@@ -2,7 +2,7 @@
 
 # anno
 
-Information extraction: NER and coref.
+Information extraction: NER, relation extraction, and coref.
 
 [![CI](https://github.com/arclabs561/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/anno/actions)
 [![Crates.io](https://img.shields.io/crates/v/anno.svg)](https://crates.io/crates/anno)
@@ -10,7 +10,7 @@ Information extraction: NER and coref.
 
 </div>
 
-Library and CLI for named entity recognition and coref. Multiple backends: regex (~400ns), transformers (~50-150ms), zero-shot NER.
+Library and CLI for named entity recognition, relation extraction, and coref. Multiple backends: regex (~400ns), transformers (~50-150ms), zero-shot NER.
 
 ## Installation
 
@@ -29,10 +29,10 @@ cd anno && cargo build --release
 $ anno extract --model gliner "Marie Curie won the Nobel Prize in Paris"
 
   PER (2):
-    [  0, 11) ########..  75% "Marie Curie"
-    [ 20, 31) ######....  60% "Nobel Prize"
+    [  0, 11) ########.. "Marie Curie"
+    [ 20, 31) ######.... "Nobel Prize"
   LOC (1):
-    [ 35, 40) ########..  80% "Paris"
+    [ 35, 40) ########.. "Paris"
 ```
 
 JSON output:
@@ -81,8 +81,6 @@ $ anno extract --url https://example.com/article --model gliner
 
 Example output:
 ```
-ok: extracted 5 entities in 12.3ms (model: heuristic, avg confidence: 0.78, tracks: 5, identities: 0)
-
   PER (2):
     [  0, 11) ########.. "Marie Curie"
     [ 20, 31) ######.... "Nobel Prize"
@@ -92,8 +90,6 @@ ok: extracted 5 entities in 12.3ms (model: heuristic, avg confidence: 0.78, trac
     [ 50, 60) #######... "Acme Corp"
   DATE (1):
     [ 70, 78) ########.. "2024-01-15"
-
-  [PER: Marie Curie] won the [PER: Nobel Prize] in [LOC: Paris]. [ORG: Acme Corp] announced on [DATE: 2024-01-15].
 ```
 
 ### Ingest URL and debug (HTML visualization)
