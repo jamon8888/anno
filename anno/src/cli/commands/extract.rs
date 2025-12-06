@@ -293,28 +293,11 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
                     );
                 }
             } else {
-                // Use doc.stats() for consistent statistics
-                let stats = doc.stats();
-                println!();
-                println!(
-                    "{} extracted {} entities in {:.1}ms (model: {}, avg confidence: {:.2}, tracks: {}, identities: {})",
-                    color("32", "ok:"),
-                    stats.signal_count,
-                    elapsed.as_secs_f64() * 1000.0,
-                    args.model.name(),
-                    stats.avg_confidence,
-                    stats.track_count,
-                    stats.identity_count
-                );
-                println!();
-
                 if doc.signals().is_empty() {
                     println!("  (no entities found)");
                 } else {
-                    print_signals(&doc, &text, !args.quiet);
+                    print_signals(&doc, &text, false);
                 }
-                println!();
-                print_annotated_signals(&text, doc.signals());
             }
         }
     }
