@@ -2,7 +2,7 @@
 
 # anno
 
-Information extraction for Rust: NER and cross-document entity resolution.
+Information extraction: NER and coref.
 
 [![CI](https://github.com/arclabs561/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/anno/actions)
 [![Crates.io](https://img.shields.io/crates/v/anno.svg)](https://crates.io/crates/anno)
@@ -10,7 +10,7 @@ Information extraction for Rust: NER and cross-document entity resolution.
 
 </div>
 
-Rust library and CLI for named entity recognition and cross-document entity resolution. Multiple backends: regex (~400ns), transformers (~50-150ms), zero-shot NER.
+Library and CLI for named entity recognition and coref. Multiple backends: regex (~400ns), transformers (~50-150ms), zero-shot NER.
 
 ## Installation
 
@@ -26,7 +26,7 @@ cd anno && cargo build --release
 ### Extract entities
 
 ```bash
-$ anno extract --model heuristic "Marie Curie won the Nobel Prize in Paris"
+$ anno extract --model gliner "Marie Curie won the Nobel Prize in Paris"
 
   PER (2):
     [  0, 11) ########..  75% "Marie Curie"
@@ -37,15 +37,15 @@ $ anno extract --model heuristic "Marie Curie won the Nobel Prize in Paris"
 
 JSON output:
 ```bash
-$ anno extract --format json --model heuristic "Marie Curie won the Nobel Prize in Paris"
+$ anno extract --format json --model gliner "Marie Curie won the Nobel Prize in Paris"
 [{"text":"Marie Curie","type":"PER","start":0,"end":11,"confidence":0.75},...]
 ```
 
-### Cross-document entity resolution
+### Coref
 
 ```bash
 # Process directory of text files
-$ anno crossdoc --directory ./docs --model heuristic --threshold 0.6 --format tree
+$ anno crossdoc --directory ./docs --model gliner --threshold 0.6 --format tree
 
 # Or import pre-processed JSON files
 $ anno extract --file doc1.txt --export doc1.json
@@ -58,7 +58,7 @@ $ anno crossdoc --import doc1.json --import doc2.json --threshold 0.6 --format t
 ### Ingest directory and coalesce → see entity clusters
 
 ```bash
-$ anno crossdoc --directory ./docs --model heuristic --threshold 0.7 --format tree
+$ anno crossdoc --directory ./docs --model gliner --threshold 0.7 --format tree
 ```
 
 Example output:
@@ -76,7 +76,7 @@ Identity 2: "Paris" (2 mentions)
 ### Ingest URL and extract entities
 
 ```bash
-$ anno extract --url https://example.com/article --model heuristic
+$ anno extract --url https://example.com/article --model gliner
 ```
 
 Example output:
@@ -112,7 +112,7 @@ $ anno debug --url https://example.com/article --coref
 
 Shows entities with intra-document coreference resolution (pronouns linked to antecedents).
 
-**Note**: `crossdoc` requires `eval-advanced` feature. Use `--model heuristic` for better entity detection. Import pre-processed JSON files with `--import` for best results.
+**Note**: `crossdoc` requires `eval-advanced` feature. Use `--model gliner` for better entity detection. Import pre-processed JSON files with `--import` for best results.
 
 **More examples**: See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for advanced workflows.
 
@@ -130,7 +130,7 @@ Workspace crates (top-level directories):
 ```
 anno-core/      # Foundation: Entity, GroundedDocument
 anno/           # NER backends, evaluation
-coalesce/       # Cross-document entity resolution (anno-coalesce)
+coalesce/       # Coref (anno-coalesce)
 strata/         # Hierarchical clustering (anno-strata)
 anno-cli/       # CLI binary
 ```
@@ -155,7 +155,7 @@ Named entity recognition: detect persons, organizations, locations, dates, etc.
 
 - **Input**: raw text
 - **Output**: entities with spans, types, confidence
-- **CLI**: `anno extract --model heuristic "text"`
+- **CLI**: `anno extract --model gliner "text"`
 
 ```rust
 use anno::{Model, RegexNER};
@@ -166,11 +166,11 @@ let entities = ner.extract_entities("Contact alice@acme.com by Jan 15", None)?;
 
 ### Coalesce
 
-Cross-document entity resolution: merge mentions across documents into canonical entities.
+Coref: merge mentions across documents into canonical entities.
 
 - **Input**: entities from multiple documents
 - **Output**: identity clusters linking mentions across documents
-- **CLI**: `anno crossdoc --directory ./docs --model heuristic --threshold 0.6 --format tree`
+- **CLI**: `anno crossdoc --directory ./docs --model gliner --threshold 0.6 --format tree`
 - **When to use**: Processing multiple documents, need to know "Barack Obama" in doc1 and doc2 refer to the same person
 - **Note**: Requires `eval-advanced` feature. Use `--import` for pre-processed GroundedDocument JSON files.
 
@@ -224,7 +224,7 @@ let entities = ner.extract_with_types(
 
 - `onnx`: BERT, GLiNER, GLiNER2 via ONNX Runtime
 - `eval`: Evaluation framework, datasets, metrics
-- `eval-advanced`: Cross-document resolution, advanced evaluation
+- `eval-advanced`: Coref, advanced evaluation
 
 **See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for complete feature list.**
 
