@@ -103,18 +103,59 @@ pub fn confidence_bar(conf: f32) -> String {
     )
 }
 
-/// Print signals grouped by type
-pub fn print_signals(doc: &GroundedDocument, text: &str, verbose: bool) {
+/// Print document extraction results with hierarchical verbose levels.
+///
+/// Verbosity levels follow CLI best practices (inspired by `iw -vvv`):
+/// - **Level 0 (default)**: Dense, expert-friendly - entity counts and spans only
+/// - **Level 1 (-v)**: Add confidence scores and context snippets
+/// - **Level 2 (-vv)**: Add tracks (within-doc coreference), basic statistics
+/// - **Level 3 (-vvv)**: Add identities (KB links), full metadata, timing, annotated text
+///
+/// Each level is a strict superset: higher levels include all information from lower levels.
+pub fn print_signals(doc: &GroundedDocument, text: &str, verbose_level: u8) {
     let mut by_type: HashMap<String, Vec<&Signal<Location>>> = HashMap::new();
     for s in doc.signals() {
         by_type.entry(s.label().to_string()).or_default().push(s);
     }
 
+    if by_type.is_empty() {
+        if verbose_level == 0 {
+            println!(
+                "(no entities found - try -v for debugging or --model gliner for zero-shot NER)"
+            );
+        } else {
+            println!("(no entities found)");
+        }
+        return;
+    }
+
+    // Level 0: Entity-focused (no spans - they're implementation details)
+    if verbose_level == 0 {
+        for (typ, signals) in &by_type {
+            let col = type_color(typ);
+            let entities: Vec<String> = signals
+                .iter()
+                .map(|s| format!("\"{}\"", s.surface()))
+                .collect();
+            println!(
+                "{}:{} {}",
+                color(col, typ),
+                signals.len(),
+                entities.join(" ")
+            );
+        }
+        return;
+    }
+
+    // Level 1+: More detailed output
     for (typ, signals) in &by_type {
         let col = type_color(typ);
-        println!("  {} ({}):", color(col, typ), signals.len());
+        println!("{}:{}", color(col, typ), signals.len());
         for s in signals {
             let (start, end) = s.text_offsets().unwrap_or((0, 0));
+
+            // Level 1: Entity text with confidence (no spans)
+            let conf_str = format!("({:.2})", s.confidence);
             let neg = if s.negated {
                 color("31", " [NEG]")
             } else {
@@ -125,37 +166,129 @@ pub fn print_signals(doc: &GroundedDocument, text: &str, verbose: bool) {
                 .map(|q| color("35", &format!(" [{:?}]", q)))
                 .unwrap_or_default();
 
-            // Show confidence bar only (percentage is redundant)
-            println!(
-                "    [{:3},{:3}) {} \"{}\"{}{}",
-                start,
-                end,
-                confidence_bar(s.confidence),
-                s.surface(),
-                neg,
-                quant
-            );
+            print!("  \"{}\" {}", s.surface(), color("90", &conf_str));
+            if !neg.is_empty() || !quant.is_empty() {
+                print!("{}{}", neg, quant);
+            }
+            println!();
 
-            if verbose {
-                let ctx_start = start.saturating_sub(15);
-                let ctx_end = (end + 15).min(text.chars().count());
-                let before: String = text
-                    .chars()
-                    .skip(ctx_start)
-                    .take(start - ctx_start)
-                    .collect();
-                let entity: String = text.chars().skip(start).take(end - start).collect();
-                let after: String = text.chars().skip(end).take(ctx_end - end).collect();
-                println!(
-                    "           {}{}{}{}{}",
-                    color("90", "..."),
-                    color("90", &before),
-                    color("1;33", &entity),
-                    color("90", &after),
+            // Level 1+: Context snippets (shows surrounding text)
+            // Use 30 chars for better context (was 15, too short)
+            let ctx_start = start.saturating_sub(30);
+            let ctx_end = (end + 30).min(text.chars().count());
+            let before: String = text
+                .chars()
+                .skip(ctx_start)
+                .take(start.saturating_sub(ctx_start))
+                .collect();
+            let entity: String = text.chars().skip(start).take(end - start).collect();
+            let after: String = text.chars().skip(end).take(ctx_end - end).collect();
+            println!(
+                "    {}{}{}{}{}",
+                if ctx_start > 0 {
                     color("90", "...")
+                } else {
+                    String::new()
+                },
+                color("90", &before),
+                color("1;33", &entity),
+                color("90", &after),
+                if ctx_end < text.chars().count() {
+                    color("90", "...")
+                } else {
+                    String::new()
+                }
+            );
+        }
+    }
+
+    // Level 2+: Tracks (within-document coreference chains)
+    let tracks: Vec<_> = doc.tracks().collect();
+    if verbose_level >= 2 && !tracks.is_empty() {
+        println!();
+        println!("{}:", color("1;36", "Coreference"));
+        for track in &tracks {
+            let track_type = track.entity_type.as_deref().unwrap_or("-");
+            // Show entity text, not signal IDs (more useful for humans)
+            let mentions: Vec<String> = track
+                .signals
+                .iter()
+                .filter_map(|s| doc.get_signal(s.signal_id))
+                .map(|sig| format!("\"{}\"", sig.surface()))
+                .collect();
+            let identity_link = track
+                .identity_id
+                .map(|id| format!(" -> I{}", id))
+                .unwrap_or_default();
+            let _cluster_conf = if verbose_level >= 3 {
+                format!(" (conf:{:.2})", track.cluster_confidence)
+            } else {
+                String::new()
+            };
+            // Only show tracks with multiple mentions (actual coreference)
+            // Single mentions are not interesting - they're just the entity itself
+            if mentions.len() > 1 {
+                println!(
+                    "  \"{}\" [{}] → {}",
+                    track.canonical_surface,
+                    track_type,
+                    mentions.join(" ")
+                );
+            }
+            if !identity_link.is_empty() {
+                println!("    {}", identity_link);
+            }
+        }
+    }
+
+    // Level 2+: Basic statistics
+    if verbose_level >= 2 {
+        let stats = doc.stats();
+        println!();
+        println!(
+            "{}: {} entities, {} tracks, {} identities, avg confidence {:.2}",
+            color("90", "stats"),
+            stats.signal_count,
+            stats.track_count,
+            stats.identity_count,
+            stats.avg_confidence
+        );
+    }
+
+    // Level 3+: Identities (KB-linked entities), full metadata, annotated text
+    if verbose_level >= 3 {
+        let identities: Vec<_> = doc.identities().collect();
+        if !identities.is_empty() {
+            println!();
+            println!("{}:", color("1;35", "Identities"));
+            for identity in &identities {
+                let kb_info =
+                    if let (Some(kb_name), Some(kb_id)) = (&identity.kb_name, &identity.kb_id) {
+                        format!(" [{}/{}]", kb_name, kb_id)
+                    } else {
+                        String::new()
+                    };
+                let aliases = if !identity.aliases.is_empty() {
+                    format!(" aliases: {}", identity.aliases.join(", "))
+                } else {
+                    String::new()
+                };
+                let desc = identity
+                    .description
+                    .as_deref()
+                    .map(|d| format!(" desc: \"{}\"", d))
+                    .unwrap_or_default();
+                println!(
+                    "  I{}: \"{}\"{}{}{}",
+                    identity.id, identity.canonical_name, kb_info, aliases, desc
                 );
             }
         }
+
+        // Annotated text (full document with entity highlights)
+        println!();
+        println!("{}:", color("1;37", "Annotated text"));
+        print_annotated_signals(text, doc.signals());
     }
 }
 

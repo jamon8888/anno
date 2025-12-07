@@ -171,12 +171,37 @@ pub trait BatchCapable: Model {
     }
 }
 
+/// Trait for models that support GPU acceleration.
+///
+/// Models implementing this trait can report whether GPU is active
+/// and which device they're using.
 pub trait GpuCapable: Model {
+    /// Check if GPU acceleration is currently active.
+    ///
+    /// Returns `true` if the model is using GPU, `false` if using CPU.
     fn is_gpu_active(&self) -> bool;
+
+    /// Get the device identifier (e.g., "cuda:0", "cpu").
+    ///
+    /// Returns a string describing the compute device being used.
     fn device(&self) -> &str;
 }
 
+/// Trait for models that support streaming/chunked extraction.
+///
+/// Useful for processing very long documents by splitting them into chunks
+/// and extracting entities from each chunk with proper offset tracking.
 pub trait StreamingCapable: Model {
+    /// Extract entities from a chunk of text, adjusting offsets by the chunk's position.
+    ///
+    /// # Arguments
+    ///
+    /// * `chunk` - A portion of the full document text
+    /// * `offset` - Character offset of this chunk within the full document
+    ///
+    /// # Returns
+    ///
+    /// Entities with offsets adjusted to their position in the full document.
     fn extract_entities_streaming(&self, chunk: &str, offset: usize) -> Result<Vec<Entity>> {
         let entities = self.extract_entities(chunk, None)?;
         Ok(entities
@@ -189,15 +214,42 @@ pub trait StreamingCapable: Model {
             .collect())
     }
 
+    /// Get the recommended chunk size for streaming extraction.
+    ///
+    /// Returns the optimal number of characters per chunk for this model.
+    /// Default implementation returns 10,000 characters.
     fn recommended_chunk_size(&self) -> usize {
         10_000
     }
 }
 
+/// Marker trait for models that extract named entities (persons, organizations, locations).
+///
+/// This is a marker trait used for type-level distinctions between different
+/// model capabilities. All NER models should implement this.
 pub trait NamedEntityCapable: Model {}
+
+/// Marker trait for models that extract structured entities (dates, times, money, etc.).
+///
+/// This is a marker trait used for type-level distinctions between different
+/// model capabilities. Models that extract structured data (like `RegexNER`) should implement this.
 pub trait StructuredEntityCapable: Model {}
 
+/// Trait for models that can extract relations between entities.
+///
+/// Models implementing this trait can jointly extract entities and their relationships,
+/// producing (head, relation_type, tail) triples.
 pub trait RelationCapable: Model {
+    /// Extract entities and their relations from text.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - Input text to extract from
+    /// * `language` - Optional language hint (e.g., "en", "es")
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (entities, relations) where relations link entities together.
     fn extract_with_relations(
         &self,
         text: &str,
@@ -205,7 +257,23 @@ pub trait RelationCapable: Model {
     ) -> Result<(Vec<Entity>, Vec<Relation>)>;
 }
 
+/// Trait for models that support dynamic/zero-shot entity type specification.
+///
+/// Models implementing this trait can extract entities of arbitrary types
+/// specified at inference time (e.g., GLiNER, UniversalNER), rather than
+/// being limited to a fixed set of pre-trained types.
 pub trait DynamicLabels: Model {
+    /// Extract entities with custom type labels.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - Input text to extract from
+    /// * `labels` - Custom entity type labels to extract (e.g., ["PERSON", "ORGANIZATION"])
+    /// * `language` - Optional language hint (e.g., "en", "es")
+    ///
+    /// # Returns
+    ///
+    /// Entities of the specified types found in the text.
     fn extract_with_labels(
         &self,
         text: &str,
@@ -232,11 +300,23 @@ pub use backends::{BertNEROnnx, GLiNEROnnx};
 pub use backends::CandleNER;
 
 // Constants
+
+/// Default BERT ONNX model identifier (HuggingFace model ID).
 pub const DEFAULT_BERT_ONNX_MODEL: &str = "protectai/bert-base-NER-onnx";
+
+/// Default GLiNER ONNX model identifier (HuggingFace model ID).
 pub const DEFAULT_GLINER_MODEL: &str = "onnx-community/gliner_small-v2.1";
+
+/// Default GLiNER2 ONNX model identifier (HuggingFace model ID).
 pub const DEFAULT_GLINER2_MODEL: &str = "onnx-community/gliner-multitask-large-v0.5";
+
+/// Default Candle model identifier (HuggingFace model ID).
 pub const DEFAULT_CANDLE_MODEL: &str = "dslim/bert-base-NER";
+
+/// Default NuNER ONNX model identifier (HuggingFace model ID).
 pub const DEFAULT_NUNER_MODEL: &str = "deepanwa/NuNerZero_onnx";
+
+/// Default W2NER ONNX model identifier (HuggingFace model ID).
 pub const DEFAULT_W2NER_MODEL: &str = "ljynlp/w2ner-bert-base";
 
 /// Automatically select the best available NER backend.
@@ -261,7 +341,7 @@ pub fn auto() -> Result<Box<dyn Model>> {
 
 /// Check which backends are currently available.
 pub fn available_backends() -> Vec<(&'static str, bool)> {
-    let mut backends = vec![
+    let backends = vec![
         ("RegexNER", true),
         ("HeuristicNER", true),
         ("StackedNER", true),
@@ -308,10 +388,13 @@ pub fn available_backends() -> Vec<(&'static str, bool)> {
 /// ```
 #[derive(Clone)]
 pub struct MockModel {
+    /// Model name identifier.
     name: &'static str,
+    /// Entities to return when `extract_entities` is called.
     entities: Vec<Entity>,
+    /// Supported entity types for this mock model.
     types: Vec<EntityType>,
-    /// If true, validate entity offsets against input text (default: true)
+    /// If true, validate entity offsets against input text (default: true).
     validate: bool,
 }
 

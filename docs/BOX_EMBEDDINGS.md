@@ -1,6 +1,59 @@
-# Box Embeddings Usage Guide
+# Box Embeddings
 
-## Quick Start
+Complete implementation of box embeddings for coreference resolution, encoding logical invariants as geometric properties.
+
+## Overview
+
+Box embeddings address limitations of vector-based approaches by providing explicit constraints for transitivity, syntactic rules, temporal evolution, uncertainty, and noise. This implementation is related to the **matryoshka-box** research project (not yet published), which explores combining matryoshka embeddings (variable dimensions) with box embeddings (hierarchical reasoning with uncertainty).
+
+## Implementation Status: ✅ Complete
+
+### Core Infrastructure
+
+- ✅ **BoxEmbedding** (`src/backends/box_embeddings.rs`)
+  - Axis-aligned hyperrectangles with min/max bounds
+  - Operations: `volume()`, `intersection_volume()`, `conditional_probability()`, `coreference_score()`
+  - Helper methods: `from_vector()`, `center()`, `size()`
+  - 19 comprehensive tests passing
+
+- ✅ **BoxCorefResolver** (`src/eval/coref_resolver.rs`)
+  - Implements `CoreferenceResolver` trait
+  - Syntactic constraint enforcement (Principle B/C)
+  - Union-find clustering with box-based scoring
+
+### Advanced Features
+
+- ✅ **Temporal Boxes** (BoxTE-style)
+  - `TemporalBox` and `BoxVelocity` types
+  - `at_time()` for time-slice operations
+  - Prevents false coreference across time boundaries
+
+- ✅ **Uncertainty-Aware Boxes** (UKGE-style)
+  - `UncertainBox` with confidence derived from volume
+  - `Conflict` detection for contradictory claims
+  - Source trust modeling
+
+- ✅ **Gumbel Boxes** (Noise Robustness)
+  - `GumbelBox` with soft, probabilistic boundaries
+  - `membership_probability()` for fuzzy membership
+  - `robust_coreference()` with grid sampling
+
+- ✅ **Interaction Modeling**
+  - `interaction_strength()` for actor-action-target triples
+  - `acquisition_roles()` for asymmetric relations
+  - Triple intersection for event modeling
+
+## Logical Invariants → Box Geometry
+
+| Invariant | Box Encoding | Implementation |
+|-----------|--------------|----------------|
+| **Transitivity** | Box containment is transitive | `coreference_score()` uses conditional probability |
+| **Syntactic Constraints** | Disjoint boxes for Principle B/C | `check_syntactic_constraints()` |
+| **Temporal Evolution** | Time-sliced boxes | `TemporalBox::at_time()` |
+| **Uncertainty** | Volume = confidence | `UncertainBox::confidence()` |
+| **Noise Robustness** | Soft boundaries | `GumbelBox::membership_probability()` |
+
+## Usage
 
 ### Basic Coreference Resolution
 
@@ -112,26 +165,7 @@ let score = gumbel.robust_coreference(&gumbel2, 100);
 assert!(score > 0.3);
 ```
 
-### Interaction Modeling
-
-```rust
-use anno::backends::box_embeddings::{interaction_strength, acquisition_roles, BoxEmbedding};
-
-// Actor-action-target triple
-let buyer = BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]);
-let seller = BoxEmbedding::new(vec![0.5, 0.5], vec![1.5, 1.5]);
-let acquisition = BoxEmbedding::new(vec![0.2, 0.2], vec![0.8, 0.8]);
-
-// Compute interaction strength
-let strength = interaction_strength(&buyer, &acquisition, &seller);
-
-// Determine roles (asymmetric)
-let (buyer_role, seller_role) = acquisition_roles(&buyer, &seller, &acquisition);
-```
-
-## Integration with Existing Code
-
-### Using with Identity Type
+### Integration with Existing Code
 
 ```rust
 use anno::grounded::{Identity, IdentityId};
@@ -147,7 +181,6 @@ identity.box_embedding = Some(BoxEmbedding::new(
 ### Combining with Vector Embeddings
 
 Box embeddings can be used alongside vector embeddings:
-
 - **Vectors**: Fast semantic similarity (cosine similarity)
 - **Boxes**: Logical constraints (transitivity, syntactic rules)
 
@@ -159,10 +192,46 @@ Hybrid approach: Use vectors for initial filtering, boxes for final resolution.
 - **Temporal boxes** require time-slice computation (cache `at_time()` results)
 - **Gumbel boxes** use grid sampling (adjust sample count for speed vs accuracy)
 
+## Code Organization
+
+```
+src/
+├── backends/
+│   └── box_embeddings.rs      # Core types (BoxEmbedding, TemporalBox, etc.)
+├── eval/
+│   └── coref_resolver.rs       # BoxCorefResolver + utilities
+└── grounded.rs                 # Identity.box_embedding integration
+
+examples/
+└── box_coreference.rs            # Complete example
+```
+
+## Test Coverage
+
+All 19 tests passing:
+- Core box operations (volume, intersection, conditional probability)
+- Temporal boxes (at_time, coreference_at_time, velocity)
+- Uncertainty boxes (confidence, conflict detection)
+- Gumbel boxes (membership, robust coreference, temperature effects)
+- Interaction modeling (interaction_strength, acquisition_roles)
+- Helper methods (from_vector, center, size)
+
 ## Research References
 
 - **Box Embeddings**: Vilnis et al. (2018) - Probabilistic embedding of knowledge graphs
 - **BERE**: Lee et al. (2022) - Event-event relation extraction
 - **BoxTE**: Messner et al. (2022) - Temporal knowledge graphs
 - **UKGE**: Chen et al. (2021) - Uncertainty-aware embeddings
+
+## Training
+
+See [`BOX_EMBEDDINGS_TRAINING.md`](BOX_EMBEDDINGS_TRAINING.md) for mathematical details and training procedures.
+
+## Next Steps (Research)
+
+1. **Learning Box Embeddings**: How to learn box parameters from coreference annotations?
+2. **Evaluation**: Compare box-based vs. vector-based on CoNLL-2012
+3. **Hybrid Approach**: When to use boxes vs. vectors?
+4. **Performance**: Optimize box operations (currently O(d) per pair)
+5. **Full BoxTE**: Temporal training for time-varying entities
 

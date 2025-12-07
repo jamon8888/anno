@@ -744,7 +744,16 @@ fn classify_minimal(
         return (EntityType::Organization, 0.50, "long_span_org");
     }
 
-    // Rule 9: Single word at sentence start with no context - very low confidence
+    // Rule 9: Filter single-letter words (common false positives)
+    if span.len() == 1 {
+        let word = span[0].trim_matches(|c: char| !c.is_alphanumeric());
+        if word.len() == 1 {
+            // Single letter - likely not an entity (could be a variable, abbreviation, etc.)
+            return (EntityType::Other("skip".into()), 0.0, "single_letter");
+        }
+    }
+
+    // Rule 10: Single word at sentence start with no context - very low confidence
     if start_idx == 0 && prev_word.is_none() {
         return (EntityType::Person, 0.30, "single_start_word");
     }

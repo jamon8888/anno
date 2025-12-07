@@ -26,18 +26,20 @@ cd anno && cargo build --release
 ### Extract entities
 
 ```bash
-$ anno extract --model gliner "Marie Curie won the Nobel Prize in Paris"
+$ anno extract "Marie Curie won the Nobel Prize in Paris"
 
-  PER (2):
-    [  0, 11) ########.. "Marie Curie"
-    [ 20, 31) ######.... "Nobel Prize"
-  LOC (1):
-    [ 35, 40) ########.. "Paris"
+PER:2 "Marie Curie" "Nobel Prize"
+LOC:1 "Paris"
 ```
+
+Verbose output levels:
+- `-v`: Add confidence, negation, quantifiers, context snippets
+- `-vv`: Add tracks (coreference chains), statistics
+- `-vvv`: Add identities (KB links), full metadata, annotated text
 
 JSON output:
 ```bash
-$ anno extract --format json --model gliner "Marie Curie won the Nobel Prize in Paris"
+$ anno extract --format json "Marie Curie won the Nobel Prize in Paris"
 [{"text":"Marie Curie","type":"PER","start":0,"end":11,"confidence":0.75},...]
 ```
 
@@ -45,7 +47,7 @@ $ anno extract --format json --model gliner "Marie Curie won the Nobel Prize in 
 
 ```bash
 # Process directory of text files
-$ anno crossdoc --directory ./docs --model gliner --threshold 0.6 --format tree
+$ anno crossdoc --directory ./docs --threshold 0.6 --format tree
 
 # Or import pre-processed JSON files
 $ anno extract --file doc1.txt --export doc1.json
@@ -58,38 +60,47 @@ $ anno crossdoc --import doc1.json --import doc2.json --threshold 0.6 --format t
 ### Ingest directory and coalesce → see entity clusters
 
 ```bash
-$ anno crossdoc --directory ./docs --model gliner --threshold 0.7 --format tree
+$ anno crossdoc --directory ./docs --threshold 0.7 --format tree
 ```
 
 Example output:
 ```
-Identity 1: "Marie Curie" (3 mentions)
-  ├─ Document: doc1.txt [0, 11) confidence: 0.85
-  ├─ Document: doc2.txt [5, 16) confidence: 0.82
-  └─ Document: doc3.txt [12, 23) confidence: 0.79
+● Marie Curie (PER) [cross-doc]
+  3 mentions • 3 docs • conf: 0.85
+  Docs: doc1.txt, doc2.txt, doc3.txt
+    • doc1.txt: "Marie Curie"
+    • doc2.txt: "Marie Curie"
+    • doc3.txt: "Marie Curie"
 
-Identity 2: "Paris" (2 mentions)
-  ├─ Document: doc1.txt [35, 40) confidence: 0.90
-  └─ Document: doc3.txt [45, 50) confidence: 0.88
+● Paris (LOC) [cross-doc]
+  2 mentions • 2 docs • conf: 0.90
+  Docs: doc1.txt, doc3.txt
+    • doc1.txt: "Paris"
+    • doc3.txt: "Paris"
 ```
 
 ### Ingest URL and extract entities
 
 ```bash
-$ anno extract --url https://example.com/article --model gliner
+$ anno extract --url https://example.com/article -v
 ```
 
-Example output:
+Example output (verbose mode):
 ```
-  PER (2):
-    [  0, 11) ########.. "Marie Curie"
-    [ 20, 31) ######.... "Nobel Prize"
-  LOC (1):
-    [ 35, 40) ########.. "Paris"
-  ORG (1):
-    [ 50, 60) #######... "Acme Corp"
-  DATE (1):
-    [ 70, 78) ########.. "2024-01-15"
+PER:2
+  "Marie Curie" (0.85)
+    ...Marie Curie won the Nobel Prize...
+  "Nobel Prize" (0.75)
+    ...won the Nobel Prize in Paris...
+LOC:1
+  "Paris" (0.90)
+    ...Nobel Prize in Paris. She was...
+ORG:1
+  "Acme Corp" (0.88)
+    ...founded by Acme Corp in 2024...
+DATE:1
+  "2024-01-15" (0.95)
+    ...Acme Corp in 2024-01-15...
 ```
 
 ### Ingest URL and debug (HTML visualization)
@@ -150,7 +161,7 @@ Three-level hierarchy: **Signal → Track → Identity**.[^1]
 Named entity recognition: detect persons, organizations, locations, dates, etc.
 
 - **Input**: raw text
-- **Output**: entities with spans, types, confidence
+- **Output**: entities with types, confidence (spans available in JSON/TSV formats)
 - **CLI**: `anno extract --model gliner "text"`
 
 ```rust

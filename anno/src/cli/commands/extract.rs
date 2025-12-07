@@ -73,9 +73,9 @@ pub struct ExtractArgs {
     #[arg(long)]
     pub quantifiers: bool,
 
-    /// Show context around entities
-    #[arg(short, long)]
-    pub verbose: bool,
+    /// Verbose output (repeat for more detail: -v, -vv, -vvv)
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    pub verbose: u8,
 
     /// Minimal output
     #[arg(short, long)]
@@ -124,7 +124,7 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
         };
         let prepared = preprocessor.prepare(&raw_text);
         raw_text = prepared.text;
-        if args.verbose && !prepared.metadata.is_empty() {
+        if args.verbose >= 1 && !prepared.metadata.is_empty() {
             log_info(
                 &format!("Preprocessing metadata: {:?}", prepared.metadata),
                 args.quiet,
@@ -293,10 +293,26 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
                     );
                 }
             } else {
-                if doc.signals().is_empty() {
-                    println!("  (no entities found)");
-                } else {
-                    print_signals(&doc, &text, false);
+                // print_signals already handles statistics at level 2+ and metadata at level 3+
+                // Debug: Check if verbose is being passed correctly
+
+                print_signals(&doc, &text, args.verbose);
+
+                // Level 3+: Additional metadata (timing, model, document ID) - only if not already shown
+                if args.verbose >= 3 {
+                    let stats = doc.stats();
+                    println!();
+                    println!("  {}:", color("90", "Metadata"));
+                    println!("    document: {}", doc.id);
+                    println!("    model: {}", args.model.name());
+                    println!("    timing: {:.1}ms", elapsed.as_secs_f64() * 1000.0);
+                    println!("    text length: {} chars", text.chars().count());
+                    if stats.signal_count > 0 {
+                        println!(
+                            "    signals/track: {:.1}",
+                            stats.signal_count as f32 / stats.track_count.max(1) as f32
+                        );
+                    }
                 }
             }
         }

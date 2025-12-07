@@ -1,6 +1,6 @@
-# Static Analysis Tools Setup
+# Static Analysis
 
-This document describes the static analysis tools integrated into the `anno` project and how to use them.
+Static analysis tools integrated into the `anno` project and how to use them.
 
 ## Quick Start
 
@@ -115,6 +115,20 @@ just coverage
 cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 ```
 
+## Installation
+
+To install all static analysis tools locally:
+
+```bash
+cargo install --locked cargo-deny
+cargo install cargo-machete
+cargo install cargo-geiger
+cargo install cargo-nextest
+cargo install cargo-llvm-cov
+rustup component add miri
+curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash
+```
+
 ## CI/CD Integration
 
 All tools are integrated into GitHub Actions (`.github/workflows/ci.yml`):
@@ -125,6 +139,15 @@ All tools are integrated into GitHub Actions (`.github/workflows/ci.yml`):
 4. **miri-unsafe** - Validates unsafe code (selective, on-demand)
 5. **opengrep** - Security pattern detection with SARIF upload
 6. **coverage** - Code coverage (runs on schedule/manual trigger)
+
+### Workspace Updates
+
+All CI commands have been updated to use `--workspace` flag:
+- `cargo check --workspace --all-targets`
+- `cargo fmt --workspace --all -- --check`
+- `cargo clippy --workspace --all-targets`
+- `cargo test --workspace --lib`
+- `cargo build --workspace`
 
 ## Creative Integrations
 
@@ -199,32 +222,26 @@ just coverage
 
 | Tool | Speed | Accuracy | CI-Friendly | Purpose |
 |------|-------|----------|-------------|---------|
-| cargo-deny | Medium | High | OK: | Dependency security |
-| cargo-machete | Very Fast | Good | OK: | Unused deps (fast) |
-| cargo-udeps | Slow | Excellent | WARNING: | Unused deps (accurate) |
-| cargo-geiger | Medium | High | OK: | Unsafe code stats |
-| OpenGrep | Medium | High | OK: | Security patterns |
-| Miri | Slow | Excellent | WARNING: | Undefined behavior |
-| cargo-nextest | Fast | High | OK: | Test runner |
-| cargo-llvm-cov | Medium | High | OK: | Coverage |
+| cargo-deny | Medium | High | ✅ | Dependency security |
+| cargo-machete | Very Fast | Good | ✅ | Unused deps (fast) |
+| cargo-udeps | Slow | Excellent | ⚠️ | Unused deps (accurate) |
+| cargo-geiger | Medium | High | ✅ | Unsafe code stats |
+| OpenGrep | Medium | High | ✅ | Security patterns |
+| Miri | Slow | Excellent | ⚠️ | Undefined behavior |
+| cargo-nextest | Fast | High | ✅ | Test runner |
+| cargo-llvm-cov | Medium | High | ✅ | Coverage |
+
+## Current Findings
+
+- **unwrap()**: No matches found (good!)
+- **expect()**: No matches found (good!)
+- **unsafe**: 5 instances (all in Candle backends - expected for FFI)
+- **panic!**: 20 instances (mostly in tests - acceptable)
 
 ## Troubleshooting
 
 ### Tool Not Found
-Most tools need to be installed:
-```bash
-cargo install --locked cargo-deny
-cargo install cargo-machete
-cargo install cargo-geiger
-cargo install cargo-nextest
-cargo install cargo-llvm-cov
-rustup component add miri
-```
-
-### OpenGrep Installation
-```bash
-curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash
-```
+Most tools need to be installed (see Installation section above).
 
 ### CI Failures
 All static analysis jobs use `continue-on-error: true` so they won't block CI. Check artifacts for details.

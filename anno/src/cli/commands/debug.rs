@@ -3,7 +3,7 @@
 use clap::Parser;
 use std::fs;
 
-use super::super::output::{color, print_annotated_signals, print_signals};
+use super::super::output::{color, print_signals};
 use super::super::parser::ModelBackend;
 use super::super::utils::{get_input_text, link_tracks_to_kb, resolve_coreference};
 
@@ -79,9 +79,9 @@ pub struct DebugArgs {
     #[arg(short, long)]
     pub quiet: bool,
 
-    /// Verbose output (show preprocessing metadata, etc.)
-    #[arg(long)]
-    pub verbose: bool,
+    /// Verbose output (repeat for more detail: -v, -vv, -vvv)
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    pub verbose: u8,
 }
 
 pub fn run(args: DebugArgs) -> Result<(), String> {
@@ -119,7 +119,7 @@ pub fn run(args: DebugArgs) -> Result<(), String> {
         };
         let prepared = preprocessor.prepare(&raw_text);
         raw_text = prepared.text;
-        if args.verbose && !prepared.metadata.is_empty() {
+        if args.verbose >= 1 && !prepared.metadata.is_empty() {
             eprintln!("Preprocessing metadata: {:?}", prepared.metadata);
         }
     }
@@ -228,7 +228,7 @@ pub fn run(args: DebugArgs) -> Result<(), String> {
     }
 
     // Build spatial index and validate
-    let index = doc.build_text_index();
+    let _index = doc.build_text_index();
     let errors = doc.validate();
 
     if !errors.is_empty() && !args.quiet {
@@ -240,27 +240,6 @@ pub fn run(args: DebugArgs) -> Result<(), String> {
         for e in &errors {
             eprintln!("  - {}", e);
         }
-    }
-
-    // Show stats
-    if !args.quiet {
-        let stats = doc.stats();
-        println!();
-        println!("{}", color("1;36", "Document Analysis"));
-        println!("  Text length: {} chars", text.len());
-        println!("  Signals: {}", stats.signal_count);
-        println!("  Tracks: {}", stats.track_count);
-        println!("  Identities: {}", stats.identity_count);
-        println!("  Spatial index nodes: {}", index.len());
-        println!(
-            "  Validation: {}",
-            if errors.is_empty() {
-                color("32", "valid")
-            } else {
-                color("31", &format!("{} errors", errors.len()))
-            }
-        );
-        println!();
     }
 
     // Output format
@@ -283,58 +262,18 @@ pub fn run(args: DebugArgs) -> Result<(), String> {
             println!("{}", html);
         }
     } else {
-        // Text output (default)
+        // Text output (default) - use dense format with verbose levels
         if doc.signals().is_empty() {
-            println!("  (no entities found)");
+            println!("(no entities)");
         } else {
-            print_signals(&doc, &text, false);
+            // Use verbose level from args, but ensure tracks/identities are shown if coref/link_kb was run
+            let effective_verbose = if args.coref || args.link_kb {
+                args.verbose.max(2) // At least level 2 if coref or KB linking was run
+            } else {
+                args.verbose
+            };
+            print_signals(&doc, &text, effective_verbose);
         }
-        println!();
-        print_annotated_signals(&text, doc.signals());
-
-        // Show tracks if coref was run
-        if args.coref {
-            let tracks: Vec<_> = doc.tracks().collect();
-            if !tracks.is_empty() {
-                println!();
-                println!("{}", color("1;36", "Coreference Tracks"));
-                for track in tracks {
-                    let entity_type = track.entity_type.as_deref().unwrap_or("-");
-                    let signals: Vec<String> = track
-                        .signals
-                        .iter()
-                        .filter_map(|s| doc.get_signal(s.signal_id))
-                        .map(|s| format!("\"{}\"", s.surface()))
-                        .collect();
-                    println!(
-                        "  T{}: {} [{}] ({})",
-                        track.id,
-                        track.canonical_surface,
-                        entity_type,
-                        signals.join(", ")
-                    );
-                }
-            }
-        }
-
-        // Show identities if KB linking was run
-        if args.link_kb {
-            let identities: Vec<_> = doc.identities().collect();
-            if !identities.is_empty() {
-                println!();
-                println!("{}", color("1;36", "KB-Linked Identities"));
-                for identity in identities {
-                    let kb_id = identity.kb_id.as_deref().unwrap_or("-");
-                    println!(
-                        "  I{}: {} ({})",
-                        identity.id, identity.canonical_name, kb_id
-                    );
-                }
-            }
-        }
-
-        // Note: Text output always goes to stdout
-        // Use --html --output file.html for HTML file output
     }
 
     Ok(())

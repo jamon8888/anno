@@ -529,12 +529,41 @@ pub struct StackStats {
 }
 
 impl Default for StackedNER {
-    /// Default configuration: Pattern + Statistical layers.
+    /// Default configuration: Best available model stack.
     ///
-    /// This provides zero-dependency NER with:
-    /// - High-precision structured entity extraction (dates, money, etc.)
-    /// - Heuristic named entity extraction (person, org, location)
+    /// Tries to include ML backends (GLiNER, BERT) when available, falling back to
+    /// Pattern + Heuristic for zero-dependency operation.
+    ///
+    /// Priority:
+    /// 1. GLiNER (if `onnx` feature and model available) - best accuracy
+    /// 2. BERT ONNX (if `onnx` feature and model available) - reliable
+    /// 3. Pattern + Heuristic (always available) - zero dependencies
     fn default() -> Self {
+        // Try GLiNER first (best accuracy, zero-shot)
+        #[cfg(feature = "onnx")]
+        {
+            use crate::{GLiNEROnnx, DEFAULT_GLINER_MODEL};
+            if let Ok(gliner) = GLiNEROnnx::new(DEFAULT_GLINER_MODEL) {
+                return Self::builder()
+                    .layer_boxed(Box::new(gliner))
+                    .layer(RegexNER::new())
+                    .layer(HeuristicNER::new())
+                    .build();
+            }
+
+            // Fallback to BERT ONNX (reliable)
+            use crate::backends::onnx::BertNEROnnx;
+            use crate::DEFAULT_BERT_ONNX_MODEL;
+            if let Ok(bert) = BertNEROnnx::new(DEFAULT_BERT_ONNX_MODEL) {
+                return Self::builder()
+                    .layer_boxed(Box::new(bert))
+                    .layer(RegexNER::new())
+                    .layer(HeuristicNER::new())
+                    .build();
+            }
+        }
+
+        // Ultimate fallback: Pattern + Heuristic (zero dependencies)
         Self::builder()
             .layer(RegexNER::new())
             .layer(HeuristicNER::new())

@@ -578,10 +578,10 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                     .extract_entities(&text, None)
                     .map_err(|e| format!("Failed to extract entities from {}: {}", doc_id, e))?;
 
-                // Build GroundedDocument and optionally run coreference for better clustering
-                // This enables using tracks (Level 2) instead of just raw signals (Level 1)
-                let mut _grounded_doc = GroundedDocument::new(&doc_id, &text);
-                let mut _signal_ids: Vec<u64> = Vec::new();
+                // Build GroundedDocument and run coreference to create tracks (Level 2)
+                // This enables using tracks instead of just raw signals for better clustering
+                let mut grounded_doc = GroundedDocument::new(&doc_id, &text);
+                let mut signal_ids: Vec<u64> = Vec::new();
 
                 for e in &entities {
                     let signal = Signal::new(
@@ -591,12 +591,18 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                         e.entity_type.as_label(),
                         e.confidence as f32,
                     );
-                    let id = _grounded_doc.add_signal(signal);
-                    _signal_ids.push(id);
+                    let id = grounded_doc.add_signal(signal);
+                    signal_ids.push(id);
                 }
 
-                // If we have tracks from import, use them; otherwise use signals
-                // For now, convert to CDCR Document using signals (can be enhanced to use tracks)
+                // Auto-create tracks by running within-document coreference
+                // This groups signals into tracks, improving crossdoc clustering quality
+                use super::super::utils::resolve_coreference;
+                resolve_coreference(&mut grounded_doc, &text, &signal_ids);
+
+                // Convert to CDCR Document using entities (tracks are preserved in GroundedDocument
+                // but CDCRResolver works with entities, so we use the original entities)
+                // Future enhancement: CDCRResolver could accept tracks directly
                 documents.push(Document::new(&doc_id, &text).with_entities(entities));
             }
 

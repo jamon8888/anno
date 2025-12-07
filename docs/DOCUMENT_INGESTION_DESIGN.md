@@ -1,5 +1,7 @@
 # Document Ingestion and Preparation Design
 
+**Related**: See [URL_REFERENCE_SUPPORT.md](URL_REFERENCE_SUPPORT.md) for current URL resolution implementation.
+
 ## Current State Analysis
 
 ### What Exists

@@ -3144,6 +3144,7 @@ impl Default for Corpus {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)] // unwrap() is acceptable in test code
     use super::*;
 
     #[test]
@@ -3706,6 +3707,7 @@ mod tests {
 
 #[cfg(test)]
 mod proptests {
+    #![allow(clippy::unwrap_used)] // unwrap() is acceptable in property tests
     use super::*;
     use proptest::prelude::*;
 

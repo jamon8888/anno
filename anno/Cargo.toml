@@ -80,6 +80,7 @@ production = ["onnx", "async-inference", "session-pool", "fast-lock"]
 
 [dev-dependencies]
 proptest = { workspace = true }
+tempfile = "3"
 
 [lints]
 workspace = true

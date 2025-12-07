@@ -2,6 +2,8 @@
 
 This guide explains how to profile the evaluation framework to identify performance bottlenecks.
 
+**Related**: See [PERFORMANCE_ANALYSIS.md](PERFORMANCE_ANALYSIS.md) for performance analysis and optimization opportunities.
+
 ## Quick Start
 
 Build with profiling enabled:

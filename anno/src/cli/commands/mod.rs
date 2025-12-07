@@ -3,6 +3,7 @@
 //! Each command has its own module/file for better organization.
 
 pub mod analyze;
+pub mod backends;
 pub mod batch;
 pub mod benchmark;
 pub mod cache;
@@ -14,8 +15,8 @@ pub mod debug;
 pub mod enhance;
 pub mod eval;
 pub mod extract;
-pub mod info;
-pub mod models;
+pub mod info; // Deprecated: use backends
+pub mod models; // Deprecated: use backends
 pub mod pipeline;
 pub mod query;
 pub mod strata;
@@ -23,6 +24,7 @@ pub mod validate;
 
 // Re-export argument types for parser
 pub use analyze::AnalyzeArgs;
+pub use backends::BackendsArgs;
 pub use batch::BatchArgs;
 pub use benchmark::BenchmarkArgs;
 pub use cache::{CacheAction, CacheArgs};
@@ -34,7 +36,7 @@ pub use debug::DebugArgs;
 pub use enhance::EnhanceArgs;
 pub use eval::EvalArgs;
 pub use extract::ExtractArgs;
-pub use models::ModelsArgs;
+pub use models::ModelsArgs; // Deprecated: use BackendsArgs
 pub use pipeline::PipelineArgs;
 pub use query::QueryArgs;
 pub use strata::StrataArgs;
