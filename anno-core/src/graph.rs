@@ -735,6 +735,7 @@ fn sanitize_cypher_name(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)] // unwrap() is acceptable in test code
     use super::*;
     use crate::EntityType;
 

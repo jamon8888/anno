@@ -98,7 +98,7 @@ async def test_readme_rendering(url: str, output_dir: Path):
 - **Precise notation**: Use clear, consistent mathematical notation
 
 **Math Notation** (from `docs/MATH_DOCUMENTATION_GUIDE.md`):
-- **ASCII math preferred**: `similarity(a, b) = (a · b) / (||a|| × ||b||)` (works everywhere, no dependencies)
+    - **ASCII math preferred**: `similarity(a, b) = (a * b) / (||a|| * ||b||)` (works everywhere, no dependencies)
 - **When to add formulas**: Complex algorithms (Leiden, box embeddings), evaluation metrics (P/R/F1), calibration metrics (ECE, Brier)
 - **When to keep minimal**: Well-known formulas (cosine similarity, F1), simple utilities, obvious calculations
 - **Structure for complex cases**: Definition → Formula → Brief intuition → Example → Reference paper

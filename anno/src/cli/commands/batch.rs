@@ -213,7 +213,7 @@ pub fn run(args: BatchArgs) -> Result<(), String> {
                 }
                 _ => {
                     // Human-readable output for all other formats
-                    print_signals(doc, &doc.text, false);
+                    print_signals(doc, &doc.text, 0);
                 }
             }
         }

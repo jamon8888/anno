@@ -47,9 +47,9 @@ pub struct EvalArgs {
     #[arg(long)]
     pub html: bool,
 
-    /// Show detailed match information and statistics
-    #[arg(short, long)]
-    pub verbose: bool,
+    /// Verbose output (repeat for more detail: -v, -vv, -vvv)
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    pub verbose: u8,
 
     /// Minimal output (suppress warnings and non-essential messages)
     #[arg(short, long)]
@@ -257,7 +257,7 @@ pub fn run(args: EvalArgs) -> Result<(), String> {
         println!();
 
         #[cfg(feature = "eval")]
-        print_matches(&cmp, args.verbose);
+        print_matches(&cmp, args.verbose >= 1);
 
         #[cfg(feature = "eval")]
         if let Some(analysis) = detailed_analysis {

@@ -111,7 +111,7 @@ docs-open:
 readme-preview:
     @uv run scripts/serve_readme.py > /tmp/serve_readme.log 2>&1 & \
     sleep 3 && \
-    PORT=$$(cat /tmp/serve_readme_port.txt 2>/dev/null || echo "8000") && \
+    PORT=$$(cat scripts/port_file.txt 2>/dev/null || echo "8000") && \
     open http://localhost:$$PORT/README_github_style.html && \
     echo "✅ Preview at http://localhost:$$PORT/README_github_style.html (auto-reloads)"
 

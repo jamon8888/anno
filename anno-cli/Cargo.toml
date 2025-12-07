@@ -16,6 +16,9 @@ default = ["eval-advanced"]
 eval = ["anno/eval", "dirs"]
 eval-advanced = ["eval", "anno/eval-advanced"]
 discourse = ["anno/discourse"]
+onnx = ["anno/onnx"]
+candle = ["anno/candle"]
+eval-bias = ["anno/eval-bias"]
 
 [dependencies]
 anno = { path = "../anno", features = ["cli", "eval"], default-features = false }

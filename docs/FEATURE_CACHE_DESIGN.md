@@ -1,6 +1,6 @@
 # Shared Feature Cache Design
 
-> **Note**: This document has been critiqued. See [FEATURE_CACHE_CRITIQUE.md](FEATURE_CACHE_CRITIQUE.md) for issues identified, and [FEATURE_CACHE_IMPLEMENTATION_PLAN.md](FEATURE_CACHE_IMPLEMENTATION_PLAN.md) for the revised implementation plan.
+> **Note**: Related critique and implementation plans are archived in [`archive/process-2025-01/`](archive/process-2025-01/).
 
 ## Problem
 

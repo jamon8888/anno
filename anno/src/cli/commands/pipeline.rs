@@ -290,7 +290,7 @@ pub fn run(args: PipelineArgs) -> Result<(), String> {
                 for doc in &documents {
                     println!();
                     println!("{}", color("1;36", &format!("Document: {}", doc.id)));
-                    print_signals(doc, &doc.text, false);
+                    print_signals(doc, &doc.text, 0);
                 }
             }
         }

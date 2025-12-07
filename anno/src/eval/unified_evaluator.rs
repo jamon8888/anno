@@ -108,10 +108,15 @@ pub struct StandardEvalResults {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "eval-advanced")]
 pub struct TaskResults {
+    /// Task identifier (e.g., "NER", "Coref").
     pub task: String,
+    /// F1 score for this task.
     pub f1: f64,
+    /// Precision score for this task.
     pub precision: f64,
+    /// Recall score for this task.
     pub recall: f64,
+    /// Number of examples evaluated.
     pub num_examples: usize,
 }
 

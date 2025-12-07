@@ -161,7 +161,7 @@ pub fn run(args: EnhanceArgs) -> Result<(), String> {
                 println!("  Identities: {}", stats.identity_count);
                 println!();
             }
-            print_signals(&doc, &doc.text, false);
+            print_signals(&doc, &doc.text, 0);
         }
         _ => {
             return Err(format!(

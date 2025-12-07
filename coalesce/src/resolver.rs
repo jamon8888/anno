@@ -125,13 +125,16 @@ impl Resolver {
                     continue;
                 }
 
-                // Compute similarity: prefer embeddings if available, fallback to string similarity
+                // Compute similarity: prefer embeddings if BOTH available, fallback to string similarity
+                // Edge case: If only one track has an embedding, we can't compare embeddings directly,
+                // so we fall back to string similarity for consistency.
                 let similarity =
                     if let (Some(emb_a), Some(emb_b)) = (&track_a.embedding, &track_b.embedding) {
-                        // Cosine similarity for embeddings
+                        // Both have embeddings: use cosine similarity
                         embedding_similarity(emb_a, emb_b)
                     } else {
-                        // Fallback to string similarity
+                        // One or both missing embeddings: fallback to string similarity
+                        // This handles: (Some, None), (None, Some), (None, None)
                         string_similarity(&track_a.canonical_surface, &track_b.canonical_surface)
                     };
 
