@@ -3704,6 +3704,10 @@ impl DatasetId {
     }
 
     /// Get the primary language of this dataset.
+    ///
+    /// Uses ISO 639-3 codes where applicable:
+    /// - `lzh`: Classical Chinese (文言文)
+    /// - `zh`: Modern Chinese (中文)
     #[must_use]
     pub fn language(&self) -> &'static str {
         match self {
@@ -3711,6 +3715,10 @@ impl DatasetId {
             DatasetId::CoNLL2002Dutch => "nl",
             DatasetId::GermEval2014 => "de",
             DatasetId::HAREM => "pt",
+            // Classical/Ancient Chinese (文言文, pre-modern)
+            DatasetId::CHisIEC | DatasetId::ClassicalChineseUD => "lzh",
+            // Modern Chinese (中文, 1872-1949 newspapers)
+            DatasetId::HistoricalChineseNER => "zh",
             _ => "en", // Default to English
         }
     }
@@ -3738,6 +3746,16 @@ impl DatasetId {
             DatasetId::FinNER => "financial",
             DatasetId::LegalNER => "legal",
             DatasetId::SciCo | DatasetId::SciER | DatasetId::SciERCNER => "scientific",
+            // Historical datasets (ancient texts, dynastic histories, medieval documents)
+            DatasetId::CHisIEC
+            | DatasetId::HistoricalChineseNER
+            | DatasetId::HIPE2022
+            | DatasetId::MedievalCzechCharters
+            | DatasetId::EighteenthCenturyNER
+            | DatasetId::SpanishMedievalTEI
+            | DatasetId::BiTimeBERT
+            | DatasetId::DELICATE
+            | DatasetId::TRIDIS => "historical",
             _ => "general",
         }
     }
@@ -10318,6 +10336,19 @@ Blackburn NNP I-NP I-PER
         // BOOK -> WORK_OF_ART (creative works)
         let book_type = map_to_canonical("BOOK", None);
         assert!(matches!(book_type, EntityType::Custom { .. }));
+    }
+
+    #[test]
+    fn test_chisiec_language_and_domain() {
+        // CHisIEC is Classical Chinese (文言文) - ISO 639-3: lzh
+        assert_eq!(DatasetId::CHisIEC.language(), "lzh");
+        
+        // CHisIEC is a historical dataset (24 dynastic histories)
+        assert_eq!(DatasetId::CHisIEC.domain(), "historical");
+        
+        // Compare with HistoricalChineseNER which is modern Chinese (1872-1949)
+        assert_eq!(DatasetId::HistoricalChineseNER.language(), "zh");
+        assert_eq!(DatasetId::HistoricalChineseNER.domain(), "historical");
     }
 
     // =========================================================================
