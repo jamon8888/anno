@@ -658,11 +658,16 @@ fn map_label_heuristic(label: &str) -> EntityType {
         // Creative/Legal
         "PRODUCT" | "PROD" => EntityType::custom("PRODUCT", EntityCategory::Misc),
         "EVENT" | "EVE" | "ELECTION" => EntityType::custom("EVENT", EntityCategory::Misc),
-        "WORK_OF_ART" | "CREATIVE-WORK" | "TITLE" | "SONG" | "ART" | "MEDIA" => {
+        "WORK_OF_ART" | "CREATIVE-WORK" | "TITLE" | "SONG" | "ART" | "MEDIA" | "BOOK" => {
             EntityType::custom("WORK_OF_ART", EntityCategory::Creative)
         }
         "LAW" => EntityType::custom("LAW", EntityCategory::Misc),
         "LANGUAGE" => EntityType::custom("LANGUAGE", EntityCategory::Misc),
+
+        // Historical/Official types (CHisIEC - Ancient Chinese)
+        "OFI" | "OFFICIAL" | "POSITION" | "TITLE_OFFICE" => {
+            EntityType::custom("OFFICIAL", EntityCategory::Misc)
+        }
 
         // Biomedical
         "DISEASE" | "DIS" => EntityType::custom("DISEASE", EntityCategory::Agent),
