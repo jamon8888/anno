@@ -11113,6 +11113,34 @@ mod tests {
     }
 
     #[test]
+    fn test_find_in_registry_variant_correctness() {
+        // Verify that variant-name fallback finds the CORRECT registry entry
+        // (not just any entry that happens to share a name)
+        use crate::eval::dataset_registry::DatasetId as RegistryDatasetId;
+
+        for loader_id in DatasetId::all() {
+            if let Some(registry_id) = loader_id.find_in_registry() {
+                // The variant names should match (case-insensitive comparison)
+                let loader_variant = format!("{:?}", loader_id);
+                let registry_variant = format!("{:?}", registry_id);
+
+                // Either names match, or variant names match
+                let names_match = loader_id.name() == registry_id.name();
+                let variants_match = loader_variant.eq_ignore_ascii_case(&registry_variant);
+
+                assert!(
+                    names_match || variants_match,
+                    "Potential false match: {:?} -> {:?} (names: '{}' vs '{}')",
+                    loader_id,
+                    registry_id,
+                    loader_id.name(),
+                    registry_id.name()
+                );
+            }
+        }
+    }
+
+    #[test]
     fn test_parse_bio_tag() {
         assert_eq!(parse_bio_tag("O"), ("O", ""));
         assert_eq!(parse_bio_tag("B-PER"), ("B", "PER"));
