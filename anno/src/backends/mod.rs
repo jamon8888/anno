@@ -51,6 +51,24 @@
 //! - **Nested entities**: `W2NER` - handles overlapping spans
 //! - **Structured data**: `RegexNER` - dates, emails, money
 //!
+//! # Backend Combination Design Space
+//!
+//! Two approaches for combining multiple backends:
+//!
+//! | Combiner | Execution | Conflict Resolution | Best For |
+//! |----------|-----------|---------------------|----------|
+//! | [`StackedNER`] | Sequential (cascade) | Priority/LongestSpan/HighestConf | Production, latency |
+//! | [`EnsembleNER`] | Parallel (all) | Weighted voting + agreement | Maximum accuracy |
+//!
+//! **StackedNER** runs backends in layer order. Earlier layers claim spans first.
+//! Good for: fast execution, structured patterns + ML fill-in.
+//!
+//! **EnsembleNER** runs ALL backends, groups overlapping spans into conflict clusters,
+//! and resolves via weighted voting with type-conditioned weights and agreement bonuses.
+//! Good for: maximum accuracy when latency allows.
+//!
+//! Both accept any `Model` implementation - they're fully composable with ML backends.
+//!
 //! # Quick Start
 //!
 //! Zero-dependency default (Pattern + Heuristic):
