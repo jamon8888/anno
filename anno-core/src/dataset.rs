@@ -528,7 +528,7 @@ impl fmt::Display for Domain {
 ///
 /// Important for understanding potential temporal bias and
 /// for diachronic entity tracking.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct TemporalCoverage {
     /// Earliest document date (if known)
     pub start_year: Option<i32>,
@@ -538,17 +538,6 @@ pub struct TemporalCoverage {
     pub has_temporal_annotations: bool,
     /// Whether entities have validity periods (diachronic)
     pub has_diachronic_entities: bool,
-}
-
-impl Default for TemporalCoverage {
-    fn default() -> Self {
-        Self {
-            start_year: None,
-            end_year: None,
-            has_temporal_annotations: false,
-            has_diachronic_entities: false,
-        }
-    }
 }
 
 // ============================================================================

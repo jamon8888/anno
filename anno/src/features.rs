@@ -862,9 +862,10 @@ pub fn aggregate_embeddings(
 }
 
 /// Method for aggregating multiple embeddings into one.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum AggregationMethod {
     /// Mean of all embeddings.
+    #[default]
     Mean,
     /// Element-wise max.
     Max,
@@ -875,12 +876,6 @@ pub enum AggregationMethod {
         /// Weights for each embedding dimension.
         weights: Vec<f32>,
     },
-}
-
-impl Default for AggregationMethod {
-    fn default() -> Self {
-        Self::Mean
-    }
 }
 
 // =============================================================================

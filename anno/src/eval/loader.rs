@@ -6522,7 +6522,7 @@ impl CacheManifest {
 ///
 /// Used for temporal stratification of evaluation metrics.
 /// Most datasets don't have temporal metadata, so this is optional.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TemporalMetadata {
     /// KB version used for entity linking (if applicable)
     pub kb_version: Option<String>,
@@ -6530,16 +6530,6 @@ pub struct TemporalMetadata {
     pub temporal_cutoff: Option<String>, // ISO 8601 date string
     /// Entity creation dates (if available)
     pub entity_creation_dates: Option<HashMap<String, String>>, // entity_id -> ISO 8601 date
-}
-
-impl Default for TemporalMetadata {
-    fn default() -> Self {
-        Self {
-            kb_version: None,
-            temporal_cutoff: None,
-            entity_creation_dates: None,
-        }
-    }
 }
 
 /// Dataset metadata for provenance and reproducibility.

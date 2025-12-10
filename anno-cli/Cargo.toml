@@ -23,9 +23,8 @@ instrument = ["anno/instrument", "tracing-subscriber"]
 
 [dependencies]
 anno = { path = "../anno", features = ["cli", "eval"], default-features = false }
+# NOTE: anno-core is used for types that flow through anno's API
 anno-core = { path = "../anno-core" }
-anno-coalesce = { path = "../anno-coalesce" }
-anno-strata = { path = "../anno-strata" }
 
 # CLI
 clap = { workspace = true }
