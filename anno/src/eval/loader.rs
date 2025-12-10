@@ -11042,6 +11042,63 @@ mod tests {
     }
 
     #[test]
+    fn test_find_in_registry() {
+        // WikiGold should be findable in registry
+        let id = DatasetId::WikiGold;
+        let registry_match = id.find_in_registry();
+        assert!(
+            registry_match.is_some(),
+            "WikiGold should exist in registry"
+        );
+
+        let registry = registry_match.unwrap();
+        assert_eq!(registry.name(), "WikiGold");
+    }
+
+    #[test]
+    fn test_convenience_metadata_methods() {
+        let id = DatasetId::WikiGold;
+
+        // WikiGold has known metadata
+        assert_eq!(id.citation(), Some("Balasuriya et al. (2009)"));
+        assert_eq!(id.license(), Some("CC-BY-4.0"));
+        assert_eq!(id.year(), Some(2009));
+    }
+
+    #[test]
+    fn test_loadable_registry_coverage() {
+        // Track which loadable datasets can be found in registry
+        // This is informational - some name mismatches are expected until unification
+        let mut found = 0;
+        let mut missing = Vec::new();
+        for id in DatasetId::all() {
+            if id.find_in_registry().is_some() {
+                found += 1;
+            } else {
+                missing.push(id.name());
+            }
+        }
+
+        let total = DatasetId::all().len();
+        let coverage = found as f64 / total as f64 * 100.0;
+
+        // At least 50% should be findable (current state tracking)
+        assert!(
+            coverage >= 50.0,
+            "Only {:.1}% of loadable datasets found in registry. \
+             Missing: {:?}",
+            coverage,
+            missing
+        );
+
+        // Log for tracking - coverage should improve over time
+        eprintln!(
+            "Registry coverage: {}/{} ({:.1}%)",
+            found, total, coverage
+        );
+    }
+
+    #[test]
     fn test_parse_bio_tag() {
         assert_eq!(parse_bio_tag("O"), ("O", ""));
         assert_eq!(parse_bio_tag("B-PER"), ("B", "PER"));
