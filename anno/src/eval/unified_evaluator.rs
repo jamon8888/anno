@@ -205,8 +205,11 @@ pub struct CalibrationEvalResults {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "eval-advanced")]
 pub struct DataQualityEvalResults {
+    /// Whether train/test leakage was detected.
     pub leakage_detected: bool,
+    /// Proportion of redundant examples (0.0 to 1.0).
     pub redundancy_rate: f64,
+    /// Number of ambiguous annotations found.
     pub ambiguous_count: usize,
 }
 

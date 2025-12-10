@@ -138,9 +138,7 @@ name = "anno-cli"
 version = "0.2.0"
 dependencies = [
  "anno",
- "anno-coalesce",
  "anno-core",
- "anno-strata",
  "clap",
  "clap_complete",
  "dirs 5.0.1",
@@ -178,39 +176,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.17",
-]
-
-[[package]]
-name = "anno-derive"
-version = "0.2.0"
-dependencies = [
- "anno-core",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "anno-eval"
-version = "0.2.0"
-dependencies = [
- "anno",
- "anno-coalesce",
- "anno-core",
- "chrono",
- "dirs 5.0.1",
- "glob",
- "itertools 0.14.0",
- "log",
- "proptest",
- "rand 0.9.2",
- "rayon",
- "regex",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.17",
- "ureq 2.12.1",
 ]
 
 [[package]]

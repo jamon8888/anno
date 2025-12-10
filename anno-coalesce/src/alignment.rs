@@ -296,7 +296,7 @@ impl AlignmentScore {
 ///
 /// The conventions paper found quadratic decay fits better than linear
 /// for abstract stimuli, though exponential is the classical form.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum GeneralizationGradient {
     /// No decay (fixed threshold)
     None,
@@ -305,6 +305,7 @@ pub enum GeneralizationGradient {
     /// Quadratic decay: adjustment = confidence * (1 - similarity)²
     ///
     /// From the conventions paper: "quadratic provides the best fit"
+    #[default]
     Quadratic,
     /// Exponential decay: adjustment = confidence * exp(-k * distance)
     ///
@@ -405,11 +406,6 @@ impl GeneralizationGradient {
     }
 }
 
-impl Default for GeneralizationGradient {
-    fn default() -> Self {
-        Self::Quadratic // Paper's best-fit
-    }
-}
 
 // =============================================================================
 // Adaptive Resolution Config
