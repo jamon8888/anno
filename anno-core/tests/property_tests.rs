@@ -592,3 +592,319 @@ fn test_different_page_bboxes_no_overlap() {
     assert!(!box1.overlaps(&box2));
     assert_eq!(box1.iou(&box2), Some(0.0));
 }
+
+// =============================================================================
+// Phi-Feature Linguistic Invariants
+// =============================================================================
+//
+// These property tests encode fundamental constraints from linguistic theory.
+// They verify that our phi-feature system respects cross-linguistic universals.
+
+use anno_core::types::{Gender, MentionType, Number, Person, PhiFeatures};
+
+/// Generate an arbitrary Person
+fn arb_person() -> impl Strategy<Value = Person> {
+    prop_oneof![
+        Just(Person::First),
+        Just(Person::Second),
+        Just(Person::Third),
+    ]
+}
+
+/// Generate an arbitrary Number
+fn arb_number() -> impl Strategy<Value = Number> {
+    prop_oneof![
+        Just(Number::Singular),
+        Just(Number::Dual),
+        Just(Number::Plural),
+        Just(Number::Unknown),
+    ]
+}
+
+/// Generate an arbitrary Gender
+fn arb_gender() -> impl Strategy<Value = Gender> {
+    prop_oneof![
+        Just(Gender::Masculine),
+        Just(Gender::Feminine),
+        Just(Gender::Neutral),
+        Just(Gender::Unknown),
+    ]
+}
+
+/// Generate arbitrary PhiFeatures
+fn arb_phi_features() -> impl Strategy<Value = PhiFeatures> {
+    (arb_person(), arb_number(), arb_gender())
+        .prop_map(|(person, number, gender)| PhiFeatures::new(person, number, gender))
+}
+
+/// Generate an arbitrary MentionType
+fn arb_mention_type() -> impl Strategy<Value = MentionType> {
+    prop_oneof![
+        Just(MentionType::Proper),
+        Just(MentionType::Nominal),
+        Just(MentionType::Pronominal),
+        Just(MentionType::Zero),
+        Just(MentionType::Unknown),
+    ]
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(500))]
+
+    // =========================================================================
+    // Reflexivity: Every phi-feature is compatible with itself
+    // =========================================================================
+
+    /// Compatibility is reflexive (a feature matches itself)
+    ///
+    /// This is a fundamental logical property. If an entity has gender X,
+    /// it should be compatible with gender X.
+    #[test]
+    fn phi_compatibility_reflexive(phi in arb_phi_features()) {
+        prop_assert!(phi.is_compatible(&phi), "Phi-features should be self-compatible");
+    }
+
+    #[test]
+    fn number_compatibility_reflexive(n in arb_number()) {
+        prop_assert!(n.is_compatible(&n), "Number should be self-compatible");
+    }
+
+    #[test]
+    fn gender_compatibility_reflexive(g in arb_gender()) {
+        prop_assert!(g.is_compatible(&g), "Gender should be self-compatible");
+    }
+
+    // =========================================================================
+    // Symmetry: Compatibility is symmetric
+    // =========================================================================
+
+    /// Number compatibility is symmetric
+    ///
+    /// If A is compatible with B, then B is compatible with A.
+    /// This ensures coreference linking is order-independent.
+    #[test]
+    fn number_compatibility_symmetric(n1 in arb_number(), n2 in arb_number()) {
+        prop_assert_eq!(
+            n1.is_compatible(&n2),
+            n2.is_compatible(&n1),
+            "Number compatibility must be symmetric"
+        );
+    }
+
+    /// Gender compatibility is symmetric
+    #[test]
+    fn gender_compatibility_symmetric(g1 in arb_gender(), g2 in arb_gender()) {
+        prop_assert_eq!(
+            g1.is_compatible(&g2),
+            g2.is_compatible(&g1),
+            "Gender compatibility must be symmetric"
+        );
+    }
+
+    /// Person compatibility is symmetric
+    #[test]
+    fn person_compatibility_symmetric(p1 in arb_person(), p2 in arb_person()) {
+        prop_assert_eq!(
+            p1.is_compatible(&p2),
+            p2.is_compatible(&p1),
+            "Person compatibility must be symmetric"
+        );
+    }
+
+    // =========================================================================
+    // Unknown/Neutral as Wildcards
+    // =========================================================================
+
+    /// Unknown number is compatible with all numbers
+    ///
+    /// This models singular "they", ambiguous "you", and languages
+    /// where number is not grammatically marked.
+    #[test]
+    fn unknown_number_is_wildcard(n in arb_number()) {
+        prop_assert!(
+            Number::Unknown.is_compatible(&n),
+            "Unknown should be compatible with {:?}",
+            n
+        );
+    }
+
+    /// Unknown gender is compatible with all genders
+    ///
+    /// This models neopronouns, epicene nouns, and contexts
+    /// where gender is not determined.
+    #[test]
+    fn unknown_gender_is_wildcard(g in arb_gender()) {
+        prop_assert!(
+            Gender::Unknown.is_compatible(&g),
+            "Unknown should be compatible with {:?}",
+            g
+        );
+    }
+
+    /// Neutral gender is compatible with all genders
+    ///
+    /// "They" can refer to anyone regardless of gender.
+    /// This is the singular "they" principle.
+    #[test]
+    fn neutral_gender_is_wildcard(g in arb_gender()) {
+        prop_assert!(
+            Gender::Neutral.is_compatible(&g),
+            "Neutral (they) should be compatible with {:?}",
+            g
+        );
+    }
+
+    // =========================================================================
+    // Binary Gender Exclusion
+    // =========================================================================
+
+    /// Masculine and Feminine are mutually exclusive
+    ///
+    /// This is the core binary gender constraint. "John... she" fails.
+    #[test]
+    fn binary_gender_exclusion(_ignored: ()) {
+        prop_assert!(!Gender::Masculine.is_compatible(&Gender::Feminine));
+        prop_assert!(!Gender::Feminine.is_compatible(&Gender::Masculine));
+    }
+
+    // =========================================================================
+    // Person is a Hard Constraint (Cross-Linguistic Universal)
+    // =========================================================================
+
+    /// Different persons are never compatible
+    ///
+    /// "I went home. She ate dinner." - "I" and "She" cannot corefer.
+    /// This is true in ALL known human languages.
+    #[test]
+    fn person_exclusion(p1 in arb_person(), p2 in arb_person()) {
+        if p1 != p2 {
+            prop_assert!(
+                !p1.is_compatible(&p2),
+                "Different persons {:?} and {:?} should not be compatible",
+                p1,
+                p2
+            );
+        }
+    }
+
+    // =========================================================================
+    // Dual-Plural Compatibility (Semitic/Sanskrit/Ancient Greek)
+    // =========================================================================
+
+    /// Dual is compatible with plural
+    ///
+    /// In Arabic, Hebrew, Sanskrit: a pair (dual) can be referred to with
+    /// plural pronouns. This is a cross-linguistic pattern.
+    #[test]
+    fn dual_plural_compatibility(_ignored: ()) {
+        prop_assert!(Number::Dual.is_compatible(&Number::Plural));
+        prop_assert!(Number::Plural.is_compatible(&Number::Dual));
+    }
+
+    /// Singular is NOT compatible with plural/dual
+    ///
+    /// "The dog... they" is ungrammatical (unless singular they).
+    /// This models strict number agreement.
+    #[test]
+    fn singular_plural_exclusion(_ignored: ()) {
+        prop_assert!(!Number::Singular.is_compatible(&Number::Plural));
+        prop_assert!(!Number::Singular.is_compatible(&Number::Dual));
+    }
+
+    // =========================================================================
+    // MentionType Ordering (Accessibility Hierarchy)
+    // =========================================================================
+
+    /// MentionType ordering is total (all pairs are comparable)
+    #[test]
+    fn mention_type_total_order(t1 in arb_mention_type(), t2 in arb_mention_type()) {
+        // Total order means exactly one of: t1 < t2, t1 == t2, t1 > t2
+        let lt = t1 < t2;
+        let eq = t1 == t2;
+        let gt = t1 > t2;
+        prop_assert!(
+            (lt && !eq && !gt) || (!lt && eq && !gt) || (!lt && !eq && gt),
+            "Exactly one ordering relation should hold"
+        );
+    }
+
+    /// MentionType ordering is transitive
+    #[test]
+    fn mention_type_transitive(
+        t1 in arb_mention_type(),
+        t2 in arb_mention_type(),
+        t3 in arb_mention_type()
+    ) {
+        if t1 <= t2 && t2 <= t3 {
+            prop_assert!(t1 <= t3, "Ordering should be transitive");
+        }
+    }
+
+    /// Proper nouns are always >= other types (canonical mention selection)
+    #[test]
+    fn proper_is_maximal(t in arb_mention_type()) {
+        prop_assert!(
+            MentionType::Proper >= t,
+            "Proper should be >= {:?}",
+            t
+        );
+    }
+
+    /// Zero pronouns are always <= other types (least informative)
+    #[test]
+    fn zero_is_minimal(t in arb_mention_type()) {
+        prop_assert!(
+            MentionType::Zero <= t,
+            "Zero should be <= {:?}",
+            t
+        );
+    }
+
+    // =========================================================================
+    // Salience Weight Bounds
+    // =========================================================================
+
+    /// Salience weights are in valid range (0, 1]
+    #[test]
+    fn salience_weight_bounded(t in arb_mention_type()) {
+        let w = t.salience_weight();
+        prop_assert!(w > 0.0, "Salience should be positive");
+        prop_assert!(w <= 1.0, "Salience should be <= 1.0");
+    }
+
+    /// Salience ordering matches accessibility hierarchy
+    #[test]
+    fn salience_matches_accessibility(t1 in arb_mention_type(), t2 in arb_mention_type()) {
+        if t1 > t2 {
+            prop_assert!(
+                t1.salience_weight() >= t2.salience_weight(),
+                "Higher accessibility should mean higher salience"
+            );
+        }
+    }
+
+    // =========================================================================
+    // Anaphoricity Constraints
+    // =========================================================================
+
+    /// Anaphoric types require antecedents
+    ///
+    /// Pronouns and zeros cannot introduce entities.
+    #[test]
+    fn anaphoric_types_require_antecedent(t in arb_mention_type()) {
+        if t == MentionType::Pronominal || t == MentionType::Zero {
+            prop_assert!(t.requires_antecedent(), "{:?} should require antecedent", t);
+            prop_assert!(!t.can_introduce_entity(), "{:?} should not introduce entities", t);
+        }
+    }
+
+    /// Only Zero has no surface form
+    #[test]
+    fn only_zero_is_surfaceless(t in arb_mention_type()) {
+        if t == MentionType::Zero {
+            prop_assert!(!t.has_surface_form(), "Zero should have no surface form");
+        } else {
+            prop_assert!(t.has_surface_form(), "{:?} should have surface form", t);
+        }
+    }
+}

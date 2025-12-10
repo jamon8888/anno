@@ -18,7 +18,7 @@
 //! # Usage
 //!
 //! ```rust
-//! use anno_core::label_prompt::{LabelNormalizer, StandardNormalizer};
+//! use anno::backends::label_prompt::{LabelNormalizer, StandardNormalizer};
 //!
 //! let normalizer = StandardNormalizer::default();
 //!

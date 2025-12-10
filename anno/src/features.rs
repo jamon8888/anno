@@ -939,6 +939,11 @@ mod tests {
         assert!(features.variations.contains(&"Barack Obama".to_string()));
         assert!(features.pronominal_count >= 1); // "He"
         assert!(features.named_count >= 1); // "Barack Obama"
+
+        // Test variation_count()
+        // Should have: "Barack Obama", "He", "Obama"
+        assert_eq!(features.variation_count(), 3);
+        assert!(!features.is_singleton()); // Multiple mentions
     }
 
     #[test]

@@ -111,7 +111,7 @@ impl Script {
     ///
     /// Returns the script that appears most frequently.
     pub fn detect(s: &str) -> Self {
-        let mut counts = [0u32; 12]; // One per Script variant
+        let mut counts = [0u32; 11]; // One per Script variant
 
         for c in s.chars() {
             match c {

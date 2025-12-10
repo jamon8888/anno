@@ -172,6 +172,7 @@ mod sealed {
     impl Sealed for super::HeuristicNER {}
     impl Sealed for super::StackedNER {}
     impl Sealed for super::EnsembleNER {}
+    impl Sealed for super::CrfNER {}
     impl Sealed for super::NuNER {}
     impl Sealed for super::W2NER {}
     impl Sealed for super::NERExtractor {}
@@ -378,8 +379,9 @@ pub trait DynamicLabels: Model {
 }
 
 // Re-export backends
+pub use backends::label_prompt::{LabelNormalizer, StandardNormalizer};
 pub use backends::{
-    AutoNER, BackendType, ConflictStrategy, EnsembleNER, HeuristicNER, NERExtractor, NuNER,
+    AutoNER, BackendType, ConflictStrategy, CrfNER, EnsembleNER, HeuristicNER, NERExtractor, NuNER,
     RegexNER, StackedNER, TPLinker, W2NERConfig, W2NERRelation, W2NER,
 };
 

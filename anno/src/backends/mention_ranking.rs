@@ -614,22 +614,79 @@ impl MentionRankingConfig {
 
 // MentionType imported from anno_core
 
-/// A detected mention with features.
+/// A detected mention with phi-features for coreference resolution.
+///
+/// This is the core data structure for mention-ranking coreference. Each mention
+/// carries the linguistic features needed to determine coreference compatibility:
+///
+/// - **Span** (`start`, `end`): Character offsets in the source text
+/// - **Type** (`mention_type`): Proper/Nominal/Pronominal/Zero (affects salience)
+/// - **Phi-features** (`gender`, `number`): Agreement constraints
+/// - **Head** (`head`): Syntactic head for matching
+///
+/// # Phi-Features and Agreement
+///
+/// The `gender` and `number` fields encode phi-features (φ-features) from
+/// linguistic theory. These are the grammatical features that govern agreement:
+///
+/// | Feature | Purpose | Example constraint |
+/// |---------|---------|-------------------|
+/// | Gender | Pronoun resolution | "Mary... she" not "he" |
+/// | Number | Singular/plural match | "The dogs... they" not "it" |
+///
+/// `None` values indicate unknown features, which are treated as compatible
+/// with any value (permissive matching).
+///
+/// # Cross-Linguistic Notes
+///
+/// - **Person** is not stored here (would be 3rd for most mentions)
+/// - **Dual number** is supported via `Number::Dual` (Arabic, Sanskrit, Hebrew)
+/// - **Noun class** systems (Bantu, Dyirbal) would need extension beyond `Gender`
+/// - **Zero mentions** (pro-drop) have spans but no surface text
 #[derive(Debug, Clone)]
 pub struct RankedMention {
-    /// Character start offset.
+    /// Character start offset (0-indexed, inclusive).
+    ///
+    /// Uses character offsets, not byte offsets, for Unicode safety.
     pub start: usize,
-    /// Character end offset.
+
+    /// Character end offset (exclusive).
+    ///
+    /// The span `[start, end)` extracts the mention text.
     pub end: usize,
-    /// Mention text.
+
+    /// The mention text as it appears in the source.
+    ///
+    /// For zero pronouns (pro-drop), this may be empty or a placeholder.
     pub text: String,
-    /// Mention type.
+
+    /// Mention type classification.
+    ///
+    /// Affects antecedent search: pronouns look locally, proper nouns globally.
+    /// See [`MentionType`] for the accessibility hierarchy.
     pub mention_type: MentionType,
-    /// Detected gender (if applicable).
+
+    /// Grammatical gender (if determinable).
+    ///
+    /// - `Some(Masculine/Feminine)`: Gendered pronoun or name
+    /// - `Some(Neutral)`: "they"/"it" (compatible with any gender)
+    /// - `Some(Unknown)`: Neopronouns or ungendered names
+    /// - `None`: Feature not applicable or not detected
     pub gender: Option<Gender>,
-    /// Detected number (singular/plural).
+
+    /// Grammatical number (if determinable).
+    ///
+    /// - `Some(Singular)`: "he", "she", "it", "the dog"
+    /// - `Some(Dual)`: Arabic/Sanskrit dual forms
+    /// - `Some(Plural)`: "they", "the dogs"
+    /// - `Some(Unknown)`: "you" (ambiguous), singular "they"
+    /// - `None`: Feature not detected
     pub number: Option<Number>,
-    /// Head word of the mention.
+
+    /// Syntactic head word of the mention.
+    ///
+    /// For "the former president", head = "president".
+    /// Used for head matching in coreference scoring.
     pub head: String,
 }
 
@@ -644,7 +701,7 @@ impl RankedMention {
 /// Convert RankedMention to eval::coref::Mention for evaluation.
 ///
 /// This enables using mention-ranking output directly in coreference evaluation.
-impl From<&RankedMention> for crate::eval::coref::Mention {
+impl From<&RankedMention> for anno_core::coref::Mention {
     fn from(mention: &RankedMention) -> Self {
         Self {
             text: mention.text.clone(),
@@ -658,7 +715,7 @@ impl From<&RankedMention> for crate::eval::coref::Mention {
     }
 }
 
-impl From<RankedMention> for crate::eval::coref::Mention {
+impl From<RankedMention> for anno_core::coref::Mention {
     fn from(mention: RankedMention) -> Self {
         Self::from(&mention)
     }
@@ -1007,6 +1064,203 @@ impl MentionRankingCoref {
         anno_coalesce::is_acronym_match(&m1.text, &m2.text)
     }
 
+    /// Check if "it" at the given position is pleonastic (non-referential).
+    ///
+    /// Pleonastic "it" is a grammatical placeholder that doesn't refer to any
+    /// entity. Common patterns include:
+    /// - Weather: "it rains", "it is sunny", "it's cold"
+    /// - Modal: "it is important that...", "it is likely..."
+    /// - Cognitive: "it seems", "it appears", "it turns out"
+    /// - Cleft: "it was John who..."
+    ///
+    /// Based on: Boyd et al. "Identification of Pleonastic It Using the Web"
+    /// and Stanford CoreNLP's PleonasticFilter patterns.
+    fn is_pleonastic_it(&self, text_lower: &str, it_byte_pos: usize) -> bool {
+        // Get the text after "it"
+        let after_it = &text_lower[it_byte_pos + 2..]; // Skip "it"
+        let after_it_trimmed = after_it.trim_start();
+
+        // Weather verbs: "it rains", "it snows", "it hails"
+        const WEATHER_VERBS: &[&str] = &[
+            "rain",
+            "rains",
+            "rained",
+            "raining",
+            "snow",
+            "snows",
+            "snowed",
+            "snowing",
+            "hail",
+            "hails",
+            "hailed",
+            "hailing",
+            "thunder",
+            "thunders",
+            "thundered",
+            "thundering",
+        ];
+
+        // Weather adjectives: "it is sunny", "it's cold"
+        const WEATHER_ADJS: &[&str] = &[
+            "sunny", "cloudy", "foggy", "windy", "rainy", "snowy", "cold", "hot", "warm", "cool",
+            "humid", "dry", "freezing", "chilly", "muggy", "overcast",
+        ];
+
+        // Modal/cognitive adjectives: "it is important", "it seems likely"
+        const MODAL_ADJS: &[&str] = &[
+            "important",
+            "necessary",
+            "possible",
+            "impossible",
+            "likely",
+            "unlikely",
+            "clear",
+            "obvious",
+            "evident",
+            "apparent",
+            "true",
+            "false",
+            "certain",
+            "uncertain",
+            "doubtful",
+            "essential",
+            "vital",
+            "crucial",
+            "critical",
+            "imperative",
+            "fortunate",
+            "unfortunate",
+            "surprising",
+            "unsurprising",
+            "strange",
+            "odd",
+            "weird",
+            "remarkable",
+            "noteworthy",
+            "known",
+            "unknown",
+            "believed",
+            "thought",
+            "said",
+            "reported",
+            "estimated",
+            "assumed",
+            "expected",
+            "hoped",
+            "feared",
+        ];
+
+        // Cognitive verbs: "it seems", "it appears"
+        const COGNITIVE_VERBS: &[&str] = &[
+            "seems",
+            "seem",
+            "seemed",
+            "appears",
+            "appear",
+            "appeared",
+            "turns out",
+            "turned out",
+            "happens",
+            "happen",
+            "happened",
+            "follows",
+            "follow",
+            "followed",
+            "matters",
+            "matter",
+            "mattered",
+            "helps",
+            "help",
+            "helped",
+            "hurts",
+            "hurt",
+        ];
+
+        // Check for weather verbs directly
+        for verb in WEATHER_VERBS {
+            if after_it_trimmed.starts_with(verb) {
+                let after_verb = &after_it_trimmed[verb.len()..];
+                if after_verb.is_empty() || after_verb.starts_with(|c: char| !c.is_alphanumeric()) {
+                    return true;
+                }
+            }
+        }
+
+        // Check for cognitive verbs
+        for verb in COGNITIVE_VERBS {
+            if after_it_trimmed.starts_with(verb) {
+                let after_verb = &after_it_trimmed[verb.len()..];
+                if after_verb.is_empty() || after_verb.starts_with(|c: char| !c.is_alphanumeric()) {
+                    return true;
+                }
+            }
+        }
+
+        // Check for "it is/was/has been/will be + MODAL_ADJ"
+        // Also handles contractions: "it's"
+        let copula_patterns = ["is ", "was ", "'s ", "has been ", "will be ", "would be "];
+        for copula in copula_patterns {
+            if after_it_trimmed.starts_with(copula) {
+                let after_copula = after_it_trimmed[copula.len()..].trim_start();
+
+                // Check weather verbs after copula: "it is raining"
+                for verb in WEATHER_VERBS {
+                    if after_copula.starts_with(verb) {
+                        let after_verb = &after_copula[verb.len()..];
+                        if after_verb.is_empty()
+                            || after_verb.starts_with(|c: char| !c.is_alphanumeric())
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                // Check weather adjectives
+                for adj in WEATHER_ADJS {
+                    if after_copula.starts_with(adj) {
+                        let after_adj = &after_copula[adj.len()..];
+                        if after_adj.is_empty()
+                            || after_adj.starts_with(|c: char| !c.is_alphanumeric())
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                // Check modal adjectives
+                for adj in MODAL_ADJS {
+                    if after_copula.starts_with(adj) {
+                        let after_adj = &after_copula[adj.len()..];
+                        // Modal adjectives often followed by "that", "to", or end of clause
+                        if after_adj.is_empty()
+                            || after_adj.starts_with(" that")
+                            || after_adj.starts_with(" to")
+                            || after_adj.starts_with(|c: char| !c.is_alphanumeric())
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                // Check for "it is/was + time expression"
+                // "it is 5 o'clock", "it was midnight"
+                let time_words = ["noon", "midnight", "morning", "evening", "night", "time"];
+                for tw in time_words {
+                    if after_copula.starts_with(tw) {
+                        return true;
+                    }
+                }
+
+                // Check for numeric time: "it is 5", "it's 3:00"
+                if after_copula.starts_with(|c: char| c.is_ascii_digit()) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
     /// Check if two mentions should NOT be linked based on context clues.
     ///
     /// From Chen et al. (2011): "eliminate links that actually refer to two
@@ -1214,6 +1468,11 @@ impl MentionRankingCoref {
             ("theirs", Gender::Unknown, Number::Unknown),
             ("themself", Gender::Unknown, Number::Singular), // Explicitly singular
             ("themselves", Gender::Unknown, Number::Plural), // Explicitly plural
+            // Third-person reflexives (Binding Theory Principle A: must be locally bound)
+            ("himself", Gender::Masculine, Number::Singular),
+            ("herself", Gender::Feminine, Number::Singular),
+            ("itself", Gender::Neutral, Number::Singular),
+            // First-person pronouns
             ("i", Gender::Unknown, Number::Singular),
             ("me", Gender::Unknown, Number::Singular),
             ("my", Gender::Unknown, Number::Singular),
@@ -1251,7 +1510,147 @@ impl MentionRankingCoref {
             ("faer", Gender::Unknown, Number::Singular),
             ("faers", Gender::Unknown, Number::Singular),
             ("faerself", Gender::Unknown, Number::Singular),
+            // Demonstrative pronouns (can refer to entities or discourse)
+            // Note: "this"/"that" often create discourse deixis (referring to
+            // entire clauses/events), not just entity coreference. We include
+            // them as candidates but the scorer should handle compatibility.
+            ("this", Gender::Unknown, Number::Singular),
+            ("that", Gender::Unknown, Number::Singular),
+            ("these", Gender::Unknown, Number::Plural),
+            ("those", Gender::Unknown, Number::Plural),
+            // Indefinite pronouns (introduce new entities or refer back)
+            // These are tricky: "someone" usually introduces a new entity,
+            // but can corefer in specific contexts. Number::Singular for
+            // grammatical agreement; gender is unknown.
+            ("someone", Gender::Unknown, Number::Singular),
+            ("somebody", Gender::Unknown, Number::Singular),
+            ("anyone", Gender::Unknown, Number::Singular),
+            ("anybody", Gender::Unknown, Number::Singular),
+            ("everyone", Gender::Unknown, Number::Singular), // Grammatically singular
+            ("everybody", Gender::Unknown, Number::Singular),
+            ("no one", Gender::Unknown, Number::Singular),
+            ("nobody", Gender::Unknown, Number::Singular),
+            // Impersonal "one" (generic reference, not specific entity)
+            // Similar to generic "you" - refers to people in general
+            ("one", Gender::Unknown, Number::Singular),
+            ("oneself", Gender::Unknown, Number::Singular),
+            // Interrogative/relative pronouns (when used anaphorically)
+            ("who", Gender::Unknown, Number::Unknown),
+            ("whom", Gender::Unknown, Number::Unknown),
+            ("whose", Gender::Unknown, Number::Unknown),
+            ("which", Gender::Unknown, Number::Unknown),
+            // Reciprocal pronouns (Binding Theory: like reflexives, locally bound)
+            // "John and Mary saw each other" - must have plural antecedent
+            ("each other", Gender::Unknown, Number::Plural),
+            ("one another", Gender::Unknown, Number::Plural),
         ];
+
+        // =========================================================================
+        // KNOWN GAPS / FUTURE WORK (documented for linguistic completeness):
+        // =========================================================================
+        //
+        // 1. CATAPHORA (forward reference):
+        //    "Before she arrived, Mary called ahead."
+        //    Current: Only backward (anaphoric) reference is modeled.
+        //    Fix: Would require looking ahead in discourse.
+        //
+        // 2. SPLIT ANTECEDENTS:
+        //    "John went to the store. Mary went to the bank. They met for lunch."
+        //    Current: "They" would need to link to BOTH John and Mary.
+        //    Fix: Cluster merging based on plural pronoun + multiple candidates.
+        //
+        // 3. BRIDGING ANAPHORA:
+        //    "I bought a car. The engine was faulty."
+        //    Current: "The engine" has no explicit antecedent.
+        //    Fix: Requires world knowledge (car has engine).
+        //
+        // 4. APPOSITIVE CONSTRUCTIONS:
+        //    "John, the baker, opened his shop."
+        //    Current: Would detect "John" and "the baker" as separate mentions.
+        //    Fix: Need to recognize appositive structure and link them.
+        //
+        // 5. COPULA CONSTRUCTIONS:
+        //    "The CEO is John Smith."
+        //    Current: Separate mentions, may not link.
+        //    Fix: Special handling for "X is Y" patterns (see is_be_phrase_link).
+        //
+        // 6. PRO-DROP LANGUAGES (Spanish, Italian, Japanese):
+        //    Subject pronouns can be omitted: "∅ llegué tarde" = "I arrived late"
+        //    Current: Only works with overt pronouns.
+        //    Fix: Verb morphology analysis, zero pronoun detection.
+        //
+        // 7. BINDING THEORY CONSTRAINTS:
+        //    Reflexives must be locally bound: "John saw himself" (same clause)
+        //    Pronouns must NOT be locally bound: "John saw him" (different entity)
+        //    Current: Not enforced - all candidates scored equally.
+        //    Fix: Syntactic parsing to identify clause boundaries.
+        //
+        // 8. ANIMACY CONSTRAINTS:
+        //    "The rock fell. *It/*He was heavy."
+        //    Current: Basic gender/number matching only.
+        //    Fix: Animacy feature extraction from entity type or lexicon.
+        //
+        // =========================================================================
+        // EXOTIC LINGUISTIC PHENOMENA (beyond standard English):
+        // =========================================================================
+        //
+        // 9. CLUSIVITY (inclusive vs exclusive "we"):
+        //    Many languages (Austronesian, Dravidian, Algonquian) distinguish:
+        //    - Inclusive: speaker + addressee ("you and I")
+        //    - Exclusive: speaker + others, NOT addressee ("me and them, not you")
+        //    Current: Not modeled. English "we" is ambiguous.
+        //
+        // 10. OBVIATION (Algonquian "fourth person"):
+        //     Distinguishes proximate (topical) vs obviative (less topical) 3rd person.
+        //     "He_PROX saw him_OBV" = unambiguous reference to two different entities.
+        //     Current: No support for discourse-level topicality tracking.
+        //
+        // 11. SWITCH-REFERENCE:
+        //     Clausal markers indicating whether subject is same/different from prior clause.
+        //     "He went home and-SAME_SUBJ ate" vs "He went home and-DIFF_SUBJ she cooked"
+        //     Current: No syntactic clause analysis.
+        //
+        // 12. LOGOPHORIC PRONOUNS (West African languages like Ewe, Yoruba):
+        //     Special pronoun for "the person whose speech/thought is being reported"
+        //     "Kofi said that LOG will win" (LOG = Kofi, unambiguously)
+        //     Current: No perspective/attitude holder tracking.
+        //
+        // 13. CORRELATIVE-RELATIVE (Sanskrit, Hindi):
+        //     "ya- ... sa-" pattern: relative clause first, then demonstrative resumes.
+        //     "Who(ever) came, that-one ate" = explicit cross-clause coreference.
+        //     Current: Only backward anaphora modeled.
+        //
+        // 14. NOUN CLASS SYSTEMS (Bantu, Dyirbal):
+        //     10-20+ "genders" based on semantics (human, animal, plant, tool, etc.)
+        //     Pronouns agree with noun class, not biological sex.
+        //     Current: Only masc/fem/neut gender, not full noun class agreement.
+        //
+        // 15. SHAPE-BASED CLASSIFIERS (Navajo, Chinese classifiers):
+        //     Verbs/pronouns encode physical properties (long, flat, round, granular).
+        //     Current: No shape/classifier feature tracking.
+        //
+        // 16. TRIAL/PAUCAL NUMBER (Austronesian):
+        //     Some languages distinguish: singular, dual, trial (exactly 3), paucal (few).
+        //     Current: Only sg/du/pl/unknown in Number enum.
+        //
+        // 17. HONORIFIC/POLITENESS LEVELS (Japanese, Korean, Thai):
+        //     Pronoun choice encodes social relationship, not just person/number.
+        //     "Watashi" vs "boku" vs "ore" (Japanese 1st person, different registers).
+        //     Current: No formality/register tracking.
+        //
+        // =========================================================================
+        // INFORMATION-THEORETIC VIEW:
+        // =========================================================================
+        //
+        // Coreference resolution can be framed as entropy reduction:
+        // - H(Antecedent | Context) = uncertainty over which entity a pronoun refers to
+        // - Good discourse makes pronouns low-entropy (context narrows candidates)
+        // - Surprisal of choosing antecedent a = -log p(a | Context)
+        // - Each resolved anaphor yields information gain: H(A) - H(A | Context)
+        //
+        // Features like recency, grammatical role, semantic compatibility all
+        // increase mutual information I(Antecedent; Context).
+        //
 
         // Find pronouns in text
         let text_lower = text.to_lowercase();
@@ -1277,6 +1676,13 @@ impl MentionRankingCoref {
                         .map_or(true, |c| !c.is_alphanumeric());
 
                 if is_word_start && is_word_end {
+                    // Skip pleonastic "it" (non-referential uses)
+                    // See: Boyd et al. "Identification of Pleonastic It Using the Web"
+                    if pronoun == "it" && self.is_pleonastic_it(&text_lower, abs_byte_pos) {
+                        search_start_byte = end_byte_pos;
+                        continue;
+                    }
+
                     // Use character offsets for the mention
                     let char_start = char_pos;
                     let char_end = end_char_pos;
@@ -2013,11 +2419,22 @@ impl MentionRankingCoref {
 
         // =========================================================================
         // Number agreement
+        //
+        // Uses Number::is_compatible() from anno_core which handles:
+        // - Unknown is compatible with anything (singular they, "you")
+        // - Dual is compatible with Plural (Arabic/Hebrew/Sanskrit dual numbers)
+        // - Exact matches are preferred
         // =========================================================================
         if let (Some(m_number), Some(a_number)) = (mention.number, antecedent.number) {
             if m_number == a_number {
+                // Exact match: strongest bonus
                 score += self.config.type_compat_weight * 0.2;
-            } else if m_number != Number::Unknown && a_number != Number::Unknown {
+            } else if m_number.is_compatible(&a_number) {
+                // Compatible but not exact (e.g., Unknown with Singular, Dual with Plural)
+                // Small bonus - compatible but less certain
+                score += self.config.type_compat_weight * 0.05;
+            } else {
+                // Incompatible numbers (e.g., Singular vs Plural)
                 score -= self.config.type_compat_weight * 0.4;
             }
         }
@@ -3727,7 +4144,7 @@ mod tests {
             head: "patient".to_string(),
         };
 
-        let coref_mention: crate::eval::coref::Mention = (&mention).into();
+        let coref_mention: anno_core::coref::Mention = (&mention).into();
 
         assert_eq!(coref_mention.start, 10);
         assert_eq!(coref_mention.end, 20);
@@ -3943,6 +4360,646 @@ mod tests {
                     MentionType::Pronominal,
                     "Neopronouns should be Pronominal type"
                 );
+            }
+        }
+    }
+
+    // =========================================================================
+    // Number::Dual compatibility tests (Arabic, Hebrew, Sanskrit)
+    // =========================================================================
+
+    #[test]
+    fn test_dual_number_compatibility_scoring() {
+        // Dual should be compatible with Plural (but not exact match)
+        // This is important for languages like Arabic, Hebrew, Sanskrit
+        // where dual forms are distinct from plural
+        let coref = MentionRankingCoref::new();
+
+        // Create mentions manually to test scoring
+        let dual_mention = RankedMention {
+            start: 0,
+            end: 5,
+            text: "كتابان".to_string(), // Arabic dual: "two books"
+            mention_type: MentionType::Nominal,
+            gender: Some(Gender::Neutral),
+            number: Some(Number::Dual),
+            head: "كتابان".to_string(),
+        };
+
+        let plural_mention = RankedMention {
+            start: 10,
+            end: 15,
+            text: "هم".to_string(), // Arabic plural pronoun: "they"
+            mention_type: MentionType::Pronominal,
+            gender: Some(Gender::Unknown),
+            number: Some(Number::Plural),
+            head: "هم".to_string(),
+        };
+
+        let singular_mention = RankedMention {
+            start: 20,
+            end: 22,
+            text: "هو".to_string(), // Arabic singular: "he"
+            mention_type: MentionType::Pronominal,
+            gender: Some(Gender::Masculine),
+            number: Some(Number::Singular),
+            head: "هو".to_string(),
+        };
+
+        // Test Number::is_compatible directly
+        assert!(
+            Number::Dual.is_compatible(&Number::Plural),
+            "Dual should be compatible with Plural"
+        );
+        assert!(
+            !Number::Dual.is_compatible(&Number::Singular),
+            "Dual should NOT be compatible with Singular"
+        );
+
+        // Dual ↔ Plural should score better than Dual ↔ Singular
+        let score_dual_plural = coref.score_pair(&plural_mention, &dual_mention, 5, None);
+        let score_dual_singular = coref.score_pair(&singular_mention, &dual_mention, 5, None);
+
+        assert!(
+            score_dual_plural > score_dual_singular,
+            "Dual-Plural score ({}) should be higher than Dual-Singular ({})",
+            score_dual_plural,
+            score_dual_singular
+        );
+    }
+
+    #[test]
+    fn test_number_compatibility_unknown() {
+        // Number::Unknown should be compatible with all other values
+        // This is critical for singular they, "you", etc.
+        assert!(Number::Unknown.is_compatible(&Number::Singular));
+        assert!(Number::Unknown.is_compatible(&Number::Plural));
+        assert!(Number::Unknown.is_compatible(&Number::Dual));
+        assert!(Number::Unknown.is_compatible(&Number::Unknown));
+
+        // The coreference scorer should not penalize Unknown mismatches
+        let coref = MentionRankingCoref::new();
+
+        let they_mention = RankedMention {
+            start: 0,
+            end: 4,
+            text: "They".to_string(),
+            mention_type: MentionType::Pronominal,
+            gender: Some(Gender::Unknown),
+            number: Some(Number::Unknown), // Singular or plural
+            head: "They".to_string(),
+        };
+
+        let singular_mention = RankedMention {
+            start: 10,
+            end: 14,
+            text: "Alex".to_string(),
+            mention_type: MentionType::Proper,
+            gender: Some(Gender::Unknown),
+            number: Some(Number::Singular),
+            head: "Alex".to_string(),
+        };
+
+        let plural_mention = RankedMention {
+            start: 20,
+            end: 30,
+            text: "the students".to_string(),
+            mention_type: MentionType::Nominal,
+            gender: Some(Gender::Unknown),
+            number: Some(Number::Plural),
+            head: "students".to_string(),
+        };
+
+        // Both should get non-negative scores (Unknown is compatible with both)
+        let score_they_singular = coref.score_pair(&they_mention, &singular_mention, 5, None);
+        let score_they_plural = coref.score_pair(&they_mention, &plural_mention, 5, None);
+
+        // Neither should be penalized for number mismatch
+        assert!(
+            score_they_singular > -1.0,
+            "'They' ↔ singular should not be heavily penalized: {}",
+            score_they_singular
+        );
+        assert!(
+            score_they_plural > -1.0,
+            "'They' ↔ plural should not be heavily penalized: {}",
+            score_they_plural
+        );
+    }
+
+    // =========================================================================
+    // Pleonastic "it" detection tests
+    // =========================================================================
+
+    #[test]
+    fn test_pleonastic_it_weather() {
+        // Weather expressions should NOT detect "it" as a referring pronoun
+        let coref = MentionRankingCoref::new();
+
+        let weather_texts = [
+            "It rains every day in Seattle.",
+            "It is raining outside.",
+            "It snows heavily in winter.",
+            "It was snowing when we arrived.",
+            "It thundered all night.",
+        ];
+
+        for text in weather_texts {
+            let mentions = coref.detect_mentions(text).unwrap();
+            let has_it = mentions.iter().any(|m| m.text.to_lowercase() == "it");
+            assert!(
+                !has_it,
+                "Weather 'it' should be filtered as pleonastic in: '{}'\nDetected: {:?}",
+                text,
+                mentions.iter().map(|m| &m.text).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn test_pleonastic_it_weather_adjectives() {
+        let coref = MentionRankingCoref::new();
+
+        let weather_adj_texts = [
+            "It is sunny today.",
+            "It was cold last night.",
+            "It's foggy this morning.",
+            "It will be warm tomorrow.",
+        ];
+
+        for text in weather_adj_texts {
+            let mentions = coref.detect_mentions(text).unwrap();
+            let has_it = mentions.iter().any(|m| m.text.to_lowercase() == "it");
+            assert!(
+                !has_it,
+                "Weather adjective 'it' should be filtered: '{}'\nDetected: {:?}",
+                text,
+                mentions.iter().map(|m| &m.text).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn test_pleonastic_it_modal() {
+        let coref = MentionRankingCoref::new();
+
+        let modal_texts = [
+            "It is important that we finish on time.",
+            "It is likely that he will arrive late.",
+            "It was clear that something was wrong.",
+            "It is necessary to complete the form.",
+            "It's obvious that she was upset.",
+        ];
+
+        for text in modal_texts {
+            let mentions = coref.detect_mentions(text).unwrap();
+            let has_it = mentions.iter().any(|m| m.text.to_lowercase() == "it");
+            assert!(
+                !has_it,
+                "Modal 'it' should be filtered: '{}'\nDetected: {:?}",
+                text,
+                mentions.iter().map(|m| &m.text).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn test_pleonastic_it_cognitive_verbs() {
+        let coref = MentionRankingCoref::new();
+
+        let cognitive_texts = [
+            "It seems that the project is delayed.",
+            "It appears he was mistaken.",
+            "It turns out she was right.",
+            "It happened that we met by chance.",
+        ];
+
+        for text in cognitive_texts {
+            let mentions = coref.detect_mentions(text).unwrap();
+            let has_it = mentions.iter().any(|m| m.text.to_lowercase() == "it");
+            assert!(
+                !has_it,
+                "Cognitive verb 'it' should be filtered: '{}'\nDetected: {:?}",
+                text,
+                mentions.iter().map(|m| &m.text).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn test_referential_it_not_filtered() {
+        // Referential "it" should still be detected
+        let coref = MentionRankingCoref::new();
+
+        let referential_texts = [
+            "I read the book. It was fascinating.",
+            "The car broke down. We had to push it.",
+            "She gave him a gift. He loved it.",
+        ];
+
+        for text in referential_texts {
+            let mentions = coref.detect_mentions(text).unwrap();
+            let has_it = mentions.iter().any(|m| m.text.to_lowercase() == "it");
+            assert!(
+                has_it,
+                "Referential 'it' should be detected: '{}'\nDetected: {:?}",
+                text,
+                mentions.iter().map(|m| &m.text).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn test_pleonastic_it_time_expressions() {
+        let coref = MentionRankingCoref::new();
+
+        let time_texts = [
+            "It is midnight.",
+            "It was noon when we left.",
+            "It is 5 o'clock.",
+        ];
+
+        for text in time_texts {
+            let mentions = coref.detect_mentions(text).unwrap();
+            let has_it = mentions.iter().any(|m| m.text.to_lowercase() == "it");
+            assert!(
+                !has_it,
+                "Time expression 'it' should be filtered: '{}'\nDetected: {:?}",
+                text,
+                mentions.iter().map(|m| &m.text).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    // =========================================================================
+    // Demonstrative pronoun tests
+    // =========================================================================
+
+    #[test]
+    fn test_demonstrative_pronoun_detection() {
+        let coref = MentionRankingCoref::new();
+
+        let text = "I saw the problem. This was unexpected. Those are the facts.";
+        let mentions = coref.detect_mentions(text).unwrap();
+        let texts: Vec<_> = mentions.iter().map(|m| m.text.to_lowercase()).collect();
+
+        assert!(
+            texts.contains(&"this".to_string()),
+            "Should detect 'This': {:?}",
+            texts
+        );
+        assert!(
+            texts.contains(&"those".to_string()),
+            "Should detect 'Those': {:?}",
+            texts
+        );
+    }
+
+    #[test]
+    fn test_demonstrative_pronoun_number() {
+        let coref = MentionRankingCoref::new();
+
+        // "this" and "that" are singular; "these" and "those" are plural
+        let text = "This is important. These are facts. That was clear. Those were obvious.";
+        let mentions = coref.detect_mentions(text).unwrap();
+
+        let this_m = mentions.iter().find(|m| m.text.to_lowercase() == "this");
+        let these_m = mentions.iter().find(|m| m.text.to_lowercase() == "these");
+        let that_m = mentions.iter().find(|m| m.text.to_lowercase() == "that");
+        let those_m = mentions.iter().find(|m| m.text.to_lowercase() == "those");
+
+        assert_eq!(this_m.map(|m| m.number), Some(Some(Number::Singular)));
+        assert_eq!(these_m.map(|m| m.number), Some(Some(Number::Plural)));
+        assert_eq!(that_m.map(|m| m.number), Some(Some(Number::Singular)));
+        assert_eq!(those_m.map(|m| m.number), Some(Some(Number::Plural)));
+    }
+
+    // =========================================================================
+    // Indefinite pronoun tests
+    // =========================================================================
+
+    #[test]
+    fn test_indefinite_pronoun_detection() {
+        let coref = MentionRankingCoref::new();
+
+        let text = "Someone called yesterday. Everyone was surprised.";
+        let mentions = coref.detect_mentions(text).unwrap();
+        let texts: Vec<_> = mentions.iter().map(|m| m.text.to_lowercase()).collect();
+
+        assert!(
+            texts.contains(&"someone".to_string()),
+            "Should detect 'Someone': {:?}",
+            texts
+        );
+        assert!(
+            texts.contains(&"everyone".to_string()),
+            "Should detect 'Everyone': {:?}",
+            texts
+        );
+    }
+
+    #[test]
+    fn test_indefinite_pronouns_are_singular() {
+        // "Everyone", "someone", "nobody" are grammatically singular
+        // even though they can refer to multiple people conceptually
+        let coref = MentionRankingCoref::new();
+
+        let text = "Everyone was there. Nobody left early.";
+        let mentions = coref.detect_mentions(text).unwrap();
+
+        let everyone_m = mentions
+            .iter()
+            .find(|m| m.text.to_lowercase() == "everyone");
+        let nobody_m = mentions.iter().find(|m| m.text.to_lowercase() == "nobody");
+
+        assert!(everyone_m.is_some(), "Should detect 'Everyone'");
+        assert!(nobody_m.is_some(), "Should detect 'Nobody'");
+
+        assert_eq!(
+            everyone_m.unwrap().number,
+            Some(Number::Singular),
+            "'everyone' is grammatically singular"
+        );
+        assert_eq!(
+            nobody_m.unwrap().number,
+            Some(Number::Singular),
+            "'nobody' is grammatically singular"
+        );
+    }
+
+    #[test]
+    fn test_impersonal_one_detection() {
+        // Generic "one" is an impersonal pronoun
+        let coref = MentionRankingCoref::new();
+
+        let text = "One should always be prepared. One never knows what might happen.";
+        let mentions = coref.detect_mentions(text).unwrap();
+        let one_count = mentions
+            .iter()
+            .filter(|m| m.text.to_lowercase() == "one")
+            .count();
+
+        assert!(
+            one_count >= 2,
+            "Should detect impersonal 'one': {:?}",
+            mentions.iter().map(|m| &m.text).collect::<Vec<_>>()
+        );
+    }
+
+    // =========================================================================
+    // Reflexive pronoun tests
+    // =========================================================================
+
+    #[test]
+    fn test_reflexive_pronoun_detection() {
+        let coref = MentionRankingCoref::new();
+
+        let text = "John saw himself in the mirror. Mary hurt herself.";
+        let mentions = coref.detect_mentions(text).unwrap();
+        let texts: Vec<_> = mentions.iter().map(|m| m.text.to_lowercase()).collect();
+
+        assert!(
+            texts.contains(&"himself".to_string()),
+            "Should detect 'himself': {:?}",
+            texts
+        );
+        assert!(
+            texts.contains(&"herself".to_string()),
+            "Should detect 'herself': {:?}",
+            texts
+        );
+    }
+
+    #[test]
+    fn test_reflexive_pronoun_gender() {
+        let coref = MentionRankingCoref::new();
+
+        let text = "He saw himself. She saw herself. It fixed itself.";
+        let mentions = coref.detect_mentions(text).unwrap();
+
+        let himself = mentions.iter().find(|m| m.text.to_lowercase() == "himself");
+        let herself = mentions.iter().find(|m| m.text.to_lowercase() == "herself");
+        let itself = mentions.iter().find(|m| m.text.to_lowercase() == "itself");
+
+        assert!(himself.is_some(), "Should detect 'himself'");
+        assert!(herself.is_some(), "Should detect 'herself'");
+        assert!(itself.is_some(), "Should detect 'itself'");
+
+        assert_eq!(himself.unwrap().gender, Some(Gender::Masculine));
+        assert_eq!(herself.unwrap().gender, Some(Gender::Feminine));
+        assert_eq!(itself.unwrap().gender, Some(Gender::Neutral));
+    }
+
+    // =========================================================================
+    // Reciprocal pronoun tests
+    // =========================================================================
+
+    #[test]
+    fn test_reciprocal_pronoun_detection() {
+        let coref = MentionRankingCoref::new();
+
+        let text = "John and Mary looked at each other. The teams competed against one another.";
+        let mentions = coref.detect_mentions(text).unwrap();
+        let texts: Vec<_> = mentions.iter().map(|m| m.text.to_lowercase()).collect();
+
+        assert!(
+            texts.contains(&"each other".to_string()),
+            "Should detect 'each other': {:?}",
+            texts
+        );
+        assert!(
+            texts.contains(&"one another".to_string()),
+            "Should detect 'one another': {:?}",
+            texts
+        );
+    }
+
+    #[test]
+    fn test_reciprocal_pronouns_are_plural() {
+        // Reciprocals require plural antecedents
+        let coref = MentionRankingCoref::new();
+
+        let text = "They helped each other.";
+        let mentions = coref.detect_mentions(text).unwrap();
+
+        let each_other = mentions
+            .iter()
+            .find(|m| m.text.to_lowercase() == "each other");
+        assert!(each_other.is_some(), "Should detect 'each other'");
+        assert_eq!(
+            each_other.unwrap().number,
+            Some(Number::Plural),
+            "Reciprocals are grammatically plural"
+        );
+    }
+
+    // =========================================================================
+    // Property-based tests for mention detection invariants
+    // =========================================================================
+    //
+    // These test real invariants that catch actual bugs:
+    // - Spans within bounds (prevents panics)
+    // - Valid Unicode (no slicing mid-character)
+    // - Phi-feature consistency (catches logic errors)
+
+    use proptest::prelude::*;
+
+    /// Generate ASCII text with some pronouns embedded
+    fn text_with_pronouns() -> impl Strategy<Value = String> {
+        prop::collection::vec(
+            prop_oneof![
+                Just("he".to_string()),
+                Just("she".to_string()),
+                Just("they".to_string()),
+                Just("it".to_string()),
+                Just("the dog".to_string()),
+                Just("John".to_string()),
+                "[a-z]{3,10}".prop_map(|s| s),
+            ],
+            3..15,
+        )
+        .prop_map(|words| words.join(" ") + ".")
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(50))]
+
+        /// All detected mentions have spans within text bounds
+        ///
+        /// This catches off-by-one errors and Unicode slicing bugs.
+        #[test]
+        fn mention_spans_within_bounds(text in text_with_pronouns()) {
+            let coref = MentionRankingCoref::new();
+            if let Ok(mentions) = coref.detect_mentions(&text) {
+                let char_count = text.chars().count();
+                for mention in &mentions {
+                    prop_assert!(
+                        mention.start <= mention.end,
+                        "Start {} > end {} for '{}'",
+                        mention.start, mention.end, mention.text
+                    );
+                    prop_assert!(
+                        mention.end <= char_count,
+                        "End {} > text length {} for '{}'",
+                        mention.end, char_count, mention.text
+                    );
+                }
+            }
+        }
+
+        /// Extracted mention text matches the span
+        ///
+        /// Verifies we're using character offsets correctly.
+        #[test]
+        fn mention_text_matches_span(text in text_with_pronouns()) {
+            let coref = MentionRankingCoref::new();
+            if let Ok(mentions) = coref.detect_mentions(&text) {
+                for mention in &mentions {
+                    let extracted: String = text.chars()
+                        .skip(mention.start)
+                        .take(mention.end - mention.start)
+                        .collect();
+                    // Case-insensitive comparison (we lowercase during detection)
+                    prop_assert_eq!(
+                        extracted.to_lowercase(),
+                        mention.text.to_lowercase(),
+                        "Extracted text doesn't match stored text"
+                    );
+                }
+            }
+        }
+
+        /// Pronouns always have MentionType::Pronominal
+        #[test]
+        fn pronouns_are_pronominal(text in text_with_pronouns()) {
+            let coref = MentionRankingCoref::new();
+            if let Ok(mentions) = coref.detect_mentions(&text) {
+                let pronouns = ["he", "she", "it", "they", "him", "her", "them"];
+                for mention in &mentions {
+                    if pronouns.contains(&mention.text.to_lowercase().as_str()) {
+                        prop_assert_eq!(
+                            mention.mention_type,
+                            MentionType::Pronominal,
+                            "'{}' should be Pronominal",
+                            mention.text
+                        );
+                    }
+                }
+            }
+        }
+
+        /// Gender is always set for detected pronouns
+        #[test]
+        fn pronouns_have_gender(text in text_with_pronouns()) {
+            let coref = MentionRankingCoref::new();
+            if let Ok(mentions) = coref.detect_mentions(&text) {
+                for mention in &mentions {
+                    if mention.mention_type == MentionType::Pronominal {
+                        prop_assert!(
+                            mention.gender.is_some(),
+                            "Pronoun '{}' should have gender",
+                            mention.text
+                        );
+                    }
+                }
+            }
+        }
+
+        /// Number is always set for detected pronouns
+        #[test]
+        fn pronouns_have_number(text in text_with_pronouns()) {
+            let coref = MentionRankingCoref::new();
+            if let Ok(mentions) = coref.detect_mentions(&text) {
+                for mention in &mentions {
+                    if mention.mention_type == MentionType::Pronominal {
+                        prop_assert!(
+                            mention.number.is_some(),
+                            "Pronoun '{}' should have number",
+                            mention.text
+                        );
+                    }
+                }
+            }
+        }
+
+        /// Coreference clusters partition mentions (no overlaps, no orphans)
+        #[test]
+        fn clusters_partition_mentions(text in text_with_pronouns()) {
+            let coref = MentionRankingCoref::new();
+            if let Ok(clusters) = coref.resolve(&text) {
+                // Flatten all mentions from clusters
+                let mut all_mentions: Vec<_> = clusters.iter()
+                    .flat_map(|c| &c.mentions)
+                    .collect();
+
+                // Check no duplicates (by span)
+                let original_len = all_mentions.len();
+                all_mentions.sort_by_key(|m| (m.start, m.end));
+                all_mentions.dedup_by_key(|m| (m.start, m.end));
+                prop_assert_eq!(
+                    all_mentions.len(),
+                    original_len,
+                    "Duplicate mentions across clusters"
+                );
+            }
+        }
+
+        /// Score pair is deterministic
+        ///
+        /// Same inputs should always produce same score.
+        #[test]
+        fn score_pair_deterministic(text in text_with_pronouns()) {
+            let coref = MentionRankingCoref::new();
+            if let Ok(mentions) = coref.detect_mentions(&text) {
+                if mentions.len() >= 2 {
+                    let distance = mentions[1].start.saturating_sub(mentions[0].end);
+                    let score1 = coref.score_pair(&mentions[0], &mentions[1], distance, Some(&text));
+                    let score2 = coref.score_pair(&mentions[0], &mentions[1], distance, Some(&text));
+                    prop_assert!(
+                        (score1 - score2).abs() < 0.0001,
+                        "Scoring should be deterministic"
+                    );
+                }
             }
         }
     }

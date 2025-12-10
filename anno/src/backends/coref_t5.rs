@@ -579,8 +579,8 @@ impl T5Coref {
 #[cfg(feature = "eval")]
 impl T5Coref {
     /// Convert clusters to eval-compatible CorefChain format.
-    pub fn to_eval_chains(&self, clusters: &[CorefCluster]) -> Vec<crate::eval::coref::CorefChain> {
-        use crate::eval::coref::Mention;
+    pub fn to_eval_chains(&self, clusters: &[CorefCluster]) -> Vec<anno_core::coref::CorefChain> {
+        use anno_core::coref::Mention;
 
         clusters
             .iter()
@@ -601,7 +601,7 @@ impl T5Coref {
                     })
                     .collect();
 
-                let mut chain = crate::eval::coref::CorefChain::new(mentions);
+                let mut chain = anno_core::coref::CorefChain::new(mentions);
                 // Set cluster ID based on canonical name hash
                 chain.cluster_id = Some(c.id as u64);
                 chain

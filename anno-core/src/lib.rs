@@ -61,6 +61,7 @@
 //! |--------|---------|
 //! | [`entity`] | `Entity`, `Span`, `Relation`, `EntityType` |
 //! | [`grounded`] | `GroundedDocument`, `Identity`, `Signal`, `Track` |
+//! | [`coref`] | `Mention`, `CorefChain`, `CorefDocument` |
 //! | [`graph`] | Export to Neo4j, GraphML, JSON-LD |
 //! | [`dataset`] | `DatasetSpec`, `CustomDataset`, `DatasetRegistry` |
 //! | [`calibration`] | Confidence score calibration |
@@ -76,13 +77,13 @@
 //! - **No ML dependencies**: Pure data types, no torch/candle/onnx
 
 pub mod calibration;
+pub mod coref;
 pub mod dataset;
 pub mod entity;
 pub mod error;
 pub mod graph;
 pub mod grounded;
 pub mod historical;
-pub mod label_prompt;
 pub mod ontology;
 pub mod provenance;
 pub mod types;
@@ -107,6 +108,9 @@ pub use dataset::{
     CustomDataset, DatasetRegistry, DatasetSpec, DatasetStats, Domain, License, ParserHint,
     SplitSizes, Task, TemporalCoverage,
 };
+
+// Coreference types
+pub use coref::{entities_to_chains, CorefChain, CorefDocument, Mention};
 
 // Other modules accessible via anno_core::module_name
 pub use types::{

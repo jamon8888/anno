@@ -116,7 +116,7 @@
 //! - Hossain et al. (2025): "SpanEIT: Dynamic Span Interaction and Graph-Aware Memory"
 //!   [arXiv:2509.11604](https://arxiv.org/abs/2509.11604)
 
-use crate::eval::coref::{CorefChain, Mention, MentionType};
+use anno_core::coref::{CorefChain, Mention, MentionType};
 use std::collections::HashSet;
 
 // =============================================================================
@@ -992,8 +992,8 @@ impl GraphCoref {
 pub fn chains_to_document(
     text: impl Into<String>,
     chains: Vec<CorefChain>,
-) -> crate::eval::coref::CorefDocument {
-    crate::eval::coref::CorefDocument::new(text, chains)
+) -> anno_core::coref::CorefDocument {
+    anno_core::coref::CorefDocument::new(text, chains)
 }
 
 // =============================================================================
