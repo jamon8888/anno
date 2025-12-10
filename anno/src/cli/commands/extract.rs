@@ -327,7 +327,7 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
             "full" => serde_json::to_value(&doc)
                 .map_err(|e| format!("Failed to serialize GroundedDocument: {}", e))?,
             "signals" => {
-                let signals: Vec<_> = doc.signals().iter().cloned().collect();
+                let signals: Vec<_> = doc.signals().to_vec();
                 serde_json::json!({
                     "id": doc.id,
                     "text": doc.text,

@@ -9331,7 +9331,7 @@ pub fn generate_markdown() -> String {
         "| Dialogue/Conversational | {} |\n",
         DatasetId::all_dialogue().len()
     ));
-    md.push_str("\n");
+    md.push('\n');
 
     // Full dataset table
     md.push_str("## All Datasets\n\n");
@@ -9351,7 +9351,7 @@ pub fn generate_markdown() -> String {
             cats.join(", ")
         ));
     }
-    md.push_str("\n");
+    md.push('\n');
 
     // Detailed info with citations
     md.push_str("## Dataset Details\n\n");
@@ -9407,7 +9407,7 @@ pub fn generate_markdown() -> String {
             md.push_str("\n```\n");
         }
 
-        md.push_str("\n");
+        md.push('\n');
     }
 
     md
