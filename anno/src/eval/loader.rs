@@ -1799,6 +1799,68 @@ pub enum DatasetId {
     Mahanama,
 }
 
+// =============================================================================
+// Conversion API
+// =============================================================================
+//
+// loader::DatasetId (loadable subset) <-> dataset_registry::DatasetId (full catalog)
+//
+// The relationship: loader::DatasetId ⊂ dataset_registry::DatasetId
+//
+// Currently, the two enums have different variant names in some cases
+// (e.g., CoNLL2003Sample vs CoNLL2003). Full unification is tracked as
+// future work. For now, use name-based lookup when you need registry metadata.
+
+use super::dataset_registry::DatasetId as RegistryDatasetId;
+
+impl DatasetId {
+    /// Look up this dataset in the registry by name.
+    ///
+    /// Returns the corresponding `RegistryDatasetId` if found, which provides
+    /// access to rich metadata (citation, license, paper URL, etc.).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use anno::eval::LoadableDatasetId;
+    ///
+    /// let id = LoadableDatasetId::WikiGold;
+    /// if let Some(registry) = id.find_in_registry() {
+    ///     println!("Citation: {}", registry.citation().unwrap_or("N/A"));
+    ///     println!("License: {}", registry.license().unwrap_or("Unknown"));
+    /// }
+    /// ```
+    #[must_use]
+    pub fn find_in_registry(&self) -> Option<RegistryDatasetId> {
+        let name = self.name();
+        RegistryDatasetId::all().iter().find(|r| r.name() == name).copied()
+    }
+
+    /// Get citation information for this dataset.
+    ///
+    /// Convenience method that looks up the registry entry.
+    #[must_use]
+    pub fn citation(&self) -> Option<&'static str> {
+        self.find_in_registry().and_then(|r| r.citation())
+    }
+
+    /// Get license information for this dataset.
+    ///
+    /// Convenience method that looks up the registry entry.
+    #[must_use]
+    pub fn license(&self) -> Option<&'static str> {
+        self.find_in_registry().and_then(|r| r.license())
+    }
+
+    /// Get publication year for this dataset.
+    ///
+    /// Convenience method that looks up the registry entry.
+    #[must_use]
+    pub fn year(&self) -> Option<u16> {
+        self.find_in_registry().and_then(|r| r.year())
+    }
+}
+
 impl DatasetId {
     /// Get the download URL for this dataset.
     ///
