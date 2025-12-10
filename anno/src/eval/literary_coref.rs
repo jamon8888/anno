@@ -65,7 +65,13 @@
 //! - **BOOKCOREF**: 53 full novels (200k+ tokens average)
 //! - **MovieCoref**: Screenplays with character annotations
 //! - **DROC**: German novel character coreference
-//! - **KoCoNovel**: Korean novel characters
+//! - **KoCoNovel**: Korean novel characters (50 novels, 178K tokens, 19K mentions)
+//!   - Mention distribution: Pronominal 30.7%, Proper Name 22.8%, Single Noun 24.1%, NP 22.4%
+//!   - Address term culture (호칭 문화): Kinship terms (9.2%) and titles (3.1%) substitute names
+//!   - Four versions: Reader/Omniscient × Separate/Overlapped entity handling
+//!   - Distance stats: Antecedent avg 70.7 tokens, Spread avg 1583.3 tokens
+//!   - Challenges: No determiners, pro-drop, morpheme-unit spans, "Bobu emma" patterns
+//!   - BERT baseline: ~62-73% MUC F1 (domain-specific training helps despite smaller size)
 //!
 //! # References
 //!
@@ -75,6 +81,8 @@
 //! - Orlando et al. (2024): "ReLiK: Retrieve and LinK"
 //! - **Duron-Tejedor et al. (2023)**: "How to Evaluate Coreference in Literary Texts?"
 //!   \[arXiv:2401.00238\] — Recommends stratified evaluation (protagonist vs secondary)
+//! - **Kim, Lee & Lee (2024)**: "KoCoNovel: Annotated Dataset of Character Coreference
+//!   in Korean Novels" \[arXiv:2404.01140\] — Korean literary coref with address term culture
 
 use super::coref::{CorefChain, Mention, MentionType};
 use crate::backends::llm_client::{LlmConfig, LlmProvider};

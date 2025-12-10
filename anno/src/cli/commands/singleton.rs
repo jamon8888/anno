@@ -247,7 +247,8 @@ fn classify_singleton(
 
     // Check if it's part of a compound (has "of", "for", etc. nearby)
     // Note: entity.start is a CHARACTER offset, not byte offset
-    let before_context: String = text.chars()
+    let before_context: String = text
+        .chars()
         .skip(entity.start.saturating_sub(10))
         .take(10.min(entity.start))
         .collect();
@@ -295,10 +296,7 @@ fn print_human_report(report: &SingletonReport, _text: &str, verbose: bool, quie
     println!("  Total entities:  {}", report.total_entities);
     println!("  Singletons:      {}", report.singleton_count);
     println!("  Clustered:       {}", report.clustered_count);
-    println!(
-        "  Singleton ratio: {:.1}%",
-        report.singleton_ratio * 100.0
-    );
+    println!("  Singleton ratio: {:.1}%", report.singleton_ratio * 100.0);
     println!();
 
     // By type breakdown
@@ -391,7 +389,10 @@ fn print_json_report(report: &SingletonReport) {
         }).collect::<Vec<_>>(),
         "likely_genuine": report.likely_genuine.len(),
     });
-    println!("{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json).unwrap_or_default()
+    );
 }
 
 fn print_tsv_report(report: &SingletonReport) {
@@ -415,4 +416,3 @@ fn print_tsv_report(report: &SingletonReport) {
         }
     }
 }
-

@@ -3,7 +3,11 @@
 //! This module contains the command-line interface structure, argument parsing,
 //! and command routing. Individual command implementations are in the `commands` submodule.
 
+/// Cache management utilities.
+pub mod cache;
 pub mod commands;
+/// Configuration management.
+pub mod config;
 pub mod output;
 pub mod parser;
 pub mod utils;

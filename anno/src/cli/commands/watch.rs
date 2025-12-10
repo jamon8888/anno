@@ -231,7 +231,10 @@ fn scan_directory(dir: &PathBuf, extensions: &[String]) -> Result<Vec<PathBuf>, 
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
-                if extensions.iter().any(|e| e == ext.to_string_lossy().as_ref()) {
+                if extensions
+                    .iter()
+                    .any(|e| e == ext.to_string_lossy().as_ref())
+                {
                     files.push(path);
                 }
             }
@@ -279,8 +282,11 @@ fn process_file(
             }).collect::<Vec<_>>()
         });
 
-        fs::write(&out_path, serde_json::to_string_pretty(&output).unwrap_or_default())
-            .map_err(|e| format!("Failed to write output: {}", e))?;
+        fs::write(
+            &out_path,
+            serde_json::to_string_pretty(&output).unwrap_or_default(),
+        )
+        .map_err(|e| format!("Failed to write output: {}", e))?;
     } else {
         // Print to stdout in JSONL format
         let output = serde_json::json!({
@@ -301,4 +307,3 @@ fn process_file(
 
     Ok(entity_count)
 }
-

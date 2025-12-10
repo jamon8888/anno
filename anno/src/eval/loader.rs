@@ -3987,6 +3987,7 @@ impl DatasetId {
     #[must_use]
     pub fn domain(&self) -> &'static str {
         match self {
+            // Biomedical/Clinical
             DatasetId::BC5CDR
             | DatasetId::NCBIDisease
             | DatasetId::GENIA
@@ -3996,19 +3997,83 @@ impl DatasetId {
             | DatasetId::JNLPBA
             | DatasetId::BC2GMFull
             | DatasetId::CRAFT
-            | DatasetId::BioRED => "biomedical",
-            DatasetId::MitMovie => "entertainment",
-            DatasetId::MitRestaurant => "restaurant",
-            DatasetId::Wnut17 | DatasetId::TweetNER7 | DatasetId::BroadTwitterCorpus => {
-                "social-media"
-            }
-            DatasetId::CoNLL2003Sample | DatasetId::OntoNotesSample => "news",
-            DatasetId::LitBank => "literature",
+            | DatasetId::BioRED
+            | DatasetId::MedMentions
+            | DatasetId::ShARe13
+            | DatasetId::ShARe14
+            | DatasetId::CADEC
+            | DatasetId::I2B22010
+            | DatasetId::I2B2Temporal
+            | DatasetId::I2b2Deidentification => "biomedical",
+
+            // Entertainment/Media
+            DatasetId::MitMovie
+            | DatasetId::AnimeMangaNER
+            | DatasetId::BookCoref
+            | DatasetId::BookSumCoref
+            | DatasetId::CharacterCodex => "entertainment",
+
+            // Food/Restaurant
+            DatasetId::MitRestaurant
+            | DatasetId::RecipeNER
+            | DatasetId::TASTEset
+            | DatasetId::NERsocialFood => "food",
+
+            // Social Media
+            DatasetId::Wnut17
+            | DatasetId::TweetNER7
+            | DatasetId::BroadTwitterCorpus
+            | DatasetId::TweetTopic
+            | DatasetId::TwiConv => "social-media",
+
+            // News/Journalism
+            DatasetId::CoNLL2003Sample
+            | DatasetId::OntoNotesSample
+            | DatasetId::WikiGold
+            | DatasetId::CoNLL2002
+            | DatasetId::CoNLL2002Spanish
+            | DatasetId::CoNLL2002Dutch
+            | DatasetId::OntoNotes50
+            | DatasetId::ACE2004
+            | DatasetId::ACE2005
+            | DatasetId::ACE05RE
+            | DatasetId::MUC6
+            | DatasetId::MUC7
+            | DatasetId::AGNews => "news",
+
+            // Literature/Fiction
+            DatasetId::LitBank
+            | DatasetId::FictionNER750M
+            | DatasetId::FantasyCoref
+            | DatasetId::DROC
+            | DatasetId::KoCoNovel => "literature",
+
+            // Manufacturing/Industrial
             DatasetId::FabNER => "manufacturing",
-            DatasetId::FinNER => "financial",
-            DatasetId::LegalNER => "legal",
-            DatasetId::SciCo | DatasetId::SciER | DatasetId::SciERCNER => "scientific",
-            // Historical datasets (ancient texts, dynastic histories, medieval documents)
+
+            // Financial
+            DatasetId::FinNER
+            | DatasetId::FiNER139
+            | DatasetId::FINER
+            | DatasetId::FinBenNER
+            | DatasetId::FinanceNER => "financial",
+
+            // Legal
+            DatasetId::LegalNER
+            | DatasetId::LegNER
+            | DatasetId::LegalCore
+            | DatasetId::LexGLUENER => "legal",
+
+            // Scientific/Academic
+            DatasetId::SciCo
+            | DatasetId::SciER
+            | DatasetId::SciERCNER
+            | DatasetId::SciERC
+            | DatasetId::MathEntities
+            | DatasetId::AstroNER
+            | DatasetId::AstroBERTCorpus => "scientific",
+
+            // Historical (ancient texts, dynastic histories, medieval documents)
             DatasetId::CHisIEC
             | DatasetId::HistoricalChineseNER
             | DatasetId::HIPE2022
@@ -4017,7 +4082,120 @@ impl DatasetId {
             | DatasetId::SpanishMedievalTEI
             | DatasetId::BiTimeBERT
             | DatasetId::DELICATE
-            | DatasetId::TRIDIS => "historical",
+            | DatasetId::TRIDIS
+            | DatasetId::HistNERo
+            | DatasetId::AncientGreekUD
+            | DatasetId::AncientHebrewUD
+            | DatasetId::LatinUD
+            | DatasetId::CopticScriptorium
+            | DatasetId::AkkadianUD
+            | DatasetId::AkkadianCuneiformDataset
+            | DatasetId::ORACC => "historical",
+
+            // Geographic/Geospatial
+            DatasetId::GeoWebNews
+            | DatasetId::LGL => "geographic",
+
+            // Multilingual (cross-language datasets)
+            DatasetId::WikiANN
+            | DatasetId::MultiNERD
+            | DatasetId::MultiCoNER
+            | DatasetId::MultiCoNERv2
+            | DatasetId::WikiNeural
+            | DatasetId::PolyglotNER
+            | DatasetId::UniversalNER
+            | DatasetId::UNER
+            | DatasetId::MasakhaNER
+            | DatasetId::MasakhaNER2 => "multilingual",
+
+            // Code-mixed/Mixed-language
+            DatasetId::HinglishNER
+            | DatasetId::LinCE
+            | DatasetId::GLUECoS
+            | DatasetId::CALCS
+            | DatasetId::CALCS2018
+            | DatasetId::MixRED => "code-mixed",
+
+            // Constructed languages (conlangs)
+            DatasetId::Klingon
+            | DatasetId::KlingonEffectLID
+            | DatasetId::HighValyrian
+            | DatasetId::Dothraki
+            | DatasetId::Navi
+            | DatasetId::Quenya
+            | DatasetId::EsperantoUD
+            | DatasetId::Lojban
+            | DatasetId::LojbanTatoeba
+            | DatasetId::Interslavic => "constructed-language",
+
+            // Coreference (general coreference datasets)
+            DatasetId::GAP
+            | DatasetId::PreCo
+            | DatasetId::ECBPlus
+            | DatasetId::WikiCoref
+            | DatasetId::GUM
+            | DatasetId::WinoBias
+            | DatasetId::MuDoCo
+            | DatasetId::ARRAU
+            | DatasetId::ARRAU3
+            | DatasetId::ArrauGenia
+            | DatasetId::ArrauPear
+            | DatasetId::ArrauRst
+            | DatasetId::ArrauTrains => "coreference",
+
+            // Relation Extraction
+            DatasetId::DocRED
+            | DatasetId::ReTACRED
+            | DatasetId::NYTFB
+            | DatasetId::WEBNLG
+            | DatasetId::GoogleRE
+            | DatasetId::CovEReD => "relation-extraction",
+
+            // Event extraction
+            DatasetId::MAVEN
+            | DatasetId::MAVENArg
+            | DatasetId::CASIE
+            | DatasetId::RAMS => "event-extraction",
+
+            // Entity Linking
+            DatasetId::AIDA
+            | DatasetId::AIDACoNLL
+            | DatasetId::TACKBP
+            | DatasetId::WNEDWiki
+            | DatasetId::KORE50
+            | DatasetId::ELGold
+            | DatasetId::MewsliX => "entity-linking",
+
+            // Bias evaluation
+            DatasetId::WinoBias
+            | DatasetId::BoldBias
+            | DatasetId::CrowSPairs
+            | DatasetId::StereoSet
+            | DatasetId::BBQ => "bias-evaluation",
+
+            // Discourse/Pragmatics
+            DatasetId::PDTB3
+            | DatasetId::PDTBv3
+            | DatasetId::RSTDT
+            | DatasetId::DiscoBench
+            | DatasetId::DiscoTrack
+            | DatasetId::ISNotes
+            | DatasetId::ShellNouns => "discourse",
+
+            // Low-resource African languages
+            DatasetId::NaijaNER
+            | DatasetId::AfriSenti
+            | DatasetId::AfriQA
+            | DatasetId::MasakhaNEWS
+            | DatasetId::MasakhaPOS => "low-resource-african",
+
+            // Low-resource Asian languages
+            DatasetId::IndicNER => "low-resource-asian",
+
+            // Low-resource other
+            DatasetId::MaoriNER
+            | DatasetId::BasqueNER => "low-resource-other",
+
             _ => "general",
         }
     }
@@ -4460,6 +4638,101 @@ impl DatasetId {
                 "sports_&_gaming",
                 "science_&_technology",
             ],
+            // ACE datasets (7 entity types)
+            DatasetId::ACE2004 | DatasetId::ACE05RE => {
+                &["PER", "ORG", "GPE", "LOC", "FAC", "VEH", "WEA"]
+            }
+            // ARRAU (coreference mentions, not typed NER)
+            DatasetId::ARRAU
+            | DatasetId::ARRAU3
+            | DatasetId::ArrauGenia
+            | DatasetId::ArrauPear
+            | DatasetId::ArrauRst
+            | DatasetId::ArrauTrains => &["MENTION"],
+            // Historical/ancient language datasets
+            DatasetId::AncientGreekUD | DatasetId::AncientHebrewUD | DatasetId::LatinUD => {
+                &["PER", "LOC", "ORG", "MISC"]
+            }
+            DatasetId::AkkadianUD | DatasetId::AkkadianCuneiformDataset | DatasetId::ORACC => {
+                &["PER", "LOC", "ORG", "DEITY"]
+            }
+            DatasetId::CopticScriptorium => &["PER", "LOC", "ORG", "EVENT"],
+            // Constructed language datasets
+            DatasetId::Klingon | DatasetId::KlingonEffectLID => &["PER", "LOC", "ORG"],
+            DatasetId::HighValyrian | DatasetId::Dothraki | DatasetId::Navi => {
+                &["PER", "LOC", "ORG"]
+            }
+            DatasetId::Quenya => &["PER", "LOC", "ORG", "ARTIFACT"],
+            DatasetId::EsperantoUD | DatasetId::Lojban | DatasetId::LojbanTatoeba => {
+                &["PER", "LOC", "ORG"]
+            }
+            DatasetId::Interslavic => &["PER", "LOC", "ORG", "MISC"],
+            // Scientific datasets
+            DatasetId::SciERC => &["Method", "Task", "Material", "Metric", "OtherScientificTerm"],
+            DatasetId::MathEntities => &["FUNCTION", "OPERATOR", "VARIABLE", "CONSTANT"],
+            DatasetId::AstroNER | DatasetId::AstroBERTCorpus => {
+                &["CELESTIAL_BODY", "MISSION", "INSTRUMENT", "PROPERTY"]
+            }
+            // Medical/clinical datasets
+            DatasetId::I2B22010 | DatasetId::I2b2Deidentification => {
+                &["PROBLEM", "TREATMENT", "TEST"]
+            }
+            DatasetId::I2B2Temporal => &["DATE", "TIME", "DURATION", "FREQUENCY", "PROBLEM"],
+            DatasetId::MedMentions => &["DISEASE", "CHEMICAL", "GENE", "CELL"],
+            DatasetId::ShARe2013 | DatasetId::ShARe2014 | DatasetId::ShAReCLEF => &["Disorder"],
+            // Financial datasets
+            DatasetId::FiNER139 | DatasetId::FINER | DatasetId::FinBenNER | DatasetId::FinanceNER => {
+                &["Company", "Currency", "FinancialInstrument", "Amount", "Date"]
+            }
+            // Legal datasets
+            DatasetId::LegalCore | DatasetId::LexGLUENER => {
+                &["PERSON", "ORGANIZATION", "LAW", "COURT", "DATE"]
+            }
+            // Low-resource language datasets
+            DatasetId::MaoriNER => &["PER", "LOC", "ORG"],
+            DatasetId::NaijaNER => &["PER", "LOC", "ORG", "DATE"],
+            DatasetId::BasqueNER => &["PER", "LOC", "ORG", "MISC"],
+            DatasetId::IndicNER => &["PER", "LOC", "ORG", "MISC"],
+            // Germanic language datasets  
+            DatasetId::NorNE => &["PER", "LOC", "ORG", "GPE_LOC", "GPE_ORG", "PROD", "EVT", "DRV"],
+            // Romance language datasets
+            DatasetId::FrenchClinicalNER => &["PROBLEM", "TREATMENT", "TEST", "ANATOMY"],
+            DatasetId::HistNERo => &["PER", "LOC", "ORG", "DATE"],
+            // Code-mixed datasets
+            DatasetId::HinglishNER | DatasetId::LinCE | DatasetId::GLUECoS | DatasetId::CALCS | DatasetId::CALCS2018 => {
+                &["PER", "LOC", "ORG"]
+            }
+            // Recipe/Food datasets
+            DatasetId::RecipeNER | DatasetId::TASTEset | DatasetId::NERsocialFood => {
+                &["INGREDIENT", "QUANTITY", "UNIT", "PROCESS"]
+            }
+            // GeoNER datasets
+            DatasetId::GeoWebNews | DatasetId::LGL => &["LOC", "GPE", "FAC", "STREET", "CITY"],
+            // Fiction/Literary datasets
+            DatasetId::BookCoref | DatasetId::BookSumCoref | DatasetId::CharacterCodex => {
+                &["CHARACTER", "LOCATION"]
+            }
+            DatasetId::AnimeMangaNER => &["CHARACTER", "SERIES", "ORGANIZATION"],
+            DatasetId::FictionNER750M => &["PER", "LOC", "ORG", "MISC"],
+            // Entity linking datasets
+            DatasetId::AIDACoNLL | DatasetId::WNEDWiki | DatasetId::KORE50 | DatasetId::ELGold | DatasetId::MewsliX => {
+                &["PER", "LOC", "ORG"]
+            }
+            // Nested NER datasets
+            DatasetId::ChineseNestedNER | DatasetId::SCINERNested => &["PER", "LOC", "ORG", "MISC"],
+            // Discontinuous NER datasets
+            DatasetId::ADRDiscontinuous | DatasetId::PubMedDiscontinuous | DatasetId::GermEvalDiscontinuous => {
+                &["ENTITY"]
+            }
+            // Bias evaluation datasets
+            DatasetId::WinoBias | DatasetId::BoldBias | DatasetId::CrowSPairs | DatasetId::StereoSet | DatasetId::BBQ => {
+                &["PERSON"]
+            }
+            // Discourse datasets
+            DatasetId::PDTB3 | DatasetId::PDTBv3 | DatasetId::RSTDT | DatasetId::DiscoBench | DatasetId::DiscoTrack => {
+                &["DISCOURSE_RELATION"]
+            }
+            DatasetId::ISNotes | DatasetId::ShellNouns => &["MENTION"],
             // Catch-all for new datasets - return generic types
             _ => &["ENTITY"],
         }

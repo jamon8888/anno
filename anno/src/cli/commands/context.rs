@@ -158,8 +158,8 @@ fn build_context(
     window: usize,
     full_sentence: bool,
 ) -> EntityContext {
-    let start = entity.start;  // CHARACTER offset
-    let end = entity.end;      // CHARACTER offset
+    let start = entity.start; // CHARACTER offset
+    let end = entity.end; // CHARACTER offset
     let char_count = text.chars().count();
 
     // Character-based context window (entity offsets are CHARACTER offsets)
@@ -167,11 +167,13 @@ fn build_context(
     let right_end = (end + window).min(char_count);
 
     // Extract context using character iteration (not byte slicing!)
-    let left_context: String = text.chars()
+    let left_context: String = text
+        .chars()
         .skip(left_start)
         .take(start.saturating_sub(left_start))
         .collect();
-    let right_context: String = text.chars()
+    let right_context: String = text
+        .chars()
         .skip(end)
         .take(right_end.saturating_sub(end))
         .collect();
@@ -240,10 +242,7 @@ fn format_human(contexts: &[EntityContext], quiet: bool) -> String {
     }
 
     let mut output = String::new();
-    output.push_str(&format!(
-        "{}\n\n",
-        color("1;36", "Entity Context Export")
-    ));
+    output.push_str(&format!("{}\n\n", color("1;36", "Entity Context Export")));
 
     for (i, ctx) in contexts.iter().enumerate() {
         output.push_str(&format!(
@@ -252,7 +251,12 @@ fn format_human(contexts: &[EntityContext], quiet: bool) -> String {
             color("36", &ctx.entity_type),
             ctx.text
         ));
-        output.push_str(&format!("  Span: {}:{} ({:.0}% conf)\n", ctx.start, ctx.end, ctx.confidence * 100.0));
+        output.push_str(&format!(
+            "  Span: {}:{} ({:.0}% conf)\n",
+            ctx.start,
+            ctx.end,
+            ctx.confidence * 100.0
+        ));
 
         // Context with highlighting
         output.push_str(&format!(
@@ -267,7 +271,7 @@ fn format_human(contexts: &[EntityContext], quiet: bool) -> String {
             let sentence_chars: Vec<char> = sentence.chars().collect();
             let relative_start = ctx.start.saturating_sub(ctx.sentence_start.unwrap_or(0));
             let relative_end = relative_start + ctx.text.chars().count();
-            
+
             let before: String = sentence_chars.iter().take(relative_start).collect();
             let entity_text = &ctx.text;
             let after: String = sentence_chars.iter().skip(relative_end).collect();
@@ -281,10 +285,7 @@ fn format_human(contexts: &[EntityContext], quiet: bool) -> String {
         output.push('\n');
     }
 
-    output.push_str(&format!(
-        "─── {} entities exported\n",
-        contexts.len()
-    ));
+    output.push_str(&format!("─── {} entities exported\n", contexts.len()));
 
     output
 }
@@ -319,7 +320,8 @@ fn format_json(contexts: &[EntityContext]) -> String {
 }
 
 fn format_tsv(contexts: &[EntityContext]) -> String {
-    let mut output = String::from("text\ttype\tstart\tend\tconf\tleft_context\tright_context\tsentence\n");
+    let mut output =
+        String::from("text\ttype\tstart\tend\tconf\tleft_context\tright_context\tsentence\n");
     for c in contexts {
         output.push_str(&format!(
             "{}\t{}\t{}\t{}\t{:.2}\t{}\t{}\t{}\n",
@@ -330,7 +332,11 @@ fn format_tsv(contexts: &[EntityContext]) -> String {
             c.confidence,
             c.left_context.replace('\t', " ").replace('\n', " "),
             c.right_context.replace('\t', " ").replace('\n', " "),
-            c.sentence.as_deref().unwrap_or("").replace('\t', " ").replace('\n', " ")
+            c.sentence
+                .as_deref()
+                .unwrap_or("")
+                .replace('\t', " ")
+                .replace('\n', " ")
         ));
     }
     output
@@ -382,4 +388,3 @@ fn format_brat(contexts: &[EntityContext]) -> String {
 
     output
 }
-

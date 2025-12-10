@@ -750,4 +750,148 @@ mod tests {
         let overlap = calculate_span_overlap((0, 10), (5, 15));
         assert!(overlap > 0.3 && overlap < 0.4); // IoU for this case
     }
+
+    #[test]
+    fn test_relation_type_case_insensitive() {
+        // Relation types should match case-insensitively
+        let gold = vec![RelationGold::new(
+            (0, 10),
+            "PER",
+            "Steve Jobs",
+            (20, 25),
+            "ORG",
+            "Apple",
+            "FOUNDED",
+        )];
+        let pred = vec![RelationPrediction {
+            head_span: (0, 10),
+            head_type: "PER".to_string(),
+            tail_span: (20, 25),
+            tail_type: "ORG".to_string(),
+            relation_type: "founded".to_string(), // lowercase
+            confidence: 0.9,
+        }];
+
+        let metrics = evaluate_relations(&gold, &pred, &RelationEvalConfig::default());
+        assert!(
+            (metrics.strict_f1 - 1.0).abs() < 0.001,
+            "Relation type matching should be case-insensitive"
+        );
+    }
+
+    #[test]
+    fn test_entity_type_match_disabled() {
+        // When require_entity_type_match is false, entity types don't need to match
+        let gold = vec![RelationGold::new(
+            (0, 10),
+            "PER",
+            "Steve Jobs",
+            (20, 25),
+            "ORG",
+            "Apple",
+            "FOUNDED",
+        )];
+        let pred = vec![RelationPrediction {
+            head_span: (0, 10),
+            head_type: "PERSON".to_string(), // Different from PER
+            tail_span: (20, 25),
+            tail_type: "COMPANY".to_string(), // Different from ORG
+            relation_type: "FOUNDED".to_string(),
+            confidence: 0.9,
+        }];
+
+        // With type match required: should fail
+        let config_strict = RelationEvalConfig {
+            require_entity_type_match: true,
+            ..Default::default()
+        };
+        let metrics = evaluate_relations(&gold, &pred, &config_strict);
+        assert!(metrics.strict_f1 < 0.001, "Type mismatch should fail");
+
+        // Without type match required: should succeed
+        let config_lenient = RelationEvalConfig {
+            require_entity_type_match: false,
+            ..Default::default()
+        };
+        let metrics = evaluate_relations(&gold, &pred, &config_lenient);
+        assert!(
+            (metrics.strict_f1 - 1.0).abs() < 0.001,
+            "Without type matching, should succeed"
+        );
+    }
+
+    #[test]
+    fn test_no_gold_all_pred() {
+        // No gold annotations, but predictions exist
+        let gold: Vec<RelationGold> = vec![];
+        let pred = vec![RelationPrediction {
+            head_span: (0, 10),
+            head_type: "PER".to_string(),
+            tail_span: (20, 25),
+            tail_type: "ORG".to_string(),
+            relation_type: "FOUNDED".to_string(),
+            confidence: 0.9,
+        }];
+
+        let metrics = evaluate_relations(&gold, &pred, &RelationEvalConfig::default());
+        // Precision = 0 (no correct), Recall = undefined (no gold) -> 0
+        assert!(metrics.strict_precision < 0.001);
+        assert!(metrics.strict_f1 < 0.001);
+    }
+
+    #[test]
+    fn test_all_gold_no_pred() {
+        // Gold annotations exist, but no predictions
+        let gold = vec![RelationGold::new(
+            (0, 10),
+            "PER",
+            "Steve Jobs",
+            (20, 25),
+            "ORG",
+            "Apple",
+            "FOUNDED",
+        )];
+        let pred: Vec<RelationPrediction> = vec![];
+
+        let metrics = evaluate_relations(&gold, &pred, &RelationEvalConfig::default());
+        // Precision = undefined (no pred) -> 0, Recall = 0 (no correct)
+        assert!(metrics.strict_recall < 0.001);
+        assert!(metrics.strict_f1 < 0.001);
+    }
+
+    #[test]
+    fn test_boundary_vs_strict_matching() {
+        // Test that boundary matching is more lenient than strict
+        let gold = vec![RelationGold::new(
+            (0, 15),
+            "PER",
+            "Steve Jobs Jr.",
+            (25, 35),
+            "ORG",
+            "Apple Inc.",
+            "FOUNDED",
+        )];
+        // Predictions have overlapping but not exact spans
+        let pred = vec![RelationPrediction {
+            head_span: (0, 10), // Partial overlap (10/15 = 66%)
+            head_type: "PER".to_string(),
+            tail_span: (25, 30), // Partial overlap (5/10 = 50%)
+            tail_type: "ORG".to_string(),
+            relation_type: "FOUNDED".to_string(),
+            confidence: 0.9,
+        }];
+
+        let metrics = evaluate_relations(&gold, &pred, &RelationEvalConfig::default());
+
+        // Strict should fail (spans don't match exactly)
+        assert!(
+            metrics.strict_f1 < 0.001,
+            "Strict should fail for partial overlap"
+        );
+        // Boundary should succeed (>= 0.5 overlap threshold)
+        assert!(
+            metrics.boundary_f1 > 0.5,
+            "Boundary should succeed for sufficient overlap"
+        );
+    }
 }

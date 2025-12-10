@@ -12,6 +12,15 @@
 //! | **Mediation Quality** | How well mediation strategies combine signals |
 //! | **Source Importance** | Which evidence sources contribute most |
 //!
+//! ## Related Modules
+//!
+//! - [`crate::geometric::sheaf`]: Sheaf neural networks enforce transitivity at
+//!   the gradient level (training time) rather than as post-hoc evaluation.
+//!   This module evaluates transitivity; sheaf learns to satisfy it.
+//!
+//! - [`crate::geometric::transitivity_violations`]: Utility function for detecting
+//!   transitivity violations in a score matrix.
+//!
 //! ## References
 //!
 //! - Hypergraph Clustering: Chodrow et al. 2022

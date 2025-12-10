@@ -103,7 +103,10 @@ pub fn run(args: DomainArgs) -> Result<(), String> {
 
     // Return non-zero on high risk
     if report.shift_risk == ShiftRisk::High {
-        eprintln!("{} High domain shift risk detected", color("33", "warning:"));
+        eprintln!(
+            "{} High domain shift risk detected",
+            color("33", "warning:")
+        );
     }
 
     Ok(())
@@ -312,8 +315,8 @@ fn analyze_domain(text: &str, model: &ModelBackend) -> DomainReport {
     });
 
     // Check for unusual patterns
-    let numeric_ratio = text.chars().filter(|c| c.is_numeric()).count() as f32
-        / text.len().max(1) as f32;
+    let numeric_ratio =
+        text.chars().filter(|c| c.is_numeric()).count() as f32 / text.len().max(1) as f32;
     indicators.push(DomainIndicator {
         name: "numeric_ratio".into(),
         value: format!("{:.1}%", numeric_ratio * 100.0),
@@ -439,6 +442,8 @@ fn print_json_report(report: &DomainReport) {
         }).collect::<Vec<_>>(),
         "recommendations": report.recommendations,
     });
-    println!("{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json).unwrap_or_default()
+    );
 }
-

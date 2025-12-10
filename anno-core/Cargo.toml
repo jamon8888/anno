@@ -18,6 +18,12 @@ log = { workspace = true }
 chrono = { workspace = true }
 once_cell = { workspace = true }
 
+[features]
+default = []
+# Serde is always enabled (non-optional) but we expose the feature
+# for downstream crates that want to conditionally enable their own serde
+serde = []
+
 [dev-dependencies]
 proptest = { workspace = true }
 

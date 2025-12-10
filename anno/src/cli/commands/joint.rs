@@ -39,12 +39,10 @@ use std::time::Instant;
 ///
 /// Based on: Durrett & Klein (2014) "A Joint Model for Entity Analysis"
 #[derive(Parser, Debug)]
-#[command(
-    after_help = "EXAMPLES:\n  \
+#[command(after_help = "EXAMPLES:\n  \
         anno joint \"Barack Obama visited France.\"\n  \
         anno joint -f article.txt --format json\n  \
-        anno joint -t \"...\" --threshold 0.3 --no-coref-link"
-)]
+        anno joint -t \"...\" --threshold 0.3 --no-coref-link")]
 pub struct JointArgs {
     /// Input text to process
     #[arg(short, long)]
@@ -126,8 +124,8 @@ pub fn run(args: JointArgs) -> Result<(), String> {
     };
 
     // Create and run joint model
-    let joint_model = JointModel::new(config)
-        .map_err(|e| format!("Failed to create joint model: {}", e))?;
+    let joint_model =
+        JointModel::new(config).map_err(|e| format!("Failed to create joint model: {}", e))?;
 
     let start_joint = Instant::now();
     let result = joint_model
@@ -197,7 +195,9 @@ pub fn run(args: JointArgs) -> Result<(), String> {
         let mut type_counts: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();
         for e in &result.entities {
-            *type_counts.entry(e.entity_type.as_label().to_string()).or_insert(0) += 1;
+            *type_counts
+                .entry(e.entity_type.as_label().to_string())
+                .or_insert(0) += 1;
         }
 
         println!(

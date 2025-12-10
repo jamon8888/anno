@@ -240,6 +240,12 @@ fn main() -> ExitCode {
         Some(Commands::Cache(args)) => cache::run(args),
         Some(Commands::Config(args)) => config::run(args),
         Some(Commands::Batch(args)) => batch::run(args),
+        Some(Commands::Joint(args)) => joint::run(args),
+        Some(Commands::Privacy(args)) => privacy::run(args),
+        Some(Commands::Watch(args)) => watch::run(args),
+        Some(Commands::Domain(args)) => domain::run(args),
+        Some(Commands::Explain(args)) => explain::run(args),
+        Some(Commands::Singleton(args)) => singleton::run(args),
         Some(Commands::Completions { shell }) => {
             generate(shell, &mut Cli::command(), "anno", &mut io::stdout());
             Ok(())

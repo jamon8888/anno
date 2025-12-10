@@ -1,23 +1,31 @@
 //! NER and Coreference evaluation framework.
 //!
-//! # Design Note
+//! # Feature Gating
 //!
-//! The evaluation framework lives in `anno::eval` rather than a separate `anno-eval`
-//! crate because:
+//! This module is behind the `eval` feature flag. Without it, anno is ~85k lines.
+//! With it, anno gains ~92k lines of evaluation infrastructure.
+//!
+//! ```toml
+//! # Minimal (no eval): ~85k lines
+//! anno = { version = "0.2", default-features = false }
+//!
+//! # With eval: ~177k lines
+//! anno = { version = "0.2", features = ["eval"] }
+//! ```
+//!
+//! # Why eval is in anno (not anno-eval)?
 //!
 //! 1. **Circular dependency**: Evaluation functions take `&dyn Model` and reference
-//!    backend types (`HeuristicNER`, `RegexNER`, etc.). If `anno-eval` were separate,
-//!    it would depend on `anno`, preventing `anno` from re-exporting `anno-eval`.
+//!    backend types. If `anno-eval` were standalone, it would depend on `anno`,
+//!    preventing `anno` from re-exporting `anno-eval`.
 //!
-//! 2. **Sealed trait pattern**: The `Model` trait uses a sealed pattern to control
-//!    implementations. Moving it to `anno-core` would require removing this pattern,
-//!    allowing external crates to implement `Model`.
+//! 2. **Sealed trait pattern**: The `Model` trait uses a sealed pattern. Moving it
+//!    to `anno-core` would allow external crates to implement `Model`.
 //!
-//! 3. **Feature flags work**: Users who don't need evaluation can omit the `eval`
-//!    feature, which excludes most eval dependencies (dirs, glob, etc.).
+//! 3. **Feature flags work**: The `eval` feature excludes 92k lines when disabled.
 //!
-//! The archived `archive/anno-eval/` contains an earlier extraction attempt for
-//! reference.
+//! Note: `anno-eval` exists as a convenience crate that re-exports `anno` with eval
+//! enabled. Use it if you primarily need evaluation functionality.
 //!
 //! # Overview
 //!
@@ -268,6 +276,8 @@ pub mod dataset;
 pub mod dataset_registry;
 pub mod datasets;
 pub mod discontinuous;
+#[cfg(feature = "discourse")]
+pub mod discourse_deixis;
 pub mod evaluator;
 pub mod harness;
 pub mod inter_doc_coref;
@@ -335,6 +345,24 @@ pub mod ood_detection;
 pub mod robustness;
 #[cfg(feature = "eval-advanced")]
 pub mod threshold_analysis;
+
+// Specialized analysis modules (eval-advanced)
+#[cfg(feature = "eval-advanced")]
+pub mod annotator;
+#[cfg(feature = "eval-advanced")]
+pub mod attribution;
+#[cfg(feature = "eval-advanced")]
+pub mod bridging;
+#[cfg(feature = "eval-advanced")]
+pub mod joint;
+#[cfg(feature = "eval-advanced")]
+pub mod ranking;
+#[cfg(feature = "eval-advanced")]
+pub mod schema;
+#[cfg(feature = "eval-advanced")]
+pub mod similarity;
+#[cfg(feature = "eval-advanced")]
+pub mod viewpoint;
 
 // Re-exports
 #[allow(deprecated)]
