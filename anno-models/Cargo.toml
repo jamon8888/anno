@@ -1,0 +1,55 @@
+[package]
+name = "anno-models"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "ML model backends for NER with runtime abstraction (ONNX, Candle, Burn)"
+keywords = ["ner", "nlp", "machine-learning", "transformers"]
+categories = ["science", "text-processing"]
+
+[dependencies]
+anno-core = { path = "../anno-core" }
+thiserror.workspace = true
+serde = { workspace = true, optional = true }
+log.workspace = true
+
+# ONNX Runtime
+ort = { workspace = true, optional = true }
+tokenizers = { workspace = true, optional = true }
+hf-hub = { workspace = true, optional = true }
+ndarray = { workspace = true, optional = true }
+
+# Candle (Rust-native ML)
+candle-core = { workspace = true, optional = true }
+candle-nn = { workspace = true, optional = true }
+candle-transformers = { workspace = true, optional = true }
+safetensors = { workspace = true, optional = true }
+
+# Burn (WebGPU + training)
+burn = { workspace = true, optional = true }
+burn-ndarray = { workspace = true, optional = true }
+
+[features]
+default = []
+
+# Runtime backends
+onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
+candle = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:safetensors"]
+burn = ["dep:burn", "dep:burn-ndarray"]
+
+# Hardware acceleration
+metal = ["candle-core/metal", "candle-nn/metal", "candle-transformers/metal"]
+cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+
+# Utilities
+serde = ["dep:serde", "anno-core/serde"]
+hf = ["dep:hf-hub"]
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true
