@@ -1,6 +1,9 @@
 //! Dataset command - Work with NER datasets
 
 use clap::{Parser, Subcommand};
+#[cfg(feature = "eval-advanced")]
+use itertools::Itertools;
+#[cfg(feature = "eval")]
 use std::time::Instant;
 
 use super::super::output::color;
@@ -105,9 +108,9 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                         if !stats.entities_by_type.is_empty() {
                             println!();
                             println!("  Entity types:");
-                            let mut type_vec: Vec<_> = stats.entities_by_type.iter().collect();
-                            type_vec.sort_by(|a, b| b.1.cmp(a.1)); // Sort by count descending
-                            for (entity_type, count) in type_vec {
+                            for (entity_type, count) in
+                                stats.entities_by_type.iter().sorted_by(|a, b| b.1.cmp(a.1))
+                            {
                                 let percentage = if stats.entities > 0 {
                                     *count as f64 / stats.entities as f64 * 100.0
                                 } else {
@@ -557,20 +560,15 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             }
 
                             let entity_types_vec: Vec<&str> =
-                                entity_types.iter().map(|s| s.as_str()).collect();
+                                entity_types.iter().map(|s| s.as_str()).collect_vec();
                             let relation_types_vec: Vec<&str> =
-                                relation_types.iter().map(|s| s.as_str()).collect();
+                                relation_types.iter().map(|s| s.as_str()).collect_vec();
 
                             println!("  Entity types: {}", entity_types_vec.join(", "));
                             println!(
                                 "  Relation types: {} ({} total)",
                                 relation_types_vec.len(),
-                                relation_types_vec
-                                    .iter()
-                                    .take(5)
-                                    .cloned()
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
+                                relation_types_vec.iter().take(5).join(", ")
                             );
                             println!();
 

@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read};
 
-use anno_core::{Entity, GroundedDocument, Identity, Location, Quantifier, Signal};
+#[cfg(feature = "eval-advanced")]
+use anno_core::Entity;
+use anno_core::{GroundedDocument, Identity, Location, Quantifier, Signal};
 
 /// Get input text from various sources (text arg, file, or stdin)
 pub fn get_input_text(

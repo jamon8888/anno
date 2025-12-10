@@ -1,0 +1,35 @@
+# ast-grep rules for Candle/Metal tensor operations
+# These catch common issues with Metal GPU acceleration
+
+id: matmul-without-contiguous
+language: rust
+rule:
+  pattern: $A.matmul(&$B)
+message: |
+  matmul without .contiguous() call. On Metal backend, non-contiguous tensors 
+  from transpose/reshape cause 'Invalid matmul arguments'. 
+  Call .contiguous()? before matmul.
+severity: warning
+note: |
+  Example fix:
+    let a = a.contiguous()?;
+    let b = b.contiguous()?;
+    a.matmul(&b)
+---
+id: transpose-may-need-contiguous
+language: rust
+rule:
+  pattern: $T.transpose($D1, $D2)?
+message: |
+  transpose() creates non-contiguous view. If used before matmul on Metal,
+  call .contiguous()? to avoid 'Invalid matmul arguments' errors.
+severity: hint
+---
+id: broadcast-may-need-contiguous  
+language: rust
+rule:
+  pattern: $T.broadcast_as($SHAPE)?
+message: |
+  broadcast_as() creates non-contiguous view. If used before matmul on Metal,
+  call .contiguous()? to ensure Metal compatibility.
+severity: hint

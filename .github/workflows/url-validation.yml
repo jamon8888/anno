@@ -1,0 +1,77 @@
+name: URL Validation
+
+on:
+  schedule:
+    # Run weekly on Sunday at midnight UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  validate-urls:
+    name: Validate Dataset URLs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: pip install httpx
+      
+      - name: Run URL validation
+        run: |
+          python scripts/validate_urls.py --output url_validation_results.json
+          
+      - name: Summarize results
+        run: |
+          python3 << 'EOF'
+          import json
+          with open('url_validation_results.json') as f:
+              results = json.load(f)
+          
+          ok = len([r for r in results if r['status'] == 'ok'])
+          errors = len([r for r in results if r['status'] == 'error'])
+          total = len(results)
+          
+          print(f"## URL Validation Summary")
+          print(f"- **Working**: {ok}/{total} ({100*ok//total}%)")
+          print(f"- **Broken**: {errors}")
+          
+          if errors > 0:
+              print("\n### Broken URLs (first 20)")
+              broken = [r for r in results if r['status'] == 'error'][:20]
+              for r in broken:
+                  print(f"- {r['name']}: {r.get('code', 'unknown error')}")
+          EOF
+      
+      - name: Upload validation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: url-validation-results
+          path: url_validation_results.json
+          retention-days: 30
+      
+      - name: Create issue if too many broken URLs
+        if: always()
+        run: |
+          python3 << 'EOF'
+          import json
+          import os
+          
+          with open('url_validation_results.json') as f:
+              results = json.load(f)
+          
+          errors = len([r for r in results if r['status'] == 'error'])
+          total = len(results)
+          error_rate = errors / total if total > 0 else 0
+          
+          # Only alert if error rate exceeds 50% (unusually high)
+          if error_rate > 0.5:
+              print(f"::warning::High URL error rate: {errors}/{total} ({100*error_rate:.0f}%)")
+          else:
+              print(f"URL validation: {errors}/{total} broken ({100*error_rate:.0f}%)")
+          EOF
+

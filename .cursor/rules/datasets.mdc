@@ -1,0 +1,224 @@
+# Dataset Architecture
+
+## Three-Layer Design
+
+The dataset system has **three complementary layers**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              anno-core/src/dataset.rs                       │
+│   DatasetSpec trait (interface) + CustomDataset (runtime)   │
+│   Purpose: Extensibility, user-defined datasets             │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ implements
+          ┌───────────────┴───────────────┐
+          │                               │
+┌─────────▼─────────┐          ┌──────────▼──────────┐
+│ dataset_registry  │          │ User-defined        │
+│ 184 built-in      │          │ CustomDataset       │
+│ (define_datasets!)│          │ instances           │
+└─────────┬─────────┘          └─────────────────────┘
+          │
+┌─────────▼─────────────────────────────────────────┐
+│                    loader.rs                       │
+│   Download + Cache + Parse (188 variants)          │
+│   Purpose: IO operations, checksums, caching       │
+└───────────────────────────────────────────────────┘
+```
+
+### Layer 1: `anno-core/src/dataset.rs` (Abstraction)
+
+```rust
+// Core trait - implement this for any dataset
+pub trait DatasetSpec: Send + Sync {
+    fn name(&self) -> &str;
+    fn id(&self) -> &str;
+    fn task(&self) -> Task;
+    fn languages(&self) -> &[&str];
+    fn entity_types(&self) -> &[&str];
+    fn parser_hint(&self) -> ParserHint;
+    fn license(&self) -> License;
+    // ... optional methods with defaults
+}
+```
+
+| Type | Purpose |
+|------|---------|
+| `DatasetSpec` trait | Core interface all datasets implement |
+| `CustomDataset` | Builder for runtime-defined datasets |
+| `DatasetRegistry` | Runtime registry for custom datasets |
+
+### Layer 2: `anno/src/eval/dataset_registry.rs` (Metadata)
+
+The `define_datasets!` macro generates 184 built-in datasets with rich metadata:
+
+```rust
+define_datasets! {
+    WikiGold {
+        name: "WikiGold",
+        description: "Wikipedia-based NER (2009)",
+        url: "...",
+        entity_types: ["PER", "LOC", "ORG", "MISC"],
+        language: "en",
+        domain: "news",
+        license: "CC-BY-3.0",
+        citation: "Balasuriya et al. (2009)",
+        categories: [ner],
+    },
+    // ... 183 more
+}
+```
+
+- Categories: `biomedical`, `literary`, `multilingual`, `low_resource`, etc.
+- Tasks: `ner`, `coref`, `re`, `el`, `event_coref`, etc.
+- Metadata: license, citation, paper_url, year, format, size_hint
+
+### Layer 3: `anno/src/eval/loader.rs` (Operations)
+
+Handles actual data loading:
+- Download URLs with fallbacks
+- SHA256 checksum verification  
+- Persistent caching (`~/.cache/anno/`)
+- Format-specific parsers (CoNLL, JSONL, BRAT, etc.)
+- Graceful offline degradation
+
+### Known Drift
+
+The TODO at loader.rs:83-95 notes:
+- `loader.rs`: 188 variants
+- `dataset_registry.rs`: 184 variants
+- Shared: only 62 variants
+
+This drift means some datasets exist in one but not the other.
+
+## Adding a New Dataset
+
+### For runtime/custom datasets (preferred)
+
+```rust
+use anno_core::dataset::*;
+
+let mahanama = CustomDataset::new("mahanama", Task::NED)
+    .with_name("Mahānāma")
+    .with_languages(&["sa"])
+    .with_entity_types(&["Person", "Location", "Miscellaneous"])
+    .with_parser(ParserHint::CoNLLU)
+    .with_license(License::CCBY)
+    .with_domain(Domain::Literary)
+    .with_url("https://github.com/sujoysarkarai/mahanama")
+    .with_secondary_tasks(vec![Task::IntraDocCoref, Task::NER])
+    .with_stats(DatasetStats {
+        doc_count: Some(2110),
+        mention_count: Some(109_000),
+        entity_count: Some(5_500),
+        token_count: Some(988_502),
+        split_sizes: Some(SplitSizes { train: 1688, dev: 211, test: 211 }),
+    })
+    .with_citation("Sarkar et al. (2025)")
+    .historical();
+
+let mut registry = DatasetRegistry::new();
+registry.register(mahanama);
+```
+
+### For built-in datasets (requires both files)
+
+1. Add to `define_datasets!` in `dataset_registry.rs`:
+
+```rust
+Mahanama {
+    name: "Mahānāma",
+    description: "Sanskrit EDL from Mahābhārata. Extreme name variation.",
+    url: "https://github.com/sujoysarkarai/mahanama",
+    entity_types: ["Person", "Location", "Miscellaneous"],
+    language: "sa",
+    domain: "literary",
+    license: "CC-BY-4.0",
+    citation: "Sarkar et al. (2025)",
+    paper_url: "https://arxiv.org/abs/2509.19844",
+    year: 2025,
+    format: "CoNLLU",
+    annotation_scheme: "Standoff",
+    size_hint: "988K tokens, 109K mentions, 5.5K entities",
+    notes: "124 avg name forms/entity. 47% ambiguity. 39% MWT mentions.",
+    splits: ["train", "dev", "test"],
+    tasks: ["ner", "coref", "el"],
+    categories: [coref, literary, ancient, long_document, low_resource],
+},
+```
+
+2. Add variant + URL to `DatasetId` in `loader.rs` (if loadable)
+3. Add parser logic if new format
+4. Run: `cargo test -p anno --features eval`
+
+## Future: Bridging the Layers
+
+The `DatasetSpec` trait could unify all three layers:
+
+```rust
+// Potential bridge (not yet implemented)
+impl DatasetSpec for dataset_registry::DatasetId {
+    fn name(&self) -> &str { self.name() }
+    fn id(&self) -> &str { /* variant name */ }
+    fn task(&self) -> Task { self.tasks().first().map(parse_task)? }
+    fn languages(&self) -> &[&str] { &[self.language()] }
+    fn entity_types(&self) -> &[&str] { self.entity_types() }
+    fn parser_hint(&self) -> ParserHint { self.format().map(parse_format)? }
+    fn license(&self) -> License { self.license().map(parse_license)? }
+    // ...
+}
+```
+
+This would allow using `DatasetId` wherever `DatasetSpec` is expected.
+
+## Format Support
+
+| ParserHint | Extensions | Example Datasets |
+|------------|------------|------------------|
+| `CoNLL` | .conll, .txt, .bio | CoNLL2003, WNUT17 |
+| `CoNLLU` | .conllu | CorefUD, Mahānāma |
+| `JSONL` | .jsonl, .ndjson | WikiANN, Universal NER |
+| `BRAT` | .ann, .txt | LitBank |
+| `JSON` | .json | MultiNERD |
+
+## Task Types
+
+```rust
+pub enum Task {
+    NER,              // Sequence labeling
+    IntraDocCoref,    // Within-document coreference
+    InterDocCoref,    // Cross-document coreference  
+    NED,              // Entity Disambiguation / Linking
+    RelationExtraction,
+    EventExtraction,
+    DiscontinuousNER, // CADEC, ShARe-style
+    TemporalNER,      // Diachronic entities
+    // ...
+}
+```
+
+## Classical/Historical Language Datasets
+
+For ancient/classical languages, use:
+- `.historical()` builder method
+- `Domain::Historical` or `Domain::Literary` as appropriate
+- Appropriate ISO 639-3 codes: `sa` (Sanskrit), `grc` (Ancient Greek), `la` (Latin)
+
+Key datasets for classical languages:
+- **Mahānāma**: Sanskrit EDL, extreme name variation (arXiv:2509.19844)
+- **NEReus**: Ancient Greek with deity types
+- **HIPE-2022**: Multilingual historical NER
+
+## Testing Datasets
+
+```rust
+#[test]
+fn test_dataset_properties() {
+    let ds = CustomDataset::new("test", Task::NER)
+        .with_languages(&["en", "de"]);
+    
+    assert!(ds.supports_language("en"));
+    assert!(ds.supports_task(Task::NER));
+    assert!(ds.is_public()); // License allows redistribution
+}
+```

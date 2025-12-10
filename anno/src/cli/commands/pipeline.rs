@@ -6,7 +6,9 @@ use std::fs;
 use super::super::output::{color, print_signals};
 use super::super::parser::{ModelBackend, OutputFormat};
 use super::super::utils::{link_tracks_to_kb, resolve_coreference};
-use anno_core::{Entity, EntityType, GroundedDocument, Location, Signal};
+#[cfg(feature = "eval-advanced")]
+use anno_core::{Entity, EntityType};
+use anno_core::{GroundedDocument, Location, Signal};
 
 /// Unified pipeline command
 #[derive(Parser, Debug)]

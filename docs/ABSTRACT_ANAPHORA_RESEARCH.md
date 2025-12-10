@@ -193,10 +193,50 @@ The shared task used:
 ## Files in This Research Track
 
 - `docs/ABSTRACT_ANAPHORA_RESEARCH.md` - This document
-- `src/discourse.rs` - Core discourse module (EventMention, DiscourseReferent, ShellNoun)
-- `src/eval/abstract_anaphora.rs` - Evaluation infrastructure
+- `anno/src/discourse/` - Core discourse module (EventMention, DiscourseReferent, ShellNoun)
+- `anno/src/eval/abstract_anaphora.rs` - Evaluation infrastructure
 - `examples/abstract_anaphora_eval.rs` - Run evaluation
-- `abstract_anaphora_analysis.html` - Generated failure report
+
+### Human-Voice Agent Interaction Dataset
+
+Location: `testdata/human_voice_agent/`
+
+Why this matters: Most abstract anaphora research uses written text, but spoken
+dialogue has unique phenomena:
+
+- **Response tokens** ("uh huh", "oui") that standard coref ignores
+- **Aside sequences** (whispered comments) with implicit addressee switching
+- **Discourse deixis** in multi-turn context where "this" refers to events/propositions
+
+| File | Records | Content |
+|------|---------|---------|
+| `transcripts.jsonl` | 70 | French dialogue turns from Pepper robot & ChatGPT voice |
+| `discourse_deixis.jsonl` | 10 | Abstract anaphora with character offsets |
+| `response_tokens.jsonl` | 11 | Continuer/acknowledgment function labels |
+
+Source: Rudaz, Broth & Mlynář (2025) "Everything counts: the managed omnirelevance
+of speech in human-voice agent interaction" (ACM TOCHI).
+
+### Recent Discourse Benchmarks (2023-2025)
+
+Anno now includes entries for recent discourse evaluation datasets:
+
+| Dataset | Year | Focus | Languages |
+|---------|------|-------|-----------|
+| **Disco-Bench** | 2023 | Document-level discourse (cohesion, coherence) | zh, en |
+| **DiscoTrack** | 2025 | Multilingual discourse tracking (salience, bridging) | 12 languages |
+| **LIEDER** | 2024 | Discourse entity recognition (existence, uniqueness, novelty) | en |
+| **GCDC** | 2018 | Real-world discourse coherence across domains | en |
+| **DISAPERE** | 2022 | Peer review discourse structure and argumentation | en |
+
+Key insights from recent work:
+
+- **DiscoTrack** (arXiv:2510.17013) shows that even state-of-the-art LLMs struggle with
+  implicit information and pragmatic inference across documents
+- **LIEDER** (arXiv:2403.06301) finds LLMs handle existence/uniqueness/plurality but
+  fail on **novelty** - a fundamental discourse property
+- **Disco-Bench** (arXiv:2307.08074) demonstrates discourse phenomena remain challenging
+  even for 20+ transformer and LLM models
 
 ## References
 
@@ -220,6 +260,49 @@ The shared task used:
   author={Thalken, Rosamond and others},
   journal={arXiv:2401.00238},
   year={2024}
+}
+
+@unpublished{rudaz2025omnirelevance,
+  title={Everything counts: the managed omnirelevance of speech in 
+         human-voice agent interaction},
+  author={Rudaz, Damien and Broth, Mathias and Mlyn{\'a}{\v{r}}, Jakub},
+  year={2025},
+  note={Submitted to ACM TOCHI}
+}
+
+@inproceedings{wang2023discobench,
+  title={Disco-Bench: A Discourse-Aware Evaluation Benchmark for Language Modelling},
+  author={Wang, Longyue and Du, Zefeng and Liu, Donghuai and others},
+  booktitle={arXiv:2307.08074},
+  year={2023}
+}
+
+@inproceedings{bu2025discotrack,
+  title={DiscoTrack: A Multilingual LLM Benchmark for Discourse Tracking},
+  author={Bu, Lanni and Levine, Lauren and Zeldes, Amir},
+  booktitle={arXiv:2510.17013},
+  year={2025}
+}
+
+@inproceedings{zhu2024lieder,
+  title={LIEDER: Linguistically-Informed Evaluation for Discourse Entity Recognition},
+  author={Zhu, Xiaomeng and Frank, Robert},
+  booktitle={arXiv:2403.06301},
+  year={2024}
+}
+
+@inproceedings{lai2018gcdc,
+  title={Discourse Coherence in the Wild: A Dataset, Evaluation and Methods},
+  author={Lai, Alice and Tetreault, Joel},
+  booktitle={SIGDIAL},
+  year={2018}
+}
+
+@inproceedings{kennard2022disapere,
+  title={DISAPERE: A Dataset for Discourse Structure in Peer Review Discussions},
+  author={Kennard, Neha and O'Gorman, Tim and Das, Rajarshi and others},
+  booktitle={NAACL},
+  year={2022}
 }
 ```
 

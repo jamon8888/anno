@@ -1,0 +1,277 @@
+---
+description: Testing patterns and nextest configuration
+globs: ["**/tests/**/*.rs", "**/.config/nextest.toml", "**/justfile"]
+alwaysApply: true
+---
+
+# Testing Guidelines for Anno
+
+## Test Organization
+
+### Test Tiers
+| Tier | Profile | Timeout | Use Case |
+|------|---------|---------|----------|
+| Quick | `--profile quick` | 10s | Fast iteration, CI PR checks |
+| Default | `--profile default` | 30s | Normal development |
+| ML | `--profile ml` | 180s | Tests with model loading |
+| Property | `--profile property` | 120s | Proptest/fuzz testing |
+| CI | `--profile ci` | 60s | Full CI pipeline |
+
+### Running Tests
+```bash
+# Fast development cycle
+cargo nextest run --profile quick --lib --features "eval"
+
+# Full suite before commit
+cargo nextest run --profile ci --workspace --features "eval-advanced discourse"
+
+# ML backend tests only
+cargo nextest run --profile ml --features "onnx candle" -E 'test(/gliner/) or test(/candle/)'
+
+# Property tests with more cases
+PROPTEST_CASES=1000 cargo nextest run --profile property -E 'test(/property/)'
+```
+
+## Test Patterns
+
+### Unit Tests
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_basic_functionality() {
+        // Fast, isolated, no external dependencies
+    }
+}
+```
+
+### Property Tests
+```rust
+use proptest::prelude::*;
+
+// Reduced config for slow backends
+fn slow_config() -> ProptestConfig {
+    ProptestConfig {
+        cases: 10,
+        ..ProptestConfig::default()
+    }
+}
+
+proptest! {
+    #![proptest_config(slow_config())]
+    
+    #[test]
+    fn invariant_holds(text in arb_text()) {
+        // Property that should hold for all inputs
+    }
+}
+```
+
+### CLI Integration Tests
+```rust
+/// Helper to get CLI command using pre-built binary
+fn anno_cli_cmd() -> Command {
+    if let Ok(bin_path) = std::env::var("ANNO_CLI_BIN") {
+        return Command::new(bin_path);
+    }
+    
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir.parent().unwrap();
+    
+    // Try release binary first (fastest)
+    let release_bin = workspace_root.join("target/release/anno");
+    if release_bin.exists() {
+        return Command::new(release_bin);
+    }
+    
+    // Fall back to debug binary
+    let debug_bin = workspace_root.join("target/debug/anno");
+    if debug_bin.exists() {
+        return Command::new(debug_bin);
+    }
+    
+    // Last resort: cargo run (slow)
+    let mut cmd = Command::new("cargo");
+    cmd.args(["run", "-p", "anno-cli", "--"]);
+    cmd
+}
+```
+
+## Feature-Gated Tests
+
+```rust
+// Only run when feature is enabled
+#[test]
+#[cfg(feature = "onnx")]
+fn test_onnx_backend() { ... }
+
+// Skip if model unavailable (graceful degradation)
+#[test]
+fn test_with_optional_model() {
+    let model = match load_model() {
+        Ok(m) => m,
+        Err(_) => {
+            eprintln!("Skipping: model not available");
+            return;
+        }
+    };
+    // ... test with model
+}
+
+// For NuNER/GLiNER ONNX smoke:
+// - gate with `#[cfg(feature = "onnx")]`
+// - skip unless `NUNER_ONNX_MODEL` env var is set
+```
+
+## Test Data
+
+### Fixture Files
+- Place in `testdata/` or `tests/fixtures/`
+- Use `include_str!()` for embedded test data
+- Prefer generated data over large fixture files
+- ONNX smoke fixtures can live in `tests/data/` (e.g., `tests/data/ner/coarse_smoke.jsonl`) and should stay tiny and versioned
+
+### Multilingual Test Data
+Every test file should include diverse examples:
+```rust
+let test_texts = [
+    "Barack Obama was born in Hawaii.",           // English
+    "習近平是中國國家主席。",                        // Chinese
+    "Angela Merkel war Bundeskanzlerin.",         // German
+    "المملكة العربية السعودية",                    // Arabic
+    "東京オリンピック2020",                         // Japanese
+];
+```
+
+### Zero-shot / Label Pack Tests
+- When adding new NER schemas or label packs, add unit tests that:
+  - verify `with_label_pack` swaps defaults
+  - ensure `map_label_to_entity_type` covers new labels
+- Keep span decoding tests for fine/CNER labels and overlap resolution
+
+## Assertion Patterns
+
+### Entity Validation
+```rust
+fn assert_valid_entity(entity: &Entity, text: &str) {
+    let char_count = text.chars().count();
+    assert!(entity.start <= entity.end, "Invalid span: start > end");
+    assert!(entity.end <= char_count, "Span exceeds text length");
+    assert!(entity.confidence >= 0.0 && entity.confidence <= 1.0);
+    assert!(!entity.text.is_empty(), "Empty entity text");
+}
+```
+
+### Backend Invariants
+```rust
+// All backends should satisfy these
+fn test_backend_invariants<B: Model>(backend: &B, text: &str) {
+    let entities = backend.extract_entities(text, None).unwrap();
+    
+    for entity in &entities {
+        // Valid spans
+        assert!(entity.start <= entity.end);
+        
+        // Valid confidence
+        assert!(entity.confidence >= 0.0);
+        assert!(entity.confidence <= 1.0);
+        
+        // Non-empty text
+        assert!(!entity.text.trim().is_empty());
+    }
+    
+    // Determinism (same input → same output)
+    let entities2 = backend.extract_entities(text, None).unwrap();
+    assert_eq!(entities.len(), entities2.len());
+}
+```
+
+## CI Configuration
+
+### nextest.toml Profiles
+
+Located at `.config/nextest.toml`:
+
+```toml
+[profile.quick]
+retries = 0
+slow-timeout = { period = "10s", terminate-after = 1 }
+# Excludes: property tests, CLI integration, slow ML tests
+# Use `binary(name)` for test binaries, `test(/regex/)` for test names
+default-filter = "not test(/property/) and not binary(cli_context_output) and not binary(compare_command) and not binary(e2e_cli_workflows) and not test(/stacked.*proptest/) and not test(/eval.*harness/) and not test(/test_harness_synthetic/) and not test(/test_agreement_bonus/) and not test(/backend_availability_matrix/) and not test(/property_backends/) and not binary(task_evaluator_comprehensive) and not test(/test_layer_error_handling/) and not test(/randomized_matrix/)"
+
+[profile.ml]
+retries = 1
+slow-timeout = { period = "180s", terminate-after = 3 }
+test-threads = 2  # Limit parallelism for GPU/model tests
+
+[profile.ci]
+retries = 2
+slow-timeout = { period = "60s", terminate-after = 2 }
+fail-fast = true
+```
+
+### Feature Flag Combinations
+
+```bash
+# Core evaluation
+cargo nextest run --profile quick -p anno --features "eval"
+
+# Full eval with discourse analysis
+cargo nextest run --profile quick --workspace --features "eval-full discourse"
+
+# With ONNX backends (requires ONNX models)
+cargo nextest run --profile ml -p anno --features "eval-full onnx"
+
+# With Candle ML (pure Rust, no ONNX)
+cargo nextest run --profile ml -p anno --features "eval-full candle"
+
+# Everything except CUDA/Metal (platform-specific)
+cargo nextest run --profile ml --workspace --features "eval-full discourse onnx candle"
+```
+
+### Pre-commit Checklist
+1. Build release binary: `cargo build --release -p anno-cli`
+2. Run quick tests: `cargo nextest run --profile quick`
+3. Run lints: `cargo clippy --workspace --all-features`
+4. Format: `cargo fmt --check`
+
+## Debugging Failing Tests
+
+```bash
+# Run single test with output
+cargo nextest run --no-capture test_name
+
+# Run with backtrace
+RUST_BACKTRACE=1 cargo nextest run test_name
+
+# Run with debug logging
+RUST_LOG=debug cargo nextest run test_name
+
+# Profile slow tests
+cargo nextest run --profile default --status-level all 2>&1 | grep SLOW
+```
+
+## CRITICAL: No Output Truncation
+
+**NEVER pipe test output through `head`, `tail`, or `grep` to hide results.**
+
+```bash
+# BAD - hides important information
+cargo nextest run 2>&1 | tail -20
+cargo test 2>&1 | head -50
+cargo check 2>&1 | grep error
+
+# GOOD - see all output
+cargo nextest run
+cargo test
+cargo check
+```
+
+Rationale:
+- Truncating output hides important context about failures
+- Errors may appear in the middle of output, not just at the end
+- More context is always better for debugging
+- Your AI assistant's context window can handle the full output

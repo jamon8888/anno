@@ -97,9 +97,9 @@ fn main() {
     let gold_realistic = vec![
         CorefChain::new(vec![
             Mention::with_type("Barack Obama", 0, 12, MentionType::Proper),
-            Mention::with_type("He", 33, 35, MentionType::Pronoun),
+            Mention::with_type("He", 33, 35, MentionType::Pronominal),
             Mention::with_type("Obama", 67, 72, MentionType::Proper),
-            Mention::with_type("his", 112, 115, MentionType::Pronoun),
+            Mention::with_type("his", 112, 115, MentionType::Pronominal),
         ]),
         CorefChain::new(vec![Mention::with_type(
             "Michelle Obama",

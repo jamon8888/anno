@@ -1,0 +1,347 @@
+//! Mention type classification for coreference resolution.
+//!
+//! This is the canonical `MentionType` enum used throughout anno for:
+//! - Coreference resolution mention classification
+//! - Mention ranking algorithms
+//! - Linguistic analysis of referring expressions
+
+use serde::{Deserialize, Serialize};
+
+/// Type of referring expression in coreference.
+///
+/// This classification is fundamental to coreference resolution:
+/// - **Proper** nouns are typically antecedents (first mention)
+/// - **Nominal** mentions provide descriptive information
+/// - **Pronominal** mentions require resolution to an antecedent
+///
+/// # Examples
+///
+/// ```rust
+/// use anno_core::types::MentionType;
+///
+/// let mention_type = MentionType::classify("John Smith");
+/// assert_eq!(mention_type, MentionType::Proper);
+///
+/// let mention_type = MentionType::classify("the president");
+/// assert_eq!(mention_type, MentionType::Nominal);
+///
+/// let mention_type = MentionType::classify("he");
+/// assert_eq!(mention_type, MentionType::Pronominal);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum MentionType {
+    /// Proper name ("John Smith", "Microsoft", "New York")
+    ///
+    /// Typically the first or canonical mention of an entity.
+    /// Usually capitalized in English.
+    Proper,
+
+    /// Common noun phrase ("the company", "a dog", "the president")
+    ///
+    /// Descriptive mentions that provide semantic information.
+    /// May be definite ("the") or indefinite ("a/an").
+    #[default]
+    Nominal,
+
+    /// Pronoun ("he", "she", "it", "they", "this", "that")
+    ///
+    /// Anaphoric expressions that must be resolved to an antecedent.
+    /// Includes personal, demonstrative, and relative pronouns.
+    Pronominal,
+
+    /// Zero pronoun (pro-drop languages: Arabic, Spanish, Japanese, Korean, Chinese)
+    ///
+    /// A dropped argument with no surface realization. The subject or object
+    /// is grammatically required but omitted in the text. Common in:
+    /// - Arabic: verb conjugation encodes subject ("ذهب" = "\[he\] went")
+    /// - Spanish: "Vino a casa" = "\[He/She\] came home"
+    /// - Japanese: topic/subject frequently omitted
+    /// - Chinese: arguments recoverable from context
+    ///
+    /// Zero mentions have an anchor position (where they "would be") but no text span.
+    /// They carry phi-features (person, gender, number) from morphology or context.
+    Zero,
+
+    /// Unknown or unclassified mention type.
+    Unknown,
+}
+
+impl MentionType {
+    /// Classify a mention string by its type.
+    ///
+    /// Uses heuristics based on:
+    /// - Pronoun list matching
+    /// - Capitalization patterns
+    /// - Article presence
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use anno_core::types::MentionType;
+    ///
+    /// assert_eq!(MentionType::classify("Barack Obama"), MentionType::Proper);
+    /// assert_eq!(MentionType::classify("the former president"), MentionType::Nominal);
+    /// assert_eq!(MentionType::classify("he"), MentionType::Pronominal);
+    /// ```
+    #[must_use]
+    pub fn classify(mention: &str) -> Self {
+        let lower = mention.to_lowercase();
+        let trimmed = mention.trim();
+
+        // Check for pronouns first
+        if Self::is_pronoun(&lower) {
+            return MentionType::Pronominal;
+        }
+
+        // Check for articles (indicates nominal)
+        if lower.starts_with("the ")
+            || lower.starts_with("a ")
+            || lower.starts_with("an ")
+            || lower.starts_with("this ")
+            || lower.starts_with("that ")
+            || lower.starts_with("these ")
+            || lower.starts_with("those ")
+            || lower.starts_with("some ")
+            || lower.starts_with("any ")
+        {
+            return MentionType::Nominal;
+        }
+
+        // Check for capitalization (indicates proper noun)
+        // Skip single-word all-caps (might be acronym or emphasis)
+        let words: Vec<&str> = trimmed.split_whitespace().collect();
+        if !words.is_empty() {
+            let first_char = words[0].chars().next();
+            if let Some(c) = first_char {
+                if c.is_uppercase()
+                    && !trimmed
+                        .chars()
+                        .all(|c| c.is_uppercase() || !c.is_alphabetic())
+                {
+                    return MentionType::Proper;
+                }
+            }
+        }
+
+        // Default to nominal
+        MentionType::Nominal
+    }
+
+    /// Check if a string is a pronoun.
+    fn is_pronoun(s: &str) -> bool {
+        matches!(
+            s.trim(),
+            // Personal pronouns
+            "i" | "me" | "my" | "mine" | "myself"
+                | "you" | "your" | "yours" | "yourself" | "yourselves"
+                | "he" | "him" | "his" | "himself"
+                | "she" | "her" | "hers" | "herself"
+                | "it" | "its" | "itself"
+                | "we" | "us" | "our" | "ours" | "ourselves"
+                | "they" | "them" | "their" | "theirs" | "themselves" | "themself"
+                // Demonstrative pronouns
+                | "this" | "these" | "those"
+                // Relative pronouns
+                | "who" | "whom" | "whose" | "which" | "that"
+                // Indefinite pronouns (subset)
+                | "one" | "ones" | "someone" | "anyone" | "everyone" | "no one"
+                | "somebody" | "anybody" | "everybody" | "nobody"
+                | "something" | "anything" | "everything" | "nothing"
+        )
+    }
+
+    /// Get the typical salience weight for this mention type.
+    ///
+    /// Proper nouns are most salient, pronouns and zeros least (they depend on context).
+    /// Used in mention ranking algorithms.
+    #[must_use]
+    pub fn salience_weight(&self) -> f64 {
+        match self {
+            MentionType::Proper => 1.0,
+            MentionType::Nominal => 0.7,
+            MentionType::Pronominal => 0.3,
+            MentionType::Zero => 0.2, // Even less salient than overt pronouns
+            MentionType::Unknown => 0.5,
+        }
+    }
+
+    /// Check if this mention type typically introduces new entities.
+    ///
+    /// Proper nouns often introduce entities; pronouns and zeros almost never do.
+    #[must_use]
+    pub fn can_introduce_entity(&self) -> bool {
+        match self {
+            MentionType::Proper => true,
+            MentionType::Nominal => true, // Indefinite nominals can introduce
+            MentionType::Pronominal => false,
+            MentionType::Zero => false, // Zero pronouns are always anaphoric
+            MentionType::Unknown => true, // Conservative default
+        }
+    }
+
+    /// Check if this mention type requires an antecedent.
+    #[must_use]
+    pub fn requires_antecedent(&self) -> bool {
+        match self {
+            MentionType::Proper => false,
+            MentionType::Nominal => false, // Definite nominals often do, but not always
+            MentionType::Pronominal => true,
+            MentionType::Zero => true, // Zero pronouns always need resolution
+            MentionType::Unknown => false,
+        }
+    }
+
+    /// Check if this mention type has a surface form in the text.
+    ///
+    /// Returns `false` for zero pronouns (pro-drop).
+    #[must_use]
+    pub fn has_surface_form(&self) -> bool {
+        !matches!(self, MentionType::Zero)
+    }
+
+    /// Check if this is a zero mention (pro-drop).
+    #[must_use]
+    pub fn is_zero(&self) -> bool {
+        matches!(self, MentionType::Zero)
+    }
+
+    /// Get a string label for this mention type.
+    ///
+    /// Returns a lowercase string suitable for use as a classification label.
+    #[must_use]
+    pub fn as_label(&self) -> &'static str {
+        match self {
+            MentionType::Proper => "proper",
+            MentionType::Nominal => "nominal",
+            MentionType::Pronominal => "pronominal",
+            MentionType::Zero => "zero",
+            MentionType::Unknown => "unknown",
+        }
+    }
+}
+
+impl std::fmt::Display for MentionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MentionType::Proper => write!(f, "proper"),
+            MentionType::Nominal => write!(f, "nominal"),
+            MentionType::Pronominal => write!(f, "pronominal"),
+            MentionType::Zero => write!(f, "zero"),
+            MentionType::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+impl std::str::FromStr for MentionType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "proper" | "nam" | "name" | "propernoun" => Ok(MentionType::Proper),
+            "nominal" | "nom" | "common" | "commonnoun" => Ok(MentionType::Nominal),
+            "pronominal" | "pro" | "pronoun" | "pron" => Ok(MentionType::Pronominal),
+            "zero" | "zero_pronoun" | "zeropronoun" | "*pro*" | "dropped" => Ok(MentionType::Zero),
+            "unknown" | "?" | "" => Ok(MentionType::Unknown),
+            _ => Err(format!("Unknown mention type: {}", s)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_classify_proper() {
+        assert_eq!(MentionType::classify("John Smith"), MentionType::Proper);
+        assert_eq!(MentionType::classify("Microsoft"), MentionType::Proper);
+        assert_eq!(MentionType::classify("New York City"), MentionType::Proper);
+        assert_eq!(MentionType::classify("Dr. Jane Doe"), MentionType::Proper);
+    }
+
+    #[test]
+    fn test_classify_nominal() {
+        assert_eq!(MentionType::classify("the president"), MentionType::Nominal);
+        assert_eq!(MentionType::classify("a company"), MentionType::Nominal);
+        assert_eq!(MentionType::classify("this document"), MentionType::Nominal);
+        assert_eq!(MentionType::classify("some people"), MentionType::Nominal);
+    }
+
+    #[test]
+    fn test_classify_pronominal() {
+        assert_eq!(MentionType::classify("he"), MentionType::Pronominal);
+        assert_eq!(MentionType::classify("she"), MentionType::Pronominal);
+        assert_eq!(MentionType::classify("they"), MentionType::Pronominal);
+        assert_eq!(MentionType::classify("it"), MentionType::Pronominal);
+        assert_eq!(MentionType::classify("this"), MentionType::Pronominal);
+    }
+
+    #[test]
+    fn test_salience() {
+        assert!(MentionType::Proper.salience_weight() > MentionType::Nominal.salience_weight());
+        assert!(MentionType::Nominal.salience_weight() > MentionType::Pronominal.salience_weight());
+    }
+
+    #[test]
+    fn test_serde_roundtrip() {
+        let mt = MentionType::Pronominal;
+        let json = serde_json::to_string(&mt).unwrap();
+        assert_eq!(json, "\"pronominal\"");
+        let recovered: MentionType = serde_json::from_str(&json).unwrap();
+        assert_eq!(mt, recovered);
+    }
+
+    #[test]
+    fn test_from_str() {
+        assert_eq!(
+            "proper".parse::<MentionType>().unwrap(),
+            MentionType::Proper
+        );
+        assert_eq!("nom".parse::<MentionType>().unwrap(), MentionType::Nominal);
+        assert_eq!(
+            "pronoun".parse::<MentionType>().unwrap(),
+            MentionType::Pronominal
+        );
+        assert_eq!("zero".parse::<MentionType>().unwrap(), MentionType::Zero);
+        assert_eq!("*pro*".parse::<MentionType>().unwrap(), MentionType::Zero);
+    }
+
+    #[test]
+    fn test_zero_properties() {
+        let zero = MentionType::Zero;
+
+        // Zero pronouns have no surface form
+        assert!(!zero.has_surface_form());
+        assert!(zero.is_zero());
+
+        // They require antecedents
+        assert!(zero.requires_antecedent());
+
+        // They cannot introduce entities
+        assert!(!zero.can_introduce_entity());
+
+        // Low salience (less than overt pronouns)
+        assert!(zero.salience_weight() < MentionType::Pronominal.salience_weight());
+    }
+
+    #[test]
+    fn test_overt_mentions_have_surface_form() {
+        assert!(MentionType::Proper.has_surface_form());
+        assert!(MentionType::Nominal.has_surface_form());
+        assert!(MentionType::Pronominal.has_surface_form());
+        assert!(MentionType::Unknown.has_surface_form());
+
+        // Only Zero has no surface form
+        assert!(!MentionType::Zero.has_surface_form());
+    }
+
+    #[test]
+    fn test_zero_serde_roundtrip() {
+        let mt = MentionType::Zero;
+        let json = serde_json::to_string(&mt).unwrap();
+        assert_eq!(json, "\"zero\"");
+        let recovered: MentionType = serde_json::from_str(&json).unwrap();
+        assert_eq!(mt, recovered);
+    }
+}

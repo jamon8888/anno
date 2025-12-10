@@ -1,0 +1,4803 @@
+{
+  "generated_from": "generated/datasets_generated.json",
+  "total_datasets": 371,
+  "configs": {
+    "wikigold": {
+      "group": "general",
+      "url": "https://raw.githubusercontent.com/juand-r/entity-recognition-datasets/master/data/wikigold/CONLL-format/data/wikigold.conll.txt",
+      "output": "wikigold.conll",
+      "description": "Wikipedia-based NER (PER, LOC, ORG, MISC). Historically significant as early Wikipedia NER resource.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en",
+      "expected_docs": 145
+    },
+    "wnut17": {
+      "group": "general",
+      "url": "https://raw.githubusercontent.com/leondz/emerging_entities_17/master/emerging.test.annotated",
+      "output": "wnut17.txt",
+      "description": "Social media NER with emerging entities. Created to evaluate models on rare/emerging entities in noisy social text.",
+      "entity_types": [
+        "person",
+        "location",
+        "corporation",
+        "product",
+        "creative-work",
+        "group"
+      ],
+      "language": "en"
+    },
+    "mitmovie": {
+      "group": "general",
+      "url": "https://groups.csail.mit.edu/sls/downloads/movie/engtest.bio",
+      "output": "mitmovie.txt",
+      "description": "Movie domain slot filling NER. Created at MIT SLS for spoken language understanding research.",
+      "entity_types": [
+        "Actor",
+        "Director",
+        "Genre",
+        "Title",
+        "Year",
+        "Song",
+        "Character",
+        "Plot",
+        "Rating"
+      ],
+      "language": "en"
+    },
+    "mitrestaurant": {
+      "group": "general",
+      "url": "https://groups.csail.mit.edu/sls/downloads/restaurant/restauranttest.bio",
+      "output": "mitrestaurant.txt",
+      "description": "Restaurant domain slot filling NER. Part of MIT SLS spoken dialogue systems research.",
+      "entity_types": [
+        "Amenity",
+        "Cuisine",
+        "Dish",
+        "Hours",
+        "Location",
+        "Price",
+        "Rating",
+        "Restaurant_Name"
+      ],
+      "language": "en"
+    },
+    "conll2003sample": {
+      "group": "general",
+      "url": "https://raw.githubusercontent.com/autoih/conll2003/master/CoNLL-2003/eng.testb",
+      "output": "conll2003sample.txt",
+      "description": "Classic news NER benchmark from Reuters Corpus. Foundational dataset that established modern NER evaluation standards.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "ontonotessample": {
+      "group": "general",
+      "url": "https://raw.githubusercontent.com/autoih/conll2003/master/CoNLL-2003/eng.testb",
+      "output": "ontonotessample.txt",
+      "description": "Multi-genre 18-type NER from OntoNotes 5.0. Rich annotation including coreference, parsing, and PropBank.",
+      "entity_types": [
+        "PERSON",
+        "ORG",
+        "GPE",
+        "LOC",
+        "DATE",
+        "TIME",
+        "MONEY",
+        "PERCENT",
+        "NORP",
+        "FAC",
+        "PRODUCT",
+        "EVENT",
+        "WORK_OF_ART",
+        "LAW",
+        "LANGUAGE",
+        "QUANTITY",
+        "ORDINAL",
+        "CARDINAL"
+      ],
+      "language": "en"
+    },
+    "multinerd": {
+      "group": "multilingual",
+      "url": "https://huggingface.co/datasets/Babelscape/multinerd/resolve/main/test/test_en.jsonl",
+      "output": "multinerd.jsonl",
+      "description": "Large multilingual NER covering 10 languages. Created to address scarcity of multilingual fine-grained NER data.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "ANIM",
+        "BIO",
+        "CEL",
+        "DIS",
+        "EVE",
+        "FOOD",
+        "INST",
+        "MEDIA",
+        "MYTH",
+        "PLANT",
+        "TIME",
+        "VEHI"
+      ],
+      "language": "en"
+    },
+    "fewnerd": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/DFKI-SLT/few-nerd",
+      "output": "fewnerd.txt",
+      "description": "Fine-grained NER with 66 types in 8 coarse categories. Designed for few-shot learning evaluation.",
+      "entity_types": [
+        "person",
+        "location",
+        "organization",
+        "building",
+        "art",
+        "product",
+        "event",
+        "other"
+      ],
+      "language": "en"
+    },
+    "crossner": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/DFKI-SLT/cross_ner",
+      "output": "crossner.txt",
+      "description": "Cross-domain NER across 5 domains: politics, science, music, literature, AI. Tests domain transfer.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC",
+        "MISC",
+        "Domain-specific"
+      ],
+      "language": "en"
+    },
+    "fabner": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/DFKI-SLT/fabner",
+      "output": "fabner.txt",
+      "description": "Manufacturing domain NER. 12 entity types for Industry 4.0 applications.",
+      "entity_types": [
+        "Material",
+        "Process",
+        "Machine",
+        "Product",
+        "Property"
+      ],
+      "language": "en"
+    },
+    "broadtwittercorpus": {
+      "group": "general",
+      "url": "https://raw.githubusercontent.com/GateNLP/broad_twitter_corpus/master/test.bio",
+      "output": "broadtwittercorpus.txt",
+      "description": "Twitter NER across multiple time periods. Tests temporal robustness of NER systems.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "wikineural": {
+      "group": "multilingual",
+      "url": "https://huggingface.co/datasets/Babelscape/wikineural",
+      "output": "wikineural.txt",
+      "description": "Silver-standard multilingual NER from Wikipedia. 9 languages with automatic annotation.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "multi"
+    },
+    "polyglotner": {
+      "group": "multilingual",
+      "url": "https://sites.google.com/site/rmaborhoo/polyglot-ner",
+      "output": "polyglotner.txt",
+      "description": "Massively multilingual NER. 40 languages with silver annotations from Wikipedia.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "universalnerbench": {
+      "group": "multilingual",
+      "url": "https://github.com/UniversalNER/UNER",
+      "output": "universalnerbench.txt",
+      "description": "Cross-lingual NER benchmark spanning 13 diverse languages. Tests zero-shot transfer.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "conll2002": {
+      "group": "multilingual",
+      "url": "https://www.clips.uantwerpen.be/conll2002/ner/",
+      "output": "conll2002.txt",
+      "description": "Spanish and Dutch NER from CoNLL 2002 shared task. Multi-language NER benchmark.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "multi"
+    },
+    "tweetner7": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/tner/tweetner7",
+      "output": "tweetner7.txt",
+      "description": "Twitter NER across 7 entity types. Fine-grained social media NER with temporal annotations.",
+      "entity_types": [
+        "person",
+        "location",
+        "corporation",
+        "product",
+        "creative_work",
+        "group",
+        "event"
+      ],
+      "language": "en"
+    },
+    "googlere": {
+      "group": "relations",
+      "url": "https://github.com/google-research-datasets/relation-extraction-corpus",
+      "output": "googlere.txt",
+      "description": "Google Relation Extraction dataset. Wikipedia sentences with relation annotations.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "nytfb": {
+      "group": "relations",
+      "url": "https://github.com/thunlp/OpenNRE",
+      "output": "nytfb.txt",
+      "description": "New York Times with Freebase relations. Distant supervision relation extraction.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "rebel": {
+      "group": "relations",
+      "url": "https://huggingface.co/datasets/Babelscape/rebel-dataset",
+      "output": "rebel.txt",
+      "description": "Relation Extraction By End-to-end Language generation. Large-scale RE dataset.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "Event"
+      ],
+      "language": "en"
+    },
+    "multiconer": {
+      "group": "multilingual",
+      "url": "https://multiconer.github.io/",
+      "output": "multiconer.txt",
+      "description": "Multilingual Complex NER. 11 languages with fine-grained and complex entities.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "CORP",
+        "GRP",
+        "PROD",
+        "CW"
+      ],
+      "language": "multi"
+    },
+    "multiconerv2": {
+      "group": "multilingual",
+      "url": "https://multiconer.github.io/",
+      "output": "multiconerv2.txt",
+      "description": "MultiCoNER v2 with expanded languages and fine-grained types.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "CORP",
+        "GRP",
+        "PROD",
+        "CW",
+        "Medical",
+        "Scientist"
+      ],
+      "language": "multi"
+    },
+    "bc5cdr": {
+      "group": "biomedical",
+      "url": "https://raw.githubusercontent.com/shreyashub/BioFLAIR/master/data/ner/bc5cdr/test.txt",
+      "output": "bc5cdr.txt",
+      "description": "Biomedical NER for diseases and chemicals. Created for BioCreative V CDR task, a major biomedical NLP benchmark.",
+      "entity_types": [
+        "Chemical",
+        "Disease"
+      ],
+      "language": "en"
+    },
+    "ncbidisease": {
+      "group": "biomedical",
+      "url": "https://raw.githubusercontent.com/shreyashub/BioFLAIR/master/data/ner/NCBI-disease/test.txt",
+      "output": "ncbidisease.txt",
+      "description": "NCBI disease mentions corpus. Foundational resource for disease NER from NIH.",
+      "entity_types": [
+        "Disease"
+      ],
+      "language": "en"
+    },
+    "genia": {
+      "group": "biomedical",
+      "url": "https://huggingface.co/datasets/chufangao/GENIA-NER",
+      "output": "genia.txt",
+      "description": "Biomedical NER for molecular biology. First large-scale biomedical NER corpus; historically significant.",
+      "entity_types": [
+        "DNA",
+        "RNA",
+        "protein",
+        "cell_line",
+        "cell_type"
+      ],
+      "language": "en"
+    },
+    "anatem": {
+      "group": "biomedical",
+      "url": "https://huggingface.co/datasets/disi-unibo-nlp/AnatEM",
+      "output": "anatem.txt",
+      "description": "Anatomical entity mention corpus. 1,212 PubMed abstracts with anatomical structures.",
+      "entity_types": [
+        "Anatomy"
+      ],
+      "language": "en"
+    },
+    "bc2gm": {
+      "group": "biomedical",
+      "url": "https://huggingface.co/datasets/bigbio/bc2gm_corpus",
+      "output": "bc2gm.txt",
+      "description": "BioCreative II Gene Mention recognition. Gold-standard gene/protein name tagging.",
+      "entity_types": [
+        "Gene",
+        "Protein"
+      ],
+      "language": "en"
+    },
+    "bc4chemd": {
+      "group": "biomedical",
+      "url": "https://huggingface.co/datasets/bigbio/bc4chemd",
+      "output": "bc4chemd.txt",
+      "description": "BioCreative IV Chemical Entity Mention Detection. Drug and chemical name recognition.",
+      "entity_types": [
+        "Chemical"
+      ],
+      "language": "en"
+    },
+    "gap": {
+      "group": "coreference",
+      "url": "https://raw.githubusercontent.com/google-research-datasets/gap-coreference/master/gap-test.tsv",
+      "output": "gap.tsv",
+      "description": "Gender Ambiguous Pronoun resolution. Google's benchmark for exposing gender bias in coreference systems.",
+      "entity_types": [
+        "PER"
+      ],
+      "language": "en"
+    },
+    "preco": {
+      "group": "coreference",
+      "url": "https://preschool-lab.github.io/PreCo/",
+      "output": "preco.txt",
+      "description": "Large-scale coreference from PreCo reading comprehension corpus. 10x larger than OntoNotes.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "litbank": {
+      "group": "coreference",
+      "url": "https://raw.githubusercontent.com/dbamman/litbank/master/coref/brat/1023_bleak_house_brat.ann",
+      "output": "litbank.txt",
+      "description": "Literary coreference. 100 public-domain English fiction works (1719-1922) with ACE-style entities.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "GPE",
+        "FAC",
+        "VEH"
+      ],
+      "language": "en",
+      "expected_docs": 100
+    },
+    "ecbplus": {
+      "group": "coreference",
+      "url": "https://raw.githubusercontent.com/cltl/ecbPlus/master/ECB%2B_LREC2014/ECBplus_coreference_sentences.csv",
+      "output": "ecbplus.csv",
+      "description": "Event Coreference Bank Plus. Standard benchmark for cross-document event coreference resolution.",
+      "entity_types": [
+        "EVENT",
+        "TIME",
+        "LOC",
+        "PARTICIPANT"
+      ],
+      "language": "en",
+      "expected_docs": 982
+    },
+    "ontonotescoref": {
+      "group": "coreference",
+      "url": "https://catalog.ldc.upenn.edu/LDC2013T19",
+      "output": "ontonotescoref.txt",
+      "description": "OntoNotes 5.0 coreference annotations. Gold-standard multi-genre coref including WSJ, broadcast, web.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "GPE",
+        "NORP"
+      ],
+      "language": "en"
+    },
+    "wikicoref": {
+      "group": "coreference",
+      "url": "https://rali.iro.umontreal.ca/rali/en/wikicoref-corpus",
+      "output": "wikicoref.txt",
+      "description": "Wikipedia coreference corpus. 30 documents with full coreference annotation.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC"
+      ],
+      "language": "en"
+    },
+    "amimeeting": {
+      "group": "coreference",
+      "url": "https://groups.inf.ed.ac.uk/ami/download/",
+      "output": "amimeeting.txt",
+      "description": "Meeting transcripts with coreference and dialogue act annotation.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC"
+      ],
+      "language": "en"
+    },
+    "clefclinicalcoref": {
+      "group": "biomedical",
+      "url": "https://physionet.org/content/shareclefehealth2013coreference/",
+      "output": "clefclinicalcoref.txt",
+      "description": "Clinical coreference from ShARe/CLEF eHealth. Patient records with coref.",
+      "entity_types": [
+        "Disorder",
+        "Drug",
+        "Procedure"
+      ],
+      "language": "en"
+    },
+    "rstdt": {
+      "group": "coreference",
+      "url": "https://catalog.ldc.upenn.edu/LDC2002T07",
+      "output": "rstdt.txt",
+      "description": "Penn Discourse Treebank with RST annotations. Discourse relations and structure.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "winobias": {
+      "group": "coreference",
+      "url": "https://raw.githubusercontent.com/uclanlp/corefBias/master/WinoBias/wino/data/anti_stereotyped_type1.txt.dev",
+      "output": "winobias.txt",
+      "description": "Coreference bias benchmark. Winograd-schema sentences testing occupational gender stereotypes.",
+      "entity_types": [
+        "PER"
+      ],
+      "language": "en"
+    },
+    "qxoref": {
+      "group": "indigenous",
+      "url": "https://raw.githubusercontent.com/Lguyogiro/qxoRef/main/data/conll/all.conll",
+      "output": "qxoref.conll",
+      "description": "First coreference corpus for Conchucos Quechua. Historically significant as first indigenous coref resource.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "qxo"
+    },
+    "americasnli": {
+      "group": "indigenous",
+      "url": "https://raw.githubusercontent.com/nala-cub/AmericasNLI/main/data/test/quechua_test.tsv",
+      "output": "americasnli.tsv",
+      "description": "NLI for 10 Indigenous American languages (Quechua, Guaran\u00ed, Nahuatl, etc.).",
+      "entity_types": [],
+      "language": "multi"
+    },
+    "cherokeener": {
+      "group": "indigenous",
+      "url": "https://raw.githubusercontent.com/ZhangShiyworkhub/ChrEn/main/chr/chr.txt",
+      "output": "cherokeener.txt",
+      "description": "Cherokee-English parallel corpus for NER transfer. Uses Syllabary script.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "chr"
+    },
+    "nahuatlner": {
+      "group": "ancient",
+      "url": "https://github.com/Lguyogiro/nahuatl-ner",
+      "output": "nahuatlner.txt",
+      "description": "Named entity recognition for Nahuatl (Aztec language). Colonial-era texts and modern usage.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "nah"
+    },
+    "welshner": {
+      "group": "indigenous",
+      "url": "https://github.com/Portulan/welsh-ner",
+      "output": "welshner.txt",
+      "description": "Named entity recognition for Welsh (Cymraeg). Celtic language NER corpus.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "cy"
+    },
+    "basquener": {
+      "group": "indigenous",
+      "url": "https://github.com/ixa-ehu/eusner",
+      "output": "basquener.txt",
+      "description": "Named entity recognition for Basque (Euskara). Language isolate NER corpus.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "eu"
+    },
+    "hipe2022": {
+      "group": "ancient",
+      "url": "https://raw.githubusercontent.com/hipe-eval/HIPE-2022-data/main/data/v2.1/de/HIPE-2022-v2.1-hipe2020-de-test.tsv",
+      "output": "hipe2022.tsv",
+      "description": "Multilingual Historical NER. 6 datasets across 11 languages including Latin.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "PROD"
+      ],
+      "language": "multi"
+    },
+    "histnero": {
+      "group": "ancient",
+      "url": "https://github.com/UniBuc-HistNERo/HistNERo",
+      "output": "histnero.txt",
+      "description": "Romanian historical newspaper NER. First Romanian historical NER corpus from four regions.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "DATE",
+        "MISC"
+      ],
+      "language": "ro"
+    },
+    "chisiec": {
+      "group": "ancient",
+      "url": "https://raw.githubusercontent.com/tangxuemei1995/CHisIEC/main/data/re/coling_test.json",
+      "output": "chisiec.json",
+      "description": "Chinese Historical Information Extraction Corpus. Ancient Chinese NER + RE with 12 relation types.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "OFI",
+        "BOOK"
+      ],
+      "language": "lzh"
+    },
+    "docred": {
+      "group": "relations",
+      "url": "https://raw.githubusercontent.com/mainlp/CrossRE/main/crossre_data/ai-test.json",
+      "output": "docred.json",
+      "description": "Document-level relation extraction. 96 relation types from Wikipedia.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "TIME",
+        "NUM"
+      ],
+      "language": "en",
+      "expected_docs": 5053
+    },
+    "retacred": {
+      "group": "relations",
+      "url": "https://raw.githubusercontent.com/mainlp/CrossRE/main/crossre_data/news-test.json",
+      "output": "retacred.json",
+      "description": "Large-scale relation extraction. 41 relation types + no_relation. Cleaned TACRED.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC",
+        "DATE",
+        "NUM"
+      ],
+      "language": "en"
+    },
+    "cadec": {
+      "group": "biomedical",
+      "url": "https://huggingface.co/datasets/KevinSpaghetti/cadec",
+      "output": "cadec.txt",
+      "description": "Clinical Adverse Drug Events. Benchmark for discontinuous NER from AskaPatient.",
+      "entity_types": [
+        "ADR",
+        "Drug",
+        "Disease",
+        "Symptom"
+      ],
+      "language": "en"
+    },
+    "winoqueer": {
+      "group": "general",
+      "url": "https://raw.githubusercontent.com/katyfelkner/winoqueer/main/data/winoqueer_final.csv",
+      "output": "winoqueer.csv",
+      "description": "Anti-LGBTQ+ bias benchmark. Community-in-the-loop design for queer representation.",
+      "entity_types": [
+        "PER"
+      ],
+      "language": "en"
+    },
+    "bbq": {
+      "group": "general",
+      "url": "https://raw.githubusercontent.com/nyu-mll/BBQ/main/data/Gender_identity.jsonl",
+      "output": "bbq.jsonl",
+      "description": "Bias Benchmark for QA. Tests 9 social bias categories including sexual orientation.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "gicoref": {
+      "group": "coreference",
+      "url": "https://raw.githubusercontent.com/TristaCao/into_inclusivecoref/master/GICoref/coref.combo.conll",
+      "output": "gicoref.conll",
+      "description": "Gender-inclusive coreference. Written by/about trans and non-binary individuals.",
+      "entity_types": [
+        "PER"
+      ],
+      "language": "en"
+    },
+    "corefud": {
+      "group": "coreference",
+      "url": "https://ufal.mff.cuni.cz/corefud/corefud-1.3.zip",
+      "output": "corefud.zip",
+      "description": "Multilingual coreference (17 languages, 22 datasets). CRAC shared task standard.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "crowspairs": {
+      "group": "general",
+      "url": "https://github.com/nyu-mll/crows-pairs",
+      "output": "crowspairs.txt",
+      "description": "Crowdsourced stereotype pairs benchmark. 9 bias categories for language models.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "stereoset": {
+      "group": "general",
+      "url": "https://github.com/moinnadeem/StereoSet",
+      "output": "stereoset.txt",
+      "description": "Measuring stereotypical bias in language models. 4 target domains.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "realtoxicityprompts": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/allenai/real-toxicity-prompts",
+      "output": "realtoxicityprompts.txt",
+      "description": "100k prompts for measuring toxicity generation in language models.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "boldbias": {
+      "group": "general",
+      "url": "https://github.com/amazon-science/bold",
+      "output": "boldbias.txt",
+      "description": "Bias in Open-ended Language Generation Dataset. Wikipedia-based prompts.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "droc": {
+      "group": "coreference",
+      "url": "https://raw.githubusercontent.com/dbamman/droc/main/data/dta_reduced.jsonl",
+      "output": "droc.jsonl",
+      "description": "German novel coreference. 90 German novels from DTA (Deutsches Textarchiv).",
+      "entity_types": [
+        "PER"
+      ],
+      "language": "de"
+    },
+    "bookcoref": {
+      "group": "coreference",
+      "url": "https://huggingface.co/datasets/sapienzanlp/bookcoref",
+      "output": "bookcoref.txt",
+      "description": "Book-scale coreference. First benchmark with 200k+ tokens/doc average. Character coreference on 53 Project Gutenberg novels.",
+      "entity_types": [
+        "PER"
+      ],
+      "language": "en",
+      "expected_docs": 53
+    },
+    "bookcorefsplit": {
+      "group": "coreference",
+      "url": "https://huggingface.co/datasets/sapienzanlp/bookcoref",
+      "output": "bookcorefsplit.txt",
+      "description": "BOOKCOREF split into 1500-token windows for comparison with standard benchmarks.",
+      "entity_types": [
+        "PER"
+      ],
+      "language": "en"
+    },
+    "longtonotes": {
+      "group": "coreference",
+      "url": "https://docs.google.com/forms/d/e/1FAIpQLScoWkBOgJ1HH_phtvTJ4_hGvQw6f0W6K7kw74sUKCDTG8P2iA/viewform",
+      "output": "longtonotes.txt",
+      "description": "OntoNotes with merged coreference chains. Manually merges split OntoNotes documents back into full documents.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "GPE",
+        "NORP"
+      ],
+      "language": "en"
+    },
+    "twiconv": {
+      "group": "coreference",
+      "url": "https://raw.githubusercontent.com/berfingit/TwiConv/main/conll_skeleton/001_940791133357199360.branch7._with_boundaries_gold_conll",
+      "output": "twiconv.txt",
+      "description": "Twitter conversational coreference.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "mudoco": {
+      "group": "coreference",
+      "url": "https://raw.githubusercontent.com/facebookresearch/mudoco/main/mudoco_calling.json",
+      "output": "mudoco.json",
+      "description": "Multi-domain document-level coreference. Dialog-based.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "dialogre": {
+      "group": "relations",
+      "url": "https://github.com/nlpdata/dialogre",
+      "output": "dialogre.txt",
+      "description": "Dialogue-based relation extraction. Multi-turn conversations requiring entity tracking across turns.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC"
+      ],
+      "language": "en"
+    },
+    "multiwozner": {
+      "group": "general",
+      "url": "https://github.com/budzianowski/multiwoz",
+      "output": "multiwozner.txt",
+      "description": "Multi-domain task-oriented dialogue with slot/entity annotations. Multi-turn conversations.",
+      "entity_types": [
+        "RESTAURANT",
+        "HOTEL",
+        "ATTRACTION",
+        "TAXI",
+        "TRAIN",
+        "HOSPITAL",
+        "POLICE"
+      ],
+      "language": "en"
+    },
+    "coqaentities": {
+      "group": "coreference",
+      "url": "https://stanfordnlp.github.io/coqa/",
+      "output": "coqaentities.txt",
+      "description": "Conversational Question Answering. Multi-turn QA requiring entity mention resolution.",
+      "entity_types": [
+        "ANSWER_SPAN"
+      ],
+      "language": "en"
+    },
+    "gvc": {
+      "group": "coreference",
+      "url": "https://github.com/cltl/GunViolenceCorpus",
+      "output": "gvc.txt",
+      "description": "Cross-document event coreference for gun violence. Tests domain transfer from ECB+.",
+      "entity_types": [
+        "EVENT",
+        "PARTICIPANT",
+        "WEAPON",
+        "LOCATION",
+        "TIME"
+      ],
+      "language": "en"
+    },
+    "isnotes": {
+      "group": "coreference",
+      "url": "https://www.h-its.org/software/isnotes-corpus/",
+      "output": "isnotes.txt",
+      "description": "Unrestricted bridging anaphora on OntoNotes. ~660 bridging pairs.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "codicracbridging": {
+      "group": "coreference",
+      "url": "https://github.com/UniversalAnaphora/UA-CODI-CRAC",
+      "output": "codicracbridging.txt",
+      "description": "Universal Anaphora bridging annotations. One of the largest bridging datasets.",
+      "entity_types": [
+        "BRIDGING_REF"
+      ],
+      "language": "en"
+    },
+    "ancientgreekud": {
+      "group": "ancient",
+      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Ancient_Greek-Perseus/master/grc_perseus-ud-test.conllu",
+      "output": "ancientgreekud.conllu",
+      "description": "Universal Dependencies for Ancient Greek. Homeric through Byzantine.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "grc"
+    },
+    "latinud": {
+      "group": "ancient",
+      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Latin-ITTB/master/la_ittb-ud-test.conllu",
+      "output": "latinud.conllu",
+      "description": "Universal Dependencies for Latin. Classical through Medieval.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "la"
+    },
+    "copticscriptorium": {
+      "group": "ancient",
+      "url": "https://data.copticscriptorium.org/",
+      "output": "copticscriptorium.txt",
+      "description": "Sahidic Coptic with multi-layer annotation. ~50k tokens.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "cop"
+    },
+    "oracc": {
+      "group": "ancient",
+      "url": "http://oracc.museum.upenn.edu/",
+      "output": "oracc.txt",
+      "description": "Open Richly Annotated Cuneiform Corpus. Sumerian, Akkadian, Urartian.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "DIVINE"
+      ],
+      "language": "akk"
+    },
+    "masakhaner": {
+      "group": "multilingual",
+      "url": "https://raw.githubusercontent.com/masakhane-io/masakhane-ner/main/data/yor/test.txt",
+      "output": "masakhaner.txt",
+      "description": "NER for 10 African languages. PER/LOC/ORG/DATE.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "DATE"
+      ],
+      "language": "multi"
+    },
+    "masakhaner2": {
+      "group": "multilingual",
+      "url": "https://huggingface.co/datasets/masakhane/masakhaner2",
+      "output": "masakhaner2.txt",
+      "description": "Extended MasakhaNER with 20+ African languages.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "DATE"
+      ],
+      "language": "multi"
+    },
+    "afrisenti": {
+      "group": "multilingual",
+      "url": "https://huggingface.co/datasets/shmuhammad/AfriSenti-twitter-sentiment",
+      "output": "afrisenti.txt",
+      "description": "Sentiment analysis for 14 African languages. 110k+ tweets. SemEval 2023 Task 12.",
+      "entity_types": [],
+      "language": "multi"
+    },
+    "afriqa": {
+      "group": "multilingual",
+      "url": "https://huggingface.co/datasets/masakhane/afriqa",
+      "output": "afriqa.txt",
+      "description": "Cross-lingual QA for 10 African languages. Wikipedia-based.",
+      "entity_types": [],
+      "language": "multi"
+    },
+    "masakhanews": {
+      "group": "multilingual",
+      "url": "https://huggingface.co/datasets/masakhane/masakhanews",
+      "output": "masakhanews.txt",
+      "description": "News topic classification for 16 African languages.",
+      "entity_types": [],
+      "language": "multi"
+    },
+    "masakhapos": {
+      "group": "multilingual",
+      "url": "https://github.com/masakhane-io/masakhane-pos",
+      "output": "masakhapos.txt",
+      "description": "Part-of-speech tagging for 20 African languages.",
+      "entity_types": [],
+      "language": "multi"
+    },
+    "wikiann": {
+      "group": "multilingual",
+      "url": "https://huggingface.co/datasets/wikiann",
+      "output": "wikiann.txt",
+      "description": "Silver-standard NER from Wikipedia hyperlinks. 282 languages.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "wiesp2022ner": {
+      "group": "scientific",
+      "url": "https://huggingface.co/datasets/adsabs/WIESP2022-NER",
+      "output": "wiesp2022ner.txt",
+      "description": "Astrophysics NER from NASA ADS. 31 entity types: facilities, wavelengths, telescopes, archives.",
+      "entity_types": [
+        "WAVELENGTH",
+        "TELESCOPE",
+        "FACILITY",
+        "MODEL",
+        "ARCHIVE",
+        "DATASET",
+        "MISSION"
+      ],
+      "language": "en"
+    },
+    "dutcharchaeology": {
+      "group": "general",
+      "url": "https://live.european-language-grid.eu/catalogue/corpus/13410",
+      "output": "dutcharchaeology.txt",
+      "description": "Archaeological excavation reports from DANS archive. 31k annotations across 6 entity types.",
+      "entity_types": [
+        "ARTEFACT",
+        "PERIOD",
+        "MATERIAL",
+        "LOCATION",
+        "SPECIES",
+        "CONTEXT"
+      ],
+      "language": "nl"
+    },
+    "ener": {
+      "group": "general",
+      "url": "https://github.com/ener-dataset/ener",
+      "output": "ener.txt",
+      "description": "E-commerce NER. Product entities in e-commerce text.",
+      "entity_types": [
+        "Product",
+        "Brand",
+        "Attribute",
+        "Price"
+      ],
+      "language": "en"
+    },
+    "finer": {
+      "group": "food",
+      "url": "https://figshare.com/ndownloader/files/36144501",
+      "output": "finer.txt",
+      "description": "Food ingredient NER from AllRecipes. 182k sentences with ingredient phrases in IOB2 format.",
+      "entity_types": [
+        "INGREDIENT",
+        "PRODUCT",
+        "QUANTITY",
+        "UNIT",
+        "STATE"
+      ],
+      "language": "en"
+    },
+    "annoctr": {
+      "group": "general",
+      "url": "https://github.com/boschresearch/anno-ctr-lrec-coling-2024/archive/refs/heads/main.zip",
+      "output": "annoctr.zip",
+      "description": "Cyber threat intelligence NER with MITRE ATT&CK linking. 400 annotated documents from commercial CTI vendors.",
+      "entity_types": [
+        "ORGANIZATION",
+        "LOCATION",
+        "SECTOR",
+        "TIME",
+        "CODE",
+        "THREAT_ACTOR",
+        "MALWARE",
+        "TOOL",
+        "TACTIC",
+        "TECHNIQUE"
+      ],
+      "language": "en"
+    },
+    "craft": {
+      "group": "biomedical",
+      "url": "https://github.com/UCDenver-ccp/CRAFT/archive/refs/heads/master.zip",
+      "output": "craft.zip",
+      "description": "Colorado Richly Annotated Full-Text. 97 PubMed articles with multi-layer annotation including coreference.",
+      "entity_types": [
+        "GENE",
+        "PROTEIN",
+        "CHEMICAL",
+        "CELL",
+        "ORGANISM"
+      ],
+      "language": "en"
+    },
+    "wnut16": {
+      "group": "general",
+      "url": "https://raw.githubusercontent.com/napsternxg/TwitterNER/master/data/wnut16/test",
+      "output": "wnut16.txt",
+      "description": "Twitter NER workshop shared task. Focus on rare and emerging entities in noisy social media text.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "sanskritud": {
+      "group": "ancient",
+      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Sanskrit-Vedic/master/sa_vedic-ud-test.conllu",
+      "output": "sanskritud.conllu",
+      "description": "Universal Dependencies for Vedic and Classical Sanskrit. Includes Vedas and epics.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "sa"
+    },
+    "oldenglishud": {
+      "group": "ancient",
+      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Old_English-YCOE/master/ang_ycoe-ud-test.conllu",
+      "output": "oldenglishud.conllu",
+      "description": "Universal Dependencies for Old English (Anglo-Saxon). York-Toronto-Helsinki corpus.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "ang"
+    },
+    "oldnorseud": {
+      "group": "ancient",
+      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Old_Norse-ICEPAHC/master/non_icepahc-ud-test.conllu",
+      "output": "oldnorseud.conllu",
+      "description": "Universal Dependencies for Old Norse/Icelandic Sagas. PROIEL and ISWOC treebanks.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "non"
+    },
+    "calcs2018": {
+      "group": "multilingual",
+      "url": "https://code-switching.github.io/2018/",
+      "output": "calcs2018.txt",
+      "description": "Code-Switching Workshop shared task. English-Spanish Twitter NER with 9 entity types.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "GROUP",
+        "TITLE",
+        "PROD",
+        "EVENT",
+        "TIME",
+        "OTHER"
+      ],
+      "language": "multi"
+    },
+    "hinglishner": {
+      "group": "multilingual",
+      "url": "https://github.com/murali1996/CodemixedNLP",
+      "output": "hinglishner.txt",
+      "description": "Hindi-English code-mixed social media NER. Roman script Hindi mixed with English.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "medievalcharterner": {
+      "group": "ancient",
+      "url": "https://zenodo.org/records/6463699",
+      "output": "medievalcharterner.txt",
+      "description": "Multilingual medieval charter NER. Latin, French, Spanish from major charter collections.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "DATE"
+      ],
+      "language": "multi"
+    },
+    "msner": {
+      "group": "multilingual",
+      "url": "https://rdr.kuleuven.be/dataset.xhtml?persistentId=doi:10.48804/ZTVMIX",
+      "output": "msner.txt",
+      "description": "Multilingual Spoken NER. Speech-to-NER on VoxPopuli parliamentary speeches.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "multi"
+    },
+    "noisebench": {
+      "group": "general",
+      "url": "https://github.com/elenamer/NoiseBench",
+      "output": "noisebench.txt",
+      "description": "Robustness benchmark for NER. 6 real noise types: expert, crowd, LLM, distant/weak supervision.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "rockner": {
+      "group": "general",
+      "url": "https://github.com/INK-USC/RockNER",
+      "output": "rockner.txt",
+      "description": "Robustness benchmark for NER. Real-world adversarial examples with boundary ambiguity.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "crossweigh": {
+      "group": "multilingual",
+      "url": "https://github.com/ZihanWangKi/CrossWeigh",
+      "output": "crossweigh.txt",
+      "description": "Cross-lingual adversarial NER evaluation. Tests multilingual model robustness.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "zelda": {
+      "group": "general",
+      "url": "https://github.com/flairNLP/zelda",
+      "output": "zelda.txt",
+      "description": "Entity disambiguation benchmark. 95k Wikipedia paragraphs, 8 ED datasets unified.",
+      "entity_types": [
+        "ENTITY"
+      ],
+      "language": "en"
+    },
+    "tweetnerd": {
+      "group": "general",
+      "url": "https://zenodo.org/records/6617192",
+      "output": "tweetnerd.txt",
+      "description": "Twitter NER + Entity Linking. End-to-end NERD benchmark spanning 2010-2021.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "aidaconll": {
+      "group": "general",
+      "url": "https://www.mpi-inf.mpg.de/departments/databases-and-information-systems/research/ambiverse-nlu/aida",
+      "output": "aidaconll.txt",
+      "description": "Primary entity linking benchmark linking CoNLL-2003 mentions to Wikipedia. De-facto standard for end-to-end EL evaluation.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "nne": {
+      "group": "general",
+      "url": "https://github.com/nickyringland/nested_named_entities",
+      "output": "nne.txt",
+      "description": "Large-scale nested NER corpus from Wikipedia/news. Deep nesting up to 6 levels.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "GPE",
+        "NORP",
+        "FAC",
+        "PRODUCT",
+        "EVENT",
+        "WORK",
+        "LAW"
+      ],
+      "language": "en"
+    },
+    "genianested": {
+      "group": "biomedical",
+      "url": "https://raw.githubusercontent.com/thecharm/boundary-aware-nested-ner/master/Our_boundary-aware_model/data/genia/genia.test.iob2",
+      "output": "genianested.txt",
+      "description": "Biomedical nested NER from GENIA corpus. Up to 3 levels of nesting.",
+      "entity_types": [
+        "DNA",
+        "RNA",
+        "PROTEIN",
+        "CELL_LINE",
+        "CELL_TYPE"
+      ],
+      "language": "en"
+    },
+    "chinesenestedner": {
+      "group": "multilingual",
+      "url": "https://github.com/LeeSureman/Nested-NER",
+      "output": "chinesenestedner.txt",
+      "description": "Chinese nested named entity recognition. Multiple levels of embedded entities.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC",
+        "GPE"
+      ],
+      "language": "zh"
+    },
+    "scinernested": {
+      "group": "scientific",
+      "url": "https://github.com/allenai/sciie",
+      "output": "scinernested.txt",
+      "description": "Scientific paper NER with nested annotations. Methods, tasks, and datasets.",
+      "entity_types": [
+        "TASK",
+        "METHOD",
+        "METRIC",
+        "MATERIAL",
+        "GENERIC"
+      ],
+      "language": "en"
+    },
+    "germevaldiscontinuous": {
+      "group": "multilingual",
+      "url": "https://sites.google.com/site/germaboreval/data",
+      "output": "germevaldiscontinuous.txt",
+      "description": "German discontinuous NER from GermEval 2014. Non-contiguous entity spans.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC",
+        "OTH"
+      ],
+      "language": "de"
+    },
+    "adrdiscontinuous": {
+      "group": "biomedical",
+      "url": "https://github.com/Aitslab/ADR-DisNER",
+      "output": "adrdiscontinuous.txt",
+      "description": "Adverse Drug Reaction corpus with discontinuous mentions. Patient forum posts.",
+      "entity_types": [
+        "ADR",
+        "DRUG",
+        "SYMPTOM"
+      ],
+      "language": "en"
+    },
+    "pubmeddiscontinuous": {
+      "group": "biomedical",
+      "url": "https://github.com/dmis-lab/discontinuous-ner",
+      "output": "pubmeddiscontinuous.txt",
+      "description": "PubMed abstracts with discontinuous biomedical entities. Complex entity boundaries.",
+      "entity_types": [
+        "CHEMICAL",
+        "DISEASE",
+        "GENE"
+      ],
+      "language": "en"
+    },
+    "semeval2010task8": {
+      "group": "relations",
+      "url": "https://github.com/sahitya0000/Relation-Classification",
+      "output": "semeval2010task8.txt",
+      "description": "Semantic relation classification between nominals. 9 relation types.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "fewrel": {
+      "group": "relations",
+      "url": "https://raw.githubusercontent.com/thunlp/FewRel/master/data/val_wiki.json",
+      "output": "fewrel.json",
+      "description": "Few-shot relation classification benchmark. 100 relations from Wikidata.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "nyt10": {
+      "group": "relations",
+      "url": "http://iesl.cs.umass.edu/riedel/ecml/",
+      "output": "nyt10.txt",
+      "description": "New York Times distant supervision RE. 24 Freebase relations.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC"
+      ],
+      "language": "en"
+    },
+    "jnlpba": {
+      "group": "biomedical",
+      "url": "https://raw.githubusercontent.com/cambridgeltl/MTL-Bioinformatics-2016/master/data/JNLPBA/test.tsv",
+      "output": "jnlpba.tsv",
+      "description": "JNLPBA 2004 shared task. Bio-entity recognition in PubMed abstracts.",
+      "entity_types": [
+        "PROTEIN",
+        "DNA",
+        "RNA",
+        "CELL_TYPE",
+        "CELL_LINE"
+      ],
+      "language": "en"
+    },
+    "s800": {
+      "group": "biomedical",
+      "url": "https://species.jensenlab.org/files/S800-1.0.tar.gz",
+      "output": "s800.txt",
+      "description": "Species-800 corpus. Species name recognition in biomedical text.",
+      "entity_types": [
+        "SPECIES"
+      ],
+      "language": "en"
+    },
+    "tempeval3": {
+      "group": "general",
+      "url": "https://figshare.com/articles/dataset/TempEval-3_data/9586532",
+      "output": "tempeval3.txt",
+      "description": "Temporal annotation benchmark. TIMEX, EVENT spans, and temporal relations.",
+      "entity_types": [
+        "TIMEX",
+        "EVENT"
+      ],
+      "language": "en"
+    },
+    "timebank12": {
+      "group": "general",
+      "url": "https://catalog.ldc.upenn.edu/LDC2006T08",
+      "output": "timebank12.txt",
+      "description": "Canonical temporal IE corpus. News articles with TIMEX3, events, and temporal links (TLINKs).",
+      "entity_types": [
+        "TIMEX3",
+        "EVENT",
+        "SIGNAL"
+      ],
+      "language": "en"
+    },
+    "matres": {
+      "group": "general",
+      "url": "https://github.com/qiangning/MATRES",
+      "output": "matres.txt",
+      "description": "Multi-Axis Temporal Relations. Cleaner, more consistent event-event temporal relation annotations.",
+      "entity_types": [
+        "EVENT"
+      ],
+      "language": "en"
+    },
+    "twitter2015mner": {
+      "group": "general",
+      "url": "https://github.com/jefferyYu/UMT",
+      "output": "twitter2015mner.txt",
+      "description": "Multimodal NER on Twitter. Text + image for entity recognition.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "distantlisteningcorpus": {
+      "group": "music",
+      "url": "https://zenodo.org/records/15150283",
+      "output": "distantlisteningcorpus.txt",
+      "description": "1,283 musical scores with harmonic annotations. String quartet + piano music with Roman numeral analysis.",
+      "entity_types": [
+        "CHORD",
+        "KEY",
+        "MODULATION",
+        "CADENCE",
+        "PHRASE"
+      ],
+      "language": "multi"
+    },
+    "piimasking200k": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/ai4privacy/pii-masking-200k",
+      "output": "piimasking200k.txt",
+      "description": "200k synthetic examples for PII detection and masking. Covers 50+ PII types.",
+      "entity_types": [
+        "EMAIL",
+        "PHONE",
+        "SSN",
+        "ADDRESS",
+        "NAME",
+        "DOB",
+        "CREDIT_CARD",
+        "PASSPORT",
+        "IP_ADDRESS",
+        "LICENSE"
+      ],
+      "language": "multi"
+    },
+    "enersec": {
+      "group": "legal",
+      "url": "https://github.com/jnishii/E-NER",
+      "output": "enersec.txt",
+      "description": "Legal NER from SEC EDGAR filings. 52 documents with financial entity annotations.",
+      "entity_types": [
+        "ORG",
+        "LOC",
+        "DATE",
+        "MONEY",
+        "PERCENT",
+        "PERSON",
+        "PRODUCT",
+        "CARDINAL"
+      ],
+      "language": "en"
+    },
+    "kore50": {
+      "group": "general",
+      "url": "https://github.com/KORE50/KORE50-NIF-NER",
+      "output": "kore50.txt",
+      "description": "Short, highly ambiguous entity linking snippets. Tests disambiguation difficulty.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "wnedwiki": {
+      "group": "general",
+      "url": "https://github.com/wikipedia2vec/wikipedia2vec",
+      "output": "wnedwiki.txt",
+      "description": "Large-scale Wikipedia entity linking dataset extracted from Wikipedia hyperlinks.",
+      "entity_types": [
+        "ENTITY"
+      ],
+      "language": "en"
+    },
+    "belb": {
+      "group": "biomedical",
+      "url": "https://github.com/sg-wbi/belb",
+      "output": "belb.txt",
+      "description": "Biomedical Entity Linking Benchmark unifying 11 corpora across 7 knowledge bases. Standardized biomedical EL evaluation.",
+      "entity_types": [
+        "Disease",
+        "Chemical",
+        "Gene",
+        "Species",
+        "CellLine",
+        "Variant"
+      ],
+      "language": "en"
+    },
+    "melo": {
+      "group": "multilingual",
+      "url": "https://github.com/avature/melo-benchmark",
+      "output": "melo.txt",
+      "description": "Multilingual Entity Linking of Occupations. 48 datasets across 21 languages for occupation EL.",
+      "entity_types": [
+        "OCCUPATION"
+      ],
+      "language": "multi"
+    },
+    "bookcorefbamman": {
+      "group": "coreference",
+      "url": "https://huggingface.co/datasets/spacemanidol/BookCoref",
+      "output": "bookcorefbamman.txt",
+      "description": "Full-novel coreference with automatic silver and manual gold annotations. Includes Animal Farm, Siddhartha, Pride and Prejudice.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "novelcr": {
+      "group": "coreference",
+      "url": "https://github.com/NovelCR/NovelCR",
+      "output": "novelcr.txt",
+      "description": "Large-scale bilingual (EN/ZH) novel coreference. 148k EN mentions, 311k ZH mentions with 74-83% spanning 3+ sentences.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "agcner": {
+      "group": "multilingual",
+      "url": "https://github.com/AgCNER/AgCNER",
+      "output": "agcner.txt",
+      "description": "Large-scale Chinese agricultural NER. 66k samples, ~207k entities, 3.9M characters.",
+      "entity_types": [
+        "CROP",
+        "DISEASE",
+        "PEST",
+        "CHEMICAL",
+        "VARIETY",
+        "LOCATION",
+        "TIME"
+      ],
+      "language": "zh"
+    },
+    "scrollsqmsum": {
+      "group": "general",
+      "url": "https://github.com/tau-nlp/scrolls",
+      "output": "scrollsqmsum.txt",
+      "description": "Long-document QA from SCROLLS benchmark. Query-focused meeting summarization.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "longdocner": {
+      "group": "general",
+      "url": "https://github.com/xhuang28/LongDocNER",
+      "output": "longdocner.txt",
+      "description": "Long-document NER benchmark. Tests entity recognition across extended contexts.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "booksumcoref": {
+      "group": "coreference",
+      "url": "https://github.com/salesforce/booksum",
+      "output": "booksumcoref.txt",
+      "description": "Coreference annotations on book chapters from BookSum. Long literary texts.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "multibionerlong": {
+      "group": "biomedical",
+      "url": "https://github.com/dmis-lab/multi-bio-ner",
+      "output": "multibionerlong.txt",
+      "description": "Long biomedical document NER. Full-text articles vs abstracts.",
+      "entity_types": [
+        "GENE",
+        "CHEMICAL",
+        "DISEASE",
+        "SPECIES"
+      ],
+      "language": "en"
+    },
+    "radcoref": {
+      "group": "biomedical",
+      "url": "https://physionet.org/content/rad-coreference-resolution/",
+      "output": "radcoref.txt",
+      "description": "Radiology report coreference from MIMIC-CXR. Clinical domain long-document coref.",
+      "entity_types": [
+        "ANATOMY",
+        "OBSERVATION",
+        "FINDING"
+      ],
+      "language": "en"
+    },
+    "meantime": {
+      "group": "coreference",
+      "url": "https://github.com/newsreader/meantime",
+      "output": "meantime.txt",
+      "description": "Multilingual news corpus with within- and cross-document event coreference. 4 languages.",
+      "entity_types": [
+        "EVENT",
+        "TIMEX",
+        "PARTICIPANT",
+        "LOCATION"
+      ],
+      "language": "multi"
+    },
+    "fcct": {
+      "group": "coreference",
+      "url": "https://github.com/cltl/FCC",
+      "output": "fcct.txt",
+      "description": "Football Coreference Corpus with token-level annotations. Cross-document event coref in sports news.",
+      "entity_types": [
+        "EVENT",
+        "PARTICIPANT",
+        "TIME",
+        "LOCATION"
+      ],
+      "language": "en"
+    },
+    "lemonade": {
+      "group": "coreference",
+      "url": "https://github.com/lemonade-coref/lemonade",
+      "output": "lemonade.txt",
+      "description": "Large-scale multilingual conflict event corpus. 39k events across 20 languages for CDEC search.",
+      "entity_types": [
+        "EVENT",
+        "PARTICIPANT",
+        "LOCATION",
+        "TIME"
+      ],
+      "language": "multi"
+    },
+    "biored": {
+      "group": "biomedical",
+      "url": "https://ftp.ncbi.nlm.nih.gov/pub/lu/BioRED/",
+      "output": "biored.txt",
+      "description": "Document-level biomedical RE with novelty labels. BioCreative VIII shared task benchmark.",
+      "entity_types": [
+        "Gene",
+        "Disease",
+        "Chemical",
+        "Species",
+        "Variant",
+        "CellLine"
+      ],
+      "language": "en"
+    },
+    "medmentions": {
+      "group": "biomedical",
+      "url": "https://github.com/chanzuckerberg/MedMentions",
+      "output": "medmentions.txt",
+      "description": "Large-scale biomedical concept mentions mapped to UMLS. PubMed abstracts with fine-grained semantic types.",
+      "entity_types": [
+        "UMLS_CONCEPT"
+      ],
+      "language": "en"
+    },
+    "enzchemred": {
+      "group": "biomedical",
+      "url": "https://github.com/EnzChemRED/EnzChemRED",
+      "output": "enzchemred.txt",
+      "description": "Enzyme chemistry relation extraction. Links enzymes, substrates, products, cofactors from biochemical literature.",
+      "entity_types": [
+        "Enzyme",
+        "Substrate",
+        "Product",
+        "Cofactor",
+        "Reaction"
+      ],
+      "language": "en"
+    },
+    "ncerb": {
+      "group": "biomedical",
+      "url": "https://github.com/NCERB/NCERB",
+      "output": "ncerb.txt",
+      "description": "Named Clinical Entity Recognition Benchmark. Multi-dataset clinical NER evaluation suite.",
+      "entity_types": [
+        "Problem",
+        "Treatment",
+        "Test",
+        "Medication",
+        "Anatomy"
+      ],
+      "language": "en"
+    },
+    "maccrobat": {
+      "group": "biomedical",
+      "url": "https://figshare.com/articles/dataset/MACCROBAT2018/9764942",
+      "output": "maccrobat.txt",
+      "description": "Biomedical NER corpus with extensive coverage. Used with RoBERTa-WWM and deep models.",
+      "entity_types": [
+        "Disease",
+        "Chemical",
+        "Gene",
+        "Species"
+      ],
+      "language": "en"
+    },
+    "conll04re": {
+      "group": "relations",
+      "url": "https://github.com/bekou/multihead_joint_entity_relation_extraction",
+      "output": "conll04re.txt",
+      "description": "Sentence-level relation extraction from CoNLL-2004. Clean, small RE benchmark.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC",
+        "Other"
+      ],
+      "language": "en"
+    },
+    "crossre": {
+      "group": "relations",
+      "url": "https://github.com/mainlp/CrossRE",
+      "output": "crossre.txt",
+      "description": "Cross-domain relation extraction across 6 domains. Tests RE generalization.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "uner": {
+      "group": "multilingual",
+      "url": "https://github.com/UniversalNER/UNER",
+      "output": "uner.txt",
+      "description": "Universal NER on Universal Dependencies. Gold NER with unified schema across 13 languages.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "indicner": {
+      "group": "multilingual",
+      "url": "https://github.com/AI4Bharat/IndicNER",
+      "output": "indicner.txt",
+      "description": "Indian languages NER covering 11 Indian languages. Low-resource multilingual NER.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "norne": {
+      "group": "general",
+      "url": "https://github.com/ltgoslo/norne",
+      "output": "norne.txt",
+      "description": "Norwegian NER covering Bokm\u00e5l and Nynorsk. Morphologically rich language NER.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "GPE",
+        "PROD",
+        "EVT",
+        "DRV"
+      ],
+      "language": "no"
+    },
+    "germeval2014": {
+      "group": "general",
+      "url": "https://sites.google.com/site/germaboreval2014/data",
+      "output": "germeval2014.txt",
+      "description": "German NER shared task. Standard German NER benchmark with nested entities.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "OTH"
+      ],
+      "language": "de"
+    },
+    "reasoningner": {
+      "group": "general",
+      "url": "https://github.com/reasoning-ner/reasoning-ner",
+      "output": "reasoningner.txt",
+      "description": "Zero-shot NER evaluation suite across 20 diverse datasets. Tests LLM NER capabilities.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "bionerllama": {
+      "group": "biomedical",
+      "url": "https://github.com/BioNER-LLaMA/BioNER-LLaMA",
+      "output": "bionerllama.txt",
+      "description": "Instruction-tuned biomedical NER benchmark. Evaluates generative models on disease/chemical/gene NER.",
+      "entity_types": [
+        "Disease",
+        "Chemical",
+        "Gene"
+      ],
+      "language": "en"
+    },
+    "mentionresolutionllm": {
+      "group": "coreference",
+      "url": "https://github.com/mention-resolution/mention-resolution-llm",
+      "output": "mentionresolutionllm.txt",
+      "description": "MCQ-format coreference for LLMs from LitBank and FantasyCoref. Tests referential understanding on narratives.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "lexgluener": {
+      "group": "legal",
+      "url": "https://github.com/coastalcph/lex-glue",
+      "output": "lexgluener.txt",
+      "description": "Legal NER from LexGLUE benchmark. Legal entity extraction from case law and contracts.",
+      "entity_types": [
+        "PERSON",
+        "ORGANIZATION",
+        "LOCATION",
+        "DATE",
+        "LEGAL_REF",
+        "COURT"
+      ],
+      "language": "en"
+    },
+    "finbenner": {
+      "group": "general",
+      "url": "https://github.com/TheFinAI/FinBen",
+      "output": "finbenner.txt",
+      "description": "Financial NER from FinBen benchmark. Entity extraction from financial documents and filings.",
+      "entity_types": [
+        "COMPANY",
+        "PERSON",
+        "MONEY",
+        "PERCENT",
+        "DATE",
+        "PRODUCT"
+      ],
+      "language": "en"
+    },
+    "finer139": {
+      "group": "general",
+      "url": "https://github.com/FiNER-139/FiNER-139",
+      "output": "finer139.txt",
+      "description": "Financial NER with 139 fine-grained entity types. SEC 10-K/10-Q filings.",
+      "entity_types": [
+        "COMPANY",
+        "EXECUTIVE",
+        "SUBSIDIARY",
+        "PRODUCT",
+        "REGULATION",
+        "FINANCIAL_METRIC"
+      ],
+      "language": "en"
+    },
+    "taggedpbcesperanto": {
+      "group": "general",
+      "url": "https://github.com/clab/taggedPBC",
+      "output": "taggedpbcesperanto.txt",
+      "description": "POS-tagged Esperanto from Parallel Bible Corpus. ~1800 sentences with word-level alignment.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "eo"
+    },
+    "taggedpbcklingon": {
+      "group": "general",
+      "url": "https://github.com/clab/taggedPBC",
+      "output": "taggedpbcklingon.txt",
+      "description": "POS-tagged Klingon from Parallel Bible Corpus. OVS word order with complex verbal morphology.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "tlh"
+    },
+    "udesperantocairo": {
+      "group": "general",
+      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Esperanto-Cairo/master/eo_cairo-ud-test.conllu",
+      "output": "udesperantocairo.conllu",
+      "description": "Universal Dependencies treebank for Esperanto. Syntax annotation without NER layer.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "eo"
+    },
+    "klingoneffectlid": {
+      "group": "multilingual",
+      "url": "https://wmdqs.org/submissions-2025/19.pdf",
+      "output": "klingoneffectlid.txt",
+      "description": "Language ID dataset with 11 constructed languages. 14.2M sentences across 101 languages.",
+      "entity_types": [],
+      "language": "multi"
+    },
+    "lojbantatoeba": {
+      "group": "general",
+      "url": "https://tatoeba.org/en/downloads",
+      "output": "lojbantatoeba.txt",
+      "description": "Lojban-English sentence pairs from Tatoeba. Logical language translation corpus.",
+      "entity_types": [],
+      "language": "jbo"
+    },
+    "interlinguewikipedia": {
+      "group": "general",
+      "url": "https://dumps.wikimedia.org/iewiki/",
+      "output": "interlinguewikipedia.txt",
+      "description": "Interlingue (Occidental) Wikipedia text corpus. International auxiliary language.",
+      "entity_types": [],
+      "language": "ie"
+    },
+    "tokiponacorpus": {
+      "group": "general",
+      "url": "https://github.com/kilipan/toki-pona-corpus",
+      "output": "tokiponacorpus.txt",
+      "description": "Toki Pona minimalist language corpus. 120-word language for semantic simplification.",
+      "entity_types": [],
+      "language": "tok"
+    },
+    "naturelmaudio": {
+      "group": "multilingual",
+      "url": "https://github.com/earthspecies/naturelm-audio",
+      "output": "naturelmaudio.txt",
+      "description": "Foundation model training collection for bioacoustics. Multi-species audio-text pairs.",
+      "entity_types": [
+        "SPECIES",
+        "CALL_TYPE",
+        "BEHAVIOR"
+      ],
+      "language": "en"
+    },
+    "beanszero": {
+      "group": "general",
+      "url": "https://github.com/earthspecies/beans-zero",
+      "output": "beanszero.txt",
+      "description": "Bioacoustics benchmark beyond species classification. Natural-language prompts for animal sounds.",
+      "entity_types": [
+        "SPECIES",
+        "CALL_TYPE",
+        "INDIVIDUAL"
+      ],
+      "language": "en"
+    },
+    "nlmchem": {
+      "group": "biomedical",
+      "url": "https://ftp.ncbi.nlm.nih.gov/pub/lu/NLM-Chem/",
+      "output": "nlmchem.txt",
+      "description": "Chemical entity recognition and normalization. Full-text PMC articles with MeSH identifiers.",
+      "entity_types": [
+        "CHEMICAL",
+        "DRUG"
+      ],
+      "language": "en"
+    },
+    "chemdner": {
+      "group": "biomedical",
+      "url": "https://biocreative.bioinformatics.udel.edu/tasks/biocreative-iv/chemdner/",
+      "output": "chemdner.txt",
+      "description": "Chemical compound and drug name recognition in scientific text.",
+      "entity_types": [
+        "CHEMICAL",
+        "DRUG",
+        "ABBREVIATION"
+      ],
+      "language": "en"
+    },
+    "timebankdense": {
+      "group": "general",
+      "url": "https://github.com/bethard/timebank-dense",
+      "output": "timebankdense.txt",
+      "description": "Dense temporal relation annotation. Re-annotation of TimeBank with more consistent TLINK labels.",
+      "entity_types": [
+        "EVENT",
+        "TIMEX3"
+      ],
+      "language": "en"
+    },
+    "twittergmner": {
+      "group": "general",
+      "url": "https://github.com/JinYuanLi0012/RiVEG",
+      "output": "twittergmner.txt",
+      "description": "Grounded Multimodal NER. Entities linked to bounding boxes in social media images.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "mnermi": {
+      "group": "general",
+      "url": "https://github.com/NUSTM/MNER-MI",
+      "output": "mnermi.txt",
+      "description": "Multimodal NER with Multiple Images. Social media posts with multiple image context.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "twomner": {
+      "group": "multilingual",
+      "url": "https://github.com/Alibaba-NLP/2M-NER",
+      "output": "twomner.txt",
+      "description": "Multilingual Multimodal NER. Four languages with text-image pairs.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "multi"
+    },
+    "mathentities": {
+      "group": "scientific",
+      "url": "https://github.com/dmazzei/mathematical-entities",
+      "output": "mathentities.txt",
+      "description": "Terminology and definition extraction from mathematical text. Category theory corpora.",
+      "entity_types": [
+        "TERM",
+        "DEFINITION",
+        "THEOREM"
+      ],
+      "language": "en"
+    },
+    "scierc": {
+      "group": "relations",
+      "url": "https://nlp.cs.washington.edu/sciIE/",
+      "output": "scierc.txt",
+      "description": "Scientific information extraction from AI/ML papers. Nested entities and relations.",
+      "entity_types": [
+        "TASK",
+        "METHOD",
+        "METRIC",
+        "MATERIAL",
+        "GENERIC",
+        "OTHER"
+      ],
+      "language": "en"
+    },
+    "geowebnews": {
+      "group": "general",
+      "url": "https://github.com/milangritta/GeoWebNews",
+      "output": "geowebnews.txt",
+      "description": "Geoparsing benchmark from web news. Toponyms with geocoding coordinates.",
+      "entity_types": [
+        "LOC",
+        "GPE",
+        "FACILITY"
+      ],
+      "language": "en"
+    },
+    "lgl": {
+      "group": "general",
+      "url": "https://github.com/wikipedia2vec/wikipedia2vec",
+      "output": "lgl.txt",
+      "description": "Local-Global Lexicon for toponym disambiguation. News articles with geolocation.",
+      "entity_types": [
+        "LOC"
+      ],
+      "language": "en"
+    },
+    "tasteset": {
+      "group": "food",
+      "url": "https://github.com/taisti/TASTEset",
+      "output": "tasteset.txt",
+      "description": "Recipe ingredient NER. 700 annotated recipe ingredient lists with 9 entity classes.",
+      "entity_types": [
+        "INGREDIENT",
+        "QUANTITY",
+        "UNIT",
+        "STATE",
+        "SIZE",
+        "TEMP"
+      ],
+      "language": "en"
+    },
+    "recipener": {
+      "group": "food",
+      "url": "https://github.com/cosylabiiit/recipe-ner",
+      "output": "recipener.txt",
+      "description": "Deep learning recipe NER. Multi-scale datasets with ingredient and instruction entities.",
+      "entity_types": [
+        "INGREDIENT",
+        "QUANTITY",
+        "UNIT",
+        "PROCESS",
+        "UTENSIL",
+        "TEMP"
+      ],
+      "language": "en"
+    },
+    "codesearchnet": {
+      "group": "multilingual",
+      "url": "https://github.com/github/CodeSearchNet",
+      "output": "codesearchnet.txt",
+      "description": "Code understanding benchmark. Function documentation and code search across 6 languages.",
+      "entity_types": [
+        "FUNCTION",
+        "CLASS",
+        "VARIABLE",
+        "MODULE"
+      ],
+      "language": "multi"
+    },
+    "fable": {
+      "group": "general",
+      "url": "https://huggingface.co/DeBERTa-literary-entities",
+      "output": "fable.txt",
+      "description": "Fiction Adapted BERT for Literary Entities. DeBERTa-based NER for narrative fiction.",
+      "entity_types": [
+        "CHARACTER",
+        "LOCATION",
+        "ORGANIZATION",
+        "ARTIFACT"
+      ],
+      "language": "en"
+    },
+    "elgold": {
+      "group": "multilingual",
+      "url": "https://mostwiedzy.pl/en/open-research-data/elgold-gold-standard-multi-genre-dataset",
+      "output": "elgold.txt",
+      "description": "Gold-standard multi-genre Polish NER+EL. Includes fiction, press, blogs.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "pl"
+    },
+    "streamingcdcoref": {
+      "group": "coreference",
+      "url": "https://www.cs.jhu.edu/~mdredze/publications/streaming_coref_coling.pdf",
+      "output": "streamingcdcoref.txt",
+      "description": "Streaming cross-document entity coreference protocol. News domain streaming evaluation.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC"
+      ],
+      "language": "en"
+    },
+    "temdocred": {
+      "group": "relations",
+      "url": "https://github.com/THUDM/Tem-DocRED",
+      "output": "temdocred.txt",
+      "description": "Temporal document-level relation extraction. Converts static triples to temporal quadruples.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC",
+        "TIME"
+      ],
+      "language": "en"
+    },
+    "scicoradar": {
+      "group": "coreference",
+      "url": "https://github.com/allenai/scico-radar",
+      "output": "scicoradar.txt",
+      "description": "Scientific cross-document concept coreference. Dynamic definitions via LLM retrieval.",
+      "entity_types": [
+        "CONCEPT",
+        "METHOD",
+        "TASK",
+        "MATERIAL"
+      ],
+      "language": "en"
+    },
+    "eventkgdrift": {
+      "group": "general",
+      "url": "https://research.tue.nl/files/349781334/978-3-031-61057-8_9.pdf",
+      "output": "eventkgdrift.txt",
+      "description": "Multi-perspective concept drift detection on event knowledge graphs.",
+      "entity_types": [
+        "EVENT",
+        "CASE",
+        "ACTOR",
+        "TIME"
+      ],
+      "language": "en"
+    },
+    "aida": {
+      "group": "general",
+      "url": "https://www.mpi-inf.mpg.de/departments/databases-and-information-systems/research/ambiverse-nlu/aida/downloads",
+      "output": "aida.txt",
+      "description": "Entity linking to Wikipedia. CoNLL-YAGO dataset for named entity disambiguation.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "aioner": {
+      "group": "biomedical",
+      "url": "https://github.com/AIONER/AIONER",
+      "output": "aioner.txt",
+      "description": "All-in-one biomedical NER. Unified biomedical entity extraction model.",
+      "entity_types": [
+        "Gene",
+        "Disease",
+        "Chemical",
+        "Species"
+      ],
+      "language": "en"
+    },
+    "aishellner": {
+      "group": "general",
+      "url": "https://www.aishelltech.com/aishell_2",
+      "output": "aishellner.txt",
+      "description": "Chinese speech NER from AISHELL corpus. Named entities in Mandarin speech.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "zh"
+    },
+    "astroner": {
+      "group": "general",
+      "url": "https://github.com/astronomical-ner/AstroNER",
+      "output": "astroner.txt",
+      "description": "Astronomy named entity recognition. Celestial objects and astronomical concepts.",
+      "entity_types": [
+        "CelestialObject",
+        "Instrument",
+        "Mission",
+        "Phenomenon"
+      ],
+      "language": "en"
+    },
+    "b2nerd": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/Umean/B2NERD",
+      "output": "b2nerd.txt",
+      "description": "Billion-scale news NER dataset. Large-scale distantly supervised NER.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "biomner": {
+      "group": "biomedical",
+      "url": "https://huggingface.co/datasets/tner/bionlp2004",
+      "output": "biomner.txt",
+      "description": "Biomedical method NER. Scientific methods and techniques in biomedical text.",
+      "entity_types": [
+        "Method",
+        "Technique",
+        "Protocol"
+      ],
+      "language": "en"
+    },
+    "legner": {
+      "group": "legal",
+      "url": "https://github.com/Liquid-Legal-Institute/LegalBench",
+      "output": "legner.txt",
+      "description": "Legal domain NER. Named entities in legal documents and court opinions.",
+      "entity_types": [
+        "Court",
+        "Judge",
+        "Statute",
+        "Party",
+        "Date"
+      ],
+      "language": "en"
+    },
+    "openner": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/Babelscape/OpenNER",
+      "output": "openner.txt",
+      "description": "Open domain NER benchmark. Broad coverage across multiple domains.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "EVENT",
+        "PRODUCT"
+      ],
+      "language": "en"
+    },
+    "sciner": {
+      "group": "scientific",
+      "url": "https://github.com/allenai/sciner",
+      "output": "sciner.txt",
+      "description": "Scientific literature NER. Entities from scientific papers across disciplines.",
+      "entity_types": [
+        "Method",
+        "Task",
+        "Dataset",
+        "Metric",
+        "Material"
+      ],
+      "language": "en"
+    },
+    "financener": {
+      "group": "general",
+      "url": "https://github.com/nlpaueb/finer",
+      "output": "financener.txt",
+      "description": "Financial domain NER. Named entities from financial documents and news.",
+      "entity_types": [
+        "Company",
+        "Stock",
+        "Currency",
+        "Amount",
+        "Date"
+      ],
+      "language": "en"
+    },
+    "techner": {
+      "group": "general",
+      "url": "https://github.com/techner/techner",
+      "output": "techner.txt",
+      "description": "Technology domain NER. Software, hardware, and technical entities.",
+      "entity_types": [
+        "Software",
+        "Hardware",
+        "Company",
+        "Version",
+        "Language"
+      ],
+      "language": "en"
+    },
+    "fictionner750m": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/fiction-ner/750M",
+      "output": "fictionner750m.txt",
+      "description": "Fiction NER at scale. Named entities from 750M tokens of fiction text.",
+      "entity_types": [
+        "Character",
+        "Location",
+        "Object",
+        "Organization"
+      ],
+      "language": "en"
+    },
+    "charactercodex": {
+      "group": "general",
+      "url": "https://github.com/character-codex/character-codex",
+      "output": "charactercodex.txt",
+      "description": "Character entity recognition in fiction. Literary character identification.",
+      "entity_types": [
+        "Character",
+        "Alias",
+        "Role"
+      ],
+      "language": "en"
+    },
+    "muc6": {
+      "group": "ancient",
+      "url": "https://catalog.ldc.upenn.edu/LDC2003T13",
+      "output": "muc6.txt",
+      "description": "Message Understanding Conference 6. Seminal NER and coreference dataset.",
+      "entity_types": [
+        "ENAMEX",
+        "TIMEX",
+        "NUMEX"
+      ],
+      "language": "en"
+    },
+    "muc7": {
+      "group": "ancient",
+      "url": "https://catalog.ldc.upenn.edu/LDC2001T02",
+      "output": "muc7.txt",
+      "description": "Message Understanding Conference 7. Expanded NE types from MUC-6.",
+      "entity_types": [
+        "ENAMEX",
+        "TIMEX",
+        "NUMEX"
+      ],
+      "language": "en"
+    },
+    "ontonotes50": {
+      "group": "coreference",
+      "url": "https://catalog.ldc.upenn.edu/LDC2013T19",
+      "output": "ontonotes50.txt",
+      "description": "OntoNotes Release 5.0. Multi-genre corpus with NER, coref, and more.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "GPE",
+        "LOC",
+        "FAC",
+        "NORP",
+        "EVENT",
+        "WORK_OF_ART",
+        "LAW",
+        "LANGUAGE",
+        "DATE",
+        "TIME",
+        "PERCENT",
+        "MONEY",
+        "QUANTITY",
+        "ORDINAL",
+        "CARDINAL"
+      ],
+      "language": "en"
+    },
+    "gum": {
+      "group": "coreference",
+      "url": "https://github.com/amir-zeldes/gum",
+      "output": "gum.txt",
+      "description": "Georgetown University Multilayer corpus. Rich annotation across 12 genres.",
+      "entity_types": [
+        "person",
+        "place",
+        "organization",
+        "time",
+        "event"
+      ],
+      "language": "en"
+    },
+    "tackbp": {
+      "group": "general",
+      "url": "https://tac.nist.gov/",
+      "output": "tackbp.txt",
+      "description": "TAC Knowledge Base Population. Entity linking and slot filling benchmark.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "GPE"
+      ],
+      "language": "en"
+    },
+    "harem": {
+      "group": "multilingual",
+      "url": "https://www.linguateca.pt/HAREM/",
+      "output": "harem.txt",
+      "description": "Portuguese NER evaluation. First and Second HAREM conferences.",
+      "entity_types": [
+        "PESSOA",
+        "LOCAL",
+        "ORGANIZACAO",
+        "TEMPO",
+        "VALOR"
+      ],
+      "language": "pt"
+    },
+    "gunviolencecorpus": {
+      "group": "general",
+      "url": "https://github.com/gun-violence-corpus/gvc",
+      "output": "gunviolencecorpus.txt",
+      "description": "Gun violence event extraction. Named entities and events from news.",
+      "entity_types": [
+        "Shooter",
+        "Victim",
+        "Weapon",
+        "Location",
+        "Date"
+      ],
+      "language": "en"
+    },
+    "slue": {
+      "group": "general",
+      "url": "https://github.com/asappresearch/slue-toolkit",
+      "output": "slue.txt",
+      "description": "Spoken Language Understanding Evaluation. NER in speech transcripts.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "DATE"
+      ],
+      "language": "en"
+    },
+    "craftcoref": {
+      "group": "biomedical",
+      "url": "https://github.com/UCDenver-ccp/CRAFT",
+      "output": "craftcoref.txt",
+      "description": "Colorado Richly Annotated Full-Text corpus coreference. Biomedical coref.",
+      "entity_types": [
+        "Gene",
+        "Protein",
+        "Cell",
+        "Organism"
+      ],
+      "language": "en"
+    },
+    "footballcorefcorpus": {
+      "group": "general",
+      "url": "https://github.com/cltl/FCC",
+      "output": "footballcorefcorpus.txt",
+      "description": "Cross-document event coreference for football matches.",
+      "entity_types": [
+        "Event",
+        "Team",
+        "Player",
+        "Location"
+      ],
+      "language": "en"
+    },
+    "multipartydialoguecoref": {
+      "group": "coreference",
+      "url": "https://github.com/sopan-sarkar/multiparty-dialogue-coref",
+      "output": "multipartydialoguecoref.txt",
+      "description": "Coreference in multi-party conversations. Meeting and chat transcripts.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC"
+      ],
+      "language": "en"
+    },
+    "codicrac": {
+      "group": "coreference",
+      "url": "https://github.com/UniversalAnaphora/UA-CODI-CRAC",
+      "output": "codicrac.txt",
+      "description": "CODI/CRAC shared task on anaphora and coreference. Multiple languages.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC",
+        "Event"
+      ],
+      "language": "multi"
+    },
+    "mixred": {
+      "group": "relations",
+      "url": "https://github.com/mixred/MixRED",
+      "output": "mixred.txt",
+      "description": "Mixed relation extraction dataset. Multiple relation types and domains.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC"
+      ],
+      "language": "en"
+    },
+    "covered": {
+      "group": "biomedical",
+      "url": "https://github.com/covered/CovEReD",
+      "output": "covered.txt",
+      "description": "COVID-19 relation extraction dataset. Biomedical relations from pandemic literature.",
+      "entity_types": [
+        "Drug",
+        "Disease",
+        "Gene",
+        "Symptom"
+      ],
+      "language": "en"
+    },
+    "scier": {
+      "group": "relations",
+      "url": "https://github.com/allenai/sciie",
+      "output": "scier.txt",
+      "description": "Scientific entity and relation extraction. From AI/ML papers.",
+      "entity_types": [
+        "Task",
+        "Method",
+        "Metric",
+        "Material",
+        "Generic"
+      ],
+      "language": "en"
+    },
+    "webnlg": {
+      "group": "relations",
+      "url": "https://gitlab.com/webnlg/challenge-2017",
+      "output": "webnlg.txt",
+      "description": "Web NLG Challenge dataset. RDF-to-text generation with entity-relation triples.",
+      "entity_types": [
+        "Entity"
+      ],
+      "language": "en"
+    },
+    "akkadianud": {
+      "group": "ancient",
+      "url": "https://universaldependencies.org/treebanks/akk_pisandub/index.html",
+      "output": "akkadianud.txt",
+      "description": "Universal Dependencies for Akkadian. Cuneiform texts from ancient Mesopotamia.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "GPE"
+      ],
+      "language": "akk"
+    },
+    "ancienthebrewud": {
+      "group": "ancient",
+      "url": "https://universaldependencies.org/treebanks/hbo_ptnk/index.html",
+      "output": "ancienthebrewud.txt",
+      "description": "Universal Dependencies for Biblical Hebrew. Hebrew Bible text.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "GPE"
+      ],
+      "language": "hbo"
+    },
+    "classicalchineseud": {
+      "group": "ancient",
+      "url": "https://universaldependencies.org/treebanks/lzh_kyoto/index.html",
+      "output": "classicalchineseud.txt",
+      "description": "Universal Dependencies for Classical/Literary Chinese. Pre-modern texts.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "GPE"
+      ],
+      "language": "lzh"
+    },
+    "copticud": {
+      "group": "ancient",
+      "url": "https://universaldependencies.org/treebanks/cop_scriptorium/index.html",
+      "output": "copticud.txt",
+      "description": "Universal Dependencies for Coptic. Late Egyptian language.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "GPE"
+      ],
+      "language": "cop"
+    },
+    "gothicud": {
+      "group": "ancient",
+      "url": "https://universaldependencies.org/treebanks/got_proiel/index.html",
+      "output": "gothicud.txt",
+      "description": "Universal Dependencies for Gothic. Wulfila's Bible translation.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "GPE"
+      ],
+      "language": "got"
+    },
+    "hittiteud": {
+      "group": "ancient",
+      "url": "https://universaldependencies.org/treebanks/hit_hittb/index.html",
+      "output": "hittiteud.txt",
+      "description": "Universal Dependencies for Hittite. Ancient Anatolian language.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "GPE"
+      ],
+      "language": "hit"
+    },
+    "oldchurchslavonicud": {
+      "group": "ancient",
+      "url": "https://universaldependencies.org/treebanks/cu_proiel/index.html",
+      "output": "oldchurchslavonicud.txt",
+      "description": "Universal Dependencies for OCS. Medieval Slavic liturgical language.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "GPE"
+      ],
+      "language": "cu"
+    },
+    "latinittb": {
+      "group": "ancient",
+      "url": "https://universaldependencies.org/treebanks/la_ittb/index.html",
+      "output": "latinittb.txt",
+      "description": "Index Thomisticus Treebank. Medieval Latin theological texts.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "la"
+    },
+    "latinproiel": {
+      "group": "ancient",
+      "url": "https://universaldependencies.org/treebanks/la_proiel/index.html",
+      "output": "latinproiel.txt",
+      "description": "Pragmatic Resources in Old Indo-European Languages. Classical Latin.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "GPE"
+      ],
+      "language": "la"
+    },
+    "esperantoud": {
+      "group": "general",
+      "url": "https://universaldependencies.org/treebanks/eo_pud/index.html",
+      "output": "esperantoud.txt",
+      "description": "Universal Dependencies for Esperanto. Planned international language.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "eo"
+    },
+    "dothraki": {
+      "group": "general",
+      "url": "https://wiki.dothraki.org/",
+      "output": "dothraki.txt",
+      "description": "Dothraki language corpus. Game of Thrones constructed language.",
+      "entity_types": [
+        "PER",
+        "LOC"
+      ],
+      "language": "dlk"
+    },
+    "highvalyrian": {
+      "group": "general",
+      "url": "https://wiki.dothraki.org/High_Valyrian",
+      "output": "highvalyrian.txt",
+      "description": "High Valyrian corpus. Game of Thrones constructed language.",
+      "entity_types": [
+        "PER",
+        "LOC"
+      ],
+      "language": "hvy"
+    },
+    "klingon": {
+      "group": "general",
+      "url": "https://github.com/klingonlanguage/klingon-data",
+      "output": "klingon.txt",
+      "description": "Klingon language corpus. Star Trek constructed language.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "tlh"
+    },
+    "quenya": {
+      "group": "general",
+      "url": "https://eldamo.org/",
+      "output": "quenya.txt",
+      "description": "Quenya language corpus. Tolkien's Elvish language.",
+      "entity_types": [
+        "PER",
+        "LOC"
+      ],
+      "language": "qya"
+    },
+    "navi": {
+      "group": "general",
+      "url": "https://learnnavi.org/",
+      "output": "navi.txt",
+      "description": "Na'vi language corpus. Avatar constructed language.",
+      "entity_types": [
+        "PER",
+        "LOC"
+      ],
+      "language": "nav"
+    },
+    "interslavic": {
+      "group": "general",
+      "url": "https://interslavic.fun/",
+      "output": "interslavic.txt",
+      "description": "Interslavic zonal auxiliary language. Constructed for Slavic intelligibility.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "isv"
+    },
+    "lojban": {
+      "group": "general",
+      "url": "https://mw.lojban.org/",
+      "output": "lojban.txt",
+      "description": "Lojban logical language corpus. Constructed for unambiguous communication.",
+      "entity_types": [],
+      "language": "jbo"
+    },
+    "tokipona": {
+      "group": "general",
+      "url": "https://github.com/kilipan/toki-pona-corpus",
+      "output": "tokipona.txt",
+      "description": "Toki Pona minimalist language corpus. 120-word philosophical language.",
+      "entity_types": [],
+      "language": "tok"
+    },
+    "i2b22010": {
+      "group": "biomedical",
+      "url": "https://www.i2b2.org/NLP/DataSets/",
+      "output": "i2b22010.txt",
+      "description": "i2b2/VA 2010 NLP Challenge. Clinical concept extraction and relations.",
+      "entity_types": [
+        "Problem",
+        "Treatment",
+        "Test"
+      ],
+      "language": "en"
+    },
+    "i2b2deidentification": {
+      "group": "biomedical",
+      "url": "https://www.i2b2.org/NLP/DataSets/",
+      "output": "i2b2deidentification.txt",
+      "description": "i2b2 2014 De-identification Challenge. PHI recognition and removal.",
+      "entity_types": [
+        "Name",
+        "Date",
+        "Address",
+        "Phone",
+        "SSN",
+        "MRN"
+      ],
+      "language": "en"
+    },
+    "frenchclinicalner": {
+      "group": "biomedical",
+      "url": "https://github.com/EDS-NLP/eds-nlp",
+      "output": "frenchclinicalner.txt",
+      "description": "French clinical NER from hospital records. APHP collaboration.",
+      "entity_types": [
+        "Drug",
+        "Disease",
+        "Procedure",
+        "Date"
+      ],
+      "language": "fr"
+    },
+    "share13": {
+      "group": "biomedical",
+      "url": "https://physionet.org/content/shareclefehealth2013/",
+      "output": "share13.txt",
+      "description": "ShARe/CLEF eHealth 2013. Disorder mention recognition.",
+      "entity_types": [
+        "Disorder"
+      ],
+      "language": "en"
+    },
+    "share14": {
+      "group": "biomedical",
+      "url": "https://physionet.org/content/shareclefehealth2014/",
+      "output": "share14.txt",
+      "description": "ShARe/CLEF eHealth 2014. Improved disorder normalization.",
+      "entity_types": [
+        "Disorder"
+      ],
+      "language": "en"
+    },
+    "calcs": {
+      "group": "multilingual",
+      "url": "https://code-switching.github.io/",
+      "output": "calcs.txt",
+      "description": "Computational Approaches to Linguistic Code-Switching. Multiple language pairs.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "lince": {
+      "group": "multilingual",
+      "url": "https://ritual.uh.edu/lince/",
+      "output": "lince.txt",
+      "description": "Linguistic Code-switching Evaluation. Multiple code-switching benchmarks.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "gluecos": {
+      "group": "multilingual",
+      "url": "https://github.com/microsoft/GLUECoS",
+      "output": "gluecos.txt",
+      "description": "Code-Switching GLUE benchmark. NLU for code-switched text.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "chemdataextractor": {
+      "group": "biomedical",
+      "url": "https://chemdataextractor.org/",
+      "output": "chemdataextractor.txt",
+      "description": "Chemical data extraction toolkit benchmark. Chemical NER and properties.",
+      "entity_types": [
+        "Chemical",
+        "Property",
+        "Value",
+        "Unit"
+      ],
+      "language": "en"
+    },
+    "hupd": {
+      "group": "legal",
+      "url": "https://github.com/suzgunmirac/hupd",
+      "output": "hupd.txt",
+      "description": "Harvard USPTO Patent Dataset. Patent application NER.",
+      "entity_types": [
+        "Inventor",
+        "Assignee",
+        "Reference",
+        "Claim"
+      ],
+      "language": "en"
+    },
+    "fintechpatent": {
+      "group": "general",
+      "url": "https://github.com/fintech-patent-ner",
+      "output": "fintechpatent.txt",
+      "description": "FinTech patent entity extraction. Financial technology domain.",
+      "entity_types": [
+        "Technology",
+        "Company",
+        "Product",
+        "Method"
+      ],
+      "language": "en"
+    },
+    "wateragriner": {
+      "group": "scientific",
+      "url": "https://github.com/wateragriner",
+      "output": "wateragriner.txt",
+      "description": "Water and agriculture domain NER. Environmental science entities.",
+      "entity_types": [
+        "Crop",
+        "Chemical",
+        "Equipment",
+        "Location"
+      ],
+      "language": "en"
+    },
+    "wiespastro": {
+      "group": "general",
+      "url": "https://ui.adsabs.harvard.edu/",
+      "output": "wiespastro.txt",
+      "description": "WIESP 2022 Astrophysics NER. NASA ADS literature.",
+      "entity_types": [
+        "Mission",
+        "Instrument",
+        "CelestialObject",
+        "Phenomenon"
+      ],
+      "language": "en"
+    },
+    "nersocialfood": {
+      "group": "food",
+      "url": "https://github.com/food-ner/social",
+      "output": "nersocialfood.txt",
+      "description": "Food-related NER from social media. Recipes and food mentions.",
+      "entity_types": [
+        "Food",
+        "Ingredient",
+        "Brand",
+        "Restaurant"
+      ],
+      "language": "en"
+    },
+    "russianculturalner": {
+      "group": "multilingual",
+      "url": "https://github.com/russian-cultural-ner",
+      "output": "russianculturalner.txt",
+      "description": "Russian cultural heritage NER. Museums, artworks, cultural entities.",
+      "entity_types": [
+        "Artwork",
+        "Artist",
+        "Museum",
+        "Period",
+        "Style"
+      ],
+      "language": "ru"
+    },
+    "eighteenthcenturyner": {
+      "group": "ancient",
+      "url": "https://github.com/Living-with-machines/",
+      "output": "eighteenthcenturyner.txt",
+      "description": "Named entities in 18th century English text. Historical OCR challenges.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "DATE"
+      ],
+      "language": "en"
+    },
+    "spanishmedievaltei": {
+      "group": "ancient",
+      "url": "https://github.com/spanish-medieval-nlp",
+      "output": "spanishmedievaltei.txt",
+      "description": "Medieval Spanish manuscript NER. TEI-encoded historical texts.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "DATE"
+      ],
+      "language": "es"
+    },
+    "medievalczechcharters": {
+      "group": "ancient",
+      "url": "https://github.com/czech-medieval-charters",
+      "output": "medievalczechcharters.txt",
+      "description": "Czech medieval charter NER. Historical legal documents.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "DATE"
+      ],
+      "language": "cs"
+    },
+    "dutcharchaeologyner": {
+      "group": "ancient",
+      "url": "https://easy.dans.knaw.nl/",
+      "output": "dutcharchaeologyner.txt",
+      "description": "Dutch archaeological excavation reports. DANS archive annotations.",
+      "entity_types": [
+        "Site",
+        "Artifact",
+        "Period",
+        "Material"
+      ],
+      "language": "nl"
+    },
+    "guaraniner": {
+      "group": "indigenous",
+      "url": "https://github.com/guarani-nlp",
+      "output": "guaraniner.txt",
+      "description": "Guaran\u00ed language NER. South American indigenous language.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "gn"
+    },
+    "shipibokoniboner": {
+      "group": "indigenous",
+      "url": "https://github.com/ixa-ehu/shipibo-konibo",
+      "output": "shipibokoniboner.txt",
+      "description": "Shipibo-Konibo language NER. Peruvian Amazonian language.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "shp"
+    },
+    "navajomorph": {
+      "group": "indigenous",
+      "url": "https://github.com/navajo-nlp",
+      "output": "navajomorph.txt",
+      "description": "Navajo morphological annotation. North American indigenous language.",
+      "entity_types": [
+        "PER",
+        "LOC"
+      ],
+      "language": "nv"
+    },
+    "koconovel": {
+      "group": "coreference",
+      "url": "https://github.com/koco-novel",
+      "output": "koconovel.txt",
+      "description": "Korean coreference in novels. Literary Korean coreference.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "ko"
+    },
+    "openboek": {
+      "group": "coreference",
+      "url": "https://github.com/cltl/OpenBoek",
+      "output": "openboek.txt",
+      "description": "Dutch literary coreference. Open-source Dutch fiction annotation.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "nl"
+    },
+    "scico": {
+      "group": "coreference",
+      "url": "https://github.com/allenai/scico",
+      "output": "scico.txt",
+      "description": "Scientific coreference. Cross-document concept coreference in AI papers.",
+      "entity_types": [
+        "Method",
+        "Task",
+        "Dataset"
+      ],
+      "language": "en"
+    },
+    "semeval2013task91": {
+      "group": "biomedical",
+      "url": "https://www.cs.york.ac.uk/semeval-2013/task9/",
+      "output": "semeval2013task91.txt",
+      "description": "Drug-drug interaction extraction. SemEval shared task.",
+      "entity_types": [
+        "Drug",
+        "Drug_n",
+        "Group",
+        "Brand"
+      ],
+      "language": "en"
+    },
+    "pdtb3": {
+      "group": "coreference",
+      "url": "https://catalog.ldc.upenn.edu/LDC2019T05",
+      "output": "pdtb3.txt",
+      "description": "Penn Discourse Treebank 3.0. Discourse relations and connectives.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "winopron": {
+      "group": "coreference",
+      "url": "https://cs.nyu.edu/~davise/papers/WinoPron/",
+      "output": "winopron.txt",
+      "description": "Winograd pronoun resolution. Commonsense coreference benchmark.",
+      "entity_types": [
+        "PER"
+      ],
+      "language": "en"
+    },
+    "quoref": {
+      "group": "coreference",
+      "url": "https://github.com/allenai/quoref",
+      "output": "quoref.txt",
+      "description": "Question answering requiring coreference. Reading comprehension.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "conll2002dutch": {
+      "group": "multilingual",
+      "url": "https://www.clips.uantwerpen.be/conll2002/ner/data/ned.testa",
+      "output": "conll2002dutch.txt",
+      "description": "Dutch portion of CoNLL-2002 NER shared task. Newspaper text.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "nl"
+    },
+    "conll2002spanish": {
+      "group": "multilingual",
+      "url": "https://www.clips.uantwerpen.be/conll2002/ner/data/esp.testa",
+      "output": "conll2002spanish.txt",
+      "description": "Spanish portion of CoNLL-2002 NER shared task. News articles.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "es"
+    },
+    "bc2gmfull": {
+      "group": "biomedical",
+      "url": "https://biocreative.bioinformatics.udel.edu/resources/biocreative-ii-corpus/",
+      "output": "bc2gmfull.txt",
+      "description": "Complete BioCreative II Gene Mention corpus. Extended from BC2GM.",
+      "entity_types": [
+        "Gene",
+        "Protein"
+      ],
+      "language": "en"
+    },
+    "finner": {
+      "group": "multilingual",
+      "url": "https://github.com/mpsilfern/finer",
+      "output": "finner.txt",
+      "description": "Finnish named entity recognition. News and Wikipedia text.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "DATE",
+        "EVENT"
+      ],
+      "language": "fi"
+    },
+    "legalner": {
+      "group": "legal",
+      "url": "https://github.com/legal-ner/legal-ner",
+      "output": "legalner.txt",
+      "description": "Legal Named Entity Recognition. Court cases and legislation.",
+      "entity_types": [
+        "Court",
+        "Judge",
+        "Lawyer",
+        "Party",
+        "Statute",
+        "Case"
+      ],
+      "language": "en"
+    },
+    "cerec": {
+      "group": "relations",
+      "url": "https://github.com/Stardust-hyx/CEREC",
+      "output": "cerec.txt",
+      "description": "Chinese entity and relation extraction corpus. Web text and news.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "zh"
+    },
+    "delicate": {
+      "group": "biomedical",
+      "url": "https://github.com/delicate-nlp/delicate",
+      "output": "delicate.txt",
+      "description": "Depression, emotion, and linguistic analysis corpus. Mental health text.",
+      "entity_types": [
+        "Symptom",
+        "Treatment",
+        "Emotion"
+      ],
+      "language": "en"
+    },
+    "sciercner": {
+      "group": "relations",
+      "url": "https://github.com/allenai/sciie/tree/main/data",
+      "output": "sciercner.txt",
+      "description": "Scientific Information Extraction NER. AI paper abstracts.",
+      "entity_types": [
+        "Task",
+        "Method",
+        "Metric",
+        "Material",
+        "OtherScientificTerm",
+        "Generic"
+      ],
+      "language": "en"
+    },
+    "ulner": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/ULNER",
+      "output": "ulner.txt",
+      "description": "Ultra-Large Scale NER. Massive silver-standard dataset.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "language": "en"
+    },
+    "universalner": {
+      "group": "multilingual",
+      "url": "https://universal-ner.github.io/",
+      "output": "universalner.txt",
+      "description": "Universal NER model benchmark. Multiple domains and languages.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "multi"
+    },
+    "nombankimplicit": {
+      "group": "coreference",
+      "url": "https://catalog.ldc.upenn.edu/LDC2008T23",
+      "output": "nombankimplicit.txt",
+      "description": "Implicit arguments in NomBank. Nominal predicate-argument structures.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "bashi": {
+      "group": "multilingual",
+      "url": "https://sites.google.com/view/ipm-bashi/",
+      "output": "bashi.txt",
+      "description": "Bangla Shared Task on Information extraction. Bengali NER.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "bn"
+    },
+    "erst": {
+      "group": "coreference",
+      "url": "https://github.com/rsttools/signal",
+      "output": "erst.txt",
+      "description": "English RST Signalling Corpus. Discourse markers and signals.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "bitimebert": {
+      "group": "general",
+      "url": "https://github.com/btime-bert/bitimebert",
+      "output": "bitimebert.txt",
+      "description": "Bi-directional temporal relation dataset. Event ordering and duration.",
+      "entity_types": [
+        "Event",
+        "Time"
+      ],
+      "language": "en"
+    },
+    "tridis": {
+      "group": "coreference",
+      "url": "https://github.com/tridis/tridis",
+      "output": "tridis.txt",
+      "description": "Triple Discourse dataset. Entity and discourse relations.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "en"
+    },
+    "queerbench": {
+      "group": "coreference",
+      "url": "https://github.com/queerbench/queerbench",
+      "output": "queerbench.txt",
+      "description": "Queer identity coreference benchmark. LGBTQ+ representation in NLP.",
+      "entity_types": [
+        "PER"
+      ],
+      "language": "en"
+    },
+    "queereotypes": {
+      "group": "general",
+      "url": "https://github.com/queereotypes/queereotypes",
+      "output": "queereotypes.txt",
+      "description": "LGBTQ+ stereotype detection in text. Bias in language models.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "map": {
+      "group": "biomedical",
+      "url": "https://github.com/medical-annotation-pipeline/map",
+      "output": "map.txt",
+      "description": "Medical Annotation Pipeline dataset. Clinical concept normalization.",
+      "entity_types": [
+        "Drug",
+        "Disease",
+        "Procedure"
+      ],
+      "language": "en"
+    },
+    "asn": {
+      "group": "relations",
+      "url": "http://www.cs.toronto.edu/~varada/ASN/",
+      "output": "asn.txt",
+      "description": "Atomic Slot Number dataset. Slot filling benchmark.",
+      "entity_types": [
+        "Organization",
+        "Person",
+        "Date"
+      ],
+      "language": "en"
+    },
+    "csn": {
+      "group": "general",
+      "url": "https://github.com/github/CodeSearchNet",
+      "output": "csn.txt",
+      "description": "Code Search Net. Programming language dataset for code understanding.",
+      "entity_types": [
+        "Function",
+        "Class",
+        "Variable"
+      ],
+      "language": "multi"
+    },
+    "homomex": {
+      "group": "multilingual",
+      "url": "https://github.com/homomex/homomex",
+      "output": "homomex.txt",
+      "description": "Homonym resolution in Mexican Spanish. Word sense disambiguation.",
+      "entity_types": [],
+      "language": "es"
+    },
+    "fireball": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/lara-martin/FIREBALL",
+      "output": "fireball.txt",
+      "description": "D&D gameplay NLG with true game state. ~25k sessions, 153k turns with structured game state.",
+      "entity_types": [
+        "Character",
+        "Item",
+        "Location",
+        "Creature",
+        "Spell",
+        "Action"
+      ],
+      "language": "en"
+    },
+    "criticalroledataset": {
+      "group": "general",
+      "url": "https://www.microsoft.com/en-us/research/wp-content/uploads/2020/06/R.Rameshkumar-and-P.Bailey-Storytelling-with-Dialogue-ACL2020.pdf",
+      "output": "criticalroledataset.txt",
+      "description": "Unscripted live D&D transcripts. Storytelling and dialogue analysis.",
+      "entity_types": [
+        "Character",
+        "Location",
+        "Item"
+      ],
+      "language": "en"
+    },
+    "cuad": {
+      "group": "legal",
+      "url": "https://www.atticusprojectai.org/cuad",
+      "output": "cuad.txt",
+      "description": "Contract Understanding Atticus Dataset. 13k+ labels across 510 commercial contracts.",
+      "entity_types": [
+        "Party",
+        "Date",
+        "Amount",
+        "Clause",
+        "Jurisdiction"
+      ],
+      "language": "en"
+    },
+    "finerfood": {
+      "group": "food",
+      "url": "https://figshare.com/articles/dataset/Food_Ingredient_Named-Entity_Data/20222361",
+      "output": "finerfood.txt",
+      "description": "Food ingredient NER. 181k ingredient phrases in IOB2 format.",
+      "entity_types": [
+        "Ingredient",
+        "Product",
+        "Quantity",
+        "Unit",
+        "State"
+      ],
+      "language": "en"
+    },
+    "sanskritnerbhagavadgita": {
+      "group": "ancient",
+      "url": "https://www.kaggle.com/datasets/akashsuklabaidya/ner-dataset-fyp-25",
+      "output": "sanskritnerbhagavadgita.txt",
+      "description": "Sanskrit NER from Bhagavad Gita and Patanjali Yoga Sutras.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "CONCEPT"
+      ],
+      "language": "sa"
+    },
+    "akkadiancuneiformdataset": {
+      "group": "ancient",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7592802/",
+      "output": "akkadiancuneiformdataset.txt",
+      "description": "Unicode cuneiform with transliteration. Old/Middle Babylonian, Neo-Assyrian.",
+      "entity_types": [
+        "Person",
+        "Place",
+        "God",
+        "Object"
+      ],
+      "language": "akk"
+    },
+    "heidelbergcuneiformbenchmark": {
+      "group": "ancient",
+      "url": "https://direct.mit.edu/coli/article/49/3/703/116160",
+      "output": "heidelbergcuneiformbenchmark.txt",
+      "description": "Cuneiform sign classification across historical periods.",
+      "entity_types": [
+        "Sign",
+        "Determinative",
+        "Logogram"
+      ],
+      "language": "akk"
+    },
+    "greekmythologykg": {
+      "group": "coreference",
+      "url": "https://www.semantic-web-journal.net/system/files/swj2754.pdf",
+      "output": "greekmythologykg.txt",
+      "description": "Coref + RE pipeline for mythological texts. 15k+ entities from Roscher's Lexikon.",
+      "entity_types": [
+        "Deity",
+        "Hero",
+        "Place",
+        "Creature",
+        "Object",
+        "Event"
+      ],
+      "language": "en"
+    },
+    "folkloremotifdistribution": {
+      "group": "multilingual",
+      "url": "https://www.academia.edu/14481230/",
+      "output": "folkloremotifdistribution.txt",
+      "description": "548 folklore motifs across 309 ethnic traditions in the Old World.",
+      "entity_types": [
+        "Motif",
+        "Tradition",
+        "Region",
+        "Character"
+      ],
+      "language": "multi"
+    },
+    "ndner": {
+      "group": "general",
+      "url": "https://github.com/XinyanLi2016/ND-NER",
+      "output": "ndner.txt",
+      "description": "National defense OSINT NER. 17+ entity types for military equipment.",
+      "entity_types": [
+        "AIRCRAFT",
+        "SHIP",
+        "MISSILE",
+        "TANK",
+        "FIREARM",
+        "ELECTRONIC",
+        "MASS_DESTR",
+        "SPACE",
+        "NEW"
+      ],
+      "language": "en"
+    },
+    "re3ddefense": {
+      "group": "relations",
+      "url": "https://github.com/dstl/re3d",
+      "output": "re3ddefense.txt",
+      "description": "Relationship and Entity Extraction Evaluation Dataset for defense domain.",
+      "entity_types": [
+        "Person",
+        "Organization",
+        "Location",
+        "Equipment",
+        "Event"
+      ],
+      "language": "en"
+    },
+    "cyneraptner": {
+      "group": "general",
+      "url": "https://ceur-ws.org/Vol-3928/paper_170.pdf",
+      "output": "cyneraptner.txt",
+      "description": "Unified cyber threat intelligence NER. Malware, threat actors, IOCs.",
+      "entity_types": [
+        "Malware",
+        "ThreatActor",
+        "Vulnerability",
+        "Indicator",
+        "Tool"
+      ],
+      "language": "en"
+    },
+    "chineseengineeringgeologyner": {
+      "group": "multilingual",
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S0957417423024272",
+      "output": "chineseengineeringgeologyner.txt",
+      "description": "Geological disasters NER with EDA-based augmentation for small samples.",
+      "entity_types": [
+        "Disaster",
+        "Location",
+        "Cause",
+        "Measure",
+        "Material"
+      ],
+      "language": "zh"
+    },
+    "llmrocminner": {
+      "group": "general",
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S0098300425000949",
+      "output": "llmrocminner.txt",
+      "description": "Rocks and minerals NER. 2-shot prompt-based extraction with nested handling.",
+      "entity_types": [
+        "Rock",
+        "Mineral",
+        "Element",
+        "Property",
+        "Location"
+      ],
+      "language": "en"
+    },
+    "polyie": {
+      "group": "relations",
+      "url": "https://ramprasad.mse.gatech.edu/PolyIE/",
+      "output": "polyie.txt",
+      "description": "Polymer materials NER + relation extraction from literature.",
+      "entity_types": [
+        "Polymer",
+        "Property",
+        "Value",
+        "Condition",
+        "Method"
+      ],
+      "language": "en"
+    },
+    "comta": {
+      "group": "general",
+      "url": "https://learninganalytics.upenn.edu/ryanbaker/",
+      "output": "comta.txt",
+      "description": "Student-GPT4 Khanmigo tutor dialogues for knowledge tracing.",
+      "entity_types": [
+        "Student",
+        "Tutor",
+        "Concept",
+        "Question",
+        "Response"
+      ],
+      "language": "en"
+    },
+    "winogradschemachallengewsc": {
+      "group": "coreference",
+      "url": "https://cs.nyu.edu/~davise/papers/WinoPron/WSCollection.xml",
+      "output": "winogradschemachallengewsc.xml",
+      "description": "Pronoun resolution requiring world knowledge. 273 sentence pairs.",
+      "entity_types": [
+        "PER"
+      ],
+      "language": "en"
+    },
+    "tvshowmultilingualcoref": {
+      "group": "coreference",
+      "url": "https://direct.mit.edu/tacl/article/doi/10.1162/tacl_a_00581/117162",
+      "output": "tvshowmultilingualcoref.txt",
+      "description": "English TV show transcripts with projections to Chinese and Farsi.",
+      "entity_types": [
+        "Character",
+        "Location",
+        "Object"
+      ],
+      "language": "multi"
+    },
+    "visdialcoref": {
+      "group": "coreference",
+      "url": "https://www.sciencedirect.com/science/article/pii/S266729522300082X",
+      "output": "visdialcoref.txt",
+      "description": "Visual dialog with 120k images and 10-turn dialogs requiring visual coref.",
+      "entity_types": [
+        "Object",
+        "Person",
+        "Location"
+      ],
+      "language": "en"
+    },
+    "craftcorpuscoref": {
+      "group": "biomedical",
+      "url": "https://github.com/UCDenver-ccp/CRAFT",
+      "output": "craftcorpuscoref.txt",
+      "description": "Biomedical coref with ~30k relations. 23% span 500-12k words.",
+      "entity_types": [
+        "Gene",
+        "Protein",
+        "Cell",
+        "Organism",
+        "Chemical"
+      ],
+      "language": "en"
+    },
+    "aerospacenerdataset": {
+      "group": "general",
+      "url": "https://arc.aiaa.org/doi/10.2514/1.I011251",
+      "output": "aerospacenerdataset.txt",
+      "description": "First open-source aerospace NER. 5 entity types for aviation knowledge graphs.",
+      "entity_types": [
+        "Aircraft",
+        "Component",
+        "Manufacturer",
+        "Mission",
+        "System"
+      ],
+      "language": "en"
+    },
+    "aviationproductsner": {
+      "group": "multilingual",
+      "url": "https://dspace.lib.cranfield.ac.uk/server/api/core/bitstreams/a59ed640-4783-4ddb-871b-6fd8bd0e7400/content",
+      "output": "aviationproductsner.txt",
+      "description": "Chinese aviation manufacturing corpus. Complex product entities.",
+      "entity_types": [
+        "Product",
+        "Component",
+        "Process",
+        "Material"
+      ],
+      "language": "zh"
+    },
+    "fashioniq": {
+      "group": "general",
+      "url": "https://github.com/XiaoxiaoGuo/fashion-iq",
+      "output": "fashioniq.txt",
+      "description": "77k fashion images with relative captions. 1000 attribute labels.",
+      "entity_types": [
+        "Texture",
+        "Fabric",
+        "Shape",
+        "Part",
+        "Style",
+        "Color"
+      ],
+      "language": "en"
+    },
+    "naturalproductsre": {
+      "group": "biomedical",
+      "url": "https://direct.mit.edu/coli/article/50/3/953/121178",
+      "output": "naturalproductsre.txt",
+      "description": "Relation extraction in underexplored biomedical domains. Diversity-sampled entities.",
+      "entity_types": [
+        "NaturalProduct",
+        "Organism",
+        "Activity",
+        "Target"
+      ],
+      "language": "en"
+    },
+    "drugprotbiocreative": {
+      "group": "biomedical",
+      "url": "https://biocreative.bioinformatics.udel.edu/tasks/biocreative-vii/track-1/",
+      "output": "drugprotbiocreative.txt",
+      "description": "Chemical-protein interactions from BioCreative VII challenge.",
+      "entity_types": [
+        "Chemical",
+        "Gene",
+        "Protein"
+      ],
+      "language": "en"
+    },
+    "mofdataset": {
+      "group": "relations",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10869356/",
+      "output": "mofdataset.txt",
+      "description": "Metal-organic frameworks joint NER+RE. GPT-3/Llama extraction.",
+      "entity_types": [
+        "MOF",
+        "Linker",
+        "Metal",
+        "Property",
+        "Application"
+      ],
+      "language": "en"
+    },
+    "solidstatedoping": {
+      "group": "relations",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10869356/",
+      "output": "solidstatedoping.txt",
+      "description": "Impurity doping in materials. Joint NER+RE from literature.",
+      "entity_types": [
+        "Host",
+        "Dopant",
+        "Property",
+        "Concentration",
+        "Method"
+      ],
+      "language": "en"
+    },
+    "agriner": {
+      "group": "relations",
+      "url": "https://2023.eswc-conferences.org/wp-content/uploads/2023/05/paper_De_2023_AgriNER.pdf",
+      "output": "agriner.txt",
+      "description": "Agricultural knowledge graph construction. 36 entity types, 9 relation types.",
+      "entity_types": [
+        "Crop",
+        "Disease",
+        "Soil",
+        "Pathogen",
+        "Pesticide",
+        "Product"
+      ],
+      "language": "en"
+    },
+    "agroner": {
+      "group": "general",
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S0957417423009429",
+      "output": "agroner.txt",
+      "description": "Unsupervised agricultural NER. Six major agricultural entity types.",
+      "entity_types": [
+        "Disease",
+        "Soil",
+        "Pathogen",
+        "Pesticide",
+        "Crop",
+        "Product"
+      ],
+      "language": "en"
+    },
+    "agmner": {
+      "group": "multilingual",
+      "url": "https://www.nature.com/articles/s41598-025-88874-9",
+      "output": "agmner.txt",
+      "description": "Chinese multimodal agricultural NER. Text and speech combined.",
+      "entity_types": [
+        "Crop",
+        "Disease",
+        "Pest",
+        "Method"
+      ],
+      "language": "zh"
+    },
+    "polishcoreferencecorpus": {
+      "group": "coreference",
+      "url": "http://zil.ipipan.waw.pl/PolishCoreferenceCorpus",
+      "output": "polishcoreferencecorpus.txt",
+      "description": "Polish coreference resolution corpus. General domain Polish text.",
+      "entity_types": [
+        "PER",
+        "ORG",
+        "LOC"
+      ],
+      "language": "pl"
+    },
+    "arabiceventcoref": {
+      "group": "coreference",
+      "url": "https://dl.acm.org/doi/10.1145/3743047",
+      "output": "arabiceventcoref.txt",
+      "description": "Arabic event coreference. Underexplored language for event coref.",
+      "entity_types": [
+        "Event",
+        "Time",
+        "Location",
+        "Participant"
+      ],
+      "language": "ar"
+    },
+    "hindienglishsocialmedianer": {
+      "group": "multilingual",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "hindienglishsocialmedianer.txt",
+      "description": "Code-switched Hindi-English NER from social media.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG"
+      ],
+      "language": "hi-en"
+    },
+    "astronomicaltelegramkee": {
+      "group": "general",
+      "url": "https://www.raa-journal.org/issues/all/2024/v24n6/202405/",
+      "output": "astronomicaltelegramkee.txt",
+      "description": "Event IDs, object names, telescope names from GCN Circulars.",
+      "entity_types": [
+        "EventID",
+        "ObjectName",
+        "TelescopeName",
+        "Observatory"
+      ],
+      "language": "en"
+    },
+    "musicbrainzre": {
+      "group": "relations",
+      "url": "https://web.stanford.edu/~jurafsky/mintz.pdf",
+      "output": "musicbrainzre.txt",
+      "description": "Music metadata relations from Freebase/MusicBrainz. 116M instances.",
+      "entity_types": [
+        "Artist",
+        "Album",
+        "Track",
+        "Label",
+        "Genre"
+      ],
+      "language": "en"
+    },
+    "dinaa": {
+      "group": "general",
+      "url": "https://ux.opencontext.org/endangered-data-and-the-digital-index-of-north-american-archaeology-dinaa/",
+      "output": "dinaa.txt",
+      "description": "Digital Index of North American Archaeology. Geospatial heritage data.",
+      "entity_types": [
+        "Site",
+        "Artifact",
+        "Culture",
+        "Period",
+        "Location"
+      ],
+      "language": "en"
+    },
+    "imdbsemistructuredre": {
+      "group": "relations",
+      "url": "https://www.vldb.org/pvldb/vol11/p1084-lockard.pdf",
+      "output": "imdbsemistructuredre.txt",
+      "description": "Distantly supervised extraction from structured web content.",
+      "entity_types": [
+        "Movie",
+        "Person",
+        "Role",
+        "Date",
+        "Award"
+      ],
+      "language": "en"
+    },
+    "atisflightbooking": {
+      "group": "general",
+      "url": "https://github.com/yvchen/JointSLU",
+      "output": "atisflightbooking.txt",
+      "description": "Slot-filling NER for flight booking intents. Classic NLU benchmark.",
+      "entity_types": [
+        "FromCity",
+        "ToCity",
+        "DepartDate",
+        "ReturnDate",
+        "Airline",
+        "FlightNumber"
+      ],
+      "language": "en"
+    },
+    "waterresourcener": {
+      "group": "general",
+      "url": "https://www.frontiersin.org/journals/environmental-science/articles/10.3389/fenvs.2025.1558317/pdf",
+      "output": "waterresourcener.txt",
+      "description": "Domain-adaptive NER for AI-driven water resource management.",
+      "entity_types": [
+        "WaterBody",
+        "Infrastructure",
+        "Pollutant",
+        "Measurement",
+        "Policy"
+      ],
+      "language": "en"
+    },
+    "malwaretextdb": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "malwaretextdb.txt",
+      "description": "Annotated malware articles for cybersecurity NER.",
+      "entity_types": [
+        "Malware",
+        "Vulnerability",
+        "Tool",
+        "ThreatActor",
+        "IOC"
+      ],
+      "language": "en"
+    },
+    "secfilingsner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "secfilingsner.txt",
+      "description": "Finance domain NER from SEC filing documents.",
+      "entity_types": [
+        "Company",
+        "Person",
+        "Money",
+        "Date",
+        "Percentage"
+      ],
+      "language": "en"
+    },
+    "anem": {
+      "group": "biomedical",
+      "url": "http://www.nactem.ac.uk/anatomy/",
+      "output": "anem.txt",
+      "description": "Anatomical entity mentions corpus. Anatomy terms in biomedical text.",
+      "entity_types": [
+        "AnatomicalStructure",
+        "Organ",
+        "Tissue",
+        "Cell",
+        "OrganismSubdivision"
+      ],
+      "language": "en"
+    },
+    "rittertwitterner": {
+      "group": "general",
+      "url": "https://github.com/aritter/twitter_nlp",
+      "output": "rittertwitterner.txt",
+      "description": "Twitter NER dataset with diverse entity types from tweets.",
+      "entity_types": [
+        "PER",
+        "LOC",
+        "ORG",
+        "PRODUCT",
+        "FACILITY",
+        "BAND",
+        "SPORTSTEAM"
+      ],
+      "language": "en"
+    },
+    "musicner": {
+      "group": "music",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "musicner.txt",
+      "description": "Music domain entities. Artists, albums, songs, genres.",
+      "entity_types": [
+        "Artist",
+        "Album",
+        "Song",
+        "Genre",
+        "Instrument",
+        "Label"
+      ],
+      "language": "en"
+    },
+    "gnergeoscience": {
+      "group": "multilingual",
+      "url": "https://agupubs.onlinelibrary.wiley.com/doi/abs/10.1029/2019EA000610",
+      "output": "gnergeoscience.txt",
+      "description": "Chinese geological entities from geoscience survey reports.",
+      "entity_types": [
+        "Rock",
+        "Mineral",
+        "Stratum",
+        "Age",
+        "Location"
+      ],
+      "language": "zh"
+    },
+    "fourregionsgeologyner": {
+      "group": "multilingual",
+      "url": "https://www.geodoi.ac.cn/WebEn/down.aspx?ID=1873",
+      "output": "fourregionsgeologyner.txt",
+      "description": "Regional geological surveys with 6 typical geological categories.",
+      "entity_types": [
+        "Rock",
+        "Mineral",
+        "Stratum",
+        "Structure",
+        "Age",
+        "Location"
+      ],
+      "language": "zh"
+    },
+    "msppodcast": {
+      "group": "general",
+      "url": "https://ecs.utdallas.edu/research/researchlabs/msp-lab/MSP-Podcast.html",
+      "output": "msppodcast.txt",
+      "description": "100k+ English podcast episodes with multimodal annotations.",
+      "entity_types": [
+        "Speaker",
+        "Topic",
+        "Emotion",
+        "Sentiment"
+      ],
+      "language": "en"
+    },
+    "spotifypodcastsdataset": {
+      "group": "general",
+      "url": "https://www.isca-archive.org/interspeech_2023/kotey23_interspeech.pdf",
+      "output": "spotifypodcastsdataset.txt",
+      "description": "Professional and amateur podcast episodes with transcriptions.",
+      "entity_types": [
+        "Host",
+        "Guest",
+        "Topic",
+        "Advertisement"
+      ],
+      "language": "en"
+    },
+    "deepfashion2": {
+      "group": "general",
+      "url": "https://github.com/switchablenorms/DeepFashion2",
+      "output": "deepfashion2.txt",
+      "description": "Comprehensive fashion dataset. 491k images, 801k clothing items.",
+      "entity_types": [
+        "Category",
+        "Style",
+        "Color",
+        "Pattern",
+        "Landmark"
+      ],
+      "language": "en"
+    },
+    "constructionner": {
+      "group": "general",
+      "url": "https://www.sciencedirect.com/science/article/pii/S0926580520309481",
+      "output": "constructionner.txt",
+      "description": "Construction industry entities. Materials, equipment, processes.",
+      "entity_types": [
+        "Material",
+        "Equipment",
+        "Process",
+        "Measurement",
+        "Location"
+      ],
+      "language": "en"
+    },
+    "pharmaner": {
+      "group": "biomedical",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "pharmaner.txt",
+      "description": "Pharmaceutical named entity recognition. Drug names, dosages, routes.",
+      "entity_types": [
+        "Drug",
+        "Dosage",
+        "Route",
+        "Frequency",
+        "Indication"
+      ],
+      "language": "en"
+    },
+    "productreviewner": {
+      "group": "general",
+      "url": "https://www.aclweb.org/anthology/S14-2004/",
+      "output": "productreviewner.txt",
+      "description": "E-commerce product reviews with aspect and sentiment entities.",
+      "entity_types": [
+        "Aspect",
+        "Opinion",
+        "Product",
+        "Feature",
+        "Sentiment"
+      ],
+      "language": "en"
+    },
+    "realestatener": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "realestatener.txt",
+      "description": "Property listings entity extraction. Addresses, prices, features.",
+      "entity_types": [
+        "Address",
+        "Price",
+        "Size",
+        "Rooms",
+        "Amenity",
+        "PropertyType"
+      ],
+      "language": "en"
+    },
+    "automotivener": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "automotivener.txt",
+      "description": "Vehicle and automotive entities. Makes, models, parts, specs.",
+      "entity_types": [
+        "Make",
+        "Model",
+        "Part",
+        "Specification",
+        "Year",
+        "Price"
+      ],
+      "language": "en"
+    },
+    "tourismner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "tourismner.txt",
+      "description": "Tourism and travel entities. Attractions, hotels, restaurants.",
+      "entity_types": [
+        "Attraction",
+        "Hotel",
+        "Restaurant",
+        "City",
+        "Activity",
+        "Price"
+      ],
+      "language": "en"
+    },
+    "energyner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "energyner.txt",
+      "description": "Energy sector entities. Power plants, fuels, grid infrastructure.",
+      "entity_types": [
+        "PowerPlant",
+        "Fuel",
+        "Grid",
+        "Capacity",
+        "Company",
+        "Location"
+      ],
+      "language": "en"
+    },
+    "insurancener": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "insurancener.txt",
+      "description": "Insurance domain entities. Policies, claims, coverages.",
+      "entity_types": [
+        "Policy",
+        "Claim",
+        "Coverage",
+        "Premium",
+        "Deductible",
+        "Beneficiary"
+      ],
+      "language": "en"
+    },
+    "logisticsner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "logisticsner.txt",
+      "description": "Supply chain and logistics entities. Shipments, warehouses, routes.",
+      "entity_types": [
+        "Shipment",
+        "Warehouse",
+        "Route",
+        "Carrier",
+        "TrackingNumber",
+        "Date"
+      ],
+      "language": "en"
+    },
+    "resumener": {
+      "group": "general",
+      "url": "https://www.kaggle.com/datasets/dataturks/resume-entities-for-ner",
+      "output": "resumener.txt",
+      "description": "Resume/CV entity extraction. Skills, experience, education.",
+      "entity_types": [
+        "Skill",
+        "Company",
+        "Degree",
+        "University",
+        "Date",
+        "Location"
+      ],
+      "language": "en"
+    },
+    "jobpostingner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "jobpostingner.txt",
+      "description": "Job posting entity extraction. Requirements, benefits, qualifications.",
+      "entity_types": [
+        "JobTitle",
+        "Skill",
+        "Salary",
+        "Location",
+        "Company",
+        "Benefit"
+      ],
+      "language": "en"
+    },
+    "healthcareadminner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "healthcareadminner.txt",
+      "description": "Healthcare administration entities. Procedures, billing codes, facilities.",
+      "entity_types": [
+        "Procedure",
+        "BillingCode",
+        "Facility",
+        "Provider",
+        "Insurance"
+      ],
+      "language": "en"
+    },
+    "telecomner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "telecomner.txt",
+      "description": "Telecommunications entities. Networks, devices, protocols.",
+      "entity_types": [
+        "Network",
+        "Device",
+        "Protocol",
+        "Carrier",
+        "Plan",
+        "Speed"
+      ],
+      "language": "en"
+    },
+    "weatherner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "weatherner.txt",
+      "description": "Weather and climate entities. Events, measurements, locations.",
+      "entity_types": [
+        "WeatherEvent",
+        "Temperature",
+        "Precipitation",
+        "Location",
+        "Date",
+        "Wind"
+      ],
+      "language": "en"
+    },
+    "manufacturingner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "manufacturingner.txt",
+      "description": "Manufacturing entities. Parts, processes, machines, defects.",
+      "entity_types": [
+        "Part",
+        "Process",
+        "Machine",
+        "Defect",
+        "Material",
+        "Measurement"
+      ],
+      "language": "en"
+    },
+    "retailinventoryner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "retailinventoryner.txt",
+      "description": "Retail inventory entities. SKUs, quantities, locations, prices.",
+      "entity_types": [
+        "SKU",
+        "Quantity",
+        "Location",
+        "Price",
+        "Category",
+        "Supplier"
+      ],
+      "language": "en"
+    },
+    "cropdiseasener": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "cropdiseasener.txt",
+      "description": "Crop disease identification. Symptoms, pathogens, treatments.",
+      "entity_types": [
+        "Disease",
+        "Symptom",
+        "Pathogen",
+        "Treatment",
+        "Crop",
+        "Stage"
+      ],
+      "language": "en"
+    },
+    "winener": {
+      "group": "food",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "winener.txt",
+      "description": "Wine domain entities. Varietals, regions, vintages, tasting notes.",
+      "entity_types": [
+        "Varietal",
+        "Region",
+        "Vintage",
+        "Producer",
+        "TastingNote",
+        "Price"
+      ],
+      "language": "en"
+    },
+    "veterinaryner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "veterinaryner.txt",
+      "description": "Veterinary medicine entities. Animals, conditions, treatments.",
+      "entity_types": [
+        "Animal",
+        "Breed",
+        "Condition",
+        "Treatment",
+        "Medication",
+        "Symptom"
+      ],
+      "language": "en"
+    },
+    "photographyner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "photographyner.txt",
+      "description": "Photography entities. Cameras, lenses, settings, techniques.",
+      "entity_types": [
+        "Camera",
+        "Lens",
+        "Aperture",
+        "ShutterSpeed",
+        "ISO",
+        "Technique"
+      ],
+      "language": "en"
+    },
+    "genealogyner": {
+      "group": "ancient",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "genealogyner.txt",
+      "description": "Genealogical records entities. Names, relationships, dates, locations.",
+      "entity_types": [
+        "Person",
+        "Relationship",
+        "BirthDate",
+        "DeathDate",
+        "Location",
+        "Occupation"
+      ],
+      "language": "en"
+    },
+    "boardgamener": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "boardgamener.txt",
+      "description": "Board game entities. Games, mechanics, components, designers.",
+      "entity_types": [
+        "Game",
+        "Mechanic",
+        "Component",
+        "Designer",
+        "Publisher",
+        "PlayerCount"
+      ],
+      "language": "en"
+    },
+    "gardeningner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "gardeningner.txt",
+      "description": "Gardening entities. Plants, soil, seasons, techniques.",
+      "entity_types": [
+        "Plant",
+        "Soil",
+        "Season",
+        "Technique",
+        "Tool",
+        "Pest"
+      ],
+      "language": "en"
+    },
+    "brewingner": {
+      "group": "food",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "brewingner.txt",
+      "description": "Craft brewing entities. Ingredients, processes, styles, equipment.",
+      "entity_types": [
+        "Ingredient",
+        "Process",
+        "Style",
+        "Equipment",
+        "ABV",
+        "IBU"
+      ],
+      "language": "en"
+    },
+    "knittingner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "knittingner.txt",
+      "description": "Knitting and crafts entities. Patterns, yarns, stitches, tools.",
+      "entity_types": [
+        "Pattern",
+        "Yarn",
+        "Stitch",
+        "Tool",
+        "Size",
+        "Technique"
+      ],
+      "language": "en"
+    },
+    "fitnessner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "fitnessner.txt",
+      "description": "Fitness entities. Exercises, muscles, equipment, routines.",
+      "entity_types": [
+        "Exercise",
+        "Muscle",
+        "Equipment",
+        "Sets",
+        "Reps",
+        "Duration"
+      ],
+      "language": "en"
+    },
+    "astrologyner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "astrologyner.txt",
+      "description": "Astrological entities. Signs, planets, houses, aspects.",
+      "entity_types": [
+        "Sign",
+        "Planet",
+        "House",
+        "Aspect",
+        "Transit",
+        "Date"
+      ],
+      "language": "en"
+    },
+    "tattooner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "tattooner.txt",
+      "description": "Tattoo entities. Styles, placements, artists, designs.",
+      "entity_types": [
+        "Style",
+        "Placement",
+        "Artist",
+        "Design",
+        "Color",
+        "Size"
+      ],
+      "language": "en"
+    },
+    "fragrancener": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "fragrancener.txt",
+      "description": "Perfume entities. Notes, accords, houses, concentrations.",
+      "entity_types": [
+        "Note",
+        "Accord",
+        "House",
+        "Concentration",
+        "Season",
+        "Longevity"
+      ],
+      "language": "en"
+    },
+    "chessner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "chessner.txt",
+      "description": "Chess entities. Openings, players, tournaments, moves.",
+      "entity_types": [
+        "Opening",
+        "Player",
+        "Tournament",
+        "Move",
+        "ELO",
+        "TimeControl"
+      ],
+      "language": "en"
+    },
+    "cocktailner": {
+      "group": "food",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "cocktailner.txt",
+      "description": "Cocktail entities. Ingredients, techniques, glassware, garnishes.",
+      "entity_types": [
+        "Spirit",
+        "Mixer",
+        "Technique",
+        "Glassware",
+        "Garnish",
+        "Measurement"
+      ],
+      "language": "en"
+    },
+    "antiquesner": {
+      "group": "ancient",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "antiquesner.txt",
+      "description": "Antiques entities. Periods, styles, materials, makers.",
+      "entity_types": [
+        "Period",
+        "Style",
+        "Material",
+        "Maker",
+        "Provenance",
+        "Condition"
+      ],
+      "language": "en"
+    },
+    "maritimener": {
+      "group": "maritime",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "maritimener.txt",
+      "description": "Maritime entities. Vessels, ports, routes, cargo.",
+      "entity_types": [
+        "Vessel",
+        "Port",
+        "Route",
+        "Cargo",
+        "Flag",
+        "IMONumber"
+      ],
+      "language": "en"
+    },
+    "equestrianner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "equestrianner.txt",
+      "description": "Equestrian entities. Horses, breeds, disciplines, tack.",
+      "entity_types": [
+        "Horse",
+        "Breed",
+        "Discipline",
+        "Tack",
+        "Rider",
+        "Competition"
+      ],
+      "language": "en"
+    },
+    "woodworkingner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "woodworkingner.txt",
+      "description": "Woodworking entities. Tools, joints, wood types, finishes.",
+      "entity_types": [
+        "Tool",
+        "Joint",
+        "WoodType",
+        "Finish",
+        "Technique",
+        "Measurement"
+      ],
+      "language": "en"
+    },
+    "birdwatchingner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "birdwatchingner.txt",
+      "description": "Birdwatching entities. Species, habitats, behaviors, locations.",
+      "entity_types": [
+        "Species",
+        "Family",
+        "Habitat",
+        "Behavior",
+        "Location",
+        "Season"
+      ],
+      "language": "en"
+    },
+    "numismaticsner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "numismaticsner.txt",
+      "description": "Coin collecting entities. Denominations, mints, grades, errors.",
+      "entity_types": [
+        "Denomination",
+        "Mint",
+        "Grade",
+        "Error",
+        "Year",
+        "Metal"
+      ],
+      "language": "en"
+    },
+    "philatelyner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "philatelyner.txt",
+      "description": "Stamp collecting entities. Issues, perforations, watermarks, varieties.",
+      "entity_types": [
+        "Issue",
+        "Perforation",
+        "Watermark",
+        "Variety",
+        "Country",
+        "Year"
+      ],
+      "language": "en"
+    },
+    "scubaner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "scubaner.txt",
+      "description": "Scuba diving entities. Equipment, sites, certifications, marine life.",
+      "entity_types": [
+        "Equipment",
+        "DiveSite",
+        "Certification",
+        "MarineLife",
+        "Depth",
+        "Visibility"
+      ],
+      "language": "en"
+    },
+    "themeparkner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "themeparkner.txt",
+      "description": "Theme park entities. Rides, parks, manufacturers, statistics.",
+      "entity_types": [
+        "Ride",
+        "Park",
+        "Manufacturer",
+        "Height",
+        "Speed",
+        "Type"
+      ],
+      "language": "en"
+    },
+    "origaminer": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "origaminer.txt",
+      "description": "Origami entities. Folds, bases, models, paper types.",
+      "entity_types": [
+        "Fold",
+        "Base",
+        "Model",
+        "PaperType",
+        "Designer",
+        "Difficulty"
+      ],
+      "language": "en"
+    },
+    "animemanganer": {
+      "group": "multilingual",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "animemanganer.txt",
+      "description": "Anime and manga entities. Titles, characters, studios, genres.",
+      "entity_types": [
+        "Title",
+        "Character",
+        "Studio",
+        "Genre",
+        "Author",
+        "Year"
+      ],
+      "language": "multi"
+    },
+    "cryptoner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "cryptoner.txt",
+      "description": "Cryptocurrency entities. Tokens, wallets, exchanges, protocols.",
+      "entity_types": [
+        "Token",
+        "Wallet",
+        "Exchange",
+        "Protocol",
+        "Price",
+        "Address"
+      ],
+      "language": "en"
+    },
+    "telenovelaner": {
+      "group": "multilingual",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "telenovelaner.txt",
+      "description": "Spanish-language soap opera entities. Characters, relationships, plots.",
+      "entity_types": [
+        "Character",
+        "Relationship",
+        "PlotPoint",
+        "Actor",
+        "Network"
+      ],
+      "language": "es"
+    },
+    "tarotner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "tarotner.txt",
+      "description": "Tarot entities. Cards, spreads, meanings, suits.",
+      "entity_types": [
+        "Card",
+        "Spread",
+        "Meaning",
+        "Suit",
+        "Position",
+        "Reversal"
+      ],
+      "language": "en"
+    },
+    "beekeepingner": {
+      "group": "general",
+      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "output": "beekeepingner.txt",
+      "description": "Apiculture entities. Equipment, bee types, diseases, products.",
+      "entity_types": [
+        "Equipment",
+        "BeeType",
+        "Disease",
+        "Product",
+        "Season",
+        "Technique"
+      ],
+      "language": "en"
+    }
+  }
+}

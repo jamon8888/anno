@@ -110,9 +110,229 @@
 //! - [`TextSpan`]: Stores both byte and char offsets together
 //! - [`TokenSpan`]: Stores subword token indices
 //! - [`OffsetMapping`]: Maps between token ↔ character positions
+//! - [`CharOffset`]: Newtype wrapper for character offsets (type safety)
+//! - [`ByteOffset`]: Newtype wrapper for byte offsets (type safety)
+//!
+//! # Type Safety with Newtypes
+//!
+//! The most common source of Unicode bugs is accidentally mixing byte and character
+//! offsets. Use the newtype wrappers to make this impossible at compile time:
+//!
+//! ```rust
+//! use anno::offset::{CharOffset, ByteOffset};
+//!
+//! fn process_span(start: CharOffset, end: CharOffset) {
+//!     // Can only receive CharOffset, not ByteOffset
+//! }
+//!
+//! let char_pos = CharOffset(5);
+//! let byte_pos = ByteOffset(10);
+//!
+//! process_span(char_pos, CharOffset(10));  // OK
+//! // process_span(byte_pos, CharOffset(10));  // Compile error!
+//! ```
 
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
+
+// =============================================================================
+// Newtype Wrappers for Type Safety
+// =============================================================================
+
+/// A character offset (Unicode scalar value index).
+///
+/// Use this newtype to prevent accidentally passing byte offsets where
+/// character offsets are expected. This is the most common source of
+/// Unicode-related bugs in NLP code.
+///
+/// # Example
+///
+/// ```rust
+/// use anno::offset::CharOffset;
+///
+/// let text = "日本語";  // 3 chars, 9 bytes
+/// let pos = CharOffset(1);  // Second character (本)
+/// assert_eq!(pos.0, 1);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[repr(transparent)]
+pub struct CharOffset(pub usize);
+
+impl CharOffset {
+    /// Create a new character offset.
+    #[must_use]
+    pub const fn new(offset: usize) -> Self {
+        Self(offset)
+    }
+
+    /// Get the raw value.
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl From<usize> for CharOffset {
+    fn from(offset: usize) -> Self {
+        Self(offset)
+    }
+}
+
+impl From<CharOffset> for usize {
+    fn from(offset: CharOffset) -> Self {
+        offset.0
+    }
+}
+
+/// A byte offset (raw byte index into UTF-8 string).
+///
+/// Use this newtype to prevent accidentally passing character offsets where
+/// byte offsets are expected. Byte offsets are what Rust's `str::get()` and
+/// regex libraries return.
+///
+/// # Example
+///
+/// ```rust
+/// use anno::offset::ByteOffset;
+///
+/// let text = "日本語";  // 3 chars, 9 bytes
+/// let pos = ByteOffset(3);  // Start of second character (本)
+/// assert_eq!(pos.0, 3);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[repr(transparent)]
+pub struct ByteOffset(pub usize);
+
+impl ByteOffset {
+    /// Create a new byte offset.
+    #[must_use]
+    pub const fn new(offset: usize) -> Self {
+        Self(offset)
+    }
+
+    /// Get the raw value.
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl From<usize> for ByteOffset {
+    fn from(offset: usize) -> Self {
+        Self(offset)
+    }
+}
+
+impl From<ByteOffset> for usize {
+    fn from(offset: ByteOffset) -> Self {
+        offset.0
+    }
+}
+
+/// A character range (start and end as character offsets).
+///
+/// This is a convenience type for APIs that need to express spans
+/// in character coordinates with compile-time type safety.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CharRange {
+    /// Start offset (inclusive)
+    pub start: CharOffset,
+    /// End offset (exclusive)
+    pub end: CharOffset,
+}
+
+impl CharRange {
+    /// Create a new character range.
+    #[must_use]
+    pub const fn new(start: CharOffset, end: CharOffset) -> Self {
+        Self { start, end }
+    }
+
+    /// Create from raw usize values.
+    #[must_use]
+    pub const fn from_raw(start: usize, end: usize) -> Self {
+        Self {
+            start: CharOffset(start),
+            end: CharOffset(end),
+        }
+    }
+
+    /// Length in characters.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.end.0.saturating_sub(self.start.0)
+    }
+
+    /// Check if empty.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.start.0 >= self.end.0
+    }
+
+    /// Convert to a standard Range.
+    #[must_use]
+    pub const fn as_range(&self) -> Range<usize> {
+        self.start.0..self.end.0
+    }
+}
+
+impl From<(usize, usize)> for CharRange {
+    fn from((start, end): (usize, usize)) -> Self {
+        Self::from_raw(start, end)
+    }
+}
+
+/// A byte range (start and end as byte offsets).
+///
+/// Use for APIs that work with raw byte positions (regex, file I/O).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ByteRange {
+    /// Start offset (inclusive)
+    pub start: ByteOffset,
+    /// End offset (exclusive)
+    pub end: ByteOffset,
+}
+
+impl ByteRange {
+    /// Create a new byte range.
+    #[must_use]
+    pub const fn new(start: ByteOffset, end: ByteOffset) -> Self {
+        Self { start, end }
+    }
+
+    /// Create from raw usize values.
+    #[must_use]
+    pub const fn from_raw(start: usize, end: usize) -> Self {
+        Self {
+            start: ByteOffset(start),
+            end: ByteOffset(end),
+        }
+    }
+
+    /// Length in bytes.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.end.0.saturating_sub(self.start.0)
+    }
+
+    /// Check if empty.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.start.0 >= self.end.0
+    }
+
+    /// Convert to a standard Range.
+    #[must_use]
+    pub const fn as_range(&self) -> Range<usize> {
+        self.start.0..self.end.0
+    }
+}
+
+impl From<(usize, usize)> for ByteRange {
+    fn from((start, end): (usize, usize)) -> Self {
+        Self::from_raw(start, end)
+    }
+}
 
 /// A text span with both byte and character offsets.
 ///
@@ -914,6 +1134,84 @@ mod tests {
         assert_eq!(span.byte_len(), 9);
         assert_eq!(span.char_len(), 3);
     }
+
+    // =========================================================================
+    // Newtype wrapper tests
+    // =========================================================================
+
+    #[test]
+    fn test_char_offset_newtype() {
+        let offset = CharOffset::new(5);
+        assert_eq!(offset.get(), 5);
+        assert_eq!(offset.0, 5);
+
+        let from_usize: CharOffset = 10.into();
+        assert_eq!(from_usize.get(), 10);
+
+        let back_to_usize: usize = CharOffset(15).into();
+        assert_eq!(back_to_usize, 15);
+    }
+
+    #[test]
+    fn test_byte_offset_newtype() {
+        let offset = ByteOffset::new(5);
+        assert_eq!(offset.get(), 5);
+        assert_eq!(offset.0, 5);
+
+        let from_usize: ByteOffset = 10.into();
+        assert_eq!(from_usize.get(), 10);
+
+        let back_to_usize: usize = ByteOffset(15).into();
+        assert_eq!(back_to_usize, 15);
+    }
+
+    #[test]
+    fn test_char_range() {
+        let range = CharRange::new(CharOffset(5), CharOffset(10));
+        assert_eq!(range.len(), 5);
+        assert!(!range.is_empty());
+        assert_eq!(range.as_range(), 5..10);
+
+        let from_raw = CharRange::from_raw(0, 5);
+        assert_eq!(from_raw.start.0, 0);
+        assert_eq!(from_raw.end.0, 5);
+
+        let from_tuple: CharRange = (2, 7).into();
+        assert_eq!(from_tuple.len(), 5);
+    }
+
+    #[test]
+    fn test_byte_range() {
+        let range = ByteRange::new(ByteOffset(5), ByteOffset(10));
+        assert_eq!(range.len(), 5);
+        assert!(!range.is_empty());
+        assert_eq!(range.as_range(), 5..10);
+
+        let empty_range = ByteRange::from_raw(5, 5);
+        assert!(empty_range.is_empty());
+    }
+
+    #[test]
+    fn test_char_offset_ordering() {
+        let a = CharOffset(5);
+        let b = CharOffset(10);
+        let c = CharOffset(5);
+
+        assert!(a < b);
+        assert!(b > a);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn test_byte_offset_ordering() {
+        let a = ByteOffset(5);
+        let b = ByteOffset(10);
+        let c = ByteOffset(5);
+
+        assert!(a < b);
+        assert!(b > a);
+        assert_eq!(a, c);
+    }
 }
 
 #[cfg(test)]
@@ -961,6 +1259,44 @@ mod proptests {
         #[test]
         fn ascii_detection(text in "[a-zA-Z0-9 ]{0,50}") {
             prop_assert!(is_ascii(&text));
+        }
+
+        /// CharOffset preserves value through conversions.
+        #[test]
+        fn char_offset_roundtrip(val in 0usize..1_000_000) {
+            let offset = CharOffset::new(val);
+            prop_assert_eq!(offset.get(), val);
+
+            let from_into: usize = CharOffset::from(val).into();
+            prop_assert_eq!(from_into, val);
+        }
+
+        /// ByteOffset preserves value through conversions.
+        #[test]
+        fn byte_offset_roundtrip(val in 0usize..1_000_000) {
+            let offset = ByteOffset::new(val);
+            prop_assert_eq!(offset.get(), val);
+
+            let from_into: usize = ByteOffset::from(val).into();
+            prop_assert_eq!(from_into, val);
+        }
+
+        /// CharRange length is always end - start.
+        #[test]
+        fn char_range_length(start in 0usize..1000, len in 0usize..1000) {
+            let end = start + len;
+            let range = CharRange::from_raw(start, end);
+            prop_assert_eq!(range.len(), len);
+            prop_assert_eq!(range.is_empty(), len == 0);
+        }
+
+        /// ByteRange length is always end - start.
+        #[test]
+        fn byte_range_length(start in 0usize..1000, len in 0usize..1000) {
+            let end = start + len;
+            let range = ByteRange::from_raw(start, end);
+            prop_assert_eq!(range.len(), len);
+            prop_assert_eq!(range.is_empty(), len == 0);
         }
     }
 }

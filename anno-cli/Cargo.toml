@@ -19,12 +19,13 @@ discourse = ["anno/discourse"]
 onnx = ["anno/onnx"]
 candle = ["anno/candle"]
 eval-bias = ["anno/eval-bias"]
+instrument = ["anno/instrument", "tracing-subscriber"]
 
 [dependencies]
 anno = { path = "../anno", features = ["cli", "eval"], default-features = false }
 anno-core = { path = "../anno-core" }
-anno-coalesce = { path = "../coalesce" }
-anno-strata = { path = "../strata" }
+anno-coalesce = { path = "../anno-coalesce" }
+anno-strata = { path = "../anno-strata" }
 
 # CLI
 clap = { workspace = true }
@@ -38,6 +39,9 @@ toml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 dirs = { workspace = true, optional = true }
+
+# Observability (optional)
+tracing-subscriber = { workspace = true, optional = true }
 
 [[bin]]
 name = "anno"

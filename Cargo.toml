@@ -2,9 +2,10 @@
 members = [
     "anno-core",
     "anno",
-    "coalesce",
-    "strata",
+    "anno-coalesce",
+    "anno-strata",
     "anno-cli",
+    "anno-derive",
 ]
 resolver = "2"
 
@@ -52,6 +53,13 @@ candle-nn = "0.9"
 candle-transformers = "0.9"
 safetensors = "0.4"
 
+# Burn ML framework (training + inference, WebGPU support)
+burn = "0.16"
+burn-ndarray = "0.16"
+burn-tch = "0.16"
+burn-wgpu = "0.16"
+burn-autodiff = "0.16"
+
 # Async
 tokio = { version = "1", features = ["rt", "sync"] }
 futures = "0.3"
@@ -61,8 +69,18 @@ crossbeam-channel = "0.5"
 parking_lot = "0.12"
 rayon = "1"
 
+# Utilities
+itertools = "0.14"
+smallvec = { version = "1.13", features = ["serde"] }
+dashmap = "6"
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
 # Testing
 proptest = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
 
 [workspace.lints.rust]
 missing_docs = "warn"

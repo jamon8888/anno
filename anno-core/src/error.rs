@@ -55,3 +55,46 @@ impl Error {
         Self::Parse(msg.into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_display() {
+        let e = Error::InvalidInput("bad data".into());
+        assert_eq!(e.to_string(), "Invalid input: bad data");
+
+        let e = Error::parse("unexpected token");
+        assert_eq!(e.to_string(), "Parse error: unexpected token");
+
+        let e = Error::corpus("document not found");
+        assert_eq!(e.to_string(), "Corpus error: document not found");
+
+        let e = Error::track_ref("invalid track ID");
+        assert_eq!(e.to_string(), "Track reference error: invalid track ID");
+    }
+
+    #[test]
+    fn test_error_constructors() {
+        let e = Error::invalid_input("test");
+        assert!(matches!(e, Error::InvalidInput(_)));
+
+        let e = Error::parse("test");
+        assert!(matches!(e, Error::Parse(_)));
+
+        let e = Error::corpus("test");
+        assert!(matches!(e, Error::Corpus(_)));
+
+        let e = Error::track_ref("test");
+        assert!(matches!(e, Error::TrackRef(_)));
+    }
+
+    #[test]
+    fn test_io_error_conversion() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
+        let err: Error = io_err.into();
+        assert!(matches!(err, Error::Io(_)));
+        assert!(err.to_string().contains("file missing"));
+    }
+}
