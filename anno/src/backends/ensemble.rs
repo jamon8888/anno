@@ -312,7 +312,46 @@ impl SpanKey {
 // EnsembleNER
 // =============================================================================
 
-/// Ensemble NER that runs multiple backends and intelligently resolves conflicts.
+/// Ensemble NER that runs ALL backends and resolves conflicts via weighted voting.
+///
+/// Unlike [`StackedNER`] (priority-based cascade), `EnsembleNER`:
+/// 1. Runs ALL backends in parallel (conceptually)
+/// 2. Groups overlapping spans into conflict clusters
+/// 3. Resolves via weighted voting with type-conditioned weights
+/// 4. Applies agreement bonus when multiple backends agree
+///
+/// # When to Use
+///
+/// - **EnsembleNER**: Maximum accuracy, latency not critical
+/// - **StackedNER**: Production, predictable latency, early exit
+///
+/// # Example
+///
+/// ```rust
+/// use anno::{EnsembleNER, Model, RegexNER, HeuristicNER};
+///
+/// // Default: uses all available backends
+/// let ensemble = EnsembleNER::new();
+///
+/// // Custom: specific backends
+/// let custom = EnsembleNER::with_backends(vec![
+///     Box::new(RegexNER::new()),
+///     Box::new(HeuristicNER::new()),
+/// ]);
+///
+/// let entities = custom.extract_entities("Contact us at test@example.com", None)?;
+/// # Ok::<(), anno::Error>(())
+/// ```
+///
+/// # Algorithm
+///
+/// 1. **Collect candidates**: Run each backend, tag results with provenance
+/// 2. **Cluster overlaps**: Group candidates with >50% span overlap
+/// 3. **Weighted vote**: Score each candidate by `backend_weight * confidence`
+/// 4. **Agreement bonus**: Add +0.10 when 2+ backends agree on type
+/// 5. **Select winner**: Highest weighted score wins the cluster
+///
+/// [`StackedNER`]: super::stacked::StackedNER
 pub struct EnsembleNER {
     backends: Vec<Arc<dyn Model + Send + Sync>>,
     weights: HashMap<String, BackendWeight>,
