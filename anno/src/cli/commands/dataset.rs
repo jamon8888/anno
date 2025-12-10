@@ -1,4 +1,9 @@
 //! Dataset command - Work with NER datasets
+//!
+//! Provides CLI access to the dataset registry and loader.
+//! - `list`: Browse available datasets from the registry
+//! - `info`: Show metadata and statistics for a dataset
+//! - `eval`: Evaluate a model on a dataset
 
 use clap::{Parser, Subcommand};
 #[cfg(feature = "eval-advanced")]
@@ -30,7 +35,23 @@ pub struct DatasetArgs {
 pub enum DatasetAction {
     /// List available datasets
     #[command(visible_alias = "ls")]
-    List,
+    List {
+        /// Filter by task (ner, coref, re, el)
+        #[arg(short, long)]
+        task: Option<String>,
+
+        /// Filter by domain (biomedical, news, social_media, etc.)
+        #[arg(short, long)]
+        domain: Option<String>,
+
+        /// Show only loadable datasets (vs full registry)
+        #[arg(long)]
+        loadable: bool,
+
+        /// Show detailed information
+        #[arg(short, long)]
+        verbose: bool,
+    },
 
     /// Show dataset statistics
     #[command(visible_alias = "i")]
@@ -59,82 +80,16 @@ pub enum DatasetAction {
 
 pub fn run(args: DatasetArgs) -> Result<(), String> {
     match args.action {
-        DatasetAction::List => {
-            println!();
-            println!("{}", color("1;36", "Available Datasets"));
-            println!();
-
-            #[cfg(feature = "eval-advanced")]
-            {
-                println!("  Downloadable (with --features eval-advanced):");
-                println!("    - wikigold    : WikiGold NER corpus");
-                println!("    - wnut17      : WNUT 2017 emerging entities");
-                println!("    - conll2003   : CoNLL 2003 (requires manual download)");
-            }
-
-            println!();
-            println!("  Synthetic (always available):");
-            println!("    - synthetic   : Generated test cases");
-            println!("    - robustness  : Adversarial perturbations");
-            println!();
+        DatasetAction::List {
+            task,
+            domain,
+            loadable,
+            verbose,
+        } => {
+            run_list(task, domain, loadable, verbose)?;
         }
         DatasetAction::Info { dataset } => {
-            #[cfg(feature = "eval-advanced")]
-            {
-                use crate::eval::loader::{DatasetId, DatasetLoader};
-
-                // Parse dataset ID from string
-                let dataset_id = dataset.parse::<DatasetId>().map_err(|e| {
-                    format!("Unknown dataset '{}'. Use 'anno dataset list' to see available datasets. Error: {}", dataset, e)
-                })?;
-
-                // Load dataset
-                let loader = DatasetLoader::new()
-                    .map_err(|e| format!("Failed to create dataset loader: {}", e))?;
-
-                match loader.load(dataset_id) {
-                    Ok(loaded) => {
-                        let stats = loaded.stats();
-                        println!();
-                        println!("{}", color("1;36", &format!("Dataset: {}", stats.name)));
-                        println!();
-                        println!("  Sentences: {}", stats.sentences);
-                        println!("  Tokens: {}", stats.tokens);
-                        println!("  Entities: {}", stats.entities);
-                        if stats.sentences > 0 {
-                            println!(
-                                "  Avg entities per sentence: {:.2}",
-                                stats.entities as f64 / stats.sentences as f64
-                            );
-                        }
-                        if !stats.entities_by_type.is_empty() {
-                            println!();
-                            println!("  Entity types:");
-                            for (entity_type, count) in
-                                stats.entities_by_type.iter().sorted_by(|a, b| b.1.cmp(a.1))
-                            {
-                                let percentage = if stats.entities > 0 {
-                                    *count as f64 / stats.entities as f64 * 100.0
-                                } else {
-                                    0.0
-                                };
-                                println!("    {}: {} ({:.1}%)", entity_type, count, percentage);
-                            }
-                        }
-                        println!();
-                    }
-                    Err(e) => {
-                        return Err(format!("Failed to load dataset '{}': {}\n  Tip: The dataset may need to be downloaded first.", dataset, e));
-                    }
-                }
-            }
-            #[cfg(not(feature = "eval-advanced"))]
-            {
-                println!("Dataset: {}", dataset);
-                println!();
-                println!("Note: Full dataset statistics require --features eval-advanced");
-                println!("Basic info: Use 'anno dataset list' to see available datasets");
-            }
+            run_info(&dataset)?;
         }
         DatasetAction::Eval {
             dataset,
@@ -703,5 +658,260 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
         }
     }
 
+    Ok(())
+}
+
+/// Run the info subcommand
+fn run_info(dataset: &str) -> Result<(), String> {
+    println!();
+
+    #[cfg(feature = "eval")]
+    {
+        use crate::eval::dataset_registry::DatasetId as RegistryDatasetId;
+        use crate::eval::loader::{DatasetId as LoadableDatasetId, DatasetLoader};
+
+        // Try to find in registry first (for metadata)
+        let registry_match = RegistryDatasetId::all()
+            .iter()
+            .find(|d| d.name().eq_ignore_ascii_case(dataset))
+            .copied();
+
+        // Try to parse as loadable dataset
+        let loadable_match = dataset.parse::<LoadableDatasetId>().ok();
+
+        if let Some(registry_id) = registry_match {
+            // Show registry metadata
+            println!("{}", color("1;36", &format!("Dataset: {}", registry_id.name())));
+            println!();
+
+            // Basic info
+            println!("  Description: {}", registry_id.description());
+            println!("  Language:    {}", registry_id.language());
+            println!("  Domain:      {}", registry_id.domain());
+
+            // Optional metadata
+            if let Some(year) = registry_id.year() {
+                println!("  Year:        {}", year);
+            }
+            if let Some(citation) = registry_id.citation() {
+                println!("  Citation:    {}", citation);
+            }
+            if let Some(license) = registry_id.license() {
+                println!("  License:     {}", license);
+            }
+            if let Some(paper_url) = registry_id.paper_url() {
+                println!("  Paper:       {}", paper_url);
+            }
+            if let Some(size_hint) = registry_id.size_hint() {
+                println!("  Size:        {}", size_hint);
+            }
+
+            // Entity types
+            let entity_types = registry_id.entity_types();
+            if !entity_types.is_empty() {
+                println!("  Entity types: {}", entity_types.join(", "));
+            }
+
+            // Task capabilities
+            println!();
+            println!("  Tasks:");
+            if registry_id.is_ner() {
+                println!("    - Named Entity Recognition");
+            }
+            if registry_id.is_coreference() {
+                println!("    - Coreference Resolution");
+            }
+            if registry_id.is_biomedical() {
+                println!("    (Biomedical domain)");
+            }
+
+            // Check if loadable
+            println!();
+            if loadable_match.is_some() {
+                println!("  Status: {} (can be downloaded)", color("1;32", "Loadable"));
+
+                // Try to load and show stats if eval-advanced is enabled
+                #[cfg(feature = "eval-advanced")]
+                {
+                    if let Ok(loadable_id) = dataset.parse::<LoadableDatasetId>() {
+                        let loader = DatasetLoader::new()
+                            .map_err(|e| format!("Failed to create loader: {}", e))?;
+
+                        match loader.load(loadable_id) {
+                            Ok(loaded) => {
+                                let stats = loaded.stats();
+                                println!();
+                                println!("  Loaded Statistics:");
+                                println!("    Sentences: {}", stats.sentences);
+                                println!("    Tokens:    {}", stats.tokens);
+                                println!("    Entities:  {}", stats.entities);
+                                if stats.sentences > 0 {
+                                    println!(
+                                        "    Avg entities/sentence: {:.2}",
+                                        stats.entities as f64 / stats.sentences as f64
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                println!("  (Could not load: {})", e);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let access_status = registry_id.access_status();
+                println!(
+                    "  Status: {} ({})",
+                    color("1;33", "Not loadable"),
+                    access_status.as_str()
+                );
+            }
+        } else {
+            return Err(format!(
+                "Unknown dataset '{}'. Use 'anno dataset list' to see available datasets.",
+                dataset
+            ));
+        }
+    }
+
+    #[cfg(not(feature = "eval"))]
+    {
+        println!("Dataset: {}", dataset);
+        println!();
+        println!("Note: Full dataset info requires --features eval");
+    }
+
+    println!();
+    Ok(())
+}
+
+/// Run the list subcommand
+fn run_list(
+    task_filter: Option<String>,
+    domain_filter: Option<String>,
+    loadable_only: bool,
+    verbose: bool,
+) -> Result<(), String> {
+    println!();
+    println!("{}", color("1;36", "Available Datasets"));
+    println!();
+
+    #[cfg(feature = "eval")]
+    {
+        use crate::eval::dataset_registry::DatasetId as RegistryDatasetId;
+        use crate::eval::loader::DatasetId as LoadableDatasetId;
+
+        if loadable_only {
+            // Show only loadable datasets
+            println!(
+                "  {} loadable datasets (can be downloaded and parsed):",
+                LoadableDatasetId::all().len()
+            );
+            println!();
+
+            for id in LoadableDatasetId::all() {
+                let name = id.name();
+                if let Some(ref task) = task_filter {
+                    // Simple task filtering based on name patterns
+                    let is_coref = name.to_lowercase().contains("coref")
+                        || matches!(
+                            id,
+                            LoadableDatasetId::GAP
+                                | LoadableDatasetId::PreCo
+                                | LoadableDatasetId::LitBank
+                                | LoadableDatasetId::WikiCoref
+                                | LoadableDatasetId::ARRAU
+                                | LoadableDatasetId::GUM
+                        );
+                    if task == "coref" && !is_coref {
+                        continue;
+                    }
+                    if task == "ner" && is_coref {
+                        continue;
+                    }
+                }
+
+                if verbose {
+                    let citation = id.citation().unwrap_or("N/A");
+                    let license = id.license().unwrap_or("Unknown");
+                    let year = id
+                        .year()
+                        .map(|y| y.to_string())
+                        .unwrap_or_else(|| "N/A".to_string());
+                    println!("    {:<20} [{:>4}] {} ({})", name, year, citation, license);
+                } else {
+                    println!("    {}", name);
+                }
+            }
+        } else {
+            // Show registry (full catalog)
+            let all_datasets: Vec<_> = RegistryDatasetId::all().iter().collect();
+            println!(
+                "  {} datasets in registry ({} loadable):",
+                all_datasets.len(),
+                LoadableDatasetId::all().len()
+            );
+            println!();
+
+            // Group by domain if no filter
+            if domain_filter.is_none() && task_filter.is_none() {
+                // Just show counts by category
+                let ner_count = all_datasets.iter().filter(|d| d.is_ner()).count();
+                let coref_count = all_datasets.iter().filter(|d| d.is_coreference()).count();
+                let bio_count = all_datasets.iter().filter(|d| d.is_biomedical()).count();
+
+                println!("    NER datasets:           {}", ner_count);
+                println!("    Coreference datasets:   {}", coref_count);
+                println!("    Biomedical datasets:    {}", bio_count);
+                println!();
+                println!("  Use --loadable to see only downloadable datasets");
+                println!("  Use --task ner/coref to filter by task");
+                println!("  Use --verbose for more details");
+            } else {
+                // Filter and display
+                for dataset in &all_datasets {
+                    // Apply task filter
+                    if let Some(ref task) = task_filter {
+                        match task.as_str() {
+                            "ner" if !dataset.is_ner() => continue,
+                            "coref" if !dataset.is_coreference() => continue,
+                            _ => {}
+                        }
+                    }
+
+                    // Apply domain filter
+                    if let Some(ref domain) = domain_filter {
+                        let dataset_domain = dataset.domain().to_lowercase();
+                        if !dataset_domain.contains(&domain.to_lowercase()) {
+                            continue;
+                        }
+                    }
+
+                    if verbose {
+                        let citation = dataset.citation().unwrap_or("N/A");
+                        let year = dataset
+                            .year()
+                            .map(|y| y.to_string())
+                            .unwrap_or_else(|| "----".to_string());
+                        println!("    {:<25} [{:>4}] {}", dataset.name(), year, citation);
+                    } else {
+                        println!("    {}", dataset.name());
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(not(feature = "eval"))]
+    {
+        let _ = (task_filter, domain_filter, loadable_only, verbose);
+        println!("  Synthetic (always available):");
+        println!("    - synthetic   : Generated test cases");
+        println!("    - robustness  : Adversarial perturbations");
+        println!();
+        println!("  Note: Full dataset catalog requires --features eval");
+    }
+
+    println!();
     Ok(())
 }
