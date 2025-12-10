@@ -3,7 +3,30 @@
 //! Downloads, caches, and parses real NER datasets from public sources.
 //! Follows burntsushi's philosophy: real-world data, not toy examples.
 //!
-//! ## Supported Datasets
+//! # Quick Start
+//!
+//! ```rust,ignore
+//! use anno::eval::{DatasetLoader, LoadableDatasetId};
+//!
+//! let loader = DatasetLoader::new()?;
+//! let dataset = loader.load(LoadableDatasetId::WikiGold)?;
+//! println!("Loaded {} sentences", dataset.len());
+//! ```
+//!
+//! # Two Dataset Enums
+//!
+//! This crate has two related `DatasetId` enums:
+//!
+//! | Enum | Variants | Purpose |
+//! |------|----------|---------|
+//! | [`DatasetId`] (this module) | ~158 | **Loading**: Has actual download/parse code |
+//! | [`dataset_registry::DatasetId`] | ~451 | **Discovery**: Full metadata catalog |
+//!
+//! For most users, this module's `DatasetId` (re-exported as `LoadableDatasetId`)
+//! is what you want. The registry is useful for browsing available datasets,
+//! filtering by domain/task, or generating documentation.
+//!
+//! # Supported Datasets
 //!
 //! | Dataset | Source | License | Entities |
 //! |---------|--------|---------|----------|
@@ -13,8 +36,10 @@
 //! | MIT Restaurant | MIT | Research | amenity, cuisine, dish, etc. |
 //! | CoNLL-2003 Sample | Public | Research | PER, LOC, ORG, MISC |
 //! | OntoNotes Sample | Public | Research | 18 entity types |
+//! | BC5CDR | PubMed | Research | Disease, Chemical |
+//! | NCBI Disease | PubMed | Research | Disease |
 //!
-//! ## Design Philosophy (burntsushi-style)
+//! # Design Philosophy
 //!
 //! - **Lazy downloading**: Only fetch what's needed
 //! - **Persistent caching**: Never re-download unchanged data
@@ -22,23 +47,33 @@
 //! - **Graceful degradation**: Work offline with cached data
 //! - **Clear errors**: Explain exactly what went wrong
 //!
-//! ## Usage
+//! # Extended Example
 //!
 //! ```rust,ignore
-//! use anno::eval::loader::{DatasetLoader, DatasetId};
+//! use anno::eval::{DatasetLoader, LoadableDatasetId};
 //!
 //! let loader = DatasetLoader::new()?;
 //!
-//! // Check cache status
-//! if loader.is_cached(DatasetId::WikiGold) {
+//! // Check cache status before loading
+//! if loader.is_cached(LoadableDatasetId::WikiGold) {
 //!     println!("WikiGold is cached, will load from disk");
 //! }
 //!
 //! // Load dataset (downloads if not cached, verifies checksum)
-//! let dataset = loader.load(DatasetId::WikiGold)?;
+//! let dataset = loader.load(LoadableDatasetId::WikiGold)?;
 //! println!("Loaded {} sentences with {} entities",
 //!     dataset.len(), dataset.entity_count());
+//!
+//! // Iterate over examples
+//! for example in dataset.iter() {
+//!     println!("Text: {}", example.text);
+//!     for entity in &example.entities {
+//!         println!("  {} [{}]", entity.text, entity.entity_type);
+//!     }
+//! }
 //! ```
+//!
+//! [`dataset_registry::DatasetId`]: super::dataset_registry::DatasetId
 
 use crate::{Error, Result};
 use anno_core::EntityType;
@@ -53,54 +88,71 @@ use super::datasets::GoldEntity;
 // Dataset Identification
 // =============================================================================
 
-/// Supported dataset identifiers.
+/// Identifier for a loadable dataset.
 ///
-/// Each dataset has a known download URL, format, and expected entity types.
-/// Use `DatasetId::all()` to iterate over all available datasets.
+/// This enum contains only datasets with actual loading implementations.
+/// For the full catalog of known datasets (with metadata), see
+/// [`dataset_registry::DatasetId`](super::dataset_registry::DatasetId).
 ///
-/// # NER Datasets
+/// # Usage
+///
+/// ```rust,ignore
+/// use anno::eval::{DatasetLoader, LoadableDatasetId};
+///
+/// let loader = DatasetLoader::new()?;
+/// let dataset = loader.load(LoadableDatasetId::WikiGold)?;
+/// ```
+///
+/// # Available Datasets
+///
+/// ## NER Datasets
 ///
 /// | Dataset | Size | Domain | Entity Types |
 /// |---------|------|--------|--------------|
-/// | WikiGold | ~3.5k entities | Wikipedia | PER, LOC, ORG, MISC |
-/// | WNUT-17 | ~2k entities | Social media | person, location, etc. |
-/// | MIT Movie | ~10k entities | Movies | actor, director, genre |
-/// | MIT Restaurant | ~8k entities | Restaurants | cuisine, dish, etc. |
-/// | CoNLL-2003 | ~20k entities | News | PER, LOC, ORG, MISC |
-/// | OntoNotes | ~18k entities | Mixed | 18 types |
-/// | MultiNERD | 100k+ | Wikipedia | 15+ types |
-/// | BC5CDR | ~28k entities | Biomedical | Disease, Chemical |
-/// | NCBI Disease | ~6k entities | Biomedical | Disease |
+/// | `WikiGold` | ~3.5k entities | Wikipedia | PER, LOC, ORG, MISC |
+/// | `Wnut17` | ~2k entities | Social media | person, location, etc. |
+/// | `MitMovie` | ~10k entities | Movies | actor, director, genre |
+/// | `MitRestaurant` | ~8k entities | Restaurants | cuisine, dish, etc. |
+/// | `CoNLL2003Sample` | ~20k entities | News | PER, LOC, ORG, MISC |
+/// | `OntoNotesSample` | ~18k entities | Mixed | 18 types |
+/// | `BC5CDR` | ~28k entities | Biomedical | Disease, Chemical |
+/// | `NCBIDisease` | ~6k entities | Biomedical | Disease |
 ///
-/// # Coreference Datasets
+/// ## Coreference Datasets
 ///
 /// | Dataset | Size | Domain | Features |
 /// |---------|------|--------|----------|
-/// | GAP | 8,908 pairs | Wikipedia | Gender-balanced pronouns |
-/// | PreCo | 38k docs | Reading | Includes singletons |
-/// | LitBank | 100 works | Literature | Literary coreference |
+/// | `GAP` | 8,908 pairs | Wikipedia | Gender-balanced pronouns |
+/// | `PreCo` | 38k docs | Reading | Includes singletons |
+/// | `LitBank` | 100 works | Literature | Literary coreference |
 ///
-// ARCHITECTURAL DEBT: Two DatasetId enums exist
+/// # Extending
+///
+/// To add a new loadable dataset:
+/// 1. Add the variant here
+/// 2. Implement loading in `DatasetLoader::load()`
+/// 3. Add to `DatasetId::all()` iterator
+/// 4. Ensure it exists in `dataset_registry::DatasetId` (metadata catalog)
+///
+// DESIGN NOTE: Two DatasetId enums by design
 //
-// This file defines `loader::DatasetId` with variants that have actual
-// loading implementations. Meanwhile, `dataset_registry::DatasetId` defines
-// the same variants with rich metadata (URL, license, citation, etc).
+// This file:  loader::DatasetId     (~158 variants) - has loading code
+// Registry:   registry::DatasetId   (~451 variants) - has metadata
 //
-// Why two enums?
-// - Registry: metadata catalog, auto-generates docs, provides info methods
-// - Loader: same variants but with loading/parsing implementations
+// The registry is an aspirational catalog: "these datasets exist."
+// The loader is the practical subset: "these datasets we can actually load."
 //
-// Current state (2025-12-10): Variants are SYNCHRONIZED.
-// Both enums have 450 variants. Keep them in sync when adding datasets.
+// Why not unify?
+// - Not all datasets have public URLs (some require LDC license)
+// - Not all formats have parsers implemented yet
+// - Registry grows faster than loader implementations
 //
-// Unification plan (deferred):
-//   1. Use registry::DatasetId as single source of truth
-//   2. Add `is_loadable() -> bool` method to registry
-//   3. Generate loader match arms from registry metadata
-//   4. Remove this enum, use type alias
+// Synchronization:
+// - loader variants are a SUBSET of registry variants
+// - test_dataset_id_enums_synchronized() enforces this
+// - When adding a dataset: add to registry first, then loader if loadable
 //
-// For now: when adding a dataset, add to BOTH files.
-// See: docs/DATASET_INTEGRATION_STATUS.md
+// See also: super::dataset_registry for the full metadata catalog
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum DatasetId {
