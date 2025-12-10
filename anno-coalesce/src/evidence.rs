@@ -579,8 +579,7 @@ impl MediationStrategy {
                 .iter()
                 .map(|s| s.score_contribution())
                 .fold(f32::NEG_INFINITY, f32::max)
-                .max(-1.0)
-                .min(1.0)
+                .clamp(-1.0, 1.0)
                 .pipe(|x| (x + 1.0) / 2.0),
 
             Self::Min => evidence
@@ -588,8 +587,7 @@ impl MediationStrategy {
                 .iter()
                 .map(|s| s.score_contribution())
                 .fold(f32::INFINITY, f32::min)
-                .max(-1.0)
-                .min(1.0)
+                .clamp(-1.0, 1.0)
                 .pipe(|x| (x + 1.0) / 2.0),
 
             Self::Product => {
@@ -599,7 +597,7 @@ impl MediationStrategy {
                     .iter()
                     .map(|s| {
                         let score = (s.score_contribution() + 1.0) / 2.0; // [0, 1]
-                        score.max(0.1).min(0.9)
+                        score.clamp(0.1, 0.9)
                     })
                     .product();
 

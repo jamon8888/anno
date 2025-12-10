@@ -561,7 +561,7 @@ impl EntityFeatureExtractor {
         let chain_features: HashMap<String, ChainFeatures> = groups
             .iter()
             .map(|(key, mentions)| {
-                let refs: Vec<&Entity> = mentions.iter().copied().collect();
+                let refs: Vec<&Entity> = mentions.to_vec();
                 (key.clone(), ChainFeatures::from_mentions(&refs, text_len))
             })
             .collect();
@@ -622,7 +622,7 @@ impl EntityFeatureExtractor {
         groups
             .iter()
             .map(|(key, mentions)| {
-                let refs: Vec<&Entity> = mentions.iter().copied().collect();
+                let refs: Vec<&Entity> = mentions.to_vec();
                 (key.clone(), ChainFeatures::from_mentions(&refs, text_len))
             })
             .collect()
