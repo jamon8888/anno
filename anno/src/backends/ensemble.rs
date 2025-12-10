@@ -76,7 +76,7 @@
 //!
 //! Each backend has a weight based on its expected reliability:
 //! - Pattern backends: high weight (0.95+) when they fire
-//! - ML backends: medium-high weight (0.80-0.90)  
+//! - ML backends: medium-high weight (0.80-0.90)
 //! - Heuristic backends: lower weight (0.60-0.70)
 //!
 //! ## Type-Conditioned Voting
@@ -245,10 +245,10 @@ fn default_backend_weights() -> HashMap<&'static str, BackendWeight> {
         BackendWeight {
             overall: 0.60,
             per_type: Some(TypeWeights {
-                person: 0.65, // Title + Name pattern works well
+                person: 0.65,       // Title + Name pattern works well
                 organization: 0.70, // "Inc", "Corp" patterns
-                location: 0.55, // Context-dependent
-                date: 0.40,   // Better to use pattern
+                location: 0.55,     // Context-dependent
+                date: 0.40,         // Better to use pattern
                 money: 0.40,
                 other: 0.50,
             }),
@@ -391,7 +391,7 @@ impl EnsembleNER {
         // Use '|' for parallel weighted voting (no priority ordering)
         let backend_names: Vec<String> = backends.iter().map(|b| b.name().to_string()).collect();
         let name = format!("ensemble({})", backend_names.join("|"));
-        
+
         let backends: Vec<Arc<dyn Model + Send + Sync>> =
             backends.into_iter().map(Arc::from).collect();
 
@@ -504,14 +504,12 @@ impl EnsembleNER {
 
         // Build merged entity
         // Use the candidate with highest individual confidence as base
-        let best_candidate = winning_candidates
-            .iter()
-            .max_by(|a, b| {
-                a.entity
-                    .confidence
-                    .partial_cmp(&b.entity.confidence)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })?;
+        let best_candidate = winning_candidates.iter().max_by(|a, b| {
+            a.entity
+                .confidence
+                .partial_cmp(&b.entity.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })?;
 
         let sources: Vec<String> = winning_candidates
             .iter()
@@ -524,17 +522,17 @@ impl EnsembleNER {
         // - boundary: Agreement on exact span boundaries
         let total_candidates = candidates.len() as f32;
         let num_winners = winning_candidates.len() as f32;
-        
+
         // Linkage: ratio of candidates in winning type
         let linkage = if total_candidates > 0.0 {
             (num_winners / total_candidates).min(1.0)
         } else {
             0.5
         };
-        
+
         // Type score: confidence in the winning type (weighted)
         let type_score = final_confidence as f32;
-        
+
         // Boundary: agreement on span boundaries
         // Check if all winning candidates have the same start/end
         let reference_span = (best_candidate.entity.start, best_candidate.entity.end);
@@ -551,9 +549,7 @@ impl EnsembleNER {
         let mut entity = best_candidate.entity.clone();
         entity.confidence = final_confidence;
         entity.hierarchical_confidence = Some(anno_core::entity::HierarchicalConfidence::new(
-            linkage,
-            type_score,
-            boundary,
+            linkage, type_score, boundary,
         ));
         entity.provenance = Some(anno_core::entity::Provenance {
             source: Cow::Owned(format!("ensemble({})", sources.join("+"))),
@@ -699,7 +695,7 @@ pub struct WeightTrainingExample {
     pub gold_type: EntityType,
     /// Span start
     pub start: usize,
-    /// Span end  
+    /// Span end
     pub end: usize,
     /// Predictions from each backend: (backend_name, predicted_type, confidence)
     pub predictions: Vec<(String, EntityType, f64)>,
@@ -795,10 +791,7 @@ impl WeightLearner {
     /// Add a training example.
     pub fn add_example(&mut self, example: &WeightTrainingExample) {
         for (backend_name, predicted_type, _confidence) in &example.predictions {
-            let stats = self
-                .backend_stats
-                .entry(backend_name.clone())
-                .or_default();
+            let stats = self.backend_stats.entry(backend_name.clone()).or_default();
 
             stats.total += 1;
             let correct = *predicted_type == example.gold_type;
@@ -871,8 +864,8 @@ impl WeightLearner {
 
         for (backend_name, stats) in &self.backend_stats {
             // Smoothed precision: (correct + smoothing) / (total + 2*smoothing)
-            let smoothed_precision =
-                (stats.correct as f64 + self.smoothing) / (stats.total as f64 + 2.0 * self.smoothing);
+            let smoothed_precision = (stats.correct as f64 + self.smoothing)
+                / (stats.total as f64 + 2.0 * self.smoothing);
 
             // Per-type weights
             let mut type_weights = TypeWeights::default();
@@ -950,7 +943,10 @@ mod tests {
         let span3 = SpanKey { start: 20, end: 30 };
 
         assert!(span1.overlaps(&span2), "Overlapping spans should match");
-        assert!(!span1.overlaps(&span3), "Non-overlapping spans should not match");
+        assert!(
+            !span1.overlaps(&span3),
+            "Non-overlapping spans should not match"
+        );
     }
 
     #[test]
@@ -1041,4 +1037,3 @@ mod tests {
         assert!((stats.type_precision("ORG") - 0.0).abs() < 0.01); // Unknown type
     }
 }
-

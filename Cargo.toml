@@ -1,4 +1,13 @@
 [workspace]
+# Naming convention:
+#   anno/        - Main library crate (publishes as "anno" on crates.io)
+#   anno-<suffix> - Supporting crates (anno-core, anno-coalesce, etc.)
+#
+# Why "anno/" not "anno-lib/" or "anno-main/"?
+#   - The main crate IS "anno" - it's the library users import
+#   - The directory matches the package name for clarity
+#   - "-core", "-coalesce", etc. are supporting actors, not the star
+#
 members = [
     "anno-core",
     "anno",

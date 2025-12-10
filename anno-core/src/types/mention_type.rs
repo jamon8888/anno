@@ -35,6 +35,10 @@ pub enum MentionType {
     ///
     /// Typically the first or canonical mention of an entity.
     /// Usually capitalized in English.
+    ///
+    /// Also known as "Named" in NER terminology. Use [`MentionType::is_named()`]
+    /// or the [`MentionType::NAMED`] constant for compatibility with code
+    /// using that terminology.
     Proper,
 
     /// Common noun phrase ("the company", "a dog", "the president")
@@ -67,7 +71,56 @@ pub enum MentionType {
     Unknown,
 }
 
+/// Ordering for MentionType based on canonical selection priority.
+///
+/// Order: `Zero < Pronominal < Unknown < Nominal < Proper`
+///
+/// This ordering is useful for canonical mention selection: when choosing
+/// a representative mention from a cluster, higher-ranked types are preferred.
+/// Proper nouns are most informative, zeros are least.
+impl PartialOrd for MentionType {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MentionType {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.priority().cmp(&other.priority())
+    }
+}
+
 impl MentionType {
+    /// Alias for [`MentionType::Proper`] using NER terminology.
+    ///
+    /// In NER, "named entity" is the standard term. In coreference literature,
+    /// "proper noun/name" is preferred. Both refer to the same concept.
+    pub const NAMED: MentionType = MentionType::Proper;
+
+    /// Check if this is a named/proper mention.
+    ///
+    /// Returns `true` for [`MentionType::Proper`]. This is an alias using
+    /// NER terminology for code that prefers "named" over "proper".
+    #[must_use]
+    pub fn is_named(&self) -> bool {
+        matches!(self, MentionType::Proper)
+    }
+
+    /// Get the ordering priority for canonical selection.
+    ///
+    /// Higher values = preferred for canonical mention.
+    /// Order: Zero(0) < Pronominal(1) < Unknown(2) < Nominal(3) < Proper(4)
+    #[must_use]
+    fn priority(&self) -> u8 {
+        match self {
+            MentionType::Zero => 0,
+            MentionType::Pronominal => 1,
+            MentionType::Unknown => 2,
+            MentionType::Nominal => 3,
+            MentionType::Proper => 4,
+        }
+    }
+
     /// Classify a mention string by its type.
     ///
     /// Uses heuristics based on:
@@ -129,6 +182,16 @@ impl MentionType {
     }
 
     /// Check if a string is a pronoun.
+    /// Check if a string is an English pronoun.
+    ///
+    /// # Multilingual Note
+    ///
+    /// Currently English-only. For multilingual pronoun detection:
+    /// - Use morphological analyzers (e.g., spaCy, Stanza)
+    /// - Pro-drop languages (Arabic, Spanish, Japanese) need zero pronoun detection
+    /// - CJK languages have different pronoun inventories (e.g., 彼/她/它 in Chinese)
+    ///
+    /// For multilingual NER, prefer model-based mention detection over heuristics.
     fn is_pronoun(s: &str) -> bool {
         matches!(
             s.trim(),

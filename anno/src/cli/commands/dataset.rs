@@ -8,10 +8,12 @@ use std::time::Instant;
 
 use super::super::output::color;
 use super::super::parser::{EvalTask, ModelBackend};
-use super::super::utils::types_match_flexible;
 
 #[cfg(feature = "eval-advanced")]
 use super::super::utils::create_entity_pair_relations;
+
+#[cfg(feature = "eval")]
+use super::super::utils::types_match_flexible;
 
 #[cfg(feature = "eval")]
 use crate::eval::loader::DatasetId;

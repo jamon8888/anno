@@ -9,7 +9,9 @@ use super::super::parser::{ModelBackend, OutputFormat};
 use super::super::utils::{detect_quantifier, get_input_text, is_negated};
 
 use crate::graph::{GraphDocument, GraphExportFormat}; // Re-exported from anno-core
-use crate::grounded::{GroundedDocument, Location, Modality, Signal, SignalValidationError}; // Re-exported from anno-core
+use crate::grounded::{
+    GroundedDocument, Location, Modality, Signal, SignalId, SignalValidationError,
+}; // Re-exported from anno-core
 #[cfg(feature = "eval-advanced")]
 use crate::ingest::url_resolver::CompositeResolver;
 use crate::ingest::DocumentPreprocessor;
@@ -161,7 +163,7 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
 
     for e in &entities {
         let mut signal = Signal::new(
-            0,
+            SignalId::ZERO,
             Location::text(e.start, e.end),
             &e.text,
             e.entity_type.as_label(),

@@ -10,7 +10,7 @@ use super::super::output::{color, metric_colored};
 use super::super::parser::ModelBackend;
 use super::super::utils::{get_input_text, load_gold_from_file, parse_gold_spec};
 
-use crate::grounded::{render_eval_html, EvalComparison, EvalMatch, Location, Signal};
+use crate::grounded::{render_eval_html, EvalComparison, EvalMatch, Location, Signal, SignalId};
 
 /// Evaluate predictions against gold annotations
 #[derive(Parser, Debug)]
@@ -96,7 +96,7 @@ pub fn run(args: EvalArgs) -> Result<(), String> {
         .enumerate()
         .map(|(i, g)| {
             Signal::new(
-                i as u64,
+                SignalId::new(i as u64),
                 Location::text(g.start, g.end),
                 &g.text,
                 &g.label,
@@ -110,7 +110,7 @@ pub fn run(args: EvalArgs) -> Result<(), String> {
         .enumerate()
         .map(|(i, e)| {
             Signal::new(
-                i as u64,
+                SignalId::new(i as u64),
                 Location::text(e.start, e.end),
                 &e.text,
                 e.entity_type.as_label(),

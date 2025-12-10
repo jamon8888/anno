@@ -7,7 +7,9 @@ use std::io::{self, Read};
 
 #[cfg(feature = "eval-advanced")]
 use anno_core::Entity;
-use anno_core::{GroundedDocument, Identity, Location, Quantifier, Signal};
+use anno_core::{
+    GroundedDocument, Identity, IdentityId, Location, Quantifier, Signal, SignalId, TrackId,
+};
 
 /// Get input text from various sources (text arg, file, or stdin)
 pub fn get_input_text(
@@ -75,11 +77,19 @@ pub fn log_success(msg: &str, quiet: bool) {
     }
 }
 
+/// A gold-standard entity annotation for evaluation.
+///
+/// Loaded from JSONL files with `entities` arrays containing
+/// `{text, label, start, end}` objects.
 #[derive(Debug, Clone)]
 pub struct GoldSpec {
+    /// Surface text of the entity.
     pub text: String,
+    /// Entity type label (e.g., "PER", "ORG").
     pub label: String,
+    /// Character offset where entity begins.
     pub start: usize,
+    /// Character offset where entity ends.
     pub end: usize,
 }
 
@@ -105,6 +115,10 @@ pub fn parse_gold_spec(s: &str) -> Option<GoldSpec> {
     })
 }
 
+/// Load gold-standard annotations from a JSONL file.
+///
+/// Each line should be a JSON object with an `entities` array.
+/// Entities are objects with `text`, `label`, `start`, and `end` fields.
 pub fn load_gold_from_file(path: &str) -> Result<Vec<GoldSpec>, String> {
     let content =
         fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {}", path, e))?;
@@ -321,7 +335,7 @@ pub fn is_likely_female(name: &str) -> bool {
 /// This uses a simple rule-based approach:
 /// 1. Named entities of the same type that overlap in their canonical form
 /// 2. Pronouns detected in text and linked to nearest compatible antecedent
-pub fn resolve_coreference(doc: &mut GroundedDocument, text: &str, signal_ids: &[u64]) {
+pub fn resolve_coreference(doc: &mut GroundedDocument, text: &str, signal_ids: &[SignalId]) {
     // Pronouns by gender
     let male_pronouns = ["he", "him", "his"];
     let female_pronouns = ["she", "her", "hers"];
@@ -330,7 +344,7 @@ pub fn resolve_coreference(doc: &mut GroundedDocument, text: &str, signal_ids: &
 
     // First, detect pronouns in text that weren't found by NER
     // (pronoun_id, pronoun_type: "male", "female", "org", "any")
-    let mut pronoun_signals: Vec<(u64, &str)> = Vec::new();
+    let mut pronoun_signals: Vec<(SignalId, &str)> = Vec::new();
 
     // Build byte-to-char offset mapping for proper conversion
     let byte_to_char: Vec<usize> = text.char_indices().map(|(byte_idx, _)| byte_idx).collect();
@@ -406,7 +420,7 @@ pub fn resolve_coreference(doc: &mut GroundedDocument, text: &str, signal_ids: &
                         // Add pronoun as a signal (use byte slice for surface text)
                         let surface = &text[abs_byte_start..abs_byte_end];
                         let signal = Signal::new(
-                            0,
+                            SignalId::ZERO,                       // ID will be assigned by add_signal
                             Location::text(char_start, char_end), // Use char offsets
                             surface,
                             "PRON", // Special label for pronouns
@@ -424,9 +438,9 @@ pub fn resolve_coreference(doc: &mut GroundedDocument, text: &str, signal_ids: &
     }
 
     // Group NER signals by type
-    let mut per_signals: Vec<u64> = Vec::new();
-    let mut org_signals: Vec<u64> = Vec::new();
-    let mut loc_signals: Vec<u64> = Vec::new();
+    let mut per_signals: Vec<SignalId> = Vec::new();
+    let mut org_signals: Vec<SignalId> = Vec::new();
+    let mut loc_signals: Vec<SignalId> = Vec::new();
 
     for &sig_id in signal_ids {
         if let Some(sig) = doc.get_signal(sig_id) {
@@ -441,7 +455,7 @@ pub fn resolve_coreference(doc: &mut GroundedDocument, text: &str, signal_ids: &
     }
 
     // Create tracks from named entities (group same-type entities by canonical form)
-    let mut track_assignments: HashMap<u64, u64> = HashMap::new(); // signal_id -> track_id
+    let mut track_assignments: HashMap<SignalId, TrackId> = HashMap::new(); // signal_id -> track_id
 
     // For each entity type, create tracks by grouping similar surface forms
     for signals in [&per_signals, &org_signals, &loc_signals] {
@@ -450,7 +464,7 @@ pub fn resolve_coreference(doc: &mut GroundedDocument, text: &str, signal_ids: &
         }
 
         // Simple grouping: each unique entity gets its own track
-        let mut canonical_groups: HashMap<String, Vec<u64>> = HashMap::new();
+        let mut canonical_groups: HashMap<String, Vec<SignalId>> = HashMap::new();
 
         for &sig_id in signals {
             if let Some(sig) = doc.get_signal(sig_id) {
@@ -484,7 +498,7 @@ pub fn resolve_coreference(doc: &mut GroundedDocument, text: &str, signal_ids: &
         };
 
         // For person pronouns, we need to filter by gender compatibility
-        let compatible_signals: Vec<u64> = match *pronoun_type {
+        let compatible_signals: Vec<SignalId> = match *pronoun_type {
             "male" => {
                 // Filter to likely male names
                 per_signals
@@ -518,7 +532,7 @@ pub fn resolve_coreference(doc: &mut GroundedDocument, text: &str, signal_ids: &
             _ => continue,
         };
 
-        let mut nearest: Option<(u64, usize)> = None; // (signal_id, distance)
+        let mut nearest: Option<(SignalId, usize)> = None; // (signal_id, distance)
 
         for sig_id in &compatible_signals {
             if let Some(sig) = doc.get_signal(*sig_id) {
@@ -590,7 +604,7 @@ pub fn link_tracks_to_kb(doc: &mut GroundedDocument) {
     .collect();
 
     // Collect track IDs first to avoid borrow issues
-    let track_ids: Vec<u64> = doc.tracks().map(|t| t.id).collect();
+    let track_ids: Vec<TrackId> = doc.tracks().map(|t| t.id).collect();
 
     for track_id in track_ids {
         let (canonical, entity_type) = {
@@ -607,8 +621,10 @@ pub fn link_tracks_to_kb(doc: &mut GroundedDocument) {
         if let Some(&(qid, description)) = known_entities.get(canonical_lower.as_str()) {
             // Create identity from KB
             let mut identity = Identity::from_kb(
-                0, // Will be assigned by add_identity
-                &canonical, "wikidata", qid,
+                IdentityId::ZERO, // Will be assigned by add_identity
+                &canonical,
+                "wikidata",
+                qid,
             );
             identity.aliases.push(description.to_string());
             if let Some(etype) = &entity_type {
@@ -619,7 +635,7 @@ pub fn link_tracks_to_kb(doc: &mut GroundedDocument) {
             doc.link_track_to_identity(track_id, identity_id);
         } else {
             // Create placeholder identity without KB link
-            let identity = Identity::new(0, &canonical);
+            let identity = Identity::new(IdentityId::ZERO, &canonical);
             let identity_id = doc.add_identity(identity);
             doc.link_track_to_identity(track_id, identity_id);
         }

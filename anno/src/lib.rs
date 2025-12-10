@@ -79,6 +79,7 @@
 pub mod backends;
 /// Edit distance algorithms.
 pub mod edit_distance;
+pub mod env;
 pub mod error;
 pub mod eval;
 /// Entity feature extraction for downstream ML and analysis.
@@ -90,8 +91,12 @@ pub mod lang;
 /// Entity linking to knowledge bases.
 pub mod linking;
 pub mod offset;
+/// Shared PageRank algorithm for graph-based ranking.
+pub mod pagerank;
 /// Preprocessing for mention detection.
 pub mod preprocess;
+/// Entity salience and importance ranking.
+pub mod salience;
 pub mod schema;
 pub mod similarity;
 pub mod sync;
@@ -166,6 +171,7 @@ mod sealed {
     impl Sealed for super::RegexNER {}
     impl Sealed for super::HeuristicNER {}
     impl Sealed for super::StackedNER {}
+    impl Sealed for super::EnsembleNER {}
     impl Sealed for super::NuNER {}
     impl Sealed for super::W2NER {}
     impl Sealed for super::NERExtractor {}
@@ -373,8 +379,8 @@ pub trait DynamicLabels: Model {
 
 // Re-export backends
 pub use backends::{
-    AutoNER, BackendType, ConflictStrategy, HeuristicNER, NERExtractor, NuNER, RegexNER,
-    StackedNER, TPLinker, W2NERConfig, W2NERRelation, W2NER,
+    AutoNER, BackendType, ConflictStrategy, EnsembleNER, HeuristicNER, NERExtractor, NuNER,
+    RegexNER, StackedNER, TPLinker, W2NERConfig, W2NERRelation, W2NER,
 };
 
 // Mention-ranking coreference (Bourgois & Poibeau 2025)

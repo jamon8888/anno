@@ -3,7 +3,7 @@
 //! Ensures that if A≈B and B≈C, then A≈C (via identity linking).
 
 use anno_coalesce::Resolver;
-use anno_core::{Corpus, GroundedDocument, Location, Signal, Track};
+use anno_core::{Corpus, GroundedDocument, Location, Signal, Track, TrackId};
 
 /// Property: Crossdoc coref should be transitive
 ///
@@ -18,7 +18,7 @@ fn prop_crossdoc_transitivity() {
     let sig1 = Signal::new(0, Location::text(0, 12), "Barack Obama", "PER", 0.95);
     let sig1_id = doc1.add_signal(sig1);
     let track1 = Track {
-        id: 0, // Will be reassigned by add_track
+        id: TrackId::new(0), // Will be reassigned by add_track
         signals: vec![anno_core::SignalRef {
             signal_id: sig1_id,
             position: 0,
@@ -37,7 +37,7 @@ fn prop_crossdoc_transitivity() {
     let sig2 = Signal::new(0, Location::text(0, 5), "Obama", "PER", 0.85);
     let sig2_id = doc2.add_signal(sig2);
     let track2 = Track {
-        id: 0,
+        id: TrackId::new(0),
         signals: vec![anno_core::SignalRef {
             signal_id: sig2_id,
             position: 0,
@@ -56,7 +56,7 @@ fn prop_crossdoc_transitivity() {
     let sig3 = Signal::new(0, Location::text(0, 8), "B. Obama", "PER", 0.80);
     let sig3_id = doc3.add_signal(sig3);
     let track3 = Track {
-        id: 0,
+        id: TrackId::new(0),
         signals: vec![anno_core::SignalRef {
             signal_id: sig3_id,
             position: 0,
@@ -112,7 +112,7 @@ fn prop_same_doc_tracks_not_merged() {
     let sig1 = Signal::new(0, Location::text(0, 9), "Apple Inc.", "ORG", 0.95);
     let sig1_id = doc.add_signal(sig1);
     let track1 = Track {
-        id: 0, // Will be reassigned by add_track
+        id: TrackId::new(0), // Will be reassigned by add_track
         signals: vec![anno_core::SignalRef {
             signal_id: sig1_id,
             position: 0,
@@ -134,7 +134,7 @@ fn prop_same_doc_tracks_not_merged() {
     );
     let sig2_id = doc.add_signal(sig2);
     let track2 = Track {
-        id: 0,
+        id: TrackId::new(0),
         signals: vec![anno_core::SignalRef {
             signal_id: sig2_id,
             position: 1,

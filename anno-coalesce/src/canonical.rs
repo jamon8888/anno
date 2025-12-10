@@ -42,6 +42,10 @@
 
 use std::cmp::Ordering;
 
+// Re-export the canonical MentionType from anno_core.
+// This unifies the type system across the anno ecosystem.
+pub use anno_core::types::MentionType;
+
 /// Features of a mention used for canonical selection.
 #[derive(Debug, Clone)]
 pub struct MentionFeatures {
@@ -49,7 +53,11 @@ pub struct MentionFeatures {
     pub surface: String,
     /// Position in document (character offset or sentence index)
     pub position: usize,
-    /// Mention type: Named, Nominal, or Pronominal
+    /// Mention type: Proper, Nominal, or Pronominal
+    ///
+    /// Uses [`anno_core::types::MentionType`]. For compatibility with code
+    /// using "Named" terminology, use [`MentionType::NAMED`] or the
+    /// [`MentionFeatures::named()`] builder method.
     pub mention_type: MentionType,
     /// Is this mention in subject position?
     pub is_subject: bool,
@@ -59,18 +67,6 @@ pub struct MentionFeatures {
     pub frequency: usize,
     /// Optional salience score from external model
     pub salience_score: Option<f64>,
-}
-
-/// Type of mention (affects canonical selection priority).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub enum MentionType {
-    /// Pronominal: "he", "she", "it", "they"
-    Pronominal = 0,
-    /// Nominal: "the company", "the president"
-    #[default]
-    Nominal = 1,
-    /// Named: "Barack Obama", "Apple Inc."
-    Named = 2,
 }
 
 impl MentionFeatures {
@@ -93,9 +89,11 @@ impl MentionFeatures {
         self
     }
 
-    /// Mark as named mention.
+    /// Mark as named/proper mention.
+    ///
+    /// Uses [`MentionType::Proper`] (also known as "Named" in NER terminology).
     pub fn named(mut self) -> Self {
-        self.mention_type = MentionType::Named;
+        self.mention_type = MentionType::Proper;
         self
     }
 
@@ -142,9 +140,11 @@ impl MentionFeatures {
 
         // Mention type: Named >> Nominal >> Pronominal
         score += match self.mention_type {
-            MentionType::Named => 100.0,
+            MentionType::Proper => 100.0,
             MentionType::Nominal => 50.0,
             MentionType::Pronominal => 0.0,
+            MentionType::Zero => -10.0, // Zero pronouns are poor canonical choices
+            MentionType::Unknown => 25.0, // Between pronominal and nominal
         };
 
         // Length bonus: longer mentions are often more informative
@@ -231,7 +231,7 @@ impl CanonicalSelector for NamedFirstSelector {
         let named: Vec<_> = mentions
             .iter()
             .enumerate()
-            .filter(|(_, m)| m.mention_type == MentionType::Named)
+            .filter(|(_, m)| m.mention_type == MentionType::Proper)
             .collect();
 
         if !named.is_empty() {
@@ -376,7 +376,7 @@ pub fn detect_mention_type(surface: &str) -> MentionType {
         .count();
 
     if capitalized_count > words.len() / 2 {
-        MentionType::Named
+        MentionType::Proper
     } else {
         MentionType::Nominal
     }
@@ -389,9 +389,9 @@ mod tests {
     #[test]
     fn test_mention_type_detection() {
         assert_eq!(detect_mention_type("he"), MentionType::Pronominal);
-        assert_eq!(detect_mention_type("Barack Obama"), MentionType::Named);
+        assert_eq!(detect_mention_type("Barack Obama"), MentionType::Proper);
         assert_eq!(detect_mention_type("the president"), MentionType::Nominal);
-        assert_eq!(detect_mention_type("Apple Inc."), MentionType::Named);
+        assert_eq!(detect_mention_type("Apple Inc."), MentionType::Proper);
         assert_eq!(detect_mention_type("a company"), MentionType::Nominal);
     }
 

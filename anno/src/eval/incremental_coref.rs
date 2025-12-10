@@ -56,6 +56,32 @@
 //! - **LFU (Least Frequently Used)**: Evict least-frequently-accessed clusters
 //! - **Dual-cache**: Combines LRU (local) + LFU (global) caches
 //!
+//! # Memory Paradigms: Heuristic vs Neural
+//!
+//! This implementation uses **heuristic** entity memory. There are three main
+//! paradigms in the literature:
+//!
+//! | Paradigm | Memory Update | Training | Systems |
+//! |----------|---------------|----------|---------|
+//! | **Heuristic** (this) | String match + discrete ops | None | Anno EntityMemory |
+//! | **Referential Reader** | GRU gates | End-to-end | Liu et al. 2019 |
+//! | **SpanEIT** | GRU per coref cluster | Supervised | Hossain et al. 2025 |
+//!
+//! **Why heuristic?**
+//! - No training data required
+//! - Fast inference (no neural forward pass)
+//! - Interpretable decisions
+//! - Good enough for many applications (string match works for ~80% of cases)
+//!
+//! **When to consider neural:**
+//! - Need to handle ambiguous mentions ("the president" → multiple candidates)
+//! - Working with languages where string match is unreliable
+//! - Building a trained coreference system
+//!
+//! References:
+//! - Liu, Zettlemoyer & Eisenstein (2019): "The Referential Reader" - ACL 2019
+//! - Hossain et al. (2025): "SpanEIT" - arXiv:2509.11604
+//!
 //! # Example
 //!
 //! ```rust

@@ -1,10 +1,11 @@
 //! Tests for Identity tracking and management.
 
-use anno_core::grounded::{Identity, IdentityId, IdentitySource, TrackRef};
+use anno_core::grounded::{Identity, IdentitySource, TrackRef};
+use anno_core::IdentityId;
 
 #[test]
 fn test_identity_creation() {
-    let id: IdentityId = 1;
+    let id = IdentityId::new(1);
     let identity = Identity::new(id, "John Smith");
 
     assert_eq!(identity.id, id);
@@ -16,7 +17,7 @@ fn test_identity_creation() {
 
 #[test]
 fn test_identity_from_knowledge_base() {
-    let id: IdentityId = 7186;
+    let id = IdentityId::new(7186);
     let identity = Identity::from_kb(id, "Marie Curie", "wikidata", "Q7186");
 
     assert_eq!(identity.canonical_name, "Marie Curie");
@@ -34,7 +35,7 @@ fn test_identity_from_knowledge_base() {
 
 #[test]
 fn test_identity_aliases() {
-    let id: IdentityId = 100;
+    let id = IdentityId::new(100);
     let mut identity = Identity::new(id, "Robert Smith");
 
     identity.add_alias("Bob Smith");
@@ -48,7 +49,7 @@ fn test_identity_aliases() {
 
 #[test]
 fn test_identity_with_embedding() {
-    let id: IdentityId = 200;
+    let id = IdentityId::new(200);
     let embedding = vec![0.1, 0.2, 0.3, 0.4];
     let identity = Identity::new(id, "Test Entity").with_embedding(embedding.clone());
 
@@ -57,7 +58,7 @@ fn test_identity_with_embedding() {
 
 #[test]
 fn test_identity_with_entity_type() {
-    let id: IdentityId = 300;
+    let id = IdentityId::new(300);
     let mut identity = Identity::new(id, "Apple Inc.");
     identity.entity_type = Some("Organization".to_string());
 
@@ -66,7 +67,7 @@ fn test_identity_with_entity_type() {
 
 #[test]
 fn test_identity_confidence() {
-    let id: IdentityId = 400;
+    let id = IdentityId::new(400);
     let mut identity = Identity::new(id, "Uncertain Entity");
     identity.confidence = 0.75;
 
@@ -75,8 +76,8 @@ fn test_identity_confidence() {
 
 #[test]
 fn test_identity_equality() {
-    let id1: IdentityId = 500;
-    let id2: IdentityId = 500;
+    let id1 = IdentityId::new(500);
+    let id2 = IdentityId::new(500);
 
     let identity1 = Identity::new(id1, "Test");
     let identity2 = Identity::new(id2, "Test");
@@ -110,7 +111,7 @@ fn test_identity_source_variants() {
 
 #[test]
 fn test_identity_serialization() {
-    let id: IdentityId = 600;
+    let id = IdentityId::new(600);
     let mut identity = Identity::from_kb(id, "Test Entity", "test_kb", "T123");
     identity.add_alias("Alias 1");
     identity.description = Some("A test entity".to_string());
@@ -128,7 +129,7 @@ fn test_identity_serialization() {
 
 #[test]
 fn test_identity_with_description() {
-    let id: IdentityId = 700;
+    let id = IdentityId::new(700);
     let mut identity = Identity::new(id, "Albert Einstein");
     identity.description = Some("German-born theoretical physicist".to_string());
     identity.entity_type = Some("Person".to_string());
@@ -139,8 +140,8 @@ fn test_identity_with_description() {
 
 #[test]
 fn test_multiple_identities_distinct() {
-    let id1: IdentityId = 937; // Einstein's Wikidata Q number
-    let id2: IdentityId = 7186; // Curie's Wikidata Q number
+    let id1 = IdentityId::new(937); // Einstein's Wikidata Q number
+    let id2 = IdentityId::new(7186); // Curie's Wikidata Q number
 
     let einstein = Identity::from_kb(id1, "Albert Einstein", "wikidata", "Q937");
     let curie = Identity::from_kb(id2, "Marie Curie", "wikidata", "Q7186");

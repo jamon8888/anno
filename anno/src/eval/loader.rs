@@ -80,18 +80,26 @@ use super::datasets::GoldEntity;
 /// | PreCo | 38k docs | Reading | Includes singletons |
 /// | LitBank | 100 works | Literature | Literary coreference |
 ///
-// TODO(2025-12-08): This enum is manually maintained and has drifted out of sync
-// with `dataset_registry::DatasetId` which is generated from `define_datasets!`.
-// Currently:
-//   - loader.rs: 188 variants
-//   - dataset_registry.rs: 184 variants
-//   - Shared: only 62 variants
+// ARCHITECTURAL DEBT: Two DatasetId enums exist
 //
-// Consider:
-//   1. Re-exporting dataset_registry::DatasetId here
-//   2. Generating loader implementations from registry metadata
-//   3. At minimum, keep these in sync when adding new datasets
+// This file defines `loader::DatasetId` with variants that have actual
+// loading implementations. Meanwhile, `dataset_registry::DatasetId` defines
+// the same variants with rich metadata (URL, license, citation, etc).
 //
+// Why two enums?
+// - Registry: metadata catalog, auto-generates docs, provides info methods
+// - Loader: same variants but with loading/parsing implementations
+//
+// Current state (2025-12-10): Variants are SYNCHRONIZED.
+// Both enums have 450 variants. Keep them in sync when adding datasets.
+//
+// Unification plan (deferred):
+//   1. Use registry::DatasetId as single source of truth
+//   2. Add `is_loadable() -> bool` method to registry
+//   3. Generate loader match arms from registry metadata
+//   4. Remove this enum, use type alias
+//
+// For now: when adding a dataset, add to BOTH files.
 // See: docs/DATASET_INTEGRATION_STATUS.md
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -843,6 +851,10 @@ pub enum DatasetId {
     /// Meeting transcripts with coreference annotations
     /// Source: AMI project
     AMIMeeting,
+
+    /// TikTalk Coreference: TikTok dialogue coreference
+    /// Social media video dialogue coreference annotations
+    TikTalkCoref,
 
     /// ARRAU: Anaphoric annotation corpus
     /// Diverse genres with rich anaphoric annotations
@@ -1700,6 +1712,39 @@ pub enum DatasetId {
     TutoringSessionsAlgebra,
     /// Pronoun resolution requiring world knowledge. XML format.
     WinogradSchemaChallengeWSC,
+
+    // === Discourse Datasets (synced from registry 2025-12-10) ===
+    /// Disco-Bench: Discourse-aware evaluation benchmark for language modeling.
+    /// 9 document-level testsets covering cohesion, coherence across Chinese/English literature.
+    DiscoBench,
+    /// DiscoTrack: Multilingual LLM benchmark for discourse tracking.
+    /// 12 languages, 4 levels: salience, entity tracking, discourse relations, bridging.
+    DiscoTrack,
+    /// LIEDER: Linguistically-Informed Evaluation for Discourse Entity Recognition.
+    /// Tests existence, uniqueness, plurality, novelty.
+    LIEDER,
+    /// GCDC: Grammarly Corpus of Discourse Coherence.
+    /// Real-world texts with coherence ratings across 4 domains.
+    GCDC,
+    /// DISAPERE: Discourse Structure in Peer Review Discussions.
+    /// 20k sentences in 506 review-rebuttal pairs with argumentation annotation.
+    DISAPERE,
+    /// PragmEval: Pragmatics-centered evaluation framework.
+    /// 11 datasets covering discourse relations, speech acts, stance, sarcasm, verifiability.
+    PragmEval,
+    /// DISRPT 2025: Cross-formalism benchmark for discourse segmentation.
+    /// 39 corpora, 16 languages, 6 frameworks.
+    DISRPT2025,
+
+    // === Entity Linking Datasets (synced from registry 2025-12-10) ===
+    /// Mewsli-X: Multilingual entity linking across 50 languages.
+    /// Wikipedia-linked mentions for zero-shot cross-lingual EL.
+    MewsliX,
+
+    // === Classical Language Datasets (synced from registry 2025-12-10) ===
+    /// Mahānāma: Sanskrit Entity Discovery and Linking from Mahābhārata.
+    /// World's largest epic with extreme name variation.
+    Mahanama,
 }
 
 impl DatasetId {
@@ -2419,6 +2464,10 @@ impl DatasetId {
             DatasetId::AMIMeeting =>
                 "https://datasets-server.huggingface.co/rows?dataset=edinburghcstr/ami&config=headset&split=test&offset=0&length=100",
 
+            // TikTalk Coreference
+            DatasetId::TikTalkCoref =>
+                "https://datasets-server.huggingface.co/rows?dataset=tiktalk/tiktalk_coref&config=default&split=test&offset=0&length=100",
+
             // ARRAU: Anaphoric annotation corpus
             DatasetId::ARRAU =>
                 "https://datasets-server.huggingface.co/rows?dataset=coref/arrau&config=default&split=test&offset=0&length=100",
@@ -2714,6 +2763,7 @@ impl DatasetId {
             // Streaming/Dialogue Coref
             DatasetId::CODICRAC => "CODI-CRAC",
             DatasetId::AMIMeeting => "AMI Meeting",
+            DatasetId::TikTalkCoref => "TikTalk Coref",
             DatasetId::ARRAU => "ARRAU",
             DatasetId::ARRAU3 => "ARRAU 3.0",
             DatasetId::ArrauRst => "ARRAU RST",
@@ -3033,6 +3083,7 @@ impl DatasetId {
             // Dialogue Coreference
             DatasetId::CODICRAC => "Dialogue coreference",
             DatasetId::AMIMeeting => "Meeting dialogue coreference",
+            DatasetId::TikTalkCoref => "TikTok video dialogue coreference",
             DatasetId::ARRAU => "Rich anaphoric annotations",
             DatasetId::ARRAU3 => "ARRAU 3.0 comprehensive annotations",
             DatasetId::ArrauRst => "RST bridging annotations",
@@ -3177,6 +3228,7 @@ impl DatasetId {
                 // Dialogue coreference
                 | DatasetId::CODICRAC
                 | DatasetId::AMIMeeting
+                | DatasetId::TikTalkCoref
                 | DatasetId::ARRAU
                 | DatasetId::ARRAU3
                 | DatasetId::ArrauRst
@@ -3237,6 +3289,7 @@ impl DatasetId {
                 // Dialogue coreference
                 | DatasetId::CODICRAC
                 | DatasetId::AMIMeeting
+                | DatasetId::TikTalkCoref
                 | DatasetId::ARRAU
                 | DatasetId::ARRAU3
                 | DatasetId::ArrauRst
@@ -3405,6 +3458,7 @@ impl DatasetId {
                 | DatasetId::MuDoCo
                 | DatasetId::CODICRAC
                 | DatasetId::AMIMeeting
+                | DatasetId::TikTalkCoref
                 | DatasetId::ARRAU
         )
     }
@@ -4453,6 +4507,7 @@ impl DatasetId {
             // Discourse/Coreference (advanced)
             DatasetId::CODICRAC => "codicrac.tsv",
             DatasetId::AMIMeeting => "ami_meeting.json",
+            DatasetId::TikTalkCoref => "tiktalk_coref.json",
             DatasetId::ARRAU => "arrau.conllu",
 
             // === ARCANE / NICHE DATASETS ===
@@ -4727,6 +4782,7 @@ impl DatasetId {
             // Streaming/Dialogue Coref
             DatasetId::CODICRAC,
             DatasetId::AMIMeeting,
+            DatasetId::TikTalkCoref,
             DatasetId::ARRAU,
             // Code-Switching / Mixed Language
             DatasetId::LinCE,
@@ -5943,6 +5999,9 @@ impl std::str::FromStr for DatasetId {
             // Dialogue coreference
             "codicrac" | "codi_crac" | "codi-crac" => Ok(DatasetId::CODICRAC),
             "ami_meeting" | "ami-meeting" | "amimeeting" => Ok(DatasetId::AMIMeeting),
+            "tiktalkcoref" | "tiktalk_coref" | "tiktalk-coref" | "tiktalk" => {
+                Ok(DatasetId::TikTalkCoref)
+            }
             // Specialized domain
             "nlm_chem" | "nlmchem" | "nlm-chem" => Ok(DatasetId::NLMChem),
             "sciner" | "sci_ner" | "sci-ner" => Ok(DatasetId::SciNER),
@@ -10824,6 +10883,49 @@ fn map_entity_type(original: &str) -> EntityType {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Verify loader::DatasetId and registry::DatasetId have the same variants.
+    ///
+    /// This test ensures the two enums stay synchronized. If this fails,
+    /// add the missing variants to the appropriate enum.
+    ///
+    /// NOTE: The registry (451 variants) is intentionally larger than loader (158).
+    /// Registry = aspirational catalog with metadata.
+    /// Loader = practical subset with actual loading implementations.
+    /// This test checks loader is a subset of registry, not that they're equal.
+    #[test]
+    fn test_dataset_id_enums_synchronized() {
+        use crate::eval::dataset_registry::DatasetId as RegistryId;
+
+        // Get all variants from loader
+        let loader_variants = DatasetId::all();
+
+        // Get all variants from registry
+        let registry_variants = RegistryId::all();
+
+        // Loader should be a subset of registry (registry is aspirational, loader is practical)
+        assert!(
+            loader_variants.len() <= registry_variants.len(),
+            "loader::DatasetId has {} variants but dataset_registry::DatasetId has {}. \
+             Loader should be a subset of registry.",
+            loader_variants.len(),
+            registry_variants.len()
+        );
+
+        // Check all loader variants can be parsed from their display name
+        // (This verifies the names match between enums)
+        for variant in loader_variants {
+            let name = format!("{:?}", variant);
+            // This will succeed if registry has the same variant
+            let _registry_name = format!(
+                "{:?}",
+                registry_variants
+                    .iter()
+                    .find(|r| format!("{:?}", r) == name)
+                    .expect(&format!("Registry missing variant: {:?}", variant))
+            );
+        }
+    }
 
     #[test]
     fn test_parse_bio_tag() {

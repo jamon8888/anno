@@ -126,6 +126,13 @@ pub mod stacked;
 pub mod tplinker;
 pub mod w2ner;
 
+/// Ensemble NER - weighted voting across multiple backends.
+///
+/// Unlike `StackedNER` (priority-based layers), `EnsembleNER` collects
+/// candidates from ALL backends and resolves conflicts via weighted voting
+/// with agreement bonuses.
+pub mod ensemble;
+
 // Advanced backends
 #[cfg(feature = "onnx")]
 pub mod albert;
@@ -189,6 +196,7 @@ pub mod graph_coref;
 pub mod mention_ranking;
 
 // Re-exports (always available)
+pub use ensemble::EnsembleNER;
 pub use extractor::{BackendType, NERExtractor};
 pub use heuristic::HeuristicNER;
 pub use nuner::NuNER;
@@ -286,3 +294,12 @@ pub use box_embeddings_training::{
     coref_documents_to_training_examples, split_train_val, BoxEmbeddingTrainer, TrainingConfig,
     TrainingExample,
 };
+
+// Coreference resolution trait and simple resolvers
+// NOTE: These live in eval/ but are re-exported here for discoverability.
+// Ideally they'd live in backends/ directly. See eval/coref_resolver.rs for context.
+pub use crate::eval::coref_resolver::{
+    BoxCorefResolver, CorefConfig, CoreferenceResolver, SimpleCorefResolver,
+};
+#[cfg(feature = "discourse")]
+pub use crate::eval::coref_resolver::{DiscourseAwareResolver, DiscourseCorefConfig};
