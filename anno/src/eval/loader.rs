@@ -1836,7 +1836,11 @@ impl DatasetId {
         let variant_name = format!("{:?}", self);
 
         // Try exact name match first
-        if let Some(found) = RegistryDatasetId::all().iter().find(|r| r.name() == name).copied() {
+        if let Some(found) = RegistryDatasetId::all()
+            .iter()
+            .find(|r| r.name() == name)
+            .copied()
+        {
             return Some(found);
         }
 
@@ -11103,10 +11107,7 @@ mod tests {
         );
 
         // Log for tracking - coverage should improve over time
-        eprintln!(
-            "Registry coverage: {}/{} ({:.1}%)",
-            found, total, coverage
-        );
+        eprintln!("Registry coverage: {}/{} ({:.1}%)", found, total, coverage);
         if !missing.is_empty() {
             eprintln!("Missing from registry: {:?}", missing);
         }

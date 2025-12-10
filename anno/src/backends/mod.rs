@@ -130,10 +130,13 @@ pub mod box_embeddings;
 /// research project extends this with matryoshka-specific features (variable dimensions, etc.).
 pub mod box_embeddings_training;
 pub mod catalog;
+pub mod crf;
 pub mod encoder;
 pub mod extractor;
 pub mod heuristic;
 pub mod inference;
+/// Label prompt normalization for zero-shot NER systems.
+pub mod label_prompt;
 pub mod nuner;
 pub mod pattern_config;
 pub mod regex;
@@ -214,6 +217,7 @@ pub mod graph_coref;
 pub mod mention_ranking;
 
 // Re-exports (always available)
+pub use crf::CrfNER;
 pub use ensemble::EnsembleNER;
 pub use extractor::{BackendType, NERExtractor};
 pub use heuristic::HeuristicNER;

@@ -4,6 +4,35 @@
 //! - Coreference resolution mention classification
 //! - Mention ranking algorithms
 //! - Linguistic analysis of referring expressions
+//!
+//! # Linguistic Background
+//!
+//! The classification follows the **Accessibility Hierarchy** (Ariel 1990):
+//!
+//! ```text
+//! Full names > Descriptions > Pronouns > Zero
+//!   (low accessibility)    →    (high accessibility)
+//! ```
+//!
+//! More accessible antecedents (recent, topical, salient) can use reduced forms
+//! (pronouns, zeros). Less accessible antecedents need fuller descriptions.
+//!
+//! # Cross-Linguistic Variation
+//!
+//! | Language | Zero Pronouns | Nominal Articles | Honorific Pronouns |
+//! |----------|---------------|------------------|-------------------|
+//! | English | Rare | the/a | No |
+//! | Spanish | Very common | el/la/un/una | usted (formal) |
+//! | Japanese | Very common | None | Many levels |
+//! | Arabic | Common (in verbs) | al- (definite only) | No |
+//! | Chinese | Common | None | Some |
+//!
+//! # Binding Theory Implications
+//!
+//! - **Proper/Nominal**: Can be antecedents; "R-expressions" must be free
+//! - **Pronominal**: Must be free in local domain (Principle B)
+//! - **Reflexive** (subset): Must be bound in local domain (Principle A)
+//! - **Zero**: Anaphoric; requires antecedent in discourse
 
 use serde::{Deserialize, Serialize};
 
@@ -406,5 +435,96 @@ mod tests {
         assert_eq!(json, "\"zero\"");
         let recovered: MentionType = serde_json::from_str(&json).unwrap();
         assert_eq!(mt, recovered);
+    }
+
+    // =========================================================================
+    // Linguistic invariant tests - these encode theoretical constraints
+    // =========================================================================
+
+    /// The Accessibility Hierarchy (Ariel 1990): reduced forms require
+    /// more accessible (salient/recent) antecedents.
+    ///
+    /// Proper > Nominal > Pronominal > Zero
+    ///
+    /// This ordering is used for canonical mention selection.
+    #[test]
+    fn test_accessibility_hierarchy_ordering() {
+        // Proper names are most informative (lowest accessibility requirement)
+        assert!(MentionType::Proper > MentionType::Nominal);
+        assert!(MentionType::Nominal > MentionType::Pronominal);
+        assert!(MentionType::Pronominal > MentionType::Zero);
+
+        // Full chain
+        assert!(MentionType::Proper > MentionType::Zero);
+    }
+
+    /// Anaphoric types require antecedents; referential types can introduce entities.
+    ///
+    /// This is a fundamental constraint in discourse:
+    /// - "He arrived" (who?) - requires prior context
+    /// - "John arrived" - introduces an entity
+    #[test]
+    fn test_anaphoricity_constraint() {
+        // Anaphoric types: require antecedent, cannot introduce
+        assert!(MentionType::Pronominal.requires_antecedent());
+        assert!(MentionType::Zero.requires_antecedent());
+        assert!(!MentionType::Pronominal.can_introduce_entity());
+        assert!(!MentionType::Zero.can_introduce_entity());
+
+        // Referential types: can introduce, don't require antecedent
+        assert!(!MentionType::Proper.requires_antecedent());
+        assert!(MentionType::Proper.can_introduce_entity());
+
+        // Nominals are mixed - definite require antecedent, indefinite introduce
+        // So the type doesn't strictly require antecedent
+        assert!(!MentionType::Nominal.requires_antecedent());
+        assert!(MentionType::Nominal.can_introduce_entity());
+    }
+
+    /// Salience weights should reflect accessibility: fuller forms = higher salience.
+    ///
+    /// When ranking mentions in a cluster for canonical selection,
+    /// proper nouns should be preferred over pronouns.
+    #[test]
+    fn test_salience_reflects_accessibility() {
+        let proper = MentionType::Proper.salience_weight();
+        let nominal = MentionType::Nominal.salience_weight();
+        let pronominal = MentionType::Pronominal.salience_weight();
+        let zero = MentionType::Zero.salience_weight();
+
+        assert!(proper > nominal, "Proper nouns more salient than nominals");
+        assert!(nominal > pronominal, "Nominals more salient than pronouns");
+        assert!(pronominal > zero, "Pronouns more salient than zeros");
+
+        // All should be in valid range
+        for w in [proper, nominal, pronominal, zero] {
+            assert!(w > 0.0 && w <= 1.0, "Salience weight in (0, 1]");
+        }
+    }
+
+    /// Zero pronouns are the only type without surface realization.
+    ///
+    /// This distinguishes pro-drop languages (Arabic, Spanish, Japanese)
+    /// from non-pro-drop languages (English, French, German).
+    #[test]
+    fn test_zero_is_unique_surfaceless() {
+        let all_types = [
+            MentionType::Proper,
+            MentionType::Nominal,
+            MentionType::Pronominal,
+            MentionType::Zero,
+            MentionType::Unknown,
+        ];
+
+        let surfaceless: Vec<_> = all_types.iter().filter(|t| !t.has_surface_form()).collect();
+
+        assert_eq!(surfaceless.len(), 1, "Only one surfaceless type");
+        assert_eq!(*surfaceless[0], MentionType::Zero);
+    }
+
+    /// The default mention type should be Nominal (most common in text).
+    #[test]
+    fn test_default_is_nominal() {
+        assert_eq!(MentionType::default(), MentionType::Nominal);
     }
 }

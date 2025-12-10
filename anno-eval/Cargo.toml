@@ -1,0 +1,56 @@
+[package]
+name = "anno-eval"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+description = "Evaluation framework for anno: NER metrics, coreference metrics, bias analysis, dataset loaders"
+publish = false  # Not published to crates.io
+
+[dependencies]
+anno-core = { path = "../anno-core" }
+anno = { path = "../anno", default-features = false }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+itertools = { workspace = true }
+
+# Evaluation dependencies
+rand = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+dirs = { workspace = true, optional = true }
+glob = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+
+[features]
+default = []
+# Core evaluation (datasets, metrics)
+eval = ["dirs", "glob"]
+# Bias analysis
+eval-bias = ["eval"]
+# Advanced evaluation (calibration, robustness, active learning)
+eval-advanced = ["eval", "rand", "ureq", "sha2"]
+# Full evaluation suite
+eval-full = ["eval", "eval-bias", "eval-advanced"]
+# Parallel evaluation
+eval-parallel = ["eval", "rayon"]
+# Profiling support
+eval-profiling = ["eval"]
+# Discourse-aware evaluation
+discourse = ["eval", "anno/discourse"]
+
+[dev-dependencies]
+proptest = { workspace = true }
+anno-coalesce = { path = "../anno-coalesce" }
+
+[lints]
+workspace = true

@@ -10,6 +10,28 @@
 //! The enum is intentionally simple with four variants to cover most NLP use cases.
 //! For more nuanced gender representation (e.g., social vs grammatical gender),
 //! consider domain-specific extensions.
+//!
+//! # Cross-Linguistic Perspective
+//!
+//! English's masc/fem/neut system is actually unusual. Other systems include:
+//!
+//! | Language Family | System | Example |
+//! |----------------|--------|---------|
+//! | Bantu | 10-20 noun classes | Human, animal, plant, tool, abstract... |
+//! | Dyirbal | 4 semantic classes | Men; women/fire/danger; edible plants; other |
+//! | Algonquian | Animate/inanimate | Rocks can be "animate" if culturally significant |
+//! | Navajo | Shape classifiers | Long-slender, flat, round, granular... |
+//!
+//! For these languages, our `Gender` enum is insufficient. Future work may need
+//! a more general `NounClass` system.
+//!
+//! # Grammatical vs Social Gender
+//!
+//! This enum conflates grammatical gender (agreement class) with social gender
+//! (identity). In many languages these differ:
+//! - German "das Mädchen" (girl) is grammatically neuter
+//! - Arabic has grammatical gender for all nouns, not just animate ones
+//! - Some languages have no grammatical gender but complex honorific systems
 
 use serde::{Deserialize, Serialize};
 
@@ -61,12 +83,24 @@ impl Gender {
     #[must_use]
     pub fn from_pronoun(pronoun: &str) -> Option<Self> {
         match pronoun.to_lowercase().as_str() {
+            // Traditional gendered pronouns
             "he" | "him" | "his" | "himself" => Some(Gender::Masculine),
             "she" | "her" | "hers" | "herself" => Some(Gender::Feminine),
+            // Singular they / plural they (Neutral)
             "they" | "them" | "their" | "theirs" | "themself" | "themselves" => {
                 Some(Gender::Neutral)
             }
+            // Inanimate (Neutral)
             "it" | "its" | "itself" => Some(Gender::Neutral),
+            // Neopronouns (Unknown - explicitly non-binary, distinct from neutral "they")
+            // xe/xem set
+            "xe" | "xem" | "xyr" | "xyrs" | "xemself" => Some(Gender::Unknown),
+            // ze/hir set
+            "ze" | "hir" | "hirs" | "hirself" => Some(Gender::Unknown),
+            // ey/em set (Spivak pronouns)
+            "ey" | "em" | "eir" | "eirs" | "emself" => Some(Gender::Unknown),
+            // fae/faer set
+            "fae" | "faer" | "faers" | "faerself" => Some(Gender::Unknown),
             _ => None,
         }
     }
@@ -233,5 +267,151 @@ mod tests {
     #[test]
     fn test_default() {
         assert_eq!(Gender::default(), Gender::Neutral);
+    }
+
+    #[test]
+    fn test_neopronoun_detection() {
+        // Neopronouns should return Gender::Unknown (explicitly non-binary)
+        // xe/xem set
+        for pronoun in &["xe", "xem", "xyr", "xyrs", "xemself"] {
+            assert_eq!(
+                Gender::from_pronoun(pronoun),
+                Some(Gender::Unknown),
+                "xe/xem set: {}",
+                pronoun
+            );
+        }
+        // ze/hir set
+        for pronoun in &["ze", "hir", "hirs", "hirself"] {
+            assert_eq!(
+                Gender::from_pronoun(pronoun),
+                Some(Gender::Unknown),
+                "ze/hir set: {}",
+                pronoun
+            );
+        }
+        // ey/em set (Spivak pronouns)
+        for pronoun in &["ey", "em", "eir", "eirs", "emself"] {
+            assert_eq!(
+                Gender::from_pronoun(pronoun),
+                Some(Gender::Unknown),
+                "ey/em set: {}",
+                pronoun
+            );
+        }
+        // fae/faer set
+        for pronoun in &["fae", "faer", "faers", "faerself"] {
+            assert_eq!(
+                Gender::from_pronoun(pronoun),
+                Some(Gender::Unknown),
+                "fae/faer set: {}",
+                pronoun
+            );
+        }
+    }
+
+    // =========================================================================
+    // Linguistic invariant tests - encoding theoretical constraints
+    // =========================================================================
+
+    /// Neutral gender (they/it) is compatible with all genders.
+    ///
+    /// This models English singular "they" which can refer to any gender:
+    /// - "The doctor said they would call back" (gender unknown)
+    /// - "Alex brought their laptop" (Alex could be any gender)
+    ///
+    /// Also models "it" for inanimate referents that have grammatical gender
+    /// in other languages (e.g., German "das Mädchen" = neuter "girl").
+    #[test]
+    fn test_neutral_is_universally_compatible() {
+        for gender in [
+            Gender::Masculine,
+            Gender::Feminine,
+            Gender::Neutral,
+            Gender::Unknown,
+        ] {
+            assert!(
+                Gender::Neutral.is_compatible(&gender),
+                "Neutral should be compatible with {:?}",
+                gender
+            );
+            assert!(
+                gender.is_compatible(&Gender::Neutral),
+                "{:?} should be compatible with Neutral",
+                gender
+            );
+        }
+    }
+
+    /// Masculine and Feminine are mutually exclusive.
+    ///
+    /// This is the core binary gender constraint in agreement systems.
+    /// "John... she" and "Mary... he" are typically ungrammatical.
+    #[test]
+    fn test_binary_gender_exclusion() {
+        assert!(!Gender::Masculine.is_compatible(&Gender::Feminine));
+        assert!(!Gender::Feminine.is_compatible(&Gender::Masculine));
+    }
+
+    /// Unknown gender is compatible with everything.
+    ///
+    /// Used for:
+    /// - Neopronouns (ze, xe, fae) that explicitly reject binary gender
+    /// - Names without clear gender marking ("Alex", "Jordan", "Morgan")
+    /// - Entities whose gender is not yet established in discourse
+    #[test]
+    fn test_unknown_is_maximally_permissive() {
+        for gender in [
+            Gender::Masculine,
+            Gender::Feminine,
+            Gender::Neutral,
+            Gender::Unknown,
+        ] {
+            assert!(
+                Gender::Unknown.is_compatible(&gender),
+                "Unknown should be compatible with {:?}",
+                gender
+            );
+        }
+    }
+
+    /// Pronoun paradigms should be complete (subject, object, possessive, reflexive).
+    ///
+    /// Each gender should provide all forms needed for English sentence generation.
+    #[test]
+    fn test_pronoun_paradigms_complete() {
+        for gender in [
+            Gender::Masculine,
+            Gender::Feminine,
+            Gender::Neutral,
+            Gender::Unknown,
+        ] {
+            // All forms should be non-empty
+            assert!(!gender.subject_pronoun().is_empty());
+            assert!(!gender.object_pronoun().is_empty());
+            assert!(!gender.possessive_pronoun().is_empty());
+        }
+    }
+
+    /// Neopronouns should map to Unknown, not Neutral.
+    ///
+    /// This distinction matters because:
+    /// - Neutral (they/it) is a grammatical category that can refer to any gender
+    /// - Unknown marks explicitly non-binary identity (neopronouns)
+    ///
+    /// The difference is semantic, not just grammatical.
+    #[test]
+    fn test_neopronoun_vs_neutral_distinction() {
+        // Traditional neutral pronouns → Neutral
+        assert_eq!(Gender::from_pronoun("they"), Some(Gender::Neutral));
+        assert_eq!(Gender::from_pronoun("it"), Some(Gender::Neutral));
+
+        // Neopronouns → Unknown (explicitly non-binary identity)
+        assert_eq!(Gender::from_pronoun("xe"), Some(Gender::Unknown));
+        assert_eq!(Gender::from_pronoun("ze"), Some(Gender::Unknown));
+        assert_eq!(Gender::from_pronoun("fae"), Some(Gender::Unknown));
+
+        // This means: Neutral is a grammatical convenience,
+        // Unknown is a semantic marker of gender identity
     }
 }

@@ -138,29 +138,39 @@ pub fn cache_dir() -> std::path::PathBuf {
         return std::path::PathBuf::from(dir);
     }
 
-    // Platform-specific default
-    #[cfg(target_os = "macos")]
+    // When eval feature is enabled, use platform-specific cache directories
+    // (the eval feature enables the dirs crate)
+    #[cfg(feature = "eval")]
     {
-        dirs::home_dir()
-            .map(|h| h.join("Library/Caches/anno"))
-            .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"))
+        #[cfg(target_os = "macos")]
+        {
+            return dirs::home_dir()
+                .map(|h| h.join("Library/Caches/anno"))
+                .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"));
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            return dirs::cache_dir()
+                .map(|c| c.join("anno"))
+                .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"));
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            return dirs::cache_dir()
+                .map(|c| c.join("anno"))
+                .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"));
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+        {
+            return std::path::PathBuf::from(".anno-cache");
+        }
     }
 
-    #[cfg(target_os = "linux")]
-    {
-        dirs::cache_dir()
-            .map(|c| c.join("anno"))
-            .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"))
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        dirs::cache_dir()
-            .map(|c| c.join("anno"))
-            .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"))
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    // Fallback when eval feature is not enabled
+    #[cfg(not(feature = "eval"))]
     {
         std::path::PathBuf::from(".anno-cache")
     }
@@ -177,7 +187,7 @@ mod tests {
 KEY1=value1
 KEY2="quoted value"
 KEY3='single quoted'
-  SPACED_KEY = spaced_value  
+  SPACED_KEY = spaced_value
 "#;
         // Use unique keys to avoid test pollution
         let test_prefix = format!("ANNO_TEST_{}", std::process::id());

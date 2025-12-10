@@ -54,6 +54,11 @@ impl BackendFactory {
             "pattern" | "patternner" | "regex" | "regexner" => Ok(Box::new(crate::RegexNER::new())),
             "heuristic" | "heuristicner" => Ok(Box::new(crate::HeuristicNER::new())),
             "stacked" | "stackedner" => Ok(Box::new(crate::StackedNER::default())),
+            "crf" | "crfner" => Ok(Box::new(crate::backends::crf::CrfNER::new())),
+            "ensemble" | "ensemblener" => {
+                use crate::backends::ensemble::EnsembleNER;
+                Ok(Box::new(EnsembleNER::default()) as Box<dyn Model>)
+            }
 
             // ONNX backends
             #[cfg(feature = "onnx")]
@@ -234,7 +239,7 @@ impl BackendFactory {
 
             // Unknown backend
             _ => Err(crate::Error::InvalidInput(format!(
-                "Unknown backend: '{}'. Available: pattern, heuristic, stacked, tplinker{}",
+                "Unknown backend: '{}'. Available: pattern, heuristic, stacked, crf, ensemble, tplinker{}",
                 backend_name,
                 if cfg!(feature = "onnx") {
                     ", bert_onnx, gliner_onnx, nuner, w2ner, gliner2"
@@ -253,6 +258,8 @@ impl BackendFactory {
             "pattern",
             "heuristic",
             "stacked",
+            "crf",
+            "ensemble",
             "tplinker",
             "universal_ner",
         ];

@@ -169,16 +169,40 @@ impl CrfNER {
     pub fn new() -> Self {
         // Default gazetteers (common names, locations, organizations)
         let mut gazetteers = HashMap::new();
-        
+
         gazetteers.insert(
             EntityType::Person,
             vec![
                 // Common first names
-                "John", "Mary", "James", "Robert", "Michael", "David", "William",
-                "Richard", "Joseph", "Thomas", "Elizabeth", "Jennifer", "Linda",
-                "Barbara", "Susan", "Jessica", "Sarah", "Karen", "Nancy", "Margaret",
+                "John",
+                "Mary",
+                "James",
+                "Robert",
+                "Michael",
+                "David",
+                "William",
+                "Richard",
+                "Joseph",
+                "Thomas",
+                "Elizabeth",
+                "Jennifer",
+                "Linda",
+                "Barbara",
+                "Susan",
+                "Jessica",
+                "Sarah",
+                "Karen",
+                "Nancy",
+                "Margaret",
                 // Titles that precede names
-                "Dr", "Mr", "Mrs", "Ms", "Prof", "President", "CEO", "Senator",
+                "Dr",
+                "Mr",
+                "Mrs",
+                "Ms",
+                "Prof",
+                "President",
+                "CEO",
+                "Senator",
             ]
             .into_iter()
             .map(String::from)
@@ -189,13 +213,41 @@ impl CrfNER {
             EntityType::Location,
             vec![
                 // Countries
-                "USA", "UK", "France", "Germany", "China", "Japan", "India", "Brazil",
-                "Canada", "Australia", "Russia", "Italy", "Spain", "Mexico",
+                "USA",
+                "UK",
+                "France",
+                "Germany",
+                "China",
+                "Japan",
+                "India",
+                "Brazil",
+                "Canada",
+                "Australia",
+                "Russia",
+                "Italy",
+                "Spain",
+                "Mexico",
                 // US States
-                "California", "Texas", "Florida", "New York", "Illinois", "Pennsylvania",
+                "California",
+                "Texas",
+                "Florida",
+                "New York",
+                "Illinois",
+                "Pennsylvania",
                 // Major cities
-                "London", "Paris", "Tokyo", "Beijing", "Moscow", "Berlin", "Rome",
-                "Madrid", "Sydney", "Toronto", "Mumbai", "Shanghai", "Seoul",
+                "London",
+                "Paris",
+                "Tokyo",
+                "Beijing",
+                "Moscow",
+                "Berlin",
+                "Rome",
+                "Madrid",
+                "Sydney",
+                "Toronto",
+                "Mumbai",
+                "Shanghai",
+                "Seoul",
             ]
             .into_iter()
             .map(String::from)
@@ -206,12 +258,37 @@ impl CrfNER {
             EntityType::Organization,
             vec![
                 // Companies
-                "Google", "Apple", "Microsoft", "Amazon", "Facebook", "Tesla", "IBM",
-                "Intel", "Oracle", "Cisco", "Samsung", "Sony", "Toyota", "Honda",
+                "Google",
+                "Apple",
+                "Microsoft",
+                "Amazon",
+                "Facebook",
+                "Tesla",
+                "IBM",
+                "Intel",
+                "Oracle",
+                "Cisco",
+                "Samsung",
+                "Sony",
+                "Toyota",
+                "Honda",
                 // Suffixes
-                "Inc", "Corp", "LLC", "Ltd", "Company", "Corporation", "Group",
+                "Inc",
+                "Corp",
+                "LLC",
+                "Ltd",
+                "Company",
+                "Corporation",
+                "Group",
                 // Organizations
-                "UN", "NATO", "WHO", "FBI", "CIA", "NASA", "EU", "OPEC",
+                "UN",
+                "NATO",
+                "WHO",
+                "FBI",
+                "CIA",
+                "NASA",
+                "EU",
+                "OPEC",
             ]
             .into_iter()
             .map(String::from)
@@ -261,7 +338,7 @@ impl CrfNER {
     }
 
     /// Load weights from a JSON file.
-    /// 
+    ///
     /// # Example JSON format:
     /// ```json
     /// {
@@ -271,10 +348,12 @@ impl CrfNER {
     /// }
     /// ```
     pub fn load_weights(path: &str) -> Result<HashMap<String, f64>> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| crate::Error::invalid_input(format!("Failed to read weights file: {}", e)))?;
-        let weights: HashMap<String, f64> = serde_json::from_str(&content)
-            .map_err(|e| crate::Error::invalid_input(format!("Failed to parse weights JSON: {}", e)))?;
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            crate::Error::invalid_input(format!("Failed to read weights file: {}", e))
+        })?;
+        let weights: HashMap<String, f64> = serde_json::from_str(&content).map_err(|e| {
+            crate::Error::invalid_input(format!("Failed to parse weights JSON: {}", e))
+        })?;
         Ok(weights)
     }
 
@@ -287,7 +366,7 @@ impl CrfNER {
     }
 
     /// Create default heuristic weights for common features.
-    /// 
+    ///
     /// These weights are hand-tuned heuristics, not learned from data.
     /// For better accuracy, train weights using scripts/train_crf_weights.py
     /// and load them with `CrfNER::with_weights("crf_weights.json")`.
@@ -296,12 +375,12 @@ impl CrfNER {
 
         // Strong bias toward O (outside) by default - entities are rare
         w.insert("bias:O".to_string(), 3.0);
-        
+
         // Extra strong bias for lowercase words
         w.insert("shape=x:O".to_string(), 2.5);
         w.insert("shape=x:B-PER".to_string(), -3.0);
         w.insert("shape=x:I-PER".to_string(), -2.0);
-        
+
         // Gazetteer features are very strong signals for B- tags
         w.insert("gaz:PER:B-PER".to_string(), 4.0);
         w.insert("gaz:LOC:B-LOC".to_string(), 4.0);
@@ -311,17 +390,101 @@ impl CrfNER {
         w.insert("shape=Xx:B-PER".to_string(), 2.0);
         w.insert("shape=Xx:B-LOC".to_string(), 1.5);
         w.insert("shape=Xx:B-ORG".to_string(), 1.5);
-        w.insert("shape=Xx:I-PER".to_string(), 1.0);  // Continue if already in entity
+        w.insert("shape=Xx:I-PER".to_string(), 1.0); // Continue if already in entity
         w.insert("shape=Xx:I-ORG".to_string(), 1.0);
         w.insert("shape=XX:B-ORG".to_string(), 2.5); // Acronyms like IBM, NASA
-        
+
         // Lowercase words are unlikely to be entity starts
         w.insert("shape=x:B-PER".to_string(), -2.0);
         w.insert("shape=x:B-ORG".to_string(), -2.0);
         w.insert("shape=x:B-LOC".to_string(), -2.0);
-        
+
         // Common words that are NOT entities - strongly bias toward O
-        for word in ["the", "a", "an", "of", "in", "at", "to", "and", "or", "is", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might", "must", "can", "won", "works", "worked", "working", "serves", "served", "announced", "said", "made", "that", "this", "which", "for", "with", "as", "by", "on", "from", "into", "through", "during", "before", "after", "above", "below", "between", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "each", "few", "more", "most", "other", "some", "such", "no", "not", "only", "own", "same", "so", "than", "too", "very"] {
+        for word in [
+            "the",
+            "a",
+            "an",
+            "of",
+            "in",
+            "at",
+            "to",
+            "and",
+            "or",
+            "is",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "can",
+            "won",
+            "works",
+            "worked",
+            "working",
+            "serves",
+            "served",
+            "announced",
+            "said",
+            "made",
+            "that",
+            "this",
+            "which",
+            "for",
+            "with",
+            "as",
+            "by",
+            "on",
+            "from",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "between",
+            "under",
+            "again",
+            "further",
+            "then",
+            "once",
+            "here",
+            "there",
+            "when",
+            "where",
+            "why",
+            "how",
+            "all",
+            "each",
+            "few",
+            "more",
+            "most",
+            "other",
+            "some",
+            "such",
+            "no",
+            "not",
+            "only",
+            "own",
+            "same",
+            "so",
+            "than",
+            "too",
+            "very",
+        ] {
             w.insert(format!("w={}:O", word), 5.0);
             w.insert(format!("w={}:B-PER", word), -5.0);
             w.insert(format!("w={}:B-ORG", word), -5.0);
@@ -336,7 +499,7 @@ impl CrfNER {
         w.insert("suf4=corp:B-ORG".to_string(), 3.0);
         w.insert("suf3=ltd:B-ORG".to_string(), 3.0);
         w.insert("suf3=llc:B-ORG".to_string(), 3.0);
-        
+
         // Context words that suggest entities
         w.insert("w[-1]=dr:B-PER".to_string(), 2.5);
         w.insert("w[-1]=mr:B-PER".to_string(), 2.5);
@@ -345,7 +508,7 @@ impl CrfNER {
         w.insert("w[-1]=prof:B-PER".to_string(), 2.5);
         w.insert("w[-1]=president:B-PER".to_string(), 2.0);
         w.insert("w[-1]=ceo:B-PER".to_string(), 2.0);
-        
+
         // Location context
         w.insert("w[-1]=in:B-LOC".to_string(), 1.5);
         w.insert("w[-1]=at:B-LOC".to_string(), 1.5);
@@ -361,7 +524,7 @@ impl CrfNER {
         w.insert("trans:I-PER->I-PER".to_string(), 2.0);
         w.insert("trans:I-ORG->I-ORG".to_string(), 2.0);
         w.insert("trans:I-LOC->I-LOC".to_string(), 2.0);
-        
+
         // End entity transitions
         w.insert("trans:B-PER->O".to_string(), 0.0);
         w.insert("trans:B-ORG->O".to_string(), 0.0);
@@ -369,13 +532,13 @@ impl CrfNER {
         w.insert("trans:I-PER->O".to_string(), 0.0);
         w.insert("trans:I-ORG->O".to_string(), 0.0);
         w.insert("trans:I-LOC->O".to_string(), 0.0);
-        
+
         // Invalid transitions (strongly penalize)
         w.insert("trans:O->I-PER".to_string(), -10.0);
         w.insert("trans:O->I-ORG".to_string(), -10.0);
         w.insert("trans:O->I-LOC".to_string(), -10.0);
         w.insert("trans:O->I-MISC".to_string(), -10.0);
-        
+
         // Cross-type I- transitions are invalid
         w.insert("trans:B-PER->I-ORG".to_string(), -10.0);
         w.insert("trans:B-PER->I-LOC".to_string(), -10.0);
@@ -524,11 +687,11 @@ impl CrfNER {
     fn score_label(&self, features: &[String], label: &str) -> f64 {
         let mut score = 0.0;
         let debug = std::env::var("CRF_DEBUG").is_ok();
-        
+
         if debug && label == "I-PER" {
             eprintln!("  Features for I-PER: {:?}", features);
         }
-        
+
         for feat in features {
             let key = format!("{}:{}", feat, label);
             if let Some(&w) = self.weights.get(&key) {
@@ -576,7 +739,7 @@ impl CrfNER {
 
                 for (k, prev_label) in self.labels.iter().enumerate() {
                     let features = self.extract_features(tokens, i, prev_label);
-                    let trans_key = format!("trans:{}->{}",  prev_label, label);
+                    let trans_key = format!("trans:{}->{}", prev_label, label);
                     let trans_score = self.weights.get(&trans_key).copied().unwrap_or(0.0);
                     let score = scores[i - 1][k] + self.score_label(&features, label) + trans_score;
 
@@ -620,15 +783,15 @@ impl CrfNER {
     /// first occurrence, causing incorrect offsets for duplicate entities.
     fn labels_to_entities(&self, text: &str, tokens: &[&str], labels: &[String]) -> Vec<Entity> {
         use crate::offset::SpanConverter;
-        
+
         let mut entities = Vec::new();
-        
+
         // Build converter once for all byte-to-char conversions
         let converter = SpanConverter::new(text);
-        
+
         // Track token positions (byte offsets) as we iterate
         let token_positions: Vec<(usize, usize)> = Self::calculate_token_positions(text, tokens);
-        
+
         let mut current_entity: Option<(usize, usize, EntityType, Vec<&str>)> = None;
 
         for (i, (token, label)) in tokens.iter().zip(labels.iter()).enumerate() {
@@ -636,8 +799,13 @@ impl CrfNER {
                 // Save previous entity if any
                 if let Some((start_idx, end_idx, entity_type, words)) = current_entity.take() {
                     Self::push_entity_from_positions(
-                        &converter, &token_positions, start_idx, end_idx,
-                        &words, entity_type, &mut entities
+                        &converter,
+                        &token_positions,
+                        start_idx,
+                        end_idx,
+                        &words,
+                        entity_type,
+                        &mut entities,
                     );
                 }
 
@@ -659,8 +827,13 @@ impl CrfNER {
                 // O label - save and reset
                 if let Some((start_idx, end_idx, entity_type, words)) = current_entity.take() {
                     Self::push_entity_from_positions(
-                        &converter, &token_positions, start_idx, end_idx,
-                        &words, entity_type, &mut entities
+                        &converter,
+                        &token_positions,
+                        start_idx,
+                        end_idx,
+                        &words,
+                        entity_type,
+                        &mut entities,
                     );
                 }
             }
@@ -669,14 +842,19 @@ impl CrfNER {
         // Don't forget last entity
         if let Some((start_idx, end_idx, entity_type, words)) = current_entity.take() {
             Self::push_entity_from_positions(
-                &converter, &token_positions, start_idx, end_idx,
-                &words, entity_type, &mut entities
+                &converter,
+                &token_positions,
+                start_idx,
+                end_idx,
+                &words,
+                entity_type,
+                &mut entities,
             );
         }
 
         entities
     }
-    
+
     /// Calculate byte positions for each token in the text.
     fn calculate_token_positions(text: &str, tokens: &[&str]) -> Vec<(usize, usize)> {
         let mut positions = Vec::with_capacity(tokens.len());
@@ -711,13 +889,13 @@ impl CrfNER {
         if start_token_idx >= positions.len() || end_token_idx >= positions.len() {
             return;
         }
-        
+
         let byte_start = positions[start_token_idx].0;
         let byte_end = positions[end_token_idx].1;
         let char_start = converter.byte_to_char(byte_start);
         let char_end = converter.byte_to_char(byte_end);
         let entity_text = words.join(" ");
-        
+
         entities.push(Entity::new(
             &entity_text,
             entity_type,
@@ -793,8 +971,10 @@ mod tests {
     #[test]
     fn test_crf_basic() {
         let ner = CrfNER::new();
-        let entities = ner.extract_entities("John Smith works at Google in California.", None).unwrap();
-        
+        let entities = ner
+            .extract_entities("John Smith works at Google in California.", None)
+            .unwrap();
+
         // Should find some entities (quality depends on weights)
         assert!(!entities.is_empty() || true); // CRF with heuristic weights may not find all
     }
@@ -824,7 +1004,7 @@ mod tests {
     #[test]
     fn test_gazetteer_lookup() {
         let ner = CrfNER::new();
-        
+
         // Gazetteer should contain common entities
         assert!(ner.gazetteers[&EntityType::Person].contains(&"John".to_string()));
         assert!(ner.gazetteers[&EntityType::Location].contains(&"California".to_string()));
@@ -836,20 +1016,22 @@ mod tests {
         let ner = CrfNER::new();
         let tokens = vec!["John", "works", "at", "Google"];
         let labels = ner.viterbi_decode(&tokens);
-        
+
         assert_eq!(labels.len(), tokens.len());
         for label in &labels {
             assert!(ner.labels.contains(label));
         }
     }
-    
+
     #[test]
     fn test_common_verbs_not_in_entities() {
         let ner = CrfNER::new();
-        
+
         // Test that common verbs don't get tagged as part of entities
-        let entities = ner.extract_entities("John Smith works at Apple", None).unwrap();
-        
+        let entities = ner
+            .extract_entities("John Smith works at Apple", None)
+            .unwrap();
+
         // Should find John Smith and Apple, but NOT "works"
         let entity_texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
         for entity_text in &entity_texts {
@@ -860,35 +1042,49 @@ mod tests {
             );
         }
     }
-    
+
     #[test]
     fn test_weights_for_common_words() {
         let ner = CrfNER::new();
-        
+
         // Check that weights exist for common stop words
-        assert!(ner.weights.get("w=works:O").is_some(), "Missing weight for w=works:O");
-        assert!(ner.weights.get("w=works:I-PER").is_some(), "Missing weight for w=works:I-PER");
-        
+        assert!(
+            ner.weights.get("w=works:O").is_some(),
+            "Missing weight for w=works:O"
+        );
+        assert!(
+            ner.weights.get("w=works:I-PER").is_some(),
+            "Missing weight for w=works:I-PER"
+        );
+
         // Check that O weight is positive and I-* weight is negative
         let o_weight = *ner.weights.get("w=works:O").unwrap();
         let i_per_weight = *ner.weights.get("w=works:I-PER").unwrap();
-        assert!(o_weight > 0.0, "O weight should be positive, got {}", o_weight);
-        assert!(i_per_weight < 0.0, "I-PER weight should be negative, got {}", i_per_weight);
+        assert!(
+            o_weight > 0.0,
+            "O weight should be positive, got {}",
+            o_weight
+        );
+        assert!(
+            i_per_weight < 0.0,
+            "I-PER weight should be negative, got {}",
+            i_per_weight
+        );
     }
-    
+
     #[test]
     fn test_unicode_char_offsets() {
         // Test that entity offsets are character-based, not byte-based
         let ner = CrfNER::new();
-        
+
         // "北京" is 2 chars, 6 bytes. "Beijing" is 7 chars, 7 bytes.
         // Text "北京 Beijing" is 10 chars, 14 bytes.
         let text = "北京 Beijing";
         assert_eq!(text.len(), 14, "Expected 14 bytes");
         assert_eq!(text.chars().count(), 10, "Expected 10 characters");
-        
+
         let entities = ner.extract_entities(text, None).unwrap();
-        
+
         // Regardless of what entities are found, check all offsets are valid char offsets
         let char_count = text.chars().count();
         for entity in &entities {
@@ -905,9 +1101,13 @@ mod tests {
                 char_count,
                 text
             );
-            
+
             // Also verify we can extract the text at those offsets
-            let extracted: String = text.chars().skip(entity.start).take(entity.end - entity.start).collect();
+            let extracted: String = text
+                .chars()
+                .skip(entity.start)
+                .take(entity.end - entity.start)
+                .collect();
             assert!(
                 !extracted.is_empty() || entity.start == entity.end,
                 "Empty extraction for entity at {}..{} in {:?}",
@@ -917,7 +1117,7 @@ mod tests {
             );
         }
     }
-    
+
     /// Test that duplicate entity texts get correct offsets.
     #[test]
     fn test_duplicate_entity_offsets() {
@@ -925,24 +1125,31 @@ mod tests {
         let text = "Google bought Google for $1 billion.";
         let tokens: Vec<&str> = text.split_whitespace().collect();
         let positions = CrfNER::calculate_token_positions(text, &tokens);
-        
+
         // First "Google" at byte 0-6
-        assert_eq!(positions[0], (0, 6), "First 'Google' should be at bytes 0-6");
+        assert_eq!(
+            positions[0],
+            (0, 6),
+            "First 'Google' should be at bytes 0-6"
+        );
         // Second "Google" at byte 14-20
-        assert_eq!(positions[2], (14, 20), "Second 'Google' should be at bytes 14-20");
+        assert_eq!(
+            positions[2],
+            (14, 20),
+            "Second 'Google' should be at bytes 14-20"
+        );
     }
-    
+
     /// Test token position calculation with Unicode.
     #[test]
     fn test_token_positions_unicode() {
         let text = "東京 Tokyo 東京";
         let tokens: Vec<&str> = text.split_whitespace().collect();
         let positions = CrfNER::calculate_token_positions(text, &tokens);
-        
+
         // Each 東京 is 6 bytes (2 chars × 3 bytes each)
         assert_eq!(positions[0], (0, 6), "First '東京' at bytes 0-6");
         assert_eq!(positions[1], (7, 12), "Tokyo at bytes 7-12");
         assert_eq!(positions[2], (13, 19), "Second '東京' at bytes 13-19");
     }
 }
-
