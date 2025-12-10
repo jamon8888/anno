@@ -1833,7 +1833,18 @@ impl DatasetId {
     #[must_use]
     pub fn find_in_registry(&self) -> Option<RegistryDatasetId> {
         let name = self.name();
-        RegistryDatasetId::all().iter().find(|r| r.name() == name).copied()
+        let variant_name = format!("{:?}", self);
+
+        // Try exact name match first
+        if let Some(found) = RegistryDatasetId::all().iter().find(|r| r.name() == name).copied() {
+            return Some(found);
+        }
+
+        // Try variant name match (handles cases where display names differ)
+        RegistryDatasetId::all()
+            .iter()
+            .find(|r| format!("{:?}", r) == variant_name)
+            .copied()
     }
 
     /// Get citation information for this dataset.
@@ -11096,6 +11107,9 @@ mod tests {
             "Registry coverage: {}/{} ({:.1}%)",
             found, total, coverage
         );
+        if !missing.is_empty() {
+            eprintln!("Missing from registry: {:?}", missing);
+        }
     }
 
     #[test]
