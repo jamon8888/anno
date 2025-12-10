@@ -1,5 +1,24 @@
 //! NER and Coreference evaluation framework.
 //!
+//! # Design Note
+//!
+//! The evaluation framework lives in `anno::eval` rather than a separate `anno-eval`
+//! crate because:
+//!
+//! 1. **Circular dependency**: Evaluation functions take `&dyn Model` and reference
+//!    backend types (`HeuristicNER`, `RegexNER`, etc.). If `anno-eval` were separate,
+//!    it would depend on `anno`, preventing `anno` from re-exporting `anno-eval`.
+//!
+//! 2. **Sealed trait pattern**: The `Model` trait uses a sealed pattern to control
+//!    implementations. Moving it to `anno-core` would require removing this pattern,
+//!    allowing external crates to implement `Model`.
+//!
+//! 3. **Feature flags work**: Users who don't need evaluation can omit the `eval`
+//!    feature, which excludes most eval dependencies (dirs, glob, etc.).
+//!
+//! The archived `archive/anno-eval/` contains an earlier extraction attempt for
+//! reference.
+//!
 //! # Overview
 //!
 //! This module provides comprehensive evaluation tools for:

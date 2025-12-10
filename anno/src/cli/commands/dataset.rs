@@ -31,6 +31,7 @@ pub struct DatasetArgs {
     pub action: DatasetAction,
 }
 
+/// Dataset subcommand actions.
 #[derive(Subcommand, Debug)]
 pub enum DatasetAction {
     /// List available datasets
@@ -78,6 +79,7 @@ pub enum DatasetAction {
     },
 }
 
+/// Execute the dataset command.
 pub fn run(args: DatasetArgs) -> Result<(), String> {
     match args.action {
         DatasetAction::List {
@@ -387,9 +389,9 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             println!();
 
                             let resolver = SimpleCorefResolver::default();
-                            let mut all_pred_chains: Vec<Vec<anno_core::coref::CorefChain>> =
+                            let mut all_pred_chains: Vec<Vec<crate::eval::coref::CorefChain>> =
                                 Vec::new();
-                            let mut all_gold_chains: Vec<&[anno_core::coref::CorefChain]> =
+                            let mut all_gold_chains: Vec<&[crate::eval::coref::CorefChain]> =
                                 Vec::new();
                             let start_time = Instant::now();
 

@@ -11,12 +11,12 @@
 //!
 //! For polysynthetic languages like Cherokee, Navajo, and Mohawk, standard
 //! word-level tokenization fails because a single word can encode an entire
-//! sentence. The [`morphology`] module provides segmentation strategies and
-//! the [`MorphologicalAnalyzer`] trait for integrating external analyzers.
+//! sentence. The `morphology` module provides segmentation strategies and
+//! the `MorphologicalAnalyzer` trait for integrating external analyzers.
 //!
 //! # Parenthetical Analysis
 //!
-//! The [`parenthetical`] module extracts valuable entity information from
+//! The `parenthetical` module extracts valuable entity information from
 //! parenthetical text:
 //!
 //! ```rust

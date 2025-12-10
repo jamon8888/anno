@@ -60,6 +60,7 @@ pub struct EvalArgs {
     pub positional: Vec<String>,
 }
 
+/// Execute the eval command.
 pub fn run(args: EvalArgs) -> Result<(), String> {
     let text = get_input_text(&args.text, args.file.as_deref(), &args.positional)?;
 

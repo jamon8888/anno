@@ -51,6 +51,7 @@ pub struct BatchArgs {
     pub quiet: bool,
 }
 
+/// Execute the batch processing command.
 pub fn run(args: BatchArgs) -> Result<(), String> {
     use super::super::parser::OutputFormat;
     use super::pipeline::PipelineArgs;

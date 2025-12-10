@@ -197,7 +197,7 @@
 //!
 //! # References
 //!
-//! - NeuralCoref (HuggingFace): https://github.com/huggingface/neuralcoref
+//! - NeuralCoref (HuggingFace): <https://github.com/huggingface/neuralcoref>
 //! - Clark & Manning 2016: "Deep Reinforcement Learning for Mention-Ranking Coreference Models"
 //! - Miculicich & Henderson 2022: "Graph Refinement for Coreference Resolution"
 //!   [arXiv:2203.16574](https://arxiv.org/abs/2203.16574)
@@ -805,7 +805,7 @@ impl MentionCluster {
     /// * `signal_id_base` - Starting signal ID for the signals in this track
     ///
     /// # Returns
-    /// A tuple of (Track, Vec<Signal>) containing the track and its signals.
+    /// A tuple of `(Track, Vec<Signal>)` containing the track and its signals.
     /// The signals should be added to the GroundedDocument separately.
     #[must_use]
     pub fn to_track(

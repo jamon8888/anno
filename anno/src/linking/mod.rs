@@ -23,9 +23,9 @@
 //!
 //! | Component | Purpose | Module |
 //! |-----------|---------|--------|
-//! | **Candidate Generation** | High-recall retrieval of potential KB entries | [`candidate`] |
-//! | **NIL Detection** | Identifies unlinkable mentions | [`nil`] |
-//! | **Entity Linker** | Combines all components | [`linker`] |
+//! | **Candidate Generation** | High-recall retrieval of potential KB entries | `candidate` |
+//! | **NIL Detection** | Identifies unlinkable mentions | `nil` |
+//! | **Entity Linker** | Combines all components | `linker` |
 //!
 //! # Knowledge Bases Supported
 //!

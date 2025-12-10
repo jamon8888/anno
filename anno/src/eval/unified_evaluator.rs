@@ -210,12 +210,18 @@ pub struct DataQualityEvalResults {
     pub ambiguous_count: usize,
 }
 
-/// Evaluation metadata.
+/// Evaluation metadata captured during an evaluation run.
+///
+/// Contains timing, model identification, and basic statistics.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalMetadata {
+    /// ISO 8601 timestamp when evaluation started.
     pub timestamp: String,
+    /// Name of the model being evaluated, if known.
     pub model_name: Option<String>,
+    /// Total wall-clock duration in milliseconds.
     pub total_duration_ms: Option<f64>,
+    /// Number of examples processed.
     pub num_examples: usize,
 }
 

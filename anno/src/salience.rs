@@ -51,9 +51,9 @@
 //!
 //! | Algorithm | Graph Source | Description |
 //! |-----------|--------------|-------------|
-//! | [`GraphRankSalience`] | `GraphDocument` | PageRank on actual relations (PREFERRED) |
-//! | [`TextRankSalience`] | Entities only | PageRank on co-occurrence (fallback) |
-//! | [`PositionSalience`] | Entities only | Heuristic: early position + frequency |
+//! | `GraphRankSalience` | `GraphDocument` | PageRank on actual relations (PREFERRED) |
+//! | `TextRankSalience` | Entities only | PageRank on co-occurrence (fallback) |
+//! | `PositionSalience` | Entities only | Heuristic: early position + frequency |
 //!
 //! # Example
 //!

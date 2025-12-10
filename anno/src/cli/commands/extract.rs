@@ -88,6 +88,7 @@ pub struct ExtractArgs {
     pub positional: Vec<String>,
 }
 
+/// Execute the extract command.
 pub fn run(args: ExtractArgs) -> Result<(), String> {
     // Level 1 (Signal): Raw entity extraction from single document
     // This is the foundation for all other commands:

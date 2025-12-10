@@ -870,8 +870,11 @@ pub enum AggregationMethod {
     Max,
     /// Just use the first embedding.
     First,
-    /// Weighted mean.
-    WeightedMean { weights: Vec<f32> },
+    /// Weighted mean with custom weights per embedding dimension.
+    WeightedMean {
+        /// Weights for each embedding dimension.
+        weights: Vec<f32>,
+    },
 }
 
 impl Default for AggregationMethod {
