@@ -35,6 +35,7 @@ pub struct CompareArgs {
     pub output: Option<String>,
 }
 
+/// Execute the compare command.
 pub fn run(args: CompareArgs) -> Result<(), String> {
     if args.models {
         // Compare models on same text

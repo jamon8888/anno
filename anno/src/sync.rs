@@ -25,6 +25,7 @@ use std::sync::Mutex as StdMutex;
 #[cfg(feature = "fast-lock")]
 pub type Mutex<T> = ParkingLotMutex<T>;
 
+/// Mutex type using std::sync::Mutex (default, no fast-lock feature).
 #[cfg(not(feature = "fast-lock"))]
 pub type Mutex<T> = StdMutex<T>;
 
@@ -46,6 +47,7 @@ pub fn lock<T>(mutex: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
     mutex.lock()
 }
 
+/// Lock a mutex using std::sync::Mutex, recovering from poisoning.
 #[cfg(not(feature = "fast-lock"))]
 pub fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
@@ -79,6 +81,7 @@ pub fn try_lock<T>(mutex: &Mutex<T>) -> crate::Result<parking_lot::MutexGuard<'_
         .ok_or_else(|| crate::Error::Retrieval("Mutex lock failed: would block".to_string()))
 }
 
+/// Try to lock a mutex using std::sync::Mutex without blocking.
 #[cfg(not(feature = "fast-lock"))]
 pub fn try_lock<T>(mutex: &Mutex<T>) -> crate::Result<std::sync::MutexGuard<'_, T>> {
     mutex.try_lock().map_err(|e| match e {

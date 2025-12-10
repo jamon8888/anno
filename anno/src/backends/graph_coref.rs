@@ -76,7 +76,7 @@
 //! - **Token-level granularity**: G2GT operates on tokens; we operate on mentions.
 //!
 //! For production use with high accuracy requirements, consider a full neural
-//! implementation or the T5-based coreference in [`super::coref_t5`].
+//! implementation or the T5-based coreference in `crate::backends::coref_t5`.
 //!
 //! # Usage with MentionType
 //!

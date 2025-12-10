@@ -46,6 +46,7 @@ pub struct EnhanceArgs {
     pub export_graph: Option<String>,
 }
 
+/// Execute the enhance command.
 pub fn run(args: EnhanceArgs) -> Result<(), String> {
     // Load GroundedDocument from file or stdin
     let json_content = if args.input == "-" {

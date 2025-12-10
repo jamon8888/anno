@@ -6,9 +6,8 @@
 //! that report results using MUC/SemEval-2013 evaluation methodology.
 //!
 //! For **modern evaluation** (2024+), prefer:
-//! - [`crate::eval::dataset_quality`]: Dataset quality metrics (unseen entity ratio,
-//!   entity ambiguity, cross-corpus evaluation)
-//! - [`crate::eval::error_analysis`]: Fine-grained error taxonomy
+//! - Dataset quality metrics (unseen entity ratio, entity ambiguity, cross-corpus evaluation)
+//! - Fine-grained error taxonomy analysis
 //! - Semantic similarity metrics for LLM-based systems
 //!
 //! # Known Limitations (2023-2024 Research)

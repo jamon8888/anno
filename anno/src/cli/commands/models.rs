@@ -13,6 +13,7 @@ pub struct ModelsArgs {
     pub action: ModelsAction,
 }
 
+/// Models subcommand actions.
 #[derive(Subcommand, Debug)]
 pub enum ModelsAction {
     /// List all available models with status
@@ -32,6 +33,7 @@ pub enum ModelsAction {
     Compare,
 }
 
+/// Execute the models command.
 pub fn run(args: ModelsArgs) -> Result<(), String> {
     match args.action {
         ModelsAction::List => {

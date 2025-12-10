@@ -14,6 +14,7 @@ pub struct ConfigArgs {
     pub action: ConfigAction,
 }
 
+/// Config subcommand actions.
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
     /// Save current settings as config
@@ -58,6 +59,7 @@ pub enum ConfigAction {
     },
 }
 
+/// Execute the config command.
 pub fn run(args: ConfigArgs) -> Result<(), String> {
     let config_dir = get_config_dir()?;
 

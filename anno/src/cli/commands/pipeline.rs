@@ -62,6 +62,7 @@ pub struct PipelineArgs {
     pub quiet: bool,
 }
 
+/// Execute the pipeline command.
 pub fn run(args: PipelineArgs) -> Result<(), String> {
     // Collect input texts
     let mut texts: Vec<(String, String)> = Vec::new(); // (id, text)

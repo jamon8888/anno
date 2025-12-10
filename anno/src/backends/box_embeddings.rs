@@ -35,9 +35,9 @@ use std::f32;
 /// Coreference is modeled as high mutual conditional probability (overlap).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BoxEmbedding {
-    /// Lower bound in each dimension [d]
+    /// Lower bound in each dimension (d-dimensional vector).
     pub min: Vec<f32>,
-    /// Upper bound in each dimension [d]
+    /// Upper bound in each dimension (d-dimensional vector).
     pub max: Vec<f32>,
 }
 
@@ -70,7 +70,7 @@ impl BoxEmbedding {
 
     /// Compute the volume of the box.
     ///
-    /// Volume = ∏(max[i] - min[i])
+    /// Volume = product of (max - min) for each dimension.
     #[must_use]
     pub fn volume(&self) -> f32 {
         self.min
@@ -279,9 +279,9 @@ pub struct TemporalBox {
 /// Velocity of a temporal box (change per time unit).
 #[derive(Debug, Clone, PartialEq)]
 pub struct BoxVelocity {
-    /// Change in min bounds per time unit [d]
+    /// Change in min bounds per time unit (d-dimensional vector).
     pub min_delta: Vec<f32>,
-    /// Change in max bounds per time unit [d]
+    /// Change in max bounds per time unit (d-dimensional vector).
     pub max_delta: Vec<f32>,
 }
 
