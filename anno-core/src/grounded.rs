@@ -879,6 +879,158 @@ impl Track {
         self.entity_type = Some(entity_type.into());
         self
     }
+
+    /// Set the embedding for this track.
+    #[must_use]
+    pub fn with_embedding(mut self, embedding: Vec<f32>) -> Self {
+        self.embedding = Some(embedding);
+        self
+    }
+
+    /// Get the spread (distance from first to last mention).
+    ///
+    /// Requires document to resolve signal positions.
+    pub fn compute_spread(&self, doc: &GroundedDocument) -> Option<usize> {
+        if self.signals.is_empty() {
+            return Some(0);
+        }
+
+        let positions: Vec<usize> = self
+            .signals
+            .iter()
+            .filter_map(|sr| {
+                doc.signals
+                    .iter()
+                    .find(|s| s.id == sr.signal_id)
+                    .and_then(|s| s.location.text_offsets())
+                    .map(|(start, _)| start)
+            })
+            .collect();
+
+        if positions.is_empty() {
+            return None;
+        }
+
+        let min_pos = *positions.iter().min().unwrap();
+        let max_pos = *positions.iter().max().unwrap();
+        Some(max_pos.saturating_sub(min_pos))
+    }
+
+    /// Collect all surface form variations from signals.
+    ///
+    /// Requires document to resolve signal surfaces.
+    pub fn collect_variations(&self, doc: &GroundedDocument) -> Vec<String> {
+        let mut variations: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for sr in &self.signals {
+            if let Some(signal) = doc.signals.iter().find(|s| s.id == sr.signal_id) {
+                variations.insert(signal.surface.clone());
+            }
+        }
+
+        variations.into_iter().collect()
+    }
+
+    /// Get confidence statistics across all signals.
+    ///
+    /// Returns (min, max, mean) confidence values.
+    pub fn confidence_stats(&self, doc: &GroundedDocument) -> Option<(f32, f32, f32)> {
+        let confidences: Vec<f32> = self
+            .signals
+            .iter()
+            .filter_map(|sr| {
+                doc.signals
+                    .iter()
+                    .find(|s| s.id == sr.signal_id)
+                    .map(|s| s.confidence)
+            })
+            .collect();
+
+        if confidences.is_empty() {
+            return None;
+        }
+
+        let min = confidences.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max = confidences
+            .iter()
+            .cloned()
+            .fold(f32::NEG_INFINITY, f32::max);
+        let mean = confidences.iter().sum::<f32>() / confidences.len() as f32;
+
+        Some((min, max, mean))
+    }
+
+    /// Compute aggregate statistics for this track.
+    ///
+    /// Returns a `TrackStats` struct with comprehensive aggregate features.
+    pub fn compute_stats(&self, doc: &GroundedDocument, text_len: usize) -> TrackStats {
+        let chain_length = self.signals.len();
+        let spread = self.compute_spread(doc).unwrap_or(0);
+        let variations = self.collect_variations(doc);
+        let (min_conf, max_conf, mean_conf) = self.confidence_stats(doc).unwrap_or((0.0, 0.0, 0.0));
+
+        // Compute first/last positions
+        let positions: Vec<usize> = self
+            .signals
+            .iter()
+            .filter_map(|sr| {
+                doc.signals
+                    .iter()
+                    .find(|s| s.id == sr.signal_id)
+                    .and_then(|s| s.location.text_offsets())
+                    .map(|(start, _)| start)
+            })
+            .collect();
+
+        let first_position = positions.iter().min().copied().unwrap_or(0);
+        let last_position = positions.iter().max().copied().unwrap_or(0);
+        let relative_spread = if text_len > 0 {
+            spread as f64 / text_len as f64
+        } else {
+            0.0
+        };
+
+        TrackStats {
+            chain_length,
+            variation_count: variations.len(),
+            variations,
+            spread,
+            relative_spread,
+            first_position,
+            last_position,
+            min_confidence: min_conf,
+            max_confidence: max_conf,
+            mean_confidence: mean_conf,
+            has_embedding: self.embedding.is_some(),
+        }
+    }
+}
+
+/// Aggregate statistics for a track (coreference chain).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TrackStats {
+    /// Number of mentions in the track.
+    pub chain_length: usize,
+    /// Number of unique surface form variations.
+    pub variation_count: usize,
+    /// All surface form variations.
+    pub variations: Vec<String>,
+    /// Spread in characters (first to last mention).
+    pub spread: usize,
+    /// Spread as fraction of document length.
+    pub relative_spread: f64,
+    /// Position of first mention.
+    pub first_position: usize,
+    /// Position of last mention.
+    pub last_position: usize,
+    /// Minimum confidence across mentions.
+    pub min_confidence: f32,
+    /// Maximum confidence across mentions.
+    pub max_confidence: f32,
+    /// Mean confidence across mentions.
+    pub mean_confidence: f32,
+    /// Whether this track has an embedding.
+    pub has_embedding: bool,
 }
 
 // =============================================================================
@@ -1104,7 +1256,7 @@ pub struct GroundedDocument {
     pub identities: HashMap<IdentityId, Identity>,
     /// Index: signal_id → track_id (for efficient lookup)
     signal_to_track: HashMap<SignalId, TrackId>,
-    /// Index: track_id → identity_id (for efficient lookup)  
+    /// Index: track_id → identity_id (for efficient lookup)
     track_to_identity: HashMap<TrackId, IdentityId>,
     /// Next signal ID (for auto-incrementing)
     next_signal_id: SignalId,
@@ -2185,7 +2337,7 @@ tr:hover{background:#111}
     ));
     html.push_str(&format!(r#"<div class="stat"><div class="stat-v">{}</div><div class="stat-l">untracked</div></div>"#, stats.untracked_count));
     if stats.iconic_count > 0 || stats.hybrid_count > 0 {
-        html.push_str(&format!(r#"<div class="stat"><div class="stat-v">{}/{}/{}</div><div class="stat-l">sym/ico/hyb</div></div>"#, 
+        html.push_str(&format!(r#"<div class="stat"><div class="stat-v">{}/{}/{}</div><div class="stat-l">sym/ico/hyb</div></div>"#,
             stats.symbolic_count, stats.iconic_count, stats.hybrid_count));
     }
     html.push_str(r#"</div>"#);
@@ -2388,7 +2540,7 @@ pub struct EvalComparison {
     pub text: String,
     /// Gold/ground truth signals
     pub gold: Vec<Signal<Location>>,
-    /// Predicted signals  
+    /// Predicted signals
     pub predicted: Vec<Signal<Location>>,
     /// Match results
     pub matches: Vec<EvalMatch>,

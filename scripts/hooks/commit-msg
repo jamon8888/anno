@@ -1,0 +1,37 @@
+#!/bin/bash
+# Commit message validation hook
+# Encourages (but doesn't enforce) conventional commit format
+#
+# Install: just setup-hooks
+# Or: cp scripts/hooks/* .git/hooks/ && chmod +x .git/hooks/*
+
+COMMIT_MSG_FILE=$1
+COMMIT_MSG=$(head -n 1 "$COMMIT_MSG_FILE")
+
+# Block commits with very short messages
+if [ ${#COMMIT_MSG} -lt 10 ]; then
+    echo "error: commit message too short (minimum 10 characters)"
+    echo "  current: '$COMMIT_MSG'"
+    exit 1
+fi
+
+# Allow merge/revert commits
+if echo "$COMMIT_MSG" | grep -qE "^(Merge|Revert|Release)"; then
+    exit 0
+fi
+
+# Check for conventional commit format (hint only, don't block)
+if ! echo "$COMMIT_MSG" | grep -qE "^[a-z]+(\(.+\))?: .{5,}"; then
+    echo ""
+    echo "hint: consider conventional commit format"
+    echo "  format: type(scope): description"
+    echo "  examples:"
+    echo "    feat(coref): add easy-first clustering"
+    echo "    fix: resolve Unicode offset bug"
+    echo "    docs: improve Entity rustdoc"
+    echo ""
+    echo "  your message: '$COMMIT_MSG'"
+    echo ""
+fi
+
+exit 0

@@ -81,6 +81,8 @@ pub mod backends;
 pub mod edit_distance;
 pub mod error;
 pub mod eval;
+/// Entity feature extraction for downstream ML and analysis.
+pub mod features;
 pub mod ingest;
 /// Joint inference for coreference resolution and entity linking.
 pub mod joint;
@@ -123,7 +125,7 @@ pub use anno_core::{
     ExtractionMethod, GraphDocument, GraphEdge, GraphExportFormat, GraphNode, GroundedDocument,
     HashMapLexicon, HierarchicalConfidence, Identity, IdentityId, IdentitySource, Lexicon,
     Location, Modality, Provenance, Quantifier, RaggedBatch, Relation, Signal, SignalId, SignalRef,
-    Span, SpanCandidate, Track, TrackId, TrackRef, TypeMapper, ValidationIssue,
+    Span, SpanCandidate, Track, TrackId, TrackRef, TrackStats, TypeMapper, ValidationIssue,
 };
 
 /// Re-export graph module for backward compatibility (anno::graph::*)

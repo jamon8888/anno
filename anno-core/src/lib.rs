@@ -96,7 +96,7 @@ pub use entity::{
 
 pub use grounded::{
     Corpus, GroundedDocument, Identity, IdentityId, IdentitySource, Location, Modality, Quantifier,
-    Signal, SignalId, SignalRef, Track, TrackId, TrackRef,
+    Signal, SignalId, SignalRef, Track, TrackId, TrackRef, TrackStats,
 };
 
 pub use error::{Error, Result};

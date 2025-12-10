@@ -93,6 +93,7 @@
 //! - Mihalcea & Tarau (2004): TextRank: Bringing Order into Text
 //! - Campos et al. (2018): YAKE! Collection-independent keyword extraction
 
+use crate::features::{ChainFeatures, EntityFeatureExtractor, ExtractorConfig, MentionType};
 use crate::Entity;
 use std::collections::HashMap;
 
@@ -627,6 +628,185 @@ impl std::fmt::Debug for dyn EntityRanker {
     }
 }
 
+// =============================================================================
+// Chain-Feature Based Salience
+// =============================================================================
+
+/// Chain-feature based salience ranking.
+///
+/// Uses aggregate chain features (frequency, spread, mention type distribution)
+/// to compute entity salience. This integrates with the `features` module
+/// for comprehensive entity analysis.
+///
+/// # Features Used
+///
+/// | Feature | Weight | Rationale |
+/// |---------|--------|-----------|
+/// | Chain length | High | More mentions = more salient |
+/// | Spread | Medium | Mentions across document = important |
+/// | Named ratio | Medium | Named mentions indicate main entities |
+/// | First position | Low | Earlier = slightly more salient |
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use anno::salience::{EntityRanker, ChainFeatureSalience};
+///
+/// let text = "Barack Obama met Angela Merkel. Obama discussed policy with her.";
+/// let entities = ner.extract_entities(text, None)?;
+///
+/// let ranker = ChainFeatureSalience::default();
+/// let ranked = ranker.rank(text, &entities);
+/// // Obama has longer chain, ranked higher
+/// ```
+#[derive(Debug, Clone)]
+pub struct ChainFeatureSalience {
+    /// Weight for chain length (frequency).
+    pub length_weight: f64,
+    /// Weight for mention spread.
+    pub spread_weight: f64,
+    /// Weight for named mention ratio.
+    pub named_ratio_weight: f64,
+    /// Weight for first position (earlier = higher).
+    pub position_weight: f64,
+    /// Weight for confidence.
+    pub confidence_weight: f64,
+    /// Feature extractor configuration.
+    extractor_config: ExtractorConfig,
+}
+
+impl Default for ChainFeatureSalience {
+    fn default() -> Self {
+        Self {
+            length_weight: 1.0,
+            spread_weight: 0.5,
+            named_ratio_weight: 0.3,
+            position_weight: 0.2,
+            confidence_weight: 0.1,
+            extractor_config: ExtractorConfig::default(),
+        }
+    }
+}
+
+impl ChainFeatureSalience {
+    /// Create with custom extractor config.
+    pub fn with_config(mut self, config: ExtractorConfig) -> Self {
+        self.extractor_config = config;
+        self
+    }
+
+    /// Compute salience from chain features.
+    fn chain_salience(&self, features: &ChainFeatures, text_len: usize) -> f64 {
+        let mut score = 0.0;
+
+        // Chain length (log scale to avoid dominance)
+        let length_score = (features.chain_length as f64).ln_1p();
+        score += self.length_weight * length_score;
+
+        // Spread: mentions across document indicate importance
+        score += self.spread_weight * features.relative_spread;
+
+        // Named mention ratio: named > nominal > pronominal
+        let named_ratio = if features.chain_length > 0 {
+            features.named_count as f64 / features.chain_length as f64
+        } else {
+            0.0
+        };
+        score += self.named_ratio_weight * named_ratio;
+
+        // Position: earlier mentions slightly more salient
+        let position_score = if text_len > 0 {
+            1.0 - (features.first_mention_position as f64 / text_len as f64)
+        } else {
+            0.0
+        };
+        score += self.position_weight * position_score;
+
+        // Confidence
+        score += self.confidence_weight * features.mean_confidence;
+
+        score
+    }
+}
+
+impl EntityRanker for ChainFeatureSalience {
+    fn rank(&self, text: &str, entities: &[Entity]) -> Vec<(Entity, f64)> {
+        if entities.is_empty() {
+            return vec![];
+        }
+
+        let text_len = text.chars().count();
+        let extractor = EntityFeatureExtractor::new(self.extractor_config.clone());
+        let chain_features = extractor.extract_chains(text, entities);
+
+        // Compute salience for each chain
+        let mut scores: HashMap<String, (Entity, f64)> = HashMap::new();
+
+        for (key, features) in &chain_features {
+            let salience = self.chain_salience(features, text_len);
+
+            // Find representative entity (prefer named, longest)
+            let representative = entities
+                .iter()
+                .filter(|e| e.text.to_lowercase() == *key)
+                .max_by_key(|e| {
+                    let is_named = MentionType::classify(&e.text) == MentionType::Named;
+                    (is_named as usize, e.text.len())
+                })
+                .cloned()
+                .unwrap_or_else(|| entities[0].clone());
+
+            scores.insert(key.clone(), (representative, salience));
+        }
+
+        let mut ranked: Vec<(Entity, f64)> = scores.into_values().collect();
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        ranked
+    }
+}
+
+// =============================================================================
+// Helper: Convert features to salience scores for coref integration
+// =============================================================================
+
+/// Convert entity features to salience scores for coreference integration.
+///
+/// This function extracts chain features and converts them to a HashMap
+/// suitable for use with `MentionRankingCoref::with_salience()`.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use anno::salience::features_to_salience_scores;
+/// use anno::backends::mention_ranking::MentionRankingCoref;
+///
+/// let entities = ner.extract_entities(text, None)?;
+/// let salience_scores = features_to_salience_scores(text, &entities);
+///
+/// let coref = MentionRankingCoref::new()
+///     .with_salience(salience_scores);
+/// ```
+pub fn features_to_salience_scores(text: &str, entities: &[Entity]) -> HashMap<String, f64> {
+    let ranker = ChainFeatureSalience::default();
+    let ranked = ranker.rank(text, entities);
+
+    // Normalize scores to [0, 1]
+    let max_score = ranked
+        .iter()
+        .map(|(_, s)| *s)
+        .fold(f64::NEG_INFINITY, f64::max);
+
+    if max_score <= 0.0 {
+        return HashMap::new();
+    }
+
+    ranked
+        .into_iter()
+        .map(|(e, score)| (e.text.to_lowercase(), score / max_score))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -666,7 +846,7 @@ mod tests {
 
         // Obama mentioned twice, should rank high
         assert!(!ranked.is_empty());
-        
+
         // Check that we get unique entities (by text)
         let unique_count = ranked.len();
         assert!(unique_count <= 4); // May be less due to deduplication

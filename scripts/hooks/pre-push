@@ -1,0 +1,95 @@
+#!/bin/bash
+# Pre-push hook for anno project
+# COMPREHENSIVE checks (~30-60 seconds)
+# Goal: Ensure code quality before sharing with others
+#
+# Install: just setup-hooks
+# Or: cp scripts/hooks/* .git/hooks/ && chmod +x .git/hooks/*
+#
+# Matches CI behavior for local/remote parity.
+
+set -e
+
+echo "pre-push: running checks..."
+echo ""
+
+# Track warnings
+WARNINGS=0
+
+# ============================================================================
+# 1. Format check (should be clean from pre-commit)
+# ============================================================================
+echo -n "  [1/5] format ....... "
+if ! cargo fmt --all -- --check 2>/dev/null; then
+    echo "FAILED"
+    echo ""
+    echo "error: code not formatted"
+    echo "  run: cargo fmt --all"
+    exit 1
+fi
+echo "ok"
+
+# ============================================================================
+# 2. Clippy with warnings as errors
+# ============================================================================
+# IMPORTANT: Uses same feature flags as CI for parity
+echo -n "  [2/5] clippy ....... "
+CLIPPY_OUTPUT=$(cargo clippy --workspace --all-targets --features "eval-advanced discourse" -- -D warnings 2>&1) || {
+    echo "FAILED"
+    echo ""
+    echo "error: clippy found issues:"
+    echo "$CLIPPY_OUTPUT" | grep -E "^error" | head -20
+    echo ""
+    echo "  run: cargo clippy --workspace --all-targets --features 'eval-advanced discourse' -- -D warnings"
+    exit 1
+}
+echo "ok"
+
+# ============================================================================
+# 3. Quick tests (lib only, matches CI test-minimal job)
+# ============================================================================
+echo -n "  [3/5] tests ........ "
+if ! cargo test --workspace --lib --features "eval-advanced discourse" --quiet 2>/dev/null; then
+    echo "FAILED"
+    echo ""
+    echo "error: tests failed"
+    echo "  run: cargo test --workspace --lib --features 'eval-advanced discourse'"
+    exit 1
+fi
+echo "ok"
+
+# ============================================================================
+# 4. Doc tests (often forgotten, non-blocking)
+# ============================================================================
+echo -n "  [4/5] doc tests .... "
+if ! cargo test --workspace --doc --features "eval-advanced discourse" --quiet 2>/dev/null; then
+    echo "warning (failures)"
+    WARNINGS=$((WARNINGS + 1))
+else
+    echo "ok"
+fi
+
+# ============================================================================
+# 5. Check for uncommitted changes
+# ============================================================================
+echo -n "  [5/5] clean state .. "
+UNCOMMITTED=$(git status --porcelain | grep -v '^??' | wc -l | tr -d ' ')
+if [ "$UNCOMMITTED" -gt 0 ]; then
+    echo "warning"
+    echo "        uncommitted changes:"
+    git status --porcelain | grep -v '^??' | head -5 | sed 's/^/        /'
+    WARNINGS=$((WARNINGS + 1))
+else
+    echo "ok"
+fi
+
+# ============================================================================
+# Summary
+# ============================================================================
+echo ""
+if [ $WARNINGS -gt 0 ]; then
+    echo "pre-push: passed with $WARNINGS warning(s)"
+else
+    echo "pre-push: passed"
+fi
+exit 0
