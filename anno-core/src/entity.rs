@@ -1638,12 +1638,12 @@ pub struct Entity {
     /// Start position (character offset, NOT byte offset).
     ///
     /// For Unicode text, character offsets differ from byte offsets.
-    /// Use [`crate::offset::bytes_to_chars`] to convert if needed.
+    /// Use `anno::offset::bytes_to_chars` to convert if needed.
     pub start: usize,
     /// End position (character offset, exclusive).
     ///
     /// For Unicode text, character offsets differ from byte offsets.
-    /// Use [`crate::offset::bytes_to_chars`] to convert if needed.
+    /// Use `anno::offset::bytes_to_chars` to convert if needed.
     pub end: usize,
     /// Confidence score (0.0-1.0, calibrated)
     pub confidence: f64,
