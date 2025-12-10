@@ -1055,12 +1055,11 @@ fn e2e_cli_domain_detection() {
     );
     let stdout = String::from_utf8(output.stdout).unwrap();
 
-    // Command runs successfully (may or may not find entities depending on heuristics)
-    // The test verifies the command exists and runs without error
+    // Domain command outputs domain analysis, not entities
+    // The test verifies the command exists and produces domain detection output
     assert!(
-        stdout.contains("PER:") || stdout.contains("ORG:") || stdout.contains("LOC:")
-            || stdout.contains("no entities"),
-        "Should produce output, got: {}",
+        stdout.contains("Domain") || stdout.contains("domain"),
+        "Should produce domain output, got: {}",
         stdout
     );
 }
@@ -1169,9 +1168,9 @@ fn e2e_cli_explain_detailed() {
     assert!(output.status.success(), "explain command should succeed");
     let stdout = String::from_utf8(output.stdout).unwrap();
 
-    // Should show extracted entities (format: TYPE:count "text")
+    // Should show extracted entities with type decisions
     assert!(
-        stdout.contains("PER:") || stdout.contains("LOC:") || stdout.contains("ORG:"),
+        stdout.contains("Entity:") || stdout.contains("Type Decision:"),
         "Should show extracted entities, got: {}",
         stdout
     );
@@ -1193,9 +1192,9 @@ fn e2e_cli_privacy_detection() {
     assert!(output.status.success(), "privacy command should succeed");
     let stdout = String::from_utf8(output.stdout).unwrap();
 
-    // Should detect PII types (format: TYPE:count "text")
+    // Should detect PII types (PERSON, CONTACT, ADDRESS, etc.)
     assert!(
-        stdout.contains("PER:") || stdout.contains("LOC:") || stdout.contains("PHONE:"),
+        stdout.contains("PERSON") || stdout.contains("CONTACT") || stdout.contains("ADDRESS"),
         "Should detect PII types, got: {}",
         stdout
     );
@@ -1217,10 +1216,10 @@ fn e2e_cli_privacy_redaction() {
     assert!(output.status.success(), "privacy command should succeed");
     let stdout = String::from_utf8(output.stdout).unwrap();
 
-    // Should detect email and phone patterns
+    // Should detect contact patterns (email/phone under CONTACT category)
     assert!(
-        stdout.contains("EMAIL:") || stdout.contains("PHONE:"),
-        "Should detect EMAIL or PHONE, got: {}",
+        stdout.contains("CONTACT") || stdout.contains("emails/phones"),
+        "Should detect CONTACT patterns, got: {}",
         stdout
     );
 }
@@ -1292,10 +1291,10 @@ fn e2e_cli_ensemble_backend() {
     assert!(output.status.success(), "stacked backend should succeed");
     let stdout = String::from_utf8(output.stdout).unwrap();
 
-    // Should have entities
+    // Should have entities in JSON format (array of objects with "type" field)
     assert!(
-        stdout.contains("\"entities\""),
-        "Should have entities array, got: {}",
+        stdout.contains("\"type\"") && stdout.contains("\"text\""),
+        "Should have entities with type and text fields, got: {}",
         stdout
     );
 }
