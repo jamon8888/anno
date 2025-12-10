@@ -6,11 +6,17 @@ default:
 
 # === Quick Commands ===
 
-# Run fast checks (fmt + clippy + quick tests)
+# Run fast checks (fmt + clippy + quick tests) - matches pre-push hook
 check:
     cargo fmt --all -- --check
-    cargo clippy --all-targets
-    cargo test --lib
+    cargo clippy --workspace --all-targets --features "eval-advanced discourse" -- -D warnings
+    cargo test --workspace --lib --features "eval-advanced discourse"
+
+# Run fast checks without features (minimal, for quick iteration)
+check-minimal:
+    cargo fmt --all -- --check
+    cargo clippy --workspace --all-targets
+    cargo test --workspace --lib
 
 # Format all code
 fmt:
@@ -113,7 +119,7 @@ readme-preview:
     sleep 3 && \
     PORT=$$(cat scripts/port_file.txt 2>/dev/null || echo "8000") && \
     open http://localhost:$$PORT/README_github_style.html && \
-    echo "✅ Preview at http://localhost:$$PORT/README_github_style.html (auto-reloads)"
+    echo "ok: Preview at http://localhost:$$PORT/README_github_style.html (auto-reloads)"
 
 # Run e2e test with Playwright + Gemini VLM
 readme-test:
@@ -271,16 +277,16 @@ static-analysis:
     @echo "=== Running Static Analysis Tools ==="
     @echo ""
     @echo "1. cargo-deny (dependency linting)..."
-    @just deny || echo "⚠️  cargo-deny failed or not installed"
+    @just deny || echo "warning:  cargo-deny failed or not installed"
     @echo ""
     @echo "2. cargo-machete (unused dependencies)..."
-    @just machete || echo "⚠️  cargo-machete failed or not installed"
+    @just machete || echo "warning:  cargo-machete failed or not installed"
     @echo ""
     @echo "3. cargo-geiger (unsafe code stats)..."
-    @just geiger || echo "⚠️  cargo-geiger failed or not installed"
+    @just geiger || echo "warning:  cargo-geiger failed or not installed"
     @echo ""
     @echo "4. OpenGrep (security patterns)..."
-    @just opengrep || echo "⚠️  OpenGrep failed or not installed"
+    @just opengrep || echo "warning:  OpenGrep failed or not installed"
     @echo ""
     @echo "=== Static Analysis Complete ==="
 
@@ -330,7 +336,7 @@ analysis-full:
     @echo "Tracking unsafe code trends..."
     @just track-unsafe-trends
     @echo ""
-    @echo "✅ Comprehensive analysis complete!"
+    @echo "ok: Comprehensive analysis complete!"
     @echo "   - Reports: safety-report.md, tool-comparison.md"
     @echo "   - Trends: .unsafe-code-trends/"
 
@@ -340,13 +346,13 @@ analysis-full:
 check-filenames:
     @echo "Checking for files with spaces in names..."
     @if find . -type f \( -name "*.rs" -o -name "*.toml" \) -name "* *" ! -path "./.git/*" ! -path "./target/*" ! -path "./.cargo/*" 2>/dev/null | grep -q .; then \
-        echo "❌ Error: Found files with spaces in names (invalid for Rust):"; \
+        echo "error: Error: Found files with spaces in names (invalid for Rust):"; \
         find . -type f \( -name "*.rs" -o -name "*.toml" \) -name "* *" ! -path "./.git/*" ! -path "./target/*" ! -path "./.cargo/*"; \
         exit 1; \
     fi
     @echo "Checking for duplicate test files..."
     @if find . -type f -name "* 2.rs" ! -path "./.git/*" ! -path "./target/*" 2>/dev/null | grep -q .; then \
-        echo "❌ Error: Found duplicate test files (likely backups):"; \
+        echo "error: Error: Found duplicate test files (likely backups):"; \
         find . -type f -name "* 2.rs" ! -path "./.git/*" ! -path "./target/*"; \
         echo "Please remove these files before committing."; \
         exit 1; \
@@ -370,18 +376,18 @@ check-secrets:
            --glob '!*.md' --glob '!*.txt' --glob '!target/**' \
            --glob '!.git/**' --glob '!*.lock' --glob '!justfile' \
            --glob '!*.sh' --glob '!docs/**' 2>/dev/null | head -5; then \
-            echo "⚠️  Warning: Potential secrets found. Review before committing."; \
+            echo "warning:  Warning: Potential secrets found. Review before committing."; \
             echo "   (This is a warning, not blocking)"; \
         fi; \
     else \
-        echo "⚠️  ripgrep not found, skipping secrets check"; \
+        echo "warning:  ripgrep not found, skipping secrets check"; \
     fi
 
 # Check for large files (warn only, non-blocking)
 check-large-files:
     @echo "Checking for large files..."
     @if find . -type f -size +1M ! -path "./target/*" ! -path "./.git/*" ! -path "./.cargo/*" ! -path "./*.lock" ! -path "./assets/*" ! -path "./.mypy_cache/*" ! -path "./.pytest_cache/*" ! -path "./__pycache__/*" 2>/dev/null | head -1 | grep -q .; then \
-        echo "⚠️  Warning: Large files detected (>1MB):"; \
+        echo "warning:  Warning: Large files detected (>1MB):"; \
         find . -type f -size +1M ! -path "./target/*" ! -path "./.git/*" ! -path "./.cargo/*" ! -path "./*.lock" ! -path "./assets/*" ! -path "./.mypy_cache/*" ! -path "./.pytest_cache/*" ! -path "./__pycache__/*" 2>/dev/null | head -5; \
         echo "   (This is a warning, not blocking)"; \
     fi
@@ -389,7 +395,7 @@ check-large-files:
 # Run clippy with warnings only (non-blocking)
 check-clippy-warn:
     @echo "Running clippy (warnings only)..."
-    @cargo clippy --workspace --all-targets --quiet 2>&1 | head -20 || echo "⚠️  Clippy found warnings (not blocking)"
+    @cargo clippy --workspace --all-targets --quiet 2>&1 | head -20 || echo "warning:  Clippy found warnings (not blocking)"
 
 # Full pre-commit checks (all blocking checks)
 pre-commit-full:
@@ -397,7 +403,7 @@ pre-commit-full:
     @just check-compile
     @just check-tests-compile
     @just fmt-check
-    @echo "✅ Pre-commit checks passed!"
+    @echo "ok: Pre-commit checks passed!"
 
 # Pre-commit with warnings (blocking + non-blocking)
 pre-commit-all: pre-commit-full
@@ -408,7 +414,7 @@ pre-commit-all: pre-commit-full
 # Validate commit message format
 validate-commit-msg COMMIT_MSG:
     @if [ -z "$$(echo '{{COMMIT_MSG}}' | head -c 10)" ]; then \
-        echo "❌ Error: Commit message too short (minimum 10 characters)"; \
+        echo "error: Error: Commit message too short (minimum 10 characters)"; \
         echo "   Current message: '{{COMMIT_MSG}}'"; \
         exit 1; \
     fi
@@ -418,7 +424,7 @@ validate-commit-msg COMMIT_MSG:
     @if echo "{{COMMIT_MSG}}" | grep -qE "^(Merge|Revert|Release|chore\(release\))"; then \
         exit 0; \
     fi
-    @echo "⚠️  Warning: Commit message doesn't follow conventional format"
+    @echo "warning:  Warning: Commit message doesn't follow conventional format"
     @echo "   Recommended: type(scope): description"
     @echo "   Examples:"
     @echo "     - feat(api): add new endpoint"
@@ -432,9 +438,47 @@ validate-commit-msg COMMIT_MSG:
 pre-commit-check:
     @echo "Running pre-commit checks..."
     @cargo fmt --all -- --check
-    @cargo clippy --all-targets -- -D warnings
-    @just machete || echo "⚠️  cargo-machete not installed, skipping"
-    @echo "✅ Pre-commit checks passed"
+    @cargo clippy --workspace --all-targets --features "eval-advanced discourse" -- -D warnings
+    @just machete || echo "warning:  cargo-machete not installed, skipping"
+    @echo "ok: Pre-commit checks passed"
+
+# === Git Hook Setup ===
+
+# Install git hooks (run once after clone)
+setup-hooks:
+    @echo "Installing git hooks from scripts/hooks/..."
+    @cp scripts/hooks/pre-commit .git/hooks/pre-commit
+    @cp scripts/hooks/pre-push .git/hooks/pre-push
+    @cp scripts/hooks/commit-msg .git/hooks/commit-msg
+    @chmod +x .git/hooks/pre-commit
+    @chmod +x .git/hooks/pre-push
+    @chmod +x .git/hooks/commit-msg
+    @echo ""
+    @echo "Hooks installed:"
+    @echo "  pre-commit   fast checks (format, compile)     ~5-10s"
+    @echo "  pre-push     full checks (clippy, tests)       ~30-60s"
+    @echo "  commit-msg   message format hints"
+    @echo ""
+    @echo "To bypass: git commit --no-verify"
+
+# Show hook status
+hook-status:
+    @echo "Git hook status:"
+    @ls -la .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/commit-msg 2>/dev/null || echo "No hooks installed"
+
+# Run what pre-commit hook runs (for debugging)
+run-pre-commit-hook:
+    @echo "Simulating pre-commit hook..."
+    @cargo fmt --all
+    @cargo check --workspace --all-targets --quiet
+
+# Run what pre-push hook runs (for debugging)
+run-pre-push-hook:
+    @echo "Simulating pre-push hook..."
+    @cargo fmt --all -- --check
+    @cargo clippy --workspace --all-targets --features "eval-advanced discourse" -- -D warnings
+    @cargo test --workspace --lib --features "eval-advanced discourse" --quiet
+    @cargo test --workspace --doc --features "eval-advanced discourse" --quiet || echo "warning:  Doc test warnings"
 
 # Generate HTML dashboard (creative: visual analysis results)
 dashboard:
@@ -463,21 +507,21 @@ check-eval-invariants:
 # Comprehensive NLP/ML analysis (combines all checks)
 analysis-nlp-ml:
     @echo "=== NLP/ML Pattern Analysis ==="
-    @just check-nlp-patterns || echo "⚠️  Some NLP pattern issues found"
+    @just check-nlp-patterns || echo "warning:  Some NLP pattern issues found"
     @echo ""
     @echo "=== Evaluation Framework Analysis ==="
     @just analyze-eval-patterns
     @echo ""
     @echo "=== ML Backend Analysis ==="
-    @just check-ml-backends || echo "⚠️  Some ML backend issues found"
+    @just check-ml-backends || echo "warning:  Some ML backend issues found"
     @echo ""
     @echo "=== Evaluation Invariants ==="
-    @just check-eval-invariants || echo "⚠️  Some invariant issues found"
+    @just check-eval-invariants || echo "warning:  Some invariant issues found"
     @echo ""
     @echo "=== OpenGrep Custom Rules ==="
-    @just opengrep-custom || echo "⚠️  OpenGrep not installed"
+    @just opengrep-custom || echo "warning:  OpenGrep not installed"
     @echo ""
-    @echo "✅ NLP/ML analysis complete"
+    @echo "ok: NLP/ML analysis complete"
 
 # Generate repo-specific analysis report
 repo-analysis:

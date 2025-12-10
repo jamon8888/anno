@@ -1,0 +1,99 @@
+#!/bin/bash
+# Pre-commit hook for anno project
+# FAST checks only (~5-10 seconds)
+# Goal: Catch obvious issues BEFORE commit, not after
+#
+# Install: just setup-hooks
+# Or: cp scripts/hooks/* .git/hooks/ && chmod +x .git/hooks/*
+
+set -e
+
+echo "pre-commit: running checks..."
+echo ""
+
+# ============================================================================
+# 1. Trailing whitespace fix (BEFORE cargo fmt)
+# ============================================================================
+# This fixes the issue where cargo fmt couldn't handle trailing whitespace
+# in certain edge cases (discovered the hard way)
+
+STAGED_RS_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rs$' || true)
+if [ -n "$STAGED_RS_FILES" ]; then
+    for file in $STAGED_RS_FILES; do
+        if [ -f "$file" ]; then
+            # Remove trailing whitespace
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' 's/[[:space:]]*$//' "$file"
+            else
+                sed -i 's/[[:space:]]*$//' "$file"
+            fi
+            git add "$file"
+        fi
+    done
+fi
+
+# ============================================================================
+# 2. Format check (with auto-fix)
+# ============================================================================
+echo -n "  [1/4] format ....... "
+if ! cargo fmt --all -- --check 2>/dev/null; then
+    echo "fixing"
+    cargo fmt --all
+    # Re-add formatted files
+    git diff --name-only | xargs -I {} git add {} 2>/dev/null || true
+    echo "        formatted and staged"
+else
+    echo "ok"
+fi
+
+# ============================================================================
+# 3. Compile check (fast, catches type errors early)
+# ============================================================================
+echo -n "  [2/4] compile ...... "
+if ! cargo check --workspace --all-targets --quiet 2>/dev/null; then
+    echo "FAILED"
+    echo ""
+    echo "error: compilation failed"
+    echo ""
+    cargo check --workspace --all-targets 2>&1 | head -50
+    exit 1
+fi
+echo "ok"
+
+# ============================================================================
+# 4. Check for files with spaces in names
+# ============================================================================
+echo -n "  [3/4] filenames .... "
+BAD_FILES=$(git diff --cached --name-only | grep ' ' || true)
+if [ -n "$BAD_FILES" ]; then
+    echo "FAILED"
+    echo ""
+    echo "error: files with spaces in names:"
+    echo "$BAD_FILES"
+    exit 1
+fi
+echo "ok"
+
+# ============================================================================
+# 5. Check for large files (>1MB warning only)
+# ============================================================================
+echo -n "  [4/4] file sizes ... "
+LARGE_FILES=$(git diff --cached --name-only | while read file; do
+    if [ -f "$file" ]; then
+        size=$(wc -c < "$file" 2>/dev/null || echo 0)
+        if [ "$size" -gt 1048576 ]; then
+            echo "$file ($(($size / 1024))KB)"
+        fi
+    fi
+done)
+if [ -n "$LARGE_FILES" ]; then
+    echo "warning"
+    echo "        large files (>1MB):"
+    echo "$LARGE_FILES" | sed 's/^/        /'
+else
+    echo "ok"
+fi
+
+echo ""
+echo "pre-commit: passed"
+exit 0
