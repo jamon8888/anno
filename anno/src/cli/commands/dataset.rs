@@ -670,10 +670,15 @@ fn run_info(dataset: &str) -> Result<(), String> {
         use crate::eval::dataset_registry::DatasetId as RegistryDatasetId;
         use crate::eval::loader::{DatasetId as LoadableDatasetId, DatasetLoader};
 
-        // Try to find in registry first (for metadata)
+        // Try to find in registry (by display name or variant name)
         let registry_match = RegistryDatasetId::all()
             .iter()
-            .find(|d| d.name().eq_ignore_ascii_case(dataset))
+            .find(|d| {
+                // Match by display name (case-insensitive)
+                d.name().eq_ignore_ascii_case(dataset)
+                    // Or by variant name (e.g., "BroadTwitterCorpus")
+                    || format!("{:?}", d).eq_ignore_ascii_case(dataset)
+            })
             .copied();
 
         // Try to parse as loadable dataset
