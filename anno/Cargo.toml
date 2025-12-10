@@ -17,6 +17,8 @@ readme = "../README.md"
 anno-core = { path = "../anno-core" }
 anno-coalesce = { path = "../anno-coalesce" }
 anno-strata = { path = "../anno-strata", optional = true }
+# NOTE: anno-eval is a separate crate that depends on anno, not the other way around
+# The eval features in anno are self-contained
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

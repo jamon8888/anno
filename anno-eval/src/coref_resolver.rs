@@ -448,25 +448,11 @@ impl SimpleCorefResolver {
 }
 
 // =============================================================================
-// Trait Implementation
+// Trait Re-export
 // =============================================================================
 
-/// Trait for coreference resolvers.
-///
-/// Allows different resolution strategies to be used interchangeably.
-pub trait CoreferenceResolver: Send + Sync {
-    /// Resolve coreference, assigning canonical IDs to entities.
-    fn resolve(&self, entities: &[Entity]) -> Vec<Entity>;
-
-    /// Resolve directly to chains.
-    fn resolve_to_chains(&self, entities: &[Entity]) -> Vec<CorefChain> {
-        let resolved = self.resolve(entities);
-        super::coref::entities_to_chains(&resolved)
-    }
-
-    /// Get resolver name.
-    fn name(&self) -> &'static str;
-}
+// Re-export the canonical trait from anno-core
+pub use anno_core::CoreferenceResolver;
 
 impl CoreferenceResolver for SimpleCorefResolver {
     fn resolve(&self, entities: &[Entity]) -> Vec<Entity> {

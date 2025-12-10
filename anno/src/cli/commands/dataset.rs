@@ -387,9 +387,9 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             println!();
 
                             let resolver = SimpleCorefResolver::default();
-                            let mut all_pred_chains: Vec<Vec<crate::eval::coref::CorefChain>> =
+                            let mut all_pred_chains: Vec<Vec<anno_core::coref::CorefChain>> =
                                 Vec::new();
-                            let mut all_gold_chains: Vec<&[crate::eval::coref::CorefChain]> =
+                            let mut all_gold_chains: Vec<&[anno_core::coref::CorefChain]> =
                                 Vec::new();
                             let start_time = Instant::now();
 

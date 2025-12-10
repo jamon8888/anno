@@ -234,8 +234,8 @@ impl MentionType {
                 | "they" | "them" | "their" | "theirs" | "themselves" | "themself"
                 // Demonstrative pronouns
                 | "this" | "these" | "those"
-                // Relative pronouns
-                | "who" | "whom" | "whose" | "which" | "that"
+                // Relative/interrogative pronouns
+                | "who" | "whom" | "whose" | "which" | "that" | "what"
                 // Indefinite pronouns (subset)
                 | "one" | "ones" | "someone" | "anyone" | "everyone" | "no one"
                 | "somebody" | "anybody" | "everybody" | "nobody"
@@ -367,6 +367,10 @@ mod tests {
         assert_eq!(MentionType::classify("they"), MentionType::Pronominal);
         assert_eq!(MentionType::classify("it"), MentionType::Pronominal);
         assert_eq!(MentionType::classify("this"), MentionType::Pronominal);
+        // Interrogative pronouns
+        assert_eq!(MentionType::classify("who"), MentionType::Pronominal);
+        assert_eq!(MentionType::classify("what"), MentionType::Pronominal);
+        assert_eq!(MentionType::classify("which"), MentionType::Pronominal);
     }
 
     #[test]

@@ -110,7 +110,7 @@ pub use dataset::{
 };
 
 // Coreference types
-pub use coref::{entities_to_chains, CorefChain, CorefDocument, Mention};
+pub use coref::{entities_to_chains, CorefChain, CorefDocument, CoreferenceResolver, Mention};
 
 // Other modules accessible via anno_core::module_name
 pub use types::{
