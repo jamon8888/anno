@@ -364,9 +364,10 @@ fn test_french_text_unicode() {
 // The test below validates that the dataset structure is compatible with
 // anno's discourse processing infrastructure when the feature is enabled.
 #[test]
-#[cfg(feature = "discourse")]
+#[cfg(all(feature = "discourse", feature = "eval"))]
 fn test_integration_with_anno_discourse() {
-    use anno::discourse::{DiscourseDeicticDetector, DiscourseScope};
+    use anno::discourse::DiscourseScope;
+    use anno::eval::discourse_deixis::DiscourseDeicticDetector;
 
     let path = dataset_path().join("discourse_deixis.jsonl");
     if !path.exists() {

@@ -97,10 +97,10 @@ pub fn split_sentences(text: &str) -> Vec<String> {
     // Regex-free approach: split on common sentence terminators
     // Including Unicode variants for CJK and Arabic
     let terminators = [
-        '.', '!', '?',           // Latin
-        '。', '！', '？',         // CJK
-        '؟', '۔',               // Arabic/Urdu
-        '।',                    // Devanagari
+        '.', '!', '?', // Latin
+        '。', '！', '？', // CJK
+        '؟', '۔', // Arabic/Urdu
+        '।', // Devanagari
     ];
 
     let mut sentences = Vec::new();
@@ -164,7 +164,10 @@ pub struct PositionSummarizer;
 
 impl Summarizer for PositionSummarizer {
     fn summarize(&self, text: &str, num_sentences: usize) -> Vec<String> {
-        split_sentences(text).into_iter().take(num_sentences).collect()
+        split_sentences(text)
+            .into_iter()
+            .take(num_sentences)
+            .collect()
     }
 }
 
@@ -301,7 +304,10 @@ impl LexRankSummarizer {
         a: &std::collections::HashMap<String, f64>,
         b: &std::collections::HashMap<String, f64>,
     ) -> f64 {
-        let dot: f64 = a.iter().filter_map(|(k, v)| b.get(k).map(|bv| v * bv)).sum();
+        let dot: f64 = a
+            .iter()
+            .filter_map(|(k, v)| b.get(k).map(|bv| v * bv))
+            .sum();
 
         let norm_a: f64 = a.values().map(|v| v * v).sum::<f64>().sqrt();
         let norm_b: f64 = b.values().map(|v| v * v).sum::<f64>().sqrt();
@@ -490,8 +496,10 @@ mod tests {
         let combined = summary.join(" ");
         // At least some tech/market keywords should be present
         assert!(
-            combined.contains("market") || combined.contains("tech")
-            || combined.contains("Apple") || combined.contains("Microsoft")
+            combined.contains("market")
+                || combined.contains("tech")
+                || combined.contains("Apple")
+                || combined.contains("Microsoft")
         );
     }
 
@@ -614,4 +622,3 @@ mod tests {
         assert_eq!(summary.len(), 2);
     }
 }
-

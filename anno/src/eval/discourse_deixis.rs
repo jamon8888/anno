@@ -35,8 +35,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Type of discourse deictic expression.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum DeicticType {
     /// Demonstrative pronoun: "this", "that"
     #[default]
@@ -51,10 +50,8 @@ pub enum DeicticType {
     Other(String),
 }
 
-
 /// Type of antecedent for discourse deixis.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum DiscourseAntecedentType {
     /// Single clause
     #[default]
@@ -74,7 +71,6 @@ pub enum DiscourseAntecedentType {
     /// Implicit (must be inferred from context)
     Implicit,
 }
-
 
 /// A discourse deictic expression.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -241,7 +237,10 @@ impl DiscourseDeicticDocument {
 
     /// Get multi-sentence antecedent links.
     pub fn multi_sentence(&self) -> Vec<&DiscourseDeicticLink> {
-        self.links.iter().filter(|l| l.is_multi_sentence()).collect()
+        self.links
+            .iter()
+            .filter(|l| l.is_multi_sentence())
+            .collect()
     }
 }
 
@@ -286,8 +285,9 @@ impl DiscourseDeicticDetector {
 
         // Detect demonstratives that likely refer to propositions
         // Pattern: "That + verb" at sentence start or after punctuation
-        let sentence_initial_that = regex::Regex::new(r"(?:^|[.!?]\s+)([Tt]hat)\s+(?:was|is|seems|appears|means|shows)")
-            .ok();
+        let sentence_initial_that =
+            regex::Regex::new(r"(?:^|[.!?]\s+)([Tt]hat)\s+(?:was|is|seems|appears|means|shows)")
+                .ok();
 
         if let Some(re) = sentence_initial_that {
             for cap in re.captures_iter(&lower) {
@@ -300,8 +300,9 @@ impl DiscourseDeicticDetector {
 
         // Detect "this" that refers to prior discourse
         // Pattern: "This + verb" (not followed by noun)
-        let this_propositional = regex::Regex::new(r"\b([Tt]his)\s+(?:is|was|means|suggests|shows|indicates|explains)")
-            .ok();
+        let this_propositional =
+            regex::Regex::new(r"\b([Tt]his)\s+(?:is|was|means|suggests|shows|indicates|explains)")
+                .ok();
 
         if let Some(re) = this_propositional {
             for cap in re.captures_iter(&lower) {
@@ -363,10 +364,7 @@ mod tests {
             .with_type(DiscourseAntecedentType::Event)
             .with_sentences(vec![0]);
 
-        assert_eq!(
-            antecedent.antecedent_type,
-            DiscourseAntecedentType::Event
-        );
+        assert_eq!(antecedent.antecedent_type, DiscourseAntecedentType::Event);
         assert_eq!(antecedent.sentence_indices, vec![0]);
     }
 
@@ -405,4 +403,3 @@ mod tests {
         assert_eq!(doc.demonstratives().len(), 1);
     }
 }
-

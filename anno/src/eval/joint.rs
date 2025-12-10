@@ -308,7 +308,12 @@ impl JointEvaluator {
 
         // Error analysis
         let errors = if self.error_analysis {
-            self.analyze_errors(&all_gold_entities, &all_pred_entities, &all_gold_links, &all_pred_links)
+            self.analyze_errors(
+                &all_gold_entities,
+                &all_pred_entities,
+                &all_gold_links,
+                &all_pred_links,
+            )
         } else {
             JointErrorAnalysis::default()
         };
@@ -346,9 +351,9 @@ impl JointEvaluator {
         // Count correct matches
         for g in gold {
             let type_label = g.entity_type.as_label().to_string();
-            let matched = pred.iter().any(|p| {
-                p.start == g.start && p.end == g.end && p.entity_type == g.entity_type
-            });
+            let matched = pred
+                .iter()
+                .any(|p| p.start == g.start && p.end == g.end && p.entity_type == g.entity_type);
             if matched {
                 let entry = per_type.entry(type_label).or_insert((0, 0, 0));
                 entry.2 += 1;
@@ -388,11 +393,7 @@ impl JointEvaluator {
             .collect()
     }
 
-    fn compute_linking_metrics(
-        &self,
-        gold: &[GoldLink],
-        pred: &[PredictedLink],
-    ) -> LinkingResults {
+    fn compute_linking_metrics(&self, gold: &[GoldLink], pred: &[PredictedLink]) -> LinkingResults {
         if gold.is_empty() {
             return LinkingResults::default();
         }
@@ -408,7 +409,10 @@ impl JointEvaluator {
         for g in gold {
             let matched_pred = pred.iter().find(|p| p.start == g.start && p.end == g.end);
 
-            match (g.kb_id.as_ref(), matched_pred.and_then(|p| p.kb_id.as_ref())) {
+            match (
+                g.kb_id.as_ref(),
+                matched_pred.and_then(|p| p.kb_id.as_ref()),
+            ) {
                 (Some(gold_kb), Some(pred_kb)) if gold_kb == pred_kb => {
                     correct += 1;
                     non_nil_tp += 1;
@@ -519,9 +523,7 @@ impl JointEvaluator {
                 .iter()
                 .any(|p| p.start == gold_link.start && p.end == gold_link.end);
             let link_correct = pred_links.iter().any(|p| {
-                p.start == gold_link.start
-                    && p.end == gold_link.end
-                    && p.kb_id == gold_link.kb_id
+                p.start == gold_link.start && p.end == gold_link.end && p.kb_id == gold_link.kb_id
             });
 
             if ner_correct && !link_correct {
@@ -565,14 +567,12 @@ mod tests {
     fn test_linking_results_perfect() {
         let evaluator = JointEvaluator::new();
 
-        let gold = vec![
-            GoldLink {
-                mention_text: "Paris".to_string(),
-                start: 0,
-                end: 5,
-                kb_id: Some("Q90".to_string()),
-            },
-        ];
+        let gold = vec![GoldLink {
+            mention_text: "Paris".to_string(),
+            start: 0,
+            end: 5,
+            kb_id: Some("Q90".to_string()),
+        }];
 
         let pred = vec![PredictedLink {
             start: 0,
@@ -590,14 +590,12 @@ mod tests {
     fn test_linking_results_nil() {
         let evaluator = JointEvaluator::new();
 
-        let gold = vec![
-            GoldLink {
-                mention_text: "unknown".to_string(),
-                start: 0,
-                end: 7,
-                kb_id: None, // NIL
-            },
-        ];
+        let gold = vec![GoldLink {
+            mention_text: "unknown".to_string(),
+            start: 0,
+            end: 7,
+            kb_id: None, // NIL
+        }];
 
         let pred = vec![PredictedLink {
             start: 0,
@@ -659,4 +657,3 @@ mod tests {
         assert!((per.f1 - 0.0).abs() < 0.001);
     }
 }
-

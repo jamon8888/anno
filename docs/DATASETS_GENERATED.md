@@ -316,7 +316,7 @@
 | `GuaraniNER` | Guaraní NER | gn | general | CC-BY-4.0 | ner, indigenous, low_resource |
 | `ShipiboKoniboNER` | Shipibo-Konibo NER | shp | general | CC-BY-4.0 | ner, indigenous, low_resource |
 | `NavajoMorph` | Navajo Morphology | nv | general | Research | ner, indigenous, low_resource |
-| `KoCoNovel` | KoCoNovel | ko | fiction | CC-BY-4.0 | coref, multilingual, literary |
+| `KoCoNovel` | KoCoNovel | ko | fiction | CC-BY-SA-4.0 | coref, multilingual, literary |
 | `OpenBoek` | OpenBoek | nl | fiction | CC-BY-4.0 | coref, multilingual, literary |
 | `SciCo` | SciCo | en | scientific | Apache-2.0 | coref |
 | `SemEval2013Task91` | SemEval-2013 Task 9.1 | en | biomedical | Research | ner, biomedical, relation_extraction |
@@ -5558,18 +5558,20 @@ Navajo morphological annotation. North American indigenous language.
 
 **Rust ID**: `DatasetId::KoCoNovel`
 
-Korean coreference in novels. Literary Korean coreference.
+Korean character coreference in 50 modern/contemporary novels. First Korean literary coreference dataset. Four versions: Reader/Omniscient perspective × Separate/Overlapped entity treatment. 178K tokens, 19K mentions, ~1.4K entities.
 
 - **Language**: ko
 - **Domain**: fiction
-- **Entity Types**: PER, LOC, ORG
-- **Year**: 2022
+- **Entity Types**: PER
+- **Year**: 2024
 - **Format**: CoNLL
 - **Annotation Scheme**: CoNLLCoref
-- **License**: CC-BY-4.0 (SPDX)
-- **Citation**: KoCoNovel Team (2022)
-- **Notes**: Korean fiction; zero-pronoun resolution
-- **URL**: <https://github.com/koco-novel>
+- **Size**: 178K tokens, 50 novels
+- **License**: CC-BY-SA-4.0 (SPDX)
+- **Citation**: Kim, Lee & Lee (2024)
+- **Paper**: <https://arxiv.org/abs/2404.01140>
+- **Notes**: 24% of mentions are single common nouns (Korean address term culture favors kinship/title over names). Korean lacks determiners and proper noun markers. Four annotation versions available. Speaker annotations for direct quotations. IAA: MUC 94.53 F1.
+- **URL**: <https://github.com/storidient/KoCoNovel>
 
 ### OpenBoek
 

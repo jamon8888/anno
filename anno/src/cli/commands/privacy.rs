@@ -120,7 +120,10 @@ pub fn run(args: PrivacyArgs) -> Result<(), String> {
         .filter_map(|e| classify_pii(e))
         .filter(|pii| {
             args.types.is_empty()
-                || args.types.iter().any(|t| t.eq_ignore_ascii_case(&pii.pii_type))
+                || args
+                    .types
+                    .iter()
+                    .any(|t| t.eq_ignore_ascii_case(&pii.pii_type))
         })
         .collect();
 
@@ -170,7 +173,8 @@ pub fn run(args: PrivacyArgs) -> Result<(), String> {
                     .map(|(orig, fake)| format!("{}\t{}", orig, fake))
                     .collect::<Vec<_>>()
                     .join("\n");
-                fs::write(map_path, map_content).map_err(|e| format!("Failed to write map: {}", e))?;
+                fs::write(map_path, map_content)
+                    .map_err(|e| format!("Failed to write map: {}", e))?;
                 if !args.quiet {
                     eprintln!(
                         "{} Exported {} mappings to {:?}",
@@ -211,7 +215,7 @@ fn classify_pii(entity: &Entity) -> Option<PIIEntity> {
         }
         "EMAIL" => ("CONTACT", "HIGH"),
         "PHONE" => ("CONTACT", "HIGH"),
-        "URL" => return None, // URLs generally not PII
+        "URL" => return None,   // URLs generally not PII
         "MONEY" => return None, // Money amounts generally not PII
         _ => {
             // Check for ID patterns
@@ -256,7 +260,9 @@ fn looks_like_dob(text: &str) -> bool {
 fn looks_like_address(text: &str) -> bool {
     // Contains number + street indicator
     let has_number = text.chars().any(|c| c.is_numeric());
-    let street_indicators = ["St", "Street", "Ave", "Avenue", "Rd", "Road", "Blvd", "Dr", "Lane", "Ln"];
+    let street_indicators = [
+        "St", "Street", "Ave", "Avenue", "Rd", "Road", "Blvd", "Dr", "Lane", "Ln",
+    ];
     let has_street = street_indicators.iter().any(|ind| text.contains(ind));
     has_number && has_street
 }
@@ -416,8 +422,16 @@ fn pseudonymize_text(text: &str, entities: &[PIIEntity]) -> (String, HashMap<Str
 
     // Fake names pool
     let fake_names = [
-        "John Smith", "Jane Doe", "Alex Johnson", "Sam Williams", "Chris Brown",
-        "Pat Davis", "Jordan Miller", "Taylor Wilson", "Morgan Lee", "Casey Martinez",
+        "John Smith",
+        "Jane Doe",
+        "Alex Johnson",
+        "Sam Williams",
+        "Chris Brown",
+        "Pat Davis",
+        "Jordan Miller",
+        "Taylor Wilson",
+        "Morgan Lee",
+        "Casey Martinez",
     ];
 
     // Sort by start position descending
@@ -455,4 +469,3 @@ fn pseudonymize_text(text: &str, entities: &[PIIEntity]) -> (String, HashMap<Str
 
     (result, mapping)
 }
-

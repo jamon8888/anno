@@ -303,9 +303,21 @@ impl BridgingMetrics {
         let by_type_metrics: std::collections::HashMap<String, (f64, f64, f64)> = by_type
             .into_iter()
             .map(|(k, (pred, gold, corr))| {
-                let p = if pred > 0 { corr as f64 / pred as f64 } else { 0.0 };
-                let r = if gold > 0 { corr as f64 / gold as f64 } else { 0.0 };
-                let f = if p + r > 0.0 { 2.0 * p * r / (p + r) } else { 0.0 };
+                let p = if pred > 0 {
+                    corr as f64 / pred as f64
+                } else {
+                    0.0
+                };
+                let r = if gold > 0 {
+                    corr as f64 / gold as f64
+                } else {
+                    0.0
+                };
+                let f = if p + r > 0.0 {
+                    2.0 * p * r / (p + r)
+                } else {
+                    0.0
+                };
                 (k, (p, r, f))
             })
             .collect();
@@ -396,4 +408,3 @@ mod tests {
         assert_eq!(metrics.f1, 1.0);
     }
 }
-

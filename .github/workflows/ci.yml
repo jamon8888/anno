@@ -313,6 +313,42 @@ jobs:
           PROPTEST_CASES: 100
 
   # ==========================================================================
+  # Randomized Matrix Test (backends x datasets x tasks)
+  # ==========================================================================
+  matrix-test:
+    name: Randomized Matrix Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+      
+      - name: Cache datasets
+        uses: actions/cache@v4
+        with:
+          path: ~/.anno_cache
+          key: anno-datasets-${{ runner.os }}-v2
+          restore-keys: |
+            anno-datasets-${{ runner.os }}-
+      
+      - name: Run randomized matrix test
+        run: |
+          cargo test --test randomized_matrix_ci --features "eval-advanced" -- --nocapture
+        env:
+          ANNO_SAMPLE_STRATEGY: random
+          ANNO_CI_SEED: ${{ github.run_id }}
+      
+      - name: Run worst-first matrix test
+        run: |
+          cargo test --test randomized_matrix_ci --features "eval-advanced" -- --nocapture
+        env:
+          ANNO_SAMPLE_STRATEGY: worst-first
+          ANNO_CI_SEED: ${{ github.run_id }}
+
+  # ==========================================================================
   # F1 Regression Tests
   # ==========================================================================
   regression:

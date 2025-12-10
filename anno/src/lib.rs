@@ -81,12 +81,15 @@ pub mod backends;
 pub mod edit_distance;
 pub mod env;
 pub mod error;
+#[cfg(feature = "eval")]
 pub mod eval;
 /// Entity feature extraction for downstream ML and analysis.
 pub mod features;
 pub mod ingest;
 /// Joint inference for coreference resolution and entity linking.
 pub mod joint;
+/// Keyword and keyphrase extraction (TF-IDF, YAKE, TextRank).
+pub mod keywords;
 pub mod lang;
 /// Entity linking to knowledge bases.
 pub mod linking;
@@ -99,8 +102,33 @@ pub mod preprocess;
 pub mod salience;
 pub mod schema;
 pub mod similarity;
+/// Extractive summarization.
+pub mod summarize;
 pub mod sync;
+/// Temporal entity tracking, parsing, and diachronic NER.
+pub mod temporal;
 pub mod types;
+
+/// Geometric and topological foundations for entity resolution.
+///
+/// Provides advanced geometric representations that complement box embeddings:
+///
+/// - [`geometric::hyperbolic`]: Poincaré ball embeddings for hierarchical entity types
+/// - [`geometric::sheaf`]: Sheaf neural networks for gradient-level transitivity
+/// - [`geometric::tda`]: Topological data analysis for structural diagnostics
+///
+/// These are research stubs - see `docs/GEOMETRIC_FOUNDATIONS.md` for implementation status.
+///
+/// # When to Use What
+///
+/// | Need | Use |
+/// |------|-----|
+/// | Temporal evolution | Box embeddings (existing) |
+/// | Uncertainty quantification | Box embeddings (existing) |
+/// | Deep type hierarchies | `geometric::hyperbolic` |
+/// | Gradient-level transitivity | `geometric::sheaf` |
+/// | Structural diagnostics | `geometric::tda` |
+pub mod geometric;
 
 #[cfg(feature = "cli")]
 pub mod cli;

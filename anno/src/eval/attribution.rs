@@ -83,7 +83,10 @@ impl EntityAttribution {
     #[must_use]
     pub fn most_important(&self) -> Option<&TokenAttribution> {
         self.token_attributions.iter().max_by(|a, b| {
-            a.score.abs().partial_cmp(&b.score.abs()).unwrap_or(std::cmp::Ordering::Equal)
+            a.score
+                .abs()
+                .partial_cmp(&b.score.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
         })
     }
 
@@ -92,7 +95,10 @@ impl EntityAttribution {
     pub fn sorted_by_importance(&self) -> Vec<&TokenAttribution> {
         let mut sorted: Vec<_> = self.token_attributions.iter().collect();
         sorted.sort_by(|a, b| {
-            b.score.abs().partial_cmp(&a.score.abs()).unwrap_or(std::cmp::Ordering::Equal)
+            b.score
+                .abs()
+                .partial_cmp(&a.score.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         sorted
     }
@@ -101,19 +107,31 @@ impl EntityAttribution {
     #[must_use]
     pub fn explain(&self) -> String {
         let mut parts = Vec::new();
-        
+
         parts.push(format!(
             "Entity \"{}\" classified as {} (confidence: {:.1}%)",
-            self.entity_text, self.entity_type, self.original_confidence * 100.0
+            self.entity_text,
+            self.entity_type,
+            self.original_confidence * 100.0
         ));
 
         if !self.top_positive.is_empty() {
-            let tokens: Vec<_> = self.top_positive.iter().take(3).map(|t| format!("\"{}\"", t.token)).collect();
+            let tokens: Vec<_> = self
+                .top_positive
+                .iter()
+                .take(3)
+                .map(|t| format!("\"{}\"", t.token))
+                .collect();
             parts.push(format!("Key supporting tokens: {}", tokens.join(", ")));
         }
 
         if !self.top_negative.is_empty() {
-            let tokens: Vec<_> = self.top_negative.iter().take(3).map(|t| format!("\"{}\"", t.token)).collect();
+            let tokens: Vec<_> = self
+                .top_negative
+                .iter()
+                .take(3)
+                .map(|t| format!("\"{}\"", t.token))
+                .collect();
             parts.push(format!("Tokens reducing confidence: {}", tokens.join(", ")));
         }
 
@@ -196,35 +214,53 @@ impl AttributionAnalyzer {
     ) -> EntityAttribution {
         let chars: Vec<char> = text.chars().collect();
         let entity_text: String = chars[entity_start..entity_end].iter().collect();
-        
+
         // Simple tokenization (word-level)
         let tokens: Vec<&str> = text.split_whitespace().collect();
-        
+
         // Heuristic attribution based on position and content
         let mut attributions: Vec<TokenAttribution> = Vec::new();
-        
+
         for (pos, token) in tokens.iter().enumerate() {
             let score = self.heuristic_score(token, entity_type, pos, tokens.len(), &entity_text);
             attributions.push(TokenAttribution::new(token, pos, score));
         }
-        
+
         // Normalize if configured
         if self.ablation_config.normalize {
-            let max_abs = attributions.iter().map(|a| a.score.abs()).fold(0.0f64, f64::max);
+            let max_abs = attributions
+                .iter()
+                .map(|a| a.score.abs())
+                .fold(0.0f64, f64::max);
             if max_abs > 0.0 {
                 for attr in &mut attributions {
                     attr.normalized_score = attr.score.abs() / max_abs;
                 }
             }
         }
-        
+
         // Compute top positive/negative
         let mut sorted = attributions.clone();
-        sorted.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        
-        let top_positive: Vec<_> = sorted.iter().filter(|a| a.score > 0.0).take(5).cloned().collect();
-        let top_negative: Vec<_> = sorted.iter().rev().filter(|a| a.score < 0.0).take(5).cloned().collect();
-        
+        sorted.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        let top_positive: Vec<_> = sorted
+            .iter()
+            .filter(|a| a.score > 0.0)
+            .take(5)
+            .cloned()
+            .collect();
+        let top_negative: Vec<_> = sorted
+            .iter()
+            .rev()
+            .filter(|a| a.score < 0.0)
+            .take(5)
+            .cloned()
+            .collect();
+
         EntityAttribution {
             entity_text,
             entity_type: entity_type.to_string(),
@@ -248,63 +284,89 @@ impl AttributionAnalyzer {
         let mut score = 0.0;
         let token_lower = token.to_lowercase();
         let entity_type_lower = entity_type.to_lowercase();
-        
+
         // Tokens in entity itself are highly important
         if entity_text.to_lowercase().contains(&token_lower) {
             score += 0.8;
         }
-        
+
         // Title tokens for PERSON
         if entity_type_lower.contains("person") || entity_type_lower == "per" {
-            if ["dr", "dr.", "mr", "mr.", "ms", "ms.", "mrs", "mrs.", "prof", "prof."].contains(&token_lower.as_str()) {
+            if [
+                "dr", "dr.", "mr", "mr.", "ms", "ms.", "mrs", "mrs.", "prof", "prof.",
+            ]
+            .contains(&token_lower.as_str())
+            {
                 score += 0.5;
             }
-            if token.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            if token
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+            {
                 score += 0.2;
             }
         }
-        
+
         // Organization indicators
         if (entity_type_lower.contains("org") || entity_type_lower == "organization")
-            && ["inc", "inc.", "corp", "corp.", "llc", "ltd", "company", "corporation", "group"].contains(&token_lower.as_str()) {
-                score += 0.6;
-            }
-        
+            && [
+                "inc",
+                "inc.",
+                "corp",
+                "corp.",
+                "llc",
+                "ltd",
+                "company",
+                "corporation",
+                "group",
+            ]
+            .contains(&token_lower.as_str())
+        {
+            score += 0.6;
+        }
+
         // Location indicators
         if (entity_type_lower.contains("loc") || entity_type_lower.contains("gpe"))
-            && ["city", "country", "state", "capital", "in", "of", "near"].contains(&token_lower.as_str()) {
-                score += 0.3;
-            }
-        
+            && ["city", "country", "state", "capital", "in", "of", "near"]
+                .contains(&token_lower.as_str())
+        {
+            score += 0.3;
+        }
+
         // Position effect (closer to entity = more important)
         let entity_position = total_tokens / 2; // Approximate
         let distance = (position as i32 - entity_position as i32).unsigned_abs() as f64;
         let position_factor = 1.0 / (1.0 + distance * 0.1);
         score *= position_factor;
-        
+
         // Function words have less attribution
-        if ["the", "a", "an", "is", "was", "were", "are", "and", "or", "but"].contains(&token_lower.as_str()) {
+        if [
+            "the", "a", "an", "is", "was", "were", "are", "and", "or", "but",
+        ]
+        .contains(&token_lower.as_str())
+        {
             score *= 0.3;
         }
-        
+
         score
     }
 
     /// Compute aggregated feature importance across multiple entities.
-    pub fn aggregate_importance(
-        &self,
-        attributions: &[EntityAttribution],
-    ) -> HashMap<String, f64> {
+    pub fn aggregate_importance(&self, attributions: &[EntityAttribution]) -> HashMap<String, f64> {
         let mut importance: HashMap<String, (f64, usize)> = HashMap::new();
-        
+
         for attr in attributions {
             for token_attr in &attr.token_attributions {
-                let entry = importance.entry(token_attr.token.to_lowercase()).or_insert((0.0, 0));
+                let entry = importance
+                    .entry(token_attr.token.to_lowercase())
+                    .or_insert((0.0, 0));
                 entry.0 += token_attr.score.abs();
                 entry.1 += 1;
             }
         }
-        
+
         importance
             .into_iter()
             .map(|(k, (sum, count))| (k, sum / count as f64))
@@ -364,20 +426,22 @@ impl CounterfactualGenerator {
     ) -> Vec<Counterfactual> {
         let chars: Vec<char> = text.chars().collect();
         let entity_text: String = chars[entity_start..entity_end].iter().collect();
-        
+
         let mut counterfactuals = Vec::new();
-        
+
         // Counterfactual 1: Remove title
         let tokens: Vec<&str> = text.split_whitespace().collect();
         for (i, token) in tokens.iter().enumerate() {
             let lower = token.to_lowercase();
             if ["dr.", "mr.", "ms.", "prof.", "ceo"].contains(&lower.as_str()) {
-                let modified: String = tokens.iter().enumerate()
+                let modified: String = tokens
+                    .iter()
+                    .enumerate()
                     .filter(|(j, _)| *j != i)
                     .map(|(_, t)| *t)
                     .collect::<Vec<_>>()
                     .join(" ");
-                    
+
                 counterfactuals.push(Counterfactual {
                     original: text.to_string(),
                     modified,
@@ -388,11 +452,13 @@ impl CounterfactualGenerator {
                 });
             }
         }
-        
+
         // Counterfactual 2: Lowercase entity
         let lowercase_entity = entity_text.to_lowercase();
         if lowercase_entity != entity_text {
-            let modified: String = chars.iter().enumerate()
+            let modified: String = chars
+                .iter()
+                .enumerate()
                 .map(|(i, c)| {
                     if i >= entity_start && i < entity_end {
                         c.to_lowercase().next().unwrap_or(*c)
@@ -401,7 +467,7 @@ impl CounterfactualGenerator {
                     }
                 })
                 .collect();
-                
+
             counterfactuals.push(Counterfactual {
                 original: text.to_string(),
                 modified,
@@ -411,7 +477,7 @@ impl CounterfactualGenerator {
                 confidence_delta: -0.25,
             });
         }
-        
+
         // Counterfactual 3: Add context
         if entity_type.to_lowercase().contains("person") {
             let modified = format!("{} said that", text);
@@ -424,7 +490,7 @@ impl CounterfactualGenerator {
                 confidence_delta: 0.05,
             });
         }
-        
+
         counterfactuals.truncate(self.max_edits);
         counterfactuals
     }
@@ -441,15 +507,18 @@ mod tests {
     #[test]
     fn test_ablation_analysis() {
         let analyzer = AttributionAnalyzer::default();
-        
+
         let text = "Dr. Albert Einstein was a physicist.";
         let attribution = analyzer.ablation_analysis(text, 4, 19, "PERSON");
-        
+
         assert_eq!(attribution.entity_type, "PERSON");
         assert!(!attribution.token_attributions.is_empty());
-        
+
         // Dr. should have high attribution for PERSON
-        let dr_attr = attribution.token_attributions.iter().find(|a| a.token == "Dr.");
+        let dr_attr = attribution
+            .token_attributions
+            .iter()
+            .find(|a| a.token == "Dr.");
         assert!(dr_attr.is_some());
         assert!(dr_attr.unwrap().score > 0.0);
     }
@@ -475,7 +544,7 @@ mod tests {
             top_negative: vec![],
             method: AttributionMethod::Ablation,
         };
-        
+
         let explanation = attribution.explain();
         assert!(explanation.contains("PERSON"));
         assert!(explanation.contains("95.0%"));
@@ -484,10 +553,10 @@ mod tests {
     #[test]
     fn test_counterfactual_generator() {
         let generator = CounterfactualGenerator::new();
-        
+
         let text = "Dr. Smith is the CEO.";
         let counterfactuals = generator.generate(text, 4, 9, "PERSON");
-        
+
         // Should generate counterfactual for removing "Dr."
         assert!(!counterfactuals.is_empty());
     }
@@ -495,7 +564,7 @@ mod tests {
     #[test]
     fn test_aggregate_importance() {
         let analyzer = AttributionAnalyzer::default();
-        
+
         let attr1 = EntityAttribution {
             entity_text: "Einstein".to_string(),
             entity_type: "PERSON".to_string(),
@@ -508,7 +577,7 @@ mod tests {
             top_negative: vec![],
             method: AttributionMethod::Ablation,
         };
-        
+
         let importance = analyzer.aggregate_importance(&[attr1]);
         assert!(importance.contains_key("dr."));
         assert!(importance.contains_key("einstein"));
@@ -529,10 +598,9 @@ mod tests {
             top_negative: vec![],
             method: AttributionMethod::Ablation,
         };
-        
+
         let most = attribution.most_important();
         assert!(most.is_some());
         assert_eq!(most.unwrap().token, "b");
     }
 }
-

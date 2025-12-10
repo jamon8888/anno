@@ -1112,6 +1112,33 @@ For production use, Option 2 (ONNX) provides the best balance of accuracy and de
 13. [ ] Document FAISS integration path for billion-scale entity linking
 14. [ ] Complete joint model feature engineering and learning implementation
 
+### Geometric Foundations (NEW - Dec 2025)
+
+**Stub implementations completed** in `anno/src/geometric/`:
+
+15. [x] **Sheaf Neural Networks**: Stub implementation with trait definitions
+    - See `anno/src/geometric/sheaf.rs` for `SheafGraph`, `RestrictionMap`, `SheafCoref` trait
+    - See [`GEOMETRIC_FOUNDATIONS.md`](GEOMETRIC_FOUNDATIONS.md) for theory
+    - Apache 2.0 reference: twitter-research/neural-sheaf-diffusion
+    - [ ] TODO: Port diffusion layer from PyTorch to Candle
+16. [x] **Hyperbolic Embeddings**: Stub implementation with core operations
+    - See `anno/src/geometric/hyperbolic.rs` for `HyperbolicEmbedding`, `PoincareDistance`
+    - [ ] TODO: Implement Möbius addition, exponential/logarithmic maps
+    - [ ] TODO: Add Riemannian optimizer for training
+17. [x] **Persistent Homology**: Stub implementation with types
+    - See `anno/src/geometric/tda.rs` for `PersistencePair`, `PersistenceDiagram`
+    - [ ] TODO: Integrate with Python TDA libraries (giotto-tda, ripser)
+    - [ ] TODO: Add coreference-specific analysis utilities
+18. [ ] **eRST Integration**: Enhanced RST graph structure for discourse-aware coref
+    - Graph-based (not tree-based) discourse relations
+    - Enables non-projective cross-discourse links
+
+**Unified traits** in `anno/src/geometric/mod.rs`:
+- `GeometricMention`: Common interface for coreference scoring
+- `GeometricSpace`: Common interface for embedding spaces
+- `transitivity_violations()`: Detect transitivity inconsistencies
+- `transitivity_consistency()`: Measure global consistency score
+
 ### xCoRe Integration (High Priority)
 
 15. [ ] Add BookCoref and Animal Farm datasets to registry

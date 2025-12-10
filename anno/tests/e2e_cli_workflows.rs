@@ -1049,10 +1049,7 @@ fn e2e_cli_domain_detection() {
         .output()
         .unwrap();
 
-    assert!(
-        output.status.success(),
-        "domain command should succeed"
-    );
+    assert!(output.status.success(), "domain command should succeed");
     let stdout = String::from_utf8(output.stdout).unwrap();
 
     // Domain command outputs domain analysis, not entities
@@ -1205,11 +1202,7 @@ fn e2e_cli_privacy_detection() {
 #[cfg(feature = "eval-advanced")]
 fn e2e_cli_privacy_redaction() {
     let output = anno_cli_cmd()
-        .args(&[
-            "privacy",
-            "-t",
-            "Contact john@company.com or 555-123-4567",
-        ])
+        .args(&["privacy", "-t", "Contact john@company.com or 555-123-4567"])
         .output()
         .unwrap();
 

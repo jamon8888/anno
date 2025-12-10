@@ -142,10 +142,7 @@ pub fn run(args: ExplainArgs) -> Result<(), String> {
             .map(|p| p.source.to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
-        println!(
-            "{}",
-            color("1;36", &format!("Entity: \"{}\"", entity.text))
-        );
+        println!("{}", color("1;36", &format!("Entity: \"{}\"", entity.text)));
         println!();
 
         // Type decision
@@ -180,9 +177,21 @@ pub fn run(args: ExplainArgs) -> Result<(), String> {
         // Context
         let ctx_start = entity.start.saturating_sub(30);
         let ctx_end = (entity.end + 30).min(text.chars().count());
-        let before: String = text.chars().skip(ctx_start).take(entity.start - ctx_start).collect();
-        let entity_text: String = text.chars().skip(entity.start).take(entity.end - entity.start).collect();
-        let after: String = text.chars().skip(entity.end).take(ctx_end - entity.end).collect();
+        let before: String = text
+            .chars()
+            .skip(ctx_start)
+            .take(entity.start - ctx_start)
+            .collect();
+        let entity_text: String = text
+            .chars()
+            .skip(entity.start)
+            .take(entity.end - entity.start)
+            .collect();
+        let after: String = text
+            .chars()
+            .skip(entity.end)
+            .take(ctx_end - entity.end)
+            .collect();
 
         println!("{}:", color("1;33", "Context"));
         println!(
@@ -191,7 +200,11 @@ pub fn run(args: ExplainArgs) -> Result<(), String> {
             color("90", &before),
             color("1;33", &entity_text),
             color("90", &after),
-            if ctx_end < text.chars().count() { "..." } else { "" }
+            if ctx_end < text.chars().count() {
+                "..."
+            } else {
+                ""
+            }
         );
         println!();
 
@@ -251,7 +264,11 @@ fn analyze_features(text: &str, entity: &anno_core::Entity) -> Vec<FeatureContri
     }
 
     // All caps
-    if entity_text.chars().all(|c| !c.is_alphabetic() || c.is_uppercase()) && entity_text.len() > 1 {
+    if entity_text
+        .chars()
+        .all(|c| !c.is_alphabetic() || c.is_uppercase())
+        && entity_text.len() > 1
+    {
         features.push(FeatureContribution {
             name: "all_caps".into(),
             value: "true".into(),
@@ -279,7 +296,7 @@ fn analyze_features(text: &str, entity: &anno_core::Entity) -> Vec<FeatureContri
     // Left context analysis
     let left_ctx: String = text.chars().take(entity.start).collect();
     let left_words: Vec<&str> = left_ctx.split_whitespace().rev().take(3).collect();
-    
+
     // Title detection
     let titles = ["Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "Sir", "Lord", "Lady"];
     for title in &titles {
@@ -297,8 +314,9 @@ fn analyze_features(text: &str, entity: &anno_core::Entity) -> Vec<FeatureContri
     let right_ctx: String = text.chars().skip(entity.end).take(50).collect();
     let person_verbs = ["said", "says", "told", "announced", "declared", "stated"];
     for verb in &person_verbs {
-        if right_ctx.to_lowercase().starts_with(&format!(" {}", verb)) 
-            || right_ctx.to_lowercase().starts_with(&format!(", {}", verb)) {
+        if right_ctx.to_lowercase().starts_with(&format!(" {}", verb))
+            || right_ctx.to_lowercase().starts_with(&format!(", {}", verb))
+        {
             features.push(FeatureContribution {
                 name: "context_right".into(),
                 value: format!("followed by '{}'", verb),
@@ -309,7 +327,15 @@ fn analyze_features(text: &str, entity: &anno_core::Entity) -> Vec<FeatureContri
     }
 
     // Organization indicators
-    let org_suffixes = ["Inc.", "Corp.", "LLC", "Ltd.", "Co.", "Company", "Corporation"];
+    let org_suffixes = [
+        "Inc.",
+        "Corp.",
+        "LLC",
+        "Ltd.",
+        "Co.",
+        "Company",
+        "Corporation",
+    ];
     for suffix in &org_suffixes {
         if entity_text.ends_with(suffix) {
             features.push(FeatureContribution {
@@ -356,8 +382,11 @@ fn analyze_features(text: &str, entity: &anno_core::Entity) -> Vec<FeatureContri
     }
 
     // Sort by weight descending
-    features.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap_or(std::cmp::Ordering::Equal));
+    features.sort_by(|a, b| {
+        b.weight
+            .partial_cmp(&a.weight)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     features
 }
-

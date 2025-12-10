@@ -65,6 +65,8 @@
 mod confidence;
 mod ext;
 mod score;
+/// Uncertain predictions and abstention for selective NER.
+pub mod uncertain;
 
 pub use confidence::{Confidence, ConfidenceError, Probability, UnitInterval};
 pub use ext::EntitySliceExt;

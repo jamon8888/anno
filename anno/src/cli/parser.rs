@@ -125,6 +125,27 @@ pub enum Commands {
     #[command(visible_alias = "b")]
     Batch(commands::BatchArgs),
 
+    /// Joint NER + Coreference + Entity Linking analysis
+    #[command(visible_alias = "j")]
+    Joint(commands::JointArgs),
+
+    /// Privacy: detect and redact PII
+    #[command(visible_alias = "priv")]
+    Privacy(commands::PrivacyArgs),
+
+    /// Watch directory for incremental processing
+    #[command(visible_alias = "w")]
+    Watch(commands::WatchArgs),
+
+    /// Domain shift detection
+    Domain(commands::DomainArgs),
+
+    /// Explain why entities were extracted
+    Explain(commands::ExplainArgs),
+
+    /// Analyze singleton coreference clusters
+    Singleton(commands::SingletonArgs),
+
     /// Generate shell completions
     Completions {
         /// Shell to generate completions for

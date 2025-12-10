@@ -115,6 +115,22 @@
 //! - Mohammadshahi & Henderson (2021): "Graph-to-Graph Transformer for Dependency Parsing"
 //! - Hossain et al. (2025): "SpanEIT: Dynamic Span Interaction and Graph-Aware Memory"
 //!   [arXiv:2509.11604](https://arxiv.org/abs/2509.11604)
+//!
+//! # Future Direction: Sheaf Neural Networks
+//!
+//! This implementation uses explicit transitivity bonuses to approximate global consistency.
+//! A more principled approach: **Sheaf Neural Networks** replace scalar edge weights with
+//! learned linear maps (restriction maps) and minimize the sheaf Dirichlet energy:
+//!
+//! ```text
+//! E(x) = Σ_{(u,v) ∈ E} || F(u→v) · x_u - F(v→u) · x_v ||²
+//! ```
+//!
+//! This enforces transitivity at the gradient level, not post-hoc. See:
+//! - [`crate::geometric::sheaf`] for stub implementation and trait definitions
+//! - `docs/GEOMETRIC_FOUNDATIONS.md` for theory and integration path
+//! - Bodnar et al. (2023): "Neural Sheaf Diffusion" - NeurIPS
+//! - twitter-research/neural-sheaf-diffusion (Apache 2.0): reference implementation
 
 use anno_core::coref::{CorefChain, Mention, MentionType};
 use std::collections::HashSet;
@@ -350,7 +366,8 @@ impl CorefGraph {
     /// let positions = vec![0, 50, 200];  // Character offsets
     ///
     /// // Seed edges for mentions within 100 chars of each other
-    /// graph.seed_cooccurrence_edges(&positions, 100, None);
+    /// // Type annotation needed when passing None for the scorer
+    /// graph.seed_cooccurrence_edges::<fn(usize, usize) -> bool>(&positions, 100, None);
     ///
     /// assert!(graph.has_edge(0, 1));   // 50 < 100
     /// assert!(!graph.has_edge(0, 2));  // 200 > 100

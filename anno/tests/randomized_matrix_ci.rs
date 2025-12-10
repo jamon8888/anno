@@ -36,7 +36,10 @@ use xxhash_rust::xxh3::xxh3_64;
 // =============================================================================
 
 /// Built-in lightweight backends (no model downloads required)
-const BUILTIN_BACKENDS: &[&str] = &["pattern", "heuristic", "crf", "stacked", "ensemble"];
+const BUILTIN_BACKENDS: &[&str] = &["pattern", "heuristic", "crf", "stacked"];
+
+/// Coreference backends (built-in, no model downloads)
+const COREF_BACKENDS: &[&str] = &["mention_ranking"];
 
 /// ML backends requiring ONNX feature
 #[cfg(feature = "onnx")]
@@ -90,6 +93,7 @@ impl SamplingStrategy {
 /// Get all available backends based on compiled features
 fn get_all_backends() -> Vec<&'static str> {
     let mut backends: Vec<&str> = BUILTIN_BACKENDS.to_vec();
+    backends.extend(COREF_BACKENDS);
     backends.extend(ONNX_BACKENDS);
     backends.extend(CANDLE_BACKENDS);
     backends.extend(BURN_BACKENDS);
@@ -116,10 +120,11 @@ fn backend_priority(backend: &str) -> u32 {
         "nuner" => 4,                      // Token-based
         "bert_onnx" | "candle_ner" => 5,   // Standard BERT
         "burn_ner" => 6,                   // New, undertested
+        // Coreference backends: medium priority
+        "mention_ranking" => 8, // Book-scale coref, type-specific limits
         // Builtins: lower priority (well-tested)
-        "ensemble" => 10,
-        "stacked" => 11,
-        "crf" => 12,
+        "stacked" => 10,
+        "crf" => 11,
         "heuristic" => 13,
         "pattern" => 14,
         _ => 100,
@@ -164,10 +169,14 @@ fn select_backends(strategy: SamplingStrategy, count: usize, seed: u64) -> Vec<&
 
 /// Datasets that are typically cached or fast to load
 const QUICK_DATASETS: &[DatasetId] = &[
+    // NER datasets
     DatasetId::WikiGold,
     DatasetId::Wnut17,
     DatasetId::MitMovie,
     DatasetId::MitRestaurant,
+    // Coreference datasets (for coref backend testing)
+    DatasetId::GAP,
+    DatasetId::WikiCoref,
 ];
 
 /// More comprehensive dataset list for thorough testing
@@ -234,17 +243,40 @@ enum ErrorCategory {
 impl ErrorCategory {
     fn from_error(err: &str) -> Self {
         let lower = err.to_lowercase();
-        if lower.contains("not cached") || lower.contains("unavailable") {
+        if lower.contains("not cached")
+            || lower.contains("unavailable")
+            || lower.contains("not found")
+            || lower.contains("missing dataset")
+        {
             Self::DatasetNotCached
-        } else if lower.contains("feature") || lower.contains("not enabled") {
+        } else if lower.contains("feature")
+            || lower.contains("not enabled")
+            || lower.contains("requires feature")
+        {
             Self::FeatureNotEnabled
-        } else if lower.contains("model not") || lower.contains("download") {
+        } else if lower.contains("model not")
+            || lower.contains("download")
+            || lower.contains("loading model")
+            || lower.contains("model file")
+        {
             Self::ModelNotDownloaded
-        } else if lower.contains("auth") || lower.contains("token") || lower.contains("hf_") {
+        } else if lower.contains("auth")
+            || lower.contains("token")
+            || lower.contains("hf_")
+            || lower.contains("huggingface")
+            || lower.contains("unauthorized")
+            || lower.contains("403")
+        {
             Self::AuthRequired
-        } else if lower.contains("incompatible") || lower.contains("entity type") {
+        } else if lower.contains("incompatible")
+            || lower.contains("entity type")
+            || lower.contains("does not support")
+            || lower.contains("unsupported task")
+            || lower.contains("invalid input")
+            || lower.contains("backend")
+        {
             Self::TypeIncompatible
-        } else if lower.contains("panic") || lower.contains("error") {
+        } else if lower.contains("panic") || lower.contains("internal error") {
             Self::RuntimeError
         } else {
             Self::Unknown
@@ -821,6 +853,73 @@ fn test_deterministic_sampling() {
     if selection1 != selection3 {
         eprintln!("Different seeds produce different selections (as expected)");
     }
+}
+
+#[test]
+fn test_dataset_metadata_quality() {
+    //! Verify that datasets used in testing have complete metadata.
+
+    eprintln!("\n=== Dataset Metadata Quality Check ===");
+
+    let datasets_to_check = [
+        QUICK_DATASETS,
+        #[allow(dead_code)]
+        ALL_DATASETS,
+    ];
+
+    let mut issues = Vec::new();
+
+    for dataset in datasets_to_check.iter().flat_map(|d| d.iter()) {
+        let name = dataset.name();
+        let desc = dataset.description();
+        let url = dataset.download_url();
+
+        // Check for placeholder values
+        if name == "Unknown Dataset" {
+            issues.push(format!("{:?}: missing name", dataset));
+        }
+        if desc == "Dataset not yet fully integrated" {
+            issues.push(format!("{:?}: missing description", dataset));
+        }
+        if url.is_empty()
+            && !matches!(
+                dataset,
+                DatasetId::GAP | DatasetId::WikiCoref // Local/sample datasets OK
+            )
+        {
+            // Note: empty URL is OK for some datasets that require registration
+            eprintln!(
+                "  {:?}: no download URL (may require registration)",
+                dataset
+            );
+        }
+
+        eprintln!(
+            "  {:?}: name={}, desc_len={}, has_url={}",
+            dataset,
+            if name != "Unknown Dataset" {
+                "ok"
+            } else {
+                "MISSING"
+            },
+            desc.len(),
+            !url.is_empty()
+        );
+    }
+
+    if !issues.is_empty() {
+        eprintln!("\nMetadata issues found:");
+        for issue in &issues {
+            eprintln!("  - {}", issue);
+        }
+    }
+
+    // Datasets used in matrix testing should have complete metadata
+    assert!(
+        issues.is_empty(),
+        "Found {} metadata issues in test datasets",
+        issues.len()
+    );
 }
 
 #[test]

@@ -484,8 +484,7 @@ impl UncertainPrediction {
                 if let Some((_, p)) = dist.argmax() {
                     if p < threshold {
                         if dist.num_types() >= 2 {
-                            let top: Vec<_> =
-                                dist.iter().take(2).map(|(t, _)| t.clone()).collect();
+                            let top: Vec<_> = dist.iter().take(2).map(|(t, _)| t.clone()).collect();
                             return Self::abstain_ambiguous(top, dist.margin());
                         }
                         return Self::abstain_low_confidence(p);
@@ -797,10 +796,10 @@ mod tests {
     #[test]
     fn test_selective_metrics() {
         let predictions = vec![
-            (Some(EntityType::Person), EntityType::Person),        // correct
-            (Some(EntityType::Organization), EntityType::Person),  // incorrect
-            (None, EntityType::Location),                          // abstained
-            (Some(EntityType::Location), EntityType::Location),    // correct
+            (Some(EntityType::Person), EntityType::Person), // correct
+            (Some(EntityType::Organization), EntityType::Person), // incorrect
+            (None, EntityType::Location),                   // abstained
+            (Some(EntityType::Location), EntityType::Location), // correct
         ];
 
         let metrics = SelectiveMetrics::compute(&predictions);
@@ -847,4 +846,3 @@ mod tests {
         .is_resolvable());
     }
 }
-

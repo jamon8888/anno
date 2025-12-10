@@ -90,6 +90,83 @@ assert!(is_valid_entity_span("🎉🎊", 0, 2)); // 2 chars, 8 bytes
 - Endonyms vs exonyms: 日本/Japan/Japon, Москва/Moscow
 - Administrative divisions: Province, State, Prefecture, Oblast, Bundesland
 
+## Korean-Specific Coreference Challenges
+
+Korean presents unique challenges for coreference resolution documented in KoCoNovel (Kim et al. 2024, arXiv:2404.01140):
+
+### Address Term Culture (호칭 문화)
+In Korean, characters are frequently referred to by kinship/relational terms rather than names:
+- **Fictive kinship**: Non-relatives addressed by kinship terms (e.g., calling a neighbor "삼촌" uncle)
+- **"Bobu emma" pattern**: Mothers referred to by child's name + "엄마/어머니" (e.g., "보부 엄마" = Bobu's mother)
+- **24% of character mentions in Korean novels are single common nouns** (vs English using proper names)
+
+### Mention Category Breakdown (KoCoNovel)
+| Category | % | Count | Subcategories |
+|----------|---|-------|---------------|
+| Pronominal | 30.7% | 5846 | - |
+| Proper Name | 22.8% | 4338 | - |
+| Single Noun | 24.1% | 4591 | kinship 9.2%, titles 3.1%, other 11.8% |
+| Noun Phrase | 22.4% | 4255 | Name+modifier 4.6%, kinship 4.4%, other 13.3% |
+
+### Linguistic Features Affecting Coreference
+| Feature | Korean | English | Impact on Coref |
+|---------|--------|---------|-----------------|
+| Determiners | None (no "the/a") | Present | No definiteness cues |
+| Proper noun markers | None (no capitalization) | Capitalization | Hard to distinguish names |
+| Plural suffix | Often omitted | Required | Ambiguous number |
+| Pro-drop | Very common (∅ pronouns) | Rare | Many zero anaphora |
+| Possessive markers | Often omitted | Required | Implicit relationships |
+
+### Distance Statistics (vs NIKL Corpus)
+| Metric | KoCoNovel | NIKL News | NIKL Spoken |
+|--------|-----------|-----------|-------------|
+| Tokens/doc avg | 3578.5 | 275.3 | 2379.3 |
+| Antecedent Distance avg | 70.7 | 38.2 | 163.2 |
+| Spread avg | 1583.3 | 119.5 | 847.6 |
+| Spread max | 19603 | 2318 | 15488 |
+
+### Test Data for Korean Coreference
+```rust
+let korean_coref_tests = vec![
+    // Address term culture: kinship over names (from The Unknown Woman by Lee Gwangsu)
+    "\"달걀이 어디서 났니?\" 하고 조부님은 물으셨다.",  // grandfather (not name)
+    // Pro-drop with zero pronouns
+    "삼순이 어머니더러 오빠 온단 말을 했더니, 달걀 두 개를 주어.",  // I(∅) told, she(∅) gave
+    // Nested proper name with kinship pattern
+    "보부 엄마가 누구냐?",  // "Who is Bobu's mother?" - embedded name in kinship phrase
+    // Compound kinship terms
+    "우리 모자는 눈 내리는 거리를 방황했다.",  // "The mother and son" (moca = 母子)
+    // Reader-character asymmetry (character identity revealed later)
+    "하고 나는 못 듣던 여인의 이름이 수상해서 경애에게 물었다.",  // narrator curious about unknown woman
+];
+```
+
+### KoCoNovel Dataset Versions
+- **Reader vs Omniscient**: Character identity from reader's perspective vs author's knowledge
+  - Example: In "Ms. B and Love Letters", Taehoon/Kyungsuk revealed to be one-man show by Ms. B
+- **Separate vs Overlapped**: Plural mentions treated as distinct or connected to singular entities
+  - Separate: ['We'], ['I'], ['You'] as distinct entities
+  - Overlapped: ['We', 'I'], ['We', 'You'] with shared membership
+
+### Non-Human Character Criteria
+| Case | Character? | Basis |
+|------|------------|-------|
+| Goblin asking for a favor | Yes | Engagement in dialogue |
+| Cow crying at protagonist's words | Yes | Emotional exchange with protagonist |
+| Bird protagonist believes is crying for him | No | Simple projection of protagonist's emotions |
+| Ghost protagonist mistakenly sees | Maybe | Depends on what entity is revealed to be |
+
+### Pronoun Exclusions
+Korean first-person plural pronouns `우리` (wuli) and `저희` (cehuy) are excluded from
+coreference annotation due to ambiguous in-group semantics (can mean "my", "our", or "we" 
+depending on psychological relationship between speakers).
+
+### Experimental Baselines (BERT-based)
+- KoCoNovel-only training: ~62-73% MUC F1 (varies by split)
+- NIKL-only training: ~42-46% avg F1 on literary test
+- NIKL+KoCoNovel combined: Often best performance, higher recall
+- Note: Literary domain benefits from domain-specific training despite smaller corpus size
+
 ## Classical Languages
 
 ### Supported Classical Languages
