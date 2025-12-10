@@ -1,0 +1,29 @@
+[package]
+name = "anno-rel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Relation extraction for NLP: extract (head, relation, tail) triples from text"
+keywords = ["nlp", "relation-extraction", "knowledge-graph", "information-extraction"]
+categories = ["science", "text-processing"]
+
+[dependencies]
+anno-core = { path = "../anno-core" }
+anno-models = { path = "../anno-models", optional = true }
+thiserror.workspace = true
+serde = { workspace = true, optional = true }
+log.workspace = true
+
+[features]
+default = []
+models = ["dep:anno-models"]
+serde = ["dep:serde", "anno-core/serde"]
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true
