@@ -817,22 +817,18 @@ fn run_list(
             for id in LoadableDatasetId::all() {
                 let name = id.name();
                 if let Some(ref task) = task_filter {
-                    // Simple task filtering based on name patterns
-                    let is_coref = name.to_lowercase().contains("coref")
-                        || matches!(
-                            id,
-                            LoadableDatasetId::GAP
-                                | LoadableDatasetId::PreCo
-                                | LoadableDatasetId::LitBank
-                                | LoadableDatasetId::WikiCoref
-                                | LoadableDatasetId::ARRAU
-                                | LoadableDatasetId::GUM
-                        );
-                    if task == "coref" && !is_coref {
-                        continue;
-                    }
-                    if task == "ner" && is_coref {
-                        continue;
+                    // Use the dataset's categorization (loader method or registry fallback)
+                    let is_coref = id.is_coreference();
+                    // NER is the default if not specifically coref
+                    let is_ner = id
+                        .find_in_registry()
+                        .map(|r| r.is_ner())
+                        .unwrap_or(!is_coref);
+
+                    match task.as_str() {
+                        "coref" if !is_coref => continue,
+                        "ner" if !is_ner => continue,
+                        _ => {}
                     }
                 }
 
