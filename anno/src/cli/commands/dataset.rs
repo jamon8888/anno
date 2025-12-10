@@ -686,7 +686,10 @@ fn run_info(dataset: &str) -> Result<(), String> {
 
         if let Some(registry_id) = registry_match {
             // Show registry metadata
-            println!("{}", color("1;36", &format!("Dataset: {}", registry_id.name())));
+            println!(
+                "{}",
+                color("1;36", &format!("Dataset: {}", registry_id.name()))
+            );
             println!();
 
             // Basic info
@@ -733,7 +736,10 @@ fn run_info(dataset: &str) -> Result<(), String> {
             // Check if loadable
             println!();
             if loadable_match.is_some() {
-                println!("  Status: {} (can be downloaded)", color("1;32", "Loadable"));
+                println!(
+                    "  Status: {} (can be downloaded)",
+                    color("1;32", "Loadable")
+                );
 
                 // Try to load and show stats if eval-advanced is enabled
                 #[cfg(feature = "eval-advanced")]

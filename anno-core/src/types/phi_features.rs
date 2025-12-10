@@ -552,6 +552,47 @@ mod tests {
         assert_eq!(format!("{}", Number::Singular), "sg");
         assert_eq!(format!("{}", Number::Dual), "du");
         assert_eq!(format!("{}", Number::Plural), "pl");
+        assert_eq!(format!("{}", Number::Unknown), "?");
+    }
+
+    #[test]
+    fn test_number_from_str() {
+        assert_eq!("sg".parse::<Number>().unwrap(), Number::Singular);
+        assert_eq!("singular".parse::<Number>().unwrap(), Number::Singular);
+        assert_eq!("du".parse::<Number>().unwrap(), Number::Dual);
+        assert_eq!("dual".parse::<Number>().unwrap(), Number::Dual);
+        assert_eq!("pl".parse::<Number>().unwrap(), Number::Plural);
+        assert_eq!("plural".parse::<Number>().unwrap(), Number::Plural);
+        assert_eq!("?".parse::<Number>().unwrap(), Number::Unknown);
+        assert_eq!("unknown".parse::<Number>().unwrap(), Number::Unknown);
+        assert_eq!("unk".parse::<Number>().unwrap(), Number::Unknown);
+    }
+
+    #[test]
+    fn test_number_compatibility() {
+        // Exact matches
+        assert!(Number::Singular.is_compatible(&Number::Singular));
+        assert!(Number::Dual.is_compatible(&Number::Dual));
+        assert!(Number::Plural.is_compatible(&Number::Plural));
+        assert!(Number::Unknown.is_compatible(&Number::Unknown));
+
+        // Unknown is compatible with everything
+        assert!(Number::Unknown.is_compatible(&Number::Singular));
+        assert!(Number::Unknown.is_compatible(&Number::Dual));
+        assert!(Number::Unknown.is_compatible(&Number::Plural));
+        assert!(Number::Singular.is_compatible(&Number::Unknown));
+        assert!(Number::Dual.is_compatible(&Number::Unknown));
+        assert!(Number::Plural.is_compatible(&Number::Unknown));
+
+        // Dual is compatible with Plural (Semitic/Sanskrit languages)
+        assert!(Number::Dual.is_compatible(&Number::Plural));
+        assert!(Number::Plural.is_compatible(&Number::Dual));
+
+        // Singular is NOT compatible with Plural or Dual
+        assert!(!Number::Singular.is_compatible(&Number::Plural));
+        assert!(!Number::Singular.is_compatible(&Number::Dual));
+        assert!(!Number::Plural.is_compatible(&Number::Singular));
+        assert!(!Number::Dual.is_compatible(&Number::Singular));
     }
 
     #[test]
@@ -566,5 +607,107 @@ mod tests {
         let json = serde_json::to_string(&phi).unwrap();
         let recovered: PhiFeatures = serde_json::from_str(&json).unwrap();
         assert_eq!(phi, recovered);
+    }
+
+    // =========================================================================
+    // Linguistic invariant tests - encoding theoretical constraints
+    // =========================================================================
+
+    /// Person is a hard constraint: 1st/2nd/3rd cannot corefer.
+    ///
+    /// "I went to the store. She bought milk." - "I" and "She" cannot corefer.
+    /// This is absolute in all known human languages.
+    #[test]
+    fn test_person_is_hard_constraint() {
+        assert!(Person::First.is_compatible(&Person::First));
+        assert!(Person::Second.is_compatible(&Person::Second));
+        assert!(Person::Third.is_compatible(&Person::Third));
+
+        // Cross-person is never compatible
+        assert!(!Person::First.is_compatible(&Person::Second));
+        assert!(!Person::First.is_compatible(&Person::Third));
+        assert!(!Person::Second.is_compatible(&Person::Third));
+    }
+
+    /// Dual number is compatible with plural in most contexts.
+    ///
+    /// In Arabic/Hebrew/Sanskrit, a pair of entities (dual) can often be
+    /// referred to with plural pronouns. This is a cross-linguistic pattern.
+    ///
+    /// Example (Arabic):
+    /// - الولدان ذهبا (al-waladān dhahabā) - "The two boys went" (dual)
+    /// - هم ذهبوا (hum dhahabū) - "They went" (plural can refer to the pair)
+    #[test]
+    fn test_dual_plural_compatibility_is_symmetric() {
+        assert!(Number::Dual.is_compatible(&Number::Plural));
+        assert!(Number::Plural.is_compatible(&Number::Dual));
+    }
+
+    /// Unknown number/gender should be compatible with anything.
+    ///
+    /// This handles:
+    /// - Singular "they" in English (number ambiguous)
+    /// - Epicene nouns (doctor, teacher - gender unknown without context)
+    /// - Generic "you" (singular or plural)
+    #[test]
+    fn test_unknown_is_permissive() {
+        // Unknown number is compatible with all numbers
+        for number in [
+            Number::Singular,
+            Number::Dual,
+            Number::Plural,
+            Number::Unknown,
+        ] {
+            assert!(
+                Number::Unknown.is_compatible(&number),
+                "Unknown should be compatible with {:?}",
+                number
+            );
+        }
+    }
+
+    /// PhiFeatures compatibility is conjunction of component compatibility.
+    ///
+    /// Two mentions can corefer only if ALL phi-features are compatible.
+    /// This models agreement constraints in syntax.
+    #[test]
+    fn test_phi_compatibility_is_conjunction() {
+        let he = PhiFeatures::third_sg_masc();
+        let she = PhiFeatures::third_sg_fem();
+        let they = PhiFeatures::third_plural();
+
+        // Same features = compatible
+        assert!(he.is_compatible(&he));
+
+        // Gender mismatch = incompatible
+        assert!(!he.is_compatible(&she));
+
+        // Number mismatch = incompatible
+        assert!(!he.is_compatible(&they));
+
+        // Person mismatch would also be incompatible
+        let i = PhiFeatures::new(Person::First, Number::Singular, Gender::Unknown);
+        assert!(!i.is_compatible(&he));
+    }
+
+    /// The parsing format "3sgm" should round-trip correctly.
+    ///
+    /// This format is used in linguistic annotations and should be stable.
+    #[test]
+    fn test_parse_format_stability() {
+        let cases = [
+            ("3sgm", Person::Third, Number::Singular, Gender::Masculine),
+            ("3sgf", Person::Third, Number::Singular, Gender::Feminine),
+            ("3plm", Person::Third, Number::Plural, Gender::Masculine),
+            ("1sg", Person::First, Number::Singular, Gender::Unknown),
+            ("2du", Person::Second, Number::Dual, Gender::Unknown),
+        ];
+
+        for (input, expected_person, expected_number, expected_gender) in cases {
+            let phi = PhiFeatures::parse(input).expect(&format!("Should parse: {}", input));
+            assert_eq!(phi.person, expected_person, "Person for {}", input);
+            assert_eq!(phi.number, expected_number, "Number for {}", input);
+            assert_eq!(phi.gender, expected_gender, "Gender for {}", input);
+        }
     }
 }

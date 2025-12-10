@@ -43,7 +43,7 @@
 //! - Reparameterization: Mᵢ = mᵢ + exp(δᵢ) where δᵢ is the learned parameter
 
 use crate::backends::box_embeddings::BoxEmbedding;
-use crate::eval::coref::{CorefChain, CorefDocument};
+use anno_core::coref::{CorefChain, CorefDocument};
 use anno_core::Entity;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -764,7 +764,7 @@ impl BoxEmbeddingTrainer {
                 } else {
                     "S-"
                 };
-                println!("Epoch {}: loss = {:.4}{}, lr = {:.6}, best = {:.4} {} ({} batches{}, neg_w={:.2}, stage={})", 
+                println!("Epoch {}: loss = {:.4}{}, lr = {:.6}, best = {:.4} {} ({} batches{}, neg_w={:.2}, stage={})",
                     epoch, avg_loss, loss_reduction, current_lr, best_loss, status, num_batches, patience_info, adaptive_negative_weight, stage);
                 println!(
                     "  Overlap: {:.1}%, Pos: {:.4}, Neg: {:.4}, Gap: {:.4} {}",
@@ -1097,7 +1097,7 @@ impl BoxEmbeddingTrainer {
             let resolved_entities = resolver.resolve_with_boxes(entities, &boxes);
 
             // Convert resolved entities to chains
-            let predicted_chains = crate::eval::coref::entities_to_chains(&resolved_entities);
+            let predicted_chains = anno_core::coref::entities_to_chains(&resolved_entities);
             all_predicted_chains.extend(predicted_chains);
         }
 

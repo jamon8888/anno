@@ -3,6 +3,49 @@
 //! This module provides canonical definitions for types that are used across
 //! multiple modules to avoid duplication and ensure consistency.
 //!
+//! # Type-Theoretic Design Philosophy
+//!
+//! Anno's type system is informed by the **Curry-Howard correspondence**: the
+//! principle that types correspond to propositions and programs correspond to
+//! proofs. Under this view:
+//!
+//! - A function `fn resolve(mention: Unresolved) -> Resolved` is a proof that
+//!   unresolved mentions can be transformed into resolved ones
+//! - Type errors are logical contradictions caught at compile time
+//! - Well-typed programs are correct by construction
+//!
+//! ## Type-Logical Grammar Connection
+//!
+//! Just as categorial grammar assigns types to words (e.g., `NP`, `NP\S`),
+//! we assign types to linguistic objects:
+//!
+//! | Linguistic Concept | Anno Type | Notes |
+//! |-------------------|-----------|-------|
+//! | Entity mention | `Signal<Location>` | Level 1 detection |
+//! | Coreference chain | `Track` | Level 2 grouping |
+//! | KB-linked entity | `Identity` | Level 3 linking |
+//! | Phi-features | `PhiFeatures` | Agreement constraints |
+//! | Mention category | `MentionType` | Accessibility hierarchy |
+//!
+//! ## Type Safety Patterns Used
+//!
+//! 1. **Newtypes**: `SignalId`, `TrackId`, `IdentityId` prevent mixing IDs
+//! 2. **Enums with methods**: `MentionType::is_compatible()` encodes constraints
+//! 3. **Option for uncertainty**: `Option<Gender>` = unknown gender
+//! 4. **Result for fallibility**: Parsing, validation can fail
+//!
+//! ## Future: Typestate for Coreference
+//!
+//! A typestate pattern could enforce the resolution pipeline:
+//!
+//! ```text
+//! Mention<Undetected> → detect() → Mention<Detected>
+//! Mention<Detected>   → resolve() → Mention<Resolved>
+//! Mention<Resolved>   → link() → Mention<Linked>
+//! ```
+//!
+//! This would make it a compile error to call `link()` on an unresolved mention.
+//!
 //! # Types
 //!
 //! ## Identifiers (Type-Safe)
