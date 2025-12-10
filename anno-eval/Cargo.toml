@@ -8,49 +8,31 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-description = "Evaluation framework for anno: NER metrics, coreference metrics, bias analysis, dataset loaders"
+description = "Convenience re-export of anno's evaluation framework"
 publish = false  # Not published to crates.io
 
+# This crate is a thin wrapper that re-exports anno::eval
+# All actual implementation lives in anno/src/eval/
+
 [dependencies]
+# Re-export anno with eval feature enabled
+anno = { path = "../anno", default-features = false, features = ["eval"] }
 anno-core = { path = "../anno-core" }
-anno = { path = "../anno", default-features = false }
-
-serde = { workspace = true }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
-regex = { workspace = true }
-chrono = { workspace = true }
-log = { workspace = true }
-itertools = { workspace = true }
-
-# Evaluation dependencies
-rand = { workspace = true, optional = true }
-ureq = { workspace = true, optional = true }
-sha2 = { workspace = true, optional = true }
-dirs = { workspace = true, optional = true }
-glob = { workspace = true, optional = true }
-rayon = { workspace = true, optional = true }
 
 [features]
 default = []
-# Core evaluation (datasets, metrics)
-eval = ["dirs", "glob"]
-# Bias analysis
-eval-bias = ["eval"]
-# Advanced evaluation (calibration, robustness, active learning)
-eval-advanced = ["eval", "rand", "ureq", "sha2"]
-# Full evaluation suite
-eval-full = ["eval", "eval-bias", "eval-advanced"]
-# Parallel evaluation
-eval-parallel = ["eval", "rayon"]
-# Profiling support
-eval-profiling = ["eval"]
-# Discourse-aware evaluation
-discourse = ["eval", "anno/discourse"]
+
+# Forward features to anno
+eval = ["anno/eval"]
+eval-bias = ["anno/eval-bias"]
+eval-advanced = ["anno/eval-advanced"]
+eval-full = ["anno/eval-full"]
+eval-parallel = ["anno/eval-parallel"]
+eval-profiling = ["anno/eval-profiling"]
+discourse = ["anno/discourse"]
 
 [dev-dependencies]
 proptest = { workspace = true }
-anno-coalesce = { path = "../anno-coalesce" }
 
 [lints]
 workspace = true
