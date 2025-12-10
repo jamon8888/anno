@@ -112,8 +112,8 @@ use std::collections::{HashMap, HashSet};
 /// # Example
 ///
 /// For mentions {A, B, C, D} where A=0, B=1, C=2, D=3:
-/// - Configuration `[[0,1,3], [2]]` means A, B, D corefer; C is separate
-/// - Configuration `[[0,1], [2,3]]` means A~B and C~D but not across
+/// - Configuration `{{0,1,3}, {2}}` means A, B, D corefer; C is separate
+/// - Configuration `{{0,1}, {2,3}}` means A~B and C~D but not across
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CorefConfiguration {
     /// Cells of the partition, each containing mention indices.
@@ -183,7 +183,7 @@ impl CorefConfiguration {
 
     /// Convert to a compact string representation.
     ///
-    /// Example: `(0 1 3)(2)` for [[0,1,3], [2]]
+    /// Example: `(0 1 3)(2)` for `{{0,1,3}, {2}}`
     pub fn to_compact_string(&self) -> String {
         self.cells
             .iter()
