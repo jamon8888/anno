@@ -188,10 +188,235 @@ pub fn analyze_confidence_thresholds(
     }
 }
 
+// ============================================================================
+// Text Classification Metrics
+// ============================================================================
+
+/// Metrics for text classification tasks.
+///
+/// Supports multi-class classification with macro/micro/weighted averaging.
+#[derive(Debug, Clone, Default)]
+pub struct ClassificationMetrics {
+    /// Total number of examples
+    pub total: usize,
+    /// Number of correct predictions
+    pub correct: usize,
+    /// Per-class true positives
+    pub class_tp: std::collections::HashMap<String, usize>,
+    /// Per-class false positives
+    pub class_fp: std::collections::HashMap<String, usize>,
+    /// Per-class false negatives
+    pub class_fn: std::collections::HashMap<String, usize>,
+    /// Per-class support (total examples per class)
+    pub class_support: std::collections::HashMap<String, usize>,
+}
+
+impl ClassificationMetrics {
+    /// Create new empty metrics.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add a prediction to the metrics.
+    pub fn add(&mut self, predicted: &str, actual: &str) {
+        self.total += 1;
+
+        // Update support
+        *self.class_support.entry(actual.to_string()).or_insert(0) += 1;
+
+        if predicted == actual {
+            self.correct += 1;
+            *self.class_tp.entry(actual.to_string()).or_insert(0) += 1;
+        } else {
+            // False positive for predicted class
+            *self.class_fp.entry(predicted.to_string()).or_insert(0) += 1;
+            // False negative for actual class
+            *self.class_fn.entry(actual.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    /// Overall accuracy.
+    #[must_use]
+    pub fn accuracy(&self) -> f64 {
+        if self.total == 0 {
+            return 0.0;
+        }
+        self.correct as f64 / self.total as f64
+    }
+
+    /// Macro-averaged precision (unweighted average across classes).
+    #[must_use]
+    pub fn macro_precision(&self) -> f64 {
+        let classes: std::collections::HashSet<_> = self
+            .class_support
+            .keys()
+            .chain(self.class_fp.keys())
+            .collect();
+
+        if classes.is_empty() {
+            return 0.0;
+        }
+
+        let sum: f64 = classes
+            .iter()
+            .map(|class| self.class_precision(class))
+            .sum();
+
+        sum / classes.len() as f64
+    }
+
+    /// Macro-averaged recall (unweighted average across classes).
+    #[must_use]
+    pub fn macro_recall(&self) -> f64 {
+        if self.class_support.is_empty() {
+            return 0.0;
+        }
+
+        let sum: f64 = self
+            .class_support
+            .keys()
+            .map(|class| self.class_recall(class))
+            .sum();
+
+        sum / self.class_support.len() as f64
+    }
+
+    /// Macro-averaged F1 score.
+    #[must_use]
+    pub fn macro_f1(&self) -> f64 {
+        let p = self.macro_precision();
+        let r = self.macro_recall();
+        if p + r == 0.0 {
+            return 0.0;
+        }
+        2.0 * p * r / (p + r)
+    }
+
+    /// Micro-averaged precision (aggregate TP/FP across classes).
+    #[must_use]
+    pub fn micro_precision(&self) -> f64 {
+        let tp: usize = self.class_tp.values().sum();
+        let fp: usize = self.class_fp.values().sum();
+        if tp + fp == 0 {
+            return 0.0;
+        }
+        tp as f64 / (tp + fp) as f64
+    }
+
+    /// Micro-averaged recall (aggregate TP/FN across classes).
+    #[must_use]
+    pub fn micro_recall(&self) -> f64 {
+        let tp: usize = self.class_tp.values().sum();
+        let fn_sum: usize = self.class_fn.values().sum();
+        if tp + fn_sum == 0 {
+            return 0.0;
+        }
+        tp as f64 / (tp + fn_sum) as f64
+    }
+
+    /// Micro-averaged F1 score.
+    #[must_use]
+    pub fn micro_f1(&self) -> f64 {
+        let p = self.micro_precision();
+        let r = self.micro_recall();
+        if p + r == 0.0 {
+            return 0.0;
+        }
+        2.0 * p * r / (p + r)
+    }
+
+    /// Weighted F1 score (weighted by class support).
+    #[must_use]
+    pub fn weighted_f1(&self) -> f64 {
+        if self.total == 0 {
+            return 0.0;
+        }
+
+        let sum: f64 = self
+            .class_support
+            .iter()
+            .map(|(class, &support)| {
+                let f1 = self.class_f1(class);
+                f1 * support as f64
+            })
+            .sum();
+
+        sum / self.total as f64
+    }
+
+    /// Precision for a specific class.
+    #[must_use]
+    pub fn class_precision(&self, class: &str) -> f64 {
+        let tp = *self.class_tp.get(class).unwrap_or(&0);
+        let fp = *self.class_fp.get(class).unwrap_or(&0);
+        if tp + fp == 0 {
+            return 0.0;
+        }
+        tp as f64 / (tp + fp) as f64
+    }
+
+    /// Recall for a specific class.
+    #[must_use]
+    pub fn class_recall(&self, class: &str) -> f64 {
+        let tp = *self.class_tp.get(class).unwrap_or(&0);
+        let fn_count = *self.class_fn.get(class).unwrap_or(&0);
+        if tp + fn_count == 0 {
+            return 0.0;
+        }
+        tp as f64 / (tp + fn_count) as f64
+    }
+
+    /// F1 for a specific class.
+    #[must_use]
+    pub fn class_f1(&self, class: &str) -> f64 {
+        let p = self.class_precision(class);
+        let r = self.class_recall(class);
+        if p + r == 0.0 {
+            return 0.0;
+        }
+        2.0 * p * r / (p + r)
+    }
+
+    /// Get all class labels.
+    #[must_use]
+    pub fn classes(&self) -> Vec<&String> {
+        let mut classes: Vec<_> = self.class_support.keys().collect();
+        classes.sort();
+        classes
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use anno_core::EntityType;
+
+    #[test]
+    fn test_classification_metrics() {
+        let mut metrics = ClassificationMetrics::new();
+
+        // Add some predictions
+        metrics.add("sports", "sports");
+        metrics.add("sports", "sports");
+        metrics.add("business", "business");
+        metrics.add("sports", "business"); // Misclassification
+
+        assert_eq!(metrics.total, 4);
+        assert_eq!(metrics.correct, 3);
+        assert!((metrics.accuracy() - 0.75).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_classification_macro_f1() {
+        let mut metrics = ClassificationMetrics::new();
+
+        // Perfect classification
+        metrics.add("a", "a");
+        metrics.add("b", "b");
+
+        assert!((metrics.macro_f1() - 1.0).abs() < 0.001);
+    }
 
     #[test]
     fn test_calculate_overlap() {

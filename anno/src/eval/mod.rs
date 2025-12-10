@@ -6,6 +6,30 @@
 //! - **Named Entity Recognition (NER)**: Standard metrics, error analysis, significance testing
 //! - **Coreference Resolution**: MUC, B³, CEAF, LEA, BLANC, CoNLL F1
 //!
+//! # Why Multiple Coreference Metrics?
+//!
+//! No single metric captures all aspects of coreference quality:
+//!
+//! | Metric | Measures | Blind to |
+//! |--------|----------|----------|
+//! | **MUC** | Link recall/precision | Singletons, entity count |
+//! | **B³** | Mention-level overlap | Link structure |
+//! | **CEAF** | Optimal entity alignment | Within-cluster structure |
+//! | **LEA** | Links weighted by entity size | Nothing (comprehensive) |
+//! | **BLANC** | Rand index (coreference + non-coref) | Entity semantics |
+//!
+//! The **CoNLL F1** (average of MUC, B³, CEAF-e) is the standard benchmark metric.
+//!
+//! # Metric Divergence: A Diagnostic Tool
+//!
+//! When metrics disagree significantly, it reveals systematic model behaviors:
+//!
+//! - **High MUC, Low B³**: Model makes too few links (conservative)
+//! - **Low MUC, High B³**: Model over-clusters (aggressive)
+//! - **High CEAF variance**: Inconsistent entity boundaries
+//!
+//! Use [`MetricDivergence`] to quantify this and diagnose model behavior.
+//!
 //! # NER Evaluation
 //!
 //! ```rust,ignore
@@ -214,12 +238,15 @@ pub mod backend_eval;
 pub mod backend_factory;
 pub mod benchmark;
 pub mod bio_adapter;
+pub mod book_scale;
 pub mod cdcr;
+pub mod cluster_encoder;
 pub mod coref;
 pub mod coref_loader;
 pub mod coref_metrics;
 pub mod coref_resolver;
 pub mod dataset;
+pub mod dataset_registry;
 pub mod datasets;
 pub mod discontinuous;
 pub mod evaluator;
@@ -303,7 +330,8 @@ pub use harness::{
 };
 pub use metrics::*;
 pub use types::{
-    CorefChainStats, GoalCheck, GoalCheckResult, LabelShift, MetricValue, MetricWithVariance,
+    CorefChainStats, CorefDocStats, DocumentScale, GoalCheck, GoalCheckResult, LabelShift,
+    MetricDivergence, MetricValue, MetricWithVariance,
 };
 pub use validation::*;
 
@@ -315,6 +343,13 @@ pub use coref_loader::{
 pub use coref_metrics::{
     b_cubed_score, blanc_score, ceaf_e_score, ceaf_m_score, compare_systems, conll_f1, lea_score,
     muc_score, AggregateCorefEvaluation, CorefEvaluation, CorefScores, SignificanceTest,
+};
+
+// Book-scale coreference analysis (Bourgois & Poibeau 2025)
+pub use book_scale::{
+    BookScaleAnalysis, BookScaleAnalyzer, BookScaleConfig, BookScaleDiagnostics, CorefEvalScores,
+    MetricReliability, MultiBookReport, PerBookEvaluation, ReliabilityLevel, Scores,
+    StratifiedEvaluation, WindowedEvaluation,
 };
 
 // Coreference resolution

@@ -1,0 +1,23 @@
+[package]
+name = "anno-derive"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+description = "Derive macros for the anno NLP toolkit"
+repository = "https://github.com/arclabs561/anno"
+keywords = ["nlp", "derive", "macro", "dataset"]
+categories = ["development-tools::procedural-macro-helpers"]
+publish = false  # Publishing disabled
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2.0", features = ["full", "parsing", "extra-traits"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+[dev-dependencies]
+anno-core = { path = "../anno-core" }
+

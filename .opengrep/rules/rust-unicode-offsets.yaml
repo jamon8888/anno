@@ -1,0 +1,43 @@
+# ast-grep rules for Unicode correctness in NLP
+# These catch common issues with character vs byte offset handling
+
+id: byte-slice-on-string
+language: rust
+rule:
+  pattern: "&$TEXT[$START..$END]"
+message: |
+  Byte slicing on text string may panic on multi-byte characters.
+  Use chars().skip().take() or validate boundaries.
+  
+  Safe alternative:
+    let span: String = text.chars().skip(start).take(end - start).collect();
+severity: warning
+---
+id: len-for-character-count
+language: rust
+rule:
+  pattern: $TEXT.len()
+message: |
+  .len() returns byte count, not character count.
+  For character count, use .chars().count().
+  
+  Note: .len() is fine for capacity/allocation, but not for character positions.
+severity: hint
+---
+id: unsafe-string-index
+language: rust
+rule:
+  pattern: $TEXT.get($START..$END)
+message: |
+  String indexing with get() uses byte offsets.
+  For Unicode-safe extraction, use chars().skip().take().
+severity: hint
+---
+id: char-boundary-check
+language: rust
+rule:
+  pattern: $TEXT.is_char_boundary($POS)
+message: |
+  is_char_boundary() suggests byte-based indexing.
+  Consider using character offsets consistently.
+severity: hint

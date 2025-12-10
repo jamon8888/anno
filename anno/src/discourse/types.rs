@@ -1,23 +1,66 @@
 //! Discourse-level entities for abstract anaphora resolution.
 //!
-//! # Research Background
+//! # Why This Matters
+//!
+//! Standard coreference systems link noun phrases: "John" → "he" → "the CEO".
+//! But natural language routinely refers to **abstract objects**—events,
+//! propositions, facts, situations—that aren't noun phrases at all:
+//!
+//! ```text
+//! "Russia invaded Ukraine. This shocked the world."
+//!                          ^^^^
+//!                          What is "this"? Not a person, place, or thing.
+//!                          It's the *event* of the invasion.
+//! ```
+//!
+//! Current NER/coref systems fail catastrophically on abstract anaphora because
+//! they only look for nominal antecedents. This module provides the types needed
+//! to represent and resolve these discourse-level references.
+//!
+//! # The Core Problem
 //!
 //! Standard NER extracts **nominal** entities (Person, Org, Location).
 //! Abstract anaphora requires extracting **discourse referents**:
 //!
-//! - **Events**: "Russia invaded Ukraine" → the invasion
-//! - **Propositions**: "She might resign" → the possibility of resignation
-//! - **Facts**: "Water boils at 100C" → this established fact
-//! - **Situations**: "Prices rose while wages fell" → this state of affairs
+//! | Type | Example Source | Anaphor | What's Referenced |
+//! |------|---------------|---------|-------------------|
+//! | **Event** | "Russia invaded Ukraine" | "This shocked..." | The invasion |
+//! | **Proposition** | "She might resign" | "This worries me" | The possibility |
+//! | **Fact** | "Water boils at 100°C" | "This is well-known" | The established fact |
+//! | **Situation** | "Prices rose while wages fell" | "This was unsustainable" | The state of affairs |
 //!
 //! These are not noun phrases but *discourse segments* that can serve as
 //! antecedents for shell nouns ("this problem") and demonstratives ("This").
 //!
+//! # Theoretical Foundation: Higher-Order Unification
+//!
+//! Following Dalrymple, Shieber & Pereira (1991), we can view abstract anaphora
+//! resolution as solving an equation:
+//!
+//! ```text
+//! P(s₁, s₂, ..., sₙ) = s
+//! ```
+//!
+//! Where `s` is the source clause interpretation, `sᵢ` are parallel elements,
+//! and `P` is the property/relation being predicated. The resolved property
+//! is then applied to parallel elements in the target clause.
+//!
+//! **Key insights from this view:**
+//!
+//! 1. **Multiple readings emerge** from a single unambiguous source—the
+//!    ambiguity is in *how we abstract*, not in the source itself
+//! 2. **Strict/sloppy distinctions** arise from which occurrences get abstracted
+//! 3. **Deeply embedded antecedents** can license sloppy readings (contra c-command)
+//! 4. **Cascaded anaphora** chains resolve correctly and order-free
+//! 5. **Shell noun classes act as type constraints** on the property P
+//!
 //! # Key Papers
 //!
+//! - Dalrymple, Shieber & Pereira (1991): "Ellipsis and Higher-Order Unification"
 //! - Kolhatkar & Hirst (2012): "Resolving 'this-issue' anaphors"
 //! - Marasović et al. (2017): "A Mention-Ranking Model for Abstract Anaphora Resolution"
 //! - Schmid (2000): ~670 shell nouns in English
+//! - Asher (1993): "Reference to Abstract Objects in Discourse"
 //!
 //! # Example
 //!
@@ -48,6 +91,20 @@ use serde::{Deserialize, Serialize};
 
 /// Type of discourse referent (what kind of "thing" can be referred to).
 ///
+/// # Why This Taxonomy?
+///
+/// Not all things that can be referred to are "things" in the ordinary sense.
+/// When someone says "This surprised me," the referent might be:
+/// - A person (nominal) → standard coreference
+/// - An event ("the crash") → needs event extraction
+/// - A fact ("that he won") → needs propositional analysis
+/// - A situation ("the ongoing crisis") → needs discourse modeling
+///
+/// The type constrains what predicates are felicitous:
+/// - Events can "happen," "occur," be "witnessed"
+/// - Facts can be "known," "believed," "denied"
+/// - Propositions can be "true," "false," "uncertain"
+///
 /// # Research Background
 ///
 /// This taxonomy follows Asher (1993) "Reference to Abstract Objects in Discourse"
@@ -60,6 +117,21 @@ use serde::{Deserialize, Serialize};
 /// - **Fact**: A true proposition (can be asserted, denied)
 /// - **Proposition**: A potential truth value (can be believed, doubted)
 /// - **Situation**: A state of affairs (ongoing, not instantaneous)
+///
+/// ## Connection to Higher-Order Unification
+///
+/// When resolving anaphora to abstract referents, we solve `P(source) = interpretation`
+/// where the *type* of P is constrained by the referent type:
+///
+/// | Referent Type | Property Domain | Example Predicate |
+/// |---------------|-----------------|-------------------|
+/// | Event | event → truth | "shocked everyone" |
+/// | Fact | fact → truth | "is undeniable" |
+/// | Proposition | prop → truth | "worries me" |
+/// | Situation | situation → truth | "was unsustainable" |
+///
+/// Shell nouns (see [`ShellNounClass`]) further constrain which referent types
+/// are valid—this acts as a type constraint on the unification variable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[non_exhaustive]
 pub enum ReferentType {
@@ -634,18 +706,73 @@ pub fn is_shell_noun(word: &str) -> bool {
 
 /// A simple clause/sentence boundary detector for discourse scope analysis.
 ///
-/// For abstract anaphora, the antecedent is often:
-/// - The immediately preceding clause (for "This")
-/// - The preceding sentence (for longer-distance reference)
-/// - Multiple preceding sentences (for "This situation")
+/// # Why Bounded Context?
 ///
-/// This module provides heuristic-based boundary detection.
+/// Abstract anaphora resolution requires finding antecedents in preceding
+/// discourse. But how far back should we look?
+///
+/// **Empirical finding**: Window size n=2-3 preceding clauses outperforms
+/// max-length concatenation by ~6% F1. Larger windows add noise without
+/// improving recall. This motivates bounded `preceding_clauses(offset, n)`.
+///
+/// # Antecedent Distance Distribution
+///
+/// For abstract anaphora, the antecedent is typically:
+/// - **Immediately preceding clause** (~60%): "X happened. This..."
+/// - **Same sentence, different clause** (~20%): "When X, this..."
+/// - **Previous sentence** (~15%): "X. Y. This..."
+/// - **2+ sentences back** (~5%): Rare, usually with explicit markers
+///
+/// # Theoretical Background (Dalrymple et al. 1991)
+///
+/// The equational view frames resolution as finding P such that
+/// `P(parallel_elements) = source_interpretation`. Crucially, parallelism
+/// need not be purely syntactic—semantic and pragmatic parallelism also
+/// license resolution (Section 5.1).
+///
+/// This means:
+/// 1. Syntactic distance isn't the only constraint
+/// 2. Active/passive, logical subjects, and pragmatic factors affect parallelism
+/// 3. The `candidate_antecedent_spans` method returns spans in preference order,
+///    but *semantic* parallelism must be checked by higher-level resolution logic
+///
+/// # Example
+///
+/// ```rust
+/// use anno::discourse::DiscourseScope;
+///
+/// let text = "Russia invaded Ukraine in 2022. This caused inflation. It affected everyone.";
+/// let scope = DiscourseScope::analyze(text);
+///
+/// // For "This" at position 32, the immediately preceding clause is preferred
+/// let candidates = scope.preceding_clauses(32, 2);
+/// // Returns spans for "Russia invaded Ukraine in 2022" and potentially more
+/// ```
+///
+/// # Character vs Byte Offsets
+///
+/// All offsets in `DiscourseScope` are **character offsets**, not byte offsets.
+/// This is critical for Unicode text where characters may be multi-byte:
+///
+/// ```rust
+/// use anno::discourse::DiscourseScope;
+///
+/// let text = "日本語。英語。"; // Japanese with periods
+/// let scope = DiscourseScope::analyze(text);
+///
+/// // Character-based: each kanji is 1 character (but 3 bytes)
+/// assert!(scope.sentence_count() >= 1);
+/// ```
+///
+/// Use [`extract_span`] to safely extract text from character offsets.
 #[derive(Debug, Clone)]
 pub struct DiscourseScope {
-    /// Sentence boundaries (character offsets)
+    /// Sentence boundaries (character offsets, NOT byte offsets)
     pub sentence_boundaries: Vec<usize>,
     /// Clause boundaries (character offsets, more fine-grained)
     pub clause_boundaries: Vec<usize>,
+    /// Mapping from char offsets to byte offsets for extraction
+    char_to_byte: Vec<usize>,
 }
 
 impl DiscourseScope {
@@ -662,23 +789,51 @@ impl DiscourseScope {
     /// ```
     #[must_use]
     pub fn analyze(text: &str) -> Self {
+        // Build char-to-byte mapping for later extraction
+        let char_to_byte = Self::build_char_to_byte_map(text);
+
         let sentence_boundaries = Self::find_sentence_boundaries(text);
         let clause_boundaries = Self::find_clause_boundaries(text);
 
         Self {
             sentence_boundaries,
             clause_boundaries,
+            char_to_byte,
         }
     }
 
+    /// Build mapping from character index to byte index.
+    fn build_char_to_byte_map(text: &str) -> Vec<usize> {
+        let char_count = text.chars().count();
+        let mut map = Vec::with_capacity(char_count + 1);
+
+        for (byte_idx, _ch) in text.char_indices() {
+            map.push(byte_idx);
+        }
+        map.push(text.len()); // End position
+
+        map
+    }
+
+    /// Convert character offset to byte offset.
+    fn char_to_byte_offset(&self, char_offset: usize) -> usize {
+        self.char_to_byte
+            .get(char_offset)
+            .copied()
+            .unwrap_or_else(|| self.char_to_byte.last().copied().unwrap_or(0))
+    }
+
     /// Find sentence boundaries using punctuation heuristics.
+    ///
+    /// Returns CHARACTER offsets (not byte offsets).
     fn find_sentence_boundaries(text: &str) -> Vec<usize> {
         let mut boundaries = vec![0]; // Start of text
         let chars: Vec<char> = text.chars().collect();
+        let char_count = chars.len();
 
         for (i, &c) in chars.iter().enumerate() {
             // Sentence-ending punctuation
-            if matches!(c, '.' | '!' | '?') {
+            if matches!(c, '.' | '!' | '?' | '。' | '！' | '？') {
                 // Check it's not an abbreviation (followed by lowercase)
                 let next_char = chars.get(i + 1).or(chars.get(i + 2));
                 let after_space = chars.get(i + 2);
@@ -687,27 +842,23 @@ impl DiscourseScope {
                 if next_char.map_or(true, |&nc| nc.is_whitespace() || nc == '"' || nc == '\'')
                     && after_space.map_or(true, |&ac| ac.is_uppercase() || ac == '"')
                 {
-                    // Convert char index to byte offset
-                    let byte_offset: usize = text
-                        .char_indices()
-                        .take(i + 1)
-                        .last()
-                        .map(|(idx, c)| idx + c.len_utf8())
-                        .unwrap_or(text.len());
-                    boundaries.push(byte_offset);
+                    // Return character offset (i+1 is after the punctuation)
+                    boundaries.push(i + 1);
                 }
             }
         }
 
-        // End of text
-        if boundaries.last() != Some(&text.len()) {
-            boundaries.push(text.len());
+        // End of text (character count)
+        if boundaries.last() != Some(&char_count) {
+            boundaries.push(char_count);
         }
 
         boundaries
     }
 
     /// Find clause boundaries using punctuation and connectors.
+    ///
+    /// Returns CHARACTER offsets (not byte offsets).
     fn find_clause_boundaries(text: &str) -> Vec<usize> {
         let mut boundaries = vec![0];
 
@@ -730,17 +881,27 @@ impl DiscourseScope {
             " whereas ",
             " unless ",
             " if ",
+            // CJK clause markers
+            "、", // Japanese/Chinese comma
+            "，", // Chinese comma
         ];
+
+        // Convert text to lowercase for matching, but track character positions
+        let text_lower = text.to_lowercase();
 
         for marker in &clause_markers {
             let marker_lower = marker.to_lowercase();
-            let text_lower = text.to_lowercase();
 
-            let mut search_from = 0;
-            while let Some(pos) = text_lower[search_from..].find(&marker_lower) {
-                let absolute_pos = search_from + pos + marker.len();
-                boundaries.push(absolute_pos);
-                search_from = absolute_pos;
+            // Find byte positions in lowercase text, then convert to char positions
+            let mut search_from_byte = 0;
+            while let Some(byte_pos) = text_lower[search_from_byte..].find(&marker_lower) {
+                let absolute_byte_pos = search_from_byte + byte_pos + marker.len();
+
+                // Convert byte position to character position
+                let char_pos = text[..absolute_byte_pos.min(text.len())].chars().count();
+
+                boundaries.push(char_pos);
+                search_from_byte = absolute_byte_pos;
             }
         }
 
@@ -812,9 +973,33 @@ impl DiscourseScope {
         clauses
     }
 
-    /// Get text for a span.
+    /// Get text for a span (character offsets).
+    ///
+    /// Converts character offsets to byte offsets for safe extraction.
+    ///
+    /// # Arguments
+    /// * `text` - The original text (must match the text passed to `analyze`)
+    /// * `start` - Start character offset (inclusive)
+    /// * `end` - End character offset (exclusive)
+    ///
+    /// # Example
+    /// ```rust
+    /// use anno::discourse::DiscourseScope;
+    ///
+    /// let text = "日本語。英語。";
+    /// let scope = DiscourseScope::analyze(text);
+    ///
+    /// // Extract first sentence (chars 0-4 = "日本語。")
+    /// if let Some((start, end)) = scope.sentence_at(0) {
+    ///     let extracted = scope.extract_span(text, start, end);
+    ///     assert!(!extracted.is_empty());
+    /// }
+    /// ```
+    #[must_use]
     pub fn extract_span<'a>(&self, text: &'a str, start: usize, end: usize) -> &'a str {
-        text.get(start..end).unwrap_or("")
+        let byte_start = self.char_to_byte_offset(start);
+        let byte_end = self.char_to_byte_offset(end);
+        text.get(byte_start..byte_end).unwrap_or("")
     }
 
     /// For an anaphor at a given offset, find candidate antecedent spans.

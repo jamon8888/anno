@@ -76,7 +76,7 @@ impl GapExample {
             &self.pronoun,
             self.pronoun_offset,
             self.pronoun_offset + self.pronoun.len(),
-            MentionType::Pronoun,
+            MentionType::Pronominal,
         );
 
         // Create mentions for names
@@ -687,6 +687,29 @@ pub fn adversarial_coref_examples() -> Vec<(CorefDocument, CorefDocument, &'stat
 }
 
 // =============================================================================
+// BookCoref Support (Stub)
+// =============================================================================
+
+/// Parse BookCoref JSON format.
+///
+/// BookCoref (Martinelli et al. 2025) provides book-scale coreference data.
+/// This function is a placeholder - actual implementation requires the
+/// HuggingFace datasets library to download from Project Gutenberg.
+///
+/// # Errors
+///
+/// Returns error until full implementation is available.
+pub fn parse_bookcoref_json(_content: &str) -> Result<Vec<CorefDocument>> {
+    // TODO: Implement BookCoref JSON parsing
+    // Format follows OntoNotes-style with character metadata
+    Err(Error::InvalidInput(
+        "BookCoref parsing not yet implemented. \
+         Use HuggingFace datasets library to load this dataset."
+            .to_string(),
+    ))
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 
@@ -713,6 +736,51 @@ mod tests {
         let doc = example.to_coref_document();
         assert_eq!(doc.mention_count(), 3);
         assert_eq!(doc.chain_count(), 2); // John+He, Mary
+    }
+
+    #[test]
+    fn test_gap_example_mention_types() {
+        use crate::eval::coref::MentionType;
+
+        let example = GapExample {
+            id: "test-2".to_string(),
+            text: "Alice met Bob. She smiled.".to_string(),
+            pronoun: "She".to_string(),
+            pronoun_offset: 15,
+            name_a: "Alice".to_string(),
+            offset_a: 0,
+            coref_a: true,
+            name_b: "Bob".to_string(),
+            offset_b: 10,
+            coref_b: false,
+            url: None,
+        };
+
+        let doc = example.to_coref_document();
+
+        // Verify mention types are correctly assigned
+        let all_mentions: Vec<_> = doc.chains.iter().flat_map(|c| &c.mentions).collect();
+        assert_eq!(all_mentions.len(), 3);
+
+        // Proper nouns: Alice, Bob
+        let proper_count = all_mentions
+            .iter()
+            .filter(|m| m.mention_type == Some(MentionType::Proper))
+            .count();
+        assert_eq!(
+            proper_count, 2,
+            "Should have 2 proper noun mentions (Alice, Bob)"
+        );
+
+        // Pronominal: She
+        let pronominal_count = all_mentions
+            .iter()
+            .filter(|m| m.mention_type == Some(MentionType::Pronominal))
+            .count();
+        assert_eq!(
+            pronominal_count, 1,
+            "Should have 1 pronominal mention (She)"
+        );
     }
 
     #[test]

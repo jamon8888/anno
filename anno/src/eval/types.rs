@@ -629,6 +629,402 @@ impl CorefChainStats {
     }
 }
 
+// =============================================================================
+// Document Scale Classification (Bourgois & Poibeau 2025)
+// =============================================================================
+
+/// Document scale classification based on token count.
+///
+/// # Research Context (Bourgois & Poibeau 2025, arXiv:2510.15594)
+///
+/// The paper shows that coreference performance degrades significantly with
+/// document length. These thresholds are informed by their analysis:
+///
+/// ```text
+/// Scale           Token Range     Performance Impact
+/// ─────────────────────────────────────────────────────
+/// Short           <2k             Baseline (OntoNotes-like)
+/// Medium          2k-10k          -5% CoNLL F1
+/// Long            10k-50k         -10% CoNLL F1
+/// BookScale       >50k            -15% CoNLL F1, metrics unreliable
+/// ```
+///
+/// # Example
+///
+/// ```rust
+/// use anno::eval::DocumentScale;
+///
+/// let scale = DocumentScale::from_tokens(95_000);
+/// assert!(scale.is_book_scale());
+/// assert!(scale.metrics_may_be_unreliable());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum DocumentScale {
+    /// Short document (<2k tokens). OntoNotes-like scale.
+    #[default]
+    Short,
+    /// Medium document (2k-10k tokens). Slight performance drop.
+    Medium,
+    /// Long document (10k-50k tokens). Noticeable degradation.
+    Long,
+    /// Book-scale document (>50k tokens). Metrics may be unreliable.
+    BookScale,
+}
+
+impl DocumentScale {
+    /// Classify document scale from token count.
+    #[must_use]
+    pub fn from_tokens(token_count: usize) -> Self {
+        match token_count {
+            0..=2000 => Self::Short,
+            2001..=10000 => Self::Medium,
+            10001..=50000 => Self::Long,
+            _ => Self::BookScale,
+        }
+    }
+
+    /// Check if this is book-scale (>50k tokens).
+    #[must_use]
+    pub fn is_book_scale(&self) -> bool {
+        matches!(self, Self::BookScale)
+    }
+
+    /// Check if coreference metrics may be unreliable at this scale.
+    ///
+    /// At book scale, MUC tends to inflate while CEAF-e tends to collapse.
+    #[must_use]
+    pub fn metrics_may_be_unreliable(&self) -> bool {
+        matches!(self, Self::Long | Self::BookScale)
+    }
+
+    /// Get expected CoNLL F1 degradation relative to short documents.
+    #[must_use]
+    pub fn expected_degradation(&self) -> f64 {
+        match self {
+            Self::Short => 0.0,
+            Self::Medium => 0.05,
+            Self::Long => 0.10,
+            Self::BookScale => 0.15,
+        }
+    }
+}
+
+impl std::fmt::Display for DocumentScale {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Short => write!(f, "Short (<2k tokens)"),
+            Self::Medium => write!(f, "Medium (2k-10k tokens)"),
+            Self::Long => write!(f, "Long (10k-50k tokens)"),
+            Self::BookScale => write!(f, "Book-scale (>50k tokens)"),
+        }
+    }
+}
+
+// =============================================================================
+// Metric Divergence (Book-scale Coreference Analysis)
+// =============================================================================
+
+/// Divergence between coreference metrics.
+///
+/// # Research Context
+///
+/// At book scale, different metrics diverge significantly:
+/// - MUC tends to be inflated (favors link-based evaluation)
+/// - CEAF-e tends to collapse (entity alignment struggles)
+/// - B³ falls between but is more stable
+///
+/// Large divergence (>0.20) indicates potential metric unreliability.
+///
+/// # Example
+///
+/// ```rust
+/// use anno::eval::MetricDivergence;
+///
+/// let divergence = MetricDivergence::from_scores(0.90, 0.65, 0.45);
+/// assert!(divergence.has_high_divergence());
+/// println!("MUC-CEAF divergence: {:.0}%", divergence.muc_ceaf_divergence * 100.0);
+/// ```
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+pub struct MetricDivergence {
+    /// MUC F1 score.
+    pub muc_f1: f64,
+    /// B³ F1 score.
+    pub b3_f1: f64,
+    /// CEAF-e F1 score.
+    pub ceaf_e_f1: f64,
+    /// Divergence between MUC and CEAF-e (absolute difference).
+    pub muc_ceaf_divergence: f64,
+    /// Divergence between MUC and B³.
+    pub muc_b3_divergence: f64,
+    /// Divergence between B³ and CEAF-e.
+    pub b3_ceaf_divergence: f64,
+}
+
+impl MetricDivergence {
+    /// Compute divergence from raw scores.
+    #[must_use]
+    pub fn from_scores(muc_f1: f64, b3_f1: f64, ceaf_e_f1: f64) -> Self {
+        Self {
+            muc_f1,
+            b3_f1,
+            ceaf_e_f1,
+            muc_ceaf_divergence: (muc_f1 - ceaf_e_f1).abs(),
+            muc_b3_divergence: (muc_f1 - b3_f1).abs(),
+            b3_ceaf_divergence: (b3_f1 - ceaf_e_f1).abs(),
+        }
+    }
+
+    /// Check if divergence is high (>0.20), indicating unreliable metrics.
+    #[must_use]
+    pub fn has_high_divergence(&self) -> bool {
+        self.muc_ceaf_divergence > 0.20
+    }
+
+    /// Check if MUC is likely inflated (MUC >> CEAF-e).
+    #[must_use]
+    pub fn muc_likely_inflated(&self) -> bool {
+        self.muc_f1 > self.ceaf_e_f1 + 0.15
+    }
+
+    /// Check if CEAF-e is likely collapsed (CEAF-e << others).
+    #[must_use]
+    pub fn ceaf_likely_collapsed(&self) -> bool {
+        self.ceaf_e_f1 < self.b3_f1 - 0.15 && self.ceaf_e_f1 < self.muc_f1 - 0.20
+    }
+
+    /// Get most reliable metric recommendation.
+    #[must_use]
+    pub fn most_reliable_metric(&self) -> &'static str {
+        if self.muc_likely_inflated() && self.ceaf_likely_collapsed() {
+            "B³ (MUC inflated, CEAF-e collapsed)"
+        } else if self.muc_likely_inflated() {
+            "B³ or CEAF-e (MUC inflated)"
+        } else if self.ceaf_likely_collapsed() {
+            "MUC or B³ (CEAF-e collapsed)"
+        } else {
+            "CoNLL F1 (metrics agree)"
+        }
+    }
+}
+
+// =============================================================================
+// Document Statistics for Coreference (Entity Spread)
+// =============================================================================
+
+/// Document-level statistics for coreference evaluation.
+///
+/// # Research Context (Bourgois & Poibeau 2025)
+///
+/// The paper introduces "entity spread" as a key metric:
+/// > "The entity spread refers to the distance between the first and the last
+/// > mention of an entity."
+///
+/// Their Long-LitBank-fr corpus shows:
+/// - Average entity spread: 17,529 tokens
+/// - Maximum entity spread: 115,369 tokens (spanning entire novels)
+///
+/// This metric characterizes the difficulty of coreference:
+/// high spread = mentions far apart = harder to resolve.
+///
+/// # Example
+///
+/// ```rust
+/// use anno::eval::{CorefDocStats, coref::CorefChain};
+///
+/// // Create from chains (would use actual chains in practice)
+/// let stats = CorefDocStats {
+///     chain_count: 159,
+///     mention_count: 13178,
+///     avg_chain_length: 82.9,
+///     avg_entity_spread: 17529,
+///     max_entity_spread: 115369,
+///     ..Default::default()
+/// };
+///
+/// println!("Avg entity spread: {} tokens", stats.avg_entity_spread);
+/// ```
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+pub struct CorefDocStats {
+    /// Document length in tokens (approximate).
+    pub doc_length: usize,
+    /// Total number of coreference chains.
+    pub chain_count: usize,
+    /// Total number of mentions.
+    pub mention_count: usize,
+    /// Average mentions per chain.
+    pub avg_chain_length: f64,
+    /// Maximum chain length.
+    pub max_chain_length: usize,
+
+    // =========================================================================
+    // Entity Spread (Bourgois & Poibeau 2025)
+    // =========================================================================
+    /// Average entity spread in tokens.
+    /// Entity spread = distance between first and last mention of an entity.
+    pub avg_entity_spread: usize,
+
+    /// Maximum entity spread in tokens.
+    /// For protagonists in novels, this can exceed 100k tokens.
+    pub max_entity_spread: usize,
+
+    /// Median entity spread in tokens.
+    pub median_entity_spread: usize,
+
+    // =========================================================================
+    // Mention Type Distribution
+    // =========================================================================
+    /// Proportion of pronominal mentions.
+    pub pronoun_ratio: f64,
+    /// Proportion of proper noun mentions.
+    pub proper_ratio: f64,
+    /// Proportion of nominal mentions.
+    pub nominal_ratio: f64,
+    /// Proportion of singleton chains.
+    pub singleton_ratio: f64,
+}
+
+impl CorefDocStats {
+    /// Compute statistics from coreference chains.
+    ///
+    /// Chains should have mentions with character offsets.
+    /// Use `doc_length` to set the token count separately.
+    #[must_use]
+    pub fn from_chains(chains: &[crate::eval::coref::CorefChain]) -> Self {
+        if chains.is_empty() {
+            return Self::default();
+        }
+
+        let chain_count = chains.len();
+        let mention_count: usize = chains.iter().map(|c| c.mentions.len()).sum();
+        let avg_chain_length = mention_count as f64 / chain_count as f64;
+        let max_chain_length = chains.iter().map(|c| c.mentions.len()).max().unwrap_or(0);
+
+        // Count singletons
+        let singleton_count = chains.iter().filter(|c| c.mentions.len() == 1).count();
+        let singleton_ratio = singleton_count as f64 / chain_count as f64;
+
+        // Compute entity spread for each chain
+        let mut spreads: Vec<usize> = Vec::with_capacity(chain_count);
+        for chain in chains {
+            if chain.mentions.len() <= 1 {
+                spreads.push(0);
+                continue;
+            }
+
+            let first_start = chain.mentions.iter().map(|m| m.start).min().unwrap_or(0);
+            let last_end = chain.mentions.iter().map(|m| m.end).max().unwrap_or(0);
+            let spread = last_end.saturating_sub(first_start);
+            spreads.push(spread);
+        }
+
+        let avg_entity_spread = if !spreads.is_empty() {
+            spreads.iter().sum::<usize>() / spreads.len()
+        } else {
+            0
+        };
+
+        let max_entity_spread = spreads.iter().copied().max().unwrap_or(0);
+
+        // Compute median spread
+        spreads.sort_unstable();
+        let median_entity_spread = if spreads.is_empty() {
+            0
+        } else {
+            spreads[spreads.len() / 2]
+        };
+
+        // Compute mention type ratios (approximate from text patterns)
+        // This is a heuristic; proper classification requires POS tagging
+        let mut pronoun_count = 0usize;
+        let mut proper_count = 0usize;
+        let mut nominal_count = 0usize;
+
+        for chain in chains {
+            for mention in &chain.mentions {
+                let text_lower = mention.text.to_lowercase();
+                let is_pronoun = matches!(
+                    text_lower.as_str(),
+                    "he" | "she"
+                        | "it"
+                        | "they"
+                        | "him"
+                        | "her"
+                        | "them"
+                        | "his"
+                        | "hers"
+                        | "its"
+                        | "their"
+                        | "i"
+                        | "me"
+                        | "we"
+                        | "us"
+                        | "you"
+                );
+
+                if is_pronoun {
+                    pronoun_count += 1;
+                } else if mention
+                    .text
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_uppercase())
+                {
+                    proper_count += 1;
+                } else {
+                    nominal_count += 1;
+                }
+            }
+        }
+
+        let total_mentions = mention_count.max(1) as f64;
+        let pronoun_ratio = pronoun_count as f64 / total_mentions;
+        let proper_ratio = proper_count as f64 / total_mentions;
+        let nominal_ratio = nominal_count as f64 / total_mentions;
+
+        Self {
+            doc_length: 0, // Must be set separately
+            chain_count,
+            mention_count,
+            avg_chain_length,
+            max_chain_length,
+            avg_entity_spread,
+            max_entity_spread,
+            median_entity_spread,
+            pronoun_ratio,
+            proper_ratio,
+            nominal_ratio,
+            singleton_ratio,
+        }
+    }
+
+    /// Get document scale classification.
+    #[must_use]
+    pub fn scale_classification(&self) -> DocumentScale {
+        DocumentScale::from_tokens(self.doc_length)
+    }
+
+    /// Check if entity spread suggests book-scale complexity.
+    ///
+    /// Book-scale documents typically have entities spanning >10k tokens.
+    #[must_use]
+    pub fn has_book_scale_spread(&self) -> bool {
+        self.avg_entity_spread > 5000 || self.max_entity_spread > 20000
+    }
+
+    /// Format as summary string.
+    #[must_use]
+    pub fn format_summary(&self) -> String {
+        format!(
+            "Chains: {}, Mentions: {}, Avg length: {:.1}, Spread: avg={} max={}",
+            self.chain_count,
+            self.mention_count,
+            self.avg_chain_length,
+            self.avg_entity_spread,
+            self.max_entity_spread,
+        )
+    }
+}
+
 /// Compute string-based familiarity using normalized edit distance and substring matching.
 ///
 /// This is an improved heuristic over simple overlap ratio, but still not true semantic similarity.
@@ -935,5 +1331,249 @@ mod tests {
         let range = m.format_with_range();
         assert!(range.contains("82.0%"));
         assert!(range.contains("88.0%"));
+    }
+
+    // =========================================================================
+    // Tests for DocumentScale (Bourgois & Poibeau 2025)
+    // =========================================================================
+
+    #[test]
+    fn test_document_scale_classification() {
+        // Short documents (<2k tokens)
+        assert_eq!(DocumentScale::from_tokens(500), DocumentScale::Short);
+        assert_eq!(DocumentScale::from_tokens(2000), DocumentScale::Short);
+
+        // Medium documents (2k-10k tokens)
+        assert_eq!(DocumentScale::from_tokens(2001), DocumentScale::Medium);
+        assert_eq!(DocumentScale::from_tokens(5000), DocumentScale::Medium);
+        assert_eq!(DocumentScale::from_tokens(10000), DocumentScale::Medium);
+
+        // Long documents (10k-50k tokens)
+        assert_eq!(DocumentScale::from_tokens(10001), DocumentScale::Long);
+        assert_eq!(DocumentScale::from_tokens(30000), DocumentScale::Long);
+        assert_eq!(DocumentScale::from_tokens(50000), DocumentScale::Long);
+
+        // Book-scale documents (>50k tokens)
+        assert_eq!(DocumentScale::from_tokens(50001), DocumentScale::BookScale);
+        assert_eq!(DocumentScale::from_tokens(100000), DocumentScale::BookScale);
+    }
+
+    #[test]
+    fn test_document_scale_is_book_scale() {
+        assert!(!DocumentScale::Short.is_book_scale());
+        assert!(!DocumentScale::Medium.is_book_scale());
+        assert!(!DocumentScale::Long.is_book_scale());
+        assert!(DocumentScale::BookScale.is_book_scale());
+    }
+
+    #[test]
+    fn test_document_scale_metrics_reliability() {
+        assert!(!DocumentScale::Short.metrics_may_be_unreliable());
+        assert!(!DocumentScale::Medium.metrics_may_be_unreliable());
+        assert!(DocumentScale::Long.metrics_may_be_unreliable());
+        assert!(DocumentScale::BookScale.metrics_may_be_unreliable());
+    }
+
+    #[test]
+    fn test_document_scale_expected_degradation() {
+        assert!((DocumentScale::Short.expected_degradation() - 0.0).abs() < 0.001);
+        assert!((DocumentScale::Medium.expected_degradation() - 0.05).abs() < 0.001);
+        assert!((DocumentScale::Long.expected_degradation() - 0.10).abs() < 0.001);
+        assert!((DocumentScale::BookScale.expected_degradation() - 0.15).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_document_scale_display() {
+        assert!(DocumentScale::Short.to_string().contains("Short"));
+        assert!(DocumentScale::BookScale.to_string().contains("Book-scale"));
+    }
+
+    // =========================================================================
+    // Tests for MetricDivergence
+    // =========================================================================
+
+    #[test]
+    fn test_metric_divergence_computation() {
+        // Typical book-scale pattern: high MUC, lower B³, collapsed CEAF-e
+        let divergence = MetricDivergence::from_scores(0.90, 0.65, 0.45);
+
+        assert!((divergence.muc_f1 - 0.90).abs() < 0.001);
+        assert!((divergence.b3_f1 - 0.65).abs() < 0.001);
+        assert!((divergence.ceaf_e_f1 - 0.45).abs() < 0.001);
+
+        // MUC-CEAF divergence should be 0.45
+        assert!((divergence.muc_ceaf_divergence - 0.45).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_metric_divergence_high_divergence_detection() {
+        // High divergence (>0.20)
+        let high = MetricDivergence::from_scores(0.90, 0.70, 0.50);
+        assert!(high.has_high_divergence());
+
+        // Low divergence (<0.20)
+        let low = MetricDivergence::from_scores(0.80, 0.75, 0.70);
+        assert!(!low.has_high_divergence());
+    }
+
+    #[test]
+    fn test_metric_divergence_muc_inflation() {
+        // MUC inflated (MUC >> CEAF-e by >0.15)
+        let inflated = MetricDivergence::from_scores(0.90, 0.70, 0.50);
+        assert!(inflated.muc_likely_inflated());
+
+        // MUC not inflated
+        let not_inflated = MetricDivergence::from_scores(0.80, 0.75, 0.70);
+        assert!(!not_inflated.muc_likely_inflated());
+    }
+
+    #[test]
+    fn test_metric_divergence_ceaf_collapse() {
+        // CEAF-e collapsed (much lower than others)
+        let collapsed = MetricDivergence::from_scores(0.90, 0.70, 0.40);
+        assert!(collapsed.ceaf_likely_collapsed());
+
+        // CEAF-e not collapsed
+        let not_collapsed = MetricDivergence::from_scores(0.80, 0.75, 0.70);
+        assert!(!not_collapsed.ceaf_likely_collapsed());
+    }
+
+    #[test]
+    fn test_metric_divergence_recommendation() {
+        // When both MUC inflated and CEAF-e collapsed -> recommend B³
+        let both_bad = MetricDivergence::from_scores(0.90, 0.65, 0.40);
+        assert!(both_bad.most_reliable_metric().contains("B³"));
+
+        // When metrics agree -> recommend CoNLL F1
+        let agree = MetricDivergence::from_scores(0.75, 0.73, 0.71);
+        assert!(agree.most_reliable_metric().contains("CoNLL"));
+    }
+
+    // =========================================================================
+    // Tests for CorefDocStats (Entity Spread)
+    // =========================================================================
+
+    #[test]
+    fn test_coref_doc_stats_default() {
+        let stats = CorefDocStats::default();
+        assert_eq!(stats.chain_count, 0);
+        assert_eq!(stats.mention_count, 0);
+        assert_eq!(stats.avg_entity_spread, 0);
+        assert_eq!(stats.max_entity_spread, 0);
+    }
+
+    #[test]
+    fn test_coref_doc_stats_scale_classification() {
+        let mut stats = CorefDocStats::default();
+
+        stats.doc_length = 1000;
+        assert_eq!(stats.scale_classification(), DocumentScale::Short);
+
+        stats.doc_length = 5000;
+        assert_eq!(stats.scale_classification(), DocumentScale::Medium);
+
+        stats.doc_length = 30000;
+        assert_eq!(stats.scale_classification(), DocumentScale::Long);
+
+        stats.doc_length = 100000;
+        assert_eq!(stats.scale_classification(), DocumentScale::BookScale);
+    }
+
+    #[test]
+    fn test_coref_doc_stats_book_scale_spread() {
+        let mut stats = CorefDocStats::default();
+
+        // Low spread - not book-scale
+        stats.avg_entity_spread = 1000;
+        stats.max_entity_spread = 5000;
+        assert!(!stats.has_book_scale_spread());
+
+        // High avg spread - book-scale
+        stats.avg_entity_spread = 6000;
+        stats.max_entity_spread = 10000;
+        assert!(stats.has_book_scale_spread());
+
+        // High max spread - book-scale
+        stats.avg_entity_spread = 2000;
+        stats.max_entity_spread = 25000;
+        assert!(stats.has_book_scale_spread());
+    }
+
+    #[test]
+    fn test_coref_doc_stats_format_summary() {
+        let stats = CorefDocStats {
+            chain_count: 159,
+            mention_count: 13178,
+            avg_chain_length: 82.9,
+            avg_entity_spread: 17529,
+            max_entity_spread: 115369,
+            ..Default::default()
+        };
+
+        let summary = stats.format_summary();
+        assert!(summary.contains("159"));
+        assert!(summary.contains("13178"));
+        assert!(summary.contains("17529"));
+        assert!(summary.contains("115369"));
+    }
+
+    #[test]
+    fn test_coref_doc_stats_from_chains() {
+        use crate::eval::coref::{CorefChain, Mention};
+
+        // Create test chains
+        let chains = vec![
+            CorefChain::new(vec![
+                Mention::new("John", 0, 4),
+                Mention::new("he", 20, 22),
+                Mention::new("him", 50, 53),
+            ]),
+            CorefChain::new(vec![
+                Mention::new("Mary", 5, 9),
+                Mention::new("she", 30, 33),
+            ]),
+            // Singleton
+            CorefChain::new(vec![Mention::new("London", 60, 66)]),
+        ];
+
+        let stats = CorefDocStats::from_chains(&chains);
+
+        assert_eq!(stats.chain_count, 3);
+        assert_eq!(stats.mention_count, 6);
+        assert!((stats.avg_chain_length - 2.0).abs() < 0.01);
+        assert_eq!(stats.max_chain_length, 3);
+
+        // Entity spread: John chain spans 0-53 = 53, Mary chain spans 5-33 = 28
+        assert!(stats.avg_entity_spread > 0);
+        assert!(stats.max_entity_spread >= 53);
+
+        // Singleton ratio: 1/3 = 0.333
+        assert!((stats.singleton_ratio - 0.333).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_coref_doc_stats_mention_type_ratios() {
+        use crate::eval::coref::{CorefChain, Mention};
+
+        // Create chains with mixed mention types
+        let chains = vec![
+            CorefChain::new(vec![
+                Mention::new("John", 0, 4),  // Proper (capitalized)
+                Mention::new("he", 10, 12),  // Pronoun
+                Mention::new("him", 20, 23), // Pronoun
+            ]),
+            CorefChain::new(vec![
+                Mention::new("Mary", 30, 34), // Proper
+                Mention::new("she", 40, 43),  // Pronoun
+            ]),
+        ];
+
+        let stats = CorefDocStats::from_chains(&chains);
+
+        // 3 pronouns (he, him, she), 2 proper (John, Mary)
+        // pronoun_ratio = 3/5 = 0.6, proper_ratio = 2/5 = 0.4
+        assert!(stats.pronoun_ratio > 0.5, "Should have majority pronouns");
+        assert!(stats.proper_ratio > 0.3, "Should have some proper nouns");
+        assert_eq!(stats.mention_count, 5);
     }
 }

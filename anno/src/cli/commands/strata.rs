@@ -1,9 +1,11 @@
 //! Strata command - Hierarchical clustering: reveal strata of abstraction
 
+#[cfg(feature = "eval-advanced")]
 use anno_core::GraphDocument;
 #[cfg(feature = "eval-advanced")]
 use anno_strata::HierarchicalLeiden;
 
+#[cfg(feature = "eval-advanced")]
 use super::super::output::color;
 use super::super::parser::OutputFormat;
 
@@ -146,6 +148,7 @@ pub fn run(_args: StrataArgs) -> Result<(), String> {
     Err("Hierarchical clustering requires 'eval-advanced' feature. Build with: cargo build --features eval-advanced".to_string())
 }
 
+#[cfg(feature = "eval-advanced")]
 fn format_human_output(graph: &GraphDocument, levels: usize) -> String {
     let mut output = String::new();
 
