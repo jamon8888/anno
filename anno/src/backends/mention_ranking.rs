@@ -2553,8 +2553,8 @@ impl MentionRankingCoref {
 // CoreferenceResolver trait implementation
 // =============================================================================
 
-use crate::eval::coref_resolver::CoreferenceResolver;
 use crate::Entity;
+use anno_core::CoreferenceResolver;
 
 impl CoreferenceResolver for MentionRankingCoref {
     fn resolve(&self, entities: &[Entity]) -> Vec<Entity> {

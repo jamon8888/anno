@@ -448,84 +448,11 @@ impl SimpleCorefResolver {
 }
 
 // =============================================================================
-// Trait Implementation
+// Trait Re-export
 // =============================================================================
 
-/// Trait for coreference resolvers.
-///
-/// Coreference resolution determines which mentions in a text refer to the same
-/// real-world entity. This is a fundamental NLP task that bridges mention detection
-/// (Level 1: Signals) and entity linking (Level 3: Identities).
-///
-/// # Linguistic Background
-///
-/// Coreference follows several constraints:
-///
-/// 1. **Phi-feature agreement**: Mentions must agree in person, number, gender
-///    (with some flexibility for singular "they", unknown gender, etc.)
-///
-/// 2. **Binding Theory** (Chomsky 1981):
-///    - Principle A: Reflexives must be locally bound
-///    - Principle B: Pronouns must be free in local domain
-///    - Principle C: R-expressions (names) must be free everywhere
-///
-/// 3. **Centering Theory** (Grosz, Joshi, Weinstein 1995):
-///    - Discourse maintains a "center" (most salient entity)
-///    - Pronouns prefer to refer to the center
-///    - Center shifts are marked by fuller referring expressions
-///
-/// # Implementation Strategies
-///
-/// | Strategy | Speed | Accuracy | Notes |
-/// |----------|-------|----------|-------|
-/// | Rule-based | Fast | Low | Simple heuristics |
-/// | Mention-pair | Medium | Medium | Score all pairs |
-/// | Mention-ranking | Medium | High | Score antecedent candidates |
-/// | Entity-mention | Slow | High | Global cluster optimization |
-/// | Neural E2E | Slow | Highest | End-to-end learned |
-///
-/// # Example
-///
-/// ```rust,ignore
-/// use anno::eval::CoreferenceResolver;
-///
-/// let resolver = SimpleCorefResolver::new();
-/// let entities = vec![
-///     Entity::new("John", EntityType::Person, 0, 4, 0.9),
-///     Entity::new("he", EntityType::Person, 10, 12, 0.8),
-/// ];
-/// let resolved = resolver.resolve(&entities);
-/// // Both should now have the same canonical_id
-/// ```
-pub trait CoreferenceResolver: Send + Sync {
-    /// Resolve coreference, assigning canonical IDs to entities.
-    ///
-    /// Each entity in the output will have a `canonical_id` field set.
-    /// Entities with the same `canonical_id` are coreferent (refer to the
-    /// same real-world entity).
-    ///
-    /// # Invariants
-    ///
-    /// - Every output entity has `canonical_id.is_some()`
-    /// - Coreferent entities share the same `canonical_id`
-    /// - Singleton mentions get unique `canonical_id` values
-    fn resolve(&self, entities: &[Entity]) -> Vec<Entity>;
-
-    /// Resolve directly to chains.
-    ///
-    /// A chain groups all mentions of the same entity together.
-    /// This is often the desired output format for evaluation and
-    /// downstream tasks.
-    fn resolve_to_chains(&self, entities: &[Entity]) -> Vec<CorefChain> {
-        let resolved = self.resolve(entities);
-        super::coref::entities_to_chains(&resolved)
-    }
-
-    /// Get resolver name.
-    ///
-    /// Used for logging, metrics, and result attribution.
-    fn name(&self) -> &'static str;
-}
+// Re-export the canonical trait from anno-core
+pub use anno_core::CoreferenceResolver;
 
 impl CoreferenceResolver for SimpleCorefResolver {
     fn resolve(&self, entities: &[Entity]) -> Vec<Entity> {
