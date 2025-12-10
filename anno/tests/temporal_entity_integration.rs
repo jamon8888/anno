@@ -19,13 +19,13 @@ fn regex_ner_populates_valid_from_for_dates() {
         .expect("Should find a date entity");
 
     assert_eq!(date_entity.text, "2024-01-15");
-    
+
     // valid_from should be populated with the parsed date
     assert!(
         date_entity.valid_from.is_some(),
         "Date entity should have valid_from set"
     );
-    
+
     let dt = date_entity.valid_from.unwrap();
     assert_eq!(dt.format("%Y-%m-%d").to_string(), "2024-01-15");
 }
@@ -47,10 +47,7 @@ fn regex_ner_populates_normalized_for_dates() {
         date_entity.normalized.is_some(),
         "Date entity should have normalized set"
     );
-    assert_eq!(
-        date_entity.normalized.as_ref().unwrap(),
-        "2024-01-15"
-    );
+    assert_eq!(date_entity.normalized.as_ref().unwrap(), "2024-01-15");
 }
 
 #[test]
@@ -70,10 +67,7 @@ fn regex_ner_populates_normalized_for_times() {
         time_entity.normalized.is_some(),
         "Time entity should have normalized set"
     );
-    assert_eq!(
-        time_entity.normalized.as_ref().unwrap(),
-        "15:30"
-    );
+    assert_eq!(time_entity.normalized.as_ref().unwrap(), "15:30");
 }
 
 #[test]
@@ -90,7 +84,7 @@ fn regex_ner_handles_japanese_dates() {
 
     assert_eq!(date_entity.text, "2024年1月15日");
     assert!(date_entity.valid_from.is_some());
-    
+
     let dt = date_entity.valid_from.unwrap();
     assert_eq!(dt.format("%Y-%m-%d").to_string(), "2024-01-15");
 }
@@ -98,9 +92,7 @@ fn regex_ner_handles_japanese_dates() {
 #[test]
 fn regex_ner_handles_us_format_dates() {
     let ner = RegexNER::new();
-    let entities = ner
-        .extract_entities("Deadline: 01/15/2024", None)
-        .unwrap();
+    let entities = ner.extract_entities("Deadline: 01/15/2024", None).unwrap();
 
     let date_entity = entities
         .iter()
@@ -114,9 +106,7 @@ fn regex_ner_handles_us_format_dates() {
 #[test]
 fn regex_ner_handles_eu_format_dates() {
     let ner = RegexNER::new();
-    let entities = ner
-        .extract_entities("Termin: 15.01.2024", None)
-        .unwrap();
+    let entities = ner.extract_entities("Termin: 15.01.2024", None).unwrap();
 
     let date_entity = entities
         .iter()
@@ -159,10 +149,13 @@ fn multiple_dates_all_get_temporal_info() {
         .iter()
         .filter(|e| matches!(e.entity_type, EntityType::Date))
         .count();
-    
+
     assert_eq!(date_count, 2, "Should find two dates");
-    
-    for entity in entities.iter().filter(|e| matches!(e.entity_type, EntityType::Date)) {
+
+    for entity in entities
+        .iter()
+        .filter(|e| matches!(e.entity_type, EntityType::Date))
+    {
         assert!(
             entity.valid_from.is_some(),
             "Date '{}' should have valid_from",
@@ -194,4 +187,3 @@ fn entity_is_temporal_method_works() {
         "Entity with valid_from should be considered temporal"
     );
 }
-

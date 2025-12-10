@@ -147,16 +147,9 @@ pub struct NameExample {
     pub frequency: NameFrequency,
 }
 
-/// Gender for intersectional analysis.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Gender {
-    /// Typically masculine names
-    Masculine,
-    /// Typically feminine names
-    Feminine,
-    /// Gender-neutral names
-    Neutral,
-}
+// Re-export the canonical Gender from anno_core.
+// This unifies the type system across the anno ecosystem.
+pub use anno_core::types::Gender;
 
 /// Name frequency category.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

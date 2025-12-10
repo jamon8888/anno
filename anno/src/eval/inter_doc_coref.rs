@@ -178,7 +178,7 @@ impl Default for InterDocCorefMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anno_core::{GroundedDocument, Location, Signal, Track};
+    use anno_core::{GroundedDocument, Location, Signal, Track, TrackId};
 
     fn create_test_corpus() -> (crate::grounded::Corpus, Vec<Vec<TrackRef>>) {
         let mut corpus = crate::grounded::Corpus::new();
@@ -239,21 +239,21 @@ mod tests {
             vec![
                 TrackRef {
                     doc_id: "doc1".to_string(),
-                    track_id: 0,
+                    track_id: TrackId::new(0),
                 },
                 TrackRef {
                     doc_id: "doc2".to_string(),
-                    track_id: 0,
+                    track_id: TrackId::new(0),
                 },
             ],
             vec![
                 TrackRef {
                     doc_id: "doc1".to_string(),
-                    track_id: 1,
+                    track_id: TrackId::new(1),
                 },
                 TrackRef {
                     doc_id: "doc3".to_string(),
-                    track_id: 0,
+                    track_id: TrackId::new(0),
                 },
             ],
         ];

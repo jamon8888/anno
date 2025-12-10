@@ -541,6 +541,203 @@ pub fn multilingual_similarity(a: &str, b: &str) -> f32 {
 }
 
 // =============================================================================
+// Acronym Detection
+// =============================================================================
+
+/// Check if one string is an acronym of another.
+///
+/// This is a language-agnostic algorithm that checks if the "short" form
+/// consists of the first letters of words in the "long" form.
+///
+/// # Algorithm
+///
+/// 1. Identify which string is shorter (candidate acronym)
+/// 2. Verify the short form looks like an acronym (mostly uppercase, 2-10 chars)
+/// 3. Extract initials from the long form by splitting on whitespace/hyphens
+/// 4. Compare initials to the short form (case-insensitive)
+///
+/// # Examples
+///
+/// ```rust
+/// use anno_coalesce::similarity::is_acronym_match;
+///
+/// assert!(is_acronym_match("WHO", "World Health Organization"));
+/// assert!(is_acronym_match("MRSA", "Methicillin-resistant Staphylococcus aureus"));
+/// assert!(is_acronym_match("IBM", "International Business Machines"));
+///
+/// // Also works with reversed argument order
+/// assert!(is_acronym_match("World Health Organization", "WHO"));
+///
+/// // Negative cases
+/// assert!(!is_acronym_match("IBM", "Apple"));
+/// assert!(!is_acronym_match("USA", "Canada"));
+/// ```
+///
+/// # Language Agnosticism
+///
+/// This works for any language that uses spaces or hyphens to separate words:
+/// - English: "WHO" ↔ "World Health Organization"
+/// - German: "DDR" ↔ "Deutsche Demokratische Republik"
+/// - Spanish: "ONU" ↔ "Organización de las Naciones Unidas"
+///
+/// For languages without word boundaries (CJK), this will not produce matches,
+/// which is the correct behavior since CJK acronyms work differently.
+pub fn is_acronym_match(a: &str, b: &str) -> bool {
+    // Determine which is the potential acronym (shorter one)
+    let (short, long) = if a.chars().count() < b.chars().count() {
+        (a, b)
+    } else {
+        (b, a)
+    };
+
+    // Acronym should be reasonably short (2-10 chars)
+    let short_len = short.chars().count();
+    if short_len < 2 || short_len > 10 {
+        return false;
+    }
+
+    // Check if short form looks like an acronym (mostly uppercase letters)
+    let upper_count = short.chars().filter(|c| c.is_uppercase()).count();
+    let alpha_count = short.chars().filter(|c| c.is_alphabetic()).count();
+
+    // Need at least half uppercase, and mostly alphabetic
+    if upper_count < short_len / 2 || alpha_count < short_len / 2 {
+        return false;
+    }
+
+    // Extract initials from long form
+    let initials: String = long
+        .split(|c: char| c.is_whitespace() || c == '-')
+        .filter(|w| !w.is_empty())
+        .filter_map(|w| w.chars().next())
+        .filter(|c| c.is_alphabetic())
+        .collect();
+
+    // Compare case-insensitively
+    initials.eq_ignore_ascii_case(short)
+}
+
+// =============================================================================
+// Synonym Infrastructure
+// =============================================================================
+
+/// Source for synonym relationships.
+///
+/// Implement this trait to provide synonym lookups from various sources:
+/// - UMLS MRCONSO table (medical)
+/// - WordNet (general English)
+/// - Wikidata aliases (multilingual)
+/// - Custom domain-specific tables
+///
+/// The trait is designed to be composable: you can chain multiple sources.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use anno_coalesce::similarity::{SynonymSource, SynonymMatch};
+///
+/// struct UmlsSynonyms { /* UMLS connection */ }
+///
+/// impl SynonymSource for UmlsSynonyms {
+///     fn lookup(&self, term: &str) -> Option<SynonymMatch> {
+///         // Query UMLS MRCONSO for the term
+///         // Return canonical CUI and confidence
+///         None
+///     }
+/// }
+/// ```
+pub trait SynonymSource: Send + Sync {
+    /// Look up a term and return synonym information if found.
+    ///
+    /// Returns `None` if the term is not in this source.
+    fn lookup(&self, term: &str) -> Option<SynonymMatch>;
+
+    /// Check if two terms are synonyms according to this source.
+    ///
+    /// Default implementation looks up both terms and checks if they
+    /// share a canonical ID.
+    fn are_synonyms(&self, a: &str, b: &str) -> Option<SynonymMatch> {
+        let match_a = self.lookup(a)?;
+        let match_b = self.lookup(b)?;
+
+        // If they share a canonical ID, they're synonyms
+        if match_a.canonical_id == match_b.canonical_id {
+            Some(SynonymMatch {
+                canonical_id: match_a.canonical_id,
+                confidence: (match_a.confidence + match_b.confidence) / 2.0,
+                source: match_a.source,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Name of this synonym source for provenance tracking.
+    fn source_name(&self) -> &str;
+}
+
+/// Result of a synonym lookup.
+#[derive(Debug, Clone)]
+pub struct SynonymMatch {
+    /// Canonical identifier (e.g., UMLS CUI, WordNet synset ID)
+    pub canonical_id: String,
+    /// Confidence in the match [0, 1]
+    pub confidence: f32,
+    /// Name of the source that produced this match
+    pub source: String,
+}
+
+/// Empty synonym source that never matches.
+///
+/// Use this as the default when no synonym sources are configured.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoSynonyms;
+
+impl SynonymSource for NoSynonyms {
+    fn lookup(&self, _term: &str) -> Option<SynonymMatch> {
+        None
+    }
+
+    fn source_name(&self) -> &str {
+        "none"
+    }
+}
+
+/// Chained synonym sources that try each source in order.
+#[derive(Default)]
+pub struct ChainedSynonyms {
+    sources: Vec<Box<dyn SynonymSource>>,
+}
+
+impl ChainedSynonyms {
+    /// Create a new empty chain.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add a synonym source to the chain.
+    pub fn add<S: SynonymSource + 'static>(mut self, source: S) -> Self {
+        self.sources.push(Box::new(source));
+        self
+    }
+}
+
+impl SynonymSource for ChainedSynonyms {
+    fn lookup(&self, term: &str) -> Option<SynonymMatch> {
+        for source in &self.sources {
+            if let Some(m) = source.lookup(term) {
+                return Some(m);
+            }
+        }
+        None
+    }
+
+    fn source_name(&self) -> &str {
+        "chained"
+    }
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 
@@ -693,5 +890,72 @@ mod proptests {
             prop_assert!(sim >= 0.0 && sim <= 1.0,
                 "Jaro-Winkler bounds: {}", sim);
         }
+    }
+
+    // =========================================================================
+    // Acronym matching tests
+    // =========================================================================
+
+    #[test]
+    fn test_acronym_who() {
+        assert!(is_acronym_match("WHO", "World Health Organization"));
+        assert!(is_acronym_match("World Health Organization", "WHO"));
+    }
+
+    #[test]
+    fn test_acronym_mrsa() {
+        assert!(is_acronym_match(
+            "MRSA",
+            "Methicillin-resistant Staphylococcus aureus"
+        ));
+    }
+
+    #[test]
+    fn test_acronym_ibm() {
+        assert!(is_acronym_match("IBM", "International Business Machines"));
+    }
+
+    #[test]
+    fn test_acronym_german() {
+        // German acronyms work too (DDR = Deutsche Demokratische Republik)
+        assert!(is_acronym_match("DDR", "Deutsche Demokratische Republik"));
+        // EU works in German too
+        assert!(is_acronym_match("EU", "Europäische Union"));
+    }
+
+    #[test]
+    fn test_acronym_negative() {
+        assert!(!is_acronym_match("IBM", "Apple"));
+        assert!(!is_acronym_match("WHO", "United Nations"));
+        assert!(!is_acronym_match("USA", "Canada"));
+    }
+
+    #[test]
+    fn test_acronym_too_short() {
+        // Single letter is not an acronym
+        assert!(!is_acronym_match("A", "Apple"));
+    }
+
+    #[test]
+    fn test_acronym_not_mostly_uppercase() {
+        // Lowercase doesn't look like an acronym
+        assert!(!is_acronym_match("who", "World Health Organization"));
+    }
+
+    // =========================================================================
+    // Synonym infrastructure tests
+    // =========================================================================
+
+    #[test]
+    fn test_no_synonyms_returns_none() {
+        let source = NoSynonyms;
+        assert!(source.lookup("test").is_none());
+        assert!(source.are_synonyms("a", "b").is_none());
+    }
+
+    #[test]
+    fn test_chained_synonyms_empty() {
+        let chain = ChainedSynonyms::new();
+        assert!(chain.lookup("test").is_none());
     }
 }

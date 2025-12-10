@@ -130,7 +130,7 @@ pub fn run(args: BatchArgs) -> Result<(), String> {
     // For stdin, we need to manually process since pipeline expects files/dir
     if args.stdin {
         use super::super::utils::{link_tracks_to_kb, resolve_coreference};
-        use anno_core::{GroundedDocument, Location, Signal};
+        use anno_core::{GroundedDocument, Location, Signal, SignalId};
 
         let model = args.model.create_model()?;
         let mut documents: Vec<GroundedDocument> = Vec::new();
@@ -164,11 +164,11 @@ pub fn run(args: BatchArgs) -> Result<(), String> {
                 .map_err(|e| format!("Extraction failed for {}: {}", doc_id, e))?;
 
             let mut doc = GroundedDocument::new(doc_id, text);
-            let mut signal_ids: Vec<u64> = Vec::new();
+            let mut signal_ids: Vec<SignalId> = Vec::new();
 
             for e in &entities {
                 let signal = Signal::new(
-                    0,
+                    SignalId::ZERO,
                     Location::text(e.start, e.end),
                     &e.text,
                     e.entity_type.as_label(),

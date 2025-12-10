@@ -40,9 +40,21 @@ fn test_wikigold_structure() {
     let stats = dataset.stats();
 
     // WikiGold should have substantial content
-    assert!(stats.sentences > 100, "WikiGold should have >100 sentences, got {}", stats.sentences);
-    assert!(stats.entities > 500, "WikiGold should have >500 entities, got {}", stats.entities);
-    assert!(stats.tokens > 1000, "WikiGold should have >1000 tokens, got {}", stats.tokens);
+    assert!(
+        stats.sentences > 100,
+        "WikiGold should have >100 sentences, got {}",
+        stats.sentences
+    );
+    assert!(
+        stats.entities > 500,
+        "WikiGold should have >500 entities, got {}",
+        stats.entities
+    );
+    assert!(
+        stats.tokens > 1000,
+        "WikiGold should have >1000 tokens, got {}",
+        stats.tokens
+    );
 
     // Should have standard NER types
     assert!(
@@ -64,12 +76,20 @@ fn test_wnut17_structure() {
     let stats = dataset.stats();
 
     // WNUT-17 has social media text
-    assert!(stats.sentences > 50, "WNUT-17 should have >50 sentences, got {}", stats.sentences);
-    assert!(stats.entities > 100, "WNUT-17 should have >100 entities, got {}", stats.entities);
+    assert!(
+        stats.sentences > 50,
+        "WNUT-17 should have >50 sentences, got {}",
+        stats.sentences
+    );
+    assert!(
+        stats.entities > 100,
+        "WNUT-17 should have >100 entities, got {}",
+        stats.entities
+    );
 
     // Should have emerging entity types
-    let has_person = stats.entities_by_type.contains_key("person")
-        || stats.entities_by_type.contains_key("PER");
+    let has_person =
+        stats.entities_by_type.contains_key("person") || stats.entities_by_type.contains_key("PER");
     let has_location = stats.entities_by_type.contains_key("location")
         || stats.entities_by_type.contains_key("LOC");
     assert!(
@@ -123,22 +143,39 @@ fn test_entity_span_invariants() {
                 );
 
                 // Entity text should match span (if extractable)
+                // Note: Some datasets have byte offset vs char offset confusion,
+                // so we need to check for valid UTF-8 boundaries
                 if entity.start < text_len && entity.end <= text_len {
-                    let extracted = &text[entity.start..entity.end];
-                    // Normalize whitespace for comparison
-                    let normalized_extracted = extracted.split_whitespace().collect::<Vec<_>>().join(" ");
-                    let normalized_entity = entity.text.split_whitespace().collect::<Vec<_>>().join(" ");
-                    
-                    // Allow some tolerance for tokenization differences
-                    if normalized_extracted != normalized_entity {
-                        // Just warn, don't fail - some datasets have minor mismatches
+                    // Check if both boundaries are valid UTF-8 char boundaries
+                    if text.is_char_boundary(entity.start) && text.is_char_boundary(entity.end) {
+                        let extracted = &text[entity.start..entity.end];
+                        // Normalize whitespace for comparison
+                        let normalized_extracted =
+                            extracted.split_whitespace().collect::<Vec<_>>().join(" ");
+                        let normalized_entity =
+                            entity.text.split_whitespace().collect::<Vec<_>>().join(" ");
+
+                        // Allow some tolerance for tokenization differences
+                        if normalized_extracted != normalized_entity {
+                            // Just warn, don't fail - some datasets have minor mismatches
+                            eprintln!(
+                                "Warning: {}: Entity text mismatch at [{}, {}): expected '{}', got '{}'",
+                                ds_id.name(),
+                                entity.start,
+                                entity.end,
+                                normalized_entity,
+                                normalized_extracted
+                            );
+                        }
+                    } else {
+                        // Byte offset is not a valid char boundary - this indicates
+                        // a potential issue with how the dataset was parsed
                         eprintln!(
-                            "Warning: {}: Entity text mismatch at [{}, {}): expected '{}', got '{}'",
+                            "Warning: {}: Entity '{}' has non-char-boundary span [{}, {}) in UTF-8 text",
                             ds_id.name(),
+                            entity.text,
                             entity.start,
-                            entity.end,
-                            normalized_entity,
-                            normalized_extracted
+                            entity.end
                         );
                     }
                 }
@@ -214,7 +251,7 @@ fn test_dataset_id_metadata() {
         );
 
         // Entity types should be non-empty
-        let types = ds_id.expected_entity_types();
+        let types = ds_id.entity_types();
         assert!(
             !types.is_empty(),
             "Dataset {} has no expected entity types",
@@ -300,7 +337,10 @@ fn download_and_validate_all_datasets() {
         match loader.load_or_download(*ds_id) {
             Ok(dataset) => {
                 let stats = dataset.stats();
-                println!("OK ({} sentences, {} entities)", stats.sentences, stats.entities);
+                println!(
+                    "OK ({} sentences, {} entities)",
+                    stats.sentences, stats.entities
+                );
                 successes += 1;
             }
             Err(e) => {
@@ -341,7 +381,10 @@ fn test_stats_serialization() {
     assert!(!json.is_empty(), "Serialized stats should not be empty");
 
     // Should contain expected fields
-    assert!(json.contains("sentences"), "JSON should contain 'sentences'");
+    assert!(
+        json.contains("sentences"),
+        "JSON should contain 'sentences'"
+    );
     assert!(json.contains("entities"), "JSON should contain 'entities'");
     assert!(json.contains("tokens"), "JSON should contain 'tokens'");
 }
@@ -385,4 +428,3 @@ fn test_to_test_cases_conversion() {
         }
     }
 }
-

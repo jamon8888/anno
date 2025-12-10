@@ -52,22 +52,9 @@ pub struct Mention {
     pub mention_type: Option<MentionType>,
 }
 
-/// Type of referring expression.
-///
-/// Matches `anno_core::types::MentionType` for compatibility.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum MentionType {
-    /// Proper name ("John Smith", "Microsoft")
-    Proper,
-    /// Common noun phrase ("the company", "a dog")
-    Nominal,
-    /// Pronoun ("he", "it", "they")
-    ///
-    /// Named `Pronominal` to match linguistic terminology and `anno_core`.
-    Pronominal,
-    /// Unknown/unspecified
-    Unknown,
-}
+// Re-export the canonical MentionType from anno_core.
+// This unifies the type system across the anno ecosystem.
+pub use anno_core::types::MentionType;
 
 impl Mention {
     /// `Mention::new("John", 0, 4)` creates a mention for "John" at characters 0..4.

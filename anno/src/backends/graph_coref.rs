@@ -97,6 +97,15 @@
 //! let chains = coref.resolve(&[john, he]);
 //! ```
 //!
+//! # Graph Initialization: Syntactic vs Semantic
+//!
+//! SpanEIT (Hossain et al. 2025) constructs a combined graph:
+//! - **Syntactic edges** (`E_syn`): From dependency parse (adjectival modifiers, etc.)
+//! - **Semantic edges** (`E_sem`): From co-occurrence statistics
+//!
+//! Use [`CorefGraph::seed_cooccurrence_edges`] to initialize with proximity-based
+//! priors before running iterative refinement.
+//!
 //! # References
 //!
 //! - Miculicich & Henderson (2022): "Graph Refinement for Coreference Resolution"
@@ -104,6 +113,8 @@
 //! - Lee et al. (2017): "End-to-end Neural Coreference Resolution"
 //! - Lee et al. (2018): "Higher-Order Coreference Resolution"
 //! - Mohammadshahi & Henderson (2021): "Graph-to-Graph Transformer for Dependency Parsing"
+//! - Hossain et al. (2025): "SpanEIT: Dynamic Span Interaction and Graph-Aware Memory"
+//!   [arXiv:2509.11604](https://arxiv.org/abs/2509.11604)
 
 use crate::eval::coref::{CorefChain, Mention, MentionType};
 use std::collections::HashSet;
@@ -316,6 +327,74 @@ impl CorefGraph {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.edges.is_empty()
+    }
+
+    /// Seed the graph with co-occurrence priors based on mention proximity.
+    ///
+    /// This is inspired by SpanEIT (Hossain et al. 2025), which constructs a
+    /// semantic co-occurrence graph `G_sem` alongside the syntactic graph. The
+    /// insight: mentions that appear close together are more likely coreferent.
+    ///
+    /// # Arguments
+    ///
+    /// * `mention_positions` - Position of each mention (e.g., character offset)
+    /// * `window_size` - Maximum distance for co-occurrence (e.g., 100 chars)
+    /// * `scorer` - Optional scoring function; if None, uses constant weight
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use anno::backends::graph_coref::CorefGraph;
+    ///
+    /// let mut graph = CorefGraph::new(3);
+    /// let positions = vec![0, 50, 200];  // Character offsets
+    ///
+    /// // Seed edges for mentions within 100 chars of each other
+    /// graph.seed_cooccurrence_edges(&positions, 100, None);
+    ///
+    /// assert!(graph.has_edge(0, 1));   // 50 < 100
+    /// assert!(!graph.has_edge(0, 2));  // 200 > 100
+    /// ```
+    ///
+    /// # Research Background
+    ///
+    /// SpanEIT constructs `G = (V, E_syn ∪ E_sem)` where:
+    /// - `E_syn` = syntactic dependency edges
+    /// - `E_sem` = co-occurrence edges (this method)
+    ///
+    /// The combined graph is processed by GAT layers for context-aware embeddings.
+    /// For anno's heuristic approach, we add these edges as initial priors before
+    /// iterative refinement.
+    pub fn seed_cooccurrence_edges<F>(
+        &mut self,
+        mention_positions: &[usize],
+        window_size: usize,
+        scorer: Option<F>,
+    ) where
+        F: Fn(usize, usize) -> bool,
+    {
+        for i in 0..self.num_mentions {
+            for j in (i + 1)..self.num_mentions {
+                if i >= mention_positions.len() || j >= mention_positions.len() {
+                    continue;
+                }
+
+                let pos_i = mention_positions[i];
+                let pos_j = mention_positions[j];
+                let distance = if pos_i > pos_j {
+                    pos_i - pos_j
+                } else {
+                    pos_j - pos_i
+                };
+
+                if distance <= window_size {
+                    let should_add = scorer.as_ref().map_or(true, |f| f(i, j));
+                    if should_add {
+                        self.add_edge(i, j);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1232,5 +1311,52 @@ mod tests {
 
         assert_eq!(doc.chain_count(), 1);
         assert_eq!(doc.mention_count(), 2);
+    }
+
+    // -------------------------------------------------------------------------
+    // Co-occurrence seeding (SpanEIT-inspired)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_cooccurrence_seeding_basic() {
+        let mut graph = CorefGraph::new(3);
+        let positions = vec![0, 50, 200]; // Character offsets
+
+        // Window of 100: should connect 0-1 (distance 50) but not 0-2 (distance 200)
+        graph.seed_cooccurrence_edges(&positions, 100, None::<fn(usize, usize) -> bool>);
+
+        assert!(graph.has_edge(0, 1), "Close mentions should be connected");
+        assert!(
+            !graph.has_edge(0, 2),
+            "Distant mentions should not be connected"
+        );
+        assert!(
+            !graph.has_edge(1, 2),
+            "Distant mentions should not be connected"
+        );
+    }
+
+    #[test]
+    fn test_cooccurrence_seeding_with_scorer() {
+        let mut graph = CorefGraph::new(3);
+        let positions = vec![0, 50, 80];
+
+        // Custom scorer: only connect if both indices are even
+        let scorer = |i: usize, j: usize| i % 2 == 0 && j % 2 == 0;
+        graph.seed_cooccurrence_edges(&positions, 100, Some(scorer));
+
+        assert!(graph.has_edge(0, 2), "0 and 2 are both even");
+        assert!(!graph.has_edge(0, 1), "1 is odd");
+        assert!(!graph.has_edge(1, 2), "1 is odd");
+    }
+
+    #[test]
+    fn test_cooccurrence_seeding_empty() {
+        let mut graph = CorefGraph::new(3);
+        let positions: Vec<usize> = vec![];
+
+        graph.seed_cooccurrence_edges(&positions, 100, None::<fn(usize, usize) -> bool>);
+
+        assert!(graph.is_empty(), "Empty positions should create no edges");
     }
 }

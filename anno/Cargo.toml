@@ -105,6 +105,7 @@ production = ["onnx", "async-inference", "session-pool", "fast-lock"]
 proptest = { workspace = true }
 criterion = { workspace = true }
 tempfile = "3"
+xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
 
 [[bench]]
 name = "offset_operations"

@@ -22,6 +22,26 @@ Standard entity coref links mentions within documents. **Cross-context** corefer
 
 The unification enables **joint training** on both settings, increasing data availability.
 
+### Maverick Validation: TikTalkCoref (arXiv:2504.14321, Li et al. 2025)
+
+**TikTalkCoref** is the first Chinese multimodal coreference dataset for social media dialogues (Douyin/TikTok comments). While the multimodal aspects are out of scope for anno, the textual coreference findings validate our Maverick implementation:
+
+| Model | MUC F1 | B³ F1 | CEAFφ4 F1 | Avg F1 |
+|-------|--------|-------|-----------|--------|
+| **Maverick** | 51.9 | 68.1 | 76.3 | **65.5** |
+| e2e-coref | 66.0 | 30.6 | 20.6 | 39.1 |
+
+**Key findings:**
+- Maverick significantly outperforms e2e-coref on Chinese social media dialogues (+26.4 Avg.F1)
+- Singleton handling is critical: 44% pronouns, 34% proper names, 22% common nouns
+- e2e-coref struggles with singletons (11.6 F1 vs Maverick's 51.3 F1)
+- MUC favors e2e-coref (link-based), but B³/CEAF favor Maverick (entity-based)
+
+**Implications for anno:**
+- Validates `maverick_coref.rs` as SOTA choice for coreference
+- Chinese social media domain requires explicit singleton handling
+- Short dialogues have different mention type distributions than long documents
+
 ### xCoRe Architecture (EMNLP 2025, Martinelli et al.)
 
 **Three-step pipeline**:
@@ -869,6 +889,210 @@ Key insight: Propagating information across coreference arcs informs both semant
 
 ---
 
+## Priority 8: Memory-Augmented Entity Tracking
+
+### Why It Matters
+
+Sequential text processing requires tracking entities across sentence boundaries. Standard transformers have a fixed context window; for long documents (10k+ tokens), memory mechanisms provide bounded-resource alternatives. Three paradigms have emerged:
+
+1. **Incremental Entity Memory** (Referential Reader): Fixed-size memory cells updated via gating
+2. **Graph-Based Refinement** (G2GT, GraphCoref): Iterative graph message passing
+3. **Span-Attention with Memory** (SpanEIT): Cross-attention between entity/sentiment spans + GRU memory
+
+### Research Papers Analyzed
+
+#### The Referential Reader (Liu, Zettlemoyer, Eisenstein; ACL 2019)
+
+**Core idea**: Fixed-length memory bank where each cell holds an entity representation. Reading the text triggers either:
+- **Update**: GRU-like integration of new mention into existing cell (implies coreference)
+- **Overwrite**: Replace cell with new entity (breaks coreference chain)
+
+```
+m_i(t) = u_i · GRU(x_t, m_i(t-1)) + (1-u_i) · o_i · x_t + (1-u_i) · (1-o_i) · m_i(t-1)
+```
+
+Where `u_i` is update gate, `o_i` is overwrite gate, `x_t` is current mention embedding.
+
+**Insight**: Memory operations are differentiable gates—trained end-to-end.
+
+**Implementation**: https://github.com/liufly/refreader (fairseq-based)
+
+#### SpanEIT (Hossain et al.; arXiv:2509.11604, Oct 2025)
+
+**Task**: Entity-level sentiment classification (related but distinct from coreference)
+
+**Architecture components**:
+1. BERT contextual embeddings
+2. POS-based span extraction (entity spans + sentiment spans)
+3. Combined syntactic + semantic graph: `G = (V, E_syn ∪ E_sem)`
+4. GAT layers for graph message passing
+5. Bidirectional multi-head attention: entity→sentiment and entity→sentence
+6. Coreference-aware memory with GRU: `m_ci(t) = GRU(h^(L,t)_e, m_ci(t-1))`
+7. Fusion + classification
+
+**Auxiliary losses** (Equations 9-12):
+- Span detection loss (BCE for sentiment span tokens)
+- Pair relevance loss (entity-sentiment pair classification)
+- Span relevance loss (overall span importance)
+
+**Results**: 92.75% accuracy on FSAD, outperforming RoBERTa+BiLSTM+GAT baseline.
+
+#### Graph Refinement for Coreference (G2GT; Miculicich & Henderson 2022)
+
+Already documented in `graph_coref.rs`. Key insight: conditioning each iteration on the full predicted graph enables global transitivity.
+
+### Current State in Anno
+
+| Component | Anno Implementation | SpanEIT Equivalent | Gap |
+|-----------|--------------------|--------------------|-----|
+| Entity memory | `EntityMemory` with LRU/LFU/DualCache | GRU-based memory module | Heuristic vs learned |
+| Graph reasoning | `GraphCoref` (iterative refinement) | GAT layers | Similar paradigm |
+| Span extraction | NER backends (`Model` trait) | POS-based + heuristics | Anno uses neural, SpanEIT uses linguistic |
+| Cross-mention attention | Not explicit | Bidirectional multi-head | **Gap**: Anno lacks explicit span-pair attention |
+| Memory indexing | Cluster ID (uint) | Coreference cluster | Same concept |
+
+**Anno's `EntityMemory` (incremental_coref.rs)**:
+
+```rust
+pub struct EntityMemory {
+    clusters: HashMap<u64, ClusterMetadata>,
+    next_cluster_id: u64,
+    policy: MemoryPolicy,  // LRU, LFU, DualCache, Unbounded
+    current_window: usize,
+    l_cache: VecDeque<u64>,
+    g_cache: Vec<u64>,
+}
+```
+
+This is a **heuristic** implementation:
+- String matching for cluster assignment
+- Discrete add/evict operations
+- No learned representations
+
+**SpanEIT's Memory Module**:
+
+```python
+m_ci(t) = GRU(h^(L,t)_e, m_ci(t-1))  # Learned update
+```
+
+This is **neural**:
+- GRU smooths entity representations across mentions
+- Trained end-to-end
+- Requires coreference supervision
+
+### What's Worth Adopting
+
+| Idea | Effort | Benefit | Verdict |
+|------|--------|---------|---------|
+| GRU-based memory for neural backends | HIGH (training infrastructure) | Moderate (cleaner representation) | LATER: Only if we build trainable coref |
+| Syntactic + semantic graph fusion | MEDIUM | Moderate (co-occurrence signals) | CONSIDER: Could extend GraphCoref |
+| Bidirectional span attention | MEDIUM | Moderate (explicit entity-context modeling) | CONSIDER: For discourse-aware resolution |
+| Auxiliary span detection losses | HIGH (training) | Moderate (regularization) | LATER: Only for trained models |
+
+### What's Out of Scope
+
+**Sentiment classification**: Anno's scope is NER → Coreference → Relation Extraction → Event Extraction. Sentiment polarity classification is a different task family.
+
+**The full SpanEIT architecture**: Designed for supervised sentiment classification, not unsupervised/heuristic coreference.
+
+### Recommended Enhancements for Anno
+
+1. **Co-occurrence graph edges in GraphCoref** (LOW effort):
+   Add statistical co-occurrence edges alongside syntactic edges. In `graph_coref.rs`:
+   
+   ```rust
+   // Current: syntactic edges only
+   // Enhancement: add co-occurrence edges
+   fn add_cooccurrence_edges(&mut self, window: usize) {
+       for i in 0..self.num_mentions {
+           for j in i+1..min(i+window, self.num_mentions) {
+               if self.mentions_cooccur(i, j) {
+                   self.add_edge(i, j, EdgeType::Cooccurrence);
+               }
+           }
+       }
+   }
+   ```
+
+2. **Span-pair attention for discourse-aware resolution** (MEDIUM effort):
+   In `discourse/types.rs`, add explicit cross-attention between anaphor and candidate antecedent spans:
+   
+   ```rust
+   pub fn compute_span_attention(
+       anaphor: &DiscourseReferent,
+       candidates: &[DiscourseReferent],
+   ) -> Vec<f64> {
+       // Bidirectional attention weights
+   }
+   ```
+
+3. **Document the paradigm differences in EntityMemory** (LOW effort):
+   Add a doc comment explaining the trade-offs:
+   
+   ```rust
+   /// # Memory Paradigms in Entity Tracking
+   ///
+   /// | Approach | Memory | Update | Training |
+   /// |----------|--------|--------|----------|
+   /// | EntityMemory (Anno) | Discrete clusters | String match | None |
+   /// | Referential Reader | Fixed cells | GRU gate | E2E |
+   /// | SpanEIT | Per-cluster | GRU | Supervised |
+   ```
+
+### References
+
+- Liu, Zettlemoyer & Eisenstein (2019): "The Referential Reader: A Recurrent Entity Network for Anaphora Resolution" - ACL 2019. https://arxiv.org/abs/1902.01541
+- Hossain et al. (2025): "Dynamic Span Interaction and Graph-Aware Memory for Entity-Level Sentiment Classification" - arXiv:2509.11604
+- Miculicich & Henderson (2022): "Graph Refinement for Coreference Resolution" - arXiv:2203.16574
+- Martinelli, Barba & Navigli (2024): "Maverick: Efficient and Accurate Coreference Resolution Defying Recent Trends" - ACL 2024. https://arxiv.org/abs/2407.21489
+
+---
+
+## Priority 9: Efficient Coreference at Scale (Maverick Paradigm)
+
+### Why It Matters
+
+Recent SOTA coreference moved to 13B+ parameter generative models. Maverick (ACL 2024) challenges this, achieving 83.6 CoNLL-F1 with 500M parameters, 0.006x memory, and 170x faster inference.
+
+### Architecture Overview
+
+```text
+1. Encode text with DeBERTa-v3
+2. Mention Extraction (start + end boundary detection)
+3. Multi-Expert Scorer (MES) for antecedent linking
+   ├── Project start/end to K category-specific spaces
+   ├── Bilinear scoring: s2s, e2e, s2e, e2s
+   └── Categories: Proper, Nominal, Pronoun, ALL
+4. Clustering via transitivity
+```
+
+**Key innovation**: Category-specific bilinear scorers (Proper/Nominal/Pronoun) improve precision without sacrificing recall.
+
+### Current State in Anno
+
+**Implemented**: `anno/src/eval/maverick_coref.rs` contains:
+- `MaverickConfig` with all hyperparameters
+- Multi-expert architecture documentation
+- Category-specific mention handling
+
+**Gap**: No actual model weights or inference. The Python `maverick-coref` package exists on PyPI for inference.
+
+### Integration Options
+
+1. **Python subprocess**: Call `maverick-coref` CLI from Rust
+2. **ONNX export**: Convert PyTorch → ONNX, load in Rust
+3. **Candle reimplementation**: Port DeBERTa + MES scorer to Candle
+
+For production use, Option 2 (ONNX) provides the best balance of accuracy and deployment simplicity.
+
+### References
+
+- Martinelli, Barba & Navigli (2024): "Maverick: Efficient and Accurate Coreference Resolution Defying Recent Trends" - ACL 2024
+- Code: https://github.com/SapienzaNLP/maverick-coref
+- HuggingFace: https://huggingface.co/sapienzanlp/maverick-mes-ontonotes
+
+---
+
 ## Next Steps
 
 1. [x] Add high-priority datasets to `dataset_registry.rs` (FINER, AnnoCTR, Distant Listening)
@@ -877,6 +1101,8 @@ Key insight: Propagating information across coreference arcs informs both semant
 4. [ ] Add remaining category flags (event_coref, ancient, abstract_anaphora, etc.)
 5. [ ] Update `download_extended_datasets.py` with URLs
 6. [ ] Create evaluation harness for CDCR
+7. [ ] Consider co-occurrence graph edges in GraphCoref (Priority 8)
+8. [ ] Evaluate Maverick ONNX export for production coreference (Priority 9)
 7. [ ] Complete abstract anaphora evaluation pipeline
 8. [ ] Add robustness/adversarial generation
 9. [ ] Consider multimodal entity alignment for future scope

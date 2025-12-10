@@ -8,7 +8,11 @@ use anno::EntityType;
 
 #[test]
 fn test_bio_schema_creation() {
-    let types = [EntityType::Person, EntityType::Organization, EntityType::Location];
+    let types = [
+        EntityType::Person,
+        EntityType::Organization,
+        EntityType::Location,
+    ];
     let schema = BIOSchema::new(&types);
 
     assert_eq!(schema.entity_types.len(), 3);
@@ -27,10 +31,8 @@ fn test_bio_schema_descriptions() {
 #[test]
 fn test_bio_schema_custom_description() {
     let types = [EntityType::Person];
-    let schema = BIOSchema::new(&types).with_description(
-        EntityType::Person,
-        "Names of human individuals",
-    );
+    let schema =
+        BIOSchema::new(&types).with_description(EntityType::Person, "Names of human individuals");
 
     let desc = schema.descriptions.get(&EntityType::Person).unwrap();
     assert!(desc.contains("human individuals"));
@@ -38,10 +40,7 @@ fn test_bio_schema_custom_description() {
 
 #[test]
 fn test_code_ner_prompt_basic() {
-    let schema = BIOSchema::new(&[
-        EntityType::Person,
-        EntityType::Organization,
-    ]);
+    let schema = BIOSchema::new(&[EntityType::Person, EntityType::Organization]);
 
     let prompt = CodeNERPrompt::new(schema);
     let rendered = prompt.render("Apple Inc. CEO Tim Cook announced today.");
@@ -80,20 +79,15 @@ fn test_code_ner_prompt_chain_of_thought() {
 }
 
 #[test]
-fn test_code_ner_prompt_format_options() {
+fn test_code_ner_prompt_output_format() {
     let schema = BIOSchema::new(&[EntityType::Person]);
-    
-    // Test JSON format
-    let json_prompt = CodeNERPrompt::new(schema.clone())
-        .with_output_format("json");
-    let rendered = json_prompt.render("Test");
-    assert!(!rendered.is_empty());
-    
-    // Test BIO format
-    let bio_prompt = CodeNERPrompt::new(schema)
-        .with_output_format("bio");
-    let rendered = bio_prompt.render("Test");
-    assert!(!rendered.is_empty());
+
+    let prompt = CodeNERPrompt::new(schema);
+
+    // Check that output format description is provided
+    let format_desc = prompt.output_format();
+    assert!(!format_desc.is_empty());
+    assert!(format_desc.contains("text") || format_desc.contains("type"));
 }
 
 #[test]
@@ -125,10 +119,9 @@ fn test_bio_schema_all_standard_types() {
 
 #[test]
 fn test_bio_schema_custom_type() {
-    let custom_type = EntityType::Custom {
-        name: "GENE".to_string(),
-        description: Some("Gene names".to_string()),
-    };
+    use anno::EntityCategory;
+
+    let custom_type = EntityType::custom("GENE", EntityCategory::Misc);
 
     let schema = BIOSchema::new(&[custom_type.clone()]);
     assert!(schema.entity_types.contains(&custom_type));

@@ -3,6 +3,16 @@
 //! Provides a minimal resolver to produce coreference chains from entities,
 //! completing the loop between NER extraction and coreference evaluation metrics.
 //!
+//! # Architectural Note
+//!
+//! This module lives in `eval/` but implements NLP algorithms (resolvers).
+//! Ideally, `CoreferenceResolver` trait and implementations would live in
+//! `backends/` alongside `MentionRankingCoref`, and `eval/` would only
+//! contain metrics and evaluation harnesses.
+//!
+//! For now, the trait is re-exported from `backends::coref` for discoverability.
+//! See: `backends/coref.rs` for the production-grade resolver.
+//!
 //! # Design Philosophy
 //!
 //! This resolver is intentionally simple:

@@ -191,16 +191,25 @@ pub enum Number {
     /// In languages with dual, plural specifically means "three or more".
     /// In languages without dual, plural means "two or more".
     Plural,
+
+    /// Unknown or ambiguous number
+    ///
+    /// Used when number cannot be determined, e.g., "you" in English
+    /// (ambiguous singular/plural), or "they" (singular they vs plural).
+    Unknown,
 }
 
 impl Number {
     /// Check if this number is compatible with another for coreference.
     ///
+    /// Unknown is compatible with anything (permissive).
     /// Dual is compatible with plural in some contexts.
     #[must_use]
     pub fn is_compatible(&self, other: &Number) -> bool {
         match (self, other) {
             (a, b) if a == b => true,
+            // Unknown is compatible with anything
+            (Number::Unknown, _) | (_, Number::Unknown) => true,
             // Dual can sometimes be treated as plural
             (Number::Dual, Number::Plural) | (Number::Plural, Number::Dual) => true,
             _ => false,
@@ -214,6 +223,7 @@ impl std::fmt::Display for Number {
             Number::Singular => write!(f, "sg"),
             Number::Dual => write!(f, "du"),
             Number::Plural => write!(f, "pl"),
+            Number::Unknown => write!(f, "?"),
         }
     }
 }
@@ -226,6 +236,7 @@ impl std::str::FromStr for Number {
             "sg" | "singular" | "sing" | "1" => Ok(Number::Singular),
             "du" | "dual" | "2" => Ok(Number::Dual),
             "pl" | "plural" | "plur" | "3+" => Ok(Number::Plural),
+            "?" | "unknown" | "unk" => Ok(Number::Unknown),
             _ => Err(format!("Unknown number: {}", s)),
         }
     }

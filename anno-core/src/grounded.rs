@@ -404,8 +404,8 @@ impl From<&Span> for Location {
 // Signal (Level 1): Raw Detection
 // =============================================================================
 
-/// Unique identifier for a signal within a document.
-pub type SignalId = u64;
+// SignalId is now a newtype in crate::types::ids for type safety
+pub use crate::types::SignalId;
 
 /// A raw detection signal: the atomic unit of entity extraction.
 ///
@@ -492,14 +492,14 @@ impl<L> Signal<L> {
     /// * `confidence` - Detection confidence in `[0, 1]`
     #[must_use]
     pub fn new(
-        id: SignalId,
+        id: impl Into<SignalId>,
         location: L,
         surface: impl Into<String>,
         label: impl Into<String>,
         confidence: f32,
     ) -> Self {
         Self {
-            id,
+            id: id.into(),
             location,
             surface: surface.into(),
             label: label.into(),
@@ -669,7 +669,7 @@ impl Signal<Location> {
                 let end = start + surface.chars().count();
 
                 return Some(Self::new(
-                    0,
+                    SignalId::ZERO,
                     Location::text(start, end),
                     surface,
                     label,
@@ -762,8 +762,8 @@ impl std::error::Error for SignalValidationError {}
 // Track (Level 2): Within-Document Coreference
 // =============================================================================
 
-/// Unique identifier for a track within a document.
-pub type TrackId = u64;
+// TrackId is now a newtype in crate::types::ids for type safety
+pub use crate::types::TrackId;
 
 /// A reference to a signal within a track.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -828,9 +828,9 @@ pub struct Track {
 impl Track {
     /// Create a new track.
     #[must_use]
-    pub fn new(id: TrackId, canonical_surface: impl Into<String>) -> Self {
+    pub fn new(id: impl Into<TrackId>, canonical_surface: impl Into<String>) -> Self {
         Self {
-            id,
+            id: id.into(),
             signals: Vec::new(),
             entity_type: None,
             canonical_surface: canonical_surface.into(),
@@ -841,7 +841,8 @@ impl Track {
     }
 
     /// Add a signal to this track.
-    pub fn add_signal(&mut self, signal_id: SignalId, position: u32) {
+    pub fn add_signal(&mut self, signal_id: impl Into<SignalId>, position: u32) {
+        let signal_id = signal_id.into();
         self.signals.push(SignalRef {
             signal_id,
             position,
@@ -1037,8 +1038,8 @@ pub struct TrackStats {
 // Identity (Level 3): Cross-Document Entity Linking
 // =============================================================================
 
-/// Unique identifier for a global identity.
-pub type IdentityId = u64;
+// IdentityId is now a newtype in crate::types::ids for type safety
+pub use crate::types::IdentityId;
 
 /// Source of identity formation.
 ///
@@ -1127,9 +1128,9 @@ pub struct Identity {
 impl Identity {
     /// Create a new identity.
     #[must_use]
-    pub fn new(id: IdentityId, canonical_name: impl Into<String>) -> Self {
+    pub fn new(id: impl Into<IdentityId>, canonical_name: impl Into<String>) -> Self {
         Self {
-            id,
+            id: id.into(),
             canonical_name: canonical_name.into(),
             entity_type: None,
             kb_id: None,
@@ -1146,7 +1147,7 @@ impl Identity {
     /// Create an identity from a knowledge base entry.
     #[must_use]
     pub fn from_kb(
-        id: IdentityId,
+        id: impl Into<IdentityId>,
         canonical_name: impl Into<String>,
         kb_name: impl Into<String>,
         kb_id: impl Into<String>,
@@ -1154,7 +1155,7 @@ impl Identity {
         let kb_name_str = kb_name.into();
         let kb_id_str = kb_id.into();
         Self {
-            id,
+            id: id.into(),
             canonical_name: canonical_name.into(),
             entity_type: None,
             kb_id: Some(kb_id_str.clone()),
@@ -1278,9 +1279,9 @@ impl GroundedDocument {
             identities: HashMap::new(),
             signal_to_track: HashMap::new(),
             track_to_identity: HashMap::new(),
-            next_signal_id: 0,
-            next_track_id: 0,
-            next_identity_id: 0,
+            next_signal_id: SignalId::ZERO,
+            next_track_id: TrackId::ZERO,
+            next_identity_id: IdentityId::ZERO,
         }
     }
 
@@ -1299,7 +1300,8 @@ impl GroundedDocument {
 
     /// Get a signal by ID.
     #[must_use]
-    pub fn get_signal(&self, id: SignalId) -> Option<&Signal<Location>> {
+    pub fn get_signal(&self, id: impl Into<SignalId>) -> Option<&Signal<Location>> {
+        let id = id.into();
         self.signals.iter().find(|s| s.id == id)
     }
 
@@ -1329,14 +1331,14 @@ impl GroundedDocument {
 
     /// Get a track by ID.
     #[must_use]
-    pub fn get_track(&self, id: TrackId) -> Option<&Track> {
-        self.tracks.get(&id)
+    pub fn get_track(&self, id: impl Into<TrackId>) -> Option<&Track> {
+        self.tracks.get(&id.into())
     }
 
     /// Get a mutable reference to a track by ID.
     #[must_use]
-    pub fn get_track_mut(&mut self, id: TrackId) -> Option<&mut Track> {
-        self.tracks.get_mut(&id)
+    pub fn get_track_mut(&mut self, id: impl Into<TrackId>) -> Option<&mut Track> {
+        self.tracks.get_mut(&id.into())
     }
 
     /// Add a signal to an existing track.
@@ -1345,10 +1347,12 @@ impl GroundedDocument {
     /// Returns true if the signal was added, false if track doesn't exist.
     pub fn add_signal_to_track(
         &mut self,
-        signal_id: SignalId,
-        track_id: TrackId,
+        signal_id: impl Into<SignalId>,
+        track_id: impl Into<TrackId>,
         position: u32,
     ) -> bool {
+        let signal_id = signal_id.into();
+        let track_id = track_id.into();
         if let Some(track) = self.tracks.get_mut(&track_id) {
             track.add_signal(signal_id, position);
             self.signal_to_track.insert(signal_id, track_id);
@@ -1384,7 +1388,13 @@ impl GroundedDocument {
     }
 
     /// Link a track to an identity.
-    pub fn link_track_to_identity(&mut self, track_id: TrackId, identity_id: IdentityId) {
+    pub fn link_track_to_identity(
+        &mut self,
+        track_id: impl Into<TrackId>,
+        identity_id: impl Into<IdentityId>,
+    ) {
+        let track_id = track_id.into();
+        let identity_id = identity_id.into();
         if let Some(track) = self.tracks.get_mut(&track_id) {
             track.identity_id = Some(identity_id);
             self.track_to_identity.insert(track_id, identity_id);
@@ -1456,7 +1466,7 @@ impl GroundedDocument {
                     normalized: signal.normalized.clone(),
                     provenance: signal.provenance.clone(),
                     kb_id: identity.and_then(|i| i.kb_id.clone()),
-                    canonical_id: track.map(|t| t.id),
+                    canonical_id: track.map(|t| t.id.get()),
                     hierarchical_confidence: signal.hierarchical,
                     visual_span: match &signal.location {
                         Location::BoundingBox {
@@ -1532,7 +1542,7 @@ impl GroundedDocument {
             };
 
             let mut signal = Signal::new(
-                idx as SignalId,
+                SignalId::new(idx as u64),
                 location,
                 &entity.text,
                 entity.entity_type.as_label(),
@@ -1869,7 +1879,7 @@ impl GroundedDocument {
             return None;
         }
 
-        let mut track = Track::new(0, canonical);
+        let mut track = Track::new(TrackId::ZERO, canonical);
         for (pos, &id) in signal_ids.iter().enumerate() {
             track.add_signal(id, pos as u32);
         }
@@ -1913,7 +1923,7 @@ impl GroundedDocument {
         }
 
         // Create new merged track
-        let mut new_track = Track::new(0, canonical);
+        let mut new_track = Track::new(TrackId::ZERO, canonical);
         new_track.entity_type = entity_type;
         for (pos, signal_ref) in all_signals.iter().enumerate() {
             new_track.add_signal(signal_ref.signal_id, pos as u32);
@@ -2467,7 +2477,7 @@ fn annotate_text_html(text: &str, signals: &[Signal<Location>]) -> String {
                 s.surface.as_str(),
                 s.label.as_str(),
                 s.confidence,
-                s.id,
+                s.id.get(),
             ))
         })
         .collect();
@@ -3092,7 +3102,7 @@ impl Corpus {
         Self {
             documents: std::collections::HashMap::new(),
             identities: std::collections::HashMap::new(),
-            next_identity_id: 0,
+            next_identity_id: IdentityId::ZERO,
         }
     }
 
@@ -4092,7 +4102,7 @@ mod proptests {
             let mut track = Track::new(0, "test");
 
             for i in 0..signal_count {
-                track.add_signal(i as SignalId, i as u32);
+                track.add_signal(i, i as u32);
                 prop_assert_eq!(
                     track.len(),
                     i + 1,
@@ -4119,7 +4129,7 @@ mod proptests {
             let mut track = Track::new(0, "test");
 
             for i in 0..signal_count {
-                track.add_signal(i as SignalId, i as u32);
+                track.add_signal(i, i as u32);
             }
 
             for (idx, signal_ref) in track.signals.iter().enumerate() {
@@ -4718,5 +4728,68 @@ mod proptests {
             let unique: std::collections::HashSet<_> = offsets.iter().collect();
             prop_assert_eq!(offsets.len(), unique.len(), "Each occurrence should have distinct offset");
         }
+    }
+
+    // =========================================================================
+    // TrackStats Tests
+    // =========================================================================
+
+    #[test]
+    fn test_track_stats_basic() {
+        let text = "John met Mary. He said hello. John left.";
+        let mut doc = GroundedDocument::new("test", text);
+        let text_len = text.chars().count();
+
+        // Add signals for "John" at positions 0 and 30
+        let s1 = doc.add_signal(Signal::new(0, Location::text(0, 4), "John", "Person", 0.95));
+        let s2 = doc.add_signal(Signal::new(
+            0,
+            Location::text(30, 34),
+            "John",
+            "Person",
+            0.90,
+        ));
+
+        // Create track linking both Johns
+        let track_id = doc.add_track(Track::new(0, "John".to_string()));
+        doc.add_signal_to_track(s1, track_id, 0);
+        doc.add_signal_to_track(s2, track_id, 1);
+
+        // Get track and compute stats
+        let track = doc.get_track(track_id).unwrap();
+        let stats = track.compute_stats(&doc, text_len);
+
+        assert_eq!(stats.chain_length, 2, "Two mentions");
+        assert_eq!(stats.variation_count, 1, "One unique surface form");
+        assert!(stats.spread > 0, "Spread should be positive");
+        assert!(stats.relative_spread > 0.0 && stats.relative_spread < 1.0);
+        assert!((stats.min_confidence - 0.90).abs() < 0.01);
+        assert!((stats.max_confidence - 0.95).abs() < 0.01);
+        assert!((stats.mean_confidence - 0.925).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_track_stats_singleton() {
+        let text = "Paris is beautiful.";
+        let mut doc = GroundedDocument::new("test", text);
+        let text_len = text.chars().count();
+
+        let s1 = doc.add_signal(Signal::new(
+            0,
+            Location::text(0, 5),
+            "Paris",
+            "Location",
+            0.88,
+        ));
+        let track_id = doc.add_track(Track::new(0, "Paris".to_string()));
+        doc.add_signal_to_track(s1, track_id, 0);
+
+        let track = doc.get_track(track_id).unwrap();
+        let stats = track.compute_stats(&doc, text_len);
+
+        assert_eq!(stats.chain_length, 1);
+        assert_eq!(stats.spread, 0, "Singleton has zero spread");
+        assert_eq!(stats.first_position, stats.last_position);
+        assert!((stats.min_confidence - stats.max_confidence).abs() < 0.001);
     }
 }

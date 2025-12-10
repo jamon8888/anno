@@ -8,7 +8,7 @@ use super::super::output::{color, print_signals};
 use super::super::parser::OutputFormat;
 use super::super::utils::{link_tracks_to_kb, log_success, resolve_coreference};
 use anno_core::GroundedDocument;
-use anno_core::{GraphDocument, GraphExportFormat};
+use anno_core::{GraphDocument, GraphExportFormat, SignalId};
 
 /// Enhance existing GroundedDocument with additional processing
 #[derive(Parser, Debug)]
@@ -63,7 +63,7 @@ pub fn run(args: EnhanceArgs) -> Result<(), String> {
         .map_err(|e| format!("Failed to parse GroundedDocument JSON: {}", e))?;
 
     // Collect signal IDs for coreference
-    let signal_ids: Vec<u64> = doc.signals().iter().map(|s| s.id).collect();
+    let signal_ids: Vec<SignalId> = doc.signals().iter().map(|s| s.id).collect();
 
     // Apply enhancements
     if args.coref {

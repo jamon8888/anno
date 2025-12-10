@@ -14,6 +14,7 @@ use crate::eval::cdcr::{CDCRConfig, CDCRResolver, CrossDocCluster, Document};
 #[cfg(feature = "eval-advanced")]
 use crate::{
     Corpus, Entity, EntityType, GroundedDocument, Identity, IdentitySource, Location, Signal,
+    SignalId,
 };
 #[cfg(feature = "eval-advanced")]
 use anno_coalesce::Resolver;
@@ -589,7 +590,7 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                 // Build GroundedDocument and run coreference to create tracks (Level 2)
                 // This enables using tracks instead of just raw signals for better clustering
                 let mut grounded_doc = GroundedDocument::new(&doc_id, &text);
-                let mut signal_ids: Vec<u64> = Vec::new();
+                let mut signal_ids: Vec<SignalId> = Vec::new();
 
                 for e in &entities {
                     let signal = Signal::new(
@@ -1156,7 +1157,7 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
             | OutputFormat::Inline
             | OutputFormat::Grounded
             | OutputFormat::Html => {
-                return Err(format!("Format '{}' not supported for cross-doc command. Use: json, jsonl, tree, or summary.", 
+                return Err(format!("Format '{}' not supported for cross-doc command. Use: json, jsonl, tree, or summary.",
                     match args.format {
                         OutputFormat::Human => "human",
                         OutputFormat::Tsv => "tsv",
