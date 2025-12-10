@@ -84,6 +84,7 @@ pub struct DebugArgs {
     pub verbose: u8,
 }
 
+/// Execute the debug command.
 pub fn run(args: DebugArgs) -> Result<(), String> {
     // Level 1 + 2 (Signal → Track): Entity extraction + within-document coreference
     // With --link-kb: Level 1 + 2 + 3 (Signal → Track → Identity): Adds KB linking

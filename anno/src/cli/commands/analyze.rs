@@ -24,6 +24,7 @@ pub struct AnalyzeArgs {
     pub positional: Vec<String>,
 }
 
+/// Execute the analyze command.
 pub fn run(args: AnalyzeArgs) -> Result<(), String> {
     let text = get_input_text(&args.text, args.file.as_deref(), &args.positional)?;
 

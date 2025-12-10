@@ -21,42 +21,59 @@ use std::fmt;
 #[non_exhaustive]
 pub enum BackendName {
     // Always available
+    /// Pattern-based NER using regular expressions.
     Pattern,
+    /// Heuristic NER using capitalization and context rules.
     Heuristic,
+    /// Stacked NER combining Pattern and Heuristic backends.
     Stacked,
 
     // ONNX backends
+    /// BERT-based NER via ONNX runtime.
     #[cfg(feature = "onnx")]
     BertOnnx,
+    /// GLiNER zero-shot NER via ONNX runtime.
     #[cfg(feature = "onnx")]
     GLiNEROnnx,
+    /// NuNER zero-shot NER via ONNX runtime.
     #[cfg(feature = "onnx")]
     NuNER,
+    /// W2NER word-word relation NER via ONNX runtime.
     #[cfg(feature = "onnx")]
     W2NER,
+    /// GLiNER v2 zero-shot NER via ONNX runtime.
     #[cfg(feature = "onnx")]
     GLiNER2,
+    /// GLiNER with polynomial attention via ONNX runtime.
     #[cfg(feature = "onnx")]
     GLiNERPoly,
+    /// DeBERTa v3 NER via ONNX runtime.
     #[cfg(feature = "onnx")]
     DeBERTaV3,
+    /// ALBERT NER via ONNX runtime.
     #[cfg(feature = "onnx")]
     ALBERT,
+    /// TPLinker relation extraction via ONNX runtime.
     #[cfg(feature = "onnx")]
     TPLinker,
 
     // Candle backends
+    /// Candle-based NER (pure Rust inference).
     #[cfg(feature = "candle")]
     CandleNER,
+    /// GLiNER via Candle (pure Rust inference).
     #[cfg(feature = "candle")]
     GLiNERCandle,
+    /// GLiNER v2 via Candle (pure Rust inference).
     #[cfg(feature = "candle")]
     GLiNER2Candle,
 
     // Coreference
+    /// Coreference resolution backend.
     CorefResolver,
 
     // Universal
+    /// Universal NER supporting all entity types.
     UniversalNER,
 }
 

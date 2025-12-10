@@ -41,6 +41,7 @@ pub struct BenchmarkArgs {
     pub output: Option<String>,
 }
 
+/// Execute the benchmark command.
 pub fn run(args: BenchmarkArgs) -> Result<(), String> {
     #[cfg(not(feature = "eval-advanced"))]
     {

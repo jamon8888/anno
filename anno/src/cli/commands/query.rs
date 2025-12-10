@@ -68,6 +68,7 @@ pub struct QueryArgs {
     pub output: Option<String>,
 }
 
+/// Execute the query command.
 pub fn run(args: QueryArgs) -> Result<(), String> {
     // Load input file
     let json_content = if args.input == "-" {

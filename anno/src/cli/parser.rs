@@ -44,6 +44,7 @@ EXAMPLES:
 )]
 #[command(propagate_version = true)]
 pub struct Cli {
+    /// The subcommand to execute.
     #[command(subcommand)]
     pub command: Option<Commands>,
 
@@ -52,6 +53,7 @@ pub struct Cli {
     pub text: Vec<String>,
 }
 
+/// Available CLI commands.
 #[derive(Subcommand)]
 pub enum Commands {
     /// Extract entities from text
@@ -164,6 +166,7 @@ pub enum ModelBackend {
 }
 
 impl ModelBackend {
+    /// Create a model instance from this backend type.
     pub fn create_model(self) -> Result<Box<dyn crate::Model>, String> {
         #[cfg(feature = "eval")]
         {
@@ -215,6 +218,7 @@ impl ModelBackend {
         }
     }
 
+    /// Get the canonical string name for this backend.
     pub fn name(self) -> &'static str {
         match self {
             Self::Pattern => "pattern",

@@ -91,6 +91,7 @@ pub struct CrossDocArgs {
 }
 
 #[cfg(feature = "eval-advanced")]
+/// Execute the crossdoc command.
 pub fn run(args: CrossDocArgs) -> Result<(), String> {
     #[cfg(not(feature = "eval"))]
     return Err("Cross-document coreference requires 'eval' feature. Build with: cargo build --features eval".to_string());
@@ -1185,6 +1186,7 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
     }
 }
 
+/// Execute the cross-document command (stub when eval-advanced is disabled).
 #[cfg(not(feature = "eval-advanced"))]
 pub fn run(_args: CrossDocArgs) -> Result<(), String> {
     Err("Cross-document entity coalescing requires 'eval-advanced' feature. Build with: cargo build --features eval-advanced".to_string())

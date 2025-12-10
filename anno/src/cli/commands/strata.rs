@@ -46,6 +46,7 @@ pub struct StrataArgs {
 }
 
 #[cfg(feature = "eval-advanced")]
+/// Execute the strata command.
 pub fn run(args: StrataArgs) -> Result<(), String> {
     // Validate input source
     if args.input.is_none() && !args.stdin {
@@ -143,6 +144,7 @@ pub fn run(args: StrataArgs) -> Result<(), String> {
     Ok(())
 }
 
+/// Execute the strata command (stub when eval-advanced is disabled).
 #[cfg(not(feature = "eval-advanced"))]
 pub fn run(_args: StrataArgs) -> Result<(), String> {
     Err("Hierarchical clustering requires 'eval-advanced' feature. Build with: cargo build --features eval-advanced".to_string())

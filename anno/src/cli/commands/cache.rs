@@ -14,6 +14,7 @@ pub struct CacheArgs {
     pub action: CacheAction,
 }
 
+/// Cache subcommand actions.
 #[derive(Subcommand, Debug)]
 pub enum CacheAction {
     /// List cached results
@@ -38,6 +39,7 @@ pub enum CacheAction {
     },
 }
 
+/// Execute the cache management command.
 pub fn run(args: CacheArgs) -> Result<(), String> {
     let cache_dir = get_cache_dir()?;
 

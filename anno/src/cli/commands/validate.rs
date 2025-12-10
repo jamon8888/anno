@@ -13,6 +13,7 @@ pub struct ValidateArgs {
     pub files: Vec<String>,
 }
 
+/// Execute the validate command.
 pub fn run(args: ValidateArgs) -> Result<(), String> {
     let mut total_errors = 0;
     let mut total_warnings = 0;

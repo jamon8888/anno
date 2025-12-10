@@ -3,6 +3,7 @@
 use super::super::output::{color, type_color};
 use crate::{available_backends, Model, StackedNER};
 
+/// Execute the info command.
 pub fn run() -> Result<(), String> {
     println!();
     println!("{}", color("1;36", "anno"));

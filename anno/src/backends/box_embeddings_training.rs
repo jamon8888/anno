@@ -54,16 +54,16 @@ use std::collections::HashMap;
 
 /// A trainable box embedding with learnable parameters.
 ///
-/// Uses reparameterization to ensure min ≤ max:
-/// - min[i] = μᵢ - exp(δᵢ)/2 (learnable via μᵢ, δᵢ)
-/// - max[i] = μᵢ + exp(δᵢ)/2 (learnable via μᵢ, δᵢ)
+/// Uses reparameterization to ensure min <= max:
+/// - min = mu - exp(delta)/2
+/// - max = mu + exp(delta)/2
 ///
-/// This ensures boxes are always valid (min ≤ max).
+/// This ensures boxes are always valid (min <= max).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrainableBox {
-    /// Mean position in each dimension [d]
+    /// Mean position in each dimension (d-dimensional vector).
     pub mu: Vec<f32>,
-    /// Log-width in each dimension [d] (width = exp(delta))
+    /// Log-width in each dimension (width = exp(delta)).
     pub delta: Vec<f32>,
     /// Dimension
     pub dim: usize,
@@ -78,8 +78,8 @@ impl TrainableBox {
     /// * `delta` - Log-width (width = exp(delta))
     ///
     /// The box will have:
-    /// - min[i] = mu[i] - exp(delta[i]) / 2
-    /// - max[i] = mu[i] + exp(delta[i]) / 2
+    /// - min = mu - exp(delta) / 2
+    /// - max = mu + exp(delta) / 2
     #[must_use]
     pub fn new(mu: Vec<f32>, delta: Vec<f32>) -> Self {
         assert_eq!(

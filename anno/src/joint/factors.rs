@@ -549,8 +549,9 @@ pub struct CorefNerFactor {
     scope: Vec<VariableId>,
     /// Weights
     pub weights: CorefNerWeights,
-    /// Head words for monolexical features
+    /// Head word of mention i for monolexical features.
     pub head_i: Option<String>,
+    /// Head word of mention j for monolexical features.
     pub head_j: Option<String>,
     /// Monolexical feature lookup: (type, head) → weight
     pub monolexical_weights: HashMap<(String, String), f64>,

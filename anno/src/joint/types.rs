@@ -354,8 +354,9 @@ pub struct DecontextualizedMention {
     pub decontextualized: String,
     /// Source document ID
     pub doc_id: String,
-    /// Original character offsets in source
+    /// Original character start offset in source document.
     pub original_start: usize,
+    /// Original character end offset in source document.
     pub original_end: usize,
     /// Entities resolved during decontextualization
     pub resolved_entities: Vec<(String, String)>, // (pronoun/reference, resolved value)
@@ -403,8 +404,9 @@ pub struct EventMention {
     pub event_type: Option<String>,
     /// Source document ID
     pub doc_id: String,
-    /// Character offsets in source
+    /// Character start offset in source document.
     pub start: usize,
+    /// Character end offset in source document.
     pub end: usize,
     /// Decontextualized form (for improved annotation/modeling)
     pub decontextualized: Option<DecontextualizedMention>,
