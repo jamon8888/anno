@@ -4,25 +4,35 @@
 #
 # Dependency graph:
 #
-#   anno-core (types, traits)
+#   anno-core (18k lines - types, CoreferenceResolver trait)
 #       ↑
-#       ├── anno-coalesce (cross-doc entity resolution)
-#       ├── anno-strata (hierarchical clustering)
+#       ├── anno-coalesce (9k - cross-doc entity resolution)
+#       ├── anno-strata (3k - hierarchical clustering)
 #       │
-#       └── anno (main library: NER, coref, eval, backends)
+#       └── anno (85-177k lines depending on features)
+#               │   - Without eval: ~85k lines (NER, backends, coref)
+#               │   - With eval: +92k lines (metrics, datasets, harnesses)
 #               ↑
-#               └── anno-cli (thin CLI wrapper)
+#               ├── anno-eval (92k - standalone eval, re-exports anno with eval)
+#               └── anno-cli (thin wrapper)
+#
+# Feature gating in anno:
+#   - `eval` feature: Enables 92k lines of evaluation infrastructure
+#   - Without `eval`: Core NER + coreference only (~85k lines)
 #
 # Naming convention:
-#   anno/        - Main library crate (publishes as "anno")
-#   anno-<suffix> - Supporting crates
+#   anno/         - Main library (publishes as "anno" on crates.io)
+#   anno-<suffix> - Supporting/specialized crates
 #
-# Archived crates (in archive/):
-#   anno-eval  - Redundant; duplicated anno/src/eval/ (circular dep issue)
-#   anno-derive - Unused; declarative macro in dataset_registry.rs suffices
+# Why anno/ not anno-lib/?
+#   - The published package name is "anno"
+#   - Directory matches package name for clarity
+#   - Consistent with tokio/, serde/, etc.
 #
 members = [
     "anno-core",
+    "anno-models",
+    "anno-rel",
     "anno",
     "anno-coalesce",
     "anno-strata",

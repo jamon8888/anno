@@ -237,6 +237,18 @@ pub fn detect_quantifier(text: &str, entity_start: usize) -> Option<Quantifier> 
 }
 
 /// Flexible type matching for evaluation (handles PER/PERSON, LOC/LOCATION, etc.)
+///
+/// Handles common entity type variations across datasets:
+/// - CoNLL-style: PER, LOC, ORG, MISC
+/// - OntoNotes-style: PERSON, GPE, ORG, NORP, FAC, LOC
+/// - spaCy-style: PERSON, GPE, ORG, LOC, DATE, TIME
+///
+/// # Examples
+/// ```rust,ignore
+/// assert!(types_match_flexible("PERSON", "PER"));
+/// assert!(types_match_flexible("GPE", "LOC"));
+/// assert!(types_match_flexible("MISC", "OTHER"));
+/// ```
 pub fn types_match_flexible(pred: &str, gold: &str) -> bool {
     let pred = pred.to_uppercase();
     let gold = gold.to_uppercase();
@@ -245,20 +257,58 @@ pub fn types_match_flexible(pred: &str, gold: &str) -> bool {
         return true;
     }
 
-    // Allow common mappings
-    match (pred.as_str(), gold.as_str()) {
-        // Person
-        ("PERSON", "PER") | ("PER", "PERSON") => true,
-        // Location
-        ("LOCATION", "LOC") | ("LOC", "LOCATION") | ("LOCATION", "GPE") | ("GPE", "LOCATION") => {
-            true
-        }
-        // Organization
-        ("ORGANIZATION", "ORG") | ("ORG", "ORGANIZATION") => true,
-        // Date/Time
-        ("DATE", "YEAR") | ("YEAR", "DATE") | ("DATE", "HOURS") => true,
-        _ => false,
+    // Normalize to canonical groups for comparison
+    let pred_canonical = normalize_entity_type(&pred);
+    let gold_canonical = normalize_entity_type(&gold);
+
+    pred_canonical == gold_canonical && pred_canonical != "UNKNOWN"
+}
+
+/// Normalize entity type to canonical form for flexible matching.
+/// This is used internally by types_match_flexible.
+fn normalize_entity_type(entity_type: &str) -> &'static str {
+    match entity_type {
+        // Person variants
+        "PERSON" | "PER" | "PEOPLE" => "PERSON",
+        // Location variants (including GPE for geopolitical entities)
+        "LOCATION" | "LOC" | "GPE" | "GEO" | "PLACE" | "FAC" | "FACILITY" => "LOCATION",
+        // Organization variants
+        "ORGANIZATION" | "ORG" | "COMPANY" | "CORP" | "AGENCY" => "ORGANIZATION",
+        // Miscellaneous/Other variants
+        "MISC" | "MISCELLANEOUS" | "OTHER" | "O" => "MISC",
+        // Date/Time variants
+        "DATE" | "TIME" | "YEAR" | "MONTH" | "DAY" | "HOURS" | "DURATION" => "TEMPORAL",
+        // Money variants
+        "MONEY" | "CURRENCY" | "PRICE" | "AMOUNT" => "MONEY",
+        // Quantity variants
+        "QUANTITY" | "NUMBER" | "CARDINAL" | "ORDINAL" | "PERCENT" | "PERCENTAGE" => "QUANTITY",
+        // Event variants
+        "EVENT" | "INCIDENT" | "OCCURRENCE" => "EVENT",
+        // Product variants
+        "PRODUCT" | "WORK_OF_ART" | "ARTWORK" => "PRODUCT",
+        // Language variants
+        "LANGUAGE" | "LANG" => "LANGUAGE",
+        // Nationalities, Religions, Political groups (NORP) - distinct from PERSON
+        "NORP" | "NATIONALITY" | "RELIGION" | "POLITICAL_GROUP" => "NORP",
+        // Law variants
+        "LAW" | "LEGAL" | "REGULATION" => "LAW",
+        // Anything else is unknown
+        _ => "UNKNOWN",
     }
+}
+
+/// Normalize entity type to canonical form (owned String version).
+/// Exported for use in per-type stats aggregation.
+///
+/// Handles case-insensitive input and returns owned String.
+///
+/// # Examples
+/// ```rust,ignore
+/// assert_eq!(normalize_entity_type_canonical("per"), "PERSON".to_string());
+/// assert_eq!(normalize_entity_type_canonical("GPE"), "LOCATION".to_string());
+/// ```
+pub fn normalize_entity_type_canonical(entity_type: &str) -> String {
+    normalize_entity_type(&entity_type.to_uppercase()).to_string()
 }
 
 /// Normalize an entity name for grouping (lowercase, trim)
@@ -724,7 +774,7 @@ pub fn get_config_dir() -> Result<std::path::PathBuf, String> {
 pub fn create_entity_pair_relations(
     entities: &[Entity],
     text: &str,
-    relation_types: &[&str],
+    _relation_types: &[&str], // Kept for API compatibility, but no longer used
 ) -> Vec<crate::eval::relation::RelationPrediction> {
     use crate::eval::relation::RelationPrediction;
 
@@ -776,6 +826,8 @@ pub fn create_entity_pair_relations(
             };
 
             // Simple regex matching for common relations
+            // Note: Using explicit "UNKNOWN" fallback to avoid inflating metrics
+            // for any particular gold relation type
             let between_lower = between_text.to_lowercase();
             let rel_type = if between_lower.contains("founded") || between_lower.contains("founder")
             {
@@ -787,14 +839,25 @@ pub fn create_entity_pair_relations(
                 "WORKS_FOR"
             } else if between_lower.contains("located in")
                 || between_lower.contains("based in")
-                || between_lower.contains("in ")
+                || between_lower.contains("headquartered")
             {
                 "LOCATED_IN"
-            } else if between_lower.contains("born in") {
+            } else if between_lower.contains("born in") || between_lower.contains("native of") {
                 "BORN_IN"
+            } else if between_lower.contains("ceo of")
+                || between_lower.contains("president of")
+                || between_lower.contains("leads")
+            {
+                "HEAD_OF"
+            } else if between_lower.contains("acquired")
+                || between_lower.contains("bought")
+                || between_lower.contains("merged")
+            {
+                "ACQUIRED"
             } else {
-                // Use first relation type from gold data as fallback, or "RELATED"
-                relation_types.first().copied().unwrap_or("RELATED")
+                // Use explicit "UNKNOWN" to avoid inflating metrics for gold types
+                // This ensures unknown relations don't count as correct matches
+                "UNKNOWN"
             };
 
             pred_relations.push(RelationPrediction {
@@ -809,4 +872,297 @@ pub fn create_entity_pair_relations(
     }
 
     pred_relations
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(feature = "eval-advanced")]
+    use anno_core::{Entity, EntityType};
+
+    // -------------------------------------------------------------------------
+    // types_match_flexible tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_types_match_flexible_exact() {
+        assert!(types_match_flexible("PERSON", "PERSON"));
+        assert!(types_match_flexible("LOC", "LOC"));
+        assert!(types_match_flexible("ORG", "ORG"));
+    }
+
+    #[test]
+    fn test_types_match_flexible_person_variants() {
+        assert!(types_match_flexible("PERSON", "PER"));
+        assert!(types_match_flexible("PER", "PERSON"));
+        assert!(types_match_flexible("PEOPLE", "PER"));
+        assert!(types_match_flexible("PER", "PEOPLE"));
+    }
+
+    #[test]
+    fn test_types_match_flexible_location_variants() {
+        // LOC and LOCATION
+        assert!(types_match_flexible("LOCATION", "LOC"));
+        assert!(types_match_flexible("LOC", "LOCATION"));
+        // GPE (geopolitical) should match LOC
+        assert!(types_match_flexible("GPE", "LOC"));
+        assert!(types_match_flexible("LOC", "GPE"));
+        assert!(types_match_flexible("GPE", "LOCATION"));
+        // FAC (facility) is also location-ish
+        assert!(types_match_flexible("FAC", "LOC"));
+        assert!(types_match_flexible("FACILITY", "LOCATION"));
+    }
+
+    #[test]
+    fn test_types_match_flexible_org_variants() {
+        assert!(types_match_flexible("ORGANIZATION", "ORG"));
+        assert!(types_match_flexible("ORG", "ORGANIZATION"));
+        assert!(types_match_flexible("COMPANY", "ORG"));
+        assert!(types_match_flexible("CORP", "ORGANIZATION"));
+    }
+
+    #[test]
+    fn test_types_match_flexible_misc_other() {
+        assert!(types_match_flexible("MISC", "OTHER"));
+        assert!(types_match_flexible("OTHER", "MISC"));
+        assert!(types_match_flexible("MISCELLANEOUS", "MISC"));
+    }
+
+    #[test]
+    fn test_types_match_flexible_temporal() {
+        assert!(types_match_flexible("DATE", "TIME"));
+        assert!(types_match_flexible("YEAR", "DATE"));
+        assert!(types_match_flexible("DURATION", "DATE"));
+    }
+
+    #[test]
+    fn test_types_match_flexible_no_match() {
+        // Different categories should not match
+        assert!(!types_match_flexible("PERSON", "ORG"));
+        assert!(!types_match_flexible("LOC", "PER"));
+        assert!(!types_match_flexible("DATE", "PERSON"));
+        // Unknown types should not match anything
+        assert!(!types_match_flexible("FOOBAR", "PERSON"));
+        assert!(!types_match_flexible("UNKNOWN_TYPE", "LOC"));
+    }
+
+    #[test]
+    fn test_types_match_flexible_case_insensitive() {
+        assert!(types_match_flexible("person", "PER"));
+        assert!(types_match_flexible("Person", "per"));
+        assert!(types_match_flexible("PERSON", "per"));
+    }
+
+    // -------------------------------------------------------------------------
+    // normalize_entity_type tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_normalize_entity_type() {
+        assert_eq!(normalize_entity_type("PERSON"), "PERSON");
+        assert_eq!(normalize_entity_type("PER"), "PERSON");
+        assert_eq!(normalize_entity_type("LOC"), "LOCATION");
+        assert_eq!(normalize_entity_type("GPE"), "LOCATION");
+        assert_eq!(normalize_entity_type("ORG"), "ORGANIZATION");
+        assert_eq!(normalize_entity_type("MISC"), "MISC");
+        assert_eq!(normalize_entity_type("OTHER"), "MISC");
+        assert_eq!(normalize_entity_type("DATE"), "TEMPORAL");
+        assert_eq!(normalize_entity_type("UNKNOWN_XYZ"), "UNKNOWN");
+    }
+
+    #[test]
+    fn test_normalize_entity_type_canonical() {
+        // Case insensitive
+        assert_eq!(normalize_entity_type_canonical("per"), "PERSON");
+        assert_eq!(normalize_entity_type_canonical("Person"), "PERSON");
+        assert_eq!(normalize_entity_type_canonical("PERSON"), "PERSON");
+
+        // Location variants
+        assert_eq!(normalize_entity_type_canonical("gpe"), "LOCATION");
+        assert_eq!(normalize_entity_type_canonical("loc"), "LOCATION");
+
+        // NORP is now separate from LANGUAGE
+        assert_eq!(normalize_entity_type_canonical("NORP"), "NORP");
+        assert_eq!(normalize_entity_type_canonical("LANGUAGE"), "LANGUAGE");
+
+        // Unknown falls through
+        assert_eq!(normalize_entity_type_canonical("FOOBAR"), "UNKNOWN");
+    }
+
+    // -------------------------------------------------------------------------
+    // is_negated tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_is_negated() {
+        assert!(is_negated("He is not a doctor", 12)); // "doctor" at 12
+        assert!(is_negated("I never saw John", 11)); // "John" at 11
+        assert!(!is_negated("He is a doctor", 8)); // "doctor" at 8
+        assert!(!is_negated("The quick brown fox", 4)); // "quick" at 4
+    }
+
+    // -------------------------------------------------------------------------
+    // detect_quantifier tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_detect_quantifier() {
+        assert_eq!(
+            detect_quantifier("Every student passed", 6),
+            Some(Quantifier::Universal)
+        );
+        assert_eq!(
+            detect_quantifier("Some students failed", 5),
+            Some(Quantifier::Existential)
+        );
+        assert_eq!(
+            detect_quantifier("No student failed", 3),
+            Some(Quantifier::None)
+        );
+        assert_eq!(
+            detect_quantifier("The student passed", 4),
+            Some(Quantifier::Definite)
+        );
+        assert_eq!(detect_quantifier("Students passed", 0), None);
+    }
+
+    // -------------------------------------------------------------------------
+    // parse_gold_spec tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_gold_spec_basic() {
+        let spec = parse_gold_spec("John:PER:0:4").unwrap();
+        assert_eq!(spec.text, "John");
+        assert_eq!(spec.label, "PER");
+        assert_eq!(spec.start, 0);
+        assert_eq!(spec.end, 4);
+    }
+
+    #[test]
+    fn test_parse_gold_spec_with_colon_in_text() {
+        // URLs have colons, should still parse correctly (rsplit from right)
+        let spec = parse_gold_spec("http://example.com:URL:5:22").unwrap();
+        assert_eq!(spec.text, "http://example.com");
+        assert_eq!(spec.label, "URL");
+        assert_eq!(spec.start, 5);
+        assert_eq!(spec.end, 22);
+    }
+
+    #[test]
+    fn test_parse_gold_spec_invalid() {
+        assert!(parse_gold_spec("invalid").is_none());
+        assert!(parse_gold_spec("only:two").is_none());
+        assert!(parse_gold_spec("text:label:notanumber:4").is_none());
+    }
+
+    // -------------------------------------------------------------------------
+    // normalize_entity_name tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_normalize_entity_name() {
+        assert_eq!(normalize_entity_name("John Smith"), "john smith");
+        assert_eq!(normalize_entity_name("  APPLE INC  "), "apple inc");
+        assert_eq!(normalize_entity_name(""), "");
+    }
+
+    // -------------------------------------------------------------------------
+    // find_similar_models tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_find_similar_models() {
+        let candidates = &["gliner", "gliner-candle", "heuristic", "pattern", "stacked"];
+
+        let matches = find_similar_models("gli", candidates);
+        assert!(matches.contains(&"gliner".to_string()));
+        assert!(matches.contains(&"gliner-candle".to_string()));
+
+        let matches = find_similar_models("pattern", candidates);
+        assert!(matches.contains(&"pattern".to_string()));
+
+        let matches = find_similar_models("xyz", candidates);
+        assert!(matches.is_empty() || matches.len() <= 3);
+    }
+
+    // -------------------------------------------------------------------------
+    // create_entity_pair_relations tests
+    // -------------------------------------------------------------------------
+
+    #[cfg(feature = "eval-advanced")]
+    #[test]
+    fn test_create_entity_pair_relations_founded() {
+        let entities = vec![
+            Entity::new("Steve Jobs", EntityType::Person, 0, 10, 0.9),
+            Entity::new("Apple", EntityType::Organization, 30, 35, 0.9),
+        ];
+        let text = "Steve Jobs, who founded Apple in 1976, changed the world.";
+        let relation_types = &["FOUNDED", "WORKS_FOR"];
+
+        let relations = create_entity_pair_relations(&entities, text, relation_types);
+
+        assert_eq!(relations.len(), 1);
+        assert_eq!(relations[0].relation_type, "FOUNDED");
+    }
+
+    #[cfg(feature = "eval-advanced")]
+    #[test]
+    fn test_create_entity_pair_relations_unknown_fallback() {
+        let entities = vec![
+            Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
+            Entity::new("Bob", EntityType::Person, 15, 18, 0.9),
+        ];
+        // No relation keywords between entities
+        let text = "Alice met Bob yesterday.";
+        // Even if gold types include specific relations, fallback should be UNKNOWN
+        let relation_types = &["FOUNDED", "WORKS_FOR"];
+
+        let relations = create_entity_pair_relations(&entities, text, relation_types);
+
+        assert_eq!(relations.len(), 1);
+        // Should use UNKNOWN, not first gold type (FOUNDED) - this prevents metric inflation
+        assert_eq!(
+            relations[0].relation_type, "UNKNOWN",
+            "Unknown relations should use UNKNOWN, not first gold type"
+        );
+    }
+
+    #[cfg(feature = "eval-advanced")]
+    #[test]
+    fn test_create_entity_pair_relations_max_distance() {
+        // Entities very far apart should not form relations
+        let entities = vec![
+            Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
+            Entity::new("Bob", EntityType::Person, 300, 303, 0.9),
+        ];
+        let text = &"x".repeat(400); // Text longer than max_distance
+        let relation_types = &["RELATED"];
+
+        let relations = create_entity_pair_relations(&entities, text, relation_types);
+
+        // Entities are > 200 chars apart, should not create relation
+        assert!(relations.is_empty());
+    }
+
+    #[cfg(feature = "eval-advanced")]
+    #[test]
+    fn test_create_entity_pair_relations_overlapping_entities() {
+        // Overlapping entities should be skipped
+        let entities = vec![
+            Entity::new("New York", EntityType::Location, 0, 8, 0.9),
+            Entity::new("New York City", EntityType::Location, 0, 13, 0.9), // Overlapping
+        ];
+        let text = "New York City is great.";
+        let relation_types = &["LOCATED_IN"];
+
+        let relations = create_entity_pair_relations(&entities, text, relation_types);
+
+        // Overlapping entities should be skipped
+        assert!(relations.is_empty());
+    }
 }

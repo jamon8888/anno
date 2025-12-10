@@ -25,6 +25,23 @@
 //! - Lee et al. (2022): "Box Embeddings for Event-Event Relation Extraction" (BERE)
 //! - Messner et al. (2022): "Temporal Knowledge Graph Completion with Box Embeddings" (BoxTE)
 //! - Chen et al. (2021): "Uncertainty-Aware Knowledge Graph Embeddings" (UKGE)
+//!
+//! # Complementary Geometric Representations
+//!
+//! Box embeddings are one of several geometric approaches available in Anno.
+//! See [`crate::geometric`] for alternatives:
+//!
+//! | Representation | Best For | Module |
+//! |---------------|----------|--------|
+//! | **Box embeddings** | Temporal, uncertainty | This module |
+//! | Hyperbolic (Poincaré) | Deep type hierarchies | [`crate::geometric::hyperbolic`] |
+//! | Sheaf NN | Gradient-level transitivity | [`crate::geometric::sheaf`] |
+//! | TDA | Structural diagnostics | [`crate::geometric::tda`] |
+//!
+//! These approaches are **complementary**, not competing. Use boxes when you need:
+//! - Explicit uncertainty (volume = confidence)
+//! - Temporal evolution (min/max with velocity)
+//! - Easy visualization and debugging
 
 use serde::{Deserialize, Serialize};
 use std::f32;
@@ -212,6 +229,201 @@ impl BoxEmbedding {
             .zip(self.max.iter())
             .map(|(&m, &max_val)| (max_val - m).max(0.0))
             .collect()
+    }
+
+    /// Compute the intersection box with another box.
+    ///
+    /// Returns a new box representing the overlapping region.
+    /// If boxes are disjoint, returns a zero-volume box.
+    #[must_use]
+    pub fn intersection(&self, other: &Self) -> Self {
+        assert_eq!(
+            self.dim(),
+            other.dim(),
+            "Boxes must have same dimension for intersection"
+        );
+
+        let min: Vec<f32> = self
+            .min
+            .iter()
+            .zip(other.min.iter())
+            .map(|(&a, &b)| a.max(b))
+            .collect();
+
+        let max: Vec<f32> = self
+            .max
+            .iter()
+            .zip(other.max.iter())
+            .map(|(&a, &b)| a.min(b))
+            .collect();
+
+        Self { min, max }
+    }
+
+    /// Compute the union box (bounding box containing both).
+    #[must_use]
+    pub fn union(&self, other: &Self) -> Self {
+        assert_eq!(
+            self.dim(),
+            other.dim(),
+            "Boxes must have same dimension for union"
+        );
+
+        let min: Vec<f32> = self
+            .min
+            .iter()
+            .zip(other.min.iter())
+            .map(|(&a, &b)| a.min(b))
+            .collect();
+
+        let max: Vec<f32> = self
+            .max
+            .iter()
+            .zip(other.max.iter())
+            .map(|(&a, &b)| a.max(b))
+            .collect();
+
+        Self { min, max }
+    }
+
+    /// Compute overlap probability (Jaccard-style).
+    ///
+    /// P(overlap) = Vol(intersection) / Vol(union)
+    #[must_use]
+    pub fn overlap_prob(&self, other: &Self) -> f32 {
+        let intersection_vol = self.intersection_volume(other);
+        let union_vol = self.volume() + other.volume() - intersection_vol;
+        if union_vol == 0.0 {
+            return 0.0;
+        }
+        intersection_vol / union_vol
+    }
+
+    /// Compute minimum Euclidean distance between two boxes.
+    ///
+    /// Returns 0.0 if boxes overlap.
+    #[must_use]
+    pub fn distance(&self, other: &Self) -> f32 {
+        assert_eq!(
+            self.dim(),
+            other.dim(),
+            "Boxes must have same dimension for distance"
+        );
+
+        let dist_sq: f32 = self
+            .min
+            .iter()
+            .zip(self.max.iter())
+            .zip(other.min.iter().zip(other.max.iter()))
+            .map(|((&min1, &max1), (&min2, &max2))| {
+                // Gap in this dimension
+                let gap = if max1 < min2 {
+                    min2 - max1 // other is to the right
+                } else if max2 < min1 {
+                    min1 - max2 // other is to the left
+                } else {
+                    0.0 // overlap in this dimension
+                };
+                gap * gap
+            })
+            .sum();
+
+        dist_sq.sqrt()
+    }
+}
+
+// =============================================================================
+// Subsume Trait Implementation (optional, feature-gated)
+// =============================================================================
+
+/// Implements the subsume-core Box trait when the `subsume` feature is enabled.
+///
+/// This allows anno's BoxEmbedding to be used with subsume's distance metrics,
+/// training utilities, and other advanced box operations.
+#[cfg(feature = "subsume")]
+impl subsume_core::Box for BoxEmbedding {
+    type Scalar = f32;
+    type Vector = Vec<f32>;
+
+    fn min(&self) -> &Self::Vector {
+        &self.min
+    }
+
+    fn max(&self) -> &Self::Vector {
+        &self.max
+    }
+
+    fn dim(&self) -> usize {
+        self.min.len()
+    }
+
+    fn volume(&self, _temperature: Self::Scalar) -> Result<Self::Scalar, subsume_core::BoxError> {
+        // anno's BoxEmbedding doesn't use temperature (hard boxes)
+        Ok(BoxEmbedding::volume(self))
+    }
+
+    fn intersection(&self, other: &Self) -> Result<Self, subsume_core::BoxError> {
+        if self.dim() != other.dim() {
+            return Err(subsume_core::BoxError::DimensionMismatch {
+                expected: self.dim(),
+                actual: other.dim(),
+            });
+        }
+        Ok(BoxEmbedding::intersection(self, other))
+    }
+
+    fn containment_prob(
+        &self,
+        other: &Self,
+        _temperature: Self::Scalar,
+    ) -> Result<Self::Scalar, subsume_core::BoxError> {
+        if self.dim() != other.dim() {
+            return Err(subsume_core::BoxError::DimensionMismatch {
+                expected: self.dim(),
+                actual: other.dim(),
+            });
+        }
+        // subsume: P(other ⊆ self) = Vol(intersection) / Vol(other)
+        // This is the same as anno's conditional_probability but with swapped args
+        Ok(self.conditional_probability(other))
+    }
+
+    fn overlap_prob(
+        &self,
+        other: &Self,
+        _temperature: Self::Scalar,
+    ) -> Result<Self::Scalar, subsume_core::BoxError> {
+        if self.dim() != other.dim() {
+            return Err(subsume_core::BoxError::DimensionMismatch {
+                expected: self.dim(),
+                actual: other.dim(),
+            });
+        }
+        Ok(BoxEmbedding::overlap_prob(self, other))
+    }
+
+    fn union(&self, other: &Self) -> Result<Self, subsume_core::BoxError> {
+        if self.dim() != other.dim() {
+            return Err(subsume_core::BoxError::DimensionMismatch {
+                expected: self.dim(),
+                actual: other.dim(),
+            });
+        }
+        Ok(BoxEmbedding::union(self, other))
+    }
+
+    fn center(&self) -> Result<Self::Vector, subsume_core::BoxError> {
+        Ok(BoxEmbedding::center(self))
+    }
+
+    fn distance(&self, other: &Self) -> Result<Self::Scalar, subsume_core::BoxError> {
+        if self.dim() != other.dim() {
+            return Err(subsume_core::BoxError::DimensionMismatch {
+                expected: self.dim(),
+                actual: other.dim(),
+            });
+        }
+        Ok(BoxEmbedding::distance(self, other))
     }
 }
 
@@ -961,5 +1173,96 @@ mod tests {
         // Roles should be asymmetric (buyer ≠ seller in general)
         // Note: In this simple test, they might be equal, but in practice
         // with learned embeddings, they would differ
+    }
+
+    // =========================================================================
+    // New Methods Tests (intersection, union, overlap_prob, distance)
+    // =========================================================================
+
+    #[test]
+    fn test_intersection_box() {
+        let a = BoxEmbedding::new(vec![0.0, 0.0], vec![2.0, 2.0]);
+        let b = BoxEmbedding::new(vec![1.0, 1.0], vec![3.0, 3.0]);
+
+        let intersection = a.intersection(&b);
+        assert_eq!(intersection.min, vec![1.0, 1.0]);
+        assert_eq!(intersection.max, vec![2.0, 2.0]);
+        assert_eq!(intersection.volume(), 1.0);
+    }
+
+    #[test]
+    fn test_union_box() {
+        let a = BoxEmbedding::new(vec![0.0, 0.0], vec![2.0, 2.0]);
+        let b = BoxEmbedding::new(vec![1.0, 1.0], vec![3.0, 3.0]);
+
+        let union = a.union(&b);
+        assert_eq!(union.min, vec![0.0, 0.0]);
+        assert_eq!(union.max, vec![3.0, 3.0]);
+        assert_eq!(union.volume(), 9.0);
+    }
+
+    #[test]
+    fn test_overlap_prob() {
+        // Identical boxes: overlap = 1.0
+        let a = BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]);
+        let b = BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]);
+        assert!((a.overlap_prob(&b) - 1.0).abs() < 0.001);
+
+        // Disjoint boxes: overlap = 0.0
+        let c = BoxEmbedding::new(vec![5.0, 5.0], vec![6.0, 6.0]);
+        assert!((a.overlap_prob(&c) - 0.0).abs() < 0.001);
+
+        // Partial overlap
+        let d = BoxEmbedding::new(vec![0.5, 0.5], vec![1.5, 1.5]);
+        let overlap = a.overlap_prob(&d);
+        assert!(overlap > 0.0 && overlap < 1.0);
+    }
+
+    #[test]
+    fn test_distance() {
+        // Overlapping boxes: distance = 0
+        let a = BoxEmbedding::new(vec![0.0, 0.0], vec![2.0, 2.0]);
+        let b = BoxEmbedding::new(vec![1.0, 1.0], vec![3.0, 3.0]);
+        assert_eq!(a.distance(&b), 0.0);
+
+        // Disjoint boxes: distance > 0
+        let c = BoxEmbedding::new(vec![5.0, 5.0], vec![6.0, 6.0]);
+        let dist = a.distance(&c);
+        assert!(dist > 0.0);
+        // Distance should be sqrt((5-2)^2 + (5-2)^2) = sqrt(18) ≈ 4.24
+        assert!((dist - 18.0_f32.sqrt()).abs() < 0.01);
+    }
+
+    // =========================================================================
+    // Subsume Trait Tests (feature-gated)
+    // =========================================================================
+
+    #[test]
+    #[cfg(feature = "subsume")]
+    fn test_subsume_trait_implementation() {
+        use subsume_core::Box as SubsumeBox;
+
+        let a = BoxEmbedding::new(vec![0.0, 0.0], vec![2.0, 2.0]);
+        let b = BoxEmbedding::new(vec![0.5, 0.5], vec![1.5, 1.5]);
+
+        // Test trait methods
+        assert_eq!(SubsumeBox::dim(&a), 2);
+        assert_eq!(SubsumeBox::min(&a), &vec![0.0, 0.0]);
+        assert_eq!(SubsumeBox::max(&a), &vec![2.0, 2.0]);
+
+        // Volume (temperature is ignored for hard boxes)
+        let vol = SubsumeBox::volume(&a, 1.0).unwrap();
+        assert_eq!(vol, 4.0);
+
+        // Containment prob: b is contained in a
+        let containment = SubsumeBox::containment_prob(&a, &b, 1.0).unwrap();
+        assert!(containment > 0.0);
+
+        // Distance
+        let dist = SubsumeBox::distance(&a, &b).unwrap();
+        assert_eq!(dist, 0.0); // Overlapping
+
+        // This verifies anno's BoxEmbedding is compatible with subsume's trait
+        // and can use subsume's distance metrics, diagnostics, etc.
     }
 }

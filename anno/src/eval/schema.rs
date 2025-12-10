@@ -243,18 +243,18 @@ impl TypeSchema {
     #[must_use]
     pub fn conll() -> Self {
         let mut schema = Self::new().with_name("CoNLL-2003");
-        
+
         // Base types
         schema.add_type("person");
         schema.add_type("organization");
         schema.add_type("location");
         schema.add_type("misc");
-        
+
         // Exclusions
         schema.add_exclusion("person", "organization");
         schema.add_exclusion("person", "location");
         schema.add_exclusion("organization", "location");
-        
+
         schema
     }
 
@@ -262,7 +262,7 @@ impl TypeSchema {
     #[must_use]
     pub fn ontonotes() -> Self {
         let mut schema = Self::new().with_name("OntoNotes 5.0");
-        
+
         // Named entities
         schema.add_type_with_description("person", "People, including fictional");
         schema.add_type_with_description("norp", "Nationalities, religious/political groups");
@@ -275,7 +275,7 @@ impl TypeSchema {
         schema.add_type_with_description("work_of_art", "Titles of books, songs, etc.");
         schema.add_type_with_description("law", "Named documents made into laws");
         schema.add_type_with_description("language", "Any named language");
-        
+
         // Numeric
         schema.add_type_with_description("date", "Absolute or relative dates");
         schema.add_type_with_description("time", "Times smaller than a day");
@@ -284,13 +284,13 @@ impl TypeSchema {
         schema.add_type_with_description("quantity", "Measurements");
         schema.add_type_with_description("ordinal", "First, second, etc.");
         schema.add_type_with_description("cardinal", "Numerals");
-        
+
         // Exclusions
         schema.add_exclusion("person", "org");
         schema.add_exclusion("person", "gpe");
         schema.add_exclusion("person", "loc");
         schema.add_exclusion("org", "gpe");
-        
+
         schema
     }
 
@@ -298,7 +298,7 @@ impl TypeSchema {
     #[must_use]
     pub fn fine_grained() -> Self {
         let mut schema = Self::new().with_name("Fine-Grained");
-        
+
         // Person hierarchy
         schema.add_type("person");
         schema.add_hierarchy("politician", "person");
@@ -309,7 +309,7 @@ impl TypeSchema {
         schema.add_hierarchy("author", "artist");
         schema.add_hierarchy("musician", "artist");
         schema.add_hierarchy("actor", "artist");
-        
+
         // Organization hierarchy
         schema.add_type("organization");
         schema.add_hierarchy("company", "organization");
@@ -318,7 +318,7 @@ impl TypeSchema {
         schema.add_hierarchy("sports_team", "organization");
         schema.add_hierarchy("political_party", "organization");
         schema.add_hierarchy("religious_org", "organization");
-        
+
         // Location hierarchy
         schema.add_type("location");
         schema.add_hierarchy("country", "location");
@@ -326,12 +326,12 @@ impl TypeSchema {
         schema.add_hierarchy("state", "location");
         schema.add_hierarchy("facility", "location");
         schema.add_hierarchy("natural_feature", "location");
-        
+
         // Exclusions
         schema.add_exclusion("person", "organization");
         schema.add_exclusion("person", "location");
         schema.add_exclusion("organization", "location");
-        
+
         schema
     }
 }
@@ -426,7 +426,7 @@ impl SchemaValidator {
     /// Validate a single entity type.
     pub fn validate_type(&self, type_name: &str) -> Vec<SchemaViolation> {
         let mut violations = Vec::new();
-        
+
         if self.strict && !self.schema.is_valid_type(type_name) {
             violations.push(SchemaViolation {
                 kind: ViolationKind::UnknownType,
@@ -436,7 +436,7 @@ impl SchemaValidator {
                 message: format!("Unknown type: {}", type_name),
             });
         }
-        
+
         violations
     }
 
@@ -448,7 +448,7 @@ impl SchemaValidator {
         entity_idx: usize,
     ) -> Vec<SchemaViolation> {
         let mut violations = Vec::new();
-        
+
         // Check for mutual exclusions
         for (i, type_a) in types.iter().enumerate() {
             for type_b in types.iter().skip(i + 1) {
@@ -463,7 +463,7 @@ impl SchemaValidator {
                 }
             }
         }
-        
+
         // Check for missing supertypes (if we have fine-grained without coarse)
         for t in types {
             for ancestor in self.schema.ancestors(t) {
@@ -472,7 +472,7 @@ impl SchemaValidator {
                 }
             }
         }
-        
+
         violations
     }
 
@@ -496,7 +496,7 @@ mod tests {
         let mut schema = TypeSchema::new();
         schema.add_hierarchy("politician", "person");
         schema.add_hierarchy("senator", "politician");
-        
+
         assert!(schema.implies("politician", "person"));
         assert!(schema.implies("senator", "politician"));
         assert!(schema.implies("senator", "person")); // Transitive
@@ -507,7 +507,7 @@ mod tests {
     fn test_mutual_exclusion() {
         let mut schema = TypeSchema::new();
         schema.add_exclusion("person", "organization");
-        
+
         assert!(schema.mutually_exclusive("person", "organization"));
         assert!(schema.mutually_exclusive("organization", "person"));
         assert!(!schema.mutually_exclusive("person", "person"));
@@ -519,7 +519,7 @@ mod tests {
         schema.add_hierarchy("politician", "person");
         schema.add_hierarchy("company", "organization");
         schema.add_exclusion("person", "organization");
-        
+
         // Politician (subtype of person) excludes company (subtype of org)
         assert!(schema.mutually_exclusive("politician", "company"));
     }
@@ -529,7 +529,7 @@ mod tests {
         let mut schema = TypeSchema::new();
         schema.add_hierarchy("senator", "politician");
         schema.add_hierarchy("politician", "person");
-        
+
         let ancestors = schema.ancestors("senator");
         assert_eq!(ancestors, vec!["politician", "person"]);
     }
@@ -537,7 +537,7 @@ mod tests {
     #[test]
     fn test_descendants() {
         let schema = TypeSchema::fine_grained();
-        
+
         let descendants = schema.descendants("artist");
         assert!(descendants.contains(&"author".to_string()));
         assert!(descendants.contains(&"musician".to_string()));
@@ -546,7 +546,7 @@ mod tests {
     #[test]
     fn test_conll_schema() {
         let schema = TypeSchema::conll();
-        
+
         assert!(schema.is_valid_type("person"));
         assert!(schema.is_valid_type("organization"));
         assert!(schema.mutually_exclusive("person", "organization"));
@@ -555,7 +555,7 @@ mod tests {
     #[test]
     fn test_ontonotes_schema() {
         let schema = TypeSchema::ontonotes();
-        
+
         assert!(schema.is_valid_type("person"));
         assert!(schema.is_valid_type("gpe"));
         assert!(schema.is_valid_type("date"));
@@ -565,11 +565,11 @@ mod tests {
     fn test_validator() {
         let schema = TypeSchema::conll();
         let validator = SchemaValidator::new(schema).with_strict();
-        
+
         // Valid type
         let violations = validator.validate_type("person");
         assert!(violations.is_empty());
-        
+
         // Unknown type in strict mode
         let violations = validator.validate_type("unknown_type");
         assert!(!violations.is_empty());
@@ -580,7 +580,7 @@ mod tests {
     fn test_multi_label_validation() {
         let schema = TypeSchema::fine_grained();
         let validator = SchemaValidator::new(schema);
-        
+
         // Valid: person and politician (not exclusive, politician is subtype)
         let violations = validator.validate_multi_label(
             "Obama",
@@ -588,7 +588,7 @@ mod tests {
             0,
         );
         assert!(violations.is_empty());
-        
+
         // Invalid: person and organization are mutually exclusive
         let violations = validator.validate_multi_label(
             "Apple",
@@ -603,10 +603,9 @@ mod tests {
     fn test_roots() {
         let schema = TypeSchema::fine_grained();
         let roots = schema.roots();
-        
+
         assert!(roots.contains(&"person".to_string()));
         assert!(roots.contains(&"organization".to_string()));
         assert!(roots.contains(&"location".to_string()));
     }
 }
-

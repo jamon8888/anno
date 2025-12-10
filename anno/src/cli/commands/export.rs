@@ -101,7 +101,14 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
     let mut error_count = 0;
 
     for file in &files {
-        match export_file(file, &args.output, &model, args.format, args.include_confidence, args.overwrite) {
+        match export_file(
+            file,
+            &args.output,
+            &model,
+            args.format,
+            args.include_confidence,
+            args.overwrite,
+        ) {
             Ok(entity_count) => {
                 success_count += 1;
                 if !args.quiet {
@@ -153,8 +160,7 @@ fn export_file(
     overwrite: bool,
 ) -> Result<usize, String> {
     // Read input file
-    let content = fs::read_to_string(input)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = fs::read_to_string(input).map_err(|e| format!("Failed to read file: {}", e))?;
 
     // Extract entities
     let entities = model
@@ -173,7 +179,10 @@ fn export_file(
 
     // Check if output exists
     if output_path.exists() && !overwrite {
-        return Err(format!("Output file already exists: {:?} (use --overwrite)", output_path));
+        return Err(format!(
+            "Output file already exists: {:?} (use --overwrite)",
+            output_path
+        ));
     }
 
     // Generate output content
@@ -206,22 +215,21 @@ fn export_brat(entities: &[anno_core::Entity], include_confidence: bool) -> Stri
     for (idx, entity) in entities.iter().enumerate() {
         let tid = format!("T{}", idx + 1);
         let entity_type = entity.entity_type.as_label();
-        
+
         // brat format: T1	Type Start End	Text
         let line = format!(
             "{}\t{} {} {}\t{}",
-            tid,
-            entity_type,
-            entity.start,
-            entity.end,
-            entity.text
+            tid, entity_type, entity.start, entity.end, entity.text
         );
 
         // Add confidence as attribute
         if include_confidence {
             let aid = format!("A{}", idx + 1);
             lines.push(line);
-            lines.push(format!("{}\tConfidence {} {:.2}", aid, tid, entity.confidence));
+            lines.push(format!(
+                "{}\tConfidence {} {:.2}",
+                aid, tid, entity.confidence
+            ));
             continue;
         }
 
@@ -238,7 +246,10 @@ fn export_conll(text: &str, entities: &[anno_core::Entity]) -> String {
 
     // Simple word tokenization
     for word in text.split_whitespace() {
-        let word_start = text[char_idx..].find(word).map(|i| char_idx + i).unwrap_or(char_idx);
+        let word_start = text[char_idx..]
+            .find(word)
+            .map(|i| char_idx + i)
+            .unwrap_or(char_idx);
         let word_end = word_start + word.len();
         char_idx = word_end;
 
@@ -267,7 +278,11 @@ fn export_conll(text: &str, entities: &[anno_core::Entity]) -> String {
 }
 
 /// Export to JSONL format
-fn export_jsonl(entities: &[anno_core::Entity], source: &PathBuf, include_confidence: bool) -> String {
+fn export_jsonl(
+    entities: &[anno_core::Entity],
+    source: &PathBuf,
+    include_confidence: bool,
+) -> String {
     let mut lines = Vec::new();
 
     for entity in entities {
@@ -288,4 +303,3 @@ fn export_jsonl(entities: &[anno_core::Entity], source: &PathBuf, include_confid
 
     lines.join("\n")
 }
-

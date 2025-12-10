@@ -425,6 +425,39 @@ pub struct LearnedAggregator {
 
 ---
 
+---
+
+## Connection to Sheaf Neural Networks
+
+The hypergraph formulation naturally extends to **cellular sheaves** (see [`GEOMETRIC_FOUNDATIONS.md`](GEOMETRIC_FOUNDATIONS.md)):
+
+| Hypergraph Concept | Sheaf Generalization |
+|--------------------|---------------------|
+| Hyperedge weight (scalar) | Restriction map (matrix) |
+| Evidence aggregation | Sheaf diffusion |
+| Transitivity via hyperedges | Sheaf Laplacian energy |
+
+The sheaf formulation provides:
+1. **Learned transformations**: Edge weights become linear maps
+2. **Energy-based consistency**: Transitivity emerges from minimizing sheaf Dirichlet energy
+3. **Gradient-level enforcement**: Consistency is in the loss, not post-hoc
+
+For future work, the `EvidenceGraph` trait could be extended to support sheaf structure:
+
+```rust
+/// Extension for sheaf-valued evidence
+pub trait SheafEvidenceGraph: EvidenceGraph {
+    /// Get restriction map for edge (learned linear transformation)
+    fn restriction_map(&self, edge: &HyperedgeRef<Self::NodeId>) 
+        -> Option<&Tensor>;
+    
+    /// Compute sheaf Laplacian for spectral clustering
+    fn sheaf_laplacian(&self) -> Tensor;
+}
+```
+
+---
+
 ## References
 
 1. Cohen-Addad, Lee, Li, Newman (2023). "Handling Correlated Rounding Error via Preclustering: A 1.73-approximation for Correlation Clustering"
@@ -434,4 +467,6 @@ pub struct LearnedAggregator {
 5. Gan et al. (2024). "Clustering ensemble algorithm with high-order consistency learning"
 6. Hacquard (2024). "Hypergraph clustering using Ricci curvature"
 7. Dempster-Shafer theory extensions (2023). "Correlation belief function" for conflict resolution
+8. Bodnar et al. (2023). "Neural Sheaf Diffusion" - NeurIPS
+9. Hansen & Ghrist (2019). "Toward a Spectral Theory of Cellular Sheaves" - arXiv:1808.01513
 

@@ -111,7 +111,11 @@ impl NedMetrics {
     /// Compute all NED metrics for a single ranking.
     #[cfg(feature = "rank-eval")]
     pub fn compute(ranking: &CandidateRanking, _max_k: usize) -> Self {
-        let ranked: Vec<&str> = ranking.candidates.iter().map(|(id, _)| id.as_str()).collect();
+        let ranked: Vec<&str> = ranking
+            .candidates
+            .iter()
+            .map(|(id, _)| id.as_str())
+            .collect();
 
         // Convert gold_ids to &str for rank-eval
         let relevant: HashSet<&str> = ranking.gold_ids.iter().map(|s| s.as_str()).collect();
@@ -121,11 +125,7 @@ impl NedMetrics {
             precision_at_1: precision_at_k(&ranked, &relevant, 1),
             precision_at_5: precision_at_k(&ranked, &relevant, 5),
             recall_at_5: recall_at_k(&ranked, &relevant, 5),
-            hits_at_5: if ranked
-                .iter()
-                .take(5)
-                .any(|id| relevant.contains(id))
-            {
+            hits_at_5: if ranked.iter().take(5).any(|id| relevant.contains(id)) {
                 1.0
             } else {
                 0.0
@@ -296,4 +296,3 @@ mod tests {
         assert!((metrics.mrr - 0.5).abs() < 0.01);
     }
 }
-

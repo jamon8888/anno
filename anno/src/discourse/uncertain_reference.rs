@@ -83,7 +83,7 @@
 //! uncertain.update_evidence(2, -0.2); // Demote Mary
 //!
 //! // Resolve when needed
-//! let resolved = uncertain.resolve();
+//! let resolved = uncertain.resolve().expect("should resolve");
 //! assert_eq!(resolved.entity_id, 1);
 //! ```
 //!

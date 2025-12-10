@@ -63,7 +63,7 @@ use std::collections::{HashMap, HashSet};
 // =============================================================================
 
 /// Coreference evaluation scores (precision, recall, F1).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
 pub struct CorefScores {
     /// Precision
     pub precision: f64,
@@ -101,7 +101,7 @@ impl CorefScores {
 }
 
 /// Complete coreference evaluation results.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct CorefEvaluation {
     /// MUC metric
     pub muc: CorefScores,

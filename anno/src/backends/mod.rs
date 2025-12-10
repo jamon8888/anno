@@ -317,11 +317,13 @@ pub use box_embeddings_training::{
     TrainingExample,
 };
 
-// Coreference resolution trait and simple resolvers
-// NOTE: These live in eval/ but are re-exported here for discoverability.
-// Ideally they'd live in backends/ directly. See eval/coref_resolver.rs for context.
-pub use crate::eval::coref_resolver::{
-    BoxCorefResolver, CorefConfig, CoreferenceResolver, SimpleCorefResolver,
-};
-#[cfg(feature = "discourse")]
+// Coreference resolution trait (from anno-core, always available)
+pub use anno_core::CoreferenceResolver;
+
+// Simple resolvers for evaluation pipelines (eval feature only)
+// NOTE: These live in eval/ and are for evaluation, not production.
+// For production coreference, use `MentionRankingCoref` above.
+#[cfg(feature = "eval")]
+pub use crate::eval::coref_resolver::{BoxCorefResolver, CorefConfig, SimpleCorefResolver};
+#[cfg(all(feature = "eval", feature = "discourse"))]
 pub use crate::eval::coref_resolver::{DiscourseAwareResolver, DiscourseCorefConfig};

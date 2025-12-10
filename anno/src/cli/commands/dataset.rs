@@ -77,6 +77,18 @@ pub enum DatasetAction {
         #[arg(short, long, default_value = "ner")]
         task: EvalTask,
     },
+
+    /// Export annotations to brat/CoNLL/JSONL formats
+    #[command(visible_alias = "ex")]
+    Export(super::export::ExportArgs),
+
+    /// Import annotations from brat/CoNLL/JSONL formats
+    #[command(visible_alias = "im")]
+    Import(super::import::ImportArgs),
+
+    /// View entities with surrounding context for review
+    #[command(visible_alias = "ctx")]
+    Context(super::context::ContextArgs),
 }
 
 /// Execute the dataset command.
@@ -198,18 +210,25 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                     }
                 };
 
+                // Parse dataset ID once for reuse (avoid duplicate parsing)
+                // Store Result to preserve error message if parsing fails
+                #[cfg(feature = "eval-advanced")]
+                let parsed_dataset_result: Result<DatasetId, String> = if dataset != "synthetic" {
+                    dataset
+                        .parse::<DatasetId>()
+                        .map_err(|e| format!("Invalid dataset '{}': {}", dataset, e))
+                } else {
+                    Err("synthetic dataset".to_string()) // Not a real error, just indicates synthetic
+                };
+
                 // Route to appropriate evaluation based on task
                 match task {
                     EvalTask::Ner => {
                         #[cfg(feature = "eval-advanced")]
-                        let type_mapper: Option<crate::TypeMapper> = if dataset != "synthetic" {
-                            dataset
-                                .parse::<DatasetId>()
-                                .ok()
-                                .and_then(|id| id.type_mapper())
-                        } else {
-                            None
-                        };
+                        let type_mapper: Option<crate::TypeMapper> = parsed_dataset_result
+                            .as_ref()
+                            .ok()
+                            .and_then(|id| id.type_mapper());
                         #[cfg(not(feature = "eval-advanced"))]
                         let type_mapper: Option<crate::TypeMapper> = None;
 
@@ -224,6 +243,11 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                         println!("  Sentences: {}", test_cases.len());
                         println!();
 
+                        // Per-entity-type tracking: (gold, pred, correct)
+                        let mut per_type_stats: std::collections::HashMap<
+                            String,
+                            (usize, usize, usize),
+                        > = std::collections::HashMap::new();
                         let mut total_gold = 0;
                         let mut total_pred = 0;
                         let mut total_correct = 0;
@@ -234,6 +258,7 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                         #[cfg(feature = "eval-advanced")]
                         {
                             use crate::eval::validation::validate_ground_truth_entities;
+                            let mut total_warnings = 0;
                             for (text, gold) in &test_cases {
                                 let validation = validate_ground_truth_entities(text, gold, false);
                                 if !validation.is_valid {
@@ -243,14 +268,14 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                         validation.errors.join("; ")
                                     );
                                 }
-                                // Note: Warnings are typically non-critical (e.g., overlapping entities)
-                                // Only show first few warnings to avoid spam
-                                if !validation.warnings.is_empty() && validation.warnings.len() <= 3
-                                {
-                                    for warning in validation.warnings.iter().take(3) {
-                                        eprintln!("{} {}", color("33", "warning:"), warning);
-                                    }
-                                }
+                                total_warnings += validation.warnings.len();
+                            }
+                            if total_warnings > 0 {
+                                eprintln!(
+                                    "{} {} validation warnings in gold annotations",
+                                    color("33", "warning:"),
+                                    total_warnings
+                                );
                             }
                         }
 
@@ -264,12 +289,24 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             let mut matched_pred = vec![false; entities.len()];
 
                             for gold_entity in gold {
-                                // Apply type mapping if available
+                                // Apply type mapping if available (consistent with matching logic)
                                 let gold_type = if let Some(ref mapper) = type_mapper {
                                     mapper.normalize(&gold_entity.original_label)
                                 } else {
                                     anno_core::EntityType::from_label(&gold_entity.original_label)
                                 };
+
+                                // Use canonical normalization for consistent grouping
+                                let gold_type_key =
+                                    crate::cli::utils::normalize_entity_type_canonical(
+                                        gold_type.as_label(),
+                                    );
+
+                                // Track per-type gold counts using normalized type
+                                per_type_stats
+                                    .entry(gold_type_key.clone())
+                                    .or_insert((0, 0, 0))
+                                    .0 += 1;
 
                                 // Match: exact span + type match (with flexible type matching)
                                 // Find first unmatched prediction that matches
@@ -302,26 +339,44 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
 
                                 if matched {
                                     total_correct += 1;
+                                    // Track per-type correct count
+                                    per_type_stats.entry(gold_type_key).or_insert((0, 0, 0)).2 += 1;
                                 }
+                            }
+
+                            // Track per-type pred counts
+                            // Use canonical normalization so PER/PERSON etc. are grouped together
+                            for e in &entities {
+                                let raw_type = e.entity_type.as_label().to_uppercase();
+                                // Normalize pred type to match gold type normalization
+                                let type_key =
+                                    crate::cli::utils::normalize_entity_type_canonical(&raw_type);
+                                per_type_stats.entry(type_key).or_insert((0, 0, 0)).1 += 1;
                             }
                         }
 
                         let elapsed = start_time.elapsed();
 
-                        let p = if total_pred > 0 {
-                            total_correct as f64 / total_pred as f64
+                        // Handle edge case: if no gold entities and no predictions, that's perfect
+                        let (p, r, f1) = if total_gold == 0 && total_pred == 0 {
+                            (1.0, 1.0, 1.0)
                         } else {
-                            0.0
-                        };
-                        let r = if total_gold > 0 {
-                            total_correct as f64 / total_gold as f64
-                        } else {
-                            0.0
-                        };
-                        let f1 = if p + r > 0.0 {
-                            2.0 * p * r / (p + r)
-                        } else {
-                            0.0
+                            let p = if total_pred > 0 {
+                                total_correct as f64 / total_pred as f64
+                            } else {
+                                0.0
+                            };
+                            let r = if total_gold > 0 {
+                                total_correct as f64 / total_gold as f64
+                            } else {
+                                0.0
+                            };
+                            let f1 = if p + r > 0.0 {
+                                2.0 * p * r / (p + r)
+                            } else {
+                                0.0
+                            };
+                            (p, r, f1)
                         };
 
                         println!("Results:");
@@ -335,11 +390,53 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             r * 100.0,
                             f1 * 100.0
                         );
+
+                        // Per-entity-type breakdown (sorted by gold count descending)
+                        let mut type_entries: Vec<_> = per_type_stats.iter().collect();
+                        type_entries.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+
+                        if !type_entries.is_empty() {
+                            println!();
+                            println!("Per-type breakdown:");
+                            for (type_name, (gold_count, pred_count, correct_count)) in type_entries
+                            {
+                                if *gold_count == 0 && *pred_count == 0 {
+                                    continue;
+                                }
+                                let type_p = if *pred_count > 0 {
+                                    *correct_count as f64 / *pred_count as f64
+                                } else {
+                                    0.0
+                                };
+                                let type_r = if *gold_count > 0 {
+                                    *correct_count as f64 / *gold_count as f64
+                                } else {
+                                    0.0
+                                };
+                                let type_f1 = if type_p + type_r > 0.0 {
+                                    2.0 * type_p * type_r / (type_p + type_r)
+                                } else {
+                                    0.0
+                                };
+                                println!(
+                                    "  {:12} F1={:5.1}%  P={:5.1}%  R={:5.1}%  [gold={} pred={} correct={}]",
+                                    type_name,
+                                    type_f1 * 100.0,
+                                    type_p * 100.0,
+                                    type_r * 100.0,
+                                    gold_count,
+                                    pred_count,
+                                    correct_count
+                                );
+                            }
+                        }
+
                         let ms_per_sent = if !test_cases.is_empty() {
                             elapsed.as_secs_f64() * 1000.0 / test_cases.len() as f64
                         } else {
                             0.0
                         };
+                        println!();
                         println!(
                             "  Time: {:.1}s ({:.1}ms/sent)",
                             elapsed.as_secs_f64(),
@@ -362,9 +459,9 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                 return Err("Coreference evaluation requires a real dataset (e.g., gap, preco, litbank)".to_string());
                             }
 
-                            let dataset_id: DatasetId = dataset
-                                .parse::<DatasetId>()
-                                .map_err(|e| format!("Invalid dataset '{}': {}", dataset, e))?;
+                            // Reuse parsed result (preserves original error message)
+                            let dataset_id: DatasetId =
+                                parsed_dataset_result.clone().map_err(|e| e)?;
 
                             if !dataset_id.is_coreference() {
                                 return Err(format!("Dataset '{}' is not a coreference dataset. Use: gap, preco, or litbank", dataset));
@@ -479,9 +576,9 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                 return Err("Relation extraction evaluation requires a real dataset (e.g., docred, retacred)".to_string());
                             }
 
-                            let dataset_id: DatasetId = dataset
-                                .parse::<DatasetId>()
-                                .map_err(|e| format!("Invalid dataset '{}': {}", dataset, e))?;
+                            // Reuse parsed result (preserves original error message)
+                            let dataset_id: DatasetId =
+                                parsed_dataset_result.clone().map_err(|e| e)?;
 
                             if !dataset_id.is_relation_extraction() {
                                 return Err(format!("Dataset '{}' is not a relation extraction dataset. Use: docred or retacred", dataset));
@@ -557,8 +654,8 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             let start_time = Instant::now();
 
                             if let Some(ref rel_extractor) = use_relation_extractor {
-                                println!("{} Using GLiNER2 RelationExtractor (heuristic-based regex matching)", color("32", "✓"));
-                                println!("  Note: This uses regex matching on text, not a neural relation model.",);
+                                println!("{} Using GLiNER2 RelationExtractor", color("32", "[OK]"));
+                                println!("  Note: This uses regex matching on text, not a neural relation model.");
                                 println!();
 
                                 for doc in &gold_docs {
@@ -658,6 +755,15 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                 return Err("Dataset evaluation requires --features eval".to_string());
             }
         }
+        DatasetAction::Export(args) => {
+            super::export::run(args)?;
+        }
+        DatasetAction::Import(args) => {
+            super::import::run(args)?;
+        }
+        DatasetAction::Context(args) => {
+            super::context::run(args)?;
+        }
     }
 
     Ok(())
@@ -670,7 +776,7 @@ fn run_info(dataset: &str) -> Result<(), String> {
     #[cfg(feature = "eval")]
     {
         use crate::eval::dataset_registry::DatasetId as RegistryDatasetId;
-        use crate::eval::loader::{DatasetId as LoadableDatasetId, DatasetLoader};
+        use crate::eval::loader::DatasetId as LoadableDatasetId;
 
         // Try to find in registry (by display name or variant name)
         let registry_match = RegistryDatasetId::all()
@@ -746,6 +852,7 @@ fn run_info(dataset: &str) -> Result<(), String> {
                 // Try to load and show stats if eval-advanced is enabled
                 #[cfg(feature = "eval-advanced")]
                 {
+                    use crate::eval::loader::DatasetLoader;
                     if let Ok(loadable_id) = dataset.parse::<LoadableDatasetId>() {
                         let loader = DatasetLoader::new()
                             .map_err(|e| format!("Failed to create loader: {}", e))?;

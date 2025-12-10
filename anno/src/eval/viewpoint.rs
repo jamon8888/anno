@@ -67,8 +67,7 @@ use std::collections::HashMap;
 // =============================================================================
 
 /// Epistemic status of a proposition.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum EpistemicStatus {
     /// Asserted as fact by the author
     #[default]
@@ -99,7 +98,10 @@ impl EpistemicStatus {
     /// Check if this status indicates uncertainty.
     #[must_use]
     pub fn is_uncertain(&self) -> bool {
-        matches!(self, Self::Hypothetical | Self::Uncertain | Self::Future | Self::Opinion)
+        matches!(
+            self,
+            Self::Hypothetical | Self::Uncertain | Self::Future | Self::Opinion
+        )
     }
 }
 
@@ -238,34 +240,125 @@ impl Default for ViewpointExtractor {
     fn default() -> Self {
         Self {
             reporting_verbs: vec![
-                "said", "says", "told", "stated", "claimed", "reported",
-                "announced", "declared", "confirmed", "denied", "argued",
-                "suggested", "explained", "noted", "added", "according to",
-                "tweeted", "posted", "wrote", "mentioned", "revealed",
-            ].into_iter().map(String::from).collect(),
+                "said",
+                "says",
+                "told",
+                "stated",
+                "claimed",
+                "reported",
+                "announced",
+                "declared",
+                "confirmed",
+                "denied",
+                "argued",
+                "suggested",
+                "explained",
+                "noted",
+                "added",
+                "according to",
+                "tweeted",
+                "posted",
+                "wrote",
+                "mentioned",
+                "revealed",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
             negation_markers: vec![
-                "not", "no", "never", "neither", "nor", "none", "nobody",
-                "nothing", "nowhere", "didn't", "doesn't", "don't", "won't",
-                "wasn't", "weren't", "isn't", "aren't", "haven't", "hasn't",
-                "cannot", "can't", "couldn't", "wouldn't", "shouldn't",
-                "failed to", "refused to", "denied",
-            ].into_iter().map(String::from).collect(),
+                "not",
+                "no",
+                "never",
+                "neither",
+                "nor",
+                "none",
+                "nobody",
+                "nothing",
+                "nowhere",
+                "didn't",
+                "doesn't",
+                "don't",
+                "won't",
+                "wasn't",
+                "weren't",
+                "isn't",
+                "aren't",
+                "haven't",
+                "hasn't",
+                "cannot",
+                "can't",
+                "couldn't",
+                "wouldn't",
+                "shouldn't",
+                "failed to",
+                "refused to",
+                "denied",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
             hedging_markers: vec![
-                "may", "might", "could", "possibly", "perhaps", "probably",
-                "likely", "unlikely", "appears", "seems", "suggests",
-                "reportedly", "allegedly", "rumored", "believed to",
-                "thought to", "expected to", "estimated", "approximately",
-            ].into_iter().map(String::from).collect(),
+                "may",
+                "might",
+                "could",
+                "possibly",
+                "perhaps",
+                "probably",
+                "likely",
+                "unlikely",
+                "appears",
+                "seems",
+                "suggests",
+                "reportedly",
+                "allegedly",
+                "rumored",
+                "believed to",
+                "thought to",
+                "expected to",
+                "estimated",
+                "approximately",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
             future_markers: vec![
-                "will", "shall", "going to", "plans to", "intends to",
-                "expected to", "scheduled to", "set to", "about to",
-                "next year", "next month", "in the future", "upcoming",
-            ].into_iter().map(String::from).collect(),
+                "will",
+                "shall",
+                "going to",
+                "plans to",
+                "intends to",
+                "expected to",
+                "scheduled to",
+                "set to",
+                "about to",
+                "next year",
+                "next month",
+                "in the future",
+                "upcoming",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
             opinion_markers: vec![
-                "think", "believe", "feel", "consider", "view", "regard",
-                "opinion", "perspective", "in my view", "personally",
-                "should", "ought to", "must", "best", "worst",
-            ].into_iter().map(String::from).collect(),
+                "think",
+                "believe",
+                "feel",
+                "consider",
+                "view",
+                "regard",
+                "opinion",
+                "perspective",
+                "in my view",
+                "personally",
+                "should",
+                "ought to",
+                "must",
+                "best",
+                "worst",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
         }
     }
 }
@@ -283,11 +376,11 @@ impl ViewpointExtractor {
         for entity in entities {
             let context = self.get_context(text, entity.start, 100);
             let (source, status) = self.analyze_context(&context, &lower, entity.start);
-            
+
             let mut attr = Attribution::new(entity, source, status);
             attr.claim_text = Some(context);
             attr.confidence = self.compute_confidence(&attr);
-            
+
             attributions.push(attr);
         }
 
@@ -297,17 +390,20 @@ impl ViewpointExtractor {
     /// Extract entities with their viewpoint context.
     pub fn extract_with_entities(&self, text: &str, entities: &[Entity]) -> Vec<Attribution> {
         let lower = text.to_lowercase();
-        
-        entities.iter().map(|entity| {
-            let context = self.get_context(text, entity.start, 100);
-            let (source, status) = self.analyze_context(&context, &lower, entity.start);
-            
-            let mut attr = Attribution::new(entity.clone(), source, status);
-            attr.claim_text = Some(context);
-            attr.confidence = self.compute_confidence(&attr);
-            
-            attr
-        }).collect()
+
+        entities
+            .iter()
+            .map(|entity| {
+                let context = self.get_context(text, entity.start, 100);
+                let (source, status) = self.analyze_context(&context, &lower, entity.start);
+
+                let mut attr = Attribution::new(entity.clone(), source, status);
+                attr.claim_text = Some(context);
+                attr.confidence = self.compute_confidence(&attr);
+
+                attr
+            })
+            .collect()
     }
 
     /// Get context around a position.
@@ -319,7 +415,12 @@ impl ViewpointExtractor {
     }
 
     /// Analyze context to determine source and epistemic status.
-    fn analyze_context(&self, context: &str, _lower_text: &str, _pos: usize) -> (Source, EpistemicStatus) {
+    fn analyze_context(
+        &self,
+        context: &str,
+        _lower_text: &str,
+        _pos: usize,
+    ) -> (Source, EpistemicStatus) {
         let context_lower = context.to_lowercase();
 
         // Check for reporting patterns first
@@ -356,9 +457,10 @@ impl ViewpointExtractor {
         let context_lower = context.to_lowercase();
 
         // Pattern: "According to X"
-        if let Some(caps) = Regex::new(r"(?i)according to ([A-Z][a-z]+ [A-Z][a-z]+|[A-Z][a-z]+|the [a-z]+)")
-            .ok()
-            .and_then(|re| re.captures(context))
+        if let Some(caps) =
+            Regex::new(r"(?i)according to ([A-Z][a-z]+ [A-Z][a-z]+|[A-Z][a-z]+|the [a-z]+)")
+                .ok()
+                .and_then(|re| re.captures(context))
         {
             let source_text = caps.get(1).map(|m| m.as_str()).unwrap_or("");
             return Some(Source::new(source_text, SourceType::Person));
@@ -431,20 +533,30 @@ impl ViewpointExtractor {
     /// Simple entity extraction (placeholder - use actual NER in practice).
     fn simple_entity_extraction(&self, text: &str) -> Vec<Entity> {
         use crate::EntityType;
-        
+
         let mut entities = Vec::new();
-        
+
         // Very simple pattern: Capitalized words (excluding sentence starts)
         let re = Regex::new(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b").unwrap();
-        
+
         for caps in re.captures_iter(text) {
             if let Some(m) = caps.get(1) {
                 // Skip common non-entities
                 let text_match = m.as_str();
-                if ["The", "This", "That", "These", "Those", "According", "However"].contains(&text_match) {
+                if [
+                    "The",
+                    "This",
+                    "That",
+                    "These",
+                    "Those",
+                    "According",
+                    "However",
+                ]
+                .contains(&text_match)
+                {
                     continue;
                 }
-                
+
                 entities.push(Entity::new(
                     text_match,
                     EntityType::Person, // Default to person
@@ -454,7 +566,7 @@ impl ViewpointExtractor {
                 ));
             }
         }
-        
+
         entities
     }
 }
@@ -473,7 +585,9 @@ pub struct ViewpointAggregator {
 impl ViewpointAggregator {
     /// Create a new aggregator.
     pub fn new(consensus_threshold: f64) -> Self {
-        Self { consensus_threshold }
+        Self {
+            consensus_threshold,
+        }
     }
 
     /// Aggregate attributions for the same entity.
@@ -485,7 +599,8 @@ impl ViewpointAggregator {
         // Group by source
         let mut by_source: HashMap<String, Vec<&Attribution>> = HashMap::new();
         for attr in attributions {
-            by_source.entry(attr.source.text.clone())
+            by_source
+                .entry(attr.source.text.clone())
                 .or_default()
                 .push(attr);
         }
@@ -504,8 +619,8 @@ impl ViewpointAggregator {
             .unwrap_or(EpistemicStatus::Factual);
 
         // Check for conflicting viewpoints
-        let has_conflict = status_counts.len() > 1 && 
-            status_counts.values().filter(|&&c| c > 0).count() > 1;
+        let has_conflict =
+            status_counts.len() > 1 && status_counts.values().filter(|&&c| c > 0).count() > 1;
 
         // Compute consensus
         let total = attributions.len() as f64;
@@ -513,7 +628,10 @@ impl ViewpointAggregator {
         let consensus = dominant_count / total;
 
         ViewpointSummary {
-            entity_text: attributions.first().map(|a| a.entity.text.clone()).unwrap_or_default(),
+            entity_text: attributions
+                .first()
+                .map(|a| a.entity.text.clone())
+                .unwrap_or_default(),
             sources: by_source.keys().cloned().collect(),
             dominant_status,
             status_distribution: status_counts,
@@ -543,7 +661,6 @@ pub struct ViewpointSummary {
     pub n_mentions: usize,
 }
 
-
 // =============================================================================
 // Tests
 // =============================================================================
@@ -562,25 +679,30 @@ mod tests {
     #[test]
     fn test_attribution_source_detection() {
         let extractor = ViewpointExtractor::default();
-        
+
         let text = "According to John Smith, Apple will acquire Microsoft.";
         let attrs = extractor.extract(text);
-        
+
         // Should detect John Smith as source
-        let has_john_smith = attrs.iter()
-            .any(|a| a.source.text.contains("John Smith"));
-        assert!(has_john_smith || attrs.iter().any(|a| a.epistemic_status == EpistemicStatus::Reported));
+        let has_john_smith = attrs.iter().any(|a| a.source.text.contains("John Smith"));
+        assert!(
+            has_john_smith
+                || attrs
+                    .iter()
+                    .any(|a| a.epistemic_status == EpistemicStatus::Reported)
+        );
     }
 
     #[test]
     fn test_negation_detection() {
         let extractor = ViewpointExtractor::default();
-        
+
         let text = "Apple did not announce any layoffs.";
         let attrs = extractor.extract(text);
-        
+
         // Should detect negation
-        let has_negated = attrs.iter()
+        let has_negated = attrs
+            .iter()
             .any(|a| a.epistemic_status == EpistemicStatus::Negated);
         assert!(has_negated);
     }
@@ -588,27 +710,36 @@ mod tests {
     #[test]
     fn test_hedging_detection() {
         let extractor = ViewpointExtractor::default();
-        
+
         let text = "Microsoft may acquire Activision next year.";
         let attrs = extractor.extract(text);
-        
+
         // Should detect uncertainty or future
-        let has_uncertain = attrs.iter()
-            .any(|a| a.epistemic_status == EpistemicStatus::Uncertain || 
-                     a.epistemic_status == EpistemicStatus::Future);
+        let has_uncertain = attrs.iter().any(|a| {
+            a.epistemic_status == EpistemicStatus::Uncertain
+                || a.epistemic_status == EpistemicStatus::Future
+        });
         assert!(has_uncertain);
     }
 
     #[test]
     fn test_viewpoint_aggregation() {
         use crate::EntityType;
-        
+
         let entity = Entity::new("Apple", EntityType::Organization, 0, 5, 0.9);
-        
+
         let attributions = vec![
             Attribution::new(entity.clone(), Source::author(), EpistemicStatus::Factual),
-            Attribution::new(entity.clone(), Source::new("Reuters", SourceType::Publication), EpistemicStatus::Reported),
-            Attribution::new(entity.clone(), Source::new("Bloomberg", SourceType::Publication), EpistemicStatus::Reported),
+            Attribution::new(
+                entity.clone(),
+                Source::new("Reuters", SourceType::Publication),
+                EpistemicStatus::Reported,
+            ),
+            Attribution::new(
+                entity.clone(),
+                Source::new("Bloomberg", SourceType::Publication),
+                EpistemicStatus::Reported,
+            ),
         ];
 
         let aggregator = ViewpointAggregator::new(0.5);
@@ -622,12 +753,16 @@ mod tests {
     #[test]
     fn test_conflict_detection() {
         use crate::EntityType;
-        
+
         let entity = Entity::new("Merger", EntityType::Other("EVENT".to_string()), 0, 6, 0.9);
-        
+
         let attributions = vec![
             Attribution::new(entity.clone(), Source::author(), EpistemicStatus::Factual),
-            Attribution::new(entity.clone(), Source::new("Analyst", SourceType::Person), EpistemicStatus::Negated),
+            Attribution::new(
+                entity.clone(),
+                Source::new("Analyst", SourceType::Person),
+                EpistemicStatus::Negated,
+            ),
         ];
 
         let aggregator = ViewpointAggregator::new(0.5);
@@ -636,4 +771,3 @@ mod tests {
         assert!(summary.has_conflict);
     }
 }
-

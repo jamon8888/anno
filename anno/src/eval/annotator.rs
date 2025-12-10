@@ -160,8 +160,9 @@ impl MultiAnnotatorCorpus {
         annotations: Vec<(&str, usize, usize, &str)>,
     ) {
         self.annotators.insert(annotator.to_string());
-        
-        let doc = self.documents
+
+        let doc = self
+            .documents
             .entry(doc_id.to_string())
             .or_insert_with(|| AnnotatedDocument::new(doc_id, ""));
 
@@ -292,8 +293,12 @@ impl<'a> AnnotatorAnalyzer<'a> {
 
                 // Track contentious spans
                 if types_for_span.len() > 1 || annotators_with_span < annotators.len() {
-                    let disagreement = 1.0 - (types_for_span.values().map(|v| v.len()).max().unwrap_or(0) as f64 / annotators.len() as f64);
-                    let text = doc.annotations.values()
+                    let disagreement = 1.0
+                        - (types_for_span.values().map(|v| v.len()).max().unwrap_or(0) as f64
+                            / annotators.len() as f64);
+                    let text = doc
+                        .annotations
+                        .values()
                         .flat_map(|anns| anns.iter())
                         .find(|a| a.start == start && a.end == end)
                         .map(|a| a.text.clone())
@@ -312,7 +317,11 @@ impl<'a> AnnotatorAnalyzer<'a> {
         }
 
         // Sort contentious by disagreement
-        contentious.sort_by(|a, b| b.disagreement.partial_cmp(&a.disagreement).unwrap_or(std::cmp::Ordering::Equal));
+        contentious.sort_by(|a, b| {
+            b.disagreement
+                .partial_cmp(&a.disagreement)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Compute Fleiss' kappa
         let fleiss_kappa = self.compute_fleiss_kappa();
@@ -320,12 +329,29 @@ impl<'a> AnnotatorAnalyzer<'a> {
         // Per-type agreement
         let type_specific_agreement: HashMap<String, f64> = type_counts
             .into_iter()
-            .map(|(t, (agree, total))| (t, if total > 0 { agree as f64 / total as f64 } else { 0.0 }))
+            .map(|(t, (agree, total))| {
+                (
+                    t,
+                    if total > 0 {
+                        agree as f64 / total as f64
+                    } else {
+                        0.0
+                    },
+                )
+            })
             .collect();
 
         AgreementStats {
-            span_agreement: if span_total > 0 { span_agree_count as f64 / span_total as f64 } else { 0.0 },
-            type_agreement: if type_total > 0 { type_agree_count as f64 / type_total as f64 } else { 0.0 },
+            span_agreement: if span_total > 0 {
+                span_agree_count as f64 / span_total as f64
+            } else {
+                0.0
+            },
+            type_agreement: if type_total > 0 {
+                type_agree_count as f64 / type_total as f64
+            } else {
+                0.0
+            },
             fleiss_kappa,
             type_specific_agreement,
             contentious_spans: contentious.into_iter().take(20).collect(), // Top 20
@@ -338,7 +364,7 @@ impl<'a> AnnotatorAnalyzer<'a> {
     fn compute_fleiss_kappa(&self) -> f64 {
         // Simplified Fleiss' kappa computation
         // Full implementation would need token-level annotation matrix
-        
+
         let mut total_agreement = 0.0;
         let mut count = 0;
 
@@ -482,10 +508,13 @@ impl SoftEvaluator {
             let mut best_match: Option<(usize, f64)> = None;
 
             for (i, (g, conf)) in gold.iter().enumerate() {
-                if pred.same_span(g) && pred.entity_type == g.entity_type && !matched_gold.contains(&i)
-                    && (best_match.is_none() || *conf > best_match.unwrap().1) {
-                        best_match = Some((i, *conf));
-                    }
+                if pred.same_span(g)
+                    && pred.entity_type == g.entity_type
+                    && !matched_gold.contains(&i)
+                    && (best_match.is_none() || *conf > best_match.unwrap().1)
+                {
+                    best_match = Some((i, *conf));
+                }
             }
 
             if let Some((idx, conf)) = best_match {
@@ -571,14 +600,19 @@ mod tests {
     fn test_multi_annotator_corpus() {
         let mut corpus = MultiAnnotatorCorpus::new();
 
-        corpus.add_annotation("doc1", "annotator_A", vec![
-            ("Barack Obama", 0, 12, "PER"),
-            ("Hawaii", 25, 31, "LOC"),
-        ]);
-        corpus.add_annotation("doc1", "annotator_B", vec![
-            ("Barack Obama", 0, 12, "PER"),
-            ("Hawaii", 25, 31, "GPE"), // Different type
-        ]);
+        corpus.add_annotation(
+            "doc1",
+            "annotator_A",
+            vec![("Barack Obama", 0, 12, "PER"), ("Hawaii", 25, 31, "LOC")],
+        );
+        corpus.add_annotation(
+            "doc1",
+            "annotator_B",
+            vec![
+                ("Barack Obama", 0, 12, "PER"),
+                ("Hawaii", 25, 31, "GPE"), // Different type
+            ],
+        );
 
         assert_eq!(corpus.num_annotators(), 2);
         assert_eq!(corpus.num_documents(), 1);
@@ -588,14 +622,16 @@ mod tests {
     fn test_agreement_computation() {
         let mut corpus = MultiAnnotatorCorpus::new();
 
-        corpus.add_annotation("doc1", "A", vec![
-            ("Obama", 0, 5, "PER"),
-            ("Hawaii", 10, 16, "LOC"),
-        ]);
-        corpus.add_annotation("doc1", "B", vec![
-            ("Obama", 0, 5, "PER"),
-            ("Hawaii", 10, 16, "LOC"),
-        ]);
+        corpus.add_annotation(
+            "doc1",
+            "A",
+            vec![("Obama", 0, 5, "PER"), ("Hawaii", 10, 16, "LOC")],
+        );
+        corpus.add_annotation(
+            "doc1",
+            "B",
+            vec![("Obama", 0, 5, "PER"), ("Hawaii", 10, 16, "LOC")],
+        );
 
         let analyzer = AnnotatorAnalyzer::new(&corpus);
         let stats = analyzer.compute_agreement();
@@ -609,15 +645,9 @@ mod tests {
     fn test_contentious_spans() {
         let mut corpus = MultiAnnotatorCorpus::new();
 
-        corpus.add_annotation("doc1", "A", vec![
-            ("Apple", 0, 5, "ORG"),
-        ]);
-        corpus.add_annotation("doc1", "B", vec![
-            ("Apple", 0, 5, "PRODUCT"),
-        ]);
-        corpus.add_annotation("doc1", "C", vec![
-            ("Apple", 0, 5, "ORG"),
-        ]);
+        corpus.add_annotation("doc1", "A", vec![("Apple", 0, 5, "ORG")]);
+        corpus.add_annotation("doc1", "B", vec![("Apple", 0, 5, "PRODUCT")]);
+        corpus.add_annotation("doc1", "C", vec![("Apple", 0, 5, "ORG")]);
 
         let analyzer = AnnotatorAnalyzer::new(&corpus);
         let stats = analyzer.compute_agreement();
@@ -645,12 +675,8 @@ mod tests {
 
     #[test]
     fn test_soft_evaluation() {
-        let predictions = vec![
-            Annotation::new("Obama", 0, 5, "PER", "model"),
-        ];
-        let gold_with_conf = vec![
-            (Annotation::new("Obama", 0, 5, "PER", "gold"), 0.9),
-        ];
+        let predictions = vec![Annotation::new("Obama", 0, 5, "PER", "model")];
+        let gold_with_conf = vec![(Annotation::new("Obama", 0, 5, "PER", "gold"), 0.9)];
 
         let evaluator = SoftEvaluator::new(0.5);
         let metrics = evaluator.evaluate(&predictions, &gold_with_conf);
@@ -658,4 +684,3 @@ mod tests {
         assert!(metrics.f1 > 0.8); // Should be close to 1.0 weighted by confidence
     }
 }
-

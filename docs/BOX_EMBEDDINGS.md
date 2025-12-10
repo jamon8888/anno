@@ -235,3 +235,18 @@ See [`BOX_EMBEDDINGS_TRAINING.md`](BOX_EMBEDDINGS_TRAINING.md) for mathematical 
 4. **Performance**: Optimize box operations (currently O(d) per pair)
 5. **Full BoxTE**: Temporal training for time-varying entities
 
+## Related: Geometric Alternatives
+
+See [`GEOMETRIC_FOUNDATIONS.md`](GEOMETRIC_FOUNDATIONS.md) for comparison with:
+
+- **Hyperbolic embeddings** (Poincaré ball): Better hierarchy capacity, rotation-invariant
+- **Sheaf neural networks**: Enforce transitivity via Laplacian, not post-hoc clustering
+- **Persistent homology**: Identify structurally important connections
+
+Box embeddings remain well-suited for:
+- Temporal evolution (explicit min/max with velocity)
+- Uncertainty quantification (volume = confidence)
+- Interpretability (easy to visualize and debug)
+
+The approaches are complementary, not competing.
+

@@ -540,14 +540,10 @@ impl TemporalScope {
             Self::Range { start, end } => {
                 // Entity overlaps with range if:
                 // entity_start <= end AND (entity_end is None OR entity_end >= start)
-                let entity_starts_before_end = entity
-                    .valid_from
-                    .as_ref()
-                    .map_or(true, |ef| ef <= end);
-                let entity_ends_after_start = entity
-                    .valid_until
-                    .as_ref()
-                    .map_or(true, |eu| eu >= start);
+                let entity_starts_before_end =
+                    entity.valid_from.as_ref().map_or(true, |ef| ef <= end);
+                let entity_ends_after_start =
+                    entity.valid_until.as_ref().map_or(true, |eu| eu >= start);
                 entity_starts_before_end && entity_ends_after_start
             }
             Self::AnyTime => true,
@@ -671,14 +667,13 @@ impl EntityTimeline {
             inferred: false,
         });
         // Sort by valid_from (None goes first as "unknown/always")
-        self.versions.sort_by(|a, b| {
-            match (&a.entity.valid_from, &b.entity.valid_from) {
+        self.versions
+            .sort_by(|a, b| match (&a.entity.valid_from, &b.entity.valid_from) {
                 (None, None) => std::cmp::Ordering::Equal,
                 (None, Some(_)) => std::cmp::Ordering::Less,
                 (Some(_), None) => std::cmp::Ordering::Greater,
                 (Some(a_from), Some(b_from)) => a_from.cmp(b_from),
-            }
-        });
+            });
     }
 
     /// Get the value at a specific point in time.
@@ -719,7 +714,8 @@ impl EntityTimeline {
             let next = &self.versions[i + 1];
 
             // If current has an end and next has a start, check for gap
-            if let (Some(end), Some(start)) = (&current.entity.valid_until, &next.entity.valid_from) {
+            if let (Some(end), Some(start)) = (&current.entity.valid_until, &next.entity.valid_from)
+            {
                 if end < start {
                     return true;
                 }
@@ -1105,43 +1101,43 @@ impl TemporalRelation {
 #[must_use]
 pub fn normalize_date(text: &str) -> Option<String> {
     let text = text.trim();
-    
+
     // Try Japanese format: YYYY年MM月DD日
     if let Some(date) = parse_japanese_date(text) {
         return Some(date.format("%Y-%m-%d").to_string());
     }
-    
+
     // Try EU dot format: DD.MM.YYYY
     if let Some(date) = parse_eu_dot_date(text) {
         return Some(date.format("%Y-%m-%d").to_string());
     }
-    
+
     // Try common date formats
     let formats = [
-        "%Y-%m-%d",         // 2024-01-15
-        "%Y/%m/%d",         // 2024/01/15
-        "%d-%m-%Y",         // 15-01-2024
-        "%d/%m/%Y",         // 15/01/2024
-        "%B %d, %Y",        // January 15, 2024
-        "%b %d, %Y",        // Jan 15, 2024
-        "%d %B %Y",         // 15 January 2024
-        "%d %b %Y",         // 15 Jan 2024
-        "%m/%d/%Y",         // 01/15/2024 (US format)
+        "%Y-%m-%d",  // 2024-01-15
+        "%Y/%m/%d",  // 2024/01/15
+        "%d-%m-%Y",  // 15-01-2024
+        "%d/%m/%Y",  // 15/01/2024
+        "%B %d, %Y", // January 15, 2024
+        "%b %d, %Y", // Jan 15, 2024
+        "%d %B %Y",  // 15 January 2024
+        "%d %b %Y",  // 15 Jan 2024
+        "%m/%d/%Y",  // 01/15/2024 (US format)
     ];
-    
+
     for fmt in &formats {
         if let Ok(date) = NaiveDate::parse_from_str(text, fmt) {
             return Some(date.format("%Y-%m-%d").to_string());
         }
     }
-    
+
     // Try year-only
     if let Ok(year) = text.parse::<i32>() {
         if (1000..=2100).contains(&year) {
             return Some(format!("{year}-01-01"));
         }
     }
-    
+
     None
 }
 
@@ -1150,21 +1146,21 @@ pub fn normalize_date(text: &str) -> Option<String> {
 #[must_use]
 pub fn parse_date(text: &str) -> Option<DateTime<Utc>> {
     let text = text.trim();
-    
+
     // Try Japanese format: YYYY年MM月DD日
     if let Some(date) = parse_japanese_date(text) {
         if let Some(dt) = date.and_hms_opt(0, 0, 0) {
             return Some(Utc.from_utc_datetime(&dt));
         }
     }
-    
+
     // Try EU dot format: DD.MM.YYYY
     if let Some(date) = parse_eu_dot_date(text) {
         if let Some(dt) = date.and_hms_opt(0, 0, 0) {
             return Some(Utc.from_utc_datetime(&dt));
         }
     }
-    
+
     let formats = [
         "%Y-%m-%d",
         "%Y/%m/%d",
@@ -1176,7 +1172,7 @@ pub fn parse_date(text: &str) -> Option<DateTime<Utc>> {
         "%d %b %Y",
         "%m/%d/%Y",
     ];
-    
+
     for fmt in &formats {
         if let Ok(date) = NaiveDate::parse_from_str(text, fmt) {
             if let Some(dt) = date.and_hms_opt(0, 0, 0) {
@@ -1184,7 +1180,7 @@ pub fn parse_date(text: &str) -> Option<DateTime<Utc>> {
             }
         }
     }
-    
+
     // Try year-only
     if let Ok(year) = text.parse::<i32>() {
         if (1000..=2100).contains(&year) {
@@ -1195,7 +1191,7 @@ pub fn parse_date(text: &str) -> Option<DateTime<Utc>> {
             }
         }
     }
-    
+
     None
 }
 
@@ -1203,21 +1199,21 @@ pub fn parse_date(text: &str) -> Option<DateTime<Utc>> {
 fn parse_japanese_date(text: &str) -> Option<NaiveDate> {
     // Match pattern: digits + 年 + digits + 月 + digits + 日
     let text = text.trim();
-    
+
     // Find the year part (before 年)
     let year_end = text.find('年')?;
     let year: i32 = text[..year_end].parse().ok()?;
-    
+
     // Find the month part (between 年 and 月)
     let month_start = year_end + '年'.len_utf8();
     let month_end = text[month_start..].find('月')? + month_start;
     let month: u32 = text[month_start..month_end].parse().ok()?;
-    
+
     // Find the day part (between 月 and 日)
     let day_start = month_end + '月'.len_utf8();
     let day_end = text[day_start..].find('日')? + day_start;
     let day: u32 = text[day_start..day_end].parse().ok()?;
-    
+
     NaiveDate::from_ymd_opt(year, month, day)
 }
 
@@ -1227,18 +1223,22 @@ fn parse_eu_dot_date(text: &str) -> Option<NaiveDate> {
     if parts.len() != 3 {
         return None;
     }
-    
+
     let day: u32 = parts[0].parse().ok()?;
     let month: u32 = parts[1].parse().ok()?;
     let year: i32 = parts[2].parse().ok()?;
-    
+
     // Handle 2-digit years
     let year = if year < 100 {
-        if year > 50 { 1900 + year } else { 2000 + year }
+        if year > 50 {
+            1900 + year
+        } else {
+            2000 + year
+        }
     } else {
         year
     };
-    
+
     NaiveDate::from_ymd_opt(year, month, day)
 }
 
@@ -1247,7 +1247,7 @@ fn parse_eu_dot_date(text: &str) -> Option<NaiveDate> {
 #[must_use]
 pub fn normalize_time(text: &str) -> Option<String> {
     let text = text.trim().to_uppercase();
-    
+
     // Handle 12-hour format with AM/PM
     let (time_part, is_pm) = if text.ends_with("PM") {
         (text.trim_end_matches("PM").trim(), true)
@@ -1256,7 +1256,7 @@ pub fn normalize_time(text: &str) -> Option<String> {
     } else {
         (text.as_str(), false)
     };
-    
+
     // Parse HH:MM or HH:MM:SS
     let parts: Vec<&str> = time_part.split(':').collect();
     match parts.len() {
@@ -1292,7 +1292,7 @@ pub fn normalize_time(text: &str) -> Option<String> {
         }
         _ => {}
     }
-    
+
     None
 }
 
@@ -1323,8 +1323,9 @@ pub fn normalize_time(text: &str) -> Option<String> {
 /// │                                                                     │
 /// └─────────────────────────────────────────────────────────────────────┘
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 pub enum TemporalGranularity {
     /// Precise timestamp with time component
     Instant,
@@ -1376,7 +1377,6 @@ impl TemporalGranularity {
         )
     }
 }
-
 
 /// Type of temporal expression based on how it relates to absolute time.
 ///
@@ -1572,7 +1572,10 @@ impl AbstractTemporalExpression {
                 grounded.requires_context = false;
                 Some(grounded)
             }
-            TemporalExpressionType::Fuzzy { direction, approximate_days } => {
+            TemporalExpressionType::Fuzzy {
+                direction,
+                approximate_days,
+            } => {
                 // For fuzzy expressions, create a probabilistic range
                 let (min_days, max_days) = approximate_days.unwrap_or(match direction {
                     FuzzyDirection::Past => (-365, -1),
@@ -1604,9 +1607,8 @@ impl AbstractTemporalExpression {
     /// Get the midpoint of this temporal expression (if grounded).
     #[must_use]
     pub fn midpoint(&self) -> Option<DateTime<Utc>> {
-        self.grounded_range.map(|(start, end)| {
-            start + Duration::seconds((end - start).num_seconds() / 2)
-        })
+        self.grounded_range
+            .map(|(start, end)| start + Duration::seconds((end - start).num_seconds() / 2))
     }
 }
 
@@ -1724,18 +1726,27 @@ fn parse_fuzzy_expression(text: &str) -> Option<AbstractTemporalExpression> {
 
     for pattern in past_patterns {
         if text.contains(pattern) {
-            return Some(AbstractTemporalExpression::fuzzy(text, FuzzyDirection::Past));
+            return Some(AbstractTemporalExpression::fuzzy(
+                text,
+                FuzzyDirection::Past,
+            ));
         }
     }
 
     for pattern in future_patterns {
         if text.contains(pattern) {
-            return Some(AbstractTemporalExpression::fuzzy(text, FuzzyDirection::Future));
+            return Some(AbstractTemporalExpression::fuzzy(
+                text,
+                FuzzyDirection::Future,
+            ));
         }
     }
 
     if text.contains("sometime") || text.contains("someday") {
-        return Some(AbstractTemporalExpression::fuzzy(text, FuzzyDirection::Unknown));
+        return Some(AbstractTemporalExpression::fuzzy(
+            text,
+            FuzzyDirection::Unknown,
+        ));
     }
 
     None
@@ -1779,8 +1790,16 @@ fn extract_number(text: &str) -> Option<u32> {
     }
     // Word numbers
     let word_numbers = [
-        ("one", 1), ("two", 2), ("three", 3), ("four", 4), ("five", 5),
-        ("six", 6), ("seven", 7), ("eight", 8), ("nine", 9), ("ten", 10),
+        ("one", 1),
+        ("two", 2),
+        ("three", 3),
+        ("four", 4),
+        ("five", 5),
+        ("six", 6),
+        ("seven", 7),
+        ("eight", 8),
+        ("nine", 9),
+        ("ten", 10),
     ];
     for (word, n) in word_numbers {
         if text.contains(word) {
@@ -1803,9 +1822,31 @@ fn infer_granularity(text: &str) -> TemporalGranularity {
     }
 
     // Check for month-level patterns
-    let months = ["january", "february", "march", "april", "may", "june",
-                  "july", "august", "september", "october", "november", "december",
-                  "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    let months = [
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+        "jan",
+        "feb",
+        "mar",
+        "apr",
+        "jun",
+        "jul",
+        "aug",
+        "sep",
+        "oct",
+        "nov",
+        "dec",
+    ];
     let text_lower = text.to_lowercase();
 
     for month in months {
@@ -1827,8 +1868,11 @@ fn infer_granularity(text: &str) -> TemporalGranularity {
     }
 
     // Check for quarter
-    if text_lower.contains("q1") || text_lower.contains("q2") ||
-       text_lower.contains("q3") || text_lower.contains("q4") {
+    if text_lower.contains("q1")
+        || text_lower.contains("q2")
+        || text_lower.contains("q3")
+        || text_lower.contains("q4")
+    {
         return TemporalGranularity::Quarter;
     }
 
@@ -1839,7 +1883,12 @@ fn infer_granularity(text: &str) -> TemporalGranularity {
 
     // Check for decade (e.g., "1990s", "the 90s")
     if text_lower.contains("'s") || text_lower.ends_with("0s") {
-        if let Ok(decade) = text.chars().filter(|c| c.is_ascii_digit()).collect::<String>().parse::<u32>() {
+        if let Ok(decade) = text
+            .chars()
+            .filter(|c| c.is_ascii_digit())
+            .collect::<String>()
+            .parse::<u32>()
+        {
             if decade < 100 || (1900..=2100).contains(&decade) {
                 return TemporalGranularity::Decade;
             }
@@ -1859,7 +1908,10 @@ fn infer_granularity(text: &str) -> TemporalGranularity {
     TemporalGranularity::Unknown
 }
 
-fn granularity_to_range(dt: &DateTime<Utc>, granularity: TemporalGranularity) -> (DateTime<Utc>, DateTime<Utc>) {
+fn granularity_to_range(
+    dt: &DateTime<Utc>,
+    granularity: TemporalGranularity,
+) -> (DateTime<Utc>, DateTime<Utc>) {
     use chrono::Datelike;
 
     let date = dt.date_naive();
@@ -1867,16 +1919,28 @@ fn granularity_to_range(dt: &DateTime<Utc>, granularity: TemporalGranularity) ->
     match granularity {
         TemporalGranularity::Instant => (*dt, *dt),
         TemporalGranularity::Day => {
-            let start = date.and_hms_opt(0, 0, 0).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
-            let end = date.and_hms_opt(23, 59, 59).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
+            let start = date
+                .and_hms_opt(0, 0, 0)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
+            let end = date
+                .and_hms_opt(23, 59, 59)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
             (start, end)
         }
         TemporalGranularity::Week => {
             let weekday = date.weekday().num_days_from_monday();
             let start_date = date - Duration::days(i64::from(weekday));
             let end_date = start_date + Duration::days(6);
-            let start = start_date.and_hms_opt(0, 0, 0).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
-            let end = end_date.and_hms_opt(23, 59, 59).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
+            let start = start_date
+                .and_hms_opt(0, 0, 0)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
+            let end = end_date
+                .and_hms_opt(23, 59, 59)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
             (start, end)
         }
         TemporalGranularity::Month => {
@@ -1884,10 +1948,17 @@ fn granularity_to_range(dt: &DateTime<Utc>, granularity: TemporalGranularity) ->
             let end_date = if date.month() == 12 {
                 NaiveDate::from_ymd_opt(date.year() + 1, 1, 1).unwrap_or(date) - Duration::days(1)
             } else {
-                NaiveDate::from_ymd_opt(date.year(), date.month() + 1, 1).unwrap_or(date) - Duration::days(1)
+                NaiveDate::from_ymd_opt(date.year(), date.month() + 1, 1).unwrap_or(date)
+                    - Duration::days(1)
             };
-            let start = start_date.and_hms_opt(0, 0, 0).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
-            let end = end_date.and_hms_opt(23, 59, 59).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
+            let start = start_date
+                .and_hms_opt(0, 0, 0)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
+            let end = end_date
+                .and_hms_opt(23, 59, 59)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
             (start, end)
         }
         TemporalGranularity::Quarter => {
@@ -1898,33 +1969,58 @@ fn granularity_to_range(dt: &DateTime<Utc>, granularity: TemporalGranularity) ->
             let end_date = if end_month == 12 {
                 NaiveDate::from_ymd_opt(date.year(), 12, 31).unwrap_or(date)
             } else {
-                NaiveDate::from_ymd_opt(date.year(), end_month + 1, 1).unwrap_or(date) - Duration::days(1)
+                NaiveDate::from_ymd_opt(date.year(), end_month + 1, 1).unwrap_or(date)
+                    - Duration::days(1)
             };
-            let start = start_date.and_hms_opt(0, 0, 0).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
-            let end = end_date.and_hms_opt(23, 59, 59).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
+            let start = start_date
+                .and_hms_opt(0, 0, 0)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
+            let end = end_date
+                .and_hms_opt(23, 59, 59)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
             (start, end)
         }
         TemporalGranularity::Year => {
             let start_date = NaiveDate::from_ymd_opt(date.year(), 1, 1).unwrap_or(date);
             let end_date = NaiveDate::from_ymd_opt(date.year(), 12, 31).unwrap_or(date);
-            let start = start_date.and_hms_opt(0, 0, 0).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
-            let end = end_date.and_hms_opt(23, 59, 59).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
+            let start = start_date
+                .and_hms_opt(0, 0, 0)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
+            let end = end_date
+                .and_hms_opt(23, 59, 59)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
             (start, end)
         }
         TemporalGranularity::Decade => {
             let decade_start = (date.year() / 10) * 10;
             let start_date = NaiveDate::from_ymd_opt(decade_start, 1, 1).unwrap_or(date);
             let end_date = NaiveDate::from_ymd_opt(decade_start + 9, 12, 31).unwrap_or(date);
-            let start = start_date.and_hms_opt(0, 0, 0).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
-            let end = end_date.and_hms_opt(23, 59, 59).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
+            let start = start_date
+                .and_hms_opt(0, 0, 0)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
+            let end = end_date
+                .and_hms_opt(23, 59, 59)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
             (start, end)
         }
         TemporalGranularity::Century => {
             let century_start = (date.year() / 100) * 100;
             let start_date = NaiveDate::from_ymd_opt(century_start, 1, 1).unwrap_or(date);
             let end_date = NaiveDate::from_ymd_opt(century_start + 99, 12, 31).unwrap_or(date);
-            let start = start_date.and_hms_opt(0, 0, 0).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
-            let end = end_date.and_hms_opt(23, 59, 59).map(|d| Utc.from_utc_datetime(&d)).unwrap_or(*dt);
+            let start = start_date
+                .and_hms_opt(0, 0, 0)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
+            let end = end_date
+                .and_hms_opt(23, 59, 59)
+                .map(|d| Utc.from_utc_datetime(&d))
+                .unwrap_or(*dt);
             (start, end)
         }
         TemporalGranularity::Era | TemporalGranularity::Unknown => {
@@ -2138,7 +2234,10 @@ mod tests {
         let expr = parse_temporal_expression("yesterday");
         assert!(matches!(
             expr.expression_type,
-            TemporalExpressionType::Relative { offset_days: -1, .. }
+            TemporalExpressionType::Relative {
+                offset_days: -1,
+                ..
+            }
         ));
         assert!(expr.requires_context);
 
@@ -2151,7 +2250,10 @@ mod tests {
         let expr = parse_temporal_expression("3 days ago");
         assert!(matches!(
             expr.expression_type,
-            TemporalExpressionType::Relative { offset_days: -3, .. }
+            TemporalExpressionType::Relative {
+                offset_days: -3,
+                ..
+            }
         ));
     }
 
@@ -2160,19 +2262,28 @@ mod tests {
         let expr = parse_temporal_expression("recently");
         assert!(matches!(
             expr.expression_type,
-            TemporalExpressionType::Fuzzy { direction: FuzzyDirection::Past, .. }
+            TemporalExpressionType::Fuzzy {
+                direction: FuzzyDirection::Past,
+                ..
+            }
         ));
 
         let expr = parse_temporal_expression("soon");
         assert!(matches!(
             expr.expression_type,
-            TemporalExpressionType::Fuzzy { direction: FuzzyDirection::Future, .. }
+            TemporalExpressionType::Fuzzy {
+                direction: FuzzyDirection::Future,
+                ..
+            }
         ));
 
         let expr = parse_temporal_expression("sometime");
         assert!(matches!(
             expr.expression_type,
-            TemporalExpressionType::Fuzzy { direction: FuzzyDirection::Unknown, .. }
+            TemporalExpressionType::Fuzzy {
+                direction: FuzzyDirection::Unknown,
+                ..
+            }
         ));
     }
 
@@ -2209,12 +2320,18 @@ mod tests {
     #[test]
     fn test_infer_granularity() {
         assert_eq!(infer_granularity("2024-01-15"), TemporalGranularity::Day);
-        assert_eq!(infer_granularity("January 2024"), TemporalGranularity::Month);
+        assert_eq!(
+            infer_granularity("January 2024"),
+            TemporalGranularity::Month
+        );
         assert_eq!(infer_granularity("2024"), TemporalGranularity::Year);
         assert_eq!(infer_granularity("Q1 2024"), TemporalGranularity::Quarter);
         // "21st century" contains "century" but also matches decade pattern due to "21st"
         // Fix the check order in infer_granularity to prioritize explicit keywords
-        assert_eq!(infer_granularity("the 21st century"), TemporalGranularity::Century);
+        assert_eq!(
+            infer_granularity("the 21st century"),
+            TemporalGranularity::Century
+        );
         assert_eq!(infer_granularity("the 90s"), TemporalGranularity::Decade);
     }
 
@@ -2376,7 +2493,12 @@ pub mod jiff_interop {
         }
 
         /// Add an entity with jiff timestamps.
-        pub fn add(&mut self, entity: crate::Entity, from: Option<Timestamp>, until: Option<Timestamp>) {
+        pub fn add(
+            &mut self,
+            entity: crate::Entity,
+            from: Option<Timestamp>,
+            until: Option<Timestamp>,
+        ) {
             self.entities.push((entity, from, until));
         }
 
@@ -2406,7 +2528,7 @@ pub mod jiff_interop {
         pub fn within(&self, span: Span) -> Vec<&crate::Entity> {
             let now = Timestamp::now();
             let end = now.checked_add(span).unwrap_or(now);
-            
+
             self.entities
                 .iter()
                 .filter(|(_, from, until)| {
@@ -2448,12 +2570,12 @@ pub mod jiff_interop {
         if let Ok(zoned) = text.parse::<Zoned>() {
             return Some(zoned.timestamp());
         }
-        
+
         // Try parsing as a timestamp
         if let Ok(ts) = text.parse::<Timestamp>() {
             return Some(ts);
         }
-        
+
         // Try civil date parsing
         if let Ok(date) = text.parse::<jiff::civil::Date>() {
             // Convert to timestamp at midnight UTC
@@ -2462,7 +2584,7 @@ pub mod jiff_interop {
                 return Some(ts.timestamp());
             }
         }
-        
+
         None
     }
 
@@ -2476,7 +2598,7 @@ pub mod jiff_interop {
             let chrono_now = Utc::now();
             let jiff_ts = chrono_to_jiff(&chrono_now);
             let chrono_back = jiff_to_chrono(&jiff_ts);
-            
+
             // Should be within 1 second (we lose sub-second precision)
             assert!((chrono_now - chrono_back).num_seconds().abs() < 1);
         }
@@ -2484,19 +2606,19 @@ pub mod jiff_interop {
         #[test]
         fn test_jiff_tracker_query() {
             let mut tracker = JiffTemporalTracker::new();
-            
+
             let entity = Entity::new("Test", EntityType::Person, 0, 4, 0.9);
             let now = Timestamp::now();
             // Use hours instead of days (Timestamp doesn't support calendar units)
             let past = now.checked_sub(720.hours()).unwrap(); // ~30 days
-            
+
             tracker.add(entity, Some(past), Some(now));
-            
+
             // Query in the middle - should find it
             let mid = now.checked_sub(360.hours()).unwrap(); // ~15 days
             let results = tracker.at(&mid);
             assert_eq!(results.len(), 1);
-            
+
             // Query in the future - should not find it
             let future = now.checked_add(360.hours()).unwrap();
             let results = tracker.at(&future);
@@ -2507,7 +2629,7 @@ pub mod jiff_interop {
         fn test_parse_date_jiff() {
             // ISO 8601
             assert!(parse_date_jiff("2024-01-15").is_some());
-            
+
             // With time
             assert!(parse_date_jiff("2024-01-15T10:30:00Z").is_some());
         }

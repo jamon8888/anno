@@ -304,8 +304,7 @@ impl DocumentConverter {
             return self.run_pdftotext_file(path);
         }
 
-        let content = std::fs::read(path)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
+        let content = std::fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
         self.convert(&content, format)
     }
 
@@ -494,11 +493,20 @@ mod tests {
 
     #[test]
     fn test_format_detection() {
-        assert_eq!(DocumentFormat::from_extension("txt"), DocumentFormat::PlainText);
+        assert_eq!(
+            DocumentFormat::from_extension("txt"),
+            DocumentFormat::PlainText
+        );
         assert_eq!(DocumentFormat::from_extension("html"), DocumentFormat::Html);
-        assert_eq!(DocumentFormat::from_extension("md"), DocumentFormat::Markdown);
+        assert_eq!(
+            DocumentFormat::from_extension("md"),
+            DocumentFormat::Markdown
+        );
         assert_eq!(DocumentFormat::from_extension("docx"), DocumentFormat::Docx);
-        assert_eq!(DocumentFormat::from_extension("xyz"), DocumentFormat::Unknown);
+        assert_eq!(
+            DocumentFormat::from_extension("xyz"),
+            DocumentFormat::Unknown
+        );
     }
 
     #[test]
@@ -524,4 +532,3 @@ mod tests {
         let _ = converter.is_available();
     }
 }
-

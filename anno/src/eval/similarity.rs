@@ -117,15 +117,15 @@ impl EntityEmbedding {
 #[must_use]
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     assert_eq!(a.len(), b.len(), "Vectors must have same dimension");
-    
+
     let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
     let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    
+
     if norm_a == 0.0 || norm_b == 0.0 {
         return 0.0;
     }
-    
+
     dot / (norm_a * norm_b)
 }
 
@@ -133,7 +133,7 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 #[must_use]
 pub fn l2_distance(a: &[f32], b: &[f32]) -> f32 {
     assert_eq!(a.len(), b.len(), "Vectors must have same dimension");
-    
+
     a.iter()
         .zip(b.iter())
         .map(|(x, y)| (x - y).powi(2))
@@ -145,7 +145,7 @@ pub fn l2_distance(a: &[f32], b: &[f32]) -> f32 {
 #[must_use]
 pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
     assert_eq!(a.len(), b.len(), "Vectors must have same dimension");
-    
+
     a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
@@ -166,21 +166,21 @@ pub fn average_embeddings(embeddings: &[Vec<f32>]) -> Vec<f32> {
     if embeddings.is_empty() {
         return Vec::new();
     }
-    
+
     let dim = embeddings[0].len();
     let mut result = vec![0.0; dim];
-    
+
     for emb in embeddings {
         for (i, v) in emb.iter().enumerate() {
             result[i] += v;
         }
     }
-    
+
     let n = embeddings.len() as f32;
     for v in &mut result {
         *v /= n;
     }
-    
+
     result
 }
 
@@ -189,8 +189,7 @@ pub fn average_embeddings(embeddings: &[Vec<f32>]) -> Vec<f32> {
 // =============================================================================
 
 /// Distance metric for similarity search.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum DistanceMetric {
     /// Cosine similarity (higher = more similar)
     #[default]
@@ -200,7 +199,6 @@ pub enum DistanceMetric {
     /// Dot product (higher = more similar)
     DotProduct,
 }
-
 
 /// Result of a similarity search.
 #[derive(Debug, Clone)]
@@ -236,7 +234,7 @@ impl SimilarityIndex {
             .enumerate()
             .map(|(i, e)| (e.id.clone(), i))
             .collect();
-            
+
         Self {
             embeddings,
             id_to_idx,
@@ -357,19 +355,24 @@ impl MentionContext {
     pub fn from_text(text: &str, start: usize, end: usize, context_window: usize) -> Self {
         let chars: Vec<char> = text.chars().collect();
         let text_len = chars.len();
-        
+
         let ctx_start = start.saturating_sub(context_window);
         let ctx_end = (end + context_window).min(text_len);
-        
+
         let left: String = chars[ctx_start..start].iter().collect();
         let mention: String = chars[start..end].iter().collect();
         let right: String = chars[end..ctx_end].iter().collect();
-        
+
         Self {
             mention,
             left_context: left.clone(),
             right_context: right.clone(),
-            sentence: format!("{}{}{}", left, chars[start..end].iter().collect::<String>(), right),
+            sentence: format!(
+                "{}{}{}",
+                left,
+                chars[start..end].iter().collect::<String>(),
+                right
+            ),
         }
     }
 }
@@ -395,17 +398,17 @@ pub struct MentionEntitySimilarity {
 #[must_use]
 pub fn char_jaccard(a: &str, b: &str) -> f32 {
     use std::collections::HashSet;
-    
+
     let chars_a: HashSet<char> = a.to_lowercase().chars().collect();
     let chars_b: HashSet<char> = b.to_lowercase().chars().collect();
-    
+
     if chars_a.is_empty() && chars_b.is_empty() {
         return 1.0;
     }
-    
+
     let intersection = chars_a.intersection(&chars_b).count();
     let union = chars_a.union(&chars_b).count();
-    
+
     intersection as f32 / union as f32
 }
 
@@ -452,7 +455,7 @@ pub fn cluster_embeddings(
         for (i, emb) in index.embeddings.iter().enumerate() {
             let mut best_cluster = 0;
             let mut best_sim = f32::NEG_INFINITY;
-            
+
             for (c, centroid) in centroids.iter().enumerate() {
                 let sim = cosine_similarity(&emb.embedding, centroid);
                 if sim > best_sim {
@@ -496,7 +499,9 @@ pub fn cluster_embeddings(
         .collect();
 
     for (i, &cluster) in assignments.iter().enumerate() {
-        clusters[cluster].entity_ids.push(index.embeddings[i].id.clone());
+        clusters[cluster]
+            .entity_ids
+            .push(index.embeddings[i].id.clone());
     }
 
     // Compute cohesion
@@ -504,14 +509,14 @@ pub fn cluster_embeddings(
         if cluster.entity_ids.is_empty() {
             continue;
         }
-        
+
         let sims: Vec<f32> = cluster
             .entity_ids
             .iter()
             .filter_map(|id| index.get(id))
             .map(|e| cosine_similarity(&e.embedding, &cluster.centroid))
             .collect();
-            
+
         cluster.cohesion = if sims.is_empty() {
             0.0
         } else {
@@ -563,7 +568,7 @@ mod tests {
         ];
 
         let index = SimilarityIndex::new(embeddings);
-        
+
         // Find similar to Einstein-like vector
         let results = index.find_similar(&vec![1.0, 0.0, 0.0], 2);
         assert_eq!(results.len(), 2);
@@ -581,7 +586,7 @@ mod tests {
 
         let index = SimilarityIndex::new(embeddings);
         let results = index.find_similar_to("Q1", 2);
-        
+
         // Should not include Q1 itself
         assert!(!results.iter().any(|r| r.id == "Q1"));
         assert_eq!(results[0].id, "Q2"); // B is most similar to A
@@ -612,7 +617,7 @@ mod tests {
 
         let index = SimilarityIndex::new(embeddings);
         let clusters = cluster_embeddings(&index, 2, 10);
-        
+
         assert_eq!(clusters.len(), 2);
         // Q1 and Q2 should be in one cluster, Q3 and Q4 in another
     }
@@ -627,13 +632,9 @@ mod tests {
 
     #[test]
     fn test_average_embeddings() {
-        let embeddings = vec![
-            vec![1.0, 0.0],
-            vec![0.0, 1.0],
-        ];
+        let embeddings = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
         let avg = average_embeddings(&embeddings);
         assert!((avg[0] - 0.5).abs() < 1e-6);
         assert!((avg[1] - 0.5).abs() < 1e-6);
     }
 }
-

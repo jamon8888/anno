@@ -175,8 +175,7 @@ fn import_file(
 
 /// Import from brat standoff format
 fn import_brat(input: &PathBuf, include_text: bool) -> Result<Vec<ImportedAnnotation>, String> {
-    let content = fs::read_to_string(input)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = fs::read_to_string(input).map_err(|e| format!("Failed to read file: {}", e))?;
 
     // Try to read corresponding .txt file for entity text
     let txt_path = input.with_extension("txt");
@@ -219,7 +218,7 @@ fn import_brat(input: &PathBuf, include_text: bool) -> Result<Vec<ImportedAnnota
                     let entity_type = type_span[0].to_string();
                     let start: usize = type_span[1].parse().map_err(|_| "Invalid start offset")?;
                     let end: usize = type_span[2].parse().map_err(|_| "Invalid end offset")?;
-                    
+
                     // Get text from annotation or from txt file
                     let text = if parts.len() > 2 && !parts[2].is_empty() {
                         parts[2].to_string()
@@ -247,8 +246,7 @@ fn import_brat(input: &PathBuf, include_text: bool) -> Result<Vec<ImportedAnnota
 
 /// Import from CoNLL IOB format
 fn import_conll(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
-    let content = fs::read_to_string(input)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = fs::read_to_string(input).map_err(|e| format!("Failed to read file: {}", e))?;
 
     let mut annotations = Vec::new();
     let mut current_entity: Option<(String, String, usize)> = None; // (type, text, start)
@@ -318,8 +316,7 @@ fn import_conll(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
 
 /// Import from JSONL format
 fn import_jsonl(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
-    let content = fs::read_to_string(input)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = fs::read_to_string(input).map_err(|e| format!("Failed to read file: {}", e))?;
 
     let mut annotations = Vec::new();
 
@@ -328,19 +325,21 @@ fn import_jsonl(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
             continue;
         }
 
-        let obj: serde_json::Value = serde_json::from_str(line)
-            .map_err(|e| format!("Invalid JSON: {}", e))?;
+        let obj: serde_json::Value =
+            serde_json::from_str(line).map_err(|e| format!("Invalid JSON: {}", e))?;
 
         annotations.push(ImportedAnnotation {
             text: obj["text"].as_str().unwrap_or("").to_string(),
             entity_type: obj["type"].as_str().unwrap_or("").to_string(),
             start: obj["start"].as_u64().unwrap_or(0) as usize,
             end: obj["end"].as_u64().unwrap_or(0) as usize,
-            source: obj["source"].as_str().unwrap_or(&input.to_string_lossy()).to_string(),
+            source: obj["source"]
+                .as_str()
+                .unwrap_or(&input.to_string_lossy())
+                .to_string(),
             confidence: obj["confidence"].as_f64(),
         });
     }
 
     Ok(annotations)
 }
-
