@@ -3,7 +3,7 @@
 //! Tests adding, removing, merging documents, and identity management.
 
 use anno_coalesce::Resolver;
-use anno_core::{Corpus, GroundedDocument, Identity, Location, Signal, Track};
+use anno_core::{Corpus, GroundedDocument, Identity, IdentityId, Location, Signal, Track, TrackId};
 
 /// Test: Add multiple documents to corpus
 #[test]
@@ -189,9 +189,9 @@ fn test_corpus_identity_id_increment() {
     let id3 = corpus.add_identity(Identity::new(0, "Entity 3"));
 
     // IDs should be sequential
-    assert_eq!(id1, 0);
-    assert_eq!(id2, 1);
-    assert_eq!(id3, 2);
+    assert_eq!(id1, IdentityId::new(0));
+    assert_eq!(id2, IdentityId::new(1));
+    assert_eq!(id3, IdentityId::new(2));
 
     // Verify all identities exist
     assert!(corpus.identities().get(&id1).is_some());
@@ -226,7 +226,7 @@ fn test_corpus_track_ref_validation() {
     // Invalid track ref (document doesn't have that track)
     let invalid_ref = anno_core::TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 999, // Non-existent track ID
+        track_id: TrackId::new(999), // Non-existent track ID
     };
 
     // Should return error

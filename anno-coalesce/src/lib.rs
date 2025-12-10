@@ -344,8 +344,9 @@ pub use hierarchical::{
 pub use lsh::{LSHConfig, LSHItem, MinHashLSH, SimHashLSH};
 pub use resolver::{embedding_similarity, string_similarity, Resolver};
 pub use similarity::{
-    jaro_similarity, jaro_winkler_similarity, levenshtein_distance, levenshtein_similarity,
-    multilingual_similarity, normalize, Script, Similarity, SimilarityConfig,
+    is_acronym_match, jaro_similarity, jaro_winkler_similarity, levenshtein_distance,
+    levenshtein_similarity, multilingual_similarity, normalize, ChainedSynonyms, NoSynonyms,
+    Script, Similarity, SimilarityConfig, SynonymMatch, SynonymSource,
 };
 pub use streaming::{
     trigram_similarity, EntityCluster, EntityMention, StreamingConfig, StreamingResolver,

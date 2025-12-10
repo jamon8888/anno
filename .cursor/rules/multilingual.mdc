@@ -199,6 +199,38 @@ let names = [
 - Royal/noble titles: King, Sheikh, Raja, Count
 - Professional titles across cultures
 
+## Inclusive Pronoun Support
+
+Anno supports neopronouns and singular they for gender-inclusive coreference:
+
+### Supported Neopronoun Sets
+| Set | Subject | Object | Possessive | Reflexive |
+|-----|---------|--------|------------|-----------|
+| ze/hir | ze | hir | hirs | hirself |
+| xe/xem | xe | xem | xyr/xyrs | xemself |
+| ey/em (Spivak) | ey | em | eir/eirs | emself |
+| fae/faer | fae | faer | faers | faerself |
+
+### Implementation Notes
+- All neopronouns are `Number::Singular` (grammatically singular)
+- All neopronouns use `Gender::Unknown` (explicitly non-binary)
+- "themself" is singular; "themselves" is plural
+- Singular "they/them/their" uses `Number::Unknown` (ambiguous)
+
+### Test Data for Inclusive Pronouns
+```rust
+let inclusive_texts = vec![
+    "Alex uses ze/hir pronouns. Ze said hir class was great.",
+    "Jordan introduced xemself. Xe was happy to meet everyone.",
+    "The student prepared themself for the exam.",  // Singular they
+    "Sam asked em to pass eir notebook.",  // Spivak
+];
+```
+
+### Evaluation Datasets
+- **GICoref**: Gender-inclusive coreference (neopronouns, singular they)
+- **MISGENDERED**: Gender identity misrepresentation detection
+
 ## Implementation Checklist
 
 When adding new functionality:
@@ -213,6 +245,7 @@ When adding new functionality:
 - [ ] Test with polytonic Greek (U+1F00-1FFF diacritics)
 - [ ] Test with Devanagari + Vedic extensions (U+1CD0-1CFF)
 - [ ] Test with precomposed vs combining diacritics (e.g., ō vs o+macron)
+- [ ] Test with neopronouns (ze/hir, xe/xem) and singular they for coref features
 
 ## Language Detection API
 

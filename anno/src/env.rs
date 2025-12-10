@@ -203,4 +203,3 @@ KEY3='single quoted'
         assert!(!dir.as_os_str().is_empty());
     }
 }
-

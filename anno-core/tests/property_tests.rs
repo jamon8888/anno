@@ -6,6 +6,7 @@
 use anno_core::grounded::{
     Identity, IdentitySource, Location, Modality, Signal, SignalRef, Track, TrackRef,
 };
+use anno_core::{IdentityId, SignalId, TrackId};
 use proptest::prelude::*;
 
 // =============================================================================
@@ -45,7 +46,7 @@ fn arb_signal() -> impl Strategy<Value = Signal<Location>> {
         0.0f32..1.0,          // confidence
     )
         .prop_map(|(id, location, surface, label, confidence)| Signal {
-            id,
+            id: id.into(),
             location,
             surface,
             label,
@@ -335,6 +336,7 @@ proptest! {
     /// with_identity sets identity_id
     #[test]
     fn with_identity_sets_id(id in any::<u64>(), surface in "[A-Za-z]{1,20}", identity_id in any::<u64>()) {
+        let identity_id = IdentityId::new(identity_id);
         let track = Track::new(id, surface).with_identity(identity_id);
         prop_assert_eq!(track.identity_id, Some(identity_id));
     }
@@ -415,6 +417,7 @@ proptest! {
         signal_ids in prop::collection::vec(any::<u64>(), 1..10)
     ) {
         let mut track = Track::new(track_id, surface);
+        let signal_ids: Vec<SignalId> = signal_ids.into_iter().map(SignalId::new).collect();
         for (pos, sig_id) in signal_ids.iter().enumerate() {
             track.add_signal(*sig_id, pos as u32);
         }
@@ -432,6 +435,7 @@ proptest! {
         surface in "[A-Za-z]{1,20}",
         identity_id in any::<u64>()
     ) {
+        let identity_id = IdentityId::new(identity_id);
         let track = Track::new(track_id, surface).with_identity(identity_id);
         prop_assert_eq!(track.identity_id, Some(identity_id));
     }
@@ -448,7 +452,7 @@ proptest! {
     ) {
         let refs: Vec<TrackRef> = track_refs
             .into_iter()
-            .map(|(doc_id, track_id)| TrackRef { doc_id, track_id })
+            .map(|(doc_id, track_id)| TrackRef { doc_id, track_id: track_id.into() })
             .collect();
 
         let mut identity = Identity::new(identity_id, name);
@@ -492,11 +496,11 @@ fn test_track_empty_after_creation() {
 #[test]
 fn test_signal_ref_equality() {
     let ref1 = SignalRef {
-        signal_id: 42,
+        signal_id: 42.into(),
         position: 5,
     };
     let ref2 = SignalRef {
-        signal_id: 42,
+        signal_id: 42.into(),
         position: 5,
     };
     assert_eq!(ref1, ref2);
@@ -506,11 +510,11 @@ fn test_signal_ref_equality() {
 fn test_track_ref_equality() {
     let ref1 = TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 42,
+        track_id: 42.into(),
     };
     let ref2 = TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 42,
+        track_id: 42.into(),
     };
     assert_eq!(ref1, ref2);
 }
@@ -526,7 +530,7 @@ fn test_identity_source_variants_all() {
     let coref = IdentitySource::CrossDocCoref {
         track_refs: vec![TrackRef {
             doc_id: "doc1".to_string(),
-            track_id: 1,
+            track_id: 1.into(),
         }],
     };
     assert!(matches!(coref, IdentitySource::CrossDocCoref { .. }));

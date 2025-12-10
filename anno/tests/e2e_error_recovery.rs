@@ -4,7 +4,7 @@
 
 use anno_coalesce::Resolver;
 use anno_core::Corpus;
-use anno_core::{GroundedDocument, Location, Signal, Track};
+use anno_core::{GroundedDocument, Location, Signal, Track, TrackId};
 
 /// E2E: Handle empty documents gracefully
 #[test]
@@ -391,7 +391,7 @@ fn e2e_merge_nonexistent_tracks() {
     let mut doc = GroundedDocument::new("merge_nonexistent_doc", "Test.");
 
     // Try to merge tracks that don't exist
-    let merged_id = doc.merge_tracks(&[999, 1000]);
+    let merged_id = doc.merge_tracks(&[TrackId::new(999), TrackId::new(1000)]);
 
     // Should handle gracefully (return None or panic)
     // Implementation-dependent

@@ -160,9 +160,9 @@ pub struct CrossDocCluster {
 impl CrossDocCluster {
     /// Create a new cluster.
     #[must_use]
-    pub fn new(id: u64, canonical_name: &str) -> Self {
+    pub fn new(id: impl Into<u64>, canonical_name: &str) -> Self {
         Self {
-            id,
+            id: id.into(),
             canonical_name: canonical_name.to_string(),
             entity_type: None,
             documents: Vec::new(),
@@ -240,7 +240,7 @@ impl CrossDocCluster {
 impl From<&CrossDocCluster> for anno_core::Identity {
     fn from(cluster: &CrossDocCluster) -> Self {
         Self {
-            id: cluster.id,
+            id: anno_core::IdentityId::new(cluster.id),
             canonical_name: cluster.canonical_name.clone(),
             entity_type: cluster
                 .entity_type
@@ -1329,7 +1329,7 @@ mod tests {
 
     #[test]
     fn test_cross_doc_cluster_methods() {
-        let mut cluster = CrossDocCluster::new(1, "Test Entity");
+        let mut cluster = CrossDocCluster::new(1u64, "Test Entity");
         cluster.add_mention("doc1", 0);
         cluster.add_mention("doc2", 1);
         cluster.add_mention("doc1", 2); // Same doc, different mention

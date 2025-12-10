@@ -198,100 +198,12 @@ impl MentionContext {
 // Chain/Track-Level Features
 // =============================================================================
 
-/// Mention type classification for chain analysis.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MentionType {
-    /// Named entity: "Barack Obama", "Apple Inc."
-    Named,
-    /// Nominal: "the president", "the company"
-    Nominal,
-    /// Pronominal: "he", "she", "it", "they"
-    Pronominal,
-}
-
-impl MentionType {
-    /// Classify a mention based on surface form heuristics.
-    pub fn classify(text: &str) -> Self {
-        let lower = text.to_lowercase();
-        let trimmed = lower.trim();
-
-        // Check for pronouns
-        if is_pronoun(trimmed) {
-            return Self::Pronominal;
-        }
-
-        let words: Vec<&str> = trimmed.split_whitespace().collect();
-        if words.is_empty() {
-            return Self::Nominal;
-        }
-
-        // Starts with determiner -> nominal
-        let first = words[0];
-        if matches!(
-            first,
-            "the" | "a" | "an" | "this" | "that" | "these" | "those"
-        ) {
-            return Self::Nominal;
-        }
-
-        // Check capitalization pattern (majority capitalized -> named)
-        let cap_count = text
-            .split_whitespace()
-            .filter(|w| w.chars().next().map(|c| c.is_uppercase()).unwrap_or(false))
-            .count();
-
-        if cap_count > words.len() / 2 {
-            Self::Named
-        } else {
-            Self::Nominal
-        }
-    }
-}
-
-/// Check if text is a pronoun.
-fn is_pronoun(s: &str) -> bool {
-    matches!(
-        s,
-        "he" | "she"
-            | "it"
-            | "they"
-            | "him"
-            | "her"
-            | "them"
-            | "his"
-            | "hers"
-            | "its"
-            | "their"
-            | "theirs"
-            | "i"
-            | "me"
-            | "my"
-            | "mine"
-            | "we"
-            | "us"
-            | "our"
-            | "ours"
-            | "you"
-            | "your"
-            | "yours"
-            | "this"
-            | "that"
-            | "these"
-            | "those"
-            | "who"
-            | "whom"
-            | "whose"
-            | "which"
-            | "what"
-            | "himself"
-            | "herself"
-            | "itself"
-            | "themselves"
-            | "myself"
-            | "yourself"
-            | "ourselves"
-    )
-}
+// Re-export the canonical MentionType from anno_core.
+// This unifies the type system across the anno ecosystem.
+//
+// Note: The canonical type uses `Proper` instead of `Named`. For compatibility,
+// use `MentionType::NAMED` constant or `MentionType::is_named()` method.
+pub use anno_core::types::MentionType;
 
 /// Aggregate features for a coreference chain (group of mentions referring to same entity).
 #[derive(Debug, Clone)]
@@ -359,7 +271,7 @@ impl ChainFeatures {
         // Find canonical form (longest named mention, or first)
         let canonical_form = mentions
             .iter()
-            .filter(|m| MentionType::classify(&m.text) == MentionType::Named)
+            .filter(|m| MentionType::classify(&m.text) == MentionType::Proper)
             .max_by_key(|m| m.text.len())
             .map(|m| m.text.clone())
             .unwrap_or_else(|| mentions[0].text.clone());
@@ -380,9 +292,11 @@ impl ChainFeatures {
         let mut pronominal_count = 0;
         for m in mentions {
             match MentionType::classify(&m.text) {
-                MentionType::Named => named_count += 1,
+                MentionType::Proper => named_count += 1,
                 MentionType::Nominal => nominal_count += 1,
                 MentionType::Pronominal => pronominal_count += 1,
+                MentionType::Zero => pronominal_count += 1, // Treat zeros like pronouns
+                MentionType::Unknown => nominal_count += 1, // Conservative default
             }
         }
         let total = mentions.len();
@@ -425,7 +339,7 @@ impl ChainFeatures {
         // Entity type from first named mention or first mention
         let entity_type = mentions
             .iter()
-            .find(|m| MentionType::classify(&m.text) == MentionType::Named)
+            .find(|m| MentionType::classify(&m.text) == MentionType::Proper)
             .or_else(|| mentions.first())
             .map(|m| m.entity_type.as_label().to_string());
 
@@ -489,6 +403,12 @@ impl ChainFeatures {
     /// Is this chain mostly pronominal?
     pub fn is_mostly_pronominal(&self) -> bool {
         self.pronoun_ratio > 0.5
+    }
+
+    /// Number of unique surface form variations.
+    #[must_use]
+    pub fn variation_count(&self) -> usize {
+        self.variations.len()
     }
 }
 
@@ -983,9 +903,9 @@ mod tests {
     fn test_mention_type_classification() {
         assert_eq!(MentionType::classify("he"), MentionType::Pronominal);
         assert_eq!(MentionType::classify("She"), MentionType::Pronominal);
-        assert_eq!(MentionType::classify("Barack Obama"), MentionType::Named);
+        assert_eq!(MentionType::classify("Barack Obama"), MentionType::Proper);
         assert_eq!(MentionType::classify("the president"), MentionType::Nominal);
-        assert_eq!(MentionType::classify("Apple Inc."), MentionType::Named);
+        assert_eq!(MentionType::classify("Apple Inc."), MentionType::Proper);
     }
 
     #[test]

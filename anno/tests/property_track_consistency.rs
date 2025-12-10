@@ -3,7 +3,7 @@
 //! Ensures tracks maintain invariants: all signals from same document,
 //! canonical_surface matches at least one signal, etc.
 
-use anno_core::{GroundedDocument, Location, Signal, Track};
+use anno_core::{GroundedDocument, Location, Signal, Track, TrackId};
 
 /// Property: All signals in a track must be from the same document
 #[test]
@@ -18,7 +18,7 @@ fn prop_track_signals_same_doc() {
 
     // Create track with both signals
     let track = Track {
-        id: 0, // Will be reassigned by add_track
+        id: TrackId::new(0), // Will be reassigned by add_track
         signals: vec![
             anno_core::SignalRef {
                 signal_id: sig1_id,
@@ -58,7 +58,7 @@ fn prop_track_canonical_matches_signal() {
     let sig1_id = doc.add_signal(sig1);
 
     let track = Track {
-        id: 0, // Will be reassigned by add_track
+        id: TrackId::new(0), // Will be reassigned by add_track
         signals: vec![anno_core::SignalRef {
             signal_id: sig1_id,
             position: 0,
@@ -101,7 +101,7 @@ fn prop_track_type_matches_signals() {
     let sig1_id = doc.add_signal(sig1);
 
     let track = Track {
-        id: 0, // Will be reassigned by add_track
+        id: TrackId::new(0), // Will be reassigned by add_track
         signals: vec![anno_core::SignalRef {
             signal_id: sig1_id,
             position: 0,

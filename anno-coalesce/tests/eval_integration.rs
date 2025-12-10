@@ -11,7 +11,7 @@ use anno_coalesce::{
     hierarchical::{hierarchical_from_similarity, Linkage},
     streaming::{StreamingConfig, StreamingResolver},
 };
-use anno_core::{Identity, IdentitySource, TrackRef};
+use anno_core::{Identity, IdentityId, IdentitySource, TrackId, TrackRef};
 
 /// Simulate a simple cross-document scenario:
 /// - Doc1: "Jensen Huang" and "Nvidia"
@@ -119,7 +119,7 @@ fn test_resolver_creates_identities() {
 
     // Verify Identity can be created with CrossDocCoref source
     let identity = Identity {
-        id: 1,
+        id: IdentityId::new(1),
         canonical_name: "Test Entity".to_string(),
         entity_type: Some("Person".to_string()),
         kb_id: None,
@@ -133,11 +133,11 @@ fn test_resolver_creates_identities() {
             track_refs: vec![
                 TrackRef {
                     doc_id: "doc1".to_string(),
-                    track_id: 0,
+                    track_id: TrackId::new(0),
                 },
                 TrackRef {
                     doc_id: "doc2".to_string(),
-                    track_id: 1,
+                    track_id: TrackId::new(1),
                 },
             ],
         }),

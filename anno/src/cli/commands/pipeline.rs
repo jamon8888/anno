@@ -8,7 +8,7 @@ use super::super::parser::{ModelBackend, OutputFormat};
 use super::super::utils::{link_tracks_to_kb, resolve_coreference};
 #[cfg(feature = "eval-advanced")]
 use anno_core::{Entity, EntityType};
-use anno_core::{GroundedDocument, Location, Signal};
+use anno_core::{GroundedDocument, Location, Signal, SignalId};
 
 /// Unified pipeline command
 #[derive(Parser, Debug)]
@@ -146,11 +146,11 @@ pub fn run(args: PipelineArgs) -> Result<(), String> {
 
         // Build GroundedDocument
         let mut doc = GroundedDocument::new(doc_id, text);
-        let mut signal_ids: Vec<u64> = Vec::new();
+        let mut signal_ids: Vec<SignalId> = Vec::new();
 
         for e in &entities {
             let signal = Signal::new(
-                0,
+                SignalId::ZERO,
                 Location::text(e.start, e.end),
                 &e.text,
                 e.entity_type.as_label(),

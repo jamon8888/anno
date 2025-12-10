@@ -196,6 +196,42 @@ pub enum EvidenceSource {
         /// Whether the cluster has temporal bounds
         cluster_valid: bool,
     },
+
+    /// Acronym expansion match.
+    ///
+    /// Detects when one string is the acronym of another:
+    /// - "WHO" ↔ "World Health Organization"
+    /// - "MRSA" ↔ "Methicillin-resistant Staphylococcus aureus"
+    ///
+    /// This is language-agnostic: the algorithm checks if the short form
+    /// consists of the first letters of words in the long form.
+    Acronym {
+        /// The short form (potential acronym)
+        short_form: String,
+        /// The long form (potential expansion)
+        long_form: String,
+        /// Whether the match was successful
+        matched: bool,
+    },
+
+    /// Synonym relationship between entities.
+    ///
+    /// Evidence that two surface forms are synonymous, based on:
+    /// - Knowledge base lookups (UMLS, WordNet, Wikidata aliases)
+    /// - Custom synonym tables
+    /// - Cross-lingual equivalent detection
+    ///
+    /// Unlike string similarity, synonyms may have very different surface forms:
+    /// - "heart attack" ↔ "myocardial infarction"
+    /// - "USA" ↔ "United States" ↔ "America"
+    Synonym {
+        /// Source of the synonym relationship (e.g., "umls", "wordnet", "custom")
+        source: String,
+        /// Confidence in the synonym relationship [0, 1]
+        confidence: f32,
+        /// The canonical form if available (e.g., UMLS CUI)
+        canonical_id: Option<String>,
+    },
 }
 
 impl EvidenceSource {
@@ -238,6 +274,19 @@ impl EvidenceSource {
                 // 1.0 (consistent) → +1.0, 0.0 (anachronistic) → -1.0, 0.5 (uncertain) → 0.0
                 2.0 * score - 1.0
             }
+            Self::Acronym { matched, .. } => {
+                // Strong positive if matched, neutral otherwise
+                if *matched {
+                    0.8 // High confidence when acronym matches
+                } else {
+                    0.0
+                }
+            }
+            Self::Synonym { confidence, .. } => {
+                // Synonyms are strong positive evidence
+                // Map [0, 1] confidence to [0, 1] contribution
+                *confidence
+            }
         }
     }
 
@@ -252,6 +301,8 @@ impl EvidenceSource {
             Self::NegativeEvidence { reason, .. } => reason,
             Self::Custom { source, .. } => source,
             Self::TemporalConsistency { .. } => "temporal_consistency",
+            Self::Acronym { .. } => "acronym",
+            Self::Synonym { source, .. } => source,
         }
     }
 }

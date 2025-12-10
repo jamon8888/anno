@@ -188,7 +188,7 @@ pub struct EntityMention {
     /// Optional embedding vector
     pub embedding: Option<Vec<f32>>,
     /// Track ID within the document (links to intra-doc coref)
-    pub track_id: Option<u64>,
+    pub track_id: Option<anno_core::TrackId>,
     /// Timestamp when mention was observed (for temporal tracking)
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
     /// Valid from date (for diachronic entity tracking, e.g., "USSR" valid until 1991)
@@ -247,7 +247,7 @@ impl EntityMention {
     }
 
     /// Set track ID.
-    pub fn with_track_id(mut self, track_id: u64) -> Self {
+    pub fn with_track_id(mut self, track_id: anno_core::TrackId) -> Self {
         self.track_id = Some(track_id);
         self
     }
@@ -257,7 +257,7 @@ impl EntityMention {
 #[derive(Debug, Clone)]
 pub struct EntityCluster {
     /// Cluster ID
-    pub id: u64,
+    pub id: anno_core::IdentityId,
     /// Canonical name (best representative)
     pub canonical_name: String,
     /// Entity type (consensus)
@@ -272,7 +272,7 @@ pub struct EntityCluster {
 
 impl EntityCluster {
     /// Create a new cluster from a single mention.
-    fn from_mention(id: u64, mention: EntityMention) -> Self {
+    fn from_mention(id: anno_core::IdentityId, mention: EntityMention) -> Self {
         let canonical_name = mention.canonical_surface.clone();
         let entity_type = mention.entity_type.clone();
         let centroid = mention.embedding.clone();
@@ -390,13 +390,13 @@ impl EntityCluster {
 pub struct StreamingResolver {
     config: StreamingConfig,
     /// All clusters, keyed by cluster ID
-    clusters: HashMap<u64, EntityCluster>,
+    clusters: HashMap<anno_core::IdentityId, EntityCluster>,
     /// LSH index for scalable similarity search
     lsh: Option<MinHashLSH>,
     /// Mapping from LSH item index to cluster ID
-    lsh_to_cluster: HashMap<usize, u64>,
+    lsh_to_cluster: HashMap<usize, anno_core::IdentityId>,
     /// Next cluster ID
-    next_id: u64,
+    next_id: anno_core::IdentityId,
     /// Total mentions processed
     mention_count: usize,
 }
@@ -415,7 +415,7 @@ impl StreamingResolver {
             clusters: HashMap::new(),
             lsh,
             lsh_to_cluster: HashMap::new(),
-            next_id: 0,
+            next_id: anno_core::IdentityId::ZERO,
             mention_count: 0,
         }
     }
@@ -424,7 +424,7 @@ impl StreamingResolver {
     ///
     /// This is the main entry point for streaming entity resolution.
     /// Returns the cluster ID that the mention was added to.
-    pub fn add_mention(&mut self, mention: EntityMention) -> u64 {
+    pub fn add_mention(&mut self, mention: EntityMention) -> anno_core::IdentityId {
         self.mention_count += 1;
 
         // Find best matching cluster
@@ -460,7 +460,7 @@ impl StreamingResolver {
         doc_id: impl Into<String>,
         surface: impl Into<String>,
         entity_type: Option<String>,
-    ) -> u64 {
+    ) -> anno_core::IdentityId {
         let mut mention = EntityMention::new(doc_id, surface);
         if let Some(et) = entity_type {
             mention = mention.with_type(et);
@@ -474,7 +474,7 @@ impl StreamingResolver {
     }
 
     /// Get a cluster by ID.
-    pub fn get_cluster(&self, id: u64) -> Option<&EntityCluster> {
+    pub fn get_cluster(&self, id: anno_core::IdentityId) -> Option<&EntityCluster> {
         self.clusters.get(&id)
     }
 
@@ -490,9 +490,11 @@ impl StreamingResolver {
 
     /// Manually trigger cluster merging.
     pub fn merge_clusters(&mut self) {
+        use anno_core::IdentityId;
+
         // Find pairs of similar clusters
-        let cluster_ids: Vec<u64> = self.clusters.keys().copied().collect();
-        let mut to_merge: Vec<(u64, u64)> = Vec::new();
+        let cluster_ids: Vec<IdentityId> = self.clusters.keys().copied().collect();
+        let mut to_merge: Vec<(IdentityId, IdentityId)> = Vec::new();
 
         for i in 0..cluster_ids.len() {
             for j in (i + 1)..cluster_ids.len() {
@@ -518,9 +520,12 @@ impl StreamingResolver {
         }
 
         // Merge clusters (use union-find to handle transitive merges)
-        let mut merged_into: HashMap<u64, u64> = HashMap::new();
+        let mut merged_into: HashMap<IdentityId, IdentityId> = HashMap::new();
 
-        fn find_root(merged_into: &mut HashMap<u64, u64>, id: u64) -> u64 {
+        fn find_root(
+            merged_into: &mut HashMap<IdentityId, IdentityId>,
+            id: IdentityId,
+        ) -> IdentityId {
             if let Some(&parent) = merged_into.get(&id) {
                 if parent != id {
                     let root = find_root(merged_into, parent);
@@ -540,7 +545,7 @@ impl StreamingResolver {
         }
 
         // Actually merge the clusters
-        let to_remove: Vec<u64> = merged_into
+        let to_remove: Vec<IdentityId> = merged_into
             .iter()
             .filter(|(k, v)| *k != *v)
             .map(|(k, _)| *k)
@@ -561,12 +566,12 @@ impl StreamingResolver {
     // =========================================================================
 
     /// Find the best matching cluster for a mention.
-    fn find_best_cluster(&self, mention: &EntityMention) -> Option<(u64, f32)> {
+    fn find_best_cluster(&self, mention: &EntityMention) -> Option<(anno_core::IdentityId, f32)> {
         if let Some(lsh) = &self.lsh {
             // Use LSH blocking for scalability
             let candidates = lsh.query(&mention.canonical_surface);
 
-            let mut best: Option<(u64, f32)> = None;
+            let mut best: Option<(anno_core::IdentityId, f32)> = None;
             for idx in candidates {
                 if let Some(&cluster_id) = self.lsh_to_cluster.get(&idx) {
                     if let Some(cluster) = self.clusters.get(&cluster_id) {
@@ -588,7 +593,7 @@ impl StreamingResolver {
             best
         } else {
             // Brute force (O(n) clusters)
-            let mut best: Option<(u64, f32)> = None;
+            let mut best: Option<(anno_core::IdentityId, f32)> = None;
 
             for (&cluster_id, cluster) in &self.clusters {
                 // Check type match
@@ -609,14 +614,14 @@ impl StreamingResolver {
     }
 
     /// Create a new cluster from a mention.
-    fn create_cluster(&mut self, mention: EntityMention) -> u64 {
+    fn create_cluster(&mut self, mention: EntityMention) -> anno_core::IdentityId {
         let id = self.next_id;
         self.next_id += 1;
 
         // Add to LSH if enabled
         if let Some(lsh) = &mut self.lsh {
             let lsh_idx = lsh.len();
-            lsh.insert_text(id.to_string(), &mention.canonical_surface);
+            lsh.insert_text(id.get().to_string(), &mention.canonical_surface);
             self.lsh_to_cluster.insert(lsh_idx, id);
         }
 
@@ -821,7 +826,7 @@ impl StreamingResolver {
     pub fn explain_similarity(
         &self,
         mention: &EntityMention,
-        cluster_id: u64,
+        cluster_id: anno_core::IdentityId,
     ) -> Option<PairEvidence> {
         let cluster = self.clusters.get(&cluster_id)?;
         Some(self.mention_cluster_evidence(mention, cluster))
@@ -1053,7 +1058,11 @@ impl StreamingResolver {
     ///
     /// Convenience method that extracts relevant information from an anno_core::Track
     /// and adds it to the resolver.
-    pub fn add_track(&mut self, doc_id: impl Into<String>, track: &anno_core::Track) -> u64 {
+    pub fn add_track(
+        &mut self,
+        doc_id: impl Into<String>,
+        track: &anno_core::Track,
+    ) -> anno_core::IdentityId {
         let mention = EntityMention::from_track(doc_id, track);
         self.add_mention(mention)
     }
@@ -1155,7 +1164,7 @@ mod tests {
         assert_eq!(mention.doc_id, "doc1");
         assert_eq!(mention.canonical_surface, "Barack Obama");
         assert_eq!(mention.entity_type, Some("Person".to_string()));
-        assert_eq!(mention.track_id, Some(42));
+        assert_eq!(mention.track_id, Some(anno_core::TrackId::new(42)));
     }
 
     #[test]

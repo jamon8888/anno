@@ -94,6 +94,7 @@
 //! - Campos et al. (2018): YAKE! Collection-independent keyword extraction
 
 use crate::features::{ChainFeatures, EntityFeatureExtractor, ExtractorConfig, MentionType};
+use crate::pagerank::{pagerank, PageRankConfig};
 use crate::Entity;
 use std::collections::HashMap;
 
@@ -199,7 +200,9 @@ impl TextRankSalience {
                 // Distance between entity spans
                 let dist = if e1.end <= e2.start {
                     e2.start - e1.end
-                } else { e1.start.saturating_sub(e2.end) };
+                } else {
+                    e1.start.saturating_sub(e2.end)
+                };
 
                 if dist <= self.window_size {
                     // Weight by inverse distance (closer = stronger)
@@ -213,49 +216,14 @@ impl TextRankSalience {
         adjacency
     }
 
-    /// Run PageRank on adjacency matrix.
-    fn pagerank(&self, adjacency: &[Vec<f64>]) -> Vec<f64> {
-        let n = adjacency.len();
-        if n == 0 {
-            return vec![];
-        }
-
-        // Initialize scores uniformly
-        let mut scores = vec![1.0 / n as f64; n];
-
-        // Compute out-degree for each node
-        let out_degree: Vec<f64> = adjacency
-            .iter()
-            .map(|row| row.iter().sum::<f64>().max(1.0))
-            .collect();
-
-        // Iterate until convergence
-        for _ in 0..self.iterations {
-            let mut new_scores = vec![(1.0 - self.damping) / n as f64; n];
-
-            for i in 0..n {
-                for j in 0..n {
-                    if adjacency[j][i] > 0.0 {
-                        new_scores[i] += self.damping * scores[j] * adjacency[j][i] / out_degree[j];
-                    }
-                }
-            }
-
-            // Check convergence
-            let diff: f64 = scores
-                .iter()
-                .zip(new_scores.iter())
-                .map(|(a, b)| (a - b).abs())
-                .sum();
-
-            scores = new_scores;
-
-            if diff < self.epsilon {
-                break;
-            }
-        }
-
-        scores
+    /// Run PageRank on adjacency matrix using shared implementation.
+    fn run_pagerank(&self, adjacency: &[Vec<f64>]) -> Vec<f64> {
+        let config = PageRankConfig {
+            damping: self.damping,
+            max_iterations: self.iterations,
+            epsilon: self.epsilon,
+        };
+        pagerank(adjacency, &config)
     }
 }
 
@@ -269,7 +237,7 @@ impl EntityRanker for TextRankSalience {
         let adjacency = self.build_graph(entities);
 
         // Run PageRank
-        let scores = self.pagerank(&adjacency);
+        let scores = self.run_pagerank(&adjacency);
 
         // Combine entities with scores and sort
         let mut ranked: Vec<(Entity, f64)> = entities
@@ -609,9 +577,7 @@ impl EntityRanker for CompositeRanker {
             }
 
             let final_score = weighted_sum / total_weight;
-            combined
-                .entry(key)
-                .or_insert((entity.clone(), final_score));
+            combined.entry(key).or_insert((entity.clone(), final_score));
         }
 
         let mut ranked: Vec<(Entity, f64)> = combined.into_values().collect();
@@ -750,7 +716,7 @@ impl EntityRanker for ChainFeatureSalience {
                 .iter()
                 .filter(|e| e.text.to_lowercase() == *key)
                 .max_by_key(|e| {
-                    let is_named = MentionType::classify(&e.text) == MentionType::Named;
+                    let is_named = MentionType::classify(&e.text) == MentionType::Proper;
                     (is_named as usize, e.text.len())
                 })
                 .cloned()
@@ -874,8 +840,20 @@ mod tests {
     fn test_position_ranking() {
         let text = "First Entity appears here. Later Entity appears here.";
         let entities = vec![
-            Entity::new("First Entity", EntityType::Other("test".to_string()), 0, 12, 0.9),
-            Entity::new("Later Entity", EntityType::Other("test".to_string()), 27, 39, 0.9),
+            Entity::new(
+                "First Entity",
+                EntityType::Other("test".to_string()),
+                0,
+                12,
+                0.9,
+            ),
+            Entity::new(
+                "Later Entity",
+                EntityType::Other("test".to_string()),
+                27,
+                39,
+                0.9,
+            ),
         ];
 
         let ranker = PositionSalience::new();
@@ -922,4 +900,3 @@ mod tests {
         assert!(ranked.is_empty());
     }
 }
-

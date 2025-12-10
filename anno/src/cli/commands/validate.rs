@@ -1,7 +1,7 @@
 //! Validate command - Validate JSONL annotation files
 
 use super::super::output::color;
-use crate::grounded::{GroundedDocument, Location, Signal, SignalValidationError}; // Re-exported from anno-core
+use crate::grounded::{GroundedDocument, Location, Signal, SignalId, SignalValidationError}; // Re-exported from anno-core
 use clap::Parser;
 use std::fs;
 
@@ -79,7 +79,7 @@ pub fn run(args: ValidateArgs) -> Result<(), String> {
                     .unwrap_or("UNK");
 
                 let signal = Signal::new(
-                    i as u64,
+                    SignalId::new(i as u64),
                     Location::text(start, end),
                     ent_text,
                     ent_type,

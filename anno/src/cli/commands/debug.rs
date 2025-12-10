@@ -7,7 +7,7 @@ use super::super::output::{color, print_signals};
 use super::super::parser::ModelBackend;
 use super::super::utils::{get_input_text, link_tracks_to_kb, resolve_coreference};
 
-use crate::grounded::{render_document_html, GroundedDocument, Location, Signal}; // Re-exported from anno-core
+use crate::grounded::{render_document_html, GroundedDocument, Location, Signal, SignalId}; // Re-exported from anno-core
 #[cfg(feature = "eval-advanced")]
 use crate::ingest::url_resolver::{CompositeResolver, UrlResolver};
 use crate::ingest::DocumentPreprocessor;
@@ -134,11 +134,11 @@ pub fn run(args: DebugArgs) -> Result<(), String> {
     // Build grounded document with validated signals
     // Always use actual offsets from model - don't re-find text (which would always find first occurrence)
     let mut doc = GroundedDocument::new("debug", &text);
-    let mut signal_ids: Vec<u64> = Vec::new();
+    let mut signal_ids: Vec<SignalId> = Vec::new();
 
     for e in &entities {
         let signal = Signal::new(
-            0,
+            SignalId::ZERO,
             Location::text(e.start, e.end),
             &e.text,
             e.entity_type.as_label(),

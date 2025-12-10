@@ -58,6 +58,7 @@
 //! - [ ] Multi-document summarization
 
 use crate::keywords::{KeywordExtractor, TfIdfExtractor};
+use crate::pagerank::{pagerank, PageRankConfig};
 use std::collections::HashSet;
 
 /// Trait for extractive summarizers.
@@ -337,27 +338,13 @@ impl Summarizer for LexRankSummarizer {
             }
         }
 
-        // PageRank
-        let out_degree: Vec<f64> = similarity
-            .iter()
-            .map(|row| row.iter().sum::<f64>().max(1.0))
-            .collect();
-
-        let mut scores = vec![1.0 / n as f64; n];
-
-        for _ in 0..self.iterations {
-            let mut new_scores = vec![(1.0 - self.damping) / n as f64; n];
-
-            for i in 0..n {
-                for j in 0..n {
-                    if similarity[j][i] > 0.0 {
-                        new_scores[i] += self.damping * scores[j] * similarity[j][i] / out_degree[j];
-                    }
-                }
-            }
-
-            scores = new_scores;
-        }
+        // Run PageRank using shared implementation
+        let config = PageRankConfig {
+            damping: self.damping,
+            max_iterations: self.iterations,
+            epsilon: 1e-6,
+        };
+        let scores = pagerank(&similarity, &config);
 
         // Select top sentences and restore order
         let mut indexed: Vec<_> = scores.into_iter().enumerate().collect();
@@ -503,7 +490,7 @@ mod tests {
         let combined = summary.join(" ");
         // At least some tech/market keywords should be present
         assert!(
-            combined.contains("market") || combined.contains("tech") 
+            combined.contains("market") || combined.contains("tech")
             || combined.contains("Apple") || combined.contains("Microsoft")
         );
     }

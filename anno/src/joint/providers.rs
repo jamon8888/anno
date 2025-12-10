@@ -8,7 +8,6 @@ use std::sync::Arc;
 use crate::backends::box_embeddings::BoxEmbedding;
 use crate::linking::candidate::CandidateGenerator;
 use crate::linking::linker::{EntityLinker, Mention};
-use crate::Entity;
 use anno_core::EntityType;
 
 use super::types::{

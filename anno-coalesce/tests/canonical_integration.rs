@@ -158,10 +158,10 @@ fn test_mention_type_detection_pronouns() {
 
 #[test]
 fn test_mention_type_detection_named() {
-    assert_eq!(detect_mention_type("Barack Obama"), MentionType::Named);
-    assert_eq!(detect_mention_type("Apple Inc."), MentionType::Named);
-    assert_eq!(detect_mention_type("New York City"), MentionType::Named);
-    assert_eq!(detect_mention_type("Microsoft"), MentionType::Named);
+    assert_eq!(detect_mention_type("Barack Obama"), MentionType::Proper);
+    assert_eq!(detect_mention_type("Apple Inc."), MentionType::Proper);
+    assert_eq!(detect_mention_type("New York City"), MentionType::Proper);
+    assert_eq!(detect_mention_type("Microsoft"), MentionType::Proper);
 }
 
 #[test]
@@ -260,7 +260,7 @@ fn test_cjk_mention_detection() {
     // Accept either Named or Nominal
     let xi = detect_mention_type("習近平");
     assert!(
-        xi == MentionType::Named || xi == MentionType::Nominal,
+        xi == MentionType::Proper || xi == MentionType::Nominal,
         "Chinese name should be Named or Nominal, got {:?}",
         xi
     );
@@ -268,7 +268,7 @@ fn test_cjk_mention_detection() {
     // Japanese name
     let yamada = detect_mention_type("山田太郎");
     assert!(
-        yamada == MentionType::Named || yamada == MentionType::Nominal,
+        yamada == MentionType::Proper || yamada == MentionType::Nominal,
         "Japanese name should be Named or Nominal, got {:?}",
         yamada
     );
@@ -277,7 +277,7 @@ fn test_cjk_mention_detection() {
     // Our simple heuristic may not handle this correctly
     let mixed = detect_mention_type("Dr. 田中");
     assert!(
-        mixed == MentionType::Named || mixed == MentionType::Nominal,
+        mixed == MentionType::Proper || mixed == MentionType::Nominal,
         "Mixed script should be Named or Nominal, got {:?}",
         mixed
     );
@@ -292,7 +292,7 @@ fn test_arabic_mention_detection() {
     let result = detect_mention_type("محمد بن سلمان");
     // Accept either Named or Nominal for Arabic
     assert!(
-        result == MentionType::Named || result == MentionType::Nominal,
+        result == MentionType::Proper || result == MentionType::Nominal,
         "Arabic name should be Named or Nominal, got {:?}",
         result
     );

@@ -78,7 +78,7 @@
 //! ```rust,ignore
 //! use anno::keywords::{KeywordExtractor, RakeExtractor};
 //!
-//! let text = "Machine learning is a subset of artificial intelligence. 
+//! let text = "Machine learning is a subset of artificial intelligence.
 //!             Deep learning uses neural networks for machine learning tasks.";
 //!
 //! let extractor = RakeExtractor::new();
@@ -101,6 +101,7 @@
 //! - Campos et al. (2018): YAKE! Collection-independent keyword extraction
 //! - Mihalcea & Tarau (2004): TextRank
 
+use crate::pagerank::{pagerank, PageRankConfig};
 use std::collections::{HashMap, HashSet};
 
 // =============================================================================
@@ -749,25 +750,13 @@ impl TextRankExtractor {
             }
         }
 
-        // Compute out-degree
-        let out_degree: Vec<f64> = adj.iter().map(|row| row.iter().sum::<f64>().max(1.0)).collect();
-
-        // PageRank iteration
-        let mut scores = vec![1.0 / n as f64; n];
-
-        for _ in 0..self.iterations {
-            let mut new_scores = vec![(1.0 - self.damping) / n as f64; n];
-
-            for i in 0..n {
-                for j in 0..n {
-                    if adj[j][i] > 0.0 {
-                        new_scores[i] += self.damping * scores[j] * adj[j][i] / out_degree[j];
-                    }
-                }
-            }
-
-            scores = new_scores;
-        }
+        // Run PageRank using shared implementation
+        let config = PageRankConfig {
+            damping: self.damping,
+            max_iterations: self.iterations,
+            epsilon: 1e-6,
+        };
+        let scores = pagerank(&adj, &config);
 
         // Map back to words
         vocab
