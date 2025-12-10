@@ -1,0 +1,10 @@
+{"child":"Barack Obama","parent":"CLUSTER_0_doc1","relation":"contained_in","child_type":"MENTION","parent_type":"COREFERENCE_CLUSTER","doc_id":"doc1"}
+{"child":"He","parent":"CLUSTER_0_doc1","relation":"contained_in","child_type":"MENTION","parent_type":"COREFERENCE_CLUSTER","doc_id":"doc1"}
+{"child":"Hawaii","parent":"CLUSTER_1_doc1","relation":"contained_in","child_type":"MENTION","parent_type":"COREFERENCE_CLUSTER","doc_id":"doc1"}
+{"child":"Barack Obama","parent":"Hawaii","relation":"disjoint_from","child_type":"MENTION","parent_type":"MENTION","doc_id":"doc1"}
+{"child":"He","parent":"Hawaii","relation":"disjoint_from","child_type":"MENTION","parent_type":"MENTION","doc_id":"doc1"}
+{"child":"Google","parent":"CLUSTER_0_doc2","relation":"contained_in","child_type":"MENTION","parent_type":"COREFERENCE_CLUSTER","doc_id":"doc2"}
+{"child":"The company","parent":"CLUSTER_0_doc2","relation":"contained_in","child_type":"MENTION","parent_type":"COREFERENCE_CLUSTER","doc_id":"doc2"}
+{"child":"DeepMind","parent":"CLUSTER_1_doc2","relation":"contained_in","child_type":"MENTION","parent_type":"COREFERENCE_CLUSTER","doc_id":"doc2"}
+{"child":"Google","parent":"DeepMind","relation":"disjoint_from","child_type":"MENTION","parent_type":"MENTION","doc_id":"doc2"}
+{"child":"The company","parent":"DeepMind","relation":"disjoint_from","child_type":"MENTION","parent_type":"MENTION","doc_id":"doc2"}

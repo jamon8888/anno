@@ -164,6 +164,7 @@
 use super::heuristic::HeuristicNER;
 use super::regex::RegexNER;
 use crate::{Entity, EntityType, Model, Result};
+use itertools::Itertools;
 use std::borrow::Cow;
 use std::sync::Arc;
 
@@ -492,7 +493,10 @@ impl StackedNER {
     /// Get layer names in priority order.
     #[must_use]
     pub fn layer_names(&self) -> Vec<String> {
-        self.layers.iter().map(|l| l.name().to_string()).collect()
+        self.layers
+            .iter()
+            .map(|l| l.name().to_string())
+            .collect_vec()
     }
 
     /// Get the conflict strategy.
@@ -572,6 +576,7 @@ impl Default for StackedNER {
 }
 
 impl Model for StackedNER {
+    #[cfg_attr(feature = "instrument", tracing::instrument(skip(self, text), fields(text_len = text.len(), num_layers = self.layers.len())))]
     fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
         // Performance: Pre-allocate entities vec with estimated capacity
         // Most texts have 0-20 entities, but we'll start with a reasonable default
@@ -816,19 +821,13 @@ impl Model for StackedNER {
     }
 
     fn supported_types(&self) -> Vec<EntityType> {
-        // Performance: Pre-allocate types vec with estimated capacity
-        let mut types = Vec::with_capacity(self.layers.len() * 4); // Estimate ~4 types per layer
-        for layer in &self.layers {
-            types.extend(layer.supported_types());
-        }
-        // Performance: Use unstable sort (we don't need stable sort here)
-        types.sort_unstable_by(|a, b| {
-            let a_str = format!("{:?}", a);
-            let b_str = format!("{:?}", b);
-            a_str.cmp(&b_str)
-        });
-        types.dedup();
-        types
+        // Use itertools for efficient deduplication
+        self.layers
+            .iter()
+            .flat_map(|layer| layer.supported_types())
+            .sorted_by(|a, b| format!("{:?}", a).cmp(&format!("{:?}", b)))
+            .dedup()
+            .collect_vec()
     }
 
     fn is_available(&self) -> bool {

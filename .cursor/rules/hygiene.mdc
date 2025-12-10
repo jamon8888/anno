@@ -1,0 +1,169 @@
+---
+description: Repository hygiene and artifact cleanup
+globs: ["**/.gitignore", "**/justfile"]
+alwaysApply: false
+---
+
+# Repository Hygiene
+
+## Common Remnant Patterns
+
+### Build Directory Duplicates
+
+macOS Finder copy operations can create `target 2/`, `target 3/` etc:
+
+```bash
+# Check for duplicates
+ls -la | grep "target"
+
+# Clean up (500MB+ each)
+rm -rf "target 2" "target 3"
+```
+
+**Prevention**: `.gitignore` should include:
+```gitignore
+/target
+/target */
+target*/
+```
+
+### Debug HTML Artifacts
+
+Debug visualizations at repo root:
+```bash
+# Find and clean
+ls *.html 2>/dev/null
+rm -f *_debug.html *_preview*.html
+```
+
+**Prevention**: `.gitignore` includes `*.html` with `!docs/**/*.html` exception.
+
+### Test Artifacts
+
+Directories matching `test_*` pattern:
+```bash
+# Check sizes
+du -sh test_* 2>/dev/null
+
+# Common culprits
+rm -rf test_docs test_output test_screenshots
+```
+
+## Periodic Cleanup Check
+
+Run monthly or before major commits:
+
+```bash
+# Size check
+du -sh . target reports 2>/dev/null
+
+# Find large untracked files
+git status --short | grep "^??" | xargs -I {} du -sh {} 2>/dev/null | sort -h
+
+# Find duplicate target dirs
+ls -la | grep -E "target.*[0-9]"
+
+# Find root-level artifacts
+ls *.{html,png,jpg,txt} 2>/dev/null
+```
+
+## .gitignore Maintenance
+
+### Essential Patterns for Rust NLP
+
+```gitignore
+# Build artifacts (including duplicates)
+/target
+/target */
+target*/
+
+# Generated HTML (keep docs)
+*.html
+!docs/**/*.html
+
+# Test artifacts
+test_*
+!testdata/
+
+# Reports (regenerated on demand)
+reports/
+*_report.md
+*-report.md
+
+# Python cache (from scripts/)
+__pycache__/
+*.pyc
+
+# Model weights (large, downloaded on demand)
+*.safetensors
+*.onnx
+*.bin
+!tests/data/**  # Keep small test fixtures
+```
+
+### Common Mistakes
+
+```gitignore
+# BAD: Too broad, catches workspace crate
+anno/
+
+# GOOD: Only build artifacts
+anno/target/
+
+# BAD: Misses space in directory name
+target2/
+
+# GOOD: Catches "target 2", "target 3" etc
+/target */
+target*/
+```
+
+## Size Budget
+
+| Directory | Expected | Alert If |
+|-----------|----------|----------|
+| `target/` | 5-10 GB | > 15 GB |
+| `reports/` | < 1 MB | > 10 MB |
+| `.git/` | < 100 MB | > 500 MB |
+| Root files | < 1 MB | > 5 MB |
+
+```bash
+# Quick health check
+du -sh target .git reports 2>/dev/null
+```
+
+## box-coref Experiment Hygiene
+
+When working with `../box-coref`, experiment runs accumulate in `experiments/runs/`.
+
+### Cleanup Commands
+
+```bash
+# Archive runs older than 7 days
+cd ../box-coref && just archive-old-runs 7
+
+# Delete "unknown_*" runs (from base.toml tests)
+cd ../box-coref && just clean-unknown-runs
+
+# Archive runs matching pattern
+cd ../box-coref && just archive-pattern "base_*"
+```
+
+### .gitignore for Experiments
+
+box-coref's `.gitignore` should include:
+```gitignore
+# Experiment runs (keep directory structure)
+experiments/runs/*/
+!experiments/runs/README.md
+
+# Archive directory
+experiments/archive/
+```
+
+### CI Verification
+
+Before committing box-coref changes:
+```bash
+cd ../box-coref && just ci
+```

@@ -2,21 +2,94 @@
 //!
 //! Information extraction for Rust: NER, coreference resolution, and evaluation.
 //!
+//! ## The Three-Level Hierarchy
+//!
+//! Anno organizes entity processing into three distinct levels, each answering
+//! a different question:
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────────────────────────────┐
+//! │ Level 3: Identity — "Which knowledge base entry is this?"               │
+//! │ Cross-document entity, may have KB link (Wikidata Q-ID, etc.)           │
+//! │ Type: anno_core::grounded::Identity                                     │
+//! ├─────────────────────────────────────────────────────────────────────────┤
+//! │ Level 2: Track — "Are these mentions the SAME entity?"                  │
+//! │ Within-document coreference chain                                       │
+//! │ Type: anno_core::grounded::Track                                        │
+//! │ Backend: backends::mention_ranking::MentionRankingCoref                 │
+//! ├─────────────────────────────────────────────────────────────────────────┤
+//! │ Level 1: Signal — "What entity mentions exist here?"                    │
+//! │ Single mention detection (NER)                                          │
+//! │ Types: anno_core::grounded::Signal, anno_core::Entity                   │
+//! │ Backends: RegexNER, HeuristicNER, GLiNER, NuNER, etc.                   │
+//! └─────────────────────────────────────────────────────────────────────────┘
+//! ```
+//!
+//! ## Don't Confuse These
+//!
+//! | Concept | What it is | What it's NOT |
+//! |---------|------------|---------------|
+//! | **NER** | What mentions exist? | Coreference (same entity?) |
+//! | **Coreference** | Same entity? | Salience (how important?) |
+//! | **Salience** | How important? | Coreference (not a substitute!) |
+//!
+//! ## Core Capabilities
+//!
 //! - **NER**: Multiple backends (Regex, BERT, GLiNER, NuNER, W2NER)
-//! - **Coreference**: Resolution (rule-based, T5-based) and metrics (MUC, B³, CEAF, LEA, BLANC)
+//! - **Coreference**: Resolution (mention-ranking, rule-based) and metrics (MUC, B³, CEAF, LEA, BLANC)
+//! - **Salience**: Entity importance ranking (TextRank, YAKE, TF-IDF, Position)
 //! - **Evaluation**: Comprehensive benchmarking framework with bias analysis
 //!
-//! Core types (Entity, GroundedDocument, etc.) are in `anno-core` and re-exported here.
+//! ## Discourse Analysis (feature = "discourse")
+//!
+//! Handles phenomena beyond sentence-level NER:
+//!
+//! - **Centering theory**: Track what the discourse is "about" through forward/backward-looking
+//!   centers. Use for pronoun resolution and coherence analysis.
+//! - **Uncertain reference**: Defer resolution when antecedent is ambiguous, maintaining
+//!   a distribution over candidates. Handles cataphora and bridging.
+//! - **Abstract anaphora**: Resolve pronouns like "this" that refer to events, propositions,
+//!   or facts—not just named entities.
+//!
+//! ## Quick Start
+//!
+//! ```rust
+//! use anno::{Model, StackedNER};
+//!
+//! // Level 1: Detect entity mentions
+//! let ner = StackedNER::default();
+//! let entities = ner.extract_entities("John met Mary in Paris.", None).unwrap();
+//! ```
+//!
+//! For coreference (Level 2):
+//!
+//! ```rust,ignore
+//! use anno::backends::mention_ranking::MentionRankingCoref;
+//!
+//! let coref = MentionRankingCoref::new();
+//! let (signals, tracks) = coref.resolve_to_grounded("John saw Mary. He waved.")?;
+//! // signals: individual mentions, tracks: coreference chains
+//! ```
+//!
+//! Core types (Entity, GroundedDocument, Signal, Track, etc.) are in `anno-core` and re-exported here.
 
 #![warn(missing_docs)]
 
 // Module declarations (core types are in anno-core, not declared here)
 pub mod backends;
+/// Edit distance algorithms.
+pub mod edit_distance;
 pub mod error;
 pub mod eval;
 pub mod ingest;
+/// Joint inference for coreference resolution and entity linking.
+pub mod joint;
 pub mod lang;
+/// Entity linking to knowledge bases.
+pub mod linking;
 pub mod offset;
+/// Preprocessing for mention detection.
+pub mod preprocess;
 pub mod schema;
 pub mod similarity;
 pub mod sync;
@@ -25,6 +98,19 @@ pub mod types;
 #[cfg(feature = "cli")]
 pub mod cli;
 
+/// Discourse-level analysis for coreference resolution.
+///
+/// Provides infrastructure for handling phenomena that span sentence boundaries:
+///
+/// - **Centering theory**: Track discourse focus through forward/backward-looking centers
+/// - **Uncertain reference**: Deferred resolution using epsilon-term semantics
+/// - **Abstract anaphora**: Pronouns referring to events, propositions, facts
+/// - **Shell nouns**: Abstract nouns like "problem", "issue", "fact"
+///
+/// Enable with the `discourse` feature.
+///
+/// See [`discourse::centering`] for salience-based pronoun resolution and
+/// [`discourse::uncertain_reference`] for handling ambiguous references.
 #[cfg(feature = "discourse")]
 pub mod discourse;
 
@@ -110,6 +196,7 @@ mod sealed {
     impl Sealed for super::backends::rule::RuleBasedNER {}
 
     impl Sealed for super::MockModel {}
+    impl Sealed for super::joint::JointModel {}
 }
 
 /// Trait for NER model backends.
@@ -286,6 +373,12 @@ pub trait DynamicLabels: Model {
 pub use backends::{
     AutoNER, BackendType, ConflictStrategy, HeuristicNER, NERExtractor, NuNER, RegexNER,
     StackedNER, TPLinker, W2NERConfig, W2NERRelation, W2NER,
+};
+
+// Mention-ranking coreference (Bourgois & Poibeau 2025)
+pub use backends::mention_ranking::{
+    ClusteringStrategy, MentionCluster, MentionRankingConfig, MentionRankingCoref, Number,
+    RankedMention,
 };
 
 // Re-export MockModel for testing

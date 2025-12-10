@@ -2886,21 +2886,27 @@ impl ProcessResult {
 /// This is a convenience function for ad-hoc debugging.
 /// For production use, use the full Model API.
 ///
+/// # Note
+///
+/// This function is a stub - the actual implementation lives in the `anno` crate
+/// which has access to ML backends. This placeholder exists to document the
+/// intended API for `ProcessResult`.
+///
 /// # Example
 ///
 /// ```rust,ignore
-/// use anno_core::grounded::process_text;
+/// use anno::process_text;  // Note: anno crate, not anno_core
 ///
 /// let result = process_text("Marie Curie won the Nobel Prize.", None)?;
 /// println!("{}", result.to_html());
 /// ```
-// Note: This function will be moved to anno crate
 #[allow(dead_code)]
+#[doc(hidden)]
 pub fn process_text(
     _text: &str,
     _model: Option<&dyn std::any::Any>,
 ) -> crate::Result<ProcessResult> {
-    todo!("This function will be moved to anno crate")
+    unimplemented!("Use anno::process_text instead - this stub documents the API only")
 }
 
 // Implementation removed - will be in anno crate

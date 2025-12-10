@@ -53,6 +53,8 @@ pub struct Mention {
 }
 
 /// Type of referring expression.
+///
+/// Matches `anno_core::types::MentionType` for compatibility.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MentionType {
     /// Proper name ("John Smith", "Microsoft")
@@ -60,13 +62,17 @@ pub enum MentionType {
     /// Common noun phrase ("the company", "a dog")
     Nominal,
     /// Pronoun ("he", "it", "they")
-    Pronoun,
+    ///
+    /// Named `Pronominal` to match linguistic terminology and `anno_core`.
+    Pronominal,
     /// Unknown/unspecified
     Unknown,
 }
 
 impl Mention {
-    /// Create a new mention with text and span.
+    /// `Mention::new("John", 0, 4)` creates a mention for "John" at characters 0..4.
+    ///
+    /// Offsets are character positions, not byte positions.
     #[must_use]
     pub fn new(text: impl Into<String>, start: usize, end: usize) -> Self {
         Self {
@@ -80,7 +86,15 @@ impl Mention {
         }
     }
 
-    /// Create mention with head span.
+    /// Mention with head span for head-match evaluation.
+    ///
+    /// The head is the syntactic nucleus: in "the former president", head is "president".
+    ///
+    /// ```
+    /// # use anno::eval::coref::Mention;
+    /// let m = Mention::with_head("the former president", 0, 20, 11, 20);
+    /// assert_eq!(m.head_start, Some(11)); // "president" starts at 11
+    /// ```
     #[must_use]
     pub fn with_head(
         text: impl Into<String>,
@@ -100,7 +114,13 @@ impl Mention {
         }
     }
 
-    /// Create mention with type annotation.
+    /// Mention with type annotation for type-aware evaluation.
+    ///
+    /// ```
+    /// # use anno::eval::coref::{Mention, MentionType};
+    /// let pronoun = Mention::with_type("he", 25, 27, MentionType::Pronominal);
+    /// let proper = Mention::with_type("John Smith", 0, 10, MentionType::Proper);
+    /// ```
     #[must_use]
     pub fn with_type(
         text: impl Into<String>,
@@ -119,31 +139,31 @@ impl Mention {
         }
     }
 
-    /// Check if this mention overlaps with another.
+    /// True if spans share any characters: `[0,5)` overlaps `[3,8)`.
     #[must_use]
     pub fn overlaps(&self, other: &Mention) -> bool {
         self.start < other.end && other.start < self.end
     }
 
-    /// Check if spans match exactly.
+    /// True if spans are identical: same start AND end.
     #[must_use]
     pub fn span_matches(&self, other: &Mention) -> bool {
         self.start == other.start && self.end == other.end
     }
 
-    /// Get span length.
+    /// Span length in characters. Returns 0 if `end <= start`.
     #[must_use]
     pub fn len(&self) -> usize {
         self.end.saturating_sub(self.start)
     }
 
-    /// Check if empty span.
+    /// True if span has zero length.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Create a unique identifier for this mention (for set operations).
+    /// `(start, end)` tuple for use in hash sets and comparisons.
     #[must_use]
     pub fn span_id(&self) -> (usize, usize) {
         (self.start, self.end)
@@ -160,27 +180,45 @@ impl std::fmt::Display for Mention {
 // CorefChain (Cluster)
 // =============================================================================
 
-/// A coreference chain (cluster) of mentions that refer to the same entity.
+/// A coreference chain: mentions that all refer to the same entity.
 ///
-/// # Invariants
+/// ```
+/// # use anno::eval::coref::{CorefChain, Mention};
+/// // "John went to the store. He bought milk."
+/// //  ^^^^                    ^^
+/// let john = Mention::new("John", 0, 4);
+/// let he = Mention::new("He", 25, 27);
 ///
-/// - A chain contains at least one mention
-/// - Mentions within a chain should not overlap
-/// - Chains are identified by an optional cluster ID
+/// let chain = CorefChain::new(vec![john, he]);
+/// assert_eq!(chain.len(), 2);
+/// assert!(!chain.is_singleton());
+/// ```
+///
+/// # Note
+///
+/// This type is for **evaluation**, not storage. For production pipelines,
+/// use [`anno_core::Track`] which integrates with the Signal/Track/Identity hierarchy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CorefChain {
-    /// The mentions in this chain, ordered by position.
+    /// Mentions in document order (sorted by start position).
     pub mentions: Vec<Mention>,
-    /// Optional cluster identifier.
+    /// Cluster ID from the source data, if any.
     pub cluster_id: Option<u64>,
-    /// Optional entity type for the entire chain.
+    /// Entity type shared by all mentions (e.g., "PERSON").
     pub entity_type: Option<String>,
 }
 
 impl CorefChain {
-    /// Create a new chain from mentions.
+    /// Build a chain from mentions. Sorts by position automatically.
     ///
-    /// Mentions are automatically sorted by start position.
+    /// ```
+    /// # use anno::eval::coref::{CorefChain, Mention};
+    /// let chain = CorefChain::new(vec![
+    ///     Mention::new("she", 50, 53),
+    ///     Mention::new("Dr. Smith", 0, 9),  // out of order
+    /// ]);
+    /// assert_eq!(chain.mentions[0].text, "Dr. Smith"); // sorted
+    /// ```
     #[must_use]
     pub fn new(mut mentions: Vec<Mention>) -> Self {
         mentions.sort_by_key(|m| (m.start, m.end));
@@ -191,7 +229,7 @@ impl CorefChain {
         }
     }
 
-    /// Create chain with cluster ID.
+    /// Build a chain with an explicit cluster ID.
     #[must_use]
     pub fn with_id(mut mentions: Vec<Mention>, cluster_id: u64) -> Self {
         mentions.sort_by_key(|m| (m.start, m.end));
@@ -202,7 +240,7 @@ impl CorefChain {
         }
     }
 
-    /// Create a singleton chain (single mention).
+    /// A chain with exactly one mention (entity mentioned only once).
     #[must_use]
     pub fn singleton(mention: Mention) -> Self {
         Self {
@@ -212,27 +250,35 @@ impl CorefChain {
         }
     }
 
-    /// Number of mentions in this chain.
+    /// Number of mentions. A chain with 3 mentions has 2 implicit "links".
     #[must_use]
     pub fn len(&self) -> usize {
         self.mentions.len()
     }
 
-    /// Check if chain is empty.
+    /// True if chain has no mentions. Shouldn't happen in valid data.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.mentions.is_empty()
     }
 
-    /// Check if this is a singleton (single mention).
+    /// True if chain has exactly one mention (singleton entity).
     #[must_use]
     pub fn is_singleton(&self) -> bool {
         self.mentions.len() == 1
     }
 
-    /// Get all coreference links (pairs) in this chain.
+    /// All pairwise links. For MUC: `n` mentions = `n*(n-1)/2` links.
     ///
-    /// For MUC evaluation: number of links = len - 1
+    /// ```
+    /// # use anno::eval::coref::{CorefChain, Mention};
+    /// let chain = CorefChain::new(vec![
+    ///     Mention::new("A", 0, 1),
+    ///     Mention::new("B", 2, 3),
+    ///     Mention::new("C", 4, 5),
+    /// ]);
+    /// assert_eq!(chain.links().len(), 3); // A-B, A-C, B-C
+    /// ```
     #[must_use]
     pub fn links(&self) -> Vec<(&Mention, &Mention)> {
         let mut links = Vec::new();

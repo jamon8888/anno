@@ -182,6 +182,12 @@ pub mod warmup;
 #[cfg(feature = "onnx")]
 pub mod coref_t5;
 
+// Graph-based coreference (iterative refinement)
+pub mod graph_coref;
+
+// Mention-ranking coreference (Bourgois & Poibeau 2025 inspired)
+pub mod mention_ranking;
+
 // Re-exports (always available)
 pub use extractor::{BackendType, NERExtractor};
 pub use heuristic::HeuristicNER;

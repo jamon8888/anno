@@ -1,0 +1,33 @@
+# Example benchmark configuration
+#
+# Usage: anno benchmark --config examples/benchmark.toml
+#
+# This config is logged with results for reproducibility.
+
+# Tasks to evaluate (ner, coref, relation)
+# Empty list means all tasks
+tasks = ["ner"]
+
+# Datasets to use
+# Empty list means all suitable datasets for the specified tasks
+datasets = ["wikigold"]
+
+# Backends to test
+# Empty list means all compatible backends
+backends = ["pattern", "heuristic", "crf", "stacked", "ensemble"]
+
+# Maximum examples per dataset (for quick testing)
+# Omit or set to null for unlimited
+max_examples = 100
+
+# Random seeds for variance estimation
+# Multiple seeds produce multi-seed reports with statistical reliability
+seeds = [42, 123, 456]
+
+# Only use cached datasets (skip downloads)
+cached_only = false
+
+# Output directory for reports
+# Individual seed reports go here as seed_N.md
+output_dir = "reports/"
+

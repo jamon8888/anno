@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 31974110373c401b97c7b9de3d571485dde5aab75ace41f35a3237a6add515c0 # shrinks to graph = GraphDocument { nodes: [GraphNode { id: "n0", node_type: "entity", name: "n0", properties: {} }, GraphNode { id: "n1", node_type: "entity", name: "n1", properties: {} }, GraphNode { id: "n2", node_type: "entity", name: "n2", properties: {} }], edges: [GraphEdge { source: "n0", target: "n2", relation: "connected", confidence: 0.950427896823762, properties: {} }], metadata: {} }, seed = 41
+cc b6d5e90922a3ec37af34cb2e6f0a13c614651ba7740bd13a3ad0ba30e1e7e317 # shrinks to n = 6, p = 0.1
+cc ffe9ef6ad1e22918f204360e50c7fad0dcc395f309c856e56a79473fb41aa7d3 # shrinks to n = 9, seed = 318

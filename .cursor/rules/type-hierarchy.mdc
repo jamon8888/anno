@@ -1,0 +1,146 @@
+---
+description: Canonical type hierarchy and crate boundaries for anno
+globs: ["**/*.rs", "**/grounded.rs", "**/entity.rs", "**/mention_ranking.rs"]
+alwaysApply: false
+---
+
+# Type Hierarchy & Crate Boundaries
+
+## The Canonical Hierarchy: Signal → Track → Identity
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Level 3: Identity                                                   │
+│ Cross-document entity, may have KB link                             │
+│ "This entity is Q7186 in Wikidata"                                  │
+│ Type: anno_core::grounded::Identity                                 │
+│ Contains: kb_id, canonical_name, embedding, source                  │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │ tracks linked via identity_id
+┌───────────────────────────────┴─────────────────────────────────────┐
+│ Level 2: Track                                                      │
+│ Within-document coreference chain                                   │
+│ "These mentions refer to the same entity"                           │
+│ Type: anno_core::grounded::Track                                    │
+│ Contains: signals (Vec<SignalRef>), canonical_surface, entity_type  │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │ signals referenced by SignalRef
+┌───────────────────────────────┴─────────────────────────────────────┐
+│ Level 1: Signal                                                     │
+│ Single mention detection                                            │
+│ "There's an entity here"                                            │
+│ Type: anno_core::grounded::Signal<Location>                         │
+│ Contains: location, surface, label, confidence                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## Crate Responsibilities
+
+| Crate | Purpose | Key Types |
+|-------|---------|-----------|
+| `anno-core` | Canonical types, shared across crates | `Signal`, `Track`, `Identity`, `Entity`, `MentionType`, `Gender` |
+| `anno-coalesce` | Cross-document clustering, similarity | `EntityCluster`, `Similarity`, `HierarchicalClusterer` |
+| `anno-strata` | Graph algorithms, community detection | `Leiden`, `Louvain`, `PageRank` |
+| `anno` | NER backends, coref, evaluation | `Model`, `CoreferenceResolver`, `MentionRankingCoref` |
+| `anno-cli` | Command-line interface | CLI commands |
+
+## Type Mapping: Intermediate → Canonical
+
+When building backends, always provide conversions to canonical types:
+
+| Intermediate Type | Canonical Type | Conversion |
+|-------------------|----------------|------------|
+| `MentionCluster` | `Track` + `Vec<Signal>` | `.to_track(signal_id_base)` |
+| `RankedMention` | `Signal<Location>` | `.to_signal(signal_id)` |
+| `CorefChain` (eval) | N/A (eval-only) | Use for metrics, not storage |
+| `CrossDocCluster` (eval) | `Identity` | Manual conversion needed |
+
+### Example: Mention Ranking Integration
+
+```rust
+use anno::backends::mention_ranking::MentionRankingCoref;
+use anno_core::GroundedDocument;
+
+let coref = MentionRankingCoref::new();
+let text = "John saw Mary. He waved to her.";
+
+// GOOD: Get canonical types directly
+let (signals, tracks) = coref.resolve_to_grounded(text)?;
+
+// GOOD: Integrate with GroundedDocument
+let mut doc = GroundedDocument::new("doc1", text);
+coref.resolve_into_document(text, &mut doc)?;
+// doc.signals and doc.tracks now populated
+
+// AVOID: Using intermediate types without conversion
+let clusters = coref.resolve(text)?; // Returns Vec<MentionCluster>
+// These don't flow into GroundedDocument without conversion!
+```
+
+## Don't Confuse These
+
+| Concept | What It Is | What It's NOT |
+|---------|------------|---------------|
+| **Signal** | A single mention detection | A cluster of mentions |
+| **Track** | Mentions of same entity in ONE doc | Cross-doc entity |
+| **Identity** | Global entity (may span docs) | Just a KB ID |
+| **Entity** | General-purpose struct for NER output | Same as Signal (though similar) |
+| **CorefChain** | Eval format for metrics | Canonical storage type |
+| **Salience** | Importance ranking | Coreference resolution |
+
+## Anti-Patterns
+
+### Don't create orphaned types
+```rust
+// BAD: New type with no path to canonical hierarchy
+pub struct MyMentionCluster { ... } // How does this become a Track?
+
+// GOOD: Include conversion
+impl MyMentionCluster {
+    pub fn to_track(&self, ...) -> (Track, Vec<Signal>) { ... }
+}
+```
+
+### Don't duplicate canonical types
+```rust
+// BAD: Redefining what anno-core already has
+struct EntityMention {
+    start: usize,
+    end: usize,
+    text: String,
+}
+
+// GOOD: Use anno_core::Signal or anno_core::Entity
+use anno_core::Signal;
+```
+
+### Don't skip levels
+```rust
+// BAD: NER directly to Identity (skipping Track)
+let identities = ner.extract_identities(text)?; // Levels 1 → 3
+
+// GOOD: Each level has distinct responsibility
+let signals = ner.extract_signals(text)?;      // Level 1
+let tracks = coref.cluster(signals)?;          // Level 2
+let identities = linker.link(tracks)?;         // Level 3
+```
+
+## When to Use Which Type
+
+| Use Case | Type |
+|----------|------|
+| Storing NER output | `Signal<Location>` or `Entity` |
+| Within-doc coreference chains | `Track` |
+| Cross-doc entities | `Identity` |
+| Evaluation metrics | `CorefChain`, `CrossDocCluster` |
+| Salience ranking | `(Entity, f64)` pairs |
+| Full document representation | `GroundedDocument` |
+
+## Key Files
+
+- `anno-core/src/grounded.rs` - Canonical hierarchy (`Signal`, `Track`, `Identity`)
+- `anno-core/src/entity.rs` - General `Entity` type
+- `anno/src/backends/mention_ranking.rs` - Mention ranking with Track integration
+- `anno/src/eval/coref.rs` - Evaluation types (`CorefChain`, `Mention`)
+- `docs/CRATE_BOUNDARY_ANALYSIS.md` - Detailed analysis of type boundaries
+- `docs/INTER_INTRA_DOC_ABSTRACTIONS.md` - Operation mapping documentation

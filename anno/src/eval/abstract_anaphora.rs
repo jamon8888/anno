@@ -1,19 +1,46 @@
 //! Abstract anaphora evaluation infrastructure.
 //!
-//! Demonstrates the gap between nominal coreference (which we handle)
-//! and abstract anaphora (which we don't).
+//! # Why This Exists
 //!
-//! # The Problem
+//! Standard coreference resolvers achieve 70-80% F1 on benchmarks like OntoNotes.
+//! But they **completely fail** on abstract anaphora—references to events,
+//! propositions, facts, and situations rather than nominal entities.
 //!
-//! Standard coref links noun phrases: "John" → "he"
-//! Abstract anaphora links to events/propositions: "The invasion" → "This"
+//! ```text
+//! "The company announced layoffs. This shocked employees."
+//!                                 ^^^^
+//!                                 What does "this" refer to?
+//!                                 → The *announcement* (event)
+//!                                 → The *fact* of layoffs
+//!                                 → The *situation* of job losses
 //!
-//! # Research Context
+//! Standard coreference: ??? (no nominal antecedent found)
+//! ```
 //!
-//! See `docs/ABSTRACT_ANAPHORA_RESEARCH.md` for full background.
+//! This module provides evaluation infrastructure to measure this gap and
+//! track progress toward systems that handle abstract anaphora.
 //!
-//! ## Key Papers
+//! # The Problem in Numbers
 //!
+//! | Anaphora Type | Standard Coref F1 | Specialized Systems |
+//! |---------------|-------------------|---------------------|
+//! | Nominal | ~75% | ~75% |
+//! | Event | ~5% | ~40% |
+//! | Proposition | ~2% | ~35% |
+//! | Shell nouns | ~10% | ~65% |
+//!
+//! The gap is not a minor limitation—it's a fundamental blind spot.
+//!
+//! # Theoretical Foundation
+//!
+//! Following Dalrymple, Shieber & Pereira (1991), anaphora resolution can be
+//! framed as solving `P(s₁, ..., sₙ) = s` where P is the property being
+//! predicated. For abstract anaphora, P operates over events/propositions,
+//! not entities. See `docs/ABSTRACT_ANAPHORA_RESEARCH.md` for full treatment.
+//!
+//! # Key Papers
+//!
+//! - Dalrymple et al. (1991): "Ellipsis and Higher-Order Unification" - theoretical foundation
 //! - Kolhatkar & Hirst (2012): "Resolving 'this-issue' anaphors" - 92% antecedent recall
 //! - Marasović et al. (2017): LSTM-Siamese model, EMNLP, outperforms on shell nouns
 //! - Moosavi & Strube (2016): LEA metric addresses "mention identification effect"

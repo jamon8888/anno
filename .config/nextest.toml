@@ -1,0 +1,68 @@
+# Nextest configuration for anno
+# See: https://nexte.st/book/configuration.html
+
+[store]
+dir = "target/nextest"
+
+# =============================================================================
+# Default Profile
+# =============================================================================
+
+[profile.default]
+# Retry failed tests once
+retries = 1
+
+# Mark tests as slow after 30s, terminate after 60s
+slow-timeout = { period = "30s", terminate-after = 2 }
+
+# Fail fast on first failure in CI
+fail-fast = false
+
+# Status level for output
+status-level = "pass"
+
+# =============================================================================
+# CI Profile - stricter timeouts
+# =============================================================================
+
+[profile.ci]
+retries = 2
+slow-timeout = { period = "60s", terminate-after = 2 }
+fail-fast = true
+status-level = "all"
+
+# =============================================================================
+# Quick Profile - fast tests only
+# =============================================================================
+
+[profile.quick]
+retries = 0
+slow-timeout = { period = "10s", terminate-after = 1 }
+
+# Filter out slow tests: property tests, eval harness, flaky ensemble tests
+# Also exclude backend availability matrix (slow with ONNX models)
+default-filter = "not test(/property/) and not test(/proptest/) and not test(/eval.*harness/) and not test(/backend_availability_matrix/)"
+
+# =============================================================================
+# ML Profile - for ML backend tests
+# =============================================================================
+
+[profile.ml]
+# ML tests are slow due to model loading
+retries = 1
+slow-timeout = { period = "180s", terminate-after = 3 }
+
+# Limit parallelism to avoid OOM with multiple models
+test-threads = 2
+
+# =============================================================================
+# Property Test Profile
+# =============================================================================
+
+[profile.property]
+retries = 0
+slow-timeout = { period = "120s", terminate-after = 2 }
+test-threads = 4
+
+# Only run property/fuzz tests
+default-filter = "test(/property/) or test(/fuzz/) or test(/proptest/)"

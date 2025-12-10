@@ -1,0 +1,208 @@
+---
+description: Rust NLP/NER development patterns for anno
+globs: ["**/*.rs", "**/Cargo.toml"]
+alwaysApply: true
+---
+
+# Anno Rust Development Rules
+
+## Architecture Overview
+
+Anno is a Rust NLP toolkit for named entity recognition (NER), coreference resolution, and relation extraction. Key architectural principles:
+
+1. **Workspace structure**: `anno` (main lib), `anno-core` (canonical types), `anno-coalesce` (cross-doc clustering), `anno-strata` (hierarchical/graph), `anno-cli` (CLI)
+2. **Feature flags**: Heavy use of Cargo features for optional backends (`onnx`, `candle`, `metal`, `burn`)
+3. **Trait-based backends**: NER backends implement `Model`, coref backends implement `CoreferenceResolver`
+4. **Character offsets**: Entity spans use CHARACTER offsets, not byte offsets (critical for Unicode)
+5. **Canonical type hierarchy**: `Signal → Track → Identity` in `anno-core::grounded`
+
+## The Three-Level Hierarchy
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Level 1: Signal (Detection)                                  │
+│ "There's an entity mention here"                             │
+│ Types: Signal<Location>, Entity                              │
+│ Location: anno_core::grounded, anno_core::entity             │
+├─────────────────────────────────────────────────────────────┤
+│ Level 2: Track (Within-Document Coreference)                 │
+│ "These mentions refer to the same entity"                    │
+│ Types: Track, MentionCluster                                 │
+│ Location: anno_core::grounded, anno::backends::mention_ranking│
+├─────────────────────────────────────────────────────────────┤
+│ Level 3: Identity (Cross-Document / KB Linking)              │
+│ "This entity is Q7186 in Wikidata"                          │
+│ Types: Identity                                              │
+│ Location: anno_core::grounded                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Crate Dependencies
+
+```
+anno-core         ← Canonical types (Signal, Track, Identity, Entity)
+    ↑
+anno-coalesce     ← Cross-document operations, similarity
+    ↑
+anno              ← NER backends, coref, evaluation
+    ↑
+anno-cli          ← Command-line interface
+```
+
+## Pipeline Layers (Don't Confuse These)
+
+| Layer | Question | Components | Output |
+|-------|----------|------------|--------|
+| **Detection (NER)** | What mentions exist? | `Model` trait, GLiNER, Pattern | `Vec<Entity>` or `Vec<Signal>` |
+| **Coreference** | Are these the SAME entity? | `CoreferenceResolver`, `MentionRankingCoref` | `Vec<Track>` |
+| **Salience** | How IMPORTANT is this entity? | `EntityRanker`, `TextRankSalience` | Ranked entities |
+| **Linking** | Which KB entry? | (future) | `Identity` with `kb_id` |
+
+**Key insight**: Coreference and salience solve DIFFERENT problems. Salience can *inform* coreference scoring, but they're not substitutes.
+
+## Code Style
+
+### Error Handling
+```rust
+// Prefer thiserror for library errors
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("inference failed: {0}")]
+    Inference(String),
+}
+
+// Use anyhow for application code (CLI)
+// Use .map_err(|e| Error::Inference(format!("context: {}", e))) in lib code
+```
+
+### Feature Gates
+```rust
+// Always use cfg_attr for optional derives
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+
+// Group related features
+#[cfg(any(feature = "onnx", feature = "candle"))]
+
+// Document feature requirements in doc comments
+/// Requires `candle` feature.
+#[cfg(feature = "candle")]
+```
+
+### Tensor Operations (Candle/Metal)
+```rust
+// CRITICAL: Use .contiguous() before matmul on Metal backend
+// Non-contiguous views from transpose/reshape will fail on Metal
+let q = q.transpose(1, 2)?.contiguous()?;
+let k = k.transpose(1, 2)?.contiguous()?;
+let scores = q.matmul(&k.t()?.contiguous()?)?;
+```
+
+### Unicode Safety
+```rust
+// ALWAYS use char indices, never byte indices for entity spans
+let char_count = text.chars().count();
+let span_text: String = text.chars()
+    .skip(entity.start)
+    .take(entity.end - entity.start)
+    .collect();
+
+// Test with multi-byte characters
+let test_cases = ["日本語", "Müller", "🎉 emoji", "Москва"];
+```
+
+## Testing Patterns
+
+### Property Tests
+```rust
+// Use slow_config() for tests involving composite backends
+fn slow_config() -> ProptestConfig {
+    ProptestConfig { cases: 10, ..Default::default() }
+}
+
+proptest! {
+    #![proptest_config(slow_config())]
+    #[test]
+    fn stacked_backend_test(text in arb_text()) { ... }
+}
+```
+
+### CLI Integration Tests
+```rust
+// Use anno_cli_cmd() helper to avoid spawning cargo run
+fn anno_cli_cmd() -> Command {
+    // Checks ANNO_CLI_BIN, then target/release/anno, then target/debug/anno
+    // Falls back to cargo run only if no binary available
+}
+```
+
+### Test Categories
+- Unit tests: `#[test]` in `mod tests { }` within source files
+- Integration tests: `tests/*.rs` files
+- Property tests: Use `proptest!` macro, consider `slow_config()` for slow backends
+- CLI tests: Use pre-built binary via `anno_cli_cmd()`
+
+## Type Conversions
+
+### Mention Ranking → Grounded Types
+
+```rust
+use anno::backends::mention_ranking::MentionRankingCoref;
+use anno_core::GroundedDocument;
+
+let coref = MentionRankingCoref::new();
+let text = "John saw Mary. He waved.";
+
+// Option 1: Get signals and tracks directly
+let (signals, tracks) = coref.resolve_to_grounded(text)?;
+
+// Option 2: Add to a GroundedDocument
+let mut doc = GroundedDocument::new("doc1", text);
+let track_ids = coref.resolve_into_document(text, &mut doc)?;
+```
+
+### Key Conversions Available
+
+| From | To | Method |
+|------|-----|--------|
+| `MentionCluster` | `(Track, Vec<Signal>)` | `.to_track(signal_id_base)` |
+| `RankedMention` | `Signal<Location>` | `.to_signal(signal_id)` |
+| `&Entity` | `Mention` (eval) | `impl From` in `eval/coref.rs` |
+| `Track` | `EntityMention` | in `coalesce/streaming.rs` |
+
+### Intermediate vs Canonical Types
+
+- **Canonical** (use these): `Signal`, `Track`, `Identity`, `Entity` from `anno-core`
+- **Intermediate** (internal): `MentionCluster`, `RankedMention`, `CorefChain`
+- Always convert intermediate → canonical for pipeline integration
+
+## Backend Implementation
+
+### Adding a New NER Backend
+1. Implement `Model` trait (extract_entities, name, supported_types, is_available)
+2. Add `Sealed` impl in `lib.rs` with correct feature gate
+3. Add optional `BatchCapable`, `StreamingCapable`, `GpuCapable` traits
+4. Add tests in `tests/` with property tests for invariants
+5. Update `backends/mod.rs` re-exports
+
+### Adding a New Coref Backend
+1. Implement `CoreferenceResolver` trait (resolve, name)
+2. Provide conversion to canonical types (Signal, Track)
+3. Consider salience integration via `with_salience(scores)`
+4. Test with multilingual data (CJK, RTL, diacritics)
+
+### Model Loading
+```rust
+// Use hf-hub for HuggingFace model downloads
+let api = hf_hub::api::sync::Api::new()?;
+let repo = api.model(model_id.to_string());
+let model_path = repo.get("model.safetensors")?;
+```
+
+## Performance Considerations
+
+1. **Avoid repeated model initialization** in property tests
+2. **Use nextest profiles** for different test categories (quick, ml, property)
+3. **Build release binary** before running CLI integration tests
+4. **Limit parallelism** for ML tests to avoid OOM (`test-threads = 2`)

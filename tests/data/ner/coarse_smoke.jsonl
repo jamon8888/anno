@@ -1,0 +1,4 @@
+{"text": "Marie Curie discovered radium in Paris.", "labels": ["person","organization","location","date","product","event"]}
+{"text": "Apple CEO Tim Cook announced new products in California.", "labels": ["person","organization","location","date","product","event"]}
+{"text": "Barack Obama was born in Hawaii and studied at Harvard.", "labels": ["person","organization","location","date","product","event"]}
+

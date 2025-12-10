@@ -571,7 +571,9 @@ impl TaskEvaluator {
                     sentences: sampled_sentences,
                     loaded_at: dataset_data.loaded_at.clone(),
                     source_url: dataset_data.source_url.clone(),
+                    data_source: dataset_data.data_source.clone(),
                     temporal_metadata: dataset_data.temporal_metadata.clone(),
+                    metadata: dataset_data.metadata.clone(),
                 };
                 (sampled_dataset, max)
             }

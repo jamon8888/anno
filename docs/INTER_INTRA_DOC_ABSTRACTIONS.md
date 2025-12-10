@@ -176,9 +176,34 @@ pub enum IdentitySource {
 | **NER (intra-doc)** | `&str` | `Vec<Signal>` | 1 | ✅ Implemented |
 | **NER (inter-doc)** | `&[&str]` | `Vec<(DocId, Vec<Signal>)>` | 1 | ✅ Just batch NER |
 | **Intra-doc coref** | `Vec<Signal>` | `Vec<Track>` | 2 | ✅ Implemented |
+| **Mention-ranking coref** | `&str` | `(Vec<Signal>, Vec<Track>)` | 2 | ✅ `MentionRankingCoref::resolve_to_grounded()` |
 | **Inter-doc coref** | `Vec<GroundedDocument>` | `Vec<Identity>` | 3 | ⚠️ Uses `CrossDocCluster` |
 | **Entity Linking (NED)** | `Track` or `Identity` | `Identity` | 3 | ⚠️ Not first-class |
 | **Stream coref** | `Stream<Signal>` | `Stream<Track>` | 2 | ⚠️ Not implemented |
+
+## Mention Ranking Integration
+
+The `MentionRankingCoref` resolver now fully integrates with the canonical hierarchy:
+
+```rust
+use anno::backends::mention_ranking::MentionRankingCoref;
+use anno_core::GroundedDocument;
+
+let coref = MentionRankingCoref::new();
+let text = "John saw Mary. He waved to her.";
+
+// Method 1: Get signals and tracks directly
+let (signals, tracks) = coref.resolve_to_grounded(text)?;
+// signals: Vec<Signal<Location>> - individual mentions
+// tracks: Vec<Track> - coreference chains
+
+// Method 2: Add to GroundedDocument
+let mut doc = GroundedDocument::new("doc1", text);
+let track_ids = coref.resolve_into_document(text, &mut doc)?;
+// Now doc.signals and doc.tracks are populated
+```
+
+This closes the gap where `MentionRankingCoref` produced orphaned `MentionCluster` types that had no path to the canonical `Signal → Track → Identity` hierarchy.
 
 ## The Vision Analogy (Revisited)
 

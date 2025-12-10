@@ -1,20 +1,28 @@
 //! CrossDoc command - Cross-document entity coalescing: cluster entities across multiple documents
 
+#[cfg(feature = "eval-advanced")]
 use std::collections::{HashMap, HashSet};
+#[cfg(feature = "eval-advanced")]
 use std::fs;
+#[cfg(feature = "eval-advanced")]
 use std::io::{self, BufRead};
+#[cfg(feature = "eval-advanced")]
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "eval-advanced")]
 use crate::eval::cdcr::{CDCRConfig, CDCRResolver, CrossDocCluster, Document};
+#[cfg(feature = "eval-advanced")]
 use crate::{
     Corpus, Entity, EntityType, GroundedDocument, Identity, IdentitySource, Location, Signal,
 };
+#[cfg(feature = "eval-advanced")]
 use anno_coalesce::Resolver;
 
+#[cfg(feature = "eval-advanced")]
 use super::super::output::color;
 use super::super::parser::{ModelBackend, OutputFormat};
 
-#[cfg(feature = "eval")]
+#[cfg(all(feature = "eval", feature = "eval-advanced"))]
 use glob::glob;
 
 /// Cross-document entity coalescing: cluster entities across multiple documents

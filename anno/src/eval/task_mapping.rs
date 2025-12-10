@@ -107,6 +107,89 @@ impl Task {
             Task::HierarchicalExtraction => "hierarchical",
         }
     }
+
+    /// Parse task from short code string.
+    ///
+    /// Supports many common aliases used in dataset registry:
+    /// - NER: "ner", "sequence_labeling", "nested-ner", "mner", "pii_detection", "slot_filling"
+    /// - NED: "ned", "el", "entity_linking", "entity-linking"
+    /// - RelationExtraction: "re", "relation_extraction", "relation-extraction"
+    /// - IntraDocCoref: "coref", "intra-coref", "intra_coref"
+    /// - InterDocCoref: "inter-coref", "inter_coref", "cdcr", "event_coref"
+    /// - AbstractAnaphora: "abstract-anaphora", "abstract_anaphora", "bridging", "discourse_deixis"
+    /// - DiscontinuousNER: "discontinuous-ner", "discontinuous_ner", "dner"
+    /// - EventExtraction: "events", "event_extraction", "event-extraction"
+    /// - TextClassification: "classification", "text-classification", "bias_evaluation", "qa", "harmonic_analysis"
+    /// - HierarchicalExtraction: "hierarchical", "temporal"
+    pub fn from_code(code: &str) -> Option<Self> {
+        match code.to_lowercase().as_str() {
+            // NER family
+            "ner" | "sequence_labeling" | "nested-ner" | "mner" | "pii_detection"
+            | "slot_filling" => Some(Task::NER),
+
+            // Entity Linking / Disambiguation
+            "ned" | "el" | "entity_linking" | "entity-linking" => Some(Task::NED),
+
+            // Relation Extraction
+            "re" | "relation" | "relation_extraction" | "relation-extraction" => {
+                Some(Task::RelationExtraction)
+            }
+
+            // Intra-document coreference
+            "coref" | "intra-coref" | "intra_coref" | "intracoref" => Some(Task::IntraDocCoref),
+
+            // Inter-document coreference (CDCR)
+            "inter-coref" | "inter_coref" | "intercoref" | "cdcr" | "event_coref" => {
+                Some(Task::InterDocCoref)
+            }
+
+            // Abstract Anaphora (includes bridging and discourse deixis)
+            "abstract-anaphora" | "abstract_anaphora" | "bridging" | "discourse_deixis" => {
+                Some(Task::AbstractAnaphora)
+            }
+
+            // Discontinuous NER
+            "discontinuous-ner" | "discontinuous_ner" | "disc-ner" | "dner" => {
+                Some(Task::DiscontinuousNER)
+            }
+
+            // Event Extraction
+            "events" | "event" | "event_extraction" | "event-extraction" | "ee" => {
+                Some(Task::EventExtraction)
+            }
+
+            // Text Classification (includes bias evaluation, QA, harmonic analysis)
+            "classification"
+            | "text-classification"
+            | "tc"
+            | "bias_evaluation"
+            | "qa"
+            | "harmonic_analysis" => Some(Task::TextClassification),
+
+            // Hierarchical Extraction (includes temporal)
+            "hierarchical" | "hierarchical-extraction" | "he" | "temporal" => {
+                Some(Task::HierarchicalExtraction)
+            }
+
+            _ => None,
+        }
+    }
+
+    /// Check if this task is in the NER family (NER, discontinuous NER, NED).
+    pub fn is_ner_family(&self) -> bool {
+        matches!(
+            self,
+            Task::NER | Task::DiscontinuousNER | Task::NED | Task::HierarchicalExtraction
+        )
+    }
+
+    /// Check if this task is in the coreference family.
+    pub fn is_coref_family(&self) -> bool {
+        matches!(
+            self,
+            Task::IntraDocCoref | Task::InterDocCoref | Task::AbstractAnaphora
+        )
+    }
 }
 
 /// Mapping from datasets to tasks they support.
@@ -153,6 +236,10 @@ pub fn dataset_tasks(dataset: DatasetId) -> &'static [Task] {
 
         // Event extraction datasets
         DatasetId::ACE2005 => &[Task::EventExtraction],
+        DatasetId::MAVEN => &[Task::EventExtraction],
+        DatasetId::MAVENArg => &[Task::EventExtraction, Task::RelationExtraction],
+        DatasetId::CASIE => &[Task::EventExtraction, Task::NER],
+        DatasetId::RAMS => &[Task::EventExtraction],
 
         // Named Entity Disambiguation datasets
         DatasetId::AIDA | DatasetId::TACKBP => &[Task::NED],
@@ -191,8 +278,24 @@ pub fn dataset_tasks(dataset: DatasetId) -> &'static [Task] {
             // Some coref datasets can also evaluate abstract anaphora
             Task::AbstractAnaphora,
         ],
+        // Human-Voice Agent: primarily abstract anaphora (response tokens, discourse deixis)
+        DatasetId::HumanVoiceAgentInteraction => &[Task::AbstractAnaphora, Task::IntraDocCoref],
+
+        // Text Classification datasets
+        DatasetId::MasakhaNEWS
+        | DatasetId::AGNews
+        | DatasetId::DBPedia14
+        | DatasetId::YahooAnswers
+        | DatasetId::TREC
+        | DatasetId::TweetTopic => &[Task::TextClassification],
+
         // Note: OntoNotes has both NER and coreference, but we only have the NER sample
         // Full OntoNotes would support: [Task::NER, Task::IntraDocCoref]
+
+        // Default: assume NER task for any unhandled datasets
+        // This allows new datasets to be added to DatasetId enum without breaking this match
+        #[allow(unreachable_patterns)]
+        _ => &[Task::NER],
     }
 }
 
@@ -259,15 +362,35 @@ pub fn task_datasets(task: Task) -> &'static [DatasetId] {
             DatasetId::MixRED,
             DatasetId::CovEReD,
         ],
-        Task::IntraDocCoref => &[DatasetId::GAP, DatasetId::PreCo, DatasetId::LitBank],
+        Task::IntraDocCoref => &[
+            DatasetId::GAP,
+            DatasetId::PreCo,
+            DatasetId::LitBank,
+            DatasetId::HumanVoiceAgentInteraction,
+        ],
         Task::InterDocCoref => &[DatasetId::ECBPlus, DatasetId::WikiCoref],
-        Task::AbstractAnaphora => &[DatasetId::GAP, DatasetId::PreCo, DatasetId::LitBank],
-        Task::EventExtraction => &[DatasetId::ACE2005],
+        Task::AbstractAnaphora => &[
+            DatasetId::GAP,
+            DatasetId::PreCo,
+            DatasetId::LitBank,
+            DatasetId::HumanVoiceAgentInteraction,
+        ],
+        Task::EventExtraction => &[
+            DatasetId::ACE2005,
+            DatasetId::MAVEN,
+            DatasetId::MAVENArg,
+            DatasetId::CASIE,
+            DatasetId::RAMS,
+        ],
         Task::NED => &[DatasetId::AIDA, DatasetId::TACKBP],
-        Task::TextClassification => {
-            // GLiNER2 can do classification, but we don't have dedicated datasets yet
-            &[]
-        }
+        Task::TextClassification => &[
+            DatasetId::MasakhaNEWS,
+            DatasetId::AGNews,
+            DatasetId::DBPedia14,
+            DatasetId::YahooAnswers,
+            DatasetId::TREC,
+            DatasetId::TweetTopic,
+        ],
         Task::HierarchicalExtraction => {
             // GLiNER2 can do hierarchical extraction, but we don't have dedicated datasets yet
             &[]

@@ -2110,15 +2110,21 @@ impl Entity {
     /// # Returns
     /// A TextSpan with both byte and char offsets.
     ///
+    /// # Note
+    ///
+    /// This method requires the offset conversion utilities from the `anno` crate.
+    /// Use `anno::offset::char_to_byte_offsets()` directly for now.
+    ///
     /// # Example
     /// ```rust,ignore
-    /// // Note: This method is not yet implemented (returns todo!).
-    /// // When implemented, it will return a TextSpan with char/byte offsets.
+    /// use anno::offset::char_to_byte_offsets;
+    ///
+    /// let (byte_start, byte_end) = char_to_byte_offsets(text, entity.start, entity.end);
     /// ```
-    // Note: This method will be moved to anno crate (depends on offset module)
     #[allow(dead_code)]
+    #[doc(hidden)]
     pub fn to_text_span(&self, _source_text: &str) -> serde_json::Value {
-        todo!("This method depends on offset module which will be in anno crate")
+        unimplemented!("Use anno::offset utilities directly - see method docs")
     }
 
     /// Set visual span for multi-modal extraction.

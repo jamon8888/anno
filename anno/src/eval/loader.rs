@@ -84,9 +84,9 @@ use super::datasets::GoldEntity;
 // with `dataset_registry::DatasetId` which is generated from `define_datasets!`.
 // Currently:
 //   - loader.rs: 188 variants
-//   - dataset_registry.rs: 184 variants  
+//   - dataset_registry.rs: 184 variants
 //   - Shared: only 62 variants
-// 
+//
 // Consider:
 //   1. Re-exporting dataset_registry::DatasetId here
 //   2. Generating loader implementations from registry metadata
@@ -347,6 +347,23 @@ pub enum DatasetId {
     /// Note: Requires LDC license (LDC2006T06)
     /// Source: Linguistic Data Consortium
     ACE2005,
+    /// MAVEN: A Massive General Domain Event Detection Dataset
+    /// 168 event types, 4,480 documents from Wikipedia
+    /// Source: <https://github.com/THU-KEG/MAVEN-dataset>
+    MAVEN,
+    /// MAVEN-Arg: Event argument extraction extension of MAVEN
+    /// Event arguments and roles for MAVEN events
+    /// Source: <https://github.com/THU-KEG/MAVEN-dataset>
+    MAVENArg,
+    /// CASIE: A Dataset for Computer Security Event Extraction
+    /// 5 event types, cybersecurity domain
+    /// Source: <https://github.com/Ebiquity/CASIE>
+    CASIE,
+    /// RAMS: Roles Across Multiple Sentences
+    /// Multi-sentence argument linking
+    /// 139 event types, implicit arguments
+    /// Source: <https://nlp.jhu.edu/rams/>
+    RAMS,
 
     // === Named Entity Disambiguation / Entity Linking Datasets ===
     /// AIDA: Accurate Information from Discursive Articles
@@ -447,7 +464,6 @@ pub enum DatasetId {
     // =========================================================================
     // Indigenous / Native American Language Datasets
     // =========================================================================
-
     /// qxoRef: First coreference corpus for a Quechuan language (Conchucos Quechua)
     /// 12 documents, 1,413 words, 3,137 morphemes, 332 mentions
     /// CoNLL-2012 format adapted for morphologically complex languages
@@ -495,7 +511,6 @@ pub enum DatasetId {
     // =========================================================================
     // Multilingual Coreference Datasets
     // =========================================================================
-
     /// CorefUD 1.3: Multilingual coreference corpus (17 languages, 22 datasets)
     /// Harmonized collection including Hindi, Korean, Hungarian, Turkish
     /// Supports zero anaphora annotation
@@ -519,7 +534,6 @@ pub enum DatasetId {
     // =========================================================================
     // Literary / Narrative Coreference Datasets
     // =========================================================================
-
     /// DROC: German novel coreference corpus
     /// 90 German novels, first public German character coreference dataset
     /// Source: <https://github.com/dbamman/droc>
@@ -550,7 +564,6 @@ pub enum DatasetId {
     // =========================================================================
     // Additional Coreference / QA Datasets
     // =========================================================================
-
     /// QUOREF: QA dataset requiring coreference resolution
     /// 24k question-answer pairs over Wikipedia paragraphs
     /// 70.5% best system F1 vs 93.4% human performance
@@ -585,7 +598,6 @@ pub enum DatasetId {
     // =========================================================================
     // Nested / Discontinuous NER Datasets (additional)
     // =========================================================================
-
     /// ACE 2004: Automatic Content Extraction 2004
     /// Nested entity recognition benchmark
     /// 7 entity types with nested annotations
@@ -605,7 +617,6 @@ pub enum DatasetId {
     // =========================================================================
     // Specialized / Domain-Specific Datasets
     // =========================================================================
-
     /// NLM-Chem: Chemical NER from NLM
     /// 150 full-text articles, ~5000 chemical annotations mapped to MeSH
     /// Source: Nature Scientific Data
@@ -637,7 +648,6 @@ pub enum DatasetId {
     // =========================================================================
     // Speech / Audio NER Datasets
     // =========================================================================
-
     /// SLUE: Spoken Language Understanding Evaluation
     /// Low-resource spoken language understanding including NER
     /// ASR + NER pipeline evaluation
@@ -652,7 +662,6 @@ pub enum DatasetId {
     // =========================================================================
     // Historical NER Datasets
     // =========================================================================
-
     /// HIPE-2022: Multilingual Historical NER Shared Task
     /// 6 datasets across 11 languages (DE/EN/FR/FI/SV + Latin, Classical commentary)
     /// Tasks: NERC (coarse + fine-grained) + Entity Linking
@@ -695,7 +704,6 @@ pub enum DatasetId {
     // =========================================================================
     // Ancient/Classical Language Datasets (Dead Languages)
     // =========================================================================
-
     /// Ancient Greek UD: Homeric Greek through Byzantine texts
     /// Universal Dependencies annotation; diachronic Greek corpus
     /// Source: <https://universaldependencies.org/treebanks/grc_perseus/index.html>
@@ -764,7 +772,6 @@ pub enum DatasetId {
     // =========================================================================
     // Queer / Gender-Inclusive NLP Datasets
     // =========================================================================
-
     /// WinoQueer: Anti-LGBTQ+ bias benchmark for LLMs
     /// Community-in-the-loop design; tests stereotypes about queer people
     /// Source: <https://github.com/webersab/queer_NLP_bib>
@@ -803,7 +810,6 @@ pub enum DatasetId {
     // =========================================================================
     // Joint NER + Relation Extraction Datasets
     // =========================================================================
-
     /// TACRED: TAC Relation Extraction Dataset
     /// 106,264 examples with 41 relation types
     /// Sentence-level relation extraction
@@ -828,7 +834,6 @@ pub enum DatasetId {
     // =========================================================================
     // Incremental / Streaming Coreference Datasets
     // =========================================================================
-
     /// CODI-CRAC: Dialogue coreference shared task
     /// Anaphora resolution in dialogue with speaker information
     /// Source: CODI/CRAC workshop
@@ -847,7 +852,6 @@ pub enum DatasetId {
     // =========================================================================
     // META-DATASETS & AGGREGATED CORPORA
     // =========================================================================
-
     /// B2NERD: Beyond Boundaries NER Dataset
     /// 400+ entity types, 54 English/Chinese datasets amalgamated
     /// Designed for open-domain/zero-shot NER; outperforms GPT-4 by 6.8-12.0 F1
@@ -869,7 +873,6 @@ pub enum DatasetId {
     // =========================================================================
 
     // --- Scientific & Technical Domains ---
-
     /// Astro-NER: Astronomy named entity recognition
     /// 5,000 annotated article titles; celestial objects, instruments, missions, datasets
     /// Source: <https://arxiv.org/html/2405.02602v1>
@@ -896,7 +899,6 @@ pub enum DatasetId {
     WaterAgriNER,
 
     // --- Cultural Heritage & Humanities ---
-
     /// Dutch Archaeology NER: Archaeological excavation reports
     /// 60,000 reports (658M words); artefact types, time periods, materials
     /// Source: <https://aclanthology.org/2020.lrec-1.562/>
@@ -913,7 +915,6 @@ pub enum DatasetId {
     NERsocialFood,
 
     // --- Legal & Financial ---
-
     /// E-NER: US SEC filings named entities
     /// Legal entities, regulations, financial instruments
     /// Source: <https://arxiv.org/abs/2212.09306>
@@ -929,7 +930,6 @@ pub enum DatasetId {
     FinanceNER,
 
     // --- Fiction & Fantasy ---
-
     /// CharacterCodex: Multi-media fiction characters
     /// Diverse characters from games/novels/film
     /// Source: <https://huggingface.co/datasets/NousResearch/CharacterCodex>
@@ -948,7 +948,6 @@ pub enum DatasetId {
     // =========================================================================
     // Code-Switching & Mixed Language Datasets
     // =========================================================================
-
     /// LinCE: Linguistic Code-switching Evaluation
     /// English-Spanish, English-Hindi code-switching in social media
     /// Source: <https://ritual.uh.edu/lince/>
@@ -967,7 +966,6 @@ pub enum DatasetId {
     // =========================================================================
     // African Languages NER (Underrepresented)
     // =========================================================================
-
     /// MasakhaNER: NER for 10 African languages
     /// Amharic, Hausa, Igbo, Kinyarwanda, Luganda, Luo, Nigerian Pidgin,
     /// Swahili, Wolof, Yoruba
@@ -998,6 +996,28 @@ pub enum DatasetId {
     /// Source: <https://huggingface.co/datasets/masakhane/masakhanews>
     MasakhaNEWS,
 
+    // === Additional Text Classification Datasets ===
+    /// AG News: News articles classification (4 classes)
+    /// ~120k training samples, ~7.6k test samples
+    /// Source: <http://groups.di.unipi.it/~gulli/AG_corpus_of_news_articles.html>
+    AGNews,
+    /// DBPedia-14: DBpedia ontology classification (14 classes)
+    /// ~560k training samples, ~70k test samples
+    /// Source: <https://huggingface.co/datasets/dbpedia_14>
+    DBPedia14,
+    /// Yahoo! Answers: Topic classification (10 classes)
+    /// Question-answer pairs from Yahoo! Answers
+    /// Source: <https://huggingface.co/datasets/yahoo_answers_topics>
+    YahooAnswers,
+    /// TREC: Question classification (6 types)
+    /// ~5.5k training samples, 500 test samples
+    /// Source: <https://cogcomp.seas.upenn.edu/Data/QA/QC/>
+    TREC,
+    /// TweetTopic: Twitter topic classification
+    /// 6 topics, social media domain
+    /// Source: <https://github.com/cardiffnlp/tweeteval>
+    TweetTopic,
+
     /// MasakhaPOS: Part-of-speech tagging for 20 African languages
     /// Universal Dependencies tagset; community-driven
     /// Source: <https://github.com/masakhane-io/masakhane-pos>
@@ -1006,7 +1026,6 @@ pub enum DatasetId {
     // =========================================================================
     // Constructed Languages (Edge Case Testing)
     // =========================================================================
-
     /// Esperanto UD: Universal Dependencies for Esperanto
     /// ~16K tokens; tests NER on regular synthetic language
     /// Has ~2000 native speakers; exhibits "living language" irregularities
@@ -1062,7 +1081,6 @@ pub enum DatasetId {
     Quenya,
 
     // --- Clinical & Biomedical Specialized ---
-
     /// i2b2 De-identification: Clinical EHR PHI detection
     /// HIPAA-aligned; dates, names, locations, IDs
     /// Source: <https://pmc.ncbi.nlm.nih.gov/articles/PMC8378656/>
@@ -1079,7 +1097,6 @@ pub enum DatasetId {
     FrenchClinicalNER,
 
     // --- Evaluation Edge Cases ---
-
     /// Gun Violence Corpus: Cross-document event coreference
     /// Tests domain transfer from ECB+
     /// Source: <https://direct.mit.edu/coli/article/47/3/575>
@@ -1101,7 +1118,6 @@ pub enum DatasetId {
     ECBPlusMeta,
 
     // --- Abstract Anaphora & Shell Nouns ---
-
     /// CSN: Cataphoric Shell Nouns
     /// Training data via "this [shell noun]" patterns
     /// Source: <https://aclanthology.org/D17-1021.pdf>
@@ -1112,8 +1128,13 @@ pub enum DatasetId {
     /// Source: <http://www.cs.toronto.edu/~varada/VaradaHomePage/Research_files/law2013.pdf>
     ASN,
 
-    // --- Bridging Anaphora ---
+    /// HumanVoiceAgentInteraction: Dialogue transcripts from human-voice agent interaction
+    /// 70 turns, 10 discourse deixis examples, 11 response tokens
+    /// French dialogue from Pepper robot (2022) and ChatGPT voice mode (2025)
+    /// Source: Rudaz, Broth & Mlynář (2025) - testdata/human_voice_agent/
+    HumanVoiceAgentInteraction,
 
+    // --- Bridging Anaphora ---
     /// ISNotes: Unrestricted bridging corpus
     /// OntoNotes layer; ~660 bridging pairs
     /// Source: <https://www.h-its.org/software/isnotes-corpus/>
@@ -1130,7 +1151,6 @@ pub enum DatasetId {
     ArrauRst,
 
     // --- Discourse Relation Parsing ---
-
     /// RST-DT: Rhetorical Structure Theory Discourse Treebank
     /// Full document hierarchical trees; ~78 relations
     /// Source: LDC
@@ -1147,7 +1167,6 @@ pub enum DatasetId {
     ERST,
 
     // --- Event Coreference (Cross-Document) ---
-
     /// GVC: Gun Violence Corpus for CDCR
     /// Event coreference in gun violence reports
     /// Source: <https://direct.mit.edu/coli/article/47/3/575>
@@ -1159,14 +1178,12 @@ pub enum DatasetId {
     FCCT,
 
     // --- Implicit Semantic Role Labeling ---
-
     /// NomBank Implicit: Implicit arguments corpus
     /// 71% more argument structure beyond explicit
     /// Source: <https://direct.mit.edu/coli/article/38/4/755>
     NomBankImplicit,
 
     // --- Comprehensive Anaphoric Annotation ---
-
     /// ARRAU 3.0: Comprehensive anaphoric annotation
     /// Identity, bridging, discourse deixis, split antecedents, ambiguity
     /// Source: <https://aclanthology.org/2024.codi-1.12/>
@@ -1189,7 +1206,6 @@ pub enum DatasetId {
     // These are auto-generated stubs. The wildcard match arms in methods
     // like download_url(), name(), description() provide default behavior.
     // =========================================================================
-
     /// ACE 2005 relation extraction component
     ACE05RE,
     /// Adverse Drug Reaction corpus with discontinuous mentions
@@ -1438,7 +1454,6 @@ pub enum DatasetId {
     // =========================================================================
     // Additional CoNLL/BIO Format Datasets (batch 1)
     // =========================================================================
-
     /// Unsupervised agricultural NER. Six major agricultural entity types.
     AGRONER,
     /// Slot-filling NER for flight booking intents. Classic NLU benchmark.
@@ -1557,7 +1572,6 @@ pub enum DatasetId {
     // =========================================================================
     // Additional JSONL Format Datasets
     // =========================================================================
-
     /// Expert-annotated clause retrieval for contract drafting.
     ACORD,
     /// Synthetic RE dataset for literary texts. GPT-4o generated annotations.
@@ -1640,7 +1654,6 @@ pub enum DatasetId {
     // =========================================================================
     // Final Batch: Custom/Standoff/BRAT/XML Format Datasets
     // =========================================================================
-
     /// Unicode cuneiform with transliteration. Old/Middle Babylonian.
     AkkadianCuneiformDataset,
     /// Anatomical entity mentions corpus. Standoff format.
@@ -1956,6 +1969,21 @@ impl DatasetId {
             // NOTE: Using DocRED as placeholder proxy (similar document-level extraction)
             DatasetId::ACE2005 =>
                 "https://raw.githubusercontent.com/mainlp/CrossRE/main/crossre_data/ai-test.json",
+
+            // === Event Extraction Datasets ===
+            // MAVEN: Massive general-domain event detection
+            DatasetId::MAVEN =>
+                "https://raw.githubusercontent.com/THU-KEG/MAVEN-dataset/main/docid2topic.json",
+            // MAVEN-ARG: Event argument extraction
+            DatasetId::MAVENArg =>
+                "https://raw.githubusercontent.com/THU-KEG/MAVEN-dataset/main/docid2topic.json",
+            // CASIE: Cybersecurity event extraction (sample file; full dataset requires combining annotation/*.json)
+            DatasetId::CASIE =>
+                "https://raw.githubusercontent.com/Ebiquity/CASIE/master/data/annotation/10001.json",
+            // RAMS: Cross-sentence argument linking (tar.gz - auto-extracted)
+            DatasetId::RAMS =>
+                "https://nlp.jhu.edu/rams/RAMS_1.0c.tar.gz",
+
             // === Named Entity Disambiguation Datasets ===
             // AIDA: Entity linking benchmark
             // NOTE: Using WikiGold as placeholder proxy (similar Wikipedia-based NER)
@@ -2100,6 +2128,25 @@ impl DatasetId {
             // Languages: 20 African languages
             DatasetId::MasakhaPOS =>
                 "https://huggingface.co/datasets/masakhane/masakhapos/resolve/main/data/yor/test.conllu",
+
+            // =========================================================================
+            // Text Classification Datasets
+            // =========================================================================
+            // AG News: News topic classification (4 classes)
+            DatasetId::AGNews =>
+                "https://huggingface.co/datasets/fancyzhx/ag_news/resolve/main/data/test-00000-of-00001.parquet",
+            // DBPedia-14: Wikipedia ontology classification (14 classes)
+            DatasetId::DBPedia14 =>
+                "https://huggingface.co/datasets/dbpedia_14/resolve/main/dbpedia_14/test-00000-of-00001.parquet",
+            // Yahoo Answers: Topic classification (10 classes)
+            DatasetId::YahooAnswers =>
+                "https://huggingface.co/datasets/yahoo_answers_topics/resolve/main/yahoo_answers_topics/test-00000-of-00001.parquet",
+            // TREC: Question classification (6 types) - from CogComp
+            DatasetId::TREC =>
+                "https://cogcomp.seas.upenn.edu/Data/QA/QC/TREC_10.label",
+            // TweetTopic: Twitter topic classification (from CardiffNLP)
+            DatasetId::TweetTopic =>
+                "https://huggingface.co/datasets/cardiffnlp/tweet_topic_single/resolve/main/dataset/split_coling2022_random/test_random.single.json",
 
             // =========================================================================
             // Multilingual Coreference Datasets
@@ -2502,7 +2549,7 @@ impl DatasetId {
             DatasetId::Re3dDefense => "https://github.com/dstl/re3d",
             DatasetId::TutoringSessionsAlgebra => "https://aclanthology.org/C16-1188.pdf",
             DatasetId::WinogradSchemaChallengeWSC => "https://cs.nyu.edu/~davise/papers/WinoPron/WSCollection.xml",
-            
+
             // Catch-all for unimplemented datasets - returns empty URL
             // These datasets require manual configuration or are not yet integrated
             _ => "",
@@ -2566,6 +2613,11 @@ impl DatasetId {
             DatasetId::MuDoCo => "MuDoCo",
             DatasetId::SciCo => "SciCo",
             DatasetId::ACE2005 => "ACE 2005",
+            // Event Extraction
+            DatasetId::MAVEN => "MAVEN",
+            DatasetId::MAVENArg => "MAVEN-ARG",
+            DatasetId::CASIE => "CASIE",
+            DatasetId::RAMS => "RAMS",
             DatasetId::AIDA => "AIDA",
             DatasetId::TACKBP => "TAC-KBP",
             DatasetId::CoNLL2002 => "CoNLL-2002",
@@ -2677,6 +2729,7 @@ impl DatasetId {
             DatasetId::ECBPlusMeta => "ECB+ Meta",
             DatasetId::GVC => "GVC",
             DatasetId::FCCT => "FCCT",
+            DatasetId::HumanVoiceAgentInteraction => "Human-Voice Agent",
             // Additional CoNLL/BIO Format Datasets (batch 1)
             DatasetId::AGRONER => "AGRONER",
             DatasetId::ATISFlightBooking => "ATIS Flight Booking",
@@ -2809,6 +2862,12 @@ impl DatasetId {
             DatasetId::AfriQA => "AfriQA",
             DatasetId::MasakhaNEWS => "MasakhaNEWS",
             DatasetId::MasakhaPOS => "MasakhaPOS",
+            // Text Classification
+            DatasetId::AGNews => "AG News",
+            DatasetId::DBPedia14 => "DBPedia-14",
+            DatasetId::YahooAnswers => "Yahoo Answers",
+            DatasetId::TREC => "TREC",
+            DatasetId::TweetTopic => "TweetTopic",
 
             // Catch-all for unimplemented datasets
             #[allow(unreachable_patterns)]
@@ -2873,6 +2932,11 @@ impl DatasetId {
             DatasetId::MuDoCo => "Multi-domain dialogue coref",
             DatasetId::SciCo => "Scientific cross-doc coref",
             DatasetId::ACE2005 => "Event extraction benchmark",
+            // Event Extraction
+            DatasetId::MAVEN => "Massive general-domain event detection (168 types)",
+            DatasetId::MAVENArg => "Event argument extraction on MAVEN",
+            DatasetId::CASIE => "Cybersecurity event extraction",
+            DatasetId::RAMS => "Cross-sentence event argument linking",
             DatasetId::AIDA => "Entity linking to Wikipedia",
             DatasetId::TACKBP => "TAC knowledge base population",
             DatasetId::CoNLL2002 => "Spanish/Dutch NER",
@@ -2984,6 +3048,9 @@ impl DatasetId {
             DatasetId::ECBPlusMeta => "Extended ECB+ meta-level",
             DatasetId::GVC => "Gun Violence Corpus CDCR",
             DatasetId::FCCT => "Forum cross-document coref",
+            DatasetId::HumanVoiceAgentInteraction => {
+                "French dialogue transcripts for abstract anaphora"
+            }
 
             // JSONL Format Datasets
             DatasetId::ACORD => "Expert-annotated contract clause retrieval",
@@ -3058,6 +3125,12 @@ impl DatasetId {
             DatasetId::AfriQA => "Cross-lingual QA for African languages",
             DatasetId::MasakhaNEWS => "News topic classification for African languages",
             DatasetId::MasakhaPOS => "POS tagging for 20 African languages (UD format)",
+            // Text Classification
+            DatasetId::AGNews => "News topic classification (4 classes)",
+            DatasetId::DBPedia14 => "Wikipedia ontology classification (14 classes)",
+            DatasetId::YahooAnswers => "Q&A topic classification (10 classes)",
+            DatasetId::TREC => "Question type classification (6 types)",
+            DatasetId::TweetTopic => "Twitter topic classification",
 
             // Catch-all for unimplemented datasets
             _ => "Dataset not yet fully integrated",
@@ -3203,9 +3276,7 @@ impl DatasetId {
     pub fn is_temporal_ner(&self) -> bool {
         matches!(
             self,
-            DatasetId::BiTimeBERT
-                | DatasetId::DELICATE
-                | DatasetId::TweetNER7  // Has temporal entity recognition
+            DatasetId::BiTimeBERT | DatasetId::DELICATE | DatasetId::TweetNER7 // Has temporal entity recognition
         )
     }
 
@@ -3465,26 +3536,31 @@ impl DatasetId {
     pub fn african_language_codes(&self) -> &'static [&'static str] {
         match self {
             // MasakhaNER v1: 10 languages
-            DatasetId::MasakhaNER => &["am", "ha", "ig", "rw", "lg", "luo", "pcm", "sw", "wo", "yo"],
+            DatasetId::MasakhaNER => {
+                &["am", "ha", "ig", "rw", "lg", "luo", "pcm", "sw", "wo", "yo"]
+            }
             // MasakhaNER v2: 20 languages (v1 + 10 more)
             DatasetId::MasakhaNER2 => &[
-                "am", "ha", "ig", "rw", "lg", "luo", "pcm", "sw", "wo", "yo",
-                "bbj", "bem", "ee", "fon", "mos", "sna", "tsn", "twi", "xho", "zul"
+                "am", "ha", "ig", "rw", "lg", "luo", "pcm", "sw", "wo", "yo", "bbj", "bem", "ee",
+                "fon", "mos", "sna", "tsn", "twi", "xho", "zul",
             ],
             // AfriSenti: 14 languages (sentiment)
             DatasetId::AfriSenti => &[
-                "am", "arq", "ary", "ha", "ig", "rw", "orm", "pcm", "pt", "sw", "ti", "tso", "twi", "yo"
+                "am", "arq", "ary", "ha", "ig", "rw", "orm", "pcm", "pt", "sw", "ti", "tso", "twi",
+                "yo",
             ],
             // AfriQA: 10 languages (QA)
-            DatasetId::AfriQA => &["am", "bem", "fon", "ha", "ig", "rw", "sw", "twi", "wo", "yo"],
+            DatasetId::AfriQA => &[
+                "am", "bem", "fon", "ha", "ig", "rw", "sw", "twi", "wo", "yo",
+            ],
             // MasakhaNEWS: 16 languages (topic classification)
             DatasetId::MasakhaNEWS => &[
-                "am", "ha", "ig", "rw", "lg", "orm", "pcm", "sna", "som", "sw", "ti", "yo"
+                "am", "ha", "ig", "rw", "lg", "orm", "pcm", "sna", "som", "sw", "ti", "yo",
             ],
             // MasakhaPOS: 21 languages (POS tagging)
             DatasetId::MasakhaPOS => &[
-                "am", "bbj", "bam", "ee", "fon", "ha", "ig", "rw", "lg", "luo",
-                "mos", "nya", "pcm", "sna", "sw", "tsn", "twi", "wo", "xho", "yo", "zul"
+                "am", "bbj", "bam", "ee", "fon", "ha", "ig", "rw", "lg", "luo", "mos", "nya",
+                "pcm", "sna", "sw", "tsn", "twi", "wo", "xho", "yo", "zul",
             ],
             _ => &[],
         }
@@ -3506,7 +3582,8 @@ impl DatasetId {
     ///
     /// let url = DatasetId::MasakhaNER2.african_language_url("yo", "test");
     /// assert!(url.is_some());
-    /// assert!(url.unwrap().contains("yor") || url.unwrap().contains("yo"));
+    /// let url_str = url.unwrap();
+    /// assert!(url_str.contains("yor") || url_str.contains("yo"));
     /// ```
     #[must_use]
     pub fn african_language_url(&self, lang_code: &str, split: &str) -> Option<String> {
@@ -3739,7 +3816,9 @@ impl DatasetId {
             | DatasetId::BioRED => "biomedical",
             DatasetId::MitMovie => "entertainment",
             DatasetId::MitRestaurant => "restaurant",
-            DatasetId::Wnut17 | DatasetId::TweetNER7 | DatasetId::BroadTwitterCorpus => "social-media",
+            DatasetId::Wnut17 | DatasetId::TweetNER7 | DatasetId::BroadTwitterCorpus => {
+                "social-media"
+            }
             DatasetId::CoNLL2003Sample | DatasetId::OntoNotesSample => "news",
             DatasetId::LitBank => "literature",
             DatasetId::FabNER => "manufacturing",
@@ -4086,8 +4165,8 @@ impl DatasetId {
             DatasetId::MixRED => &["PER", "ORG", "LOC"],         // Code-mixed uses standard types
             DatasetId::CovEReD => &["PER", "ORG", "LOC", "MISC"], // Counterfactual DocRED
             DatasetId::CHisIEC => &["PER", "LOC", "OFI", "BOOK"], // Ancient Chinese: Person, Location, Official, Book
-            DatasetId::UNER => &["PER", "LOC", "ORG"],           // Universal NER standard types
-            DatasetId::MSNER => &["PER", "LOC", "ORG"],          // Speech NER standard types
+            DatasetId::UNER => &["PER", "LOC", "ORG"],            // Universal NER standard types
+            DatasetId::MSNER => &["PER", "LOC", "ORG"],           // Speech NER standard types
             DatasetId::BioMNER => &["Method", "Material", "Metric"], // Biomedical method entities (methodological concepts)
             DatasetId::LegNER => &["PERSON", "ORGANIZATION", "LAW", "CASE_REFERENCE", "COURT"], // Legal entities (NOTE: using WikiGold proxy, actual types may differ)
             // Discontinuous NER datasets
@@ -4105,6 +4184,17 @@ impl DatasetId {
             DatasetId::MuDoCo => &["PER", "LOC", "ORG"], // Multi-domain dialogue
             DatasetId::SciCo => &["Concept"], // Scientific concepts
             DatasetId::ACE2005 => &["PER", "ORG", "GPE", "LOC", "FAC", "VEH", "WEA"], // Event extraction
+            // Event Extraction datasets
+            DatasetId::MAVEN => &["EVENT_TRIGGER"], // 168 event types
+            DatasetId::MAVENArg => &["EVENT_TRIGGER", "EVENT_ARGUMENT"], // Events with arguments
+            DatasetId::CASIE => &[
+                "Attack-Pattern",
+                "Vulnerability",
+                "Data-Breach",
+                "Malware",
+                "Patch",
+            ], // Cybersecurity
+            DatasetId::RAMS => &["EVENT_TRIGGER", "EVENT_ARGUMENT"], // 139 event types
             DatasetId::AIDA | DatasetId::TACKBP => &["PER", "LOC", "ORG", "MISC"], // Entity linking
             DatasetId::JNLPBA => &["DNA", "RNA", "protein", "cell_line", "cell_type"],
             DatasetId::BC2GMFull => &["GENE"],
@@ -4133,7 +4223,7 @@ impl DatasetId {
             // African Language Datasets (Masakhane Community)
             DatasetId::MasakhaNER | DatasetId::MasakhaNER2 => &["PER", "ORG", "LOC", "DATE"],
             DatasetId::AfriSenti => &["positive", "neutral", "negative"], // Sentiment labels
-            DatasetId::AfriQA => &["ANSWER"], // QA - answer spans
+            DatasetId::AfriQA => &["ANSWER"],                             // QA - answer spans
             DatasetId::MasakhaNEWS => &[
                 "business",
                 "entertainment",
@@ -4144,8 +4234,48 @@ impl DatasetId {
                 "technology",
             ],
             DatasetId::MasakhaPOS => &[
-                "ADJ", "ADP", "ADV", "AUX", "CCONJ", "DET", "INTJ", "NOUN",
-                "NUM", "PART", "PRON", "PROPN", "PUNCT", "SCONJ", "SYM", "VERB", "X",
+                "ADJ", "ADP", "ADV", "AUX", "CCONJ", "DET", "INTJ", "NOUN", "NUM", "PART", "PRON",
+                "PROPN", "PUNCT", "SCONJ", "SYM", "VERB", "X",
+            ],
+            // Text Classification datasets - return class labels
+            DatasetId::AGNews => &["World", "Sports", "Business", "Sci/Tech"],
+            DatasetId::DBPedia14 => &[
+                "Company",
+                "EducationalInstitution",
+                "Artist",
+                "Athlete",
+                "OfficeHolder",
+                "MeanOfTransportation",
+                "Building",
+                "NaturalPlace",
+                "Village",
+                "Animal",
+                "Plant",
+                "Album",
+                "Film",
+                "WrittenWork",
+            ],
+            DatasetId::YahooAnswers => &[
+                "Society",
+                "Science",
+                "Health",
+                "Education",
+                "Computers",
+                "Sports",
+                "Business",
+                "Entertainment",
+                "Family",
+                "Politics",
+            ],
+            DatasetId::TREC => &["ABBR", "DESC", "ENTY", "HUM", "LOC", "NUM"],
+            // Note: Using tweet_topic_single (6 classes), not tweet_topic_multi (19 classes)
+            DatasetId::TweetTopic => &[
+                "arts_&_culture",
+                "business_&_entrepreneurs",
+                "pop_culture",
+                "daily_life",
+                "sports_&_gaming",
+                "science_&_technology",
             ],
             // Catch-all for new datasets - return generic types
             _ => &["ENTITY"],
@@ -4200,6 +4330,10 @@ impl DatasetId {
             DatasetId::SciCo => "scico_data.tar",
             // Event extraction
             DatasetId::ACE2005 => "ace2005.json",
+            DatasetId::MAVEN => "maven.jsonl",
+            DatasetId::MAVENArg => "maven_arg.jsonl",
+            DatasetId::CASIE => "casie.jsonl",
+            DatasetId::RAMS => "rams.jsonl",
             // Entity linking / NED
             DatasetId::AIDA => "aida.conll",
             DatasetId::TACKBP => "tackbp.json",
@@ -4320,26 +4454,26 @@ impl DatasetId {
             DatasetId::CODICRAC => "codicrac.tsv",
             DatasetId::AMIMeeting => "ami_meeting.json",
             DatasetId::ARRAU => "arrau.conllu",
-            
+
             // === ARCANE / NICHE DATASETS ===
-            
+
             // Scientific & Technical
             DatasetId::AstroNER => "astro_ner.json",
             DatasetId::WIESPAstro => "wiesp_astro.json",
             DatasetId::HUPD => "hupd_patents.json",
             DatasetId::TechNER => "techner.json",
             DatasetId::WaterAgriNER => "water_agri_ner.json",
-            
+
             // Cultural Heritage & Humanities
             DatasetId::DutchArchaeologyNER => "dutch_archaeology.conll",
             DatasetId::RussianCulturalNER => "russian_cultural.json",
             DatasetId::NERsocialFood => "nersocial_food.json",
-            
+
             // Legal & Financial
             DatasetId::ENER => "ener_sec.json",
             DatasetId::FinTechPatent => "fintech_patent.json",
             DatasetId::FinanceNER => "finance_ner.json",
-            
+
             // Fiction & Fantasy
             DatasetId::CharacterCodex => "character_codex.json",
             DatasetId::MultipartyDialogueCoref => "multiparty_dialogue.json",
@@ -4357,6 +4491,12 @@ impl DatasetId {
             DatasetId::AfriQA => "afriqa.jsonl",
             DatasetId::MasakhaNEWS => "masakhanews.jsonl",
             DatasetId::MasakhaPOS => "masakhapos.conllu",
+            // Text Classification (JSONL converted from parquet)
+            DatasetId::AGNews => "agnews.jsonl",
+            DatasetId::DBPedia14 => "dbpedia14.jsonl",
+            DatasetId::YahooAnswers => "yahoo_answers.jsonl",
+            DatasetId::TREC => "trec_test.txt",
+            DatasetId::TweetTopic => "tweet_topic.jsonl",
 
             // Constructed Languages (Edge Case Testing)
             DatasetId::EsperantoUD => "esperanto_ud.conllu",
@@ -4373,40 +4513,41 @@ impl DatasetId {
             DatasetId::I2b2Deidentification => "i2b2_deid.xml",
             DatasetId::CLEFClinicalCoref => "clef_clinical_coref.xml",
             DatasetId::FrenchClinicalNER => "french_clinical_ner.json",
-            
+
             // Evaluation Edge Cases
             DatasetId::GunViolenceCorpus => "gun_violence.json",
             DatasetId::FootballCorefCorpus => "football_coref.json",
             DatasetId::CEREC => "cerec_email.json",
             DatasetId::ECBPlusMeta => "ecbplus_meta.json",
-            
+
             // Abstract Anaphora & Shell Nouns
             DatasetId::CSN => "csn_shell_nouns.json",
             DatasetId::ASN => "asn_shell_nouns.json",
-            
+            DatasetId::HumanVoiceAgentInteraction => "human_voice_agent.jsonl",
+
             // Bridging Anaphora
             DatasetId::ISNotes => "isnotes.conll",
             DatasetId::BASHI => "bashi.json",
             DatasetId::ArrauRst => "arrau_rst.json",
-            
+
             // Discourse Relation Parsing
             DatasetId::RSTDT => "rst_dt.json",
             DatasetId::PDTB3 => "pdtb3.json",
             DatasetId::ERST => "erst.json",
-            
+
             // Event Coreference
             DatasetId::GVC => "gvc.json",
             DatasetId::FCCT => "fcc_t.json",
-            
+
             // Implicit SRL
             DatasetId::NomBankImplicit => "nombank_implicit.json",
-            
+
             // ARRAU subsets
             DatasetId::ARRAU3 => "arrau3.json",
             DatasetId::ArrauTrains => "arrau_trains.json",
             DatasetId::ArrauPear => "arrau_pear.json",
             DatasetId::ArrauGenia => "arrau_genia.json",
-            
+
             // Default filename for new datasets: lowercase variant name + .json
             _ => {
                 // Return a static string using the variant's debug name
@@ -4786,13 +4927,13 @@ impl DatasetId {
     #[must_use]
     pub fn all_indigenous() -> &'static [DatasetId] {
         &[
-            DatasetId::QxoRef,          // Quechua coreference
-            DatasetId::AmericasNLI,     // 10 Indigenous American languages
-            DatasetId::CherokeeNER,     // Cherokee-English
-            DatasetId::NavajoMorph,     // Navajo morphological
+            DatasetId::QxoRef,           // Quechua coreference
+            DatasetId::AmericasNLI,      // 10 Indigenous American languages
+            DatasetId::CherokeeNER,      // Cherokee-English
+            DatasetId::NavajoMorph,      // Navajo morphological
             DatasetId::ShipiboKoniboNER, // Shipibo-Konibo (Peru)
-            DatasetId::GuaraniNER,      // Guarani-Spanish
-            DatasetId::NahuatlNER,      // Nahuatl (Central Mexican)
+            DatasetId::GuaraniNER,       // Guarani-Spanish
+            DatasetId::NahuatlNER,       // Nahuatl (Central Mexican)
         ]
     }
 
@@ -4800,12 +4941,12 @@ impl DatasetId {
     #[must_use]
     pub fn all_literary_coref() -> &'static [DatasetId] {
         &[
-            DatasetId::LitBank,     // English 19th-20th century
-            DatasetId::DROC,        // German novels
-            DatasetId::KoCoNovel,   // Korean novels
+            DatasetId::LitBank,      // English 19th-20th century
+            DatasetId::DROC,         // German novels
+            DatasetId::KoCoNovel,    // Korean novels
             DatasetId::FantasyCoref, // Fantasy fiction
-            DatasetId::OpenBoek,    // Dutch literary
-            DatasetId::NovelCR,     // Bilingual (en/zh) novels
+            DatasetId::OpenBoek,     // Dutch literary
+            DatasetId::NovelCR,      // Bilingual (en/zh) novels
         ]
     }
 
@@ -4827,7 +4968,7 @@ impl DatasetId {
     // =========================================================================
 
     /// All scientific/technical domain datasets.
-    /// 
+    ///
     /// Includes astronomy, patents, environmental science.
     #[must_use]
     pub fn all_scientific_technical() -> &'static [DatasetId] {
@@ -4909,6 +5050,7 @@ impl DatasetId {
         &[
             DatasetId::CSN,
             DatasetId::ASN,
+            DatasetId::HumanVoiceAgentInteraction,
         ]
     }
 
@@ -4917,21 +5059,13 @@ impl DatasetId {
     /// Bridging involves inferential links (part-whole, set-membership).
     #[must_use]
     pub fn all_bridging_anaphora() -> &'static [DatasetId] {
-        &[
-            DatasetId::ISNotes,
-            DatasetId::BASHI,
-            DatasetId::ArrauRst,
-        ]
+        &[DatasetId::ISNotes, DatasetId::BASHI, DatasetId::ArrauRst]
     }
 
     /// All discourse relation parsing datasets.
     #[must_use]
     pub fn all_discourse_relation() -> &'static [DatasetId] {
-        &[
-            DatasetId::RSTDT,
-            DatasetId::PDTB3,
-            DatasetId::ERST,
-        ]
+        &[DatasetId::RSTDT, DatasetId::PDTB3, DatasetId::ERST]
     }
 
     /// All event coreference (cross-document) datasets.
@@ -5037,11 +5171,7 @@ impl DatasetId {
     /// Tests NLP systems on multilingual text with language mixing.
     #[must_use]
     pub fn all_code_switching() -> &'static [DatasetId] {
-        &[
-            DatasetId::LinCE,
-            DatasetId::CALCS,
-            DatasetId::GLUECoS,
-        ]
+        &[DatasetId::LinCE, DatasetId::CALCS, DatasetId::GLUECoS]
     }
 
     /// All intra-document coreference datasets.
@@ -5155,7 +5285,7 @@ impl DatasetId {
             DatasetId::NCBIDisease => Some(DatasetCounts::new(5424, 5134)),
             DatasetId::GENIA => Some(DatasetCounts::new(100, 305)), // HF API sample
             DatasetId::AnatEM => Some(DatasetCounts::new(100, 33)), // HF API sample
-            DatasetId::BC2GM => Some(DatasetCounts::new(100, 47)), // HF API sample
+            DatasetId::BC2GM => Some(DatasetCounts::new(100, 47)),  // HF API sample
             DatasetId::BC4CHEMD => Some(DatasetCounts::new(100, 59)), // HF API sample
 
             // === Social Media (verified) ===
@@ -5289,7 +5419,10 @@ impl DatasetCounts {
     /// Create new counts.
     #[must_use]
     pub const fn new(sentences: usize, entities: usize) -> Self {
-        Self { sentences, entities }
+        Self {
+            sentences,
+            entities,
+        }
     }
 }
 
@@ -5368,8 +5501,8 @@ pub struct DatasetValidator {
 impl Default for DatasetValidator {
     fn default() -> Self {
         Self {
-            sentence_tolerance_pct: 5,  // 5% tolerance
-            entity_tolerance_pct: 10,    // 10% tolerance (entities can vary more)
+            sentence_tolerance_pct: 5, // 5% tolerance
+            entity_tolerance_pct: 10,  // 10% tolerance (entities can vary more)
         }
     }
 }
@@ -5395,10 +5528,7 @@ impl DatasetValidator {
 
     /// Validate a loaded dataset against expected counts.
     pub fn validate(&self, dataset: &LoadedDataset) -> ValidationResult {
-        let actual = DatasetCounts::new(
-            dataset.sentences.len(),
-            dataset.entity_count(),
-        );
+        let actual = DatasetCounts::new(dataset.sentences.len(), dataset.entity_count());
 
         let expected = dataset.id.canonical_counts();
         let mut issues = Vec::new();
@@ -5438,7 +5568,9 @@ impl DatasetValidator {
         }
 
         ValidationResult {
-            valid: issues.iter().all(|i| i.severity != ValidationSeverity::Error),
+            valid: issues
+                .iter()
+                .all(|i| i.severity != ValidationSeverity::Error),
             expected,
             actual,
             issues,
@@ -5449,7 +5581,8 @@ impl DatasetValidator {
     pub fn validate_strict(&self, dataset: &LoadedDataset) -> Result<ValidationResult> {
         let result = self.validate(dataset);
         if !result.is_valid() {
-            let errors: Vec<_> = result.errors()
+            let errors: Vec<_> = result
+                .errors()
                 .iter()
                 .map(|e| format!("{}: expected {}, got {}", e.field, e.expected, e.actual))
                 .collect();
@@ -5522,7 +5655,10 @@ impl StreamingValidator {
     }
 
     /// Observe multiple sentences.
-    pub fn observe_sentences<'a>(&mut self, sentences: impl IntoIterator<Item = &'a AnnotatedSentence>) {
+    pub fn observe_sentences<'a>(
+        &mut self,
+        sentences: impl IntoIterator<Item = &'a AnnotatedSentence>,
+    ) {
         for sentence in sentences {
             self.observe_sentence(sentence);
         }
@@ -5560,7 +5696,8 @@ impl StreamingValidator {
 
         if let Some(exp) = expected {
             let sentence_diff = actual.sentences.abs_diff(exp.sentences);
-            let sentence_tolerance = exp.sentences * (self.validator.sentence_tolerance_pct as usize) / 100;
+            let sentence_tolerance =
+                exp.sentences * (self.validator.sentence_tolerance_pct as usize) / 100;
             if sentence_diff > sentence_tolerance {
                 issues.push(ValidationIssue {
                     field: "sentences".to_string(),
@@ -5575,7 +5712,8 @@ impl StreamingValidator {
             }
 
             let entity_diff = actual.entities.abs_diff(exp.entities);
-            let entity_tolerance = exp.entities * (self.validator.entity_tolerance_pct as usize) / 100;
+            let entity_tolerance =
+                exp.entities * (self.validator.entity_tolerance_pct as usize) / 100;
             if entity_diff > entity_tolerance {
                 issues.push(ValidationIssue {
                     field: "entities".to_string(),
@@ -5591,7 +5729,9 @@ impl StreamingValidator {
         }
 
         Some(ValidationResult {
-            valid: issues.iter().all(|i| i.severity != ValidationSeverity::Error),
+            valid: issues
+                .iter()
+                .all(|i| i.severity != ValidationSeverity::Error),
             expected,
             actual,
             issues,
@@ -5603,7 +5743,8 @@ impl StreamingValidator {
         let result = self.finalize();
         if let Some(ref r) = result {
             if !r.is_valid() {
-                let errors: Vec<_> = r.errors()
+                let errors: Vec<_> = r
+                    .errors()
                     .iter()
                     .map(|e| format!("{}: expected {}, got {}", e.field, e.expected, e.actual))
                     .collect();
@@ -5687,9 +5828,16 @@ impl std::str::FromStr for DatasetId {
             "biored" | "bio-red" | "bio_red" => Ok(DatasetId::BioRED),
             "mixred" | "mix-red" | "mix_red" => Ok(DatasetId::MixRED),
             "covered" | "cov-ered" | "counterfactual-docred" => Ok(DatasetId::CovEReD),
-            "chisiec" | "ch-is-iec" | "chinese-historical-ie" | "ancient-chinese-ner" => Ok(DatasetId::CHisIEC),
-            // Event / Entity linking
+            "chisiec" | "ch-is-iec" | "chinese-historical-ie" | "ancient-chinese-ner" => {
+                Ok(DatasetId::CHisIEC)
+            }
+            // Event extraction
             "ace2005" | "ace-2005" | "ace_2005" | "ace" => Ok(DatasetId::ACE2005),
+            "maven" | "maven-ed" => Ok(DatasetId::MAVEN),
+            "maven-arg" | "mavenarg" | "maven_arg" => Ok(DatasetId::MAVENArg),
+            "casie" | "cybersecurity-ee" => Ok(DatasetId::CASIE),
+            "rams" | "rams-ee" => Ok(DatasetId::RAMS),
+            // Entity linking
             "aida" | "aida-conll" | "aida_conll" => Ok(DatasetId::AIDA),
             "tackbp" | "tac-kbp" | "tac_kbp" | "kbp" => Ok(DatasetId::TACKBP),
             // Extended NER datasets
@@ -5714,6 +5862,12 @@ impl std::str::FromStr for DatasetId {
             "afriqa" | "afri_qa" | "afri-qa" => Ok(DatasetId::AfriQA),
             "masakhanews" | "masakhane_news" | "masakhane-news" => Ok(DatasetId::MasakhaNEWS),
             "masakhapos" | "masakhane_pos" | "masakhane-pos" => Ok(DatasetId::MasakhaPOS),
+            // Text Classification
+            "agnews" | "ag_news" | "ag-news" => Ok(DatasetId::AGNews),
+            "dbpedia14" | "dbpedia_14" | "dbpedia-14" | "dbpedia" => Ok(DatasetId::DBPedia14),
+            "yahoo_answers" | "yahooanswers" | "yahoo-answers" => Ok(DatasetId::YahooAnswers),
+            "trec" | "trec-qa" | "trec_qa" => Ok(DatasetId::TREC),
+            "tweettopic" | "tweet_topic" | "tweet-topic" => Ok(DatasetId::TweetTopic),
             // Constructed languages
             "esperanto_ud" | "esperanto-ud" | "esperantoud" => Ok(DatasetId::EsperantoUD),
             "toki_pona" | "tokipona" | "toki-pona" => Ok(DatasetId::TokiPona),
@@ -5758,11 +5912,19 @@ impl std::str::FromStr for DatasetId {
             "latin_proiel" | "latin-proiel" | "la_proiel" => Ok(DatasetId::LatinPROIEL),
             "ancient_hebrew_ud" | "ancient-hebrew" | "hbo_ptnk" => Ok(DatasetId::AncientHebrewUD),
             "gothic_ud" | "gothic" | "got_proiel" => Ok(DatasetId::GothicUD),
-            "classical_chinese_ud" | "classical-chinese" | "lzh_kyoto" => Ok(DatasetId::ClassicalChineseUD),
+            "classical_chinese_ud" | "classical-chinese" | "lzh_kyoto" => {
+                Ok(DatasetId::ClassicalChineseUD)
+            }
             "sanskrit_ud" | "sanskrit" | "sa_ufal" => Ok(DatasetId::SanskritUD),
-            "old_english_ud" | "old-english" | "anglo-saxon" | "ang_iswoc" => Ok(DatasetId::OldEnglishUD),
-            "old_norse_ud" | "old-norse" | "old-icelandic" | "non_icepahc" => Ok(DatasetId::OldNorseUD),
-            "old_church_slavonic_ud" | "old-church-slavonic" | "cu_proiel" => Ok(DatasetId::OldChurchSlavonicUD),
+            "old_english_ud" | "old-english" | "anglo-saxon" | "ang_iswoc" => {
+                Ok(DatasetId::OldEnglishUD)
+            }
+            "old_norse_ud" | "old-norse" | "old-icelandic" | "non_icepahc" => {
+                Ok(DatasetId::OldNorseUD)
+            }
+            "old_church_slavonic_ud" | "old-church-slavonic" | "cu_proiel" => {
+                Ok(DatasetId::OldChurchSlavonicUD)
+            }
             "coptic_ud" | "coptic" | "cop_scriptorium" => Ok(DatasetId::CopticUD),
             "akkadian_ud" | "akkadian" | "akk_pisandub" => Ok(DatasetId::AkkadianUD),
             "hittite_ud" | "hittite" | "hit_hittb" => Ok(DatasetId::HittiteUD),
@@ -5795,7 +5957,9 @@ impl std::str::FromStr for DatasetId {
             "cherokee" | "cherokee_ner" | "cherokee-english" => Ok(DatasetId::CherokeeNER),
             // Other coref (quoref aliases to qxoref for convenience)
             "quoref" | "quo_ref" | "qa-coref" => Ok(DatasetId::QxoRef),
-            "ontonotes_coref" | "ontonotes-coref" | "onto_notes_coref" => Ok(DatasetId::OntoNotesCoref),
+            "ontonotes_coref" | "ontonotes-coref" | "onto_notes_coref" => {
+                Ok(DatasetId::OntoNotesCoref)
+            }
             "craft_coref" | "craft-coref" | "craftcoref" => Ok(DatasetId::CRAFTCoref),
             // === Extended aliases for TOML compatibility ===
             // Entity linking / Events
@@ -5820,11 +5984,13 @@ impl std::str::FromStr for DatasetId {
             // Multilingual/Historical
             "co_nll2002" | "conll2002" => Ok(DatasetId::CoNLL2002),
             "co_nll2002_dutch" | "conll2002dutch" | "conll2002-nl" => Ok(DatasetId::CoNLL2002Dutch),
-            "co_nll2002_spanish" | "conll2002spanish" | "conll2002-es" => Ok(DatasetId::CoNLL2002Spanish),
+            "co_nll2002_spanish" | "conll2002spanish" | "conll2002-es" => {
+                Ok(DatasetId::CoNLL2002Spanish)
+            }
             "germ_eval2014" | "germeval" | "germeval2014" => Ok(DatasetId::GermEval2014),
             "harem" | "portuguese-ner" => Ok(DatasetId::HAREM),
             "polyglot_ner" | "polyglotner" => Ok(DatasetId::PolyglotNER),
-            // Specialized domains  
+            // Specialized domains
             "astro_ner" | "astroner" | "astronomy-ner" => Ok(DatasetId::AstroNER),
             "wiespastro" | "wiesp-astro" => Ok(DatasetId::WIESPAstro),
             "finance_ner" | "financener" => Ok(DatasetId::FinanceNER),
@@ -5836,11 +6002,15 @@ impl std::str::FromStr for DatasetId {
             "nersocial_food" | "nersocialfood" | "food-ner" => Ok(DatasetId::NERsocialFood),
             "ener" | "e-ner" => Ok(DatasetId::ENER),
             // Medical / Clinical
-            "i2b2_deidentification" | "i2b2" | "i2b2deidentification" => Ok(DatasetId::I2b2Deidentification),
+            "i2b2_deidentification" | "i2b2" | "i2b2deidentification" => {
+                Ok(DatasetId::I2b2Deidentification)
+            }
             "sh_are13" | "share13" | "share-clef-2013" => Ok(DatasetId::ShARe13),
             "sh_are14" | "share14" | "share-clef-2014" => Ok(DatasetId::ShARe14),
             "french_clinical_ner" | "frenchclinicalner" => Ok(DatasetId::FrenchClinicalNER),
-            "clefclinical_coref" | "clef-clinical" | "clefclinicalcoref" => Ok(DatasetId::CLEFClinicalCoref),
+            "clefclinical_coref" | "clef-clinical" | "clefclinicalcoref" => {
+                Ok(DatasetId::CLEFClinicalCoref)
+            }
             "rad_coref" | "radcoref" | "radiology-coref" => Ok(DatasetId::RadCoref),
             // Discourse / Coreference
             "ecbplus_meta" | "ecbplus-meta" => Ok(DatasetId::ECBPlusMeta),
@@ -5849,7 +6019,9 @@ impl std::str::FromStr for DatasetId {
             "rstdt" | "rst-dt" | "rst-discourse" => Ok(DatasetId::RSTDT),
             "erst" | "e-rst" => Ok(DatasetId::ERST),
             "nom_bank_implicit" | "nombank" | "nombankimplicit" => Ok(DatasetId::NomBankImplicit),
-            "multiparty_dialogue_coref" | "multipartydialogue" => Ok(DatasetId::MultipartyDialogueCoref),
+            "multiparty_dialogue_coref" | "multipartydialogue" => {
+                Ok(DatasetId::MultipartyDialogueCoref)
+            }
             "football_coref_corpus" | "footballcoref" => Ok(DatasetId::FootballCorefCorpus),
             // Historical
             // "bi_time_bert" | "bitimebert" already covered above
@@ -5878,6 +6050,9 @@ impl std::str::FromStr for DatasetId {
             "bashi" | "bashi-ner" => Ok(DatasetId::BASHI),
             "cerec" | "ce-rec" => Ok(DatasetId::CEREC),
             "csn" | "cs-ner" => Ok(DatasetId::CSN),
+            "human_voice_agent" | "humanvoiceagent" | "human-voice-agent" => {
+                Ok(DatasetId::HumanVoiceAgentInteraction)
+            }
             "fcct" | "forum-coref" => Ok(DatasetId::FCCT),
             "nne" | "nested-ne" => Ok(DatasetId::NNE),
             "wiki_neural" | "wikineural" => Ok(DatasetId::WikiNeural),
@@ -6107,25 +6282,21 @@ impl CacheManifest {
             return Ok(Self::new());
         }
 
-        let content = fs::read_to_string(&manifest_path).map_err(|e| {
-            Error::InvalidInput(format!("Failed to read manifest: {}", e))
-        })?;
+        let content = fs::read_to_string(&manifest_path)
+            .map_err(|e| Error::InvalidInput(format!("Failed to read manifest: {}", e)))?;
 
-        serde_json::from_str(&content).map_err(|e| {
-            Error::InvalidInput(format!("Failed to parse manifest: {}", e))
-        })
+        serde_json::from_str(&content)
+            .map_err(|e| Error::InvalidInput(format!("Failed to parse manifest: {}", e)))
     }
 
     /// Save manifest to a cache directory.
     pub fn save(&self, cache_dir: &std::path::Path) -> Result<()> {
         let manifest_path = cache_dir.join("manifest.json");
-        let content = serde_json::to_string_pretty(self).map_err(|e| {
-            Error::InvalidInput(format!("Failed to serialize manifest: {}", e))
-        })?;
+        let content = serde_json::to_string_pretty(self)
+            .map_err(|e| Error::InvalidInput(format!("Failed to serialize manifest: {}", e)))?;
 
-        fs::write(&manifest_path, content).map_err(|e| {
-            Error::InvalidInput(format!("Failed to write manifest: {}", e))
-        })
+        fs::write(&manifest_path, content)
+            .map_err(|e| Error::InvalidInput(format!("Failed to write manifest: {}", e)))
     }
 
     /// Add or update an entry in the manifest.
@@ -6439,10 +6610,7 @@ impl DatasetLoader {
 
         // Check if S3 caching is enabled
         let s3_bucket = if std::env::var("ANNO_S3_CACHE").map_or(false, |v| v == "1") {
-            Some(
-                std::env::var("ANNO_S3_BUCKET")
-                    .unwrap_or_else(|_| "arc-anno-data".to_string()),
-            )
+            Some(std::env::var("ANNO_S3_BUCKET").unwrap_or_else(|_| "arc-anno-data".to_string()))
         } else {
             None
         };
@@ -6463,10 +6631,7 @@ impl DatasetLoader {
 
         // Check if S3 caching is enabled
         let s3_bucket = if std::env::var("ANNO_S3_CACHE").map_or(false, |v| v == "1") {
-            Some(
-                std::env::var("ANNO_S3_BUCKET")
-                    .unwrap_or_else(|_| "arc-anno-data".to_string()),
-            )
+            Some(std::env::var("ANNO_S3_BUCKET").unwrap_or_else(|_| "arc-anno-data".to_string()))
         } else {
             None
         };
@@ -6485,10 +6650,9 @@ impl DatasetLoader {
             if manifest.is_some() {
                 // Return existing manifest
                 drop(manifest);
-                return Ok(std::cell::Ref::map(
-                    self.manifest.borrow(),
-                    |opt| opt.as_ref().unwrap(),
-                ));
+                return Ok(std::cell::Ref::map(self.manifest.borrow(), |opt| {
+                    opt.as_ref().unwrap()
+                }));
             }
         }
 
@@ -6496,13 +6660,13 @@ impl DatasetLoader {
         let loaded = CacheManifest::load(&self.cache_dir)?;
         *self.manifest.borrow_mut() = Some(loaded);
 
-        Ok(std::cell::Ref::map(
-            self.manifest.borrow(),
-            |opt| opt.as_ref().unwrap(),
-        ))
+        Ok(std::cell::Ref::map(self.manifest.borrow(), |opt| {
+            opt.as_ref().unwrap()
+        }))
     }
 
     /// Update the cache manifest with a new entry and save it.
+    #[cfg(feature = "eval-advanced")]
     fn update_manifest(&self, entry: CacheManifestEntry) -> Result<()> {
         // Ensure manifest is loaded
         let _ = self.manifest()?;
@@ -6644,7 +6808,7 @@ impl DatasetLoader {
             | DatasetId::LegNER => self.parse_conll(content, id),
 
             // JSONL format (HuggingFace style)
-            DatasetId::MultiNERD 
+            DatasetId::MultiNERD
             | DatasetId::ACORD
             | DatasetId::ARFFiction
             | DatasetId::AgMNER
@@ -6816,7 +6980,7 @@ impl DatasetLoader {
 
             // UNER/MSNER use WikiANN-style JSON format (from download_hf_datasets.py)
             DatasetId::UNER | DatasetId::MSNER => self.parse_wikiann_json(content, id),
-            
+
             // BioMNER uses CoNLL/IOB2 format (JNLPBA/GENIA corpus)
             DatasetId::BioMNER => self.parse_conll(content, id),
 
@@ -6840,6 +7004,23 @@ impl DatasetLoader {
 
             // MasakhaPOS: CoNLL-U format (Universal Dependencies)
             DatasetId::MasakhaPOS => self.parse_conllu(content, id),
+
+            // =========================================================================
+            // Text Classification Datasets
+            // =========================================================================
+            DatasetId::AGNews => self.parse_agnews(content, id),
+            DatasetId::DBPedia14 => self.parse_dbpedia14(content, id),
+            DatasetId::YahooAnswers => self.parse_yahoo_answers(content, id),
+            DatasetId::TREC => self.parse_trec(content, id),
+            DatasetId::TweetTopic => self.parse_tweettopic(content, id),
+
+            // =========================================================================
+            // Event Extraction Datasets
+            // =========================================================================
+            DatasetId::MAVEN => self.parse_maven(content, id),
+            DatasetId::MAVENArg => self.parse_maven_arg(content, id),
+            DatasetId::CASIE => self.parse_casie(content, id),
+            DatasetId::RAMS => self.parse_rams(content, id),
 
             // Datasets now using HF datasets-server API (fallback if auto-detect fails)
             DatasetId::GENIA
@@ -7262,7 +7443,7 @@ impl DatasetLoader {
 
         // Load .env for HF_TOKEN if not already set
         crate::env::load_dotenv();
-        
+
         // Use HF_TOKEN from environment if available (for gated datasets)
         let api = if let Some(token) = crate::env::hf_token() {
             ApiBuilder::new()
@@ -7353,6 +7534,179 @@ impl DatasetLoader {
             content.hash(&mut hasher);
             format!("{:x}", hasher.finish())
         }
+    }
+
+    /// Download and extract a tar.gz archive, returning the content of the target data file.
+    ///
+    /// Uses system `tar` and `gzip` commands for extraction (available on most Unix systems
+    /// and Windows with WSL/Git Bash).
+    ///
+    /// For RAMS and similar datasets distributed as archives.
+    #[cfg(feature = "eval-advanced")]
+    fn download_and_extract_tarball(&self, id: DatasetId, url: &str) -> Result<String> {
+        use std::io::{Read, Write};
+        use std::process::Command;
+
+        log::info!("Downloading tarball for {:?} from {}", id, url);
+
+        // Download to a temporary file (binary content, not string)
+        let response = ureq::get(url)
+            .timeout(std::time::Duration::from_secs(300)) // 5 min for large archives
+            .call()
+            .map_err(|e| {
+                Error::InvalidInput(format!("Failed to download tarball from {}: {}", url, e))
+            })?;
+
+        if response.status() != 200 {
+            return Err(Error::InvalidInput(format!(
+                "HTTP {} downloading tarball from {}",
+                response.status(),
+                url
+            )));
+        }
+
+        // Read binary content
+        let mut bytes = Vec::new();
+        response
+            .into_reader()
+            .read_to_end(&mut bytes)
+            .map_err(|e| Error::InvalidInput(format!("Failed to read tarball response: {}", e)))?;
+
+        // Create temp directory for extraction
+        let temp_dir = std::env::temp_dir().join(format!("anno_extract_{:?}", id));
+        if temp_dir.exists() {
+            std::fs::remove_dir_all(&temp_dir).ok();
+        }
+        std::fs::create_dir_all(&temp_dir).map_err(|e| {
+            Error::InvalidInput(format!("Failed to create temp dir {:?}: {}", temp_dir, e))
+        })?;
+
+        // Write tarball to temp file
+        let tarball_path = temp_dir.join("archive.tar.gz");
+        let mut file = std::fs::File::create(&tarball_path).map_err(|e| {
+            Error::InvalidInput(format!(
+                "Failed to create temp file {:?}: {}",
+                tarball_path, e
+            ))
+        })?;
+        file.write_all(&bytes)
+            .map_err(|e| Error::InvalidInput(format!("Failed to write tarball: {}", e)))?;
+        drop(file);
+
+        log::info!(
+            "Downloaded {} bytes, extracting to {:?}",
+            bytes.len(),
+            temp_dir
+        );
+
+        // Extract using system tar (works on Unix, macOS, and Windows with Git Bash/WSL)
+        let output = Command::new("tar")
+            .args(["-xzf", tarball_path.to_str().unwrap_or("archive.tar.gz")])
+            .current_dir(&temp_dir)
+            .output()
+            .map_err(|e| {
+                Error::InvalidInput(format!(
+                    "Failed to run tar command: {}. \
+                     Make sure tar is installed and in PATH. \
+                     On Windows, use Git Bash, WSL, or install GNU tar.",
+                    e
+                ))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(Error::InvalidInput(format!(
+                "tar extraction failed: {}",
+                stderr
+            )));
+        }
+
+        // Find the target data file based on dataset
+        let target_patterns = self.tarball_target_patterns(id);
+        let data_content = self.find_and_read_data_file(&temp_dir, &target_patterns)?;
+
+        // Clean up temp directory
+        std::fs::remove_dir_all(&temp_dir).ok();
+
+        Ok(data_content)
+    }
+
+    /// Get file patterns to look for within an extracted tarball.
+    #[cfg(feature = "eval-advanced")]
+    fn tarball_target_patterns(&self, id: DatasetId) -> Vec<&'static str> {
+        match id {
+            // RAMS: Look for train/dev/test JSONL files
+            DatasetId::RAMS => vec![
+                "test.jsonl",
+                "dev.jsonl",
+                "train.jsonl",
+                "RAMS_1.0/data/test.jsonl",
+                "RAMS_1.0/data/dev.jsonl",
+            ],
+            // Generic fallback: look for common data file extensions
+            _ => vec![
+                "test.jsonl",
+                "test.json",
+                "data.jsonl",
+                "data.json",
+                "test.txt",
+            ],
+        }
+    }
+
+    /// Recursively find and read the first matching data file in extracted directory.
+    #[cfg(feature = "eval-advanced")]
+    fn find_and_read_data_file(&self, dir: &std::path::Path, patterns: &[&str]) -> Result<String> {
+        use std::fs;
+
+        // Collect all files recursively
+        fn collect_files(dir: &std::path::Path, files: &mut Vec<std::path::PathBuf>) {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        collect_files(&path, files);
+                    } else {
+                        files.push(path);
+                    }
+                }
+            }
+        }
+
+        let mut all_files = Vec::new();
+        collect_files(dir, &mut all_files);
+
+        // Try each pattern in order of preference
+        for pattern in patterns {
+            for file in &all_files {
+                if let Some(name) = file.file_name().and_then(|n| n.to_str()) {
+                    if name == *pattern
+                        || file.to_str().map(|s| s.ends_with(pattern)).unwrap_or(false)
+                    {
+                        log::info!("Found matching file: {:?}", file);
+                        return fs::read_to_string(file).map_err(|e| {
+                            Error::InvalidInput(format!(
+                                "Failed to read extracted file {:?}: {}",
+                                file, e
+                            ))
+                        });
+                    }
+                }
+            }
+        }
+
+        // List what we found for debugging
+        let found_names: Vec<_> = all_files
+            .iter()
+            .filter_map(|f| f.file_name().and_then(|n| n.to_str()))
+            .collect();
+
+        Err(Error::InvalidInput(format!(
+            "Could not find target data file in extracted archive. \
+             Looking for: {:?}. \
+             Found files: {:?}",
+            patterns, found_names
+        )))
     }
 
     /// Parse CoNLL/BIO format content.
@@ -8725,8 +9079,7 @@ impl DatasetLoader {
                 // Format: OntoNotes-style with character metadata
                 // Note: Actual data requires HuggingFace datasets library to download
                 // from Project Gutenberg. We support pre-downloaded JSONL.
-                let docs = super::coref_loader::parse_bookcoref_json(&content)?;
-                Ok(docs.into_iter().map(|d| d.to_coref_document()).collect())
+                super::coref_loader::parse_bookcoref_json(&content)
             }
             _ => Err(Error::InvalidInput(format!(
                 "No coreference parser for {:?}",
@@ -9178,7 +9531,10 @@ impl DatasetLoader {
 
             if let Some(entities) = entities_arr {
                 for entity in entities {
-                    let ent_type = entity.get("type").and_then(|v| v.as_str()).unwrap_or("ENTITY");
+                    let ent_type = entity
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("ENTITY");
                     let start = entity.get("start").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
                     let end = entity.get("end").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
 
@@ -9302,10 +9658,18 @@ impl DatasetLoader {
 
             if let Some(entities) = entities_arr {
                 for entity in entities {
-                    let ent_type = entity.get("type").and_then(|v| v.as_str()).unwrap_or("ENTITY").to_string();
+                    let ent_type = entity
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("ENTITY")
+                        .to_string();
                     let start = entity.get("start").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
                     let end = entity.get("end").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                    let span = entity.get("span").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let span = entity
+                        .get("span")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
 
                     // Fallback to extracting from text if span is empty
                     let span_text = if !span.is_empty() {
@@ -9324,7 +9688,11 @@ impl DatasetLoader {
 
             if let Some(rels) = relations_arr {
                 for rel in rels {
-                    let rel_type = rel.get("type").and_then(|v| v.as_str()).unwrap_or("RELATION").to_string();
+                    let rel_type = rel
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("RELATION")
+                        .to_string();
                     // CHisIEC uses entity indices for head/tail
                     let head_idx = rel.get("head").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
                     let tail_idx = rel.get("tail").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
@@ -9429,9 +9797,7 @@ impl DatasetLoader {
 
         for doc in docs {
             // Get context text
-            let context = doc.get("context")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let context = doc.get("context").and_then(|v| v.as_str()).unwrap_or("");
 
             // Get answers
             if let Some(answers) = doc.get("answers").and_then(|v| v.as_object()) {
@@ -9451,10 +9817,12 @@ impl DatasetLoader {
 
                     // Mark answer spans
                     for (text_val, start_val) in texts.iter().zip(starts.iter()) {
-                        if let (Some(answer_text), Some(start)) = (text_val.as_str(), start_val.as_u64()) {
+                        if let (Some(answer_text), Some(start)) =
+                            (text_val.as_str(), start_val.as_u64())
+                        {
                             let start = start as usize;
                             let answer_words: Vec<&str> = answer_text.split_whitespace().collect();
-                            
+
                             // Find word index by counting words before start position
                             let prefix: String = context.chars().take(start).collect();
                             let word_idx = prefix.split_whitespace().count();
@@ -9544,6 +9912,781 @@ impl DatasetLoader {
         })
     }
 
+    /// Parse TREC question classification format.
+    ///
+    /// TREC format: `COARSE:fine question text`
+    /// E.g.: `NUM:dist How far is it from Denver to Aspen ?`
+    ///
+    /// 6 coarse classes: ABBR, DESC, ENTY, HUM, LOC, NUM
+    /// 50 fine-grained classes.
+    ///
+    /// Source: <https://cogcomp.seas.upenn.edu/Data/QA/QC/>
+    fn parse_trec(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences = Vec::new();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            // Format: COARSE:fine question text
+            // Find the first space to separate label from question
+            if let Some(space_idx) = line.find(' ') {
+                let label = &line[..space_idx];
+                let question = line[space_idx + 1..].trim();
+
+                // Extract coarse label (before colon)
+                let coarse_label = label.split(':').next().unwrap_or(label);
+
+                // Create single token with the question and classification label
+                let tokens = vec![AnnotatedToken {
+                    text: question.to_string(),
+                    ner_tag: format!("B-{}", coarse_label),
+                }];
+
+                sentences.push(AnnotatedSentence {
+                    tokens,
+                    source_dataset: id,
+                });
+            }
+        }
+
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
+    /// Parse AG News classification format (parquet or CSV).
+    ///
+    /// AG News has 4 classes: World (0), Sports (1), Business (2), Sci/Tech (3)
+    ///
+    /// Source: <https://huggingface.co/datasets/ag_news>
+    fn parse_agnews(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences = Vec::new();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        let label_map = ["World", "Sports", "Business", "Sci/Tech"];
+
+        // Try parsing as JSON (converted from parquet)
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            // Try JSON format
+            if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
+                let text = obj.get("text").and_then(|v| v.as_str()).unwrap_or_default();
+                let label_idx = obj.get("label").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
+
+                let label = label_map.get(label_idx).unwrap_or(&"Unknown");
+
+                let tokens = vec![AnnotatedToken {
+                    text: text.to_string(),
+                    ner_tag: format!("B-{}", label),
+                }];
+
+                sentences.push(AnnotatedSentence {
+                    tokens,
+                    source_dataset: id,
+                });
+            }
+        }
+
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
+    /// Parse DBPedia-14 classification format.
+    ///
+    /// 14 classes from DBpedia ontology.
+    ///
+    /// Source: <https://huggingface.co/datasets/dbpedia_14>
+    fn parse_dbpedia14(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences = Vec::new();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        let label_map = [
+            "Company",
+            "EducationalInstitution",
+            "Artist",
+            "Athlete",
+            "OfficeHolder",
+            "MeanOfTransportation",
+            "Building",
+            "NaturalPlace",
+            "Village",
+            "Animal",
+            "Plant",
+            "Album",
+            "Film",
+            "WrittenWork",
+        ];
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
+                let content_text = obj
+                    .get("content")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let label_idx = obj.get("label").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
+
+                let label = label_map.get(label_idx).unwrap_or(&"Unknown");
+
+                let tokens = vec![AnnotatedToken {
+                    text: content_text.to_string(),
+                    ner_tag: format!("B-{}", label),
+                }];
+
+                sentences.push(AnnotatedSentence {
+                    tokens,
+                    source_dataset: id,
+                });
+            }
+        }
+
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
+    /// Parse Yahoo Answers topic classification format.
+    ///
+    /// 10 topics: Society, Science, Health, Education, Computers,
+    /// Sports, Business, Entertainment, Family, Politics
+    ///
+    /// Source: <https://huggingface.co/datasets/yahoo_answers_topics>
+    fn parse_yahoo_answers(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences = Vec::new();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        let label_map = [
+            "Society",
+            "Science",
+            "Health",
+            "Education",
+            "Computers",
+            "Sports",
+            "Business",
+            "Entertainment",
+            "Family",
+            "Politics",
+        ];
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
+                // Yahoo Answers has question_title, question_content, best_answer
+                let question = obj
+                    .get("question_title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let label_idx = obj.get("topic").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
+
+                let label = label_map.get(label_idx).unwrap_or(&"Unknown");
+
+                let tokens = vec![AnnotatedToken {
+                    text: question.to_string(),
+                    ner_tag: format!("B-{}", label),
+                }];
+
+                sentences.push(AnnotatedSentence {
+                    tokens,
+                    source_dataset: id,
+                });
+            }
+        }
+
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
+    /// Parse MAVEN event detection format.
+    ///
+    /// MAVEN provides event triggers with 168 event types.
+    /// Supports both:
+    /// - Full MAVEN JSONL format (train.jsonl/valid.jsonl with events array)
+    /// - Fallback: docid2topic.json mapping file
+    ///
+    /// Full format structure:
+    /// ```json
+    /// {
+    ///   "id": "doc_id",
+    ///   "content": [{"sentence": "...", "tokens": [...]}],
+    ///   "events": [{
+    ///     "type": "EventType",
+    ///     "mention": [{"trigger_word": "...", "sent_id": 0, "offset": [3, 4]}]
+    ///   }]
+    /// }
+    /// ```
+    ///
+    /// Source: <https://github.com/THU-KEG/MAVEN-dataset>
+    fn parse_maven(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences = Vec::new();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Try parsing as JSONL (full MAVEN format)
+        let mut is_jsonl = false;
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(line) {
+                // Check if this is full MAVEN format with events
+                if let Some(events) = doc.get("events").and_then(|e| e.as_array()) {
+                    is_jsonl = true;
+
+                    // Get document content for context
+                    let doc_content: Vec<String> = doc
+                        .get("content")
+                        .and_then(|c| c.as_array())
+                        .map(|sents| {
+                            sents
+                                .iter()
+                                .filter_map(|s| s.get("sentence").and_then(|v| v.as_str()))
+                                .map(|s| s.to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    // Process each event
+                    for event in events {
+                        let event_type = event
+                            .get("type")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("EVENT");
+
+                        // Process each mention of this event
+                        if let Some(mentions) = event.get("mention").and_then(|m| m.as_array()) {
+                            for mention in mentions {
+                                let trigger_word = mention
+                                    .get("trigger_word")
+                                    .and_then(|t| t.as_str())
+                                    .unwrap_or("");
+
+                                let sent_id =
+                                    mention.get("sent_id").and_then(|s| s.as_u64()).unwrap_or(0)
+                                        as usize;
+
+                                // Get sentence context if available
+                                let context = doc_content
+                                    .get(sent_id)
+                                    .cloned()
+                                    .unwrap_or_else(|| trigger_word.to_string());
+
+                                let tokens = vec![AnnotatedToken {
+                                    text: context,
+                                    ner_tag: format!("B-{}", event_type),
+                                }];
+
+                                sentences.push(AnnotatedSentence {
+                                    tokens,
+                                    source_dataset: id,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: parse as docid2topic.json mapping
+        if !is_jsonl {
+            if let Ok(obj) = serde_json::from_str::<serde_json::Value>(content) {
+                if let Some(map) = obj.as_object() {
+                    for (doc_id, event_type) in map {
+                        let event_type_str = event_type.as_str().unwrap_or("event");
+
+                        let tokens = vec![AnnotatedToken {
+                            text: doc_id.clone(),
+                            ner_tag: format!(
+                                "B-EVENT_{}",
+                                event_type_str.to_uppercase().replace(' ', "_")
+                            ),
+                        }];
+
+                        sentences.push(AnnotatedSentence {
+                            tokens,
+                            source_dataset: id,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
+    /// Parse CASIE cybersecurity event extraction format.
+    ///
+    /// CASIE has 5 event types: Attack-Pattern, Vulnerability, Data-Breach, Malware, Patch
+    ///
+    /// Format structure:
+    /// ```json
+    /// {
+    ///   "content": "document text...",
+    ///   "cyberevent": {
+    ///     "hopper": [{
+    ///       "events": [{
+    ///         "subtype": "Databreach",
+    ///         "nugget": {"text": "trigger", "startOffset": 0, "endOffset": 10},
+    ///         "argument": [{"text": "arg", "role": {"type": "RoleType"}}]
+    ///       }]
+    ///     }]
+    ///   }
+    /// }
+    /// ```
+    ///
+    /// Source: <https://github.com/Ebiquity/CASIE>
+    fn parse_casie(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences = Vec::new();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Handle JSONL format (multiple documents)
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(line) {
+                let content_text = doc
+                    .get("content")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+
+                if content_text.is_empty() {
+                    continue;
+                }
+
+                // Extract events from cyberevent.hopper[].events[]
+                let mut found_events = false;
+                if let Some(hopper) = doc
+                    .get("cyberevent")
+                    .and_then(|ce| ce.get("hopper"))
+                    .and_then(|h| h.as_array())
+                {
+                    for cluster in hopper {
+                        if let Some(events) = cluster.get("events").and_then(|e| e.as_array()) {
+                            for event in events {
+                                found_events = true;
+
+                                // Get event subtype
+                                let subtype = event
+                                    .get("subtype")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("Event");
+
+                                // Get trigger (nugget)
+                                let trigger_text = event
+                                    .get("nugget")
+                                    .and_then(|n| n.get("text"))
+                                    .and_then(|t| t.as_str())
+                                    .unwrap_or("");
+
+                                // Create entry with trigger and event type
+                                let tokens = vec![AnnotatedToken {
+                                    text: trigger_text.to_string(),
+                                    ner_tag: format!("B-{}", subtype),
+                                }];
+
+                                sentences.push(AnnotatedSentence {
+                                    tokens,
+                                    source_dataset: id,
+                                });
+
+                                // Also extract arguments if present
+                                if let Some(args) = event.get("argument").and_then(|a| a.as_array())
+                                {
+                                    for arg in args {
+                                        let arg_text =
+                                            arg.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                                        let role = arg
+                                            .get("role")
+                                            .and_then(|r| r.get("type"))
+                                            .and_then(|t| t.as_str())
+                                            .unwrap_or("Argument");
+
+                                        if !arg_text.is_empty() {
+                                            let tokens = vec![AnnotatedToken {
+                                                text: arg_text.to_string(),
+                                                ner_tag: format!("B-ARG_{}", role),
+                                            }];
+
+                                            sentences.push(AnnotatedSentence {
+                                                tokens,
+                                                source_dataset: id,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // If no events found, add document with O tag
+                if !found_events {
+                    let tokens = vec![AnnotatedToken {
+                        text: content_text.chars().take(200).collect(),
+                        ner_tag: "O".to_string(),
+                    }];
+
+                    sentences.push(AnnotatedSentence {
+                        tokens,
+                        source_dataset: id,
+                    });
+                }
+            }
+        }
+
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
+    /// Parse MAVEN-ARG event argument extraction format.
+    ///
+    /// MAVEN-ARG extends MAVEN with 612 argument roles across 162 event types.
+    ///
+    /// Format structure:
+    /// ```json
+    /// {
+    ///   "id": "doc_id",
+    ///   "document": "full document text...",
+    ///   "events": [{
+    ///     "type": "EventType",
+    ///     "mention": [{"trigger_word": "...", "offset": [start, end]}],
+    ///     "argument": {"Role": [{"content": "arg text", "offset": [s, e]}]}
+    ///   }]
+    /// }
+    /// ```
+    ///
+    /// Source: <https://github.com/THU-KEG/MAVEN-Argument>
+    fn parse_maven_arg(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences = Vec::new();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(line) {
+                // Get document text
+                let _doc_text = doc.get("document").and_then(|d| d.as_str()).unwrap_or("");
+
+                // Process events
+                if let Some(events) = doc.get("events").and_then(|e| e.as_array()) {
+                    for event in events {
+                        let event_type = event
+                            .get("type")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("EVENT");
+
+                        // Process event mentions (triggers)
+                        if let Some(mentions) = event.get("mention").and_then(|m| m.as_array()) {
+                            for mention in mentions {
+                                let trigger = mention
+                                    .get("trigger_word")
+                                    .and_then(|t| t.as_str())
+                                    .unwrap_or("");
+
+                                if !trigger.is_empty() {
+                                    let tokens = vec![AnnotatedToken {
+                                        text: trigger.to_string(),
+                                        ner_tag: format!("B-{}", event_type),
+                                    }];
+
+                                    sentences.push(AnnotatedSentence {
+                                        tokens,
+                                        source_dataset: id,
+                                    });
+                                }
+                            }
+                        }
+
+                        // Process arguments
+                        if let Some(args) = event.get("argument").and_then(|a| a.as_object()) {
+                            for (role, arg_list) in args {
+                                if let Some(arg_arr) = arg_list.as_array() {
+                                    for arg in arg_arr {
+                                        // Arguments can be text or entity references
+                                        if let Some(content) =
+                                            arg.get("content").and_then(|c| c.as_str())
+                                        {
+                                            if !content.is_empty() {
+                                                let tokens = vec![AnnotatedToken {
+                                                    text: content.to_string(),
+                                                    ner_tag: format!("B-ARG_{}", role),
+                                                }];
+
+                                                sentences.push(AnnotatedSentence {
+                                                    tokens,
+                                                    source_dataset: id,
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
+    /// Parse RAMS event argument extraction format.
+    ///
+    /// RAMS (Roles Across Multiple Sentences) covers 139 event types
+    /// with arguments that can span multiple sentences.
+    ///
+    /// Format structure:
+    /// ```json
+    /// {
+    ///   "doc_key": "...",
+    ///   "sentences": [["token1", "token2", ...]],
+    ///   "evt_triggers": [[start, end, [["event.type", score]]]],
+    ///   "gold_evt_links": [[[evt_idx], [arg_start, arg_end], "role"]]
+    /// }
+    /// ```
+    ///
+    /// Source: <https://nlp.jhu.edu/rams/>
+    fn parse_rams(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences = Vec::new();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(line) {
+                // Get all tokens (flattened sentences)
+                let all_tokens: Vec<String> = doc
+                    .get("sentences")
+                    .and_then(|s| s.as_array())
+                    .map(|sents| {
+                        sents
+                            .iter()
+                            .filter_map(|s| s.as_array())
+                            .flat_map(|toks| {
+                                toks.iter().filter_map(|t| t.as_str().map(String::from))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                // Process event triggers
+                if let Some(triggers) = doc.get("evt_triggers").and_then(|t| t.as_array()) {
+                    for trigger in triggers {
+                        if let Some(trigger_arr) = trigger.as_array() {
+                            if trigger_arr.len() >= 3 {
+                                let start = trigger_arr[0].as_u64().unwrap_or(0) as usize;
+                                let end = trigger_arr[1].as_u64().unwrap_or(0) as usize;
+
+                                // Get event type from nested array
+                                let event_type = trigger_arr[2]
+                                    .as_array()
+                                    .and_then(|types| types.first())
+                                    .and_then(|t| t.as_array())
+                                    .and_then(|t| t.first())
+                                    .and_then(|t| t.as_str())
+                                    .unwrap_or("event");
+
+                                // Extract trigger text
+                                if end <= all_tokens.len() {
+                                    let trigger_text = all_tokens[start..=end.min(start)].join(" ");
+                                    let tokens = vec![AnnotatedToken {
+                                        text: trigger_text,
+                                        ner_tag: format!("B-{}", event_type),
+                                    }];
+
+                                    sentences.push(AnnotatedSentence {
+                                        tokens,
+                                        source_dataset: id,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Process argument links
+                if let Some(links) = doc.get("gold_evt_links").and_then(|l| l.as_array()) {
+                    for link in links {
+                        if let Some(link_arr) = link.as_array() {
+                            if link_arr.len() >= 3 {
+                                // Argument span
+                                if let Some(span) = link_arr[1].as_array() {
+                                    if span.len() >= 2 {
+                                        let start = span[0].as_u64().unwrap_or(0) as usize;
+                                        let end = span[1].as_u64().unwrap_or(0) as usize;
+                                        let role = link_arr[2].as_str().unwrap_or("argument");
+
+                                        if end < all_tokens.len() {
+                                            let arg_text =
+                                                all_tokens[start..=end.min(start)].join(" ");
+                                            let tokens = vec![AnnotatedToken {
+                                                text: arg_text,
+                                                ner_tag: format!("B-ARG_{}", role),
+                                            }];
+
+                                            sentences.push(AnnotatedSentence {
+                                                tokens,
+                                                source_dataset: id,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
+    /// Parse TweetTopic format (JSONL with text and labels).
+    ///
+    /// Format: {"text": "...", "label": 0, "label_name": "sports_&_gaming", ...}
+    ///
+    /// Source: <https://huggingface.co/datasets/cardiffnlp/tweet_topic_single>
+    fn parse_tweettopic(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences = Vec::new();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Label mapping if label_name not present
+        let label_map = [
+            "arts_&_culture",
+            "business_&_entrepreneurs",
+            "pop_culture",
+            "daily_life",
+            "sports_&_gaming",
+            "science_&_technology",
+        ];
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
+                let text = obj.get("text").and_then(|v| v.as_str()).unwrap_or_default();
+
+                // Try label_name first, then map from label index
+                let label = obj
+                    .get("label_name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(|| {
+                        obj.get("label")
+                            .and_then(|v| v.as_i64())
+                            .and_then(|idx| label_map.get(idx as usize))
+                            .map(|s| s.to_string())
+                    })
+                    .unwrap_or_else(|| "topic".to_string());
+
+                let tokens = vec![AnnotatedToken {
+                    text: text.to_string(),
+                    ner_tag: format!("B-{}", label),
+                }];
+
+                sentences.push(AnnotatedSentence {
+                    tokens,
+                    source_dataset: id,
+                });
+            }
+        }
+
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
     /// Parse CoNLL-U format (Universal Dependencies).
     ///
     /// CoNLL-U format has 10 tab-separated columns per line:
@@ -9559,7 +10702,7 @@ impl DatasetLoader {
 
         for line in content.lines() {
             let line = line.trim();
-            
+
             // Skip comments
             if line.starts_with('#') {
                 continue;
@@ -9688,6 +10831,21 @@ mod tests {
         assert_eq!(parse_bio_tag("B-PER"), ("B", "PER"));
         assert_eq!(parse_bio_tag("I-LOC"), ("I", "LOC"));
         assert_eq!(parse_bio_tag("B-ORG"), ("B", "ORG"));
+    }
+
+    #[test]
+    #[cfg(feature = "eval-advanced")]
+    fn test_tarball_target_patterns() {
+        let loader = DatasetLoader::new().unwrap();
+
+        // RAMS should look for test.jsonl first
+        let rams_patterns = loader.tarball_target_patterns(DatasetId::RAMS);
+        assert!(!rams_patterns.is_empty());
+        assert!(rams_patterns.iter().any(|p| p.contains("jsonl")));
+
+        // Generic fallback should include common patterns
+        let generic_patterns = loader.tarball_target_patterns(DatasetId::WikiGold);
+        assert!(!generic_patterns.is_empty());
     }
 
     #[test]
@@ -9911,13 +11069,16 @@ Blackburn NNP I-NP I-PER
         // Historical NER datasets should have proper metadata
         assert!(!DatasetId::HIPE2022.download_url().is_empty());
         assert_eq!(DatasetId::HIPE2022.name(), "HIPE-2022");
-        
+
         assert!(!DatasetId::MedievalCzechCharters.download_url().is_empty());
-        assert_eq!(DatasetId::MedievalCzechCharters.name(), "Medieval Czech Charters");
-        
+        assert_eq!(
+            DatasetId::MedievalCzechCharters.name(),
+            "Medieval Czech Charters"
+        );
+
         assert!(!DatasetId::TRIDIS.download_url().is_empty());
         assert_eq!(DatasetId::TRIDIS.name(), "TRIDIS");
-        
+
         // Should be in all() list
         let all = DatasetId::all();
         assert!(all.contains(&DatasetId::HIPE2022));
@@ -9929,13 +11090,13 @@ Blackburn NNP I-NP I-PER
         // Queer/gender-inclusive NLP datasets
         assert!(!DatasetId::WinoQueer.download_url().is_empty());
         assert_eq!(DatasetId::WinoQueer.name(), "WinoQueer");
-        
+
         assert!(!DatasetId::GICoref.download_url().is_empty());
         assert_eq!(DatasetId::GICoref.name(), "GICoref");
-        
+
         assert!(!DatasetId::BBQ.download_url().is_empty());
         assert_eq!(DatasetId::BBQ.name(), "BBQ");
-        
+
         // Should be in all() list
         let all = DatasetId::all();
         assert!(all.contains(&DatasetId::WinoQueer));
@@ -9948,10 +11109,10 @@ Blackburn NNP I-NP I-PER
         // Joint NER + Relation Extraction datasets
         assert!(!DatasetId::TACRED.download_url().is_empty());
         assert_eq!(DatasetId::TACRED.name(), "TACRED");
-        
+
         assert!(!DatasetId::REBEL.download_url().is_empty());
         assert_eq!(DatasetId::REBEL.name(), "REBEL");
-        
+
         // Should be in all() list
         let all = DatasetId::all();
         assert!(all.contains(&DatasetId::TACRED));
@@ -9963,13 +11124,13 @@ Blackburn NNP I-NP I-PER
         // Dialogue/streaming coreference datasets
         assert!(!DatasetId::CODICRAC.download_url().is_empty());
         assert_eq!(DatasetId::CODICRAC.name(), "CODI-CRAC");
-        
+
         assert!(!DatasetId::AMIMeeting.download_url().is_empty());
         assert_eq!(DatasetId::AMIMeeting.name(), "AMI Meeting");
-        
+
         assert!(!DatasetId::ARRAU.download_url().is_empty());
         assert_eq!(DatasetId::ARRAU.name(), "ARRAU");
-        
+
         // Should be in all() list
         let all = DatasetId::all();
         assert!(all.contains(&DatasetId::CODICRAC));
@@ -9985,7 +11146,7 @@ Blackburn NNP I-NP I-PER
         assert!(DatasetId::MedievalCzechCharters.is_historical());
         assert!(DatasetId::EighteenthCenturyNER.is_historical());
         assert!(DatasetId::HistoricalChineseNER.is_historical());
-        
+
         // Non-historical should return false
         assert!(!DatasetId::WikiGold.is_historical());
         assert!(!DatasetId::CoNLL2003Sample.is_historical());
@@ -9999,7 +11160,7 @@ Blackburn NNP I-NP I-PER
         assert!(DatasetId::GICoref.is_bias_evaluation());
         assert!(DatasetId::WinoBias.is_bias_evaluation());
         assert!(DatasetId::GAP.is_bias_evaluation());
-        
+
         // Non-bias should return false
         assert!(!DatasetId::WikiGold.is_bias_evaluation());
     }
@@ -10010,7 +11171,7 @@ Blackburn NNP I-NP I-PER
         assert!(DatasetId::CODICRAC.is_dialogue_coref());
         assert!(DatasetId::AMIMeeting.is_dialogue_coref());
         assert!(DatasetId::ARRAU.is_dialogue_coref());
-        
+
         // Non-dialogue should return false
         assert!(!DatasetId::LitBank.is_dialogue_coref());
     }
@@ -10022,7 +11183,7 @@ Blackburn NNP I-NP I-PER
         assert!(DatasetId::REBEL.is_joint_ner_re());
         assert!(DatasetId::FewRel.is_joint_ner_re());
         assert!(DatasetId::DocRED.is_joint_ner_re());
-        
+
         // Non-RE should return false
         assert!(!DatasetId::WikiGold.is_joint_ner_re());
     }
@@ -10031,20 +11192,20 @@ Blackburn NNP I-NP I-PER
     fn test_new_datasets_have_descriptions() {
         // All new datasets should have proper descriptions (not the catch-all)
         let catch_all = "Dataset not yet fully integrated";
-        
+
         // Historical
         assert_ne!(DatasetId::HIPE2022.description(), catch_all);
         assert_ne!(DatasetId::TRIDIS.description(), catch_all);
-        
+
         // Queer NLP
         assert_ne!(DatasetId::WinoQueer.description(), catch_all);
         assert_ne!(DatasetId::BBQ.description(), catch_all);
         assert_ne!(DatasetId::GICoref.description(), catch_all);
-        
+
         // Joint NER+RE
         assert_ne!(DatasetId::TACRED.description(), catch_all);
         assert_ne!(DatasetId::REBEL.description(), catch_all);
-        
+
         // Dialogue
         assert_ne!(DatasetId::CODICRAC.description(), catch_all);
         assert_ne!(DatasetId::ARRAU.description(), catch_all);
@@ -10067,7 +11228,7 @@ Blackburn NNP I-NP I-PER
         // CHisIEC should be both historical and relation extraction
         assert!(DatasetId::CHisIEC.is_historical());
         assert!(DatasetId::CHisIEC.is_relation_extraction());
-        
+
         // Verify entity types
         let types = DatasetId::CHisIEC.entity_types();
         assert!(types.contains(&"PER"));
@@ -10080,9 +11241,18 @@ Blackburn NNP I-NP I-PER
     fn test_chisiec_from_str() {
         // Test various string representations
         assert_eq!("chisiec".parse::<DatasetId>().unwrap(), DatasetId::CHisIEC);
-        assert_eq!("ch-is-iec".parse::<DatasetId>().unwrap(), DatasetId::CHisIEC);
-        assert_eq!("chinese-historical-ie".parse::<DatasetId>().unwrap(), DatasetId::CHisIEC);
-        assert_eq!("ancient-chinese-ner".parse::<DatasetId>().unwrap(), DatasetId::CHisIEC);
+        assert_eq!(
+            "ch-is-iec".parse::<DatasetId>().unwrap(),
+            DatasetId::CHisIEC
+        );
+        assert_eq!(
+            "chinese-historical-ie".parse::<DatasetId>().unwrap(),
+            DatasetId::CHisIEC
+        );
+        assert_eq!(
+            "ancient-chinese-ner".parse::<DatasetId>().unwrap(),
+            DatasetId::CHisIEC
+        );
     }
 
     #[test]
@@ -10111,10 +11281,10 @@ Blackburn NNP I-NP I-PER
         assert_eq!(sentence.tokens.len(), 4);
 
         // Check BIO tags
-        assert_eq!(sentence.tokens[0].ner_tag, "B-PER");  // 衞
-        assert_eq!(sentence.tokens[1].ner_tag, "I-PER");  // 鞅
-        assert_eq!(sentence.tokens[2].ner_tag, "O");      // 奔
-        assert_eq!(sentence.tokens[3].ner_tag, "B-LOC");  // 魏
+        assert_eq!(sentence.tokens[0].ner_tag, "B-PER"); // 衞
+        assert_eq!(sentence.tokens[1].ner_tag, "I-PER"); // 鞅
+        assert_eq!(sentence.tokens[2].ner_tag, "O"); // 奔
+        assert_eq!(sentence.tokens[3].ner_tag, "B-LOC"); // 魏
     }
 
     #[test]
@@ -10172,7 +11342,9 @@ Blackburn NNP I-NP I-PER
         ]"#;
 
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.parse_chisiec(sample_json, DatasetId::CHisIEC).unwrap();
+        let dataset = loader
+            .parse_chisiec(sample_json, DatasetId::CHisIEC)
+            .unwrap();
 
         assert_eq!(dataset.sentences.len(), 1);
         let sentence = &dataset.sentences[0];
@@ -10221,7 +11393,9 @@ Blackburn NNP I-NP I-PER
         ]"#;
 
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.parse_chisiec(sample_json, DatasetId::CHisIEC).unwrap();
+        let dataset = loader
+            .parse_chisiec(sample_json, DatasetId::CHisIEC)
+            .unwrap();
 
         // 曹操 is 2 characters (but 6 bytes in UTF-8)
         let sentence = &dataset.sentences[0];
@@ -10285,12 +11459,15 @@ Blackburn NNP I-NP I-PER
         // CHisIEC: PER, LOC, OFI, BOOK (ancient Chinese)
         // HistoricalChineseNER: PER, LOC, ORG, DATE, etc. (modern Chinese 1872-1949)
         let chisiec_types = DatasetId::CHisIEC.entity_types();
-        assert!(chisiec_types.contains(&"OFI"));  // Official position - unique to CHisIEC
+        assert!(chisiec_types.contains(&"OFI")); // Official position - unique to CHisIEC
         assert!(chisiec_types.contains(&"BOOK")); // Classical texts
 
         // Different names
         assert_eq!(DatasetId::CHisIEC.name(), "CHisIEC");
-        assert_eq!(DatasetId::HistoricalChineseNER.name(), "Historical Chinese NER");
+        assert_eq!(
+            DatasetId::HistoricalChineseNER.name(),
+            "Historical Chinese NER"
+        );
     }
 
     #[test]
@@ -10305,7 +11482,9 @@ Blackburn NNP I-NP I-PER
         ]"#;
 
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.parse_chisiec(sample_json, DatasetId::CHisIEC).unwrap();
+        let dataset = loader
+            .parse_chisiec(sample_json, DatasetId::CHisIEC)
+            .unwrap();
 
         assert_eq!(dataset.sentences.len(), 1);
         let sentence = &dataset.sentences[0];
@@ -10342,10 +11521,10 @@ Blackburn NNP I-NP I-PER
     fn test_chisiec_language_and_domain() {
         // CHisIEC is Classical Chinese (文言文) - ISO 639-3: lzh
         assert_eq!(DatasetId::CHisIEC.language(), "lzh");
-        
+
         // CHisIEC is a historical dataset (24 dynastic histories)
         assert_eq!(DatasetId::CHisIEC.domain(), "historical");
-        
+
         // Compare with HistoricalChineseNER which is modern Chinese (1872-1949)
         assert_eq!(DatasetId::HistoricalChineseNER.language(), "zh");
         assert_eq!(DatasetId::HistoricalChineseNER.domain(), "historical");
@@ -10539,20 +11718,195 @@ Blackburn NNP I-NP I-PER
         assert!(all.contains(&DatasetId::MasakhaPOS));
     }
 
+    // =========================================================================
+    // Event Extraction Parser Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parse_maven_jsonl() {
+        // Test MAVEN full JSONL format with events array
+        let sample_jsonl = r#"{"id": "doc1", "content": [{"sentence": "The earthquake struck Tokyo.", "tokens": ["The", "earthquake", "struck", "Tokyo", "."]}], "events": [{"type": "Disaster", "mention": [{"trigger_word": "earthquake", "sent_id": 0, "offset": [1, 2]}]}]}"#;
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_maven(sample_jsonl, DatasetId::MAVEN);
+        assert!(result.is_ok(), "parse_maven should succeed");
+
+        let dataset = result.unwrap();
+        assert!(!dataset.sentences.is_empty(), "Should have sentences");
+
+        // Check event type tag
+        let has_disaster = dataset
+            .sentences
+            .iter()
+            .any(|s| s.tokens.iter().any(|t| t.ner_tag.contains("Disaster")));
+        assert!(has_disaster, "Should have Disaster event tag");
+    }
+
+    #[test]
+    fn test_parse_maven_docid2topic_fallback() {
+        // Test fallback format (docid2topic.json)
+        let sample_json = r#"{"doc1": "Natural_Disaster", "doc2": "Political_Event"}"#;
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_maven(sample_json, DatasetId::MAVEN);
+        assert!(result.is_ok(), "parse_maven fallback should succeed");
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 2, "Should have 2 entries");
+    }
+
+    #[test]
+    fn test_parse_casie() {
+        // Test CASIE cybersecurity event format
+        let sample_jsonl = r#"{"content": "A vulnerability was discovered in Apache.", "cyberevent": {"hopper": [{"events": [{"subtype": "Vulnerability", "nugget": {"text": "vulnerability"}, "argument": [{"text": "Apache", "role": {"type": "Affected_System"}}]}]}]}}"#;
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_casie(sample_jsonl, DatasetId::CASIE);
+        assert!(result.is_ok(), "parse_casie should succeed");
+
+        let dataset = result.unwrap();
+        assert!(!dataset.sentences.is_empty(), "Should have sentences");
+
+        // Check for vulnerability trigger
+        let has_vuln = dataset
+            .sentences
+            .iter()
+            .any(|s| s.tokens.iter().any(|t| t.ner_tag.contains("Vulnerability")));
+        assert!(has_vuln, "Should have Vulnerability tag");
+
+        // Check for argument
+        let has_arg = dataset
+            .sentences
+            .iter()
+            .any(|s| s.tokens.iter().any(|t| t.ner_tag.contains("ARG_")));
+        assert!(has_arg, "Should have argument tag");
+    }
+
+    #[test]
+    fn test_parse_maven_arg() {
+        // Test MAVEN-ARG format with arguments
+        let sample_jsonl = r#"{"id": "doc1", "document": "The company announced layoffs.", "events": [{"type": "Employment", "mention": [{"trigger_word": "layoffs", "offset": [4, 5]}], "argument": {"Employer": [{"content": "company", "offset": [1, 2]}]}}]}"#;
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_maven_arg(sample_jsonl, DatasetId::MAVENArg);
+        assert!(result.is_ok(), "parse_maven_arg should succeed");
+
+        let dataset = result.unwrap();
+        assert!(!dataset.sentences.is_empty(), "Should have sentences");
+
+        // Check for trigger
+        let has_trigger = dataset
+            .sentences
+            .iter()
+            .any(|s| s.tokens.iter().any(|t| t.ner_tag.contains("Employment")));
+        assert!(has_trigger, "Should have Employment event tag");
+
+        // Check for argument role
+        let has_employer = dataset
+            .sentences
+            .iter()
+            .any(|s| s.tokens.iter().any(|t| t.ner_tag.contains("ARG_Employer")));
+        assert!(has_employer, "Should have Employer argument tag");
+    }
+
+    #[test]
+    fn test_parse_rams() {
+        // Test RAMS tokenized format
+        let sample_jsonl = r#"{"doc_key": "doc1", "sentences": [["The", "soldier", "fired", "his", "weapon", "."]], "evt_triggers": [[2, 2, [["conflict.attack", 1.0]]]], "gold_evt_links": [[[0], [1, 1], "attacker"]]}"#;
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_rams(sample_jsonl, DatasetId::RAMS);
+        assert!(result.is_ok(), "parse_rams should succeed");
+
+        let dataset = result.unwrap();
+        assert!(!dataset.sentences.is_empty(), "Should have sentences");
+
+        // Check for event trigger
+        let has_event = dataset
+            .sentences
+            .iter()
+            .any(|s| s.tokens.iter().any(|t| t.ner_tag.starts_with("B-")));
+        assert!(has_event, "Should have event tags");
+    }
+
+    #[test]
+    fn test_parse_trec() {
+        // Test TREC question classification format
+        let sample =
+            "NUM:dist How far is it from Denver to Aspen ?\nLOC:city What county is Modesto in ?\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_trec(sample, DatasetId::TREC);
+        assert!(result.is_ok(), "parse_trec should succeed");
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 2, "Should have 2 questions");
+
+        // Check coarse labels
+        assert!(dataset.sentences[0].tokens[0].ner_tag.contains("NUM"));
+        assert!(dataset.sentences[1].tokens[0].ner_tag.contains("LOC"));
+    }
+
+    #[test]
+    fn test_parse_tweettopic() {
+        // Test TweetTopic JSONL format
+        let sample_jsonl = r#"{"text": "Amazing game last night!", "label": 4, "label_name": "sports_&_gaming"}
+{"text": "New AI breakthrough announced", "label": 5, "label_name": "science_&_technology"}"#;
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_tweettopic(sample_jsonl, DatasetId::TweetTopic);
+        assert!(result.is_ok(), "parse_tweettopic should succeed");
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 2, "Should have 2 tweets");
+
+        // Check label names are used
+        assert!(dataset.sentences[0].tokens[0]
+            .ner_tag
+            .contains("sports_&_gaming"));
+        assert!(dataset.sentences[1].tokens[0]
+            .ner_tag
+            .contains("science_&_technology"));
+    }
+
     #[test]
     fn test_african_dataset_from_str() {
         // Test string parsing for African datasets
-        assert_eq!("masakhaner".parse::<DatasetId>().unwrap(), DatasetId::MasakhaNER);
-        assert_eq!("masakhaner2".parse::<DatasetId>().unwrap(), DatasetId::MasakhaNER2);
-        assert_eq!("afrisenti".parse::<DatasetId>().unwrap(), DatasetId::AfriSenti);
+        assert_eq!(
+            "masakhaner".parse::<DatasetId>().unwrap(),
+            DatasetId::MasakhaNER
+        );
+        assert_eq!(
+            "masakhaner2".parse::<DatasetId>().unwrap(),
+            DatasetId::MasakhaNER2
+        );
+        assert_eq!(
+            "afrisenti".parse::<DatasetId>().unwrap(),
+            DatasetId::AfriSenti
+        );
         assert_eq!("afriqa".parse::<DatasetId>().unwrap(), DatasetId::AfriQA);
-        assert_eq!("masakhanews".parse::<DatasetId>().unwrap(), DatasetId::MasakhaNEWS);
-        assert_eq!("masakhapos".parse::<DatasetId>().unwrap(), DatasetId::MasakhaPOS);
+        assert_eq!(
+            "masakhanews".parse::<DatasetId>().unwrap(),
+            DatasetId::MasakhaNEWS
+        );
+        assert_eq!(
+            "masakhapos".parse::<DatasetId>().unwrap(),
+            DatasetId::MasakhaPOS
+        );
 
         // Alternative spellings
-        assert_eq!("masakhane-ner".parse::<DatasetId>().unwrap(), DatasetId::MasakhaNER);
-        assert_eq!("afri-senti".parse::<DatasetId>().unwrap(), DatasetId::AfriSenti);
-        assert_eq!("masakhane-news".parse::<DatasetId>().unwrap(), DatasetId::MasakhaNEWS);
+        assert_eq!(
+            "masakhane-ner".parse::<DatasetId>().unwrap(),
+            DatasetId::MasakhaNER
+        );
+        assert_eq!(
+            "afri-senti".parse::<DatasetId>().unwrap(),
+            DatasetId::AfriSenti
+        );
+        assert_eq!(
+            "masakhane-news".parse::<DatasetId>().unwrap(),
+            DatasetId::MasakhaNEWS
+        );
     }
 
     #[test]
