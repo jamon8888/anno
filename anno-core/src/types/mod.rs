@@ -30,21 +30,13 @@
 //! ## Type Safety Patterns Used
 //!
 //! 1. **Newtypes**: `SignalId`, `TrackId`, `IdentityId` prevent mixing IDs
-//! 2. **Enums with methods**: `MentionType::is_compatible()` encodes constraints
+//! 2. **Enums with methods**: `Number::is_compatible()` encodes agreement
 //! 3. **Option for uncertainty**: `Option<Gender>` = unknown gender
 //! 4. **Result for fallibility**: Parsing, validation can fail
 //!
-//! ## Future: Typestate for Coreference
-//!
-//! A typestate pattern could enforce the resolution pipeline:
-//!
-//! ```text
-//! Mention<Undetected> → detect() → Mention<Detected>
-//! Mention<Detected>   → resolve() → Mention<Resolved>
-//! Mention<Resolved>   → link() → Mention<Linked>
-//! ```
-//!
-//! This would make it a compile error to call `link()` on an unresolved mention.
+//! These patterns catch real bugs at compile time:
+//! - Can't pass a `TrackId` where `SignalId` is expected
+//! - `is_compatible()` enforces linguistic constraints (person exclusion, dual-plural)
 //!
 //! # Types
 //!

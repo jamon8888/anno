@@ -530,6 +530,70 @@ pub fn entities_to_chains(entities: &[Entity]) -> Vec<CorefChain> {
 }
 
 // =============================================================================
+// CoreferenceResolver Trait
+// =============================================================================
+
+/// Trait for coreference resolution algorithms.
+///
+/// Implementors take a set of entity mentions and cluster them into
+/// coreference chains (groups of mentions referring to the same entity).
+///
+/// # Design Philosophy
+///
+/// This trait lives in `anno-core` because:
+/// 1. It depends only on core types (`Entity`, `CorefChain`)
+/// 2. Multiple crates need to implement it (backends, eval)
+/// 3. Keeping it here prevents circular dependencies
+///
+/// # Example Implementation
+///
+/// ```rust,ignore
+/// use anno_core::{CoreferenceResolver, Entity, CorefChain};
+///
+/// struct ExactMatchResolver;
+///
+/// impl CoreferenceResolver for ExactMatchResolver {
+///     fn resolve(&self, entities: &[Entity]) -> Vec<Entity> {
+///         // Cluster entities with identical text
+///         // ... implementation ...
+///     }
+///
+///     fn name(&self) -> &'static str {
+///         "exact-match"
+///     }
+/// }
+/// ```
+pub trait CoreferenceResolver: Send + Sync {
+    /// Resolve coreference, assigning canonical IDs to entities.
+    ///
+    /// Each entity in the output will have a `canonical_id` field set.
+    /// Entities with the same `canonical_id` are coreferent (refer to the
+    /// same real-world entity).
+    ///
+    /// # Invariants
+    ///
+    /// - Every output entity has `canonical_id.is_some()`
+    /// - Coreferent entities share the same `canonical_id`
+    /// - Singleton mentions get unique `canonical_id` values
+    fn resolve(&self, entities: &[Entity]) -> Vec<Entity>;
+
+    /// Resolve directly to chains.
+    ///
+    /// A chain groups all mentions of the same entity together.
+    /// This is often the desired output format for evaluation and
+    /// downstream tasks.
+    fn resolve_to_chains(&self, entities: &[Entity]) -> Vec<CorefChain> {
+        let resolved = self.resolve(entities);
+        entities_to_chains(&resolved)
+    }
+
+    /// Get resolver name.
+    ///
+    /// Used for logging, metrics, and result attribution.
+    fn name(&self) -> &'static str;
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 

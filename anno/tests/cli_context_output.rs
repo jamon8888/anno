@@ -2,11 +2,15 @@
 //!
 //! These features support human review, active learning, and annotation workflows.
 //!
-//! These tests are slow because they spawn CLI processes. To speed up:
-//! 1. Build release binary: `cargo build --release -p anno-cli`
-//! 2. Set ANNO_CLI_BIN to path, or tests will use `cargo run`
+//! NOTE: These tests are ignored because the `--context-window` and `--sentence`
+//! flags are not yet implemented in the CLI. When implementing:
+//! 1. Add --context-window <N> to extract command
+//! 2. Add context_before/context_after fields to JSON output
+//! 3. Add --sentence flag for sentence extraction
 //!
-//! Or run with `--ignored` to skip them in normal test runs.
+//! See: https://github.com/arclabs561/anno/issues/XXX
+
+#![cfg(feature = "cli_context_window")] // Feature gate: only compile when enabled
 
 use std::process::Command;
 

@@ -56,8 +56,8 @@
 
 use super::factors::{CorefLinkWeights, CorefNerWeights, LinkNerWeights};
 use super::types::JointMention;
-use crate::eval::coref::CorefChain;
 use crate::{Entity, EntityType};
+use anno_core::coref::CorefChain;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -1030,7 +1030,7 @@ fn shuffle<T>(slice: &mut [T], seed: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eval::coref::Mention as CorefMention;
+    use anno_core::coref::Mention as CorefMention;
 
     #[test]
     fn test_training_config_default() {

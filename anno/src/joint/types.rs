@@ -44,10 +44,10 @@
 //!   Typing, and Linking" (TACL)
 //! - Zhao et al. (2025): RECB for cross-document event coreference (future)
 
-use crate::eval::coref::{CorefChain, Mention as CorefMention};
 use crate::linking::candidate::CandidateSource;
 use crate::linking::linker::LinkedEntity;
 use crate::{Entity, EntityType, Result};
+use anno_core::coref::{CorefChain, Mention as CorefMention};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -1149,7 +1149,7 @@ impl crate::Model for JointModel {
 }
 
 /// Implement the `CoreferenceResolver` trait for JointModel.
-impl crate::eval::coref_resolver::CoreferenceResolver for JointModel {
+impl anno_core::CoreferenceResolver for JointModel {
     fn resolve(&self, entities: &[Entity]) -> Vec<Entity> {
         if entities.is_empty() {
             return vec![];
@@ -1665,7 +1665,7 @@ mod tests {
 
     #[test]
     fn test_coref_resolver_trait_implementation() {
-        use crate::eval::coref_resolver::CoreferenceResolver;
+        use anno_core::CoreferenceResolver;
 
         let model = JointModel::default();
 
@@ -1679,7 +1679,7 @@ mod tests {
 
     #[test]
     fn test_coref_resolver_assigns_canonical_ids() {
-        use crate::eval::coref_resolver::CoreferenceResolver;
+        use anno_core::CoreferenceResolver;
 
         let model = JointModel::default();
 
