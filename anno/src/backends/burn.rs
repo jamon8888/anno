@@ -278,8 +278,7 @@ impl BurnNER {
         let _device = NdArrayDevice::default();
 
         // Placeholder: Create a simple tensor to prove Burn is working
-        let _dummy: Tensor<NdArray<f32>, 2> =
-            Tensor::zeros([1, 768], &NdArrayDevice::default());
+        let _dummy: Tensor<NdArray<f32>, 2> = Tensor::zeros([1, 768], &NdArrayDevice::default());
 
         // Fall back to heuristic for now
         // TODO: Implement full BERT forward pass with Burn
@@ -457,7 +456,10 @@ mod tests {
     #[test]
     fn test_label_to_entity_type() {
         assert_eq!(BurnNER::label_to_entity_type("B-PER"), EntityType::Person);
-        assert_eq!(BurnNER::label_to_entity_type("I-ORG"), EntityType::Organization);
+        assert_eq!(
+            BurnNER::label_to_entity_type("I-ORG"),
+            EntityType::Organization
+        );
         assert_eq!(BurnNER::label_to_entity_type("B-LOC"), EntityType::Location);
         assert_eq!(
             BurnNER::label_to_entity_type("B-MISC"),

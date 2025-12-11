@@ -1012,6 +1012,21 @@ impl Provenance {
         }
     }
 
+    /// Create provenance for ML-based extraction with owned model name.
+    ///
+    /// Use this when the model name is dynamically determined at runtime.
+    #[must_use]
+    pub fn ml_owned(model_name: impl Into<String>, confidence: f64) -> Self {
+        Self {
+            source: Cow::Owned(model_name.into()),
+            method: ExtractionMethod::Neural,
+            pattern: None,
+            raw_confidence: Some(confidence),
+            model_version: None,
+            timestamp: None,
+        }
+    }
+
     /// Create provenance for ensemble/hybrid extraction.
     #[must_use]
     pub fn ensemble(sources: &'static str) -> Self {

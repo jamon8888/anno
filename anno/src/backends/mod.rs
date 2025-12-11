@@ -154,6 +154,28 @@ pub mod w2ner;
 /// with agreement bonuses.
 pub mod ensemble;
 
+/// Hidden Markov Model NER - classical statistical approach.
+///
+/// Implements HMM-based sequence labeling, the dominant approach from the 1990s
+/// before CRFs. Useful as a baseline and for understanding NER history.
+pub mod hmm;
+
+/// Middleware pipeline for preprocessing and postprocessing.
+///
+/// Provides a chain-of-responsibility pattern for transforming text before
+/// entity extraction and filtering/enriching entities afterward.
+pub mod middleware;
+
+/// Streaming NER for incremental entity extraction.
+///
+/// Iterator-based API for processing large documents in chunks,
+/// with backpressure support and boundary handling.
+pub mod streaming;
+
+// Burn ML framework (training + inference)
+#[cfg(feature = "burn")]
+pub mod burn;
+
 // Advanced backends
 #[cfg(feature = "onnx")]
 pub mod albert;
@@ -319,6 +341,22 @@ pub use box_embeddings_training::{
 
 // Coreference resolution trait (from anno-core, always available)
 pub use anno_core::CoreferenceResolver;
+
+// Classical HMM NER (zero deps)
+pub use hmm::{HmmConfig, HmmNER};
+
+// Streaming NER utilities
+pub use streaming::{ChunkConfig, EntityIterator, StreamingExtractor};
+
+// Middleware pipeline
+pub use middleware::{
+    FilterByConfidence, FilterByType, HookedPipeline, Middleware, MiddlewareContext,
+    NormalizeWhitespace, Pipeline as MiddlewarePipeline, RemoveOverlaps,
+};
+
+// Burn ML framework (trainable)
+#[cfg(feature = "burn")]
+pub use burn::{BurnConfig, BurnNER};
 
 // Simple resolvers for evaluation pipelines (eval feature only)
 // NOTE: These live in eval/ and are for evaluation, not production.

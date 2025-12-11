@@ -240,65 +240,286 @@ impl HmmNER {
     ///
     /// These are empirically-tuned emission probabilities based on word lists
     /// commonly found in NER training data (CoNLL-2003, OntoNotes, etc.).
-    fn init_emissions(_states: &[String], state_to_idx: &HashMap<String, usize>) -> HashMap<(usize, String), f64> {
+    fn init_emissions(
+        _states: &[String],
+        state_to_idx: &HashMap<String, usize>,
+    ) -> HashMap<(usize, String), f64> {
         let mut emissions = HashMap::new();
 
         // Comprehensive person indicators (names, titles, honorifics)
         let person_indicators = [
             // Common first names
-            "john", "mary", "james", "david", "michael", "robert", "william", "richard",
-            "sarah", "jennifer", "elizabeth", "lisa", "marie", "jane", "emily", "anna",
-            "barack", "donald", "joe", "george", "bill", "hillary", "elon", "jeff",
-            "angela", "vladimir", "emmanuel", "xi", "narendra", "justin", "rishi",
-            "steve", "tim", "mark", "satya", "sundar", "sheryl", "sam", "dario",
+            "john",
+            "mary",
+            "james",
+            "david",
+            "michael",
+            "robert",
+            "william",
+            "richard",
+            "sarah",
+            "jennifer",
+            "elizabeth",
+            "lisa",
+            "marie",
+            "jane",
+            "emily",
+            "anna",
+            "barack",
+            "donald",
+            "joe",
+            "george",
+            "bill",
+            "hillary",
+            "elon",
+            "jeff",
+            "angela",
+            "vladimir",
+            "emmanuel",
+            "xi",
+            "narendra",
+            "justin",
+            "rishi",
+            "steve",
+            "tim",
+            "mark",
+            "satya",
+            "sundar",
+            "sheryl",
+            "sam",
+            "dario",
             // Common surnames (political, tech, historical)
-            "obama", "biden", "trump", "bush", "clinton", "reagan", "kennedy", "lincoln",
-            "merkel", "macron", "putin", "jinping", "modi", "trudeau", "sunak",
-            "musk", "bezos", "zuckerberg", "gates", "jobs", "wozniak", "cook", "pichai",
-            "nadella", "altman", "amodei", "hassabis", "hinton", "lecun", "bengio",
-            "smith", "johnson", "williams", "brown", "jones", "garcia", "miller", "davis",
+            "obama",
+            "biden",
+            "trump",
+            "bush",
+            "clinton",
+            "reagan",
+            "kennedy",
+            "lincoln",
+            "merkel",
+            "macron",
+            "putin",
+            "jinping",
+            "modi",
+            "trudeau",
+            "sunak",
+            "musk",
+            "bezos",
+            "zuckerberg",
+            "gates",
+            "jobs",
+            "wozniak",
+            "cook",
+            "pichai",
+            "nadella",
+            "altman",
+            "amodei",
+            "hassabis",
+            "hinton",
+            "lecun",
+            "bengio",
+            "smith",
+            "johnson",
+            "williams",
+            "brown",
+            "jones",
+            "garcia",
+            "miller",
+            "davis",
             // Honorifics and titles
-            "mr", "mrs", "ms", "dr", "prof", "sir", "lord", "lady", "president", "ceo",
-            "chairman", "director", "minister", "senator", "mayor", "governor",
-            "chancellor", "prime", "secretary", "ambassador", "general", "admiral",
+            "mr",
+            "mrs",
+            "ms",
+            "dr",
+            "prof",
+            "sir",
+            "lord",
+            "lady",
+            "president",
+            "ceo",
+            "chairman",
+            "director",
+            "minister",
+            "senator",
+            "mayor",
+            "governor",
+            "chancellor",
+            "prime",
+            "secretary",
+            "ambassador",
+            "general",
+            "admiral",
         ];
 
         // Comprehensive organization indicators
         let org_indicators = [
             // Company names
-            "google", "apple", "microsoft", "amazon", "facebook", "meta", "tesla",
-            "ibm", "intel", "nvidia", "oracle", "cisco", "adobe", "netflix", "uber",
-            "toyota", "honda", "ford", "chevrolet", "bmw", "mercedes", "audi",
+            "google",
+            "apple",
+            "microsoft",
+            "amazon",
+            "facebook",
+            "meta",
+            "tesla",
+            "ibm",
+            "intel",
+            "nvidia",
+            "oracle",
+            "cisco",
+            "adobe",
+            "netflix",
+            "uber",
+            "toyota",
+            "honda",
+            "ford",
+            "chevrolet",
+            "bmw",
+            "mercedes",
+            "audi",
             // Suffixes
-            "inc", "corp", "ltd", "llc", "co", "plc", "gmbh", "ag", "sa",
-            "company", "corporation", "incorporated", "limited", "group", "holdings",
+            "inc",
+            "corp",
+            "ltd",
+            "llc",
+            "co",
+            "plc",
+            "gmbh",
+            "ag",
+            "sa",
+            "company",
+            "corporation",
+            "incorporated",
+            "limited",
+            "group",
+            "holdings",
             // Institutional
-            "university", "institute", "college", "academy", "school", "hospital",
-            "foundation", "association", "organization", "committee", "council",
-            "department", "ministry", "agency", "bureau", "commission",
+            "university",
+            "institute",
+            "college",
+            "academy",
+            "school",
+            "hospital",
+            "foundation",
+            "association",
+            "organization",
+            "committee",
+            "council",
+            "department",
+            "ministry",
+            "agency",
+            "bureau",
+            "commission",
             // Government/International
-            "fbi", "cia", "nsa", "nasa", "un", "nato", "who", "imf", "eu", "usa",
-            "parliament", "congress", "senate", "house", "court", "bank",
+            "fbi",
+            "cia",
+            "nsa",
+            "nasa",
+            "un",
+            "nato",
+            "who",
+            "imf",
+            "eu",
+            "usa",
+            "parliament",
+            "congress",
+            "senate",
+            "house",
+            "court",
+            "bank",
         ];
 
         // Comprehensive location indicators
         let loc_indicators = [
             // US cities/states
-            "new", "york", "california", "texas", "florida", "washington", "chicago",
-            "boston", "seattle", "san", "francisco", "los", "angeles", "las", "vegas",
-            "miami", "denver", "atlanta", "phoenix", "dallas", "houston", "portland",
+            "new",
+            "york",
+            "california",
+            "texas",
+            "florida",
+            "washington",
+            "chicago",
+            "boston",
+            "seattle",
+            "san",
+            "francisco",
+            "los",
+            "angeles",
+            "las",
+            "vegas",
+            "miami",
+            "denver",
+            "atlanta",
+            "phoenix",
+            "dallas",
+            "houston",
+            "portland",
             // World cities
-            "london", "paris", "berlin", "tokyo", "beijing", "moscow", "sydney",
-            "toronto", "vancouver", "rome", "madrid", "amsterdam", "brussels", "vienna",
-            "seoul", "singapore", "hong", "kong", "dubai", "mumbai", "delhi",
+            "london",
+            "paris",
+            "berlin",
+            "tokyo",
+            "beijing",
+            "moscow",
+            "sydney",
+            "toronto",
+            "vancouver",
+            "rome",
+            "madrid",
+            "amsterdam",
+            "brussels",
+            "vienna",
+            "seoul",
+            "singapore",
+            "hong",
+            "kong",
+            "dubai",
+            "mumbai",
+            "delhi",
             // Countries/regions
-            "united", "states", "america", "china", "russia", "germany", "france",
-            "japan", "india", "brazil", "canada", "australia", "uk", "britain",
-            "italy", "spain", "mexico", "korea", "taiwan", "vietnam", "thailand",
+            "united",
+            "states",
+            "america",
+            "china",
+            "russia",
+            "germany",
+            "france",
+            "japan",
+            "india",
+            "brazil",
+            "canada",
+            "australia",
+            "uk",
+            "britain",
+            "italy",
+            "spain",
+            "mexico",
+            "korea",
+            "taiwan",
+            "vietnam",
+            "thailand",
             // Geographic terms
-            "city", "county", "state", "country", "province", "region", "district",
-            "river", "mountain", "lake", "ocean", "sea", "island", "peninsula",
-            "north", "south", "east", "west", "central", "northern", "southern",
+            "city",
+            "county",
+            "state",
+            "country",
+            "province",
+            "region",
+            "district",
+            "river",
+            "mountain",
+            "lake",
+            "ocean",
+            "sea",
+            "island",
+            "peninsula",
+            "north",
+            "south",
+            "east",
+            "west",
+            "central",
+            "northern",
+            "southern",
         ];
 
         // Set higher emission probabilities for known indicators
@@ -348,12 +569,15 @@ impl HmmNER {
         // Heuristic emissions based on word features
         let state = &self.states[state_idx];
         let is_capitalized = word.chars().next().map_or(false, |c| c.is_uppercase());
-        let is_all_caps = word.chars().all(|c| c.is_uppercase() || !c.is_alphabetic()) && word.len() > 1;
+        let is_all_caps =
+            word.chars().all(|c| c.is_uppercase() || !c.is_alphabetic()) && word.len() > 1;
         let has_digit = word.chars().any(|c| c.is_ascii_digit());
         let is_title_case = is_capitalized && word.len() > 1;
-        
+
         // Check for organization suffixes
-        let org_suffixes = ["Inc", "Corp", "Ltd", "LLC", "Co", "Company", "Inc.", "Corp.", "Ltd."];
+        let org_suffixes = [
+            "Inc", "Corp", "Ltd", "LLC", "Co", "Company", "Inc.", "Corp.", "Ltd.",
+        ];
         let is_org_suffix = org_suffixes.iter().any(|s| word == *s);
 
         if state == "O" {
@@ -374,36 +598,36 @@ impl HmmNER {
 
         if state.starts_with("B-") || state.starts_with("I-") {
             let entity_type = &state[2..];
-            
+
             // Organization suffixes strongly indicate ORG
             if entity_type == "ORG" && is_org_suffix {
                 return 0.8;
             }
-            
+
             // All caps = likely ORG (acronyms like IBM, NASA)
             if is_all_caps && entity_type == "ORG" {
                 return 0.6;
             }
-            
+
             // Title case words are likely entities, but prefer PER for typical names
             // Most proper nouns starting with capital letters are person names
             // unless they have organization-specific markers
             if is_title_case && !has_digit {
                 if entity_type == "PER" {
-                    return 0.55;  // Slightly prefer PER over others for title case
+                    return 0.55; // Slightly prefer PER over others for title case
                 } else if entity_type == "LOC" {
-                    return 0.45;  // Locations are second most common title case
+                    return 0.45; // Locations are second most common title case
                 } else if entity_type == "ORG" {
-                    return 0.35;  // ORGs need more evidence (suffix, acronym)
+                    return 0.35; // ORGs need more evidence (suffix, acronym)
                 }
                 return 0.4;
             }
-            
+
             // Capitalized words at least somewhat likely
             if is_capitalized && !has_digit {
                 return 0.3;
             }
-            
+
             return self.config.smoothing;
         }
 
@@ -478,10 +702,10 @@ impl HmmNER {
 
         let converter = SpanConverter::new(text);
         let mut entities = Vec::new();
-        
+
         // Track token positions (byte offsets) as we iterate
         let token_positions: Vec<(usize, usize)> = Self::calculate_token_positions(text, words);
-        
+
         let mut current: Option<(usize, usize, EntityType, Vec<&str>)> = None;
 
         for (i, (&label_idx, &word)) in labels.iter().zip(words.iter()).enumerate() {
@@ -491,8 +715,13 @@ impl HmmNER {
                 // Save previous entity
                 if let Some((start_idx, end_idx, entity_type, entity_words)) = current.take() {
                     Self::push_entity_from_positions(
-                        &converter, &token_positions, start_idx, end_idx,
-                        &entity_words, entity_type, &mut entities
+                        &converter,
+                        &token_positions,
+                        start_idx,
+                        end_idx,
+                        &entity_words,
+                        entity_type,
+                        &mut entities,
                     );
                 }
 
@@ -513,8 +742,13 @@ impl HmmNER {
                 // O tag
                 if let Some((start_idx, end_idx, entity_type, entity_words)) = current.take() {
                     Self::push_entity_from_positions(
-                        &converter, &token_positions, start_idx, end_idx,
-                        &entity_words, entity_type, &mut entities
+                        &converter,
+                        &token_positions,
+                        start_idx,
+                        end_idx,
+                        &entity_words,
+                        entity_type,
+                        &mut entities,
                     );
                 }
             }
@@ -523,8 +757,13 @@ impl HmmNER {
         // Final entity
         if let Some((start_idx, end_idx, entity_type, entity_words)) = current {
             Self::push_entity_from_positions(
-                &converter, &token_positions, start_idx, end_idx,
-                &entity_words, entity_type, &mut entities
+                &converter,
+                &token_positions,
+                start_idx,
+                end_idx,
+                &entity_words,
+                entity_type,
+                &mut entities,
             );
         }
 
@@ -565,13 +804,13 @@ impl HmmNER {
         if start_token_idx >= positions.len() || end_token_idx >= positions.len() {
             return;
         }
-        
+
         let byte_start = positions[start_token_idx].0;
         let byte_end = positions[end_token_idx].1;
         let char_start = converter.byte_to_char(byte_start);
         let char_end = converter.byte_to_char(byte_end);
         let entity_text = words.join(" ");
-        
+
         entities.push(Entity::new(
             entity_text,
             entity_type,
@@ -607,7 +846,9 @@ impl HmmNER {
             for (i, (word, tag)) in words.iter().zip(tags.iter()).enumerate() {
                 if let Some(&tag_idx) = self.state_to_idx.get(*tag) {
                     // Emission count
-                    *emission_counts.entry((tag_idx, word.to_lowercase())).or_insert(0) += 1;
+                    *emission_counts
+                        .entry((tag_idx, word.to_lowercase()))
+                        .or_insert(0) += 1;
                     state_counts[tag_idx] += 1;
 
                     // Transition count
@@ -621,22 +862,26 @@ impl HmmNER {
         }
 
         // Convert counts to probabilities (with smoothing)
-        let total_initial: f64 = initial_counts.iter().sum::<usize>() as f64 + self.config.smoothing * n as f64;
+        let total_initial: f64 =
+            initial_counts.iter().sum::<usize>() as f64 + self.config.smoothing * n as f64;
         for (i, &count) in initial_counts.iter().enumerate() {
             self.initial[i] = (count as f64 + self.config.smoothing) / total_initial;
         }
 
         for i in 0..n {
-            let total: f64 = trans_counts[i].iter().sum::<usize>() as f64 + self.config.smoothing * n as f64;
+            let total: f64 =
+                trans_counts[i].iter().sum::<usize>() as f64 + self.config.smoothing * n as f64;
             for j in 0..n {
-                self.transitions[i][j] = (trans_counts[i][j] as f64 + self.config.smoothing) / total;
+                self.transitions[i][j] =
+                    (trans_counts[i][j] as f64 + self.config.smoothing) / total;
             }
         }
 
         for ((state_idx, word), count) in emission_counts {
             let total = state_counts[state_idx] as f64;
             if total > 0.0 {
-                self.emissions.insert((state_idx, word), count as f64 / total);
+                self.emissions
+                    .insert((state_idx, word), count as f64 / total);
             }
         }
     }
@@ -689,7 +934,9 @@ mod tests {
     #[test]
     fn test_basic_extraction() {
         let ner = HmmNER::new();
-        let entities = ner.extract_entities("John works at Google in California.", None).unwrap();
+        let entities = ner
+            .extract_entities("John works at Google in California.", None)
+            .unwrap();
 
         // HMM with heuristics should find some entities
         for entity in &entities {
@@ -748,8 +995,14 @@ mod tests {
         let mut ner = HmmNER::new();
 
         let sentences: Vec<(&[&str], &[&str])> = vec![
-            (&["John", "works", "at", "Google"][..], &["B-PER", "O", "O", "B-ORG"][..]),
-            (&["Mary", "lives", "in", "Paris"][..], &["B-PER", "O", "O", "B-LOC"][..]),
+            (
+                &["John", "works", "at", "Google"][..],
+                &["B-PER", "O", "O", "B-ORG"][..],
+            ),
+            (
+                &["Mary", "lives", "in", "Paris"][..],
+                &["B-PER", "O", "O", "B-LOC"][..],
+            ),
         ];
 
         ner.train(&sentences);
@@ -804,24 +1057,31 @@ mod tests {
         let text = "Google bought Google for $1 billion.";
         let tokens: Vec<&str> = text.split_whitespace().collect();
         let positions = HmmNER::calculate_token_positions(text, &tokens);
-        
+
         // First "Google" at byte 0-6
-        assert_eq!(positions[0], (0, 6), "First 'Google' should be at bytes 0-6");
+        assert_eq!(
+            positions[0],
+            (0, 6),
+            "First 'Google' should be at bytes 0-6"
+        );
         // Second "Google" at byte 14-20
-        assert_eq!(positions[2], (14, 20), "Second 'Google' should be at bytes 14-20");
+        assert_eq!(
+            positions[2],
+            (14, 20),
+            "Second 'Google' should be at bytes 14-20"
+        );
     }
-    
+
     /// Test token position calculation with Unicode.
     #[test]
     fn test_token_positions_unicode() {
         let text = "東京 Tokyo 東京";
         let tokens: Vec<&str> = text.split_whitespace().collect();
         let positions = HmmNER::calculate_token_positions(text, &tokens);
-        
+
         // Each 東京 is 6 bytes (2 chars × 3 bytes each)
         assert_eq!(positions[0], (0, 6), "First '東京' at bytes 0-6");
         assert_eq!(positions[1], (7, 12), "Tokyo at bytes 7-12");
         assert_eq!(positions[2], (13, 19), "Second '東京' at bytes 13-19");
     }
 }
-
