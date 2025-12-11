@@ -108,8 +108,17 @@ fast-lock = ["parking_lot"]
 instrument = ["tracing"]
 full = ["eval-full", "onnx", "candle", "discourse"]
 production = ["onnx", "async-inference", "session-pool", "fast-lock"]
-# Geometric foundations from subsume library (disabled - see dep comment above)
-# subsume = ["dep:subsume-core"]
+# Geometric foundations from subsume library
+# NOTE: subsume feature is defined but dep is disabled. To enable:
+# 1. Uncomment subsume-core dependency above
+# 2. Change this line to: subsume = ["dep:subsume-core"]
+subsume = []
+# Future: External ranking metrics library (not yet published)
+# Change to: rank-eval = ["dep:rank_eval"] when available
+rank-eval = []
+# Future: Jiff temporal library integration
+# Change to: jiff-time = ["dep:jiff"] when available
+jiff-time = []
 
 [dev-dependencies]
 proptest = { workspace = true }
