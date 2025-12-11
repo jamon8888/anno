@@ -10,7 +10,7 @@ alwaysApply: true
 
 Anno is a Rust NLP toolkit for named entity recognition (NER), coreference resolution, and relation extraction. Key architectural principles:
 
-1. **Workspace structure**: `anno` (main lib), `anno-core` (canonical types), `anno-coalesce` (cross-doc clustering), `anno-strata` (hierarchical/graph), `anno-cli` (CLI)
+1. **Workspace structure**: `anno` (main lib + CLI binary), `anno-core` (canonical types), `anno-coalesce` (cross-doc clustering), `anno-strata` (hierarchical/graph)
 2. **Feature flags**: Heavy use of Cargo features for optional backends (`onnx`, `candle`, `metal`, `burn`)
 3. **Trait-based backends**: NER backends implement `Model`, coref backends implement `CoreferenceResolver`
 4. **Character offsets**: Entity spans use CHARACTER offsets, not byte offsets (critical for Unicode)
@@ -44,9 +44,7 @@ anno-core         ← Canonical types (Signal, Track, Identity, Entity)
     ↑
 anno-coalesce     ← Cross-document operations, similarity
     ↑
-anno              ← NER backends, coref, evaluation
-    ↑
-anno-cli          ← Command-line interface
+anno              ← NER backends, coref, eval, CLI (binary via [[bin]])
 ```
 
 ## Pipeline Layers (Don't Confuse These)
@@ -226,14 +224,19 @@ Feature-gated:
 
 ## CLI Structure
 
-The CLI is split between two crates:
+The CLI is part of the `anno` crate (no separate `anno-cli` crate):
 
 | Location | Purpose | Lines |
 |----------|---------|-------|
 | `anno/src/cli/` | Library code: commands, parsers, output | ~11k |
-| `anno-cli/src/main.rs` | Thin dispatcher, tracing setup | ~350 |
+| `anno/src/bin/anno.rs` | Thin dispatcher, tracing setup | ~90 |
 
-**Canonical types live in `anno::cli::parser`** (not in main.rs):
+**To build the binary**:
+```bash
+cargo build -p anno --bin anno --features "cli eval"
+```
+
+**Canonical types live in `anno::cli::parser`**:
 - `ModelBackend`, `OutputFormat`, `Cli`, `Commands`
 
 **Command handlers live in `anno::cli::commands::*`**:
