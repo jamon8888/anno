@@ -29,14 +29,14 @@
 //! # Complementary Geometric Representations
 //!
 //! Box embeddings are one of several geometric approaches available in Anno.
-//! See [`crate::geometric`] for alternatives:
+//! See `archive/geometric-2024-12/` for alternatives:
 //!
 //! | Representation | Best For | Module |
 //! |---------------|----------|--------|
 //! | **Box embeddings** | Temporal, uncertainty | This module |
-//! | Hyperbolic (Poincaré) | Deep type hierarchies | [`crate::geometric::hyperbolic`] |
-//! | Sheaf NN | Gradient-level transitivity | [`crate::geometric::sheaf`] |
-//! | TDA | Structural diagnostics | [`crate::geometric::tda`] |
+//! | Hyperbolic (Poincaré) | Deep type hierarchies | `archive/geometric-2024-12/hyperbolic.rs` |
+//! | Sheaf NN | Gradient-level transitivity | `archive/geometric-2024-12/sheaf.rs` |
+//! | TDA | Structural diagnostics | `archive/geometric-2024-12/tda.rs` |
 //!
 //! These approaches are **complementary**, not competing. Use boxes when you need:
 //! - Explicit uncertainty (volume = confidence)

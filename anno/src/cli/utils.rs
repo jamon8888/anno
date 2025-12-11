@@ -1165,4 +1165,49 @@ mod tests {
         // Overlapping entities should be skipped
         assert!(relations.is_empty());
     }
+
+    // -------------------------------------------------------------------------
+    // Unicode tests (character offsets, not byte offsets)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_is_negated_unicode() {
+        // "café" has 4 chars but 5 bytes (é is 2 bytes in UTF-8)
+        assert!(!is_negated("café John", 5)); // "John" starts at char 5
+        assert!(is_negated("not café John", 9)); // "not" is in the prefix
+    }
+
+    #[test]
+    fn test_detect_quantifier_unicode() {
+        // "every café employee" - "employee" starts at char index 11
+        assert_eq!(
+            detect_quantifier("every café employee", 11),
+            None // "café" is not a quantifier
+        );
+        // "every employee" still works
+        assert_eq!(
+            detect_quantifier("every employee", 6),
+            Some(Quantifier::Universal)
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Gender heuristics tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_is_likely_male() {
+        assert!(is_likely_male("John Smith"));
+        assert!(is_likely_male("Barack Obama"));
+        assert!(!is_likely_male("Marie Curie"));
+        assert!(!is_likely_male("Unknown Person"));
+    }
+
+    #[test]
+    fn test_is_likely_female() {
+        assert!(is_likely_female("Marie Curie"));
+        assert!(is_likely_female("Hillary Clinton"));
+        assert!(!is_likely_female("John Smith"));
+        assert!(!is_likely_female("Unknown Person"));
+    }
 }
