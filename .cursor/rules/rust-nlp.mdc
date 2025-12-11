@@ -128,10 +128,10 @@ proptest! {
 
 ### CLI Integration Tests
 ```rust
-// Use anno_cli_cmd() helper to avoid spawning cargo run
-fn anno_cli_cmd() -> Command {
-    // Checks ANNO_CLI_BIN, then target/release/anno, then target/debug/anno
-    // Falls back to cargo run only if no binary available
+// Use anno_cmd() helper to avoid spawning cargo run
+fn anno_cmd() -> Command {
+    // Checks ANNO_BIN, then target/release/anno, then target/debug/anno
+    // Falls back to: cargo run -p anno --bin anno --features "cli eval" --
 }
 ```
 
@@ -139,7 +139,7 @@ fn anno_cli_cmd() -> Command {
 - Unit tests: `#[test]` in `mod tests { }` within source files
 - Integration tests: `tests/*.rs` files
 - Property tests: Use `proptest!` macro, consider `slow_config()` for slow backends
-- CLI tests: Use pre-built binary via `anno_cli_cmd()`
+- CLI tests: Use pre-built binary via `anno_cmd()`
 
 ## Type Conversions
 

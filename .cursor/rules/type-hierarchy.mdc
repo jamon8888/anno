@@ -41,8 +41,7 @@ alwaysApply: false
 | `anno-core` | Canonical types, shared across crates | `Signal`, `Track`, `Identity`, `Entity`, `MentionType`, `Gender` |
 | `anno-coalesce` | Cross-document clustering, similarity | `EntityCluster`, `Similarity`, `HierarchicalClusterer` |
 | `anno-strata` | Graph algorithms, community detection | `Leiden`, `Louvain`, `PageRank` |
-| `anno` | NER backends, coref, evaluation | `Model`, `CoreferenceResolver`, `MentionRankingCoref` |
-| `anno-cli` | Command-line interface | CLI commands |
+| `anno` | NER backends, coref, evaluation, CLI | `Model`, `CoreferenceResolver`, CLI commands |
 
 ## Type Mapping: Intermediate → Canonical
 
