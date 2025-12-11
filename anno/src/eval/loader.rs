@@ -1805,50 +1805,43 @@ pub enum DatasetId {
 //
 // loader::DatasetId (loadable subset) <-> dataset_registry::DatasetId (full catalog)
 //
-// The relationship: loader::DatasetId ⊂ dataset_registry::DatasetId
+// The relationship: loader::DatasetId ≡ dataset_registry::DatasetId
 //
-// Currently, the two enums have different variant names in some cases
-// (e.g., CoNLL2003Sample vs CoNLL2003). Full unification is tracked as
-// future work. For now, use name-based lookup when you need registry metadata.
+// Both enums have IDENTICAL variants (451 datasets). The loader provides
+// download/loading logic while the registry provides rich metadata
+// (citation, license, year, paper URL, etc.).
+//
+// The mapping uses Debug format comparison which is O(n) but correct.
+// For hot paths, prefer caching the conversion result.
 
 use super::dataset_registry::DatasetId as RegistryDatasetId;
 
 impl DatasetId {
-    /// Look up this dataset in the registry by name.
+    /// Convert to the registry variant for rich metadata access.
     ///
-    /// Returns the corresponding `RegistryDatasetId` if found, which provides
-    /// access to rich metadata (citation, license, paper URL, etc.).
+    /// Both enums have identical variants, so this always succeeds.
+    /// Uses variant name comparison via Debug format.
     ///
     /// # Example
     ///
     /// ```rust,ignore
-    /// use anno::eval::LoadableDatasetId;
+    /// use anno::eval::loader::DatasetId;
     ///
-    /// let id = LoadableDatasetId::WikiGold;
-    /// if let Some(registry) = id.find_in_registry() {
-    ///     println!("Citation: {}", registry.citation().unwrap_or("N/A"));
-    ///     println!("License: {}", registry.license().unwrap_or("Unknown"));
-    /// }
+    /// let id = DatasetId::WikiGold;
+    /// let registry = id.to_registry();
+    /// println!("Citation: {}", registry.citation().unwrap_or("N/A"));
+    /// println!("License: {}", registry.license().unwrap_or("Unknown"));
     /// ```
     #[must_use]
-    pub fn find_in_registry(&self) -> Option<RegistryDatasetId> {
-        let name = self.name();
+    pub fn to_registry(&self) -> RegistryDatasetId {
         let variant_name = format!("{:?}", self);
 
-        // Try exact name match first
-        if let Some(found) = RegistryDatasetId::all()
-            .iter()
-            .find(|r| r.name() == name)
-            .copied()
-        {
-            return Some(found);
-        }
-
-        // Try variant name match (handles cases where display names differ)
+        // Both enums have identical variants, so this will always find a match
         RegistryDatasetId::all()
             .iter()
             .find(|r| format!("{:?}", r) == variant_name)
             .copied()
+            .expect("loader::DatasetId and registry::DatasetId have identical variants")
     }
 
     /// Get citation information for this dataset.
@@ -1856,7 +1849,7 @@ impl DatasetId {
     /// Convenience method that looks up the registry entry.
     #[must_use]
     pub fn citation(&self) -> Option<&'static str> {
-        self.find_in_registry().and_then(|r| r.citation())
+        self.to_registry().citation()
     }
 
     /// Get license information for this dataset.
@@ -1864,7 +1857,7 @@ impl DatasetId {
     /// Convenience method that looks up the registry entry.
     #[must_use]
     pub fn license(&self) -> Option<&'static str> {
-        self.find_in_registry().and_then(|r| r.license())
+        self.to_registry().license()
     }
 
     /// Get publication year for this dataset.
@@ -1872,7 +1865,7 @@ impl DatasetId {
     /// Convenience method that looks up the registry entry.
     #[must_use]
     pub fn year(&self) -> Option<u16> {
-        self.find_in_registry().and_then(|r| r.year())
+        self.to_registry().year()
     }
 }
 
@@ -4093,8 +4086,7 @@ impl DatasetId {
             | DatasetId::ORACC => "historical",
 
             // Geographic/Geospatial
-            DatasetId::GeoWebNews
-            | DatasetId::LGL => "geographic",
+            DatasetId::GeoWebNews | DatasetId::LGL => "geographic",
 
             // Multilingual (cross-language datasets)
             DatasetId::WikiANN
@@ -4152,10 +4144,9 @@ impl DatasetId {
             | DatasetId::CovEReD => "relation-extraction",
 
             // Event extraction
-            DatasetId::MAVEN
-            | DatasetId::MAVENArg
-            | DatasetId::CASIE
-            | DatasetId::RAMS => "event-extraction",
+            DatasetId::MAVEN | DatasetId::MAVENArg | DatasetId::CASIE | DatasetId::RAMS => {
+                "event-extraction"
+            }
 
             // Entity Linking
             DatasetId::AIDA
@@ -4166,12 +4157,10 @@ impl DatasetId {
             | DatasetId::ELGold
             | DatasetId::MewsliX => "entity-linking",
 
-            // Bias evaluation
-            DatasetId::WinoBias
-            | DatasetId::BoldBias
-            | DatasetId::CrowSPairs
-            | DatasetId::StereoSet
-            | DatasetId::BBQ => "bias-evaluation",
+            // Bias evaluation (WinoBias already covered under coreference)
+            DatasetId::BoldBias | DatasetId::CrowSPairs | DatasetId::StereoSet | DatasetId::BBQ => {
+                "bias-evaluation"
+            }
 
             // Discourse/Pragmatics
             DatasetId::PDTB3
@@ -4193,8 +4182,7 @@ impl DatasetId {
             DatasetId::IndicNER => "low-resource-asian",
 
             // Low-resource other
-            DatasetId::MaoriNER
-            | DatasetId::BasqueNER => "low-resource-other",
+            DatasetId::MaoriNER | DatasetId::BasqueNER => "low-resource-other",
 
             _ => "general",
         }
@@ -4668,7 +4656,13 @@ impl DatasetId {
             }
             DatasetId::Interslavic => &["PER", "LOC", "ORG", "MISC"],
             // Scientific datasets
-            DatasetId::SciERC => &["Method", "Task", "Material", "Metric", "OtherScientificTerm"],
+            DatasetId::SciERC => &[
+                "Method",
+                "Task",
+                "Material",
+                "Metric",
+                "OtherScientificTerm",
+            ],
             DatasetId::MathEntities => &["FUNCTION", "OPERATOR", "VARIABLE", "CONSTANT"],
             DatasetId::AstroNER | DatasetId::AstroBERTCorpus => {
                 &["CELESTIAL_BODY", "MISSION", "INSTRUMENT", "PROPERTY"]
@@ -4681,9 +4675,16 @@ impl DatasetId {
             DatasetId::MedMentions => &["DISEASE", "CHEMICAL", "GENE", "CELL"],
             DatasetId::ShARe2013 | DatasetId::ShARe2014 | DatasetId::ShAReCLEF => &["Disorder"],
             // Financial datasets
-            DatasetId::FiNER139 | DatasetId::FINER | DatasetId::FinBenNER | DatasetId::FinanceNER => {
-                &["Company", "Currency", "FinancialInstrument", "Amount", "Date"]
-            }
+            DatasetId::FiNER139
+            | DatasetId::FINER
+            | DatasetId::FinBenNER
+            | DatasetId::FinanceNER => &[
+                "Company",
+                "Currency",
+                "FinancialInstrument",
+                "Amount",
+                "Date",
+            ],
             // Legal datasets
             DatasetId::LegalCore | DatasetId::LexGLUENER => {
                 &["PERSON", "ORGANIZATION", "LAW", "COURT", "DATE"]
@@ -4693,15 +4694,19 @@ impl DatasetId {
             DatasetId::NaijaNER => &["PER", "LOC", "ORG", "DATE"],
             DatasetId::BasqueNER => &["PER", "LOC", "ORG", "MISC"],
             DatasetId::IndicNER => &["PER", "LOC", "ORG", "MISC"],
-            // Germanic language datasets  
-            DatasetId::NorNE => &["PER", "LOC", "ORG", "GPE_LOC", "GPE_ORG", "PROD", "EVT", "DRV"],
+            // Germanic language datasets
+            DatasetId::NorNE => &[
+                "PER", "LOC", "ORG", "GPE_LOC", "GPE_ORG", "PROD", "EVT", "DRV",
+            ],
             // Romance language datasets
             DatasetId::FrenchClinicalNER => &["PROBLEM", "TREATMENT", "TEST", "ANATOMY"],
             DatasetId::HistNERo => &["PER", "LOC", "ORG", "DATE"],
             // Code-mixed datasets
-            DatasetId::HinglishNER | DatasetId::LinCE | DatasetId::GLUECoS | DatasetId::CALCS | DatasetId::CALCS2018 => {
-                &["PER", "LOC", "ORG"]
-            }
+            DatasetId::HinglishNER
+            | DatasetId::LinCE
+            | DatasetId::GLUECoS
+            | DatasetId::CALCS
+            | DatasetId::CALCS2018 => &["PER", "LOC", "ORG"],
             // Recipe/Food datasets
             DatasetId::RecipeNER | DatasetId::TASTEset | DatasetId::NERsocialFood => {
                 &["INGREDIENT", "QUANTITY", "UNIT", "PROCESS"]
@@ -4715,23 +4720,27 @@ impl DatasetId {
             DatasetId::AnimeMangaNER => &["CHARACTER", "SERIES", "ORGANIZATION"],
             DatasetId::FictionNER750M => &["PER", "LOC", "ORG", "MISC"],
             // Entity linking datasets
-            DatasetId::AIDACoNLL | DatasetId::WNEDWiki | DatasetId::KORE50 | DatasetId::ELGold | DatasetId::MewsliX => {
-                &["PER", "LOC", "ORG"]
-            }
+            DatasetId::AIDACoNLL
+            | DatasetId::WNEDWiki
+            | DatasetId::KORE50
+            | DatasetId::ELGold
+            | DatasetId::MewsliX => &["PER", "LOC", "ORG"],
             // Nested NER datasets
             DatasetId::ChineseNestedNER | DatasetId::SCINERNested => &["PER", "LOC", "ORG", "MISC"],
             // Discontinuous NER datasets
-            DatasetId::ADRDiscontinuous | DatasetId::PubMedDiscontinuous | DatasetId::GermEvalDiscontinuous => {
-                &["ENTITY"]
-            }
-            // Bias evaluation datasets
-            DatasetId::WinoBias | DatasetId::BoldBias | DatasetId::CrowSPairs | DatasetId::StereoSet | DatasetId::BBQ => {
+            DatasetId::ADRDiscontinuous
+            | DatasetId::PubMedDiscontinuous
+            | DatasetId::GermEvalDiscontinuous => &["ENTITY"],
+            // Bias evaluation datasets (WinoBias already handled above at line 4535)
+            DatasetId::BoldBias | DatasetId::CrowSPairs | DatasetId::StereoSet | DatasetId::BBQ => {
                 &["PERSON"]
             }
             // Discourse datasets
-            DatasetId::PDTB3 | DatasetId::PDTBv3 | DatasetId::RSTDT | DatasetId::DiscoBench | DatasetId::DiscoTrack => {
-                &["DISCOURSE_RELATION"]
-            }
+            DatasetId::PDTB3
+            | DatasetId::PDTBv3
+            | DatasetId::RSTDT
+            | DatasetId::DiscoBench
+            | DatasetId::DiscoTrack => &["DISCOURSE_RELATION"],
             DatasetId::ISNotes | DatasetId::ShellNouns => &["MENTION"],
             // Catch-all for new datasets - return generic types
             _ => &["ENTITY"],
@@ -11320,16 +11329,10 @@ mod tests {
     }
 
     #[test]
-    fn test_find_in_registry() {
-        // WikiGold should be findable in registry
+    fn test_to_registry() {
+        // WikiGold should convert to registry variant
         let id = DatasetId::WikiGold;
-        let registry_match = id.find_in_registry();
-        assert!(
-            registry_match.is_some(),
-            "WikiGold should exist in registry"
-        );
-
-        let registry = registry_match.unwrap();
+        let registry = id.to_registry();
         assert_eq!(registry.name(), "WikiGold");
     }
 
@@ -11344,63 +11347,45 @@ mod tests {
     }
 
     #[test]
-    fn test_loadable_registry_coverage() {
-        // Track which loadable datasets can be found in registry
-        // This is informational - some name mismatches are expected until unification
-        let mut found = 0;
-        let mut missing = Vec::new();
+    fn test_registry_coverage_100_percent() {
+        // Both enums have identical variants, so every dataset should convert
         for id in DatasetId::all() {
-            if id.find_in_registry().is_some() {
-                found += 1;
-            } else {
-                missing.push(id.name());
-            }
+            // to_registry() panics if variant is missing, so this tests completeness
+            let registry = id.to_registry();
+
+            // Verify the conversion produces matching variant names
+            let loader_variant = format!("{:?}", id);
+            let registry_variant = format!("{:?}", registry);
+            assert_eq!(
+                loader_variant, registry_variant,
+                "Variant names should match for {:?}",
+                id
+            );
         }
 
-        let total = DatasetId::all().len();
-        let coverage = found as f64 / total as f64 * 100.0;
-
-        // At least 50% should be findable (current state tracking)
-        assert!(
-            coverage >= 50.0,
-            "Only {:.1}% of loadable datasets found in registry. \
-             Missing: {:?}",
-            coverage,
-            missing
+        // Log for tracking
+        eprintln!(
+            "Registry coverage: {}/{} (100%)",
+            DatasetId::all().len(),
+            DatasetId::all().len()
         );
-
-        // Log for tracking - coverage should improve over time
-        eprintln!("Registry coverage: {}/{} ({:.1}%)", found, total, coverage);
-        if !missing.is_empty() {
-            eprintln!("Missing from registry: {:?}", missing);
-        }
     }
 
     #[test]
-    fn test_find_in_registry_variant_correctness() {
-        // Verify that variant-name fallback finds the CORRECT registry entry
-        // (not just any entry that happens to share a name)
-        use crate::eval::dataset_registry::DatasetId as RegistryDatasetId;
-
+    fn test_to_registry_variant_correctness() {
+        // Verify that to_registry finds the CORRECT registry entry
         for loader_id in DatasetId::all() {
-            if let Some(registry_id) = loader_id.find_in_registry() {
-                // The variant names should match (case-insensitive comparison)
-                let loader_variant = format!("{:?}", loader_id);
-                let registry_variant = format!("{:?}", registry_id);
+            let registry_id = loader_id.to_registry();
 
-                // Either names match, or variant names match
-                let names_match = loader_id.name() == registry_id.name();
-                let variants_match = loader_variant.eq_ignore_ascii_case(&registry_variant);
+            // The variant names should match exactly
+            let loader_variant = format!("{:?}", loader_id);
+            let registry_variant = format!("{:?}", registry_id);
 
-                assert!(
-                    names_match || variants_match,
-                    "Potential false match: {:?} -> {:?} (names: '{}' vs '{}')",
-                    loader_id,
-                    registry_id,
-                    loader_id.name(),
-                    registry_id.name()
-                );
-            }
+            assert_eq!(
+                loader_variant, registry_variant,
+                "Variant mismatch: {:?} -> {:?}",
+                loader_id, registry_id
+            );
         }
     }
 

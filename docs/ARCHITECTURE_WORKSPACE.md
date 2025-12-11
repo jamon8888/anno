@@ -1,23 +1,40 @@
 # Anno Workspace Architecture
 
 **Status**: Implemented  
-**Date**: 2024-12-10
+**Date**: 2024-12-10 (updated 2024-12-10)
 
 ## Summary
 
-| Component | Status | Purpose |
-|-----------|--------|---------|
-| `subsume-core` sheaf/hyperbolic | Working | Pure geometric algebra (12 tests passing) |
-| `anno-models` | Spec | Runtime abstraction for future backend consolidation |
-| `anno-rel` | Working | Relation extraction types + evaluation |
-| `anno/src/ingest/` | Kept | CLI ingestion, trait boundary if models need it |
+| Crate | Status | Purpose |
+|-------|--------|---------|
+| `anno-core` | Active | Canonical types: Entity, Track, Identity, Signal |
+| `anno` | Active | NER backends, coref, eval, discourse, salience |
+| `anno-coalesce` | Active | Cross-document entity resolution |
+| `anno-strata` | Active | Graph algorithms (PageRank, Leiden, Louvain) |
+| `anno-eval` | Active | Re-export wrapper for anno::eval |
+| `anno-cli` | Active | Command-line interface |
+| `anno-derive` | Active | Proc macros |
+
+### Archived Crates (see archive/skeleton-crates-2024-12/)
+
+| Crate | Why Archived |
+|-------|--------------|
+| `anno-models` | Runtime trait not integrated; backends remain in anno |
+| `anno-rel` | Types duplicated in anno::backends::inference |
+
+### External Dependencies
+
+| Crate | Location | Status |
+|-------|----------|--------|
+| `subsume-core` | ../subsume | Separate repo, optional dep (currently disabled) |
 
 ## Decisions
 
-1. **No `anno-ingest` crate** - existing `anno/src/ingest/` is sufficient
-2. **`anno-models` is a specification** - defines `Runtime`/`Model` traits for migration
-3. **Subsume expanded** - now covers boxes, hyperbolic, sheaf (anno-width geometric needs)
-4. **Ingestion stays in anno** - avoids premature extraction; use trait if needed
+1. **No separate `anno-ingest` crate** - existing `anno/src/ingest/` is sufficient
+2. **No separate `anno-models` crate** - Runtime abstraction deferred; backends stay in anno
+3. **No separate `anno-rel` crate** - RelationTriple already exists in anno
+4. **Subsume stays external** - Pure geometric algebra, can be enabled when stable
+5. **Training stays minimal** - box_embeddings_training.rs is exception; complex training in Python
 
 ## Vision
 
@@ -38,83 +55,43 @@ With geometric foundations provided by `subsume` for:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                     GEOMETRIC FOUNDATIONS (subsume)                      │
-│                                                                          │
-│  subsume-core/          Pure traits, no tensor deps                     │
-│  ├── box.rs             Box<S,V> trait for containment                  │
-│  ├── hyperbolic.rs      HyperbolicPoint trait for hierarchies           │
-│  ├── sheaf.rs           SheafGraph, RestrictionMap for transitivity     │
-│  └── tda.rs             PersistenceDiagram for topology (future)        │
-│                                                                          │
-│  subsume-ndarray/       CPU implementations (ndarray)                   │
-│  subsume-candle/        GPU implementations (candle)                    │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                         optional dependency
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
 │                        CANONICAL TYPES (anno-core)                       │
 │                                                                          │
 │  Entity, Track, Identity, Signal          NLP primitives                │
 │  GraphDocument, Corpus                    Document containers           │
 │  CoreferenceResolver trait                Coref abstraction             │
-│  RelationTriple                           Relation extraction           │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
               ┌─────────────────────┼─────────────────────┐
               ▼                     ▼                     ▼
 ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐
-│   anno-ingest     │  │   anno-models     │  │     anno-rel      │
+│  anno-coalesce    │  │   anno-strata     │  │      anno         │
 │                   │  │                   │  │                   │
-│ URL resolution    │  │ Runtime trait:    │  │ Relation extract  │
-│ HTML cleaning     │  │  OnnxRuntime      │  │ TPLinker          │
-│ Text preparation  │  │  CandleRuntime    │  │ W2NER relations   │
-│ Format detection  │  │  BurnRuntime      │  │ DocRED eval       │
+│ Cross-doc entity  │  │ Graph algorithms  │  │ NER backends:     │
+│ resolution        │  │                   │  │  GLiNER (ONNX)    │
+│                   │  │ PageRank          │  │  GLiNER (Candle)  │
+│ Union-Find        │  │ Leiden/Louvain    │  │  NuNER, CRF, etc  │
+│ LSH blocking      │  │ Label propagation │  │                   │
+│ Hierarchical      │  │ Centrality        │  │ Coref backends:   │
+│ Correlation clust │  │                   │  │  MentionRanking   │
+│ Streaming         │  │                   │  │  GraphCoref       │
+│                   │  │                   │  │  Joint (NER+coref)│
 │                   │  │                   │  │                   │
-│ (zero ML deps)    │  │ Model trait:      │  │ Uses anno-models  │
-│                   │  │  GLiNER<R>        │  │ for entity spans  │
-│                   │  │  NuNER<R>         │  │                   │
-│                   │  │  CRF, BiLSTM      │  │                   │
+│                   │  │                   │  │ Other modules:    │
+│                   │  │                   │  │  discourse/       │
+│                   │  │                   │  │  salience.rs      │
+│                   │  │                   │  │  linking/         │
+│                   │  │                   │  │  temporal.rs      │
+│                   │  │                   │  │  eval/ (gated)    │
 └───────────────────┘  └───────────────────┘  └───────────────────┘
               │                     │                     │
               └─────────────────────┼─────────────────────┘
                                     ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                              anno                                        │
-│                                                                          │
-│  Facade crate - re-exports and integrates:                              │
-│                                                                          │
-│  ┌─────────────────────────────────────────────────────────────┐        │
-│  │ pub use anno_core::*;                                        │        │
-│  │ pub use anno_models::{Model, Runtime, GLiNER, NuNER, ...};  │        │
-│  │ pub use anno_rel::{RelationExtractor, TPLinker};            │        │
-│  │ pub use anno_ingest::{Ingest, PreparedDocument};            │        │
-│  └─────────────────────────────────────────────────────────────┘        │
-│                                                                          │
-│  Plus anno-specific integration:                                         │
-│  - joint/         Factor graphs (NER + coref + linking)                 │
-│  - geometric/     Thin wrappers over subsume for NLP                    │
-│  - linking/       Wikidata entity linking                               │
-│  - discourse/     Shell nouns, dialogue acts                            │
-│  - salience/      Entity importance ranking                             │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-              ┌─────────────────────┼─────────────────────┐
-              ▼                     ▼                     ▼
-┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐
-│  anno-coalesce    │  │   anno-strata     │  │    anno-eval      │
-│                   │  │                   │  │                   │
-│ Cross-doc entity  │  │ Graph algorithms  │  │ Evaluation infra  │
-│ resolution        │  │                   │  │                   │
-│                   │  │ PageRank          │  │ NER metrics       │
-│ Union-Find        │  │ Leiden clustering │  │ Coref metrics     │
-│ LSH blocking      │  │ HITS              │  │ Relation metrics  │
-│ Correlation clust │  │ Label propagation │  │ Benchmarks        │
-│ Hierarchical      │  │                   │  │                   │
-└───────────────────┘  └───────────────────┘  └───────────────────┘
-                                    │
-                                    ▼
                          ┌───────────────────┐
+                         │    anno-eval      │  (re-export wrapper)
+                         └─────────┬─────────┘
+                                   │
+                         ┌─────────┴─────────┐
                          │    anno-cli       │
                          │                   │
                          │ Thin CLI wrapper  │
@@ -138,66 +115,27 @@ Types:
 - `Corpus` - Multi-document container
 - `CoreferenceResolver` trait
 
-### anno-models (NEW)
-**Purpose**: ML model backends with runtime abstraction  
-**Dependencies**: anno-core, ort (optional), candle (optional), burn (optional)  
-**Size**: ~40k lines (extracted from anno/backends)
+### anno
+**Purpose**: Main library with NER backends, coreference, and evaluation  
+**Dependencies**: anno-core, anno-coalesce, anno-strata (optional)  
+**Size**: ~120k lines
 
-Key abstraction:
-```rust
-/// Runtime for executing ML models
-pub trait Runtime: Send + Sync {
-    type Tensor;
-    type Error: std::error::Error;
-    
-    fn load(&self, path: &Path) -> Result<Box<dyn Inference>, Self::Error>;
-    fn device(&self) -> Device;
-}
+Modules:
+- `backends/` - NER backends (GLiNER, NuNER, CRF, W2NER, etc.)
+- `backends/mention_ranking.rs` - Mention-ranking coreference  
+- `backends/graph_coref.rs` - Graph-based coreference
+- `backends/box_embeddings.rs` - Box embedding inference
+- `backends/box_embeddings_training.rs` - Box embedding training (pure Rust)
+- `joint/` - Joint NER+Coref+Linking (structured CRF)
+- `discourse/` - Abstract anaphora, shell nouns
+- `linking/` - Entity linking to knowledge bases
+- `salience.rs` - Entity importance ranking
+- `temporal.rs` - Temporal parsing, diachronic NER
+- `eval/` - Evaluation infrastructure (feature-gated)
+- `cli/` - CLI commands (feature-gated)
+- `ingest/` - URL resolution, HTML cleaning, text prep
 
-/// Model that works with any runtime
-pub struct GLiNER<R: Runtime> {
-    runtime: R,
-    config: GLiNERConfig,
-}
-
-impl<R: Runtime> Model for GLiNER<R> {
-    fn extract_entities(&self, text: &str, types: Option<&[&str]>) -> Result<Vec<Entity>>;
-}
-```
-
-Benefits:
-- One GLiNER implementation, works with ONNX/Candle/Burn
-- Users who only want models don't need eval, CLI, etc.
-- Clear feature gates: `onnx`, `candle`, `burn`
-
-### anno-rel (NEW)
-**Purpose**: Relation extraction  
-**Dependencies**: anno-core, anno-models  
-**Size**: ~5k lines (extracted from anno)
-
-Types:
-- `RelationExtractor` trait
-- `TPLinker` - Joint entity-relation
-- `W2NER` - Relation variant
-- Relation evaluation metrics
-
-### anno-ingest (NEW)
-**Purpose**: Document ingestion and preparation  
-**Dependencies**: anno-core, ureq (optional), scraper (optional)  
-**Size**: ~3k lines (extracted from anno/ingest)
-
-Features:
-- URL resolution (HTTP, file://)
-- HTML cleaning
-- Text normalization
-- Format detection (plaintext, HTML, PDF stub)
-
-Why separate:
-- Zero ML dependencies
-- Useful independently for data pipelines
-- Clear boundary: ingest → models → coalesce → strata
-
-### anno-coalesce (existing)
+### anno-coalesce
 **Purpose**: Cross-document entity resolution  
 **Dependencies**: anno-core  
 **Size**: ~9k lines
@@ -209,135 +147,76 @@ Already well-designed. Algorithms:
 - Hierarchical agglomerative
 - Streaming resolution
 
-### anno-strata (existing)
+### anno-strata
 **Purpose**: Graph algorithms for knowledge graphs  
-**Dependencies**: anno-core  
+**Dependencies**: anno-core, petgraph  
 **Size**: ~3k lines
 
-Already well-designed. Algorithms:
-- PageRank, HITS, eigenvector centrality
+Algorithms:
+- PageRank, eigenvector centrality
 - Leiden, Louvain community detection
 - Label propagation
 - Graph utilities
 
-### subsume (separate repo, expanded)
-**Purpose**: Geometric foundations for NLP  
-**Dependencies**: minimal (ndarray/candle optional)
+### subsume (external, ../subsume)
+**Purpose**: Pure geometric algebra for box/hyperbolic/sheaf embeddings  
+**Status**: Separate repo, optional dependency (currently disabled in anno)
 
-Current modules:
-- `box_trait.rs` - Box containment
-- `gumbel.rs` - Probabilistic boxes
-- `distance.rs` - Depth/boundary distance
-- `training.rs` - Training infrastructure
-
-New modules:
-- `sheaf.rs` - Sheaf neural networks
-- `hyperbolic.rs` - Poincaré ball embeddings
-- `tda.rs` - Persistence diagrams (future)
+When integrated, provides:
+- `Box` trait - Containment/entailment
+- `GumbelBox` - Probabilistic boxes with dense gradients
+- `HyperbolicPoint` - Poincaré ball for hierarchies
+- `SheafGraph` - Transitivity enforcement
 
 ## Feature Flags
-
-### anno-models
-```toml
-[features]
-default = []
-onnx = ["ort"]
-candle = ["candle-core", "candle-nn"]
-burn = ["burn", "burn-ndarray"]
-metal = ["candle/metal"]
-cuda = ["candle/cuda", "burn-tch"]
-```
 
 ### anno
 ```toml
 [features]
-default = ["models"]
-models = ["anno-models"]
-rel = ["anno-rel"]
-ingest = ["anno-ingest"]
-eval = ["anno-eval"]
-full = ["models", "rel", "ingest", "eval"]
-
-# Runtime selection (passed through to anno-models)
-onnx = ["anno-models/onnx"]
-candle = ["anno-models/candle"]
-burn = ["anno-models/burn"]
-
-# Geometric (optional dependency on subsume)
-subsume = ["dep:subsume-core"]
+default = ["cli"]
+cli = ["clap", "clap_complete", "is-terminal", "indicatif", "toml"]
+eval = ["dirs", "glob"]
+eval-advanced = ["eval", "rand", "ureq", "sha2", "anno-strata"]
+eval-full = ["eval", "eval-bias", "eval-advanced"]
+discourse = ["eval"]
+onnx = ["ort", "tokenizers", "hf-hub", "ndarray", "lru"]
+candle = ["candle-core", "candle-nn", "candle-transformers", "tokenizers", "hf-hub", "safetensors"]
+metal = ["candle", "candle-core/metal"]
+cuda = ["candle", "candle-core/cuda"]
+burn = ["dep:burn", "burn-ndarray", "burn-autodiff", "tokenizers", "hf-hub", "safetensors"]
+# subsume = ["dep:subsume-core"]  # Currently disabled
 ```
 
-## Migration Path
-
-### Phase 1: Create new crates (skeleton)
-1. Create anno-models with Runtime trait
-2. Create anno-ingest (move from anno/src/ingest)
-3. Create anno-rel (extract from anno)
-
-### Phase 2: Expand subsume
-1. Add sheaf.rs to subsume-core
-2. Add hyperbolic.rs to subsume-core
-3. Implement in subsume-ndarray
-4. Implement in subsume-candle (GPU)
-
-### Phase 3: Consolidate backends
-1. Implement Runtime for ONNX, Candle, Burn
-2. Refactor GLiNER to GLiNER<R: Runtime>
-3. Delete gliner_onnx.rs, gliner_candle.rs, etc.
-4. Same for NuNER, other backends
-
-### Phase 4: Update anno facade
-1. Re-export from new crates
-2. Keep backward compatibility
-3. Deprecate direct backend access
-
-## Dependency Graph (Final)
+## Current Dependency Graph
 
 ```
-subsume-core (traits)
+anno-core (18k - types)
     │
-    ├── subsume-ndarray (CPU)
-    └── subsume-candle (GPU)
-           │
-anno-core ←┘
+    ├── anno-coalesce (9k - cross-doc resolution)
+    ├── anno-strata (3k - graph algorithms)
     │
-    ├── anno-ingest (no ML)
-    ├── anno-models (ML backends)
-    │       │
-    │       └── anno-rel (relations)
-    │
-    ├── anno-coalesce (clustering)
-    └── anno-strata (graphs)
-           │
-    ┌──────┴──────┐
-    │             │
-anno (facade) ←───┘
-    │
-anno-eval
-    │
-anno-cli
+    └── anno (120k - backends, coref, eval)
+            │
+            ├── anno-eval (re-export wrapper)
+            └── anno-cli (CLI wrapper)
 ```
 
-## Open Questions
+## Resolved Questions
 
 1. **Should anno-models include coref backends?**
-   - Currently: coref backends in anno/backends
-   - Option A: Move to anno-models (it's a "model")
-   - Option B: Keep in anno (it's NLP-specific integration)
-   - Leaning: Option B, coref is higher-level than NER
+   - **Resolved**: No separate anno-models crate. Backends stay in anno.
+   - Reason: Runtime abstraction wasn't integrated; backends have model-specific logic.
 
 2. **Should joint (factor graphs) stay in anno?**
-   - Yes - it integrates NER + coref + linking
-   - Too intertwined to extract cleanly
+   - **Yes** - it integrates NER + coref + linking; too intertwined to extract.
 
-3. **subsume naming for expanded scope?**
-   - Keep "subsume" - the pun works ("subsumes geometric needs")
-   - Sheaf/hyperbolic still relate to containment/hierarchy
+3. **subsume integration?**
+   - **Deferred**: Dependency disabled until subsume is stable.
+   - anno/geometric/ has stubs; subsume trait impl ready in box_embeddings.rs.
 
-4. **box-coref integration?**
-   - Keep separate (Python training)
-   - Its Rust inference already uses subsume
-   - Document ONNX export format
+4. **Training in Rust?**
+   - box_embeddings_training.rs provides pure Rust training (exception).
+   - Complex model training stays in Python (PyTorch → export to ONNX/Safetensors).
 
 ## References
 

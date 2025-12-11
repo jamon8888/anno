@@ -64,7 +64,10 @@ itertools = { workspace = true }
 smallvec = { workspace = true }
 
 # Geometric foundations (optional)
-subsume-core = { path = "../../subsume/subsume-core", optional = true }
+# NOTE: subsume-core is a separate repo at ../subsume. The trait impl in
+# box_embeddings.rs is ready but this dep is disabled until subsume is stable.
+# To enable: uncomment and ensure ../subsume exists
+# subsume-core = { path = "../../subsume/subsume-core", optional = true }
 
 # Observability
 tracing = { workspace = true, optional = true }
@@ -105,8 +108,8 @@ fast-lock = ["parking_lot"]
 instrument = ["tracing"]
 full = ["eval-full", "onnx", "candle", "discourse"]
 production = ["onnx", "async-inference", "session-pool", "fast-lock"]
-# Geometric foundations from subsume library
-subsume = ["dep:subsume-core"]
+# Geometric foundations from subsume library (disabled - see dep comment above)
+# subsume = ["dep:subsume-core"]
 
 [dev-dependencies]
 proptest = { workspace = true }
