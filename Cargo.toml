@@ -15,10 +15,11 @@
 #       │
 #       └── anno (120k - NER backends, coref, eval, CLI)
 #               ↑
-#               ├── anno-eval (re-export wrapper)
 #               └── anno-cli (thin wrapper)
 #
 # Archived (see archive/skeleton-crates-2024-12/):
+#   - anno-eval: thin re-export of anno with eval feature (unnecessary)
+#   - anno-derive: Dataset derive macro (never used by any crate)
 #   - anno-models: Runtime trait idea, not integrated
 #   - anno-rel: Relation types, duplicated in anno::backends::inference
 #
@@ -29,9 +30,9 @@ members = [
     "anno",
     "anno-coalesce",
     "anno-strata",
-    "anno-eval",
+    # "anno-eval",  # Archived: thin re-export of anno with eval feature
     "anno-cli",
-    "anno-derive",
+    # "anno-derive",  # Archived: Dataset derive macro not used by any crate
 ]
 resolver = "2"
 
