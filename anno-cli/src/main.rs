@@ -41,17 +41,7 @@
 use std::io;
 use std::process::ExitCode;
 
-use clap::{CommandFactory, Parser, ValueEnum};
-
-use anno::Model;
-
-#[cfg(not(any(feature = "eval", feature = "eval-advanced")))]
-use anno::{AutoNER, HeuristicNER, RegexNER};
-
-#[cfg(feature = "onnx")]
-// GLiNER exports available when onnx feature is enabled
-#[allow(unused_imports)]
-use anno::{DEFAULT_GLINER2_MODEL, DEFAULT_GLINER_MODEL};
+use clap::{CommandFactory, Parser};
 
 // ============================================================================
 // CLI Structure
@@ -65,127 +55,9 @@ use anno::{DEFAULT_GLINER2_MODEL, DEFAULT_GLINER_MODEL};
 /// - TODO: Standardize input patterns, add `anno models` command, improve error messages
 
 // ============================================================================
-// Shared Types (Legacy - most moved to cli module)
+// Command Arguments & Types
 // ============================================================================
-// ModelBackend, OutputFormat, EvalTask are now in src/cli/parser.rs
-
-/// Model backend selection (legacy - use anno::cli::parser::ModelBackend)
-#[derive(Debug, Clone, Copy, Default, ValueEnum)]
-#[allow(dead_code)]
-enum ModelBackend {
-    /// Regex matching only (dates, emails, etc.)
-    Pattern,
-    /// Heuristic NER (persons, orgs, locs via capitalization + context)
-    #[value(alias = "statistical")]
-    Heuristic,
-    /// Minimal heuristic (low complexity experiment)
-    Minimal,
-    /// Automatic (Language-detected routing)
-    Auto,
-    /// Stacked: Pattern + Heuristic (default)
-    #[default]
-    Stacked,
-    /// GLiNER via ONNX (requires --features onnx)
-    #[cfg(feature = "onnx")]
-    Gliner,
-    /// GLiNER2 multi-task (NER + classification + structure, requires --features onnx)
-    #[cfg(feature = "onnx")]
-    Gliner2,
-    /// NuNER (requires --features onnx)
-    #[cfg(feature = "onnx")]
-    Nuner,
-    /// W2NER for nested entities (requires --features onnx)
-    #[cfg(feature = "onnx")]
-    W2ner,
-    /// GLiNER via Candle (requires --features candle)
-    #[cfg(feature = "candle")]
-    GlinerCandle,
-}
-
-impl ModelBackend {
-    #[allow(dead_code)] // Used in tests
-    fn create_model(self) -> Result<Box<dyn Model>, String> {
-        // Use BackendFactory for consistent backend creation when available
-        #[cfg(any(feature = "eval", feature = "eval-advanced"))]
-        {
-            // Map backend enum to factory name
-            let factory_name = match self {
-                Self::Pattern => "pattern",
-                Self::Heuristic => "heuristic",
-                Self::Minimal => "heuristic", // Minimal uses heuristic
-                Self::Auto => "stacked",      // Auto uses stacked
-                Self::Stacked => "stacked",
-                #[cfg(feature = "onnx")]
-                Self::Gliner => "gliner_onnx",
-                #[cfg(feature = "onnx")]
-                Self::Gliner2 => "gliner2",
-                #[cfg(feature = "onnx")]
-                Self::Nuner => "nuner",
-                #[cfg(feature = "onnx")]
-                Self::W2ner => "w2ner",
-                #[cfg(feature = "candle")]
-                Self::GlinerCandle => "gliner_candle",
-            };
-            return anno::eval::backend_factory::BackendFactory::create(factory_name)
-                .map_err(|e| format!("Failed to create model '{}': {}", self.name(), e));
-        }
-        // Fallback to original implementation when eval feature not available
-        #[cfg(not(any(feature = "eval", feature = "eval-advanced")))]
-        match self {
-            Self::Pattern => Ok(Box::new(RegexNER::new())),
-            Self::Heuristic => Ok(Box::new(HeuristicNER::new())),
-            // Minimal was merged into HeuristicNER
-            Self::Minimal => Ok(Box::new(HeuristicNER::new())),
-            Self::Auto => {
-                // AutoNER just routes to default (StackedNER), doesn't combine models
-                Ok(Box::new(AutoNER::new()))
-            }
-            Self::Stacked => Ok(Box::new(StackedNER::default())),
-            #[cfg(feature = "onnx")]
-            Self::Gliner => anno::GLiNEROnnx::new(anno::DEFAULT_GLINER_MODEL)
-                .map(|m| Box::new(m) as Box<dyn Model>)
-                .map_err(|e| format!("Failed to load GLiNER: {}\n  Tip: Use 'anno models info gliner' to check model status.", e)),
-            #[cfg(feature = "onnx")]
-            Self::Gliner2 => anno::backends::gliner2::GLiNER2Onnx::from_pretrained(anno::DEFAULT_GLINER2_MODEL)
-                .map(|m| Box::new(m) as Box<dyn Model>)
-                .map_err(|e| format!("Failed to load GLiNER2: {}\n  Tip: Use 'anno models info gliner2' to check model status.", e)),
-            #[cfg(feature = "onnx")]
-            Self::Nuner => Err("NuNER not yet implemented in CLI.\n  Tip: Use 'anno models list' to see available models.".to_string()),
-            #[cfg(feature = "onnx")]
-            Self::W2ner => Err("W2NER not yet implemented in CLI.\n  Tip: Use 'anno models list' to see available models.".to_string()),
-            #[cfg(feature = "candle")]
-            Self::GlinerCandle => Err("GLiNER Candle not yet implemented in CLI.\n  Tip: Use 'anno models list' to see available models.".to_string()),
-        }
-    }
-
-    fn name(self) -> &'static str {
-        match self {
-            Self::Pattern => "pattern",
-            Self::Heuristic => "heuristic",
-            Self::Minimal => "minimal",
-            Self::Auto => "auto",
-            Self::Stacked => "stacked",
-            #[cfg(feature = "onnx")]
-            Self::Gliner => "gliner",
-            #[cfg(feature = "onnx")]
-            Self::Gliner2 => "gliner2",
-            #[cfg(feature = "onnx")]
-            Self::Nuner => "nuner",
-            #[cfg(feature = "onnx")]
-            Self::W2ner => "w2ner",
-            #[cfg(feature = "candle")]
-            Self::GlinerCandle => "gliner-candle",
-        }
-    }
-}
-
-// OutputFormat and EvalTask are now in src/cli/parser.rs
-
-// ============================================================================
-// Command Arguments
-// ============================================================================
-
-// All Args structs moved to cli module - see src/cli/commands/*.rs
+// All Args structs, ModelBackend, OutputFormat, EvalTask are in anno::cli::parser
 
 // ============================================================================
 // Legacy Command Handlers (to be extracted)
@@ -308,8 +180,8 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::ModelBackend;
     use anno::cli::output::{color, confidence_bar, metric_colored, type_color};
+    use anno::cli::parser::ModelBackend;
     use anno::cli::utils::{
         detect_quantifier, is_likely_female, is_likely_male, is_negated, normalize_entity_name,
         parse_gold_spec,
