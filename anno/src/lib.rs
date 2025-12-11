@@ -72,6 +72,50 @@
 //! ```
 //!
 //! Core types (Entity, GroundedDocument, Signal, Track, etc.) are in `anno-core` and re-exported here.
+//!
+//! ## Feature Flags
+//!
+//! Anno uses feature flags to control compile-time dependencies. Here's the taxonomy:
+//!
+//! ### Evaluation Features
+//!
+//! | Feature | Dependencies | Enables |
+//! |---------|--------------|---------|
+//! | `eval` | `dirs`, `glob` | Dataset loading, basic metrics, harness |
+//! | `eval-bias` | `eval` | Demographic/gender bias evaluation |
+//! | `eval-advanced` | `eval`, `rand`, `ureq`, `sha2`, `anno-strata` | Network downloads, advanced metrics, graph clustering |
+//! | `eval-full` | All above | Everything for comprehensive evaluation |
+//! | `eval-parallel` | `eval`, `rayon` | Parallel evaluation (multi-threaded) |
+//!
+//! **Recommendation**: Use `eval` for development, `eval-full` for benchmarking.
+//!
+//! ### ML Backend Features
+//!
+//! | Feature | Framework | Notes |
+//! |---------|-----------|-------|
+//! | `onnx` | ONNX Runtime | Best for inference, requires system ONNX libs |
+//! | `candle` | Candle (pure Rust) | No external deps, slower than ONNX |
+//! | `metal` | Candle + Metal | Apple Silicon GPU acceleration |
+//! | `cuda` | Candle + CUDA | NVIDIA GPU acceleration |
+//! | `burn` | Burn (Rust) | Training support, multiple backends |
+//!
+//! **Recommendation**: Start with `onnx` for best accuracy/speed tradeoff.
+//!
+//! ### Production Features
+//!
+//! | Feature | Enables |
+//! |---------|---------|
+//! | `async-inference` | Async/await for ONNX inference |
+//! | `session-pool` | Connection pooling for ONNX sessions |
+//! | `fast-lock` | `parking_lot` for faster mutexes |
+//! | `production` | All production features combined |
+//!
+//! ### Convenience Features
+//!
+//! | Feature | What it includes |
+//! |---------|------------------|
+//! | `full` | `eval-full` + `onnx` + `candle` + `discourse` |
+//! | `default` | `cli` only (minimal deps) |
 
 #![warn(missing_docs)]
 
@@ -128,7 +172,9 @@ pub mod types;
 /// | Deep type hierarchies | `geometric::hyperbolic` |
 /// | Gradient-level transitivity | `geometric::sheaf` |
 /// | Structural diagnostics | `geometric::tda` |
-pub mod geometric;
+// geometric module archived to archive/geometric-2024-12/
+// Reason: Only used in doc comments, contains unimplemented!() calls
+// Restore when sheaf diffusion / hyperbolic embeddings are actually needed
 
 #[cfg(feature = "cli")]
 pub mod cli;

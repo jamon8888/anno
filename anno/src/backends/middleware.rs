@@ -415,7 +415,7 @@ impl Middleware for AddProvenance {
         use anno_core::Provenance;
         for entity in &mut entities {
             if entity.provenance.is_none() {
-                entity.provenance = Some(Provenance::ml_owned(
+                entity.provenance = Some(Provenance::ml(
                     self.backend.clone(),
                     entity.confidence,
                 ));
