@@ -123,7 +123,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "smallvec 1.15.1",
- "subsume-core",
  "tempfile",
  "thiserror 2.0.17",
  "tokenizers",
@@ -196,39 +195,6 @@ dependencies = [
  "anno",
  "anno-core",
  "proptest",
-]
-
-[[package]]
-name = "anno-models"
-version = "0.2.0"
-dependencies = [
- "anno-core",
- "burn",
- "burn-ndarray",
- "candle-core 0.9.1",
- "candle-nn",
- "candle-transformers",
- "hf-hub",
- "log",
- "ndarray 0.16.1",
- "ort",
- "proptest",
- "safetensors 0.4.5",
- "serde",
- "thiserror 2.0.17",
- "tokenizers",
-]
-
-[[package]]
-name = "anno-rel"
-version = "0.2.0"
-dependencies = [
- "anno-core",
- "anno-models",
- "log",
- "proptest",
- "serde",
- "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -5358,15 +5324,6 @@ dependencies = [
  "quote",
  "rustversion",
  "syn",
-]
-
-[[package]]
-name = "subsume-core"
-version = "0.1.0"
-dependencies = [
- "rand 0.8.5",
- "serde",
- "thiserror 2.0.17",
 ]
 
 [[package]]
