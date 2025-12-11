@@ -1,4 +1,4 @@
-{"text": "Marie Curie discovered radium in Paris.", "labels": ["person","organization","location","date","product","event"]}
-{"text": "Apple CEO Tim Cook announced new products in California.", "labels": ["person","organization","location","date","product","event"]}
-{"text": "Barack Obama was born in Hawaii and studied at Harvard.", "labels": ["person","organization","location","date","product","event"]}
+{"text": "Marie Curie discovered radium in Paris.", "labels": ["person","organization","location","date","product","event"], "source": "coarse_smoke_synthetic", "license": "CC-BY-4.0"}
+{"text": "Apple CEO Tim Cook announced new products in California.", "labels": ["person","organization","location","date","product","event"], "source": "coarse_smoke_synthetic", "license": "CC-BY-4.0"}
+{"text": "Barack Obama was born in Hawaii and studied at Harvard.", "labels": ["person","organization","location","date","product","event"], "source": "coarse_smoke_synthetic", "license": "CC-BY-4.0"}
 
