@@ -88,6 +88,7 @@ dependencies = [
  "anno-coalesce",
  "anno-core",
  "anno-strata",
+ "bitflags 2.10.0",
  "burn",
  "burn-autodiff",
  "burn-ndarray",
@@ -129,26 +130,9 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-subscriber",
  "ureq 2.12.1",
  "xxhash-rust",
-]
-
-[[package]]
-name = "anno-cli"
-version = "0.2.0"
-dependencies = [
- "anno",
- "anno-core",
- "clap",
- "clap_complete",
- "dirs 5.0.1",
- "glob",
- "indicatif",
- "is-terminal",
- "serde",
- "serde_json",
- "toml",
- "tracing-subscriber",
 ]
 
 [[package]]

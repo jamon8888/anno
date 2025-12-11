@@ -23,6 +23,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 regex = { workspace = true }
+bitflags = { workspace = true }
 chrono = { workspace = true }
 log = { workspace = true }
 once_cell = { workspace = true }
@@ -71,6 +72,7 @@ smallvec = { workspace = true }
 
 # Observability
 tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
 
 # CLI dependencies (optional)
 clap = { workspace = true, optional = true }
@@ -105,7 +107,7 @@ async-inference = ["tokio", "futures", "onnx"]
 session-pool = ["crossbeam-channel", "onnx"]
 fast-lock = ["parking_lot"]
 # Observability
-instrument = ["tracing"]
+instrument = ["tracing", "tracing-subscriber"]
 full = ["eval-full", "onnx", "candle", "discourse"]
 production = ["onnx", "async-inference", "session-pool", "fast-lock"]
 # Geometric foundations from subsume library
@@ -129,6 +131,11 @@ xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
 [[bench]]
 name = "offset_operations"
 harness = false
+
+[[bin]]
+name = "anno"
+path = "src/bin/anno.rs"
+required-features = ["cli", "eval"]
 
 [lints]
 workspace = true

@@ -1000,10 +1000,19 @@ impl Provenance {
     }
 
     /// Create provenance for ML-based extraction.
+    ///
+    /// Accepts both static strings and owned strings:
+    /// ```rust,ignore
+    /// // Static string (zero allocation)
+    /// Provenance::ml("gliner", 0.95);
+    ///
+    /// // Owned string (dynamic model name)
+    /// Provenance::ml(model_name.to_string(), 0.95);
+    /// ```
     #[must_use]
-    pub fn ml(model_name: &'static str, confidence: f64) -> Self {
+    pub fn ml(model_name: impl Into<Cow<'static, str>>, confidence: f64) -> Self {
         Self {
-            source: Cow::Borrowed(model_name),
+            source: model_name.into(),
             method: ExtractionMethod::Neural,
             pattern: None,
             raw_confidence: Some(confidence),
@@ -1012,19 +1021,11 @@ impl Provenance {
         }
     }
 
-    /// Create provenance for ML-based extraction with owned model name.
-    ///
-    /// Use this when the model name is dynamically determined at runtime.
+    /// Deprecated: Use `ml()` instead which now accepts both static and owned strings.
+    #[deprecated(since = "0.2.1", note = "Use ml() instead, it now accepts owned strings")]
     #[must_use]
     pub fn ml_owned(model_name: impl Into<String>, confidence: f64) -> Self {
-        Self {
-            source: Cow::Owned(model_name.into()),
-            method: ExtractionMethod::Neural,
-            pattern: None,
-            raw_confidence: Some(confidence),
-            model_version: None,
-            timestamp: None,
-        }
+        Self::ml(Cow::Owned(model_name.into()), confidence)
     }
 
     /// Create provenance for ensemble/hybrid extraction.

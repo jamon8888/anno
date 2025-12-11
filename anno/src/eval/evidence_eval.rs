@@ -14,11 +14,11 @@
 //!
 //! ## Related Modules
 //!
-//! - [`crate::geometric::sheaf`]: Sheaf neural networks enforce transitivity at
+//! - `archive/geometric-2024-12/sheaf.rs`: Sheaf neural networks enforce transitivity at
 //!   the gradient level (training time) rather than as post-hoc evaluation.
 //!   This module evaluates transitivity; sheaf learns to satisfy it.
 //!
-//! - [`crate::geometric::transitivity_violations`]: Utility function for detecting
+//! - `archive/geometric-2024-12/mod.rs::transitivity_violations`: Utility function for detecting
 //!   transitivity violations in a score matrix.
 //!
 //! ## References

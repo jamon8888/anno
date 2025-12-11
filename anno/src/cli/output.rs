@@ -450,3 +450,64 @@ pub fn print_matches(cmp: &EvalComparison, _verbose: bool) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_confidence_bar_normal() {
+        // Normal cases - function returns a visual bar
+        let bar = confidence_bar(0.5);
+        assert!(bar.contains('#')); // 50% should have some filled chars
+        assert!(bar.contains('.')); // and some empty chars
+
+        let bar = confidence_bar(1.0);
+        assert!(bar.contains('#')); // 100% should be fully filled
+
+        let bar = confidence_bar(0.0);
+        assert!(bar.contains('.')); // 0% should be mostly empty
+    }
+
+    #[test]
+    fn test_confidence_bar_clamping() {
+        // Edge case: confidence slightly over 1.0 should not panic
+        let bar = confidence_bar(1.01);
+        assert!(bar.contains('#')); // Should have filled chars
+
+        // Edge case: confidence at exactly 1.0
+        let bar = confidence_bar(1.0);
+        assert!(bar.contains('#')); // 100% should be fully filled
+    }
+
+    #[test]
+    fn test_type_color() {
+        assert_eq!(type_color("PER"), "1;34");
+        assert_eq!(type_color("person"), "1;34");
+        assert_eq!(type_color("ORG"), "1;32");
+        assert_eq!(type_color("LOC"), "1;33");
+        assert_eq!(type_color("UNKNOWN"), "1;37");
+    }
+
+    #[test]
+    fn test_metric_colored() {
+        // High score (>= 90)
+        let result = metric_colored(95.0);
+        assert!(result.contains("95.0"));
+
+        // Medium score (>= 70)
+        let result = metric_colored(75.0);
+        assert!(result.contains("75.0"));
+
+        // Low score (< 50)
+        let result = metric_colored(30.0);
+        assert!(result.contains("30.0"));
+    }
+
+    #[test]
+    fn test_color_function() {
+        // When not in a terminal, color() should return plain text
+        let result = color("32", "test");
+        assert!(result.contains("test"));
+    }
+}

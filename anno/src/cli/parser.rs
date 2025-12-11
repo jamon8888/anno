@@ -296,3 +296,15 @@ pub enum EvalTask {
     /// Relation Extraction
     Relation,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_model_backend_names() {
+        assert_eq!(ModelBackend::Pattern.name(), "pattern");
+        assert_eq!(ModelBackend::Heuristic.name(), "heuristic");
+        assert_eq!(ModelBackend::Stacked.name(), "stacked");
+    }
+}
