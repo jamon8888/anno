@@ -935,10 +935,7 @@ fn run_list(
                     // Use the dataset's categorization (loader method or registry fallback)
                     let is_coref = id.is_coreference();
                     // NER is the default if not specifically coref
-                    let is_ner = id
-                        .find_in_registry()
-                        .map(|r| r.is_ner())
-                        .unwrap_or(!is_coref);
+                    let is_ner = id.to_registry().is_ner() || !is_coref;
 
                     match task.as_str() {
                         "coref" if !is_coref => continue,

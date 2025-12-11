@@ -2,37 +2,30 @@
 # Workspace Architecture
 # ======================
 #
+# Pipeline:
+#   Text → Extract → Coalesce → Stratify → Knowledge Graph
+#          (anno)   (coalesce)  (strata)
+#
 # Dependency graph:
 #
-#   anno-core (18k lines - types, CoreferenceResolver trait)
+#   anno-core (18k - Entity, Track, Identity, Signal)
 #       ↑
 #       ├── anno-coalesce (9k - cross-doc entity resolution)
-#       ├── anno-strata (3k - hierarchical clustering)
+#       ├── anno-strata (3k - graph algorithms: PageRank, Leiden)
 #       │
-#       └── anno (85-177k lines depending on features)
-#               │   - Without eval: ~85k lines (NER, backends, coref)
-#               │   - With eval: +92k lines (metrics, datasets, harnesses)
+#       └── anno (120k - NER backends, coref, eval, CLI)
 #               ↑
-#               ├── anno-eval (92k - standalone eval, re-exports anno with eval)
+#               ├── anno-eval (re-export wrapper)
 #               └── anno-cli (thin wrapper)
 #
-# Feature gating in anno:
-#   - `eval` feature: Enables 92k lines of evaluation infrastructure
-#   - Without `eval`: Core NER + coreference only (~85k lines)
-#
-# Naming convention:
-#   anno/         - Main library (publishes as "anno" on crates.io)
-#   anno-<suffix> - Supporting/specialized crates
-#
-# Why anno/ not anno-lib/?
-#   - The published package name is "anno"
-#   - Directory matches package name for clarity
-#   - Consistent with tokio/, serde/, etc.
+# Archived (see archive/skeleton-crates-2024-12/):
+#   - anno-models: Runtime trait idea, not integrated
+#   - anno-rel: Relation types, duplicated in anno::backends::inference
 #
 members = [
     "anno-core",
-    "anno-models",
-    "anno-rel",
+    # "anno-models",  # Removed: skeleton crate, Runtime trait not integrated
+    # "anno-rel",     # Removed: skeleton crate, types exist in anno::backends::inference
     "anno",
     "anno-coalesce",
     "anno-strata",
