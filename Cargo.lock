@@ -179,25 +179,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anno-derive"
-version = "0.2.0"
-dependencies = [
- "anno-core",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "anno-eval"
-version = "0.2.0"
-dependencies = [
- "anno",
- "anno-core",
- "proptest",
-]
-
-[[package]]
 name = "anno-strata"
 version = "0.2.0"
 dependencies = [
