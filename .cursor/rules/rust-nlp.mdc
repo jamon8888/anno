@@ -206,3 +206,59 @@ let model_path = repo.get("model.safetensors")?;
 2. **Use nextest profiles** for different test categories (quick, ml, property)
 3. **Build release binary** before running CLI integration tests
 4. **Limit parallelism** for ML tests to avoid OOM (`test-threads = 2`)
+
+## Backend Utilities (Zero-Dep)
+
+These utility modules are always available (no feature flags required):
+
+| Module | Purpose | Key Exports |
+|--------|---------|-------------|
+| `hmm` | Classical HMM NER (1990s approach) | `HmmNER`, `HmmConfig` |
+| `streaming` | Iterator-based chunked extraction | `StreamingExtractor`, `ChunkConfig`, `EntityIterator` |
+| `middleware` | Pre/post-processing pipeline | `Middleware`, `MiddlewarePipeline`, `FilterByConfidence` |
+
+Feature-gated:
+| Module | Feature | Purpose |
+|--------|---------|---------|
+| `burn` | `burn` | Burn ML framework (training + inference) |
+| `onnx`, `gliner_onnx` | `onnx` | ONNX Runtime backends |
+| `candle`, `gliner_candle` | `candle` | Pure Rust ML |
+
+## CLI Structure
+
+The CLI is split between two crates:
+
+| Location | Purpose | Lines |
+|----------|---------|-------|
+| `anno/src/cli/` | Library code: commands, parsers, output | ~11k |
+| `anno-cli/src/main.rs` | Thin dispatcher, tracing setup | ~350 |
+
+**Canonical types live in `anno::cli::parser`** (not in main.rs):
+- `ModelBackend`, `OutputFormat`, `Cli`, `Commands`
+
+**Command handlers live in `anno::cli::commands::*`**:
+- Each subcommand has its own file (e.g., `extract.rs`, `debug.rs`)
+- Handlers are `pub fn run(args: XxxArgs) -> Result<(), String>`
+
+## cargo-modules Usage
+
+Detect orphan files (source files not loaded via `mod`):
+
+```bash
+cargo modules orphans --package anno --features "eval discourse"
+```
+
+Check for cycles:
+
+```bash
+cargo modules dependencies --package anno --acyclic
+```
+
+View module structure:
+
+```bash
+cargo modules structure --package anno --focus-on "anno::backends"
+```
+
+**Note**: Feature-gated modules appear as "orphans" to cargo-modules
+when their features aren't enabled. This is expected behavior.
