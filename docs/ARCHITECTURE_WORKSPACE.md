@@ -11,9 +11,7 @@
 | `anno` | Active | NER backends, coref, eval, discourse, salience |
 | `anno-coalesce` | Active | Cross-document entity resolution |
 | `anno-strata` | Active | Graph algorithms (PageRank, Leiden, Louvain) |
-| `anno-eval` | Active | Re-export wrapper for anno::eval |
 | `anno-cli` | Active | Command-line interface |
-| `anno-derive` | Active | Proc macros |
 
 ### Archived Crates (see archive/skeleton-crates-2024-12/)
 
@@ -21,6 +19,8 @@
 |-------|--------------|
 | `anno-models` | Runtime trait not integrated; backends remain in anno |
 | `anno-rel` | Types duplicated in anno::backends::inference |
+| `anno-eval` | Thin re-export of anno with eval feature (unnecessary) |
+| `anno-derive` | Dataset derive macro never used by any crate |
 
 ### External Dependencies
 
@@ -88,14 +88,10 @@ With geometric foundations provided by `subsume` for:
               └─────────────────────┼─────────────────────┘
                                     ▼
                          ┌───────────────────┐
-                         │    anno-eval      │  (re-export wrapper)
-                         └─────────┬─────────┘
-                                   │
-                         ┌─────────┴─────────┐
                          │    anno-cli       │
                          │                   │
-                         │ Thin CLI wrapper  │
-                         │ over anno + eval  │
+                         │ CLI wrapper over  │
+                         │ anno + features   │
                          └───────────────────┘
 ```
 
@@ -197,7 +193,6 @@ anno-core (18k - types)
     │
     └── anno (120k - backends, coref, eval)
             │
-            ├── anno-eval (re-export wrapper)
             └── anno-cli (CLI wrapper)
 ```
 
