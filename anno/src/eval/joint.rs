@@ -537,6 +537,7 @@ impl JointEvaluator {
 
 /// Predicted link (internal).
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Fields used for construction; confidence useful for debugging
 struct PredictedLink {
     start: usize,
     end: usize,

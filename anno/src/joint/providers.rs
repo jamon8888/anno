@@ -105,6 +105,7 @@ impl LinkScoreProvider for EntityLinkerProvider {
 ///
 /// This is a stopgap adapter to let the joint model consume box-based
 /// coreference cues without wiring a full box-training pipeline.
+#[allow(dead_code)] // Future: wire up box-based coref in joint model
 pub struct BoxCorefProvider {
     /// Half-width of the constructed boxes in each dimension.
     pub radius: f32,

@@ -728,6 +728,10 @@ impl EvalSystem {
         // Note: Gender bias requires CoreferenceResolver, not Model.
         // If the provided model implements CoreferenceResolver, we could use it,
         // but for now we use a default resolver. This is a known limitation.
+        warnings.push(
+            "Gender bias evaluation uses default SimpleCorefResolver, not the provided model."
+                .to_string(),
+        );
         let resolver = SimpleCorefResolver::default();
         let templates = create_winobias_templates();
         let evaluator = GenderBiasEvaluator::new(true);

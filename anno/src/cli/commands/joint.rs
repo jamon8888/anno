@@ -25,7 +25,6 @@
 use super::super::output::{color, print_annotated_entities};
 use super::super::parser::{ModelBackend, OutputFormat};
 use super::super::utils::get_input_text;
-use crate::backends::StackedNER;
 use crate::joint::{JointConfig, JointModel};
 use crate::Model;
 use anno_core::Entity;

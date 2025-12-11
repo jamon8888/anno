@@ -8003,6 +8003,7 @@ impl DatasetLoader {
     ///
     /// For RAMS and similar datasets distributed as archives.
     #[cfg(feature = "eval-advanced")]
+    #[allow(dead_code)] // Infrastructure for future tarball-based datasets (RAMS, etc.)
     fn download_and_extract_tarball(&self, id: DatasetId, url: &str) -> Result<String> {
         use std::io::{Read, Write};
         use std::process::Command;
@@ -8093,6 +8094,7 @@ impl DatasetLoader {
 
     /// Get file patterns to look for within an extracted tarball.
     #[cfg(feature = "eval-advanced")]
+    #[allow(dead_code)] // Used by download_and_extract_tarball
     fn tarball_target_patterns(&self, id: DatasetId) -> Vec<&'static str> {
         match id {
             // RAMS: Look for train/dev/test JSONL files
@@ -8116,6 +8118,7 @@ impl DatasetLoader {
 
     /// Recursively find and read the first matching data file in extracted directory.
     #[cfg(feature = "eval-advanced")]
+    #[allow(dead_code)] // Used by download_and_extract_tarball
     fn find_and_read_data_file(&self, dir: &std::path::Path, patterns: &[&str]) -> Result<String> {
         use std::fs;
 
