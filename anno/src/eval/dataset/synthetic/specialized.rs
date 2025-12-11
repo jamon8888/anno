@@ -3,9 +3,17 @@
 //! Contains datasets for: sports, politics, ecommerce, travel, weather,
 //! academic, food, real_estate, cybersecurity, multilingual, and globally diverse.
 
-use super::super::types::helpers::entity;
+use super::super::types::helpers::{entity, entity_email, entity_phone, entity_url};
 use super::super::types::{AnnotatedExample, Difficulty, Domain};
 use anno_core::EntityType;
+
+fn entity_at(text: &str, needle: &str, entity_type: EntityType) -> crate::eval::GoldEntity {
+    let byte_start = text
+        .find(needle)
+        .unwrap_or_else(|| panic!("needle '{}' not found in '{}'", needle, text));
+    let start = text[..byte_start].chars().count();
+    entity(needle, entity_type, start)
+}
 
 /// Sports domain dataset.
 pub fn sports_dataset() -> Vec<AnnotatedExample> {
@@ -362,24 +370,40 @@ pub fn multilingual_dataset() -> Vec<AnnotatedExample> {
         AnnotatedExample {
             text: "田中太郎さんは東京で働いています。".into(),
             entities: vec![
-                entity("田中太郎", EntityType::Person, 0),
-                entity("東京", EntityType::Location, 7),
+                entity_at("田中太郎さんは東京で働いています。", "田中太郎", EntityType::Person),
+                entity_at("田中太郎さんは東京で働いています。", "東京", EntityType::Location),
             ],
             domain: Domain::Multilingual,
             difficulty: Difficulty::Hard,
         },
         AnnotatedExample {
             text: "الرئيس الأمريكي زار القاهرة في يناير.".into(),
-            entities: vec![entity("القاهرة", EntityType::Location, 20)],
+            entities: vec![entity_at(
+                "الرئيس الأمريكي زار القاهرة في يناير.",
+                "القاهرة",
+                EntityType::Location,
+            )],
             domain: Domain::Multilingual,
             difficulty: Difficulty::Hard,
         },
         AnnotatedExample {
             text: "Präsident Steinmeier besuchte Berlin am 15. März.".into(),
             entities: vec![
-                entity("Steinmeier", EntityType::Person, 10),
-                entity("Berlin", EntityType::Location, 30),
-                entity("15. März", EntityType::Date, 40),
+                entity_at(
+                    "Präsident Steinmeier besuchte Berlin am 15. März.",
+                    "Steinmeier",
+                    EntityType::Person,
+                ),
+                entity_at(
+                    "Präsident Steinmeier besuchte Berlin am 15. März.",
+                    "Berlin",
+                    EntityType::Location,
+                ),
+                entity_at(
+                    "Präsident Steinmeier besuchte Berlin am 15. März.",
+                    "15. März",
+                    EntityType::Date,
+                ),
             ],
             domain: Domain::Multilingual,
             difficulty: Difficulty::Medium,
@@ -387,8 +411,48 @@ pub fn multilingual_dataset() -> Vec<AnnotatedExample> {
         AnnotatedExample {
             text: "北京大学的李教授获得了诺贝尔奖。".into(),
             entities: vec![
-                entity("北京大学", EntityType::Organization, 0),
-                entity("李", EntityType::Person, 5),
+                entity_at("北京大学的李教授获得了诺贝尔奖。", "北京大学", EntityType::Organization),
+                entity_at("北京大学的李教授获得了诺贝尔奖。", "李", EntityType::Person),
+            ],
+            domain: Domain::Multilingual,
+            difficulty: Difficulty::Hard,
+        },
+        AnnotatedExample {
+            text: "राम ने दिल्ली में पढ़ाई की।".into(),
+            entities: vec![
+                entity_at("राम ने दिल्ली में पढ़ाई की।", "राम", EntityType::Person),
+                entity_at("राम ने दिल्ली में पढ़ाई की।", "दिल्ली", EntityType::Location),
+            ],
+            domain: Domain::Multilingual,
+            difficulty: Difficulty::Hard,
+        },
+        AnnotatedExample {
+            text: "Путин встретился с Зеленским в Москве.".into(),
+            entities: vec![
+                entity_at(
+                    "Путин встретился с Зеленским в Москве.",
+                    "Путин",
+                    EntityType::Person,
+                ),
+                entity_at(
+                    "Путин встретился с Зеленским в Москве.",
+                    "Зеленским",
+                    EntityType::Person,
+                ),
+                entity_at(
+                    "Путин встретился с Зеленским в Москве.",
+                    "Москве",
+                    EntityType::Location,
+                ),
+            ],
+            domain: Domain::Multilingual,
+            difficulty: Difficulty::Hard,
+        },
+        AnnotatedExample {
+            text: "東京2020で🥇を取った大坂なおみ".into(),
+            entities: vec![
+                entity_at("東京2020で🥇を取った大坂なおみ", "東京", EntityType::Location),
+                entity_at("東京2020で🥇を取った大坂なおみ", "大坂なおみ", EntityType::Person),
             ],
             domain: Domain::Multilingual,
             difficulty: Difficulty::Hard,
@@ -887,6 +951,50 @@ pub fn hard_domain_examples() -> Vec<AnnotatedExample> {
     ]
 }
 
+/// Email/contact dataset (tests EMAIL/PHONE/URL entities).
+pub fn email_dataset() -> Vec<AnnotatedExample> {
+    let text1 = "Contact support at help@example.com or call +1-212-555-0100.";
+    let email_start = text1
+        .find("help@example.com")
+        .map(|b| text1[..b].chars().count())
+        .unwrap();
+    let phone_start = text1
+        .find("+1-212-555-0100")
+        .map(|b| text1[..b].chars().count())
+        .unwrap();
+
+    let text2 = "Submit a ticket via https://support.example.org or email ops@example.org.";
+    let url_start = text2
+        .find("https://support.example.org")
+        .map(|b| text2[..b].chars().count())
+        .unwrap();
+    let email2_start = text2
+        .find("ops@example.org")
+        .map(|b| text2[..b].chars().count())
+        .unwrap();
+
+    vec![
+        AnnotatedExample {
+            text: text1.into(),
+            entities: vec![
+                entity_email("help@example.com", email_start),
+                entity_phone("+1-212-555-0100", phone_start),
+            ],
+            domain: Domain::Email,
+            difficulty: Difficulty::Easy,
+        },
+        AnnotatedExample {
+            text: text2.into(),
+            entities: vec![
+                entity_url("https://support.example.org", url_start),
+                entity_email("ops@example.org", email2_start),
+            ],
+            domain: Domain::Email,
+            difficulty: Difficulty::Easy,
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -951,5 +1059,35 @@ mod tests {
         let ds = aerospace_dataset();
         assert!(!ds.is_empty());
         assert!(ds.len() >= 3);
+    }
+
+    #[test]
+    fn test_email_dataset_not_empty() {
+        let ds = email_dataset();
+        assert!(!ds.is_empty());
+        for ex in ds {
+            assert_eq!(ex.domain, Domain::Email);
+        }
+    }
+
+    #[test]
+    fn test_multilingual_has_required_scripts() {
+        let ds = multilingual_dataset();
+        let texts: Vec<_> = ds.iter().map(|e| e.text.as_str()).collect();
+        let has_devanagari = texts
+            .iter()
+            .any(|t| t.chars().any(|c| ('\u{0900}'..='\u{097F}').contains(&c)));
+        let has_cyrillic = texts
+            .iter()
+            .any(|t| t.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c)));
+        let has_cjk = texts
+            .iter()
+            .any(|t| t.chars().any(|c| ('\u{4E00}'..='\u{9FFF}').contains(&c)));
+        let has_emoji = texts.iter().any(|t| t.contains('🥇'));
+
+        assert!(has_devanagari, "Missing Devanagari coverage");
+        assert!(has_cyrillic, "Missing Cyrillic coverage");
+        assert!(has_cjk, "Missing CJK coverage");
+        assert!(has_emoji, "Missing emoji/mixed-script coverage");
     }
 }

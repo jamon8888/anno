@@ -198,6 +198,56 @@ fn test_bytes_to_chars_mixed_unicode() {
 }
 
 #[test]
+fn test_bytes_to_chars_zwj_sequences_and_flags() {
+    // ZWJ family and regional indicator flag sequences
+    let samples = ["👨‍👩‍👧‍👦", "🇯🇵", "🇺🇳", "👍🏽‍💻"];
+
+    for text in samples {
+        // Build expected mapping from bytes to owning char index
+        let mut boundaries: Vec<(usize, usize)> = Vec::new(); // (byte_offset, char_idx)
+        for (char_idx, (byte_idx, _)) in text.char_indices().enumerate() {
+            boundaries.push((byte_idx, char_idx));
+        }
+
+        for byte in 0..text.len() {
+            let (char_start, char_end) = bytes_to_chars(text, byte, byte + 1);
+
+            // Find the largest boundary <= byte to get expected char
+            let mut expected_char = 0;
+            for (b, cidx) in &boundaries {
+                if *b <= byte {
+                    expected_char = *cidx;
+                } else {
+                    break;
+                }
+            }
+
+            assert_eq!(
+                char_start, expected_char,
+                "Byte {} in {:?} should map to owning char {}",
+                byte, text, expected_char
+            );
+            assert!(char_end > char_start, "End must advance for {:?} at byte {}", text, byte);
+        }
+    }
+}
+
+#[test]
+fn test_bytes_to_chars_rtl_and_mixed_scripts() {
+    // Mixed RTL/LTR scripts with combining marks
+    let text = "שלום abc مرحبا a\u{0301}\u{0327}";
+
+    for byte in 0..text.len() {
+        let (char_start, char_end) = bytes_to_chars(text, byte, byte + 1);
+        assert!(
+            char_end >= char_start && char_end <= text.chars().count(),
+            "Span should remain in bounds for byte {}: start={}, end={}",
+            byte, char_start, char_end
+        );
+    }
+}
+
+#[test]
 fn test_bytes_to_chars_roundtrip_with_middle_bytes() {
     // Test that even when byte_start is in middle of char, we can roundtrip
     let text = "café";
