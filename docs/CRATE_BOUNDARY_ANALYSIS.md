@@ -61,13 +61,15 @@ let metrics = evaluate(identities, gold)?;    // CorefEvaluation
 
 Instead, you have to manually convert between type systems.
 
-### 2. Duplicated Logic (Resolved)
+### 2. Duplicated Logic (Partially Resolved)
 
 - ~~`coalesce::streaming::string_similarity` duplicates `coalesce::resolver::string_similarity`~~
   - **Fixed**: Renamed to `trigram_similarity` (character n-grams) vs `string_similarity` (word Jaccard)
   - Both are valid with different use cases; now clearly distinguished
-- `EntityCluster::canonical_name` duplicates `Identity::canonical_name`
-- `EntityMention::doc_id` duplicates `TrackRef::doc_id`
+- ~~`EntityCluster` has no conversion to `Identity`~~
+  - **Fixed**: `EntityCluster::to_identity()` implemented (2024-12)
+- `EntityMention::doc_id` duplicates `TrackRef::doc_id` (acceptable; internal type)
+- `MentionCluster::to_track()` implemented in `mention_ranking.rs`
 
 ### 3. Untestable Invariants
 
@@ -86,48 +88,18 @@ But these invariants aren't enforced or tested because the streaming types bypas
 
 **Current state:** `resolver.rs` correctly uses `anno-core` types (`Corpus`, `Track`, `Identity`).
 
-**Issue:** `streaming.rs` defines its own types, breaking the abstraction.
+**Status:** `streaming.rs` defines internal types (`EntityMention`, `EntityCluster`) but now has conversion:
+- `EntityCluster::to_identity()` - converts clusters to `anno_core::Identity`
 
-**Fix needed:**
-
-```rust
-// streaming.rs should have:
-impl StreamingResolver {
-    /// Add a track from a document to the resolver.
-    pub fn add_track(&mut self, doc_id: &str, track: &Track) -> u64 {
-        // Convert Track to internal representation
-        // Return cluster ID
-    }
-
-    /// Export clusters as Identity objects.
-    pub fn to_identities(&self) -> Vec<Identity> {
-        // Convert internal clusters to Identity
-    }
-}
-```
+**Remaining:** Consider adding `StreamingResolver::add_track()` to accept `Track` directly.
 
 ### `coalesce` ↔ `anno::eval`
 
-**Current state:** No direct connection. `cdcr.rs` has `CDCRResolver` that doesn't use `coalesce` at all.
+**Current state:** `cdcr.rs` has `CDCRResolver` that doesn't directly use `coalesce`.
 
-**Issue:** We can't evaluate coalesce algorithms against coreference benchmarks.
+**Issue:** We can't easily evaluate coalesce algorithms against coreference benchmarks.
 
-**Fix needed:**
-
-```rust
-// anno/src/eval/cdcr.rs should have:
-impl From<Identity> for CrossDocCluster {
-    fn from(identity: Identity) -> Self {
-        // Convert for evaluation
-    }
-}
-
-// Or better: use Identity directly in evaluation
-fn evaluate_cdcr(
-    predicted: &[Identity],
-    gold: &[CrossDocCluster],
-) -> CorefEvaluation
-```
+**Future work:** Add `impl From<Identity> for CrossDocCluster` to enable evaluation of coalesce output.
 
 ### `anno-core` ↔ `anno::eval`
 

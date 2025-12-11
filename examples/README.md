@@ -1,5 +1,9 @@
 # Examples
 
+> **Note**: These examples are currently in the workspace root. To run them, they should be
+> moved to `anno/examples/`. Some examples have already been migrated there.
+> For working examples, use: `cargo run -p anno --example <name>`.
+
 ### Running
 
 ```bash
