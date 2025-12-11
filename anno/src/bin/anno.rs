@@ -1,6 +1,43 @@
 //! anno - Information Extraction CLI
 //!
-//! Entry point for the anno command-line tool.
+//! A unified toolkit for named entity recognition, coreference resolution,
+//! relation extraction, and entity linking.
+//!
+//! # Capabilities
+//!
+//! - **NER**: Named Entity Recognition (persons, organizations, locations, etc.)
+//! - **Coreference**: Link mentions to the same entity ("She" → "Marie Curie")
+//! - **Relations**: Extract (head, relation, tail) triples
+//! - **Entity Linking**: Connect entities to knowledge bases (Wikidata)
+//! - **Events**: Discourse-level event extraction
+//!
+//! # Signal → Track → Identity Hierarchy
+//!
+//! ```text
+//! Level 1 (Signal)   : Raw detections with spans
+//! Level 2 (Track)    : Within-document coreference chains
+//! Level 3 (Identity) : Cross-document entity coalescing and KB linking
+//! ```
+//!
+//! # Usage
+//!
+//! ```bash
+//! # Basic NER extraction
+//! anno extract "Marie Curie won the Nobel Prize."
+//!
+//! # Debug with coreference and KB linking
+//! anno debug --coref --link-kb -t "Barack Obama met Angela Merkel. He praised her."
+//!
+//! # Evaluate against gold annotations
+//! anno eval -t "..." -g "Marie Curie:PER:0:11"
+//!
+//! # Validate annotation files
+//! anno validate file.jsonl
+//!
+//! # Show available models and features
+//! anno info
+//! ```
+//!
 //! All logic lives in `anno::cli::*`; this is just the dispatcher.
 
 use std::io;
