@@ -289,14 +289,12 @@ pub struct NormalizeWhitespace;
 impl Middleware for NormalizeWhitespace {
     fn pre_process<'a>(&self, _ctx: &mut MiddlewareContext, text: &'a str) -> Result<Cow<'a, str>> {
         // Check if normalization is needed
-        let needs_normalization =
-            text.contains("  ") || text.starts_with(char::is_whitespace) || text.ends_with(char::is_whitespace);
+        let needs_normalization = text.contains("  ")
+            || text.starts_with(char::is_whitespace)
+            || text.ends_with(char::is_whitespace);
 
         if needs_normalization {
-            let normalized: String = text
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+            let normalized: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
             Ok(Cow::Owned(normalized))
         } else {
             Ok(Cow::Borrowed(text))
@@ -362,13 +360,17 @@ impl Middleware for RemoveOverlaps {
         mut entities: Vec<Entity>,
     ) -> Result<Vec<Entity>> {
         // Sort by confidence descending
-        entities.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        entities.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut result = Vec::with_capacity(entities.len());
         for entity in entities {
-            let overlaps = result.iter().any(|e: &Entity| {
-                entity.start < e.end && entity.end > e.start
-            });
+            let overlaps = result
+                .iter()
+                .any(|e: &Entity| entity.start < e.end && entity.end > e.start);
             if !overlaps {
                 result.push(entity);
             }
@@ -413,7 +415,10 @@ impl Middleware for AddProvenance {
         use anno_core::Provenance;
         for entity in &mut entities {
             if entity.provenance.is_none() {
-                entity.provenance = Some(Provenance::ml_owned(&self.backend, entity.confidence));
+                entity.provenance = Some(Provenance::ml_owned(
+                    self.backend.clone(),
+                    entity.confidence,
+                ));
             }
         }
         Ok(entities)
@@ -537,7 +542,9 @@ where
 
 impl<F> std::fmt::Debug for Callback<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Callback").field("name", &self.name).finish()
+        f.debug_struct("Callback")
+            .field("name", &self.name)
+            .finish()
     }
 }
 
@@ -739,7 +746,11 @@ impl HookedPipeline {
         {
             let hooks = self.hooks.borrow();
             for entity in &entities {
-                hooks.trigger(HookEvent::EntityFound, &ctx, Some(std::slice::from_ref(entity)));
+                hooks.trigger(
+                    HookEvent::EntityFound,
+                    &ctx,
+                    Some(std::slice::from_ref(entity)),
+                );
             }
         }
 
@@ -845,8 +856,7 @@ mod tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
 
-        let pipeline = HookedPipeline::new(Box::new(HeuristicNER::new()))
-            .with(NormalizeWhitespace);
+        let pipeline = HookedPipeline::new(Box::new(HeuristicNER::new())).with(NormalizeWhitespace);
 
         // Track hook invocations
         let before_count = Arc::new(AtomicUsize::new(0));
@@ -916,4 +926,3 @@ mod tests {
         assert_eq!(pipeline.hook_count(), 3);
     }
 }
-
