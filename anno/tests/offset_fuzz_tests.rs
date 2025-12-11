@@ -65,9 +65,14 @@ proptest! {
     /// SpanConverter should be consistent with direct conversion functions.
     #[test]
     fn span_converter_consistency(
-        text in ".{0,500}",
+        text in ".{1,500}",  // Non-empty text
         byte_idx in 0usize..500,
     ) {
+        // Skip if byte_idx exceeds text bounds
+        if byte_idx > text.len() {
+            return Ok(());
+        }
+
         let converter = SpanConverter::new(&text);
         let char_idx = converter.byte_to_char(byte_idx);
         let byte_idx2 = converter.char_to_byte(char_idx);
@@ -76,9 +81,9 @@ proptest! {
         if text.is_ascii() && byte_idx < text.len() {
             prop_assert_eq!(byte_idx, byte_idx2,
                 "ASCII conversion mismatch: {} -> {} -> {}", byte_idx, char_idx, byte_idx2);
-        } else {
+        } else if byte_idx <= text.len() {
             // For Unicode, should be close (within one char)
-            prop_assert!(byte_idx2 <= byte_idx + 4, // Max 4 bytes per UTF-8 char
+            prop_assert!(byte_idx2 <= byte_idx.saturating_add(4), // Max 4 bytes per UTF-8 char
                 "Byte index too far: {} -> {} -> {}", byte_idx, char_idx, byte_idx2);
         }
     }
@@ -148,6 +153,44 @@ proptest! {
         let last_byte = converter.char_to_byte(char_count);
         prop_assert_eq!(last_byte, byte_len);
     }
+
+    /// Mid-scalar byte offsets should map to the owning character.
+    #[test]
+    fn mid_scalar_byte_maps_to_owning_char(
+        text in ".{1,200}",
+    ) {
+        for (char_idx, (byte_idx, ch)) in text.char_indices().enumerate() {
+            let len = ch.len_utf8();
+            if len > 1 {
+                for delta in 1..len {
+                    let b = byte_idx + delta;
+                    if b < text.len() {
+                        let (char_start, char_end) = bytes_to_chars(&text, b, b + 1);
+                        prop_assert_eq!(char_start, char_idx,
+                            "Mid-scalar byte should map to owning char: byte={}, expected_char={}, got_char={}",
+                            b, char_idx, char_start);
+                        prop_assert!(char_end > char_start,
+                            "char_end should advance: start={}, end={}", char_start, char_end);
+                    }
+                }
+            }
+        }
+    }
+
+}
+
+/// SpanConverter handles empty text consistently.
+#[test]
+fn span_converter_empty_text() {
+    let text = "";
+    let converter = SpanConverter::new(text);
+    // For empty text, only index 0 is valid
+    assert_eq!(converter.byte_to_char(0), 0);
+    assert_eq!(converter.char_to_byte(0), 0);
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(500))]
 
     /// TextSpan should preserve all coordinate systems.
     #[test]

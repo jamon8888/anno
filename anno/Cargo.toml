@@ -86,7 +86,8 @@ toml = "0.8"
 serde = { version = "1", features = ["derive"] }
 
 [features]
-default = ["cli"]
+# Default includes cli + eval so `cargo install anno` works
+default = ["cli", "eval"]
 cli = ["clap", "clap_complete", "is-terminal", "indicatif", "toml"]
 eval = ["dirs", "glob"]
 eval-bias = ["eval"]
@@ -127,6 +128,7 @@ proptest = { workspace = true }
 criterion = { workspace = true }
 tempfile = "3"
 xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
+bstr = "1"
 
 [[bench]]
 name = "offset_operations"

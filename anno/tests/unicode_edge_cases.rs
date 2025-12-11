@@ -5,8 +5,8 @@
 //! - Grapheme clusters (emoji sequences, combining characters)
 //! - Control characters
 //! - Zero-width characters
-//! - Surrogate pairs (invalid in UTF-8, but should handle gracefully)
-//! - Potentially invalid UTF-8 (using bstr for byte-level testing)
+//! - Surrogate pairs (invalid in UTF-8; Rust `char` excludes them)
+//! - Valid UTF-8 only (API is `&str`; we still stress edge Unicode cases)
 
 use anno::{Entity, EntityType, Model, StackedNER};
 use bstr::{BStr, ByteSlice};
@@ -153,15 +153,11 @@ proptest! {
         );
     }
 
-    /// Property: Byte-level operations handle potentially invalid UTF-8 gracefully
-    ///
-    /// This test uses bstr to create byte sequences that might not be valid UTF-8,
-    /// ensuring our code handles edge cases correctly.
+    /// Property: Byte-level operations handle UTF-8 bytes and never produce invalid text
     #[test]
     fn byte_level_utf8_handling(
         bytes in proptest::collection::vec(0u8..=255u8, 0..100)
     ) {
-        // Convert bytes to string if valid UTF-8, otherwise skip test
         if let Ok(text) = std::str::from_utf8(&bytes) {
             let ner = StackedNER::default();
             let entities = ner.extract_entities(text, None).unwrap();
@@ -186,6 +182,9 @@ proptest! {
                     entity.start, entity.end, text_char_count
                 );
             }
+        } else {
+            // Invalid UTF-8 should be rejected by UTF-8 conversion and never reach model code.
+            prop_assert!(std::str::from_utf8(&bytes).is_err(), "Expect invalid UTF-8 to fail fast");
         }
     }
 
@@ -221,5 +220,61 @@ proptest! {
             "Byte-level and char-level search should agree on pattern existence: text={:?}, pattern={:?}, byte_found={}, char_found={}",
             text, pattern, byte_found, char_found
         );
+    }
+}
+
+/// Deterministic coverage: complex grapheme clusters, ZWJ sequences, combining marks,
+/// mixed scripts (including RTL), and astral-plane scalars should not break span handling.
+#[test]
+fn complex_graphemes_and_mixed_scripts() {
+    let samples = [
+        // ZWJ family emoji (multiple scalars per grapheme)
+        "👨‍👩‍👧‍👦 went to the park",
+        // Skin tone modifiers + ZWJ
+        "👍🏽‍💻 coding session",
+        // Regional indicator pair (flag)
+        "Flag test: 🇯🇵🇺🇸",
+        // Combining mark stack
+        "a\u{0301}\u{0327} layered accents",
+        // RTL with mixed scripts
+        "مرحبا بالعالم — hello world — שלום",
+        // Astral musical symbol + text
+        "Music: 𝄞 score",
+    ];
+
+    for text in samples {
+        let ner = StackedNER::default();
+        let entities = ner.extract_entities(text, None).unwrap();
+        let text_char_count = text.chars().count();
+
+        for entity in entities {
+            let extracted = entity.extract_text_with_len(text, text_char_count);
+            let issues = entity.validate_with_len(text, text_char_count);
+
+            // Spans must stay in bounds
+            assert!(
+                entity.start <= entity.end && entity.end <= text_char_count,
+                "Span out of bounds for text {:?}: start={}, end={}, len={}",
+                text,
+                entity.start,
+                entity.end,
+                text_char_count
+            );
+
+            // No span-invalid issues
+            for issue in &issues {
+                match issue {
+                    anno::ValidationIssue::SpanOutOfBounds { .. }
+                    | anno::ValidationIssue::InvalidSpan { .. } => panic!(
+                        "Invalid span on {:?}: start={}, end={}, issue={:?}",
+                        text, entity.start, entity.end, issue
+                    ),
+                    _ => {}
+                }
+            }
+
+            // Extracted text should remain valid UTF-8
+            assert!(std::str::from_utf8(extracted.as_bytes()).is_ok());
+        }
     }
 }

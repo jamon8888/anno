@@ -61,7 +61,7 @@ pub use scientific::dataset as scientific_dataset;
 pub use social_media::dataset as social_media_dataset;
 pub use specialized::{
     academic_dataset, aerospace_dataset, automotive_dataset, cybersecurity_dataset,
-    ecommerce_dataset, energy_dataset, food_dataset, globally_diverse_dataset,
+    ecommerce_dataset, email_dataset, energy_dataset, food_dataset, globally_diverse_dataset,
     hard_domain_examples, healthcare_dataset, manufacturing_dataset, multilingual_dataset,
     politics_dataset, real_estate_dataset, sports_dataset, technology_dataset, travel_dataset,
     weather_dataset,
@@ -104,6 +104,7 @@ pub fn all_datasets() -> Vec<AnnotatedExample> {
     all.extend(specialized::cybersecurity_dataset());
     all.extend(specialized::multilingual_dataset());
     all.extend(specialized::globally_diverse_dataset());
+    all.extend(specialized::email_dataset());
     all.extend(specialized::hard_domain_examples());
 
     // Industry-specific domains
