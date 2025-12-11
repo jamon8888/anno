@@ -72,8 +72,8 @@ proptest! {
 ### CLI Integration Tests
 ```rust
 /// Helper to get CLI command using pre-built binary
-fn anno_cli_cmd() -> Command {
-    if let Ok(bin_path) = std::env::var("ANNO_CLI_BIN") {
+fn anno_cmd() -> Command {
+    if let Ok(bin_path) = std::env::var("ANNO_BIN") {
         return Command::new(bin_path);
     }
     
@@ -94,7 +94,7 @@ fn anno_cli_cmd() -> Command {
     
     // Last resort: cargo run (slow)
     let mut cmd = Command::new("cargo");
-    cmd.args(["run", "-p", "anno-cli", "--"]);
+    cmd.args(["run", "-p", "anno", "--bin", "anno", "--features", "cli eval", "--"]);
     cmd
 }
 ```
@@ -233,7 +233,7 @@ cargo nextest run --profile ml --workspace --features "eval-full discourse onnx 
 ```
 
 ### Pre-commit Checklist
-1. Build release binary: `cargo build --release -p anno-cli`
+1. Build release binary: `cargo build --release -p anno --bin anno --features "cli eval"`
 2. Run quick tests: `cargo nextest run --profile quick`
 3. Run lints: `cargo clippy --workspace --all-features`
 4. Format: `cargo fmt --check`
