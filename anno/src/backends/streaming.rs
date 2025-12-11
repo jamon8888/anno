@@ -226,7 +226,7 @@ impl<'m, 't, M: Model> EntityIterator<'m, 't, M> {
                 overlap_position
             }
         };
-        
+
         self.position = new_position;
 
         if actual_end >= text_len || self.position >= text_len {
@@ -323,10 +323,7 @@ pub mod async_stream {
 
     impl<'m, M: Model + Sync> StreamingExtractor<'m, M> {
         /// Create an async stream of entities.
-        pub fn extract_stream<'t>(
-            &'m self,
-            text: &'t str,
-        ) -> impl Stream<Item = Entity> + 'm
+        pub fn extract_stream<'t>(&'m self, text: &'t str) -> impl Stream<Item = Entity> + 'm
         where
             't: 'm,
         {
@@ -516,7 +513,8 @@ mod tests {
         let extractor = StreamingExtractor::new(&model, config);
 
         // Create a longer text
-        let text = "John Smith works at Google. Mary Johnson is at Apple. Bob Williams joined Microsoft.";
+        let text =
+            "John Smith works at Google. Mary Johnson is at Apple. Bob Williams joined Microsoft.";
         let entities: Vec<Entity> = extractor.extract(text).collect();
 
         // Should find entities across chunks
@@ -554,13 +552,13 @@ mod tests {
         assert!(boundary > 0);
         assert!(boundary <= 20);
     }
-    
+
     #[test]
     fn test_entity_deduplication_across_chunks() {
         // When an entity appears in the overlap region between chunks,
         // it should be deduplicated (seen set should prevent duplicates)
         let model = HeuristicNER::new();
-        
+
         // Use reasonable chunks with small overlap (avoid infinite loop edge cases)
         let config = ChunkConfig {
             chunk_size: 100,
@@ -569,32 +567,35 @@ mod tests {
             buffer_size: 100,
         };
         let extractor = StreamingExtractor::new(&model, config);
-        
+
         let text = "I work at Google Inc in California. Then I visited Google headquarters.";
         let entities: Vec<Entity> = extractor.extract(text).collect();
-        
+
         // Should find entities without infinite loops
         // (the fix ensures forward progress)
-        assert!(entities.len() < 100, "Possible infinite loop: too many entities");
+        assert!(
+            entities.len() < 100,
+            "Possible infinite loop: too many entities"
+        );
     }
-    
+
     #[test]
     fn test_empty_text_streaming() {
         let model = HeuristicNER::new();
         let extractor = StreamingExtractor::with_model(&model);
-        
+
         let entities: Vec<Entity> = extractor.extract("").collect();
         assert!(entities.is_empty());
     }
-    
+
     #[test]
     fn test_unicode_text_streaming() {
         let model = HeuristicNER::new();
         let extractor = StreamingExtractor::with_model(&model);
-        
+
         let text = "東京 is the capital of 日本. Paris is in France.";
         let entities: Vec<Entity> = extractor.extract(text).collect();
-        
+
         // Character offsets should be valid
         let char_count = text.chars().count();
         for entity in &entities {
@@ -602,27 +603,26 @@ mod tests {
             assert!(entity.end <= char_count, "Offset exceeds text length");
         }
     }
-    
+
     #[test]
     fn test_forward_progress_guaranteed() {
         // Test that streaming always makes forward progress even with small chunks
         let model = HeuristicNER::new();
-        
+
         let config = ChunkConfig {
-            chunk_size: 5,  // Very small chunks
-            overlap: 3,     // Large overlap relative to chunk
+            chunk_size: 5, // Very small chunks
+            overlap: 3,    // Large overlap relative to chunk
             respect_sentences: false,
             buffer_size: 10,
         };
         let extractor = StreamingExtractor::new(&model, config);
-        
+
         // Short text that could cause infinite loop without the fix
         let text = "abc def";
-        
+
         // Should complete without hanging (the fix ensures forward progress)
         let entities: Vec<Entity> = extractor.extract(text).collect();
         // We don't care about the results, just that it terminates
         let _ = entities;
     }
 }
-
