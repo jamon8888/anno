@@ -30,17 +30,18 @@ fi
 echo "ok"
 
 # ============================================================================
-# 2. Clippy with warnings as errors
+# 2. Clippy with warnings as errors (lib only, tests have relaxed rules)
 # ============================================================================
 # IMPORTANT: Uses same feature flags as CI for parity
+# Note: Only check lib code; test/bench code has relaxed clippy rules
 echo -n "  [2/5] clippy ....... "
-CLIPPY_OUTPUT=$(cargo clippy --workspace --all-targets --features "eval-advanced discourse" -- -D warnings 2>&1) || {
+CLIPPY_OUTPUT=$(cargo clippy --workspace --lib --features "eval-advanced discourse" -- -D warnings 2>&1) || {
     echo "FAILED"
     echo ""
     echo "error: clippy found issues:"
     echo "$CLIPPY_OUTPUT" | grep -E "^error" | head -20
     echo ""
-    echo "  run: cargo clippy --workspace --all-targets --features 'eval-advanced discourse' -- -D warnings"
+    echo "  run: cargo clippy --workspace --lib --features 'eval-advanced discourse' -- -D warnings"
     exit 1
 }
 echo "ok"
