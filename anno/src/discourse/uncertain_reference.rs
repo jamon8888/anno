@@ -636,7 +636,7 @@ impl DeferredResolutionContext {
         for reference in &mut self.pending {
             let _ = reference.resolve();
         }
-        self.resolved.extend(self.pending.drain(..));
+        self.resolved.append(&mut self.pending);
     }
 
     /// Get pending references that are ambiguous.
@@ -980,7 +980,7 @@ mod tests {
         // Add various references
         let mut resolved = UncertainReference::new("resolved");
         resolved.add_candidate(ReferenceCandidate::new(1, "A", 0.9));
-        resolved.resolve();
+        let _ = resolved.resolve();
         context.resolved.push(resolved);
 
         let mut ambiguous = UncertainReference::new("ambiguous");

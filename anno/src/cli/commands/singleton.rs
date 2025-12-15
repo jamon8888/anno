@@ -262,13 +262,7 @@ fn classify_singleton(
     }
 
     // Check if it's a proper noun (capitalized and not at sentence start)
-    if entity.start > 0
-        && entity
-            .text
-            .chars()
-            .next()
-            .map_or(false, |c| c.is_uppercase())
-    {
+    if entity.start > 0 && entity.text.chars().next().is_some_and(|c| c.is_uppercase()) {
         let prev_char = text.chars().nth(entity.start - 1);
         if prev_char.is_some_and(|c| c != '.' && c != '!' && c != '?') {
             return SingletonReason::UniqueProperNoun;

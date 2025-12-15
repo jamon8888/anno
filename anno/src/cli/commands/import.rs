@@ -273,7 +273,10 @@ fn import_conll(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
                     });
                 }
                 // Start new entity
-                let entity_type = tag[2..].to_string();
+                let entity_type = tag
+                    .strip_prefix("B-")
+                    .expect("tag.starts_with('B-') checked above")
+                    .to_string();
                 current_entity = Some((entity_type, word.to_string(), char_idx));
             } else if tag.starts_with("I-") && current_entity.is_some() {
                 // Continue entity

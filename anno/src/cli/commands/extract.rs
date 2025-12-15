@@ -397,7 +397,7 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
             }
         }
 
-        fs::write(&export_path, json).map_err(|e| {
+        fs::write(export_path, json).map_err(|e| {
             CliError::from(format!(
                 "Failed to write export file '{}': {}",
                 export_path, e

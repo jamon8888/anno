@@ -2658,7 +2658,7 @@ impl TaskEvaluator {
         }
 
         let dataset_labels = dataset_data.id.entity_types();
-        let mapped_labels = Self::map_dataset_labels_to_model(&dataset_labels, backend_name);
+        let mapped_labels = Self::map_dataset_labels_to_model(dataset_labels, backend_name);
         let is_zero_shot = matches!(
             backend_name.to_lowercase().as_str(),
             "nuner" | "gliner_onnx" | "gliner_candle" | "gliner2" | "gliner_poly" | "universal_ner"

@@ -5712,7 +5712,7 @@ mod tests {
         );
 
         for id in LoadableDatasetId::all() {
-            let ds: DatasetId = (*id).into();
+            let ds: DatasetId = id.into();
             assert!(
                 LoadableDatasetId::is_loadable_dataset(ds),
                 "LoadableDatasetId must imply is_loadable_dataset()"
@@ -5737,7 +5737,7 @@ mod tests {
 
         // Also ensure `LoadableDatasetId::all()` only returns ids with plans.
         for id in LoadableDatasetId::all() {
-            let ds: DatasetId = (*id).into();
+            let ds: DatasetId = id.into();
             assert!(
                 LoadableDatasetId::parse_plan(ds).is_some(),
                 "LoadableDatasetId::all() returned {:?} with no parse plan",
