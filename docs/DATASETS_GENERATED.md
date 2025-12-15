@@ -3,29 +3,29 @@
 
 # Dataset Registry
 
-**Total datasets: 431**
+**Total datasets: 451**
 
 ## Coverage Summary
 
 | Category | Count |
 |----------|-------|
-| NER | 283 |
-| Coreference | 76 |
+| NER | 289 |
+| Coreference | 79 |
 | Event Coref (CDCR) | 13 |
-| Abstract Anaphora | 7 |
+| Abstract Anaphora | 15 |
 | Biomedical | 45 |
-| Multilingual | 76 |
+| Multilingual | 80 |
 | Historical | 29 |
-| Ancient Languages | 20 |
+| Ancient Languages | 21 |
 | Indigenous | 10 |
-| Low-Resource | 36 |
-| Literary | 22 |
-| Relation Extraction | 38 |
+| Low-Resource | 37 |
+| Literary | 23 |
+| Relation Extraction | 39 |
 | Nested NER | 13 |
-| Arcane Domains | 112 |
+| Arcane Domains | 114 |
 | Adversarial | 12 |
 | Constructed Languages | 16 |
-| Dialogue/Conversational | 18 |
+| Dialogue/Conversational | 25 |
 
 ## All Datasets
 
@@ -115,6 +115,14 @@
 | `PDTBv3` | PDTB 3.0 | en | news | LDC | abstract_anaphora |
 | `CODICRACBridging` | CODI-CRAC Bridging | en | dialogue | CC-BY-4.0 | coref, dialogue, abstract_anaphora |
 | `AnaphoraAccessibility` | Anaphora Accessibility | en | evaluation | Research | coref, abstract_anaphora |
+| `HumanVoiceAgentInteraction` | Human-Voice Agent Interaction | fr | dialogue | Research | dialogue, abstract_anaphora |
+| `DiscoBench` | Disco-Bench | zh-en | literature | CC-BY-4.0 | multilingual, abstract_anaphora |
+| `DiscoTrack` | DiscoTrack | multi | general | CC-BY-4.0 | coref, multilingual, abstract_anaphora |
+| `LIEDER` | LIEDER | en | evaluation | Research | abstract_anaphora |
+| `GCDC` | GCDC | en | general | Research | abstract_anaphora |
+| `DISAPERE` | DISAPERE | en | scientific | CC-BY-4.0 | dialogue, abstract_anaphora |
+| `PragmEval` | PragmEval | en | dialogue | Research | dialogue, abstract_anaphora |
+| `DISRPT2025` | DISRPT 2025 | multi | general | Research | multilingual, dialogue, abstract_anaphora |
 | `AncientGreekUD` | Ancient Greek UD | grc | literature | CC-BY-NC-SA-3.0 | ner, ancient |
 | `LatinUD` | Latin UD | la | literature | CC-BY-NC-SA-3.0 | ner, ancient |
 | `CopticScriptorium` | Coptic Scriptorium | cop | religious | CC-BY-4.0 | ner, ancient |
@@ -125,6 +133,11 @@
 | `AfriSenti` | AfriSenti | multi | social_media | CC-BY-4.0 | multilingual, social_media, low_resource |
 | `AfriQA` | AfriQA | multi | wikipedia | CC-BY-4.0 | multilingual, low_resource |
 | `MasakhaNEWS` | MasakhaNEWS | multi | news | Apache-2.0 | multilingual, low_resource |
+| `AGNews` | AG News | en | news | Non-commercial | ner |
+| `DBPedia14` | DBPedia-14 | en | wikipedia | CC-BY-SA-3.0 | ner, entity_linking |
+| `YahooAnswers` | Yahoo Answers Topic | en | qa | Non-commercial | dialogue |
+| `TREC` | TREC Question Classification | en | qa | CC-BY-4.0 | dialogue |
+| `TweetTopic` | TweetTopic | en | social_media | CC-BY-4.0 | social_media |
 | `MasakhaPOS` | MasakhaPOS | multi | general | MIT | multilingual, low_resource |
 | `WikiANN` | WikiANN | multi | wikipedia | CC-BY-SA-4.0 | ner, multilingual, low_resource |
 | `NaijaNER` | NaijaNER | pcm | social_media | Research | ner, low_resource |
@@ -180,6 +193,7 @@
 | `WNEDClueweb` | WNED-ClueWeb | en | general | Research | entity_linking |
 | `BELB` | BELB | en | biomedical | Research | biomedical, entity_linking |
 | `MELO` | MELO | multi | general | Apache-2.0 | multilingual, entity_linking |
+| `MewsliX` | Mewsli-X | multi | news | Apache-2.0 | multilingual, entity_linking |
 | `BookCorefBamman` | BookCoref (Bamman) | en | literature | Research | coref, literary, long_document |
 | `NovelCR` | NovelCR | multi | literature | Research | coref, multilingual, literary, long_document |
 | `AgCNER` | AgCNER | zh | scientific | CC-BY-4.0 | ner, multilingual, long_document, arcane_domain |
@@ -222,6 +236,7 @@
 | `OmniNER2025` | OmniNER2025 | zh | social_media | Research | ner, multilingual, social_media |
 | `LegalCore` | LegalCore | en | legal | Research | coref, event_coref, long_document, arcane_domain |
 | `Zcoref` | Z-coref | multi | general | Research | coref, multilingual, abstract_anaphora |
+| `TikTalkCoref` | TikTalkCoref | zh | social_media | Research | coref, dialogue, social_media |
 | `MHERCL` | MHERCL | en | historical | Research | historical, entity_linking, adversarial |
 | `SNOMEDChallenge` | SNOMED CT EL Challenge | en | clinical | Research | biomedical, entity_linking, clinical |
 | `ESCOSkillsEL` | ESCO Skills EL | multi | general | Research | multilingual, entity_linking |
@@ -267,6 +282,10 @@
 | `TACKBP` | TAC-KBP | en | news | LDC | entity_linking |
 | `HAREM` | HAREM | pt | news | Research | ner, multilingual |
 | `GunViolenceCorpus` | Gun Violence Corpus (v2) | en | news | CC-BY-4.0 | ner, event_coref |
+| `MAVEN` | MAVEN | en | general | MIT | ner |
+| `MAVENArg` | MAVEN-ARG | en | general | MIT | ner, relation_extraction |
+| `CASIE` | CASIE | en | cybersecurity | CC-BY-4.0 | ner, arcane_domain |
+| `RAMS` | RAMS | en | news | Research | ner, long_document |
 | `SLUE` | SLUE | en | speech | MIT | ner, speech |
 | `CRAFTCoref` | CRAFT Coreference | en | biomedical | CC-BY-4.0 | coref, biomedical |
 | `FootballCorefCorpus` | Football Coreference Corpus (v2) | en | sports | CC-BY-4.0 | event_coref |
@@ -358,6 +377,7 @@
 | `FINERFood` | FINER (Food) | en | food | CC-BY-4.0 | ner, arcane_domain |
 | `NHKRecipeDataset` | NHK Recipe Dataset | ja | food | Research | ner, multilingual, arcane_domain |
 | `SanskritNERBhagavadGita` | Sanskrit NER (Bhagavad Gita) | sa | religious | Research | ner, ancient, arcane_domain |
+| `Mahanama` | Mahānāma | sa | literary | CC-BY-4.0 | coref, literary, ancient, long_document, low_resource, arcane_domain |
 | `AkkadianCuneiformDataset` | Akkadian Cuneiform Dataset | akk | historical | CC-BY-4.0 | ner, historical, ancient |
 | `HeidelbergCuneiformBenchmark` | Heidelberg Cuneiform Benchmark | akk | historical | Research | ner, historical, ancient |
 | `GreekMythologyKG` | Greek Mythology Knowledge Graph | en | mythology | CC-BY-4.0 | ner, coref, arcane_domain |
@@ -744,7 +764,7 @@ Twitter NER across multiple time periods. Tests temporal robustness of NER syste
 - **Citation**: Derczynski et al. (2016)
 - **Paper**: <https://aclanthology.org/C16-1111/>
 - **Notes**: Temporal stratification; tests model robustness to language evolution
-- **URL**: <https://raw.githubusercontent.com/GateNLP/broad_twitter_corpus/master/test.bio>
+- **URL**: <https://huggingface.co/datasets/tner/btc>
 
 ### WikiNeural
 
@@ -798,7 +818,7 @@ Cross-lingual NER benchmark spanning 13 diverse languages. Tests zero-shot trans
 - **Citation**: Malmasi et al. (2022)
 - **Paper**: <https://aclanthology.org/2022.emnlp-main.13/>
 - **Notes**: Tests cross-lingual zero-shot transfer; diverse language families
-- **URL**: <https://github.com/UniversalNER/UNER>
+- **URL**: <https://github.com/UniversalNER/uner_code>
 
 ### CoNLL-2002
 
@@ -906,8 +926,8 @@ Multilingual Complex NER. 11 languages with fine-grained and complex entities.
 - **License**: CC-BY-4.0 (SPDX)
 - **Citation**: Malmasi et al. (2022)
 - **Paper**: <https://aclanthology.org/2022.semeval-1.196/>
-- **Notes**: SemEval-2022 shared task; complex entities from diverse sources
-- **URL**: <https://multiconer.github.io/>
+- **Notes**: SemEval-2022 shared task; complex entities from diverse sources. HF-hosted but may require approval/token depending on split/license gating.
+- **URL**: <https://huggingface.co/datasets/MultiCoNER/multiconer_v1>
 
 ### MultiCoNER v2
 
@@ -924,8 +944,8 @@ MultiCoNER v2 with expanded languages and fine-grained types.
 - **License**: CC-BY-4.0 (SPDX)
 - **Citation**: Fetahu et al. (2023)
 - **Paper**: <https://aclanthology.org/2023.semeval-1.43/>
-- **Notes**: SemEval-2023 shared task; expanded from v1 with more types
-- **URL**: <https://multiconer.github.io/>
+- **Notes**: SemEval-2023 shared task; expanded from v1 with more types. HF-hosted but may require approval/token depending on split/license gating.
+- **URL**: <https://huggingface.co/datasets/MultiCoNER/multiconer_v2>
 
 ### BC5CDR
 
@@ -1100,7 +1120,7 @@ Large-scale coreference from PreCo reading comprehension corpus. 10x larger than
 - **Citation**: Chen et al. (2018)
 - **Paper**: <https://aclanthology.org/D18-1016/>
 - **Notes**: Preschool vocabulary for cleaner evaluation; largest public coref corpus
-- **URL**: <https://preschool-lab.github.io/PreCo/>
+- **URL**: <https://huggingface.co/datasets/coref-data/preco_raw>
 
 ### LitBank
 
@@ -1179,8 +1199,8 @@ Wikipedia coreference corpus. 30 documents with full coreference annotation.
 - **License**: CC-BY-SA-4.0 (SPDX)
 - **Citation**: Ghaddar & Langlais (2016)
 - **Paper**: <https://aclanthology.org/C16-1252/>
-- **Notes**: Long documents averaging 2k tokens; challenging for span-based models
-- **URL**: <https://rali.iro.umontreal.ca/rali/en/wikicoref-corpus>
+- **Notes**: Long documents averaging 2k tokens; challenging for span-based models. Prior download URL has an expired TLS cert; needs a fresh mirror.
+- **URL**: *Requires license or manual download*
 
 ### ARRAU 3.0
 
@@ -1234,8 +1254,8 @@ Clinical coreference from ShARe/CLEF eHealth. Patient records with coref.
 - **License**: PhysioNet
 - **Citation**: Suominen et al. (2013)
 - **Paper**: <https://clef2013.clef-initiative.eu/index.php?page=pages/proceedings.php>
-- **Notes**: Clinical concept coreference; disorder mentions across sentences
-- **URL**: <https://physionet.org/content/shareclefehealth2013coreference/>
+- **Notes**: Clinical concept coreference; disorder mentions across sentences. Was hosted on PhysioNet; URL appears gone/renamed; requires controlled access.
+- **URL**: *Requires license or manual download*
 
 ### RST Discourse Treebank
 
@@ -1289,7 +1309,7 @@ First coreference corpus for Conchucos Quechua. Historically significant as firs
 - **Citation**: Rios (2021)
 - **Paper**: <https://aclanthology.org/2021.americasnlp-1.1/>
 - **Notes**: First indigenous coreference corpus; pro-drop language; agglutinative morphology
-- **URL**: <https://raw.githubusercontent.com/Lguyogiro/qxoRef/main/data/conll/all.conll>
+- **URL**: <https://raw.githubusercontent.com/elizabethpankratz/qxoRef/f0eb5716573b3f428bfcfdda923b195d0e7967b8/qxoRef_AZ23.conll>
 
 ### AmericasNLI
 
@@ -1305,7 +1325,7 @@ NLI for 10 Indigenous American languages (Quechua, Guaraní, Nahuatl, etc.).
 - **Citation**: Ebrahimi et al. (2022)
 - **Paper**: <https://aclanthology.org/2022.acl-long.435/>
 - **Notes**: Tests zero-shot transfer from multilingual models; 10 indigenous languages
-- **URL**: <https://raw.githubusercontent.com/nala-cub/AmericasNLI/main/data/test/quechua_test.tsv>
+- **URL**: <https://raw.githubusercontent.com/nala-cub/AmericasNLI/be3c351b7e1ae69936c61bfde3e24f30757db9ac/test.tsv>
 
 ### Cherokee NER
 
@@ -1321,8 +1341,8 @@ Cherokee-English parallel corpus for NER transfer. Uses Syllabary script.
 - **License**: Research
 - **Citation**: Zhang et al. (2020)
 - **Paper**: <https://aclanthology.org/2020.findings-emnlp.464/>
-- **Notes**: Syllabary script (85 characters); polysynthetic language; ~7k speakers
-- **URL**: <https://raw.githubusercontent.com/ZhangShiyworkhub/ChrEn/main/chr/chr.txt>
+- **Notes**: Syllabary script (85 characters); polysynthetic language; ~7k speakers. Prior URL is dead; needs a fresh mirror.
+- **URL**: *Requires license or manual download*
 
 ### Nahuatl NER
 
@@ -1337,8 +1357,8 @@ Named entity recognition for Nahuatl (Aztec language). Colonial-era texts and mo
 - **Format**: CoNLL
 - **License**: CC-BY-4.0 (SPDX)
 - **Citation**: Gutierrez-Vasquez et al. (2023)
-- **Notes**: Polysynthetic Uto-Aztecan language; ~1.7M speakers; includes colonial manuscripts
-- **URL**: <https://github.com/Lguyogiro/nahuatl-ner>
+- **Notes**: Polysynthetic Uto-Aztecan language; ~1.7M speakers; includes colonial manuscripts. Prior URL is dead; needs a fresh mirror.
+- **URL**: *Requires license or manual download*
 
 ### Māori NER
 
@@ -1369,8 +1389,8 @@ Named entity recognition for Welsh (Cymraeg). Celtic language NER corpus.
 - **Format**: CoNLL
 - **License**: CC-BY-4.0 (SPDX)
 - **Citation**: Roberts et al. (2021)
-- **Notes**: Celtic language; ~900k speakers; supports Welsh-specific entity types
-- **URL**: <https://github.com/Portulan/welsh-ner>
+- **Notes**: Celtic language; ~900k speakers; supports Welsh-specific entity types. Prior URL is dead; needs a fresh mirror.
+- **URL**: *Requires license or manual download*
 
 ### Basque NER
 
@@ -1386,8 +1406,8 @@ Named entity recognition for Basque (Euskara). Language isolate NER corpus.
 - **Size**: ~80k tokens
 - **License**: CC-BY-4.0 (SPDX)
 - **Citation**: Alegria et al. (2019)
-- **Notes**: Language isolate; agglutinative morphology; ~750k speakers; ergative-absolutive alignment
-- **URL**: <https://github.com/ixa-ehu/eusner>
+- **Notes**: Language isolate; agglutinative morphology; ~750k speakers; ergative-absolutive alignment. Prior URL is dead; needs a fresh mirror.
+- **URL**: *Requires license or manual download*
 
 ### HIPE-2022
 
@@ -1405,7 +1425,7 @@ Multilingual Historical NER. 6 datasets across 11 languages including Latin.
 - **Citation**: Ehrmann et al. (2022)
 - **Paper**: <https://ceur-ws.org/Vol-3180/paper-83.pdf>
 - **Notes**: CLEF-HIPE shared task; includes Latin and Classical commentary; OCR noise
-- **URL**: <https://raw.githubusercontent.com/hipe-eval/HIPE-2022-data/main/data/v2.1/de/HIPE-2022-v2.1-hipe2020-de-test.tsv>
+- **URL**: <https://raw.githubusercontent.com/hipe-eval/HIPE-2022-data/147f5bc3c7fb7e5c6b024a9ffd6503cd019fb9ea/data/v2.1/hipe2020/de/HIPE-2022-v2.1-hipe2020-test-de.tsv>
 
 ### HistNERo
 
@@ -1423,7 +1443,7 @@ Romanian historical newspaper NER. First Romanian historical NER corpus from fou
 - **Citation**: HistNERo Team (2024)
 - **Paper**: <https://arxiv.org/abs/2405.00155>
 - **Notes**: Four historical Romanian regions (Bessarabia, Moldavia, Transylvania, Wallachia); diachronic benchmark
-- **URL**: <https://github.com/UniBuc-HistNERo/HistNERo>
+- **URL**: <https://github.com/avramandrei/histnero>
 
 ### Quaero Old Press
 
@@ -1511,7 +1531,7 @@ Large-scale relation extraction. 41 relation types + no_relation. Cleaned TACRED
 - **Citation**: Stoica et al. (2021)
 - **Paper**: <https://aclanthology.org/2021.acl-long.359/>
 - **Notes**: Cleaned version of TACRED with ~23% relabeled; requires original TACRED
-- **URL**: <https://raw.githubusercontent.com/mainlp/CrossRE/main/crossre_data/news-test.json>
+- **URL**: *Requires license or manual download*
 
 ### ACE 2004
 
@@ -1625,7 +1645,7 @@ Multilingual coreference (17 languages, 22 datasets). CRAC shared task standard.
 - **Citation**: Nedoluzhko et al. (2022)
 - **Paper**: <https://aclanthology.org/2022.lrec-1.581/>
 - **Notes**: CRAC shared task standard; includes zero anaphora; harmonized across treebanks
-- **URL**: <https://ufal.mff.cuni.cz/corefud/corefud-1.3.zip>
+- **URL**: <http://hdl.handle.net/11234/1-5987>
 
 ### TransMuCoRes
 
@@ -1744,8 +1764,8 @@ German novel coreference. 90 German novels from DTA (Deutsches Textarchiv).
 - **License**: CC-BY-4.0 (SPDX)
 - **Citation**: Krug et al. (2018)
 - **Paper**: <https://aclanthology.org/L18-1045/>
-- **Notes**: First public German literary coreference dataset
-- **URL**: <https://raw.githubusercontent.com/dbamman/droc/main/data/dta_reduced.jsonl>
+- **Notes**: First public German literary coreference dataset. Prior URL is dead; needs a fresh mirror.
+- **URL**: *Requires license or manual download*
 
 ### FantasyCoref
 
@@ -2073,6 +2093,147 @@ Discourse anaphora accessibility evaluation. Tests non-NP antecedents.
 - **Notes**: 2025 evaluation dataset; focuses on discourse-level anaphora understanding; non-nominal antecedents
 - **URL**: *Requires license or manual download*
 
+### Human-Voice Agent Interaction
+
+**Rust ID**: `DatasetId::HumanVoiceAgentInteraction`
+
+Naturalistic French dialogue from human-voice agent interactions. Response tokens, aside sequences, discourse deixis.
+
+- **Language**: fr
+- **Domain**: dialogue
+- **Entity Types**: RESPONSE_TOKEN, DISCOURSE_DEIXIS, PROPOSITIONAL_ANAPHORA
+- **Year**: 2025
+- **Format**: JSONL
+- **Size**: 70 turns, 10 discourse deixis examples, 11 response tokens
+- **License**: Research
+- **Citation**: Rudaz, Broth & Mlynář (2025)
+- **Paper**: <https://dl.acm.org/journal/tochi>
+- **Notes**: French dialogue from Pepper robot (2022) and ChatGPT voice mode (2025). Documents 'managed omnirelevance of speech' - how VAD-based agents misinterpret response tokens and asides. Local dataset at testdata/human_voice_agent/
+- **URL**: *Requires license or manual download*
+
+### Disco-Bench
+
+**Rust ID**: `DatasetId::DiscoBench`
+
+Discourse-aware evaluation benchmark for language modeling. 9 document-level testsets covering cohesion, coherence across Chinese/English literature.
+
+- **Language**: zh-en
+- **Domain**: literature
+- **Year**: 2023
+- **Format**: Custom
+- **Size**: 9 document-level testsets + diagnostic suite
+- **License**: CC-BY-4.0 (SPDX)
+- **Citation**: Wang et al. (2023)
+- **Paper**: <https://arxiv.org/abs/2307.08074>
+- **Notes**: Tests intra-sentence discourse properties: cohesion, coherence, entity tracking. Evaluates LLMs on discourse phenomena that cross sentences.
+- **URL**: *Requires license or manual download*
+
+### DiscoTrack
+
+**Rust ID**: `DatasetId::DiscoTrack`
+
+Multilingual LLM benchmark for discourse tracking. 12 languages, 4 levels: salience, entity tracking, discourse relations, bridging.
+
+- **Language**: multi
+- **Domain**: general
+- **Entity Types**: SALIENT_ENTITY, TRACKED_ENTITY, BRIDGING_REF
+- **Year**: 2025
+- **Format**: Custom
+- **Size**: 12 languages, 4 task levels
+- **License**: CC-BY-4.0 (SPDX)
+- **Citation**: Bu, Levine & Zeldes (2025)
+- **Paper**: <https://arxiv.org/abs/2510.17013>
+- **Notes**: Tests implicit information and pragmatic inference across documents. Four levels: salience recognition, entity tracking, discourse relations, bridging inference. State-of-the-art models still struggle.
+- **URL**: *Requires license or manual download*
+
+### LIEDER
+
+**Rust ID**: `DatasetId::LIEDER`
+
+Linguistically-Informed Evaluation for Discourse Entity Recognition. Tests existence, uniqueness, plurality, novelty.
+
+- **Language**: en
+- **Domain**: evaluation
+- **Entity Types**: DISCOURSE_ENTITY
+- **Year**: 2024
+- **Format**: Custom
+- **Size**: Controlled evaluation set
+- **License**: Research
+- **Citation**: Zhu & Frank (2024)
+- **Paper**: <https://arxiv.org/abs/2403.06301>
+- **Notes**: Tests LLM knowledge of semantic properties governing discourse entity introduction/reference: existence, uniqueness, plurality, novelty. Models show sensitivity to all except novelty.
+- **URL**: *Requires license or manual download*
+
+### GCDC
+
+**Rust ID**: `DatasetId::GCDC`
+
+Grammarly Corpus of Discourse Coherence. Real-world texts with coherence ratings across 4 domains.
+
+- **Language**: en
+- **Domain**: general
+- **Year**: 2018
+- **Format**: TSV
+- **Size**: ~2000 texts, 4 domains
+- **License**: Research
+- **Citation**: Lai & Tetreault (2018)
+- **Paper**: <https://arxiv.org/abs/1805.04993>
+- **Notes**: Four domains: Clinton emails, Enron, Yahoo answers, Yelp. First large-scale discourse coherence evaluation.
+- **URL**: *Requires license or manual download*
+
+### DISAPERE
+
+**Rust ID**: `DatasetId::DISAPERE`
+
+Discourse Structure in Peer Review Discussions. 20k sentences in 506 review-rebuttal pairs with argumentation annotation.
+
+- **Language**: en
+- **Domain**: scientific
+- **Entity Types**: REVIEW_ARG, REBUTTAL_ARG, STANCE
+- **Year**: 2022
+- **Format**: JSONL
+- **Size**: 20k sentences, 506 review-rebuttal pairs
+- **License**: CC-BY-4.0 (SPDX)
+- **Citation**: Kennard et al. (2022)
+- **Paper**: <https://arxiv.org/abs/2110.08520>
+- **Notes**: Discourse relations between reviews and rebuttals. Fine-grained rebuttal annotation: context in review, stance toward arguments. Expert-annotated. DOWNLOADED to anno cache.
+- **URL**: <https://github.com/nnkennard/DISAPERE>
+
+### PragmEval
+
+**Rust ID**: `DatasetId::PragmEval`
+
+Pragmatics-centered evaluation framework: 11 datasets covering discourse relations, speech acts, stance, sarcasm, verifiability.
+
+- **Language**: en
+- **Domain**: dialogue
+- **Year**: 2022
+- **Format**: TSV
+- **Size**: 20 subsets, ~130k examples total
+- **License**: Research
+- **Citation**: Sileo et al. (2022)
+- **Paper**: <https://aclanthology.org/2022.lrec-1.255>
+- **Notes**: Compilation of PDTB, STAC, GUM (discourse relations), Emergent (stance), SarcasmV2, SwitchBoard/MRDA (speech acts), Verifiability, Persuasion, Squinky, EmoBank. DOWNLOADED to anno cache.
+- **URL**: <https://github.com/sileod/pragmeval>
+
+### DISRPT 2025
+
+**Rust ID**: `DatasetId::DISRPT2025`
+
+Cross-formalism benchmark for discourse segmentation, connective detection, and relation classification. 39 corpora, 16 languages, 6 frameworks.
+
+- **Language**: multi
+- **Domain**: general
+- **Entity Types**: DISCOURSE_UNIT, CONNECTIVE, DISCOURSE_RELATION
+- **Year**: 2025
+- **Format**: CoNLL
+- **Size**: 39 corpora, 5.1M tokens, 311k relations
+- **License**: Research
+- **Citation**: DISRPT Organizers (2025)
+- **Paper**: <https://aclanthology.org/2025.disrpt-1.1.pdf>
+- **Notes**: Unified 17-label relation scheme mapping 353 original labels. Includes RST, eRST, SDRT, PDTB, dependency, ISO frameworks. Czech, German, English, Basque, Persian, French, Italian, Dutch, Nigerian Pidgin, Polish, Portuguese, Russian, Spanish, Thai, Turkish, Chinese. EMNLP 2025 shared task.
+- **URL**: <https://github.com/disrpt/sharedtask2025>
+
 ### Ancient Greek UD
 
 **Rust ID**: `DatasetId::AncientGreekUD`
@@ -2211,6 +2372,7 @@ Sentiment analysis for 14 African languages. 110k+ tweets. SemEval 2023 Task 12.
 
 - **Language**: multi
 - **Domain**: social_media
+- **Entity Types**: positive, neutral, negative
 - **Year**: 2023
 - **Format**: HuggingFace
 - **Size**: ~111k tweets
@@ -2250,6 +2412,7 @@ News topic classification for 16 African languages.
 
 - **Language**: multi
 - **Domain**: news
+- **Entity Types**: business, entertainment, health, politics, religion, sports, technology
 - **Year**: 2023
 - **Format**: HuggingFace
 - **License**: Apache-2.0 (SPDX)
@@ -2257,6 +2420,96 @@ News topic classification for 16 African languages.
 - **Paper**: <https://aclanthology.org/2023.acl-long.574/>
 - **Notes**: 7 topics: business, entertainment, health, politics, religion, sports, technology
 - **URL**: <https://huggingface.co/datasets/masakhane/masakhanews>
+
+### AG News
+
+**Rust ID**: `DatasetId::AGNews`
+
+News article topic classification. 4 classes: World, Sports, Business, Sci/Tech.
+
+- **Language**: en
+- **Domain**: news
+- **Entity Types**: World, Sports, Business, Sci/Tech
+- **Year**: 2015
+- **Format**: HuggingFace
+- **Size**: 120k train, 7.6k test
+- **License**: Non-commercial
+- **Citation**: Zhang et al. (2015)
+- **Paper**: <https://arxiv.org/abs/1509.01626>
+- **Notes**: Character-level ConvNet paper; standard text classification benchmark
+- **URL**: <https://huggingface.co/datasets/fancyzhx/ag_news>
+
+### DBPedia-14
+
+**Rust ID**: `DatasetId::DBPedia14`
+
+Wikipedia article classification. 14 non-overlapping classes from DBpedia ontology.
+
+- **Language**: en
+- **Domain**: wikipedia
+- **Entity Types**: Company, EducationalInstitution, Artist, Athlete, OfficeHolder, MeanOfTransportation, Building, NaturalPlace, Village, Animal, Plant, Album, Film, WrittenWork
+- **Year**: 2015
+- **Format**: HuggingFace
+- **Size**: 560k train, 70k test
+- **License**: CC-BY-SA-3.0 (SPDX)
+- **Citation**: Zhang et al. (2015)
+- **Paper**: <https://arxiv.org/abs/1509.01626>
+- **Notes**: 14 classes: Company, EducationalInstitution, Artist, Athlete, OfficeHolder, MeanOfTransportation, Building, NaturalPlace, Village, Animal, Plant, Album, Film, WrittenWork
+- **URL**: <https://huggingface.co/datasets/fancyzhx/dbpedia_14>
+
+### Yahoo Answers Topic
+
+**Rust ID**: `DatasetId::YahooAnswers`
+
+Question-answer topic classification. 10 classes covering diverse topics.
+
+- **Language**: en
+- **Domain**: qa
+- **Entity Types**: Society, Science, Health, Education, Computers, Sports, Business, Entertainment, Family, Politics
+- **Year**: 2015
+- **Format**: HuggingFace
+- **Size**: 1.4M train, 60k test
+- **License**: Non-commercial
+- **Citation**: Zhang et al. (2015)
+- **Paper**: <https://arxiv.org/abs/1509.01626>
+- **Notes**: 10 classes: Society, Science, Health, Education, Computers, Sports, Business, Entertainment, Family, Politics
+- **URL**: <https://huggingface.co/datasets/community-datasets/yahoo_answers_topics>
+
+### TREC Question Classification
+
+**Rust ID**: `DatasetId::TREC`
+
+Question type classification. 6 coarse classes, 50 fine-grained types.
+
+- **Language**: en
+- **Domain**: qa
+- **Entity Types**: ABBR, DESC, ENTY, HUM, LOC, NUM
+- **Year**: 2002
+- **Format**: HuggingFace
+- **Size**: 5.5k train, 500 test
+- **License**: CC-BY-4.0 (SPDX)
+- **Citation**: Li & Roth (2002)
+- **Paper**: <https://www.aclweb.org/anthology/C02-1150/>
+- **Notes**: 6 coarse: Abbreviation, Entity, Description, Human, Location, Numeric; 50 fine-grained
+- **URL**: <https://huggingface.co/datasets/trec>
+
+### TweetTopic
+
+**Rust ID**: `DatasetId::TweetTopic`
+
+Multi-label topic classification for tweets. 6 domains, 19 topics.
+
+- **Language**: en
+- **Domain**: social_media
+- **Entity Types**: arts, business, daily_life, pop_culture, science, sports
+- **Year**: 2022
+- **Format**: HuggingFace
+- **Size**: ~11k tweets
+- **License**: CC-BY-4.0 (SPDX)
+- **Citation**: Antypas et al. (2022)
+- **Paper**: <https://aclanthology.org/2022.coling-1.299/>
+- **Notes**: Multi-label; domains: arts, business, daily_life, pop_culture, science, sports; zero-shot benchmark
+- **URL**: <https://huggingface.co/datasets/cardiffnlp/tweet_topic_multi>
 
 ### MasakhaPOS
 
@@ -2266,6 +2519,7 @@ Part-of-speech tagging for 20 African languages.
 
 - **Language**: multi
 - **Domain**: general
+- **Entity Types**: NOUN, VERB, ADJ, ADV, PRON, PROPN, ADP, AUX, CCONJ, DET, INTJ, NUM, PART, PUNCT, SCONJ, SYM, X
 - **Year**: 2023
 - **Format**: CoNLL-U
 - **Annotation Scheme**: IOB2
@@ -2288,7 +2542,7 @@ Silver-standard NER from Wikipedia hyperlinks. 282 languages.
 - **Citation**: Pan et al. (2017)
 - **Paper**: <https://aclanthology.org/P17-1178/>
 - **Notes**: Silver annotations; noisy but massive coverage
-- **URL**: <https://huggingface.co/datasets/wikiann>
+- **URL**: <https://huggingface.co/datasets/unimelb-nlp/wikiann>
 
 **Example**:
 ```
@@ -2439,7 +2693,7 @@ Twitter NER workshop shared task. Focus on rare and emerging entities in noisy s
 - **Citation**: Strauss et al. (2016)
 - **Paper**: <https://aclanthology.org/W16-3919/>
 - **Notes**: 89% unseen test entities; predecessor to WNUT-17; harder than standard benchmarks
-- **URL**: <https://raw.githubusercontent.com/napsternxg/TwitterNER/master/data/wnut16/test>
+- **URL**: <https://raw.githubusercontent.com/aritter/twitter_nlp/65f3d77134c40d920db8d431c5c6faef1c051c94/data/annotated/wnut16/data/test>
 
 ### Sanskrit UD
 
@@ -2472,8 +2726,8 @@ Universal Dependencies for Old English (Anglo-Saxon). York-Toronto-Helsinki corp
 - **License**: CC-BY-SA-4.0 (SPDX)
 - **Citation**: Tischler & Walkden (2019)
 - **Paper**: <https://aclanthology.org/W19-4214/>
-- **Notes**: Anglo-Saxon; insular script variations; 5th-11th century CE
-- **URL**: <https://raw.githubusercontent.com/UniversalDependencies/UD_Old_English-YCOE/master/ang_ycoe-ud-test.conllu>
+- **Notes**: Anglo-Saxon; insular script variations; 5th-11th century CE. NOTE: UD repo naming drifts; URL pinned to a specific commit.
+- **URL**: <https://raw.githubusercontent.com/UniversalDependencies/UD_Old_English-Cairo/118f11ad906fb15d930825fadce9ef9eccca9347/ang_cairo-ud-test.conllu>
 
 ### Old Norse UD
 
@@ -2489,8 +2743,8 @@ Universal Dependencies for Old Norse/Icelandic Sagas. PROIEL and ISWOC treebanks
 - **License**: CC-BY-SA-4.0 (SPDX)
 - **Citation**: Rögnvaldsson et al. (2012)
 - **Paper**: <https://aclanthology.org/L12-1148/>
-- **Notes**: Icelandic Sagas and Eddas; runic/Latin script; 9th-14th century CE
-- **URL**: <https://raw.githubusercontent.com/UniversalDependencies/UD_Old_Norse-ICEPAHC/master/non_icepahc-ud-test.conllu>
+- **Notes**: IcePaHC treebank (historical Icelandic; Old Norse family). URL pinned to a specific commit.
+- **URL**: <https://raw.githubusercontent.com/UniversalDependencies/UD_Icelandic-IcePaHC/ca72a59affd87c4b7b9067ae56efa7a694a7b4c4/is_icepahc-ud-test.conllu>
 
 ### CALCS-2018
 
@@ -2889,6 +3143,7 @@ Semantic relation classification between nominals. 9 relation types.
 
 - **Language**: en
 - **Domain**: general
+- **Entity Types**: e1, e2
 - **Year**: 2010
 - **Format**: Custom
 - **Size**: ~10k examples
@@ -2906,6 +3161,7 @@ Few-shot relation classification benchmark. 100 relations from Wikidata.
 
 - **Language**: en
 - **Domain**: wikipedia
+- **Entity Types**: head, tail
 - **Year**: 2018
 - **Format**: JSONL
 - **Size**: 70k instances, 100 relations
@@ -3252,6 +3508,24 @@ Multilingual Entity Linking of Occupations. 48 datasets across 21 languages for 
 - **Notes**: Zero-shot multilingual EL; includes sentence encoders and lexical baselines
 - **URL**: <https://github.com/avature/melo-benchmark>
 
+### Mewsli-X
+
+**Rust ID**: `DatasetId::MewsliX`
+
+Multilingual entity linking across 50 languages. Wikipedia-linked mentions for zero-shot cross-lingual EL.
+
+- **Language**: multi
+- **Domain**: news
+- **Entity Types**: ENTITY
+- **Year**: 2020
+- **Format**: TSV
+- **Size**: ~300k mentions across 50 languages
+- **License**: Apache-2.0 (SPDX)
+- **Citation**: Botha et al. (2020)
+- **Paper**: <https://arxiv.org/abs/2010.11856>
+- **Notes**: Zero-shot cross-lingual EL benchmark; from WikiNews; Wikipedia KB
+- **URL**: <https://github.com/google-research/google-research/tree/master/mewslix>
+
 ### BookCoref (Bamman)
 
 **Rust ID**: `DatasetId::BookCorefBamman`
@@ -3267,7 +3541,7 @@ Full-novel coreference with automatic silver and manual gold annotations. Includ
 - **License**: Research
 - **Citation**: Bamman et al. (2025)
 - **Paper**: <https://arxiv.org/abs/2507.12075>
-- **Notes**: Long-document coref benchmark; tests models on full novels; silver + gold annotations
+- **Notes**: Long-document coref benchmark; tests models on full novels; silver + gold annotations. HF-hosted but appears gated in practice; treat as manual unless you have explicit access.
 - **URL**: <https://huggingface.co/datasets/spacemanidol/BookCoref>
 
 ### NovelCR
@@ -3995,6 +4269,24 @@ Joint coreference and zero-pronoun resolution. For languages with pro-drop (Chin
 - **Notes**: Tests handling of dropped arguments; critical for CJK languages; zero anaphora resolution
 - **URL**: *Requires license or manual download*
 
+### TikTalkCoref
+
+**Rust ID**: `DatasetId::TikTalkCoref`
+
+Chinese social media dialogue coreference. Person mentions in Douyin video comments with singleton handling.
+
+- **Language**: zh
+- **Domain**: social_media
+- **Entity Types**: PER
+- **Year**: 2025
+- **Format**: Custom
+- **Size**: 1,012 dialogues, 2,179 mentions, 1,435 clusters
+- **License**: Research
+- **Citation**: Li, Gong & Fu (2025)
+- **Paper**: <https://arxiv.org/abs/2504.14321>
+- **Notes**: First Chinese MCR dataset for social media. Maverick outperforms e2e-coref (65.5 vs 39.1 Avg.F1). High singleton rate: 44% pronouns, 34% proper names, 22% common nouns. Text-only portion; multimodal aspect out of scope.
+- **URL**: *Requires license or manual download*
+
 ### MHERCL
 
 **Rust ID**: `DatasetId::MHERCL`
@@ -4559,7 +4851,7 @@ Open domain NER benchmark. Broad coverage across multiple domains.
 - **Format**: JSONL
 - **License**: CC-BY-SA-4.0 (SPDX)
 - **Citation**: Babelscape (2023)
-- **Notes**: Open-domain NER; tests generalization across domains
+- **Notes**: HF currently returns 401 for anonymous access; treat as gated until proven otherwise.
 - **URL**: <https://huggingface.co/datasets/Babelscape/OpenNER>
 
 ### SciNER
@@ -4623,7 +4915,7 @@ Fiction NER at scale. Named entities from 750M tokens of fiction text.
 - **Format**: JSONL
 - **License**: CC-BY-4.0 (SPDX)
 - **Citation**: Fiction NER Team (2023)
-- **Notes**: Large-scale fiction NER; novels and short stories
+- **Notes**: HF currently returns 401 for anonymous access; treat as gated until proven otherwise.
 - **URL**: <https://huggingface.co/datasets/fiction-ner/750M>
 
 ### Character Codex
@@ -4762,6 +5054,80 @@ Gun violence event extraction. Named entities and events from news.
 - **Citation**: Pavlick et al. (2016)
 - **Notes**: Event extraction; sensitive domain requiring careful handling
 - **URL**: <https://github.com/gun-violence-corpus/gvc>
+
+### MAVEN
+
+**Rust ID**: `DatasetId::MAVEN`
+
+Massive general-domain event detection. 168 event types from Wikipedia, 4x larger than ACE.
+
+- **Language**: en
+- **Domain**: general
+- **Entity Types**: EVENT_TRIGGER
+- **Year**: 2020
+- **Format**: JSONL
+- **Annotation Scheme**: Trigger-based
+- **Size**: ~118k trigger instances, 4,480 documents, 168 event types
+- **License**: MIT (SPDX)
+- **Citation**: Wang et al. (2020)
+- **Paper**: <https://aclanthology.org/2020.emnlp-main.129/>
+- **Notes**: EMNLP 2020; largest general-domain ED dataset; CodaLab leaderboard available; Tsinghua Cloud/Google Drive download
+- **URL**: <https://github.com/THU-KEG/MAVEN-dataset>
+
+### MAVEN-ARG
+
+**Rust ID**: `DatasetId::MAVENArg`
+
+MAVEN extended with event arguments and relations. Complete event extraction benchmark.
+
+- **Language**: en
+- **Domain**: general
+- **Entity Types**: EVENT_TRIGGER, EVENT_ARGUMENT, EVENT_RELATION
+- **Year**: 2024
+- **Format**: JSONL
+- **Annotation Scheme**: Trigger-Argument
+- **Size**: ~98k argument annotations, ~21k relations
+- **License**: MIT (SPDX)
+- **Citation**: Wang et al. (2024)
+- **Paper**: <https://aclanthology.org/2024.acl-long.224/>
+- **Notes**: ACL 2024; builds on MAVEN; supports ED + EAE + ERE tasks; all-in-one event understanding
+- **URL**: <https://github.com/THU-KEG/MAVEN-Argument>
+
+### CASIE
+
+**Rust ID**: `DatasetId::CASIE`
+
+Cybersecurity event extraction. Attack patterns, vulnerabilities, malware events.
+
+- **Language**: en
+- **Domain**: cybersecurity
+- **Entity Types**: Attack-Pattern, Vulnerability, Data-Breach, Malware, Patch
+- **Year**: 2020
+- **Format**: Standoff
+- **Size**: ~1k documents, 5 event types, 26 argument roles
+- **License**: CC-BY-4.0 (SPDX)
+- **Citation**: Satyapanich et al. (2020)
+- **Paper**: <https://aclanthology.org/2020.case-1.12/>
+- **Notes**: Domain-specific event extraction; cybersecurity news articles
+- **URL**: <https://github.com/Ebiquity/CASIE>
+
+### RAMS
+
+**Rust ID**: `DatasetId::RAMS`
+
+Roles Across Multiple Sentences. Cross-sentence event argument extraction with 139 event types.
+
+- **Language**: en
+- **Domain**: news
+- **Entity Types**: EVENT_TRIGGER, EVENT_ARGUMENT
+- **Year**: 2020
+- **Format**: JSONL
+- **Size**: ~9,124 event instances, 139 event types
+- **License**: Research
+- **Citation**: Ebner et al. (2020)
+- **Paper**: <https://aclanthology.org/2020.acl-main.718/>
+- **Notes**: ACL 2020; tests implicit/cross-sentence arguments; requires multi-sentence reasoning
+- **URL**: <https://nlp.jhu.edu/rams/>
 
 ### SLUE
 
@@ -5566,11 +5932,11 @@ Korean character coreference in 50 modern/contemporary novels. First Korean lite
 - **Year**: 2024
 - **Format**: CoNLL
 - **Annotation Scheme**: CoNLLCoref
-- **Size**: 178K tokens, 50 novels
+- **Size**: 178K tokens, 50 novels, 17975 sentences
 - **License**: CC-BY-SA-4.0 (SPDX)
 - **Citation**: Kim, Lee & Lee (2024)
 - **Paper**: <https://arxiv.org/abs/2404.01140>
-- **Notes**: 24% of mentions are single common nouns (Korean address term culture favors kinship/title over names). Korean lacks determiners and proper noun markers. Four annotation versions available. Speaker annotations for direct quotations. IAA: MUC 94.53 F1.
+- **Notes**: Mention types: Pronominal 30.7%, Proper Name 22.8%, Single Noun 24.1% (kinship 9.2%, titles 3.1%), Noun Phrase 22.4%. Korean address term culture (호칭 문화) favors kinship over names. Distance stats: Antecedent avg 70.7 tokens, Spread avg 1583.3 tokens. Korean lacks determiners and proper noun markers. Four annotation versions. Morpheme-unit spans. Speaker annotations. IAA: MUC 94.53 F1. BERT baseline: ~62-73% MUC F1.
 - **URL**: <https://github.com/storidient/KoCoNovel>
 
 ### OpenBoek
@@ -5818,8 +6184,8 @@ Ultra-Large Scale NER. Massive silver-standard dataset.
 - **Format**: JSONL
 - **License**: CC-BY-4.0 (SPDX)
 - **Citation**: ULNER Team (2023)
-- **Notes**: Large-scale distantly supervised NER
-- **URL**: <https://huggingface.co/datasets/ULNER>
+- **Notes**: No stable public URL found (prior HuggingFace URL returned 404).
+- **URL**: *Requires license or manual download*
 
 ### UniversalNER
 
@@ -6249,6 +6615,25 @@ Sanskrit NER from Bhagavad Gita and Patanjali Yoga Sutras.
 - **Citation**: Suklabaidya (2025)
 - **Notes**: Classical Sanskrit texts; tests Indic script and religious terminology
 - **URL**: <https://www.kaggle.com/datasets/akashsuklabaidya/ner-dataset-fyp-25>
+
+### Mahānāma
+
+**Rust ID**: `DatasetId::Mahanama`
+
+Sanskrit Entity Discovery and Linking from Mahābhārata. World's largest epic with extreme name variation.
+
+- **Language**: sa
+- **Domain**: literary
+- **Entity Types**: Person, Location, Miscellaneous
+- **Year**: 2025
+- **Format**: CoNLLU
+- **Annotation Scheme**: Standoff
+- **Size**: 988K tokens, 73K verses, 109K mentions, 5.5K entities
+- **License**: CC-BY-4.0 (SPDX)
+- **Citation**: Sarkar et al. (2025)
+- **Paper**: <https://arxiv.org/abs/2509.19844>
+- **Notes**: First large-scale Sanskrit literary EDL. Character-level boundaries for sandhi MWTs (39% of mentions). Cross-lingual KB in English. SLP1 encoding. Extreme challenges: 124.42 avg name forms per major entity (max 1385 for Śiva), 47% entity ambiguity. Best baseline: 51.57% coref F1, 64.19% EL F1.
+- **URL**: <https://github.com/sujoysarkarai/mahanama>
 
 ### Akkadian Cuneiform Dataset
 
