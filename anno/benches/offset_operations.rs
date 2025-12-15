@@ -323,7 +323,6 @@ fn bench_unicode_overhead(c: &mut Criterion) {
 // Criterion Setup
 // =============================================================================
 
-/// Benchmark group for offset operations.
 criterion_group!(
     benches,
     bench_chars_count,
