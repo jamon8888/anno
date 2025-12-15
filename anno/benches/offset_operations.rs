@@ -31,7 +31,7 @@ const TEXT_MEDIUM: &str = "Meeting scheduled for January 15, 2025 at $500 per ho
     CEO Tim Cook presented the iPhone 16 and MacBook Pro. \
     The event was held at the Steve Jobs Theater.";
 
-/// CJK text - tests Unicode overhead (from multilingual.mdc guidelines)  
+/// CJK text - tests Unicode overhead (from multilingual.mdc guidelines)
 const TEXT_CJK: &str = "習近平在北京會見了普京。這是一個重要的會議。\
     中國和俄羅斯討論了經濟合作。兩國領導人簽署了多項協議。";
 
@@ -214,11 +214,11 @@ fn bench_crossdoc_pattern(c: &mut Criterion) {
                 }
                 // Fill in gaps for multi-byte chars
                 let mut last = 0;
-                for i in 0..=text.len() {
-                    if i < text.len() && map[i] == 0 && i > 0 {
-                        map[i] = last;
+                for (i, val) in map.iter_mut().enumerate() {
+                    if i < text.len() && *val == 0 && i > 0 {
+                        *val = last;
                     } else {
-                        last = map[i];
+                        last = *val;
                     }
                 }
                 map[text.len()] = text.chars().count();
@@ -323,6 +323,7 @@ fn bench_unicode_overhead(c: &mut Criterion) {
 // Criterion Setup
 // =============================================================================
 
+#[allow(missing_docs)]
 criterion_group!(
     benches,
     bench_chars_count,

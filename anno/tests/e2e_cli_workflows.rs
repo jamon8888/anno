@@ -89,7 +89,7 @@ fn e2e_cli_extract_formats() {
 
     // Allow graceful failures (e.g., no entities found with default model)
     if output.status.success() {
-        let stdout = String::from_utf8(output.stdout).unwrap();
+        let _stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
         // JSON output should be parseable
         if !stdout.is_empty() {
             assert!(
@@ -107,7 +107,7 @@ fn e2e_cli_extract_formats() {
 
     // Allow graceful failures
     if output.status.success() {
-        let stdout = String::from_utf8(output.stdout).unwrap();
+        let _stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
         // Human output should be readable (not JSON)
         if !stdout.is_empty() {
             assert!(
@@ -143,7 +143,7 @@ fn e2e_cli_extract_verbose() {
 
     // Allow graceful failures (e.g., no entities found)
     if output.status.success() {
-        let stdout = String::from_utf8(output.stdout).unwrap();
+        let _stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
         // Level 1 should show confidence and context if entities found
         // If no entities, output may be empty or show a message
     }
@@ -218,7 +218,7 @@ fn e2e_cli_pipeline_full() {
 
     // Allow graceful failures
     if output.status.success() {
-        let stdout = String::from_utf8(output.stdout).unwrap();
+        let _stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
         // Should show extracted entities if any found
         // Output may be empty if no entities extracted
     }
@@ -1139,7 +1139,7 @@ fn e2e_cli_zeroshot_custom_types() {
         .unwrap();
 
     if output.status.success() {
-        let stdout = String::from_utf8(output.stdout).unwrap();
+        let _stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
         // Should find at least some of: person, drug, disease, organization
         let has_entities = stdout.contains("\"type\":");
         assert!(

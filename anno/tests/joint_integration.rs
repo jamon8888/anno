@@ -101,9 +101,11 @@ fn test_joint_model_single_entity() {
 #[test]
 fn test_joint_model_configuration() {
     // Test that configuration affects factor construction
-    let mut config = JointConfig::default();
-    config.enable_coref_ner = false;
-    config.enable_coref_link = false;
+    let config = JointConfig {
+        enable_coref_ner: false,
+        enable_coref_link: false,
+        ..Default::default()
+    };
     config.enable_link_ner = false;
 
     let model = JointModel::new(config).unwrap();
@@ -217,7 +219,7 @@ fn test_belief_propagation_with_binary_factors() {
 
     let config = InferenceConfig::default();
     let mut bp = BeliefPropagation::new(factors, variables, config);
-    let marginals = bp.run();
+    let _marginals = bp.run();
 
     // The binary factor should pull mention 1 towards Person to match mention 0
     // This tests that cross-task factors actually influence inference
