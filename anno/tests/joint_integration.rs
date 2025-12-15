@@ -104,9 +104,9 @@ fn test_joint_model_configuration() {
     let config = JointConfig {
         enable_coref_ner: false,
         enable_coref_link: false,
+        enable_link_ner: false,
         ..Default::default()
     };
-    config.enable_link_ner = false;
 
     let model = JointModel::new(config).unwrap();
 

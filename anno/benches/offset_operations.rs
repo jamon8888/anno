@@ -16,6 +16,8 @@
 //! cargo bench --bench offset_operations -p anno
 //! ```
 
+#![allow(missing_docs)] // criterion_group! macro doesn't support doc comments
+
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 // =============================================================================
