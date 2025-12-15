@@ -41,7 +41,7 @@ fn anno_cli_cmd() -> Command {
 
 /// Helper: Create a temporary directory with test files
 fn create_test_dir() -> (TempDir, PathBuf) {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("should be able to create temp directory");
     let dir = tmp.path().to_path_buf();
 
     // Create test files
@@ -49,17 +49,17 @@ fn create_test_dir() -> (TempDir, PathBuf) {
         dir.join("doc1.txt"),
         "Barack Obama was president. He served from 2009 to 2017.",
     )
-    .unwrap();
+    .expect("should be able to write test file");
     fs::write(
         dir.join("doc2.txt"),
         "Obama was born in Hawaii. The former president lives in Washington.",
     )
-    .unwrap();
+    .expect("should be able to write test file");
     fs::write(
         dir.join("doc3.txt"),
         "The White House is in Washington D.C.",
     )
-    .unwrap();
+    .expect("should be able to write test file");
 
     (tmp, dir)
 }
@@ -89,7 +89,7 @@ fn e2e_cli_extract_formats() {
 
     // Allow graceful failures (e.g., no entities found with default model)
     if output.status.success() {
-        let _stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
+        let stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
         // JSON output should be parseable
         if !stdout.is_empty() {
             assert!(
@@ -107,7 +107,7 @@ fn e2e_cli_extract_formats() {
 
     // Allow graceful failures
     if output.status.success() {
-        let _stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
+        let stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
         // Human output should be readable (not JSON)
         if !stdout.is_empty() {
             assert!(
@@ -836,8 +836,8 @@ fn e2e_cli_export_brat() {
     };
 
     // Create temp input and output directories
-    let input_dir = TempDir::new().unwrap();
-    let output_dir = TempDir::new().unwrap();
+    let input_dir = TempDir::new().expect("should be able to create temp directory");
+    let output_dir = TempDir::new().expect("should be able to create temp directory");
 
     // Create a test file
     fs::write(
@@ -881,8 +881,8 @@ fn e2e_cli_import_brat() {
     };
 
     // Create temp directories
-    let input_dir = TempDir::new().unwrap();
-    let output_dir = TempDir::new().unwrap();
+    let input_dir = TempDir::new().expect("should be able to create temp directory");
+    let output_dir = TempDir::new().expect("should be able to create temp directory");
 
     // Create a test .ann file
     fs::write(
@@ -1067,7 +1067,7 @@ fn e2e_cli_domain_detection() {
 #[test]
 #[cfg(feature = "eval-advanced")]
 fn e2e_cli_batch_heterogeneous() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("should be able to create temp directory");
     let dir = tmp.path();
 
     // Create diverse document types
@@ -1139,7 +1139,7 @@ fn e2e_cli_zeroshot_custom_types() {
         .unwrap();
 
     if output.status.success() {
-        let _stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
+        let stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
         // Should find at least some of: person, drug, disease, organization
         let has_entities = stdout.contains("\"type\":");
         assert!(
@@ -1298,7 +1298,7 @@ fn e2e_cli_ensemble_backend() {
 #[test]
 #[cfg(feature = "eval-advanced")]
 fn e2e_cli_crossdoc_resolution() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("should be able to create temp directory");
     let dir = tmp.path();
 
     fs::write(dir.join("doc1.txt"), "Tim Cook leads Apple Inc.").unwrap();

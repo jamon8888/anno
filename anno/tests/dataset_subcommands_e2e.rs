@@ -38,8 +38,8 @@ fn anno_cli_cmd() -> Command {
 
 #[test]
 fn test_dataset_export_brat() {
-    let input_dir = TempDir::new().unwrap();
-    let output_dir = TempDir::new().unwrap();
+    let input_dir = TempDir::new().expect("should be able to create temp directory");
+    let output_dir = TempDir::new().expect("should be able to create temp directory");
 
     // Create test input
     fs::write(
@@ -83,8 +83,8 @@ fn test_dataset_export_brat() {
 
 #[test]
 fn test_dataset_export_conll() {
-    let input_dir = TempDir::new().unwrap();
-    let output_dir = TempDir::new().unwrap();
+    let input_dir = TempDir::new().expect("should be able to create temp directory");
+    let output_dir = TempDir::new().expect("should be able to create temp directory");
 
     fs::write(
         input_dir.path().join("test.txt"),
@@ -121,8 +121,8 @@ fn test_dataset_export_conll() {
 
 #[test]
 fn test_dataset_export_jsonl() {
-    let input_dir = TempDir::new().unwrap();
-    let output_dir = TempDir::new().unwrap();
+    let input_dir = TempDir::new().expect("should be able to create temp directory");
+    let output_dir = TempDir::new().expect("should be able to create temp directory");
 
     fs::write(
         input_dir.path().join("test.txt"),
@@ -171,8 +171,8 @@ fn test_dataset_export_jsonl() {
 
 #[test]
 fn test_dataset_import_brat() {
-    let input_dir = TempDir::new().unwrap();
-    let output_dir = TempDir::new().unwrap();
+    let input_dir = TempDir::new().expect("should be able to create temp directory");
+    let output_dir = TempDir::new().expect("should be able to create temp directory");
 
     // Create brat files
     fs::write(
@@ -220,8 +220,8 @@ fn test_dataset_import_brat() {
 
 #[test]
 fn test_dataset_import_conll() {
-    let input_dir = TempDir::new().unwrap();
-    let output_dir = TempDir::new().unwrap();
+    let input_dir = TempDir::new().expect("should be able to create temp directory");
+    let output_dir = TempDir::new().expect("should be able to create temp directory");
 
     // Create CoNLL file
     fs::write(
@@ -258,8 +258,8 @@ fn test_dataset_import_conll() {
 
 #[test]
 fn test_dataset_import_jsonl() {
-    let input_dir = TempDir::new().unwrap();
-    let output_dir = TempDir::new().unwrap();
+    let input_dir = TempDir::new().expect("should be able to create temp directory");
+    let output_dir = TempDir::new().expect("should be able to create temp directory");
 
     // Create JSONL file
     fs::write(
@@ -527,7 +527,7 @@ fn test_dataset_context_quiet_mode() {
 
 #[test]
 fn test_dataset_context_from_file() {
-    let input_dir = TempDir::new().unwrap();
+    let input_dir = TempDir::new().expect("should be able to create temp directory");
     let input_file = input_dir.path().join("input.txt");
 
     fs::write(&input_file, "Steve Jobs founded Apple in California.").unwrap();
@@ -560,9 +560,9 @@ fn test_dataset_context_from_file() {
 
 #[test]
 fn test_export_import_roundtrip_brat() {
-    let input_dir = TempDir::new().unwrap();
-    let export_dir = TempDir::new().unwrap();
-    let import_dir = TempDir::new().unwrap();
+    let input_dir = TempDir::new().expect("should be able to create temp directory");
+    let export_dir = TempDir::new().expect("should be able to create temp directory");
+    let import_dir = TempDir::new().expect("should be able to create temp directory");
 
     // Create source
     fs::write(
