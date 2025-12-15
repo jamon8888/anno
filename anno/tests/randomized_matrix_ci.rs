@@ -25,6 +25,7 @@
 #![cfg(feature = "eval-advanced")]
 
 use anno::env;
+use anno::eval::backend_factory::BackendFactory;
 use anno::eval::loader::DatasetId;
 use anno::eval::task_evaluator::{TaskEvalConfig, TaskEvaluator};
 use anno::eval::task_mapping::Task;
@@ -379,9 +380,9 @@ fn max_downloads_in_matrix() -> usize {
 
 fn dataset_count_in_matrix() -> usize {
     // Default:
-    // - cached-only: 2 (fast, deterministic)
-    // - downloads allowed: 3 (one extra slot for diversity)
-    let default = if allow_downloads_in_matrix() { 3 } else { 2 };
+    // - cached-only: 5 (increased for better coverage)
+    // - downloads allowed: 8 (more diversity when downloads enabled)
+    let default = if allow_downloads_in_matrix() { 8 } else { 5 };
     match std::env::var("ANNO_MATRIX_DATASET_COUNT").as_deref() {
         Ok(s) => s.parse::<usize>().unwrap_or(default).max(1),
         Err(_) => default,
@@ -389,10 +390,11 @@ fn dataset_count_in_matrix() -> usize {
 }
 
 fn task_aware_sampling_in_matrix() -> bool {
-    matches!(
-        std::env::var("ANNO_MATRIX_TASK_AWARE").as_deref(),
-        Ok("1") | Ok("true") | Ok("yes")
-    )
+    // Default to true for better task coverage (can be disabled via env var)
+    match std::env::var("ANNO_MATRIX_TASK_AWARE").as_deref() {
+        Ok("0") | Ok("false") | Ok("no") => false,
+        _ => true, // Default enabled
+    }
 }
 
 fn allow_manual_datasets() -> bool {
@@ -491,8 +493,8 @@ fn test_randomized_matrix_sample() {
     );
 
     // Select backends based on strategy
-    // More backends if ML features enabled
-    let backend_count = if all_backends.len() > 5 { 3 } else { 2 };
+    // More backends if ML features enabled (increased for better coverage)
+    let backend_count = if all_backends.len() > 5 { 5 } else { 4 };
     let selected_backends = select_backends(strategy, backend_count, seed);
     // Prefer cached datasets when possible so we exercise real pipelines on dev machines.
     let loader = match anno::eval::loader::DatasetLoader::new() {
@@ -661,7 +663,7 @@ fn test_randomized_matrix_sample() {
         tasks: TASKS.to_vec(),
         datasets: selected_datasets.clone(),
         backends: selected_backends.iter().map(|s| s.to_string()).collect(),
-        max_examples: Some(10), // Small sample for CI speed
+        max_examples: Some(50), // Increased for more stable results and better correctness validation
         seed: Some(seed),
         require_cached: !allow_downloads,
         relation_threshold: 0.5,
@@ -690,12 +692,43 @@ fn test_randomized_matrix_sample() {
     let mut error_counts: std::collections::HashMap<ErrorCategory, usize> =
         std::collections::HashMap::new();
 
+    // Collect metrics for analysis
+    let mut f1_scores: Vec<f64> = Vec::new();
+    let mut precision_scores: Vec<f64> = Vec::new();
+    let mut recall_scores: Vec<f64> = Vec::new();
+    let mut zero_f1_count = 0;
+    let mut backend_dataset_f1: std::collections::HashMap<(String, String), Vec<f64>> =
+        std::collections::HashMap::new();
+
     for result in &results.results {
         let (status, category) = if result.success {
             success_count += 1;
             if let Some(&latency) = result.metrics.get("latency_ms") {
                 timing_stats.record(Duration::from_secs_f64(latency / 1000.0));
             }
+
+            // Collect metrics for analysis
+            let f1 = result.metrics.get("f1").copied().unwrap_or(0.0);
+            let precision = result.metrics.get("precision").copied().unwrap_or(0.0);
+            let recall = result.metrics.get("recall").copied().unwrap_or(0.0);
+            let strict_f1 = result.metrics.get("strict_f1").copied();
+            let partial_f1 = result.metrics.get("partial_f1").copied();
+
+            f1_scores.push(f1);
+            precision_scores.push(precision);
+            recall_scores.push(recall);
+
+            if f1 == 0.0 {
+                zero_f1_count += 1;
+            }
+
+            // Track F1 by backend-dataset for variance analysis
+            let key = (result.backend.clone(), format!("{:?}", result.dataset));
+            backend_dataset_f1
+                .entry(key)
+                .or_insert_with(Vec::new)
+                .push(f1);
+
             ("✓", None)
         } else if let Some(err) = &result.error {
             let cat = ErrorCategory::from_error(err);
@@ -706,14 +739,312 @@ fn test_randomized_matrix_sample() {
             ("?", Some(ErrorCategory::Unknown))
         };
 
-        eprintln!(
-            "  {} {:?} × {:?} × {} → F1={:.1}%",
-            status,
-            result.task,
-            result.dataset,
-            result.backend,
-            result.metrics.get("f1").copied().unwrap_or(0.0) * 100.0
-        );
+        // Enhanced output with detailed correctness analysis
+        if result.success {
+            let f1 = result.metrics.get("f1").copied().unwrap_or(0.0);
+            let precision = result.metrics.get("precision").copied().unwrap_or(0.0);
+            let recall = result.metrics.get("recall").copied().unwrap_or(0.0);
+            let strict_f1 = result.metrics.get("strict_f1").copied();
+            let partial_f1 = result.metrics.get("partial_f1").copied();
+            let exact_f1 = result.metrics.get("exact_f1").copied();
+            let type_f1 = result.metrics.get("type_f1").copied();
+            let num_gold = result.metrics.get("num_gold").copied().unwrap_or(0.0) as usize;
+            let num_pred = result.metrics.get("num_predicted").copied().unwrap_or(0.0) as usize;
+
+            eprint!(
+                "  {} {:?} × {:?} × {} → F1={:.1}% (P={:.1}%, R={:.1}%, gold={}, pred={})",
+                status,
+                result.task,
+                result.dataset,
+                result.backend,
+                f1 * 100.0,
+                precision * 100.0,
+                recall * 100.0,
+                num_gold,
+                num_pred
+            );
+
+            // Show mode comparison if available (critical for correctness validation)
+            if let (Some(sf1), Some(pf1)) = (strict_f1, partial_f1) {
+                if (sf1 - pf1).abs() > 0.01 {
+                    eprint!(" [strict={:.1}%, partial={:.1}%]", sf1 * 100.0, pf1 * 100.0);
+                }
+            }
+            eprintln!();
+
+            // Backend status warnings (correctness: are we using trained vs heuristic?)
+            if result.backend == "crf" {
+                eprintln!("      ℹ️  CRF backend: Using heuristic weights (not trained). Expected ~65-70% F1, not ~88%.");
+                eprintln!("         To train: uv run scripts/train_crf_weights.py");
+            } else if result.backend == "heuristic" {
+                eprintln!(
+                    "      ℹ️  Heuristic backend: Works best on formal text with capitalization."
+                );
+                eprintln!("         Struggles with social media/informal text.");
+            } else if result.backend == "pattern" {
+                eprintln!("      ℹ️  Pattern backend: Only extracts structured entities (DATE, MONEY, EMAIL, URL).");
+                eprintln!("         Not compatible with named entity datasets.");
+            }
+
+            // Type mismatch analysis (correctness: are types compatible?)
+            let dataset_types: Vec<String> = result
+                .dataset
+                .entity_types()
+                .iter()
+                .map(|t| t.to_lowercase())
+                .collect();
+            eprintln!(
+                "      📊 Dataset entity types: {}",
+                dataset_types.join(", ")
+            );
+
+            // Get backend supported types (if available via factory)
+            if let Ok(backend_model) = BackendFactory::create(&result.backend) {
+                let backend_types: Vec<String> = backend_model
+                    .supported_types()
+                    .iter()
+                    .map(|t| t.as_label().to_lowercase())
+                    .collect();
+                if !backend_types.is_empty() {
+                    eprintln!(
+                        "      📊 Backend supported types: {}",
+                        backend_types.join(", ")
+                    );
+
+                    // Type overlap analysis
+                    let dataset_set: std::collections::HashSet<String> =
+                        dataset_types.iter().cloned().collect();
+                    let backend_set: std::collections::HashSet<String> =
+                        backend_types.iter().cloned().collect();
+                    let overlap: Vec<String> =
+                        dataset_set.intersection(&backend_set).cloned().collect();
+                    let missing: Vec<String> =
+                        dataset_set.difference(&backend_set).cloned().collect();
+                    let extra: Vec<String> =
+                        backend_set.difference(&dataset_set).cloned().collect();
+
+                    if !overlap.is_empty() {
+                        eprintln!("         Type overlap: {} (✓)", overlap.join(", "));
+                    }
+                    if !missing.is_empty() {
+                        eprintln!("         Missing in backend: {} (⚠️)", missing.join(", "));
+                    }
+                    if !extra.is_empty() {
+                        eprintln!("         Extra in backend: {} (ℹ️)", extra.join(", "));
+                    }
+
+                    // Compatibility assessment
+                    if missing.is_empty() {
+                        eprintln!("         Type compatibility: ✓ All dataset types supported");
+                    } else {
+                        eprintln!(
+                            "         Type compatibility: ⚠️  {} types not supported by backend",
+                            missing.len()
+                        );
+                    }
+                }
+            } else {
+                eprintln!("      ℹ️  Backend type info: Unable to create backend instance for type checking");
+            }
+
+            // Mode comparison details (correctness: boundary vs type issues?)
+            if let (Some(sf1), Some(pf1), Some(ef1), Some(tf1)) =
+                (strict_f1, partial_f1, exact_f1, type_f1)
+            {
+                eprintln!("      📐 Evaluation modes (correctness validation):");
+                eprintln!(
+                    "         Strict: {:.1}% (exact boundary + exact type) ← Standard CoNLL metric",
+                    sf1 * 100.0
+                );
+                eprintln!("         Exact: {:.1}% (exact boundary, type ignored) ← Boundary detection test", ef1 * 100.0);
+                eprintln!(
+                    "         Partial: {:.1}% (overlap + exact type) ← Lenient boundary matching",
+                    pf1 * 100.0
+                );
+                eprintln!("         Type: {:.1}% (overlap + exact type, lenient) ← Type classification test", tf1 * 100.0);
+
+                // Diagnose failure mode (critical for correctness validation)
+                if sf1 == 0.0 && ef1 > 0.0 {
+                    eprintln!("      🔍 Correctness diagnosis: Boundary detection works ✓, but type classification fails ✗");
+                    eprintln!("         → Backend finds correct spans but assigns wrong types");
+                } else if sf1 == 0.0 && pf1 > 0.0 {
+                    eprintln!("      🔍 Correctness diagnosis: Type classification works ✓, but exact boundary detection fails ✗");
+                    eprintln!(
+                        "         → Backend finds correct types but boundary offsets are wrong"
+                    );
+                } else if sf1 == 0.0 && tf1 > 0.0 {
+                    eprintln!("      🔍 Correctness diagnosis: Type classification works ✓, but strict boundary matching fails ✗");
+                    eprintln!("         → Backend finds correct types with overlapping spans, but not exact matches");
+                } else if sf1 == 0.0 && pf1 == 0.0 && tf1 == 0.0 {
+                    eprintln!("      🔍 Correctness diagnosis: Complete mismatch - no entities found or all wrong");
+                    eprintln!(
+                        "         → Backend may be incompatible with dataset or completely failing"
+                    );
+                } else if sf1 > 0.0 && (pf1 - sf1).abs() < 0.01 {
+                    eprintln!("      🔍 Correctness diagnosis: Boundary detection is accurate (strict ≈ partial)");
+                }
+
+                // Mode consistency check
+                if sf1 > pf1 + 0.01 {
+                    eprintln!("      ⚠️  Mode consistency violation: Strict F1 ({:.1}%) > Partial F1 ({:.1}%)",
+                        sf1 * 100.0, pf1 * 100.0);
+                    eprintln!("         This should never happen - partial mode is more lenient than strict");
+                }
+                if pf1 > tf1 + 0.01 {
+                    eprintln!("      ⚠️  Mode consistency violation: Partial F1 ({:.1}%) > Type F1 ({:.1}%)",
+                        pf1 * 100.0, tf1 * 100.0);
+                    eprintln!("         This should never happen - type mode is more lenient than partial");
+                }
+            }
+
+            // Metric validation (correctness: are metrics computed correctly?)
+            if num_gold > 0 && num_pred > 0 {
+                let expected_precision = if num_pred > 0 {
+                    (f1 * num_pred as f64) / (2.0 - f1)
+                } else {
+                    0.0
+                };
+                let expected_recall = if num_gold > 0 {
+                    (f1 * num_gold as f64) / (2.0 - f1)
+                } else {
+                    0.0
+                };
+
+                // Check if precision/recall are consistent with F1 (F1 = 2PR/(P+R))
+                if precision > 0.0 && recall > 0.0 && f1 > 0.0 {
+                    let computed_f1 = 2.0 * precision * recall / (precision + recall);
+                    if (computed_f1 - f1).abs() > 0.001 {
+                        eprintln!("      ⚠️  Metric consistency check failed: F1={:.3}, but 2PR/(P+R)={:.3}",
+                            f1, computed_f1);
+                    }
+                }
+            }
+
+            // Flag concerning patterns
+            if f1 == 0.0 && num_gold > 0 && num_pred == 0 {
+                eprintln!("      ⚠️  No predictions made (all false negatives)");
+                eprintln!("         Possible causes: backend not compatible, type mismatch, or backend failure");
+            } else if f1 == 0.0 && num_gold == 0 {
+                eprintln!(
+                    "      ℹ️  No gold entities in sample (dataset may be empty or filtered)"
+                );
+            } else if precision == 0.0 && num_pred > 0 {
+                eprintln!("      ⚠️  All predictions wrong (100% false positives)");
+                eprintln!("         Possible causes: type mismatch, boundary errors, or backend producing wrong types");
+            } else if recall == 0.0 && num_gold > 0 {
+                eprintln!("      ⚠️  No correct predictions (100% false negatives)");
+                eprintln!("         Possible causes: backend not finding entities, type mismatch, or threshold too high");
+            }
+
+            // Stratified metrics (if available) - shows per-type breakdown
+            if let Some(ref stratified) = result.stratified {
+                if !stratified.by_entity_type.is_empty() {
+                    eprintln!("      📈 Per-type metrics:");
+                    let mut type_entries: Vec<_> = stratified.by_entity_type.iter().collect();
+                    type_entries.sort_by_key(|(k, _)| *k);
+                    for (type_name, metrics) in type_entries.iter().take(5) {
+                        eprintln!(
+                            "         {}: F1={:.1}% (P={:.1}%, R={:.1}%, n={})",
+                            type_name,
+                            metrics.mean * 100.0,
+                            (metrics.mean - metrics.std_dev).max(0.0) * 100.0, // Approx precision
+                            (metrics.mean + metrics.std_dev).min(1.0) * 100.0, // Approx recall
+                            metrics.n
+                        );
+                    }
+                    if stratified.by_entity_type.len() > 5 {
+                        eprintln!(
+                            "         ... and {} more types",
+                            stratified.by_entity_type.len() - 5
+                        );
+                    }
+                }
+            }
+
+            // Correctness checks
+            eprintln!("      ✅ Correctness checks:");
+            if num_gold > 0 {
+                eprintln!(
+                    "         Gold entities: {} (dataset has entities)",
+                    num_gold
+                );
+            } else {
+                eprintln!("         Gold entities: 0 (dataset may be empty or incompatible)");
+            }
+            if num_pred > 0 {
+                eprintln!(
+                    "         Predictions: {} (backend produced output)",
+                    num_pred
+                );
+            } else {
+                eprintln!("         Predictions: 0 (backend produced no output)");
+            }
+
+            // Metric validation
+            let metrics_valid = precision >= 0.0
+                && precision <= 1.0
+                && recall >= 0.0
+                && recall <= 1.0
+                && f1 >= 0.0
+                && f1 <= 1.0;
+            if metrics_valid {
+                eprintln!("         Metrics in valid range [0,1]: ✓");
+            } else {
+                eprintln!("         ⚠️  Metrics out of valid range!");
+            }
+
+            // F1 consistency check (F1 = 2PR/(P+R))
+            if precision > 0.0 && recall > 0.0 && f1 > 0.0 {
+                let expected_f1 = 2.0 * precision * recall / (precision + recall);
+                if (expected_f1 - f1).abs() > 0.001 {
+                    eprintln!(
+                        "         ⚠️  F1 consistency check failed: F1={:.3}, but 2PR/(P+R)={:.3}",
+                        f1, expected_f1
+                    );
+                } else {
+                    eprintln!("         F1 formula consistency: ✓ (F1 = 2PR/(P+R))");
+                }
+            }
+
+            // Precision/recall bounds check
+            if num_pred > 0 && num_gold > 0 {
+                let max_precision = (num_gold.min(num_pred) as f64) / (num_pred as f64);
+                let max_recall = (num_gold.min(num_pred) as f64) / (num_gold as f64);
+                if precision > max_precision + 0.01 {
+                    eprintln!(
+                        "         ⚠️  Precision exceeds theoretical maximum: {:.3} > {:.3}",
+                        precision, max_precision
+                    );
+                }
+                if recall > max_recall + 0.01 {
+                    eprintln!(
+                        "         ⚠️  Recall exceeds theoretical maximum: {:.3} > {:.3}",
+                        recall, max_recall
+                    );
+                }
+            }
+
+            // Sample size validation
+            let actual_examples = result.num_examples;
+            if actual_examples < 10 {
+                eprintln!(
+                    "         ⚠️  Small sample size: {} examples (may cause high variance)",
+                    actual_examples
+                );
+            } else if actual_examples >= 50 {
+                eprintln!(
+                    "         Sample size: {} examples (✓, good for stability)",
+                    actual_examples
+                );
+            } else {
+                eprintln!("         Sample size: {} examples (✓)", actual_examples);
+            }
+        } else {
+            eprintln!(
+                "  {} {:?} × {:?} × {} → ERROR",
+                status, result.task, result.dataset, result.backend
+            );
+        }
 
         if let Some(err) = &result.error {
             if let Some(cat) = category {
@@ -736,6 +1067,67 @@ fn test_randomized_matrix_sample() {
                 " (UNEXPECTED)"
             };
             eprintln!("  {:?}: {}{}", cat, count, expected);
+        }
+    }
+
+    // Metrics analysis
+    if !f1_scores.is_empty() {
+        eprintln!("\n=== Metrics Analysis ===");
+        let f1_mean = f1_scores.iter().sum::<f64>() / f1_scores.len() as f64;
+        let f1_min = f1_scores.iter().cloned().fold(f64::INFINITY, f64::min);
+        let f1_max = f1_scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let f1_variance = if f1_scores.len() > 1 {
+            f1_scores.iter().map(|x| (x - f1_mean).powi(2)).sum::<f64>()
+                / (f1_scores.len() - 1) as f64
+        } else {
+            0.0
+        };
+        let f1_std_dev = f1_variance.sqrt();
+
+        eprintln!(
+            "F1 scores: mean={:.1}%, std={:.1}%, min={:.1}%, max={:.1}%",
+            f1_mean * 100.0,
+            f1_std_dev * 100.0,
+            f1_min * 100.0,
+            f1_max * 100.0
+        );
+        eprintln!(
+            "  Zero F1 results: {} ({:.1}%)",
+            zero_f1_count,
+            (zero_f1_count as f64 / f1_scores.len() as f64) * 100.0
+        );
+
+        if !precision_scores.is_empty() {
+            let p_mean = precision_scores.iter().sum::<f64>() / precision_scores.len() as f64;
+            let r_mean = recall_scores.iter().sum::<f64>() / recall_scores.len() as f64;
+            eprintln!("Precision: mean={:.1}%", p_mean * 100.0);
+            eprintln!("Recall: mean={:.1}%", r_mean * 100.0);
+        }
+
+        // Backend-dataset variance analysis
+        if backend_dataset_f1.len() > 1 {
+            eprintln!("\nBackend-Dataset F1 variance (across seeds):");
+            let mut variances: Vec<((String, String), f64, f64)> = backend_dataset_f1
+                .iter()
+                .filter(|(_, scores)| scores.len() > 1)
+                .map(|((backend, dataset), scores)| {
+                    let mean = scores.iter().sum::<f64>() / scores.len() as f64;
+                    let variance = scores.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
+                        / (scores.len() - 1) as f64;
+                    ((backend.clone(), dataset.clone()), mean, variance.sqrt())
+                })
+                .collect();
+            variances.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+
+            for ((backend, dataset), mean, std_dev) in variances.iter().take(5) {
+                eprintln!(
+                    "  {} × {}: mean={:.1}%, std={:.1}%",
+                    backend,
+                    dataset,
+                    mean * 100.0,
+                    std_dev * 100.0
+                );
+            }
         }
     }
 

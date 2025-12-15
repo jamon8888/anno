@@ -129,6 +129,10 @@ pub enum DatasetAction {
         #[arg(long)]
         relaxed: bool,
 
+        /// Show verbose breakdown of filtering (why datasets are included/excluded)
+        #[arg(short, long)]
+        verbose: bool,
+
         /// Number of parallel workers for URL checking
         #[arg(short, long, default_value = "5")]
         workers: usize,
@@ -805,10 +809,11 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
             dataset,
             all,
             relaxed,
+            verbose,
             workers,
             timeout,
         } => {
-            run_check_health(dataset.as_deref(), all, relaxed, workers, timeout)?;
+            run_check_health(dataset.as_deref(), all, relaxed, verbose, workers, timeout)?;
         }
     }
 
@@ -1252,6 +1257,7 @@ fn run_check_health(
     dataset: Option<&str>,
     all: bool,
     relaxed: bool,
+    verbose: bool,
     workers: usize,
     timeout: u64,
 ) -> Result<(), String> {
@@ -1277,29 +1283,71 @@ fn run_check_health(
             .map(|id| vec![id])
             .map_err(|e| format!("Invalid dataset '{}': {}", ds_name, e))?
     } else {
-        let mut candidates: Vec<DatasetId> = DatasetId::all()
+        let total = DatasetId::all().len();
+        let with_urls: Vec<DatasetId> = DatasetId::all()
             .iter()
             .copied()
             .filter(|d| !d.download_url().is_empty())
+            .collect();
+
+        if verbose {
+            println!("Dataset filtering breakdown:");
+            println!("  Total in registry: {}", total);
+            println!("  With URLs: {}", with_urls.len());
+        }
+
+        let mut excluded_not_automatable = 0;
+        let mut excluded_not_download = 0;
+        let mut excluded_no_token = 0;
+
+        let mut candidates: Vec<DatasetId> = with_urls
+            .iter()
+            .copied()
             .filter(|d| {
                 if allow_manual {
                     return true;
                 }
                 if !d.access_status().is_automatable() {
+                    excluded_not_automatable += 1;
                     return false;
                 }
                 if !d.is_automatable_download() {
+                    excluded_not_download += 1;
                     return false;
                 }
                 if d.requires_hf_token() && !crate::env::has_hf_token() {
+                    excluded_no_token += 1;
                     return false;
                 }
                 true
             })
             .collect();
 
+        if verbose {
+            println!("  After filtering: {}", candidates.len());
+            if excluded_not_automatable > 0 {
+                println!(
+                    "    Excluded (not automatable): {}",
+                    excluded_not_automatable
+                );
+            }
+            if excluded_not_download > 0 {
+                println!(
+                    "    Excluded (not automatable download): {}",
+                    excluded_not_download
+                );
+            }
+            if excluded_no_token > 0 {
+                println!("    Excluded (requires HF_TOKEN): {}", excluded_no_token);
+            }
+        }
+
         if !all {
+            let before_truncate = candidates.len();
             candidates.truncate(50);
+            if verbose && before_truncate > 50 {
+                println!("  After truncation (--all not set): {}", candidates.len());
+            }
         }
 
         candidates
@@ -1308,6 +1356,15 @@ fn run_check_health(
     if datasets_to_check.is_empty() {
         println!("No datasets to check (no URLs or dataset not found)");
         return Ok(());
+    }
+
+    if verbose {
+        println!();
+        println!(
+            "Final selection: {} datasets to check",
+            datasets_to_check.len()
+        );
+        println!();
     }
 
     println!("Checking {} dataset URLs...", datasets_to_check.len());
@@ -1445,6 +1502,7 @@ fn run_check_health(
     _dataset: Option<&str>,
     _all: bool,
     _relaxed: bool,
+    _verbose: bool,
     _workers: usize,
     _timeout: u64,
 ) -> Result<(), String> {
