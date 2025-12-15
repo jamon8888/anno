@@ -1700,7 +1700,8 @@ mod tests {
                             // Same span, text is close (normalized)
                             || (e.start == entity.start
                                 && e.end == entity.end
-                                && e.text.trim().to_lowercase() == entity.text.trim().to_lowercase())
+                                && (e.text.trim().to_lowercase() == entity.text.trim().to_lowercase()
+                                    || e.text == entity.text))
                             // Same entity type and overlapping span (conflict resolution may have modified)
                             || (e.entity_type == entity.entity_type
                                 && e.start <= entity.start
