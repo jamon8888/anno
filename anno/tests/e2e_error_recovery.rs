@@ -291,7 +291,7 @@ fn e2e_unicode_emoji_entities() {
         "PER",
         0.95,
     ));
-    let _sig2 = doc.add_signal(Signal::new(1, Location::text(13, 20), "👩‍🔬", "EMOJI", 0.8));
+    let sig2 = doc.add_signal(Signal::new(1, Location::text(13, 20), "👩‍🔬", "EMOJI", 0.8));
     let sig3 = doc.add_signal(Signal::new(2, Location::text(58, 64), "🇵🇱", "FLAG", 0.9));
     let _sig4 = doc.add_signal(Signal::new(
         3,

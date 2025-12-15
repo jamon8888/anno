@@ -73,7 +73,7 @@ pub fn run(args: BackendsArgs) -> Result<(), String> {
 
             println!("{}:", color("1;33", "Enabled Features"));
             let features: Vec<&str> = {
-                let mut v = Vec::new();
+                let mut v = Vec::with_capacity(4);
                 #[cfg(feature = "onnx")]
                 v.push("onnx");
                 #[cfg(feature = "candle")]

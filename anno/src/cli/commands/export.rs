@@ -104,7 +104,7 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
         match export_file(
             file,
             &args.output,
-            &**model,
+            &*model,
             args.format,
             args.include_confidence,
             args.overwrite,

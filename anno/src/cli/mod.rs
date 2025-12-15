@@ -8,6 +8,7 @@ pub mod cache;
 pub mod commands;
 /// Configuration management.
 pub mod config;
+/// CLI error handling.
 pub mod error;
 pub mod exit_codes;
 pub mod output;

@@ -40,7 +40,7 @@ pub fn run() -> Result<(), String> {
     println!();
 
     println!("{}:", color("1;33", "Enabled Features"));
-    let mut features: Vec<&str> = Vec::new();
+    let mut features: Vec<&str> = Vec::with_capacity(4);
     #[cfg(feature = "onnx")]
     features.push("onnx");
     #[cfg(feature = "candle")]

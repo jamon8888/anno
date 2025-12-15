@@ -1970,6 +1970,7 @@ impl MentionRankingCoref {
 
             // Score against previous mentions with type-specific limit
             let mut antecedent_count = 0;
+            #[allow(clippy::explicit_counter_loop)]
             for j in (0..i).rev() {
                 if antecedent_count >= max_antecedents {
                     break;
@@ -2042,6 +2043,7 @@ impl MentionRankingCoref {
             let max_antecedents = self.config.max_antecedents_for_type(mention.mention_type);
             let mut antecedent_count = 0;
 
+            #[allow(clippy::explicit_counter_loop)]
             for j in (0..i).rev() {
                 if antecedent_count >= max_antecedents {
                     break;

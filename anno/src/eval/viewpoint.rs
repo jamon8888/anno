@@ -673,7 +673,7 @@ mod tests {
     #[test]
     fn test_epistemic_status() {
         assert!(EpistemicStatus::Factual.is_positive());
-        assert!(EpistemicStatus::Negated.is_uncertain() == false);
+        assert!(!EpistemicStatus::Negated.is_uncertain());
         assert!(EpistemicStatus::Hypothetical.is_uncertain());
     }
 

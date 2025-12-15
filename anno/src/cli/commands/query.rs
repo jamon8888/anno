@@ -91,7 +91,7 @@ pub fn run(args: QueryArgs) -> Result<(), String> {
                 .cloned()
                 .collect()
         } else {
-            doc.signals().iter().cloned().collect()
+            doc.signals().to_vec()
         };
 
         // Apply range filters using spatial index if both offsets provided
