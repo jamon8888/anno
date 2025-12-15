@@ -9,6 +9,7 @@
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct TranscriptRow {
     id: String,
     text: String,
@@ -25,6 +26,7 @@ struct TranscriptRow {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct DiscourseDeixisRow {
     id: String,
     text: String,
@@ -38,6 +40,7 @@ struct DiscourseDeixisRow {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct SpanWithType {
     text: String,
     start: usize,
@@ -46,6 +49,7 @@ struct SpanWithType {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Span {
     text: String,
     start: usize,
@@ -53,6 +57,7 @@ struct Span {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ResponseTokenRow {
     id: String,
     token: String,

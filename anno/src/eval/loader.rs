@@ -752,7 +752,11 @@ impl AnnotatedSentence {
             if self.tokens[i].ner_tag.starts_with("B-") {
                 let entity_type = self.tokens[i].ner_tag.trim_start_matches("B-");
                 let mut end = i + 1;
-                while end < self.tokens.len() && self.tokens[end].ner_tag.starts_with("I-") {
+                // Only continue with I-tags that match the same entity type
+                while end < self.tokens.len()
+                    && self.tokens[end].ner_tag.starts_with("I-")
+                    && self.tokens[end].ner_tag.trim_start_matches("I-") == entity_type
+                {
                     end += 1;
                 }
                 let entity_text: String = self.tokens[i..end]
