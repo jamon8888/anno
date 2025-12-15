@@ -47,7 +47,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
-      - run: cargo clippy --workspace --all-targets
+      # Match pre-push hook: lib-only with eval-advanced discourse features, warnings as errors
+      - run: cargo clippy --workspace --lib --features "eval-advanced discourse" -- -D warnings
 
   # ==========================================================================
   # Unit tests - no features (zero-dependency baseline)
