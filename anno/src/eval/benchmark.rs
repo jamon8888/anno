@@ -844,9 +844,7 @@ mod tests {
         let examples = generate_unicode_examples(10);
         assert!(!examples.is_empty());
         // Verify we have non-ASCII text
-        let has_unicode = examples
-            .iter()
-            .any(|e| e.text.chars().any(|c| !c.is_ascii()));
+        let has_unicode = examples.iter().any(|e| !e.text.is_ascii());
         assert!(has_unicode, "Should have non-ASCII characters");
     }
 

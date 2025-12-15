@@ -153,7 +153,7 @@ pub fn run(args: WatchArgs) -> Result<(), String> {
                 }
 
                 // Process the file
-                match process_file(path, &model, &args) {
+                match process_file(path, &*model, &args) {
                     Ok(entity_count) => {
                         files_processed += 1;
                         let timestamp = chrono::Local::now().format("%H:%M:%S");

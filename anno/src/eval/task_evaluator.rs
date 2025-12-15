@@ -2611,6 +2611,7 @@ impl TaskEvaluator {
     /// - Samples up to `MAX_CI_SAMPLE_SIZE` examples for performance
     /// - Creates a new backend instance (doesn't reuse from main evaluation)
     /// - For zero-shot backends, creates and uses zero-shot backend instance
+    ///
     /// Compute confidence intervals from per-example scores or aggregate metrics.
     ///
     /// This is the primary method for computing confidence intervals.

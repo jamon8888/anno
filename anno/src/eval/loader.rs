@@ -1069,7 +1069,7 @@ impl DatasetLoader {
     fn hf_dataset_from_rows_url(url: &str) -> Option<String> {
         // Example:
         // https://datasets-server.huggingface.co/rows?dataset=masakhane%2Fmasakhaner2&config=bam&split=test...
-        let query = url.splitn(2, '?').nth(1)?;
+        let query = url.split_once('?')?.1;
         for part in query.split('&') {
             let (k, v) = part.split_once('=')?;
             if k == "dataset" {

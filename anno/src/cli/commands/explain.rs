@@ -165,11 +165,11 @@ pub fn run(args: ExplainArgs) -> Result<(), String> {
         for feat in &features {
             let sign = if feat.weight > 0.0 { "+" } else { "" };
             println!(
-                "  {} = {} ({}{})",
+                "  {} = {} ({}{:.2})",
                 color("90", &feat.name),
                 feat.value,
                 sign,
-                format!("{:.2}", feat.weight)
+                feat.weight
             );
         }
         println!();

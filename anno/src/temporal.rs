@@ -445,13 +445,13 @@ impl TemporalReference for GregorianReference {
 ///
 /// impl CalendarSystem for HijriCalendar {
 ///     type Date = HijriDate;
-///     
+///
 ///     fn to_gregorian(&self, date: &Self::Date) -> Option<NaiveDate> {
 ///         // Islamic calendar is purely lunar (354 or 355 days/year)
 ///         // Conversion requires astronomical calculation or lookup tables
 ///         todo!()
 ///     }
-///     
+///
 ///     fn from_gregorian(&self, date: &NaiveDate) -> Option<Self::Date> {
 ///         todo!()
 ///     }
@@ -465,6 +465,7 @@ pub trait CalendarSystem {
     fn to_gregorian(&self, date: &Self::Date) -> Option<NaiveDate>;
 
     /// Convert from Gregorian date.
+    #[allow(clippy::wrong_self_convention)]
     fn from_gregorian(&self, date: &NaiveDate) -> Option<Self::Date>;
 
     /// Get the calendar name.
