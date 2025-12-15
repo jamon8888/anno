@@ -583,7 +583,7 @@ mod tests {
 
         // 0% should still return at least 1
         let zero = summarizer.summarize_ratio(LONGER_TEXT, 0.0);
-        assert!(zero.len() >= 1);
+        assert!(!zero.is_empty());
 
         // 100% should return all
         let full = summarizer.summarize_ratio(LONGER_TEXT, 1.0);

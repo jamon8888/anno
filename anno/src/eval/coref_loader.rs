@@ -224,7 +224,8 @@ impl CorefLoader {
 
     /// Load GAP as raw examples (for detailed analysis).
     pub fn load_gap_examples(&self) -> Result<Vec<GapExample>> {
-        let cache_path = self.inner.cache_path(DatasetId::GAP);
+        let gap = super::loader::LoadableDatasetId::try_from(DatasetId::GAP)?;
+        let cache_path = self.inner.cache_path(gap);
 
         if !cache_path.exists() {
             return Err(Error::InvalidInput(format!(
@@ -247,7 +248,10 @@ impl CorefLoader {
     /// Check if a coreference dataset is cached.
     #[must_use]
     pub fn is_cached(&self, id: DatasetId) -> bool {
-        self.inner.is_cached(id)
+        match super::loader::LoadableDatasetId::try_from(id) {
+            Ok(loadable) => self.inner.is_cached(loadable),
+            Err(_) => false,
+        }
     }
 
     /// Get the underlying DatasetLoader.

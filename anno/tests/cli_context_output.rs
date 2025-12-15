@@ -10,7 +10,8 @@
 //!
 //! See: https://github.com/arclabs561/anno/issues/XXX
 
-#![cfg(feature = "cli_context_window")] // Feature gate: only compile when enabled
+// Note: This test requires cli feature
+#![cfg(feature = "cli")]
 
 use std::process::Command;
 

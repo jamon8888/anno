@@ -11,7 +11,7 @@ fn test_corpus_add_documents() {
     let mut corpus = Corpus::new();
 
     for i in 1..=5 {
-        let doc = GroundedDocument::new(&format!("doc{}", i), &format!("Document {} text.", i));
+        let doc = GroundedDocument::new(format!("doc{}", i), format!("Document {} text.", i));
         corpus.add_document(doc);
     }
 
@@ -241,7 +241,7 @@ fn test_corpus_large_scale() {
 
     // Add 100 documents
     for i in 0..100 {
-        let doc = GroundedDocument::new(&format!("doc{}", i), &format!("Document {} content.", i));
+        let doc = GroundedDocument::new(format!("doc{}", i), format!("Document {} content.", i));
         corpus.add_document(doc);
     }
 

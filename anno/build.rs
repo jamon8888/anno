@@ -27,7 +27,7 @@ fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let toml_path = Path::new(&manifest_dir)
         .parent()
-        .unwrap()
+        .expect("CARGO_MANIFEST_DIR has no parent directory")
         .join("datasets.toml");
 
     if !toml_path.exists() {
@@ -36,7 +36,7 @@ fn main() {
             &dest_path,
             "// datasets.toml not found - skipping validation",
         )
-        .unwrap();
+        .expect("Failed to write empty dataset validation file");
         return;
     }
 

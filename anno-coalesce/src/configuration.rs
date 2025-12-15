@@ -313,14 +313,20 @@ impl ConfigurationDistribution {
     pub fn mode(&self) -> Option<&CorefConfiguration> {
         self.probabilities
             .iter()
-            .max_by(|(_, p1), (_, p2)| p1.partial_cmp(p2).unwrap())
+            .max_by(|(_, p1), (_, p2)| {
+                p1.partial_cmp(p2)
+                    .expect("probabilities should be comparable")
+            })
             .map(|(config, _)| config)
     }
 
     /// Get top-k configurations by probability.
     pub fn top_k(&self, k: usize) -> Vec<(&CorefConfiguration, f64)> {
         let mut items: Vec<_> = self.probabilities.iter().collect();
-        items.sort_by(|(_, p1), (_, p2)| p2.partial_cmp(p1).unwrap());
+        items.sort_by(|(_, p1), (_, p2)| {
+            p2.partial_cmp(p1)
+                .expect("probabilities should be comparable")
+        });
         items.into_iter().take(k).map(|(c, &p)| (c, p)).collect()
     }
 

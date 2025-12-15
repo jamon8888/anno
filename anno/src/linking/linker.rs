@@ -505,6 +505,6 @@ mod tests {
         let result_lenient = lenient_linker.link_one("some entity", "context", None);
 
         // Both should work without panicking
-        assert!(result_strict.is_some() || result_lenient.is_some() || true);
+        let _ = (result_strict, result_lenient);
     }
 }

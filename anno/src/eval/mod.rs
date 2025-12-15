@@ -371,15 +371,14 @@ pub use datasets::{GoldEntity, GroundTruthEntity};
 
 // Dataset loading and registry API
 //
-// Two related but distinct enums:
-// - `LoadableDatasetId` (loader::DatasetId): ~158 datasets with loading code
-// - `RegistryDatasetId` (dataset_registry::DatasetId): ~451 datasets with metadata
+// - `RegistryDatasetId` (`dataset_registry::DatasetId`): full metadata catalog
+// - `LoadableDatasetId` (`loader::LoadableDatasetId`): subset guaranteed to be loadable
 //
-// Most users want `LoadableDatasetId` + `DatasetLoader` to load real data.
+// Use `LoadableDatasetId` + `DatasetLoader` when you want to actually load data.
 // Use `RegistryDatasetId` when browsing/filtering the full catalog by metadata.
 pub use dataset_registry::{AnnotationScheme, DataFormat, DatasetId as RegistryDatasetId};
 pub use datasets::DatasetMetadata;
-pub use loader::{DatasetId as LoadableDatasetId, DatasetLoader, LoadedDataset};
+pub use loader::{DatasetLoader, LoadableDatasetId, LoadedDataset};
 
 // Dataset API re-exports (new structured dataset interface)
 pub use dataset::{AnnotatedExample, DatasetStats, Difficulty, Domain, NERDataset};

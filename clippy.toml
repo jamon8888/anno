@@ -1,5 +1,5 @@
 # Clippy configuration for anno workspace
 #
-# Note: Test-specific allowances (like unwrap_used) should be handled
-# via attributes in test code, not via clippy.toml configuration.
+# Allow unwrap() in test code (common practice - test failures are acceptable panics)
+allow-unwrap-in-tests = true
 

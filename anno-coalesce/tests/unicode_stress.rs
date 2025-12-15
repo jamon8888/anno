@@ -4,8 +4,7 @@
 //! and multilingual entity resolution scenarios.
 
 use anno_coalesce::similarity::{
-    jaro_similarity, jaro_winkler_similarity, levenshtein_distance, levenshtein_similarity,
-    multilingual_similarity, normalize, Script, Similarity,
+    jaro_similarity, jaro_winkler_similarity, levenshtein_distance, normalize, Script, Similarity,
 };
 
 // =============================================================================
@@ -358,7 +357,7 @@ mod proptests {
         fn unicode_similarity_bounded(a in "\\PC{0,30}", b in "\\PC{0,30}") {
             let sim = Similarity::new();
             let score = sim.compute(&a, &b);
-            prop_assert!(score >= 0.0 && score <= 1.0,
+            prop_assert!((0.0..=1.0).contains(&score),
                 "Bounds: {}", score);
         }
 

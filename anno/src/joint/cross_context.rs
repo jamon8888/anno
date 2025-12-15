@@ -288,7 +288,7 @@ impl<E: ClusterEncoder, S: MergeScorer> CrossContextJointModel<E, S> {
     ) -> Vec<MergedCluster> {
         // Encode all clusters
         let mut all_embeddings: Vec<ClusterEmbedding> = Vec::new();
-        for (_context_id, clusters) in local_clusters {
+        for clusters in local_clusters.values() {
             for cluster in clusters {
                 let embedding = self.encoder.encode_cluster(cluster, None);
                 all_embeddings.push(embedding);
@@ -624,7 +624,8 @@ mod tests {
         let scorer = CosineMergeScorer::new(0.5);
         let config = CrossContextJointConfig::default();
 
-        let model = CrossContextJointModel::new(encoder, scorer, config).unwrap();
+        let model = CrossContextJointModel::new(encoder, scorer, config)
+            .expect("model creation should succeed");
         let result = model.analyze(&[]);
 
         assert!(result.is_ok());
@@ -639,7 +640,8 @@ mod tests {
         let scorer = CosineMergeScorer::new(0.5);
         let config = CrossContextJointConfig::default();
 
-        let model = CrossContextJointModel::new(encoder, scorer, config).unwrap();
+        let model = CrossContextJointModel::new(encoder, scorer, config)
+            .expect("model creation should succeed");
 
         let entities = vec![Entity::new("Obama", EntityType::Person, 0, 5, 0.9)];
 
@@ -658,7 +660,8 @@ mod tests {
         let scorer = CosineMergeScorer::new(0.3); // Lower threshold for test
         let config = CrossContextJointConfig::default();
 
-        let model = CrossContextJointModel::new(encoder, scorer, config).unwrap();
+        let model = CrossContextJointModel::new(encoder, scorer, config)
+            .expect("model creation should succeed");
 
         // Two contexts mentioning Obama
         let contexts = vec![

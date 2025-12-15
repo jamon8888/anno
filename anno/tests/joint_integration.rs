@@ -6,7 +6,7 @@
 use anno::joint::{
     BeliefPropagation, CorefLinkFactor, CorefLinkWeights, CorefNerFactor, CorefNerWeights, Factor,
     InferenceConfig, JointConfig, JointModel, LinkNerFactor, LinkNerWeights, UnaryCorefFactor,
-    UnaryLinkFactor, UnaryNerFactor, WikipediaKnowledgeStore,
+    UnaryNerFactor, WikipediaKnowledgeStore,
 };
 use anno::{Entity, EntityType};
 use std::sync::Arc;
@@ -124,7 +124,7 @@ fn test_joint_model_configuration() {
 
 #[test]
 fn test_belief_propagation_convergence() {
-    use anno::joint::{AntecedentValue, JointVariable, VariableType};
+    use anno::joint::JointVariable;
 
     // Create a simple factor graph with known solution
     let variables = vec![
@@ -332,7 +332,7 @@ fn test_joint_model_many_mentions() {
 
 #[test]
 fn test_marginals_invariants() {
-    use anno::joint::{JointVariable, Marginals};
+    use anno::joint::JointVariable;
 
     let variables = vec![JointVariable::SemanticType {
         mention_idx: 0,

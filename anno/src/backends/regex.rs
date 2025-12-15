@@ -412,7 +412,9 @@ mod tests {
     }
 
     fn extract(text: &str) -> Vec<Entity> {
-        ner().extract_entities(text, None).unwrap()
+        ner()
+            .extract_entities(text, None)
+            .expect("NER extraction should succeed")
     }
 
     fn has_type(entities: &[Entity], ty: &EntityType) -> bool {
@@ -550,7 +552,9 @@ mod tests {
         // This test catches the bug where regex byte offsets were stored directly.
         let text = "Price: €50 then €100";
         let ner = RegexNER::new();
-        let entities = ner.extract_entities(text, None).unwrap();
+        let entities = ner
+            .extract_entities(text, None)
+            .expect("NER extraction should succeed");
 
         // "Price: " = 7 chars, so first € is at char 7
         // "€50 then " = 9 chars, so second € is at char 16
@@ -777,7 +781,7 @@ mod tests {
     fn entity_spans_correct() {
         let text = "Cost: $100";
         let e = extract(text);
-        let money = find_text(&e, "$100").unwrap();
+        let money = find_text(&e, "$100").expect("money entity should be found");
         assert_eq!(&text[money.start..money.end], "$100");
     }
 
@@ -795,7 +799,10 @@ mod tests {
                 "Missing provenance for {:?}",
                 entity
             );
-            let prov = entity.provenance.as_ref().unwrap();
+            let prov = entity
+                .provenance
+                .as_ref()
+                .expect("provenance should be set");
 
             // Source should be "pattern"
             assert_eq!(prov.source.as_ref(), "pattern");
@@ -810,27 +817,27 @@ mod tests {
         }
 
         // Check specific pattern names
-        let email = find_text(&e, "test@email.com").unwrap();
+        let email = find_text(&e, "test@email.com").expect("email entity should be found");
         assert_eq!(
             email
                 .provenance
                 .as_ref()
-                .unwrap()
+                .expect("provenance should be set")
                 .pattern
                 .as_ref()
-                .unwrap()
+                .expect("pattern should be set")
                 .as_ref(),
             "EMAIL"
         );
 
-        let date = find_text(&e, "2024-01-15").unwrap();
+        let date = find_text(&e, "2024-01-15").expect("date entity should be found");
         assert_eq!(
             date.provenance
                 .as_ref()
-                .unwrap()
+                .expect("provenance should be set")
                 .pattern
                 .as_ref()
-                .unwrap()
+                .expect("pattern should be set")
                 .as_ref(),
             "DATE_ISO"
         );

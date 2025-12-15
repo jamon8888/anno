@@ -182,6 +182,16 @@ pub trait ClusterEncoder: Send + Sync {
     fn embedding_dim(&self) -> usize;
 }
 
+// Allow configs/structs that store trait objects to derive `Debug` without requiring
+// concrete encoder types to implement it.
+impl std::fmt::Debug for dyn ClusterEncoder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("dyn ClusterEncoder")
+            .field("embedding_dim", &self.embedding_dim())
+            .finish()
+    }
+}
+
 /// Simple heuristic cluster encoder using TF-IDF style features.
 ///
 /// This is a CPU-only fallback when neural encoding is unavailable.

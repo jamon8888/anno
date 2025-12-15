@@ -92,7 +92,7 @@ use std::fmt;
 /// - Probabilities are in [0, 1]
 /// - Probabilities may not sum to 1 (unnormalized is allowed)
 /// - Empty distributions are valid (no prediction)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct TypeDistribution {
     /// Type → probability mapping
     probs: Vec<(EntityType, f64)>,
@@ -186,7 +186,7 @@ impl TypeDistribution {
     /// Check if the top prediction exceeds a confidence threshold.
     #[must_use]
     pub fn is_confident(&self, threshold: f64) -> bool {
-        self.argmax().map_or(false, |(_, p)| p >= threshold)
+        self.argmax().is_some_and(|(_, p)| p >= threshold)
     }
 
     /// Convert to a HashMap for easier iteration.
@@ -210,12 +210,6 @@ impl TypeDistribution {
     /// Iterate over (type, probability) pairs.
     pub fn iter(&self) -> impl Iterator<Item = (&EntityType, f64)> {
         self.probs.iter().map(|(t, p)| (t, *p))
-    }
-}
-
-impl Default for TypeDistribution {
-    fn default() -> Self {
-        Self { probs: vec![] }
     }
 }
 
@@ -672,7 +666,7 @@ impl SelectiveMetrics {
         let mut auc = 0.0;
 
         for (i, (_, pred_type, gold)) in sorted.iter().enumerate() {
-            if pred_type.map_or(false, |pt| pt == *gold) {
+            if pred_type.is_some_and(|pt| pt == *gold) {
                 correct += 1.0;
             }
             let coverage = (i + 1) as f64 / total;

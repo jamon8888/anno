@@ -6,7 +6,7 @@
 use anno_core::grounded::{
     Identity, IdentitySource, Location, Modality, Signal, SignalRef, Track, TrackRef,
 };
-use anno_core::{IdentityId, SignalId, TrackId};
+use anno_core::{IdentityId, SignalId};
 use proptest::prelude::*;
 
 // =============================================================================
@@ -135,7 +135,7 @@ proptest! {
         let loc = Location::text(start, start + len);
         let offsets = loc.text_offsets();
         prop_assert!(offsets.is_some());
-        let (s, e) = offsets.unwrap();
+        let (s, e) = offsets.expect("text_offsets must be Some for text locations");
         prop_assert_eq!(s, start);
         prop_assert_eq!(e, start + len);
     }
@@ -210,7 +210,11 @@ proptest! {
     #[test]
     fn iou_bounded(loc1 in arb_text_location(), loc2 in arb_text_location()) {
         if let Some(iou) = loc1.iou(&loc2) {
-            prop_assert!(iou >= 0.0 && iou <= 1.0, "IoU should be in [0,1], got {}", iou);
+            prop_assert!(
+                (0.0..=1.0).contains(&iou),
+                "IoU should be in [0,1], got {}",
+                iou
+            );
         }
     }
 
@@ -317,7 +321,7 @@ proptest! {
     /// Track is_empty() is consistent with len()
     #[test]
     fn track_is_empty_consistent(track in arb_track()) {
-        prop_assert_eq!(track.is_empty(), track.len() == 0);
+        prop_assert_eq!(track.is_empty(), track.signals.is_empty());
     }
 
     /// Track is_singleton() is consistent with len()
@@ -822,10 +826,9 @@ proptest! {
         let lt = t1 < t2;
         let eq = t1 == t2;
         let gt = t1 > t2;
-        prop_assert!(
-            (lt && !eq && !gt) || (!lt && eq && !gt) || (!lt && !eq && gt),
-            "Exactly one ordering relation should hold"
-        );
+        // Exactly one of the three conditions must be true
+        let count = (lt as u8) + (eq as u8) + (gt as u8);
+        prop_assert_eq!(count, 1, "Exactly one ordering relation should hold");
     }
 
     /// MentionType ordering is transitive

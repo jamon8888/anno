@@ -77,11 +77,23 @@ impl HttpResolver {
                             break;
                         } else if next_ch.is_whitespace() {
                             in_tag_name = false;
-                            tag_buffer.push(chars.next().unwrap());
+                            tag_buffer.push(
+                                chars
+                                    .next()
+                                    .expect("chars.peek() returned Some, so next() should be Some"),
+                            );
                         } else if in_tag_name {
-                            tag_name.push(chars.next().unwrap());
+                            tag_name.push(
+                                chars
+                                    .next()
+                                    .expect("chars.peek() returned Some, so next() should be Some"),
+                            );
                         } else {
-                            tag_buffer.push(chars.next().unwrap());
+                            tag_buffer.push(
+                                chars
+                                    .next()
+                                    .expect("chars.peek() returned Some, so next() should be Some"),
+                            );
                         }
                     }
                     // Don't add script/style content
@@ -90,10 +102,10 @@ impl HttpResolver {
                         if matches!(
                             tag_name.to_lowercase().as_str(),
                             "p" | "div" | "br" | "li" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
-                        ) {
-                            if !text.ends_with(' ') && !text.is_empty() {
-                                text.push(' ');
-                            }
+                        ) && !text.ends_with(' ')
+                            && !text.is_empty()
+                        {
+                            text.push(' ');
                         }
                     }
                 }
@@ -109,7 +121,11 @@ impl HttpResolver {
                     entity.push('&');
                     let mut found_semicolon = false;
                     while let Some(&next_ch) = chars.peek() {
-                        entity.push(chars.next().unwrap());
+                        entity.push(
+                            chars
+                                .next()
+                                .expect("chars.peek() returned Some, so next() should be Some"),
+                        );
                         if next_ch == ';' {
                             found_semicolon = true;
                             break;
@@ -263,8 +279,7 @@ impl CompositeResolver {
     /// Create a new composite resolver with default resolvers.
     #[must_use]
     pub fn new() -> Self {
-        let mut resolvers: Vec<Box<dyn UrlResolver>> = Vec::new();
-        resolvers.push(Box::new(HttpResolver::new()));
+        let resolvers = vec![Box::new(HttpResolver::new()) as Box<dyn UrlResolver>];
         Self { resolvers }
     }
 

@@ -7,9 +7,7 @@ use anno_coalesce::alignment::{
     AdaptiveResolutionConfig, AlignmentScore, GeneralizationGradient, Nameability,
 };
 use anno_coalesce::resolver::embedding_similarity;
-use anno_coalesce::similarity::{
-    jaro_winkler_similarity, levenshtein_distance, levenshtein_similarity, Similarity,
-};
+use anno_coalesce::similarity::{jaro_winkler_similarity, levenshtein_distance, Similarity};
 
 // =============================================================================
 // Embedding Similarity Edge Cases
@@ -82,7 +80,7 @@ fn test_embedding_single_element() {
 
 #[test]
 fn test_embedding_empty() {
-    let empty: Vec<f32> = vec![];
+    let empty: Vec<f32> = Vec::new();
     let normal = vec![1.0, 0.0];
 
     assert_eq!(embedding_similarity(&empty, &normal), 0.0);
@@ -113,7 +111,7 @@ fn test_alignment_many_identical_matches() {
 
     let conf = alignment.confidence();
     assert!(conf.is_finite());
-    assert!(conf > 0.0 && conf <= 1.0);
+    assert!(conf > 0.0 && (0.0..=1.0).contains(&conf));
 
     // Variance should be near zero for identical values
     assert!(alignment.variance() < 0.001);
@@ -344,7 +342,7 @@ mod proptests {
 
             let conf = alignment.confidence();
             prop_assert!(!conf.is_nan(), "Confidence is NaN");
-            prop_assert!(conf >= 0.0 && conf <= 1.0);
+            prop_assert!((0.0..=1.0).contains(&conf));
         }
 
         /// Alignment variance is always non-negative
@@ -394,7 +392,7 @@ mod proptests {
 
             prop_assert!(threshold.is_finite());
             prop_assert!(threshold >= min);
-            prop_assert!(threshold <= 1.0);
+            prop_assert!((0.0..=1.0).contains(&threshold));
         }
     }
 }

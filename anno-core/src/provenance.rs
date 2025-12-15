@@ -472,8 +472,9 @@ mod tests {
             .metadata("key", "value")
             .build();
 
-        let json = serde_json::to_string(&prov).unwrap();
-        let recovered: DocumentProvenance = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&prov).expect("serialize DocumentProvenance");
+        let recovered: DocumentProvenance =
+            serde_json::from_str(&json).expect("deserialize DocumentProvenance");
 
         assert_eq!(prov.id, recovered.id);
         assert_eq!(prov.metadata.get("key"), recovered.metadata.get("key"));
@@ -508,20 +509,21 @@ mod proptests {
     // Strategy for generating URLs
     fn arb_url() -> impl Strategy<Value = String> {
         prop::string::string_regex("https?://[a-z]+\\.[a-z]{2,4}/[a-z0-9/]*")
-            .unwrap()
+            .expect("valid URL regex for proptest")
             .prop_filter("valid url", |s| !s.is_empty())
     }
 
     // Strategy for generating file paths
     fn arb_path() -> impl Strategy<Value = String> {
         prop::string::string_regex("/[a-z]+(/[a-z0-9]+)*\\.txt")
-            .unwrap()
+            .expect("valid path regex for proptest")
             .prop_filter("valid path", |s| !s.is_empty())
     }
 
     // Strategy for generating alphanumeric identifiers
     fn arb_identifier() -> impl Strategy<Value = String> {
-        prop::string::string_regex("[a-zA-Z][a-zA-Z0-9_]{0,20}").unwrap()
+        prop::string::string_regex("[a-zA-Z][a-zA-Z0-9_]{0,20}")
+            .expect("valid identifier regex for proptest")
     }
 
     // -------------------------------------------------------------------------
@@ -533,8 +535,8 @@ mod proptests {
         #[test]
         fn prop_source_url_roundtrip(url in arb_url()) {
             let source = SourceInfo::url(&url);
-            let json = serde_json::to_string(&source).unwrap();
-            let recovered: SourceInfo = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&source).expect("serialize SourceInfo::Url");
+            let recovered: SourceInfo = serde_json::from_str(&json).expect("deserialize SourceInfo");
 
             if let SourceInfo::Url { url: recovered_url, .. } = recovered {
                 prop_assert_eq!(url, recovered_url);
@@ -547,8 +549,8 @@ mod proptests {
         #[test]
         fn prop_source_file_roundtrip(path in arb_path()) {
             let source = SourceInfo::file(&path);
-            let json = serde_json::to_string(&source).unwrap();
-            let recovered: SourceInfo = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&source).expect("serialize SourceInfo::File");
+            let recovered: SourceInfo = serde_json::from_str(&json).expect("deserialize SourceInfo");
 
             if let SourceInfo::File { path: recovered_path, .. } = recovered {
                 prop_assert_eq!(path, recovered_path);
@@ -575,8 +577,8 @@ mod proptests {
             split in prop::sample::select(vec!["train", "test", "dev"])
         ) {
             let source = SourceInfo::dataset(&name, split);
-            let json = serde_json::to_string(&source).unwrap();
-            let recovered: SourceInfo = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&source).expect("serialize SourceInfo::Dataset");
+            let recovered: SourceInfo = serde_json::from_str(&json).expect("deserialize SourceInfo");
 
             if let SourceInfo::Dataset { name: n, split: _, .. } = recovered {
                 prop_assert_eq!(name, n);
@@ -595,8 +597,8 @@ mod proptests {
         #[test]
         fn prop_ingest_converter_roundtrip(tool in arb_identifier(), version in "[0-9]+\\.[0-9]+\\.[0-9]+") {
             let ingest = IngestInfo::converter(&tool, &version);
-            let json = serde_json::to_string(&ingest).unwrap();
-            let recovered: IngestInfo = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&ingest).expect("serialize IngestInfo::Converter");
+            let recovered: IngestInfo = serde_json::from_str(&json).expect("deserialize IngestInfo");
 
             if let IngestInfo::Converter { tool: t, version: v, .. } = recovered {
                 prop_assert_eq!(tool, t);
@@ -610,8 +612,8 @@ mod proptests {
         #[test]
         fn prop_ingest_direct_roundtrip(_unused in Just(())) {
             let ingest = IngestInfo::direct();
-            let json = serde_json::to_string(&ingest).unwrap();
-            let recovered: IngestInfo = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&ingest).expect("serialize IngestInfo::Direct");
+            let recovered: IngestInfo = serde_json::from_str(&json).expect("deserialize IngestInfo");
             prop_assert!(matches!(recovered, IngestInfo::Direct));
         }
     }
@@ -625,8 +627,9 @@ mod proptests {
         #[test]
         fn prop_preprocessing_roundtrip(name in arb_identifier(), order in 0u32..100) {
             let step = PreprocessingStep::new(&name, order);
-            let json = serde_json::to_string(&step).unwrap();
-            let recovered: PreprocessingStep = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&step).expect("serialize PreprocessingStep");
+            let recovered: PreprocessingStep =
+                serde_json::from_str(&json).expect("deserialize PreprocessingStep");
 
             prop_assert_eq!(name, recovered.name);
             prop_assert_eq!(order, recovered.order);
@@ -642,8 +645,9 @@ mod proptests {
         ) {
             let step = PreprocessingStep::new(&name, order)
                 .with_param(&param_key, &param_value);
-            let json = serde_json::to_string(&step).unwrap();
-            let recovered: PreprocessingStep = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&step).expect("serialize PreprocessingStep");
+            let recovered: PreprocessingStep =
+                serde_json::from_str(&json).expect("deserialize PreprocessingStep");
 
             prop_assert_eq!(step.params.get(&param_key), recovered.params.get(&param_key));
         }
@@ -658,8 +662,9 @@ mod proptests {
         #[test]
         fn prop_extraction_roundtrip(task in arb_identifier(), model in arb_identifier()) {
             let pipeline = ExtractionPipeline::new(&task, &model);
-            let json = serde_json::to_string(&pipeline).unwrap();
-            let recovered: ExtractionPipeline = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&pipeline).expect("serialize ExtractionPipeline");
+            let recovered: ExtractionPipeline =
+                serde_json::from_str(&json).expect("deserialize ExtractionPipeline");
 
             prop_assert_eq!(task, recovered.task);
             prop_assert_eq!(model, recovered.model);
@@ -674,8 +679,9 @@ mod proptests {
         ) {
             let pipeline = ExtractionPipeline::new(&task, &model)
                 .with_version(&version);
-            let json = serde_json::to_string(&pipeline).unwrap();
-            let recovered: ExtractionPipeline = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&pipeline).expect("serialize ExtractionPipeline");
+            let recovered: ExtractionPipeline =
+                serde_json::from_str(&json).expect("deserialize ExtractionPipeline");
 
             prop_assert_eq!(Some(version), recovered.version);
         }
@@ -691,8 +697,9 @@ mod proptests {
             for t in &types {
                 pipeline = pipeline.with_type(t);
             }
-            let json = serde_json::to_string(&pipeline).unwrap();
-            let recovered: ExtractionPipeline = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&pipeline).expect("serialize ExtractionPipeline");
+            let recovered: ExtractionPipeline =
+                serde_json::from_str(&json).expect("deserialize ExtractionPipeline");
 
             prop_assert_eq!(types, recovered.types_extracted);
         }
@@ -711,8 +718,9 @@ mod proptests {
                 .ingest(IngestInfo::direct())
                 .build();
 
-            let json = serde_json::to_string(&prov).unwrap();
-            let recovered: DocumentProvenance = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&prov).expect("serialize DocumentProvenance");
+            let recovered: DocumentProvenance =
+                serde_json::from_str(&json).expect("deserialize DocumentProvenance");
 
             prop_assert_eq!(prov.id, recovered.id);
 
@@ -754,8 +762,9 @@ mod proptests {
                 .metadata(&key, &value)
                 .build();
 
-            let json = serde_json::to_string(&prov).unwrap();
-            let recovered: DocumentProvenance = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&prov).expect("serialize DocumentProvenance");
+            let recovered: DocumentProvenance =
+                serde_json::from_str(&json).expect("deserialize DocumentProvenance");
 
             prop_assert_eq!(prov.metadata.get(&key), recovered.metadata.get(&key));
         }

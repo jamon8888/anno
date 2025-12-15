@@ -17,7 +17,7 @@
 //! For any representation with finite semantic resolution ε:
 //!   - p_S = probability of correct generalization (treating similar things as same)
 //!   - p_I = probability of correct identification (distinguishing different things)
-//!   
+//!
 //! These are fundamentally constrained to a Pareto front:
 //!   ↑ p_I means ↓ p_S, and vice versa.
 //! ```
@@ -777,16 +777,14 @@ mod proptests {
         #[test]
         fn nameability_bounded(score in -10.0f32..10.0f32) {
             let n = Nameability::new(score);
-            prop_assert!(n.score() >= 0.0);
-            prop_assert!(n.score() <= 1.0);
+            prop_assert!((0.0..=1.0).contains(&n.score()), "nameability score {} out of bounds", n.score());
         }
 
         /// SND to nameability conversion is bounded.
         #[test]
         fn snd_conversion_bounded(snd in -10.0f32..10.0f32) {
             let n = Nameability::from_snd(snd);
-            prop_assert!(n.score() >= 0.0);
-            prop_assert!(n.score() <= 1.0);
+            prop_assert!((0.0..=1.0).contains(&n.score()), "SND conversion score {} out of bounds", n.score());
         }
 
         /// AlignmentScore confidence is always in [0, 1].
@@ -799,8 +797,7 @@ mod proptests {
                 alignment.record_match(score);
             }
             let conf = alignment.confidence();
-            prop_assert!(conf >= 0.0, "confidence {} < 0", conf);
-            prop_assert!(conf <= 1.0, "confidence {} > 1", conf);
+            prop_assert!((0.0..=1.0).contains(&conf), "confidence {} out of bounds [0, 1]", conf);
         }
 
         /// Alignment mean is always in [0, 1] when inputs are in [0, 1].
@@ -813,8 +810,7 @@ mod proptests {
                 alignment.record_match(*score);
             }
             let mean = alignment.mean();
-            prop_assert!(mean >= 0.0, "mean {} < 0", mean);
-            prop_assert!(mean <= 1.0, "mean {} > 1", mean);
+            prop_assert!((0.0..=1.0).contains(&mean), "mean {} out of bounds [0, 1]", mean);
         }
 
         /// Adaptive threshold is always >= min_threshold.

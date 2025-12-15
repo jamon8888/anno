@@ -3,7 +3,7 @@
 //! Tests complex, nuanced scenarios that require careful setup and validation.
 
 use anno_coalesce::Resolver;
-use anno_core::{Corpus, GroundedDocument, Identity, Location, Signal, Track};
+use anno_core::{Corpus, GroundedDocument, Location, Signal, Track};
 
 /// E2E: Cross-document coreference with partial embeddings
 ///
@@ -228,7 +228,7 @@ fn e2e_strata_nested_communities() {
     // At least some nodes should have community assignments
     // (exact count depends on clustering algorithm)
     assert!(
-        nodes_with_communities.len() > 0 || clustered.nodes.len() > 0,
+        !nodes_with_communities.is_empty() || !clustered.nodes.is_empty(),
         "Should have nodes with community assignments or at least nodes"
     );
 }
@@ -243,7 +243,7 @@ fn e2e_crossdoc_large_scale() {
     // Create 20 documents, each with 2-3 tracks
     for i in 0..20 {
         let doc_id = format!("doc_{}", i);
-        let mut doc = GroundedDocument::new(&doc_id, &format!("Document {} content.", i));
+        let mut doc = GroundedDocument::new(&doc_id, format!("Document {} content.", i));
 
         // Add 2-3 tracks per document
         for j in 0..(2 + (i % 2)) {
@@ -256,7 +256,7 @@ fn e2e_crossdoc_large_scale() {
                 0.9,
             ));
 
-            let mut track = Track::new(0, &entity_text.to_lowercase());
+            let mut track = Track::new(0, entity_text.to_lowercase());
             track.add_signal(sig, 0);
             track.entity_type = Some("PER".to_string());
             doc.add_track(track);
@@ -271,7 +271,7 @@ fn e2e_crossdoc_large_scale() {
 
     // Should create some identities (exact count depends on similarity)
     assert!(
-        identity_ids.len() > 0,
+        !identity_ids.is_empty(),
         "Should create at least some identities"
     );
 
@@ -399,7 +399,7 @@ fn e2e_identity_aliases() {
     // Should create 1 identity (if threshold is low enough) or 2 (if similarity too low)
     // This tests that the resolver handles aliases, even if they don't merge
     assert!(
-        identity_ids.len() >= 1 && identity_ids.len() <= 2,
+        !identity_ids.is_empty() && identity_ids.len() <= 2,
         "Should create 1-2 identities (may not merge if similarity too low), got: {}",
         identity_ids.len()
     );

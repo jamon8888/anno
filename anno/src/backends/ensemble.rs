@@ -491,7 +491,11 @@ impl EnsembleNER {
 
         if candidates.len() == 1 {
             // Single candidate - use its confidence directly
-            let mut entity = candidates.into_iter().next().unwrap().entity;
+            let mut entity = candidates
+                .into_iter()
+                .next()
+                .expect("candidates.len() == 1 guarantees next() is Some")
+                .entity;
             // Slight penalty for single-source
             entity.confidence *= 0.95;
             return Some(entity);
@@ -513,7 +517,13 @@ impl EnsembleNER {
                 .map(|c| c.backend_weight * c.entity.confidence)
                 .sum();
 
-            if best_type.is_none() || weighted_sum > best_type.as_ref().unwrap().1 {
+            if best_type.is_none()
+                || weighted_sum
+                    > best_type
+                        .as_ref()
+                        .expect("best_type.is_none() checked above")
+                        .1
+            {
                 best_type = Some((type_key, weighted_sum, type_candidates.clone()));
             }
         }
@@ -1066,9 +1076,11 @@ mod tests {
 
     #[test]
     fn test_backend_stats() {
-        let mut stats = BackendStats::default();
-        stats.correct = 8;
-        stats.total = 10;
+        let mut stats = BackendStats {
+            correct: 8,
+            total: 10,
+            ..Default::default()
+        };
         stats.per_type.insert("PER".to_string(), (5, 6));
 
         assert!((stats.precision() - 0.8).abs() < 0.01);

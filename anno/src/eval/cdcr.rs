@@ -418,7 +418,7 @@ impl LSHBlocker {
 // =============================================================================
 
 /// Configuration for CDCR.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CDCRConfig {
     /// Minimum similarity for clustering
     pub min_similarity: f64,
@@ -428,6 +428,37 @@ pub struct CDCRConfig {
     pub lsh: LSHBlocker,
     /// Require type match for clustering
     pub require_type_match: bool,
+    /// Optional cluster encoder for learned similarity (when available)
+    /// If None, falls back to string similarity
+    #[cfg(feature = "eval-advanced")]
+    pub cluster_encoder: Option<std::sync::Arc<dyn crate::eval::cluster_encoder::ClusterEncoder>>,
+}
+
+impl std::fmt::Debug for CDCRConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[cfg(feature = "eval-advanced")]
+        {
+            f.debug_struct("CDCRConfig")
+                .field("min_similarity", &self.min_similarity)
+                .field("use_lsh", &self.use_lsh)
+                .field("lsh", &self.lsh)
+                .field("require_type_match", &self.require_type_match)
+                .field(
+                    "cluster_encoder",
+                    &self.cluster_encoder.as_ref().map(|_| "<encoder>"),
+                )
+                .finish()
+        }
+        #[cfg(not(feature = "eval-advanced"))]
+        {
+            f.debug_struct("CDCRConfig")
+                .field("min_similarity", &self.min_similarity)
+                .field("use_lsh", &self.use_lsh)
+                .field("lsh", &self.lsh)
+                .field("require_type_match", &self.require_type_match)
+                .finish()
+        }
+    }
 }
 
 impl Default for CDCRConfig {
@@ -437,6 +468,8 @@ impl Default for CDCRConfig {
             use_lsh: true,
             lsh: LSHBlocker::default(),
             require_type_match: true,
+            #[cfg(feature = "eval-advanced")]
+            cluster_encoder: None,
         }
     }
 }
@@ -449,7 +482,7 @@ impl Default for CDCRConfig {
 /// # Algorithm
 ///
 /// 1. **Blocking** (LSH): Generate candidate pairs from all mentions
-/// 2. **Comparison**: Compute similarity for candidate pairs
+/// 2. **Comparison**: Compute similarity for candidate pairs (uses ClusterEncoder if available)
 /// 3. **Clustering**: Agglomerative clustering with single-link
 ///
 /// # Scalability
@@ -457,9 +490,24 @@ impl Default for CDCRConfig {
 /// With LSH blocking, CDCR scales to millions of mentions:
 /// - Without blocking: O(n²) comparisons
 /// - With blocking: O(n × average_block_size)
-#[derive(Debug, Clone, Default)]
+///
+/// # Cluster Encoder Integration
+///
+/// When a `ClusterEncoder` is provided in the config, CDCR uses learned
+/// cluster embeddings for similarity scoring instead of string similarity.
+/// This enables more accurate cross-document linking based on semantic
+/// similarity rather than surface form matching.
+#[derive(Clone, Default)]
 pub struct CDCRResolver {
     config: CDCRConfig,
+}
+
+impl std::fmt::Debug for CDCRResolver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CDCRResolver")
+            .field("config", &self.config)
+            .finish()
+    }
 }
 
 impl CDCRResolver {
@@ -473,6 +521,21 @@ impl CDCRResolver {
     #[must_use]
     pub fn with_config(config: CDCRConfig) -> Self {
         Self { config }
+    }
+
+    /// Set cluster encoder for learned similarity scoring.
+    ///
+    /// When a cluster encoder is provided, CDCR will use learned embeddings
+    /// for similarity computation instead of string similarity. This enables
+    /// more accurate cross-document entity linking.
+    #[cfg(feature = "eval-advanced")]
+    #[must_use]
+    pub fn with_cluster_encoder(
+        mut self,
+        encoder: std::sync::Arc<dyn crate::eval::cluster_encoder::ClusterEncoder>,
+    ) -> Self {
+        self.config.cluster_encoder = Some(encoder);
+        self
     }
 
     /// Resolve cross-document coreference.
@@ -548,7 +611,60 @@ impl CDCRResolver {
     }
 
     /// Compute similarity between two mentions.
+    ///
+    /// Uses cluster encoder if available (learned embeddings), otherwise
+    /// falls back to string similarity (heuristic).
     fn mention_similarity(&self, a: &MentionRef, b: &MentionRef) -> f64 {
+        #[cfg(feature = "eval-advanced")]
+        if let Some(ref encoder) = self.config.cluster_encoder {
+            // Convert mentions to LocalCluster format for encoding
+            // For single mentions, create a singleton cluster
+            use crate::eval::cluster_encoder::{ClusterMention, LocalCluster};
+
+            let cluster_a = {
+                let mut c = LocalCluster::new(0, 0);
+                c.add_mention(ClusterMention {
+                    start: 0,
+                    end: a.text.len(),
+                    text: a.text.clone(),
+                    context_id: 0,
+                });
+                c
+            };
+
+            let cluster_b = {
+                let mut c = LocalCluster::new(1, 0);
+                c.add_mention(ClusterMention {
+                    start: 0,
+                    end: b.text.len(),
+                    text: b.text.clone(),
+                    context_id: 0,
+                });
+                c
+            };
+
+            // Encode clusters
+            let emb_a = encoder.encode_cluster(&cluster_a, None);
+            let emb_b = encoder.encode_cluster(&cluster_b, None);
+
+            // Compute cosine similarity between embeddings
+            if emb_a.embedding.len() == emb_b.embedding.len() {
+                let dot: f32 = emb_a
+                    .embedding
+                    .iter()
+                    .zip(emb_b.embedding.iter())
+                    .map(|(x, y)| x * y)
+                    .sum();
+                let norm_a: f32 = emb_a.embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+                let norm_b: f32 = emb_b.embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+                if norm_a > 0.0 && norm_b > 0.0 {
+                    return (dot / (norm_a * norm_b)) as f64;
+                }
+            }
+        }
+
+        // Fallback to string similarity
         crate::similarity::string_similarity(&a.text, &b.text)
     }
 

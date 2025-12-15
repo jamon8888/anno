@@ -220,7 +220,7 @@ fn test_string_similarity_special_chars() {
     // Jaccard: intersection={"Paulo"} = 1, union={"São", "Paulo", "Sao"} = 3, so similarity = 1/3 ≈ 0.33
     let sim2 = string_similarity("São Paulo", "Sao Paulo");
     assert!(
-        sim2 >= 0.0 && sim2 <= 1.0,
+        (0.0..=1.0).contains(&sim2),
         "Similarity should be in [0, 1], got {}",
         sim2
     );
@@ -242,7 +242,7 @@ fn test_string_similarity_numbers() {
     // But actual implementation may tokenize differently - test for reasonable similarity
     let sim1 = string_similarity("Apple Inc.", "Apple Inc");
     assert!(
-        sim1 >= 0.0 && sim1 <= 1.0,
+        (0.0..=1.0).contains(&sim1),
         "Similarity should be in [0, 1], got {}",
         sim1
     );
@@ -259,7 +259,7 @@ fn test_string_similarity_numbers() {
     // Jaccard: intersection={"iPhone"} = 1, union={"iPhone", "13", "14"} = 3, so similarity = 1/3 ≈ 0.33
     let sim2 = string_similarity("iPhone 13", "iPhone 14");
     assert!(
-        sim2 >= 0.0 && sim2 <= 1.0,
+        (0.0..=1.0).contains(&sim2),
         "Similarity should be in [0, 1], got {}",
         sim2
     );

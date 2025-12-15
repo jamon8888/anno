@@ -210,7 +210,7 @@ proptest! {
         let byte_found = bstr_text.find(pattern_bytes).is_some();
 
         // Character-level find
-        let char_found = text.find(&pattern).is_some();
+        let char_found = text.contains(&pattern);
 
         // Both should agree on whether the pattern exists
         // This is the key invariant: for valid UTF-8, byte-level and char-level searches

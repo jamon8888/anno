@@ -312,7 +312,7 @@ pub fn pivot_clustering_best_of<R: Rng>(
         }
     }
 
-    best.unwrap()
+    best.expect("should have at least one clustering result after iterations")
 }
 
 // =============================================================================
@@ -327,7 +327,7 @@ pub fn pivot_clustering_best_of<R: Rng>(
 ///
 /// For each candidate neighbor v:
 /// - Count positive edges from v to current cluster members (support)
-/// - Count negative edges from v to current cluster members (opposition)  
+/// - Count negative edges from v to current cluster members (opposition)
 /// - Only add v if support > opposition
 pub fn modified_pivot_clustering<R: Rng>(graph: &LabeledGraph, rng: &mut R) -> ClusteringResult {
     let n = graph.n;
@@ -338,7 +338,9 @@ pub fn modified_pivot_clustering<R: Rng>(graph: &LabeledGraph, rng: &mut R) -> C
     while !unclustered.is_empty() {
         // Pick random pivot from unclustered
         let unclustered_vec: Vec<_> = unclustered.iter().copied().collect();
-        let pivot = *unclustered_vec.choose(rng).unwrap();
+        let pivot = *unclustered_vec
+            .choose(rng)
+            .expect("unclustered_vec should not be empty");
         unclustered.remove(&pivot);
 
         // Start cluster with pivot
@@ -493,7 +495,9 @@ pub fn greedy_agglomerative(graph: &LabeledGraph) -> ClusteringResult {
             e.insert(next_id);
             next_id += 1;
         }
-        assignments[i] = *id_map.get(&root).unwrap();
+        assignments[i] = *id_map
+            .get(&root)
+            .expect("root should exist in id_map after entry check");
     }
 
     let mut result = ClusteringResult::from_assignments(assignments);
@@ -681,7 +685,7 @@ pub fn min_max_clustering<R: Rng>(graph: &LabeledGraph, rng: &mut R) -> MinMaxCl
             // Get members of the worst cluster
             let members: Vec<usize> = (0..n).filter(|&i| assignments[i] == worst_idx).collect();
 
-            if members.len() <= 1 {
+            if members.len() < 2 {
                 continue; // Can't split singleton
             }
 
@@ -765,9 +769,9 @@ pub fn min_max_clustering<R: Rng>(graph: &LabeledGraph, rng: &mut R) -> MinMaxCl
 
                 // Simulate merge
                 let mut test_assignments = assignments.clone();
-                for i in 0..n {
-                    if test_assignments[i] == c2 {
-                        test_assignments[i] = c1;
+                for assignment in &mut test_assignments {
+                    if *assignment == c2 {
+                        *assignment = c1;
                     }
                 }
 
@@ -793,12 +797,14 @@ pub fn min_max_clustering<R: Rng>(graph: &LabeledGraph, rng: &mut R) -> MinMaxCl
     // Normalize assignments
     let mut id_map: HashMap<usize, usize> = HashMap::new();
     let mut next_id = 0;
-    for i in 0..n {
-        if !id_map.contains_key(&assignments[i]) {
-            id_map.insert(assignments[i], next_id);
+    for assignment in &mut assignments {
+        if let std::collections::hash_map::Entry::Vacant(e) = id_map.entry(*assignment) {
+            e.insert(next_id);
             next_id += 1;
         }
-        assignments[i] = *id_map.get(&assignments[i]).unwrap();
+        *assignment = *id_map
+            .get(assignment)
+            .expect("assignment should exist in id_map after entry check");
     }
 
     let mut result = ClusteringResult::from_assignments(assignments.clone());
@@ -1356,7 +1362,7 @@ mod proptests {
 
             let result = pivot_clustering(&graph, &mut rng);
             // cost is usize, always >= 0 by type constraint
-            prop_assert!(result.clusters.len() > 0, "Should have at least one cluster");
+            prop_assert!(!result.clusters.is_empty(), "Should have at least one cluster");
         }
     }
 }

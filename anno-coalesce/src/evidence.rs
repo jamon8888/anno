@@ -666,9 +666,9 @@ impl TransitivityAnalyzer {
         let n = sims.len();
         let mut similarities = vec![0.0; n * (n - 1) / 2];
         let mut idx = 0;
-        for i in 0..n {
-            for j in (i + 1)..n {
-                similarities[idx] = sims[i][j];
+        for (i, row) in sims.iter().enumerate() {
+            for &sim in row.iter().skip(i + 1) {
+                similarities[idx] = sim;
                 idx += 1;
             }
         }
@@ -726,7 +726,11 @@ impl TransitivityAnalyzer {
             }
         }
 
-        violations.sort_by(|x, y| y.severity.partial_cmp(&x.severity).unwrap());
+        violations.sort_by(|x, y| {
+            y.severity
+                .partial_cmp(&x.severity)
+                .expect("severities should be comparable")
+        });
         violations
     }
 

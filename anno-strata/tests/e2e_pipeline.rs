@@ -186,8 +186,12 @@ fn test_full_pipeline_ner_coalesce_strata() {
     assert!(!resolution.is_empty());
 
     // Verify resolution worked (Apple Inc. and Apple should resolve to same entity)
-    let apple_inc_canon = resolution.get("doc1:Apple Inc.").unwrap();
-    let apple_canon = resolution.get("doc2:Apple").unwrap();
+    let apple_inc_canon = resolution
+        .get("doc1:Apple Inc.")
+        .expect("Apple Inc. should be in resolution");
+    let apple_canon = resolution
+        .get("doc2:Apple")
+        .expect("Apple should be in resolution");
     assert_eq!(
         apple_inc_canon.0, apple_canon.0,
         "Apple entities should be resolved together"
@@ -222,9 +226,15 @@ fn test_full_pipeline_ner_coalesce_strata() {
     assert_eq!(hub_scores.len(), stats.node_count);
 
     // Step 5: Apply community detection
-    let leiden_graph = HierarchicalLeiden::new().cluster(&graph).unwrap();
-    let louvain_communities = Louvain::default().cluster(&graph).unwrap();
-    let label_prop_communities = LabelPropagation::default().cluster(&graph).unwrap();
+    let leiden_graph = HierarchicalLeiden::new()
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed");
+    let louvain_communities = Louvain::default()
+        .cluster(&graph)
+        .expect("Louvain clustering should succeed");
+    let label_prop_communities = LabelPropagation::default()
+        .cluster(&graph)
+        .expect("Label propagation clustering should succeed");
 
     // Verify all nodes are assigned to communities
     assert_eq!(leiden_graph.nodes.len(), stats.node_count);
@@ -233,7 +243,10 @@ fn test_full_pipeline_ner_coalesce_strata() {
 
     // Step 6: Identify important entities
     let mut ranked_entities: Vec<_> = pagerank_scores.iter().collect();
-    ranked_entities.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+    ranked_entities.sort_by(|a, b| {
+        b.1.partial_cmp(a.1)
+            .expect("PageRank scores should be comparable")
+    });
 
     println!("\nTop entities by PageRank:");
     for (id, score) in ranked_entities.iter().take(5) {
@@ -280,12 +293,14 @@ fn test_multilingual_entity_graph_pipeline() {
     assert_eq!(pagerank.len(), 6);
 
     // All scores should be non-negative
-    for (_, score) in &pagerank {
+    for score in pagerank.values() {
         assert!(*score >= 0.0, "PageRank scores must be non-negative");
     }
 
     // Community detection should work
-    let communities = LabelPropagation::default().cluster(&graph).unwrap();
+    let communities = LabelPropagation::default()
+        .cluster(&graph)
+        .expect("Label propagation clustering should succeed");
 
     // Verify all nodes have community assignments (using node IDs from graph)
     assert_eq!(communities.len(), stats.node_count);
@@ -334,12 +349,14 @@ fn test_disconnected_component_pipeline() {
     assert_eq!(pagerank.len(), 6);
 
     // All scores should be non-negative
-    for (_, score) in &pagerank {
+    for score in pagerank.values() {
         assert!(*score >= 0.0, "PageRank scores must be non-negative");
     }
 
     // Community detection should find at least 2 communities
-    let communities = Louvain::default().cluster(&graph).unwrap();
+    let communities = Louvain::default()
+        .cluster(&graph)
+        .expect("Louvain clustering should succeed");
     let unique_communities: std::collections::HashSet<_> = communities.values().collect();
     assert!(
         unique_communities.len() >= 2,
@@ -357,7 +374,7 @@ fn test_hub_detection_pipeline() {
     let spokes: Vec<Entity> = (1..=10)
         .map(|i| {
             Entity::new(
-                &format!("Spoke_{}", i),
+                format!("Spoke_{}", i),
                 EntityType::Person,
                 i * 10,
                 i * 10 + 7,
@@ -387,9 +404,9 @@ fn test_hub_detection_pipeline() {
     let find_top = |scores: &HashMap<String, f64>| -> String {
         scores
             .iter()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .max_by(|a, b| a.1.partial_cmp(b.1).expect("scores should be comparable"))
             .map(|(k, _)| k.clone())
-            .unwrap()
+            .expect("scores should not be empty")
     };
 
     // The hub should be identified as most central by most measures
@@ -407,19 +424,19 @@ fn test_hub_detection_pipeline() {
     // All measures should identify the same hub
     // (allowing for slight variations in how graph is constructed)
     assert!(
-        pagerank.values().any(|&v| v > 0.0),
+        pagerank.values().any(|v| *v > 0.0),
         "PageRank should produce positive scores"
     );
     assert!(
-        eigenvector.values().any(|&v| v > 0.0),
+        eigenvector.values().any(|v| *v > 0.0),
         "Eigenvector should produce positive scores"
     );
     assert!(
-        closeness.values().any(|&v| v > 0.0),
+        closeness.values().any(|v| *v > 0.0),
         "Closeness should produce positive scores"
     );
     assert!(
-        hub_scores.values().any(|&v| v > 0.0),
+        hub_scores.values().any(|v| *v > 0.0),
         "HITS should produce positive hub scores"
     );
 
@@ -452,13 +469,19 @@ fn test_empty_graph_handling() {
     assert!(hubs.is_empty());
     assert!(auths.is_empty());
 
-    let leiden = HierarchicalLeiden::new().cluster(&graph).unwrap();
+    let leiden = HierarchicalLeiden::new()
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed on empty graph");
     assert!(leiden.nodes.is_empty());
 
-    let louvain = Louvain::default().cluster(&graph).unwrap();
+    let louvain = Louvain::default()
+        .cluster(&graph)
+        .expect("Louvain clustering should succeed on empty graph");
     assert!(louvain.is_empty());
 
-    let label_prop = LabelPropagation::default().cluster(&graph).unwrap();
+    let label_prop = LabelPropagation::default()
+        .cluster(&graph)
+        .expect("Label propagation clustering should succeed on empty graph");
     assert!(label_prop.is_empty());
 
     println!("Empty graph handling test passed!");

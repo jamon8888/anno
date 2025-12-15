@@ -414,7 +414,7 @@ impl PipelineStage for ConfidenceFilter {
     fn process(&self, entities: Vec<Entity>, _text: &str) -> Vec<Entity> {
         entities
             .into_iter()
-            .filter(|e| e.confidence as f64 >= self.threshold)
+            .filter(|e| e.confidence >= self.threshold)
             .collect()
     }
 
@@ -430,9 +430,11 @@ impl PipelineStage for DeduplicateOverlapping {
     fn process(&self, mut entities: Vec<Entity>, _text: &str) -> Vec<Entity> {
         // Sort by start, then by confidence (desc)
         entities.sort_by(|a, b| {
-            a.start
-                .cmp(&b.start)
-                .then(b.confidence.partial_cmp(&a.confidence).unwrap())
+            a.start.cmp(&b.start).then(
+                b.confidence
+                    .partial_cmp(&a.confidence)
+                    .expect("confidence values should be comparable"),
+            )
         });
 
         let mut result = Vec::new();

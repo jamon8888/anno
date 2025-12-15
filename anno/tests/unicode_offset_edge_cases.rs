@@ -97,7 +97,7 @@ fn byte_vs_char_substring_search() {
         let bstr_text = BStr::new(text_bytes);
 
         let byte_found = bstr_text.find(pattern_bytes).is_some();
-        let char_found = text.find(&pattern).is_some();
+        let char_found = text.contains(&pattern);
 
         prop_assert_eq!(
             byte_found, char_found,
@@ -158,4 +158,3 @@ fn span_converter_empty_text() {
         byte_len
     );
 }
-

@@ -192,11 +192,11 @@ impl Script {
 /// adding the `unicode-normalization` crate.
 pub fn normalize(s: &str) -> String {
     s.chars()
-        .filter_map(|c| {
+        .map(|c| {
             if c.is_whitespace() {
-                Some(' ')
+                ' '
             } else {
-                Some(c.to_lowercase().next().unwrap_or(c))
+                c.to_lowercase().next().unwrap_or(c)
             }
         })
         .collect::<String>()
@@ -592,7 +592,7 @@ pub fn is_acronym_match(a: &str, b: &str) -> bool {
 
     // Acronym should be reasonably short (2-10 chars)
     let short_len = short.chars().count();
-    if short_len < 2 || short_len > 10 {
+    if !(2..=10).contains(&short_len) {
         return false;
     }
 
@@ -716,7 +716,7 @@ impl ChainedSynonyms {
     }
 
     /// Add a synonym source to the chain.
-    pub fn add<S: SynonymSource + 'static>(mut self, source: S) -> Self {
+    pub fn with_source<S: SynonymSource + 'static>(mut self, source: S) -> Self {
         self.sources.push(Box::new(source));
         self
     }
@@ -863,7 +863,7 @@ mod proptests {
         fn similarity_bounded(a in "\\PC{0,50}", b in "\\PC{0,50}") {
             let sim = Similarity::new();
             let score = sim.compute(&a, &b);
-            prop_assert!(score >= 0.0 && score <= 1.0,
+            prop_assert!((0.0..=1.0).contains(&score),
                 "Bounds: {}", score);
         }
 
@@ -887,7 +887,7 @@ mod proptests {
         #[test]
         fn jaro_winkler_bounded(a in "\\PC{1,30}", b in "\\PC{1,30}") {
             let sim = jaro_winkler_similarity(&a, &b);
-            prop_assert!(sim >= 0.0 && sim <= 1.0,
+            prop_assert!((0.0..=1.0).contains(&sim),
                 "Jaro-Winkler bounds: {}", sim);
         }
     }

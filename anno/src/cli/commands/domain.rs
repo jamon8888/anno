@@ -338,9 +338,8 @@ fn analyze_domain(text: &str, model: &ModelBackend) -> DomainReport {
     };
 
     // Assess shift risk
-    let shift_risk = if detected_domain == "general" {
-        ShiftRisk::Low
-    } else if training_domains.contains(&detected_domain) {
+    let shift_risk = if detected_domain == "general" || training_domains.contains(&detected_domain)
+    {
         ShiftRisk::Low
     } else if detected_domain == "biomedical" || detected_domain == "legal" {
         ShiftRisk::High

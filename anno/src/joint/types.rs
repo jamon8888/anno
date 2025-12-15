@@ -256,7 +256,7 @@ impl MentionKind {
 
         if pronouns.contains(&lower.as_str()) {
             MentionKind::Pronominal
-        } else if text.chars().next().map_or(false, |c| c.is_uppercase()) {
+        } else if text.chars().next().is_some_and(|c| c.is_uppercase()) {
             MentionKind::Proper
         } else {
             MentionKind::Nominal
@@ -774,7 +774,7 @@ impl JointModel {
     fn build_variables(&self, mentions: &[JointMention]) -> Vec<JointVariable> {
         let mut variables = Vec::new();
 
-        for (i, mention) in mentions.iter().enumerate() {
+        for (i, _mention) in mentions.iter().enumerate() {
             // Antecedent variable (for all except first)
             if i > 0 {
                 let pruned = self.pruner.prune_candidates(i, mentions);
@@ -791,11 +791,8 @@ impl JointModel {
             });
 
             // Entity link variable
-            let link_candidates: Vec<String> = if mention.mention_kind == MentionKind::Proper {
-                vec![] // In production: query WikidataLinker for candidates
-            } else {
-                vec![]
-            };
+            // In production: query WikidataLinker for candidates (only for Proper mentions)
+            let link_candidates: Vec<String> = vec![];
             variables.push(JointVariable::EntityLink {
                 mention_idx: i,
                 candidates: link_candidates,
@@ -1660,9 +1657,8 @@ mod tests {
         let text = "John Smith visited New York";
         let entities = model.extract_entities(text, None).unwrap();
 
-        // Heuristic detection should find capitalized word sequences
-        // Note: this is a basic test; the heuristic detector is simple
-        assert!(!entities.is_empty() || true); // May or may not find entities based on heuristic
+        // Heuristic detection may legitimately return empty output; this test only asserts no error.
+        let _ = entities;
     }
 
     #[test]

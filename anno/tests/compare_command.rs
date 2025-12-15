@@ -7,7 +7,8 @@
 //!
 //! See: https://github.com/arclabs561/anno/issues/XXX
 
-#![cfg(feature = "cli_compare_json")] // Feature gate: only compile when enabled
+// Note: This test requires cli feature
+#![cfg(feature = "cli")]
 
 use std::io::Write;
 use std::process::Command;

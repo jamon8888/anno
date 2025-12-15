@@ -144,28 +144,28 @@ pub fn cache_dir() -> std::path::PathBuf {
     {
         #[cfg(target_os = "macos")]
         {
-            return dirs::home_dir()
+            dirs::home_dir()
                 .map(|h| h.join("Library/Caches/anno"))
-                .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"));
+                .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"))
         }
 
         #[cfg(target_os = "linux")]
         {
-            return dirs::cache_dir()
+            dirs::cache_dir()
                 .map(|c| c.join("anno"))
-                .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"));
+                .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"))
         }
 
         #[cfg(target_os = "windows")]
         {
-            return dirs::cache_dir()
+            dirs::cache_dir()
                 .map(|c| c.join("anno"))
-                .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"));
+                .unwrap_or_else(|| std::path::PathBuf::from(".anno-cache"))
         }
 
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
-            return std::path::PathBuf::from(".anno-cache");
+            std::path::PathBuf::from(".anno-cache")
         }
     }
 

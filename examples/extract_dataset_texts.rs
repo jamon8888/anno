@@ -3,7 +3,8 @@
 //! Usage: cargo run --bin extract_dataset_texts --features eval-advanced
 
 #[cfg(feature = "eval-advanced")]
-use anno::eval::loader::{DatasetId, DatasetLoader};
+use anno::eval::loader::DatasetId;
+use anno::eval::{DatasetLoader, LoadableDatasetId};
 use std::fs;
 use std::path::Path;
 
@@ -29,8 +30,16 @@ fn main() {
 
         for dataset_id in datasets {
             println!("Processing {}...", dataset_id.name());
-            
-            match loader.load(dataset_id) {
+
+            let loadable = match LoadableDatasetId::try_from(dataset_id) {
+                Ok(id) => id,
+                Err(e) => {
+                    eprintln!("  Failed to load {}: {}", dataset_id.name(), e);
+                    continue;
+                }
+            };
+
+            match loader.load(loadable) {
                 Ok(dataset) => {
                     let dataset_dir = output_dir.join(dataset_id.name().to_lowercase());
                     fs::create_dir_all(&dataset_dir).expect("Failed to create dataset dir");
@@ -40,7 +49,7 @@ fn main() {
                         let filepath = dataset_dir.join(&filename);
                         fs::write(&filepath, &example.text).expect("Failed to write file");
                     }
-                    println!("  Extracted {} examples to {:?}", 
+                    println!("  Extracted {} examples to {:?}",
                         dataset.examples.len().min(20), dataset_dir);
                 }
                 Err(e) => {

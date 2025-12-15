@@ -111,11 +111,9 @@ pub fn run(args: CacheArgs) -> Result<(), String> {
             let mut count = 0usize;
 
             for entry in entries {
-                if let Ok(entry) = entry {
-                    if let Ok(metadata) = entry.metadata() {
-                        total_size += metadata.len();
-                        count += 1;
-                    }
+                if let Ok(entry) = entry.and_then(|e| e.metadata().map(|m| (e, m))) {
+                    total_size += entry.1.len();
+                    count += 1;
                 }
             }
 
@@ -134,24 +132,20 @@ pub fn run(args: CacheArgs) -> Result<(), String> {
 
             let mut removed = 0usize;
 
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
-                    let should_remove = if let Some(ref m) = model {
-                        name.starts_with(&format!("{}-", m))
-                    } else if let Some(ref f) = file {
-                        name.contains(f)
-                    } else {
-                        false
-                    };
+                let should_remove = if let Some(ref m) = model {
+                    name.starts_with(&format!("{}-", m))
+                } else if let Some(ref f) = file {
+                    name.contains(f)
+                } else {
+                    false
+                };
 
-                    if should_remove {
-                        if fs::remove_file(&path).is_ok() {
-                            removed += 1;
-                        }
-                    }
+                if should_remove && fs::remove_file(&path).is_ok() {
+                    removed += 1;
                 }
             }
 

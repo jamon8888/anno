@@ -406,11 +406,12 @@ mod tests {
 
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.join("test_ner.json");
-        let mut file = File::create(&file_path).unwrap();
-        file.write_all(json_content.as_bytes()).unwrap();
-        file.flush().unwrap();
+        let mut file = File::create(&file_path).expect("should create test file");
+        file.write_all(json_content.as_bytes())
+            .expect("should write test file");
+        file.flush().expect("should flush test file");
 
-        let result = load_json_ner_dataset(&file_path).unwrap();
+        let result = load_json_ner_dataset(&file_path).expect("should load test dataset");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].0, "John Smith works at Acme Corp.");
         assert_eq!(result[0].1.len(), 2);
@@ -430,7 +431,7 @@ mod tests {
         file.write_all(jsonl_content.as_bytes()).unwrap();
         file.flush().unwrap();
 
-        let result = load_json_ner_dataset(&file_path).unwrap();
+        let result = load_json_ner_dataset(&file_path).expect("should load test dataset");
         assert_eq!(result.len(), 2);
 
         std::fs::remove_file(&file_path).ok();
@@ -471,9 +472,10 @@ mod tests {
         let json_content = r#"[{"text": "Test", "entities": []}]"#;
         let temp_dir = std::env::temp_dir();
         let file_path = temp_dir.join("test_auto.json");
-        let mut file = File::create(&file_path).unwrap();
-        file.write_all(json_content.as_bytes()).unwrap();
-        file.flush().unwrap();
+        let mut file = File::create(&file_path).expect("should create test file");
+        file.write_all(json_content.as_bytes())
+            .expect("should write test file");
+        file.flush().expect("should flush test file");
 
         let result = load_ner_dataset(&file_path);
         assert!(result.is_ok());

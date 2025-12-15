@@ -912,8 +912,8 @@ impl Track {
             return None;
         }
 
-        let min_pos = *positions.iter().min().unwrap();
-        let max_pos = *positions.iter().max().unwrap();
+        let min_pos = *positions.iter().min().expect("positions non-empty");
+        let max_pos = *positions.iter().max().expect("positions non-empty");
         Some(max_pos.saturating_sub(min_pos))
     }
 
@@ -1611,7 +1611,6 @@ impl GroundedDocument {
     }
 
     /// Get tracks that are linked to an identity.
-    #[must_use]
     pub fn linked_tracks(&self) -> impl Iterator<Item = &Track> {
         self.tracks.values().filter(|t| t.identity_id.is_some())
     }
@@ -3968,7 +3967,7 @@ mod proptests {
             let a = Location::text(start1, end1);
             let b = Location::text(start2, start2 + len2);
 
-            let iou = a.iou(&b).unwrap();
+            let iou = a.iou(&b).expect("bbox iou should be defined");
             prop_assert!(
                 iou.abs() < 1e-6,
                 "Non-overlapping IoU must be 0, got {}",
@@ -3999,7 +3998,11 @@ mod proptests {
 
             // Bounded
             if let Some(iou) = iou_ab {
-                prop_assert!(iou >= 0.0 && iou <= 1.0, "BBox IoU out of bounds: {}", iou);
+                prop_assert!(
+                    (0.0..=1.0).contains(&iou),
+                    "BBox IoU out of bounds: {}",
+                    iou
+                );
             }
         }
     }

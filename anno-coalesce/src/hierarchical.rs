@@ -484,7 +484,7 @@ mod tests {
         let clusters = cluster_entities(&sims, Linkage::Average);
 
         // Should find 2 clusters based on elbow
-        assert!(clusters.len() >= 1 && clusters.len() <= 3);
+        assert!(!clusters.is_empty() && clusters.len() <= 3);
     }
 
     #[test]
@@ -581,7 +581,7 @@ mod proptests {
             let clusters = dendrogram.cut_to_k_clusters(k);
 
             // Clusters should be bounded: at least 1, at most n
-            prop_assert!(clusters.len() >= 1, "Should have at least 1 cluster");
+            prop_assert!(!clusters.is_empty(), "Should have at least 1 cluster");
             prop_assert!(clusters.len() <= n, "Should have at most n clusters");
             // And close to k (within 2 due to numerical issues)
             prop_assert!((clusters.len() as i32 - k as i32).abs() <= 2,

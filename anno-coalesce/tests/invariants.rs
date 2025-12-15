@@ -271,7 +271,7 @@ mod proptests {
         #[test]
         fn string_sim_bounded(a in ".*", b in ".*") {
             let sim = string_similarity(&a, &b);
-            prop_assert!(sim >= 0.0 && sim <= 1.0,
+            prop_assert!((0.0..=1.0).contains(&sim),
                 "Bounds: {}", sim);
         }
 
@@ -316,7 +316,7 @@ mod proptests {
             }).collect();
 
             let sim = embedding_similarity(&emb1, &emb2);
-            prop_assert!(sim >= 0.0 && sim <= 1.0,
+            prop_assert!((0.0..=1.0).contains(&sim),
                 "Embedding bounds: {}", sim);
         }
 
@@ -329,7 +329,7 @@ mod proptests {
             let resolver = Resolver::new().with_threshold(0.7);
             let mut corpus = Corpus::new();
 
-            let mut doc = GroundedDocument::new("test_doc", &format!("{} {}", name1, name2));
+            let mut doc = GroundedDocument::new("test_doc", format!("{} {}", name1, name2));
             doc.add_track(create_track(1, &name1, "PERSON"));
             doc.add_track(create_track(2, &name2, "PERSON"));
             corpus.add_document(doc);
@@ -337,7 +337,7 @@ mod proptests {
             let ids = resolver.resolve_inter_doc_coref(&mut corpus, None, None);
 
             // Should produce 1 or 2 identities depending on similarity
-            prop_assert!(ids.len() >= 1 && ids.len() <= 2,
+            prop_assert!(!ids.is_empty() && ids.len() <= 2,
                 "Should produce 1-2 identities, got {}", ids.len());
         }
 

@@ -1181,12 +1181,12 @@ mod tests {
     fn test_press_release() {
         let text = r#"
             PRESS RELEASE - January 15, 2024
-            
+
             Mr. John Smith, CEO of Acme Corporation, announced today that the company
             will invest $50 million in their San Francisco headquarters.
-            
+
             Contact: press@acme.com or call (555) 123-4567
-            
+
             The expansion is expected to increase revenue by 25%.
         "#;
 
@@ -1331,7 +1331,7 @@ mod tests {
 
         let e = ner.extract_entities(&base_text, None).unwrap();
         // Should handle large sets without panicking
-        assert!(e.len() > 0);
+        assert!(!e.is_empty());
         assert!(e.len() <= 1000); // Should resolve overlaps
     }
 
@@ -1363,14 +1363,14 @@ mod tests {
             "layer8", "layer9",
         ];
 
-        for i in 0..10 {
+        for (i, &name) in layer_names.iter().enumerate() {
             let entities = vec![mock_entity(
                 "test",
                 0,
                 EntityType::Person,
                 0.5 + (i as f64 / 20.0),
             )];
-            builder = builder.layer(mock_model(layer_names[i], entities));
+            builder = builder.layer(mock_model(name, entities));
         }
 
         let ner = builder.strategy(ConflictStrategy::Priority).build();
@@ -1388,14 +1388,14 @@ mod tests {
         let layer_names = ["layer0", "layer1", "layer2", "layer3", "layer4"];
 
         // Create 5 layers, each with overlapping entities
-        for i in 0..5 {
+        for (i, &name) in layer_names.iter().enumerate() {
             let entities = vec![mock_entity(
                 "New York",
                 0,
                 EntityType::Location,
                 0.5 + (i as f64 / 10.0),
             )];
-            builder = builder.layer(mock_model(layer_names[i], entities));
+            builder = builder.layer(mock_model(name, entities));
         }
 
         let ner = builder.strategy(ConflictStrategy::Union).build();

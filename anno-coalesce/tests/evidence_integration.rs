@@ -292,8 +292,10 @@ fn test_streaming_resolver_basic() {
 
 #[test]
 fn test_streaming_type_mismatch() {
-    let mut config = StreamingConfig::default();
-    config.require_type_match = true;
+    let config = StreamingConfig {
+        require_type_match: true,
+        ..Default::default()
+    };
     let mut resolver = StreamingResolver::new(config);
 
     // Add entities with same text but different types
@@ -313,7 +315,7 @@ fn test_streaming_type_mismatch() {
 
     // Depends on type normalization, but should respect types
     assert!(
-        clusters.len() >= 1,
+        !clusters.is_empty(),
         "Type-aware clustering should handle different types"
     );
 }
@@ -456,7 +458,7 @@ mod proptests {
     use proptest::prelude::*;
 
     fn arb_confidence() -> impl Strategy<Value = f32> {
-        (0.0f32..=1.0f32)
+        0.0f32..=1.0f32
     }
 
     proptest! {
@@ -476,8 +478,7 @@ mod proptests {
             }
 
             let result = evidence.mediate(&MediationStrategy::Average);
-            prop_assert!(result >= 0.0, "Confidence must be >= 0.0");
-            prop_assert!(result <= 1.0, "Confidence must be <= 1.0");
+            prop_assert!((0.0..=1.0).contains(&result), "Confidence must be in [0, 1]");
         }
 
         #[test]

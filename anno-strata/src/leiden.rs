@@ -5,6 +5,12 @@ use petgraph::graph::{Graph, NodeIndex};
 use petgraph::Undirected;
 use std::collections::HashMap;
 
+/// Type alias for the mapping from node ID to petgraph NodeIndex.
+type NodeIdToIndex = HashMap<String, NodeIndex>;
+
+/// Type alias for the result of graph conversion: (graph, node_id_map).
+type PetGraphBuild = (Graph<String, f32, Undirected>, NodeIdToIndex);
+
 /// Leiden algorithm implementation for community detection.
 ///
 /// The Leiden algorithm is an improvement over the Louvain algorithm,
@@ -257,9 +263,7 @@ fn refine_communities(
 /// Convert a GraphDocument to a petgraph::Graph.
 ///
 /// Returns the graph and a mapping from node ID (String) to NodeIndex.
-fn graph_to_petgraph(
-    graph_doc: &GraphDocument,
-) -> Result<(Graph<String, f32, Undirected>, HashMap<String, NodeIndex>), String> {
+fn graph_to_petgraph(graph_doc: &GraphDocument) -> Result<PetGraphBuild, String> {
     let mut petgraph = Graph::<String, f32, Undirected>::new_undirected();
     let mut node_id_map = HashMap::new();
 

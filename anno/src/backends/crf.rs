@@ -568,7 +568,7 @@ impl CrfNER {
             // Compress repeated chars
             .chars()
             .fold(String::new(), |mut acc, c| {
-                if acc.chars().last() != Some(c) {
+                if !acc.ends_with(&c.to_string()) {
                     acc.push(c);
                 }
                 acc
@@ -610,7 +610,7 @@ impl CrfNER {
         ));
         features.push(format!(
             "word.istitle={}",
-            word.chars().next().map_or(false, |c| c.is_uppercase())
+            word.chars().next().is_some_and(|c| c.is_uppercase())
                 && word.chars().skip(1).all(|c| c.is_lowercase())
         ));
         features.push(format!(
@@ -639,7 +639,7 @@ impl CrfNER {
             features.push(format!("-1:word.lower={}", prev_word.to_lowercase()));
             features.push(format!(
                 "-1:word.istitle={}",
-                prev_word.chars().next().map_or(false, |c| c.is_uppercase())
+                prev_word.chars().next().is_some_and(|c| c.is_uppercase())
                     && prev_word.chars().skip(1).all(|c| c.is_lowercase())
             ));
             features.push(format!(
@@ -657,7 +657,7 @@ impl CrfNER {
             features.push(format!("+1:word.lower={}", next_word.to_lowercase()));
             features.push(format!(
                 "+1:word.istitle={}",
-                next_word.chars().next().map_or(false, |c| c.is_uppercase())
+                next_word.chars().next().is_some_and(|c| c.is_uppercase())
                     && next_word.chars().skip(1).all(|c| c.is_lowercase())
             ));
             features.push(format!(
@@ -975,8 +975,8 @@ mod tests {
             .extract_entities("John Smith works at Google in California.", None)
             .unwrap();
 
-        // Should find some entities (quality depends on weights)
-        assert!(!entities.is_empty() || true); // CRF with heuristic weights may not find all
+        // Heuristic CRF weights may yield empty output; this test only asserts no panic / error.
+        let _ = entities;
     }
 
     #[test]
@@ -1049,11 +1049,11 @@ mod tests {
 
         // Check that weights exist for common stop words
         assert!(
-            ner.weights.get("w=works:O").is_some(),
+            ner.weights.contains_key("w=works:O"),
             "Missing weight for w=works:O"
         );
         assert!(
-            ner.weights.get("w=works:I-PER").is_some(),
+            ner.weights.contains_key("w=works:I-PER"),
             "Missing weight for w=works:I-PER"
         );
 

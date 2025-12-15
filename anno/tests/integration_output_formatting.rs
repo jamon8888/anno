@@ -2,7 +2,7 @@
 //!
 //! Tests the hierarchical verbose output system and various output formats.
 
-use anno::cli::output::{color, confidence_bar, print_signals, type_color};
+use anno::cli::output::{confidence_bar, print_signals, type_color};
 use anno_core::{GroundedDocument, Location, Signal, Track};
 
 /// Test: Level 0 output (default) - entities grouped by type
@@ -42,14 +42,14 @@ fn test_output_level_1() {
     let text = "Barack Obama was president. He served from 2009 to 2017.";
     let mut doc = GroundedDocument::new("test", text);
 
-    let sig1 = doc.add_signal(Signal::new(
+    let _sig1 = doc.add_signal(Signal::new(
         0,
         Location::text(0, 12),
         "Barack Obama",
         "PER",
         0.95,
     ));
-    let sig2 = doc.add_signal(Signal::new(1, Location::text(38, 40), "He", "PER", 0.75)); // Low confidence
+    let _sig2 = doc.add_signal(Signal::new(1, Location::text(38, 40), "He", "PER", 0.75)); // Low confidence
 
     // Level 1 should show confidence for low/high confidence entities
     print_signals(&doc, text, 1);

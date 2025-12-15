@@ -213,8 +213,7 @@ impl HmmNER {
                 let to = &states[j];
 
                 // BIO constraints
-                if to.starts_with("I-") {
-                    let entity_type = &to[2..];
+                if let Some(entity_type) = to.strip_prefix("I-") {
                     let valid_b = format!("B-{}", entity_type);
                     let valid_i = format!("I-{}", entity_type);
 
@@ -568,7 +567,7 @@ impl HmmNER {
 
         // Heuristic emissions based on word features
         let state = &self.states[state_idx];
-        let is_capitalized = word.chars().next().map_or(false, |c| c.is_uppercase());
+        let is_capitalized = word.chars().next().is_some_and(|c| c.is_uppercase());
         let is_all_caps =
             word.chars().all(|c| c.is_uppercase() || !c.is_alphabetic()) && word.len() > 1;
         let has_digit = word.chars().any(|c| c.is_ascii_digit());
@@ -578,7 +577,7 @@ impl HmmNER {
         let org_suffixes = [
             "Inc", "Corp", "Ltd", "LLC", "Co", "Company", "Inc.", "Corp.", "Ltd.",
         ];
-        let is_org_suffix = org_suffixes.iter().any(|s| word == *s);
+        let is_org_suffix = org_suffixes.contains(&word);
 
         if state == "O" {
             // Non-capitalized words and digits are likely O
@@ -651,8 +650,8 @@ impl HmmNER {
         let mut backptr = vec![vec![0usize; m]; n];
 
         // Initialize first position
-        for j in 0..m {
-            dp[0][j] = log(self.initial[j]) + log(self.emission_prob(j, words[0]));
+        for (j, cell) in dp[0].iter_mut().enumerate().take(m) {
+            *cell = log(self.initial[j]) + log(self.emission_prob(j, words[0]));
         }
 
         // Forward pass
@@ -675,9 +674,9 @@ impl HmmNER {
         // Find best final state
         let mut best_state = 0;
         let mut best_score = f64::NEG_INFINITY;
-        for j in 0..m {
-            if dp[n - 1][j] > best_score {
-                best_score = dp[n - 1][j];
+        for (j, &score) in dp[n - 1].iter().enumerate() {
+            if score > best_score {
+                best_score = score;
                 best_state = j;
             }
         }
@@ -726,7 +725,11 @@ impl HmmNER {
                 }
 
                 // Start new entity
-                let entity_type = match &label[2..] {
+                let entity_type_str = label
+                    .strip_prefix("B-")
+                    .or_else(|| label.strip_prefix("I-"))
+                    .expect("label should start with B- or I-");
+                let entity_type = match entity_type_str {
                     "PER" => EntityType::Person,
                     "ORG" => EntityType::Organization,
                     "LOC" => EntityType::Location,
@@ -868,12 +871,10 @@ impl HmmNER {
             self.initial[i] = (count as f64 + self.config.smoothing) / total_initial;
         }
 
-        for i in 0..n {
-            let total: f64 =
-                trans_counts[i].iter().sum::<usize>() as f64 + self.config.smoothing * n as f64;
-            for j in 0..n {
-                self.transitions[i][j] =
-                    (trans_counts[i][j] as f64 + self.config.smoothing) / total;
+        for (i, row) in trans_counts.iter().enumerate().take(n) {
+            let total: f64 = row.iter().sum::<usize>() as f64 + self.config.smoothing * n as f64;
+            for (j, &count) in row.iter().enumerate().take(n) {
+                self.transitions[i][j] = (count as f64 + self.config.smoothing) / total;
             }
         }
 

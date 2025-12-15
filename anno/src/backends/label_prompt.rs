@@ -489,13 +489,10 @@ impl HierarchicalTypeSystem {
             return Some(current);
         }
 
-        for ancestor in self.ancestors(type_b) {
-            if ancestors_a.contains(&ancestor) {
-                return Some(ancestor);
-            }
-        }
-
-        None
+        self.ancestors(type_b)
+            .into_iter()
+            .find(|ancestor| ancestors_a.contains(ancestor))
+            .map(|s| s.to_string())
     }
 
     /// Get all root types (types with no parent).

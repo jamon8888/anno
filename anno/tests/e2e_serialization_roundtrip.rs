@@ -4,7 +4,6 @@
 //! preserving all information.
 
 use anno_core::{Corpus, GroundedDocument, Identity, Location, Signal, Track};
-use serde_json;
 
 /// E2E: GroundedDocument JSON round-trip
 #[test]
@@ -23,7 +22,7 @@ fn e2e_grounded_document_json_roundtrip() {
         0.95,
     ));
     let sig2 = doc.add_signal(Signal::new(1, Location::text(38, 41), "She", "PER", 0.85));
-    let sig3 = doc.add_signal(Signal::new(
+    let _sig3 = doc.add_signal(Signal::new(
         2,
         Location::text(17, 29),
         "Nobel Prize",
@@ -190,7 +189,7 @@ fn e2e_identity_kb_json_roundtrip() {
 /// E2E: Large document serialization performance
 #[test]
 fn e2e_large_document_serialization() {
-    let mut doc = GroundedDocument::new("large_doc", &"Test text. ".repeat(1000));
+    let mut doc = GroundedDocument::new("large_doc", "Test text. ".repeat(1000));
 
     // Add many signals
     for i in 0..100 {

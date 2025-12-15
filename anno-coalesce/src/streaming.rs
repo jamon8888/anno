@@ -380,7 +380,12 @@ impl EntityCluster {
         if times.is_empty() {
             None
         } else {
-            Some((times[0], *times.last().unwrap()))
+            Some((
+                times[0],
+                *times
+                    .last()
+                    .expect("times should not be empty after empty check"),
+            ))
         }
     }
 }
@@ -1150,7 +1155,7 @@ mod tests {
         for cluster in clusters {
             if cluster.mentions.len() > 1 {
                 let doc_ids = cluster.document_ids();
-                assert!(doc_ids.len() >= 1);
+                assert!(!doc_ids.is_empty());
             }
         }
     }
@@ -1184,7 +1189,7 @@ mod tests {
             // Each identity should have a canonical name
             assert!(!identity.canonical_name.is_empty());
             // Confidence should be valid
-            assert!(identity.confidence >= 0.0 && identity.confidence <= 1.0);
+            assert!((0.0..=1.0).contains(&identity.confidence));
         }
     }
 
@@ -1312,7 +1317,7 @@ mod proptests {
                 "Identical entities should form one cluster, got {}",
                 resolver.num_clusters());
 
-            let cluster = resolver.clusters().into_iter().next().unwrap();
+            let cluster = resolver.clusters().into_iter().next().expect("should have at least one cluster");
             prop_assert_eq!(cluster.mentions.len(), count,
                 "Cluster should have {} mentions, got {}",
                 count, cluster.mentions.len());
@@ -1346,7 +1351,7 @@ mod proptests {
             }
 
             for cluster in resolver.clusters() {
-                prop_assert!(cluster.confidence >= 0.0 && cluster.confidence <= 1.0,
+                prop_assert!((0.0..=1.0).contains(&cluster.confidence),
                     "Confidence {} out of bounds", cluster.confidence);
             }
         }
@@ -1377,7 +1382,7 @@ mod proptests {
             }).collect();
 
             let sim = cosine_similarity(&a, &b);
-            prop_assert!(sim >= -0.001 && sim <= 1.001,
+            prop_assert!((-0.001..=1.001).contains(&sim),
                 "Cosine similarity {} out of bounds", sim);
         }
     }

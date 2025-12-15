@@ -7,7 +7,7 @@
 
 #[cfg(feature = "eval")]
 mod dataset_sync_tests {
-    use anno::eval::loader::DatasetId;
+    use anno::eval::dataset_registry::DatasetId;
     use std::collections::HashSet;
     use std::fs;
     use std::str::FromStr;
@@ -79,11 +79,18 @@ mod dataset_sync_tests {
 
             // Entity types should be defined
             let types = id.entity_types();
-            // Note: Some datasets (e.g., constructed languages) may have generic types
+            // Note: Not every dataset is a “label inventory” dataset.
+            // We only require `entity_types` when the dataset is used with a fixed label set in eval.
+            let tasks = id.tasks();
+            let expects_label_set = tasks.contains(&"ner")
+                || tasks.contains(&"pos")
+                || tasks.contains(&"sentiment")
+                || tasks.contains(&"text_classification");
             assert!(
-                !types.is_empty() || id.is_constructed_language(),
-                "{:?} has no entity types defined",
-                id
+                !types.is_empty() || id.is_constructed() || !expects_label_set,
+                "{:?} has no entity types defined (tasks: {:?})",
+                id,
+                tasks
             );
         }
     }
@@ -108,20 +115,16 @@ mod dataset_sync_tests {
             "all_indigenous() is empty"
         );
         assert!(
-            !DatasetId::all_fiction_fantasy().is_empty(),
-            "all_fiction_fantasy() is empty"
+            !DatasetId::all_constructed().is_empty(),
+            "all_constructed() is empty"
         );
         assert!(
-            !DatasetId::all_code_switching().is_empty(),
-            "all_code_switching() is empty"
+            !DatasetId::all_low_resource().is_empty(),
+            "all_low_resource() is empty"
         );
         assert!(
-            !DatasetId::all_african_languages().is_empty(),
-            "all_african_languages() is empty"
-        );
-        assert!(
-            !DatasetId::all_constructed_languages().is_empty(),
-            "all_constructed_languages() is empty"
+            !DatasetId::all_dialogue().is_empty(),
+            "all_dialogue() is empty"
         );
     }
 
@@ -130,26 +133,26 @@ mod dataset_sync_tests {
         let all: HashSet<_> = DatasetId::all().iter().collect();
 
         // Check that all group members are in all()
-        for id in DatasetId::all_code_switching() {
+        for id in DatasetId::all_low_resource() {
             assert!(
                 all.contains(id),
-                "{:?} in all_code_switching() but not in all()",
+                "{:?} in all_low_resource() but not in all()",
                 id
             );
         }
 
-        for id in DatasetId::all_african_languages() {
+        for id in DatasetId::all_constructed() {
             assert!(
                 all.contains(id),
-                "{:?} in all_african_languages() but not in all()",
+                "{:?} in all_constructed() but not in all()",
                 id
             );
         }
 
-        for id in DatasetId::all_constructed_languages() {
+        for id in DatasetId::all_dialogue() {
             assert!(
                 all.contains(id),
-                "{:?} in all_constructed_languages() but not in all()",
+                "{:?} in all_dialogue() but not in all()",
                 id
             );
         }
