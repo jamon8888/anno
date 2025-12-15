@@ -56,6 +56,9 @@ test_profiling*
 # Archived documentation (progress docs, old status reports)
 docs/archive/
 
+# Archive directory (skeleton code, old implementations)
+archive/
+
 # Generated evaluation reports (temporary, regenerated on demand)
 *_report.md
 *-report.md

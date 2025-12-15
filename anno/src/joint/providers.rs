@@ -316,7 +316,7 @@ impl NerScoreProvider for ModelNerProvider {
             }
             Err(_) => {
                 // Fallback to uniform distribution
-                let uniform = (-1.0 * self.entity_types.len() as f64).ln();
+                let uniform = (-(self.entity_types.len() as f64)).ln();
                 self.entity_types
                     .iter()
                     .map(|et| (et.clone(), uniform))
