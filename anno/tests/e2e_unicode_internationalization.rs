@@ -96,7 +96,7 @@ fn e2e_mixed_scripts() {
         "LOC",
         0.95,
     ));
-    let sig6 = doc.add_signal(Signal::new(
+    let _sig6 = doc.add_signal(Signal::new(
         5,
         Location::text(70, 76),
         "Россия",
@@ -128,7 +128,7 @@ fn e2e_emoji_entities() {
         "LOC",
         0.95,
     ));
-    let sig3 = doc.add_signal(Signal::new(2, Location::text(35, 37), "🇺🇸", "FLAG", 0.9));
+    let _sig3 = doc.add_signal(Signal::new(2, Location::text(35, 37), "🇺🇸", "FLAG", 0.9));
 
     assert_eq!(doc.signals().len(), 3);
 

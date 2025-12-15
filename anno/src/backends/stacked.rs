@@ -1697,7 +1697,7 @@ mod tests {
                     let found = e2.iter().any(|e| {
                         // Exact match
                         (e.text == entity.text && e.start == entity.start && e.end == entity.end)
-                            // Same span, text is close (normalized)
+                            // Same span, text is close (normalized) or exact
                             || (e.start == entity.start
                                 && e.end == entity.end
                                 && (e.text.trim().to_lowercase() == entity.text.trim().to_lowercase()
