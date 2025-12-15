@@ -1464,28 +1464,18 @@ mod tests {
 
     #[test]
     fn test_coref_doc_stats_scale_classification() {
-        let stats = CorefDocStats {
-            doc_length: 1000,
-            ..Default::default()
-        };
+        let mut stats = CorefDocStats::default();
+
+        stats.doc_length = 1000;
         assert_eq!(stats.scale_classification(), DocumentScale::Short);
 
-        let stats = CorefDocStats {
-            doc_length: 5000,
-            ..Default::default()
-        };
+        stats.doc_length = 5000;
         assert_eq!(stats.scale_classification(), DocumentScale::Medium);
 
-        let stats = CorefDocStats {
-            doc_length: 30000,
-            ..Default::default()
-        };
+        stats.doc_length = 30000;
         assert_eq!(stats.scale_classification(), DocumentScale::Long);
 
-        let stats = CorefDocStats {
-            doc_length: 100000,
-            ..Default::default()
-        };
+        stats.doc_length = 100000;
         assert_eq!(stats.scale_classification(), DocumentScale::BookScale);
     }
 

@@ -1696,13 +1696,13 @@ mod tests {
                 for entity in &e1 {
                     let found = e2.iter().any(|e| {
                         // Exact match
-                        (e.text == entity.text && e.start == entity.start && e.end == entity.end) ||
+                        (e.text == entity.text && e.start == entity.start && e.end == entity.end)
                         // Same span, text is close (normalized)
-                        (e.start == entity.start && e.end == entity.end &&
-                         e.text.trim().to_lowercase() == entity.text.trim().to_lowercase())
+                        || (e.start == entity.start && e.end == entity.end &&
+                            e.text.trim().to_lowercase() == entity.text.trim().to_lowercase())
                         // Same entity type and overlapping span (conflict resolution may have modified)
-                        (e.entity_type == entity.entity_type &&
-                         e.start <= entity.start && e.end >= entity.end)
+                        || (e.entity_type == entity.entity_type &&
+                            e.start <= entity.start && e.end >= entity.end)
                     });
                     // Note: Some entities may be filtered out by conflict resolution in ner2
                     // This is expected behavior, so we're lenient here
