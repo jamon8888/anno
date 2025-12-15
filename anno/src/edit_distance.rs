@@ -1136,10 +1136,10 @@ mod proptests {
         #[test]
         fn prop_question_mark_matches_one(c in "[a-zA-Z]") {
             let pattern = "?";
-            let text = c;
+            let text = c.to_string();
             prop_assert_eq!(
-                edit_distance_wildcards(pattern, text), 0,
-                "? should match single char '{}'", text
+                edit_distance_wildcards(pattern, &text), 0,
+                "? should match single char '{}'", c
             );
         }
 

@@ -1144,7 +1144,7 @@ fn run_check(issues_only: bool, dataset: Option<&str>, _fix: bool) -> Result<(),
         let entity_types = registry_id.entity_types();
         if registry_id.supports_ner() && entity_types.is_empty() {
             warnings.push(format!("{}: Missing entity_types", registry_id.name()));
-        } else if registry_id.supports_ner() && entity_types.as_slice() == ["ENTITY"] {
+        } else if registry_id.supports_ner() && entity_types == ["ENTITY"] {
             warnings.push(format!(
                 "{}: Using generic entity type 'ENTITY' (should specify actual types)",
                 registry_id.name()
