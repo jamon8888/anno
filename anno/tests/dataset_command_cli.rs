@@ -33,7 +33,9 @@ fn anno_cli_cmd() -> Command {
     }
 
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let workspace_root = manifest_dir.parent().unwrap();
+    let workspace_root = manifest_dir
+        .parent()
+        .expect("CARGO_MANIFEST_DIR should have a parent");
 
     // Try release binary first (fastest)
     let release_bin = workspace_root.join("target/release/anno");
