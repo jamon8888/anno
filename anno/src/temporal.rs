@@ -691,8 +691,7 @@ impl EntityTimeline {
     pub fn current(&self) -> Option<&Entity> {
         self.versions
             .iter()
-            .filter(|v| v.entity.valid_until.is_none())
-            .next_back()
+            .rfind(|v| v.entity.valid_until.is_none())
             .map(|v| &v.entity)
     }
 
