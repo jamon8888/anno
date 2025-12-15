@@ -1,7 +1,8 @@
 #!/bin/bash
 # Pre-commit hook for anno project
-# FAST checks only (~5-10 seconds)
+# FAST checks only (~2-3 seconds)
 # Goal: Catch obvious issues BEFORE commit, not after
+# Note: Full compilation/clippy checks are in pre-push hook
 #
 # Install: just setup-hooks
 # Or: cp scripts/hooks/* .git/hooks/ && chmod +x .git/hooks/*
