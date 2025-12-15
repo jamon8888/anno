@@ -1969,13 +1969,7 @@ impl MentionRankingCoref {
             let max_antecedents = self.config.max_antecedents_for_type(mention.mention_type);
 
             // Score against previous mentions with type-specific limit
-            #[allow(clippy::explicit_counter_loop)]
-            let mut antecedent_count = 0;
-            for j in (0..i).rev() {
-                if antecedent_count >= max_antecedents {
-                    break;
-                }
-
+            for j in (0..i).rev().take(max_antecedents) {
                 let antecedent = &mentions[j];
 
                 // Also check character distance as a fallback
@@ -1983,8 +1977,6 @@ impl MentionRankingCoref {
                 if distance > self.config.max_distance {
                     break;
                 }
-
-                antecedent_count += 1;
 
                 let score = self.score_pair(mention, antecedent, distance, Some(text));
                 if score > best_score {
@@ -2041,20 +2033,14 @@ impl MentionRankingCoref {
 
         for (i, mention) in mentions.iter().enumerate() {
             let max_antecedents = self.config.max_antecedents_for_type(mention.mention_type);
-            let mut antecedent_count = 0;
 
-            for j in (0..i).rev() {
-                if antecedent_count >= max_antecedents {
-                    break;
-                }
-
+            for j in (0..i).rev().take(max_antecedents) {
                 let antecedent = &mentions[j];
                 let distance = mention.start.saturating_sub(antecedent.end);
                 if distance > self.config.max_distance {
                     break;
                 }
 
-                antecedent_count += 1;
                 let score = self.score_pair(mention, antecedent, distance, Some(text));
 
                 // Track non-coreference constraints

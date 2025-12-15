@@ -9940,6 +9940,9 @@ pub fn generate_python_config() -> String {
     py
 }
 
+// NOTE: `is_loadable()` and `all_loadable()` deliberately live in `eval::loader`.
+// The registry is metadata-only and should not depend on loader implementation details.
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -10977,6 +10980,7 @@ mod tests {
 ///
 /// Note: Zero-shot models like GLiNER typically achieve 5-15% lower F1
 /// than fine-tuned models but offer flexibility across entity types.
+#[allow(clippy::items_after_test_module)]
 impl DatasetId {
     /// Get expected baseline F1 score (as percentage, e.g., 93.0 for 93%).
     /// These are rough guidelines from published benchmarks.
@@ -11143,7 +11147,4 @@ impl DatasetId {
         ];
         EXT_OK.iter().any(|ext| url.ends_with(ext))
     }
-
-    // NOTE: `is_loadable()` and `all_loadable()` deliberately live in `eval::loader`.
-    // The registry is metadata-only and should not depend on loader implementation details.
 }
