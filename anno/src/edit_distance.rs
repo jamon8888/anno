@@ -1138,7 +1138,7 @@ mod proptests {
             let pattern = "?";
             let text = c;
             prop_assert_eq!(
-                edit_distance_wildcards(pattern, &text), 0,
+                edit_distance_wildcards(pattern, text), 0,
                 "? should match single char '{}'", text
             );
         }

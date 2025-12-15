@@ -132,8 +132,9 @@ impl SimilarityMetric {
     }
 
     /// Parse from string (for CLI).
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
+    ///
+    /// Note: This is not the standard `FromStr::from_str` trait method.
+    pub fn parse_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "jaccard" | "jac" => Some(SimilarityMetric::Jaccard),
             "edit-distance" | "edit" | "levenshtein" | "lev" => {
@@ -872,22 +873,22 @@ mod tests {
     #[test]
     fn test_similarity_metric_from_str() {
         assert_eq!(
-            SimilarityMetric::from_str("jaccard"),
+            SimilarityMetric::parse_str("jaccard"),
             Some(SimilarityMetric::Jaccard)
         );
         assert_eq!(
-            SimilarityMetric::from_str("edit-distance"),
+            SimilarityMetric::parse_str("edit-distance"),
             Some(SimilarityMetric::EditDistance)
         );
         assert_eq!(
-            SimilarityMetric::from_str("lev"),
+            SimilarityMetric::parse_str("lev"),
             Some(SimilarityMetric::EditDistance)
         );
         assert_eq!(
-            SimilarityMetric::from_str("wildcard"),
+            SimilarityMetric::parse_str("wildcard"),
             Some(SimilarityMetric::EditDistanceWildcard)
         );
-        assert_eq!(SimilarityMetric::from_str("unknown"), None);
+        assert_eq!(SimilarityMetric::parse_str("unknown"), None);
     }
 
     #[test]
@@ -1018,7 +1019,7 @@ mod proptests {
         #[test]
         fn prop_metric_name_roundtrip(metric in arb_metric()) {
             let name = metric.name();
-            if let Some(recovered) = SimilarityMetric::from_str(name) {
+            if let Some(recovered) = SimilarityMetric::parse_str(name) {
                 prop_assert_eq!(metric, recovered);
             }
             // Some names might not round-trip exactly (aliases)
