@@ -32,6 +32,7 @@ fn sample_entities() -> Vec<Entity> {
     ]
 }
 
+#[allow(dead_code)]
 fn multilingual_entities() -> Vec<Entity> {
     vec![
         // Chinese

@@ -89,7 +89,7 @@ fn e2e_cli_extract_formats() {
 
     // Allow graceful failures (e.g., no entities found with default model)
     if output.status.success() {
-        let stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
+        let _stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
         // JSON output should be parseable
         if !stdout.is_empty() {
             assert!(
@@ -1139,7 +1139,7 @@ fn e2e_cli_zeroshot_custom_types() {
         .unwrap();
 
     if output.status.success() {
-        let stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
+        let _stdout = String::from_utf8(output.stdout).expect("stdout should be valid UTF-8");
         // Should find at least some of: person, drug, disease, organization
         let has_entities = stdout.contains("\"type\":");
         assert!(
