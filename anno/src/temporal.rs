@@ -682,8 +682,7 @@ impl EntityTimeline {
     pub fn value_at(&self, timestamp: &DateTime<Utc>) -> Option<&Entity> {
         self.versions
             .iter()
-            .filter(|v| v.entity.valid_at(timestamp))
-            .next_back()
+            .rfind(|v| v.entity.valid_at(timestamp))
             .map(|v| &v.entity)
     }
 

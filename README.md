@@ -15,10 +15,10 @@ Library and CLI for named entity recognition, relation extraction, and coref. Mu
 ## Installation
 
 ```bash
-cargo install anno-cli
+cargo install anno --features cli
 # or from source:
 git clone https://github.com/arclabs561/anno
-cd anno && cargo build --release
+cd anno && cargo build --release --bin anno --features cli
 ```
 
 ## Usage
@@ -136,10 +136,9 @@ Workspace crates (top-level directories):
 
 ```
 anno-core/      # Foundation: Entity, GroundedDocument
-anno/           # NER backends, evaluation
-coalesce/       # Coref (anno-coalesce)
-strata/         # Hierarchical clustering (anno-strata)
-anno-cli/       # CLI binary
+anno/           # NER backends, evaluation, CLI binary (src/bin/anno.rs)
+anno-coalesce/  # Cross-document coreference (anno-coalesce)
+anno-strata/    # Hierarchical clustering (anno-strata)
 ```
 
 Each crate is independently usable. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for details.
