@@ -5,6 +5,8 @@
 //!
 //! Run with: cargo run --example joint_training_experiment --features joint
 
+#![allow(missing_docs)]
+
 use std::collections::HashMap;
 
 /// Minimal reproduction of types needed for training experiment.

@@ -251,7 +251,7 @@ fn train(examples: &[TrainingExample], config: &TrainingConfig) -> JointWeights 
                             config.learning_rate,
                         );
                     } else {
-                        let ant = candidate.unwrap();
+                        let ant = candidate.expect("candidate.is_none() checked above");
                         let distance = mention.idx - ant.idx;
 
                         update_weight(

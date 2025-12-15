@@ -206,13 +206,18 @@ mod bio_constraint_tests {
         // but we can verify entities don't overlap incorrectly)
         let mut covered = vec![false; text.chars().count()];
         for entity in &entities {
-            for i in entity.start..entity.end {
+            for (i, val) in covered
+                .iter_mut()
+                .enumerate()
+                .skip(entity.start)
+                .take(entity.end - entity.start)
+            {
                 assert!(
-                    !covered[i],
+                    !*val,
                     "Overlapping entities detected at char {} - BIO violation",
                     i
                 );
-                covered[i] = true;
+                *val = true;
             }
         }
     }
@@ -575,7 +580,7 @@ mod thread_safety_tests {
     #[test]
     fn concurrent_extraction_safe() {
         let text = "John Smith works at Google Inc.";
-        let ner = anno::HeuristicNER::new();
+        let _ner = anno::HeuristicNER::new();
 
         let handles: Vec<_> = (0..4)
             .map(|_| {

@@ -137,7 +137,7 @@ fn discourse_text() -> impl Strategy<Value = String> {
         proptest::string::string_regex(
             "[A-Z][a-z]{2,8}( [a-z]{2,8}){0,5}\\. [A-Z][a-z]{2,8} [a-z]{2,8}\\."
         )
-        .unwrap(),
+        .expect("regex pattern should be valid"),
     ]
 }
 
@@ -457,18 +457,20 @@ proptest! {
     #[test]
     fn sentence_count_non_negative(text in discourse_text()) {
         let scope = DiscourseScope::analyze(&text);
-        prop_assert!(scope.sentence_count() >= 0);
+        // sentence_count() returns usize which is always >= 0, so this is a no-op check
+        // but we keep it for documentation purposes
+        let _count = scope.sentence_count();
     }
 
     /// Property: clause_count >= sentence_count (clauses are finer-grained).
     #[test]
-    fn clause_count_non_negative(text in discourse_text()) {
+    fn clause_count_valid(text in discourse_text()) {
         let scope = DiscourseScope::analyze(&text);
         // In general, clauses >= sentences (each sentence has at least one clause)
         // But our simple heuristic might not always detect clauses
-        // So we just check they're both non-negative
-        prop_assert!(scope.clause_count() >= 0);
-        prop_assert!(scope.sentence_count() >= 0);
+        // This test just ensures the methods don't panic
+        let _clause_count = scope.clause_count();
+        let _sentence_count = scope.sentence_count();
     }
 
     /// Property: Empty text has no sentences.

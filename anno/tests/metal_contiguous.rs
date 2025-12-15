@@ -122,6 +122,6 @@ mod structural_tests {
         // References:
         // - https://github.com/huggingface/candle/issues/2737
         // - https://github.com/huggingface/candle/issues/3138
-        assert!(true);
+        // Test passes if we reach here without panicking
     }
 }

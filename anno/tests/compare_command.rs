@@ -66,7 +66,12 @@ fn create_extraction_file(entities: &[(&str, &str, usize, usize, f64)]) -> Named
         }
     });
 
-    write!(file, "{}", serde_json::to_string(&json).unwrap()).expect("Failed to write");
+    write!(
+        file,
+        "{}",
+        serde_json::to_string(&json).expect("JSON serialization should succeed")
+    )
+    .expect("Failed to write");
     file
 }
 
