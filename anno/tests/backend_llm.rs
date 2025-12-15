@@ -123,7 +123,7 @@ fn test_bio_schema_custom_type() {
 
     let custom_type = EntityType::custom("GENE", EntityCategory::Misc);
 
-    let schema = BIOSchema::new(&[custom_type.clone()]);
+    let schema = BIOSchema::new(std::slice::from_ref(&custom_type));
     assert!(schema.entity_types.contains(&custom_type));
 }
 
