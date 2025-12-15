@@ -43,6 +43,13 @@ anno/target/
 .DS_Store
 Thumbs.db
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.py[cod]
+*$py.class
+
 # Temporary files
 *.tmp
 *.bak
