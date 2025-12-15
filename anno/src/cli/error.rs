@@ -4,16 +4,21 @@ use thiserror::Error;
 
 use super::exit_codes;
 
+/// CLI error type with structured error codes.
 #[derive(Debug, Error)]
 pub enum CliError {
+    /// Error with a message and exit code.
     #[error("{message}")]
     Message {
+        /// Exit code to return.
         code: u8,
+        /// Error message.
         message: Cow<'static, str>,
     },
 }
 
 impl CliError {
+    /// Create an error for invalid command-line arguments.
     pub fn args(message: impl Into<Cow<'static, str>>) -> Self {
         Self::Message {
             code: exit_codes::ERROR_ARGS,
@@ -21,6 +26,7 @@ impl CliError {
         }
     }
 
+    /// Create an error for missing input file.
     pub fn input_not_found(message: impl Into<Cow<'static, str>>) -> Self {
         Self::Message {
             code: exit_codes::ERROR_INPUT_NOT_FOUND,
@@ -28,6 +34,7 @@ impl CliError {
         }
     }
 
+    /// Create an error for missing model.
     pub fn model_not_found(message: impl Into<Cow<'static, str>>) -> Self {
         Self::Message {
             code: exit_codes::ERROR_MODEL_NOT_FOUND,
@@ -35,6 +42,7 @@ impl CliError {
         }
     }
 
+    /// Create an error for operation timeout.
     pub fn timeout(message: impl Into<Cow<'static, str>>) -> Self {
         Self::Message {
             code: exit_codes::ERROR_TIMEOUT,
@@ -42,6 +50,7 @@ impl CliError {
         }
     }
 
+    /// Create an error for out-of-memory condition.
     pub fn oom(message: impl Into<Cow<'static, str>>) -> Self {
         Self::Message {
             code: exit_codes::ERROR_OOM,
@@ -49,6 +58,7 @@ impl CliError {
         }
     }
 
+    /// Get the exit code for this error.
     pub fn exit_code(&self) -> u8 {
         match self {
             Self::Message { code, .. } => *code,

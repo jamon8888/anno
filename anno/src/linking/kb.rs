@@ -132,10 +132,7 @@ impl KnowledgeBase {
     /// Is this KB still actively maintained?
     #[must_use]
     pub fn is_active(&self) -> bool {
-        match self {
-            Self::Freebase | Self::OpenCyc => false,
-            _ => true,
-        }
+        !matches!(self, Self::Freebase | Self::OpenCyc)
     }
 
     /// Get the owl:sameAs predicate for cross-KB linking.

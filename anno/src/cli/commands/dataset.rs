@@ -1109,7 +1109,7 @@ fn run_check(issues_only: bool, dataset: Option<&str>, _fix: bool) -> Result<(),
             .map(|d| vec![d])
             .ok_or_else(|| format!("Dataset '{}' not found in registry", ds_name))?
     } else {
-        RegistryDatasetId::all().iter().copied().collect()
+        RegistryDatasetId::all().to_vec()
     };
 
     for registry_id in &datasets_to_check {
@@ -1144,7 +1144,7 @@ fn run_check(issues_only: bool, dataset: Option<&str>, _fix: bool) -> Result<(),
         let entity_types = registry_id.entity_types();
         if registry_id.supports_ner() && entity_types.is_empty() {
             warnings.push(format!("{}: Missing entity_types", registry_id.name()));
-        } else if registry_id.supports_ner() && entity_types == &["ENTITY"] {
+        } else if registry_id.supports_ner() && *entity_types == ["ENTITY"] {
             warnings.push(format!(
                 "{}: Using generic entity type 'ENTITY' (should specify actual types)",
                 registry_id.name()
