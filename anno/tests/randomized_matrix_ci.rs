@@ -1148,7 +1148,9 @@ fn test_randomized_matrix_sample() {
     );
 
     // Error legend
-    eprintln!("\nLegend: ✓=success D=dataset F=feature M=model A=auth T=type !=runtime ?=unknown");
+    eprintln!(
+        "\nLegend: PASS=success D=dataset F=feature M=model A=auth T=type !=runtime ?=unknown"
+    );
 
     // Assertions
     let unexpected_errors: usize = error_counts
