@@ -55,8 +55,24 @@ pub enum Task {
     EventExtraction,
     /// Text Classification: classify entire text or spans
     TextClassification,
+    /// Sentiment analysis (a specialization of text classification)
+    SentimentAnalysis,
+    /// Part-of-speech tagging
+    PosTagging,
+    /// Machine translation
+    MachineTranslation,
+    /// Language modeling
+    LanguageModeling,
     /// Hierarchical Structure Extraction: extract nested structures
     HierarchicalExtraction,
+    /// Discourse relations (e.g., PDTB-style)
+    DiscourseRelations,
+    /// Discourse coherence / coherence modeling
+    DiscourseCoherence,
+    /// Discourse segmentation
+    DiscourseSegmentation,
+    /// Speech act classification (dialogue acts)
+    SpeechActClassification,
 }
 
 impl Task {
@@ -72,7 +88,15 @@ impl Task {
             Task::DiscontinuousNER,
             Task::EventExtraction,
             Task::TextClassification,
+            Task::SentimentAnalysis,
+            Task::PosTagging,
+            Task::MachineTranslation,
+            Task::LanguageModeling,
             Task::HierarchicalExtraction,
+            Task::DiscourseRelations,
+            Task::DiscourseCoherence,
+            Task::DiscourseSegmentation,
+            Task::SpeechActClassification,
         ]
     }
 
@@ -88,7 +112,15 @@ impl Task {
             Task::DiscontinuousNER => "Discontinuous NER",
             Task::EventExtraction => "Event Extraction",
             Task::TextClassification => "Text Classification",
+            Task::SentimentAnalysis => "Sentiment Analysis",
+            Task::PosTagging => "Part-of-speech Tagging",
+            Task::MachineTranslation => "Machine Translation",
+            Task::LanguageModeling => "Language Modeling",
             Task::HierarchicalExtraction => "Hierarchical Structure Extraction",
+            Task::DiscourseRelations => "Discourse Relations",
+            Task::DiscourseCoherence => "Discourse Coherence",
+            Task::DiscourseSegmentation => "Discourse Segmentation",
+            Task::SpeechActClassification => "Speech Act Classification",
         }
     }
 
@@ -104,7 +136,15 @@ impl Task {
             Task::DiscontinuousNER => "discontinuous-ner",
             Task::EventExtraction => "events",
             Task::TextClassification => "classification",
+            Task::SentimentAnalysis => "sentiment",
+            Task::PosTagging => "pos",
+            Task::MachineTranslation => "mt",
+            Task::LanguageModeling => "lm",
             Task::HierarchicalExtraction => "hierarchical",
+            Task::DiscourseRelations => "discourse-relations",
+            Task::DiscourseCoherence => "discourse-coherence",
+            Task::DiscourseSegmentation => "discourse-segmentation",
+            Task::SpeechActClassification => "speech-act-classification",
         }
     }
 
@@ -160,15 +200,42 @@ impl Task {
 
             // Text Classification (includes bias evaluation, QA, harmonic analysis)
             "classification"
+            | "text_classification"
             | "text-classification"
             | "tc"
             | "bias_evaluation"
             | "qa"
             | "harmonic_analysis" => Some(Task::TextClassification),
 
+            // Sentiment analysis (often listed separately in registries)
+            "sentiment" | "sentiment_analysis" | "sentiment-analysis" => {
+                Some(Task::SentimentAnalysis)
+            }
+
+            // POS tagging
+            "pos" | "pos_tagging" | "pos-tagging" => Some(Task::PosTagging),
+
+            // Machine translation
+            "mt" | "machine_translation" | "machine-translation" | "translation" => {
+                Some(Task::MachineTranslation)
+            }
+
+            // Language modeling
+            "lm" | "language_modeling" | "language-modeling" => Some(Task::LanguageModeling),
+
             // Hierarchical Extraction (includes temporal)
             "hierarchical" | "hierarchical-extraction" | "he" | "temporal" => {
                 Some(Task::HierarchicalExtraction)
+            }
+
+            // Discourse tasks (catalogued in the registry; evaluation may be stubbed for now)
+            "discourse_relations" | "discourse-relations" => Some(Task::DiscourseRelations),
+            "discourse_coherence" | "discourse-coherence" => Some(Task::DiscourseCoherence),
+            "discourse_segmentation" | "discourse-segmentation" => {
+                Some(Task::DiscourseSegmentation)
+            }
+            "speech_act_classification" | "speech-act-classification" => {
+                Some(Task::SpeechActClassification)
             }
 
             _ => None,
@@ -192,111 +259,17 @@ impl Task {
     }
 }
 
-/// Mapping from datasets to tasks they support.
-pub fn dataset_tasks(dataset: DatasetId) -> &'static [Task] {
-    match dataset {
-        // NER datasets
-        DatasetId::WikiGold
-        | DatasetId::Wnut17
-        | DatasetId::MitMovie
-        | DatasetId::MitRestaurant
-        | DatasetId::CoNLL2003Sample
-        | DatasetId::OntoNotesSample
-        | DatasetId::MultiNERD
-        | DatasetId::BC5CDR
-        | DatasetId::NCBIDisease
-        | DatasetId::GENIA
-        | DatasetId::AnatEM
-        | DatasetId::BC2GM
-        | DatasetId::BC4CHEMD
-        | DatasetId::TweetNER7
-        | DatasetId::BroadTwitterCorpus
-        | DatasetId::FabNER
-        | DatasetId::FewNERD
-        | DatasetId::CrossNER
-        | DatasetId::UniversalNERBench
-        | DatasetId::WikiANN
-        | DatasetId::MultiCoNER
-        | DatasetId::MultiCoNERv2
-        | DatasetId::WikiNeural
-        | DatasetId::PolyglotNER
-        | DatasetId::UniversalNER
-        | DatasetId::UNER
-        | DatasetId::MSNER
-        | DatasetId::BioMNER
-        | DatasetId::LegNER => &[Task::NER],
-
-        // Discontinuous NER datasets
-        DatasetId::CADEC | DatasetId::ShARe13 | DatasetId::ShARe14 => {
-            &[Task::DiscontinuousNER, Task::NER]
-        }
-
-        // Inter-document coreference datasets
-        DatasetId::ECBPlus | DatasetId::WikiCoref => &[Task::InterDocCoref],
-
-        // Event extraction datasets
-        DatasetId::ACE2005 => &[Task::EventExtraction],
-        DatasetId::MAVEN => &[Task::EventExtraction],
-        DatasetId::MAVENArg => &[Task::EventExtraction, Task::RelationExtraction],
-        DatasetId::CASIE => &[Task::EventExtraction, Task::NER],
-        DatasetId::RAMS => &[Task::EventExtraction],
-
-        // Named Entity Disambiguation datasets
-        DatasetId::AIDA | DatasetId::TACKBP => &[Task::NED],
-
-        // Additional multilingual NER datasets
-        DatasetId::CoNLL2002
-        | DatasetId::CoNLL2002Spanish
-        | DatasetId::CoNLL2002Dutch
-        | DatasetId::OntoNotes50
-        | DatasetId::GermEval2014
-        | DatasetId::HAREM
-        | DatasetId::SemEval2013Task91
-        | DatasetId::MUC6
-        | DatasetId::MUC7 => &[Task::NER],
-
-        // Additional biomedical NER datasets
-        DatasetId::JNLPBA | DatasetId::BC2GMFull | DatasetId::CRAFT => &[Task::NER],
-
-        // Additional domain-specific NER datasets
-        DatasetId::FinNER | DatasetId::LegalNER | DatasetId::SciERCNER => &[Task::NER],
-
-        // Relation Extraction datasets
-        DatasetId::DocRED
-        | DatasetId::ReTACRED
-        | DatasetId::NYTFB
-        | DatasetId::WEBNLG
-        | DatasetId::GoogleRE
-        | DatasetId::BioRED
-        | DatasetId::SciER
-        | DatasetId::MixRED
-        | DatasetId::CovEReD => &[Task::RelationExtraction],
-
-        // Intra-document coreference datasets
-        DatasetId::GAP | DatasetId::PreCo | DatasetId::LitBank => &[
-            Task::IntraDocCoref,
-            // Some coref datasets can also evaluate abstract anaphora
-            Task::AbstractAnaphora,
-        ],
-        // Human-Voice Agent: primarily abstract anaphora (response tokens, discourse deixis)
-        DatasetId::HumanVoiceAgentInteraction => &[Task::AbstractAnaphora, Task::IntraDocCoref],
-
-        // Text Classification datasets
-        DatasetId::MasakhaNEWS
-        | DatasetId::AGNews
-        | DatasetId::DBPedia14
-        | DatasetId::YahooAnswers
-        | DatasetId::TREC
-        | DatasetId::TweetTopic => &[Task::TextClassification],
-
-        // Note: OntoNotes has both NER and coreference, but we only have the NER sample
-        // Full OntoNotes would support: [Task::NER, Task::IntraDocCoref]
-
-        // Default: assume NER task for any unhandled datasets
-        // This allows new datasets to be added to DatasetId enum without breaking this match
-        #[allow(unreachable_patterns)]
-        _ => &[Task::NER],
-    }
+/// Tasks that a dataset supports *for evaluation*.
+///
+/// Derived from the dataset registry's `DatasetId::tasks()` strings and mapped through
+/// `Task::from_code` (which supports many aliases used in the registry).
+///
+/// We intentionally **do not** default unknown datasets to NER: that hides missing metadata and
+/// creates misleading task×dataset×backend matrices.
+pub fn dataset_tasks(dataset: DatasetId) -> Vec<Task> {
+    // Keep the registry as the single source of truth for the string task codes,
+    // but use its typed view to avoid duplicating parsing/alias logic here.
+    dataset.tasks_typed()
 }
 
 /// Mapping from tasks to suitable datasets.
@@ -391,8 +364,21 @@ pub fn task_datasets(task: Task) -> &'static [DatasetId] {
             DatasetId::TREC,
             DatasetId::TweetTopic,
         ],
+        // We catalog these tasks/datasets, but we don't currently run end-to-end evaluation
+        // pipelines for them.
+        Task::SentimentAnalysis => &[],
+        Task::PosTagging => &[],
+        Task::MachineTranslation => &[],
+        Task::LanguageModeling => &[],
         Task::HierarchicalExtraction => {
             // GLiNER2 can do hierarchical extraction, but we don't have dedicated datasets yet
+            &[]
+        }
+        Task::DiscourseRelations
+        | Task::DiscourseCoherence
+        | Task::DiscourseSegmentation
+        | Task::SpeechActClassification => {
+            // Catalogued in the registry, but we don't have end-to-end eval datasets/pipelines yet.
             &[]
         }
     }
@@ -409,6 +395,7 @@ pub fn backend_tasks(backend_name: &str) -> &'static [Task] {
         "pattern" | "RegexNER" => &[Task::NER], // Only structured entities
         "heuristic" | "HeuristicNER" => &[Task::NER],
         "stacked" | "StackedNER" => &[Task::NER],
+        "crf" | "CrfNER" => &[Task::NER],
 
         // ML-based NER backends (all implement Model)
         "bert_onnx" | "BertNEROnnx" => &[Task::NER],
@@ -441,6 +428,7 @@ pub fn backend_tasks(backend_name: &str) -> &'static [Task] {
         "coref_resolver" | "CorefResolver" | "SimpleCorefResolver" | "DiscourseAwareResolver" => {
             &[Task::IntraDocCoref, Task::AbstractAnaphora]
         }
+        "mention_ranking" | "MentionRankingCoref" => &[Task::IntraDocCoref],
 
         _ => &[],
     }
@@ -469,7 +457,7 @@ pub fn detect_backend_capabilities_by_name(backend_name: &str) -> Vec<Task> {
 
 /// Get all tasks that a dataset supports.
 pub fn get_dataset_tasks(dataset: DatasetId) -> Vec<Task> {
-    dataset_tasks(dataset).to_vec()
+    dataset_tasks(dataset)
 }
 
 /// Get all datasets suitable for a task.
@@ -484,8 +472,13 @@ pub fn get_task_datasets(task: Task) -> Vec<DatasetId> {
 pub fn get_task_backends(task: Task) -> Vec<&'static str> {
     let mut backends = Vec::new();
     for backend in [
-        // Only stacked (combines pattern+heuristic), not individual ones
+        // Builtins
         "stacked",
+        "crf",
+        "heuristic",
+        // Pattern is intentionally excluded from NER eval by default (structured-only),
+        // but it still advertises NER capability via `backend_tasks` and can be enabled by callers.
+        // "pattern",
         // ML backends
         "bert_onnx",
         "candle_ner",
@@ -502,6 +495,7 @@ pub fn get_task_backends(task: Task) -> Vec<&'static str> {
         "universal_ner",
         // Special backends
         "coref_resolver",
+        "mention_ranking",
     ] {
         if backend_tasks(backend).contains(&task) {
             backends.push(backend);
@@ -629,5 +623,104 @@ mod tests {
         assert!(tasks.contains(&Task::TextClassification));
         assert!(tasks.contains(&Task::HierarchicalExtraction));
         assert!(tasks.contains(&Task::RelationExtraction));
+    }
+
+    #[test]
+    fn test_dataset_tasks_are_deduced_from_registry() {
+        // Basic sanity: we should be able to derive at least one eval task from
+        // the registry for a known dataset with explicit tasks.
+        let tasks = dataset_tasks(DatasetId::WikiGold);
+        assert!(tasks.contains(&Task::NER));
+    }
+
+    #[test]
+    fn test_registry_task_codes_are_parseable() {
+        // Ensures the task strings in the dataset registry don't silently drift away
+        // from our enum mapping (which would make task selection/eval inconsistent).
+        //
+        // We only enforce this for *in-scope* task codes. The registry currently catalogs
+        // some out-of-scope/non-text tasks (e.g., audio captioning) that we do not intend
+        // to model in the eval task enum.
+        fn is_in_scope_task_code(task_str: &str) -> bool {
+            matches!(
+                task_str.to_lowercase().as_str(),
+                // NER family
+                "ner"
+                    | "sequence_labeling"
+                    | "nested-ner"
+                    | "mner"
+                    | "pii_detection"
+                    | "slot_filling"
+                    // Coref family
+                    | "coref"
+                    | "intra-coref"
+                    | "intra_coref"
+                    | "intracoref"
+                    | "inter-coref"
+                    | "inter_coref"
+                    | "intercoref"
+                    | "cdcr"
+                    | "event_coref"
+                    // RE / events
+                    | "re"
+                    | "relation"
+                    | "relation_extraction"
+                    | "relation-extraction"
+                    | "events"
+                    | "event"
+                    | "event_extraction"
+                    | "event-extraction"
+                    | "ee"
+                    // Discourse / anaphora
+                    | "abstract-anaphora"
+                    | "abstract_anaphora"
+                    | "bridging"
+                    | "discourse_deixis"
+                    | "discourse_relations"
+                    | "discourse-relations"
+                    | "discourse_coherence"
+                    | "discourse-coherence"
+                    | "discourse_segmentation"
+                    | "discourse-segmentation"
+                    | "speech_act_classification"
+                    | "speech-act-classification"
+                    // Classification-ish (text-only; not core scope but supported in Task enum)
+                    | "classification"
+                    | "text_classification"
+                    | "text-classification"
+                    | "tc"
+                    | "bias_evaluation"
+                    | "qa"
+                    | "harmonic_analysis"
+                    | "sentiment"
+                    | "sentiment_analysis"
+                    | "sentiment-analysis"
+                    | "pos"
+                    | "pos_tagging"
+                    | "pos-tagging"
+                    // MT/LM (text-only but not evaluated end-to-end yet)
+                    | "mt"
+                    | "machine_translation"
+                    | "machine-translation"
+                    | "translation"
+                    | "lm"
+                    | "language_modeling"
+                    | "language-modeling"
+            )
+        }
+
+        for ds in DatasetId::all() {
+            for &task_str in ds.tasks() {
+                if !is_in_scope_task_code(task_str) {
+                    continue;
+                }
+                assert!(
+                    Task::from_code(task_str).is_some(),
+                    "Unrecognized task code '{}' on dataset {:?}",
+                    task_str,
+                    ds
+                );
+            }
+        }
     }
 }

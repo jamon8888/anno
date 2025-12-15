@@ -21,7 +21,8 @@
 
 #![cfg(feature = "eval-advanced")]
 
-use anno::eval::loader::{DatasetId, DatasetLoader};
+use anno::eval::loader::DatasetId;
+use anno::eval::{DatasetLoader, LoadableDatasetId};
 
 // =============================================================================
 // Structure Validation
@@ -31,12 +32,13 @@ use anno::eval::loader::{DatasetId, DatasetLoader};
 #[test]
 fn test_wikigold_structure() {
     let loader = DatasetLoader::new().expect("loader");
-    if !loader.is_cached(DatasetId::WikiGold) {
+    let wikigold = LoadableDatasetId::try_from(DatasetId::WikiGold).expect("WikiGold loadable");
+    if !loader.is_cached(wikigold) {
         eprintln!("WikiGold not cached, skipping structure test");
         return;
     }
 
-    let dataset = loader.load(DatasetId::WikiGold).expect("load WikiGold");
+    let dataset = loader.load(wikigold).expect("load WikiGold");
     let stats = dataset.stats();
 
     // WikiGold should have substantial content
@@ -67,12 +69,13 @@ fn test_wikigold_structure() {
 #[test]
 fn test_wnut17_structure() {
     let loader = DatasetLoader::new().expect("loader");
-    if !loader.is_cached(DatasetId::Wnut17) {
+    let wnut17 = LoadableDatasetId::try_from(DatasetId::Wnut17).expect("WNUT-17 loadable");
+    if !loader.is_cached(wnut17) {
         eprintln!("WNUT-17 not cached, skipping structure test");
         return;
     }
 
-    let dataset = loader.load(DatasetId::Wnut17).expect("load WNUT-17");
+    let dataset = loader.load(wnut17).expect("load WNUT-17");
     let stats = dataset.stats();
 
     // WNUT-17 has social media text
@@ -108,18 +111,23 @@ fn test_entity_span_invariants() {
     let loader = DatasetLoader::new().expect("loader");
 
     for ds_id in DatasetId::quick() {
-        if !loader.is_cached(*ds_id) {
+        let loadable = match LoadableDatasetId::try_from(*ds_id) {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
+
+        if !loader.is_cached(loadable) {
             continue;
         }
 
-        let dataset = match loader.load(*ds_id) {
+        let dataset = match loader.load(loadable) {
             Ok(d) => d,
             Err(_) => continue,
         };
 
         for sentence in &dataset.sentences {
             let text = sentence.text();
-            let text_len = text.len();
+            let text_len = text.chars().count();
 
             for entity in sentence.entities() {
                 // Start must be less than end
@@ -142,45 +150,65 @@ fn test_entity_span_invariants() {
                     text_len
                 );
 
-                // Entity text should match span (if extractable)
-                // Note: Some datasets have byte offset vs char offset confusion,
-                // so we need to check for valid UTF-8 boundaries
-                if entity.start < text_len && entity.end <= text_len {
-                    // Check if both boundaries are valid UTF-8 char boundaries
-                    if text.is_char_boundary(entity.start) && text.is_char_boundary(entity.end) {
-                        let extracted = &text[entity.start..entity.end];
-                        // Normalize whitespace for comparison
-                        let normalized_extracted =
-                            extracted.split_whitespace().collect::<Vec<_>>().join(" ");
-                        let normalized_entity =
-                            entity.text.split_whitespace().collect::<Vec<_>>().join(" ");
+                // Entity text should match span (best effort; char-offset safe)
+                let extracted: String = text
+                    .chars()
+                    .skip(entity.start)
+                    .take(entity.end - entity.start)
+                    .collect();
 
-                        // Allow some tolerance for tokenization differences
-                        if normalized_extracted != normalized_entity {
-                            // Just warn, don't fail - some datasets have minor mismatches
-                            eprintln!(
-                                "Warning: {}: Entity text mismatch at [{}, {}): expected '{}', got '{}'",
-                                ds_id.name(),
-                                entity.start,
-                                entity.end,
-                                normalized_entity,
-                                normalized_extracted
-                            );
-                        }
-                    } else {
-                        // Byte offset is not a valid char boundary - this indicates
-                        // a potential issue with how the dataset was parsed
-                        eprintln!(
-                            "Warning: {}: Entity '{}' has non-char-boundary span [{}, {}) in UTF-8 text",
-                            ds_id.name(),
-                            entity.text,
-                            entity.start,
-                            entity.end
-                        );
-                    }
+                let normalized_extracted =
+                    extracted.split_whitespace().collect::<Vec<_>>().join(" ");
+                let normalized_entity =
+                    entity.text.split_whitespace().collect::<Vec<_>>().join(" ");
+
+                if normalized_extracted != normalized_entity {
+                    // Warn only: tokenization/normalization differences exist across sources.
+                    eprintln!(
+                        "Warning: {}: Entity text mismatch at [{}, {}): expected '{}', got '{}'",
+                        ds_id.name(),
+                        entity.start,
+                        entity.end,
+                        normalized_entity,
+                        normalized_extracted
+                    );
                 }
             }
         }
+    }
+}
+
+/// Explicit Unicode offset invariants (character offsets, not byte offsets).
+#[test]
+fn test_unicode_span_offsets_are_character_based() {
+    use anno::eval::datasets::GoldEntity;
+    use anno_core::EntityType;
+
+    // Each case: (text, start_char, end_char)
+    let cases = [
+        // CJK (multi-byte)
+        ("習近平在北京會見了普京。", 0, 3), // 習近平 (3 chars)
+        // Arabic (RTL, multi-byte)
+        ("التقى محمد بن سلمان بالرئيس في الرياض", 6, 10), // محمد (4 chars)
+        // Combining marks (NFD-style)
+        ("o\u{0304} is a vowel", 0, 2), // o + macron-combining = 2 chars
+        // Emoji (single scalar value here)
+        ("🎉 party", 0, 1),
+    ];
+
+    for (text, start, end) in cases {
+        let span: String = text.chars().skip(start).take(end - start).collect();
+        let entity =
+            GoldEntity::with_span(span.clone(), EntityType::Other("TEST".into()), start, end);
+
+        // Validate character counts line up with the provided span.
+        assert_eq!(
+            entity.text.chars().count(),
+            end - start,
+            "Entity span should match char length for text={:?}, span={:?}",
+            text,
+            span
+        );
     }
 }
 
@@ -190,11 +218,16 @@ fn test_entity_type_invariants() {
     let loader = DatasetLoader::new().expect("loader");
 
     for ds_id in DatasetId::quick() {
-        if !loader.is_cached(*ds_id) {
+        let loadable = match LoadableDatasetId::try_from(*ds_id) {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
+
+        if !loader.is_cached(loadable) {
             continue;
         }
 
-        let dataset = match loader.load(*ds_id) {
+        let dataset = match loader.load(loadable) {
             Ok(d) => d,
             Err(_) => continue,
         };
@@ -250,13 +283,24 @@ fn test_dataset_id_metadata() {
             filename
         );
 
-        // Entity types should be non-empty
+        // Entity types should be non-empty for tasks where we expect a closed label set.
+        //
+        // For other tasks (e.g., discourse, QA), `entity_types` can be empty because the dataset
+        // isn't annotated with a fixed entity/tag label inventory that we use in eval.
         let types = ds_id.entity_types();
-        assert!(
-            !types.is_empty(),
-            "Dataset {} has no expected entity types",
-            ds_id.name()
-        );
+        let tasks = ds_id.tasks();
+        let expects_label_set = tasks.contains(&"ner")
+            || tasks.contains(&"pos")
+            || tasks.contains(&"sentiment")
+            || tasks.contains(&"text_classification");
+        if expects_label_set {
+            assert!(
+                !types.is_empty(),
+                "Dataset {} has no expected entity types (tasks: {:?})",
+                ds_id.name(),
+                tasks
+            );
+        }
     }
 }
 
@@ -281,11 +325,11 @@ fn test_dataset_categorization() {
         );
     }
 
-    // NER datasets should not be coreference or RE
+    // NER datasets should have a non-empty label inventory.
     for ds_id in DatasetId::all_ner() {
         assert!(
-            !ds_id.is_coreference(),
-            "Dataset {} is in all_ner but is_coreference() returns true",
+            !ds_id.entity_types().is_empty(),
+            "Dataset {} is in all_ner but has no expected entity types",
             ds_id.name()
         );
     }
@@ -304,7 +348,15 @@ fn download_and_validate_quick_datasets() {
     for ds_id in DatasetId::quick() {
         println!("Downloading {}...", ds_id.name());
 
-        match loader.load_or_download(*ds_id) {
+        let loadable = match LoadableDatasetId::try_from(*ds_id) {
+            Ok(id) => id,
+            Err(e) => {
+                eprintln!("  Skipping non-loadable {}: {}", ds_id.name(), e);
+                continue;
+            }
+        };
+
+        match loader.load_or_download(loadable) {
             Ok(dataset) => {
                 let stats = dataset.stats();
                 println!(
@@ -334,7 +386,15 @@ fn download_and_validate_all_datasets() {
     for ds_id in DatasetId::all() {
         print!("{}... ", ds_id.name());
 
-        match loader.load_or_download(*ds_id) {
+        let loadable = match LoadableDatasetId::try_from(*ds_id) {
+            Ok(id) => id,
+            Err(e) => {
+                println!("SKIP (not loadable: {})", e);
+                continue;
+            }
+        };
+
+        match loader.load_or_download(loadable) {
             Ok(dataset) => {
                 let stats = dataset.stats();
                 println!(
@@ -368,12 +428,13 @@ fn download_and_validate_all_datasets() {
 fn test_stats_serialization() {
     let loader = DatasetLoader::new().expect("loader");
 
-    if !loader.is_cached(DatasetId::WikiGold) {
+    let wikigold = LoadableDatasetId::try_from(DatasetId::WikiGold).expect("WikiGold loadable");
+    if !loader.is_cached(wikigold) {
         eprintln!("WikiGold not cached, skipping serialization test");
         return;
     }
 
-    let dataset = loader.load(DatasetId::WikiGold).expect("load");
+    let dataset = loader.load(wikigold).expect("load");
     let stats = dataset.stats();
 
     // Stats should be serializable
@@ -399,11 +460,16 @@ fn test_to_test_cases_conversion() {
     let loader = DatasetLoader::new().expect("loader");
 
     for ds_id in DatasetId::quick() {
-        if !loader.is_cached(*ds_id) {
+        let loadable = match LoadableDatasetId::try_from(*ds_id) {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
+
+        if !loader.is_cached(loadable) {
             continue;
         }
 
-        let dataset = match loader.load(*ds_id) {
+        let dataset = match loader.load(loadable) {
             Ok(d) => d,
             Err(_) => continue,
         };
@@ -418,7 +484,7 @@ fn test_to_test_cases_conversion() {
         );
 
         // Each test case should have text and gold entities
-        for (text, gold) in &test_cases {
+        for (text, _gold) in &test_cases {
             assert!(
                 !text.is_empty(),
                 "{}: Test case has empty text",

@@ -16,6 +16,8 @@ use crate::grounded::{
 use crate::ingest::url_resolver::CompositeResolver;
 use crate::ingest::DocumentPreprocessor;
 
+use crate::cli::CliError;
+
 /// Extract entities from text
 #[derive(Parser, Debug)]
 pub struct ExtractArgs {
@@ -89,7 +91,7 @@ pub struct ExtractArgs {
 }
 
 /// Execute the extract command.
-pub fn run(args: ExtractArgs) -> Result<(), String> {
+pub fn run(args: ExtractArgs) -> Result<(), CliError> {
     // Level 1 (Signal): Raw entity extraction from single document
     // This is the foundation for all other commands:
     // - `debug` adds Level 2 (Track) via coreference resolution
@@ -104,17 +106,18 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
             let resolver = CompositeResolver::new();
             let resolved = resolver
                 .resolve(url)
-                .map_err(|e| format!("Failed to fetch URL {}: {}", url, e))?;
+                .map_err(|e| CliError::from(format!("Failed to fetch URL {}: {}", url, e)))?;
             resolved.text
         }
         #[cfg(not(feature = "eval-advanced"))]
         {
             #[allow(unused_variables)]
             let _url = url;
-            return Err("URL resolution requires 'eval-advanced' feature. Enable with: cargo build --features eval-advanced".to_string());
+            return Err(CliError::from("URL resolution requires 'eval-advanced' feature. Enable with: cargo build --features eval-advanced"));
         }
     } else {
-        get_input_text(&args.text, args.file.as_deref(), &args.positional)?
+        get_input_text(&args.text, args.file.as_deref(), &args.positional)
+            .map_err(CliError::from)?
     };
 
     // Preprocess text if requested
@@ -136,12 +139,12 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
     }
 
     let text = raw_text;
-    let model = args.model.create_model()?;
+    let model = args.model.create_model().map_err(CliError::from)?;
 
     let start = Instant::now();
     let entities = model
         .extract_entities(&text, None)
-        .map_err(|e| format!("Extraction failed: {}", e))?;
+        .map_err(|e| CliError::from(format!("Extraction failed: {}", e)))?;
     let elapsed = start.elapsed();
 
     // Filter by labels if specified
@@ -153,7 +156,7 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
             .filter(|e| {
                 args.labels
                     .iter()
-                    .any(|l| e.entity_type.as_label().eq_ignore_ascii_case(l))
+                    .any(|label| label.eq_ignore_ascii_case(&e.entity_type.to_string()))
             })
             .collect()
     };
@@ -258,20 +261,36 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
                     s.surface()
                 );
             }
+            // Validate signals
+            let errors = doc.validate();
+            if !errors.is_empty() {
+                return Err(CliError::from(format!(
+                    "Signal validation failed with {} errors:\n{}",
+                    errors.len(),
+                    errors
+                        .iter()
+                        .take(5)
+                        .map(|e| format!("  - {}", e))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )));
+            }
         }
         OutputFormat::Grounded => {
-            println!("{}", serde_json::to_string_pretty(&doc).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&doc).map_err(CliError::from)?
+            );
         }
         OutputFormat::Html => {
-            return Err(
-                "HTML format not supported for extract command. Use 'debug --format html' instead."
-                    .to_string(),
-            );
+            return Err(CliError::from(
+                "HTML format not supported for extract command. Use 'debug --format html' instead.",
+            ));
         }
         OutputFormat::Tree | OutputFormat::Summary => {
-            return Err(
-                "Tree/Summary formats are only available for cross-doc command.".to_string(),
-            );
+            return Err(CliError::from(
+                "Tree/Summary formats are only available for cross-doc command.",
+            ));
         }
         OutputFormat::Inline => {
             print_annotated_signals(&text, doc.signals());
@@ -304,12 +323,13 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
                 // Level 3+: Additional metadata (timing, model, document ID) - only if not already shown
                 if args.verbose >= 3 {
                     let stats = doc.stats();
+                    let text_len = text.chars().count();
                     println!();
                     println!("  {}:", color("90", "Metadata"));
                     println!("    document: {}", doc.id);
                     println!("    model: {}", args.model.name());
                     println!("    timing: {:.1}ms", elapsed.as_secs_f64() * 1000.0);
-                    println!("    text length: {} chars", text.chars().count());
+                    println!("    text length: {} chars", text_len);
                     if stats.signal_count > 0 {
                         println!(
                             "    signals/track: {:.1}",
@@ -322,10 +342,9 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
     }
 
     // Export to file if requested
-    if let Some(export_path) = args.export {
+    if let Some(export_path) = &args.export {
         let export_data = match args.export_format.as_str() {
-            "full" => serde_json::to_value(&doc)
-                .map_err(|e| format!("Failed to serialize GroundedDocument: {}", e))?,
+            "full" => serde_json::to_value(&doc).map_err(CliError::from)?,
             "signals" => {
                 let signals: Vec<_> = doc.signals().to_vec();
                 serde_json::json!({
@@ -356,30 +375,34 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
                 })
             }
             _ => {
-                return Err(format!(
+                return Err(CliError::from(format!(
                     "Invalid export format '{}'. Use: full, signals, or minimal",
                     args.export_format
-                ));
+                )));
             }
         };
 
         let json = serde_json::to_string_pretty(&export_data)
-            .map_err(|e| format!("Failed to serialize export data: {}", e))?;
+            .map_err(|e| CliError::from(format!("Failed to serialize export data: {}", e)))?;
 
         // Ensure parent directory exists
         if let Some(parent) = std::path::Path::new(&export_path).parent() {
             if !parent.exists() {
                 fs::create_dir_all(parent).map_err(|e| {
-                    format!(
+                    CliError::from(format!(
                         "Failed to create directory for export file '{}': {}",
                         export_path, e
-                    )
+                    ))
                 })?;
             }
         }
 
-        fs::write(&export_path, json)
-            .map_err(|e| format!("Failed to write export file '{}': {}", export_path, e))?;
+        fs::write(&export_path, json).map_err(|e| {
+            CliError::from(format!(
+                "Failed to write export file '{}': {}",
+                export_path, e
+            ))
+        })?;
         if !args.quiet {
             eprintln!(
                 "{} Exported {} format to {}",
@@ -397,10 +420,10 @@ pub fn run(args: ExtractArgs) -> Result<(), String> {
             "networkx" | "nx" => GraphExportFormat::NetworkXJson,
             "jsonld" | "json-ld" => GraphExportFormat::JsonLd,
             _ => {
-                return Err(format!(
+                return Err(CliError::from(format!(
                     "Invalid graph format '{}'. Use: neo4j, networkx, or jsonld",
                     graph_format_str
-                ));
+                )));
             }
         };
 

@@ -1022,7 +1022,10 @@ impl Provenance {
     }
 
     /// Deprecated: Use `ml()` instead which now accepts both static and owned strings.
-    #[deprecated(since = "0.2.1", note = "Use ml() instead, it now accepts owned strings")]
+    #[deprecated(
+        since = "0.2.1",
+        note = "Use ml() instead, it now accepts owned strings"
+    )]
     #[must_use]
     pub fn ml_owned(model_name: impl Into<String>, confidence: f64) -> Self {
         Self::ml(Cow::Owned(model_name.into()), confidence)

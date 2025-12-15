@@ -195,7 +195,7 @@ mod tests {
         let entities = sample_entities();
         assert!(!entities.has_overlaps());
 
-        let overlapping = vec![
+        let overlapping = [
             Entity::new("New York", EntityType::Location, 0, 8, 0.9),
             Entity::new("York", EntityType::Location, 4, 8, 0.8),
         ];

@@ -132,7 +132,7 @@ use std::collections::HashMap;
 /// # Variants
 ///
 /// - [`Supportive`](Self::Supportive): Endorses, justifies, or frames positively
-/// - [`Skeptical`](Self::Skeptical): Questions, criticizes, or frames negatively  
+/// - [`Skeptical`](Self::Skeptical): Questions, criticizes, or frames negatively
 /// - [`Neutral`](Self::Neutral): Factual reporting without apparent valence
 ///
 /// # Examples
@@ -1105,7 +1105,14 @@ mod tests {
         let pair = FrecoPair::new(e1, e2);
 
         assert_eq!(pair.has_attitude_contrast(), Some(true));
-        assert!((pair.attitude_divergence().unwrap() - 2.0).abs() < 0.001);
+        assert!(
+            (pair
+                .attitude_divergence()
+                .expect("attitude divergence defined when both attitudes present")
+                - 2.0)
+                .abs()
+                < 0.001
+        );
         assert!(pair.is_cross_document());
     }
 
@@ -1139,13 +1146,15 @@ mod tests {
     #[test]
     fn test_serde_roundtrip() {
         let attitude = FramingAttitude::Skeptical;
-        let json = serde_json::to_string(&attitude).unwrap();
-        let recovered: FramingAttitude = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&attitude).expect("serialize FramingAttitude");
+        let recovered: FramingAttitude =
+            serde_json::from_str(&json).expect("deserialize FramingAttitude");
         assert_eq!(attitude, recovered);
 
         let dtype = FramingDivergenceType::Causal;
-        let json = serde_json::to_string(&dtype).unwrap();
-        let recovered: FramingDivergenceType = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&dtype).expect("serialize FramingDivergenceType");
+        let recovered: FramingDivergenceType =
+            serde_json::from_str(&json).expect("deserialize FramingDivergenceType");
         assert_eq!(dtype, recovered);
     }
 
@@ -1153,39 +1162,51 @@ mod tests {
     fn test_framing_attitude_from_str() {
         // Standard names
         assert_eq!(
-            "supportive".parse::<FramingAttitude>().unwrap(),
+            "supportive"
+                .parse::<FramingAttitude>()
+                .expect("parse 'supportive'"),
             FramingAttitude::Supportive
         );
         assert_eq!(
-            "skeptical".parse::<FramingAttitude>().unwrap(),
+            "skeptical"
+                .parse::<FramingAttitude>()
+                .expect("parse 'skeptical'"),
             FramingAttitude::Skeptical
         );
         assert_eq!(
-            "neutral".parse::<FramingAttitude>().unwrap(),
+            "neutral"
+                .parse::<FramingAttitude>()
+                .expect("parse 'neutral'"),
             FramingAttitude::Neutral
         );
 
         // Aliases
         assert_eq!(
-            "positive".parse::<FramingAttitude>().unwrap(),
+            "positive"
+                .parse::<FramingAttitude>()
+                .expect("parse 'positive'"),
             FramingAttitude::Supportive
         );
         assert_eq!(
-            "critical".parse::<FramingAttitude>().unwrap(),
+            "critical"
+                .parse::<FramingAttitude>()
+                .expect("parse 'critical'"),
             FramingAttitude::Skeptical
         );
         assert_eq!(
-            "+".parse::<FramingAttitude>().unwrap(),
+            "+".parse::<FramingAttitude>().expect("parse '+'"),
             FramingAttitude::Supportive
         );
         assert_eq!(
-            "-".parse::<FramingAttitude>().unwrap(),
+            "-".parse::<FramingAttitude>().expect("parse '-'"),
             FramingAttitude::Skeptical
         );
 
         // Case insensitive
         assert_eq!(
-            "SUPPORTIVE".parse::<FramingAttitude>().unwrap(),
+            "SUPPORTIVE"
+                .parse::<FramingAttitude>()
+                .expect("parse 'SUPPORTIVE'"),
             FramingAttitude::Supportive
         );
 
@@ -1197,35 +1218,49 @@ mod tests {
     fn test_framing_divergence_type_from_str() {
         // Standard names
         assert_eq!(
-            "lexical".parse::<FramingDivergenceType>().unwrap(),
+            "lexical"
+                .parse::<FramingDivergenceType>()
+                .expect("parse 'lexical'"),
             FramingDivergenceType::Lexical
         );
         assert_eq!(
-            "agency".parse::<FramingDivergenceType>().unwrap(),
+            "agency"
+                .parse::<FramingDivergenceType>()
+                .expect("parse 'agency'"),
             FramingDivergenceType::Agency
         );
         assert_eq!(
-            "causal".parse::<FramingDivergenceType>().unwrap(),
+            "causal"
+                .parse::<FramingDivergenceType>()
+                .expect("parse 'causal'"),
             FramingDivergenceType::Causal
         );
 
         // Aliases
         assert_eq!(
-            "voice".parse::<FramingDivergenceType>().unwrap(),
+            "voice"
+                .parse::<FramingDivergenceType>()
+                .expect("parse 'voice'"),
             FramingDivergenceType::Agency
         );
         assert_eq!(
-            "sentiment".parse::<FramingDivergenceType>().unwrap(),
+            "sentiment"
+                .parse::<FramingDivergenceType>()
+                .expect("parse 'sentiment'"),
             FramingDivergenceType::Valence
         );
         assert_eq!(
-            "actor".parse::<FramingDivergenceType>().unwrap(),
+            "actor"
+                .parse::<FramingDivergenceType>()
+                .expect("parse 'actor'"),
             FramingDivergenceType::Participant
         );
 
         // Case insensitive
         assert_eq!(
-            "LEXICAL".parse::<FramingDivergenceType>().unwrap(),
+            "LEXICAL"
+                .parse::<FramingDivergenceType>()
+                .expect("parse 'LEXICAL'"),
             FramingDivergenceType::Lexical
         );
 

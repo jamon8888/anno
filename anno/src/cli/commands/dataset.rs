@@ -22,6 +22,8 @@ use super::super::utils::types_match_flexible;
 
 #[cfg(feature = "eval")]
 use crate::eval::loader::DatasetId;
+#[cfg(feature = "eval-advanced")]
+use crate::eval::loader::LoadableDatasetId;
 
 /// Work with NER datasets
 #[derive(Parser, Debug)]
@@ -89,6 +91,52 @@ pub enum DatasetAction {
     /// View entities with surrounding context for review
     #[command(visible_alias = "ctx")]
     Context(super::context::ContextArgs),
+
+    /// Check dataset metadata consistency and issues
+    #[command(visible_alias = "c")]
+    Check {
+        /// Show only issues (errors and warnings)
+        #[arg(short, long)]
+        issues_only: bool,
+
+        /// Check specific dataset
+        #[arg(short, long)]
+        dataset: Option<String>,
+
+        /// Fix issues automatically where possible
+        #[arg(short, long)]
+        fix: bool,
+    },
+
+    /// Check URL health for dataset download sources
+    #[command(visible_alias = "ch")]
+    CheckHealth {
+        /// Check specific dataset (otherwise checks sample)
+        #[arg(short, long)]
+        dataset: Option<String>,
+
+        /// Check all datasets with URLs (can take a while)
+        #[arg(long)]
+        all: bool,
+
+        /// Do not fail the command for known-non-automatable datasets.
+        ///
+        /// This is useful for surveying the full registry (including gated / deprecated /
+        /// registration-required sources) without turning the command into a failing wall of
+        /// 404/401/403/TLS errors. In relaxed mode, only datasets that are expected to be
+        /// automatable (`access_status.is_automatable()` + `is_automatable_download()`) will
+        /// cause a non-zero exit.
+        #[arg(long)]
+        relaxed: bool,
+
+        /// Number of parallel workers for URL checking
+        #[arg(short, long, default_value = "5")]
+        workers: usize,
+
+        /// Request timeout in seconds
+        #[arg(short, long, default_value = "10")]
+        timeout: u64,
+    },
 }
 
 /// Execute the dataset command.
@@ -195,8 +243,10 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             "Loading {} (may download if not cached)...",
                             dataset_id.name()
                         );
+                        let loadable = LoadableDatasetId::try_from(dataset_id)
+                            .map_err(|e| format!("Dataset is not loadable: {}", e))?;
                         let ds = loader
-                            .load_or_download(dataset_id)
+                            .load_or_download(loadable)
                             .map_err(|e| format!("Failed to load dataset: {}", e))?;
 
                         // Only warn if evaluating NER on non-NER dataset (not for coref/relation tasks)
@@ -224,22 +274,8 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                 // Route to appropriate evaluation based on task
                 match task {
                     EvalTask::Ner => {
-                        #[cfg(feature = "eval-advanced")]
-                        let type_mapper: Option<crate::TypeMapper> = parsed_dataset_result
-                            .as_ref()
-                            .ok()
-                            .and_then(|id| id.type_mapper());
-                        #[cfg(not(feature = "eval-advanced"))]
-                        let type_mapper: Option<crate::TypeMapper> = None;
-
                         println!();
                         println!("Evaluating {} on {} dataset (NER)...", model.name(), name);
-                        if type_mapper.is_some() {
-                            println!(
-                                "  {} Using type mapping for domain-specific dataset",
-                                color("33", "!")
-                            );
-                        }
                         println!("  Sentences: {}", test_cases.len());
                         println!();
 
@@ -289,12 +325,8 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             let mut matched_pred = vec![false; entities.len()];
 
                             for gold_entity in gold {
-                                // Apply type mapping if available (consistent with matching logic)
-                                let gold_type = if let Some(ref mapper) = type_mapper {
-                                    mapper.normalize(&gold_entity.original_label)
-                                } else {
-                                    anno_core::EntityType::from_label(&gold_entity.original_label)
-                                };
+                                let gold_type =
+                                    anno_core::EntityType::from_label(&gold_entity.original_label);
 
                                 // Use canonical normalization for consistent grouping
                                 let gold_type_key =
@@ -764,6 +796,22 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
         DatasetAction::Context(args) => {
             super::context::run(args)?;
         }
+        DatasetAction::Check {
+            issues_only,
+            dataset,
+            fix,
+        } => {
+            run_check(issues_only, dataset.as_deref(), fix)?;
+        }
+        DatasetAction::CheckHealth {
+            dataset,
+            all,
+            relaxed,
+            workers,
+            timeout,
+        } => {
+            run_check_health(dataset.as_deref(), all, relaxed, workers, timeout)?;
+        }
     }
 
     Ok(())
@@ -776,7 +824,7 @@ fn run_info(dataset: &str) -> Result<(), String> {
     #[cfg(feature = "eval")]
     {
         use crate::eval::dataset_registry::DatasetId as RegistryDatasetId;
-        use crate::eval::loader::DatasetId as LoadableDatasetId;
+        use crate::eval::loader::LoadableDatasetId;
 
         // Try to find in registry (by display name or variant name)
         let registry_match = RegistryDatasetId::all()
@@ -789,8 +837,8 @@ fn run_info(dataset: &str) -> Result<(), String> {
             })
             .copied();
 
-        // Try to parse as loadable dataset
-        let loadable_match = dataset.parse::<LoadableDatasetId>().ok();
+        // Consider a dataset "loadable" if it has a loader implementation.
+        let loadable_match = registry_match.and_then(|rid| LoadableDatasetId::try_from(rid).ok());
 
         if let Some(registry_id) = registry_match {
             // Show registry metadata
@@ -853,7 +901,7 @@ fn run_info(dataset: &str) -> Result<(), String> {
                 #[cfg(feature = "eval-advanced")]
                 {
                     use crate::eval::loader::DatasetLoader;
-                    if let Ok(loadable_id) = dataset.parse::<LoadableDatasetId>() {
+                    if let Some(loadable_id) = loadable_match {
                         let loader = DatasetLoader::new()
                             .map_err(|e| format!("Failed to create loader: {}", e))?;
 
@@ -919,23 +967,27 @@ fn run_list(
     #[cfg(feature = "eval")]
     {
         use crate::eval::dataset_registry::DatasetId as RegistryDatasetId;
-        use crate::eval::loader::DatasetId as LoadableDatasetId;
+        use crate::eval::loader::LoadableDatasetId;
 
         if loadable_only {
             // Show only loadable datasets
+            let loadable_datasets: Vec<RegistryDatasetId> = RegistryDatasetId::all()
+                .iter()
+                .copied()
+                .filter(|id| LoadableDatasetId::try_from(*id).is_ok())
+                .collect();
             println!(
                 "  {} loadable datasets (can be downloaded and parsed):",
-                LoadableDatasetId::all().len()
+                loadable_datasets.len()
             );
             println!();
 
-            for id in LoadableDatasetId::all() {
+            for id in loadable_datasets {
                 let name = id.name();
                 if let Some(ref task) = task_filter {
-                    // Use the dataset's categorization (loader method or registry fallback)
-                    let is_coref = id.is_coreference();
-                    // NER is the default if not specifically coref
-                    let is_ner = id.to_registry().is_ner() || !is_coref;
+                    let tasks = id.tasks_typed();
+                    let is_coref = tasks.iter().any(|t| t.is_coref_family());
+                    let is_ner = tasks.contains(&crate::eval::task_mapping::Task::NER);
 
                     match task.as_str() {
                         "coref" if !is_coref => continue,
@@ -962,7 +1014,11 @@ fn run_list(
             println!(
                 "  {} datasets in registry ({} loadable):",
                 all_datasets.len(),
-                LoadableDatasetId::all().len()
+                RegistryDatasetId::all()
+                    .iter()
+                    .copied()
+                    .filter(|id| LoadableDatasetId::try_from(*id).is_ok())
+                    .count()
             );
             println!();
 
@@ -1027,4 +1083,458 @@ fn run_list(
 
     println!();
     Ok(())
+}
+
+#[cfg(feature = "eval")]
+fn run_check(issues_only: bool, dataset: Option<&str>, _fix: bool) -> Result<(), String> {
+    use crate::eval::dataset_registry::DatasetId as RegistryDatasetId;
+    use crate::eval::loader::LoadableDatasetId;
+
+    println!();
+    println!("{}", color("1;36", "Dataset Metadata Check"));
+    println!();
+
+    let errors: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
+    let mut info: Vec<String> = Vec::new();
+
+    // Check if specific dataset or all
+    let datasets_to_check: Vec<RegistryDatasetId> = if let Some(ds_name) = dataset {
+        // Try to find in registry
+        RegistryDatasetId::all()
+            .iter()
+            .find(|d| {
+                d.name().eq_ignore_ascii_case(ds_name)
+                    || format!("{:?}", d).eq_ignore_ascii_case(ds_name)
+            })
+            .copied()
+            .map(|d| vec![d])
+            .ok_or_else(|| format!("Dataset '{}' not found in registry", ds_name))?
+    } else {
+        RegistryDatasetId::all().iter().copied().collect()
+    };
+
+    for registry_id in &datasets_to_check {
+        let is_loadable = LoadableDatasetId::try_from(*registry_id).is_ok();
+
+        // Check 1: Missing download URL
+        let url = registry_id.download_url();
+        if url.is_empty() {
+            let access_status = registry_id.access_status();
+            // Local datasets are allowed to have no URL (they live in-repo / on-disk).
+            if access_status == crate::eval::dataset_registry::DatasetAccessibility::Local {
+                // no-op
+            } else if access_status.is_automatable() {
+                warnings.push(format!(
+                    "{}: Missing download URL but marked as automatable ({})",
+                    registry_id.name(),
+                    access_status.as_str()
+                ));
+            } else {
+                info.push(format!(
+                    "{}: No URL (requires {})",
+                    registry_id.name(),
+                    access_status.as_str()
+                ));
+            }
+        }
+
+        // Check 2: Generic entity types
+        //
+        // Only meaningful for NER-family datasets; many datasets in the registry are
+        // coref/RE/EL/bias benchmarks where "entity types" are not a first-class concept.
+        let entity_types = registry_id.entity_types();
+        if registry_id.supports_ner() && entity_types.is_empty() {
+            warnings.push(format!("{}: Missing entity_types", registry_id.name()));
+        } else if registry_id.supports_ner() && entity_types == &["ENTITY"] {
+            warnings.push(format!(
+                "{}: Using generic entity type 'ENTITY' (should specify actual types)",
+                registry_id.name()
+            ));
+        }
+
+        // Check 3: Generic domain
+        let domain = registry_id.domain();
+        if domain == "general" && !registry_id.is_multilingual() {
+            warnings.push(format!(
+                "{}: Using generic domain 'general' (should specify actual domain)",
+                registry_id.name()
+            ));
+        }
+
+        // If something is automatable *in practice*, but we don't have a loader implementation,
+        // that’s actionable (it will never be sampled in evals without manual glue).
+        if registry_id.access_status().is_automatable()
+            && registry_id.is_automatable_download()
+            && !is_loadable
+        {
+            warnings.push(format!(
+                "{}: Automatable access_status ({}) but not loadable (missing loader impl)",
+                registry_id.name(),
+                registry_id.access_status().as_str()
+            ));
+        }
+    }
+
+    // Summary
+    if !issues_only {
+        println!("Checked {} datasets", datasets_to_check.len());
+        println!();
+    }
+
+    if !errors.is_empty() {
+        println!("{} {} Errors:", color("31", "✗"), errors.len());
+        for err in &errors {
+            println!("  {}", err);
+        }
+        println!();
+    }
+
+    if !warnings.is_empty() {
+        println!("{} {} Warnings:", color("33", "!"), warnings.len());
+        for warn in &warnings {
+            println!("  {}", warn);
+        }
+        println!();
+    }
+
+    if !issues_only && !info.is_empty() {
+        println!("{} {} Info:", color("36", "i"), info.len());
+        for msg in &info {
+            println!("  {}", msg);
+        }
+        println!();
+    }
+
+    // Statistics
+    if !issues_only {
+        let registry_count = RegistryDatasetId::all().len();
+        let loadable_count = LoadableDatasetId::all().len();
+        let with_urls = datasets_to_check
+            .iter()
+            .filter(|d| !d.download_url().is_empty())
+            .count();
+        let with_entity_types = datasets_to_check
+            .iter()
+            .filter(|d| !d.entity_types().is_empty() && d.entity_types() != &["ENTITY"])
+            .count();
+
+        println!("Statistics:");
+        println!("  Registry datasets:    {}", registry_count);
+        println!("  Loadable datasets:   {}", loadable_count);
+        println!("  With download URLs: {}", with_urls);
+        println!("  With entity types:   {}", with_entity_types);
+        println!();
+    }
+
+    if !errors.is_empty() {
+        return Err(format!("Found {} errors", errors.len()));
+    }
+
+    if issues_only && warnings.is_empty() && errors.is_empty() {
+        println!("{} No issues found", color("32", "✓"));
+    } else if !issues_only && errors.is_empty() && warnings.is_empty() {
+        println!("{} All checks passed", color("32", "✓"));
+    }
+
+    Ok(())
+}
+
+#[cfg(not(feature = "eval"))]
+fn run_check(_issues_only: bool, _dataset: Option<&str>, _fix: bool) -> Result<(), String> {
+    println!("Dataset checking requires --features eval");
+    Ok(())
+}
+
+#[cfg(feature = "eval-advanced")]
+fn run_check_health(
+    dataset: Option<&str>,
+    all: bool,
+    relaxed: bool,
+    workers: usize,
+    timeout: u64,
+) -> Result<(), String> {
+    use crate::eval::dataset_registry::DatasetId;
+    use std::sync::mpsc;
+    use std::thread;
+
+    println!();
+    println!("{}", color("1;36", "Dataset URL Health Check"));
+    println!();
+
+    crate::env::load_dotenv();
+    let allow_manual = matches!(
+        std::env::var("ANNO_DATASET_ALLOW_MANUAL").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    );
+
+    // Determine which datasets to check
+    let datasets_to_check: Vec<DatasetId> = if let Some(ds_name) = dataset {
+        // Try to parse as DatasetId
+        ds_name
+            .parse::<DatasetId>()
+            .map(|id| vec![id])
+            .map_err(|e| format!("Invalid dataset '{}': {}", ds_name, e))?
+    } else {
+        let mut candidates: Vec<DatasetId> = DatasetId::all()
+            .iter()
+            .copied()
+            .filter(|d| !d.download_url().is_empty())
+            .filter(|d| {
+                if allow_manual {
+                    return true;
+                }
+                if !d.access_status().is_automatable() {
+                    return false;
+                }
+                if !d.is_automatable_download() {
+                    return false;
+                }
+                if d.requires_hf_token() && !crate::env::has_hf_token() {
+                    return false;
+                }
+                true
+            })
+            .collect();
+
+        if !all {
+            candidates.truncate(50);
+        }
+
+        candidates
+    };
+
+    if datasets_to_check.is_empty() {
+        println!("No datasets to check (no URLs or dataset not found)");
+        return Ok(());
+    }
+
+    println!("Checking {} dataset URLs...", datasets_to_check.len());
+    println!();
+
+    // Use a channel to collect results
+    let (tx, rx) = mpsc::channel();
+    let mut handles = Vec::new();
+
+    // Spawn worker threads
+    for dataset_id in datasets_to_check {
+        let tx = tx.clone();
+        let url = dataset_id.download_url().to_string();
+        let timeout_secs = timeout;
+
+        let handle = thread::spawn(move || {
+            let result = check_single_url(dataset_id.name(), &url, timeout_secs);
+            tx.send((dataset_id, result)).ok();
+        });
+
+        handles.push(handle);
+
+        // Limit concurrent workers
+        if handles.len() >= workers {
+            // Wait for one to complete
+            for handle in handles.drain(..1) {
+                handle.join().ok();
+            }
+        }
+    }
+
+    // Wait for remaining threads
+    for handle in handles {
+        handle.join().ok();
+    }
+
+    drop(tx); // Close sender so receiver knows we're done
+
+    // Collect results
+    let mut results: Vec<(DatasetId, URLHealthResult)> = Vec::new();
+    while let Ok((dataset_id, result)) = rx.recv() {
+        results.push((dataset_id, result));
+    }
+
+    // Sort by name for consistent output
+    results.sort_by_key(|(dataset_id, _)| dataset_id.name());
+
+    // Count and display results
+    let mut ok_count = 0;
+    let mut strict_error_count = 0;
+    let mut relaxed_error_count = 0;
+    let mut redirect_count = 0;
+
+    for (dataset_id, result) in &results {
+        let name = dataset_id.name();
+        match result.status.as_str() {
+            "ok" => {
+                ok_count += 1;
+                if dataset.is_some() {
+                    // Show details for single dataset check
+                    println!(
+                        "  {} {} ({})",
+                        color("32", "OK"),
+                        name,
+                        result.code.unwrap_or(0)
+                    );
+                }
+            }
+            "redirect" => {
+                redirect_count += 1;
+                ok_count += 1; // Redirects usually work
+                if dataset.is_some() {
+                    println!(
+                        "  {} {} ({}): {}",
+                        color("33", "REDIRECT"),
+                        name,
+                        result.code.unwrap_or(0),
+                        result.message
+                    );
+                }
+            }
+            "missing" => {
+                if dataset.is_some() {
+                    println!("  {} {}: No URL", color("33", "SKIP"), name);
+                }
+            }
+            _ => {
+                let expected_automatable = dataset_id.access_status().is_automatable()
+                    && dataset_id.is_automatable_download()
+                    && (!dataset_id.requires_hf_token() || crate::env::has_hf_token());
+
+                if expected_automatable {
+                    strict_error_count += 1;
+                    println!("  {} {}: {}", color("31", "ERROR"), name, result.message);
+                } else {
+                    relaxed_error_count += 1;
+                    println!("  {} {}: {}", color("33", "WARN"), name, result.message);
+                    println!("      (non-automatable source per registry metadata)");
+                }
+                if let Some(code) = result.code {
+                    println!("      HTTP {}", code);
+                }
+            }
+        }
+    }
+
+    println!();
+    if relaxed {
+        println!(
+            "Summary: {} OK ({} redirects), {} errors, {} warnings",
+            ok_count, redirect_count, strict_error_count, relaxed_error_count
+        );
+        if strict_error_count > 0 {
+            return Err(format!(
+                "{} expected-automatable URLs failed health check",
+                strict_error_count
+            ));
+        }
+    } else {
+        let total_errors = strict_error_count + relaxed_error_count;
+        println!(
+            "Summary: {} OK ({} redirects), {} errors",
+            ok_count, redirect_count, total_errors
+        );
+        if total_errors > 0 {
+            return Err(format!("{} URLs failed health check", total_errors));
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(feature = "eval-advanced"))]
+fn run_check_health(
+    _dataset: Option<&str>,
+    _all: bool,
+    _relaxed: bool,
+    _workers: usize,
+    _timeout: u64,
+) -> Result<(), String> {
+    println!("URL health checking requires --features eval-advanced");
+    Ok(())
+}
+
+#[cfg(feature = "eval-advanced")]
+struct URLHealthResult {
+    status: String,
+    code: Option<u16>,
+    message: String,
+}
+
+#[cfg(feature = "eval-advanced")]
+fn check_single_url(_name: &str, url: &str, timeout_secs: u64) -> URLHealthResult {
+    if url.is_empty() {
+        return URLHealthResult {
+            status: "missing".to_string(),
+            code: None,
+            message: "No URL defined".to_string(),
+        };
+    }
+
+    // Skip non-HTTP URLs
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return URLHealthResult {
+            status: "skip".to_string(),
+            code: None,
+            message: "Non-HTTP URL".to_string(),
+        };
+    }
+
+    // Use ureq for simple HTTP checking (already a dependency)
+    match ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .head(url)
+        .call()
+    {
+        Ok(response) => {
+            let status = response.status();
+            if status == 200 {
+                URLHealthResult {
+                    status: "ok".to_string(),
+                    code: Some(status),
+                    message: "OK".to_string(),
+                }
+            } else if (300..400).contains(&status) {
+                URLHealthResult {
+                    status: "redirect".to_string(),
+                    code: Some(status),
+                    message: format!(
+                        "Redirects to {}",
+                        response.header("Location").unwrap_or("unknown")
+                    ),
+                }
+            } else if status == 405 {
+                // HEAD not allowed, try GET
+                match ureq::get(url)
+                    .timeout(std::time::Duration::from_secs(timeout_secs))
+                    .call()
+                {
+                    Ok(resp) => URLHealthResult {
+                        status: "ok".to_string(),
+                        code: Some(resp.status()),
+                        message: "OK (HEAD not allowed)".to_string(),
+                    },
+                    Err(e) => URLHealthResult {
+                        status: "error".to_string(),
+                        code: None,
+                        message: format!("GET failed: {}", e),
+                    },
+                }
+            } else {
+                URLHealthResult {
+                    status: "error".to_string(),
+                    code: Some(status),
+                    message: format!("HTTP {}", status),
+                }
+            }
+        }
+        Err(ureq::Error::Status(code, _)) => URLHealthResult {
+            status: "error".to_string(),
+            code: Some(code),
+            message: format!("HTTP {}", code),
+        },
+        Err(ureq::Error::Transport(e)) => URLHealthResult {
+            status: "error".to_string(),
+            code: None,
+            message: format!("Connection error: {}", e),
+        },
+    }
 }

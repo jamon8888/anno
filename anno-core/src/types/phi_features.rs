@@ -529,12 +529,12 @@ mod tests {
 
     #[test]
     fn test_phi_features_parse() {
-        let phi = PhiFeatures::parse("3sgm").unwrap();
+        let phi = PhiFeatures::parse("3sgm").expect("parse '3sgm'");
         assert_eq!(phi.person, Person::Third);
         assert_eq!(phi.number, Number::Singular);
         assert_eq!(phi.gender, Gender::Masculine);
 
-        let phi = PhiFeatures::parse("3plf").unwrap();
+        let phi = PhiFeatures::parse("3plf").expect("parse '3plf'");
         assert_eq!(phi.person, Person::Third);
         assert_eq!(phi.number, Number::Plural);
         assert_eq!(phi.gender, Gender::Feminine);
@@ -557,15 +557,33 @@ mod tests {
 
     #[test]
     fn test_number_from_str() {
-        assert_eq!("sg".parse::<Number>().unwrap(), Number::Singular);
-        assert_eq!("singular".parse::<Number>().unwrap(), Number::Singular);
-        assert_eq!("du".parse::<Number>().unwrap(), Number::Dual);
-        assert_eq!("dual".parse::<Number>().unwrap(), Number::Dual);
-        assert_eq!("pl".parse::<Number>().unwrap(), Number::Plural);
-        assert_eq!("plural".parse::<Number>().unwrap(), Number::Plural);
-        assert_eq!("?".parse::<Number>().unwrap(), Number::Unknown);
-        assert_eq!("unknown".parse::<Number>().unwrap(), Number::Unknown);
-        assert_eq!("unk".parse::<Number>().unwrap(), Number::Unknown);
+        assert_eq!(
+            "sg".parse::<Number>().expect("parse 'sg'"),
+            Number::Singular
+        );
+        assert_eq!(
+            "singular".parse::<Number>().expect("parse 'singular'"),
+            Number::Singular
+        );
+        assert_eq!("du".parse::<Number>().expect("parse 'du'"), Number::Dual);
+        assert_eq!(
+            "dual".parse::<Number>().expect("parse 'dual'"),
+            Number::Dual
+        );
+        assert_eq!("pl".parse::<Number>().expect("parse 'pl'"), Number::Plural);
+        assert_eq!(
+            "plural".parse::<Number>().expect("parse 'plural'"),
+            Number::Plural
+        );
+        assert_eq!("?".parse::<Number>().expect("parse '?'"), Number::Unknown);
+        assert_eq!(
+            "unknown".parse::<Number>().expect("parse 'unknown'"),
+            Number::Unknown
+        );
+        assert_eq!(
+            "unk".parse::<Number>().expect("parse 'unk'"),
+            Number::Unknown
+        );
     }
 
     #[test]
@@ -604,8 +622,8 @@ mod tests {
     #[test]
     fn test_serde_roundtrip() {
         let phi = PhiFeatures::third_sg_masc();
-        let json = serde_json::to_string(&phi).unwrap();
-        let recovered: PhiFeatures = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&phi).expect("serialize PhiFeatures");
+        let recovered: PhiFeatures = serde_json::from_str(&json).expect("deserialize PhiFeatures");
         assert_eq!(phi, recovered);
     }
 
@@ -704,7 +722,8 @@ mod tests {
         ];
 
         for (input, expected_person, expected_number, expected_gender) in cases {
-            let phi = PhiFeatures::parse(input).expect(&format!("Should parse: {}", input));
+            let phi =
+                PhiFeatures::parse(input).unwrap_or_else(|| panic!("Should parse: {}", input));
             assert_eq!(phi.person, expected_person, "Person for {}", input);
             assert_eq!(phi.number, expected_number, "Number for {}", input);
             assert_eq!(phi.gender, expected_gender, "Gender for {}", input);

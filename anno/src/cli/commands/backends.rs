@@ -72,20 +72,22 @@ pub fn run(args: BackendsArgs) -> Result<(), String> {
             println!();
 
             println!("{}:", color("1;33", "Enabled Features"));
-            #[allow(unused_mut)]
-            let mut features: Vec<&str> = Vec::new();
-            #[cfg(feature = "onnx")]
-            features.push("onnx");
-            #[cfg(feature = "candle")]
-            features.push("candle");
-            #[cfg(feature = "eval")]
-            features.push("eval");
-            #[cfg(feature = "eval-bias")]
-            features.push("eval-bias");
-            #[cfg(feature = "eval-advanced")]
-            features.push("eval-advanced");
-            #[cfg(feature = "discourse")]
-            features.push("discourse");
+            let features: Vec<&str> = {
+                let mut v = Vec::new();
+                #[cfg(feature = "onnx")]
+                v.push("onnx");
+                #[cfg(feature = "candle")]
+                v.push("candle");
+                #[cfg(feature = "eval")]
+                v.push("eval");
+                #[cfg(feature = "eval-bias")]
+                v.push("eval-bias");
+                #[cfg(feature = "eval-advanced")]
+                v.push("eval-advanced");
+                #[cfg(feature = "discourse")]
+                v.push("discourse");
+                v
+            };
             if features.is_empty() {
                 println!("  (default features only)");
             } else {

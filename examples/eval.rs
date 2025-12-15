@@ -186,7 +186,15 @@ fn evaluate_real_datasets(backends: &[Backend]) -> HashMap<String, Vec<f64>> {
     for &id in dataset_ids {
         print!("Loading {:20} ... ", id.name());
 
-        let dataset = match loader.load_or_download(id) {
+        let loadable = match anno::eval::LoadableDatasetId::try_from(id) {
+            Ok(d) => d,
+            Err(e) => {
+                println!("SKIP ({})", e);
+                continue;
+            }
+        };
+
+        let dataset = match loader.load_or_download(loadable) {
             Ok(d) => d,
             Err(e) => {
                 println!("SKIP ({})", e);

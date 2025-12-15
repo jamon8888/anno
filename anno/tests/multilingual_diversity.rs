@@ -380,7 +380,7 @@ fn test_diverse_texts_comprehensive() {
 /// Property-based test for Unicode safety
 #[cfg(test)]
 mod property_tests {
-    use super::*;
+
     use proptest::prelude::*;
 
     /// Generate Unicode text that might cause issues

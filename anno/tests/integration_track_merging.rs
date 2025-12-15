@@ -83,10 +83,10 @@ fn test_merge_tracks_type_mismatch() {
 fn test_merge_empty_tracks() {
     let mut doc = GroundedDocument::new("test", "Test");
 
-    let mut track1 = Track::new(0, "empty1");
+    let track1 = Track::new(0, "empty1");
     let track1_id = doc.add_track(track1);
 
-    let mut track2 = Track::new(0, "empty2");
+    let track2 = Track::new(0, "empty2");
     let track2_id = doc.add_track(track2);
 
     // Merge empty tracks

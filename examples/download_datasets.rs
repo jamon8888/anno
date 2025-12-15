@@ -36,7 +36,7 @@
 use std::time::Instant;
 
 #[cfg(feature = "eval-advanced")]
-use anno::eval::loader::{DatasetId, DatasetLoader};
+use anno::eval::{DatasetLoader, LoadableDatasetId};
 
 fn main() {
     println!("=== Anno Dataset Downloader ===\n");
@@ -67,25 +67,28 @@ fn main() {
         let args: Vec<String> = std::env::args().collect();
         let ner_only = args.iter().any(|a| a == "--ner-only" || a == "-n");
 
-        let datasets: &[DatasetId] = if ner_only {
-            println!("--- NER Datasets Only ---\n");
-            DatasetId::all_ner()
+        let datasets: Vec<LoadableDatasetId> = if ner_only {
+            println!("--- NER Datasets Only (loadable subset) ---\n");
+            LoadableDatasetId::all()
+                .into_iter()
+                .filter(|id| id.is_ner())
+                .collect()
         } else {
-            println!("--- All Datasets ---\n");
-            DatasetId::all()
+            println!("--- All Loadable Datasets ---\n");
+            LoadableDatasetId::all()
         };
 
         for dataset_id in datasets {
             print!("  {}... ", dataset_id.name());
             let ds_start = Instant::now();
 
-            if loader.is_cached(*dataset_id) {
+            if loader.is_cached(dataset_id) {
                 println!("cached (skipped)");
                 skipped += 1;
                 continue;
             }
 
-            match loader.load_or_download(*dataset_id) {
+            match loader.load_or_download(dataset_id) {
                 Ok(dataset) => {
                     let elapsed = ds_start.elapsed();
                     let entity_count = dataset.entity_count();

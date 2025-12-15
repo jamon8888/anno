@@ -342,7 +342,7 @@ impl DialogueTurn {
     /// Is this a response token?
     #[must_use]
     pub fn is_response_token(&self) -> bool {
-        self.speech_act.map_or(false, |act| act.is_response_token())
+        self.speech_act.is_some_and(|act| act.is_response_token())
     }
 
     /// Is this from a human participant?

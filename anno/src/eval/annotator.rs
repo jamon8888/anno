@@ -447,7 +447,7 @@ impl<'a> AnnotatorAnalyzer<'a> {
                     .iter()
                     .max_by_key(|(_, c)| *c)
                     .map(|(t, c)| (t.clone(), *c))
-                    .unwrap();
+                    .expect("type_votes should not be empty");
 
                 // Confidence based on agreement
                 let span_confidence = total_votes as f64 / n_annotators as f64;
@@ -511,7 +511,7 @@ impl SoftEvaluator {
                 if pred.same_span(g)
                     && pred.entity_type == g.entity_type
                     && !matched_gold.contains(&i)
-                    && (best_match.is_none() || *conf > best_match.unwrap().1)
+                    && best_match.map_or(true, |(_, best_conf)| *conf > best_conf)
                 {
                     best_match = Some((i, *conf));
                 }

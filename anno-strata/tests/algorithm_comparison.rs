@@ -205,8 +205,12 @@ fn test_leiden_vs_louvain_find_same_structure() {
     let leiden = Leiden::new().with_seed(42);
     let louvain = Louvain::new().with_seed(42);
 
-    let leiden_comm = leiden.cluster(&graph).unwrap();
-    let louvain_comm = louvain.cluster(&graph).unwrap();
+    let leiden_comm = leiden
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed in test");
+    let louvain_comm = louvain
+        .cluster(&graph)
+        .expect("Louvain clustering should succeed in test");
 
     // Both should find approximately 2-3 communities
     let leiden_unique: HashSet<_> = leiden_comm.values().collect();
@@ -231,8 +235,12 @@ fn test_leiden_modularity_at_least_louvain() {
     let leiden = Leiden::new().with_seed(42);
     let louvain = Louvain::new().with_seed(42);
 
-    let leiden_comm = leiden.cluster(&graph).unwrap();
-    let louvain_comm = louvain.cluster(&graph).unwrap();
+    let leiden_comm = leiden
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed in test");
+    let louvain_comm = louvain
+        .cluster(&graph)
+        .expect("Louvain clustering should succeed in test");
 
     // Use louvain's modularity calculation for both (same formula)
     let leiden_mod = louvain.modularity(&graph, &leiden_comm);
@@ -255,8 +263,12 @@ fn test_label_propagation_vs_leiden_coverage() {
     let lp = LabelPropagation::new().with_seed(42);
     let leiden = Leiden::new().with_seed(42);
 
-    let lp_comm = lp.cluster(&graph).unwrap();
-    let leiden_comm = leiden.cluster(&graph).unwrap();
+    let lp_comm = lp
+        .cluster(&graph)
+        .expect("Label propagation clustering should succeed in test");
+    let leiden_comm = leiden
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed in test");
 
     // Both should cover all nodes
     assert_eq!(
@@ -345,9 +357,18 @@ fn test_empty_graph_all_algorithms() {
     assert!(h.is_empty() && a.is_empty());
 
     // Community detection
-    assert!(Leiden::new().cluster(&graph).unwrap().is_empty());
-    assert!(Louvain::new().cluster(&graph).unwrap().is_empty());
-    assert!(LabelPropagation::new().cluster(&graph).unwrap().is_empty());
+    assert!(Leiden::new()
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed on empty graph")
+        .is_empty());
+    assert!(Louvain::new()
+        .cluster(&graph)
+        .expect("Louvain clustering should succeed on empty graph")
+        .is_empty());
+    assert!(LabelPropagation::new()
+        .cluster(&graph)
+        .expect("Label propagation clustering should succeed on empty graph")
+        .is_empty());
 }
 
 #[test]
@@ -362,7 +383,25 @@ fn test_single_node_all_algorithms() {
     assert_eq!(Closeness::default().compute(&graph).len(), 1);
 
     // Community detection - single node = single community
-    assert_eq!(Leiden::new().cluster(&graph).unwrap().len(), 1);
-    assert_eq!(Louvain::new().cluster(&graph).unwrap().len(), 1);
-    assert_eq!(LabelPropagation::new().cluster(&graph).unwrap().len(), 1);
+    assert_eq!(
+        Leiden::new()
+            .cluster(&graph)
+            .expect("Leiden clustering should succeed on single node")
+            .len(),
+        1
+    );
+    assert_eq!(
+        Louvain::new()
+            .cluster(&graph)
+            .expect("Louvain clustering should succeed on single node")
+            .len(),
+        1
+    );
+    assert_eq!(
+        LabelPropagation::new()
+            .cluster(&graph)
+            .expect("Label propagation clustering should succeed on single node")
+            .len(),
+        1
+    );
 }

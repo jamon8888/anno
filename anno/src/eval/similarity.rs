@@ -556,7 +556,7 @@ mod tests {
     fn test_entity_embedding() {
         let e = EntityEmbedding::new("Q937", "Einstein", vec![0.5, 0.5, 0.0]);
         assert_eq!(e.dim(), 3);
-        assert!(e.cosine_similarity(&vec![0.5, 0.5, 0.0]) > 0.99);
+        assert!(e.cosine_similarity(&[0.5, 0.5, 0.0]) > 0.99);
     }
 
     #[test]
@@ -570,7 +570,7 @@ mod tests {
         let index = SimilarityIndex::new(embeddings);
 
         // Find similar to Einstein-like vector
-        let results = index.find_similar(&vec![1.0, 0.0, 0.0], 2);
+        let results = index.find_similar(&[1.0, 0.0, 0.0], 2);
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].id, "Q1"); // Einstein is most similar
         assert_eq!(results[1].id, "Q2"); // Curie is second

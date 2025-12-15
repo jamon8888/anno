@@ -263,7 +263,7 @@ mod tests {
     fn test_empty_graph() {
         let graph = GraphDocument::new();
         let lp = LabelPropagation::new();
-        let communities = lp.cluster(&graph).unwrap();
+        let communities = lp.cluster(&graph).expect("empty graph should cluster");
         assert!(communities.is_empty());
     }
 
@@ -273,7 +273,7 @@ mod tests {
         let graph = GraphDocument::from_extraction(&[solo], &[], None);
 
         let lp = LabelPropagation::new();
-        let communities = lp.cluster(&graph).unwrap();
+        let communities = lp.cluster(&graph).expect("single node should cluster");
         assert_eq!(communities.len(), 1);
     }
 
@@ -281,7 +281,7 @@ mod tests {
     fn test_two_disconnected_cliques() {
         let graph = two_cliques_graph();
         let lp = LabelPropagation::new().with_seed(42);
-        let communities = lp.cluster(&graph).unwrap();
+        let communities = lp.cluster(&graph).expect("two cliques should cluster");
 
         // Should find 2 communities
         let unique: std::collections::HashSet<_> = communities.values().collect();
@@ -306,8 +306,12 @@ mod tests {
         let lp1 = LabelPropagation::new().with_seed(123);
         let lp2 = LabelPropagation::new().with_seed(123);
 
-        let c1 = lp1.cluster(&graph).unwrap();
-        let c2 = lp2.cluster(&graph).unwrap();
+        let c1 = lp1
+            .cluster(&graph)
+            .expect("deterministic clustering should succeed");
+        let c2 = lp2
+            .cluster(&graph)
+            .expect("deterministic clustering should succeed");
 
         // Same seed should give equivalent partitions
         // (community IDs might differ, but groupings should be the same)
@@ -353,7 +357,9 @@ mod tests {
     fn test_all_nodes_assigned() {
         let graph = connected_cliques_graph();
         let lp = LabelPropagation::new().with_seed(42);
-        let communities = lp.cluster(&graph).unwrap();
+        let communities = lp
+            .cluster(&graph)
+            .expect("connected cliques should cluster");
 
         // Every node should have a community
         assert_eq!(communities.len(), graph.nodes.len());

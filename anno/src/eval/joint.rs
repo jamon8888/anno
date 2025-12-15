@@ -552,7 +552,6 @@ struct PredictedLink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eval::coref::Mention as CorefMention;
     use crate::joint::JointConfig;
 
     #[test]

@@ -264,8 +264,8 @@ proptest! {
         let mut ref2 = UncertainReference::new("test");
 
         for (i, &w) in weights.iter().enumerate() {
-            ref1.add_candidate(ReferenceCandidate::new(i as u64, &format!("entity{}", i), w));
-            ref2.add_candidate(ReferenceCandidate::new(i as u64, &format!("entity{}", i), w));
+            ref1.add_candidate(ReferenceCandidate::new(i as u64, format!("entity{}", i), w));
+            ref2.add_candidate(ReferenceCandidate::new(i as u64, format!("entity{}", i), w));
         }
 
         let resolved1 = ref1.resolve();
@@ -352,7 +352,7 @@ proptest! {
     ) {
         let mut reference = UncertainReference::new("test");
         for (i, &w) in weights.iter().enumerate() {
-            reference.add_candidate(ReferenceCandidate::new(i as u64, &format!("e{}", i), w));
+            reference.add_candidate(ReferenceCandidate::new(i as u64, format!("e{}", i), w));
         }
 
         let probs = reference.probabilities();
@@ -370,7 +370,7 @@ proptest! {
     ) {
         let mut reference = UncertainReference::new("test");
         for (i, &w) in weights.iter().enumerate() {
-            reference.add_candidate(ReferenceCandidate::new(i as u64, &format!("e{}", i), w));
+            reference.add_candidate(ReferenceCandidate::new(i as u64, format!("e{}", i), w));
         }
 
         let probs = reference.probabilities();
@@ -386,7 +386,7 @@ proptest! {
     ) {
         let mut reference = UncertainReference::new("test");
         for (i, &w) in weights.iter().enumerate() {
-            reference.add_candidate(ReferenceCandidate::new(i as u64, &format!("e{}", i), w));
+            reference.add_candidate(ReferenceCandidate::new(i as u64, format!("e{}", i), w));
         }
 
         if let Some(resolved) = reference.resolve() {
@@ -888,7 +888,7 @@ proptest! {
 
         for i in 0..n_turns {
             let speaker = &speakers[i % speakers.len()];
-            ctx.add_turn(DialogueTurn::new(&format!("Turn {}", i), speaker));
+            ctx.add_turn(DialogueTurn::new(format!("Turn {}", i), speaker));
         }
 
         prop_assert_eq!(ctx.turns.len(), n_turns);
@@ -987,7 +987,7 @@ fn fuzz_dialogue_context_last_turns() {
     let mut ctx = DialogueContext::new();
 
     for i in 0..10 {
-        ctx.add_turn(DialogueTurn::new(&format!("Turn {}", i), "SPK"));
+        ctx.add_turn(DialogueTurn::new(format!("Turn {}", i), "SPK"));
     }
 
     // Last 3 turns

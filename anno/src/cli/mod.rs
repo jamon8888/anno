@@ -8,10 +8,13 @@ pub mod cache;
 pub mod commands;
 /// Configuration management.
 pub mod config;
+pub mod error;
+pub mod exit_codes;
 pub mod output;
 pub mod parser;
 pub mod utils;
 
+pub use error::CliError;
 pub use output::*;
 pub use parser::*;
 pub use utils::*;

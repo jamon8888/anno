@@ -81,7 +81,7 @@ pub struct JointMention {
 impl JointMention {
     pub fn new(idx: usize, text: &str, start: usize, end: usize, entity_type: EntityType) -> Self {
         let head = text.split_whitespace().last().unwrap_or(text).to_string();
-        let mention_kind = if text.chars().next().map_or(false, |c| c.is_uppercase()) {
+        let mention_kind = if text.chars().next().is_some_and(|c| c.is_uppercase()) {
             MentionKind::Proper
         } else if [
             "he", "she", "it", "they", "him", "her", "them", "his", "hers", "its", "their",
@@ -236,6 +236,7 @@ pub struct Trainer {
     examples: Vec<TrainingExample>,
     // AdaGrad states
     type_bias_states: HashMap<String, AdaGradState>,
+    #[allow(dead_code)]
     context_weight_state: AdaGradState,
     new_cluster_bias_state: AdaGradState,
     distance_decay_state: AdaGradState,
@@ -327,7 +328,7 @@ impl Trainer {
         let mut score = 0.0;
 
         // Unary NER
-        for (_, entity_type) in ner {
+        for entity_type in ner.values() {
             if let Some(&bias) = self.weights.type_bias.get(entity_type.as_label()) {
                 score += bias;
             }
@@ -430,7 +431,7 @@ impl Trainer {
         scale: f64,
     ) {
         // Unary NER
-        for (_, entity_type) in ner {
+        for entity_type in ner.values() {
             *grads
                 .type_bias
                 .entry(entity_type.as_label().to_string())
@@ -745,7 +746,7 @@ fn main() {
     let scale = if max_loss > 0.0 { 50.0 / max_loss } else { 1.0 };
     for (i, &loss) in losses.iter().enumerate() {
         let bar_len = (loss * scale) as usize;
-        let bar: String = std::iter::repeat('#').take(bar_len).collect();
+        let bar: String = "#".repeat(bar_len);
         println!("  {:2}: {:>6.4} |{}", i, loss, bar);
     }
 }

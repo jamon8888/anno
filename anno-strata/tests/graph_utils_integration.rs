@@ -210,7 +210,7 @@ fn test_node_eccentricities() {
     );
 
     // All values should be non-negative
-    for (_, &ecc) in &eccentricities {
+    for &ecc in eccentricities.values() {
         assert!(ecc >= 0.0, "Eccentricity should be non-negative");
     }
 }

@@ -370,8 +370,16 @@ pub fn multilingual_dataset() -> Vec<AnnotatedExample> {
         AnnotatedExample {
             text: "田中太郎さんは東京で働いています。".into(),
             entities: vec![
-                entity_at("田中太郎さんは東京で働いています。", "田中太郎", EntityType::Person),
-                entity_at("田中太郎さんは東京で働いています。", "東京", EntityType::Location),
+                entity_at(
+                    "田中太郎さんは東京で働いています。",
+                    "田中太郎",
+                    EntityType::Person,
+                ),
+                entity_at(
+                    "田中太郎さんは東京で働いています。",
+                    "東京",
+                    EntityType::Location,
+                ),
             ],
             domain: Domain::Multilingual,
             difficulty: Difficulty::Hard,
@@ -411,7 +419,11 @@ pub fn multilingual_dataset() -> Vec<AnnotatedExample> {
         AnnotatedExample {
             text: "北京大学的李教授获得了诺贝尔奖。".into(),
             entities: vec![
-                entity_at("北京大学的李教授获得了诺贝尔奖。", "北京大学", EntityType::Organization),
+                entity_at(
+                    "北京大学的李教授获得了诺贝尔奖。",
+                    "北京大学",
+                    EntityType::Organization,
+                ),
                 entity_at("北京大学的李教授获得了诺贝尔奖。", "李", EntityType::Person),
             ],
             domain: Domain::Multilingual,
@@ -451,8 +463,16 @@ pub fn multilingual_dataset() -> Vec<AnnotatedExample> {
         AnnotatedExample {
             text: "東京2020で🥇を取った大坂なおみ".into(),
             entities: vec![
-                entity_at("東京2020で🥇を取った大坂なおみ", "東京", EntityType::Location),
-                entity_at("東京2020で🥇を取った大坂なおみ", "大坂なおみ", EntityType::Person),
+                entity_at(
+                    "東京2020で🥇を取った大坂なおみ",
+                    "東京",
+                    EntityType::Location,
+                ),
+                entity_at(
+                    "東京2020で🥇を取った大坂なおみ",
+                    "大坂なおみ",
+                    EntityType::Person,
+                ),
             ],
             domain: Domain::Multilingual,
             difficulty: Difficulty::Hard,
@@ -957,21 +977,21 @@ pub fn email_dataset() -> Vec<AnnotatedExample> {
     let email_start = text1
         .find("help@example.com")
         .map(|b| text1[..b].chars().count())
-        .unwrap();
+        .expect("email should be found in text1");
     let phone_start = text1
         .find("+1-212-555-0100")
         .map(|b| text1[..b].chars().count())
-        .unwrap();
+        .expect("phone should be found in text1");
 
     let text2 = "Submit a ticket via https://support.example.org or email ops@example.org.";
     let url_start = text2
         .find("https://support.example.org")
         .map(|b| text2[..b].chars().count())
-        .unwrap();
+        .expect("URL should be found in text2");
     let email2_start = text2
         .find("ops@example.org")
         .map(|b| text2[..b].chars().count())
-        .unwrap();
+        .expect("email should be found in text2");
 
     vec![
         AnnotatedExample {

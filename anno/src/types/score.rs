@@ -210,22 +210,22 @@ mod tests {
 
     #[test]
     fn to_confidence_preserves_value() {
-        let score = Score::new(0.85).unwrap();
+        let score = Score::new(0.85).expect("0.85 is valid");
         let conf = score.to_confidence();
         assert!((conf.get() - 0.85).abs() < 0.001);
     }
 
     #[test]
     fn predicates() {
-        assert!(Score::new(0.95).unwrap().is_high());
-        assert!(!Score::new(0.85).unwrap().is_high());
-        assert!(Score::new(0.7).unwrap().passes(0.5));
-        assert!(!Score::new(0.4).unwrap().passes(0.5));
+        assert!(Score::new(0.95).expect("0.95 is valid").is_high());
+        assert!(!Score::new(0.85).expect("0.85 is valid").is_high());
+        assert!(Score::new(0.7).expect("0.7 is valid").passes(0.5));
+        assert!(!Score::new(0.4).expect("0.4 is valid").passes(0.5));
     }
 
     #[test]
     fn display_format() {
-        let score = Score::new(0.856).unwrap();
+        let score = Score::new(0.856).expect("0.856 is valid");
         assert_eq!(format!("{}", score), "85.6%");
     }
 }

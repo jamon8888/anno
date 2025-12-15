@@ -201,18 +201,27 @@ mod tests {
     #[test]
     fn test_serde_roundtrip() {
         let gender = Gender::Feminine;
-        let json = serde_json::to_string(&gender).unwrap();
+        let json = serde_json::to_string(&gender).expect("serialize Gender");
         assert_eq!(json, "\"feminine\"");
-        let recovered: Gender = serde_json::from_str(&json).unwrap();
+        let recovered: Gender = serde_json::from_str(&json).expect("deserialize Gender");
         assert_eq!(gender, recovered);
     }
 
     #[test]
     fn test_from_str() {
-        assert_eq!("masculine".parse::<Gender>().unwrap(), Gender::Masculine);
-        assert_eq!("female".parse::<Gender>().unwrap(), Gender::Feminine);
-        assert_eq!("nb".parse::<Gender>().unwrap(), Gender::Neutral);
-        assert_eq!("".parse::<Gender>().unwrap(), Gender::Unknown);
+        assert_eq!(
+            "masculine".parse::<Gender>().expect("parse 'masculine'"),
+            Gender::Masculine
+        );
+        assert_eq!(
+            "female".parse::<Gender>().expect("parse 'female'"),
+            Gender::Feminine
+        );
+        assert_eq!("nb".parse::<Gender>().expect("parse 'nb'"), Gender::Neutral);
+        assert_eq!(
+            "".parse::<Gender>().expect("parse empty gender"),
+            Gender::Unknown
+        );
     }
 
     #[test]

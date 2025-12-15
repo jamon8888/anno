@@ -37,7 +37,7 @@ fn test_builtin_backends_extract() {
     let builtins = ["pattern", "heuristic"];
 
     for name in builtins {
-        let model = BackendFactory::create(name).expect(&format!("Create {}", name));
+        let model = BackendFactory::create(name).unwrap_or_else(|_| panic!("Create {}", name));
         let result = model.extract_entities(text, None);
 
         assert!(

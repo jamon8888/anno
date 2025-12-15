@@ -166,23 +166,34 @@ for url in urls {
 | ACE 2005 | LDC | LDC2006T06 membership |
 | i2b2 2014 | DUA | Sign DUA at i2b2.org |
 
-## Architectural Note: DatasetId Unification (2025-12-09)
+## Architectural Note: DatasetId Unification Status
 
-**DatasetId is now unified.** The `loader.rs` file re-exports from `dataset_registry.rs`:
+**Current State**: Two `DatasetId` enums exist:
+- `loader::DatasetId` (~190 variants) - datasets with loading implementations
+- `registry::DatasetId` (~479 variants) - full metadata catalog
 
+**Unification Plan**:
+1. ✅ Added `is_loadable()` predicate to registry (marks which datasets have loading code)
+2. ✅ Added `all_loadable()` method to get loadable datasets from registry
+3. ✅ Fixed generic fallback values to delegate to registry
+4. ✅ Added dataset check CLI command (`anno dataset check`)
+5. ⏳ **TODO**: Replace loader enum with type alias to registry (requires updating ~2000 match statements)
+6. ⏳ **TODO**: Update all loader methods to accept registry::DatasetId and check `is_loadable()`
+
+**Why Not Fully Unified Yet**:
+- `loader.rs` has ~2000 match statements on specific enum variants
+- Full unification requires updating all match statements to handle non-loadable datasets
+- Migration can be done gradually by making loader methods accept registry enum
+
+**Use `is_loadable()` to check if a registry dataset can be loaded**:
 ```rust
-// In loader.rs
-pub use super::dataset_registry::DatasetId;
+use anno::eval::dataset_registry::DatasetId;
+
+let id = DatasetId::WikiGold;
+if id.is_loadable() {
+    // Can use with DatasetLoader
+}
 ```
-
-This ensures `dataset_registry.rs` is the **single source of truth** for dataset identifiers.
-
-### Unification Complete (2025-12-09)
-
-The unification removed ~5,200 lines of duplicate code from `loader.rs`:
-- **Before**: `loader.rs` was ~10,800 lines (duplicate enum + impl)
-- **After**: `loader.rs` is ~5,300 lines (loading functionality only)
-- **Savings**: ~5,500 lines eliminated
 
 ---
 

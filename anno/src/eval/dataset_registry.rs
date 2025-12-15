@@ -120,11 +120,12 @@
 //! 1. Add an entry in `define_datasets!` below
 //! 2. Run tests to verify: `cargo test -p anno --features eval`
 //! 3. Regenerate exports: `cargo test generate_datasets_markdown -- --ignored`
-//! 4. **Important**: Also add to `loader.rs` if the dataset should be loadable
+//! 4. If the dataset should be *loadable*, ensure `eval::loader::LoadableDatasetId`
+//!    maps it to a parsing plan.
 //!
-//! Note: This file generates its own `DatasetId` enum which is separate from
-//! `loader::DatasetId`. See `docs/DATASET_INTEGRATION_STATUS.md` for details
-//! on the architectural gap and unification plan.
+//! Note:
+//! - `DatasetId` here is the canonical catalog + metadata.
+//! - Some catalog datasets are intentionally not loadable (yet).
 //!
 //! # Example
 //!
@@ -482,6 +483,26 @@ macro_rules! define_datasets {
                 }
             }
 
+            /// Get supported tasks as typed `Task` values (best-effort).
+            ///
+            /// This keeps the registry as the single source of truth (strings), while giving
+            /// downstream code a type-safe view for control flow and compatibility checks.
+            ///
+            /// Unknown/out-of-scope task strings are ignored.
+            #[must_use]
+            pub fn tasks_typed(&self) -> Vec<$crate::eval::task_mapping::Task> {
+                let mut out = Vec::new();
+                for &task_str in self.tasks() {
+                    let Some(task) = $crate::eval::task_mapping::Task::from_code(task_str) else {
+                        continue;
+                    };
+                    if !out.contains(&task) {
+                        out.push(task);
+                    }
+                }
+                out
+            }
+
             /// Get expected document count for validation.
             #[must_use]
             pub fn expected_docs(&self) -> Option<u32> {
@@ -604,12 +625,49 @@ macro_rules! define_datasets {
                 }
                 // Try case-insensitive
                 let lower = s.to_lowercase();
+
+                // Common aliases (human-friendly / legacy spellings)
+                match lower.as_str() {
+                    "masakhane-ner" | "masakhane_ner" | "masakhane ner" => return Ok(Self::MasakhaNER),
+                    "masakhane-news" | "masakhane_news" | "masakhane news" => return Ok(Self::MasakhaNEWS),
+                    "chinese-historical-ie" | "chinese_historical_ie" | "ancient-chinese-ner" | "ancient_chinese_ner" => {
+                        return Ok(Self::CHisIEC);
+                    }
+                    _ => {}
+                }
                 $(
                     if stringify!($variant).to_lowercase() == lower {
                         return Ok(Self::$variant);
                     }
                 )*
-                Err(format!("Unknown dataset: {}", s))
+
+                // Try normalized matching (handles `wnut-17`, `mit_movie`, `ch-is-iec`, etc.)
+                // NOTE: We intentionally only strip separators/punctuation; we do not attempt
+                // fuzzy/approximate matching.
+                fn normalize(inp: &str) -> String {
+                    inp.chars()
+                        .filter(|c| c.is_ascii_alphanumeric())
+                        .flat_map(|c| c.to_lowercase())
+                        .collect()
+                }
+
+                let needle = normalize(s);
+                if needle.is_empty() {
+                    return Err("Unknown dataset: <empty>".to_string());
+                }
+
+                let mut matches = Vec::new();
+                $(
+                    if normalize(stringify!($variant)) == needle || normalize($name) == needle {
+                        matches.push(Self::$variant);
+                    }
+                )*
+
+                match matches.as_slice() {
+                    [only] => Ok(*only),
+                    [] => Err(format!("Unknown dataset: {}", s)),
+                    _ => Err(format!("Ambiguous dataset id '{}': {:?}", s, matches)),
+                }
             }
         }
     };
@@ -683,6 +741,14 @@ macro_rules! impl_category_checks {
         pub fn is_indigenous(&self) -> bool {
             match self {
                 $(Self::$variant => $crate::has_category!([$($cat),*], indigenous),)*
+            }
+        }
+
+        /// Check if this dataset is an African language dataset.
+        #[must_use]
+        pub fn is_african_language(&self) -> bool {
+            match self {
+                $(Self::$variant => $crate::has_category!([$($cat),*], african_language),)*
             }
         }
 
@@ -933,6 +999,11 @@ macro_rules! impl_category_checks {
         /// Get all dialogue/conversational datasets.
         pub fn all_dialogue() -> Vec<&'static DatasetId> {
             Self::all().iter().filter(|d| d.is_dialogue()).collect()
+        }
+
+        /// Get all African language datasets.
+        pub fn all_african_languages() -> Vec<&'static DatasetId> {
+            Self::all().iter().filter(|d| (*d).is_african_language()).collect()
         }
 
         /// Quick evaluation set (fast downloads, common benchmarks).
@@ -1260,7 +1331,7 @@ define_datasets! {
     BroadTwitterCorpus {
         name: "Broad Twitter Corpus",
         description: "Twitter NER across multiple time periods. Tests temporal robustness of NER systems.",
-        url: "https://raw.githubusercontent.com/GateNLP/broad_twitter_corpus/master/test.bio",
+        url: "https://huggingface.co/datasets/tner/btc",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "en",
         domain: "social_media",
@@ -1272,6 +1343,7 @@ define_datasets! {
         size_hint: "~9k tweets, stratified by time period",
         notes: "Temporal stratification; tests model robustness to language evolution",
         hf_id: "tner/btc",
+        access_status: HuggingFace,
         categories: [ner, social_media],
     },
 
@@ -1314,7 +1386,7 @@ define_datasets! {
     UniversalNERBench {
         name: "Universal NER",
         description: "Cross-lingual NER benchmark spanning 13 diverse languages. Tests zero-shot transfer.",
-        url: "https://github.com/UniversalNER/UNER",
+        url: "https://github.com/UniversalNER/uner_code",
         entity_types: ["PER", "LOC", "ORG"],
         language: "multi",
         domain: "mixed",
@@ -1419,7 +1491,7 @@ define_datasets! {
     MultiCoNER {
         name: "MultiCoNER",
         description: "Multilingual Complex NER. 11 languages with fine-grained and complex entities.",
-        url: "https://multiconer.github.io/",
+        url: "https://huggingface.co/datasets/MultiCoNER/multiconer_v1",
         entity_types: ["PER", "LOC", "CORP", "GRP", "PROD", "CW"],
         language: "multi",
         domain: "mixed",
@@ -1429,14 +1501,16 @@ define_datasets! {
         year: 2022,
         format: "CoNLL",
         size_hint: "11 languages, ~1.1M tokens",
-        notes: "SemEval-2022 shared task; complex entities from diverse sources",
+        notes: "SemEval-2022 shared task; complex entities from diverse sources. HF-hosted but may require approval/token depending on split/license gating.",
+        hf_id: "MultiCoNER/multiconer_v1",
+        access_status: ContactAuthors,
         categories: [ner, multilingual],
     },
 
     MultiCoNERv2 {
         name: "MultiCoNER v2",
         description: "MultiCoNER v2 with expanded languages and fine-grained types.",
-        url: "https://multiconer.github.io/",
+        url: "https://huggingface.co/datasets/MultiCoNER/multiconer_v2",
         entity_types: ["PER", "LOC", "CORP", "GRP", "PROD", "CW", "Medical", "Scientist"],
         language: "multi",
         domain: "mixed",
@@ -1446,7 +1520,9 @@ define_datasets! {
         year: 2023,
         format: "CoNLL",
         size_hint: "12 languages, fine-grained types",
-        notes: "SemEval-2023 shared task; expanded from v1 with more types",
+        notes: "SemEval-2023 shared task; expanded from v1 with more types. HF-hosted but may require approval/token depending on split/license gating.",
+        hf_id: "MultiCoNER/multiconer_v2",
+        access_status: ContactAuthors,
         categories: [ner, multilingual],
     },
 
@@ -1542,6 +1618,7 @@ define_datasets! {
         notes: "Classic benchmark for gene/protein NER; BioCreative shared task",
         hf_id: "bigbio/bc2gm_corpus",
         hf_config: "bigbio_kb",
+        access_status: ContactAuthors,
         categories: [ner, biomedical],
     },
 
@@ -1561,6 +1638,7 @@ define_datasets! {
         notes: "Chemical NER benchmark; includes IUPAC names, trivial names, abbreviations",
         hf_id: "bigbio/bc4chemd",
         hf_config: "bigbio_kb",
+        access_status: ContactAuthors,
         categories: [ner, biomedical],
     },
 
@@ -1588,7 +1666,7 @@ define_datasets! {
     PreCo {
         name: "PreCo",
         description: "Large-scale coreference from PreCo reading comprehension corpus. 10x larger than OntoNotes.",
-        url: "https://preschool-lab.github.io/PreCo/",
+        url: "https://huggingface.co/datasets/coref-data/preco_raw",
         entity_types: ["PER", "LOC", "ORG"],
         language: "en",
         domain: "general",
@@ -1600,6 +1678,9 @@ define_datasets! {
         annotation_scheme: "CoNLLCoref",
         size_hint: "38k documents, includes singletons",
         notes: "Preschool vocabulary for cleaner evaluation; largest public coref corpus",
+        splits: ["train", "dev", "test"],
+        tasks: ["coref"],
+        hf_id: "coref-data/preco_raw",
         categories: [coref],
     },
     LitBank {
@@ -1664,7 +1745,7 @@ define_datasets! {
     WikiCoref {
         name: "WikiCoref",
         description: "Wikipedia coreference corpus. 30 documents with full coreference annotation.",
-        url: "https://rali.iro.umontreal.ca/rali/en/wikicoref-corpus",
+        url: "",
         entity_types: ["PER", "ORG", "LOC"],
         language: "en",
         domain: "wikipedia",
@@ -1674,7 +1755,8 @@ define_datasets! {
         year: 2016,
         format: "CoNLL",
         size_hint: "30 documents, ~60k tokens",
-        notes: "Long documents averaging 2k tokens; challenging for span-based models",
+        notes: "Long documents averaging 2k tokens; challenging for span-based models. Prior download URL has an expired TLS cert; needs a fresh mirror.",
+        access_status: Deprecated,
         categories: [coref],
     },
 
@@ -1716,7 +1798,7 @@ define_datasets! {
     CLEFClinicalCoref {
         name: "CLEF Clinical Coreference",
         description: "Clinical coreference from ShARe/CLEF eHealth. Patient records with coref.",
-        url: "https://physionet.org/content/shareclefehealth2013coreference/",
+        url: "",
         entity_types: ["Disorder", "Drug", "Procedure"],
         language: "en",
         domain: "clinical",
@@ -1726,7 +1808,8 @@ define_datasets! {
         year: 2013,
         format: "Standoff",
         size_hint: "298 discharge summaries",
-        notes: "Clinical concept coreference; disorder mentions across sentences",
+        notes: "Clinical concept coreference; disorder mentions across sentences. Was hosted on PhysioNet; URL appears gone/renamed; requires controlled access.",
+        access_status: Registration,
         categories: [coref, biomedical],
     },
 
@@ -1770,7 +1853,7 @@ define_datasets! {
     QxoRef {
         name: "qxoRef",
         description: "First coreference corpus for Conchucos Quechua. Historically significant as first indigenous coref resource.",
-        url: "https://raw.githubusercontent.com/Lguyogiro/qxoRef/main/data/conll/all.conll",
+        url: "https://raw.githubusercontent.com/elizabethpankratz/qxoRef/f0eb5716573b3f428bfcfdda923b195d0e7967b8/qxoRef_AZ23.conll",
         entity_types: ["PER", "LOC", "ORG"],
         language: "qxo",
         domain: "narrative",
@@ -1787,7 +1870,7 @@ define_datasets! {
     AmericasNLI {
         name: "AmericasNLI",
         description: "NLI for 10 Indigenous American languages (Quechua, Guaraní, Nahuatl, etc.).",
-        url: "https://raw.githubusercontent.com/nala-cub/AmericasNLI/main/data/test/quechua_test.tsv",
+        url: "https://raw.githubusercontent.com/nala-cub/AmericasNLI/be3c351b7e1ae69936c61bfde3e24f30757db9ac/test.tsv",
         entity_types: [],
         language: "multi",
         domain: "general",
@@ -1802,7 +1885,7 @@ define_datasets! {
     CherokeeNER {
         name: "Cherokee NER",
         description: "Cherokee-English parallel corpus for NER transfer. Uses Syllabary script.",
-        url: "https://raw.githubusercontent.com/ZhangShiyworkhub/ChrEn/main/chr/chr.txt",
+        url: "",
         entity_types: ["PER", "LOC", "ORG"],
         language: "chr",
         domain: "general",
@@ -1811,13 +1894,14 @@ define_datasets! {
         paper_url: "https://aclanthology.org/2020.findings-emnlp.464/",
         year: 2020,
         format: "Custom",
-        notes: "Syllabary script (85 characters); polysynthetic language; ~7k speakers",
+        notes: "Syllabary script (85 characters); polysynthetic language; ~7k speakers. Prior URL is dead; needs a fresh mirror.",
+        access_status: Deprecated,
         categories: [ner, indigenous, low_resource],
     },
     NahuatlNER {
         name: "Nahuatl NER",
         description: "Named entity recognition for Nahuatl (Aztec language). Colonial-era texts and modern usage.",
-        url: "https://github.com/Lguyogiro/nahuatl-ner",
+        url: "",
         entity_types: ["PER", "LOC", "ORG"],
         language: "nah",
         domain: "historical",
@@ -1825,7 +1909,8 @@ define_datasets! {
         citation: "Gutierrez-Vasquez et al. (2023)",
         year: 2023,
         format: "CoNLL",
-        notes: "Polysynthetic Uto-Aztecan language; ~1.7M speakers; includes colonial manuscripts",
+        notes: "Polysynthetic Uto-Aztecan language; ~1.7M speakers; includes colonial manuscripts. Prior URL is dead; needs a fresh mirror.",
+        access_status: Deprecated,
         categories: [ner, indigenous, low_resource, historical],
     },
     MaoriNER {
@@ -1840,12 +1925,13 @@ define_datasets! {
         year: 2022,
         format: "JSONL",
         notes: "Polynesian language; ~50k fluent speakers; limited training data available",
+        access_status: ContactAuthors,
         categories: [ner, indigenous, low_resource],
     },
     WelshNER {
         name: "Welsh NER",
         description: "Named entity recognition for Welsh (Cymraeg). Celtic language NER corpus.",
-        url: "https://github.com/Portulan/welsh-ner",
+        url: "",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "cy",
         domain: "news",
@@ -1853,13 +1939,14 @@ define_datasets! {
         citation: "Roberts et al. (2021)",
         year: 2021,
         format: "CoNLL",
-        notes: "Celtic language; ~900k speakers; supports Welsh-specific entity types",
+        notes: "Celtic language; ~900k speakers; supports Welsh-specific entity types. Prior URL is dead; needs a fresh mirror.",
+        access_status: Deprecated,
         categories: [ner, indigenous, low_resource],
     },
     BasqueNER {
         name: "Basque NER",
         description: "Named entity recognition for Basque (Euskara). Language isolate NER corpus.",
-        url: "https://github.com/ixa-ehu/eusner",
+        url: "",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "eu",
         domain: "news",
@@ -1868,7 +1955,8 @@ define_datasets! {
         year: 2019,
         format: "CoNLL",
         size_hint: "~80k tokens",
-        notes: "Language isolate; agglutinative morphology; ~750k speakers; ergative-absolutive alignment",
+        notes: "Language isolate; agglutinative morphology; ~750k speakers; ergative-absolutive alignment. Prior URL is dead; needs a fresh mirror.",
+        access_status: Deprecated,
         categories: [ner, indigenous, low_resource],
     },
 
@@ -1878,7 +1966,7 @@ define_datasets! {
     HIPE2022 {
         name: "HIPE-2022",
         description: "Multilingual Historical NER. 6 datasets across 11 languages including Latin.",
-        url: "https://raw.githubusercontent.com/hipe-eval/HIPE-2022-data/main/data/v2.1/de/HIPE-2022-v2.1-hipe2020-de-test.tsv",
+        url: "https://raw.githubusercontent.com/hipe-eval/HIPE-2022-data/147f5bc3c7fb7e5c6b024a9ffd6503cd019fb9ea/data/v2.1/hipe2020/de/HIPE-2022-v2.1-hipe2020-test-de.tsv",
         entity_types: ["PER", "LOC", "ORG", "PROD"],
         language: "multi",
         domain: "historical",
@@ -1889,12 +1977,14 @@ define_datasets! {
         format: "TSV",
         annotation_scheme: "IOB2",
         notes: "CLEF-HIPE shared task; includes Latin and Classical commentary; OCR noise",
+        splits: ["test"],
+        tasks: ["ner"],
         categories: [ner, historical, multilingual],
     },
     HistNERo {
         name: "HistNERo",
         description: "Romanian historical newspaper NER. First Romanian historical NER corpus from four regions.",
-        url: "https://github.com/UniBuc-HistNERo/HistNERo",
+        url: "https://github.com/avramandrei/histnero",
         entity_types: ["PER", "LOC", "ORG", "DATE", "MISC"],
         language: "ro",
         domain: "historical",
@@ -1924,6 +2014,7 @@ define_datasets! {
         notes: "French historical NER benchmark; manual OCR corrections; reasonably clean historical text",
         splits: ["test"],
         tasks: ["ner"],
+        access_status: ContactAuthors,
         categories: [ner, historical],
     },
     HistoricalChineseNER {
@@ -1942,6 +2033,7 @@ define_datasets! {
         notes: "LREC-COLING 2024; multi-task historical IE benchmark; cross-genre historical Chinese",
         splits: ["train", "dev", "test"],
         tasks: ["ner", "el", "coref", "re"],
+        access_status: ContactAuthors,
         categories: [ner, entity_linking, coref, historical, multilingual],
     },
     CHisIEC {
@@ -1980,7 +2072,7 @@ define_datasets! {
         format: "JSONL",
         size_hint: "5,053 docs, 132k entities, 56k relations",
         splits: ["train", "dev", "test"],
-        tasks: ["ner", "re", "coref"],
+        tasks: ["re"],
         expected_docs: 5053,
         hf_id: "docred",
         categories: [relation_extraction],
@@ -1988,7 +2080,10 @@ define_datasets! {
     ReTACRED {
         name: "Re-TACRED",
         description: "Large-scale relation extraction. 41 relation types + no_relation. Cleaned TACRED.",
-        url: "https://raw.githubusercontent.com/mainlp/CrossRE/main/crossre_data/news-test.json",
+        // NOTE: Re-TACRED is distributed as a delta/cleaned relabeling that depends on the
+        // original TACRED distribution (LDC). We intentionally do not provide a direct URL
+        // here to avoid accidentally pointing at unrelated files.
+        url: "",
         entity_types: ["PER", "ORG", "LOC", "DATE", "NUM"],
         language: "en",
         domain: "news",
@@ -1999,6 +2094,7 @@ define_datasets! {
         format: "JSONL",
         size_hint: "~106k relations",
         notes: "Cleaned version of TACRED with ~23% relabeled; requires original TACRED",
+        access_status: DependsOnOther,
         categories: [relation_extraction],
     },
 
@@ -2019,6 +2115,7 @@ define_datasets! {
         format: "XML",
         annotation_scheme: "Standoff",
         notes: "Requires LDC license; includes entity relations; ~25% nested entities",
+        access_status: Registration,
         categories: [ner, nested_ner],
     },
     CADEC {
@@ -2037,6 +2134,11 @@ define_datasets! {
         size_hint: "~1,250 posts",
         example: "'severe [pain]...in my [legs]' -> ADR spans [0:10, 20:24] (discontinuous)",
         notes: "Discontinuous spans common; requires special handling; patient-written text",
+        // Note: HF export endpoints currently fail (rows=422) and repo stores parquet shards.
+        // Keep as HF reference but treat as non-automatable until we add parquet support or a stable jsonl mirror.
+        splits: ["train", "dev", "test"],
+        tasks: ["ner", "discontinuous_ner"],
+        hf_id: "KevinSpaghetti/cadec",
         categories: [ner, biomedical, discontinuous_ner],
     },
 
@@ -2105,7 +2207,7 @@ define_datasets! {
     CorefUD {
         name: "CorefUD",
         description: "Multilingual coreference (17 languages, 22 datasets). CRAC shared task standard.",
-        url: "https://ufal.mff.cuni.cz/corefud/corefud-1.3.zip",
+        url: "http://hdl.handle.net/11234/1-5987",
         entity_types: ["PER", "LOC", "ORG"],
         language: "multi",
         domain: "general",
@@ -2131,6 +2233,7 @@ define_datasets! {
         year: 2024,
         format: "JSONL",
         notes: "Silver annotations via translation; fine-tuned mBERT models available",
+        access_status: ContactAuthors,
         categories: [coref, multilingual],
     },
     MGAP {
@@ -2147,6 +2250,7 @@ define_datasets! {
         format: "TSV",
         size_hint: "8,908 pronoun-name pairs",
         notes: "Cross-attention improves results; extension of GAP to South Asian languages",
+        access_status: ContactAuthors,
         categories: [coref, multilingual, bias_evaluation],
     },
     CrowSPairs {
@@ -2228,7 +2332,7 @@ define_datasets! {
     DROC {
         name: "DROC",
         description: "German novel coreference. 90 German novels from DTA (Deutsches Textarchiv).",
-        url: "https://raw.githubusercontent.com/dbamman/droc/main/data/dta_reduced.jsonl",
+        url: "",
         entity_types: ["PER"],
         language: "de",
         domain: "literature",
@@ -2237,9 +2341,10 @@ define_datasets! {
         paper_url: "https://aclanthology.org/L18-1045/",
         year: 2018,
         format: "JSONL",
-        notes: "First public German literary coreference dataset",
+        notes: "First public German literary coreference dataset. Prior URL is dead; needs a fresh mirror.",
         splits: ["all"],
         tasks: ["coref"],
+        access_status: Deprecated,
         categories: [coref, literary],
     },
     FantasyCoref {
@@ -2253,6 +2358,7 @@ define_datasets! {
         citation: "Shin et al. (2023)",
         paper_url: "https://aclanthology.org/2023.tacl-1.52/",
         notes: "Shape-shifting, possession, disguise - unique challenges",
+        access_status: ContactAuthors,
         categories: [coref, literary],
     },
 
@@ -2456,6 +2562,7 @@ define_datasets! {
         citation: "Bugert et al. (2021)",
         paper_url: "https://direct.mit.edu/coli/article/47/3/575/102774/",
         notes: "Requires temporal reasoning about match dates",
+        access_status: ContactAuthors,
         categories: [coref, event_coref],
     },
     ECBPlusMeta {
@@ -2469,6 +2576,7 @@ define_datasets! {
         citation: "Pouran Ben Veyseh et al. (2024)",
         paper_url: "https://arxiv.org/abs/2407.11988",
         notes: "Adversarial; existing systems struggle badly",
+        access_status: ContactAuthors,
         categories: [coref, event_coref, adversarial],
     },
 
@@ -2490,6 +2598,7 @@ define_datasets! {
         notes: "Most comprehensive anaphora resource; RST/TRAINS/Pear/GENIA subsets; LDC2023T05",
         splits: ["train", "dev", "test"],
         tasks: ["coref", "bridging", "discourse_deixis"],
+        access_status: Registration,
         categories: [coref, abstract_anaphora],
     },
     ISNotes {
@@ -2516,6 +2625,7 @@ define_datasets! {
         citation: "Kolhatkar & Hirst (2012)",
         paper_url: "https://aclanthology.org/D12-1036/",
         notes: "Factual, linguistic, mental, modal, eventive categories",
+        access_status: ContactAuthors,
         categories: [abstract_anaphora],
     },
     PDTBv3 {
@@ -2529,6 +2639,7 @@ define_datasets! {
         citation: "Prasad et al. (2019)",
         paper_url: "https://catalog.ldc.upenn.edu/LDC2019T05",
         notes: "Shallow discourse parsing; connective-argument pairs",
+        access_status: Registration,
         categories: [abstract_anaphora],
     },
     CODICRACBridging {
@@ -2565,6 +2676,7 @@ define_datasets! {
         notes: "2025 evaluation dataset; focuses on discourse-level anaphora understanding; non-nominal antecedents",
         splits: ["test"],
         tasks: ["coref", "discourse_deixis"],
+        access_status: NotYetReleased,
         categories: [coref, abstract_anaphora],
     },
     HumanVoiceAgentInteraction {
@@ -2780,6 +2892,8 @@ define_datasets! {
         citation: "LREC-COLING 2024 LT4HALA Workshop",
         paper_url: "https://lt4hala2024.github.io/",
         notes: "First systematic biblical Hebrew NER+coref",
+        tasks: ["ner", "coref"],
+        access_status: ContactAuthors,
         categories: [ner, coref, ancient],
     },
     ORACC {
@@ -2840,7 +2954,7 @@ define_datasets! {
         name: "AfriSenti",
         description: "Sentiment analysis for 14 African languages. 110k+ tweets. SemEval 2023 Task 12.",
         url: "https://huggingface.co/datasets/shmuhammad/AfriSenti-twitter-sentiment",
-        entity_types: [],  // Sentiment classes: positive, negative, neutral
+        entity_types: ["positive", "neutral", "negative"],
         language: "multi",
         domain: "social_media",
         license: "CC-BY-4.0",
@@ -2878,7 +2992,7 @@ define_datasets! {
         name: "MasakhaNEWS",
         description: "News topic classification for 16 African languages.",
         url: "https://huggingface.co/datasets/masakhane/masakhanews",
-        entity_types: [],  // Topic labels
+        entity_types: ["business", "entertainment", "health", "politics", "religion", "sports", "technology"],
         language: "multi",
         domain: "news",
         license: "Apache-2.0",
@@ -2900,8 +3014,8 @@ define_datasets! {
     AGNews {
         name: "AG News",
         description: "News article topic classification. 4 classes: World, Sports, Business, Sci/Tech.",
-        url: "https://huggingface.co/datasets/ag_news",
-        entity_types: [],  // Class labels, not entities
+        url: "https://huggingface.co/datasets/fancyzhx/ag_news",
+        entity_types: ["World", "Sports", "Business", "Sci/Tech"],
         language: "en",
         domain: "news",
         license: "Non-commercial",
@@ -2921,8 +3035,8 @@ define_datasets! {
     DBPedia14 {
         name: "DBPedia-14",
         description: "Wikipedia article classification. 14 non-overlapping classes from DBpedia ontology.",
-        url: "https://huggingface.co/datasets/dbpedia_14",
-        entity_types: [],  // Class labels: Company, EducationalInstitution, Artist, Athlete, etc.
+        url: "https://huggingface.co/datasets/fancyzhx/dbpedia_14",
+        entity_types: ["Company", "EducationalInstitution", "Artist", "Athlete", "OfficeHolder", "MeanOfTransportation", "Building", "NaturalPlace", "Village", "Animal", "Plant", "Album", "Film", "WrittenWork"],
         language: "en",
         domain: "wikipedia",
         license: "CC-BY-SA-3.0",
@@ -2942,8 +3056,8 @@ define_datasets! {
     YahooAnswers {
         name: "Yahoo Answers Topic",
         description: "Question-answer topic classification. 10 classes covering diverse topics.",
-        url: "https://huggingface.co/datasets/yahoo_answers_topics",
-        entity_types: [],  // 10 topic classes
+        url: "https://huggingface.co/datasets/community-datasets/yahoo_answers_topics",
+        entity_types: ["Society", "Science", "Health", "Education", "Computers", "Sports", "Business", "Entertainment", "Family", "Politics"],
         language: "en",
         domain: "qa",
         license: "Non-commercial",
@@ -2955,7 +3069,7 @@ define_datasets! {
         notes: "10 classes: Society, Science, Health, Education, Computers, Sports, Business, Entertainment, Family, Politics",
         splits: ["train", "test"],
         tasks: ["text_classification"],
-        hf_id: "yahoo_answers_topics",
+        hf_id: "community-datasets/yahoo_answers_topics",
         access_status: Public,
         categories: [dialogue],
     },
@@ -2964,7 +3078,7 @@ define_datasets! {
         name: "TREC Question Classification",
         description: "Question type classification. 6 coarse classes, 50 fine-grained types.",
         url: "https://huggingface.co/datasets/trec",
-        entity_types: [],  // Question types: ABBR, DESC, ENTY, HUM, LOC, NUM
+        entity_types: ["ABBR", "DESC", "ENTY", "HUM", "LOC", "NUM"],
         language: "en",
         domain: "qa",
         license: "CC-BY-4.0",
@@ -2985,7 +3099,7 @@ define_datasets! {
         name: "TweetTopic",
         description: "Multi-label topic classification for tweets. 6 domains, 19 topics.",
         url: "https://huggingface.co/datasets/cardiffnlp/tweet_topic_multi",
-        entity_types: [],  // 19 topic labels
+        entity_types: ["arts", "business", "daily_life", "pop_culture", "science", "sports"],
         language: "en",
         domain: "social_media",
         license: "CC-BY-4.0",
@@ -3006,7 +3120,7 @@ define_datasets! {
         name: "MasakhaPOS",
         description: "Part-of-speech tagging for 20 African languages.",
         url: "https://github.com/masakhane-io/masakhane-pos",
-        entity_types: [],  // POS tags
+        entity_types: ["NOUN", "VERB", "ADJ", "ADV", "PRON", "PROPN", "ADP", "AUX", "CCONJ", "DET", "INTJ", "NUM", "PART", "PUNCT", "SCONJ", "SYM", "X"],
         language: "multi",
         domain: "general",
         license: "MIT",
@@ -3024,7 +3138,7 @@ define_datasets! {
     WikiANN {
         name: "WikiANN",
         description: "Silver-standard NER from Wikipedia hyperlinks. 282 languages.",
-        url: "https://huggingface.co/datasets/wikiann",
+        url: "https://huggingface.co/datasets/unimelb-nlp/wikiann",
         entity_types: ["PER", "LOC", "ORG"],
         language: "multi",
         domain: "wikipedia",
@@ -3033,8 +3147,9 @@ define_datasets! {
         paper_url: "https://aclanthology.org/P17-1178/",
         example: "tokens: [Berlin, is, the, capital, of, Germany]\nner_tags: [B-LOC, O, O, O, O, B-LOC]",
         notes: "Silver annotations; noisy but massive coverage",
-        hf_id: "wikiann",
+        hf_id: "unimelb-nlp/wikiann",
         hf_config: "en",
+        access_status: HuggingFace,
         categories: [ner, multilingual, low_resource],
     },
     NaijaNER {
@@ -3048,6 +3163,7 @@ define_datasets! {
         citation: "Oyewusi et al. (2021)",
         paper_url: "https://arxiv.org/abs/2102.05236",
         notes: "Nigerian Pidgin English; code-mixing common",
+        access_status: ContactAuthors,
         categories: [ner, low_resource],
     },
 
@@ -3168,7 +3284,8 @@ define_datasets! {
     WNUT16 {
         name: "WNUT-16",
         description: "Twitter NER workshop shared task. Focus on rare and emerging entities in noisy social media text.",
-        url: "https://raw.githubusercontent.com/napsternxg/TwitterNER/master/data/wnut16/test",
+        // Stable raw snapshot from aritter/twitter_nlp (has train/dev/test in one folder).
+        url: "https://raw.githubusercontent.com/aritter/twitter_nlp/65f3d77134c40d920db8d431c5c6faef1c051c94/data/annotated/wnut16/data/test",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "en",
         domain: "social_media",
@@ -3206,7 +3323,7 @@ define_datasets! {
     OldEnglishUD {
         name: "Old English UD",
         description: "Universal Dependencies for Old English (Anglo-Saxon). York-Toronto-Helsinki corpus.",
-        url: "https://raw.githubusercontent.com/UniversalDependencies/UD_Old_English-YCOE/master/ang_ycoe-ud-test.conllu",
+        url: "https://raw.githubusercontent.com/UniversalDependencies/UD_Old_English-Cairo/118f11ad906fb15d930825fadce9ef9eccca9347/ang_cairo-ud-test.conllu",
         entity_types: ["PER", "LOC", "ORG"],
         language: "ang",
         domain: "historical",
@@ -3215,13 +3332,13 @@ define_datasets! {
         paper_url: "https://aclanthology.org/W19-4214/",
         year: 2019,
         format: "CoNLLU",
-        notes: "Anglo-Saxon; insular script variations; 5th-11th century CE",
+        notes: "Anglo-Saxon; insular script variations; 5th-11th century CE. NOTE: UD repo naming drifts; URL pinned to a specific commit.",
         categories: [ner, ancient, historical, low_resource],
     },
     OldNorseUD {
         name: "Old Norse UD",
         description: "Universal Dependencies for Old Norse/Icelandic Sagas. PROIEL and ISWOC treebanks.",
-        url: "https://raw.githubusercontent.com/UniversalDependencies/UD_Old_Norse-ICEPAHC/master/non_icepahc-ud-test.conllu",
+        url: "https://raw.githubusercontent.com/UniversalDependencies/UD_Icelandic-IcePaHC/ca72a59affd87c4b7b9067ae56efa7a694a7b4c4/is_icepahc-ud-test.conllu",
         entity_types: ["PER", "LOC", "ORG"],
         language: "non",
         domain: "literature",
@@ -3230,7 +3347,7 @@ define_datasets! {
         paper_url: "https://aclanthology.org/L12-1148/",
         year: 2012,
         format: "CoNLLU",
-        notes: "Icelandic Sagas and Eddas; runic/Latin script; 9th-14th century CE",
+        notes: "IcePaHC treebank (historical Icelandic; Old Norse family). URL pinned to a specific commit.",
         categories: [ner, ancient, literary, low_resource],
     },
 
@@ -3304,6 +3421,7 @@ define_datasets! {
         year: 2021,
         format: "CoNLL",
         notes: "Chartae Burgundiae Medii Aevi; medieval Latin; notarial hands",
+        access_status: ContactAuthors,
         categories: [ner, ancient, historical, low_resource],
     },
 
@@ -3461,6 +3579,7 @@ define_datasets! {
         annotation_scheme: "Standoff",
         size_hint: "~600 documents",
         notes: "Gold standard for nested NER; includes Arabic/Chinese; defines modern IE evaluation",
+        access_status: Registration,
         categories: [ner, nested_ner, relation_extraction],
     },
     NNE {
@@ -3554,6 +3673,7 @@ define_datasets! {
         annotation_scheme: "Standoff",
         size_hint: "~300 clinical notes",
         notes: "Discontinuous clinical entities; SNOMED-CT normalization; de-identified records",
+        access_status: Registration,
         categories: [ner, biomedical, discontinuous_ner],
     },
     GermEvalDiscontinuous {
@@ -3623,6 +3743,7 @@ define_datasets! {
         size_hint: "106k examples",
         example: "subj: 'Tim Cook', obj: 'Apple', relation: per:employee_of, text: 'Tim Cook is the CEO of Apple Inc.'",
         notes: "42 relations; ~80% no_relation; known label noise; Re-TACRED fixes some issues",
+        access_status: Registration,
         categories: [relation_extraction],
     },
     SemEval2010Task8 {
@@ -3786,6 +3907,7 @@ define_datasets! {
         notes: "THYME guidelines; clinical events, temporal expressions, narrative containers; Clinical TempEval basis",
         splits: ["train", "dev", "test"],
         tasks: ["ner", "temporal", "events"],
+        access_status: Registration,
         categories: [ner, clinical, biomedical],
     },
     I2B2Temporal {
@@ -3804,6 +3926,7 @@ define_datasets! {
         notes: "i2b2 2012 challenge; requires DUA; clinical temporal relation extraction benchmark",
         splits: ["train", "test"],
         tasks: ["ner", "temporal", "re"],
+        access_status: Registration,
         categories: [ner, clinical, biomedical, relations],
     },
 
@@ -3869,6 +3992,7 @@ define_datasets! {
         notes: "Synthetic PII dataset; multi-language; 50+ entity types; useful for privacy compliance testing",
         splits: ["train"],
         tasks: ["ner", "pii_detection"],
+        hf_id: "ai4privacy/pii-masking-200k",
         categories: [ner],
     },
 
@@ -3912,6 +4036,7 @@ define_datasets! {
         notes: "Early EL benchmark; often used as OOD test set alongside AIDA",
         splits: ["test"],
         tasks: ["el", "entity_linking", "ned"],
+        access_status: ContactAuthors,
         categories: [entity_linking],
     },
     AQUAINT {
@@ -3929,6 +4054,7 @@ define_datasets! {
         notes: "Commonly paired with AIDA for comprehensive EL evaluation",
         splits: ["test"],
         tasks: ["el", "entity_linking", "ned"],
+        access_status: Registration,
         categories: [entity_linking],
     },
     KORE50 {
@@ -3981,6 +4107,7 @@ define_datasets! {
         notes: "Web-scale EL benchmark; tests robustness on noisy web text",
         splits: ["test"],
         tasks: ["el", "entity_linking"],
+        access_status: Registration,
         categories: [entity_linking],
     },
     BELB {
@@ -4057,9 +4184,11 @@ define_datasets! {
         year: 2025,
         format: "JSONL",
         size_hint: "~200k tokens per document",
-        notes: "Long-document coref benchmark; tests models on full novels; silver + gold annotations",
+        notes: "Long-document coref benchmark; tests models on full novels; silver + gold annotations. HF-hosted but appears gated in practice; treat as manual unless you have explicit access.",
         splits: ["test"],
         tasks: ["coref"],
+        hf_id: "spacemanidol/BookCoref",
+        access_status: ContactAuthors,
         categories: [coref, literary, long_document],
     },
     NovelCR {
@@ -4355,6 +4484,7 @@ define_datasets! {
         notes: "Classic RE benchmark; requires LDC license; often used with ACE NER",
         splits: ["train", "dev", "test"],
         tasks: ["ner", "re", "relation_extraction"],
+        access_status: Registration,
         categories: [ner, relation_extraction],
     },
     CoNLL04RE {
@@ -4548,6 +4678,7 @@ define_datasets! {
         notes: "Clinical NER with discontinuous spans; shared task at CLEF eHealth",
         splits: ["train", "dev", "test"],
         tasks: ["ner", "discontinuous-ner"],
+        access_status: Registration,
         categories: [ner, discontinuous_ner, clinical, biomedical],
     },
     ShARe2014 {
@@ -4566,6 +4697,7 @@ define_datasets! {
         notes: "Improved clinical discontinuous NER; attribute normalization",
         splits: ["train", "test"],
         tasks: ["ner", "discontinuous-ner"],
+        access_status: Registration,
         categories: [ner, discontinuous_ner, clinical, biomedical],
     },
     I2B2_2010 {
@@ -4584,6 +4716,7 @@ define_datasets! {
         notes: "Foundational clinical NER; requires i2b2/n2c2 data use agreement",
         splits: ["train", "test"],
         tasks: ["ner"],
+        access_status: Registration,
         categories: [ner, clinical, biomedical],
     },
 
@@ -4798,6 +4931,7 @@ define_datasets! {
         notes: "2025 benchmark for fine-grained Chinese NER; expands beyond formal text; tests LLM capabilities",
         splits: ["train", "dev", "test"],
         tasks: ["ner"],
+        access_status: NotYetReleased,
         categories: [ner, social_media, multilingual],
     },
     LegalCore {
@@ -4816,6 +4950,7 @@ define_datasets! {
         notes: "ACL 2025; benchmarks Llama-3.1, Mistral, Qwen, GPT-4; LLMs underperform supervised baselines",
         splits: ["train", "dev", "test"],
         tasks: ["event_coref", "coref"],
+        access_status: NotYetReleased,
         categories: [coref, event_coref, long_document, arcane_domain],
     },
     Zcoref {
@@ -4834,6 +4969,7 @@ define_datasets! {
         notes: "Tests handling of dropped arguments; critical for CJK languages; zero anaphora resolution",
         splits: ["train", "dev", "test"],
         tasks: ["coref"],
+        access_status: NotYetReleased,
         categories: [coref, multilingual, abstract_anaphora],
     },
     TikTalkCoref {
@@ -4889,6 +5025,7 @@ define_datasets! {
         notes: "2024 challenge dataset; SNOMED CT coded clinical text; benchmarks clinical EL systems",
         splits: ["train", "test"],
         tasks: ["el", "entity_linking"],
+        access_status: Registration,
         categories: [entity_linking, clinical, biomedical],
     },
     ESCOSkillsEL {
@@ -4907,6 +5044,7 @@ define_datasets! {
         notes: "Complements MELO; links skills (not occupations) to ESCO taxonomy; job posting text",
         splits: ["train", "test"],
         tasks: ["el", "entity_linking"],
+        access_status: ContactAuthors,
         categories: [entity_linking, multilingual],
     },
 
@@ -5460,7 +5598,9 @@ define_datasets! {
         citation: "Babelscape (2023)",
         year: 2023,
         format: "JSONL",
-        notes: "Open-domain NER; tests generalization across domains",
+        notes: "HF currently returns 401 for anonymous access; treat as gated until proven otherwise.",
+        hf_id: "Babelscape/OpenNER",
+        access_status: ContactAuthors,
         categories: [ner],
     },
 
@@ -5520,7 +5660,9 @@ define_datasets! {
         citation: "Fiction NER Team (2023)",
         year: 2023,
         format: "JSONL",
-        notes: "Large-scale fiction NER; novels and short stories",
+        notes: "HF currently returns 401 for anonymous access; treat as gated until proven otherwise.",
+        hf_id: "fiction-ner/750M",
+        access_status: ContactAuthors,
         categories: [ner, literary],
     },
 
@@ -6749,7 +6891,7 @@ define_datasets! {
     ULNER {
         name: "ULNER",
         description: "Ultra-Large Scale NER. Massive silver-standard dataset.",
-        url: "https://huggingface.co/datasets/ULNER",
+        url: "",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "en",
         domain: "mixed",
@@ -6757,7 +6899,8 @@ define_datasets! {
         citation: "ULNER Team (2023)",
         year: 2023,
         format: "JSONL",
-        notes: "Large-scale distantly supervised NER",
+        notes: "No stable public URL found (prior HuggingFace URL returned 404).",
+        access_status: Deprecated,
         categories: [ner],
     },
 
@@ -9736,7 +9879,7 @@ fn to_snake_case(s: &str) -> String {
         if c.is_uppercase() && i > 0 {
             // Only add underscore if previous char was lowercase
             // This keeps acronyms together: "NER" stays as "ner", not "n_e_r"
-            let prev_lower = chars.get(i - 1).map_or(false, |p| p.is_lowercase());
+            let prev_lower = chars.get(i - 1).is_some_and(|p| p.is_lowercase());
             if prev_lower {
                 result.push('_');
             }
@@ -10944,4 +11087,63 @@ impl DatasetId {
     pub fn supports_re(&self) -> bool {
         self.tasks_or_inferred().contains(&"re")
     }
+
+    /// Whether this dataset is known to require `HF_TOKEN` (or equivalent) to download.
+    ///
+    /// This is used to keep “automatic” workflows (cache warming, randomized matrices)
+    /// usable by default while still allowing explicit attempts when a token is provided.
+    #[must_use]
+    pub fn requires_hf_token(&self) -> bool {
+        matches!(
+            self,
+            Self::BookCorefBamman | Self::MultiCoNER | Self::MultiCoNERv2
+        )
+    }
+
+    /// Whether this dataset is currently automatable by our loader without manual intervention.
+    ///
+    /// This is intentionally conservative: it can be `false` for datasets that are “public”
+    /// but do not offer a stable export path we can consume yet.
+    #[must_use]
+    pub fn is_automatable_download(&self) -> bool {
+        // Hard exclusions (known to fail under current loader automation).
+        if matches!(self, Self::MasakhaNER2 | Self::PIIMasking200k | Self::CADEC) {
+            return false;
+        }
+
+        if !self.access_status().is_automatable() {
+            return false;
+        }
+
+        let url = self.download_url();
+        if url.is_empty() {
+            return false;
+        }
+
+        // URLs we explicitly support via rewrites/special handling in the loader.
+        if url.contains("huggingface.co/datasets/")
+            || url.contains("datasets-server.huggingface.co/")
+        {
+            return true;
+        }
+
+        // GitHub: only treat as automatable if it's a raw/archive asset, not a repo homepage.
+        if url.contains("github.com/")
+            && (url.contains("/raw/")
+                || url.contains("/archive/")
+                || url.contains("/releases/download/"))
+        {
+            return true;
+        }
+
+        // Direct file downloads.
+        const EXT_OK: [&str; 10] = [
+            ".jsonl", ".json", ".tsv", ".csv", ".conll", ".conllu", ".txt", ".zip", ".tar.gz",
+            ".tgz",
+        ];
+        EXT_OK.iter().any(|ext| url.ends_with(ext))
+    }
+
+    // NOTE: `is_loadable()` and `all_loadable()` deliberately live in `eval::loader`.
+    // The registry is metadata-only and should not depend on loader implementation details.
 }

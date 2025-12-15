@@ -375,7 +375,7 @@ impl ForwardCenter {
 /// assert!(CenteringTransition::Continue.is_continuing());
 /// assert!(CenteringTransition::SmoothShift.is_shifting());
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum CenteringTransition {
     /// Cb(U_n) = Cb(U_{n-1}) AND Cb(U_n) = Cp(U_n).
     /// The discourse continues about the same entity, which remains most salient.
@@ -396,13 +396,8 @@ pub enum CenteringTransition {
     RoughShift,
 
     /// No Cb exists (discourse-initial or no entity from previous utterance realized).
+    #[default]
     Null,
-}
-
-impl Default for CenteringTransition {
-    fn default() -> Self {
-        Self::Null
-    }
 }
 
 impl CenteringTransition {
@@ -683,7 +678,7 @@ pub fn compute_transition(
         return CenteringTransition::Null;
     }
 
-    let cb = curr_cb.unwrap();
+    let cb = curr_cb.expect("curr_cb.is_none() checked above");
 
     match (prev_cb, curr_cp) {
         // Cb(U_n) = Cb(U_{n-1}) AND Cb(U_n) = Cp(U_n)

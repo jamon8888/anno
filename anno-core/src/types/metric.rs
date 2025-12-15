@@ -347,8 +347,8 @@ mod tests {
     #[test]
     fn test_serde_roundtrip() {
         let stats = MetricStats::from_samples(&[0.85, 0.87, 0.83]);
-        let json = serde_json::to_string(&stats).unwrap();
-        let recovered: MetricStats = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&stats).expect("serialize MetricStats");
+        let recovered: MetricStats = serde_json::from_str(&json).expect("deserialize MetricStats");
 
         assert!((stats.mean - recovered.mean).abs() < 0.001);
         assert_eq!(stats.n, recovered.n);

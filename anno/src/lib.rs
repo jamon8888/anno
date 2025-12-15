@@ -115,7 +115,7 @@
 //! | Feature | What it includes |
 //! |---------|------------------|
 //! | `full` | `eval-full` + `onnx` + `candle` + `discourse` |
-//! | `default` | `cli` only (minimal deps) |
+//! | `default` | `cli` + `eval` (CLI + dataset loading) |
 
 #![warn(missing_docs)]
 
@@ -175,7 +175,6 @@ pub mod types;
 // geometric module archived to archive/geometric-2024-12/
 // Reason: Only used in doc comments, contains unimplemented!() calls
 // Restore when sheaf diffusion / hyperbolic embeddings are actually needed
-
 #[cfg(feature = "cli")]
 pub mod cli;
 

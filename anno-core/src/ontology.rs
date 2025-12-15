@@ -194,7 +194,7 @@ impl LabelNormalizer {
 
     /// Register an alias for a core type.
     pub fn register(&self, alias: &str, core_type: CoreType) {
-        let mut aliases = self.aliases.write().unwrap();
+        let mut aliases = self.aliases.write().expect("LabelNormalizer lock poisoned");
         aliases.insert(alias.to_lowercase(), core_type);
     }
 
@@ -219,7 +219,7 @@ impl LabelNormalizer {
             .or_else(|| label.strip_prefix("U-"))
             .unwrap_or(label);
 
-        let aliases = self.aliases.read().unwrap();
+        let aliases = self.aliases.read().expect("LabelNormalizer lock poisoned");
         aliases.get(&label.to_lowercase()).copied()
     }
 
@@ -340,7 +340,7 @@ impl LabelNormalizer {
 
     /// Get all known aliases (for debugging/documentation).
     pub fn all_aliases(&self) -> Vec<(String, CoreType)> {
-        let aliases = self.aliases.read().unwrap();
+        let aliases = self.aliases.read().expect("LabelNormalizer lock poisoned");
         aliases.iter().map(|(k, v)| (k.clone(), *v)).collect()
     }
 }

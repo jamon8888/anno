@@ -12,9 +12,9 @@ fn e2e_chinese_text() {
     let text = "北京是中国的首都。上海是最大的城市。";
     let mut doc = GroundedDocument::new("chinese_doc", text);
 
-    let sig1 = doc.add_signal(Signal::new(0, Location::text(0, 2), "北京", "LOC", 0.95));
-    let sig2 = doc.add_signal(Signal::new(1, Location::text(3, 5), "中国", "LOC", 0.95));
-    let sig2 = doc.add_signal(Signal::new(2, Location::text(8, 10), "上海", "LOC", 0.95));
+    let _sig1 = doc.add_signal(Signal::new(0, Location::text(0, 2), "北京", "LOC", 0.95));
+    let _sig2 = doc.add_signal(Signal::new(1, Location::text(3, 5), "中国", "LOC", 0.95));
+    let _sig2 = doc.add_signal(Signal::new(2, Location::text(8, 10), "上海", "LOC", 0.95));
 
     assert_eq!(doc.signals().len(), 3);
 
@@ -29,8 +29,8 @@ fn e2e_japanese_mixed_scripts() {
     let text = "東京は日本の首都です。Tokyo is also written as 東京.";
     let mut doc = GroundedDocument::new("japanese_doc", text);
 
-    let sig1 = doc.add_signal(Signal::new(0, Location::text(0, 2), "東京", "LOC", 0.95));
-    let sig2 = doc.add_signal(Signal::new(1, Location::text(3, 5), "日本", "LOC", 0.95));
+    let _sig1 = doc.add_signal(Signal::new(0, Location::text(0, 2), "東京", "LOC", 0.95));
+    let _sig2 = doc.add_signal(Signal::new(1, Location::text(3, 5), "日本", "LOC", 0.95));
     let sig3 = doc.add_signal(Signal::new(2, Location::text(15, 20), "Tokyo", "LOC", 0.90));
 
     assert_eq!(doc.signals().len(), 3);
@@ -48,8 +48,8 @@ fn e2e_arabic_rtl_text() {
     let text = "القاهرة هي عاصمة مصر. الإسكندرية مدينة ساحلية.";
     let mut doc = GroundedDocument::new("arabic_doc", text);
 
-    let sig1 = doc.add_signal(Signal::new(0, Location::text(0, 6), "القاهرة", "LOC", 0.95));
-    let sig2 = doc.add_signal(Signal::new(1, Location::text(18, 22), "مصر", "LOC", 0.95));
+    let _sig1 = doc.add_signal(Signal::new(0, Location::text(0, 6), "القاهرة", "LOC", 0.95));
+    let _sig2 = doc.add_signal(Signal::new(1, Location::text(18, 22), "مصر", "LOC", 0.95));
 
     assert_eq!(doc.signals().len(), 2);
 
@@ -64,8 +64,8 @@ fn e2e_russian_cyrillic() {
     let text = "Москва — столица России. Санкт-Петербург — культурный центр.";
     let mut doc = GroundedDocument::new("russian_doc", text);
 
-    let sig1 = doc.add_signal(Signal::new(0, Location::text(0, 6), "Москва", "LOC", 0.95));
-    let sig2 = doc.add_signal(Signal::new(
+    let _sig1 = doc.add_signal(Signal::new(0, Location::text(0, 6), "Москва", "LOC", 0.95));
+    let _sig2 = doc.add_signal(Signal::new(
         1,
         Location::text(18, 25),
         "России",
@@ -85,8 +85,8 @@ fn e2e_mixed_scripts() {
     let text = "Tokyo (東京) is the capital of Japan (日本). Москва is the capital of Россия.";
     let mut doc = GroundedDocument::new("mixed_doc", text);
 
-    let sig1 = doc.add_signal(Signal::new(0, Location::text(0, 5), "Tokyo", "LOC", 0.95));
-    let sig2 = doc.add_signal(Signal::new(1, Location::text(7, 9), "東京", "LOC", 0.95));
+    let _sig1 = doc.add_signal(Signal::new(0, Location::text(0, 5), "Tokyo", "LOC", 0.95));
+    let _sig2 = doc.add_signal(Signal::new(1, Location::text(7, 9), "東京", "LOC", 0.95));
     let sig3 = doc.add_signal(Signal::new(2, Location::text(35, 40), "Japan", "LOC", 0.95));
     let sig4 = doc.add_signal(Signal::new(3, Location::text(42, 44), "日本", "LOC", 0.95));
     let sig5 = doc.add_signal(Signal::new(
@@ -120,8 +120,8 @@ fn e2e_emoji_entities() {
     let text = "The 🏛️ White House is in Washington. 🇺🇸 is the flag of the United States.";
     let mut doc = GroundedDocument::new("emoji_doc", text);
 
-    let sig1 = doc.add_signal(Signal::new(0, Location::text(4, 8), "🏛️", "EMOJI", 0.8));
-    let sig2 = doc.add_signal(Signal::new(
+    let _sig1 = doc.add_signal(Signal::new(0, Location::text(4, 8), "🏛️", "EMOJI", 0.8));
+    let _sig2 = doc.add_signal(Signal::new(
         1,
         Location::text(9, 20),
         "White House",
@@ -143,14 +143,14 @@ fn e2e_accented_characters() {
     let text = "São Paulo is in Brazil. München is in Germany. Montréal is in Canada.";
     let mut doc = GroundedDocument::new("accented_doc", text);
 
-    let sig1 = doc.add_signal(Signal::new(
+    let _sig1 = doc.add_signal(Signal::new(
         0,
         Location::text(0, 10),
         "São Paulo",
         "LOC",
         0.95,
     ));
-    let sig2 = doc.add_signal(Signal::new(
+    let _sig2 = doc.add_signal(Signal::new(
         1,
         Location::text(25, 33),
         "München",
@@ -218,7 +218,7 @@ fn e2e_crossdoc_accented_vs_non_accented() {
 
     // Should create 1 identity (accented and non-accented should match)
     // or 2 if similarity too low
-    assert!(identity_ids.len() >= 1);
+    assert!(!identity_ids.is_empty());
 }
 
 /// E2E: Zero-width characters and invisible characters

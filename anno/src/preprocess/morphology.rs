@@ -331,7 +331,10 @@ impl MorphologicalPreprocessor {
 
             // Fallback to single character if no syllable matches
             if !matched {
-                let c = text[pos..].chars().next().unwrap();
+                let c = text[pos..]
+                    .chars()
+                    .next()
+                    .expect("pos should be within text bounds");
                 morphemes.push(Morpheme {
                     text: c.to_string(),
                     start: pos,
@@ -429,7 +432,9 @@ mod tests {
                 boundary_chars: vec!['-'],
             });
 
-        let result = preprocessor.segment("wasi-kuna-y-ki").unwrap();
+        let result = preprocessor
+            .segment("wasi-kuna-y-ki")
+            .expect("valid Quechua word should segment");
         assert_eq!(result.morphemes.len(), 4);
         assert_eq!(result.morphemes[0].text, "wasi");
         assert_eq!(result.morphemes[1].text, "kuna");
@@ -453,10 +458,14 @@ mod tests {
                 boundary_chars: vec!['-'],
             });
 
-        let result = preprocessor.segment("wasi-kuna").unwrap();
+        let result = preprocessor
+            .segment("wasi-kuna")
+            .expect("Quechua compound should segment");
 
         // Map morphemes 0-2 (both morphemes) back to character span
-        let span = result.morpheme_to_char_span(0, 2).unwrap();
+        let span = result
+            .morpheme_to_char_span(0, 2)
+            .expect("valid morpheme indices should map to span");
         assert_eq!(span, (0, 9)); // "wasi-kuna".len() == 9
     }
 
@@ -483,7 +492,9 @@ mod tests {
             MorphologicalPreprocessor::new().with_strategy(SegmentationStrategy::Character);
 
         // Cherokee syllabary
-        let result = preprocessor.segment("ᏣᎳᎩ").unwrap();
+        let result = preprocessor
+            .segment("ᏣᎳᎩ")
+            .expect("Cherokee word should segment");
         assert_eq!(result.morphemes.len(), 3);
 
         // Nahuatl with diacritics
@@ -499,7 +510,9 @@ mod tests {
             });
 
         // Input with only boundary chars
-        let result = preprocessor.segment("---").unwrap();
+        let result = preprocessor
+            .segment("---")
+            .expect("punctuation should segment");
         assert!(result.morphemes.is_empty());
     }
 
@@ -524,11 +537,18 @@ mod tests {
             });
 
         // Quechua word with hyphens
-        let result = preprocessor.segment("wasi-kuna-y-ki").unwrap();
+        let result = preprocessor
+            .segment("wasi-kuna-y-ki")
+            .expect("valid Quechua word should segment");
         assert_eq!(result.morphemes.len(), 4);
 
         // Verify span mapping works
-        assert_eq!(result.morpheme_to_char_span(0, 1).unwrap(), (0, 4)); // "wasi"
+        assert_eq!(
+            result
+                .morpheme_to_char_span(0, 1)
+                .expect("valid morpheme indices should map to span"),
+            (0, 4)
+        ); // "wasi"
     }
 
     #[test]

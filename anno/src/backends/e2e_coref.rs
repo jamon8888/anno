@@ -336,12 +336,12 @@ impl E2ECoref {
         }
 
         // Proper nouns (capitalized)
-        if text.chars().next().map_or(false, |c| c.is_uppercase()) {
+        if text.chars().next().is_some_and(|c| c.is_uppercase()) {
             score += 0.5;
 
             // Multi-word proper nouns are stronger
             if text.contains(' ') && text.split_whitespace().all(|w| {
-                w.chars().next().map_or(false, |c| c.is_uppercase())
+                w.chars().next().is_some_and(|c| c.is_uppercase())
             }) {
                 score += 0.2;
             }
@@ -465,7 +465,7 @@ impl E2ECoref {
         // If mention is a pronoun, check gender/number agreement
         if is_pronoun(&m_lower) {
             // Assume proper nouns can be antecedents for pronouns
-            if antecedent.text.chars().next().map_or(false, |c| c.is_uppercase()) {
+            if antecedent.text.chars().next().is_some_and(|c| c.is_uppercase()) {
                 score += 0.4;
             }
         }

@@ -28,7 +28,7 @@ proptest! {
         // Note: PageRank may not sum to exactly 1.0 for graphs with disconnected
         // components or very sparse edges. We test that scores are bounded and valid.
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -64,7 +64,7 @@ proptest! {
             // Individual scores should be in [0, 1]
             for (node, &score) in &pr {
                 prop_assert!(
-                    score >= 0.0 && score <= 1.0,
+                    (0.0..=1.0).contains(&score),
                     "PageRank for {} should be in [0, 1]: {}",
                     node,
                     score
@@ -76,7 +76,7 @@ proptest! {
     #[test]
     fn pagerank_all_scores_non_negative(n in 2..=15usize, p in 0.1..0.5f64) {
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -118,7 +118,7 @@ proptest! {
     #[test]
     fn betweenness_all_scores_non_negative(n in 2..=12usize, p in 0.1..0.5f64) {
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -152,7 +152,7 @@ proptest! {
     #[test]
     fn betweenness_covers_all_nodes(n in 2..=12usize, p in 0.2..0.6f64) {
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -192,7 +192,7 @@ proptest! {
     #[test]
     fn leiden_assigns_all_nodes(n in 2..=15usize, p in 0.1..0.5f64) {
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -212,7 +212,7 @@ proptest! {
 
         let graph = GraphDocument::from_extraction(&entities, &relations, None);
         let leiden = Leiden::new().with_seed(42);
-        let communities = leiden.cluster(&graph).unwrap();
+        let communities = leiden.cluster(&graph).expect("Leiden clustering should succeed in property test");
 
         // Every node should be assigned to exactly one community
         prop_assert_eq!(
@@ -225,7 +225,7 @@ proptest! {
     #[test]
     fn louvain_assigns_all_nodes(n in 2..=15usize, p in 0.1..0.5f64) {
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -245,7 +245,7 @@ proptest! {
 
         let graph = GraphDocument::from_extraction(&entities, &relations, None);
         let louvain = Louvain::new().with_seed(42);
-        let communities = louvain.cluster(&graph).unwrap();
+        let communities = louvain.cluster(&graph).expect("Louvain clustering should succeed in property test");
 
         prop_assert_eq!(
             communities.len(),
@@ -257,7 +257,7 @@ proptest! {
     #[test]
     fn label_propagation_assigns_all_nodes(n in 2..=15usize, p in 0.1..0.5f64) {
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -277,7 +277,7 @@ proptest! {
 
         let graph = GraphDocument::from_extraction(&entities, &relations, None);
         let lp = LabelPropagation::new().with_seed(42);
-        let communities = lp.cluster(&graph).unwrap();
+        let communities = lp.cluster(&graph).expect("Label propagation clustering should succeed in property test");
 
         prop_assert_eq!(
             communities.len(),
@@ -289,7 +289,7 @@ proptest! {
     #[test]
     fn community_ids_are_valid(n in 2..=15usize, p in 0.1..0.5f64) {
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -309,9 +309,9 @@ proptest! {
 
         let graph = GraphDocument::from_extraction(&entities, &relations, None);
 
-        let leiden_comm = Leiden::new().with_seed(42).cluster(&graph).unwrap();
-        let louvain_comm = Louvain::new().with_seed(42).cluster(&graph).unwrap();
-        let lp_comm = LabelPropagation::new().with_seed(42).cluster(&graph).unwrap();
+        let leiden_comm = Leiden::new().with_seed(42).cluster(&graph).expect("Leiden clustering should succeed in property test");
+        let louvain_comm = Louvain::new().with_seed(42).cluster(&graph).expect("Louvain clustering should succeed in property test");
+        let lp_comm = LabelPropagation::new().with_seed(42).cluster(&graph).expect("Label propagation clustering should succeed in property test");
 
         // Community IDs are usize, so they're always >= 0
         // Instead, verify that community IDs are within a reasonable range
@@ -343,7 +343,7 @@ proptest! {
     #[test]
     fn eigenvector_normalized(n in 3..=15usize, p in 0.2..0.5f64) {
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -382,7 +382,7 @@ proptest! {
     #[test]
     fn hits_scores_non_negative(n in 3..=15usize, p in 0.2..0.5f64) {
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -433,7 +433,7 @@ proptest! {
     #[test]
     fn closeness_scores_bounded(n in 2..=12usize, p in 0.2..0.6f64) {
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -476,7 +476,7 @@ proptest! {
     #[test]
     fn centrality_algorithms_deterministic(n in 3..=10usize, seed in 1..=1000u64) {
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         // Use deterministic edge generation based on seed
@@ -528,7 +528,7 @@ proptest! {
         // Note: Community detection with seeds may still be non-deterministic due to
         // HashMap iteration order. We verify valid partition properties instead.
         let entities: Vec<Entity> = (0..n)
-            .map(|i| Entity::new(&format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
+            .map(|i| Entity::new(format!("N{}", i), EntityType::Person, i * 10, i * 10 + 5, 0.9))
             .collect();
 
         let mut relations = Vec::new();
@@ -548,10 +548,10 @@ proptest! {
         let graph = GraphDocument::from_extraction(&entities, &relations, None);
 
         // All algorithms should produce valid partitions (every node assigned)
-        let leiden = Leiden::new().with_seed(seed).cluster(&graph).unwrap();
+        let leiden = Leiden::new().with_seed(seed).cluster(&graph).expect("Leiden clustering should succeed in property test");
         prop_assert_eq!(leiden.len(), graph.nodes.len(), "Leiden should assign all nodes");
 
-        let louvain = Louvain::new().with_seed(seed).cluster(&graph).unwrap();
+        let louvain = Louvain::new().with_seed(seed).cluster(&graph).expect("Louvain clustering should succeed in property test");
         prop_assert_eq!(louvain.len(), graph.nodes.len(), "Louvain should assign all nodes");
 
         // Community IDs should be in valid range

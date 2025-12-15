@@ -1178,8 +1178,7 @@ impl MentionRankingCoref {
 
         // Check for weather verbs directly
         for verb in WEATHER_VERBS {
-            if after_it_trimmed.starts_with(verb) {
-                let after_verb = &after_it_trimmed[verb.len()..];
+            if let Some(after_verb) = after_it_trimmed.strip_prefix(verb) {
                 if after_verb.is_empty() || after_verb.starts_with(|c: char| !c.is_alphanumeric()) {
                     return true;
                 }
@@ -1188,8 +1187,7 @@ impl MentionRankingCoref {
 
         // Check for cognitive verbs
         for verb in COGNITIVE_VERBS {
-            if after_it_trimmed.starts_with(verb) {
-                let after_verb = &after_it_trimmed[verb.len()..];
+            if let Some(after_verb) = after_it_trimmed.strip_prefix(verb) {
                 if after_verb.is_empty() || after_verb.starts_with(|c: char| !c.is_alphanumeric()) {
                     return true;
                 }
@@ -1200,13 +1198,12 @@ impl MentionRankingCoref {
         // Also handles contractions: "it's"
         let copula_patterns = ["is ", "was ", "'s ", "has been ", "will be ", "would be "];
         for copula in copula_patterns {
-            if after_it_trimmed.starts_with(copula) {
-                let after_copula = after_it_trimmed[copula.len()..].trim_start();
+            if let Some(after_copula) = after_it_trimmed.strip_prefix(copula) {
+                let after_copula = after_copula.trim_start();
 
                 // Check weather verbs after copula: "it is raining"
                 for verb in WEATHER_VERBS {
-                    if after_copula.starts_with(verb) {
-                        let after_verb = &after_copula[verb.len()..];
+                    if let Some(after_verb) = after_copula.strip_prefix(verb) {
                         if after_verb.is_empty()
                             || after_verb.starts_with(|c: char| !c.is_alphanumeric())
                         {
@@ -1217,8 +1214,7 @@ impl MentionRankingCoref {
 
                 // Check weather adjectives
                 for adj in WEATHER_ADJS {
-                    if after_copula.starts_with(adj) {
-                        let after_adj = &after_copula[adj.len()..];
+                    if let Some(after_adj) = after_copula.strip_prefix(adj) {
                         if after_adj.is_empty()
                             || after_adj.starts_with(|c: char| !c.is_alphanumeric())
                         {
@@ -1229,8 +1225,7 @@ impl MentionRankingCoref {
 
                 // Check modal adjectives
                 for adj in MODAL_ADJS {
-                    if after_copula.starts_with(adj) {
-                        let after_adj = &after_copula[adj.len()..];
+                    if let Some(after_adj) = after_copula.strip_prefix(adj) {
                         // Modal adjectives often followed by "that", "to", or end of clause
                         if after_adj.is_empty()
                             || after_adj.starts_with(" that")
@@ -1715,7 +1710,7 @@ impl MentionRankingCoref {
                     .map_or(true, |c| c == '.' || c == '!' || c == '?');
 
             if !at_sentence_start
-                && word.chars().next().map_or(false, |c| c.is_uppercase())
+                && word.chars().next().is_some_and(|c| c.is_uppercase())
                 && word.chars().count() > 1
             // Use chars().count() for Unicode
             {
@@ -1972,9 +1967,9 @@ impl MentionRankingCoref {
 
             // Type-specific antecedent limit
             let max_antecedents = self.config.max_antecedents_for_type(mention.mention_type);
-            let mut antecedent_count = 0;
 
             // Score against previous mentions with type-specific limit
+            let mut antecedent_count = 0;
             for j in (0..i).rev() {
                 if antecedent_count >= max_antecedents {
                     break;
@@ -2568,7 +2563,7 @@ impl CoreferenceResolver for MentionRankingCoref {
             .map(|e| {
                 let mention_type = if e.text.chars().all(|c| c.is_lowercase()) {
                     MentionType::Pronominal
-                } else if e.text.chars().next().map_or(false, |c| c.is_uppercase()) {
+                } else if e.text.chars().next().is_some_and(|c| c.is_uppercase()) {
                     MentionType::Proper
                 } else {
                     MentionType::Nominal
@@ -2619,6 +2614,10 @@ impl CoreferenceResolver for MentionRankingCoref {
             }
         }
 
+        // Assign unique IDs to singletons (entities not in any cluster)
+        let max_cluster_id = clusters.iter().map(|c| c.id).max().unwrap_or(0);
+        let mut next_singleton_id = max_cluster_id + 1;
+
         // Apply canonical IDs to entities
         entities
             .iter()
@@ -2626,6 +2625,10 @@ impl CoreferenceResolver for MentionRankingCoref {
                 let mut entity = e.clone();
                 if let Some(&cluster_id) = canonical_map.get(&(e.start, e.end)) {
                     entity.canonical_id = Some(cluster_id as u64);
+                } else {
+                    // Assign unique ID to singleton
+                    entity.canonical_id = Some(next_singleton_id as u64);
+                    next_singleton_id += 1;
                 }
                 entity
             })
@@ -3389,7 +3392,7 @@ mod tests {
         let coref = MentionRankingCoref::new();
         let text = "習近平在北京。他很忙。"; // "Xi Jinping is in Beijing. He is busy."
 
-        let (signals, tracks) = coref.resolve_to_grounded(text).unwrap();
+        let (signals, _tracks) = coref.resolve_to_grounded(text).unwrap();
         let char_count = text.chars().count();
 
         // All signal locations should be within text bounds (character offsets)

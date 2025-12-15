@@ -382,25 +382,34 @@ mod tests {
     #[test]
     fn test_serde_roundtrip() {
         let mt = MentionType::Pronominal;
-        let json = serde_json::to_string(&mt).unwrap();
+        let json = serde_json::to_string(&mt).expect("serialize MentionType");
         assert_eq!(json, "\"pronominal\"");
-        let recovered: MentionType = serde_json::from_str(&json).unwrap();
+        let recovered: MentionType = serde_json::from_str(&json).expect("deserialize MentionType");
         assert_eq!(mt, recovered);
     }
 
     #[test]
     fn test_from_str() {
         assert_eq!(
-            "proper".parse::<MentionType>().unwrap(),
+            "proper".parse::<MentionType>().expect("parse 'proper'"),
             MentionType::Proper
         );
-        assert_eq!("nom".parse::<MentionType>().unwrap(), MentionType::Nominal);
         assert_eq!(
-            "pronoun".parse::<MentionType>().unwrap(),
+            "nom".parse::<MentionType>().expect("parse 'nom'"),
+            MentionType::Nominal
+        );
+        assert_eq!(
+            "pronoun".parse::<MentionType>().expect("parse 'pronoun'"),
             MentionType::Pronominal
         );
-        assert_eq!("zero".parse::<MentionType>().unwrap(), MentionType::Zero);
-        assert_eq!("*pro*".parse::<MentionType>().unwrap(), MentionType::Zero);
+        assert_eq!(
+            "zero".parse::<MentionType>().expect("parse 'zero'"),
+            MentionType::Zero
+        );
+        assert_eq!(
+            "*pro*".parse::<MentionType>().expect("parse '*pro*'"),
+            MentionType::Zero
+        );
     }
 
     #[test]
@@ -435,9 +444,10 @@ mod tests {
     #[test]
     fn test_zero_serde_roundtrip() {
         let mt = MentionType::Zero;
-        let json = serde_json::to_string(&mt).unwrap();
+        let json = serde_json::to_string(&mt).expect("serialize MentionType::Zero");
         assert_eq!(json, "\"zero\"");
-        let recovered: MentionType = serde_json::from_str(&json).unwrap();
+        let recovered: MentionType =
+            serde_json::from_str(&json).expect("deserialize MentionType::Zero");
         assert_eq!(mt, recovered);
     }
 

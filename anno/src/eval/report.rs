@@ -535,7 +535,7 @@ impl ReportBuilder {
             for (text, entity_type) in entities {
                 text_to_types
                     .entry(text.to_lowercase())
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert(entity_type.to_string());
             }
         }

@@ -121,6 +121,7 @@ impl BoxCorefProvider {
     /// Convert a mention into a deterministic 2D box embedding.
     ///
     /// The hash is mapped into [0,1]² and expanded by `radius` in each dim.
+    #[allow(dead_code)] // struct is currently not wired into main joint path
     fn mention_to_box(&self, mention: &JointMention) -> BoxEmbedding {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -305,7 +306,7 @@ impl NerScoreProvider for ModelNerProvider {
                         .collect(),
                     None => {
                         // Uniform distribution as fallback
-                        let uniform = (-1.0 * self.entity_types.len() as f64).ln();
+                        let uniform = (-(self.entity_types.len() as f64)).ln();
                         self.entity_types
                             .iter()
                             .map(|et| (et.clone(), uniform))

@@ -672,8 +672,8 @@ fn parse_year(date: &str) -> Option<i32> {
     }
 
     // Handle BCE dates (negative years)
-    let (sign, rest) = if trimmed.starts_with('-') {
-        (-1, &trimmed[1..])
+    let (sign, rest) = if let Some(rest) = trimmed.strip_prefix('-') {
+        (-1, rest)
     } else {
         (1, trimmed)
     };
@@ -977,7 +977,12 @@ mod proptests {
         #[test]
         fn prop_metric_bounds(metric in arb_metric(), a in arb_short_string(), b in arb_short_string()) {
             let sim = metric.compute(&a, &b);
-            prop_assert!(sim >= 0.0 && sim <= 1.0, "Similarity {} out of [0,1] for {:?}", sim, metric);
+            prop_assert!(
+                (0.0..=1.0).contains(&sim),
+                "Similarity {} out of [0,1] for {:?}",
+                sim,
+                metric
+            );
         }
 
         /// All metrics give 1.0 for identical strings

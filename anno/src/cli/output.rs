@@ -118,6 +118,8 @@ pub fn print_signals(doc: &GroundedDocument, text: &str, verbose_level: u8) {
         by_type.entry(s.label().to_string()).or_default().push(s);
     }
 
+    let text_len = text.chars().count();
+
     if by_type.is_empty() {
         if verbose_level == 0 {
             println!(
@@ -175,7 +177,7 @@ pub fn print_signals(doc: &GroundedDocument, text: &str, verbose_level: u8) {
             // Level 1+: Context snippets (shows surrounding text)
             // Use 30 chars for better context (was 15, too short)
             let ctx_start = start.saturating_sub(30);
-            let ctx_end = (end + 30).min(text.chars().count());
+            let ctx_end = (end + 30).min(text_len);
             let before: String = text
                 .chars()
                 .skip(ctx_start)
@@ -193,7 +195,7 @@ pub fn print_signals(doc: &GroundedDocument, text: &str, verbose_level: u8) {
                 color("90", &before),
                 color("1;33", &entity),
                 color("90", &after),
-                if ctx_end < text.chars().count() {
+                if ctx_end < text_len {
                     color("90", "...")
                 } else {
                     String::new()

@@ -623,7 +623,7 @@ impl SemanticRegistryBuilder {
 ///     let output = encoder.encode(text).unwrap();
 ///     println!("Encoded {} tokens into {} dimensions",
 ///              output.num_tokens, output.hidden_dim);
-///     
+///
 ///     // Token offsets map back to character positions
 ///     for (i, (start, end)) in output.token_offsets.iter().enumerate() {
 ///         println!("Token {}: chars {}..{}", i, start, end);
@@ -704,7 +704,7 @@ pub struct EncoderOutput {
 ///         "a company, institution, or organized group",
 ///         "a geographical location, city, country, or region",
 ///     ];
-///     
+///
 ///     let embeddings = encoder.encode_labels(labels).unwrap();
 ///     // Store embeddings in SemanticRegistry for fast lookup
 /// }
@@ -787,7 +787,7 @@ pub trait LabelEncoder: Send + Sync {
 /// fn extract_custom_entities(bi_enc: &dyn BiEncoder, text: &str) {
 ///     let labels = &["software company", "hardware manufacturer", "person"];
 ///     let scores = bi_enc.encode_and_match(text, labels, 8).unwrap();
-///     
+///
 ///     for s in scores.iter().filter(|s| s.score > 0.5) {
 ///         println!("Found '{}' as type {} (score: {:.2})",
 ///                  &text[s.start..s.end], labels[s.label_idx], s.score);
@@ -872,7 +872,7 @@ pub struct SpanLabelScore {
 /// fn extract_medical_entities(ner: &dyn ZeroShotNER, clinical_note: &str) {
 ///     // Define custom medical entity types at runtime
 ///     let types = &["drug name", "disease", "symptom", "dosage"];
-///     
+///
 ///     let entities = ner.extract_with_types(clinical_note, types, 0.5).unwrap();
 ///     for e in entities {
 ///         println!("{}: {} (conf: {:.2})", e.entity_type, e.text, e.confidence);
@@ -886,7 +886,7 @@ pub struct SpanLabelScore {
 ///         "a medical condition or illness",
 ///         "a physical sensation indicating illness",
 ///     ];
-///     
+///
 ///     let entities = ner.extract_with_descriptions(text, descriptions, 0.5).unwrap();
 /// }
 /// ```
@@ -1021,16 +1021,16 @@ pub trait ZeroShotNER: Send + Sync {
 /// fn build_knowledge_graph(extractor: &dyn RelationExtractor, text: &str) {
 ///     let entity_types = &["person", "organization", "date"];
 ///     let relation_types = &["founded", "works_for", "acquired"];
-///     
+///
 ///     let result = extractor.extract_with_relations(
 ///         text, entity_types, relation_types, 0.5
 ///     ).unwrap();
-///     
+///
 ///     // Build graph nodes from entities
 ///     for e in &result.entities {
 ///         println!("Node: {} ({})", e.text, e.entity_type);
 ///     }
-///     
+///
 ///     // Build graph edges from relations
 ///     for r in &result.relations {
 ///         let head = &result.entities[r.head_idx];
@@ -1136,7 +1136,7 @@ pub struct RelationTriple {
 /// fn extract_complex_entities(ner: &dyn DiscontinuousNER, text: &str) {
 ///     let types = &["location", "protein"];
 ///     let entities = ner.extract_discontinuous(text, types, 0.5).unwrap();
-///     
+///
 ///     for e in entities {
 ///         if e.is_contiguous() {
 ///             println!("Contiguous {}: '{}'", e.entity_type, e.text);
@@ -1265,7 +1265,7 @@ impl DiscontinuousEntity {
 /// // Span embeddings: 3 spans × 768 dim
 /// let span_embs: Vec<f32> = get_span_embeddings(&tokens, &candidates);
 ///
-/// // Label embeddings: 5 labels × 768 dim  
+/// // Label embeddings: 5 labels × 768 dim
 /// let label_embs: Vec<f32> = registry.all_embeddings();
 ///
 /// // Compute 3×5 = 15 similarity scores
@@ -1478,7 +1478,7 @@ impl Default for SpanRepConfig {
 ///
 /// where:
 /// - h_i = start token embedding
-/// - h_j = end token embedding  
+/// - h_j = end token embedding
 /// - w_{j-i} = learned width embedding (captures span length)
 ///
 /// This is the "gnarly bit" from GLiNER that enables zero-shot matching.
@@ -2607,9 +2607,7 @@ mod tests {
         let embedding1 = vec![0.1; 64];
         let mut embedding2 = vec![0.1; 64];
         // Flip second half
-        for i in 32..64 {
-            embedding2[i] = -0.1;
-        }
+        embedding2[32..64].iter_mut().for_each(|x| *x = -0.1);
 
         let hash1 = BinaryHash::from_embedding(&embedding1);
         let hash2 = BinaryHash::from_embedding(&embedding2);

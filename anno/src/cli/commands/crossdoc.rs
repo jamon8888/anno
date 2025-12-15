@@ -769,7 +769,7 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                     "{}\n",
                     color("1;36", "Cross-Document Entity Coalescing Results")
                 ));
-                output.push_str("\n");
+                output.push('\n');
 
                 // Summary header
                 let doc_count = if use_corpus {
@@ -804,7 +804,7 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                         args.entity_types.join(", ")
                     ));
                 }
-                output.push_str("\n");
+                output.push('\n');
 
                 // Entity type breakdown
                 let mut type_counts: HashMap<String, usize> = HashMap::new();
@@ -821,11 +821,11 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                     for (etype, count) in type_vec {
                         output.push_str(&format!("  {}: {}\n", etype, count));
                     }
-                    output.push_str("\n");
+                    output.push('\n');
                 }
 
                 output.push_str(&format!("{}\n", color("1;36", "Clusters")));
-                output.push_str("\n");
+                output.push('\n');
 
                 // Determine display limit
                 let display_limit = if args.max_clusters > 0 {
@@ -1033,7 +1033,7 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                         }
                     }
 
-                    output.push_str("\n");
+                    output.push('\n');
                 }
 
                 // Show limit message if applicable
@@ -1095,7 +1095,7 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                         "═══════════════════════════════════════════════════════════"
                     )
                 ));
-                output.push_str("\n");
+                output.push('\n');
                 output.push_str(&format!("{}\n", color("1;33", "Document Statistics:")));
                 let doc_count = if use_corpus {
                     corpus.documents().count()
@@ -1112,7 +1112,7 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                         total_entities as f64 / documents.len() as f64
                     }
                 ));
-                output.push_str("\n");
+                output.push('\n');
                 output.push_str(&format!("{}\n", color("1;33", "Cluster Statistics:")));
                 output.push_str(&format!("  Total clusters: {}\n", final_clusters.len()));
                 output.push_str(&format!(
@@ -1137,7 +1137,7 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                     "  Most documents per cluster: {}\n",
                     max_doc_count
                 ));
-                output.push_str("\n");
+                output.push('\n');
                 if !type_counts.is_empty() {
                     output.push_str(&format!("{}\n", color("1;33", "Entity Type Distribution:")));
                     let mut type_vec: Vec<_> = type_counts.iter().collect();

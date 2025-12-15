@@ -44,10 +44,10 @@ ci: fmt
     cargo test --test no_features
     ANNO_MAX_EXAMPLES=10 cargo test --lib --features "eval-advanced discourse"
     cargo test --test eval_integration --features "eval-advanced"
-    cargo test --test coref_integration --features "eval-advanced"
-    cargo test --test discourse_comprehensive --features "discourse"
-    cargo test --test new_features_integration --features "eval-advanced"
-    cargo test --test regression_f1 --features eval
+    cargo test --test coreference_tests --features "eval-advanced"
+    cargo test --test discourse_proptest --features "discourse"
+    cargo test --test features_comprehensive --features "eval-advanced"
+    cargo test --test regression_tests --features eval
     @echo "CI simulation passed"
 
 # Simulate CI with sanity evals (includes small random sample evals)
@@ -171,6 +171,12 @@ msrv:
 # Run property tests with more cases
 proptest:
     PROPTEST_CASES=1000 cargo test --lib --features "eval-advanced" -- proptest
+
+# Warm local dataset cache (and optionally S3 mirror).
+# Example:
+#   ANNO_WARM_PER_TASK=2 ANNO_WARM_SEED=42 cargo run --example cache_warm --features "eval-advanced"
+cache-warm:
+    cargo run -p anno --example cache_warm --features "eval-advanced"
 
 # === Release ===
 

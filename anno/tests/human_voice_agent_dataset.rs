@@ -337,7 +337,7 @@ fn test_french_text_unicode() {
         // Verify French text is valid UTF-8 and contains expected characters
         if turn.language == "fr" {
             // Check for common French diacritics
-            let has_french_chars = turn.text.chars().any(|c| {
+            let _has_french_chars = turn.text.chars().any(|c| {
                 matches!(
                     c,
                     'é' | 'è' | 'ê' | 'ë' | 'à' | 'â' | 'ô' | 'û' | 'ù' | 'ç' | 'î' | 'ï'

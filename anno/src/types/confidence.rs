@@ -329,17 +329,17 @@ mod tests {
 
     #[test]
     fn from_percent_works() {
-        let conf = Confidence::from_percent(85.0).unwrap();
+        let conf = Confidence::from_percent(85.0).expect("85.0% is a valid confidence value");
         assert!((conf.get() - 0.85).abs() < 1e-10);
         assert!(Confidence::from_percent(150.0).is_none());
     }
 
     #[test]
     fn predicates() {
-        assert!(Confidence::new(0.95).unwrap().is_high());
-        assert!(!Confidence::new(0.85).unwrap().is_high());
-        assert!(Confidence::new(0.3).unwrap().is_low());
-        assert!(!Confidence::new(0.6).unwrap().is_low());
+        assert!(Confidence::new(0.95).expect("0.95 is valid").is_high());
+        assert!(!Confidence::new(0.85).expect("0.85 is valid").is_high());
+        assert!(Confidence::new(0.3).expect("0.3 is valid").is_low());
+        assert!(!Confidence::new(0.6).expect("0.6 is valid").is_low());
     }
 
     #[test]
@@ -353,8 +353,8 @@ mod tests {
 
     #[test]
     fn combine_geometric_mean() {
-        let a = Confidence::new(0.8).unwrap();
-        let b = Confidence::new(0.8).unwrap();
+        let a = Confidence::new(0.8).expect("0.8 is valid");
+        let b = Confidence::new(0.8).expect("0.8 is valid");
         assert!((a.combine(b).get() - 0.8).abs() < 1e-10);
 
         let c = Confidence::new(1.0).unwrap();
@@ -373,16 +373,17 @@ mod tests {
 
     #[test]
     fn display_format() {
-        let conf = Confidence::new(0.856).unwrap();
+        let conf = Confidence::new(0.856).expect("0.856 is valid");
         assert_eq!(format!("{}", conf), "85.6%");
     }
 
     #[test]
     fn serde_roundtrip() {
-        let conf = Confidence::new(0.85).unwrap();
-        let json = serde_json::to_string(&conf).unwrap();
+        let conf = Confidence::new(0.85).expect("0.85 is valid");
+        let json = serde_json::to_string(&conf).expect("serialization should succeed");
         assert_eq!(json, "0.85");
-        let restored: Confidence = serde_json::from_str(&json).unwrap();
+        let restored: Confidence =
+            serde_json::from_str(&json).expect("deserialization should succeed");
         assert!((restored.get() - 0.85).abs() < 1e-10);
     }
 

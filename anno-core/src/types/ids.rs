@@ -222,10 +222,10 @@ mod tests {
     #[test]
     fn test_serde_roundtrip() {
         let id = SignalId::new(123);
-        let json = serde_json::to_string(&id).unwrap();
+        let json = serde_json::to_string(&id).expect("serialize SignalId");
         assert_eq!(json, "123"); // Serializes as plain number
 
-        let recovered: SignalId = serde_json::from_str(&json).unwrap();
+        let recovered: SignalId = serde_json::from_str(&json).expect("deserialize SignalId");
         assert_eq!(id, recovered);
     }
 

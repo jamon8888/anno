@@ -227,7 +227,12 @@ fn test_bytes_to_chars_zwj_sequences_and_flags() {
                 "Byte {} in {:?} should map to owning char {}",
                 byte, text, expected_char
             );
-            assert!(char_end > char_start, "End must advance for {:?} at byte {}", text, byte);
+            assert!(
+                char_end > char_start,
+                "End must advance for {:?} at byte {}",
+                text,
+                byte
+            );
         }
     }
 }
@@ -242,7 +247,9 @@ fn test_bytes_to_chars_rtl_and_mixed_scripts() {
         assert!(
             char_end >= char_start && char_end <= text.chars().count(),
             "Span should remain in bounds for byte {}: start={}, end={}",
-            byte, char_start, char_end
+            byte,
+            char_start,
+            char_end
         );
     }
 }

@@ -63,7 +63,7 @@ fn regression_urls_require_protocol() {
             .filter(|e| e.entity_type.as_label() == "URL")
             .collect();
         assert!(
-            url_entities.len() > 0,
+            !url_entities.is_empty(),
             "Valid URL should be detected: '{}'",
             text
         );

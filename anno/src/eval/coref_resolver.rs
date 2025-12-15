@@ -1169,14 +1169,14 @@ impl BoxCorefResolver {
 
         // Assign cluster IDs
         let mut cluster_map: HashMap<usize, u64> = HashMap::new();
-        for i in 0..entities.len() {
+        for (i, resolved_entity) in resolved.iter_mut().enumerate().take(entities.len()) {
             let root = find(&mut parent, i);
             let cluster_id = *cluster_map.entry(root).or_insert_with(|| {
                 let id = next_cluster_id;
                 next_cluster_id += 1;
                 id
             });
-            resolved[i].canonical_id = Some(cluster_id);
+            resolved_entity.canonical_id = Some(cluster_id);
         }
 
         resolved
@@ -1228,7 +1228,7 @@ impl BoxCorefResolver {
     /// Check if text is an R-expression (proper name).
     fn is_rexpression(&self, text: &str) -> bool {
         // Simple heuristic: capitalized words are likely R-expressions
-        text.chars().next().map_or(false, |c| c.is_uppercase()) && text.len() > 1
+        text.chars().next().is_some_and(|c| c.is_uppercase()) && text.len() > 1
     }
 }
 

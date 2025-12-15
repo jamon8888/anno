@@ -15,10 +15,12 @@ use std::collections::HashMap;
 enum EntityType {
     Person,
     Organization,
+    #[allow(dead_code)]
     Location,
 }
 
 impl EntityType {
+    #[allow(dead_code)]
     fn as_label(&self) -> &str {
         match self {
             EntityType::Person => "PER",
@@ -30,6 +32,7 @@ impl EntityType {
 
 #[derive(Debug, Clone)]
 struct JointMention {
+    #[allow(dead_code)]
     idx: usize,
     text: String,
 }
@@ -46,7 +49,9 @@ struct JointWeights {
 #[derive(Debug, Clone)]
 struct TrainingExample {
     mentions: Vec<JointMention>,
+    #[allow(dead_code)]
     gold_ner: HashMap<usize, EntityType>,
+    #[allow(dead_code)]
     gold_coref: HashMap<usize, Option<usize>>,
 }
 

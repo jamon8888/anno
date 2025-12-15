@@ -1,6 +1,6 @@
 //! Tests for Identity tracking and management.
 
-use anno_core::grounded::{Identity, IdentitySource, TrackRef};
+use anno_core::grounded::{Identity, IdentitySource};
 use anno_core::IdentityId;
 
 #[test]
@@ -135,7 +135,11 @@ fn test_identity_with_description() {
     identity.entity_type = Some("Person".to_string());
 
     assert!(identity.description.is_some());
-    assert!(identity.description.as_ref().unwrap().contains("physicist"));
+    assert!(identity
+        .description
+        .as_ref()
+        .expect("description set above")
+        .contains("physicist"));
 }
 
 #[test]
