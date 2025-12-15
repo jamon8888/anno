@@ -105,6 +105,7 @@ mod coref_tests {
 // =============================================================================
 
 #[cfg(all(feature = "eval", feature = "e2e_coref"))]
+#[allow(unexpected_cfgs)]
 mod e2e_coref_tests {
     use super::*;
     use anno::backends::e2e_coref::E2ECoref;
