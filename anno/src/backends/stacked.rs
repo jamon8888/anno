@@ -1695,13 +1695,12 @@ mod tests {
                 // We allow for slight text differences due to normalization and conflict resolution
                 for entity in &e1 {
                     let found = e2.iter().any(|e| {
-                        // Exact match
-                        (e.text == entity.text && e.start == entity.start && e.end == entity.end)
-                            // Same span, text is close (normalized) or exact
-                            || (e.start == entity.start
-                                && e.end == entity.end
-                                && (e.text.trim().to_lowercase() == entity.text.trim().to_lowercase()
-                                    || e.text == entity.text))
+                        // Check if spans match first (common condition)
+                        let spans_match = e.start == entity.start && e.end == entity.end;
+                        // Same span, text matches exactly or after normalization
+                        spans_match
+                            && (e.text == entity.text
+                                || e.text.trim().to_lowercase() == entity.text.trim().to_lowercase())
                             // Same entity type and overlapping span (conflict resolution may have modified)
                             || (e.entity_type == entity.entity_type
                                 && e.start <= entity.start
