@@ -348,8 +348,8 @@ fn edit_distance_wildcards_chars(pattern: &[char], text: &[char]) -> usize {
     dp[0][0] = 0;
 
     // Empty pattern vs non-empty text: need n deletions
-    for j in 1..=n {
-        dp[0][j] = j;
+    for (j, cell) in dp[0].iter_mut().enumerate().skip(1).take(n) {
+        *cell = j;
     }
 
     // Pattern vs empty text
@@ -468,11 +468,11 @@ pub fn damerau_levenshtein(a: &str, b: &str) -> usize {
     // Full DP matrix needed for transpositions
     let mut dp = vec![vec![0usize; n + 1]; m + 1];
 
-    for i in 0..=m {
-        dp[i][0] = i;
+    for (i, row) in dp.iter_mut().enumerate().take(m + 1) {
+        row[0] = i;
     }
-    for j in 0..=n {
-        dp[0][j] = j;
+    for (j, cell) in dp[0].iter_mut().enumerate().take(n + 1) {
+        *cell = j;
     }
 
     for i in 1..=m {
@@ -705,7 +705,7 @@ mod tests {
         for (a, b) in pairs {
             let d = normalized_edit_distance(a, b);
             assert!(
-                d >= 0.0 && d <= 1.0,
+                (0.0..=1.0).contains(&d),
                 "Distance {} out of bounds for ({}, {})",
                 d,
                 a,
@@ -998,12 +998,6 @@ mod proptests {
             prop_assert_eq!(levenshtein(&a, &b), levenshtein(&b, &a));
         }
 
-        /// Non-negativity: d(a, b) >= 0
-        #[test]
-        fn prop_levenshtein_non_negative(a in arb_short_string(), b in arb_short_string()) {
-            prop_assert!(levenshtein(&a, &b) >= 0);
-        }
-
         /// Upper bound: d(a, b) <= max(|a|, |b|)
         #[test]
         fn prop_levenshtein_upper_bound(a in arb_short_string(), b in arb_short_string()) {
@@ -1049,7 +1043,11 @@ mod proptests {
         #[test]
         fn prop_normalized_bounds(a in arb_short_string(), b in arb_short_string()) {
             let d = normalized_edit_distance(&a, &b);
-            prop_assert!(d >= 0.0 && d <= 1.0, "Normalized distance {} out of bounds", d);
+            prop_assert!(
+                (0.0..=1.0).contains(&d),
+                "Normalized distance {} out of bounds",
+                d
+            );
         }
 
         /// Normalized distance to self is 0
@@ -1137,7 +1135,7 @@ mod proptests {
         /// '?' always matches exactly one character
         #[test]
         fn prop_question_mark_matches_one(c in "[a-zA-Z]") {
-            let pattern = format!("?");
+            let pattern = "?";
             let text = c;
             prop_assert_eq!(
                 edit_distance_wildcards(&pattern, &text), 0,

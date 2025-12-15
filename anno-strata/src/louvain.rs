@@ -397,7 +397,7 @@ mod tests {
     fn test_empty_graph() {
         let graph = GraphDocument::new();
         let louvain = Louvain::new();
-        let communities = louvain.cluster(&graph).unwrap();
+        let communities = louvain.cluster(&graph).expect("empty graph should cluster");
         assert!(communities.is_empty());
     }
 
@@ -407,7 +407,7 @@ mod tests {
         let graph = GraphDocument::from_extraction(&[solo], &[], None);
 
         let louvain = Louvain::new();
-        let communities = louvain.cluster(&graph).unwrap();
+        let communities = louvain.cluster(&graph).expect("single node should cluster");
         assert_eq!(communities.len(), 1);
     }
 
@@ -415,7 +415,9 @@ mod tests {
     fn test_two_disconnected_cliques() {
         let graph = two_cliques_graph();
         let louvain = Louvain::new().with_seed(42);
-        let communities = louvain.cluster(&graph).unwrap();
+        let communities = louvain
+            .cluster(&graph)
+            .expect("two disconnected cliques should cluster");
 
         let unique: HashSet<_> = communities.values().collect();
         assert_eq!(unique.len(), 2, "Should detect 2 disconnected communities");
@@ -425,7 +427,9 @@ mod tests {
     fn test_connected_cliques() {
         let graph = connected_cliques_graph();
         let louvain = Louvain::new().with_seed(42);
-        let communities = louvain.cluster(&graph).unwrap();
+        let communities = louvain
+            .cluster(&graph)
+            .expect("connected cliques should cluster");
 
         // Should still find 2 communities due to weak bridge
         let unique: HashSet<_> = communities.values().collect();
@@ -438,11 +442,15 @@ mod tests {
 
         // Low resolution = fewer communities
         let louvain_low = Louvain::new().with_resolution(0.5).with_seed(42);
-        let communities_low = louvain_low.cluster(&graph).unwrap();
+        let communities_low = louvain_low
+            .cluster(&graph)
+            .expect("low resolution should cluster");
 
         // High resolution = more communities
         let louvain_high = Louvain::new().with_resolution(2.0).with_seed(42);
-        let communities_high = louvain_high.cluster(&graph).unwrap();
+        let communities_high = louvain_high
+            .cluster(&graph)
+            .expect("high resolution should cluster");
 
         let unique_low: HashSet<_> = communities_low.values().collect();
         let unique_high: HashSet<_> = communities_high.values().collect();
@@ -457,7 +465,7 @@ mod tests {
     fn test_modularity_positive_for_good_partition() {
         let graph = two_cliques_graph();
         let louvain = Louvain::new().with_seed(42);
-        let communities = louvain.cluster(&graph).unwrap();
+        let communities = louvain.cluster(&graph).expect("two cliques should cluster");
 
         let modularity = louvain.modularity(&graph, &communities);
         assert!(
@@ -473,8 +481,12 @@ mod tests {
         let louvain1 = Louvain::new().with_seed(123);
         let louvain2 = Louvain::new().with_seed(123);
 
-        let c1 = louvain1.cluster(&graph).unwrap();
-        let c2 = louvain2.cluster(&graph).unwrap();
+        let c1 = louvain1
+            .cluster(&graph)
+            .expect("deterministic clustering should succeed");
+        let c2 = louvain2
+            .cluster(&graph)
+            .expect("deterministic clustering should succeed");
 
         // Same seed should give equivalent partitions
         let partition1: HashSet<Vec<&String>> = c1

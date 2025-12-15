@@ -300,7 +300,7 @@ impl BiLstmCrfNER {
 
         for (i, token) in tokens.iter().enumerate() {
             let lower = token.to_lowercase();
-            let is_capitalized = token.chars().next().map_or(false, |c| c.is_uppercase());
+            let is_capitalized = token.chars().next().is_some_and(|c| c.is_uppercase());
             let is_all_caps = token.chars().all(|c| c.is_uppercase() || !c.is_alphabetic()) && token.len() > 1;
             let has_digit = token.chars().any(|c| c.is_ascii_digit());
             let is_first = i == 0;
@@ -330,7 +330,7 @@ impl BiLstmCrfNER {
             }
 
             // Organization suffixes
-            if lower.ends_with("inc.") || lower.ends_with("corp.") 
+            if lower.ends_with("inc.") || lower.ends_with("corp.")
                 || lower.ends_with("ltd.") || lower.ends_with("llc")
                 || lower.ends_with("co.") {
                 emissions[i][self.label_to_idx["B-ORG"]] += 1.5;
@@ -355,7 +355,7 @@ impl BiLstmCrfNER {
 
             // Multi-word entity continuation
             if i > 0 {
-                let prev_cap = tokens[i - 1].chars().next().map_or(false, |c| c.is_uppercase());
+                let prev_cap = tokens[i - 1].chars().next().is_some_and(|c| c.is_uppercase());
                 if prev_cap && is_capitalized && !is_first {
                     // Likely continuation of entity
                     emissions[i][self.label_to_idx["I-PER"]] += 0.6;
@@ -435,10 +435,10 @@ impl BiLstmCrfNER {
 
         let converter = SpanConverter::new(text);
         let mut entities = Vec::new();
-        
+
         // Track token positions (byte offsets) as we iterate
         let token_positions: Vec<(usize, usize)> = Self::calculate_token_positions(text, tokens);
-        
+
         let mut current_entity: Option<(usize, usize, EntityType, Vec<&str>)> = None;
 
         for (i, (&label_idx, &token)) in label_indices.iter().zip(tokens.iter()).enumerate() {
@@ -523,13 +523,13 @@ impl BiLstmCrfNER {
         if start_token_idx >= positions.len() || end_token_idx >= positions.len() {
             return;
         }
-        
+
         let byte_start = positions[start_token_idx].0;
         let byte_end = positions[end_token_idx].1;
         let char_start = converter.byte_to_char(byte_start);
         let char_end = converter.byte_to_char(byte_end);
         let entity_text = words.join(" ");
-        
+
         entities.push(Entity::new(
             entity_text,
             entity_type,
@@ -697,7 +697,7 @@ mod tests {
     }
 
     /// Test that duplicate entity texts get correct offsets.
-    /// 
+    ///
     /// This test verifies the fix for a bug where `text.find()` was used to locate
     /// entity positions, which always returned the first occurrence. When the same
     /// entity text appeared multiple times, subsequent occurrences would have
@@ -705,28 +705,28 @@ mod tests {
     #[test]
     fn test_duplicate_entity_offsets() {
         let ner = BiLstmCrfNER::new();
-        
+
         // Text with "Google" appearing twice
         let text = "Google bought Google for $1 billion.";
-        
+
         // Test token position calculation directly
         let tokens: Vec<&str> = text.split_whitespace().collect();
         let positions = BiLstmCrfNER::calculate_token_positions(text, &tokens);
-        
+
         // "Google" appears at indices 0 and 2 in tokens
         // First "Google" at byte 0-6
         assert_eq!(positions[0], (0, 6), "First 'Google' should be at bytes 0-6");
         // Second "Google" at byte 14-20 (after "Google bought ")
         assert_eq!(positions[2], (14, 20), "Second 'Google' should be at bytes 14-20");
-        
+
         // Also test with the full extraction
         let entities = ner.extract_entities(text, None).unwrap();
-        
+
         // If any Google entities are found, verify they have distinct offsets
         let google_entities: Vec<_> = entities.iter()
             .filter(|e| e.text.contains("Google"))
             .collect();
-        
+
         if google_entities.len() >= 2 {
             assert_ne!(
                 google_entities[0].start, google_entities[1].start,
@@ -734,14 +734,14 @@ mod tests {
             );
         }
     }
-    
+
     /// Test token position calculation with Unicode.
     #[test]
     fn test_token_positions_unicode() {
         let text = "東京 Tokyo 東京 Osaka";
         let tokens: Vec<&str> = text.split_whitespace().collect();
         let positions = BiLstmCrfNER::calculate_token_positions(text, &tokens);
-        
+
         // Each 東京 is 6 bytes (2 chars × 3 bytes each)
         assert_eq!(positions[0], (0, 6), "First '東京' at bytes 0-6");
         assert_eq!(positions[1], (7, 12), "Tokyo at bytes 7-12");

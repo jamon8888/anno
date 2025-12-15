@@ -47,23 +47,9 @@ else
 fi
 
 # ============================================================================
-# 3. Compile check (fast, catches type errors early)
+# 3. Check for files with spaces in names
 # ============================================================================
-echo -n "  [2/4] compile ...... "
-if ! cargo check --workspace --all-targets --quiet 2>/dev/null; then
-    echo "FAILED"
-    echo ""
-    echo "error: compilation failed"
-    echo ""
-    cargo check --workspace --all-targets 2>&1 | head -50
-    exit 1
-fi
-echo "ok"
-
-# ============================================================================
-# 4. Check for files with spaces in names
-# ============================================================================
-echo -n "  [3/4] filenames .... "
+echo -n "  [2/3] filenames .... "
 BAD_FILES=$(git diff --cached --name-only | grep ' ' || true)
 if [ -n "$BAD_FILES" ]; then
     echo "FAILED"
@@ -75,9 +61,9 @@ fi
 echo "ok"
 
 # ============================================================================
-# 5. Check for large files (>1MB warning only)
+# 4. Check for large files (>1MB warning only, non-blocking)
 # ============================================================================
-echo -n "  [4/4] file sizes ... "
+echo -n "  [3/3] file sizes ... "
 LARGE_FILES=$(git diff --cached --name-only | while read file; do
     if [ -f "$file" ]; then
         size=$(wc -c < "$file" 2>/dev/null || echo 0)

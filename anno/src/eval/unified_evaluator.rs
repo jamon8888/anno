@@ -124,10 +124,15 @@ pub struct TaskResults {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "eval-advanced")]
 pub struct DatasetResults {
+    /// Dataset identifier/name.
     pub dataset: String,
+    /// F1 score on this dataset.
     pub f1: f64,
+    /// Precision on this dataset.
     pub precision: f64,
+    /// Recall on this dataset.
     pub recall: f64,
+    /// Number of evaluated examples for this dataset.
     pub num_examples: usize,
 }
 
@@ -135,10 +140,15 @@ pub struct DatasetResults {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "eval-advanced")]
 pub struct BackendResults {
+    /// Backend identifier/name.
     pub backend: String,
+    /// F1 score for this backend.
     pub f1: f64,
+    /// Precision for this backend.
     pub precision: f64,
+    /// Recall for this backend.
     pub recall: f64,
+    /// Number of evaluated examples for this backend.
     pub num_examples: usize,
 }
 
@@ -196,8 +206,11 @@ pub struct LengthBiasSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "eval-advanced")]
 pub struct CalibrationEvalResults {
+    /// Expected calibration error.
     pub ece: f64,
+    /// Maximum calibration error.
     pub mce: f64,
+    /// Brier score (lower is better).
     pub brier_score: f64,
 }
 
@@ -452,6 +465,7 @@ impl EvalSystem {
         use std::time::Instant;
 
         let start = Instant::now();
+        #[allow(unused_mut)]
         let mut warnings = Vec::new();
 
         // Run standard evaluation

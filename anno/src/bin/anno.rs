@@ -46,6 +46,10 @@ use std::process::ExitCode;
 use clap::{CommandFactory, Parser};
 
 fn main() -> ExitCode {
+    // Load workspace `.env` (idempotent, does not override existing env vars).
+    // This makes `HF_TOKEN`, `ANNO_*` knobs, etc. work without manual exporting.
+    anno::env::load_dotenv();
+
     // Initialize tracing subscriber when instrument feature is enabled
     #[cfg(feature = "instrument")]
     {
@@ -59,40 +63,42 @@ fn main() -> ExitCode {
     }
 
     use anno::cli::commands::*;
+    use anno::cli::exit_codes;
     use anno::cli::output::color;
     use anno::cli::parser::{Cli, Commands, ModelBackend, OutputFormat};
+    use anno::cli::CliError;
     use clap_complete::generate;
 
     let cli = Cli::parse();
 
-    let result: Result<(), String> = match cli.command {
+    let result: Result<(), CliError> = match cli.command {
         Some(Commands::Extract(args)) => extract::run(args),
-        Some(Commands::Debug(args)) => debug::run(args),
-        Some(Commands::Eval(args)) => eval::run(args),
-        Some(Commands::Validate(args)) => validate::run(args),
-        Some(Commands::Analyze(args)) => analyze::run(args),
-        Some(Commands::Dataset(args)) => dataset::run(args),
+        Some(Commands::Debug(args)) => debug::run(args).map_err(CliError::from),
+        Some(Commands::Eval(args)) => eval::run(args).map_err(CliError::from),
+        Some(Commands::Validate(args)) => validate::run(args).map_err(CliError::from),
+        Some(Commands::Analyze(args)) => analyze::run(args).map_err(CliError::from),
+        Some(Commands::Dataset(args)) => dataset::run(args).map_err(CliError::from),
         #[cfg(feature = "eval-advanced")]
-        Some(Commands::Benchmark(args)) => benchmark::run(args),
-        Some(Commands::Info) => info::run(),
-        Some(Commands::Models(args)) => models::run(args),
+        Some(Commands::Benchmark(args)) => benchmark::run(args).map_err(CliError::from),
+        Some(Commands::Info) => info::run().map_err(CliError::from),
+        Some(Commands::Models(args)) => models::run(args).map_err(CliError::from),
         #[cfg(feature = "eval-advanced")]
-        Some(Commands::CrossDoc(args)) => crossdoc::run(args),
+        Some(Commands::CrossDoc(args)) => crossdoc::run(args).map_err(CliError::from),
         #[cfg(feature = "eval-advanced")]
-        Some(Commands::Strata(args)) => strata::run(args),
-        Some(Commands::Enhance(args)) => enhance::run(args),
-        Some(Commands::Pipeline(args)) => pipeline::run(args),
-        Some(Commands::Query(args)) => query::run(args),
-        Some(Commands::Compare(args)) => compare::run(args),
-        Some(Commands::Cache(args)) => cache::run(args),
-        Some(Commands::Config(args)) => config::run(args),
-        Some(Commands::Batch(args)) => batch::run(args),
-        Some(Commands::Joint(args)) => joint::run(args),
-        Some(Commands::Privacy(args)) => privacy::run(args),
-        Some(Commands::Watch(args)) => watch::run(args),
-        Some(Commands::Domain(args)) => domain::run(args),
-        Some(Commands::Explain(args)) => explain::run(args),
-        Some(Commands::Singleton(args)) => singleton::run(args),
+        Some(Commands::Strata(args)) => strata::run(args).map_err(CliError::from),
+        Some(Commands::Enhance(args)) => enhance::run(args).map_err(CliError::from),
+        Some(Commands::Pipeline(args)) => pipeline::run(args).map_err(CliError::from),
+        Some(Commands::Query(args)) => query::run(args).map_err(CliError::from),
+        Some(Commands::Compare(args)) => compare::run(args).map_err(CliError::from),
+        Some(Commands::Cache(args)) => cache::run(args).map_err(CliError::from),
+        Some(Commands::Config(args)) => config::run(args).map_err(CliError::from),
+        Some(Commands::Batch(args)) => batch::run(args).map_err(CliError::from),
+        Some(Commands::Joint(args)) => joint::run(args).map_err(CliError::from),
+        Some(Commands::Privacy(args)) => privacy::run(args).map_err(CliError::from),
+        Some(Commands::Watch(args)) => watch::run(args).map_err(CliError::from),
+        Some(Commands::Domain(args)) => domain::run(args).map_err(CliError::from),
+        Some(Commands::Explain(args)) => explain::run(args).map_err(CliError::from),
+        Some(Commands::Singleton(args)) => singleton::run(args).map_err(CliError::from),
         Some(Commands::Completions { shell }) => {
             generate(shell, &mut Cli::command(), "anno", &mut io::stdout());
             Ok(())
@@ -101,7 +107,7 @@ fn main() -> ExitCode {
             // No subcommand: treat positional args as text to extract
             if cli.text.is_empty() {
                 eprintln!("No input provided. Run `anno --help` for usage.");
-                return ExitCode::FAILURE;
+                return ExitCode::from(exit_codes::ERROR_ARGS);
             }
             let text = cli.text.join(" ");
             extract::run(anno::cli::commands::ExtractArgs {
@@ -130,7 +136,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("{} {}", color("31", "error:"), e);
-            ExitCode::FAILURE
+            ExitCode::from(e.exit_code())
         }
     }
 }

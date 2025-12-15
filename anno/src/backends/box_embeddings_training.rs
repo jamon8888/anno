@@ -1094,8 +1094,10 @@ impl BoxEmbeddingTrainer {
             }
 
             // Resolve coreference using boxes
-            let mut box_config = BoxCorefConfig::default();
-            box_config.coreference_threshold = threshold;
+            let box_config = BoxCorefConfig {
+                coreference_threshold: threshold,
+                ..Default::default()
+            };
             let resolver = BoxCorefResolver::new(box_config);
             let resolved_entities = resolver.resolve_with_boxes(entities, &boxes);
 
@@ -1695,13 +1697,13 @@ impl TrainableBox {
         let t = state.t as f32;
 
         // Update first moment (m)
-        for i in 0..self.dim {
-            state.m[i] = state.beta1 * state.m[i] + (1.0 - state.beta1) * grad_mu[i];
+        for (i, &grad) in grad_mu.iter().enumerate().take(self.dim) {
+            state.m[i] = state.beta1 * state.m[i] + (1.0 - state.beta1) * grad;
         }
 
         // Update second moment (v) and max (v_hat)
-        for i in 0..self.dim {
-            let v_new = state.beta2 * state.v[i] + (1.0 - state.beta2) * grad_mu[i] * grad_mu[i];
+        for (i, &grad) in grad_mu.iter().enumerate().take(self.dim) {
+            let v_new = state.beta2 * state.v[i] + (1.0 - state.beta2) * grad * grad;
             state.v[i] = v_new;
             state.v_hat[i] = state.v_hat[i].max(v_new);
         }
@@ -1714,8 +1716,8 @@ impl TrainableBox {
             .collect();
 
         // Update mu
-        for i in 0..self.dim {
-            let update = state.lr * m_hat[i] / (state.v_hat[i].sqrt() + state.epsilon);
+        for (i, &m_hat_val) in m_hat.iter().enumerate().take(self.dim) {
+            let update = state.lr * m_hat_val / (state.v_hat[i].sqrt() + state.epsilon);
             self.mu[i] -= update;
 
             // Ensure finite

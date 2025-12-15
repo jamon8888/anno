@@ -99,7 +99,9 @@ fn test_tech_article_community_detection() {
 
     // Apply Leiden to find communities
     let leiden = Leiden::new().with_seed(42);
-    let communities = leiden.cluster(&graph).unwrap();
+    let communities = leiden
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed");
 
     // We should find approximately 2-3 main communities:
     // 1. Apple ecosystem (Apple, Tim Cook, Cupertino, iPhone, iOS)
@@ -188,7 +190,9 @@ fn test_hierarchical_leiden_reveals_structure() {
 
     let h_leiden = HierarchicalLeiden::new().with_levels(2);
 
-    let annotated = h_leiden.cluster(&graph).unwrap();
+    let annotated = h_leiden
+        .cluster(&graph)
+        .expect("HierarchicalLeiden clustering should succeed");
 
     // All nodes should have community annotations
     for node in &annotated.nodes {
@@ -280,12 +284,14 @@ fn test_multilingual_community_detection() {
     let graph = multilingual_entity_graph();
 
     let leiden = Leiden::new().with_seed(42);
-    let communities = leiden.cluster(&graph).unwrap();
+    let communities = leiden
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed");
 
     // Should detect ~2 communities (China cluster, Russia cluster)
     let unique: std::collections::HashSet<_> = communities.values().collect();
     assert!(
-        unique.len() >= 1 && unique.len() <= 3,
+        !unique.is_empty() && unique.len() <= 3,
         "Should find 1-3 communities"
     );
 
@@ -319,7 +325,9 @@ fn test_disconnected_components() {
 
     // Community detection should find 2 distinct communities
     let leiden = Leiden::new().with_seed(42);
-    let communities = leiden.cluster(&graph).unwrap();
+    let communities = leiden
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed");
 
     let unique: std::collections::HashSet<_> = communities.values().collect();
     assert!(
@@ -349,15 +357,15 @@ fn test_self_loop_handling() {
     assert_eq!(bc.len(), 2, "Should compute betweenness for both nodes");
 
     // Values should be finite and non-negative
-    for (_, &v) in &pr {
+    for v in pr.values() {
         assert!(
-            v.is_finite() && v >= 0.0,
+            v.is_finite() && *v >= 0.0,
             "PageRank should be finite and non-negative"
         );
     }
-    for (_, &v) in &bc {
+    for v in bc.values() {
         assert!(
-            v.is_finite() && v >= 0.0,
+            v.is_finite() && *v >= 0.0,
             "Betweenness should be finite and non-negative"
         );
     }
@@ -369,7 +377,7 @@ fn test_very_dense_graph() {
     let entities: Vec<Entity> = (0..10)
         .map(|i| {
             Entity::new(
-                &format!("E{}", i),
+                format!("E{}", i),
                 EntityType::Person,
                 i * 10,
                 i * 10 + 2,
@@ -409,7 +417,9 @@ fn test_very_dense_graph() {
 
     // Community detection might find just 1 community
     let leiden = Leiden::new().with_seed(42);
-    let communities = leiden.cluster(&graph).unwrap();
+    let communities = leiden
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed");
 
     // All nodes should be assigned
     assert_eq!(communities.len(), 10);
@@ -425,8 +435,12 @@ fn test_leiden_determinism_with_seed() {
 
     let leiden = Leiden::new().with_seed(12345);
 
-    let result1 = leiden.cluster(&graph).unwrap();
-    let result2 = leiden.cluster(&graph).unwrap();
+    let result1 = leiden
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed");
+    let result2 = leiden
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed");
 
     assert_eq!(
         result1, result2,
@@ -440,8 +454,12 @@ fn test_louvain_determinism_with_seed() {
 
     let louvain = Louvain::new().with_seed(12345);
 
-    let result1 = louvain.cluster(&graph).unwrap();
-    let result2 = louvain.cluster(&graph).unwrap();
+    let result1 = louvain
+        .cluster(&graph)
+        .expect("Louvain clustering should succeed");
+    let result2 = louvain
+        .cluster(&graph)
+        .expect("Louvain clustering should succeed");
 
     assert_eq!(
         result1, result2,
@@ -456,7 +474,9 @@ fn test_label_propagation_coverage() {
     let graph = tech_company_article_graph();
 
     let lp = LabelPropagation::new().with_seed(12345);
-    let result = lp.cluster(&graph).unwrap();
+    let result = lp
+        .cluster(&graph)
+        .expect("Label propagation clustering should succeed");
 
     // Should assign all nodes
     assert_eq!(
@@ -483,7 +503,7 @@ fn test_medium_graph_performance() {
     let entities: Vec<Entity> = (0..100)
         .map(|i| {
             Entity::new(
-                &format!("Entity{}", i),
+                format!("Entity{}", i),
                 EntityType::Person,
                 i * 20,
                 i * 20 + 10,
@@ -516,12 +536,18 @@ fn test_medium_graph_performance() {
     let _pr = PageRank::default().compute(&graph);
     let _bc = Betweenness::default().compute(&graph);
     let _ev = Eigenvector::default().compute(&graph);
-    let _leiden = Leiden::new().with_seed(42).cluster(&graph).unwrap();
-    let _louvain = Louvain::new().with_seed(42).cluster(&graph).unwrap();
+    let _leiden = Leiden::new()
+        .with_seed(42)
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed");
+    let _louvain = Louvain::new()
+        .with_seed(42)
+        .cluster(&graph)
+        .expect("Louvain clustering should succeed");
     let _lp = LabelPropagation::new()
         .with_seed(42)
         .cluster(&graph)
-        .unwrap();
+        .expect("Label propagation clustering should succeed");
 
     let elapsed = start.elapsed();
     assert!(

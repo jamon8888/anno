@@ -646,8 +646,12 @@ mod tests {
         assert!(!candidates.is_empty());
 
         // Check estimated similarity
-        let sim_12 = lsh.estimated_similarity(0, 1).unwrap();
-        let sim_13 = lsh.estimated_similarity(0, 2).unwrap();
+        let sim_12 = lsh
+            .estimated_similarity(0, 1)
+            .expect("LSH similarity should succeed");
+        let sim_13 = lsh
+            .estimated_similarity(0, 2)
+            .expect("LSH similarity should succeed");
         assert!(
             sim_12 > sim_13,
             "Similar items should have higher similarity"
@@ -762,7 +766,7 @@ mod proptests {
             lsh.insert_text("2", &text2);
 
             if let Some(sim) = lsh.estimated_similarity(0, 1) {
-                prop_assert!(sim >= 0.0 && sim <= 1.0,
+                prop_assert!((0.0..=1.0).contains(&sim),
                     "Similarity {} out of bounds", sim);
             }
         }

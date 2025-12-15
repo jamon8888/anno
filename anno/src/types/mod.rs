@@ -123,23 +123,24 @@ mod proptests {
 
         #[test]
         fn confidence_roundtrip_f64(value in 0.0f64..=1.0) {
-            let conf = Confidence::new(value).unwrap();
+            let conf = Confidence::new(value).expect("valid confidence value");
             let back: f64 = conf.into();
             prop_assert!((back - value).abs() < 1e-15);
         }
 
         #[test]
         fn confidence_serde_roundtrip(value in 0.0f64..=1.0) {
-            let conf = Confidence::new(value).unwrap();
-            let json = serde_json::to_string(&conf).unwrap();
-            let restored: Confidence = serde_json::from_str(&json).unwrap();
+            let conf = Confidence::new(value).expect("valid confidence value");
+            let json = serde_json::to_string(&conf).expect("serialization should succeed");
+            let restored: Confidence =
+                serde_json::from_str(&json).expect("deserialization should succeed");
             prop_assert!((restored.get() - value).abs() < 1e-15);
         }
 
         #[test]
         fn confidence_combine_bounded(a in 0.0f64..=1.0, b in 0.0f64..=1.0) {
-            let ca = Confidence::new(a).unwrap();
-            let cb = Confidence::new(b).unwrap();
+            let ca = Confidence::new(a).expect("valid confidence value");
+            let cb = Confidence::new(b).expect("valid confidence value");
             let combined = ca.combine(cb);
             prop_assert!(combined.get() >= 0.0);
             prop_assert!(combined.get() <= 1.0);
@@ -147,8 +148,8 @@ mod proptests {
 
         #[test]
         fn confidence_lerp_bounded(a in 0.0f64..=1.0, b in 0.0f64..=1.0, t in -1.0f64..2.0) {
-            let ca = Confidence::new(a).unwrap();
-            let cb = Confidence::new(b).unwrap();
+            let ca = Confidence::new(a).expect("valid confidence value");
+            let cb = Confidence::new(b).expect("valid confidence value");
             let result = ca.lerp(cb, t);
             prop_assert!(result.get() >= 0.0);
             prop_assert!(result.get() <= 1.0);
@@ -191,7 +192,7 @@ mod proptests {
 
         #[test]
         fn score_to_confidence_preserves_bounds(value in 0.0f32..=1.0) {
-            let score = Score::new(value).unwrap();
+            let score = Score::new(value).expect("valid score value");
             let conf = score.to_confidence();
             prop_assert!(conf.get() >= 0.0);
             prop_assert!(conf.get() <= 1.0);
@@ -199,8 +200,8 @@ mod proptests {
 
         #[test]
         fn score_confidence_conversion_preserves_ordering(a in 0.0f32..=1.0, b in 0.0f32..=1.0) {
-            let score_a = Score::new(a).unwrap();
-            let score_b = Score::new(b).unwrap();
+            let score_a = Score::new(a).expect("valid score value");
+            let score_b = Score::new(b).expect("valid score value");
             let conf_a = score_a.to_confidence();
             let conf_b = score_b.to_confidence();
 

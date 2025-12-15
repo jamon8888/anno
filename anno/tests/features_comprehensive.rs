@@ -12,8 +12,8 @@
 //! - Edge cases
 
 use anno::features::{
-    aggregate_embeddings, AggregationMethod, ChainFeatures, CooccurrenceFeatures, DocumentFeatures,
-    EntityFeatureExtractor, ExtractorConfig, MentionContext, MentionType, PairwiseFeatures,
+    aggregate_embeddings, AggregationMethod, ChainFeatures, EntityFeatureExtractor,
+    ExtractorConfig, MentionContext, MentionType, PairwiseFeatures,
 };
 use anno::salience::{features_to_salience_scores, ChainFeatureSalience, EntityRanker};
 use anno::{Entity, EntityType};
@@ -257,7 +257,7 @@ fn test_mention_context_custom_window() {
 
 #[test]
 fn test_chain_features_basic() {
-    let entities = vec![
+    let entities = [
         Entity::new("Barack Obama", EntityType::Person, 0, 12, 0.95),
         Entity::new("He", EntityType::Person, 50, 52, 0.85),
         Entity::new("Obama", EntityType::Person, 100, 105, 0.90),
@@ -274,7 +274,7 @@ fn test_chain_features_basic() {
 
 #[test]
 fn test_chain_features_singleton() {
-    let entities = vec![Entity::new("Berlin", EntityType::Location, 0, 6, 0.9)];
+    let entities = [Entity::new("Berlin", EntityType::Location, 0, 6, 0.9)];
     let refs: Vec<&Entity> = entities.iter().collect();
 
     let features = ChainFeatures::from_mentions(&refs, 100);
@@ -288,7 +288,7 @@ fn test_chain_features_singleton() {
 
 #[test]
 fn test_chain_features_spread_calculation() {
-    let entities = vec![
+    let entities = [
         Entity::new("Obama", EntityType::Person, 0, 5, 0.9),
         Entity::new("Obama", EntityType::Person, 100, 105, 0.9),
         Entity::new("Obama", EntityType::Person, 200, 205, 0.9),
@@ -305,7 +305,7 @@ fn test_chain_features_spread_calculation() {
 
 #[test]
 fn test_chain_features_mostly_pronominal() {
-    let entities = vec![
+    let entities = [
         Entity::new("Obama", EntityType::Person, 0, 5, 0.9),
         Entity::new("he", EntityType::Person, 10, 12, 0.85),
         Entity::new("him", EntityType::Person, 20, 23, 0.85),
@@ -323,7 +323,7 @@ fn test_chain_features_mostly_pronominal() {
 
 #[test]
 fn test_chain_features_confidence_statistics() {
-    let entities = vec![
+    let entities = [
         Entity::new("A", EntityType::Person, 0, 1, 0.9),
         Entity::new("A", EntityType::Person, 5, 6, 0.8),
         Entity::new("A", EntityType::Person, 10, 11, 0.7),
@@ -340,7 +340,7 @@ fn test_chain_features_confidence_statistics() {
 #[test]
 fn test_chain_features_canonical_form_selection() {
     // Canonical should be longest named mention
-    let entities = vec![
+    let entities = [
         Entity::new("he", EntityType::Person, 0, 2, 0.85),
         Entity::new("Barack Obama", EntityType::Person, 10, 22, 0.95),
         Entity::new("Obama", EntityType::Person, 30, 35, 0.9),
@@ -354,7 +354,7 @@ fn test_chain_features_canonical_form_selection() {
 
 #[test]
 fn test_chain_features_variations() {
-    let entities = vec![
+    let entities = [
         Entity::new("Barack Obama", EntityType::Person, 0, 12, 0.95),
         Entity::new("Obama", EntityType::Person, 20, 25, 0.9),
         Entity::new("President Obama", EntityType::Person, 40, 55, 0.92),
@@ -381,7 +381,7 @@ fn test_chain_features_empty_input() {
 
 #[test]
 fn test_chain_features_with_embedding() {
-    let entities = vec![Entity::new("A", EntityType::Person, 0, 1, 0.9)];
+    let entities = [Entity::new("A", EntityType::Person, 0, 1, 0.9)];
     let refs: Vec<&Entity> = entities.iter().collect();
 
     let features = ChainFeatures::from_mentions(&refs, 100).with_centroid(vec![1.0, 2.0, 3.0]);
@@ -811,7 +811,7 @@ fn test_features_japanese() {
 
 #[test]
 fn test_chain_features_unicode() {
-    let entities = vec![
+    let entities = [
         Entity::new("北京", EntityType::Location, 0, 2, 0.9),
         Entity::new("北京", EntityType::Location, 10, 12, 0.9),
     ];
@@ -874,7 +874,7 @@ fn test_features_to_salience_scores() {
     assert!(scores.contains_key("merkel"));
 
     // Scores should be normalized to [0, 1]
-    for (_, score) in &scores {
+    for score in scores.values() {
         assert!(*score >= 0.0 && *score <= 1.0);
     }
 

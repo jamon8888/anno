@@ -537,7 +537,8 @@ impl ViewpointExtractor {
         let mut entities = Vec::new();
 
         // Very simple pattern: Capitalized words (excluding sentence starts)
-        let re = Regex::new(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b").unwrap();
+        let re = Regex::new(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b")
+            .expect("regex pattern should be valid");
 
         for caps in re.captures_iter(text) {
             if let Some(m) = caps.get(1) {

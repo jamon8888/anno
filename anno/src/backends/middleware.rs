@@ -415,10 +415,7 @@ impl Middleware for AddProvenance {
         use anno_core::Provenance;
         for entity in &mut entities {
             if entity.provenance.is_none() {
-                entity.provenance = Some(Provenance::ml(
-                    self.backend.clone(),
-                    entity.confidence,
-                ));
+                entity.provenance = Some(Provenance::ml(self.backend.clone(), entity.confidence));
             }
         }
         Ok(entities)
@@ -811,7 +808,9 @@ mod tests {
         let mw = NormalizeWhitespace;
         let mut ctx = MiddlewareContext::new("  hello   world  ");
         let text = ctx.original_text.clone();
-        let result = mw.pre_process(&mut ctx, &text).unwrap();
+        let result = mw
+            .pre_process(&mut ctx, &text)
+            .expect("pre_process should succeed");
         assert_eq!(result, "hello world");
     }
 
@@ -823,7 +822,9 @@ mod tests {
             Entity::new("high", EntityType::Person, 0, 4, 0.8),
             Entity::new("low", EntityType::Person, 5, 8, 0.3),
         ];
-        let result = mw.post_process(&mut ctx, entities).unwrap();
+        let result = mw
+            .post_process(&mut ctx, entities)
+            .expect("post_process should succeed");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].text, "high");
     }
@@ -834,7 +835,9 @@ mod tests {
             .with(NormalizeWhitespace)
             .with(FilterByConfidence(0.3));
 
-        let _entities = pipeline.extract("Hello  World").unwrap();
+        let _entities = pipeline
+            .extract("Hello  World")
+            .expect("extraction should succeed");
         // Just verify it runs without error
     }
 
@@ -846,7 +849,9 @@ mod tests {
             Entity::new("New York", EntityType::Location, 0, 8, 0.9),
             Entity::new("York City", EntityType::Location, 4, 13, 0.7),
         ];
-        let result = mw.post_process(&mut ctx, entities).unwrap();
+        let result = mw
+            .post_process(&mut ctx, entities)
+            .expect("post_process should succeed");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].text, "New York"); // Higher confidence wins
     }
@@ -907,7 +912,9 @@ mod tests {
             .with(NormalizeWhitespace)
             .with(FilterByConfidence(0.3));
 
-        let entities = pipeline.extract("  John   Smith  ").unwrap();
+        let entities = pipeline
+            .extract("  John   Smith  ")
+            .expect("extraction should succeed");
         // Should normalize whitespace and filter by confidence
         // Just verify it runs without error
         let _ = entities;

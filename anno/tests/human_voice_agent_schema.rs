@@ -97,10 +97,13 @@ fn assert_span_within(text: &str, start: usize, end: usize, label: &str) {
 #[test]
 fn validate_transcripts_schema() {
     for line in read_lines("testdata/human_voice_agent/transcripts.jsonl") {
-        let row: TranscriptRow =
-            serde_json::from_str(&line).expect("valid transcript JSON object");
+        let row: TranscriptRow = serde_json::from_str(&line).expect("valid transcript JSON object");
         assert!(!row.text.trim().is_empty(), "empty text in {}", row.id);
-        assert!(!row.speaker.trim().is_empty(), "empty speaker in {}", row.id);
+        assert!(
+            !row.speaker.trim().is_empty(),
+            "empty speaker in {}",
+            row.id
+        );
         assert!(
             row.language.len() >= 2,
             "missing/short language tag in {}",
@@ -115,7 +118,12 @@ fn validate_discourse_deixis_schema_and_spans() {
         let row: DiscourseDeixisRow =
             serde_json::from_str(&line).expect("valid discourse_deixis JSON object");
         assert!(!row.text.trim().is_empty(), "empty text in {}", row.id);
-        assert_span_within(&row.text, row.antecedent.start, row.antecedent.end, "antecedent");
+        assert_span_within(
+            &row.text,
+            row.antecedent.start,
+            row.antecedent.end,
+            "antecedent",
+        );
         assert_span_within(&row.text, row.anaphor.start, row.anaphor.end, "anaphor");
     }
 }
@@ -125,11 +133,7 @@ fn validate_response_tokens_schema() {
     for line in read_lines("testdata/human_voice_agent/response_tokens.jsonl") {
         let row: ResponseTokenRow =
             serde_json::from_str(&line).expect("valid response_token JSON object");
-        assert!(
-            !row.token.trim().is_empty(),
-            "empty token in {}",
-            row.id
-        );
+        assert!(!row.token.trim().is_empty(), "empty token in {}", row.id);
         assert!(
             row.language.len() >= 2,
             "missing/short language tag in {}",

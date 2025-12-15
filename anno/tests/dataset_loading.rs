@@ -4,7 +4,8 @@
 
 #![cfg(feature = "eval-advanced")]
 
-use anno::eval::loader::{DatasetId, DatasetLoader};
+use anno::eval::loader::DatasetId;
+use anno::eval::{DatasetLoader, LoadableDatasetId};
 
 /// Test that DatasetLoader can be created
 #[test]
@@ -37,7 +38,9 @@ fn test_load_cached_dataset() {
     let first_cached = status.iter().find(|(_, cached)| *cached);
 
     if let Some((dataset_id, _)) = first_cached {
-        let result = loader.load(*dataset_id);
+        let loadable = LoadableDatasetId::try_from(*dataset_id)
+            .expect("status() only lists loadable datasets");
+        let result = loader.load(loadable);
 
         match result {
             Ok(data) => {
@@ -70,8 +73,15 @@ fn test_is_cached() {
     ];
 
     for dataset_id in datasets {
-        let is_cached = loader.is_cached(dataset_id);
-        eprintln!("{:?}: cached={}", dataset_id, is_cached);
+        match LoadableDatasetId::try_from(dataset_id) {
+            Ok(loadable) => {
+                let is_cached = loader.is_cached(loadable);
+                eprintln!("{:?}: cached={}", dataset_id, is_cached);
+            }
+            Err(e) => {
+                eprintln!("{:?}: not loadable ({})", dataset_id, e);
+            }
+        }
     }
 }
 
@@ -90,7 +100,8 @@ fn test_dataset_id_debug() {
 fn test_cache_path() {
     let loader = DatasetLoader::new().expect("Create loader");
 
-    let path = loader.cache_path(DatasetId::WikiGold);
+    let loadable = LoadableDatasetId::try_from(DatasetId::WikiGold).expect("WikiGold loadable");
+    let path = loader.cache_path(loadable);
 
     // Should return a valid path
     assert!(!path.as_os_str().is_empty());
@@ -130,8 +141,10 @@ fn test_load_mit_if_cached() {
     let loader = DatasetLoader::new().expect("Create loader");
 
     for dataset_id in [DatasetId::MitMovie, DatasetId::MitRestaurant] {
-        if loader.is_cached(dataset_id) {
-            let result = loader.load(dataset_id);
+        let loadable = LoadableDatasetId::try_from(dataset_id).expect("MIT datasets are loadable");
+
+        if loader.is_cached(loadable) {
+            let result = loader.load(loadable);
 
             match result {
                 Ok(data) => {

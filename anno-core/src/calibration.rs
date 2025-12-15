@@ -631,8 +631,9 @@ mod tests {
     #[test]
     fn test_calibrator_serialization() {
         let cal = TemperatureCalibrator::new(1.5);
-        let json = serde_json::to_string(&cal).unwrap();
-        let recovered: TemperatureCalibrator = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&cal).expect("serialize TemperatureCalibrator");
+        let recovered: TemperatureCalibrator =
+            serde_json::from_str(&json).expect("deserialize TemperatureCalibrator");
         assert!((cal.temperature - recovered.temperature).abs() < 0.001);
     }
 
@@ -640,8 +641,9 @@ mod tests {
     fn test_isotonic_serialization() {
         let data = vec![(0.3, false), (0.5, true), (0.7, true)];
         let cal = IsotonicCalibrator::fit(&data);
-        let json = serde_json::to_string(&cal).unwrap();
-        let recovered: IsotonicCalibrator = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&cal).expect("serialize IsotonicCalibrator");
+        let recovered: IsotonicCalibrator =
+            serde_json::from_str(&json).expect("deserialize IsotonicCalibrator");
 
         // Should produce same calibration
         assert!((cal.calibrate(0.5) - recovered.calibrate(0.5)).abs() < 0.01);

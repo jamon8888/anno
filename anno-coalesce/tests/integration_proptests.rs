@@ -51,7 +51,7 @@ proptest! {
         b in ".*"
     ) {
         let sim = anno_coalesce::streaming::trigram_similarity(&a, &b);
-        prop_assert!(sim >= 0.0 && sim <= 1.0,
+        prop_assert!((0.0..=1.0).contains(&sim),
             "Bounds violated: sim({:?}, {:?}) = {} (expected [0, 1])",
             a, b, sim);
     }
@@ -72,7 +72,7 @@ proptest! {
         let (a, b) = random_positive_vectors(dim, seed);
         let sim = anno_coalesce::streaming::cosine_similarity(&a, &b);
         // For positive vectors, cosine is in [0, 1]
-        prop_assert!(sim >= -0.001 && sim <= 1.001,
+        prop_assert!((-0.001..=1.001).contains(&sim),
             "Cosine bounds violated: {} (expected [0, 1])", sim);
     }
 }
@@ -309,7 +309,7 @@ proptest! {
         b in "[\\p{Han}]{0,20}"
     ) {
         let sim = anno_coalesce::streaming::trigram_similarity(&a, &b);
-        prop_assert!(sim >= 0.0 && sim <= 1.0,
+        prop_assert!((0.0..=1.0).contains(&sim),
             "CJK similarity out of bounds: sim({:?}, {:?}) = {}", a, b, sim);
     }
 
@@ -320,7 +320,7 @@ proptest! {
         b in "[\\p{Emoji}]{0,10}"
     ) {
         let sim = anno_coalesce::streaming::trigram_similarity(&a, &b);
-        prop_assert!(sim >= 0.0 && sim <= 1.0,
+        prop_assert!((0.0..=1.0).contains(&sim),
             "Emoji similarity out of bounds: {}", sim);
     }
 
@@ -331,7 +331,7 @@ proptest! {
         b in "[A-Za-z\\p{Han}\\p{Cyrillic}]{0,30}"
     ) {
         let sim = anno_coalesce::streaming::trigram_similarity(&a, &b);
-        prop_assert!(sim >= 0.0 && sim <= 1.0,
+        prop_assert!((0.0..=1.0).contains(&sim),
             "Mixed script similarity out of bounds: {}", sim);
         // Should still be symmetric
         let sim_ba = anno_coalesce::streaming::trigram_similarity(&b, &a);
@@ -348,7 +348,7 @@ proptest! {
     fn string_similarity_empty_strings(_seed in any::<u64>()) {
         // Empty vs empty should be 1.0 (or at least bounded)
         let sim1 = anno_coalesce::streaming::trigram_similarity("", "");
-        prop_assert!(sim1 >= 0.0 && sim1 <= 1.0);
+        prop_assert!((0.0..=1.0).contains(&sim1));
 
         // Empty vs non-empty should be 0.0
         let sim2 = anno_coalesce::streaming::trigram_similarity("", "hello");
@@ -366,7 +366,7 @@ proptest! {
         let sim_diff = anno_coalesce::streaming::trigram_similarity(&a, &b);
         let sim_same = anno_coalesce::streaming::trigram_similarity(&a, &c);
 
-        prop_assert!(sim_diff >= 0.0 && sim_diff <= 1.0);
+        prop_assert!((0.0..=1.0).contains(&sim_diff));
         prop_assert!((sim_same - 1.0).abs() < 0.001, "Same long strings should be 1.0");
     }
 
@@ -374,7 +374,7 @@ proptest! {
     #[test]
     fn string_similarity_single_char(a in ".", b in ".") {
         let sim = anno_coalesce::streaming::trigram_similarity(&a, &b);
-        prop_assert!(sim >= 0.0 && sim <= 1.0);
+        prop_assert!((0.0..=1.0).contains(&sim));
         if a == b {
             prop_assert!((sim - 1.0).abs() < 0.001 || sim > 0.9,
                 "Identical single chars should have high similarity: {}", sim);

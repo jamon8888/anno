@@ -61,6 +61,13 @@ use anno_core::coref::CorefChain;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+// Type aliases for complex types
+type DecodeResult = (
+    HashMap<usize, EntityType>,
+    HashMap<usize, Option<usize>>,
+    HashMap<usize, Option<String>>,
+);
+
 // =============================================================================
 // Configuration
 // =============================================================================
@@ -262,11 +269,6 @@ impl TrainingExample {
             gold_coref,
             gold_links,
         }
-    }
-
-    /// Get the text of a mention.
-    fn mention_text(&self, idx: usize) -> &str {
-        &self.mentions[idx].text
     }
 
     /// Get the prior score for a mention (from entity linking candidates).
@@ -707,7 +709,7 @@ impl Trainer {
         let mut score = 0.0;
 
         // Unary NER scores
-        for (_idx, entity_type) in ner {
+        for entity_type in ner.values() {
             let type_label = entity_type.as_label();
             if let Some(&bias) = self.weights.unary_ner.type_bias.get(type_label) {
                 score += bias;
@@ -772,14 +774,7 @@ impl Trainer {
         score
     }
 
-    fn decode_with_cost(
-        &self,
-        example: &TrainingExample,
-    ) -> (
-        HashMap<usize, EntityType>,
-        HashMap<usize, Option<usize>>,
-        HashMap<usize, Option<String>>,
-    ) {
+    fn decode_with_cost(&self, example: &TrainingExample) -> DecodeResult {
         // Simple greedy decode with cost-augmented scoring
         let mut pred_ner = HashMap::new();
         let mut pred_coref = HashMap::new();
@@ -855,7 +850,7 @@ impl Trainer {
         scale: f64,
     ) {
         // Unary NER features
-        for (_, entity_type) in ner {
+        for entity_type in ner.values() {
             let type_label = entity_type.as_label().to_string();
             *grads.type_bias.entry(type_label).or_insert(0.0) += scale;
         }
@@ -1030,7 +1025,6 @@ fn shuffle<T>(slice: &mut [T], seed: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anno_core::coref::Mention as CorefMention;
 
     #[test]
     fn test_training_config_default() {
@@ -1060,9 +1054,11 @@ mod tests {
 
     #[test]
     fn test_gradient_clipping() {
-        let mut grads = Gradients::default();
-        grads.context_weight = 100.0;
-        grads.type_match = -100.0;
+        let mut grads = Gradients {
+            context_weight: 100.0,
+            type_match: -100.0,
+            ..Default::default()
+        };
 
         grads.clip(5.0);
 
@@ -1215,7 +1211,7 @@ mod tests {
         assert_eq!(n1, n2);
 
         // Should be in range
-        assert!(n1 >= 2 && n1 <= 10);
+        assert!((2..=10).contains(&n1));
 
         // Different seeds should (usually) give different values
         let n3 = config.sample_num_contexts(123);

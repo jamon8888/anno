@@ -339,7 +339,7 @@ impl WikipediaKnowledgeStore {
     pub fn has_link(&self, from: &str, to: &str) -> bool {
         self.outlinks
             .get(from)
-            .map_or(false, |links| links.contains(to))
+            .is_some_and(|links| links.contains(to))
     }
 
     /// Check if entities mutually link to each other.
@@ -966,7 +966,7 @@ mod tests {
 
     #[test]
     fn test_coref_ner_factor_with_heads() {
-        let mut factor = CorefNerFactor::new(1, 0, CorefNerWeights::default())
+        let factor = CorefNerFactor::new(1, 0, CorefNerWeights::default())
             .with_heads("he", "president")
             .with_default_monolexical();
 

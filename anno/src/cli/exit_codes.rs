@@ -127,4 +127,3 @@ mod tests {
         assert_eq!(result.exit_code(), ExitCode::from(ERROR_PARTIAL));
     }
 }
-

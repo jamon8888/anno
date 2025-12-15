@@ -451,6 +451,7 @@ fn test_eval_pr_range_invariant() {
 #[cfg(feature = "eval-advanced")]
 fn test_coref_eval_if_cached() {
     use anno::eval::loader::{DatasetId, DatasetLoader};
+    use anno::eval::LoadableDatasetId;
 
     let loader = match DatasetLoader::new() {
         Ok(l) => l,
@@ -462,7 +463,12 @@ fn test_coref_eval_if_cached() {
 
     // Find any cached coref dataset
     let coref_datasets = DatasetId::all_coref();
-    let cached_coref = coref_datasets.iter().find(|id| loader.is_cached(**id));
+    let cached_coref = coref_datasets
+        .iter()
+        .find(|id| match LoadableDatasetId::try_from(***id) {
+            Ok(loadable) => loader.is_cached(loadable),
+            Err(_) => false,
+        });
 
     let dataset_id = match cached_coref {
         Some(id) => *id,

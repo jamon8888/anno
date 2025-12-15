@@ -70,7 +70,7 @@ fn test_cluster_simple_graph() {
     let result = leiden.cluster(&graph);
     assert!(result.is_ok(), "Clustering should succeed for simple graph");
 
-    let clustered = result.unwrap();
+    let clustered = result.expect("clustering should succeed");
     assert_eq!(clustered.nodes.len(), 3, "Should preserve all nodes");
 }
 
@@ -99,7 +99,9 @@ fn test_cluster_preserves_graph_structure() {
         properties: Default::default(),
     });
 
-    let result = leiden.cluster(&graph).unwrap();
+    let result = leiden
+        .cluster(&graph)
+        .expect("Leiden clustering should succeed");
 
     // Original structure preserved
     assert_eq!(result.nodes.len(), 2);

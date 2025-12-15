@@ -48,7 +48,7 @@ const ONNX_BACKENDS: &[&str] = &["bert_onnx", "gliner_onnx", "nuner", "w2ner", "
 #[cfg(not(feature = "onnx"))]
 const ONNX_BACKENDS: &[&str] = &[];
 
-/// ML backends requiring Candle feature  
+/// ML backends requiring Candle feature
 #[cfg(feature = "candle")]
 const CANDLE_BACKENDS: &[&str] = &["candle_ner", "gliner_candle"];
 
@@ -205,8 +205,19 @@ const BIOMEDICAL_DATASETS: &[DatasetId] = &[
     DatasetId::BC4CHEMD,
 ];
 
-/// Tasks to test - expand as more tasks are supported
-const TASKS: &[Task] = &[Task::NER, Task::DiscontinuousNER];
+/// Tasks to test in the CI matrix.
+///
+/// This list is intentionally restricted to tasks that have concrete evaluation implementations
+/// in `TaskEvaluator` (NER/coref/RE). Catalog-only tasks can exist in the registry but are not
+/// meaningful to include here yet.
+const TASKS: &[Task] = &[
+    Task::NER,
+    Task::DiscontinuousNER,
+    Task::IntraDocCoref,
+    Task::InterDocCoref,
+    Task::AbstractAnaphora,
+    Task::RelationExtraction,
+];
 
 /// Extended tasks for comprehensive testing (includes coref, relations)
 #[allow(dead_code)]
@@ -348,6 +359,53 @@ fn ci_seed() -> u64 {
     }
 }
 
+fn allow_downloads_in_matrix() -> bool {
+    matches!(
+        std::env::var("ANNO_MATRIX_ALLOW_DOWNLOAD").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    )
+}
+
+fn max_downloads_in_matrix() -> usize {
+    let allow = allow_downloads_in_matrix();
+    if !allow {
+        return 0;
+    }
+    match std::env::var("ANNO_MATRIX_MAX_DOWNLOADS").as_deref() {
+        Ok(s) => s.parse::<usize>().unwrap_or(2),
+        Err(_) => 2,
+    }
+}
+
+fn dataset_count_in_matrix() -> usize {
+    // Default:
+    // - cached-only: 2 (fast, deterministic)
+    // - downloads allowed: 3 (one extra slot for diversity)
+    let default = if allow_downloads_in_matrix() { 3 } else { 2 };
+    match std::env::var("ANNO_MATRIX_DATASET_COUNT").as_deref() {
+        Ok(s) => s.parse::<usize>().unwrap_or(default).max(1),
+        Err(_) => default,
+    }
+}
+
+fn task_aware_sampling_in_matrix() -> bool {
+    matches!(
+        std::env::var("ANNO_MATRIX_TASK_AWARE").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    )
+}
+
+fn allow_manual_datasets() -> bool {
+    matches!(
+        std::env::var("ANNO_DATASET_ALLOW_MANUAL").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    )
+}
+
+fn dataset_supports_task(ds: DatasetId, task: Task) -> bool {
+    ds.tasks_typed().contains(&task)
+}
+
 /// Hash-based deterministic selection using xxHash for cross-run stability.
 /// NOTE: DefaultHasher (SipHash) is NOT deterministic across Rust versions/platforms.
 /// xxHash3 guarantees identical outputs everywhere.
@@ -393,9 +451,33 @@ fn test_randomized_matrix_sample() {
         "not set"
     };
     eprintln!("HF_TOKEN: {} (from .env or environment)", hf_status);
+    let allow_downloads = allow_downloads_in_matrix();
+    let max_downloads = max_downloads_in_matrix();
+    let dataset_count = dataset_count_in_matrix();
+    let task_aware = task_aware_sampling_in_matrix();
+    eprintln!(
+        "Allow downloads: {} (set ANNO_MATRIX_ALLOW_DOWNLOAD=1 to enable)",
+        allow_downloads
+    );
+    eprintln!(
+        "Max downloads: {} (set ANNO_MATRIX_MAX_DOWNLOADS to override)",
+        max_downloads
+    );
+    eprintln!(
+        "Dataset count: {} (set ANNO_MATRIX_DATASET_COUNT to override)",
+        dataset_count
+    );
+    eprintln!(
+        "Task-aware dataset selection: {} (set ANNO_MATRIX_TASK_AWARE=1 to enable)",
+        task_aware
+    );
     eprintln!(
         "Sampling strategy: {:?} (set ANNO_SAMPLE_STRATEGY to change)",
         strategy
+    );
+    eprintln!(
+        "Manual datasets: {} (set ANNO_DATASET_ALLOW_MANUAL=1 to include gated/large/unstable sources)",
+        allow_manual_datasets()
     );
     eprintln!("Hash algorithm: xxHash3 (deterministic across platforms)");
 
@@ -412,7 +494,157 @@ fn test_randomized_matrix_sample() {
     // More backends if ML features enabled
     let backend_count = if all_backends.len() > 5 { 3 } else { 2 };
     let selected_backends = select_backends(strategy, backend_count, seed);
-    let selected_datasets = select_random(QUICK_DATASETS, 2, seed.wrapping_add(1));
+    // Prefer cached datasets when possible so we exercise real pipelines on dev machines.
+    let loader = match anno::eval::loader::DatasetLoader::new() {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("Skipping: DatasetLoader init failed: {}", e);
+            return;
+        }
+    };
+
+    // Candidate set:
+    // - Always include cached datasets (fast, reproducible).
+    // - Optionally include additional *uncached* datasets if downloads are allowed.
+    //   This is opt-in because network runs are slower and less deterministic.
+    let mut cached_candidates: Vec<DatasetId> = Vec::new();
+    let mut download_candidates: Vec<DatasetId> = Vec::new();
+
+    for ds in DatasetId::all().iter().copied() {
+        let Ok(loadable) = anno::eval::LoadableDatasetId::try_from(ds) else {
+            continue;
+        };
+
+        if loader.is_cached(loadable) {
+            cached_candidates.push(ds);
+            continue;
+        }
+
+        if !allow_downloads || max_downloads == 0 {
+            continue;
+        }
+
+        // Heuristic: only try datasets that appear download-able (public/HF/local mirror).
+        let access = ds.access_status();
+        let maybe_downloadable = matches!(
+            access,
+            anno::eval::dataset_registry::DatasetAccessibility::Public
+                | anno::eval::dataset_registry::DatasetAccessibility::HuggingFace
+                | anno::eval::dataset_registry::DatasetAccessibility::Local
+        ) && !ds.download_url().is_empty()
+            && (allow_manual_datasets() || ds.is_automatable_download())
+            && (allow_manual_datasets() || !ds.requires_hf_token() || anno::env::has_hf_token());
+
+        if maybe_downloadable {
+            download_candidates.push(ds);
+        }
+    }
+
+    let mut candidates: Vec<DatasetId> = Vec::new();
+    // Pick up to `max_downloads` uncached datasets, then fill from cached ones.
+    if allow_downloads && max_downloads > 0 && !download_candidates.is_empty() {
+        candidates.extend(select_random(
+            &download_candidates,
+            max_downloads
+                .min(download_candidates.len())
+                .min(dataset_count),
+            seed.wrapping_add(2),
+        ));
+    }
+    if !cached_candidates.is_empty() {
+        candidates.extend(select_random(
+            &cached_candidates,
+            dataset_count
+                .saturating_sub(candidates.len())
+                .min(cached_candidates.len()),
+            seed.wrapping_add(3),
+        ));
+    }
+
+    // Fallback: if still empty, use quick list.
+    if candidates.is_empty() {
+        candidates = QUICK_DATASETS.to_vec();
+    }
+
+    let selected_datasets = if task_aware {
+        // Choose a subset of tasks to cover this run (bounded by dataset_count),
+        // then pick one dataset per chosen task. This improves per-run signal density:
+        // we are more likely to actually exercise multiple task pipelines, instead of
+        // listing tasks that have no matching datasets in the sample.
+        let tasks_to_cover: Vec<Task> =
+            select_random(TASKS, dataset_count.min(TASKS.len()), seed.wrapping_add(4));
+
+        let mut chosen: Vec<DatasetId> = Vec::new();
+        let mut remaining_download_budget = max_downloads;
+
+        for (ti, task) in tasks_to_cover.iter().copied().enumerate() {
+            // Prefer cached datasets for stability.
+            let task_cached: Vec<DatasetId> = cached_candidates
+                .iter()
+                .copied()
+                .filter(|ds| dataset_supports_task(*ds, task))
+                .filter(|ds| !chosen.contains(ds))
+                .collect();
+
+            if !task_cached.is_empty() {
+                chosen.extend(select_random(
+                    &task_cached,
+                    1,
+                    seed.wrapping_add(10 + ti as u64),
+                ));
+                continue;
+            }
+
+            // Fall back to download candidates if allowed + budget remains.
+            if allow_downloads && remaining_download_budget > 0 {
+                let task_dl: Vec<DatasetId> = download_candidates
+                    .iter()
+                    .copied()
+                    .filter(|ds| dataset_supports_task(*ds, task))
+                    .filter(|ds| !chosen.contains(ds))
+                    .collect();
+
+                if !task_dl.is_empty() {
+                    chosen.extend(select_random(
+                        &task_dl,
+                        1,
+                        seed.wrapping_add(20 + ti as u64),
+                    ));
+                    remaining_download_budget = remaining_download_budget.saturating_sub(1);
+                }
+            }
+        }
+
+        // If we still have room, fill from whatever candidates we have.
+        if chosen.len() < dataset_count {
+            let fill: Vec<DatasetId> = candidates
+                .iter()
+                .copied()
+                .filter(|ds| !chosen.contains(ds))
+                .collect();
+            chosen.extend(select_random(
+                &fill,
+                dataset_count.saturating_sub(chosen.len()).min(fill.len()),
+                seed.wrapping_add(5),
+            ));
+        }
+
+        if chosen.is_empty() {
+            select_random(
+                &candidates,
+                dataset_count.min(candidates.len()),
+                seed.wrapping_add(1),
+            )
+        } else {
+            chosen
+        }
+    } else {
+        select_random(
+            &candidates,
+            dataset_count.min(candidates.len()),
+            seed.wrapping_add(1),
+        )
+    };
 
     eprintln!("Selected backends: {:?}", selected_backends);
     eprintln!("Selected datasets: {:?}", selected_datasets);
@@ -431,7 +663,7 @@ fn test_randomized_matrix_sample() {
         backends: selected_backends.iter().map(|s| s.to_string()).collect(),
         max_examples: Some(10), // Small sample for CI speed
         seed: Some(seed),
-        require_cached: true, // Only use cached datasets
+        require_cached: !allow_downloads,
         relation_threshold: 0.5,
         robustness: false,
         compute_familiarity: false,

@@ -190,16 +190,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 use anno::eval::coref_loader::CorefLoader;
                 use anno::eval::loader::DatasetId;
                 use anno::eval::loader::DatasetLoader;
+                use anno::eval::LoadableDatasetId;
 
                 eprintln!("Loading GAP dataset...");
                 let loader =
                     DatasetLoader::new().map_err(|e| format!("Failed to create loader: {}", e))?;
 
                 // Download if not cached
-                if !loader.is_cached(DatasetId::GAP) {
+                let gap = LoadableDatasetId::try_from(DatasetId::GAP)
+                    .map_err(|e| format!("GAP is not loadable: {}", e))?;
+
+                if !loader.is_cached(gap) {
                     eprintln!("Downloading GAP dataset...");
                     let _ = loader
-                        .load_or_download(DatasetId::GAP)
+                        .load_or_download(gap)
                         .map_err(|e| format!("Failed to download GAP: {}", e))?;
                 }
 

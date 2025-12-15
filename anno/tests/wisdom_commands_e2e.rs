@@ -29,7 +29,7 @@ fn test_privacy_report_basic() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "privacy",
             "--text",
             "Dr. John Smith lives at 123 Main St and can be reached at john@example.com",
@@ -50,7 +50,7 @@ fn test_privacy_report_detects_email() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "privacy",
             "--text",
             "Contact john.smith@example.com for info",
@@ -70,7 +70,7 @@ fn test_privacy_redact_action() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "privacy",
             "--text",
             "Dr. John Smith met Jane Doe",
@@ -93,7 +93,7 @@ fn test_privacy_pseudonymize_action() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "privacy",
             "--text",
             "Dr. John Smith met Jane Doe",
@@ -116,7 +116,7 @@ fn test_privacy_quiet_mode() {
     };
 
     let output = Command::new(binary)
-        .args(&["privacy", "--text", "Dr. John Smith", "--quiet"])
+        .args(["privacy", "--text", "Dr. John Smith", "--quiet"])
         .output()
         .unwrap();
 
@@ -133,7 +133,7 @@ fn test_privacy_type_filter() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "privacy",
             "--text",
             "Dr. John Smith, john@example.com, March 15, 1985",
@@ -159,7 +159,7 @@ fn test_domain_general_text() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "domain",
             "--text",
             "Marie Curie won the Nobel Prize in Paris.",
@@ -180,7 +180,7 @@ fn test_domain_biomedical_text() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "domain",
             "--text",
             "The patient presented with symptoms of hypertension. Clinical diagnosis revealed elevated blood pressure. Treatment includes medication.",
@@ -201,7 +201,7 @@ fn test_domain_legal_text() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "domain",
             "--text",
             "The plaintiff hereby files motion pursuant to the court's jurisdiction. The defendant shall appear.",
@@ -221,7 +221,7 @@ fn test_domain_json_output() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "domain",
             "--text",
             "The company reported strong revenue and earnings growth.",
@@ -245,7 +245,7 @@ fn test_domain_quiet_mode() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "domain",
             "--text",
             "General news article about events.",
@@ -271,7 +271,7 @@ fn test_singleton_basic() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "singleton",
             "--text",
             "Dr. John Smith met with Jane Doe. The doctor examined the patient.",
@@ -292,7 +292,7 @@ fn test_singleton_verbose_shows_all() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "singleton",
             "--text",
             "John Smith met Jane. John was pleased.",
@@ -313,7 +313,7 @@ fn test_singleton_json_output() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "singleton",
             "--text",
             "Marie Curie discovered radium.",
@@ -337,7 +337,7 @@ fn test_singleton_tsv_output() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "singleton",
             "--text",
             "Marie Curie discovered radium.",
@@ -359,7 +359,7 @@ fn test_singleton_quiet_mode() {
     };
 
     let output = Command::new(binary)
-        .args(&["singleton", "--text", "Dr. John Smith", "--quiet"])
+        .args(["singleton", "--text", "Dr. John Smith", "--quiet"])
         .output()
         .unwrap();
 
@@ -379,7 +379,7 @@ fn test_context_basic() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "context",
             "--text",
             "Dr. Marie Curie from Paris won the Nobel Prize in 1903.",
@@ -400,7 +400,7 @@ fn test_context_full_sentence() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "context",
             "--text",
             "Dr. Marie Curie won the Nobel Prize. She was born in Poland.",
@@ -421,7 +421,7 @@ fn test_context_json_output() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "context",
             "--text",
             "Dr. Marie Curie won the Nobel Prize.",
@@ -451,7 +451,7 @@ fn test_context_tsv_output() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "context",
             "--text",
             "Marie Curie discovered radium.",
@@ -475,7 +475,7 @@ fn test_context_markdown_output() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "context",
             "--text",
             "Marie Curie discovered radium.",
@@ -498,7 +498,7 @@ fn test_context_brat_output() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "context",
             "--text",
             "Marie Curie discovered radium.",
@@ -521,7 +521,7 @@ fn test_context_window_size() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "context",
             "--text",
             "The famous Dr. Marie Curie from Paris won the Nobel Prize in Physics and Chemistry.",
@@ -553,7 +553,7 @@ fn test_context_entity_type_filter() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "context",
             "--text",
             "Dr. Marie Curie from Paris won the Nobel Prize.",
@@ -584,7 +584,7 @@ fn test_context_quiet_mode() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "context",
             "--text",
             "Marie Curie discovered radium.",
@@ -609,10 +609,7 @@ fn test_all_wisdom_commands_have_help() {
     };
 
     for cmd in &["privacy", "domain", "singleton", "context"] {
-        let output = Command::new(binary)
-            .args(&[cmd, "--help"])
-            .output()
-            .unwrap();
+        let output = Command::new(binary).args([cmd, "--help"]).output().unwrap();
 
         assert!(output.status.success(), "{} --help should succeed", cmd);
         let stdout = String::from_utf8(output.stdout).unwrap();
@@ -631,7 +628,7 @@ fn test_all_wisdom_commands_handle_empty_input_gracefully() {
     };
 
     for cmd in &["privacy", "domain", "singleton", "context"] {
-        let output = Command::new(binary).args(&[cmd]).output().unwrap();
+        let output = Command::new(binary).args([cmd]).output().unwrap();
 
         // Should fail but not crash
         let stderr = String::from_utf8(output.stderr).unwrap();
@@ -649,7 +646,7 @@ fn test_wisdom_commands_listed_in_help() {
         return;
     };
 
-    let output = Command::new(binary).args(&["--help"]).output().unwrap();
+    let output = Command::new(binary).args(["--help"]).output().unwrap();
 
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();

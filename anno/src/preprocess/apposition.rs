@@ -310,8 +310,8 @@ impl AppositionExtractor {
                         let mut appo = Apposition::new(
                             m1.as_str().trim(),
                             m2.as_str().trim(),
-                            cap.get(0).unwrap().start(),
-                            cap.get(0).unwrap().end(),
+                            cap.get(0).expect("regex match should have group 0").start(),
+                            cap.get(0).expect("regex match should have group 0").end(),
                         )
                         .with_type(atype.clone());
 
@@ -346,8 +346,8 @@ impl AppositionExtractor {
                         let appo = Apposition::new(
                             m1.as_str().trim(),
                             m2.as_str().trim(),
-                            cap.get(0).unwrap().start(),
-                            cap.get(0).unwrap().end(),
+                            cap.get(0).expect("regex match should have group 0").start(),
+                            cap.get(0).expect("regex match should have group 0").end(),
                         )
                         .with_type(AppositionType::BirthName)
                         .alias_is_canonical(); // Birth name is the canonical legal name
@@ -395,8 +395,8 @@ impl AppositionExtractor {
                         let mut appo = Apposition::new(
                             m1.as_str().trim(),
                             m2.as_str().trim(),
-                            cap.get(0).unwrap().start(),
-                            cap.get(0).unwrap().end(),
+                            cap.get(0).expect("regex match should have group 0").start(),
+                            cap.get(0).expect("regex match should have group 0").end(),
                         )
                         .with_type(atype.clone());
 
@@ -435,8 +435,8 @@ impl AppositionExtractor {
                         let appo = Apposition::new(
                             &full_name,
                             nick.as_str(),
-                            cap.get(0).unwrap().start(),
-                            cap.get(0).unwrap().end(),
+                            cap.get(0).expect("regex match should have group 0").start(),
+                            cap.get(0).expect("regex match should have group 0").end(),
                         )
                         .with_type(AppositionType::Nickname);
 
@@ -459,13 +459,10 @@ impl AppositionExtractor {
             for cap in re.captures_iter(text) {
                 if let (Some(abbrev), Some(full)) = (cap.get(1), cap.get(2)) {
                     let full_text = full.as_str().trim();
-                    let appo = Apposition::new(
-                        full_text,
-                        abbrev.as_str(),
-                        cap.get(0).unwrap().start(),
-                        cap.get(0).unwrap().end(),
-                    )
-                    .with_type(AppositionType::ColonExpansion);
+                    let group_0 = cap.get(0).expect("regex match should have group 0");
+                    let appo =
+                        Apposition::new(full_text, abbrev.as_str(), group_0.start(), group_0.end())
+                            .with_type(AppositionType::ColonExpansion);
 
                     results.push(appo);
                 }
@@ -492,8 +489,8 @@ impl AppositionExtractor {
                         let appo = Apposition::new(
                             m1.as_str().trim(),
                             m2.as_str().trim(),
-                            cap.get(0).unwrap().start(),
-                            cap.get(0).unwrap().end(),
+                            cap.get(0).expect("regex match should have group 0").start(),
+                            cap.get(0).expect("regex match should have group 0").end(),
                         )
                         .with_type(AppositionType::Nee);
 
@@ -655,7 +652,7 @@ mod tests {
         let aliases = extract_all_aliases(text);
 
         // Should find both the ticker parenthetical and the formerly pattern
-        assert!(aliases.len() >= 1);
+        assert!(!aliases.is_empty());
     }
 
     #[test]

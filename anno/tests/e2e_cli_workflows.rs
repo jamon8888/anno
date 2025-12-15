@@ -22,14 +22,16 @@ fn anno_cli_cmd() -> Command {
         .parent()
         .expect("anno crate should be in workspace");
 
-    let release_bin = workspace_root.join("target/release/anno");
-    if release_bin.exists() {
-        return Command::new(release_bin);
-    }
-
     let debug_bin = workspace_root.join("target/debug/anno");
     if debug_bin.exists() {
         return Command::new(debug_bin);
+    }
+
+    // Fall back to a pre-built release binary if present. We prefer debug above because
+    // `cargo test` builds with the current feature set, while a stale release binary may not.
+    let release_bin = workspace_root.join("target/release/anno");
+    if release_bin.exists() {
+        return Command::new(release_bin);
     }
 
     let mut cmd = Command::new("cargo");
@@ -81,7 +83,7 @@ fn e2e_cli_extract_formats() {
 
     // Test JSON output
     let output = Command::new(binary)
-        .args(&["extract", "--file", file_path, "--format", "json"])
+        .args(["extract", "--file", file_path, "--format", "json"])
         .output()
         .unwrap();
 
@@ -99,7 +101,7 @@ fn e2e_cli_extract_formats() {
 
     // Test human output (default)
     let output = Command::new(binary)
-        .args(&["extract", "--file", file_path])
+        .args(["extract", "--file", file_path])
         .output()
         .unwrap();
 
@@ -135,7 +137,7 @@ fn e2e_cli_extract_verbose() {
 
     // Test -v (level 1)
     let output = Command::new(binary)
-        .args(&["extract", "--file", file_path, "-v"])
+        .args(["extract", "--file", file_path, "-v"])
         .output()
         .unwrap();
 
@@ -148,7 +150,7 @@ fn e2e_cli_extract_verbose() {
 
     // Test -vv (level 2)
     let output = Command::new(binary)
-        .args(&["extract", "--file", file_path, "-vv"])
+        .args(["extract", "--file", file_path, "-vv"])
         .output()
         .unwrap();
 
@@ -169,7 +171,7 @@ fn e2e_cli_crossdoc_directory() {
 
     // Run crossdoc on directory
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--features",
             "eval-advanced",
@@ -210,7 +212,7 @@ fn e2e_cli_pipeline_full() {
 
     // Run full pipeline with coref
     let output = Command::new(binary)
-        .args(&["pipeline", "--file", file_path, "--coref"])
+        .args(["pipeline", "--file", file_path, "--coref"])
         .output()
         .unwrap();
 
@@ -235,7 +237,7 @@ fn e2e_cli_batch_stdin() {
 "#;
 
     let mut child = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--features",
             "eval-advanced",
@@ -277,7 +279,7 @@ fn e2e_cli_debug_html() {
 
     // Run debug with HTML output
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--features",
             "eval-advanced",
@@ -320,7 +322,7 @@ fn e2e_cli_extract_models() {
 
     // Test with heuristic model (always available)
     let output = Command::new(binary)
-        .args(&["extract", "--file", file_path, "--model", "heuristic"])
+        .args(["extract", "--file", file_path, "--model", "heuristic"])
         .output()
         .unwrap();
 
@@ -337,7 +339,7 @@ fn e2e_cli_extract_models() {
 
     // Test with regex model
     let output = Command::new(binary)
-        .args(&["extract", "--file", file_path, "--model", "regex"])
+        .args(["extract", "--file", file_path, "--model", "regex"])
         .output()
         .unwrap();
 
@@ -359,7 +361,7 @@ fn e2e_cli_extract_url() {
     // Use a simple, stable URL for testing
     // Note: This may fail if URL is unreachable, so we check for graceful failure
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--features",
             "eval-advanced",
@@ -389,7 +391,7 @@ fn e2e_cli_extract_types_filter() {
 
     // Test --types with standard entity labels (filter mode without onnx)
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "extract",
             "--types",
             "PER,LOC",
@@ -425,7 +427,7 @@ fn e2e_cli_extract_types_excludes() {
 
     // Only request LOC type
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "extract",
             "--types",
             "LOC",
@@ -462,7 +464,7 @@ fn e2e_cli_extract_threshold() {
 
     // Test that --threshold is accepted
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "extract",
             "--types",
             "PER",
@@ -491,7 +493,7 @@ fn e2e_cli_extract_type_hints() {
     // Extract with custom type hints (if supported)
     // Note: This depends on zero-shot NER backend availability
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--features",
             "eval-advanced",
@@ -522,7 +524,7 @@ fn e2e_cli_extract_expected_types() {
 
     // Expect PER, ORG, DATE, MONEY but text only has PER and LOC
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "extract",
             "--expected-types",
             "PER,ORG,DATE,MONEY",
@@ -555,7 +557,7 @@ fn e2e_cli_extract_flatten() {
     // Test each flatten mode
     for mode in &["outer", "inner", "all"] {
         let output = Command::new(binary)
-            .args(&["extract", "--flatten", mode, "Dr. Sarah Chen from MIT"])
+            .args(["extract", "--flatten", mode, "Dr. Sarah Chen from MIT"])
             .output()
             .unwrap();
 
@@ -584,7 +586,7 @@ fn e2e_cli_extract_type_map() {
     let map_path = map_file.path().to_str().unwrap();
 
     let output = Command::new(binary)
-        .args(&["extract", "--type-map", map_path, "Dr. Sarah Chen from MIT"])
+        .args(["extract", "--type-map", map_path, "Dr. Sarah Chen from MIT"])
         .output()
         .unwrap();
 
@@ -611,7 +613,7 @@ fn e2e_cli_extract_json_provenance() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "extract",
             "--format",
             "json",
@@ -648,7 +650,7 @@ fn e2e_cli_extract_tsv_provenance() {
     };
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "extract",
             "--format",
             "tsv",
@@ -686,21 +688,21 @@ fn e2e_cli_exit_codes() {
 
     // Success case (exit 0)
     let output = Command::new(binary)
-        .args(&["extract", "Marie Curie"])
+        .args(["extract", "Marie Curie"])
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(0), "Success should exit 0");
 
     // Invalid arguments (exit 2)
     let output = Command::new(binary)
-        .args(&["extract", "--invalid-flag-xyz"])
+        .args(["extract", "--invalid-flag-xyz"])
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(2), "Invalid args should exit 2");
 
     // File not found should have non-zero exit
     let output = Command::new(binary)
-        .args(&["extract", "--file", "/nonexistent/path/file.txt"])
+        .args(["extract", "--file", "/nonexistent/path/file.txt"])
         .output()
         .unwrap();
     assert_ne!(
@@ -722,7 +724,7 @@ fn e2e_cli_explain() {
     };
 
     let output = Command::new(binary)
-        .args(&["explain", "Dr. Sarah Chen from MIT won the award"])
+        .args(["explain", "Dr. Sarah Chen from MIT won the award"])
         .output()
         .unwrap();
 
@@ -757,7 +759,7 @@ fn e2e_cli_explain_show_all() {
     };
 
     let output = Command::new(binary)
-        .args(&["explain", "--show-all", "Dr. Sarah Chen from MIT"])
+        .args(["explain", "--show-all", "Dr. Sarah Chen from MIT"])
         .output()
         .unwrap();
 
@@ -777,7 +779,7 @@ fn e2e_cli_extract_max_tokens() {
 
     // Test --max-tokens limits processing
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "extract",
             "--max-tokens",
             "10",
@@ -802,7 +804,7 @@ fn e2e_cli_extract_split_strategy() {
 
     for strategy in &["none", "sentence", "paragraph", "chunk"] {
         let output = Command::new(binary)
-            .args(&[
+            .args([
                 "extract",
                 "--split-strategy",
                 strategy,
@@ -845,7 +847,7 @@ fn e2e_cli_export_brat() {
     .unwrap();
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "export",
             "--input",
             input_dir.path().to_str().unwrap(),
@@ -896,7 +898,7 @@ fn e2e_cli_import_brat() {
     .unwrap();
 
     let output = Command::new(binary)
-        .args(&[
+        .args([
             "import",
             "--input",
             input_dir.path().to_str().unwrap(),
@@ -936,7 +938,7 @@ fn e2e_cli_json_provenance_backends() {
     };
 
     let output = Command::new(binary)
-        .args(&["extract", "--format", "json", "Dr. Sarah Chen from MIT"])
+        .args(["extract", "--format", "json", "Dr. Sarah Chen from MIT"])
         .output()
         .unwrap();
 
@@ -966,7 +968,7 @@ fn e2e_cli_extract_quiet() {
     let file_path = file.path().to_str().unwrap();
 
     let output = anno_cli_cmd()
-        .args(&["extract", "--file", file_path, "--quiet"])
+        .args(["extract", "--file", file_path, "--quiet"])
         .output()
         .unwrap();
 
@@ -998,7 +1000,7 @@ fn e2e_cli_compare_backends() {
     let file_path = file.path().to_str().unwrap();
 
     let output = anno_cli_cmd()
-        .args(&[
+        .args([
             "compare",
             file_path,
             "--models",
@@ -1045,7 +1047,7 @@ fn e2e_cli_domain_detection() {
     let file_path = file.path().to_str().unwrap();
 
     let output = anno_cli_cmd()
-        .args(&["domain", "--input", file_path])
+        .args(["domain", "--input", file_path])
         .output()
         .unwrap();
 
@@ -1086,7 +1088,7 @@ fn e2e_cli_batch_heterogeneous() {
     .unwrap();
 
     let output = anno_cli_cmd()
-        .args(&["batch", "-d", dir.to_str().unwrap(), "--format", "json"])
+        .args(["batch", "-d", dir.to_str().unwrap(), "--format", "json"])
         .output()
         .unwrap();
 
@@ -1153,7 +1155,7 @@ fn e2e_cli_zeroshot_custom_types() {
 #[cfg(feature = "eval-advanced")]
 fn e2e_cli_explain_detailed() {
     let output = anno_cli_cmd()
-        .args(&[
+        .args([
             "explain",
             "-t",
             "Dr. John Smith works at Harvard University.",
@@ -1178,7 +1180,7 @@ fn e2e_cli_explain_detailed() {
 #[cfg(feature = "eval-advanced")]
 fn e2e_cli_privacy_detection() {
     let output = anno_cli_cmd()
-        .args(&[
+        .args([
             "privacy",
             "-t",
             "John Smith (555-123-4567) lives at 123 Main St.",
@@ -1202,7 +1204,7 @@ fn e2e_cli_privacy_detection() {
 #[cfg(feature = "eval-advanced")]
 fn e2e_cli_privacy_redaction() {
     let output = anno_cli_cmd()
-        .args(&["privacy", "-t", "Contact john@company.com or 555-123-4567"])
+        .args(["privacy", "-t", "Contact john@company.com or 555-123-4567"])
         .output()
         .unwrap();
 
@@ -1222,7 +1224,7 @@ fn e2e_cli_privacy_redaction() {
 #[cfg(feature = "eval-advanced")]
 fn e2e_cli_singleton_analysis() {
     let output = anno_cli_cmd()
-        .args(&[
+        .args([
             "singleton",
             "-t",
             "Obama spoke at the White House. The president addressed the nation.",
@@ -1246,7 +1248,7 @@ fn e2e_cli_singleton_analysis() {
 #[cfg(feature = "eval-advanced")]
 fn e2e_cli_context_export() {
     let output = anno_cli_cmd()
-        .args(&[
+        .args([
             "context",
             "-t",
             "Tim Cook announced new products at Apple Park in Cupertino.",
@@ -1270,7 +1272,7 @@ fn e2e_cli_context_export() {
 #[cfg(feature = "eval-advanced")]
 fn e2e_cli_ensemble_backend() {
     let output = anno_cli_cmd()
-        .args(&[
+        .args([
             "extract",
             "--model",
             "stacked",
@@ -1303,7 +1305,7 @@ fn e2e_cli_crossdoc_resolution() {
     fs::write(dir.join("doc2.txt"), "Apple's Cook announced new products.").unwrap();
 
     let output = anno_cli_cmd()
-        .args(&[
+        .args([
             "cross-doc",
             dir.to_str().unwrap(),
             "--threshold",

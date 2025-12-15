@@ -27,6 +27,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;
 
+// Type aliases for complex types
+type PerExampleScores = Vec<(Vec<anno_core::Entity>, Vec<anno_core::Entity>, String)>;
+
 // Constants for evaluation
 /// 95% confidence interval z-score (normal distribution)
 const DEFAULT_Z_SCORE_95: f64 = 1.96;
@@ -280,8 +283,7 @@ pub struct TaskEvaluator {
     // Temporary storage for per-example scores (used during evaluation)
     // Cloned when needed to avoid borrow checker issues
     #[allow(dead_code)] // Used internally
-    per_example_scores_cache:
-        Mutex<Option<Vec<(Vec<anno_core::Entity>, Vec<anno_core::Entity>, String)>>>,
+    per_example_scores_cache: Mutex<Option<PerExampleScores>>,
 }
 
 impl TaskEvaluator {
@@ -294,12 +296,178 @@ impl TaskEvaluator {
         })
     }
 
+    fn sample_dataset(
+        dataset_data: &LoadedDataset,
+        config: &TaskEvalConfig,
+    ) -> (LoadedDataset, usize) {
+        let total = dataset_data.sentences.len();
+        let (sampled_data, sentences_to_use) = if let Some(max) = config.max_examples {
+            if max >= total {
+                (dataset_data.clone(), total)
+            } else {
+                // Simple deterministic shuffle based on seed (works for all features)
+                let seed = config.seed.unwrap_or(42);
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut indices: Vec<(usize, u64)> = (0..total)
+                    .map(|i| {
+                        let mut hasher = DefaultHasher::new();
+                        seed.hash(&mut hasher);
+                        i.hash(&mut hasher);
+                        (i, hasher.finish())
+                    })
+                    .collect();
+                indices.sort_by_key(|(_, hash)| *hash);
+                let selected_indices: Vec<usize> =
+                    indices.iter().take(max).map(|(i, _)| *i).collect();
+                let sampled_sentences: Vec<_> = selected_indices
+                    .iter()
+                    .filter_map(|&i| dataset_data.sentences.get(i).cloned())
+                    .collect();
+                let sampled_dataset = LoadedDataset {
+                    id: dataset_data.id,
+                    sentences: sampled_sentences,
+                    loaded_at: dataset_data.loaded_at.clone(),
+                    source_url: dataset_data.source_url.clone(),
+                    data_source: dataset_data.data_source,
+                    temporal_metadata: dataset_data.temporal_metadata.clone(),
+                    metadata: dataset_data.metadata.clone(),
+                };
+                (sampled_dataset, max)
+            }
+        } else {
+            (dataset_data.clone(), total)
+        };
+
+        (sampled_data, sentences_to_use)
+    }
+
+    fn evaluate_backend_on_loaded(
+        &self,
+        task: Task,
+        dataset: DatasetId,
+        backend_name: &str,
+        sampled_data: &LoadedDataset,
+        sentences_to_use: usize,
+        config: &TaskEvalConfig,
+    ) -> TaskEvalResult {
+        // Try to evaluate backend (handles backend creation internally)
+        let start = Instant::now();
+        match self.try_evaluate_backend(task, dataset, backend_name, sampled_data, config) {
+            Ok(metrics) => {
+                let duration = start.elapsed().as_secs_f64() * 1000.0;
+
+                // Compute familiarity for zero-shot backends
+                let label_shift = if config.compute_familiarity {
+                    self.compute_familiarity_if_zero_shot(backend_name, sampled_data)
+                } else {
+                    None
+                };
+
+                // Run robustness testing if enabled
+                #[cfg(feature = "eval-advanced")]
+                let robustness_result: Option<
+                    super::robustness::RobustnessResults,
+                > = if config.robustness && matches!(task, Task::NER | Task::DiscontinuousNER) {
+                    self.compute_robustness(backend_name, sampled_data, config)
+                } else {
+                    None
+                };
+
+                // Compute stratified metrics (use per-example scores if available)
+                // Extract per-example scores once and reuse for both stratified metrics and confidence intervals
+                let per_example_opt =
+                    { lock::<Option<PerExampleScores>>(&self.per_example_scores_cache).clone() };
+
+                let stratified = if matches!(task, Task::NER | Task::DiscontinuousNER) {
+                    if let Some(per_example) = per_example_opt.as_ref() {
+                        self.compute_stratified_metrics_from_scores(
+                            sampled_data,
+                            &metrics,
+                            Some(per_example),
+                        )
+                    } else {
+                        self.compute_stratified_metrics(sampled_data, &metrics)
+                    }
+                } else {
+                    None
+                };
+
+                // Compute confidence intervals if requested (use per-example scores if available)
+                let confidence_intervals = if config.confidence_intervals {
+                    if let Some(per_example) = per_example_opt.as_ref() {
+                        self.compute_confidence_intervals_from_scores(per_example)
+                    } else {
+                        self.compute_confidence_intervals(
+                            sampled_data,
+                            task,
+                            backend_name,
+                            &metrics,
+                            config,
+                        )
+                    }
+                } else {
+                    None
+                };
+
+                // Clear cache after use
+                let mut cache = lock(&self.per_example_scores_cache);
+                *cache = None;
+
+                // Extract KB version if available
+                let kb_version = Self::extract_kb_version(sampled_data);
+
+                TaskEvalResult {
+                    task,
+                    dataset,
+                    backend: backend_name.to_string(),
+                    success: true,
+                    error: None,
+                    metrics,
+                    num_examples: sentences_to_use,
+                    duration_ms: Some(duration),
+                    label_shift,
+                    #[cfg(feature = "eval-advanced")]
+                    robustness: robustness_result,
+                    #[cfg(not(feature = "eval-advanced"))]
+                    robustness: None,
+                    stratified,
+                    confidence_intervals,
+                    kb_version,
+                }
+            }
+            Err(e) => {
+                let duration = start.elapsed().as_secs_f64() * 1000.0;
+                TaskEvalResult {
+                    task,
+                    dataset,
+                    backend: backend_name.to_string(),
+                    success: false,
+                    error: Some(format!("{}", e)),
+                    metrics: HashMap::new(),
+                    num_examples: sentences_to_use,
+                    duration_ms: Some(duration),
+                    label_shift: None,
+                    #[cfg(feature = "eval-advanced")]
+                    robustness: None,
+                    #[cfg(not(feature = "eval-advanced"))]
+                    robustness: None,
+                    stratified: None,
+                    confidence_intervals: None,
+                    kb_version: None,
+                }
+            }
+        }
+    }
+
     /// Run comprehensive evaluation across all valid combinations.
     pub fn evaluate_all(&self, config: TaskEvalConfig) -> Result<ComprehensiveEvalResults> {
         let mut results = Vec::new();
         let mut tasks_evaluated = Vec::new();
         let mut datasets_used = Vec::new();
-        let mut backends_tested = Vec::new();
+        let mut backends_tested: Vec<String> = Vec::new();
+        let mut dataset_cache: HashMap<DatasetId, LoadedDataset> = HashMap::new();
+        let mut sampled_cache: HashMap<DatasetId, (LoadedDataset, usize)> = HashMap::new();
 
         // Determine which tasks to evaluate
         let tasks = if config.tasks.is_empty() {
@@ -330,29 +498,147 @@ impl TaskEvaluator {
                 }
 
                 // Check if dataset is cached (if required)
-                if config.require_cached && !self.loader.is_cached(*dataset) {
-                    continue;
+                if config.require_cached {
+                    let Ok(loadable) = crate::eval::LoadableDatasetId::try_from(*dataset) else {
+                        continue;
+                    };
+                    if !self.loader.is_cached(loadable) {
+                        continue;
+                    }
                 }
 
                 // Get compatible backends for this task
-                let backends = if config.backends.is_empty() {
+                let backends: Vec<String> = if config.backends.is_empty() {
                     get_task_backends(*task)
                         .iter()
                         .map(|s| s.to_string())
                         .collect()
                 } else {
-                    config.backends.clone()
+                    // If the caller specifies explicit backends, still filter them per-task.
+                    // Otherwise we waste time evaluating impossible combinations and inflate
+                    // "expected failures" (which reduces signal from matrix sampling).
+                    let allowed: std::collections::HashSet<&'static str> =
+                        get_task_backends(*task).into_iter().collect();
+                    config
+                        .backends
+                        .iter()
+                        .filter(|b| allowed.contains(b.as_str()))
+                        .cloned()
+                        .collect()
                 };
+
+                // Further filter by dataset-level compatibility (entity types, etc.).
+                // This avoids attempting combinations that are guaranteed to fail, and it
+                // prevents pointless downloads when `require_cached=false`.
+                let backends: Vec<String> = backends
+                    .into_iter()
+                    .filter(|b| Self::is_backend_compatible(b, *dataset))
+                    .collect();
+
+                if backends.is_empty() {
+                    continue;
+                }
+
+                // Load dataset once per dataset id and reuse across backends.
+                if !dataset_cache.contains_key(dataset) {
+                    let loaded: Result<LoadedDataset> = {
+                        #[cfg(feature = "eval-advanced")]
+                        {
+                            let loadable = crate::eval::LoadableDatasetId::try_from(*dataset)
+                                .map_err(|e| crate::Error::InvalidInput(format!("{}", e)))?;
+                            self.loader.load_or_download(loadable)
+                        }
+                        #[cfg(not(feature = "eval-advanced"))]
+                        {
+                            let loadable = crate::eval::LoadableDatasetId::try_from(*dataset)
+                                .map_err(|e| crate::Error::InvalidInput(format!("{}", e)))?;
+                            self.loader.load(loadable)
+                        }
+                    };
+                    match loaded {
+                        Ok(d) => {
+                            dataset_cache.insert(*dataset, d);
+                        }
+                        Err(e) => {
+                            for backend_name in &backends {
+                                if !backends_tested.contains(backend_name) {
+                                    backends_tested.push(backend_name.clone());
+                                }
+                                results.push(TaskEvalResult {
+                                    task: *task,
+                                    dataset: *dataset,
+                                    backend: backend_name.to_string(),
+                                    success: false,
+                                    error: Some(format!("Failed to load dataset: {}", e)),
+                                    metrics: HashMap::new(),
+                                    num_examples: 0,
+                                    duration_ms: None,
+                                    label_shift: None,
+                                    #[cfg(feature = "eval-advanced")]
+                                    robustness: None,
+                                    #[cfg(not(feature = "eval-advanced"))]
+                                    robustness: None,
+                                    stratified: None,
+                                    confidence_intervals: None,
+                                    kb_version: None,
+                                });
+                            }
+                            continue;
+                        }
+                    }
+                }
+
+                let dataset_data = dataset_cache.get(dataset).expect("cache populated");
+
+                if dataset_data.sentences.is_empty() {
+                    for backend_name in &backends {
+                        if !backends_tested.contains(backend_name) {
+                            backends_tested.push(backend_name.clone());
+                        }
+                        results.push(TaskEvalResult {
+                            task: *task,
+                            dataset: *dataset,
+                            backend: backend_name.to_string(),
+                            success: false,
+                            error: Some(format!(
+                                "Dataset '{}' is empty (no sentences found)",
+                                dataset.name()
+                            )),
+                            metrics: HashMap::new(),
+                            num_examples: 0,
+                            duration_ms: None,
+                            label_shift: None,
+                            #[cfg(feature = "eval-advanced")]
+                            robustness: None,
+                            #[cfg(not(feature = "eval-advanced"))]
+                            robustness: None,
+                            stratified: None,
+                            confidence_intervals: None,
+                            kb_version: None,
+                        });
+                    }
+                    continue;
+                }
+
+                if !sampled_cache.contains_key(dataset) {
+                    let (sampled, n) = Self::sample_dataset(dataset_data, &config);
+                    sampled_cache.insert(*dataset, (sampled, n));
+                }
+                let (sampled_data, sentences_to_use) =
+                    sampled_cache.get(dataset).expect("sampled cache populated");
 
                 for backend_name in &backends {
                     if !backends_tested.contains(backend_name) {
                         backends_tested.push(backend_name.clone());
                     }
-
-                    // Evaluate this combination
-                    let result =
-                        self.evaluate_combination(*task, *dataset, backend_name, &config)?;
-                    results.push(result);
+                    results.push(self.evaluate_backend_on_loaded(
+                        *task,
+                        *dataset,
+                        backend_name,
+                        sampled_data,
+                        *sentences_to_use,
+                        &config,
+                    ));
                 }
             }
         }
@@ -421,277 +707,6 @@ impl TaskEvaluator {
         }
     }
 
-    /// Evaluate a single task-dataset-backend combination.
-    fn evaluate_combination(
-        &self,
-        task: Task,
-        dataset: DatasetId,
-        backend_name: &str,
-        config: &TaskEvalConfig,
-    ) -> Result<TaskEvalResult> {
-        // Validate inputs
-        if backend_name.is_empty() {
-            return Err(crate::Error::InvalidInput(
-                "Backend name cannot be empty".to_string(),
-            ));
-        }
-
-        // Check compatibility before loading dataset
-        if !Self::is_backend_compatible(backend_name, dataset) {
-            return Ok(TaskEvalResult {
-                task,
-                dataset,
-                backend: backend_name.to_string(),
-                success: false,
-                error: Some(format!(
-                    "Incompatible entity types: backend '{}' doesn't support dataset entity types: {:?}",
-                    backend_name,
-                    dataset.entity_types()
-                )),
-                metrics: HashMap::new(),
-                num_examples: 0,
-                duration_ms: None,
-                label_shift: None,
-                #[cfg(feature = "eval-advanced")]
-                robustness: None,
-                #[cfg(not(feature = "eval-advanced"))]
-                robustness: None,
-                stratified: None,
-                confidence_intervals: None,
-                kb_version: None,
-            });
-        }
-        // Load dataset
-        let dataset_data = {
-            #[cfg(feature = "eval-advanced")]
-            {
-                match self.loader.load_or_download(dataset) {
-                    Ok(data) => data,
-                    Err(e) => {
-                        return Ok(TaskEvalResult {
-                            task,
-                            dataset,
-                            backend: backend_name.to_string(),
-                            success: false,
-                            error: Some(format!("Failed to load dataset: {}", e)),
-                            metrics: HashMap::new(),
-                            num_examples: 0,
-                            duration_ms: None,
-                            label_shift: None,
-                            robustness: None,
-                            stratified: None,
-                            confidence_intervals: None,
-                            kb_version: None,
-                        });
-                    }
-                }
-            }
-            #[cfg(not(feature = "eval-advanced"))]
-            {
-                // Without eval-advanced, only load from cache
-                match self.loader.load(dataset) {
-                    Ok(data) => data,
-                    Err(e) => {
-                        return Ok(TaskEvalResult {
-                            task,
-                            dataset,
-                            backend: backend_name.to_string(),
-                            success: false,
-                            error: Some(format!("Failed to load dataset (not cached, eval-advanced feature required for download): {}", e)),
-                            metrics: HashMap::new(),
-                            num_examples: 0,
-                            duration_ms: None,
-                            label_shift: None,
-                            #[cfg(feature = "eval-advanced")]
-                            robustness: None,
-                            #[cfg(not(feature = "eval-advanced"))]
-                            robustness: None,
-                            stratified: None,
-                            confidence_intervals: None,
-                            kb_version: None,
-                        });
-                    }
-                }
-            }
-        };
-
-        // Validate dataset is not empty
-        if dataset_data.sentences.is_empty() {
-            return Ok(TaskEvalResult {
-                task,
-                dataset,
-                backend: backend_name.to_string(),
-                success: false,
-                error: Some(format!(
-                    "Dataset '{}' is empty (no sentences found)",
-                    dataset.name()
-                )),
-                metrics: HashMap::new(),
-                num_examples: 0,
-                duration_ms: None,
-                label_shift: None,
-                #[cfg(feature = "eval-advanced")]
-                robustness: None,
-                #[cfg(not(feature = "eval-advanced"))]
-                robustness: None,
-                stratified: None,
-                confidence_intervals: None,
-                kb_version: None,
-            });
-        }
-
-        // Sample sentences if configured (with seed for reproducibility)
-        let total = dataset_data.sentences.len();
-        let (sampled_data, sentences_to_use) = if let Some(max) = config.max_examples {
-            if max >= total {
-                (dataset_data, total)
-            } else {
-                // Simple deterministic shuffle based on seed (works for all features)
-                let seed = config.seed.unwrap_or(42);
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
-                let mut indices: Vec<(usize, u64)> = (0..total)
-                    .map(|i| {
-                        let mut hasher = DefaultHasher::new();
-                        seed.hash(&mut hasher);
-                        i.hash(&mut hasher);
-                        (i, hasher.finish())
-                    })
-                    .collect();
-                indices.sort_by_key(|(_, hash)| *hash);
-                let selected_indices: Vec<usize> =
-                    indices.iter().take(max).map(|(i, _)| *i).collect();
-                let sampled_sentences: Vec<_> = selected_indices
-                    .iter()
-                    .filter_map(|&i| dataset_data.sentences.get(i).cloned())
-                    .collect();
-                use crate::eval::loader::LoadedDataset;
-                let sampled_dataset = LoadedDataset {
-                    id: dataset_data.id,
-                    sentences: sampled_sentences,
-                    loaded_at: dataset_data.loaded_at.clone(),
-                    source_url: dataset_data.source_url.clone(),
-                    data_source: dataset_data.data_source.clone(),
-                    temporal_metadata: dataset_data.temporal_metadata.clone(),
-                    metadata: dataset_data.metadata.clone(),
-                };
-                (sampled_dataset, max)
-            }
-        } else {
-            (dataset_data, total)
-        };
-
-        // Try to evaluate backend (handles backend creation internally)
-        let start = Instant::now();
-        let result =
-            match self.try_evaluate_backend(task, dataset, backend_name, &sampled_data, config) {
-                Ok(metrics) => {
-                    let duration = start.elapsed().as_secs_f64() * 1000.0;
-
-                    // Compute familiarity for zero-shot backends
-                    let label_shift = if config.compute_familiarity {
-                        self.compute_familiarity_if_zero_shot(backend_name, &sampled_data)
-                    } else {
-                        None
-                    };
-
-                    // Run robustness testing if enabled
-                    #[cfg(feature = "eval-advanced")]
-                    let robustness_result: Option<
-                        super::robustness::RobustnessResults,
-                    > = if config.robustness && matches!(task, Task::NER | Task::DiscontinuousNER) {
-                        self.compute_robustness(backend_name, &sampled_data, config)
-                    } else {
-                        None
-                    };
-
-                    // Compute stratified metrics (use per-example scores if available)
-                    // Extract per-example scores once and reuse for both stratified metrics and confidence intervals
-                    let per_example_opt = { lock(&self.per_example_scores_cache).clone() };
-
-                    let stratified = if matches!(task, Task::NER | Task::DiscontinuousNER) {
-                        if let Some(per_example) = per_example_opt.as_ref() {
-                            self.compute_stratified_metrics_from_scores(
-                                &sampled_data,
-                                &metrics,
-                                Some(per_example),
-                            )
-                        } else {
-                            self.compute_stratified_metrics(&sampled_data, &metrics)
-                        }
-                    } else {
-                        None
-                    };
-
-                    // Compute confidence intervals if requested (use per-example scores if available)
-                    let confidence_intervals = if config.confidence_intervals {
-                        if let Some(per_example) = per_example_opt.as_ref() {
-                            self.compute_confidence_intervals_from_scores(per_example)
-                        } else {
-                            self.compute_confidence_intervals(
-                                &sampled_data,
-                                task,
-                                backend_name,
-                                &metrics,
-                                config,
-                            )
-                        }
-                    } else {
-                        None
-                    };
-
-                    // Clear cache after use
-                    let mut cache = lock(&self.per_example_scores_cache);
-                    *cache = None;
-
-                    // Extract KB version if available
-                    let kb_version = Self::extract_kb_version(&sampled_data);
-
-                    TaskEvalResult {
-                        task,
-                        dataset,
-                        backend: backend_name.to_string(),
-                        success: true,
-                        error: None,
-                        metrics,
-                        num_examples: sentences_to_use,
-                        duration_ms: Some(duration),
-                        label_shift,
-                        #[cfg(feature = "eval-advanced")]
-                        robustness: robustness_result,
-                        #[cfg(not(feature = "eval-advanced"))]
-                        robustness: None,
-                        stratified,
-                        confidence_intervals,
-                        kb_version,
-                    }
-                }
-                Err(e) => {
-                    let duration = start.elapsed().as_secs_f64() * 1000.0;
-                    TaskEvalResult {
-                        task,
-                        dataset,
-                        backend: backend_name.to_string(),
-                        success: false,
-                        error: Some(format!("{}", e)),
-                        metrics: HashMap::new(),
-                        num_examples: sentences_to_use,
-                        duration_ms: Some(duration),
-                        label_shift: None,
-                        #[cfg(feature = "eval-advanced")]
-                        robustness: None,
-                        #[cfg(not(feature = "eval-advanced"))]
-                        robustness: None,
-                        stratified: None,
-                        confidence_intervals: None,
-                        kb_version: None,
-                    }
-                }
-            };
-
-        Ok(result)
-    }
-
     /// Evaluate a backend on a task with actual inference and metrics.
     ///
     /// This implementation:
@@ -742,7 +757,7 @@ impl TaskEvaluator {
                 }
                 self.evaluate_ner_task(backend_name, &*backend, dataset, dataset_data, config)
             }
-            Task::IntraDocCoref | Task::AbstractAnaphora => {
+            Task::IntraDocCoref | Task::InterDocCoref | Task::AbstractAnaphora => {
                 // Coref tasks use create_coref_resolver, not BackendFactory
                 // Skip BackendFactory::create() to avoid "Unknown backend" error
                 self.evaluate_coref_task(backend_name, dataset_data, config)
@@ -2855,7 +2870,7 @@ impl TaskEvaluator {
         &self,
         dataset_data: &LoadedDataset,
         aggregate_metrics: &HashMap<String, f64>,
-        per_example_scores: Option<&Vec<(Vec<Entity>, Vec<Entity>, String)>>,
+        per_example_scores: Option<&PerExampleScores>,
     ) -> Option<StratifiedMetrics> {
         use crate::eval::ner_metrics::evaluate_entities;
 

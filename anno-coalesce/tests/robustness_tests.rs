@@ -32,7 +32,9 @@ proptest! {
         // Build similarity matrix
         let mut matrix: Vec<Vec<f32>> = vec![vec![1.0; n]; n];
         let mut idx = 0;
+        #[allow(clippy::needless_range_loop)] // Need to access both matrix[i][j] and matrix[j][i]
         for i in 0..n {
+            #[allow(clippy::needless_range_loop)] // Need to access both matrix[i][j] and matrix[j][i]
             for j in (i + 1)..n {
                 if idx < similarities.len() {
                     matrix[i][j] = similarities[idx];
@@ -47,7 +49,9 @@ proptest! {
 
         // Permuted order (reverse)
         let mut perm_matrix = vec![vec![1.0; n]; n];
+        #[allow(clippy::needless_range_loop)] // Need to access both source and destination matrices
         for i in 0..n {
+            #[allow(clippy::needless_range_loop)] // Need to access both source and destination matrices
             for j in 0..n {
                 perm_matrix[i][j] = matrix[n - 1 - i][n - 1 - j];
             }
@@ -205,7 +209,7 @@ proptest! {
         b in "[\u{4e00}-\u{9fff}]{1,10}"
     ) {
         let sim = string_similarity(&a, &b);
-        prop_assert!(sim >= 0.0 && sim <= 1.0);
+        prop_assert!((0.0..=1.0).contains(&sim));
     }
 
     /// String similarity handles Arabic
@@ -215,7 +219,7 @@ proptest! {
         b in "[\u{0600}-\u{06ff}]{1,10}"
     ) {
         let sim = string_similarity(&a, &b);
-        prop_assert!(sim >= 0.0 && sim <= 1.0);
+        prop_assert!((0.0..=1.0).contains(&sim));
     }
 
     /// String similarity handles Cyrillic
@@ -225,7 +229,7 @@ proptest! {
         b in "[\u{0400}-\u{04ff}]{1,10}"
     ) {
         let sim = string_similarity(&a, &b);
-        prop_assert!(sim >= 0.0 && sim <= 1.0);
+        prop_assert!((0.0..=1.0).contains(&sim));
     }
 
     /// String similarity handles mixed scripts
@@ -235,7 +239,7 @@ proptest! {
         b in "[a-zA-Z\u{4e00}-\u{9fff}\u{0600}-\u{06ff}]{1,10}"
     ) {
         let sim = string_similarity(&a, &b);
-        prop_assert!(sim >= 0.0 && sim <= 1.0);
+        prop_assert!((0.0..=1.0).contains(&sim));
     }
 
     /// String similarity handles empty strings
@@ -358,7 +362,7 @@ proptest! {
         b in "[a-zA-Z]{0,20}"
     ) {
         let sim = trigram_similarity(&a, &b);
-        prop_assert!(sim >= 0.0 && sim <= 1.0);
+        prop_assert!((0.0..=1.0).contains(&sim));
     }
 
     /// Trigram similarity is symmetric
@@ -501,7 +505,7 @@ fn stress_many_items() {
 
     let clusters = resolver.clusters();
     // Should handle without panic
-    assert!(clusters.len() > 0);
+    assert!(!clusters.is_empty());
 }
 
 #[test]

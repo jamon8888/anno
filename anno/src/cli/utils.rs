@@ -12,6 +12,9 @@ use anno_core::{
 };
 
 /// Get input text from various sources (text arg, file, or stdin)
+///
+/// Sanitizes input to remove shell command fragments that might leak in
+/// when using verbose flags with positional arguments.
 pub fn get_input_text(
     text: &Option<String>,
     file: Option<&str>,
@@ -19,7 +22,7 @@ pub fn get_input_text(
 ) -> Result<String, String> {
     // Check explicit text arg
     if let Some(t) = text {
-        return Ok(t.clone());
+        return Ok(sanitize_input(t));
     }
 
     // Check file arg
@@ -29,7 +32,8 @@ pub fn get_input_text(
 
     // Check positional args
     if !positional.is_empty() {
-        return Ok(positional.join(" "));
+        let joined = positional.join(" ");
+        return Ok(sanitize_input(&joined));
     }
 
     // Try stdin
@@ -39,11 +43,70 @@ pub fn get_input_text(
             .read_to_string(&mut buf)
             .map_err(|e| format_error("read stdin", &e.to_string()))?;
         if !buf.is_empty() {
-            return Ok(buf);
+            return Ok(sanitize_input(&buf));
         }
     }
 
     Err("No input text provided. Use -t 'text' or -f file or pipe via stdin".to_string())
+}
+
+/// Sanitize input text to remove shell command fragments.
+///
+/// Filters out common patterns that indicate shell command pollution:
+/// - Path-like strings that look like command invocations
+/// - Repeated flag patterns (e.g., "-vv" appearing in text)
+/// - Shell variable references
+fn sanitize_input(input: &str) -> String {
+    let mut result = input.to_string();
+
+    // Remove common shell command fragments that might leak in
+    // Pattern: paths that look like command invocations (e.g., "Users/arc/Documents/dev/anno")
+    // We only remove if they appear at word boundaries and look like absolute paths
+    let path_patterns = [
+        r"/Users/[^/]+/Documents/",
+        r"/home/[^/]+/",
+        r"/tmp/[^/]+/",
+        r"cargo run",
+        r"cargo test",
+        r"target/debug/",
+        r"target/release/",
+    ];
+
+    for pattern in &path_patterns {
+        // Only remove if it's a standalone word/phrase, not part of actual text
+        // This is conservative - we only remove obvious command fragments
+        if let Some(pos) = result.find(pattern) {
+            // Check if it's at the start or preceded by whitespace
+            if pos == 0 || result[..pos].trim_end().ends_with(' ') {
+                // Check if it's followed by whitespace or end of string
+                let end_pos = pos + pattern.len();
+                if end_pos >= result.len() || result[end_pos..].starts_with(' ') {
+                    // This looks like a command fragment, remove it
+                    result.replace_range(pos..end_pos, "");
+                }
+            }
+        }
+    }
+
+    // Remove standalone flag patterns that shouldn't be in text (e.g., "-vv", "--verbose")
+    // Only if they appear as separate words
+    let flag_patterns = [
+        (r" -vv ", " "),
+        (r" -vvv ", " "),
+        (r" --verbose ", " "),
+        (r" -v ", " "), // Be careful with single -v as it might be part of words
+    ];
+
+    for (pattern, replacement) in &flag_patterns {
+        result = result.replace(pattern, replacement);
+    }
+
+    // Clean up multiple spaces
+    while result.contains("  ") {
+        result = result.replace("  ", " ");
+    }
+
+    result.trim().to_string()
 }
 
 /// Read a file with consistent error handling
@@ -186,7 +249,15 @@ pub fn load_gold_from_file(path: &str) -> Result<Vec<GoldSpec>, String> {
 
 /// Detect if entity at position is negated
 pub fn is_negated(text: &str, entity_start: usize) -> bool {
-    let prefix: String = text.chars().take(entity_start).collect();
+    // Performance: avoid allocating the entire prefix up to entity_start.
+    // Negation cues are typically local (a few words before the entity), so scan a bounded window.
+    const WINDOW_CHARS: usize = 200;
+    let window_start = entity_start.saturating_sub(WINDOW_CHARS);
+    let prefix: String = text
+        .chars()
+        .skip(window_start)
+        .take(entity_start.saturating_sub(window_start))
+        .collect();
     let words: Vec<&str> = prefix.split_whitespace().collect();
     let last_words: Vec<&str> = words.iter().rev().take(3).copied().collect();
 
@@ -222,7 +293,14 @@ pub fn is_negated(text: &str, entity_start: usize) -> bool {
 
 /// Detect quantifier before entity
 pub fn detect_quantifier(text: &str, entity_start: usize) -> Option<Quantifier> {
-    let prefix: String = text.chars().take(entity_start).collect();
+    // Performance: quantifiers are almost always immediately adjacent.
+    const WINDOW_CHARS: usize = 80;
+    let window_start = entity_start.saturating_sub(WINDOW_CHARS);
+    let prefix: String = text
+        .chars()
+        .skip(window_start)
+        .take(entity_start.saturating_sub(window_start))
+        .collect();
     let words: Vec<&str> = prefix.split_whitespace().collect();
 
     words

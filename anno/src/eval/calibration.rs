@@ -479,7 +479,7 @@ mod tests {
 
     #[test]
     fn test_entropy_filter() {
-        let candidates = vec![
+        let candidates = [
             ("Apple Inc.", vec![0.9, 0.88, 0.92]), // Agreement
             ("Apple", vec![0.95, 0.05, 0.5]),      // Conflict
             ("Microsoft", vec![0.85, 0.87]),       // Agreement

@@ -38,7 +38,7 @@ pub enum BioScheme {
     /// IOB2: B always starts an entity (most common, seqeval default)
     #[default]
     IOB2,
-    /// IOE1: E appears last, I continues  
+    /// IOE1: E appears last, I continues
     IOE1,
     /// IOE2: E always ends an entity
     IOE2,
@@ -676,7 +676,8 @@ mod tests {
         let tokens = ["John", "Smith", "works", "at", "Apple"];
         let tags = ["B-PER", "I-PER", "O", "O", "B-ORG"];
 
-        let entities = bio_to_entities(&tokens, &tags, BioScheme::IOB2).unwrap();
+        let entities =
+            bio_to_entities(&tokens, &tags, BioScheme::IOB2).expect("valid BIO tags should parse");
 
         assert_eq!(entities.len(), 2);
         assert_eq!(entities[0].text, "John Smith");
@@ -690,7 +691,8 @@ mod tests {
         let tokens = ["John", "and", "Mary"];
         let tags = ["B-PER", "O", "B-PER"];
 
-        let entities = bio_to_entities(&tokens, &tags, BioScheme::IOB2).unwrap();
+        let entities =
+            bio_to_entities(&tokens, &tags, BioScheme::IOB2).expect("valid BIO tags should parse");
 
         assert_eq!(entities.len(), 2);
         assert_eq!(entities[0].text, "John");
@@ -702,7 +704,8 @@ mod tests {
         let tokens = ["The", "United", "Nations", "Security", "Council"];
         let tags = ["O", "B-ORG", "I-ORG", "I-ORG", "I-ORG"];
 
-        let entities = bio_to_entities(&tokens, &tags, BioScheme::IOB2).unwrap();
+        let entities =
+            bio_to_entities(&tokens, &tags, BioScheme::IOB2).expect("valid BIO tags should parse");
 
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0].text, "United Nations Security Council");
@@ -791,7 +794,8 @@ mod tests {
         let tokens = ["The", "United", "Nations", "met", "in", "New", "York"];
         let tags = ["O", "B-ORG", "I-ORG", "O", "O", "B-LOC", "I-LOC"];
 
-        let entities = bio_to_entities(&tokens, &tags, BioScheme::IOB2).unwrap();
+        let entities =
+            bio_to_entities(&tokens, &tags, BioScheme::IOB2).expect("valid BIO tags should parse");
 
         // Create token offsets for roundtrip
         let mut offsets = Vec::new();
@@ -811,7 +815,8 @@ mod tests {
         let tokens: [&str; 0] = [];
         let tags: [&str; 0] = [];
 
-        let entities = bio_to_entities(&tokens, &tags, BioScheme::IOB2).unwrap();
+        let entities =
+            bio_to_entities(&tokens, &tags, BioScheme::IOB2).expect("valid BIO tags should parse");
         assert!(entities.is_empty());
     }
 
@@ -820,7 +825,8 @@ mod tests {
         let tokens = ["The", "cat", "sat"];
         let tags = ["O", "O", "O"];
 
-        let entities = bio_to_entities(&tokens, &tags, BioScheme::IOB2).unwrap();
+        let entities =
+            bio_to_entities(&tokens, &tags, BioScheme::IOB2).expect("valid BIO tags should parse");
         assert!(entities.is_empty());
     }
 
@@ -838,7 +844,8 @@ mod tests {
         let tokens = ["John", "Smith"];
         let tags = ["B-PER", "I-PER"];
 
-        let entities = bio_to_entities(&tokens, &tags, BioScheme::IOB2).unwrap();
+        let entities =
+            bio_to_entities(&tokens, &tags, BioScheme::IOB2).expect("valid BIO tags should parse");
 
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0].start, 0);
@@ -854,7 +861,8 @@ mod tests {
         // Both start with I in IOB1 (no adjacency issue)
         let tags = ["I-PER", "I-PER", "O"];
 
-        let entities = bio_to_entities(&tokens, &tags, BioScheme::IOB1).unwrap();
+        let entities =
+            bio_to_entities(&tokens, &tags, BioScheme::IOB1).expect("valid IOB1 tags should parse");
 
         // In IOB1 with same types, I-I continues the entity
         assert_eq!(entities.len(), 1);
@@ -866,7 +874,8 @@ mod tests {
         let tokens = ["CRISPR", "is", "a", "technology"];
         let tags = ["B-TECH", "O", "O", "O"];
 
-        let entities = bio_to_entities(&tokens, &tags, BioScheme::IOB2).unwrap();
+        let entities =
+            bio_to_entities(&tokens, &tags, BioScheme::IOB2).expect("valid BIO tags should parse");
 
         assert_eq!(entities.len(), 1);
         assert!(matches!(entities[0].entity_type, EntityType::Custom { .. }));
@@ -907,7 +916,8 @@ mod tests {
         let tokens = ["New", "York"];
         let tags = ["I-LOC", "I-LOC"];
 
-        let entities = bio_to_entities(&tokens, &tags, BioScheme::IOE1).unwrap();
+        let entities =
+            bio_to_entities(&tokens, &tags, BioScheme::IOE1).expect("valid IOE1 tags should parse");
 
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0].text, "New York");

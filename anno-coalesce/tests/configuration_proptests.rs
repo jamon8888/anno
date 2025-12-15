@@ -91,8 +91,8 @@ proptest! {
 
         prop_assert!(p_same >= 0.0, "Negative probability: {}", p_same);
         prop_assert!(p_sep >= 0.0, "Negative probability: {}", p_sep);
-        prop_assert!(p_same <= 1.0, "Probability > 1: {}", p_same);
-        prop_assert!(p_sep <= 1.0, "Probability > 1: {}", p_sep);
+        prop_assert!((0.0..=1.0).contains(&p_same), "Probability > 1: {}", p_same);
+        prop_assert!((0.0..=1.0).contains(&p_sep), "Probability > 1: {}", p_sep);
 
         // Sum should be close to 1
         let total = p_same + p_sep;

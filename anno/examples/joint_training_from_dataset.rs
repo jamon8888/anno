@@ -25,6 +25,7 @@ struct SimpleChain {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct SimpleDocument {
     text: String,
     chains: Vec<SimpleChain>,
@@ -32,6 +33,7 @@ struct SimpleDocument {
 
 // Joint model types from learning.rs (simplified for standalone example)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 enum EntityType {
     Person,
     Organization,
@@ -40,6 +42,7 @@ enum EntityType {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct JointMention {
     idx: usize,
     text: String,
@@ -62,6 +65,7 @@ struct JointWeights {
 struct TrainingConfig {
     learning_rate: f64,
     epochs: usize,
+    #[allow(dead_code)]
     l1_reg: f64,
 }
 
@@ -312,7 +316,7 @@ fn main() {
     println!("==========================================\n");
 
     // Create sample documents (simulating loaded coref data)
-    let documents = vec![
+    let documents = [
         SimpleDocument {
             text: "Barack Obama visited France. Obama met with Macron. He praised the alliance."
                 .to_string(),
@@ -390,10 +394,8 @@ fn main() {
     ];
 
     // Convert to training examples
-    let examples: Vec<TrainingExample> = documents
-        .iter()
-        .map(|doc| document_to_training_example(doc))
-        .collect();
+    let examples: Vec<TrainingExample> =
+        documents.iter().map(document_to_training_example).collect();
 
     println!(
         "Converted {} documents to training examples\n",

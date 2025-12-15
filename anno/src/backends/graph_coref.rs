@@ -398,11 +398,7 @@ impl CorefGraph {
 
                 let pos_i = mention_positions[i];
                 let pos_j = mention_positions[j];
-                let distance = if pos_i > pos_j {
-                    pos_i - pos_j
-                } else {
-                    pos_j - pos_i
-                };
+                let distance = pos_i.abs_diff(pos_j);
 
                 if distance <= window_size {
                     let should_add = scorer.as_ref().map_or(true, |f| f(i, j));
@@ -814,7 +810,7 @@ impl GraphCoref {
 
         // Check for proper noun (starts with uppercase, not sentence-initial heuristic)
         let first_char = mention.text.chars().next();
-        if first_char.map_or(false, |c| c.is_uppercase()) {
+        if first_char.is_some_and(|c| c.is_uppercase()) {
             // Additional check: not a common word
             let common_words = ["the", "a", "an", "this", "that", "these", "those"];
             if !common_words.contains(&text_lower.as_str()) {

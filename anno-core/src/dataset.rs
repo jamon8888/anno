@@ -596,7 +596,7 @@ pub struct SplitSizes {
 ///     fn entity_types(&self) -> &[&str] { &["PER", "ORG", "LOC"] }
 ///     fn parser_hint(&self) -> ParserHint { ParserHint::CoNLL }
 ///     fn license(&self) -> License { License::Proprietary }
-///     
+///
 ///     // Override to provide actual data path
 ///     fn local_path(&self) -> Option<&std::path::Path> {
 ///         Some(&self.path)
@@ -1320,13 +1320,25 @@ mod tests {
     #[test]
     fn test_task_from_str() {
         // Basic parsing
-        assert_eq!("ner".parse::<Task>().unwrap(), Task::NER);
-        assert_eq!("NER".parse::<Task>().unwrap(), Task::NER);
-        assert_eq!("coref".parse::<Task>().unwrap(), Task::IntraDocCoref);
-        assert_eq!("cdcr".parse::<Task>().unwrap(), Task::InterDocCoref);
-        assert_eq!("el".parse::<Task>().unwrap(), Task::NED);
-        assert_eq!("entity_linking".parse::<Task>().unwrap(), Task::NED);
-        assert_eq!("re".parse::<Task>().unwrap(), Task::RelationExtraction);
+        assert_eq!("ner".parse::<Task>().expect("task parse"), Task::NER);
+        assert_eq!("NER".parse::<Task>().expect("task parse"), Task::NER);
+        assert_eq!(
+            "coref".parse::<Task>().expect("task parse"),
+            Task::IntraDocCoref
+        );
+        assert_eq!(
+            "cdcr".parse::<Task>().expect("task parse"),
+            Task::InterDocCoref
+        );
+        assert_eq!("el".parse::<Task>().expect("task parse"), Task::NED);
+        assert_eq!(
+            "entity_linking".parse::<Task>().expect("task parse"),
+            Task::NED
+        );
+        assert_eq!(
+            "re".parse::<Task>().expect("task parse"),
+            Task::RelationExtraction
+        );
 
         // Invalid task
         assert!("invalid_task".parse::<Task>().is_err());

@@ -531,15 +531,15 @@ mod tests {
     #[test]
     fn test_historical_date_parse() {
         assert_eq!(
-            HistoricalDate::parse("2024-06-15").unwrap(),
+            HistoricalDate::parse("2024-06-15").expect("parse ISO date"),
             HistoricalDate::ce(2024, 6, 15)
         );
         assert_eq!(
-            HistoricalDate::parse("-0044-03-15").unwrap(),
+            HistoricalDate::parse("-0044-03-15").expect("parse BCE ISO date"),
             HistoricalDate::bce(44, 3, 15)
         );
         assert_eq!(
-            HistoricalDate::parse("2024").unwrap(),
+            HistoricalDate::parse("2024").expect("parse year-only date"),
             HistoricalDate::year_only(2024)
         );
     }
@@ -607,13 +607,15 @@ mod tests {
     #[test]
     fn test_serde_roundtrip() {
         let date = HistoricalDate::bce(44, 3, 15);
-        let json = serde_json::to_string(&date).unwrap();
-        let recovered: HistoricalDate = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&date).expect("serialize HistoricalDate");
+        let recovered: HistoricalDate =
+            serde_json::from_str(&json).expect("deserialize HistoricalDate");
         assert_eq!(date, recovered);
 
         let validity = TemporalValidity::new(Some(date), None);
-        let json = serde_json::to_string(&validity).unwrap();
-        let recovered: TemporalValidity = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&validity).expect("serialize TemporalValidity");
+        let recovered: TemporalValidity =
+            serde_json::from_str(&json).expect("deserialize TemporalValidity");
         assert_eq!(validity, recovered);
     }
 }

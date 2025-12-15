@@ -206,96 +206,173 @@ impl DatasetMetadata {
 
     // Flag query methods (all O(1))
 
+    /// Returns `true` if this dataset supports named entity recognition.
+    ///
+    /// NER datasets provide entity span annotations with type labels.
     #[inline]
     pub const fn is_ner(&self) -> bool {
         self.flags.contains(DatasetFlags::NER)
     }
 
+    /// Returns `true` if this dataset contains coreference annotations.
+    ///
+    /// Coreference datasets provide mention clusters or entity chains
+    /// indicating which mentions refer to the same entity.
     #[inline]
     pub const fn is_coreference(&self) -> bool {
         self.flags.contains(DatasetFlags::COREFERENCE)
     }
 
+    /// Returns `true` if this dataset contains within-document coreference.
+    ///
+    /// Intra-document coreference datasets link mentions within a single
+    /// document, forming coreference chains or clusters.
     #[inline]
     pub const fn is_intra_doc_coref(&self) -> bool {
         self.flags.contains(DatasetFlags::INTRA_DOC_COREF)
     }
 
+    /// Returns `true` if this dataset contains cross-document coreference.
+    ///
+    /// Inter-document coreference datasets link entities across multiple
+    /// documents, enabling cross-document entity resolution.
     #[inline]
     pub const fn is_inter_doc_coref(&self) -> bool {
         self.flags.contains(DatasetFlags::INTER_DOC_COREF)
     }
 
+    /// Returns `true` if this dataset contains temporal entity annotations.
+    ///
+    /// Temporal NER datasets include time expressions, events with temporal
+    /// anchors, or entities with temporal attributes (e.g., historical entities).
     #[inline]
     pub const fn is_temporal_ner(&self) -> bool {
         self.flags.contains(DatasetFlags::TEMPORAL_NER)
     }
 
+    /// Returns `true` if this dataset is from the biomedical domain.
+    ///
+    /// Biomedical datasets include medical, clinical, or life science text
+    /// with specialized entity types (diseases, genes, proteins, chemicals).
     #[inline]
     pub const fn is_biomedical(&self) -> bool {
         self.flags.contains(DatasetFlags::BIOMEDICAL)
     }
 
+    /// Returns `true` if this dataset contains social media text.
+    ///
+    /// Social media datasets include Twitter, Reddit, or other informal text
+    /// with non-standard capitalization, abbreviations, and informal language.
     #[inline]
     pub const fn is_social_media(&self) -> bool {
         self.flags.contains(DatasetFlags::SOCIAL_MEDIA)
     }
 
+    /// Returns `true` if this dataset is from a specialized domain.
+    ///
+    /// Specialized domain datasets include technical, legal, financial, or
+    /// other domain-specific text requiring specialized entity recognition.
     #[inline]
     pub const fn is_specialized_domain(&self) -> bool {
         self.flags.contains(DatasetFlags::SPECIALIZED_DOMAIN)
     }
 
+    /// Returns `true` if this dataset supports relation extraction.
+    ///
+    /// Relation extraction datasets provide entity-relation-entity triples,
+    /// enabling evaluation of models that extract structured relationships.
     #[inline]
     pub const fn is_relation_extraction(&self) -> bool {
         self.flags.contains(DatasetFlags::RELATION_EXTRACTION)
     }
 
+    /// Returns `true` if this dataset contains historical text.
+    ///
+    /// Historical datasets include ancient texts, historical documents, or
+    /// diachronic corpora that test model robustness to language evolution.
     #[inline]
     pub const fn is_historical(&self) -> bool {
         self.flags.contains(DatasetFlags::HISTORICAL)
     }
 
+    /// Returns `true` if this dataset is designed for bias evaluation.
+    ///
+    /// Bias evaluation datasets test for gender, demographic, or other biases
+    /// in entity recognition and coreference resolution.
     #[inline]
     pub const fn is_bias_evaluation(&self) -> bool {
         self.flags.contains(DatasetFlags::BIAS_EVALUATION)
     }
 
+    /// Returns `true` if this dataset contains dialogue coreference annotations.
+    ///
+    /// Dialogue coreference datasets include multi-party conversations, meetings,
+    /// or interviews where coreference resolution must handle speaker turns and
+    /// dialogue-specific phenomena (e.g., prosody, gestures).
     #[inline]
     pub const fn is_dialogue_coref(&self) -> bool {
         self.flags.contains(DatasetFlags::DIALOGUE_COREF)
     }
 
+    /// Returns `true` if this dataset supports joint NER and relation extraction.
+    ///
+    /// Joint datasets provide both entity annotations and relation triples,
+    /// enabling evaluation of models that perform both tasks simultaneously.
     #[inline]
     pub const fn is_joint_ner_re(&self) -> bool {
         self.flags.contains(DatasetFlags::JOINT_NER_RE)
     }
 
+    /// Returns `true` if this dataset contains discontinuous entity annotations.
+    ///
+    /// Discontinuous entities span non-contiguous tokens (e.g., "left and right
+    /// ventricle" where "ventricle" is split). Requires specialized evaluation
+    /// metrics beyond standard span-based NER.
     #[inline]
     pub const fn is_discontinuous_ner(&self) -> bool {
         self.flags.contains(DatasetFlags::DISCONTINUOUS_NER)
     }
 
+    /// Returns `true` if this dataset is designed for few-shot learning evaluation.
+    ///
+    /// Few-shot datasets typically have small training sets or are used to test
+    /// zero-shot transfer from related domains.
     #[inline]
     pub const fn is_few_shot(&self) -> bool {
         self.flags.contains(DatasetFlags::FEW_SHOT)
     }
 
+    /// Returns `true` if this dataset covers multiple languages.
+    ///
+    /// Multilingual datasets enable cross-lingual evaluation and testing of
+    /// zero-shot transfer between languages.
     #[inline]
     pub const fn is_multilingual(&self) -> bool {
         self.flags.contains(DatasetFlags::MULTILINGUAL)
     }
 
+    /// Returns `true` if this dataset contains constructed/artificial languages.
+    ///
+    /// Constructed languages (e.g., Esperanto, Klingon) test model generalization
+    /// to languages with different structural properties than natural languages.
     #[inline]
     pub const fn is_constructed_language(&self) -> bool {
         self.flags.contains(DatasetFlags::CONSTRUCTED_LANGUAGE)
     }
 
+    /// Returns `true` if this dataset contains code-switched text.
+    ///
+    /// Code-switching datasets include text where speakers mix multiple languages
+    /// within the same utterance, requiring models to handle language boundaries.
     #[inline]
     pub const fn is_code_switching(&self) -> bool {
         self.flags.contains(DatasetFlags::CODE_SWITCHING)
     }
 
+    /// Returns `true` if this dataset contains African languages.
+    ///
+    /// African language datasets are important for evaluating model performance
+    /// on under-resourced languages and diverse linguistic structures.
     #[inline]
     pub const fn is_african_language(&self) -> bool {
         self.flags.contains(DatasetFlags::AFRICAN_LANGUAGE)
@@ -311,9 +388,24 @@ pub static CONLL_TYPES: &[&str] = &["PER", "LOC", "ORG", "MISC"];
 
 /// OntoNotes entity types (18 types)
 pub static ONTONOTES_TYPES: &[&str] = &[
-    "PERSON", "NORP", "FAC", "ORG", "GPE", "LOC", "PRODUCT", "EVENT",
-    "WORK_OF_ART", "LAW", "LANGUAGE", "DATE", "TIME", "PERCENT",
-    "MONEY", "QUANTITY", "ORDINAL", "CARDINAL",
+    "PERSON",
+    "NORP",
+    "FAC",
+    "ORG",
+    "GPE",
+    "LOC",
+    "PRODUCT",
+    "EVENT",
+    "WORK_OF_ART",
+    "LAW",
+    "LANGUAGE",
+    "DATE",
+    "TIME",
+    "PERCENT",
+    "MONEY",
+    "QUANTITY",
+    "ORDINAL",
+    "CARDINAL",
 ];
 
 /// Biomedical entity types
@@ -325,7 +417,7 @@ pub static ACE_TYPES: &[&str] = &["PER", "ORG", "GPE", "LOC", "FAC", "VEH", "WEA
 // =============================================================================
 // Static metadata table (proof of concept - first 20 datasets)
 // =============================================================================
-// 
+//
 // This table replaces the 15+ match statements in loader.rs.
 // Full migration will happen incrementally.
 
@@ -349,7 +441,14 @@ pub static WNUT17: DatasetMetadata = DatasetMetadata::new(
 )
 .domain("social-media")
 .language("en")
-.entity_types(&["person", "location", "corporation", "product", "creative-work", "group"])
+.entity_types(&[
+    "person",
+    "location",
+    "corporation",
+    "product",
+    "creative-work",
+    "group",
+])
 .flags(DatasetFlags::NER.union(DatasetFlags::SOCIAL_MEDIA))
 .year(2017);
 
@@ -362,7 +461,11 @@ pub static BC5CDR: DatasetMetadata = DatasetMetadata::new(
 .domain("biomedical")
 .language("en")
 .entity_types(&["Chemical", "Disease"])
-.flags(DatasetFlags::NER.union(DatasetFlags::BIOMEDICAL).union(DatasetFlags::SPECIALIZED_DOMAIN))
+.flags(
+    DatasetFlags::NER
+        .union(DatasetFlags::BIOMEDICAL)
+        .union(DatasetFlags::SPECIALIZED_DOMAIN),
+)
 .year(2015);
 
 /// Metadata for GAP coreference dataset
@@ -374,7 +477,11 @@ pub static GAP: DatasetMetadata = DatasetMetadata::new(
 .domain("coreference")
 .language("en")
 .entity_types(&["Pronoun", "Name"])
-.flags(DatasetFlags::COREFERENCE.union(DatasetFlags::INTRA_DOC_COREF).union(DatasetFlags::BIAS_EVALUATION))
+.flags(
+    DatasetFlags::COREFERENCE
+        .union(DatasetFlags::INTRA_DOC_COREF)
+        .union(DatasetFlags::BIAS_EVALUATION),
+)
 .year(2018);
 
 /// Metadata for OntoNotes 5.0 coreference dataset
@@ -386,7 +493,11 @@ pub static ONTONOTES_COREF: DatasetMetadata = DatasetMetadata::new(
 .domain("coreference")
 .language("en")
 .entity_types(ONTONOTES_TYPES)
-.flags(DatasetFlags::COREFERENCE.union(DatasetFlags::INTRA_DOC_COREF).union(DatasetFlags::NER))
+.flags(
+    DatasetFlags::COREFERENCE
+        .union(DatasetFlags::INTRA_DOC_COREF)
+        .union(DatasetFlags::NER),
+)
 .year(2013);
 
 /// Metadata for ECB+ cross-document coreference dataset
@@ -398,7 +509,11 @@ pub static ECBPLUS: DatasetMetadata = DatasetMetadata::new(
 .domain("coreference")
 .language("en")
 .entity_types(&["Event", "Entity"])
-.flags(DatasetFlags::COREFERENCE.union(DatasetFlags::INTER_DOC_COREF).union(DatasetFlags::EVENT_EXTRACTION))
+.flags(
+    DatasetFlags::COREFERENCE
+        .union(DatasetFlags::INTER_DOC_COREF)
+        .union(DatasetFlags::EVENT_EXTRACTION),
+)
 .year(2014);
 
 /// Metadata for MultiNERD multilingual dataset
@@ -409,7 +524,10 @@ pub static MULTINERD: DatasetMetadata = DatasetMetadata::new(
 )
 .domain("multilingual")
 .language("multilingual")
-.entity_types(&["PER", "LOC", "ORG", "ANIM", "BIO", "CEL", "DIS", "EVE", "FOOD", "INST", "MEDIA", "MYTH", "PLANT", "TIME", "VEHI"])
+.entity_types(&[
+    "PER", "LOC", "ORG", "ANIM", "BIO", "CEL", "DIS", "EVE", "FOOD", "INST", "MEDIA", "MYTH",
+    "PLANT", "TIME", "VEHI",
+])
 .flags(DatasetFlags::NER.union(DatasetFlags::MULTILINGUAL))
 .year(2022);
 
@@ -421,7 +539,16 @@ pub static FEWNERD: DatasetMetadata = DatasetMetadata::new(
 )
 .domain("general")
 .language("en")
-.entity_types(&["person", "location", "organization", "building", "art", "product", "event", "other"])
+.entity_types(&[
+    "person",
+    "location",
+    "organization",
+    "building",
+    "art",
+    "product",
+    "event",
+    "other",
+])
 .flags(DatasetFlags::NER.union(DatasetFlags::FEW_SHOT))
 .year(2021);
 
@@ -434,7 +561,12 @@ pub static MASAKHANER: DatasetMetadata = DatasetMetadata::new(
 .domain("low-resource")
 .language("multilingual")
 .entity_types(CONLL_TYPES)
-.flags(DatasetFlags::NER.union(DatasetFlags::MULTILINGUAL).union(DatasetFlags::AFRICAN_LANGUAGE).union(DatasetFlags::LOW_RESOURCE))
+.flags(
+    DatasetFlags::NER
+        .union(DatasetFlags::MULTILINGUAL)
+        .union(DatasetFlags::AFRICAN_LANGUAGE)
+        .union(DatasetFlags::LOW_RESOURCE),
+)
 .year(2021);
 
 /// Metadata for GENIA biomedical dataset
@@ -446,7 +578,11 @@ pub static GENIA: DatasetMetadata = DatasetMetadata::new(
 .domain("biomedical")
 .language("en")
 .entity_types(&["DNA", "RNA", "protein", "cell_line", "cell_type"])
-.flags(DatasetFlags::NER.union(DatasetFlags::BIOMEDICAL).union(DatasetFlags::SPECIALIZED_DOMAIN))
+.flags(
+    DatasetFlags::NER
+        .union(DatasetFlags::BIOMEDICAL)
+        .union(DatasetFlags::SPECIALIZED_DOMAIN),
+)
 .year(2003);
 
 #[cfg(test)]

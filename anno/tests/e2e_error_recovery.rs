@@ -39,14 +39,14 @@ fn e2e_overlapping_signals() {
     let mut doc = GroundedDocument::new("overlap_doc", "New York City is great.");
 
     // Add overlapping signals (nested entity)
-    let sig1 = doc.add_signal(Signal::new(
+    let _sig1 = doc.add_signal(Signal::new(
         0,
         Location::text(0, 13),
         "New York City",
         "LOC",
         0.9,
     ));
-    let sig2 = doc.add_signal(Signal::new(
+    let _sig2 = doc.add_signal(Signal::new(
         1,
         Location::text(0, 8),
         "New York",
@@ -75,7 +75,7 @@ fn e2e_invalid_signal_offsets() {
     let _sig_id = doc.add_signal(sig);
 
     // Document should still be usable
-    assert!(doc.signals().len() > 0);
+    assert!(!doc.signals().is_empty());
 }
 
 /// E2E: Handle empty tracks
@@ -83,7 +83,7 @@ fn e2e_invalid_signal_offsets() {
 fn e2e_empty_track() {
     let mut doc = GroundedDocument::new("empty_track_doc", "Test text.");
 
-    let mut track = Track::new(0, "empty");
+    let track = Track::new(0, "empty");
     // Don't add any signals
     let track_id = doc.add_track(track);
 
@@ -107,7 +107,7 @@ fn e2e_duplicate_signal_in_track() {
     let track_ref = doc.get_track(track_id).unwrap();
 
     // Track should handle duplicate signals (may have 1 or 2 entries depending on implementation)
-    assert!(track_ref.len() >= 1);
+    assert!(!track_ref.is_empty());
 }
 
 /// E2E: Handle crossdoc with empty corpus
@@ -180,7 +180,7 @@ fn e2e_crossdoc_high_threshold() {
 
     // May create 1 or 2 identities depending on exact similarity calculation
     // This tests that high threshold affects merging behavior
-    assert!(identity_ids.len() >= 1);
+    assert!(!identity_ids.is_empty());
 }
 
 /// E2E: Handle very low similarity threshold (everything might merge)
@@ -223,7 +223,7 @@ fn e2e_crossdoc_low_threshold() {
     let identity_ids = resolver.resolve_inter_doc_coref(&mut corpus, None, None);
 
     // Should create at least 1 identity (may merge or not depending on similarity)
-    assert!(identity_ids.len() >= 1);
+    assert!(!identity_ids.is_empty());
 }
 
 /// E2E: Track should not contain signals from different documents
@@ -284,14 +284,14 @@ fn e2e_unicode_emoji_entities() {
     let text = "Marie Curie (👩‍🔬) won the Nobel Prize. She was born in 🇵🇱 Poland.";
 
     let mut doc = GroundedDocument::new("unicode_doc", text);
-    let sig1 = doc.add_signal(Signal::new(
+    let _sig1 = doc.add_signal(Signal::new(
         0,
         Location::text(0, 12),
         "Marie Curie",
         "PER",
         0.95,
     ));
-    let sig2 = doc.add_signal(Signal::new(1, Location::text(13, 20), "👩‍🔬", "EMOJI", 0.8));
+    let _sig2 = doc.add_signal(Signal::new(1, Location::text(13, 20), "👩‍🔬", "EMOJI", 0.8));
     let sig3 = doc.add_signal(Signal::new(2, Location::text(58, 64), "🇵🇱", "FLAG", 0.9));
     let _sig4 = doc.add_signal(Signal::new(
         3,

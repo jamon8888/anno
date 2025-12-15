@@ -127,7 +127,7 @@ impl EvalConfig {
     /// CI-aware configuration.
     ///
     /// Respects environment variables:
-    /// - `ANNO_MAX_EXAMPLES`: Max examples per dataset (default: 50 in CI, 0 otherwise)
+    /// - `ANNO_MAX_EXAMPLES`: Max examples per dataset (default: 50 in CI, 200 otherwise; set to 0 for unlimited)
     /// - `CI` or `GITHUB_ACTIONS`: Detects CI environment
     ///
     /// # Example
@@ -139,10 +139,16 @@ impl EvalConfig {
     pub fn ci_aware() -> Self {
         let in_ci = std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok();
 
+        // Sensible defaults:
+        // - CI: small (fast + deterministic)
+        // - local: bounded (avoid accidental “full dataset” runs)
+        //
+        // Opt-out by setting `ANNO_MAX_EXAMPLES=0` (unlimited).
+        let default_max = if in_ci { 50 } else { 200 };
         let max_examples = std::env::var("ANNO_MAX_EXAMPLES")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(if in_ci { 50 } else { 0 });
+            .unwrap_or(default_max);
 
         Self {
             max_examples_per_dataset: max_examples,
@@ -665,7 +671,15 @@ impl EvalHarness {
         let mut dataset_results: HashMap<String, Vec<(String, Vec<GoldEntity>)>> = HashMap::new();
 
         for dataset_id in datasets {
-            match loader.load_or_download(*dataset_id) {
+            let loadable = match crate::eval::LoadableDatasetId::try_from(*dataset_id) {
+                Ok(id) => id,
+                Err(e) => {
+                    log::warn!("Skipping {} (not loadable): {}", dataset_id.name(), e);
+                    continue;
+                }
+            };
+
+            match loader.load_or_download(loadable) {
                 Ok(loaded) => {
                     let cases = loaded.to_test_cases();
                     let limited: Vec<_> = if self.config.max_examples_per_dataset > 0 {
@@ -734,8 +748,13 @@ impl EvalHarness {
         let mut dataset_results: HashMap<String, Vec<(String, Vec<GoldEntity>)>> = HashMap::new();
 
         for dataset_id in datasets {
-            if loader.is_cached(*dataset_id) {
-                match loader.load(*dataset_id) {
+            let loadable = match crate::eval::LoadableDatasetId::try_from(*dataset_id) {
+                Ok(id) => id,
+                Err(_) => continue,
+            };
+
+            if loader.is_cached(loadable) {
+                match loader.load(loadable) {
                     Ok(loaded) => {
                         let cases = loaded.to_test_cases();
                         let limited: Vec<_> = if self.config.max_examples_per_dataset > 0 {
@@ -1312,7 +1331,7 @@ mod tests {
         assert!(!registry.is_empty());
         // Number of backends depends on feature flags (onnx, candle, etc.)
         assert!(
-            registry.len() >= 1,
+            !registry.is_empty(),
             "Expected at least 1 backend, got {}",
             registry.len()
         );

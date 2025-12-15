@@ -328,7 +328,7 @@ impl ChainFeatures {
         };
 
         // Confidence stats
-        let confidences: Vec<f64> = mentions.iter().map(|m| m.confidence as f64).collect();
+        let confidences: Vec<f64> = mentions.iter().map(|m| m.confidence).collect();
         let mean_confidence = confidences.iter().sum::<f64>() / total as f64;
         let min_confidence = confidences.iter().cloned().fold(f64::INFINITY, f64::min);
         let max_confidence = confidences
@@ -659,7 +659,7 @@ impl EntityFeatureExtractor {
                 let distance = if e1.end <= e2.start {
                     e2.start - e1.end
                 } else if e2.end <= e1.start {
-                    e1.start - e2.end
+                    e1.start.saturating_sub(e2.end)
                 } else {
                     0 // overlapping
                 };
@@ -736,7 +736,7 @@ impl PairwiseFeatures {
         let char_distance = if a.end <= b.start {
             b.start - a.end
         } else if b.end <= a.start {
-            a.start - b.end
+            a.start.saturating_sub(b.end)
         } else {
             0
         };
@@ -946,7 +946,7 @@ mod tests {
 
     #[test]
     fn test_cooccurrence_extraction() {
-        let text = "Barack Obama met Angela Merkel in Berlin. He discussed policy.";
+        let _text = "Barack Obama met Angela Merkel in Berlin. He discussed policy.";
         let entities = sample_entities();
 
         let extractor = EntityFeatureExtractor::default();

@@ -80,7 +80,7 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
             .map_err(|e| format!("Failed to read directory: {}", e))?
             .filter_map(|e| e.ok())
             .map(|e| e.path())
-            .filter(|p| p.is_file() && p.extension().map_or(false, |e| e == "txt"))
+            .filter(|p| p.is_file() && p.extension().is_some_and(|e| e == "txt"))
             .collect()
     };
 

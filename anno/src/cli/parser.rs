@@ -23,7 +23,7 @@ CAPABILITIES:
 
 SIGNAL → TRACK → IDENTITY HIERARCHY:
   Level 1 (Signal)   : Raw detections/mentions with spans
-  Level 2 (Track)    : Within-document coreference chains  
+  Level 2 (Track)    : Within-document coreference chains
   Level 3 (Identity) : Cross-document KB-linked entities
 
 BACKENDS:
@@ -209,8 +209,8 @@ impl ModelBackend {
                 #[cfg(feature = "candle")]
                 Self::GlinerCandle => "gliner_candle",
             };
-            return BackendFactory::create(factory_name)
-                .map_err(|e| format!("Failed to create model '{}': {}", self.name(), e));
+            BackendFactory::create(factory_name)
+                .map_err(|e| format!("Failed to create model '{}': {}", self.name(), e))
         }
         #[cfg(not(feature = "eval"))]
         {

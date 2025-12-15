@@ -103,7 +103,10 @@ fn test_hierarchical_clustering_valid_output() {
         assert_eq!(total, 5, "All items should be in clusters");
 
         // Entities 0 and 1 should be in same cluster (high similarity)
-        let cluster_0 = clusters.iter().find(|c| c.contains(&0)).unwrap();
+        let cluster_0 = clusters
+            .iter()
+            .find(|c| c.contains(&0))
+            .expect("entity 0 should be in a cluster");
         assert!(
             cluster_0.contains(&1),
             "Entities 0 and 1 should cluster together"
@@ -185,7 +188,7 @@ fn test_similarity_edge_cases() {
 /// Property: Clustering is deterministic for fixed input
 #[test]
 fn test_streaming_determinism() {
-    let items = vec!["Alice", "Bob", "Alice Smith", "Robert", "Alice"];
+    let items = ["Alice", "Bob", "Alice Smith", "Robert", "Alice"];
 
     let mut results = Vec::new();
 
@@ -257,7 +260,7 @@ fn test_type_matching() {
 #[test]
 fn test_e2e_cross_document_coreference() {
     // Simulate 5 news documents about tech companies and executives
-    let documents = vec![
+    let documents = [
         // Doc 1: Nvidia earnings
         vec![
             ("Jensen Huang", "Person"),
@@ -425,7 +428,7 @@ fn test_streaming_vs_batch_consistency() {
     // Obama variants (3) and Trump variants (3) → expect 2 clusters
     // But depends on similarity function, so we just verify reasonable bounds
     assert!(
-        streaming_clusters >= 2 && streaming_clusters <= 6,
+        (2..=6).contains(&streaming_clusters),
         "Streaming should produce 2-6 clusters, got {}",
         streaming_clusters
     );

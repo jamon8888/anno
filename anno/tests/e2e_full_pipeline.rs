@@ -84,7 +84,7 @@ fn e2e_single_doc_with_coref() {
     // Verify tracks were created
     let tracks: Vec<_> = doc.tracks().collect();
     assert!(
-        tracks.len() >= 1,
+        !tracks.is_empty(),
         "Should have at least one track for 'Barack Obama'"
     );
 
@@ -409,7 +409,7 @@ fn e2e_overlapping_mentions() {
 
     // Verify overlapping signals are detected
     let overlapping = doc.find_overlapping_signal_pairs();
-    assert!(overlapping.len() >= 1, "Should detect overlapping signals");
+    assert!(!overlapping.is_empty(), "Should detect overlapping signals");
 
     // Create tracks - should handle overlapping mentions
     let mut track1 = Track::new(0, "new york city");

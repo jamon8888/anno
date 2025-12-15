@@ -465,16 +465,18 @@ mod proptests {
                 ..Default::default()
             };
             let mut resolver = StreamingResolver::new(config);
+            let mut added = 0usize;
 
             for (i, entity) in entities.iter().enumerate() {
                 let trimmed = entity.trim();
                 if !trimmed.is_empty() {
-                    resolver.add_entity(&format!("doc{}", i), trimmed, None);
+                    resolver.add_entity(format!("doc{}", i), trimmed, None);
+                    added += 1;
                 }
             }
 
-            // Should always have non-negative clusters
-            prop_assert!(resolver.num_clusters() >= 0);
+            // Can't have more clusters than added entities.
+            prop_assert!(resolver.num_clusters() <= added);
         }
 
         /// Chromatic clustering respects color constraints

@@ -967,7 +967,7 @@ impl CorefDocStats {
                     .text
                     .chars()
                     .next()
-                    .map_or(false, |c| c.is_uppercase())
+                    .is_some_and(|c| c.is_uppercase())
                 {
                     proper_count += 1;
                 } else {
@@ -1167,11 +1167,11 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
 
     let mut matrix = vec![vec![0; b_len + 1]; a_len + 1];
 
-    for i in 0..=a_len {
-        matrix[i][0] = i;
+    for (i, row) in matrix.iter_mut().enumerate().take(a_len + 1) {
+        row[0] = i;
     }
-    for j in 0..=b_len {
-        matrix[0][j] = j;
+    for (j, cell) in matrix[0].iter_mut().enumerate().take(b_len + 1) {
+        *cell = j;
     }
 
     for i in 1..=a_len {
@@ -1216,7 +1216,7 @@ mod tests {
         // so true_zero_shot_types may only contain DISEASE, or all three if similarity
         // threshold is low. The important thing is familiarity > 0.
         assert!(
-            shift.true_zero_shot_types.len() >= 1,
+            !shift.true_zero_shot_types.is_empty(),
             "Should have at least 1 true zero-shot type"
         );
         assert!(shift.true_zero_shot_types.contains(&"DISEASE".to_string()));
@@ -1481,11 +1481,13 @@ mod tests {
 
     #[test]
     fn test_coref_doc_stats_book_scale_spread() {
-        let mut stats = CorefDocStats::default();
+        let mut stats = CorefDocStats {
+            avg_entity_spread: 1000,
+            max_entity_spread: 5000,
+            ..Default::default()
+        };
 
         // Low spread - not book-scale
-        stats.avg_entity_spread = 1000;
-        stats.max_entity_spread = 5000;
         assert!(!stats.has_book_scale_spread());
 
         // High avg spread - book-scale

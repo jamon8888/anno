@@ -219,13 +219,11 @@ fn find_sentence(text: &str, start: usize, end: usize) -> (Option<String>, Optio
     }
 
     // Find end of sentence (scan forward from entity end)
-    let mut sentence_end = char_count;
-    for i in end.min(char_count)..char_count {
-        if sentence_terminators.contains(&chars[i]) {
-            sentence_end = i + 1;
-            break;
-        }
-    }
+    let sentence_end = chars[end.min(char_count)..char_count]
+        .iter()
+        .position(|&c| sentence_terminators.contains(&c))
+        .map(|pos| end.min(char_count) + pos + 1)
+        .unwrap_or(char_count);
 
     // Extract sentence using character indices
     let sentence: String = chars[sentence_start..sentence_end].iter().collect();
@@ -330,13 +328,12 @@ fn format_tsv(contexts: &[EntityContext]) -> String {
             c.start,
             c.end,
             c.confidence,
-            c.left_context.replace('\t', " ").replace('\n', " "),
-            c.right_context.replace('\t', " ").replace('\n', " "),
+            c.left_context.replace(['\t', '\n'], " "),
+            c.right_context.replace(['\t', '\n'], " "),
             c.sentence
                 .as_deref()
                 .unwrap_or("")
-                .replace('\t', " ")
-                .replace('\n', " ")
+                .replace(['\t', '\n'], " ")
         ));
     }
     output

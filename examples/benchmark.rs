@@ -1020,7 +1020,8 @@ fn print_per_type_metrics(per_type: &HashMap<String, anno::eval::TypeMetrics>) {
 fn run_real_dataset_evaluation() -> Result<(), Box<dyn std::error::Error>> {
     use anno::eval::datasets::GoldEntity;
     use anno::eval::evaluate_ner_model;
-    use anno::eval::loader::{DatasetId, DatasetLoader};
+    use anno::eval::loader::DatasetId;
+    use anno::eval::{DatasetLoader, LoadableDatasetId};
     use anno::StackedNER;
 
     let loader = DatasetLoader::new()?;
@@ -1041,7 +1042,15 @@ fn run_real_dataset_evaluation() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "-".repeat(64));
 
     for dataset_id in &datasets {
-        match loader.load_or_download(*dataset_id) {
+        let loadable = match LoadableDatasetId::try_from(*dataset_id) {
+            Ok(id) => id,
+            Err(e) => {
+                println!("{:<20} Load error: {}", dataset_id.name(), e);
+                continue;
+            }
+        };
+
+        match loader.load_or_download(loadable) {
             Ok(dataset) => {
                 // Convert to evaluation format
                 let test_cases: Vec<(String, Vec<GoldEntity>)> = dataset

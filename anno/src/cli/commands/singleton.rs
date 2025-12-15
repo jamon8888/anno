@@ -196,9 +196,10 @@ fn classify_singleton(
     let entity_words: Vec<&str> = entity.text.split_whitespace().collect();
 
     // Check if this is a generic reference (starts with "a", "an", "the", "some")
-    if entity_words.first().map_or(false, |w| {
-        ["a", "an", "the", "some", "any"].contains(&w.to_lowercase().as_str())
-    }) {
+    if entity_words
+        .first()
+        .is_some_and(|w| ["a", "an", "the", "some", "any"].contains(&w.to_lowercase().as_str()))
+    {
         return SingletonReason::GenericReference;
     }
 
@@ -269,7 +270,7 @@ fn classify_singleton(
             .map_or(false, |c| c.is_uppercase())
     {
         let prev_char = text.chars().nth(entity.start - 1);
-        if prev_char.map_or(false, |c| c != '.' && c != '!' && c != '?') {
+        if prev_char.is_some_and(|c| c != '.' && c != '!' && c != '?') {
             return SingletonReason::UniqueProperNoun;
         }
     }
@@ -397,7 +398,7 @@ fn print_json_report(report: &SingletonReport) {
 
 fn print_tsv_report(report: &SingletonReport) {
     println!("text\ttype\tstart\tend\tconfidence\treason");
-    for (_entity_type, singletons) in &report.singletons_by_type {
+    for singletons in report.singletons_by_type.values() {
         for s in singletons {
             let reason_str = match &s.reason {
                 SingletonReason::FirstMentionOnly => "first_mention",

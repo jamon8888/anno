@@ -288,9 +288,9 @@ fn e2e_calibration_metrics_consistency() {
     let e = ece(&samples, 10);
 
     // Basic bounds
-    assert!(brier >= 0.0 && brier <= 1.0);
+    assert!((0.0..=1.0).contains(&brier));
     assert!(ce >= 0.0);
-    assert!(e >= 0.0 && e <= 1.0);
+    assert!((0.0..=1.0).contains(&e));
 
     // This model is somewhat calibrated but not perfect
     // Should have moderate scores

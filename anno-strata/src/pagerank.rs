@@ -217,7 +217,7 @@ mod tests {
         assert_eq!(scores.len(), 3);
 
         // All nodes should have positive scores
-        for (_, score) in &scores {
+        for score in scores.values() {
             assert!(*score > 0.0);
         }
 

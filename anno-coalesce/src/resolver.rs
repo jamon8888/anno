@@ -504,7 +504,7 @@ mod proptests {
         #[test]
         fn string_sim_bounded(a in ".*", b in ".*") {
             let sim = string_similarity(&a, &b);
-            prop_assert!(sim >= 0.0 && sim <= 1.0);
+            prop_assert!((0.0..=1.0).contains(&sim));
         }
 
         /// String similarity is symmetric
@@ -536,7 +536,7 @@ mod proptests {
             }).collect();
 
             let sim = embedding_similarity(&emb1, &emb2);
-            prop_assert!(sim >= 0.0 && sim <= 1.0,
+            prop_assert!((0.0..=1.0).contains(&sim),
                 "Embedding similarity out of bounds: {}", sim);
         }
 

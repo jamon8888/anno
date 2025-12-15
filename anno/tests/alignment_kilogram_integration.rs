@@ -12,7 +12,9 @@ use serde::Deserialize;
 struct TangramSND {
     tangram_id: String,
     snd: f64,
+    #[allow(dead_code)]
     nameability: f64,
+    #[allow(dead_code)]
     num_annotations: usize,
 }
 
@@ -112,7 +114,7 @@ fn test_adaptive_threshold_with_kilogram_nameability() {
 #[test]
 fn test_alignment_accumulation_reduces_threshold() {
     let config = AdaptiveResolutionConfig::default();
-    let base_threshold = config.base_threshold;
+    let _base_threshold = config.base_threshold;
 
     // No evidence → threshold near base
     let no_evidence = AlignmentScore::new();
@@ -162,7 +164,7 @@ fn test_generalization_gradient_quadratic_vs_linear() {
     let q_high = quadratic
         .threshold_adjustment(high_sim, confidence, max_adj)
         .abs();
-    let l_high = linear
+    let _l_high = linear
         .threshold_adjustment(high_sim, confidence, max_adj)
         .abs();
 
