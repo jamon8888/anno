@@ -34,35 +34,35 @@ fn e2e_single_doc_with_coref() {
         0.80,
     ));
 
-    let sig5 = doc.add_signal(Signal::new(
+    let _sig5 = doc.add_signal(Signal::new(
         4,
         Location::text(17, 19),
         "44th",
         "ORDINAL",
         0.95,
     ));
-    let sig6 = doc.add_signal(Signal::new(
+    let _sig6 = doc.add_signal(Signal::new(
         5,
         Location::text(23, 48),
         "President of the United States",
         "ORG",
         0.90,
     ));
-    let sig7 = doc.add_signal(Signal::new(
+    let _sig7 = doc.add_signal(Signal::new(
         6,
         Location::text(48, 56),
         "United States",
         "LOC",
         0.95,
     ));
-    let sig8 = doc.add_signal(Signal::new(
+    let _sig8 = doc.add_signal(Signal::new(
         7,
         Location::text(75, 81),
         "Hawaii",
         "LOC",
         0.95,
     ));
-    let sig9 = doc.add_signal(Signal::new(
+    let _sig9 = doc.add_signal(Signal::new(
         8,
         Location::text(110, 125),
         "Washington, D.C.",

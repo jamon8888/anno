@@ -9,6 +9,7 @@
 //!
 //! NOTE: Some coref tests are disabled pending API stabilization.
 
+#![allow(unexpected_cfgs)]
 #![allow(dead_code, unused_imports)]
 
 use anno::{Entity, EntityType};
@@ -139,6 +140,7 @@ mod e2e_coref_tests {
 // =============================================================================
 
 #[cfg(all(feature = "eval", feature = "cdcr"))]
+#[allow(unexpected_cfgs)]
 mod cdcr_tests {
     use super::*;
     use anno::eval::cdcr::{CDCRConfig, CDCRResolver, Document};
@@ -197,6 +199,7 @@ mod cdcr_tests {
 // These tests validate that Korean text doesn't break coreference infrastructure.
 
 #[cfg(all(feature = "eval", feature = "korean_coref_tests"))]
+#[allow(unexpected_cfgs)]
 mod korean_coref_tests {
     use super::*;
 

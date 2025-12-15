@@ -94,7 +94,11 @@ fn main() {
         println!("Entity type performance for {}:", backend.name);
 
         let mut types: Vec<_> = backend.by_entity_type.iter().collect();
-        types.sort_by(|a, b| b.1.f1.partial_cmp(&a.1.f1).unwrap());
+        types.sort_by(|a, b| {
+            b.1.f1
+                .partial_cmp(&a.1.f1)
+                .expect("F1 scores should be comparable")
+        });
 
         for (entity_type, metrics) in types.iter().take(8) {
             let bar = "█".repeat((metrics.f1 * 20.0) as usize);

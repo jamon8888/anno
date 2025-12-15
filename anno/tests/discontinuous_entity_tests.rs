@@ -132,6 +132,7 @@ fn test_discontinuous_span_empty() {
 
 #[test]
 fn test_discontinuous_span_single_segment() {
+    #[allow(clippy::single_range_in_vec_init)]
     let span = DiscontinuousSpan::new(vec![0..10]);
 
     assert!(span.is_contiguous());

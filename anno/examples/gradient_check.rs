@@ -278,12 +278,14 @@ fn check_gradients(
 // Test Cases
 // ===========================================================================
 
-fn create_test_cases() -> Vec<(
+type TestCase = (
     String,
     TrainingExample,
     HashMap<usize, EntityType>,
     HashMap<usize, Option<usize>>,
-)> {
+);
+
+fn create_test_cases() -> Vec<TestCase> {
     let mut cases = Vec::new();
 
     // Case 1: Simple new cluster

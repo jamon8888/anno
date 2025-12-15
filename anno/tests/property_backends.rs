@@ -20,7 +20,7 @@ fn slow_config() -> ProptestConfig {
 fn arb_text() -> impl Strategy<Value = String> {
     prop::collection::vec(
         prop::string::string_regex(r"[A-Za-z0-9\s.,!?'-]{1,50}")
-            .unwrap()
+            .expect("regex pattern should be valid")
             .prop_filter("non-empty", |s| !s.trim().is_empty()),
         1..20,
     )
