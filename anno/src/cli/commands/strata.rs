@@ -173,7 +173,7 @@ fn format_human_output(graph: &GraphDocument, levels: usize) -> String {
                 if let Some(community_val) = community_id.as_u64() {
                     communities
                         .entry(community_val)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(&node.name);
                 }
             }

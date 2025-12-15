@@ -492,8 +492,7 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             }
 
                             // Reuse parsed result (preserves original error message)
-                            let dataset_id: DatasetId =
-                                parsed_dataset_result.clone().map_err(|e| e)?;
+                            let dataset_id: DatasetId = parsed_dataset_result.clone()?;
 
                             if !dataset_id.is_coreference() {
                                 return Err(format!("Dataset '{}' is not a coreference dataset. Use: gap, preco, or litbank", dataset));
@@ -609,8 +608,7 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             }
 
                             // Reuse parsed result (preserves original error message)
-                            let dataset_id: DatasetId =
-                                parsed_dataset_result.clone().map_err(|e| e)?;
+                            let dataset_id: DatasetId = parsed_dataset_result.clone()?;
 
                             if !dataset_id.is_relation_extraction() {
                                 return Err(format!("Dataset '{}' is not a relation extraction dataset. Use: docred or retacred", dataset));
@@ -1216,7 +1214,10 @@ fn run_check(issues_only: bool, dataset: Option<&str>, _fix: bool) -> Result<(),
             .count();
         let with_entity_types = datasets_to_check
             .iter()
-            .filter(|d| !d.entity_types().is_empty() && d.entity_types() != &["ENTITY"])
+            .filter(|d| {
+                let types = d.entity_types();
+                !types.is_empty() && types != ["ENTITY"]
+            })
             .count();
 
         println!("Statistics:");

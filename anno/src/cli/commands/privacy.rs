@@ -117,7 +117,7 @@ pub fn run(args: PrivacyArgs) -> Result<(), String> {
     // Classify entities as PII
     let pii_entities: Vec<PIIEntity> = entities
         .iter()
-        .filter_map(|e| classify_pii(e))
+        .filter_map(classify_pii)
         .filter(|pii| {
             args.types.is_empty()
                 || args

@@ -7,7 +7,7 @@
 
 use clap::{Parser, ValueEnum};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::super::output::color;
 use super::super::parser::ModelBackend;
@@ -104,7 +104,7 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
         match export_file(
             file,
             &args.output,
-            &model,
+            &**model,
             args.format,
             args.include_confidence,
             args.overwrite,
@@ -152,9 +152,9 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
 }
 
 fn export_file(
-    input: &PathBuf,
-    output_dir: &PathBuf,
-    model: &Box<dyn crate::Model>,
+    input: &Path,
+    output_dir: &Path,
+    model: &dyn crate::Model,
     format: ExportFormat,
     include_confidence: bool,
     overwrite: bool,
@@ -278,11 +278,7 @@ fn export_conll(text: &str, entities: &[anno_core::Entity]) -> String {
 }
 
 /// Export to JSONL format
-fn export_jsonl(
-    entities: &[anno_core::Entity],
-    source: &PathBuf,
-    include_confidence: bool,
-) -> String {
+fn export_jsonl(entities: &[anno_core::Entity], source: &Path, include_confidence: bool) -> String {
     let mut lines = Vec::new();
 
     for entity in entities {

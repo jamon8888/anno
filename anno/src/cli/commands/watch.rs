@@ -5,7 +5,7 @@
 use clap::Parser;
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use super::super::output::color;
@@ -245,11 +245,7 @@ fn scan_directory(dir: &PathBuf, extensions: &[String]) -> Result<Vec<PathBuf>, 
 }
 
 /// Process a single file
-fn process_file(
-    path: &PathBuf,
-    model: &Box<dyn crate::Model>,
-    args: &WatchArgs,
-) -> Result<usize, String> {
+fn process_file(path: &Path, model: &dyn crate::Model, args: &WatchArgs) -> Result<usize, String> {
     // Read file content
     let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
 
