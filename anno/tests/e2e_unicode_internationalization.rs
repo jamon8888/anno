@@ -87,9 +87,9 @@ fn e2e_mixed_scripts() {
 
     let _sig1 = doc.add_signal(Signal::new(0, Location::text(0, 5), "Tokyo", "LOC", 0.95));
     let _sig2 = doc.add_signal(Signal::new(1, Location::text(7, 9), "東京", "LOC", 0.95));
-    let sig3 = doc.add_signal(Signal::new(2, Location::text(35, 40), "Japan", "LOC", 0.95));
-    let sig4 = doc.add_signal(Signal::new(3, Location::text(42, 44), "日本", "LOC", 0.95));
-    let sig5 = doc.add_signal(Signal::new(
+    let _sig3 = doc.add_signal(Signal::new(2, Location::text(35, 40), "Japan", "LOC", 0.95));
+    let _sig4 = doc.add_signal(Signal::new(3, Location::text(42, 44), "日本", "LOC", 0.95));
+    let _sig5 = doc.add_signal(Signal::new(
         4,
         Location::text(46, 52),
         "Москва",
