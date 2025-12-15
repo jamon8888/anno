@@ -766,7 +766,7 @@ impl AnnotatedSentence {
                     .join(" ");
 
                 let start = token_starts.get(i).copied().unwrap_or(0);
-                let end = if end == 0 {
+                let end_char = if end <= i {
                     start
                 } else {
                     let last = end - 1;
@@ -779,7 +779,7 @@ impl AnnotatedSentence {
                     original_label: entity_type.to_string(),
                     entity_type: anno_core::EntityType::from_label(entity_type),
                     start,
-                    end,
+                    end: end_char,
                 });
                 i = end;
             } else {
