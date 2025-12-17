@@ -56,7 +56,7 @@ pub struct EvalArgs {
     pub quiet: bool,
 
     /// Positional text argument
-    #[arg(trailing_var_arg = true)]
+    /// Positional text input
     pub positional: Vec<String>,
 }
 
