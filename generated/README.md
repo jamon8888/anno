@@ -26,7 +26,7 @@ The `define_datasets!` macro in that file generates all dataset-related code.
 
 | File | Status | Notes |
 |------|--------|-------|
-| `datasets.toml` | **Deprecated** | Use JSON instead; kept for backward compat |
+| `datasets.toml` | **Deprecated** | JSON/JSONL are the current artifacts; a root-level `datasets.toml` is no longer generated in this repo |
 | `generated_loader_stubs.rs` | Optional | Loader stub code generation |
 
 ## Regenerating
@@ -46,12 +46,13 @@ python3 scripts/generate_download_configs.py \
 just regenerate-datasets
 ```
 
-## Dataset Count (as of 2025-12-09)
+## Dataset Count (as of 2025-12-16)
 
-- **Registry**: 351 datasets
+- **Registry**: 451 datasets
+- **Loadable**: 295+ datasets (have parse plans for evaluation)
 - **Downloadable**: 371 configs (some have multiple splits)
 - **African languages**: 6 datasets (MasakhaNER, AfriSenti, AfriQA, etc.)
-- **Multilingual**: 49 datasets
+- **Multilingual**: 49+ datasets
 
 ## Architecture Note
 

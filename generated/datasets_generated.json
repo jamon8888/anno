@@ -372,7 +372,7 @@
       "paper_url": "https://aclanthology.org/C16-1111/",
       "requires_license": false,
       "size_hint": "~9k tweets, stratified by time period",
-      "url": "https://raw.githubusercontent.com/GateNLP/broad_twitter_corpus/master/test.bio",
+      "url": "https://huggingface.co/datasets/tner/btc",
       "year": 2016
     },
     {
@@ -418,6 +418,7 @@
         "ORG"
       ],
       "format": "CoNLL",
+      "hf_id": "rmyeid/polyglot_ner",
       "id": "PolyglotNER",
       "is_spdx": false,
       "language": "multi",
@@ -427,7 +428,10 @@
       "paper_url": "https://aclanthology.org/C14-1078/",
       "requires_license": false,
       "size_hint": "40 languages, silver annotations",
-      "url": "https://sites.google.com/site/rmaborhoo/polyglot-ner",
+      "tasks": [
+        "ner"
+      ],
+      "url": "https://huggingface.co/datasets/rmyeid/polyglot_ner",
       "year": 2015
     },
     {
@@ -453,7 +457,7 @@
       "paper_url": "https://aclanthology.org/2022.emnlp-main.13/",
       "requires_license": false,
       "size_hint": "13 languages, gold annotations",
-      "url": "https://github.com/UniversalNER/UNER",
+      "url": "https://github.com/UniversalNER/uner_code",
       "year": 2022
     },
     {
@@ -472,6 +476,7 @@
         "MISC"
       ],
       "format": "CoNLL",
+      "hf_id": "eriktks/conll2002",
       "id": "CoNLL2002",
       "is_spdx": false,
       "language": "multi",
@@ -481,7 +486,10 @@
       "paper_url": "https://aclanthology.org/W02-2024/",
       "requires_license": false,
       "size_hint": "Spanish + Dutch news articles",
-      "url": "https://www.clips.uantwerpen.be/conll2002/ner/",
+      "tasks": [
+        "ner"
+      ],
+      "url": "https://huggingface.co/datasets/eriktks/conll2002",
       "year": 2002
     },
     {
@@ -528,17 +536,20 @@
         "LOC",
         "ORG"
       ],
-      "format": "JSONL",
+      "format": "JSON",
       "id": "GoogleRE",
       "is_spdx": true,
       "language": "en",
       "license": "CC-BY-4.0",
       "name": "Google-RE",
-      "notes": "Clean relation extraction; commonly used for zero-shot RE evaluation",
+      "notes": "Clean relation extraction; commonly used for zero-shot RE evaluation; using place_of_birth subset",
       "paper_url": "https://aclanthology.org/D17-1004/",
       "requires_license": false,
       "size_hint": "~60k relation triples",
-      "url": "https://github.com/google-research-datasets/relation-extraction-corpus",
+      "tasks": [
+        "re"
+      ],
+      "url": "https://raw.githubusercontent.com/google-research-datasets/relation-extraction-corpus/master/20130403-place_of_birth.json",
       "year": 2017
     },
     {
@@ -609,16 +620,17 @@
         "CW"
       ],
       "format": "CoNLL",
+      "hf_id": "samanjoy2/multiconer_v1",
       "id": "MultiCoNER",
       "is_spdx": true,
       "language": "multi",
       "license": "CC-BY-4.0",
       "name": "MultiCoNER",
-      "notes": "SemEval-2022 shared task; complex entities from diverse sources",
+      "notes": "SemEval-2022 shared task; complex entities from diverse sources. Community mirror of original.",
       "paper_url": "https://aclanthology.org/2022.semeval-1.196/",
       "requires_license": false,
       "size_hint": "11 languages, ~1.1M tokens",
-      "url": "https://multiconer.github.io/",
+      "url": "https://huggingface.co/datasets/samanjoy2/multiconer_v1",
       "year": 2022
     },
     {
@@ -640,16 +652,20 @@
         "Scientist"
       ],
       "format": "CoNLL",
+      "hf_id": "MultiCoNER/multiconer_v2",
       "id": "MultiCoNERv2",
       "is_spdx": true,
       "language": "multi",
       "license": "CC-BY-4.0",
       "name": "MultiCoNER v2",
-      "notes": "SemEval-2023 shared task; expanded from v1 with more types",
+      "notes": "SemEval-2023 shared task; expanded from v1 with more types.",
       "paper_url": "https://aclanthology.org/2023.semeval-1.43/",
       "requires_license": false,
       "size_hint": "12 languages, fine-grained types",
-      "url": "https://multiconer.github.io/",
+      "tasks": [
+        "ner"
+      ],
+      "url": "https://huggingface.co/datasets/MultiCoNER/multiconer_v2",
       "year": 2023
     },
     {
@@ -783,8 +799,7 @@
       "expected_f1": 84.0,
       "expected_zero_shot_f1": 74.0,
       "format": "IOB2",
-      "hf_config": "bigbio_kb",
-      "hf_id": "bigbio/bc2gm_corpus",
+      "hf_id": "spyysalo/bc2gm_corpus",
       "id": "BC2GM",
       "is_spdx": false,
       "language": "en",
@@ -794,7 +809,10 @@
       "paper_url": "https://genomebiology.biomedcentral.com/articles/10.1186/gb-2008-9-s2-s2",
       "requires_license": false,
       "size_hint": "20k sentences, ~24k gene mentions",
-      "url": "https://huggingface.co/datasets/bigbio/bc2gm_corpus",
+      "tasks": [
+        "ner"
+      ],
+      "url": "https://huggingface.co/datasets/spyysalo/bc2gm_corpus",
       "year": 2008
     },
     {
@@ -811,8 +829,7 @@
       "expected_f1": 89.0,
       "expected_zero_shot_f1": 79.0,
       "format": "IOB2",
-      "hf_config": "bigbio_kb",
-      "hf_id": "bigbio/bc4chemd",
+      "hf_id": "chintagunta85/bc4chemd",
       "id": "BC4CHEMD",
       "is_spdx": false,
       "language": "en",
@@ -822,7 +839,10 @@
       "paper_url": "https://jcheminf.biomedcentral.com/articles/10.1186/1758-2946-7-S1-S2",
       "requires_license": false,
       "size_hint": "10k PubMed abstracts, ~84k chemical mentions",
-      "url": "https://huggingface.co/datasets/bigbio/bc4chemd",
+      "tasks": [
+        "ner"
+      ],
+      "url": "https://huggingface.co/datasets/chintagunta85/bc4chemd",
       "year": 2015
     },
     {
@@ -858,13 +878,14 @@
       ],
       "citation": "Chen et al. (2018)",
       "description": "Large-scale coreference from PreCo reading comprehension corpus. 10x larger than OntoNotes.",
-      "domain": "general",
+      "domain": "reading_comprehension",
       "entity_types": [
         "PER",
         "LOC",
         "ORG"
       ],
       "format": "JSONL",
+      "hf_id": "coref-data/preco_raw",
       "id": "PreCo",
       "is_spdx": true,
       "language": "en",
@@ -874,7 +895,15 @@
       "paper_url": "https://aclanthology.org/D18-1016/",
       "requires_license": false,
       "size_hint": "38k documents, includes singletons",
-      "url": "https://preschool-lab.github.io/PreCo/",
+      "splits": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "tasks": [
+        "coref"
+      ],
+      "url": "https://huggingface.co/datasets/coref-data/preco_raw",
       "year": 2018
     },
     {
@@ -1000,11 +1029,11 @@
       "language": "en",
       "license": "CC-BY-SA-4.0",
       "name": "WikiCoref",
-      "notes": "Long documents averaging 2k tokens; challenging for span-based models",
+      "notes": "Long documents averaging 2k tokens; challenging for span-based models. Prior download URL has an expired TLS cert; needs a fresh mirror.",
       "paper_url": "https://aclanthology.org/C16-1252/",
-      "requires_license": false,
+      "requires_license": true,
       "size_hint": "30 documents, ~60k tokens",
-      "url": "https://rali.iro.umontreal.ca/rali/en/wikicoref-corpus",
+      "url": "",
       "year": 2016
     },
     {
@@ -1079,11 +1108,11 @@
       "language": "en",
       "license": "PhysioNet",
       "name": "CLEF Clinical Coreference",
-      "notes": "Clinical concept coreference; disorder mentions across sentences",
+      "notes": "Clinical concept coreference; disorder mentions across sentences. Was hosted on PhysioNet; URL appears gone/renamed; requires controlled access.",
       "paper_url": "https://clef2013.clef-initiative.eu/index.php?page=pages/proceedings.php",
-      "requires_license": false,
+      "requires_license": true,
       "size_hint": "298 discharge summaries",
-      "url": "https://physionet.org/content/shareclefehealth2013coreference/",
+      "url": "",
       "year": 2013
     },
     {
@@ -1156,7 +1185,7 @@
       "paper_url": "https://aclanthology.org/2021.americasnlp-1.1/",
       "requires_license": false,
       "size_hint": "12 docs, 332 mentions",
-      "url": "https://raw.githubusercontent.com/Lguyogiro/qxoRef/main/data/conll/all.conll",
+      "url": "https://raw.githubusercontent.com/elizabethpankratz/qxoRef/f0eb5716573b3f428bfcfdda923b195d0e7967b8/qxoRef_AZ23.conll",
       "year": 2021
     },
     {
@@ -1178,7 +1207,7 @@
       "notes": "Tests zero-shot transfer from multilingual models; 10 indigenous languages",
       "paper_url": "https://aclanthology.org/2022.acl-long.435/",
       "requires_license": false,
-      "url": "https://raw.githubusercontent.com/nala-cub/AmericasNLI/main/data/test/quechua_test.tsv",
+      "url": "https://raw.githubusercontent.com/nala-cub/AmericasNLI/be3c351b7e1ae69936c61bfde3e24f30757db9ac/test.tsv",
       "year": 2022
     },
     {
@@ -1189,7 +1218,7 @@
       ],
       "citation": "Zhang et al. (2020)",
       "description": "Cherokee-English parallel corpus for NER transfer. Uses Syllabary script.",
-      "domain": "general",
+      "domain": "indigenous",
       "entity_types": [
         "PER",
         "LOC",
@@ -1201,10 +1230,10 @@
       "language": "chr",
       "license": "Research",
       "name": "Cherokee NER",
-      "notes": "Syllabary script (85 characters); polysynthetic language; ~7k speakers",
+      "notes": "Syllabary script (85 characters); polysynthetic language; ~7k speakers. Prior URL is dead; needs a fresh mirror.",
       "paper_url": "https://aclanthology.org/2020.findings-emnlp.464/",
-      "requires_license": false,
-      "url": "https://raw.githubusercontent.com/ZhangShiyworkhub/ChrEn/main/chr/chr.txt",
+      "requires_license": true,
+      "url": "",
       "year": 2020
     },
     {
@@ -1228,9 +1257,9 @@
       "language": "nah",
       "license": "CC-BY-4.0",
       "name": "Nahuatl NER",
-      "notes": "Polysynthetic Uto-Aztecan language; ~1.7M speakers; includes colonial manuscripts",
-      "requires_license": false,
-      "url": "https://github.com/Lguyogiro/nahuatl-ner",
+      "notes": "Polysynthetic Uto-Aztecan language; ~1.7M speakers; includes colonial manuscripts. Prior URL is dead; needs a fresh mirror.",
+      "requires_license": true,
+      "url": "",
       "year": 2023
     },
     {
@@ -1241,7 +1270,7 @@
       ],
       "citation": "Te Hiku Media (2022)",
       "description": "Named entity recognition for Te Reo Māori. New Zealand indigenous language corpus.",
-      "domain": "general",
+      "domain": "indigenous",
       "entity_types": [
         "PER",
         "LOC",
@@ -1279,9 +1308,9 @@
       "language": "cy",
       "license": "CC-BY-4.0",
       "name": "Welsh NER",
-      "notes": "Celtic language; ~900k speakers; supports Welsh-specific entity types",
-      "requires_license": false,
-      "url": "https://github.com/Portulan/welsh-ner",
+      "notes": "Celtic language; ~900k speakers; supports Welsh-specific entity types. Prior URL is dead; needs a fresh mirror.",
+      "requires_license": true,
+      "url": "",
       "year": 2021
     },
     {
@@ -1305,10 +1334,10 @@
       "language": "eu",
       "license": "CC-BY-4.0",
       "name": "Basque NER",
-      "notes": "Language isolate; agglutinative morphology; ~750k speakers; ergative-absolutive alignment",
-      "requires_license": false,
+      "notes": "Language isolate; agglutinative morphology; ~750k speakers; ergative-absolutive alignment. Prior URL is dead; needs a fresh mirror.",
+      "requires_license": true,
       "size_hint": "~80k tokens",
-      "url": "https://github.com/ixa-ehu/eusner",
+      "url": "",
       "year": 2019
     },
     {
@@ -1336,7 +1365,13 @@
       "notes": "CLEF-HIPE shared task; includes Latin and Classical commentary; OCR noise",
       "paper_url": "https://ceur-ws.org/Vol-3180/paper-83.pdf",
       "requires_license": false,
-      "url": "https://raw.githubusercontent.com/hipe-eval/HIPE-2022-data/main/data/v2.1/de/HIPE-2022-v2.1-hipe2020-de-test.tsv",
+      "splits": [
+        "test"
+      ],
+      "tasks": [
+        "ner"
+      ],
+      "url": "https://raw.githubusercontent.com/hipe-eval/HIPE-2022-data/147f5bc3c7fb7e5c6b024a9ffd6503cd019fb9ea/data/v2.1/hipe2020/de/HIPE-2022-v2.1-hipe2020-test-de.tsv",
       "year": 2022
     },
     {
@@ -1373,7 +1408,7 @@
       "tasks": [
         "ner"
       ],
-      "url": "https://github.com/UniBuc-HistNERo/HistNERo",
+      "url": "https://github.com/avramandrei/histnero",
       "year": 2024
     },
     {
@@ -1520,9 +1555,7 @@
         "test"
       ],
       "tasks": [
-        "ner",
-        "re",
-        "coref"
+        "re"
       ],
       "url": "https://raw.githubusercontent.com/mainlp/CrossRE/main/crossre_data/ai-test.json",
       "year": 2019
@@ -1549,9 +1582,9 @@
       "name": "Re-TACRED",
       "notes": "Cleaned version of TACRED with ~23% relabeled; requires original TACRED",
       "paper_url": "https://aclanthology.org/2021.acl-long.359/",
-      "requires_license": false,
+      "requires_license": true,
       "size_hint": "~106k relations",
-      "url": "https://raw.githubusercontent.com/mainlp/CrossRE/main/crossre_data/news-test.json",
+      "url": "",
       "year": 2021
     },
     {
@@ -1602,6 +1635,7 @@
       ],
       "example": "'severe [pain]...in my [legs]' -> ADR spans [0:10, 20:24] (discontinuous)",
       "format": "BRAT",
+      "hf_id": "KevinSpaghetti/cadec",
       "id": "CADEC",
       "is_spdx": false,
       "language": "en",
@@ -1611,6 +1645,15 @@
       "paper_url": "https://pubmed.ncbi.nlm.nih.gov/25817970/",
       "requires_license": false,
       "size_hint": "~1,250 posts",
+      "splits": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "tasks": [
+        "ner",
+        "discontinuous_ner"
+      ],
       "url": "https://huggingface.co/datasets/KevinSpaghetti/cadec",
       "year": 2015
     },
@@ -1725,7 +1768,7 @@
       "notes": "CRAC shared task standard; includes zero anaphora; harmonized across treebanks",
       "paper_url": "https://aclanthology.org/2022.lrec-1.581/",
       "requires_license": false,
-      "url": "https://ufal.mff.cuni.cz/corefud/corefud-1.3.zip",
+      "url": "http://hdl.handle.net/11234/1-5987",
       "year": 2022
     },
     {
@@ -1904,16 +1947,16 @@
       "language": "de",
       "license": "CC-BY-4.0",
       "name": "DROC",
-      "notes": "First public German literary coreference dataset",
+      "notes": "First public German literary coreference dataset. Prior URL is dead; needs a fresh mirror.",
       "paper_url": "https://aclanthology.org/L18-1045/",
-      "requires_license": false,
+      "requires_license": true,
       "splits": [
         "all"
       ],
       "tasks": [
         "coref"
       ],
-      "url": "https://raw.githubusercontent.com/dbamman/droc/main/data/dta_reduced.jsonl",
+      "url": "",
       "year": 2018
     },
     {
@@ -1921,23 +1964,28 @@
         "coref",
         "literary"
       ],
-      "citation": "Shin et al. (2023)",
-      "description": "Fantasy fiction coreference. Handles entity transformations.",
+      "citation": "Han et al. (2021)",
+      "description": "Fantasy fiction coreference. Handles entity transformations. 211 Grimms' stories.",
       "domain": "literature",
       "entity_types": [
         "PER",
         "LOC",
         "ORG"
       ],
+      "format": "JSONL",
       "id": "FantasyCoref",
       "is_spdx": false,
       "language": "en",
       "license": "Research",
       "name": "FantasyCoref",
-      "notes": "Shape-shifting, possession, disguise - unique challenges",
-      "paper_url": "https://aclanthology.org/2023.tacl-1.52/",
-      "requires_license": true,
-      "url": ""
+      "notes": "Shape-shifting, possession, disguise - unique challenges; data on GitHub",
+      "paper_url": "https://aclanthology.org/2021.emnlp-main.672/",
+      "requires_license": false,
+      "tasks": [
+        "coref"
+      ],
+      "url": "https://github.com/emorynlp/FantasyCoref/archive/refs/heads/main.zip",
+      "year": 2021
     },
     {
       "annotation_scheme": "CoNLLCoref",
@@ -1954,14 +2002,14 @@
       ],
       "example": "doc_key: pride_and_prejudice_1342\nsentences: [[CHAPTER, I.], [It, is, a, truth, ...]]\nclusters: [[[79,80], [81,82], ...], ...]\ncharacters: [{name: Mr Bennet, cluster: [[79,80]]}]",
       "expected_docs": 53,
-      "format": "Custom",
+      "format": "JSONL",
       "hf_id": "sapienzanlp/bookcoref",
       "id": "BookCoref",
       "is_spdx": true,
       "language": "en",
       "license": "CC-BY-NC-SA-4.0",
       "name": "BOOKCOREF",
-      "notes": "Gold test set: 3 books (Animal Farm, Siddhartha, Pride & Prejudice). Silver train: 45 books. Unprecedented 73k avg mention distance. Current systems drop ~15 CoNLL F1 from windowed to full-book eval.",
+      "notes": "Gold test set: 3 books (Animal Farm, Siddhartha, Pride & Prejudice). Silver train: 45 books. Unprecedented 73k avg mention distance. Requires HF datasets Python lib to download; export to JSONL for anno loader.",
       "paper_url": "https://aclanthology.org/2025.acl-long.1197/",
       "requires_license": false,
       "size_hint": "53 books, ~10.8M tokens silver, 229k tokens gold",
@@ -1988,7 +2036,7 @@
       "entity_types": [
         "PER"
       ],
-      "format": "Custom",
+      "format": "JSONL",
       "hf_config": "split",
       "hf_id": "sapienzanlp/bookcoref",
       "id": "BookCorefSplit",
@@ -1996,7 +2044,7 @@
       "language": "en",
       "license": "CC-BY-NC-SA-4.0",
       "name": "BOOKCOREF (Split)",
-      "notes": "Same data as BOOKCOREF but windowed. Enables fair comparison: Maverickxl gets 82.2 CoNLL F1 on split vs 61.0 on full books.",
+      "notes": "Same data as BOOKCOREF but windowed. Enables fair comparison: Maverickxl gets 82.2 CoNLL F1 on split vs 61.0 on full books. Requires HF datasets Python lib to download.",
       "paper_url": "https://aclanthology.org/2025.acl-long.1197/",
       "requires_license": false,
       "size_hint": "7544 train, 398 val, 152 test windows",
@@ -2093,6 +2141,7 @@
         "LOC",
         "ORG"
       ],
+      "format": "CoNLL",
       "id": "TwiConv",
       "is_spdx": false,
       "language": "en",
@@ -2116,11 +2165,13 @@
         "LOC",
         "ORG"
       ],
+      "format": "JSON",
       "id": "MuDoCo",
       "is_spdx": true,
       "language": "en",
       "license": "MIT",
       "name": "MuDoCo",
+      "notes": "Multi-domain dialog coreference with speaker tracking",
       "paper_url": "https://arxiv.org/abs/2005.00816",
       "requires_license": false,
       "url": "https://raw.githubusercontent.com/facebookresearch/mudoco/main/mudoco_calling.json"
@@ -2205,8 +2256,8 @@
         "dialogue"
       ],
       "citation": "Reddy et al. (2019)",
-      "description": "Conversational Question Answering. Multi-turn QA requiring entity mention resolution.",
-      "domain": "general",
+      "description": "Conversational QA across 7 domains: children's stories, literature, mid/high school exams, news, Wikipedia, science, Reddit.",
+      "domain": "mixed",
       "entity_types": [
         "ANSWER_SPAN"
       ],
@@ -2326,7 +2377,7 @@
       ],
       "citation": "Poesio et al. (2024)",
       "description": "Multi-genre anaphoric annotation: identity, bridging, discourse deixis, split antecedents.",
-      "domain": "general",
+      "domain": "mixed",
       "entity_types": [
         "PER",
         "LOC",
@@ -2338,7 +2389,7 @@
       "is_spdx": false,
       "language": "en",
       "license": "LDC + Research",
-      "name": "ARRAU 3.0",
+      "name": "ARRAU 3.0 (v2)",
       "notes": "Most comprehensive anaphora resource; RST/TRAINS/Pear/GENIA subsets; LDC2023T05",
       "paper_url": "https://aclanthology.org/2024.codi-1.12/",
       "requires_license": true,
@@ -2368,15 +2419,19 @@
         "LOC",
         "ORG"
       ],
+      "format": "MMAX2",
       "id": "ISNotes",
       "is_spdx": false,
       "language": "en",
       "license": "Research",
       "name": "ISNotes",
-      "notes": "Part-whole, set-member, and other bridging relations",
+      "notes": "Part-whole set-member bridging; requires OntoNotes for full text",
       "paper_url": "https://direct.mit.edu/coli/article/44/2/237/1596/",
       "requires_license": false,
-      "url": "https://www.h-its.org/software/isnotes-corpus/"
+      "tasks": [
+        "coref"
+      ],
+      "url": "https://github.com/nlpAThits/ISNotes1.0/archive/refs/heads/master.zip"
     },
     {
       "categories": [
@@ -2384,7 +2439,7 @@
       ],
       "citation": "Kolhatkar & Hirst (2012)",
       "description": "Anaphoric shell noun resolution. 670 English shell nouns from Schmid taxonomy.",
-      "domain": "general",
+      "domain": "academic",
       "entity_types": [],
       "id": "ShellNouns",
       "is_spdx": false,
@@ -2483,6 +2538,262 @@
     },
     {
       "categories": [
+        "dialogue",
+        "abstract_anaphora"
+      ],
+      "citation": "Rudaz, Broth & Mlynář (2025)",
+      "description": "Naturalistic French dialogue from human-voice agent interactions. Response tokens, aside sequences, discourse deixis.",
+      "domain": "dialogue",
+      "entity_types": [
+        "RESPONSE_TOKEN",
+        "DISCOURSE_DEIXIS",
+        "PROPOSITIONAL_ANAPHORA"
+      ],
+      "format": "JSONL",
+      "id": "HumanVoiceAgentInteraction",
+      "is_spdx": false,
+      "language": "fr",
+      "license": "Research",
+      "name": "Human-Voice Agent Interaction",
+      "notes": "French dialogue from Pepper robot (2022) and ChatGPT voice mode (2025). Documents 'managed omnirelevance of speech' - how VAD-based agents misinterpret response tokens and asides. Local dataset at testdata/human_voice_agent/",
+      "paper_url": "https://dl.acm.org/journal/tochi",
+      "requires_license": true,
+      "size_hint": "70 turns, 10 discourse deixis examples, 11 response tokens",
+      "splits": [
+        "all"
+      ],
+      "tasks": [
+        "coref",
+        "abstract_anaphora"
+      ],
+      "url": "",
+      "year": 2025
+    },
+    {
+      "categories": [
+        "multilingual",
+        "abstract_anaphora"
+      ],
+      "citation": "Wang et al. (2023)",
+      "description": "Discourse-aware evaluation benchmark for language modeling. 9 document-level testsets covering cohesion, coherence across Chinese/English literature.",
+      "domain": "literature",
+      "entity_types": [],
+      "format": "Custom",
+      "id": "DiscoBench",
+      "is_spdx": true,
+      "language": "zh-en",
+      "license": "CC-BY-4.0",
+      "name": "Disco-Bench",
+      "notes": "Tests intra-sentence discourse properties: cohesion, coherence, entity tracking. Evaluates LLMs on discourse phenomena that cross sentences.",
+      "paper_url": "https://arxiv.org/abs/2307.08074",
+      "requires_license": true,
+      "size_hint": "9 document-level testsets + diagnostic suite",
+      "splits": [
+        "test"
+      ],
+      "tasks": [
+        "discourse_coherence"
+      ],
+      "url": "",
+      "year": 2023
+    },
+    {
+      "categories": [
+        "coref",
+        "multilingual",
+        "abstract_anaphora"
+      ],
+      "citation": "Bu, Levine & Zeldes (2025)",
+      "description": "Multilingual LLM benchmark for discourse tracking. 12 languages, 4 levels: salience, entity tracking, discourse relations, bridging.",
+      "domain": "general",
+      "entity_types": [
+        "SALIENT_ENTITY",
+        "TRACKED_ENTITY",
+        "BRIDGING_REF"
+      ],
+      "format": "Custom",
+      "id": "DiscoTrack",
+      "is_spdx": true,
+      "language": "multi",
+      "license": "CC-BY-4.0",
+      "name": "DiscoTrack",
+      "notes": "Tests implicit information and pragmatic inference across documents. Four levels: salience recognition, entity tracking, discourse relations, bridging inference. State-of-the-art models still struggle.",
+      "paper_url": "https://arxiv.org/abs/2510.17013",
+      "requires_license": true,
+      "size_hint": "12 languages, 4 task levels",
+      "splits": [
+        "test"
+      ],
+      "tasks": [
+        "coref",
+        "bridging",
+        "discourse_deixis"
+      ],
+      "url": "",
+      "year": 2025
+    },
+    {
+      "categories": [
+        "abstract_anaphora"
+      ],
+      "citation": "Zhu & Frank (2024)",
+      "description": "Linguistically-Informed Evaluation for Discourse Entity Recognition. Tests existence, uniqueness, plurality, novelty.",
+      "domain": "evaluation",
+      "entity_types": [
+        "DISCOURSE_ENTITY"
+      ],
+      "format": "Custom",
+      "id": "LIEDER",
+      "is_spdx": false,
+      "language": "en",
+      "license": "Research",
+      "name": "LIEDER",
+      "notes": "Tests LLM knowledge of semantic properties governing discourse entity introduction/reference: existence, uniqueness, plurality, novelty. Models show sensitivity to all except novelty.",
+      "paper_url": "https://arxiv.org/abs/2403.06301",
+      "requires_license": true,
+      "size_hint": "Controlled evaluation set",
+      "splits": [
+        "test"
+      ],
+      "tasks": [
+        "discourse_deixis"
+      ],
+      "url": "",
+      "year": 2024
+    },
+    {
+      "categories": [
+        "abstract_anaphora"
+      ],
+      "citation": "Lai & Tetreault (2018)",
+      "description": "Grammarly Corpus of Discourse Coherence. Real-world texts with coherence ratings across 4 domains.",
+      "domain": "mixed",
+      "entity_types": [],
+      "format": "TSV",
+      "id": "GCDC",
+      "is_spdx": false,
+      "language": "en",
+      "license": "Research",
+      "name": "GCDC",
+      "notes": "Four domains: Clinton emails, Enron, Yahoo answers, Yelp. First large-scale discourse coherence evaluation.",
+      "paper_url": "https://arxiv.org/abs/1805.04993",
+      "requires_license": true,
+      "size_hint": "~2000 texts, 4 domains",
+      "splits": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "tasks": [
+        "discourse_coherence"
+      ],
+      "url": "",
+      "year": 2018
+    },
+    {
+      "categories": [
+        "dialogue",
+        "abstract_anaphora"
+      ],
+      "citation": "Kennard et al. (2022)",
+      "description": "Discourse Structure in Peer Review Discussions. 20k sentences in 506 review-rebuttal pairs with argumentation annotation.",
+      "domain": "scientific",
+      "entity_types": [
+        "REVIEW_ARG",
+        "REBUTTAL_ARG",
+        "STANCE"
+      ],
+      "format": "JSONL",
+      "id": "DISAPERE",
+      "is_spdx": true,
+      "language": "en",
+      "license": "CC-BY-4.0",
+      "name": "DISAPERE",
+      "notes": "Discourse relations between reviews and rebuttals. Fine-grained rebuttal annotation: context in review, stance toward arguments. Expert-annotated. DOWNLOADED to anno cache.",
+      "paper_url": "https://arxiv.org/abs/2110.08520",
+      "requires_license": false,
+      "size_hint": "20k sentences, 506 review-rebuttal pairs",
+      "splits": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "tasks": [
+        "discourse_relations"
+      ],
+      "url": "https://github.com/nnkennard/DISAPERE",
+      "year": 2022
+    },
+    {
+      "categories": [
+        "dialogue",
+        "abstract_anaphora"
+      ],
+      "citation": "Sileo et al. (2022)",
+      "description": "Pragmatics-centered evaluation framework: 11 datasets covering discourse relations, speech acts, stance, sarcasm, verifiability.",
+      "domain": "dialogue",
+      "entity_types": [],
+      "format": "TSV",
+      "hf_id": "pragmeval",
+      "id": "PragmEval",
+      "is_spdx": false,
+      "language": "en",
+      "license": "Research",
+      "name": "PragmEval",
+      "notes": "Compilation of PDTB, STAC, GUM (discourse relations), Emergent (stance), SarcasmV2, SwitchBoard/MRDA (speech acts), Verifiability, Persuasion, Squinky, EmoBank. DOWNLOADED to anno cache.",
+      "paper_url": "https://aclanthology.org/2022.lrec-1.255",
+      "requires_license": false,
+      "size_hint": "20 subsets, ~130k examples total",
+      "splits": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "tasks": [
+        "discourse_relations",
+        "speech_act_classification"
+      ],
+      "url": "https://github.com/sileod/pragmeval",
+      "year": 2022
+    },
+    {
+      "categories": [
+        "multilingual",
+        "dialogue",
+        "abstract_anaphora"
+      ],
+      "citation": "DISRPT Organizers (2025)",
+      "description": "Cross-formalism benchmark for discourse segmentation, connective detection, and relation classification. 39 corpora, 16 languages, 6 frameworks.",
+      "domain": "general",
+      "entity_types": [
+        "DISCOURSE_UNIT",
+        "CONNECTIVE",
+        "DISCOURSE_RELATION"
+      ],
+      "format": "CoNLL",
+      "id": "DISRPT2025",
+      "is_spdx": false,
+      "language": "multi",
+      "license": "Research",
+      "name": "DISRPT 2025",
+      "notes": "Unified 17-label relation scheme mapping 353 original labels. Includes RST, eRST, SDRT, PDTB, dependency, ISO frameworks. Czech, German, English, Basque, Persian, French, Italian, Dutch, Nigerian Pidgin, Polish, Portuguese, Russian, Spanish, Thai, Turkish, Chinese. EMNLP 2025 shared task.",
+      "paper_url": "https://aclanthology.org/2025.disrpt-1.1.pdf",
+      "requires_license": false,
+      "size_hint": "39 corpora, 5.1M tokens, 311k relations",
+      "splits": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "tasks": [
+        "discourse_segmentation",
+        "discourse_relations"
+      ],
+      "url": "https://github.com/disrpt/sharedtask2025",
+      "year": 2025
+    },
+    {
+      "categories": [
         "ner",
         "ancient"
       ],
@@ -2524,6 +2835,7 @@
       ],
       "expected_f1": 70.0,
       "expected_zero_shot_f1": 60.0,
+      "format": "CoNLLU",
       "id": "LatinUD",
       "is_spdx": true,
       "language": "la",
@@ -2547,12 +2859,13 @@
         "LOC",
         "ORG"
       ],
+      "format": "CoNLLU",
       "id": "CopticScriptorium",
       "is_spdx": true,
       "language": "cop",
       "license": "CC-BY-4.0",
       "name": "Coptic Scriptorium",
-      "notes": "Multi-layer: morphology, syntax, entities, coreference",
+      "notes": "Multi-layer morphology/syntax/entities/coreference; requires ANNIS export",
       "paper_url": "https://aclanthology.org/L16-1313/",
       "requires_license": false,
       "url": "https://data.copticscriptorium.org/"
@@ -2580,6 +2893,10 @@
       "notes": "First systematic biblical Hebrew NER+coref",
       "paper_url": "https://lt4hala2024.github.io/",
       "requires_license": true,
+      "tasks": [
+        "ner",
+        "coref"
+      ],
       "url": ""
     },
     {
@@ -2596,12 +2913,13 @@
         "ORG",
         "DIVINE"
       ],
+      "format": "JSON",
       "id": "ORACC",
       "is_spdx": true,
       "language": "akk",
       "license": "CC-BY-SA-3.0",
       "name": "ORACC",
-      "notes": "Cuneiform; logographic+syllabic; polyphony challenges",
+      "notes": "Cuneiform logographic+syllabic polyphony challenges; JSON export via API",
       "paper_url": "http://oracc.museum.upenn.edu/doc/about/index.html",
       "requires_license": false,
       "url": "http://oracc.museum.upenn.edu/"
@@ -2682,7 +3000,11 @@
       "citation": "Muhammad et al. (2023)",
       "description": "Sentiment analysis for 14 African languages. 110k+ tweets. SemEval 2023 Task 12.",
       "domain": "social_media",
-      "entity_types": [],
+      "entity_types": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
       "example": "tweet: ይሄው ነው አይደል የእውቀትሽ ጥግ (Amharic)\nlabel: negative",
       "format": "HuggingFace",
       "hf_id": "shmuhammad/AfriSenti-twitter-sentiment",
@@ -2744,7 +3066,15 @@
       "citation": "Adelani et al. (2023)",
       "description": "News topic classification for 16 African languages.",
       "domain": "news",
-      "entity_types": [],
+      "entity_types": [
+        "business",
+        "entertainment",
+        "health",
+        "politics",
+        "religion",
+        "sports",
+        "technology"
+      ],
       "format": "HuggingFace",
       "hf_id": "masakhane/masakhanews",
       "id": "MasakhaNEWS",
@@ -2767,6 +3097,198 @@
       "year": 2023
     },
     {
+      "categories": [
+        "ner"
+      ],
+      "citation": "Zhang et al. (2015)",
+      "description": "News article topic classification. 4 classes: World, Sports, Business, Sci/Tech.",
+      "domain": "news",
+      "entity_types": [
+        "World",
+        "Sports",
+        "Business",
+        "Sci/Tech"
+      ],
+      "format": "HuggingFace",
+      "hf_id": "ag_news",
+      "id": "AGNews",
+      "is_spdx": false,
+      "language": "en",
+      "license": "Non-commercial",
+      "name": "AG News",
+      "notes": "Character-level ConvNet paper; standard text classification benchmark",
+      "paper_url": "https://arxiv.org/abs/1509.01626",
+      "requires_license": false,
+      "size_hint": "120k train, 7.6k test",
+      "splits": [
+        "train",
+        "test"
+      ],
+      "tasks": [
+        "text_classification"
+      ],
+      "url": "https://huggingface.co/datasets/fancyzhx/ag_news",
+      "year": 2015
+    },
+    {
+      "categories": [
+        "ner",
+        "entity_linking"
+      ],
+      "citation": "Zhang et al. (2015)",
+      "description": "Wikipedia article classification. 14 non-overlapping classes from DBpedia ontology.",
+      "domain": "wikipedia",
+      "entity_types": [
+        "Company",
+        "EducationalInstitution",
+        "Artist",
+        "Athlete",
+        "OfficeHolder",
+        "MeanOfTransportation",
+        "Building",
+        "NaturalPlace",
+        "Village",
+        "Animal",
+        "Plant",
+        "Album",
+        "Film",
+        "WrittenWork"
+      ],
+      "format": "HuggingFace",
+      "hf_id": "dbpedia_14",
+      "id": "DBPedia14",
+      "is_spdx": true,
+      "language": "en",
+      "license": "CC-BY-SA-3.0",
+      "name": "DBPedia-14",
+      "notes": "14 classes: Company, EducationalInstitution, Artist, Athlete, OfficeHolder, MeanOfTransportation, Building, NaturalPlace, Village, Animal, Plant, Album, Film, WrittenWork",
+      "paper_url": "https://arxiv.org/abs/1509.01626",
+      "requires_license": false,
+      "size_hint": "560k train, 70k test",
+      "splits": [
+        "train",
+        "test"
+      ],
+      "tasks": [
+        "text_classification"
+      ],
+      "url": "https://huggingface.co/datasets/fancyzhx/dbpedia_14",
+      "year": 2015
+    },
+    {
+      "categories": [
+        "dialogue"
+      ],
+      "citation": "Zhang et al. (2015)",
+      "description": "Question-answer topic classification. 10 classes covering diverse topics.",
+      "domain": "qa",
+      "entity_types": [
+        "Society",
+        "Science",
+        "Health",
+        "Education",
+        "Computers",
+        "Sports",
+        "Business",
+        "Entertainment",
+        "Family",
+        "Politics"
+      ],
+      "format": "HuggingFace",
+      "hf_id": "community-datasets/yahoo_answers_topics",
+      "id": "YahooAnswers",
+      "is_spdx": false,
+      "language": "en",
+      "license": "Non-commercial",
+      "name": "Yahoo Answers Topic",
+      "notes": "10 classes: Society, Science, Health, Education, Computers, Sports, Business, Entertainment, Family, Politics",
+      "paper_url": "https://arxiv.org/abs/1509.01626",
+      "requires_license": false,
+      "size_hint": "1.4M train, 60k test",
+      "splits": [
+        "train",
+        "test"
+      ],
+      "tasks": [
+        "text_classification"
+      ],
+      "url": "https://huggingface.co/datasets/community-datasets/yahoo_answers_topics",
+      "year": 2015
+    },
+    {
+      "categories": [
+        "dialogue"
+      ],
+      "citation": "Li & Roth (2002)",
+      "description": "Question type classification. 6 coarse classes, 50 fine-grained types.",
+      "domain": "qa",
+      "entity_types": [
+        "ABBR",
+        "DESC",
+        "ENTY",
+        "HUM",
+        "LOC",
+        "NUM"
+      ],
+      "format": "HuggingFace",
+      "hf_id": "trec",
+      "id": "TREC",
+      "is_spdx": true,
+      "language": "en",
+      "license": "CC-BY-4.0",
+      "name": "TREC Question Classification",
+      "notes": "6 coarse: Abbreviation, Entity, Description, Human, Location, Numeric; 50 fine-grained",
+      "paper_url": "https://www.aclweb.org/anthology/C02-1150/",
+      "requires_license": false,
+      "size_hint": "5.5k train, 500 test",
+      "splits": [
+        "train",
+        "test"
+      ],
+      "tasks": [
+        "text_classification"
+      ],
+      "url": "https://huggingface.co/datasets/trec",
+      "year": 2002
+    },
+    {
+      "categories": [
+        "social_media"
+      ],
+      "citation": "Antypas et al. (2022)",
+      "description": "Multi-label topic classification for tweets. 6 domains, 19 topics.",
+      "domain": "social_media",
+      "entity_types": [
+        "arts",
+        "business",
+        "daily_life",
+        "pop_culture",
+        "science",
+        "sports"
+      ],
+      "format": "HuggingFace",
+      "hf_id": "cardiffnlp/tweet_topic_multi",
+      "id": "TweetTopic",
+      "is_spdx": true,
+      "language": "en",
+      "license": "CC-BY-4.0",
+      "name": "TweetTopic",
+      "notes": "Multi-label; domains: arts, business, daily_life, pop_culture, science, sports; zero-shot benchmark",
+      "paper_url": "https://aclanthology.org/2022.coling-1.299/",
+      "requires_license": false,
+      "size_hint": "~11k tweets",
+      "splits": [
+        "train",
+        "validation",
+        "test"
+      ],
+      "tasks": [
+        "text_classification"
+      ],
+      "url": "https://huggingface.co/datasets/cardiffnlp/tweet_topic_multi",
+      "year": 2022
+    },
+    {
       "annotation_scheme": "IOB2",
       "categories": [
         "multilingual",
@@ -2775,7 +3297,25 @@
       "citation": "Dione et al. (2023)",
       "description": "Part-of-speech tagging for 20 African languages.",
       "domain": "general",
-      "entity_types": [],
+      "entity_types": [
+        "NOUN",
+        "VERB",
+        "ADJ",
+        "ADV",
+        "PRON",
+        "PROPN",
+        "ADP",
+        "AUX",
+        "CCONJ",
+        "DET",
+        "INTJ",
+        "NUM",
+        "PART",
+        "PUNCT",
+        "SCONJ",
+        "SYM",
+        "X"
+      ],
       "format": "CoNLL-U",
       "hf_id": "masakhane/masakhane-pos",
       "id": "MasakhaPOS",
@@ -2815,7 +3355,7 @@
       "expected_f1": 75.0,
       "expected_zero_shot_f1": 65.0,
       "hf_config": "en",
-      "hf_id": "wikiann",
+      "hf_id": "unimelb-nlp/wikiann",
       "id": "WikiANN",
       "is_spdx": true,
       "language": "multi",
@@ -2824,7 +3364,7 @@
       "notes": "Silver annotations; noisy but massive coverage",
       "paper_url": "https://aclanthology.org/P17-1178/",
       "requires_license": false,
-      "url": "https://huggingface.co/datasets/wikiann"
+      "url": "https://huggingface.co/datasets/unimelb-nlp/wikiann"
     },
     {
       "categories": [
@@ -2925,16 +3465,19 @@
         "LOCATION",
         "LEGISLATION"
       ],
-      "format": "TSV",
+      "format": "CSV",
       "id": "ENer",
       "is_spdx": true,
       "language": "en",
       "license": "GPL-3.0",
       "name": "E-NER (EDGAR-NER)",
-      "notes": "10-K, 8-K, prospectuses; CoNLL-style token/tag format",
+      "notes": "10-K, 8-K, prospectuses; CSV token,tag format with BIO scheme",
       "paper_url": "https://aclanthology.org/2022.nllp-1.22/",
       "requires_license": false,
       "size_hint": "52 SEC filings, 400k+ tokens",
+      "tasks": [
+        "ner"
+      ],
       "url": "https://raw.githubusercontent.com/terenceau1/E-NER-Dataset/main/all.csv",
       "year": 2022
     },
@@ -3059,10 +3602,12 @@
       "description": "Twitter NER workshop shared task. Focus on rare and emerging entities in noisy social media text.",
       "domain": "social_media",
       "entity_types": [
-        "PER",
-        "LOC",
-        "ORG",
-        "MISC"
+        "person",
+        "geo-loc",
+        "company",
+        "facility",
+        "product",
+        "other"
       ],
       "format": "CoNLL",
       "id": "WNUT16",
@@ -3082,7 +3627,7 @@
       "tasks": [
         "ner"
       ],
-      "url": "https://raw.githubusercontent.com/napsternxg/TwitterNER/master/data/wnut16/test",
+      "url": "https://raw.githubusercontent.com/aritter/twitter_nlp/65f3d77134c40d920db8d431c5c6faef1c051c94/data/annotated/wnut16/data/test",
       "year": 2016
     },
     {
@@ -3132,10 +3677,10 @@
       "language": "ang",
       "license": "CC-BY-SA-4.0",
       "name": "Old English UD",
-      "notes": "Anglo-Saxon; insular script variations; 5th-11th century CE",
+      "notes": "Anglo-Saxon; insular script variations; 5th-11th century CE. NOTE: UD repo naming drifts; URL pinned to a specific commit.",
       "paper_url": "https://aclanthology.org/W19-4214/",
       "requires_license": false,
-      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Old_English-YCOE/master/ang_ycoe-ud-test.conllu",
+      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Old_English-Cairo/118f11ad906fb15d930825fadce9ef9eccca9347/ang_cairo-ud-test.conllu",
       "year": 2019
     },
     {
@@ -3159,10 +3704,10 @@
       "language": "non",
       "license": "CC-BY-SA-4.0",
       "name": "Old Norse UD",
-      "notes": "Icelandic Sagas and Eddas; runic/Latin script; 9th-14th century CE",
+      "notes": "IcePaHC treebank (historical Icelandic; Old Norse family). URL pinned to a specific commit.",
       "paper_url": "https://aclanthology.org/L12-1148/",
       "requires_license": false,
-      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Old_Norse-ICEPAHC/master/non_icepahc-ud-test.conllu",
+      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Icelandic-IcePaHC/ca72a59affd87c4b7b9067ae56efa7a694a7b4c4/is_icepahc-ud-test.conllu",
       "year": 2012
     },
     {
@@ -3342,11 +3887,14 @@
       "language": "en",
       "license": "MIT",
       "name": "NoiseBench",
-      "notes": "Compares simulated vs real label noise; includes German variant",
+      "notes": "Compares simulated vs real label noise; includes German variant; using clean subset",
       "paper_url": "https://aclanthology.org/2024.emnlp-main.1011/",
       "requires_license": false,
       "size_hint": "CoNLL-03 subset with 7 label variants",
-      "url": "https://github.com/elenamer/NoiseBench",
+      "tasks": [
+        "ner"
+      ],
+      "url": "https://raw.githubusercontent.com/elenamer/NoiseBench/main/data/annotations/clean.traindev",
       "year": 2024
     },
     {
@@ -3394,25 +3942,26 @@
       "entity_types": [
         "PER",
         "LOC",
-        "ORG"
+        "ORG",
+        "MISC"
       ],
       "format": "CoNLL",
       "id": "CrossWeigh",
       "is_spdx": true,
-      "language": "multi",
+      "language": "en",
       "license": "MIT",
       "name": "CrossWeigh",
-      "notes": "Tests cross-lingual transfer robustness; character/word perturbations; zero-shot evaluation",
+      "notes": "Tests cross-lingual transfer robustness; character/word perturbations; zero-shot evaluation; CoNLL++ fix",
       "paper_url": "https://aclanthology.org/D19-1519/",
       "requires_license": false,
-      "size_hint": "Adversarial cross-lingual test sets",
+      "size_hint": "Adversarial cross-lingual test sets; includes CoNLL++ cleaned version",
       "splits": [
         "test"
       ],
       "tasks": [
         "ner"
       ],
-      "url": "https://github.com/ZihanWangKi/CrossWeigh",
+      "url": "https://raw.githubusercontent.com/ZihanWangKi/CrossWeigh/master/data/conllpp_test.txt",
       "year": 2019
     },
     {
@@ -3424,28 +3973,29 @@
       "description": "Entity disambiguation benchmark. 95k Wikipedia paragraphs, 8 ED datasets unified.",
       "domain": "wikipedia",
       "entity_types": [
-        "ENTITY"
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
       ],
-      "format": "JSONL",
+      "format": "CoNLL",
       "id": "ZELDA",
       "is_spdx": true,
       "language": "en",
       "license": "MIT",
       "name": "ZELDA",
-      "notes": "Standardized ED evaluation; Wikipedia KB; no emerging entities",
+      "notes": "Standardized ED evaluation; Wikipedia KB; no emerging entities; using AIDA-B test subset",
       "paper_url": "https://aclanthology.org/2023.eacl-main.151/",
       "requires_license": false,
       "size_hint": "95k paragraphs, 825k entities",
       "splits": [
-        "train",
-        "dev",
         "test"
       ],
       "tasks": [
         "el",
         "ner"
       ],
-      "url": "https://github.com/flairNLP/zelda",
+      "url": "https://raw.githubusercontent.com/flairNLP/zelda/main/test_data/conll/test_aida-b.conll",
       "year": 2023
     },
     {
@@ -3855,8 +4405,11 @@
       ],
       "citation": "Hendrickx et al. (2010)",
       "description": "Semantic relation classification between nominals. 9 relation types.",
-      "domain": "general",
-      "entity_types": [],
+      "domain": "mixed",
+      "entity_types": [
+        "e1",
+        "e2"
+      ],
       "format": "Custom",
       "id": "SemEval2010Task8",
       "is_spdx": false,
@@ -3877,7 +4430,10 @@
       "citation": "Han et al. (2018)",
       "description": "Few-shot relation classification benchmark. 100 relations from Wikidata.",
       "domain": "wikipedia",
-      "entity_types": [],
+      "entity_types": [
+        "head",
+        "tail"
+      ],
       "format": "JSONL",
       "hf_id": "few_rel",
       "id": "FewRel",
@@ -3972,7 +4528,7 @@
       "language": "en",
       "license": "CC-BY-4.0",
       "name": "S800",
-      "notes": "Species NER; taxonomy normalization; useful for biodiversity NLP",
+      "notes": "Species NER; taxonomy normalization; tar.gz archive with XML format; requires manual extraction and conversion to CoNLL",
       "paper_url": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0065390",
       "requires_license": false,
       "size_hint": "800 abstracts",
@@ -4241,6 +4797,7 @@
         "LICENSE"
       ],
       "format": "JSONL",
+      "hf_id": "ai4privacy/pii-masking-200k",
       "id": "PIIMasking200k",
       "is_spdx": true,
       "language": "multi",
@@ -4430,7 +4987,7 @@
       ],
       "citation": "Guo & Barbosa (2018)",
       "description": "Web-scale entity linking from ClueWeb corpus. Tests EL on noisy web text.",
-      "domain": "general",
+      "domain": "web",
       "entity_types": [
         "ENTITY"
       ],
@@ -4525,6 +5082,38 @@
     },
     {
       "categories": [
+        "multilingual",
+        "entity_linking"
+      ],
+      "citation": "Botha et al. (2020)",
+      "description": "Multilingual entity linking across 50 languages. Wikipedia-linked mentions for zero-shot cross-lingual EL.",
+      "domain": "news",
+      "entity_types": [
+        "ENTITY"
+      ],
+      "format": "TSV",
+      "id": "MewsliX",
+      "is_spdx": true,
+      "language": "multi",
+      "license": "Apache-2.0",
+      "name": "Mewsli-X",
+      "notes": "Zero-shot cross-lingual EL benchmark; from WikiNews; Wikipedia KB",
+      "paper_url": "https://arxiv.org/abs/2010.11856",
+      "requires_license": false,
+      "size_hint": "~300k mentions across 50 languages",
+      "splits": [
+        "test"
+      ],
+      "tasks": [
+        "el",
+        "entity_linking",
+        "ned"
+      ],
+      "url": "https://github.com/google-research/google-research/tree/master/mewslix",
+      "year": 2020
+    },
+    {
+      "categories": [
         "coref",
         "literary",
         "long_document"
@@ -4538,12 +5127,13 @@
         "ORG"
       ],
       "format": "JSONL",
+      "hf_id": "spacemanidol/BookCoref",
       "id": "BookCorefBamman",
       "is_spdx": false,
       "language": "en",
       "license": "Research",
       "name": "BookCoref (Bamman)",
-      "notes": "Long-document coref benchmark; tests models on full novels; silver + gold annotations",
+      "notes": "Long-document coref benchmark; tests models on full novels; silver + gold annotations. HF-hosted but appears gated in practice; treat as manual unless you have explicit access.",
       "paper_url": "https://arxiv.org/abs/2507.12075",
       "requires_license": false,
       "size_hint": "~200k tokens per document",
@@ -4669,7 +5259,7 @@
       ],
       "citation": "Huang et al. (2024)",
       "description": "Long-document NER benchmark. Tests entity recognition across extended contexts.",
-      "domain": "general",
+      "domain": "mixed",
       "entity_types": [
         "PER",
         "LOC",
@@ -5273,8 +5863,8 @@
         "ner"
       ],
       "citation": "Jørgensen et al. (2020)",
-      "description": "Norwegian NER covering Bokmål and Nynorsk. Morphologically rich language NER.",
-      "domain": "general",
+      "description": "Norwegian NER covering Bokmål and Nynorsk. Morphologically rich language from news and parliament text.",
+      "domain": "news",
       "entity_types": [
         "PER",
         "LOC",
@@ -5728,7 +6318,7 @@
       ],
       "citation": "Wennerberg (2020)",
       "description": "Universal Dependencies treebank for Esperanto. Syntax annotation without NER layer.",
-      "domain": "general",
+      "domain": "constructed_language",
       "entity_types": [
         "PER",
         "LOC",
@@ -5789,7 +6379,7 @@
       ],
       "citation": "Tatoeba Project (2024)",
       "description": "Lojban-English sentence pairs from Tatoeba. Logical language translation corpus.",
-      "domain": "general",
+      "domain": "constructed_language",
       "entity_types": [],
       "format": "TSV",
       "id": "LojbanTatoeba",
@@ -5843,7 +6433,7 @@
       ],
       "citation": "Lang (2021)",
       "description": "Toki Pona minimalist language corpus. 120-word language for semantic simplification.",
-      "domain": "general",
+      "domain": "constructed_language",
       "entity_types": [],
       "format": "TXT",
       "id": "TokiPonaCorpus",
@@ -5972,6 +6562,39 @@
       ],
       "url": "",
       "year": 2024
+    },
+    {
+      "categories": [
+        "coref",
+        "dialogue",
+        "social_media"
+      ],
+      "citation": "Li, Gong & Fu (2025)",
+      "description": "Chinese social media dialogue coreference. Person mentions in Douyin video comments with singleton handling.",
+      "domain": "social_media",
+      "entity_types": [
+        "PER"
+      ],
+      "format": "Custom",
+      "id": "TikTalkCoref",
+      "is_spdx": false,
+      "language": "zh",
+      "license": "Research",
+      "name": "TikTalkCoref",
+      "notes": "First Chinese MCR dataset for social media. Maverick outperforms e2e-coref (65.5 vs 39.1 Avg.F1). High singleton rate: 44% pronouns, 34% proper names, 22% common nouns. Text-only portion; multimodal aspect out of scope.",
+      "paper_url": "https://arxiv.org/abs/2504.14321",
+      "requires_license": true,
+      "size_hint": "1,012 dialogues, 2,179 mentions, 1,435 clusters",
+      "splits": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "tasks": [
+        "coref"
+      ],
+      "url": "",
+      "year": 2025
     },
     {
       "categories": [
@@ -6815,7 +7438,7 @@
       "is_spdx": false,
       "language": "en",
       "license": "Research",
-      "name": "AIDA-CoNLL",
+      "name": "AIDA-CoNLL (v2)",
       "notes": "Entity linking benchmark; links CoNLL-2003 mentions to YAGO/Wikipedia",
       "paper_url": "https://aclanthology.org/D11-1072/",
       "requires_license": false,
@@ -6984,14 +7607,18 @@
         "PRODUCT"
       ],
       "format": "JSONL",
+      "hf_id": "yongsun-yoon/open-ner-english",
       "id": "OpenNER",
       "is_spdx": true,
       "language": "en",
       "license": "CC-BY-SA-4.0",
       "name": "OpenNER 1.0",
-      "notes": "Open-domain NER; tests generalization across domains",
+      "notes": "Community mirror; open-domain NER benchmark",
       "requires_license": false,
-      "url": "https://huggingface.co/datasets/Babelscape/OpenNER",
+      "tasks": [
+        "ner"
+      ],
+      "url": "https://huggingface.co/datasets/yongsun-yoon/open-ner-english",
       "year": 2023
     },
     {
@@ -7084,14 +7711,18 @@
         "Organization"
       ],
       "format": "JSONL",
+      "hf_id": "SaladTechnologies/fiction-ner-750m",
       "id": "FictionNER750M",
       "is_spdx": true,
       "language": "en",
       "license": "CC-BY-4.0",
       "name": "FictionNER-750M",
-      "notes": "Large-scale fiction NER; novels and short stories",
+      "notes": "Large-scale fiction NER; public on HuggingFace",
       "requires_license": false,
-      "url": "https://huggingface.co/datasets/fiction-ner/750M",
+      "tasks": [
+        "ner"
+      ],
+      "url": "https://huggingface.co/datasets/SaladTechnologies/fiction-ner-750m",
       "year": 2023
     },
     {
@@ -7308,11 +7939,149 @@
       "is_spdx": true,
       "language": "en",
       "license": "CC-BY-4.0",
-      "name": "Gun Violence Corpus",
+      "name": "Gun Violence Corpus (v2)",
       "notes": "Event extraction; sensitive domain requiring careful handling",
       "requires_license": false,
       "url": "https://github.com/gun-violence-corpus/gvc",
       "year": 2016
+    },
+    {
+      "annotation_scheme": "Trigger-based",
+      "categories": [
+        "ner"
+      ],
+      "citation": "Wang et al. (2020)",
+      "description": "Massive general-domain event detection. 168 event types from Wikipedia, 4x larger than ACE.",
+      "domain": "wikipedia",
+      "entity_types": [
+        "EVENT_TRIGGER"
+      ],
+      "format": "JSONL",
+      "id": "MAVEN",
+      "is_spdx": true,
+      "language": "en",
+      "license": "MIT",
+      "name": "MAVEN",
+      "notes": "EMNLP 2020; largest general-domain ED dataset; CodaLab leaderboard available; Tsinghua Cloud/Google Drive download",
+      "paper_url": "https://aclanthology.org/2020.emnlp-main.129/",
+      "requires_license": false,
+      "size_hint": "~118k trigger instances, 4,480 documents, 168 event types",
+      "splits": [
+        "train",
+        "valid",
+        "test"
+      ],
+      "tasks": [
+        "event_extraction"
+      ],
+      "url": "https://github.com/THU-KEG/MAVEN-dataset",
+      "year": 2020
+    },
+    {
+      "annotation_scheme": "Trigger-Argument",
+      "categories": [
+        "ner",
+        "relation_extraction"
+      ],
+      "citation": "Wang et al. (2024)",
+      "description": "MAVEN extended with event arguments and relations. Complete event extraction benchmark.",
+      "domain": "wikipedia",
+      "entity_types": [
+        "EVENT_TRIGGER",
+        "EVENT_ARGUMENT",
+        "EVENT_RELATION"
+      ],
+      "format": "JSONL",
+      "id": "MAVENArg",
+      "is_spdx": true,
+      "language": "en",
+      "license": "MIT",
+      "name": "MAVEN-ARG",
+      "notes": "ACL 2024; builds on MAVEN; supports ED + EAE + ERE tasks; all-in-one event understanding",
+      "paper_url": "https://aclanthology.org/2024.acl-long.224/",
+      "requires_license": false,
+      "size_hint": "~98k argument annotations, ~21k relations",
+      "splits": [
+        "train",
+        "valid",
+        "test"
+      ],
+      "tasks": [
+        "event_extraction",
+        "relation_extraction"
+      ],
+      "url": "https://github.com/THU-KEG/MAVEN-Argument",
+      "year": 2024
+    },
+    {
+      "categories": [
+        "ner",
+        "arcane_domain"
+      ],
+      "citation": "Satyapanich et al. (2020)",
+      "description": "Cybersecurity event extraction. Attack patterns, vulnerabilities, malware events.",
+      "domain": "cybersecurity",
+      "entity_types": [
+        "Attack-Pattern",
+        "Vulnerability",
+        "Data-Breach",
+        "Malware",
+        "Patch"
+      ],
+      "format": "Standoff",
+      "id": "CASIE",
+      "is_spdx": true,
+      "language": "en",
+      "license": "CC-BY-4.0",
+      "name": "CASIE",
+      "notes": "Domain-specific event extraction; cybersecurity news articles",
+      "paper_url": "https://aclanthology.org/2020.case-1.12/",
+      "requires_license": false,
+      "size_hint": "~1k documents, 5 event types, 26 argument roles",
+      "splits": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "tasks": [
+        "event_extraction",
+        "ner"
+      ],
+      "url": "https://github.com/Ebiquity/CASIE",
+      "year": 2020
+    },
+    {
+      "categories": [
+        "ner",
+        "long_document"
+      ],
+      "citation": "Ebner et al. (2020)",
+      "description": "Roles Across Multiple Sentences. Cross-sentence event argument extraction with 139 event types.",
+      "domain": "news",
+      "entity_types": [
+        "EVENT_TRIGGER",
+        "EVENT_ARGUMENT"
+      ],
+      "format": "JSONL",
+      "id": "RAMS",
+      "is_spdx": false,
+      "language": "en",
+      "license": "Research",
+      "name": "RAMS",
+      "notes": "ACL 2020; tests implicit/cross-sentence arguments; requires multi-sentence reasoning",
+      "paper_url": "https://aclanthology.org/2020.acl-main.718/",
+      "requires_license": false,
+      "size_hint": "~9,124 event instances, 139 event types",
+      "splits": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "tasks": [
+        "event_extraction"
+      ],
+      "url": "https://nlp.jhu.edu/rams/",
+      "year": 2020
     },
     {
       "categories": [
@@ -7384,7 +8153,7 @@
       "is_spdx": true,
       "language": "en",
       "license": "CC-BY-4.0",
-      "name": "Football Coreference Corpus",
+      "name": "Football Coreference Corpus (v2)",
       "notes": "Cross-document event coreference; sports domain",
       "requires_license": false,
       "url": "https://github.com/cltl/FCC",
@@ -7759,7 +8528,7 @@
       ],
       "citation": "UD Esperanto Team",
       "description": "Universal Dependencies for Esperanto. Planned international language.",
-      "domain": "general",
+      "domain": "constructed_language",
       "entity_types": [
         "PER",
         "LOC",
@@ -7893,14 +8662,14 @@
       ],
       "citation": "Interslavic Team (2006)",
       "description": "Interslavic zonal auxiliary language. Constructed for Slavic intelligibility.",
-      "domain": "general",
+      "domain": "constructed_language",
       "entity_types": [
         "PER",
         "LOC",
         "ORG"
       ],
       "format": "Custom",
-      "id": "Interslavic",
+      "id": "InterslavicCorpus",
       "is_spdx": true,
       "language": "isv",
       "license": "CC-BY-SA-4.0",
@@ -7916,7 +8685,7 @@
       ],
       "citation": "Cowan (1997)",
       "description": "Lojban logical language corpus. Constructed for unambiguous communication.",
-      "domain": "general",
+      "domain": "constructed_language",
       "entity_types": [],
       "format": "Custom",
       "id": "Lojban",
@@ -7935,7 +8704,7 @@
       ],
       "citation": "Lang (2001)",
       "description": "Toki Pona minimalist language corpus. 120-word philosophical language.",
-      "domain": "general",
+      "domain": "constructed_language",
       "entity_types": [],
       "format": "Custom",
       "id": "TokiPona",
@@ -7967,7 +8736,7 @@
       "is_spdx": false,
       "language": "en",
       "license": "DUA Required",
-      "name": "i2b2 2010",
+      "name": "i2b2-2010",
       "notes": "Clinical notes; concept and relation extraction",
       "paper_url": "https://academic.oup.com/jamia/article/18/5/552/830538",
       "requires_license": false,
@@ -8420,7 +9189,7 @@
       "is_spdx": true,
       "language": "nl",
       "license": "CC-BY-4.0",
-      "name": "Dutch Archaeology NER",
+      "name": "Dutch Archaeology NER (v2)",
       "notes": "Archaeological domain; ~31k annotations",
       "requires_license": false,
       "url": "https://easy.dans.knaw.nl/",
@@ -8434,7 +9203,7 @@
       ],
       "citation": "Guaraní NLP Team (2021)",
       "description": "Guaraní language NER. South American indigenous language.",
-      "domain": "general",
+      "domain": "indigenous",
       "entity_types": [
         "PER",
         "LOC",
@@ -8459,7 +9228,7 @@
       ],
       "citation": "Mager et al. (2018)",
       "description": "Shipibo-Konibo language NER. Peruvian Amazonian language.",
-      "domain": "general",
+      "domain": "indigenous",
       "entity_types": [
         "PER",
         "LOC",
@@ -8484,7 +9253,7 @@
       ],
       "citation": "Navajo NLP Team (2020)",
       "description": "Navajo morphological annotation. North American indigenous language.",
-      "domain": "general",
+      "domain": "indigenous",
       "entity_types": [
         "PER",
         "LOC"
@@ -8507,24 +9276,24 @@
         "multilingual",
         "literary"
       ],
-      "citation": "KoCoNovel Team (2022)",
-      "description": "Korean coreference in novels. Literary Korean coreference.",
+      "citation": "Kim, Lee & Lee (2024)",
+      "description": "Korean character coreference in 50 modern/contemporary novels. First Korean literary coreference dataset. Four versions: Reader/Omniscient perspective × Separate/Overlapped entity treatment. 178K tokens, 19K mentions, ~1.4K entities.",
       "domain": "fiction",
       "entity_types": [
-        "PER",
-        "LOC",
-        "ORG"
+        "PER"
       ],
       "format": "CoNLL",
       "id": "KoCoNovel",
       "is_spdx": true,
       "language": "ko",
-      "license": "CC-BY-4.0",
+      "license": "CC-BY-SA-4.0",
       "name": "KoCoNovel",
-      "notes": "Korean fiction; zero-pronoun resolution",
+      "notes": "Mention types: Pronominal 30.7%, Proper Name 22.8%, Single Noun 24.1% (kinship 9.2%, titles 3.1%), Noun Phrase 22.4%. Korean address term culture (호칭 문화) favors kinship over names. Distance stats: Antecedent avg 70.7 tokens, Spread avg 1583.3 tokens. Korean lacks determiners and proper noun markers. Four annotation versions. Morpheme-unit spans. Speaker annotations. IAA: MUC 94.53 F1. BERT baseline: ~62-73% MUC F1.",
+      "paper_url": "https://arxiv.org/abs/2404.01140",
       "requires_license": false,
-      "url": "https://github.com/koco-novel",
-      "year": 2022
+      "size_hint": "178K tokens, 50 novels, 17975 sentences",
+      "url": "https://github.com/storidient/KoCoNovel",
+      "year": 2024
     },
     {
       "annotation_scheme": "CoNLLCoref",
@@ -8616,7 +9385,7 @@
       "is_spdx": false,
       "language": "en",
       "license": "LDC",
-      "name": "PDTB 3.0",
+      "name": "PDTB 3.0 (v2)",
       "notes": "Discourse relations; implicit and explicit connectives",
       "requires_license": false,
       "url": "https://catalog.ldc.upenn.edu/LDC2019T05",
@@ -8893,9 +9662,9 @@
       "language": "en",
       "license": "CC-BY-4.0",
       "name": "ULNER",
-      "notes": "Large-scale distantly supervised NER",
-      "requires_license": false,
-      "url": "https://huggingface.co/datasets/ULNER",
+      "notes": "No stable public URL found (prior HuggingFace URL returned 404).",
+      "requires_license": true,
+      "url": "",
       "year": 2023
     },
     {
@@ -8912,6 +9681,7 @@
         "ORG"
       ],
       "format": "JSONL",
+      "hf_id": "universalner/universal_ner",
       "id": "UniversalNER",
       "is_spdx": true,
       "language": "multi",
@@ -8920,7 +9690,10 @@
       "notes": "ChatGPT-distilled NER model benchmark",
       "paper_url": "https://arxiv.org/abs/2308.03279",
       "requires_license": false,
-      "url": "https://universal-ner.github.io/",
+      "tasks": [
+        "ner"
+      ],
+      "url": "https://huggingface.co/datasets/universalner/universal_ner",
       "year": 2023
     },
     {
@@ -9267,7 +10040,7 @@
       ],
       "citation": "ENER Team (2022)",
       "description": "E-commerce NER. Product entities in e-commerce text.",
-      "domain": "general",
+      "domain": "e-commerce",
       "entity_types": [
         "Product",
         "Brand",
@@ -9523,6 +10296,47 @@
       "notes": "Classical Sanskrit texts; tests Indic script and religious terminology",
       "requires_license": false,
       "url": "https://www.kaggle.com/datasets/akashsuklabaidya/ner-dataset-fyp-25",
+      "year": 2025
+    },
+    {
+      "annotation_scheme": "Standoff",
+      "categories": [
+        "coref",
+        "literary",
+        "ancient",
+        "long_document",
+        "low_resource",
+        "arcane_domain"
+      ],
+      "citation": "Sarkar et al. (2025)",
+      "description": "Sanskrit Entity Discovery and Linking from Mahābhārata. World's largest epic with extreme name variation.",
+      "domain": "literary",
+      "entity_types": [
+        "Person",
+        "Location",
+        "Miscellaneous"
+      ],
+      "format": "CoNLLU",
+      "id": "Mahanama",
+      "is_spdx": true,
+      "language": "sa",
+      "license": "CC-BY-4.0",
+      "name": "Mahānāma",
+      "notes": "First large-scale Sanskrit literary EDL. Character-level boundaries for sandhi MWTs (39% of mentions). Cross-lingual KB in English. SLP1 encoding. Extreme challenges: 124.42 avg name forms per major entity (max 1385 for Śiva), 47% entity ambiguity. Best baseline: 51.57% coref F1, 64.19% EL F1.",
+      "paper_url": "https://arxiv.org/abs/2509.19844",
+      "requires_license": false,
+      "size_hint": "988K tokens, 73K verses, 109K mentions, 5.5K entities",
+      "splits": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "tasks": [
+        "ner",
+        "coref",
+        "el"
+      ],
+      "url": "https://github.com/sujoysarkarai/mahanama",
       "year": 2025
     },
     {
@@ -10769,7 +11583,7 @@
       "name": "SEC-filings",
       "notes": "Financial documents; SEC 10-K and 10-Q filings",
       "requires_license": false,
-      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "url": "https://raw.githubusercontent.com/juand-r/entity-recognition-datasets/master/data/SEC-filings/CONLL-format/data/test/FIN3.txt",
       "year": 2018
     },
     {
@@ -12348,49 +13162,49 @@
   "meta": {
     "categories": {
       "adversarial": 12,
-      "ancient": 20,
+      "ancient": 21,
       "bias_evaluation": 13,
       "biomedical": 45,
       "clinical": 17,
       "constructed": 16,
-      "coreference": 76,
-      "dialogue": 18,
+      "coreference": 79,
+      "dialogue": 25,
       "discontinuous_ner": 9,
-      "entity_linking": 22,
+      "entity_linking": 24,
       "event_coref": 13,
       "historical": 29,
       "indigenous": 10,
-      "literary": 22,
-      "long_document": 16,
-      "low_resource": 36,
-      "multilingual": 76,
-      "ner": 283,
+      "literary": 23,
+      "long_document": 18,
+      "low_resource": 37,
+      "multilingual": 80,
+      "ner": 289,
       "nested_ner": 13,
-      "relation_extraction": 38
+      "relation_extraction": 39
     },
-    "dataset_count": 431,
+    "dataset_count": 451,
     "formats": {
       "BIO": 25,
       "BRAT": 9,
-      "CSV": 3,
-      "CoNLL": 111,
+      "CSV": 4,
+      "CoNLL": 114,
       "CoNLL-U": 1,
-      "CoNLLU": 20,
+      "CoNLLU": 23,
       "CoNLLUA": 1,
-      "Custom": 67,
-      "HuggingFace": 2,
+      "Custom": 69,
+      "HuggingFace": 7,
       "IOB2": 3,
-      "JSON": 2,
-      "JSONL": 124,
+      "JSON": 5,
+      "JSONL": 130,
       "LaTeX": 1,
-      "MMAX2": 6,
+      "MMAX2": 7,
       "SGML": 3,
-      "Standoff": 12,
-      "TSV": 8,
+      "Standoff": 13,
+      "TSV": 10,
       "TXT": 1,
       "TimeML": 3,
       "XML": 15,
-      "unknown": 14
+      "unknown": 7
     },
     "generated": true,
     "languages": {
@@ -12405,12 +13219,12 @@
       "cy": 1,
       "de": 3,
       "dlk": 1,
-      "en": 299,
+      "en": 313,
       "eo": 3,
       "es": 4,
       "eu": 1,
       "fi": 1,
-      "fr": 3,
+      "fr": 4,
       "gn": 1,
       "got": 1,
       "grc": 1,
@@ -12426,7 +13240,7 @@
       "la": 4,
       "lzh": 2,
       "mi": 1,
-      "multi": 47,
+      "multi": 49,
       "nah": 1,
       "nav": 1,
       "nl": 4,
@@ -12440,48 +13254,56 @@
       "qya": 1,
       "ro": 1,
       "ru": 1,
-      "sa": 2,
+      "sa": 3,
       "shp": 1,
       "tlh": 2,
       "tok": 2,
-      "zh": 11
+      "zh": 12,
+      "zh-en": 1
     },
     "tasks": {
+      "abstract_anaphora": 1,
       "bias_evaluation": 6,
-      "bridging": 2,
+      "bridging": 3,
       "captioning": 1,
       "cdcr": 5,
       "classification": 4,
-      "coref": 27,
+      "coref": 34,
       "discontinuous-ner": 2,
-      "discourse_deixis": 2,
-      "el": 20,
-      "entity_linking": 13,
+      "discontinuous_ner": 1,
+      "discourse_coherence": 2,
+      "discourse_deixis": 4,
+      "discourse_relations": 3,
+      "discourse_segmentation": 1,
+      "el": 22,
+      "entity_linking": 14,
       "event_coref": 8,
+      "event_extraction": 4,
       "events": 3,
       "grounding": 1,
       "harmonic_analysis": 1,
       "lm": 2,
       "mner": 1,
       "mt": 1,
-      "ned": 5,
-      "ner": 68,
+      "ned": 6,
+      "ner": 82,
       "pii_detection": 1,
       "pos": 1,
       "qa": 4,
-      "re": 15,
-      "relation_extraction": 5,
+      "re": 16,
+      "relation_extraction": 6,
       "retrieval": 2,
       "sentiment": 1,
       "sequence_labeling": 3,
       "slot_filling": 2,
+      "speech_act_classification": 1,
       "temporal": 7,
-      "text_classification": 1
+      "text_classification": 6
     },
     "version": "2.1",
     "with_examples": 19,
-    "with_notes": 423,
-    "with_urls": 398,
+    "with_notes": 444,
+    "with_urls": 404,
     "year_range": {
       "max": 2025,
       "min": 1954
