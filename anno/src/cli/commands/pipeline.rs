@@ -14,7 +14,6 @@ use anno_core::{GroundedDocument, Location, Signal, SignalId};
 #[derive(Parser, Debug)]
 pub struct PipelineArgs {
     /// Input text(s) to process (positional)
-    #[arg(trailing_var_arg = true)]
     pub text: Vec<String>,
 
     /// Read input from file(s)

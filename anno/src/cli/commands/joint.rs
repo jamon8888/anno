@@ -52,7 +52,7 @@ pub struct JointArgs {
     pub file: Option<String>,
 
     /// Positional text argument
-    #[arg(trailing_var_arg = true)]
+    /// Positional text input
     pub positional: Vec<String>,
 
     /// Model backend for initial NER

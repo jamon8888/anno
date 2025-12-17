@@ -46,7 +46,7 @@ pub fn run(args: BenchmarkArgs) -> Result<(), String> {
     #[cfg(not(feature = "eval-advanced"))]
     {
         let _ = args;
-        return Err("Benchmark command requires --features eval-advanced".to_string());
+        Err("Benchmark command requires --features eval-advanced".to_string())
     }
 
     #[cfg(feature = "eval-advanced")]

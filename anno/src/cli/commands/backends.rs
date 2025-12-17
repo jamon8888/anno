@@ -72,6 +72,7 @@ pub fn run(args: BackendsArgs) -> Result<(), String> {
             println!();
 
             println!("{}:", color("1;33", "Enabled Features"));
+            #[allow(clippy::vec_init_then_push)] // Feature-gated pushes can't use vec![]
             let features: Vec<&str> = {
                 let mut v = Vec::with_capacity(4);
                 #[cfg(feature = "onnx")]
