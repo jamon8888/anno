@@ -278,7 +278,7 @@ impl DatasetAccessibility {
 /// - `description`: Brief description with historical context
 /// - `url`: Download URL (empty string if requires license)
 /// - `entity_types`: Slice of entity type strings
-/// - `language`: Primary language code (ISO 639-1/3)
+/// - `language`: Primary language code (ISO 639-1/3). Use `"mul"` for multilingual datasets.
 /// - `domain`: Domain category
 /// - `categories`: List of category flags (coref, biomedical, etc.)
 ///
@@ -1352,7 +1352,7 @@ define_datasets! {
         description: "Silver-standard multilingual NER from Wikipedia. 9 languages with automatic annotation.",
         url: "https://huggingface.co/datasets/Babelscape/wikineural",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
-        language: "multi",
+        language: "mul",
         domain: "wikipedia",
         license: "CC-BY-SA-4.0",
         citation: "Tedeschi et al. (2021)",
@@ -1369,9 +1369,9 @@ define_datasets! {
     PolyglotNER {
         name: "Polyglot-NER",
         description: "Massively multilingual NER. 40 languages with silver annotations from Wikipedia.",
-        url: "https://sites.google.com/site/rmaborhoo/polyglot-ner",
+        url: "https://huggingface.co/datasets/rmyeid/polyglot_ner",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "wikipedia",
         license: "Research",
         citation: "Al-Rfou et al. (2015)",
@@ -1380,6 +1380,9 @@ define_datasets! {
         format: "CoNLL",
         size_hint: "40 languages, silver annotations",
         notes: "Largest language coverage; silver annotations via Wikipedia links",
+        tasks: ["ner"],
+        hf_id: "rmyeid/polyglot_ner",
+        access_status: Public,
         categories: [ner, multilingual],
     },
 
@@ -1388,7 +1391,7 @@ define_datasets! {
         description: "Cross-lingual NER benchmark spanning 13 diverse languages. Tests zero-shot transfer.",
         url: "https://github.com/UniversalNER/uner_code",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "mixed",
         license: "CC-BY-4.0",
         citation: "Malmasi et al. (2022)",
@@ -1403,9 +1406,9 @@ define_datasets! {
     CoNLL2002 {
         name: "CoNLL-2002",
         description: "Spanish and Dutch NER from CoNLL 2002 shared task. Multi-language NER benchmark.",
-        url: "https://www.clips.uantwerpen.be/conll2002/ner/",
+        url: "https://huggingface.co/datasets/eriktks/conll2002",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
-        language: "multi",
+        language: "mul",
         domain: "news",
         license: "Research",
         citation: "Tjong Kim Sang (2002)",
@@ -1415,6 +1418,9 @@ define_datasets! {
         annotation_scheme: "BIO",
         size_hint: "Spanish + Dutch news articles",
         notes: "First multilingual NER shared task; established CoNLL NER format",
+        tasks: ["ner"],
+        hf_id: "eriktks/conll2002",
+        access_status: Public,
         categories: [ner, multilingual],
     },
 
@@ -1440,7 +1446,7 @@ define_datasets! {
     GoogleRE {
         name: "Google-RE",
         description: "Google Relation Extraction dataset. Wikipedia sentences with relation annotations.",
-        url: "https://github.com/google-research-datasets/relation-extraction-corpus",
+        url: "https://raw.githubusercontent.com/google-research-datasets/relation-extraction-corpus/master/20130403-place_of_birth.json",
         entity_types: ["PER", "LOC", "ORG"],
         language: "en",
         domain: "wikipedia",
@@ -1448,9 +1454,11 @@ define_datasets! {
         citation: "Levy et al. (2017)",
         paper_url: "https://aclanthology.org/D17-1004/",
         year: 2017,
-        format: "JSONL",
+        format: "JSON",
         size_hint: "~60k relation triples",
-        notes: "Clean relation extraction; commonly used for zero-shot RE evaluation",
+        notes: "Clean relation extraction; commonly used for zero-shot RE evaluation; using place_of_birth subset",
+        tasks: ["re"],
+        access_status: Public,
         categories: [relation_extraction],
     },
 
@@ -1491,9 +1499,9 @@ define_datasets! {
     MultiCoNER {
         name: "MultiCoNER",
         description: "Multilingual Complex NER. 11 languages with fine-grained and complex entities.",
-        url: "https://huggingface.co/datasets/MultiCoNER/multiconer_v1",
+        url: "https://huggingface.co/datasets/samanjoy2/multiconer_v1",
         entity_types: ["PER", "LOC", "CORP", "GRP", "PROD", "CW"],
-        language: "multi",
+        language: "mul",
         domain: "mixed",
         license: "CC-BY-4.0",
         citation: "Malmasi et al. (2022)",
@@ -1501,9 +1509,9 @@ define_datasets! {
         year: 2022,
         format: "CoNLL",
         size_hint: "11 languages, ~1.1M tokens",
-        notes: "SemEval-2022 shared task; complex entities from diverse sources. HF-hosted but may require approval/token depending on split/license gating.",
-        hf_id: "MultiCoNER/multiconer_v1",
-        access_status: ContactAuthors,
+        notes: "SemEval-2022 shared task; complex entities from diverse sources. Community mirror of original.",
+        hf_id: "samanjoy2/multiconer_v1",
+        access_status: Public,
         categories: [ner, multilingual],
     },
 
@@ -1512,7 +1520,7 @@ define_datasets! {
         description: "MultiCoNER v2 with expanded languages and fine-grained types.",
         url: "https://huggingface.co/datasets/MultiCoNER/multiconer_v2",
         entity_types: ["PER", "LOC", "CORP", "GRP", "PROD", "CW", "Medical", "Scientist"],
-        language: "multi",
+        language: "mul",
         domain: "mixed",
         license: "CC-BY-4.0",
         citation: "Fetahu et al. (2023)",
@@ -1520,9 +1528,10 @@ define_datasets! {
         year: 2023,
         format: "CoNLL",
         size_hint: "12 languages, fine-grained types",
-        notes: "SemEval-2023 shared task; expanded from v1 with more types. HF-hosted but may require approval/token depending on split/license gating.",
+        notes: "SemEval-2023 shared task; expanded from v1 with more types.",
+        tasks: ["ner"],
         hf_id: "MultiCoNER/multiconer_v2",
-        access_status: ContactAuthors,
+        access_status: Public,
         categories: [ner, multilingual],
     },
 
@@ -1605,7 +1614,7 @@ define_datasets! {
     BC2GM {
         name: "BC2GM",
         description: "BioCreative II Gene Mention recognition. Gold-standard gene/protein name tagging.",
-        url: "https://huggingface.co/datasets/bigbio/bc2gm_corpus",
+        url: "https://huggingface.co/datasets/spyysalo/bc2gm_corpus",
         entity_types: ["Gene", "Protein"],
         language: "en",
         domain: "biomedical",
@@ -1616,16 +1625,16 @@ define_datasets! {
         format: "IOB2",
         size_hint: "20k sentences, ~24k gene mentions",
         notes: "Classic benchmark for gene/protein NER; BioCreative shared task",
-        hf_id: "bigbio/bc2gm_corpus",
-        hf_config: "bigbio_kb",
-        access_status: ContactAuthors,
+        tasks: ["ner"],
+        hf_id: "spyysalo/bc2gm_corpus",
+        access_status: Public,
         categories: [ner, biomedical],
     },
 
     BC4CHEMD {
         name: "BC4CHEMD",
         description: "BioCreative IV Chemical Entity Mention Detection. Drug and chemical name recognition.",
-        url: "https://huggingface.co/datasets/bigbio/bc4chemd",
+        url: "https://huggingface.co/datasets/chintagunta85/bc4chemd",
         entity_types: ["Chemical"],
         language: "en",
         domain: "biomedical",
@@ -1636,9 +1645,9 @@ define_datasets! {
         format: "IOB2",
         size_hint: "10k PubMed abstracts, ~84k chemical mentions",
         notes: "Chemical NER benchmark; includes IUPAC names, trivial names, abbreviations",
-        hf_id: "bigbio/bc4chemd",
-        hf_config: "bigbio_kb",
-        access_status: ContactAuthors,
+        tasks: ["ner"],
+        hf_id: "chintagunta85/bc4chemd",
+        access_status: Public,
         categories: [ner, biomedical],
     },
 
@@ -1669,7 +1678,7 @@ define_datasets! {
         url: "https://huggingface.co/datasets/coref-data/preco_raw",
         entity_types: ["PER", "LOC", "ORG"],
         language: "en",
-        domain: "general",
+        domain: "reading_comprehension",
         license: "CC-BY-4.0",
         citation: "Chen et al. (2018)",
         paper_url: "https://aclanthology.org/D18-1016/",
@@ -1872,7 +1881,7 @@ define_datasets! {
         description: "NLI for 10 Indigenous American languages (Quechua, Guaraní, Nahuatl, etc.).",
         url: "https://raw.githubusercontent.com/nala-cub/AmericasNLI/be3c351b7e1ae69936c61bfde3e24f30757db9ac/test.tsv",
         entity_types: [],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "CC-BY-4.0",
         citation: "Ebrahimi et al. (2022)",
@@ -1888,7 +1897,7 @@ define_datasets! {
         url: "",
         entity_types: ["PER", "LOC", "ORG"],
         language: "chr",
-        domain: "general",
+        domain: "indigenous",
         license: "Research",
         citation: "Zhang et al. (2020)",
         paper_url: "https://aclanthology.org/2020.findings-emnlp.464/",
@@ -1919,7 +1928,7 @@ define_datasets! {
         url: "",
         entity_types: ["PER", "LOC", "ORG"],
         language: "mi",
-        domain: "general",
+        domain: "indigenous",
         license: "Research",
         citation: "Te Hiku Media (2022)",
         year: 2022,
@@ -1968,7 +1977,7 @@ define_datasets! {
         description: "Multilingual Historical NER. 6 datasets across 11 languages including Latin.",
         url: "https://raw.githubusercontent.com/hipe-eval/HIPE-2022-data/147f5bc3c7fb7e5c6b024a9ffd6503cd019fb9ea/data/v2.1/hipe2020/de/HIPE-2022-v2.1-hipe2020-test-de.tsv",
         entity_types: ["PER", "LOC", "ORG", "PROD"],
-        language: "multi",
+        language: "mul",
         domain: "historical",
         license: "CC-BY-NC-4.0",
         citation: "Ehrmann et al. (2022)",
@@ -2209,7 +2218,7 @@ define_datasets! {
         description: "Multilingual coreference (17 languages, 22 datasets). CRAC shared task standard.",
         url: "http://hdl.handle.net/11234/1-5987",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "CC-BY-NC-SA-4.0",
         citation: "Nedoluzhko et al. (2022)",
@@ -2225,7 +2234,7 @@ define_datasets! {
         description: "Coreference in 31 South Asian languages. Silver annotations via NLLB-200 translation.",
         url: "",  // HuggingFace gated
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "Research",
         citation: "Verma et al. (2024)",
@@ -2241,7 +2250,7 @@ define_datasets! {
         description: "Multilingual Gender-Ambiguous Pronouns. 27 South Asian languages.",
         url: "",  // Research access required
         entity_types: ["PER"],
-        language: "multi",
+        language: "mul",
         domain: "evaluation",
         license: "Research",
         citation: "Verma et al. (2025)",
@@ -2349,16 +2358,19 @@ define_datasets! {
     },
     FantasyCoref {
         name: "FantasyCoref",
-        description: "Fantasy fiction coreference. Handles entity transformations.",
-        url: "",  // Research access required
+        description: "Fantasy fiction coreference. Handles entity transformations. 211 Grimms' stories.",
+        url: "https://github.com/emorynlp/FantasyCoref/archive/refs/heads/main.zip",
         entity_types: ["PER", "LOC", "ORG"],
         language: "en",
         domain: "literature",
         license: "Research",
-        citation: "Shin et al. (2023)",
-        paper_url: "https://aclanthology.org/2023.tacl-1.52/",
-        notes: "Shape-shifting, possession, disguise - unique challenges",
-        access_status: ContactAuthors,
+        citation: "Han et al. (2021)",
+        paper_url: "https://aclanthology.org/2021.emnlp-main.672/",
+        year: 2021,
+        format: "JSONL",
+        notes: "Shape-shifting, possession, disguise - unique challenges; data on GitHub",
+        tasks: ["coref"],
+        access_status: Public,
         categories: [coref, literary],
     },
 
@@ -2377,15 +2389,16 @@ define_datasets! {
         citation: "Martinelli et al. (2025)",
         paper_url: "https://aclanthology.org/2025.acl-long.1197/",
         year: 2025,
-        format: "Custom",
+        format: "JSONL",
         annotation_scheme: "CoNLLCoref",
         size_hint: "53 books, ~10.8M tokens silver, 229k tokens gold",
         example: "doc_key: pride_and_prejudice_1342\nsentences: [[CHAPTER, I.], [It, is, a, truth, ...]]\nclusters: [[[79,80], [81,82], ...], ...]\ncharacters: [{name: Mr Bennet, cluster: [[79,80]]}]",
-        notes: "Gold test set: 3 books (Animal Farm, Siddhartha, Pride & Prejudice). Silver train: 45 books. Unprecedented 73k avg mention distance. Current systems drop ~15 CoNLL F1 from windowed to full-book eval.",
+        notes: "Gold test set: 3 books (Animal Farm, Siddhartha, Pride & Prejudice). Silver train: 45 books. Unprecedented 73k avg mention distance. Requires HF datasets Python lib to download; export to JSONL for anno loader.",
         splits: ["train", "validation", "test"],
         tasks: ["coref"],
         expected_docs: 53,
         hf_id: "sapienzanlp/bookcoref",
+        access_status: DependsOnOther,
         categories: [coref, literary, long_document],
     },
     BookCorefSplit {
@@ -2399,14 +2412,15 @@ define_datasets! {
         citation: "Martinelli et al. (2025)",
         paper_url: "https://aclanthology.org/2025.acl-long.1197/",
         year: 2025,
-        format: "Custom",
+        format: "JSONL",
         annotation_scheme: "CoNLLCoref",
         size_hint: "7544 train, 398 val, 152 test windows",
-        notes: "Same data as BOOKCOREF but windowed. Enables fair comparison: Maverickxl gets 82.2 CoNLL F1 on split vs 61.0 on full books.",
+        notes: "Same data as BOOKCOREF but windowed. Enables fair comparison: Maverickxl gets 82.2 CoNLL F1 on split vs 61.0 on full books. Requires HF datasets Python lib to download.",
         splits: ["train", "validation", "test"],
         tasks: ["coref"],
         hf_id: "sapienzanlp/bookcoref",
         hf_config: "split",
+        access_status: DependsOnOther,
         categories: [coref, literary],
     },
     LongtoNotes {
@@ -2460,6 +2474,7 @@ define_datasets! {
         license: "Research",
         citation: "Aktaş et al. (2020)",
         paper_url: "https://aclanthology.org/2020.lrec-1.835/",
+        format: "CoNLL",
         notes: "Turn-taking dynamics; speaker grounding",
         categories: [coref, dialogue, social_media],
     },
@@ -2473,6 +2488,8 @@ define_datasets! {
         license: "MIT",
         citation: "Raghunathan et al. (2020)",
         paper_url: "https://arxiv.org/abs/2005.00816",
+        format: "JSON",
+        notes: "Multi-domain dialog coreference with speaker tracking",
         categories: [coref, dialogue],
     },
     DialogRE {
@@ -2513,11 +2530,11 @@ define_datasets! {
     },
     CoQAEntities {
         name: "CoQA",
-        description: "Conversational Question Answering. Multi-turn QA requiring entity mention resolution.",
+        description: "Conversational QA across 7 domains: children's stories, literature, mid/high school exams, news, Wikipedia, science, Reddit.",
         url: "https://stanfordnlp.github.io/coqa/",
         entity_types: ["ANSWER_SPAN"],
         language: "en",
-        domain: "general",
+        domain: "mixed",
         license: "Research",
         citation: "Reddy et al. (2019)",
         paper_url: "https://aclanthology.org/Q19-1016/",
@@ -2589,7 +2606,7 @@ define_datasets! {
         url: "",  // LDC + free subsets
         entity_types: ["PER", "LOC", "ORG", "EVENT"],
         language: "en",
-        domain: "general",
+        domain: "mixed",
         license: "LDC + Research",
         citation: "Poesio et al. (2024)",
         paper_url: "https://aclanthology.org/2024.codi-1.12/",
@@ -2604,14 +2621,17 @@ define_datasets! {
     ISNotes {
         name: "ISNotes",
         description: "Unrestricted bridging anaphora on OntoNotes. ~660 bridging pairs.",
-        url: "https://www.h-its.org/software/isnotes-corpus/",
+        url: "https://github.com/nlpAThits/ISNotes1.0/archive/refs/heads/master.zip",
         entity_types: ["PER", "LOC", "ORG"],
         language: "en",
         domain: "news",
         license: "Research",
         citation: "Hou et al. (2018)",
         paper_url: "https://direct.mit.edu/coli/article/44/2/237/1596/",
-        notes: "Part-whole, set-member, and other bridging relations",
+        format: "MMAX2",
+        notes: "Part-whole set-member bridging; requires OntoNotes for full text",
+        tasks: ["coref"],
+        access_status: DependsOnOther,
         categories: [coref, abstract_anaphora],
     },
     ShellNouns {
@@ -2620,7 +2640,7 @@ define_datasets! {
         url: "",  // Research access
         entity_types: [],
         language: "en",
-        domain: "general",
+        domain: "academic",
         license: "Research",
         citation: "Kolhatkar & Hirst (2012)",
         paper_url: "https://aclanthology.org/D12-1036/",
@@ -2722,7 +2742,7 @@ define_datasets! {
         description: "Multilingual LLM benchmark for discourse tracking. 12 languages, 4 levels: salience, entity tracking, discourse relations, bridging.",
         url: "",
         entity_types: ["SALIENT_ENTITY", "TRACKED_ENTITY", "BRIDGING_REF"],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "CC-BY-4.0",
         citation: "Bu, Levine & Zeldes (2025)",
@@ -2761,7 +2781,7 @@ define_datasets! {
         url: "",
         entity_types: [],
         language: "en",
-        domain: "general",
+        domain: "mixed",
         license: "Research",
         citation: "Lai & Tetreault (2018)",
         paper_url: "https://arxiv.org/abs/1805.04993",
@@ -2821,7 +2841,7 @@ define_datasets! {
         description: "Cross-formalism benchmark for discourse segmentation, connective detection, and relation classification. 39 corpora, 16 languages, 6 frameworks.",
         url: "https://github.com/disrpt/sharedtask2025",
         entity_types: ["DISCOURSE_UNIT", "CONNECTIVE", "DISCOURSE_RELATION"],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "Research",
         citation: "DISRPT Organizers (2025)",
@@ -2865,6 +2885,7 @@ define_datasets! {
         license: "CC-BY-NC-SA-3.0",
         citation: "Passarotti et al. (2017)",
         paper_url: "https://aclanthology.org/W17-6526/",
+        format: "CoNLLU",
         notes: "Index Thomisticus treebank; medieval scholastic",
         categories: [ner, ancient],
     },
@@ -2878,7 +2899,9 @@ define_datasets! {
         license: "CC-BY-4.0",
         citation: "Zeldes & Schroeder (2016)",
         paper_url: "https://aclanthology.org/L16-1313/",
-        notes: "Multi-layer: morphology, syntax, entities, coreference",
+        format: "CoNLLU",
+        notes: "Multi-layer morphology/syntax/entities/coreference; requires ANNIS export",
+        access_status: Registration,
         categories: [ner, ancient],
     },
     LT4HALA {
@@ -2906,7 +2929,9 @@ define_datasets! {
         license: "CC-BY-SA-3.0",
         citation: "ORACC Project",
         paper_url: "http://oracc.museum.upenn.edu/doc/about/index.html",
-        notes: "Cuneiform; logographic+syllabic; polyphony challenges",
+        format: "JSON",
+        notes: "Cuneiform logographic+syllabic polyphony challenges; JSON export via API",
+        access_status: Registration,
         categories: [ner, ancient],
     },
 
@@ -2918,7 +2943,7 @@ define_datasets! {
         description: "NER for 10 African languages. PER/LOC/ORG/DATE.",
         url: "https://raw.githubusercontent.com/masakhane-io/masakhane-ner/main/data/yor/test.txt",
         entity_types: ["PER", "LOC", "ORG", "DATE"],
-        language: "multi",
+        language: "mul",
         domain: "news",
         license: "CC-BY-4.0",
         citation: "Adelani et al. (2021)",
@@ -2936,7 +2961,7 @@ define_datasets! {
         description: "Extended MasakhaNER with 20+ African languages.",
         url: "https://huggingface.co/datasets/masakhane/masakhaner2",
         entity_types: ["PER", "LOC", "ORG", "DATE"],
-        language: "multi",
+        language: "mul",
         domain: "news",
         license: "CC-BY-NC-4.0",
         citation: "Adelani et al. (2022)",
@@ -2955,7 +2980,7 @@ define_datasets! {
         description: "Sentiment analysis for 14 African languages. 110k+ tweets. SemEval 2023 Task 12.",
         url: "https://huggingface.co/datasets/shmuhammad/AfriSenti-twitter-sentiment",
         entity_types: ["positive", "neutral", "negative"],
-        language: "multi",
+        language: "mul",
         domain: "social_media",
         license: "CC-BY-4.0",
         citation: "Muhammad et al. (2023)",
@@ -2975,7 +3000,7 @@ define_datasets! {
         description: "Cross-lingual QA for 10 African languages. Wikipedia-based.",
         url: "https://huggingface.co/datasets/masakhane/afriqa",
         entity_types: [],  // QA dataset
-        language: "multi",
+        language: "mul",
         domain: "wikipedia",
         license: "CC-BY-4.0",
         citation: "Ogundepo et al. (2023)",
@@ -2993,7 +3018,7 @@ define_datasets! {
         description: "News topic classification for 16 African languages.",
         url: "https://huggingface.co/datasets/masakhane/masakhanews",
         entity_types: ["business", "entertainment", "health", "politics", "religion", "sports", "technology"],
-        language: "multi",
+        language: "mul",
         domain: "news",
         license: "Apache-2.0",
         citation: "Adelani et al. (2023)",
@@ -3121,7 +3146,7 @@ define_datasets! {
         description: "Part-of-speech tagging for 20 African languages.",
         url: "https://github.com/masakhane-io/masakhane-pos",
         entity_types: ["NOUN", "VERB", "ADJ", "ADV", "PRON", "PROPN", "ADP", "AUX", "CCONJ", "DET", "INTJ", "NUM", "PART", "PUNCT", "SCONJ", "SYM", "X"],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "MIT",
         citation: "Dione et al. (2023)",
@@ -3140,7 +3165,7 @@ define_datasets! {
         description: "Silver-standard NER from Wikipedia hyperlinks. 282 languages.",
         url: "https://huggingface.co/datasets/unimelb-nlp/wikiann",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "wikipedia",
         license: "CC-BY-SA-4.0",
         citation: "Pan et al. (2017)",
@@ -3214,9 +3239,10 @@ define_datasets! {
         citation: "Au et al. (2022)",
         paper_url: "https://aclanthology.org/2022.nllp-1.22/",
         year: 2022,
-        format: "TSV",
+        format: "CSV",
         size_hint: "52 SEC filings, 400k+ tokens",
-        notes: "10-K, 8-K, prospectuses; CoNLL-style token/tag format",
+        notes: "10-K, 8-K, prospectuses; CSV token,tag format with BIO scheme",
+        tasks: ["ner"],
         categories: [ner, arcane_domain],
     },
     // =========================================================================
@@ -3286,7 +3312,8 @@ define_datasets! {
         description: "Twitter NER workshop shared task. Focus on rare and emerging entities in noisy social media text.",
         // Stable raw snapshot from aritter/twitter_nlp (has train/dev/test in one folder).
         url: "https://raw.githubusercontent.com/aritter/twitter_nlp/65f3d77134c40d920db8d431c5c6faef1c051c94/data/annotated/wnut16/data/test",
-        entity_types: ["PER", "LOC", "ORG", "MISC"],
+        // Note: dataset uses lowercase hyphenated labels (person, geo-loc, company, facility, product, other)
+        entity_types: ["person", "geo-loc", "company", "facility", "product", "other"],
         language: "en",
         domain: "social_media",
         license: "CC-BY-4.0",
@@ -3359,7 +3386,7 @@ define_datasets! {
         description: "Code-Switching Workshop shared task. English-Spanish Twitter NER with 9 entity types.",
         url: "https://code-switching.github.io/2018/",
         entity_types: ["PER", "LOC", "ORG", "GROUP", "TITLE", "PROD", "EVENT", "TIME", "OTHER"],
-        language: "multi",
+        language: "mul",
         domain: "social_media",
         license: "Research",
         citation: "Aguilar et al. (2018)",
@@ -3375,7 +3402,7 @@ define_datasets! {
         description: "Hindi-English code-mixed social media NER. Roman script Hindi mixed with English.",
         url: "https://github.com/murali1996/CodemixedNLP",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "social_media",
         license: "CC-BY-4.0",
         citation: "Priyadharshini et al. (2020)",
@@ -3397,7 +3424,7 @@ define_datasets! {
         description: "Multilingual medieval charter NER. Latin, French, Spanish from major charter collections.",
         url: "https://zenodo.org/records/6463699",
         entity_types: ["PER", "LOC", "ORG", "DATE"],
-        language: "multi",
+        language: "mul",
         domain: "historical",
         license: "CC-BY-4.0",
         citation: "Camps et al. (2022)",
@@ -3433,7 +3460,7 @@ define_datasets! {
         description: "Multilingual Spoken NER. Speech-to-NER on VoxPopuli parliamentary speeches.",
         url: "https://rdr.kuleuven.be/dataset.xhtml?persistentId=doi:10.48804/ZTVMIX",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
-        language: "multi",
+        language: "mul",
         domain: "speech",
         license: "CC-BY-4.0",
         citation: "Evain et al. (2024)",
@@ -3452,7 +3479,7 @@ define_datasets! {
     NoiseBench {
         name: "NoiseBench",
         description: "Robustness benchmark for NER. 6 real noise types: expert, crowd, LLM, distant/weak supervision.",
-        url: "https://github.com/elenamer/NoiseBench",
+        url: "https://raw.githubusercontent.com/elenamer/NoiseBench/main/data/annotations/clean.traindev",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "en",
         domain: "evaluation",
@@ -3462,7 +3489,9 @@ define_datasets! {
         year: 2024,
         format: "CoNLL",
         size_hint: "CoNLL-03 subset with 7 label variants",
-        notes: "Compares simulated vs real label noise; includes German variant",
+        notes: "Compares simulated vs real label noise; includes German variant; using clean subset",
+        tasks: ["ner"],
+        access_status: Public,
         categories: [ner, adversarial],
     },
     RockNER {
@@ -3486,19 +3515,20 @@ define_datasets! {
     CrossWeigh {
         name: "CrossWeigh",
         description: "Cross-lingual adversarial NER evaluation. Tests multilingual model robustness.",
-        url: "https://github.com/ZihanWangKi/CrossWeigh",
-        entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        url: "https://raw.githubusercontent.com/ZihanWangKi/CrossWeigh/master/data/conllpp_test.txt",
+        entity_types: ["PER", "LOC", "ORG", "MISC"],
+        language: "en",
         domain: "evaluation",
         license: "MIT",
         citation: "Wang et al. (2019)",
         paper_url: "https://aclanthology.org/D19-1519/",
         year: 2019,
         format: "CoNLL",
-        size_hint: "Adversarial cross-lingual test sets",
-        notes: "Tests cross-lingual transfer robustness; character/word perturbations; zero-shot evaluation",
+        size_hint: "Adversarial cross-lingual test sets; includes CoNLL++ cleaned version",
+        notes: "Tests cross-lingual transfer robustness; character/word perturbations; zero-shot evaluation; CoNLL++ fix",
         splits: ["test"],
         tasks: ["ner"],
+        access_status: Public,
         categories: [ner, adversarial, multilingual],
     },
 
@@ -3508,19 +3538,20 @@ define_datasets! {
     ZELDA {
         name: "ZELDA",
         description: "Entity disambiguation benchmark. 95k Wikipedia paragraphs, 8 ED datasets unified.",
-        url: "https://github.com/flairNLP/zelda",
-        entity_types: ["ENTITY"],
+        url: "https://raw.githubusercontent.com/flairNLP/zelda/main/test_data/conll/test_aida-b.conll",
+        entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "en",
         domain: "wikipedia",
         license: "MIT",
         citation: "Milich & Akbik (2023)",
         paper_url: "https://aclanthology.org/2023.eacl-main.151/",
         year: 2023,
-        format: "JSONL",
+        format: "CoNLL",
         size_hint: "95k paragraphs, 825k entities",
-        notes: "Standardized ED evaluation; Wikipedia KB; no emerging entities",
-        splits: ["train", "dev", "test"],
+        notes: "Standardized ED evaluation; Wikipedia KB; no emerging entities; using AIDA-B test subset",
+        splits: ["test"],
         tasks: ["el", "ner"],
+        access_status: Public,
         categories: [ner, entity_linking],
     },
     TweetNERD {
@@ -3752,7 +3783,7 @@ define_datasets! {
         url: "https://github.com/sahitya0000/Relation-Classification",
         entity_types: ["e1", "e2"],  // Entity markers for relation endpoints
         language: "en",
-        domain: "general",
+        domain: "mixed",
         license: "Research",
         citation: "Hendrickx et al. (2010)",
         paper_url: "https://aclanthology.org/S10-1006/",
@@ -3831,7 +3862,8 @@ define_datasets! {
         year: 2013,
         format: "XML",
         size_hint: "800 abstracts",
-        notes: "Species NER; taxonomy normalization; useful for biodiversity NLP",
+        notes: "Species NER; taxonomy normalization; tar.gz archive with XML format; requires manual extraction and conversion to CoNLL",
+        access_status: DependsOnOther,
         categories: [ner, biomedical],
     },
 
@@ -3960,7 +3992,7 @@ define_datasets! {
         description: "1,283 musical scores with harmonic annotations. String quartet + piano music with Roman numeral analysis.",
         url: "https://zenodo.org/records/15150283",
         entity_types: ["CHORD", "KEY", "MODULATION", "CADENCE", "PHRASE"],
-        language: "multi",
+        language: "mul",
         domain: "music",
         license: "CC-BY-4.0",
         citation: "Devaney et al. (2024)",
@@ -3982,7 +4014,7 @@ define_datasets! {
         description: "200k synthetic examples for PII detection and masking. Covers 50+ PII types.",
         url: "https://huggingface.co/datasets/ai4privacy/pii-masking-200k",
         entity_types: ["EMAIL", "PHONE", "SSN", "ADDRESS", "NAME", "DOB", "CREDIT_CARD", "PASSPORT", "IP_ADDRESS", "LICENSE"],
-        language: "multi",
+        language: "mul",
         domain: "privacy",
         license: "Apache-2.0",
         citation: "AI4Privacy (2024)",
@@ -4098,7 +4130,7 @@ define_datasets! {
         url: "",
         entity_types: ["ENTITY"],
         language: "en",
-        domain: "general",
+        domain: "web",
         license: "Research",
         citation: "Guo & Barbosa (2018)",
         year: 2018,
@@ -4133,7 +4165,7 @@ define_datasets! {
         description: "Multilingual Entity Linking of Occupations. 48 datasets across 21 languages for occupation EL.",
         url: "https://github.com/avature/melo-benchmark",
         entity_types: ["OCCUPATION"],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "Apache-2.0",
         citation: "Retyk et al. (2024)",
@@ -4152,7 +4184,7 @@ define_datasets! {
         description: "Multilingual entity linking across 50 languages. Wikipedia-linked mentions for zero-shot cross-lingual EL.",
         url: "https://github.com/google-research/google-research/tree/master/mewslix",
         entity_types: ["ENTITY"],  // Wikipedia entities
-        language: "multi",
+        language: "mul",
         domain: "news",
         license: "Apache-2.0",
         citation: "Botha et al. (2020)",
@@ -4196,7 +4228,7 @@ define_datasets! {
         description: "Large-scale bilingual (EN/ZH) novel coreference. 148k EN mentions, 311k ZH mentions with 74-83% spanning 3+ sentences.",
         url: "https://github.com/NovelCR/NovelCR",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "literature",
         license: "Research",
         citation: "Chen et al. (2024)",
@@ -4251,7 +4283,7 @@ define_datasets! {
         url: "https://github.com/xhuang28/LongDocNER",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "en",
-        domain: "general",
+        domain: "mixed",
         license: "MIT",
         citation: "Huang et al. (2024)",
         year: 2024,
@@ -4324,7 +4356,7 @@ define_datasets! {
         description: "Multilingual news corpus with within- and cross-document event coreference. 4 languages.",
         url: "https://github.com/newsreader/meantime",
         entity_types: ["EVENT", "TIMEX", "PARTICIPANT", "LOCATION"],
-        language: "multi",
+        language: "mul",
         domain: "news",
         license: "CC-BY-4.0",
         citation: "Minard et al. (2016)",
@@ -4360,7 +4392,7 @@ define_datasets! {
         description: "Large-scale multilingual conflict event corpus. 39k events across 20 languages for CDEC search.",
         url: "https://github.com/lemonade-coref/lemonade",
         entity_types: ["EVENT", "PARTICIPANT", "LOCATION", "TIME"],
-        language: "multi",
+        language: "mul",
         domain: "news",
         license: "Research",
         citation: "Eirew et al. (2025)",
@@ -4532,7 +4564,7 @@ define_datasets! {
         description: "Universal NER on Universal Dependencies. Gold NER with unified schema across 13 languages.",
         url: "https://github.com/UniversalNER/UNER",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "CC-BY-SA-4.0",
         citation: "Mayhew et al. (2024)",
@@ -4550,7 +4582,7 @@ define_datasets! {
         description: "Indian languages NER covering 11 Indian languages. Low-resource multilingual NER.",
         url: "https://github.com/AI4Bharat/IndicNER",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "CC-BY-4.0",
         citation: "Mhaske et al. (2022)",
@@ -4565,11 +4597,11 @@ define_datasets! {
     },
     NorNE {
         name: "NorNE",
-        description: "Norwegian NER covering Bokmål and Nynorsk. Morphologically rich language NER.",
+        description: "Norwegian NER covering Bokmål and Nynorsk. Morphologically rich language from news and parliament text.",
         url: "https://github.com/ltgoslo/norne",
         entity_types: ["PER", "LOC", "ORG", "GPE", "PROD", "EVT", "DRV"],
         language: "no",
-        domain: "general",
+        domain: "news",
         license: "CC-BY-4.0",
         citation: "Jørgensen et al. (2020)",
         paper_url: "https://aclanthology.org/2020.lrec-1.559/",
@@ -4830,7 +4862,7 @@ define_datasets! {
         url: "https://raw.githubusercontent.com/UniversalDependencies/UD_Esperanto-Cairo/master/eo_cairo-ud-test.conllu",
         entity_types: ["PER", "LOC", "ORG"],
         language: "eo",
-        domain: "general",
+        domain: "constructed_language",
         license: "CC-BY-SA-4.0",
         citation: "Wennerberg (2020)",
         paper_url: "https://universaldependencies.org/eo/index.html",
@@ -4847,7 +4879,7 @@ define_datasets! {
         description: "Language ID dataset with 11 constructed languages. 14.2M sentences across 101 languages.",
         url: "https://wmdqs.org/submissions-2025/19.pdf",
         entity_types: [],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "Research",
         citation: "Moura et al. (2025)",
@@ -4866,7 +4898,7 @@ define_datasets! {
         url: "https://tatoeba.org/en/downloads",
         entity_types: [],
         language: "jbo",
-        domain: "general",
+        domain: "constructed_language",
         license: "CC-BY-2.0",
         citation: "Tatoeba Project (2024)",
         year: 2024,
@@ -4900,7 +4932,7 @@ define_datasets! {
         url: "https://github.com/kilipan/toki-pona-corpus",
         entity_types: [],
         language: "tok",
-        domain: "general",
+        domain: "constructed_language",
         license: "CC0-1.0",
         citation: "Lang (2021)",
         year: 2021,
@@ -4958,7 +4990,7 @@ define_datasets! {
         description: "Joint coreference and zero-pronoun resolution. For languages with pro-drop (Chinese, Japanese, Korean).",
         url: "",
         entity_types: ["ZERO_PRONOUN", "ENTITY"],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "Research",
         citation: "Z-coref Authors (2024)",
@@ -5033,7 +5065,7 @@ define_datasets! {
         description: "Entity linking for occupational skills to ESCO taxonomy. Job market domain, multilingual.",
         url: "",
         entity_types: ["SKILL"],
-        language: "multi",
+        language: "mul",
         domain: "general",
         license: "Research",
         citation: "EACL Findings (2024)",
@@ -5193,7 +5225,7 @@ define_datasets! {
         description: "Multilingual Multimodal NER. Four languages with text-image pairs.",
         url: "https://github.com/Alibaba-NLP/2M-NER",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
-        language: "multi",
+        language: "mul",
         domain: "social_media",
         license: "Apache-2.0",
         citation: "Liu et al. (2024)",
@@ -5333,7 +5365,7 @@ define_datasets! {
         description: "Code understanding benchmark. Function documentation and code search across 6 languages.",
         url: "https://github.com/github/CodeSearchNet",
         entity_types: ["FUNCTION", "CLASS", "VARIABLE", "MODULE"],
-        language: "multi",
+        language: "mul",
         domain: "code",
         license: "MIT",
         citation: "Husain et al. (2019)",
@@ -5466,7 +5498,7 @@ define_datasets! {
         description: "Semantic drift detection in Wikidata. LLM-based classification inconsistency detection.",
         url: "https://arxiv.org/abs/2511.04926",
         entity_types: [],
-        language: "multi",
+        language: "mul",
         domain: "encyclopedia",
         license: "CC0-1.0",
         citation: "Wikidata Drift Team (2024)",
@@ -5590,7 +5622,7 @@ define_datasets! {
     OpenNER {
         name: "OpenNER 1.0",
         description: "Open domain NER benchmark. Broad coverage across multiple domains.",
-        url: "https://huggingface.co/datasets/Babelscape/OpenNER",
+        url: "https://huggingface.co/datasets/yongsun-yoon/open-ner-english",
         entity_types: ["PER", "LOC", "ORG", "EVENT", "PRODUCT"],
         language: "en",
         domain: "mixed",
@@ -5598,9 +5630,10 @@ define_datasets! {
         citation: "Babelscape (2023)",
         year: 2023,
         format: "JSONL",
-        notes: "HF currently returns 401 for anonymous access; treat as gated until proven otherwise.",
-        hf_id: "Babelscape/OpenNER",
-        access_status: ContactAuthors,
+        notes: "Community mirror; open-domain NER benchmark",
+        tasks: ["ner"],
+        hf_id: "yongsun-yoon/open-ner-english",
+        access_status: Public,
         categories: [ner],
     },
 
@@ -5652,7 +5685,7 @@ define_datasets! {
     FictionNER750M {
         name: "FictionNER-750M",
         description: "Fiction NER at scale. Named entities from 750M tokens of fiction text.",
-        url: "https://huggingface.co/datasets/fiction-ner/750M",
+        url: "https://huggingface.co/datasets/SaladTechnologies/fiction-ner-750m",
         entity_types: ["Character", "Location", "Object", "Organization"],
         language: "en",
         domain: "fiction",
@@ -5660,9 +5693,10 @@ define_datasets! {
         citation: "Fiction NER Team (2023)",
         year: 2023,
         format: "JSONL",
-        notes: "HF currently returns 401 for anonymous access; treat as gated until proven otherwise.",
-        hf_id: "fiction-ner/750M",
-        access_status: ContactAuthors,
+        notes: "Large-scale fiction NER; public on HuggingFace",
+        tasks: ["ner"],
+        hf_id: "SaladTechnologies/fiction-ner-750m",
+        access_status: Public,
         categories: [ner, literary],
     },
 
@@ -5807,7 +5841,7 @@ define_datasets! {
         url: "https://github.com/THU-KEG/MAVEN-dataset",
         entity_types: ["EVENT_TRIGGER"],  // 168 fine-grained event types
         language: "en",
-        domain: "general",
+        domain: "wikipedia",
         license: "MIT",
         citation: "Wang et al. (2020)",
         paper_url: "https://aclanthology.org/2020.emnlp-main.129/",
@@ -5828,7 +5862,7 @@ define_datasets! {
         url: "https://github.com/THU-KEG/MAVEN-Argument",
         entity_types: ["EVENT_TRIGGER", "EVENT_ARGUMENT", "EVENT_RELATION"],
         language: "en",
-        domain: "general",
+        domain: "wikipedia",
         license: "MIT",
         citation: "Wang et al. (2024)",
         paper_url: "https://aclanthology.org/2024.acl-long.224/",
@@ -5950,7 +5984,7 @@ define_datasets! {
         description: "CODI/CRAC shared task on anaphora and coreference. Multiple languages.",
         url: "https://github.com/UniversalAnaphora/UA-CODI-CRAC",
         entity_types: ["PER", "ORG", "LOC", "Event"],
-        language: "multi",
+        language: "mul",
         domain: "mixed",
         license: "CC-BY-4.0",
         citation: "CODI-CRAC Team (2022)",
@@ -6169,7 +6203,7 @@ define_datasets! {
         url: "https://universaldependencies.org/treebanks/eo_pud/index.html",
         entity_types: ["PER", "LOC", "ORG"],
         language: "eo",
-        domain: "general",
+        domain: "constructed_language",
         license: "CC-BY-SA-4.0",
         citation: "UD Esperanto Team",
         year: 2017,
@@ -6257,13 +6291,13 @@ define_datasets! {
         categories: [constructed],
     },
 
-    Interslavic {
+    InterslavicCorpus {
         name: "Interslavic",
         description: "Interslavic zonal auxiliary language. Constructed for Slavic intelligibility.",
         url: "https://interslavic.fun/",
         entity_types: ["PER", "LOC", "ORG"],
         language: "isv",
-        domain: "general",
+        domain: "constructed_language",
         license: "CC-BY-SA-4.0",
         citation: "Interslavic Team (2006)",
         year: 2006,
@@ -6278,7 +6312,7 @@ define_datasets! {
         url: "https://mw.lojban.org/",
         entity_types: [],
         language: "jbo",
-        domain: "general",
+        domain: "constructed_language",
         license: "Public Domain",
         citation: "Cowan (1997)",
         year: 1997,
@@ -6293,7 +6327,7 @@ define_datasets! {
         url: "https://github.com/kilipan/toki-pona-corpus",
         entity_types: [],
         language: "tok",
-        domain: "general",
+        domain: "constructed_language",
         license: "CC-BY-SA-4.0",
         citation: "Lang (2001)",
         year: 2001,
@@ -6391,7 +6425,7 @@ define_datasets! {
         description: "Computational Approaches to Linguistic Code-Switching. Multiple language pairs.",
         url: "https://code-switching.github.io/",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "social_media",
         license: "Research",
         citation: "CALCS Workshop",
@@ -6406,7 +6440,7 @@ define_datasets! {
         description: "Linguistic Code-switching Evaluation. Multiple code-switching benchmarks.",
         url: "https://ritual.uh.edu/lince/",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "social_media",
         license: "Research",
         citation: "Aguilar et al. (2020)",
@@ -6422,7 +6456,7 @@ define_datasets! {
         description: "Code-Switching GLUE benchmark. NLU for code-switched text.",
         url: "https://github.com/microsoft/GLUECoS",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "social_media",
         license: "MIT",
         citation: "Khanuja et al. (2020)",
@@ -6608,7 +6642,7 @@ define_datasets! {
         url: "https://github.com/guarani-nlp",
         entity_types: ["PER", "LOC", "ORG"],
         language: "gn",
-        domain: "general",
+        domain: "indigenous",
         license: "CC-BY-4.0",
         citation: "Guaraní NLP Team (2021)",
         year: 2021,
@@ -6623,7 +6657,7 @@ define_datasets! {
         url: "https://github.com/ixa-ehu/shipibo-konibo",
         entity_types: ["PER", "LOC", "ORG"],
         language: "shp",
-        domain: "general",
+        domain: "indigenous",
         license: "CC-BY-4.0",
         citation: "Mager et al. (2018)",
         year: 2018,
@@ -6638,7 +6672,7 @@ define_datasets! {
         url: "https://github.com/navajo-nlp",
         entity_types: ["PER", "LOC"],
         language: "nv",
-        domain: "general",
+        domain: "indigenous",
         license: "Research",
         citation: "Navajo NLP Team (2020)",
         year: 2020,
@@ -6907,9 +6941,9 @@ define_datasets! {
     UniversalNER {
         name: "UniversalNER",
         description: "Universal NER model benchmark. Multiple domains and languages.",
-        url: "https://universal-ner.github.io/",
+        url: "https://huggingface.co/datasets/universalner/universal_ner",
         entity_types: ["PER", "LOC", "ORG"],
-        language: "multi",
+        language: "mul",
         domain: "mixed",
         license: "CC-BY-4.0",
         citation: "Zhou et al. (2023)",
@@ -6917,6 +6951,9 @@ define_datasets! {
         year: 2023,
         format: "JSONL",
         notes: "ChatGPT-distilled NER model benchmark",
+        tasks: ["ner"],
+        hf_id: "universalner/universal_ner",
+        access_status: Public,
         categories: [ner, multilingual],
     },
 
@@ -7124,7 +7161,7 @@ define_datasets! {
         description: "Code Search Net. Programming language dataset for code understanding.",
         url: "https://github.com/github/CodeSearchNet",
         entity_types: ["Function", "Class", "Variable"],
-        language: "multi",
+        language: "mul",
         domain: "code",
         license: "MIT",
         citation: "Husain et al. (2019)",
@@ -7156,7 +7193,7 @@ define_datasets! {
         url: "https://github.com/ener-dataset/ener",
         entity_types: ["Product", "Brand", "Attribute", "Price"],
         language: "en",
-        domain: "general",
+        domain: "e-commerce",
         license: "CC-BY-4.0",
         citation: "ENER Team (2022)",
         year: 2022,
@@ -7405,7 +7442,7 @@ define_datasets! {
         description: "548 folklore motifs across 309 ethnic traditions in the Old World.",
         url: "https://www.academia.edu/14481230/",
         entity_types: ["Motif", "Tradition", "Region", "Character"],
-        language: "multi",
+        language: "mul",
         domain: "mythology",
         license: "Research",
         citation: "Berezkin et al. (2015)",
@@ -7606,7 +7643,7 @@ define_datasets! {
         description: "English TV show transcripts with projections to Chinese and Farsi.",
         url: "https://direct.mit.edu/tacl/article/doi/10.1162/tacl_a_00581/117162",
         entity_types: ["Character", "Location", "Object"],
-        language: "multi",
+        language: "mul",
         domain: "dialogue",
         license: "Research",
         citation: "Khosla et al. (2023)",
@@ -8041,7 +8078,7 @@ define_datasets! {
         description: "Indian Art Music dataset. Carnatic and Hindustani traditions.",
         url: "https://arxiv.org/pdf/2309.16396.pdf",
         entity_types: ["Raaga", "Taala", "Artist", "Composition", "Instrument"],
-        language: "multi",
+        language: "mul",
         domain: "music",
         license: "CC-BY-4.0",
         citation: "Saraga Team (2023)",
@@ -8195,7 +8232,7 @@ define_datasets! {
     SECFilingsNER {
         name: "SEC-filings",
         description: "Finance domain NER from SEC filing documents.",
-        url: "https://github.com/juand-r/entity-recognition-datasets",
+        url: "https://raw.githubusercontent.com/juand-r/entity-recognition-datasets/master/data/SEC-filings/CONLL-format/data/test/FIN3.txt",
         entity_types: ["Company", "Person", "Money", "Date", "Percentage"],
         language: "en",
         domain: "finance",
@@ -9223,7 +9260,7 @@ define_datasets! {
         description: "Anime and manga entities. Titles, characters, studios, genres.",
         url: "https://github.com/juand-r/entity-recognition-datasets",
         entity_types: ["Title", "Character", "Studio", "Genre", "Author", "Year"],
-        language: "multi",
+        language: "mul",
         domain: "entertainment",
         license: "CC-BY-4.0",
         citation: "MyAnimeList/AniDB",
@@ -9947,6 +9984,42 @@ pub fn generate_python_config() -> String {
 mod tests {
     use super::*;
 
+    fn is_reasonable_language_tag(tag: &str) -> bool {
+        // The registry uses ISO 639-1/3 codes for primary language.
+        // For multilingual datasets we standardize on ISO 639-2: "mul".
+        //
+        // Allow BCP-47-ish subtags (e.g., "pt-BR" or "zh-Hans") but keep this lightweight:
+        // - no whitespace
+        // - segments separated by '-' or '_'
+        // - first segment: 2-3 ASCII letters (ISO 639)
+        // - subsequent segments: 1-8 ASCII alnum (region/script/variant)
+        if tag.is_empty() || tag.chars().any(|c| c.is_whitespace()) {
+            return false;
+        }
+
+        let normalized = tag.replace('_', "-");
+        let mut parts = normalized.split('-');
+        let Some(first) = parts.next() else {
+            return false;
+        };
+
+        if !(2..=3).contains(&first.len()) || !first.chars().all(|c| c.is_ascii_alphabetic()) {
+            return false;
+        }
+
+        for p in parts {
+            if p.is_empty() || p.len() > 8 || !p.chars().all(|c| c.is_ascii_alphanumeric()) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn is_http_url(url: &str) -> bool {
+        url.starts_with("http://") || url.starts_with("https://")
+    }
+
     #[test]
     fn test_all_datasets_have_names() {
         for id in DatasetId::all() {
@@ -9963,6 +10036,93 @@ mod tests {
                 id
             );
         }
+    }
+
+    #[test]
+    fn test_language_codes_are_reasonable() {
+        // This catches drift like using "multi" instead of ISO "mul", accidental whitespace,
+        // or human-readable language names.
+        let mut bad: Vec<(DatasetId, &'static str)> = Vec::new();
+        for id in DatasetId::all() {
+            let lang = id.language();
+            if !is_reasonable_language_tag(lang) {
+                bad.push((*id, lang));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "Found datasets with invalid/odd language tags: {:?}",
+            bad
+        );
+    }
+
+    #[test]
+    fn test_access_status_is_self_consistent() {
+        // Highest-signal invariants:
+        // - HuggingFace datasets should have `hf_id`.
+        // - Public datasets should have a non-empty URL (or mirror_url).
+        // - Any URL fields, when present, should be http(s).
+        let mut problems: Vec<String> = Vec::new();
+
+        for id in DatasetId::all() {
+            let access = id.access_status();
+            let url = id.download_url();
+            let mirror = id.mirror_url().unwrap_or("");
+
+            if !url.is_empty() && !is_http_url(url) {
+                problems.push(format!("{id:?}: url must be http(s) or empty, got {url}"));
+            }
+            if !mirror.is_empty() && !is_http_url(mirror) {
+                problems.push(format!(
+                    "{id:?}: mirror_url must be http(s) or empty, got {mirror}"
+                ));
+            }
+
+            match access {
+                DatasetAccessibility::HuggingFace => {
+                    if id.hf_id().is_none() {
+                        problems.push(format!(
+                            "{id:?}: access_status=HuggingFace but hf_id is missing"
+                        ));
+                    }
+                }
+                DatasetAccessibility::Public => {
+                    if url.is_empty() && mirror.is_empty() {
+                        problems.push(format!(
+                            "{id:?}: access_status=Public but both url and mirror_url are empty"
+                        ));
+                    }
+                }
+                DatasetAccessibility::Local
+                | DatasetAccessibility::Registration
+                | DatasetAccessibility::ContactAuthors
+                | DatasetAccessibility::NotYetReleased
+                | DatasetAccessibility::DependsOnOther
+                | DatasetAccessibility::Deprecated => {
+                    // No URL requirements.
+                }
+            }
+
+            // If the dataset is automatable, it should have a clear programmatic handle:
+            // either a public URL or a HuggingFace ID.
+            if access.is_automatable() {
+                let has_handle = matches!(access, DatasetAccessibility::Local)
+                    || (!url.is_empty() && is_http_url(url))
+                    || (!mirror.is_empty() && is_http_url(mirror))
+                    || id.hf_id().is_some();
+                if !has_handle {
+                    problems.push(format!(
+                        "{id:?}: automatable but no url/mirror_url and no hf_id"
+                    ));
+                }
+            }
+        }
+
+        assert!(
+            problems.is_empty(),
+            "Dataset registry access_status/url invariants failed:\n{}",
+            problems.join("\n")
+        );
     }
 
     #[test]
@@ -10420,6 +10580,7 @@ mod tests {
             "bn",    // Bengali/Bangla
             "hi-en", // Hindi-English code-mixed
             "zh-en", // Chinese-English bilingual
+            "mul",   // Multilingual / multiple languages (ISO 639-2)
         ];
 
         for id in DatasetId::all() {
@@ -10486,6 +10647,7 @@ mod tests {
             "retail",
             // Commerce
             "ecommerce",
+            "e-commerce",
             "real_estate",
             "tourism",
             // Technical domains
@@ -10535,6 +10697,13 @@ mod tests {
             "constructed",
             "travel",
             "education",
+            // NLP Tasks
+            "reading_comprehension",
+            // Linguistic
+            "indigenous",
+            "constructed_language",
+            // Web
+            "web",
         ];
 
         for id in DatasetId::all() {

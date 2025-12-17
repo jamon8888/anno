@@ -141,15 +141,19 @@ def generate_category_matches(datasets: list, existing: set, category: str) -> s
 
 
 def load_existing_variants(loader_path: Path) -> set:
-    """Parse existing DatasetId variants from loader.rs."""
+    """Parse existing DatasetId variants from loader.rs or dataset_registry.rs."""
     if not loader_path.exists():
         return set()
     
     content = loader_path.read_text()
     variants = set()
     
-    # Match lines like "    WikiGold," or "    WNUT17,"
+    # Match lines like "    WikiGold," (loader.rs style)
     for match in re.finditer(r'^\s+([A-Z][A-Za-z0-9_]*),\s*$', content, re.MULTILINE):
+        variants.add(match.group(1))
+    
+    # Match lines like "    WikiGold {" (dataset_registry.rs define_datasets! macro style)
+    for match in re.finditer(r'^    ([A-Z][A-Za-z0-9_]*) \{$', content, re.MULTILINE):
         variants.add(match.group(1))
     
     return variants
