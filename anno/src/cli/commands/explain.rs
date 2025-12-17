@@ -44,7 +44,7 @@ pub struct ExplainArgs {
     pub show_all: bool,
 
     /// Positional text argument
-    #[arg(trailing_var_arg = true)]
+    /// Positional text input
     pub positional: Vec<String>,
 }
 

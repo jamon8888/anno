@@ -1166,10 +1166,14 @@ fn run_check(issues_only: bool, dataset: Option<&str>, _fix: bool) -> Result<(),
         }
 
         // If something is automatable *in practice*, but we don't have a loader implementation,
-        // that’s actionable (it will never be sampled in evals without manual glue).
+        // that's actionable (it will never be sampled in evals without manual glue).
+        // Only warn for datasets that have NER/coref/RE tasks (our loader scope).
+        let has_loadable_task =
+            registry_id.supports_ner() || registry_id.supports_coref() || registry_id.supports_re();
         if registry_id.access_status().is_automatable()
             && registry_id.is_automatable_download()
             && !is_loadable
+            && has_loadable_task
         {
             warnings.push(format!(
                 "{}: Automatable access_status ({}) but not loadable (missing loader impl)",

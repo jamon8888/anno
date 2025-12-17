@@ -121,6 +121,8 @@ fn main() -> ExitCode {
                 model: ModelBackend::default(),
                 labels: vec![],
                 format: OutputFormat::default(),
+                context_window: None,
+                include_sentence: false,
                 export: None,
                 export_format: "full".to_string(),
                 negation: false,
