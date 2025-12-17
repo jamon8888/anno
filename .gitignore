@@ -43,6 +43,10 @@ anno/target/
 .DS_Store
 Thumbs.db
 
+# Local README preview artifacts (scratch)
+README_preview_analysis*.txt
+README_preview_screenshot*.png
+
 # Python
 __pycache__/
 *.pyc
