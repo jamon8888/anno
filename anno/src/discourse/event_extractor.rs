@@ -1219,24 +1219,29 @@ impl EventExtractor {
     /// Simple tokenizer that preserves character offsets.
     fn tokenize(&self, text: &str) -> Vec<(String, usize, usize)> {
         let mut tokens = Vec::new();
-        let mut word_start = None;
+        // (start_byte, start_char)
+        let mut word_start: Option<(usize, usize)> = None;
+        let mut char_pos = 0usize;
 
         for (i, c) in text.char_indices() {
             if c.is_alphanumeric() || c == '\'' || c == '-' {
                 if word_start.is_none() {
-                    word_start = Some(i);
+                    word_start = Some((i, char_pos));
                 }
-            } else if let Some(start) = word_start {
-                let word = &text[start..i];
-                tokens.push((word.to_string(), start, i));
+            } else if let Some((start_byte, start_char)) = word_start {
+                // `i` is a byte offset (from `char_indices()`); `char_pos` is the current
+                // character offset (exclusive for the token).
+                let word = &text[start_byte..i];
+                tokens.push((word.to_string(), start_char, char_pos));
                 word_start = None;
             }
+            char_pos += 1;
         }
 
         // Handle last word
-        if let Some(start) = word_start {
-            let word = &text[start..];
-            tokens.push((word.to_string(), start, text.len()));
+        if let Some((start_byte, start_char)) = word_start {
+            let word = &text[start_byte..];
+            tokens.push((word.to_string(), start_char, char_pos));
         }
 
         tokens
@@ -1541,6 +1546,7 @@ impl EventExtractor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::offset::TextSpan;
 
     #[test]
     fn test_basic_extraction() {
@@ -1691,5 +1697,21 @@ mod tests {
 
         assert_eq!(config.min_confidence, 0.7);
         assert_eq!(config.event_labels, vec!["custom event"]);
+    }
+
+    #[test]
+    fn test_event_offsets_are_character_offsets_on_unicode_prefix() {
+        let extractor = EventExtractor::new();
+        let text = "🎉 Dr. Müller attacked Kyiv.";
+        let events = extractor.extract(text);
+
+        let attacked = events
+            .iter()
+            .find(|e| e.trigger == "attacked")
+            .expect("should extract 'attacked' trigger");
+
+        let extracted =
+            TextSpan::from_chars(text, attacked.trigger_start, attacked.trigger_end).extract(text);
+        assert_eq!(extracted, "attacked");
     }
 }

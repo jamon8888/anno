@@ -10,6 +10,7 @@
 use anno::backends::RegexNER;
 use anno::discourse::{DiscourseScope, EventExtractor};
 use anno::eval::coref_resolver::{DiscourseAwareResolver, DiscourseCorefConfig};
+use anno::offset::TextSpan;
 use anno::{Entity, EntityType, Model};
 
 fn main() {
@@ -189,19 +190,28 @@ fn find_abstract_anaphors(text: &str) -> Vec<(String, usize, usize)> {
 
     for pattern in patterns {
         let mut search_start = 0;
-        while let Some(pos) = text[search_start..].find(pattern) {
-            let abs_pos = search_start + pos;
+        while let Some(pos) = text
+            .get(search_start..)
+            .and_then(|suffix| suffix.find(pattern))
+        {
+            let abs_pos_byte = search_start + pos;
 
             // Check if it's at sentence start (after '. ' or at beginning)
+            // NOTE: avoid `text[abs_pos_byte-2..abs_pos_byte]` which can panic if the match
+            // follows a multi-byte Unicode character.
             let is_sentence_start =
-                abs_pos == 0 || (abs_pos >= 2 && &text[abs_pos - 2..abs_pos] == ". ");
+                abs_pos_byte == 0 || (abs_pos_byte >= 2 && text.get(abs_pos_byte - 2..abs_pos_byte) == Some(". "));
 
             if is_sentence_start {
                 let anaphor = pattern.trim();
-                anaphors.push((anaphor.to_string(), abs_pos, abs_pos + anaphor.len()));
+                let start_byte = abs_pos_byte;
+                let end_byte = abs_pos_byte + anaphor.len(); // ASCII patterns
+                let span = TextSpan::from_bytes(text, start_byte, end_byte);
+                anaphors.push((anaphor.to_string(), span.char_start, span.char_end));
             }
 
-            search_start = abs_pos + pattern.len();
+            // Continue searching after the matched pattern (including the trailing space).
+            search_start = abs_pos_byte + pattern.len();
         }
     }
 
