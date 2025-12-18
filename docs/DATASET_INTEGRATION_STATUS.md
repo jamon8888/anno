@@ -401,7 +401,7 @@ use crate::eval::dataset_registry::DatasetId;
 | `anno/src/eval/loader.rs` | Dataset loading implementations |
 | `datasets_generated.toml` | Generated TOML export |
 | `datasets_generated.json` | Generated JSON export |
-| `docs/DATASETS_GENERATED.md` | Generated markdown documentation |
+| `docs/generated/DATASETS_GENERATED.md` | Generated markdown documentation |
 | `download_configs_generated.json` | Generated download configs |
 | `scripts/download_extended_datasets.py` | Dataset downloader |
 | `scripts/generate_download_configs.py` | Config generator |

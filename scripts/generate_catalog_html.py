@@ -20,10 +20,10 @@ import html
 def main():
     project_root = Path(__file__).parent.parent
     jsonl_path = project_root / "datasets_generated.jsonl"
-    output_path = project_root / "docs" / "dataset_catalog.html"
+    output_path = project_root / "docs" / "generated" / "dataset_catalog.html"
     
-    # Ensure docs directory exists
-    output_path.parent.mkdir(exist_ok=True)
+    # Ensure output directory exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Load datasets from JSONL
     datasets = []

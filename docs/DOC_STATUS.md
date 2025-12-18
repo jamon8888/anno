@@ -47,7 +47,7 @@ May describe features not implemented or plans that changed.
 |------|-------|
 | research/HYPERGRAPH_EVIDENCE_DESIGN.md | Not implemented. Research note. |
 | research/XCORE_INTEGRATION.md | xCoRe not integrated. Research note. |
-| FEATURE_CACHE_DESIGN.md | Status unclear. |
+| design/FEATURE_CACHE_DESIGN.md | Status unclear. |
 | BOX_COREF_INTEGRATION.md | box-coref is external project. |
 | BOX_EMBEDDINGS*.md | Research code. Unclear if used. |
 | JOINT_MODEL_DESIGN.md | Large design doc. Verify implementation status. |
@@ -57,9 +57,9 @@ May describe features not implemented or plans that changed.
 
 | File | Source |
 |------|--------|
-| DATASETS_GENERATED.md | dataset_registry.rs |
-| dataset_catalog.html | scripts |
-| datasets.csv | scripts |
+| generated/DATASETS_GENERATED.md | dataset_registry.rs |
+| generated/dataset_catalog.html | scripts |
+| generated/datasets.csv | scripts |
 
 ## Duplicative / Consider Merging
 
