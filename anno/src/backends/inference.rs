@@ -2018,6 +2018,9 @@ pub fn extract_relations(
     _config: &RelationExtractionConfig,
 ) -> Vec<Relation> {
     let mut relations = Vec::new();
+    // `Entity` spans in anno are character offsets, but slicing a Rust `&str` requires byte
+    // offsets. Build a converter once so we can safely slice and map trigger spans back.
+    let span_converter = crate::offset::SpanConverter::new(text);
 
     // Get relation labels
     let relation_labels: Vec<_> = registry.relation_labels().collect();
@@ -2050,13 +2053,24 @@ pub fn extract_relations(
                 (tail.end, head.start)
             };
 
-            let between_text = text.get(span_start..span_end).unwrap_or("");
+            let between_span = span_converter.from_chars(span_start, span_end);
+            let between_text = text
+                .get(between_span.byte_start..between_span.byte_end)
+                .unwrap_or("");
 
             // Simple heuristic: check for common relation indicators
             let relation_type = detect_relation_type(head, tail, between_text, &relation_labels);
 
             if let Some((rel_type, confidence, trigger)) = relation_type {
-                let trigger_span = trigger.map(|(s, e)| (span_start + s, span_start + e));
+                // `detect_relation_type` returns byte offsets into `between_text`.
+                let trigger_span = trigger.map(|(s, e)| {
+                    let trigger_start_byte = between_span.byte_start.saturating_add(s);
+                    let trigger_end_byte = between_span.byte_start.saturating_add(e);
+                    (
+                        span_converter.byte_to_char(trigger_start_byte),
+                        span_converter.byte_to_char(trigger_end_byte),
+                    )
+                });
 
                 relations.push(Relation {
                     head: head.clone(),
@@ -2082,7 +2096,8 @@ fn detect_relation_type<'a>(
     between_text: &str,
     relation_labels: &[&'a LabelDefinition],
 ) -> Option<RelationMatch<'a>> {
-    let between_lower = between_text.to_lowercase();
+    // Triggers are ASCII; keep indexing stable by only lowercasing ASCII.
+    let between_lower = between_text.to_ascii_lowercase();
 
     // Common patterns: (relation_slug, triggers, confidence)
     struct RelPattern {
@@ -2566,6 +2581,55 @@ mod tests {
 
         assert!(!relations.is_empty());
         assert_eq!(relations[0].relation_type, "FOUNDED");
+    }
+
+    #[test]
+    fn test_relation_extraction_uses_character_offsets_with_unicode_prefix() {
+        // Unicode prefix ensures byte offsets != character offsets.
+        let text = "👋 Steve Jobs founded Apple Inc.";
+
+        // Compute character offsets explicitly (Entity spans are char-based).
+        let steve_start = text.find("Steve Jobs").expect("substring present");
+        // `find` returns byte offset; convert to char offset.
+        let conv = crate::offset::SpanConverter::new(text);
+        let steve_start_char = conv.byte_to_char(steve_start);
+        let steve_end_char = steve_start_char + "Steve Jobs".chars().count();
+
+        let apple_start = text.find("Apple").expect("substring present");
+        let apple_start_char = conv.byte_to_char(apple_start);
+        let apple_end_char = apple_start_char + "Apple".chars().count();
+
+        let entities = vec![
+            Entity::new("Steve Jobs", EntityType::Person, steve_start_char, steve_end_char, 0.95),
+            Entity::new(
+                "Apple",
+                EntityType::Organization,
+                apple_start_char,
+                apple_end_char,
+                0.90,
+            ),
+        ];
+
+        let registry = SemanticRegistry::builder()
+            .add_relation("FOUNDED", "Founded an organization")
+            .build_placeholder(768);
+
+        let config = RelationExtractionConfig::default();
+        let relations = extract_relations(&entities, text, &registry, &config);
+
+        assert!(!relations.is_empty(), "Expected FOUNDED relation to be detected");
+        assert_eq!(relations[0].relation_type, "FOUNDED");
+
+        // Trigger span should exist and cover "founded" in character offsets.
+        let trigger = relations[0]
+            .trigger_span
+            .expect("expected trigger_span to be present");
+        let trigger_text: String = text
+            .chars()
+            .skip(trigger.0)
+            .take(trigger.1.saturating_sub(trigger.0))
+            .collect();
+        assert_eq!(trigger_text.to_ascii_lowercase(), "founded");
     }
 
     // =========================================================================
