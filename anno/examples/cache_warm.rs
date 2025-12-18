@@ -14,13 +14,16 @@
 //! - `ANNO_MAX_DOWNLOAD_BYTES` (u64): hard cap on downloaded payload size (default: 50MiB; set 0 to disable)
 //! - `ANNO_S3_CACHE=1` + `ANNO_S3_BUCKET`: optionally mirror snapshots to S3
 
-#![cfg(feature = "eval-advanced")]
-
+#[cfg(feature = "eval-advanced")]
 use anno::eval::dataset_registry::DatasetAccessibility;
+#[cfg(feature = "eval-advanced")]
 use anno::eval::loader::{DatasetId, DatasetLoader, LoadableDatasetId};
+#[cfg(feature = "eval-advanced")]
 use anno::eval::task_mapping::Task;
+#[cfg(feature = "eval-advanced")]
 use xxhash_rust::xxh3::xxh3_64;
 
+#[cfg(feature = "eval-advanced")]
 fn allow_manual_datasets() -> bool {
     matches!(
         std::env::var("ANNO_DATASET_ALLOW_MANUAL").as_deref(),
@@ -28,6 +31,7 @@ fn allow_manual_datasets() -> bool {
     )
 }
 
+#[cfg(feature = "eval-advanced")]
 fn env_seed() -> u64 {
     std::env::var("ANNO_WARM_SEED")
         .ok()
@@ -35,6 +39,7 @@ fn env_seed() -> u64 {
         .unwrap_or(42)
 }
 
+#[cfg(feature = "eval-advanced")]
 fn env_per_task() -> usize {
     std::env::var("ANNO_WARM_PER_TASK")
         .ok()
@@ -43,6 +48,7 @@ fn env_per_task() -> usize {
         .max(1)
 }
 
+#[cfg(feature = "eval-advanced")]
 fn select_random<T: Clone>(items: &[T], count: usize, seed: u64) -> Vec<T> {
     if items.len() <= count {
         return items.to_vec();
@@ -64,6 +70,7 @@ fn select_random<T: Clone>(items: &[T], count: usize, seed: u64) -> Vec<T> {
     indexed.iter().map(|(i, _)| items[*i].clone()).collect()
 }
 
+#[cfg(feature = "eval-advanced")]
 fn is_downloadable(ds: DatasetId) -> bool {
     if !allow_manual_datasets() {
         // Skip gated HF datasets unless `HF_TOKEN` is available.
@@ -105,6 +112,7 @@ fn is_downloadable(ds: DatasetId) -> bool {
         || url.ends_with(".txt")
 }
 
+#[cfg(feature = "eval-advanced")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     anno::env::load_dotenv();
 
@@ -190,4 +198,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(not(feature = "eval-advanced"))]
+fn main() {
+    eprintln!("This example requires the `eval-advanced` feature.");
+    eprintln!("Try: `cargo run -p anno --example cache_warm --features eval-advanced`");
 }
