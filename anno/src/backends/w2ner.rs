@@ -563,6 +563,9 @@ impl W2NER {
             )));
         }
 
+        // Word positions are byte offsets; `Entity` requires character offsets.
+        let span_converter = crate::offset::SpanConverter::new(text);
+
         // Performance: Pre-allocate entities vec with estimated capacity
         // Decode entities for each type
         let mut entities = Vec::with_capacity(16);
@@ -578,8 +581,8 @@ impl W2NER {
                         entities.push(Entity::new(
                             entity_text,
                             Self::map_label(label),
-                            start_pos,
-                            end_pos,
+                            span_converter.byte_to_char(start_pos),
+                            span_converter.byte_to_char(end_pos),
                             score,
                         ));
                     }
