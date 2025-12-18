@@ -63,6 +63,7 @@ parking_lot = { workspace = true, optional = true }
 # Utilities
 itertools = { workspace = true }
 smallvec = { workspace = true }
+unicode-normalization = { workspace = true, optional = true }
 
 # Geometric foundations (optional)
 # NOTE: subsume-core is a separate repo at ../subsume. The trait impl in
@@ -93,7 +94,7 @@ cli = ["clap", "clap_complete", "is-terminal", "indicatif", "toml", "xxhash-rust
 eval = ["dirs", "glob"]
 eval-bias = ["eval"]
 llm = ["dep:ureq"]
-eval-advanced = ["eval", "rand", "sha2", "anno-strata", "llm"]
+eval-advanced = ["eval", "rand", "sha2", "anno-strata", "llm", "unicode-normalization"]
 eval-full = ["eval", "eval-bias", "eval-advanced"]
 eval-parallel = ["eval", "rayon"]
 eval-profiling = ["eval"]
