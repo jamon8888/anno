@@ -61,7 +61,7 @@ pub const STANDARD_ENTITY_TYPES: &[&str] = &[
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum BackendType {
-    /// GLiNER via gline-rs (zero-shot, SOTA)
+    /// GLiNER zero-shot NER (ONNX/Candle implementations)
     GLiNER,
     /// BERT ONNX (reliable default)
     BertOnnx,
@@ -430,7 +430,7 @@ impl Model for NERExtractor {
 
     fn description(&self) -> &'static str {
         match self.backend_type {
-            BackendType::GLiNER => "GLiNER zero-shot NER via gline-rs",
+            BackendType::GLiNER => "GLiNER zero-shot NER (ONNX/Candle backends)",
             BackendType::BertOnnx => "BERT NER via ONNX Runtime",
             BackendType::Candle => "BERT NER via Candle (Rust-native)",
             BackendType::Pattern => "Regex-based NER (structured entities only)",

@@ -39,7 +39,7 @@
 //!
 //! - GLiNER paper: "GLiNER: Generalist and Lightweight Model for Named Entity Recognition"
 //! - NuNER: Token-based variant using same span representation
-//! - gline-rs: Rust implementation that inspired this design
+//! - Community GLiNER implementations (for span layout conventions)
 
 use crate::{Entity, EntityType, Error, Result};
 
