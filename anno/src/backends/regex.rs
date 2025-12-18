@@ -983,9 +983,10 @@ mod proptests {
         fn entities_within_text_bounds(text in ".{1,200}") {
             let ner = RegexNER::new();
             if let Ok(entities) = ner.extract_entities(&text, None) {
+                let text_char_len = text.chars().count();
                 for e in entities {
-                    prop_assert!(e.start <= text.len());
-                    prop_assert!(e.end <= text.len());
+                    prop_assert!(e.start <= text_char_len);
+                    prop_assert!(e.end <= text_char_len);
                     prop_assert!(e.start <= e.end);
                 }
             }
