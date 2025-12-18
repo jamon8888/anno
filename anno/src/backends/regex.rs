@@ -779,10 +779,15 @@ mod tests {
 
     #[test]
     fn entity_spans_correct() {
+        use crate::offset::TextSpan;
+
         let text = "Cost: $100";
         let e = extract(text);
         let money = find_text(&e, "$100").expect("money entity should be found");
-        assert_eq!(&text[money.start..money.end], "$100");
+        assert_eq!(
+            TextSpan::from_chars(text, money.start, money.end).extract(text),
+            "$100"
+        );
     }
 
     #[test]

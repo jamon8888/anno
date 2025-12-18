@@ -297,6 +297,9 @@ pub fn decode_span_output(
 
     // Calculate word positions
     let word_positions = calculate_word_positions(text, text_words)?;
+    // `calculate_word_positions` (and most tokenizer/regex style tooling) yields byte offsets.
+    // `Entity` offsets are defined as character offsets, so convert at construction time.
+    let span_converter = crate::offset::SpanConverter::new(text);
 
     // Validate dimensions match
     let num_text_words = text_words.len();
@@ -343,7 +346,13 @@ pub fn decode_span_output(
                 {
                     let entity_type = map_label_to_entity_type(entity_types[type_idx]);
                     let mut entity =
-                        Entity::new(span_text, entity_type, start_byte, end_byte, best_score as f64);
+                        Entity::new(
+                            span_text,
+                            entity_type,
+                            span_converter.byte_to_char(start_byte),
+                            span_converter.byte_to_char(end_byte),
+                            best_score as f64,
+                        );
                     entity.provenance = Some(crate::Provenance::ml("span-decoder", best_score as f64));
                     entities.push(entity);
                 }
