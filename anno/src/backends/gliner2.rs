@@ -65,7 +65,8 @@
 //! - **ONNX** (recommended): `cargo build --features onnx`
 //! - **Candle** (native): `cargo build --features candle`
 
-use crate::sync::{try_lock, Mutex};
+#[cfg(feature = "onnx")]
+use crate::sync::{lock, Mutex};
 use crate::{Entity, EntityType, Error, Result};
 use anno_core::EntityCategory;
 use serde::{Deserialize, Serialize};
@@ -77,28 +78,21 @@ use std::sync::RwLock;
 use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, ZeroShotNER};
 
 // =============================================================================
-// Special Token IDs (GLiNER2 vocabulary)
+// Special Token IDs (gliner-multitask-large-v0.5 vocabulary)
+// Valid tokens: [MASK]=128000, [FLERT]=128001, <<ENT>>=128002, <<SEP>>=128003
+// Note: [P], [C], [L] markers don't exist in this model - DO NOT USE 128004+
 // =============================================================================
 
-/// Prompt marker token [P]
+/// <<ENT>> token - entity type marker (class_token_index in config)
 #[cfg(feature = "onnx")]
-const TOKEN_P: u32 = 128004;
-/// Entity type marker token [E]
-#[cfg(feature = "onnx")]
-const TOKEN_E: u32 = 128002;
-/// Child/component marker token [C] (used for structure extraction)
-#[allow(dead_code)]
-const TOKEN_C: u32 = 128005;
-/// Label marker token [L]
-#[cfg(feature = "onnx")]
-const TOKEN_L: u32 = 128006;
-/// Separator token [SEP]
+const TOKEN_ENT: u32 = 128002;
+/// <<SEP>> separator token
 #[cfg(feature = "onnx")]
 const TOKEN_SEP: u32 = 128003;
-/// Start token
+/// Start token [CLS]
 #[cfg(feature = "onnx")]
 const TOKEN_START: u32 = 1;
-/// End token
+/// End token [SEP]
 #[cfg(feature = "onnx")]
 const TOKEN_END: u32 = 2;
 
@@ -503,26 +497,14 @@ impl GLiNER2Onnx {
         let (input_ids, attention_mask, words_mask) =
             self.encode_ner_prompt(&text_words, entity_types)?;
 
-        // Generate span tensors
-        let (span_idx, span_mask) = self.make_span_tensors(text_words.len());
-
-        // Build tensors
-        use ndarray::{Array2, Array3};
+        // Build tensors - GLiNER2 ONNX model only needs 4 inputs:
+        // input_ids, attention_mask, words_mask, text_lengths
+        // (NOT span_idx/span_mask - those were for older model variants)
+        use ndarray::Array2;
         use ort::value::Tensor;
 
         let batch_size = 1;
         let seq_len = input_ids.len();
-        // Use checked_mul to prevent overflow (same pattern as line 2388)
-        let num_spans = text_words
-            .len()
-            .checked_mul(MAX_SPAN_WIDTH)
-            .ok_or_else(|| {
-                Error::InvalidInput(format!(
-                    "Span count overflow: {} words * {} MAX_SPAN_WIDTH",
-                    text_words.len(),
-                    MAX_SPAN_WIDTH
-                ))
-            })?;
 
         let input_ids_arr = Array2::from_shape_vec((batch_size, seq_len), input_ids)
             .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
@@ -533,10 +515,6 @@ impl GLiNER2Onnx {
         let text_lengths_arr =
             Array2::from_shape_vec((batch_size, 1), vec![text_words.len() as i64])
                 .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
-        let span_idx_arr = Array3::from_shape_vec((batch_size, num_spans, 2), span_idx)
-            .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
-        let span_mask_arr = Array2::from_shape_vec((batch_size, num_spans), span_mask)
-            .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
 
         let input_ids_t = Tensor::from_array(input_ids_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
@@ -546,13 +524,9 @@ impl GLiNER2Onnx {
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
         let text_lengths_t = Tensor::from_array(text_lengths_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let span_idx_t =
-            Tensor::from_array(span_idx_arr).map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let span_mask_t = Tensor::from_array(span_mask_arr)
-            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
 
-        // Run inference
-        let mut session = try_lock(&self.session)?;
+        // Run inference with blocking lock for thread-safe parallel access
+        let mut session = lock(&self.session);
 
         let outputs = session
             .run(ort::inputs![
@@ -560,8 +534,6 @@ impl GLiNER2Onnx {
                 "attention_mask" => attention_mask_t.into_dyn(),
                 "words_mask" => words_mask_t.into_dyn(),
                 "text_lengths" => text_lengths_t.into_dyn(),
-                "span_idx" => span_idx_t.into_dyn(),
-                "span_mask" => span_mask_t.into_dyn(),
             ])
             .map_err(|e| Error::Inference(format!("ONNX run: {}", e)))?;
 
@@ -578,27 +550,14 @@ impl GLiNER2Onnx {
         let mut input_ids: Vec<i64> = Vec::new();
         let mut word_mask: Vec<i64> = Vec::new();
 
-        // Start token
+        // Start token [CLS]
         input_ids.push(TOKEN_START as i64);
         word_mask.push(0);
 
-        // [P] token for prompt marker
-        input_ids.push(TOKEN_P as i64);
-        word_mask.push(0);
-
-        // "entities" keyword tokens (optional, some models skip this)
-        let entities_enc = self
-            .tokenizer
-            .encode("entities", false)
-            .map_err(|e| Error::Parse(format!("Tokenize: {}", e)))?;
-        for token_id in entities_enc.get_ids() {
-            input_ids.push(*token_id as i64);
-            word_mask.push(0);
-        }
-
-        // Entity types: [E]type1 [E]type2 ...
+        // Entity types: <<ENT>>type1 <<ENT>>type2 ...
+        // Format for token-level GLiNER: [CLS] <<ENT>>type1 <<ENT>>type2 ... <<SEP>> text [SEP]
         for entity_type in entity_types {
-            input_ids.push(TOKEN_E as i64);
+            input_ids.push(TOKEN_ENT as i64);
             word_mask.push(0);
 
             let type_enc = self
@@ -616,14 +575,13 @@ impl GLiNER2Onnx {
         word_mask.push(0);
 
         // Text words with word_mask tracking
-        let mut word_id: i64 = 0;
-        for word in text_words {
+        for (word_idx, word) in text_words.iter().enumerate() {
             let word_enc = self
                 .tokenizer
                 .encode(*word, false)
                 .map_err(|e| Error::Parse(format!("Tokenize: {}", e)))?;
 
-            word_id += 1;
+            let word_id = (word_idx + 1) as i64; // 1-indexed
             for (token_idx, token_id) in word_enc.get_ids().iter().enumerate() {
                 input_ids.push(*token_id as i64);
                 // First subword gets word ID, rest get 0
@@ -642,6 +600,8 @@ impl GLiNER2Onnx {
     }
 
     /// Generate span tensors.
+    /// Generate span tensors for span-level models (not needed for token-level ONNX models)
+    #[allow(dead_code)]
     fn make_span_tensors(&self, num_words: usize) -> (Vec<i64>, Vec<bool>) {
         // Use checked_mul to prevent overflow (same pattern as line 2388)
         let num_spans = num_words.checked_mul(MAX_SPAN_WIDTH).unwrap_or_else(|| {
@@ -737,15 +697,121 @@ impl GLiNER2Onnx {
             _ => return Err(Error::Parse("Not a tensor".into())),
         };
 
-        if output_data.is_empty() {
-            return Ok(Vec::new());
+        if output_data.is_empty() || shape.iter().any(|&d| d == 0) {
+            return Err(Error::Inference(
+                "GLiNER2 ONNX returned empty/degenerate output tensor. This usually indicates an incompatible ONNX export (shape mismatch or missing dynamic axes).".to_string(),
+            ));
         }
 
         let mut entities = Vec::new();
         let num_words = text_words.len();
 
-        // Shape: [batch, num_words, max_width, num_classes]
-        if shape.len() == 4 && shape[0] == 1 {
+        // Token-level model: shape [position, batch, num_words, num_classes]
+        // where position = 3 for BIO tagging (B=0, I=1, O=2)
+        if shape.len() == 4 && shape[0] == 3 && shape[1] == 1 {
+            let out_num_words = shape[2] as usize;
+            let num_classes = shape[3] as usize;
+            let word_class_size = out_num_words * num_classes;
+
+            // BIO decoding: find B-type starts, extend with I-type
+            // Output shape [BIO=3, batch=1, words, classes] flattened to [BIO * batch * words * classes]
+            // BIO dimension: 0=Begin, 1=Inside, 2=Outside
+            let b_offset = 0_usize; // Begin logits start at offset 0
+            let i_offset = word_class_size; // Inside logits start after B (1 * word_class_size)
+
+            #[allow(clippy::needless_range_loop)] // class_idx used for multiple array accesses
+            for class_idx in 0..num_classes.min(entity_types.len()) {
+                let mut current_start: Option<(usize, f32)> = None; // (word_idx, score)
+
+                for word_idx in 0..out_num_words.min(num_words) {
+                    // B logit at BIO dimension 0
+                    let b_idx = b_offset + word_idx * num_classes + class_idx;
+                    // I logit at BIO dimension 1
+                    let i_idx = i_offset + word_idx * num_classes + class_idx;
+
+                    let b_logit = if b_idx < output_data.len() {
+                        output_data[b_idx]
+                    } else {
+                        -100.0
+                    };
+                    let i_logit = if i_idx < output_data.len() {
+                        output_data[i_idx]
+                    } else {
+                        -100.0
+                    };
+
+                    let b_score = 1.0 / (1.0 + (-b_logit).exp());
+                    let i_score = 1.0 / (1.0 + (-i_logit).exp());
+
+                    if b_score >= threshold {
+                        // End any existing entity
+                        if let Some((start_word, avg_score)) = current_start.take() {
+                            let end_word = word_idx - 1;
+                            if start_word <= end_word && end_word < num_words {
+                                let span_text = text_words[start_word..=end_word].join(" ");
+                                let (start, end) = word_span_to_char_offsets(
+                                    text, text_words, start_word, end_word,
+                                );
+                                let entity_type = map_entity_type(entity_types[class_idx]);
+                                entities.push(Entity::new(
+                                    span_text,
+                                    entity_type,
+                                    start,
+                                    end,
+                                    avg_score as f64,
+                                ));
+                            }
+                        }
+                        // Start new entity
+                        current_start = Some((word_idx, b_score));
+                    } else if i_score >= threshold && current_start.is_some() {
+                        // Continue entity - update score
+                        if let Some((start_word, score)) = current_start {
+                            current_start = Some((start_word, (score + i_score) / 2.0));
+                        }
+                    } else if current_start.is_some() {
+                        // End entity
+                        if let Some((start_word, avg_score)) = current_start.take() {
+                            let end_word = word_idx - 1;
+                            if start_word <= end_word && end_word < num_words {
+                                let span_text = text_words[start_word..=end_word].join(" ");
+                                let (start, end) = word_span_to_char_offsets(
+                                    text, text_words, start_word, end_word,
+                                );
+                                let entity_type = map_entity_type(entity_types[class_idx]);
+                                entities.push(Entity::new(
+                                    span_text,
+                                    entity_type,
+                                    start,
+                                    end,
+                                    avg_score as f64,
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                // Handle entity at end of text
+                if let Some((start_word, avg_score)) = current_start.take() {
+                    let end_word = out_num_words.min(num_words) - 1;
+                    if start_word <= end_word {
+                        let span_text = text_words[start_word..=end_word].join(" ");
+                        let (start, end) =
+                            word_span_to_char_offsets(text, text_words, start_word, end_word);
+                        let entity_type = map_entity_type(entity_types[class_idx]);
+                        entities.push(Entity::new(
+                            span_text,
+                            entity_type,
+                            start,
+                            end,
+                            avg_score as f64,
+                        ));
+                    }
+                }
+            }
+        }
+        // Span-level model: shape [batch, num_words, max_width, num_classes]
+        else if shape.len() == 4 && shape[0] == 1 {
             let out_num_words = shape[1] as usize;
             let out_max_width = shape[2] as usize;
             let num_classes = shape[3] as usize;
@@ -757,6 +823,7 @@ impl GLiNER2Onnx {
                         continue;
                     }
 
+                    #[allow(clippy::needless_range_loop)] // class_idx used for index math
                     for class_idx in 0..num_classes.min(entity_types.len()) {
                         let idx = (word_idx * out_max_width * num_classes)
                             + (width * num_classes)
@@ -819,8 +886,10 @@ impl GLiNER2Onnx {
             _ => return Err(Error::Parse("Not a tensor".into())),
         };
 
-        if output_data.is_empty() {
-            return Ok(texts.iter().map(|_| Vec::new()).collect());
+        if output_data.is_empty() || shape.iter().any(|&d| d == 0) {
+            return Err(Error::Inference(
+                "GLiNER2 ONNX returned empty/degenerate output tensor. This usually indicates an incompatible ONNX export (shape mismatch or missing dynamic axes).".to_string(),
+            ));
         }
 
         let mut results = Vec::with_capacity(texts.len());
@@ -847,6 +916,7 @@ impl GLiNER2Onnx {
                             continue;
                         }
 
+                        #[allow(clippy::needless_range_loop)] // class_idx used for index math
                         for class_idx in 0..num_classes.min(entity_types.len()) {
                             let idx = batch_offset
                                 + (word_idx * out_max_width * num_classes)
@@ -904,27 +974,17 @@ impl GLiNER2Onnx {
             return Ok(ClassificationResult::default());
         }
 
-        // For classification, we use a simpler approach: encode [P] task ([L]label1 ...) [SEP] text
-        // Then use [CLS] or mean-pooled representation
+        // For classification, encode <<ENT>>label1 <<ENT>>label2 ... <<SEP>> text
+        // Using same format as NER since this model uses shared token markers
 
         // Encode input
         let mut input_ids: Vec<i64> = Vec::new();
 
         input_ids.push(TOKEN_START as i64);
-        input_ids.push(TOKEN_P as i64);
 
-        // Classification task marker
-        let class_enc = self
-            .tokenizer
-            .encode("classification", false)
-            .map_err(|e| Error::Parse(format!("Tokenize: {}", e)))?;
-        for id in class_enc.get_ids() {
-            input_ids.push(*id as i64);
-        }
-
-        // Labels: [L]label1 [L]label2 ...
+        // Labels: <<ENT>>label1 <<ENT>>label2 ...
         for label in labels {
-            input_ids.push(TOKEN_L as i64);
+            input_ids.push(TOKEN_ENT as i64);
             let label_enc = self
                 .tokenizer
                 .encode(*label, false)
@@ -1980,28 +2040,29 @@ fn word_span_to_char_offsets(
         return (0, 0);
     }
 
-    let mut char_pos = 0;
-    let mut char_start = 0;
-    let mut char_end = text.len();
+    // Track our search position in **bytes**.
+    let mut byte_pos = 0;
+    let mut start_byte = 0;
+    let mut end_byte = text.len();
     let mut found_start = false;
     let mut found_end = false;
 
     for (i, word) in words.iter().enumerate() {
-        if let Some(pos) = text[char_pos..].find(word) {
-            let abs_pos = char_pos + pos;
+        if let Some(pos) = text.get(byte_pos..).and_then(|s| s.find(word)) {
+            let abs_pos = byte_pos + pos;
 
             if i == start_word {
-                char_start = abs_pos;
+                start_byte = abs_pos;
                 found_start = true;
             }
             if i == end_word {
-                char_end = abs_pos + word.len();
+                end_byte = abs_pos + word.len();
                 found_end = true;
                 // Early exit: we found both start and end
                 break;
             }
 
-            char_pos = abs_pos + word.len();
+            byte_pos = abs_pos + word.len();
         } else {
             // Word not found - this shouldn't happen in normal operation,
             // but if it does, we can't reliably compute offsets
@@ -2014,7 +2075,8 @@ fn word_span_to_char_offsets(
         // Return empty span to avoid incorrect entity extraction
         (0, 0)
     } else {
-        (char_start, char_end)
+        // Convert byte offsets to character offsets (anno spans are char-based).
+        crate::offset::bytes_to_chars(text, start_byte, end_byte)
     }
 }
 
@@ -2244,12 +2306,13 @@ fn extract_relations_heuristic(
     use crate::backends::inference::RelationTriple;
 
     let mut relations = Vec::new();
-    let words: Vec<&str> = text.split_whitespace().collect();
-    let _text_len = words.len().max(1) as f32;
+    // Entity offsets in anno are character offsets. Keep all length math consistent with chars.
+    let text_char_count = text.chars().count();
+    let text_char_len = text_char_count.max(1) as f32;
 
     // Relation trigger patterns
     let trigger_patterns: Vec<(&str, &str)> = vec![
-        ("CEO", "CEO_OF"),
+        ("ceo", "CEO_OF"),
         ("founder", "FOUNDED"),
         ("founded", "FOUNDED"),
         ("works at", "WORKS_FOR"),
@@ -2267,8 +2330,6 @@ fn extract_relations_heuristic(
         ("merged", "MERGED_WITH"),
     ];
 
-    let text_lower = text.to_lowercase();
-
     for (i, head) in entities.iter().enumerate() {
         for (j, tail) in entities.iter().enumerate() {
             if i == j {
@@ -2278,7 +2339,7 @@ fn extract_relations_heuristic(
             // Distance-based scoring: closer entities are more likely related
             let head_center = (head.start + head.end) as f32 / 2.0;
             let tail_center = (tail.start + tail.end) as f32 / 2.0;
-            let distance = (head_center - tail_center).abs() / text.len().max(1) as f32;
+            let distance = (head_center - tail_center).abs() / text_char_len;
             let proximity_score = 1.0 - distance.min(1.0);
 
             // Type-based relation candidates
@@ -2295,18 +2356,22 @@ fn extract_relations_heuristic(
                 // Overlapping entities - use surrounding context
                 let min_start = head.start.min(tail.start);
                 let max_end = head.end.max(tail.end);
-                (min_start.saturating_sub(20), (max_end + 20).min(text.len()))
+                (
+                    min_start.saturating_sub(20),
+                    (max_end + 20).min(text_char_count),
+                )
             };
 
-            let between_text = if span_end > span_start && span_end <= text.len() {
-                &text_lower[span_start..span_end]
+            let between_text = if span_end > span_start && span_end <= text_char_count {
+                crate::offset::TextSpan::from_chars(text, span_start, span_end).extract(text)
             } else {
                 ""
             };
+            let between_lower = between_text.to_ascii_lowercase();
 
             // Check trigger patterns
             for (trigger, rel_type) in &trigger_patterns {
-                if between_text.contains(trigger) {
+                if between_lower.contains(trigger) {
                     // Filter by requested relation types if specified
                     if !relation_types.is_empty()
                         && !relation_types
@@ -2452,13 +2517,11 @@ impl crate::BatchCapable for GLiNER2Onnx {
             return Ok(texts.iter().map(|_| Vec::new()).collect());
         }
 
-        // Encode all prompts
+        // Encode all prompts (no span tensors needed for current model)
         let mut all_input_ids = Vec::new();
         let mut all_attention_masks = Vec::new();
         let mut all_words_masks = Vec::new();
         let mut all_text_lengths = Vec::new();
-        let mut all_span_idx = Vec::new();
-        let mut all_span_masks = Vec::new();
         let mut seq_lens = Vec::new();
 
         for words in &text_words {
@@ -2475,10 +2538,6 @@ impl crate::BatchCapable for GLiNER2Onnx {
             all_attention_masks.push(attention_mask);
             all_words_masks.push(words_mask);
             all_text_lengths.push(words.len() as i64);
-
-            let (span_idx, span_mask) = self.make_span_tensors(words.len());
-            all_span_idx.push(span_idx);
-            all_span_masks.push(span_mask);
         }
 
         // If all texts were empty, return empty results
@@ -2488,36 +2547,16 @@ impl crate::BatchCapable for GLiNER2Onnx {
 
         // Pad sequences to max length
         let max_seq_len = seq_lens.iter().copied().max().unwrap_or(0);
-        let max_span_count = max_words.checked_mul(MAX_SPAN_WIDTH).ok_or_else(|| {
-            Error::InvalidInput(format!(
-                "Span count overflow: max_words={} * MAX_SPAN_WIDTH={}",
-                max_words, MAX_SPAN_WIDTH
-            ))
-        })?;
 
         for i in 0..all_input_ids.len() {
             let pad_len = max_seq_len - all_input_ids[i].len();
             all_input_ids[i].extend(std::iter::repeat(0i64).take(pad_len));
             all_attention_masks[i].extend(std::iter::repeat(0i64).take(pad_len));
             all_words_masks[i].extend(std::iter::repeat(0i64).take(pad_len));
-
-            // Pad span tensors - validate length first
-            if all_span_idx[i].len() > max_span_count * 2 {
-                return Err(Error::InvalidInput(format!(
-                    "Span index length {} exceeds expected max {} for text {}",
-                    all_span_idx[i].len(),
-                    max_span_count * 2,
-                    i
-                )));
-            }
-            let span_pad = (max_span_count * 2).saturating_sub(all_span_idx[i].len());
-            all_span_idx[i].extend(std::iter::repeat(0i64).take(span_pad));
-            let mask_pad = max_span_count.saturating_sub(all_span_masks[i].len());
-            all_span_masks[i].extend(std::iter::repeat(false).take(mask_pad));
         }
 
-        // Build batched tensors
-        use ndarray::{Array2, Array3};
+        // Build batched tensors - only 4 inputs (no span tensors)
+        use ndarray::Array2;
         use ort::value::Tensor;
 
         let batch_size = all_input_ids.len();
@@ -2525,8 +2564,6 @@ impl crate::BatchCapable for GLiNER2Onnx {
         let input_ids_flat: Vec<i64> = all_input_ids.into_iter().flatten().collect();
         let attention_mask_flat: Vec<i64> = all_attention_masks.into_iter().flatten().collect();
         let words_mask_flat: Vec<i64> = all_words_masks.into_iter().flatten().collect();
-        let span_idx_flat: Vec<i64> = all_span_idx.into_iter().flatten().collect();
-        let span_mask_flat: Vec<bool> = all_span_masks.into_iter().flatten().collect();
 
         // Validate lengths before array creation
         let expected_input_len = batch_size * max_seq_len;
@@ -2535,15 +2572,6 @@ impl crate::BatchCapable for GLiNER2Onnx {
                 "Input IDs length mismatch: expected {}, got {}",
                 expected_input_len,
                 input_ids_flat.len()
-            )));
-        }
-
-        let expected_span_len = batch_size * max_span_count * 2;
-        if span_idx_flat.len() != expected_span_len {
-            return Err(Error::Parse(format!(
-                "Span indices length mismatch: expected {}, got {}",
-                expected_span_len,
-                span_idx_flat.len()
             )));
         }
 
@@ -2556,10 +2584,6 @@ impl crate::BatchCapable for GLiNER2Onnx {
             .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
         let text_lengths_arr = Array2::from_shape_vec((batch_size, 1), all_text_lengths)
             .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
-        let span_idx_arr = Array3::from_shape_vec((batch_size, max_span_count, 2), span_idx_flat)
-            .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
-        let span_mask_arr = Array2::from_shape_vec((batch_size, max_span_count), span_mask_flat)
-            .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
 
         let input_ids_t = Tensor::from_array(input_ids_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
@@ -2569,13 +2593,9 @@ impl crate::BatchCapable for GLiNER2Onnx {
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
         let text_lengths_t = Tensor::from_array(text_lengths_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let span_idx_t =
-            Tensor::from_array(span_idx_arr).map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let span_mask_t = Tensor::from_array(span_mask_arr)
-            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
 
-        // Run batched inference
-        let mut session = try_lock(&self.session)?;
+        // Run batched inference with blocking lock for thread-safe parallel access
+        let mut session = lock(&self.session);
 
         let outputs = session
             .run(ort::inputs![
@@ -2583,8 +2603,6 @@ impl crate::BatchCapable for GLiNER2Onnx {
                 "attention_mask" => attention_mask_t.into_dyn(),
                 "words_mask" => words_mask_t.into_dyn(),
                 "text_lengths" => text_lengths_t.into_dyn(),
-                "span_idx" => span_idx_t.into_dyn(),
-                "span_mask" => span_mask_t.into_dyn(),
             ])
             .map_err(|e| Error::Inference(format!("ONNX batch run: {}", e)))?;
 
@@ -2686,6 +2704,44 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(any(feature = "onnx", feature = "candle"))]
+    fn test_relation_heuristic_unicode_safe_and_case_insensitive() {
+        use crate::backends::inference::RelationTriple;
+        use crate::offset::bytes_to_chars;
+
+        let text = "Dr. 田中 is CEO of Apple Inc. in 東京. François works at OpenAI.";
+        let span = |needle: &str| {
+            let (b_start, _) = text
+                .match_indices(needle)
+                .next()
+                .expect("needle should exist in test text");
+            let b_end = b_start + needle.len();
+            bytes_to_chars(text, b_start, b_end)
+        };
+
+        let (s, e) = span("田中");
+        let e_tanaka = Entity::new("田中", EntityType::Person, s, e, 0.9);
+        let (s, e) = span("Apple Inc.");
+        let e_apple = Entity::new("Apple Inc.", EntityType::Organization, s, e, 0.9);
+        let (s, e) = span("東京");
+        let e_tokyo = Entity::new("東京", EntityType::Location, s, e, 0.9);
+        let (s, e) = span("François");
+        let e_francois = Entity::new("François", EntityType::Person, s, e, 0.9);
+        let (s, e) = span("OpenAI");
+        let e_openai = Entity::new("OpenAI", EntityType::Organization, s, e, 0.9);
+
+        let entities = vec![e_tanaka, e_apple, e_tokyo, e_francois, e_openai];
+
+        // Should not panic on Unicode text; should detect at least one trigger relation.
+        let rels: Vec<RelationTriple> = extract_relations_heuristic(&entities, text, &[], 0.0);
+        assert!(
+            rels.iter().any(|r| r.relation_type == "CEO_OF" || r.relation_type == "WORKS_FOR"),
+            "expected at least one trigger-based relation, got {:?}",
+            rels
+        );
+    }
+
+    #[test]
     fn test_task_schema_builder() {
         let schema = TaskSchema::new()
             .with_entities(&["person", "organization"])
@@ -2709,17 +2765,22 @@ mod tests {
 
     #[test]
     fn test_word_span_to_char_offsets() {
+        use crate::offset::TextSpan;
+
         let text = "John works at Apple";
         let words: Vec<&str> = text.split_whitespace().collect();
 
         let (start, end) = word_span_to_char_offsets(text, &words, 0, 0);
-        assert_eq!(&text[start..end], "John");
+        assert_eq!(TextSpan::from_chars(text, start, end).extract(text), "John");
 
         let (start, end) = word_span_to_char_offsets(text, &words, 3, 3);
-        assert_eq!(&text[start..end], "Apple");
+        assert_eq!(TextSpan::from_chars(text, start, end).extract(text), "Apple");
 
         let (start, end) = word_span_to_char_offsets(text, &words, 0, 2);
-        assert_eq!(&text[start..end], "John works at");
+        assert_eq!(
+            TextSpan::from_chars(text, start, end).extract(text),
+            "John works at"
+        );
     }
 
     #[test]
