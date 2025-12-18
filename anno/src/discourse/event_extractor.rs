@@ -1729,9 +1729,11 @@ mod tests {
         let referents = extractor.extract_referents(text);
         assert!(!referents.is_empty());
         assert!(
-            referents
-                .iter()
-                .any(|r| r.text.as_deref().unwrap_or("").contains("Russia invaded Ukraine")),
+            referents.iter().any(|r| r
+                .text
+                .as_deref()
+                .unwrap_or("")
+                .contains("Russia invaded Ukraine")),
             "Expected an event referent clause containing the invasion clause"
         );
     }

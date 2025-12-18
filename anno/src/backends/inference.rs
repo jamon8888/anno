@@ -2600,7 +2600,13 @@ mod tests {
         let apple_end_char = apple_start_char + "Apple".chars().count();
 
         let entities = vec![
-            Entity::new("Steve Jobs", EntityType::Person, steve_start_char, steve_end_char, 0.95),
+            Entity::new(
+                "Steve Jobs",
+                EntityType::Person,
+                steve_start_char,
+                steve_end_char,
+                0.95,
+            ),
             Entity::new(
                 "Apple",
                 EntityType::Organization,
@@ -2617,7 +2623,10 @@ mod tests {
         let config = RelationExtractionConfig::default();
         let relations = extract_relations(&entities, text, &registry, &config);
 
-        assert!(!relations.is_empty(), "Expected FOUNDED relation to be detected");
+        assert!(
+            !relations.is_empty(),
+            "Expected FOUNDED relation to be detected"
+        );
         assert_eq!(relations[0].relation_type, "FOUNDED");
 
         // Trigger span should exist and cover "founded" in character offsets.
