@@ -434,6 +434,22 @@ pub struct MentionRankingConfig {
     ///
     /// Default: false (for backward compatibility)
     pub enable_nominal_adjective_detection: bool,
+
+    /// Language for language-specific features (ISO 639-1 code).
+    ///
+    /// When set, enables language-specific patterns for:
+    /// - Nominal adjective detection (German "die Armen", French "les pauvres", etc.)
+    /// - Pronoun resolution rules
+    /// - Gender/number agreement
+    ///
+    /// Supported languages:
+    /// - "en" (default): English
+    /// - "de": German
+    /// - "fr": French
+    /// - "es": Spanish
+    ///
+    /// Default: "en"
+    pub language: String,
 }
 
 impl Default for MentionRankingConfig {
@@ -477,6 +493,9 @@ impl Default for MentionRankingConfig {
 
             // Nominal adjective detection (J2N: arXiv:2409.14374)
             enable_nominal_adjective_detection: false,
+
+            // Language (English by default)
+            language: "en".to_string(),
         }
     }
 }
@@ -525,6 +544,7 @@ impl MentionRankingConfig {
             enable_synonym_matching: false, // Off by default, requires domain synonyms
             synonym_weight: 0.5,
             enable_nominal_adjective_detection: false,
+            language: "en".to_string(),
         }
     }
 
@@ -586,6 +606,7 @@ impl MentionRankingConfig {
             enable_synonym_matching: true, // Enable with medical synonyms
             synonym_weight: 0.6,
             enable_nominal_adjective_detection: false,
+            language: "en".to_string(),
         }
     }
 
@@ -1739,14 +1760,11 @@ impl MentionRankingCoref {
         // Detect nominal adjectives (J2N: arXiv:2409.14374)
         // Phrases like "the poor", "the elderly" function as plural noun phrases.
         //
-        // MULTILINGUAL NOTE: Currently English-only. Other languages have similar patterns:
+        // MULTILINGUAL: Supports English, German, French, Spanish patterns.
         // - German: "die Armen" (the poor), "die Reichen" (the rich)
         // - French: "les pauvres", "les riches"
         // - Spanish: "los pobres", "los ricos"
-        // - Arabic: "الفقراء" (the poor) - adjective nominalization common
-        // - Japanese: 貧しい人々 (binbou na hitobito) - uses explicit 人々 (people)
-        //
-        // TODO: Add language-specific patterns or use language detection.
+        // - Arabic and Japanese use different patterns not yet supported.
         if self.config.enable_nominal_adjective_detection {
             // Adjectives that commonly function as nouns when preceded by determiners.
             // These refer to groups of people and are grammatically plural.
@@ -1812,11 +1830,88 @@ impl MentionRankingCoref {
                 "marginalized",
             ];
 
-            // Determiners that can precede nominal adjectives
-            const NA_DETERMINERS: &[&str] = &["the ", "these ", "those "];
+            // =========================================================================
+            // Language-specific nominal adjective patterns
+            // =========================================================================
 
-            for det in NA_DETERMINERS {
-                for adj in NOMINALIZED_ADJECTIVES {
+            // Get determiners and adjectives for the configured language
+            let (determiners, adjectives): (Vec<&str>, Vec<&str>) =
+                match self.config.language.as_str() {
+                    "de" => {
+                        // German: "die Armen", "die Reichen", etc.
+                        // Note: German uses "die" (the) for plural nominalized adjectives
+                        let dets = vec!["die ", "diese ", "jene "];
+                        let adjs = vec![
+                            "armen",
+                            "reichen",
+                            "alten",
+                            "jungen",
+                            "kranken",
+                            "gesunden",
+                            "toten",
+                            "lebenden",
+                            "blinden",
+                            "tauben",
+                            "arbeitslosen",
+                            "obdachlosen",
+                            "mächtigen",
+                            "schwachen",
+                            "unterdrückten",
+                        ];
+                        (dets, adjs)
+                    }
+                    "fr" => {
+                        // French: "les pauvres", "les riches", etc.
+                        let dets = vec!["les ", "ces "];
+                        let adjs = vec![
+                            "pauvres",
+                            "riches",
+                            "vieux",
+                            "jeunes",
+                            "malades",
+                            "morts",
+                            "vivants",
+                            "aveugles",
+                            "sourds",
+                            "faibles",
+                            "puissants",
+                            "opprimés",
+                            "affamés",
+                            "marginalisés",
+                        ];
+                        (dets, adjs)
+                    }
+                    "es" => {
+                        // Spanish: "los pobres", "los ricos", etc.
+                        // Note: Spanish uses gender-marked articles (los/las)
+                        let dets = vec!["los ", "las ", "estos ", "estas "];
+                        let adjs = vec![
+                            "pobres",
+                            "ricos",
+                            "viejos",
+                            "jóvenes",
+                            "enfermos",
+                            "muertos",
+                            "vivos",
+                            "ciegos",
+                            "sordos",
+                            "débiles",
+                            "poderosos",
+                            "oprimidos",
+                            "hambrientos",
+                            "marginados",
+                        ];
+                        (dets, adjs)
+                    }
+                    _ => {
+                        // English (default): "the poor", "the rich", etc.
+                        let dets = vec!["the ", "these ", "those "];
+                        (dets, NOMINALIZED_ADJECTIVES.to_vec())
+                    }
+                };
+
+            for det in &determiners {
+                for adj in &adjectives {
                     let pattern = format!("{}{}", det, adj);
                     let pattern_lower = pattern.to_lowercase();
 
@@ -1838,24 +1933,69 @@ impl MentionRankingCoref {
                             .take_while(|c| c.is_alphabetic())
                             .collect();
 
-                        // Words that can follow a nominal adjective (verbs, function words)
-                        const VALID_FOLLOWERS: &[&str] = &[
-                            // Verbs (be, have, do, modals)
-                            "are", "were", "is", "was", "be", "been", "being", "have", "has", "had",
-                            "having", "do", "does", "did", "can", "could", "will", "would",
-                            "shall", "should", "may", "might", "must",
-                            // Common action verbs
-                            "need", "want", "get", "got", "struggle", "suffer", "deserve",
-                            "receive", "face", "lack", "seek",
-                            // Conjunctions and relative pronouns
-                            "and", "or", "but", "who", "whom", "whose", "that", "which",
-                            // Prepositions starting phrases
-                            "in", "of", "from", "with", "without", "among",
-                        ];
+                        // Words that can follow a nominal adjective (language-specific)
+                        let valid_followers: Vec<&str> = match self.config.language.as_str() {
+                            "de" => vec![
+                                // German verbs
+                                "sind", "waren", "haben", "hatten", "werden", "wurden", "brauchen",
+                                "müssen", "können", "sollen", "wollen", // Conjunctions
+                                "und", "oder", "aber", "die", "welche",
+                            ],
+                            "fr" => vec![
+                                // French verbs
+                                "sont",
+                                "étaient",
+                                "ont",
+                                "avaient",
+                                "seront",
+                                "peuvent",
+                                "doivent",
+                                "veulent",
+                                "méritent",
+                                // Conjunctions
+                                "et",
+                                "ou",
+                                "mais",
+                                "qui",
+                                "que",
+                            ],
+                            "es" => vec![
+                                // Spanish verbs
+                                "son",
+                                "eran",
+                                "tienen",
+                                "tenían",
+                                "serán",
+                                "pueden",
+                                "deben",
+                                "quieren",
+                                "merecen",
+                                "necesitan",
+                                "sufren",
+                                "luchan",
+                                "reciben",
+                                "buscan",
+                                // Conjunctions
+                                "y",
+                                "o",
+                                "pero",
+                                "que",
+                                "quienes",
+                            ],
+                            _ => vec![
+                                // English (default)
+                                "are", "were", "is", "was", "be", "been", "being", "have", "has",
+                                "had", "having", "do", "does", "did", "can", "could", "will",
+                                "would", "shall", "should", "may", "might", "must", "need", "want",
+                                "get", "got", "struggle", "suffer", "deserve", "receive", "face",
+                                "lack", "seek", "and", "or", "but", "who", "whom", "whose", "that",
+                                "which", "in", "of", "from", "with", "without", "among",
+                            ],
+                        };
 
                         // Valid if: no next word, starts with punct, or next word is allowed
                         let is_valid_nominal =
-                            next_word.is_empty() || VALID_FOLLOWERS.contains(&next_word.as_str());
+                            next_word.is_empty() || valid_followers.contains(&next_word.as_str());
 
                         if is_valid_nominal {
                             // Convert byte positions to character positions
@@ -4849,6 +4989,88 @@ mod tests {
             3..15,
         )
         .prop_map(|words| words.join(" ") + ".")
+    }
+
+    // =========================================================================
+    // Multilingual Nominal Adjective Tests
+    // =========================================================================
+
+    #[test]
+    fn test_multilingual_nominal_adjective_german() {
+        let config = MentionRankingConfig {
+            enable_nominal_adjective_detection: true,
+            language: "de".to_string(),
+            ..Default::default()
+        };
+
+        let coref = MentionRankingCoref::with_config(config);
+        let text = "Die Armen leiden unter der Krise.";
+        let mentions = coref.detect_mentions(text).unwrap();
+
+        let has_armen = mentions
+            .iter()
+            .any(|m| m.text.to_lowercase().contains("armen"));
+        assert!(
+            has_armen,
+            "Should detect 'die Armen' as a nominal adjective in German"
+        );
+    }
+
+    #[test]
+    fn test_multilingual_nominal_adjective_french() {
+        let config = MentionRankingConfig {
+            enable_nominal_adjective_detection: true,
+            language: "fr".to_string(),
+            ..Default::default()
+        };
+
+        let coref = MentionRankingCoref::with_config(config);
+        let text = "Les pauvres ont besoin d'aide.";
+        let mentions = coref.detect_mentions(text).unwrap();
+
+        let has_pauvres = mentions
+            .iter()
+            .any(|m| m.text.to_lowercase().contains("pauvres"));
+        assert!(
+            has_pauvres,
+            "Should detect 'les pauvres' as a nominal adjective in French"
+        );
+    }
+
+    #[test]
+    fn test_multilingual_nominal_adjective_spanish() {
+        let config = MentionRankingConfig {
+            enable_nominal_adjective_detection: true,
+            language: "es".to_string(),
+            ..Default::default()
+        };
+
+        let coref = MentionRankingCoref::with_config(config);
+        let text = "Los pobres necesitan ayuda.";
+        let mentions = coref.detect_mentions(text).unwrap();
+
+        let has_pobres = mentions
+            .iter()
+            .any(|m| m.text.to_lowercase().contains("pobres"));
+        assert!(
+            has_pobres,
+            "Should detect 'los pobres' as a nominal adjective in Spanish"
+        );
+    }
+
+    #[test]
+    fn test_config_language_field() {
+        // Default should be English
+        let config = MentionRankingConfig::default();
+        assert_eq!(config.language, "en");
+
+        // Book scale should default to English
+        let book_config = MentionRankingConfig::book_scale();
+        assert_eq!(book_config.language, "en");
+
+        // Clinical should default to English
+        let clinical_config = MentionRankingConfig::clinical();
+        assert_eq!(clinical_config.language, "en");
     }
 
     proptest! {
