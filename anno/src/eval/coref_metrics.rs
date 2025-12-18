@@ -1857,41 +1857,40 @@ mod tests {
 
     #[test]
     fn test_zero_anaphor_eval_tp_wl_fn_fp() {
-        // Gold: John ... ∅ (zero) where ∅ is anaphoric and should link to John.
         let john = Mention::new("John", 0, 4);
-        let zero = Mention::with_type("", 5, 5, MentionType::Zero);
-        let gold = vec![CorefChain::with_id(vec![john.clone(), zero.clone()], 1)];
+        let mary = Mention::new("Mary", 10, 14);
 
-        // TP: predicted antecedent set overlaps (John).
-        let pred_tp = vec![CorefChain::with_id(vec![john.clone(), zero.clone()], 10)];
-        let tp = ZeroAnaphorEvaluation::compute(&pred_tp, &gold).unwrap();
+        // TP: gold and prediction agree on a preceding antecedent for the zero.
+        let zero_tp = Mention::with_type("", 5, 5, MentionType::Zero);
+        let gold_tp = vec![CorefChain::with_id(vec![john.clone(), zero_tp.clone()], 1)];
+        let pred_tp = vec![CorefChain::with_id(vec![john.clone(), zero_tp.clone()], 10)];
+        let tp = ZeroAnaphorEvaluation::compute(&pred_tp, &gold_tp).unwrap();
         assert_eq!(tp.tp, 1);
         assert_eq!(tp.wl, 0);
         assert_eq!(tp.fn_, 0);
         assert_eq!(tp.fp, 0);
 
-        // WL: predicted is anaphoric but links to a different antecedent.
-        let mary = Mention::new("Mary", 0, 4);
-        let pred_wl = vec![
-            CorefChain::with_id(vec![mary.clone(), zero.clone()], 11),
-            CorefChain::singleton(john.clone()),
-        ];
-        let wl = ZeroAnaphorEvaluation::compute(&pred_wl, &gold).unwrap();
+        // WL: predicted is anaphoric but links to a different preceding antecedent.
+        // Put the zero later so both John and Mary are preceding candidates.
+        let zero_wl = Mention::with_type("", 20, 20, MentionType::Zero);
+        let gold_wl = vec![CorefChain::with_id(vec![john.clone(), zero_wl.clone()], 1)];
+        let pred_wl = vec![CorefChain::with_id(vec![mary.clone(), zero_wl.clone()], 11)];
+        let wl = ZeroAnaphorEvaluation::compute(&pred_wl, &gold_wl).unwrap();
         assert_eq!(wl.tp, 0);
         assert_eq!(wl.wl, 1);
         assert_eq!(wl.fn_, 0);
         assert_eq!(wl.fp, 0);
 
-        // FN: predicted contains zero but treats it as non-anaphoric (singleton) or misses it.
-        let pred_fn = vec![CorefChain::singleton(zero.clone())];
-        let fn_eval = ZeroAnaphorEvaluation::compute(&pred_fn, &gold).unwrap();
+        // FN: predicted contains the zero but treats it as non-anaphoric (singleton).
+        let pred_fn = vec![CorefChain::singleton(zero_tp.clone())];
+        let fn_eval = ZeroAnaphorEvaluation::compute(&pred_fn, &gold_tp).unwrap();
         assert_eq!(fn_eval.tp, 0);
         assert_eq!(fn_eval.wl, 0);
         assert_eq!(fn_eval.fn_, 1);
 
         // FP: gold zero is NOT anaphoric (singleton cluster), but prediction treats it as anaphoric.
-        let gold_singleton_zero = vec![CorefChain::with_id(vec![zero.clone()], 2)];
-        let pred_fp = vec![CorefChain::with_id(vec![john.clone(), zero.clone()], 12)];
+        let gold_singleton_zero = vec![CorefChain::with_id(vec![zero_tp.clone()], 2)];
+        let pred_fp = vec![CorefChain::with_id(vec![john.clone(), zero_tp.clone()], 12)];
         let fp_eval = ZeroAnaphorEvaluation::compute(&pred_fp, &gold_singleton_zero).unwrap();
         assert_eq!(fp_eval.tp, 0);
         assert_eq!(fp_eval.fp, 1);
