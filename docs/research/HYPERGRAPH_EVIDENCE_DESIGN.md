@@ -429,7 +429,7 @@ pub struct LearnedAggregator {
 
 ## Connection to Sheaf Neural Networks
 
-The hypergraph formulation naturally extends to **cellular sheaves** (see [`GEOMETRIC_FOUNDATIONS.md`](GEOMETRIC_FOUNDATIONS.md)):
+The hypergraph formulation naturally extends to **cellular sheaves** (see [`GEOMETRIC_FOUNDATIONS.md`](../design/embeddings/GEOMETRIC_FOUNDATIONS.md)):
 
 | Hypergraph Concept | Sheaf Generalization |
 |--------------------|---------------------|

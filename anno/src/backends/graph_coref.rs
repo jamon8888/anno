@@ -128,7 +128,7 @@
 //!
 //! This enforces transitivity at the gradient level, not post-hoc. See:
 //! - `archive/geometric-2024-12/sheaf.rs` for stub implementation and trait definitions
-//! - `docs/GEOMETRIC_FOUNDATIONS.md` for theory and integration path
+//! - `docs/design/embeddings/GEOMETRIC_FOUNDATIONS.md` for theory and integration path
 //! - Bodnar et al. (2023): "Neural Sheaf Diffusion" - NeurIPS
 //! - twitter-research/neural-sheaf-diffusion (Apache 2.0): reference implementation
 

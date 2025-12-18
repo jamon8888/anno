@@ -224,7 +224,7 @@ fn project_to_box(embed: &[f32], weights: &Weights) -> BoxEmbedding {
 
 ## Training on Coref Data
 
-See `docs/BOX_COREF_INTEGRATION.md` for the full pipeline:
+See `BOX_COREF_INTEGRATION.md` for the full pipeline:
 1. Export coref clusters from anno datasets
 2. Convert to containment pairs (mention ⊆ cluster)
 3. Train in box-coref

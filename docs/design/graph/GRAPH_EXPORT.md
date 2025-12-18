@@ -2,7 +2,7 @@
 
 Convert NER/Coref output to graph formats for RAG applications (Neo4j, NetworkX, etc.).
 
-**Related**: See [CROSSDOC_COREF_ARCHITECTURE.md](CROSSDOC_COREF_ARCHITECTURE.md) for how coreference enables unified graph nodes.
+**Related**: See [CROSSDOC_COREF_ARCHITECTURE.md](../coref/CROSSDOC_COREF_ARCHITECTURE.md) for how coreference enables unified graph nodes.
 
 ## Overview
 
