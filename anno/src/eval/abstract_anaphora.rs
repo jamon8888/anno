@@ -2545,32 +2545,47 @@ impl AbstractAnaphoraEvaluator {
     }
 
     /// Extract named entities from text (simple heuristic).
+    ///
+    /// `offset` is a **character offset** into the original document.
     fn extract_named_entities(&self, text: &str, offset: usize) -> Vec<Entity> {
         let mut entities = Vec::new();
 
-        // Simple capitalized word detection
-        for (i, c) in text.char_indices() {
-            if c.is_uppercase()
-                && (i == 0 || text.chars().nth(i - 1).map_or(true, |p| p.is_whitespace()))
-            {
-                // Find end of capitalized word
-                let end = text[i..]
-                    .char_indices()
-                    .find(|(_, c)| c.is_whitespace() || *c == '.' || *c == ',')
-                    .map(|(j, _)| i + j)
-                    .unwrap_or(text.len());
+        // Simple capitalized word detection (Unicode-safe offsets).
+        let mut prev_is_ws = true;
+        let mut char_idx = 0usize;
+        for (byte_idx, c) in text.char_indices() {
+            if c.is_uppercase() && (byte_idx == 0 || prev_is_ws) {
+                // Find end of word by scanning forward from this byte index.
+                let mut end_byte = text.len();
+                let mut end_char_idx = char_idx;
+                for (j, cc) in text[byte_idx..].char_indices() {
+                    if j == 0 {
+                        continue;
+                    }
+                    if cc.is_whitespace() || cc == '.' || cc == ',' {
+                        end_byte = byte_idx + j;
+                        // Number of chars from start to delimiter gives end char idx.
+                        end_char_idx = char_idx + text[byte_idx..end_byte].chars().count();
+                        break;
+                    }
+                }
+                if end_byte == text.len() {
+                    end_char_idx = char_idx + text[byte_idx..].chars().count();
+                }
 
-                let word = &text[i..end];
-                if word.len() > 1 && !self.is_sentence_starter(word, i) {
+                let word = &text[byte_idx..end_byte];
+                if word.chars().count() > 1 && !self.is_sentence_starter(word, char_idx) {
                     entities.push(Entity::new(
                         word,
                         self.infer_entity_type(word),
-                        offset + i,
-                        offset + end,
+                        offset + char_idx,
+                        offset + end_char_idx,
                         0.7,
                     ));
                 }
             }
+            prev_is_ws = c.is_whitespace();
+            char_idx += 1;
         }
 
         entities

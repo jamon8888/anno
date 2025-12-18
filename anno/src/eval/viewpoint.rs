@@ -57,6 +57,7 @@
 //! - Minard et al. (2016): "MEANTIME: NewsReader Multilingual Event and Time Corpus"
 //! - Park et al. (2015): "Epistemic Stance in NLP"
 
+use crate::offset::TextSpan;
 use crate::Entity;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -558,17 +559,37 @@ impl ViewpointExtractor {
                     continue;
                 }
 
+                let span = TextSpan::from_bytes(text, m.start(), m.end());
                 entities.push(Entity::new(
                     text_match,
                     EntityType::Person, // Default to person
-                    m.start(),
-                    m.end(),
+                    span.char_start,
+                    span.char_end,
                     0.5,
                 ));
             }
         }
 
         entities
+    }
+}
+
+#[cfg(test)]
+mod simple_extraction_tests {
+    use super::*;
+    use crate::offset::TextSpan;
+
+    #[test]
+    fn test_simple_entity_extraction_offsets_are_character_offsets_on_unicode_prefix() {
+        let extractor = ViewpointExtractor::default();
+        let text = "Müller met John Smith in Paris.";
+        let ents = extractor.simple_entity_extraction(text);
+        assert!(!ents.is_empty(), "expected at least one extracted entity");
+
+        for e in ents {
+            let extracted = TextSpan::from_chars(text, e.start, e.end).extract(text);
+            assert_eq!(extracted, e.text);
+        }
     }
 }
 
