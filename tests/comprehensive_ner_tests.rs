@@ -1325,6 +1325,7 @@ mod integration {
     #[test]
     fn consistent_output_format() {
         let text = "$100 for Dr. Smith in Paris";
+        let text_char_len = text.chars().count();
 
         let pattern_e = RegexNER::new().extract_entities(text, None).unwrap();
         let stat_e = HeuristicNER::new().extract_entities(text, None).unwrap();
@@ -1334,7 +1335,7 @@ mod integration {
         for entities in [&pattern_e, &stat_e, &tiered_e] {
             for e in entities {
                 assert!(e.start <= e.end);
-                assert!(e.end <= text.len());
+                assert!(e.end <= text_char_len);
                 assert!(e.confidence >= 0.0 && e.confidence <= 1.0);
             }
         }
