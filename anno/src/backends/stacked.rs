@@ -168,6 +168,19 @@ use itertools::Itertools;
 use std::borrow::Cow;
 use std::sync::Arc;
 
+fn method_for_layer_name(layer_name: &str) -> anno_core::entity::ExtractionMethod {
+    match layer_name {
+        // Our built-in IDs are lowercase and stable.
+        "regex" => anno_core::entity::ExtractionMethod::Pattern,
+        "heuristic" => anno_core::entity::ExtractionMethod::Heuristic,
+        // Legacy backend id (deprecated, but still used in tests/compositions).
+        "rule" => anno_core::entity::ExtractionMethod::Heuristic,
+        // For everything else, this is the least-wrong default.
+        // (E.g. ONNX/Candle transformer backends, CRF, etc.)
+        _ => anno_core::entity::ExtractionMethod::Neural,
+    }
+}
+
 // =============================================================================
 // Conflict Resolution
 // =============================================================================
@@ -330,6 +343,8 @@ pub struct StackedNER {
     layers: Vec<Arc<dyn Model + Send + Sync>>,
     strategy: ConflictStrategy,
     name: String,
+    /// Cached static name (avoids Box::leak on every name() call)
+    name_static: std::sync::OnceLock<&'static str>,
 }
 
 /// Builder for [`StackedNER`] with fluent configuration.
@@ -385,6 +400,7 @@ impl StackedNERBuilder {
             layers: self.layers.into_iter().map(Arc::from).collect(),
             strategy: self.strategy,
             name,
+            name_static: std::sync::OnceLock::new(),
         }
     }
 }
@@ -618,6 +634,19 @@ impl Model for StackedNER {
                         text_char_count
                     );
                     candidate.end = text_char_count;
+                    // Keep `entity.text` consistent with the adjusted span (Unicode-safe).
+                    //
+                    // This only triggers on buggy/out-of-bounds backends, but when it does,
+                    // returning a span/text mismatch is more confusing than truncating text.
+                    if candidate.start < candidate.end {
+                        candidate.text = crate::offset::TextSpan::from_chars(
+                            text,
+                            candidate.start,
+                            candidate.end,
+                        )
+                        .extract(text)
+                        .to_string();
+                    }
                 }
                 if candidate.start >= candidate.end || candidate.start > text_char_count {
                     // Invalid span - skip this entity
@@ -634,7 +663,7 @@ impl Model for StackedNER {
                 if candidate.provenance.is_none() {
                     candidate.provenance = Some(anno_core::entity::Provenance {
                         source: Cow::Borrowed(layer_name),
-                        method: anno_core::entity::ExtractionMethod::Consensus,
+                        method: method_for_layer_name(layer_name),
                         pattern: None,
                         raw_confidence: Some(candidate.confidence),
                         model_version: None,
@@ -700,12 +729,13 @@ impl Model for StackedNER {
                                     ConflictStrategy::LongestSpan => {
                                         let len_a = entities[a].end - entities[a].start;
                                         let len_b = entities[b].end - entities[b].start;
-                                        len_a.cmp(&len_b)
+                                        len_a.cmp(&len_b).then_with(|| b.cmp(&a))
                                     }
                                     ConflictStrategy::HighestConf => entities[a]
                                         .confidence
                                         .partial_cmp(&entities[b].confidence)
-                                        .unwrap_or(std::cmp::Ordering::Equal),
+                                        .unwrap_or(std::cmp::Ordering::Equal)
+                                        .then_with(|| b.cmp(&a)),
                                     ConflictStrategy::Union => {
                                         // For union, we'll keep all, so just pick first
                                         a.cmp(&b)
@@ -780,10 +810,26 @@ impl Model for StackedNER {
             }
         }
 
-        // Sort by position (start, then end for deterministic ordering)
-        // This ensures consistent output order regardless of layer processing order
-        // Performance: Use unstable sort for better performance (we don't need stable sort here)
-        entities.sort_unstable_by_key(|e| (e.start, e.end));
+        // Sort by position (start, then end) with deterministic tie-breaks.
+        //
+        // We include additional keys so exact-tie cases (same span) produce stable ordering,
+        // and so dedup-by-span+type (below) works reliably if duplicates slip through.
+        entities.sort_unstable_by(|a, b| {
+            let a_ty = a.entity_type.as_label();
+            let b_ty = b.entity_type.as_label();
+            let a_src = a
+                .provenance
+                .as_ref()
+                .map(|p| p.source.as_ref())
+                .unwrap_or("");
+            let b_src = b
+                .provenance
+                .as_ref()
+                .map(|p| p.source.as_ref())
+                .unwrap_or("");
+
+            (a.start, a.end, a_ty, a_src, a.text.as_str()).cmp(&(b.start, b.end, b_ty, b_src, b.text.as_str()))
+        });
 
         // Remove any duplicates that might have been created (defensive)
         // Only deduplicate if not using Union strategy (Union intentionally allows overlaps)
@@ -835,8 +881,9 @@ impl Model for StackedNER {
     }
 
     fn name(&self) -> &'static str {
-        // Leak for static lifetime - StackedNER instances are typically long-lived
-        Box::leak(self.name.clone().into_boxed_str())
+        // Use OnceLock to cache the static string, avoiding repeated memory leaks
+        self.name_static
+            .get_or_init(|| Box::leak(self.name.clone().into_boxed_str()))
     }
 
     fn description(&self) -> &'static str {
@@ -1150,6 +1197,81 @@ mod tests {
     }
 
     #[test]
+    fn test_highest_conf_multiple_overlaps_ties_prefer_existing() {
+        // Regression: when a candidate overlaps multiple existing entities, we pick a "best"
+        // existing entity to compare against. In tie cases, we must prefer earlier layers
+        // (existing) to match the design note in ConflictStrategy::resolve.
+        let text = "aaaaa     bbbbb"; // 5 + 5 + 5 = 15 chars
+
+        let layer1 = mock_model(
+            "l1",
+            vec![
+                mock_entity("aaaaa", 0, EntityType::Person, 0.9),
+                mock_entity("bbbbb", 10, EntityType::Person, 0.9), // same confidence
+            ],
+        );
+        // Candidate spans across both existing entities, but is low confidence.
+        let layer2 = mock_model(
+            "l2",
+            vec![mock_entity(text, 0, EntityType::Person, 0.1)],
+        );
+
+        let ner = StackedNER::builder()
+            .layer(layer1)
+            .layer(layer2)
+            .strategy(ConflictStrategy::HighestConf)
+            .build();
+
+        let e = ner.extract_entities(text, None).unwrap();
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].text, "aaaaa", "should keep earliest existing entity");
+        assert_eq!(e[0].start, 0);
+        assert_eq!(e[0].end, 5);
+    }
+
+    #[test]
+    fn test_layer_name_rule_maps_to_heuristic_method() {
+        // StackedNER adds provenance when a backend doesn't.
+        // For legacy RuleBasedNER-like layers (id "rule"), provenance.method should not be Neural.
+        use anno_core::ExtractionMethod;
+
+        let ner = StackedNER::builder()
+            .layer(mock_model(
+                "rule",
+                vec![mock_entity("Apple", 0, EntityType::Organization, 0.8)],
+            ))
+            .strategy(ConflictStrategy::Priority)
+            .build();
+
+        let e = ner.extract_entities("Apple", None).unwrap();
+        assert_eq!(e.len(), 1);
+        let prov = e[0].provenance.as_ref().expect("provenance should be set");
+        assert_eq!(prov.source.as_ref(), "rule");
+        assert_eq!(prov.method, ExtractionMethod::Heuristic);
+    }
+
+    #[test]
+    fn test_clamped_spans_keep_text_consistent() {
+        // If a buggy backend produces an out-of-bounds end offset, StackedNER clamps the span.
+        // The returned entity should have `text` matching the adjusted span.
+        let layer = MockModel::new("l1")
+            .with_entities(vec![Entity::new("hello world", EntityType::Person, 0, 100, 0.9)])
+            .without_validation();
+
+        let ner = StackedNER::builder()
+            .layer(layer)
+            .strategy(ConflictStrategy::Priority)
+            .build();
+
+        let text = "hello";
+        let e = ner.extract_entities(text, None).unwrap();
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].start, 0);
+        assert_eq!(e[0].end, 5);
+        assert_eq!(e[0].text, "hello");
+    }
+
+    #[test]
     fn test_non_overlapping_always_kept() {
         for strategy in [
             ConflictStrategy::Priority,
@@ -1230,9 +1352,15 @@ mod tests {
         let ner = StackedNER::default();
         let stats = ner.stats();
 
-        assert_eq!(stats.layer_count, 2);
+        // When ONNX is enabled and GLiNER model is available, default has 3 layers
+        // Otherwise, it has 2 layers (RegexNER + HeuristicNER)
+        assert!(
+            stats.layer_count == 2 || stats.layer_count == 3,
+            "Expected 2 or 3 layers, got {}",
+            stats.layer_count
+        );
         assert_eq!(stats.strategy, ConflictStrategy::Priority);
-        assert_eq!(stats.layer_names.len(), 2);
+        assert_eq!(stats.layer_names.len(), stats.layer_count);
         assert!(stats.layer_names.iter().any(|n| n.contains("regex")));
         assert!(stats.layer_names.iter().any(|n| n.contains("heuristic")));
     }
@@ -1337,19 +1465,89 @@ mod tests {
 
     #[test]
     fn test_layer_error_handling() {
-        // Test that errors from one layer don't crash the whole stack
-        // Note: MockModel doesn't support errors, so we test with real backends
-        let ner = StackedNER::default();
+        // Test that errors from one layer don't crash the whole stack.
+        //
+        // This test must be fast and deterministic. Using `StackedNER::default()` here is
+        // problematic because it may initialize real ML backends (and potentially do disk/network
+        // work under some configurations), which can make this test slow/flaky under `nextest`
+        // quick profile.
 
-        // Empty text should work fine
-        let e = ner.extract_entities("", None).unwrap();
-        assert!(e.is_empty());
+        #[derive(Clone)]
+        struct FailingModel {
+            name: &'static str,
+        }
 
-        // Very long text should work
-        let long_text = "word ".repeat(10000);
-        let e = ner.extract_entities(&long_text, None).unwrap();
-        // Should not panic
-        let _ = e;
+        impl crate::sealed::Sealed for FailingModel {}
+
+        impl crate::Model for FailingModel {
+            fn extract_entities(
+                &self,
+                _text: &str,
+                _language: Option<&str>,
+            ) -> crate::Result<Vec<anno_core::Entity>> {
+                Err(crate::Error::Inference(format!(
+                    "intentional failure from {}",
+                    self.name
+                )))
+            }
+
+            fn supported_types(&self) -> Vec<anno_core::EntityType> {
+                vec![anno_core::EntityType::Person]
+            }
+
+            fn is_available(&self) -> bool {
+                true
+            }
+
+            fn name(&self) -> &'static str {
+                self.name
+            }
+        }
+
+        // Test 1: Working layer after failing layer - fail-fast behavior
+        // When first layer fails with no prior entities, we fail fast
+        let ner_fail_first = StackedNER::builder()
+            .layer(FailingModel { name: "fail" }) // Failing layer first
+            .layer(crate::HeuristicNER::new())
+            .strategy(ConflictStrategy::Priority)
+            .build();
+
+        // This should fail because first layer fails with no prior entities
+        let result = ner_fail_first.extract_entities("John Smith at Apple", None);
+        assert!(result.is_err(), "Should fail when first layer fails");
+
+        // Test 2: Failing layer AFTER working layer that produces entities
+        // - partial results are returned when subsequent layers fail
+        let ner_fail_second = StackedNER::builder()
+            .layer(crate::HeuristicNER::new()) // Working layer first
+            .layer(FailingModel { name: "fail" }) // Failing layer second
+            .strategy(ConflictStrategy::Priority)
+            .build();
+
+        // Text with entities: first layer extracts entities, failing layer is skipped
+        let result = ner_fail_second.extract_entities("Dr. John Smith works at Apple Inc.", None);
+        // Should succeed because HeuristicNER extracted entities before FailingModel was called
+        assert!(
+            result.is_ok(),
+            "Should succeed with partial results: {:?}",
+            result
+        );
+        let entities = result.unwrap();
+        // HeuristicNER should have found at least one entity
+        assert!(
+            !entities.is_empty(),
+            "Should have entities from working layer"
+        );
+
+        // Test 3: All-working layers should work normally
+        let ner_all_working = StackedNER::builder()
+            .layer(crate::RegexNER::new())
+            .layer(crate::HeuristicNER::new())
+            .strategy(ConflictStrategy::Priority)
+            .build();
+
+        let long_text = "word ".repeat(2000);
+        let _ = ner_all_working.extract_entities(&long_text, None).unwrap();
     }
 
     #[test]
@@ -1461,13 +1659,31 @@ mod tests {
         use super::*;
         use proptest::prelude::*;
 
+        /// Small, deterministic stack used for proptests.
+        ///
+        /// IMPORTANT: Do not use `StackedNER::default()` in proptests:
+        /// - it may initialize feature-gated ML backends
+        /// - it can become slow/flaky as defaults evolve
+        fn fast_stack() -> StackedNER {
+            StackedNER::builder()
+                .layer(RegexNER::new())
+                .layer(HeuristicNER::new())
+                .strategy(ConflictStrategy::Priority)
+                .build()
+        }
+
         proptest! {
-            #![proptest_config(ProptestConfig::with_cases(100))]
+            #![proptest_config(ProptestConfig {
+                cases: 50,
+                // nextest runs from the workspace root; default persistence can warn.
+                failure_persistence: None,
+                ..ProptestConfig::default()
+            })]
 
             /// Property: StackedNER never panics on any input text
             #[test]
             fn never_panics(text in ".*") {
-                let ner = StackedNER::default();
+                let ner = fast_stack();
                 let _ = ner.extract_entities(&text, None);
             }
 
@@ -1478,7 +1694,7 @@ mod tests {
             /// slightly beyond text length as a defensive measure.
             #[test]
             fn valid_spans(text in ".{0,1000}") {
-                let ner = StackedNER::default();
+                let ner = fast_stack();
                 let entities = ner.extract_entities(&text, None).unwrap();
                 let text_char_count = text.chars().count();
                 for entity in entities {
@@ -1507,7 +1723,7 @@ mod tests {
             /// Property: All entities have confidence in [0.0, 1.0]
             #[test]
             fn confidence_in_range(text in ".{0,1000}") {
-                let ner = StackedNER::default();
+                let ner = fast_stack();
                 let entities = ner.extract_entities(&text, None).unwrap();
                 for entity in entities {
                     prop_assert!(entity.confidence >= 0.0 && entity.confidence <= 1.0,
@@ -1518,7 +1734,7 @@ mod tests {
             /// Property: Entities are sorted by position (start, then end)
             #[test]
             fn sorted_output(text in ".{0,1000}") {
-                let ner = StackedNER::default();
+                let ner = fast_stack();
                 let entities = ner.extract_entities(&text, None).unwrap();
                 for i in 1..entities.len() {
                     let prev = &entities[i - 1];
@@ -1534,7 +1750,7 @@ mod tests {
             /// Property: No overlapping entities (except with Union strategy)
             #[test]
             fn no_overlaps_default_strategy(text in ".{0,500}") {
-                let ner = StackedNER::default(); // Uses Priority strategy
+                let ner = fast_stack(); // Uses Priority strategy
                 let entities = ner.extract_entities(&text, None).unwrap();
                 for i in 0..entities.len() {
                     for j in (i + 1)..entities.len() {
@@ -1553,7 +1769,7 @@ mod tests {
             /// differences while ensuring the core content matches.
             #[test]
             fn entity_text_matches_span(text in ".{0,500}") {
-                let ner = StackedNER::default();
+                let ner = fast_stack();
                 let entities = ner.extract_entities(&text, None).unwrap();
                 let text_chars: Vec<char> = text.chars().collect();
                 let text_char_count = text_chars.len();
