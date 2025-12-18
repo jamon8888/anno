@@ -43,7 +43,7 @@ use crate::{Entity, EntityType, Error, Model, Result};
 
 #[cfg(feature = "candle")]
 use {
-    super::encoder_candle::{CandleEncoder, EncoderConfig, TextEncoder},
+    super::encoder_candle::{CandleEncoder, TextEncoder},
     candle_core::{DType, Device, Module, Tensor, D},
     candle_nn::{linear, Linear, VarBuilder},
     std::collections::HashMap,
@@ -81,6 +81,8 @@ pub struct CandleNER {
 impl CandleNER {
     /// Create a new CandleNER from a HuggingFace model.
     ///
+    /// Automatically loads `.env` for HF_TOKEN if present.
+    ///
     /// # Arguments
     /// * `model_id` - HuggingFace model ID (e.g., "dslim/bert-base-NER")
     ///
@@ -89,12 +91,22 @@ impl CandleNER {
     /// This function will try the provided model, and if it fails due to missing tokenizer.json,
     /// it will automatically try alternative models that have tokenizer.json.
     pub fn from_pretrained(model_id: &str) -> Result<Self> {
-        use hf_hub::api::sync::Api;
+        use hf_hub::api::sync::{Api, ApiBuilder};
+
+        // Load .env if present (for HF_TOKEN)
+        crate::env::load_dotenv();
 
         let device = super::encoder_candle::best_device()?;
 
-        let api = Api::new()
-            .map_err(|e| Error::Retrieval(format!("HuggingFace API init failed: {}", e)))?;
+        let api = if let Some(token) = crate::env::hf_token() {
+            ApiBuilder::new()
+                .with_token(Some(token))
+                .build()
+                .map_err(|e| Error::Retrieval(format!("HuggingFace API init with token: {}", e)))?
+        } else {
+            Api::new()
+                .map_err(|e| Error::Retrieval(format!("HuggingFace API init failed: {}", e)))?
+        };
 
         let repo = api.model(model_id.to_string());
 
@@ -136,19 +148,28 @@ impl CandleNER {
         let config_json: serde_json::Value = serde_json::from_str(&config_str)
             .map_err(|e| Error::Parse(format!("config JSON: {}", e)))?;
 
-        // Get encoder config
-        let encoder_config = EncoderConfig::from_model_name(model_id);
+        // Get encoder config from the model's config.json (not defaults!)
+        let encoder_config = CandleEncoder::parse_config(&config_str)?;
 
         // Get label mapping
         let id2label = Self::parse_labels(&config_json)?;
         let num_labels = id2label.len();
 
-        // Load tokenizer - handle both tokenizer.json and vocab.txt
-        let _tokenizer = if tokenizer_path.ends_with("tokenizer.json") {
+        // Load weights
+        // SAFETY: VarBuilder::from_mmaped_safetensors uses unsafe internally for memory mapping.
+        // The weights_path is validated to exist before this call, and the safetensors format
+        // is validated by the library. This is a safe FFI boundary.
+        let vb = unsafe {
+            VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)
+                .map_err(|e| Error::Retrieval(format!("safetensors: {}", e)))?
+        };
+
+        // Build encoder from shared VarBuilder (encoder weights are under "bert" prefix)
+        // Load tokenizer for encoder
+        let encoder_tokenizer = if tokenizer_path.ends_with("tokenizer.json") {
             Tokenizer::from_file(&tokenizer_path)
                 .map_err(|e| Error::Retrieval(format!("tokenizer: {}", e)))?
         } else if tokenizer_path.ends_with("vocab.txt") {
-            // Create a BERT tokenizer from vocab.txt
             use tokenizers::models::wordpiece::WordPiece;
             use tokenizers::normalizers::bert::BertNormalizer;
             use tokenizers::pre_tokenizers::bert::BertPreTokenizer;
@@ -164,35 +185,30 @@ impl CandleNER {
             })?;
 
             let mut tokenizer_impl = TokenizerImpl::new(model);
-            tokenizer_impl.with_normalizer(Some(BertNormalizer::default()));
+            // Use cased normalizer for NER - case is important for detecting names!
+            // BertNormalizer::default() lowercases which breaks NER
+            tokenizer_impl.with_normalizer(Some(BertNormalizer::new(
+                false, // clean_text
+                true,  // handle_chinese_chars
+                None,  // strip_accents - None means don't strip
+                false, // lowercase - CRITICAL: keep case for NER!
+            )));
             tokenizer_impl.with_pre_tokenizer(Some(BertPreTokenizer));
             tokenizer_impl.with_post_processor(Some(BertProcessing::default()));
 
-            // Convert to the tokenizers::Tokenizer type expected
             Tokenizer::from(tokenizer_impl)
         } else {
-            return Err(Error::Retrieval(format!(
-                "Unsupported tokenizer format: {}. Expected tokenizer.json or vocab.txt.",
-                tokenizer_path
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-            )));
+            return Err(Error::Retrieval("Unsupported tokenizer format".to_string()));
         };
 
-        // Load weights
-        // SAFETY: VarBuilder::from_mmaped_safetensors uses unsafe internally for memory mapping.
-        // The weights_path is validated to exist before this call, and the safetensors format
-        // is validated by the library. This is a safe FFI boundary.
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)
-                .map_err(|e| Error::Retrieval(format!("safetensors: {}", e)))?
-        };
+        let encoder = CandleEncoder::from_vb(
+            encoder_config.clone(),
+            vb.pp("bert"),
+            encoder_tokenizer,
+            device.clone(),
+        )?;
 
-        // Build encoder
-        let encoder = CandleEncoder::from_pretrained(model_id)?;
-
-        // Build classifier head
+        // Build classifier head (classifier weights are under "classifier" prefix)
         let classifier = linear(encoder_config.hidden_size, num_labels, vb.pp("classifier"))
             .map_err(|e| Error::Retrieval(format!("classifier: {}", e)))?;
 
@@ -247,8 +263,8 @@ impl CandleNER {
             return Ok(vec![]);
         }
 
-        // Get encoder output
-        let (embeddings, seq_len) = self.encoder.encode(text)?;
+        // Get encoder output with token offsets
+        let (embeddings, seq_len, offsets) = self.encoder.encode_with_offsets(text)?;
 
         // Reshape to [1, seq_len, hidden]
         let hidden_dim = self.encoder.hidden_dim();
@@ -270,66 +286,38 @@ impl CandleNER {
             .to_vec1::<u32>()
             .map_err(|e| Error::Parse(format!("to_vec: {}", e)))?;
 
-        // Decode BIO to entities
-        let entities = self.decode_bio(text, &predictions)?;
-
-        Ok(entities)
+        // Decode BIO to entities using token offsets (like BertNEROnnx)
+        self.decode_with_offsets(text, &predictions, &offsets)
     }
 
-    fn decode_bio(&self, text: &str, predictions: &[u32]) -> Result<Vec<Entity>> {
-        // Performance: Pre-allocate entities vec with estimated capacity
+    /// Decode BIO predictions using token offsets.
+    /// This properly handles subword tokenization by using the exact character offsets.
+    fn decode_with_offsets(
+        &self,
+        text: &str,
+        predictions: &[u32],
+        offsets: &[(usize, usize)],
+    ) -> Result<Vec<Entity>> {
         let mut entities = Vec::with_capacity(16);
-        let words: Vec<&str> = text.split_whitespace().collect();
+        let mut current_entity: Option<(usize, usize, String, f64)> = None;
 
-        // Build word positions
-        let word_positions: Vec<(usize, usize)> = {
-            // Performance: Pre-allocate positions vec with known size
-            let mut positions = Vec::with_capacity(words.len());
-            let mut pos = 0;
-            for (idx, word) in words.iter().enumerate() {
-                if let Some(start) = text[pos..].find(word) {
-                    let abs_start = pos + start;
-                    let abs_end = abs_start + word.len();
-                    // Validate position is after previous word (words should be in order)
-                    if !positions.is_empty() {
-                        let (_prev_start, prev_end) = positions[positions.len() - 1];
-                        if abs_start < prev_end {
-                            log::warn!(
-                                "Word '{}' (index {}) at position {} overlaps with previous word ending at {}",
-                                word,
-                                idx,
-                                abs_start,
-                                prev_end
-                            );
-                        }
-                    }
-                    positions.push((abs_start, abs_end));
-                    pos = abs_end;
-                } else {
-                    // Word not found - return error to prevent silent entity skipping
-                    return Err(Error::Parse(format!(
-                        "Word '{}' (index {}) not found in text starting at position {}",
-                        word, idx, pos
-                    )));
-                }
-            }
-            positions
-        };
-
-        // Validate that we found positions for all words
-        if word_positions.len() != words.len() {
-            return Err(Error::Parse(format!(
-                "Word position mismatch: found {} positions for {} words",
-                word_positions.len(),
-                words.len()
-            )));
-        }
-
-        let mut current_entity: Option<(usize, usize, String)> = None;
-
-        for (idx, &pred) in predictions.iter().enumerate() {
-            if idx >= words.len() {
+        for (token_idx, &pred) in predictions.iter().enumerate() {
+            if token_idx >= offsets.len() {
                 break;
+            }
+
+            let (char_start, char_end) = offsets[token_idx];
+
+            // Skip special tokens (offset 0,0)
+            if char_start == char_end {
+                // Finalize current entity if any
+                if let Some((start, end, etype, conf)) = current_entity.take() {
+                    if let Some(e) = self.create_entity_from_offsets(text, start, end, &etype, conf)
+                    {
+                        entities.push(e);
+                    }
+                }
+                continue;
             }
 
             let label = self
@@ -338,37 +326,50 @@ impl CandleNER {
                 .map(|s| s.as_str())
                 .unwrap_or("O");
 
-            if label.starts_with("B-") {
-                // Flush previous entity
-                if let Some((start, end, etype)) = current_entity.take() {
-                    if let Some(e) = self.create_entity(text, &word_positions, start, end, &etype) {
+            if label == "O" {
+                // Outside label - finalize current entity
+                if let Some((start, end, etype, conf)) = current_entity.take() {
+                    if let Some(e) = self.create_entity_from_offsets(text, start, end, &etype, conf)
+                    {
                         entities.push(e);
                     }
                 }
-                // Start new entity
+            } else if label.starts_with("B-") {
+                // Begin new entity - finalize previous if any
+                if let Some((start, end, etype, conf)) = current_entity.take() {
+                    if let Some(e) = self.create_entity_from_offsets(text, start, end, &etype, conf)
+                    {
+                        entities.push(e);
+                    }
+                }
                 let entity_type = label.strip_prefix("B-").unwrap_or("MISC");
-                current_entity = Some((idx, idx + 1, entity_type.to_string()));
+                current_entity = Some((char_start, char_end, entity_type.to_string(), 0.9));
             } else if label.starts_with("I-") {
-                // Continue entity if same type
-                if let Some((start, _, ref etype)) = current_entity {
-                    let entity_type = label.strip_prefix("I-").unwrap_or("MISC");
+                // Inside continuation
+                let entity_type = label.strip_prefix("I-").unwrap_or("MISC");
+                if let Some((start, _, ref etype, conf)) = current_entity {
                     if entity_type == etype {
-                        current_entity = Some((start, idx + 1, etype.clone()));
+                        // Continue entity
+                        current_entity = Some((start, char_end, etype.clone(), conf));
+                    } else {
+                        // Type mismatch - start new entity
+                        if let Some((s, e, t, c)) = current_entity.take() {
+                            if let Some(ent) = self.create_entity_from_offsets(text, s, e, &t, c) {
+                                entities.push(ent);
+                            }
+                        }
+                        current_entity = Some((char_start, char_end, entity_type.to_string(), 0.9));
                     }
-                }
-            } else {
-                // O tag - flush entity
-                if let Some((start, end, etype)) = current_entity.take() {
-                    if let Some(e) = self.create_entity(text, &word_positions, start, end, &etype) {
-                        entities.push(e);
-                    }
+                } else {
+                    // No current entity - start new one (treat I- as B-)
+                    current_entity = Some((char_start, char_end, entity_type.to_string(), 0.9));
                 }
             }
         }
 
         // Flush final entity
-        if let Some((start, end, etype)) = current_entity.take() {
-            if let Some(e) = self.create_entity(text, &word_positions, start, end, &etype) {
+        if let Some((start, end, etype, conf)) = current_entity.take() {
+            if let Some(e) = self.create_entity_from_offsets(text, start, end, &etype, conf) {
                 entities.push(e);
             }
         }
@@ -376,21 +377,26 @@ impl CandleNER {
         Ok(entities)
     }
 
-    fn create_entity(
+    /// Create an entity from character offsets.
+    fn create_entity_from_offsets(
         &self,
         text: &str,
-        word_positions: &[(usize, usize)],
-        start_word: usize,
-        end_word: usize,
+        char_start: usize,
+        char_end: usize,
         entity_type: &str,
+        confidence: f64,
     ) -> Option<Entity> {
-        // Validate indices to prevent underflow
-        if end_word == 0 || end_word > word_positions.len() || start_word >= word_positions.len() {
+        if char_start >= char_end || char_end > text.len() {
             return None;
         }
-        let start_pos = word_positions.get(start_word)?.0;
-        let end_pos = word_positions.get(end_word.saturating_sub(1))?.1;
-        let entity_text = text.get(start_pos..end_pos)?;
+
+        // Extract text using byte offsets (tokenizer returns byte offsets)
+        let entity_text = text.get(char_start..char_end)?;
+
+        // Skip empty or whitespace-only entities
+        if entity_text.trim().is_empty() {
+            return None;
+        }
 
         let etype = match entity_type.to_uppercase().as_str() {
             "PER" | "PERSON" => EntityType::Person,
@@ -400,10 +406,17 @@ impl CandleNER {
             "TIME" => EntityType::Time,
             "MONEY" => EntityType::Money,
             "PERCENT" => EntityType::Percent,
+            "MISC" => EntityType::Other("MISC".to_string()),
             other => EntityType::Other(other.to_string()),
         };
 
-        Some(Entity::new(entity_text, etype, start_pos, end_pos, 0.9))
+        Some(Entity::new(
+            entity_text.trim().to_string(),
+            etype,
+            char_start,
+            char_end,
+            confidence,
+        ))
     }
 
     /// Get model name.
