@@ -1511,10 +1511,15 @@ impl EventExtractor {
             if matches!(c, '.' | '!' | '?' | ';' | ':') {
                 clause_start = i + 1;
                 // Skip whitespace
-                while clause_start < trigger_byte_start
-                    && text[clause_start..].starts_with(char::is_whitespace)
-                {
-                    clause_start += 1;
+                while clause_start < trigger_byte_start {
+                    let rest = match text.get(clause_start..) {
+                        Some(r) => r,
+                        None => break,
+                    };
+                    match rest.chars().next() {
+                        Some(c) if c.is_whitespace() => clause_start += c.len_utf8(),
+                        _ => break,
+                    }
                 }
                 break;
             }
@@ -1713,5 +1718,21 @@ mod tests {
         let extracted =
             TextSpan::from_chars(text, attacked.trigger_start, attacked.trigger_end).extract(text);
         assert_eq!(extracted, "attacked");
+    }
+
+    #[test]
+    fn test_clause_span_skips_unicode_whitespace_without_panicking() {
+        let extractor = EventExtractor::new();
+        let text = "Intro.\u{3000}Russia invaded Ukraine in 2022. This shocked everyone.";
+
+        // Should not panic even though the whitespace after '.' is multi-byte.
+        let referents = extractor.extract_referents(text);
+        assert!(!referents.is_empty());
+        assert!(
+            referents
+                .iter()
+                .any(|r| r.text.as_deref().unwrap_or("").contains("Russia invaded Ukraine")),
+            "Expected an event referent clause containing the invasion clause"
+        );
     }
 }
