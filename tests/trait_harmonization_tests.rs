@@ -27,6 +27,7 @@ proptest! {
         };
 
         if let Ok(entities) = backend.extract_entities(&text, None) {
+            let text_char_len = text.chars().count();
             for entity in entities {
                 prop_assert!(
                     entity.start <= entity.end,
@@ -34,9 +35,9 @@ proptest! {
                     entity.start, entity.end
                 );
                 prop_assert!(
-                    entity.end <= text.len(),
+                    entity.end <= text_char_len,
                     "end {} > text.len() {}",
-                    entity.end, text.len()
+                    entity.end, text_char_len
                 );
                 prop_assert!(
                     entity.confidence >= 0.0 && entity.confidence <= 1.0,
