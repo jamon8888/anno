@@ -4538,6 +4538,7 @@ impl DatasetLoader {
             .map_err(|e| Error::InvalidInput(format!("Failed to read {:?}: {}", cache_path, e)))?;
 
         match id {
+            DatasetId::CorefUD => super::coref_loader::parse_corefud_conllu(&content),
             DatasetId::GAP => {
                 let examples = super::coref_loader::parse_gap_tsv(&content)?;
                 Ok(examples
