@@ -298,21 +298,12 @@ pub struct RegionalBiasResults {
 // =============================================================================
 
 /// Evaluator for demographic bias in NER systems.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DemographicBiasEvaluator {
     /// Include detailed per-name results
     pub detailed: bool,
     /// Configuration for bias evaluation
     pub config: crate::eval::bias_config::BiasDatasetConfig,
-}
-
-impl Default for DemographicBiasEvaluator {
-    fn default() -> Self {
-        Self {
-            detailed: false,
-            config: crate::eval::bias_config::BiasDatasetConfig::default(),
-        }
-    }
 }
 
 impl DemographicBiasEvaluator {

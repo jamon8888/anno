@@ -163,7 +163,8 @@ impl BackendName {
     /// given the current feature flags.
     #[must_use]
     pub fn all_available() -> Vec<Self> {
-        let backends = vec![
+        #[allow(unused_mut)] // mut needed when onnx/candle features enabled
+        let mut backends = vec![
             BackendName::Pattern,
             BackendName::Heuristic,
             BackendName::Stacked,
