@@ -167,14 +167,16 @@ mod e2e_tests {
 
             // Create a long text
             let long_text = "Apple Inc. was founded by Steve Jobs. ".repeat(100);
+            let long_text_char_len = long_text.chars().count();
 
             // Process in chunks
             let mut all_entities = Vec::new();
-            let mut offset = 0;
+            let mut offset = 0usize;
 
-            while offset < long_text.len() {
-                let end = (offset + chunk_size).min(long_text.len());
-                let chunk = &long_text[offset..end];
+            while offset < long_text_char_len {
+                let end = (offset + chunk_size).min(long_text_char_len);
+                let chunk = anno::offset::TextSpan::from_chars(&long_text, offset, end)
+                    .extract(&long_text);
 
                 let entities = ner.extract_entities(chunk, None).unwrap();
 
@@ -192,6 +194,7 @@ mod e2e_tests {
             // Verify all are valid
             for entity in &all_entities {
                 assert!(entity.start < entity.end);
+                assert!(entity.end <= long_text_char_len);
                 assert!(entity.confidence >= 0.0 && entity.confidence <= 1.0);
             }
         }
@@ -300,12 +303,12 @@ mod e2e_tests {
 
             let press_release = r#"
                 PRESS RELEASE - January 15, 2024
-                
+
                 Apple Inc. announced today that CEO Tim Cook will present new products
                 at the company's headquarters in Cupertino, California.
-                
+
                 Contact: press@apple.com or call (555) 123-4567
-                
+
                 The event is scheduled for 2:00 PM PST and will be streamed live.
                 Revenue increased by 25% this quarter.
             "#;
@@ -340,14 +343,14 @@ mod e2e_tests {
 
             let article = r#"
                 Tech Giant Announces Major Acquisition
-                
+
                 SAN FRANCISCO - Microsoft Corporation announced today that it has
                 acquired GitHub Inc. for $7.5 billion. The deal was finalized on
                 June 4, 2018.
-                
+
                 "This acquisition strengthens our commitment to developers," said
                 CEO Satya Nadella in a statement.
-                
+
                 GitHub, founded in 2008, is based in San Francisco, California.
             "#;
 
