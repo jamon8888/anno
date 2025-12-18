@@ -812,6 +812,8 @@ impl GLiNERCandle {
         // Performance: Pre-allocate entities vec with estimated capacity
         let mut entities = Vec::with_capacity(num_spans.min(32));
         let mut span_idx = 0;
+        // Word positions are byte offsets; `Entity` requires character offsets.
+        let span_converter = crate::offset::SpanConverter::new(text);
 
         for start in 0..words.len() {
             for width in 0..MAX_SPAN_WIDTH.min(words.len() - start) {
@@ -851,8 +853,8 @@ impl GLiNERCandle {
                                 entities.push(Entity::new(
                                     entity_text,
                                     entity_type,
-                                    start_pos,
-                                    end_pos,
+                                    span_converter.byte_to_char(start_pos),
+                                    span_converter.byte_to_char(end_pos),
                                     best_score as f64,
                                 ));
                             }
