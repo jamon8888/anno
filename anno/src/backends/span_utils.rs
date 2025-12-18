@@ -328,10 +328,7 @@ pub fn decode_span_output(
             let mut best_type_idx = None;
 
             for type_idx in 0..num_classes.min(entity_types.len()) {
-                let score = output_data
-                    .get(base_idx + type_idx)
-                    .copied()
-                    .unwrap_or(0.0);
+                let score = output_data.get(base_idx + type_idx).copied().unwrap_or(0.0);
 
                 if score > best_score {
                     best_score = score;
@@ -345,15 +342,15 @@ pub fn decode_span_output(
                     extract_span(text, &word_positions, start, end)
                 {
                     let entity_type = map_label_to_entity_type(entity_types[type_idx]);
-                    let mut entity =
-                        Entity::new(
-                            span_text,
-                            entity_type,
-                            span_converter.byte_to_char(start_byte),
-                            span_converter.byte_to_char(end_byte),
-                            best_score as f64,
-                        );
-                    entity.provenance = Some(crate::Provenance::ml("span-decoder", best_score as f64));
+                    let mut entity = Entity::new(
+                        span_text,
+                        entity_type,
+                        span_converter.byte_to_char(start_byte),
+                        span_converter.byte_to_char(end_byte),
+                        best_score as f64,
+                    );
+                    entity.provenance =
+                        Some(crate::Provenance::ml("span-decoder", best_score as f64));
                     entities.push(entity);
                 }
             }
@@ -364,7 +361,8 @@ pub fn decode_span_output(
     entities.sort_by(|a, b| {
         a.start
             .cmp(&b.start)
-            .then_with(|| b.confidence.partial_cmp(&a.confidence).unwrap())
+            // Use total ordering to avoid `partial_cmp` returning None on NaN.
+            .then_with(|| b.confidence.total_cmp(&a.confidence))
     });
 
     // Remove overlapping entities (keep first = highest confidence due to sort)
@@ -537,4 +535,3 @@ mod tests {
         assert!(!ranges_overlap(0, 5, 5, 10)); // Adjacent (not overlapping)
     }
 }
-

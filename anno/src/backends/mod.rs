@@ -148,6 +148,8 @@ pub mod regex;
 /// Language-aware routing for automatic backend selection.
 pub mod router;
 pub mod rule;
+/// Shared span-tensor utilities for span-based NER backends (GLiNER/NuNER family).
+pub mod span_utils;
 pub mod stacked;
 pub mod tplinker;
 pub mod w2ner;
