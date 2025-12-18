@@ -1398,7 +1398,7 @@ mod candle_impl {
         /// # Returns
         /// - Token embeddings: `[seq_len, hidden_dim]` (flattened)
         /// - Sequence length
-        /// - Token offsets (char_start, char_end) for each token
+        /// - Token offsets (byte_start, byte_end) for each token (tokenizers uses byte indices in Rust)
         pub fn encode_with_offsets(
             &self,
             text: &str,

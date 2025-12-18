@@ -362,9 +362,9 @@ impl BertNEROnnx {
         // Get token offsets for mapping back to character positions
         let offsets = encoding.get_offsets();
 
-        // Performance: Cache text length once (used in multiple entity text extractions)
-        // ROI: High - called once, saves O(n) per entity in decode loops
-        let text_char_count = text.chars().count();
+        // `tokenizers::Encoding::get_offsets()` uses byte offsets in Rust. `Entity` uses character
+        // offsets, so convert via SpanConverter when constructing entities.
+        let span_converter = crate::offset::SpanConverter::new(text);
 
         // Helper to access logits[0, token_idx, label_idx] in flattened array
         let get_logit = |token_idx: usize, label_idx: usize| -> f32 {
@@ -374,34 +374,30 @@ impl BertNEROnnx {
         // Performance: Pre-allocate entities vec with estimated capacity
         // Most texts have 0-20 entities, but we'll start with a reasonable default
         let mut entities = Vec::with_capacity(16);
-        let mut current_entity: Option<(usize, usize, EntityType, f64)> = None; // (start_char, end_char, type, confidence)
+        let mut current_entity: Option<(usize, usize, EntityType, f64)> = None; // (start_byte, end_byte, type, confidence)
 
         for token_idx in 0..seq_len {
             // Skip special tokens (no offset)
             if token_idx >= offsets.len() {
                 continue;
             }
-            let (char_start, char_end) = offsets[token_idx];
-            if char_start == char_end {
+            let (byte_start, byte_end) = offsets[token_idx];
+            if byte_start == byte_end {
                 // Special token, finalize current entity
                 if let Some((start, end, entity_type, conf)) = current_entity.take() {
-                    // Performance: Use cached text_char_count for bounds checking
-                    let entity_text = if start < end && end <= text_char_count {
-                        text.chars()
-                            .skip(start)
-                            .take(end - start)
-                            .collect::<String>()
-                    } else {
-                        String::new()
-                    };
-                    if !entity_text.trim().is_empty() {
-                        entities.push(Entity::new(
-                            entity_text.trim().to_string(),
-                            entity_type,
-                            start,
-                            end,
-                            conf,
-                        ));
+                    if start < end && end <= text.len() {
+                        if let Some(entity_text) = text.get(start..end) {
+                            let entity_text = entity_text.trim();
+                            if !entity_text.is_empty() {
+                                entities.push(Entity::new(
+                                    entity_text.to_string(),
+                                    entity_type,
+                                    span_converter.byte_to_char(start),
+                                    span_converter.byte_to_char(end),
+                                    conf,
+                                ));
+                            }
+                        }
                     }
                 }
                 continue;
@@ -438,20 +434,19 @@ impl BertNEROnnx {
             // Skip "O" (outside) labels
             if label == "O" {
                 if let Some((start, end, entity_type, conf)) = current_entity.take() {
-                    // Performance: Use cached text_char_count for bounds checking
-                    let entity_text: String = if start < end && end <= text_char_count {
-                        text.chars().skip(start).take(end - start).collect()
-                    } else {
-                        String::new()
-                    };
-                    if !entity_text.trim().is_empty() {
-                        entities.push(Entity::new(
-                            entity_text.trim().to_string(),
-                            entity_type,
-                            start,
-                            end,
-                            conf,
-                        ));
+                    if start < end && end <= text.len() {
+                        if let Some(entity_text) = text.get(start..end) {
+                            let entity_text = entity_text.trim();
+                            if !entity_text.is_empty() {
+                                entities.push(Entity::new(
+                                    entity_text.to_string(),
+                                    entity_type,
+                                    span_converter.byte_to_char(start),
+                                    span_converter.byte_to_char(end),
+                                    conf,
+                                ));
+                            }
+                        }
                     }
                 }
                 continue;
@@ -482,7 +477,7 @@ impl BertNEROnnx {
                     {
                         // Merge if: same type AND adjacent (no gap or only whitespace)
                         std::mem::discriminant(prev_type) == std::mem::discriminant(&entity_type)
-                            && char_start <= prev_end + 1 // Adjacent or overlapping
+                            && byte_start <= prev_end + 1 // Adjacent or overlapping
                     } else {
                         false
                     };
@@ -490,29 +485,28 @@ impl BertNEROnnx {
                     if should_merge {
                         // Extend the current entity instead of starting new
                         if let Some((start, _, prev_type, conf)) = current_entity.take() {
-                            current_entity = Some((start, char_end, prev_type, conf));
+                            current_entity = Some((start, byte_end, prev_type, conf));
                         }
                     } else {
                         // Finalize previous entity and start new
                         if let Some((start, end, prev_type, conf)) = current_entity.take() {
-                            // Performance: Use cached text_char_count for bounds checking
-                            let entity_text: String = if start < end && end <= text_char_count {
-                                text.chars().skip(start).take(end - start).collect()
-                            } else {
-                                String::new()
-                            };
-                            if !entity_text.trim().is_empty() {
-                                entities.push(Entity::new(
-                                    entity_text.trim().to_string(),
-                                    prev_type,
-                                    start,
-                                    end,
-                                    conf,
-                                ));
+                            if start < end && end <= text.len() {
+                                if let Some(entity_text) = text.get(start..end) {
+                                    let entity_text = entity_text.trim();
+                                    if !entity_text.is_empty() {
+                                        entities.push(Entity::new(
+                                            entity_text.to_string(),
+                                            prev_type,
+                                            span_converter.byte_to_char(start),
+                                            span_converter.byte_to_char(end),
+                                            conf,
+                                        ));
+                                    }
+                                }
                             }
                         }
                         // Start new entity
-                        current_entity = Some((char_start, char_end, entity_type, confidence));
+                        current_entity = Some((byte_start, byte_end, entity_type, confidence));
                     }
                 }
                 "I" => {
@@ -520,29 +514,28 @@ impl BertNEROnnx {
                     if let Some((start, _end, ref prev_type, conf)) = current_entity {
                         if std::mem::discriminant(prev_type) == std::mem::discriminant(&entity_type)
                         {
-                            current_entity = Some((start, char_end, entity_type, conf));
+                            current_entity = Some((start, byte_end, entity_type, conf));
                         } else {
                             // Different type - finalize and start new
-                            // Performance: Use cached text_char_count for bounds checking
-                            let entity_text: String = if start < _end && _end <= text_char_count {
-                                text.chars().skip(start).take(_end - start).collect()
-                            } else {
-                                String::new()
-                            };
-                            if !entity_text.trim().is_empty() {
-                                entities.push(Entity::new(
-                                    entity_text.trim().to_string(),
-                                    prev_type.clone(),
-                                    start,
-                                    _end,
-                                    conf,
-                                ));
+                            if start < _end && _end <= text.len() {
+                                if let Some(entity_text) = text.get(start.._end) {
+                                    let entity_text = entity_text.trim();
+                                    if !entity_text.is_empty() {
+                                        entities.push(Entity::new(
+                                            entity_text.to_string(),
+                                            prev_type.clone(),
+                                            span_converter.byte_to_char(start),
+                                            span_converter.byte_to_char(_end),
+                                            conf,
+                                        ));
+                                    }
+                                }
                             }
-                            current_entity = Some((char_start, char_end, entity_type, confidence));
+                            current_entity = Some((byte_start, byte_end, entity_type, confidence));
                         }
                     } else {
                         // No current entity, treat I- as B-
-                        current_entity = Some((char_start, char_end, entity_type, confidence));
+                        current_entity = Some((byte_start, byte_end, entity_type, confidence));
                     }
                 }
                 _ => {}
@@ -551,20 +544,19 @@ impl BertNEROnnx {
 
         // Finalize last entity
         if let Some((start, end, entity_type, conf)) = current_entity {
-            // Performance: Use cached text_char_count for bounds checking
-            let entity_text: String = if start < end && end <= text_char_count {
-                text.chars().skip(start).take(end - start).collect()
-            } else {
-                String::new()
-            };
-            if !entity_text.trim().is_empty() {
-                entities.push(Entity::new(
-                    entity_text.trim().to_string(),
-                    entity_type,
-                    start,
-                    end,
-                    conf,
-                ));
+            if start < end && end <= text.len() {
+                if let Some(entity_text) = text.get(start..end) {
+                    let entity_text = entity_text.trim();
+                    if !entity_text.is_empty() {
+                        entities.push(Entity::new(
+                            entity_text.to_string(),
+                            entity_type,
+                            span_converter.byte_to_char(start),
+                            span_converter.byte_to_char(end),
+                            conf,
+                        ));
+                    }
+                }
             }
         }
 
