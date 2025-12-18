@@ -1,4 +1,7 @@
 /target
+# macOS Finder copies sometimes create `target 2/`, `target 3/`, etc.
+/target */
+target*/
 
 # Generated files
 # Static analysis reports
@@ -90,6 +93,9 @@ REVIEW_ISSUES.md
 !docs/**/*.md
 reports/
 .env
+
+# Deprecated generated artifacts (see generated/README.md)
+generated/datasets.toml
 
 # Archived review documents (not actively maintained)
 docs/archive/
