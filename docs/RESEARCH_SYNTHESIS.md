@@ -61,7 +61,7 @@ The unification enables **joint training** on both settings, increasing data ava
 - `maverick_coref.rs` has the within-context architecture xCoRe builds on
 - **Gap**: No learned cluster representations; no unified cross-context abstraction
 
-See `docs/XCORE_INTEGRATION.md` for detailed integration design.
+See `research/XCORE_INTEGRATION.md` for detailed integration design.
 
 ### Research-Backed Additions Needed
 

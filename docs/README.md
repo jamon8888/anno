@@ -66,3 +66,7 @@ Documentation for the `anno` crate.
 
 Historical documentation in [`archive/`](archive/).
 
+## Research notes
+
+Design/research notes (often not implemented) live in [`research/`](research/).
+

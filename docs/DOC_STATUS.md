@@ -45,13 +45,13 @@ May describe features not implemented or plans that changed.
 
 | File | Issue |
 |------|-------|
-| HYPERGRAPH_EVIDENCE_DESIGN.md | Not implemented. Archive or implement. |
-| XCORE_INTEGRATION.md | xCoRe not integrated. |
+| research/HYPERGRAPH_EVIDENCE_DESIGN.md | Not implemented. Research note. |
+| research/XCORE_INTEGRATION.md | xCoRe not integrated. Research note. |
 | FEATURE_CACHE_DESIGN.md | Status unclear. |
 | BOX_COREF_INTEGRATION.md | box-coref is external project. |
 | BOX_EMBEDDINGS*.md | Research code. Unclear if used. |
 | JOINT_MODEL_DESIGN.md | Large design doc. Verify implementation status. |
-| GRAPH_STRUCTURE_UNIFICATION.md | Unifying framework. Check if done. |
+| research/GRAPH_STRUCTURE_UNIFICATION.md | Unifying framework. Mostly conceptual. |
 
 ## Auto-Generated
 
