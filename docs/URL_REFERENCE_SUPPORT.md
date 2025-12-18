@@ -1,6 +1,6 @@
 # URL and Document Reference Support
 
-**Related**: See [DOCUMENT_INGESTION_DESIGN.md](DOCUMENT_INGESTION_DESIGN.md) for future design plans.
+**Related**: See [design/DOCUMENT_INGESTION_DESIGN.md](design/DOCUMENT_INGESTION_DESIGN.md) for future design plans.
 
 ## Current State
 

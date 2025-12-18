@@ -12,10 +12,10 @@ Documentation for the `anno` crate.
 
 ## Design
 
-- [ENCODER_TRAIT_DESIGN.md](ENCODER_TRAIT_DESIGN.md) - Text encoder trait
-- [INTER_INTRA_DOC_ABSTRACTIONS.md](INTER_INTRA_DOC_ABSTRACTIONS.md) - Coreference abstractions
-- [FEATURE_CACHE_DESIGN.md](FEATURE_CACHE_DESIGN.md) - Feature cache
-- [LLM_NER_DESIGN.md](LLM_NER_DESIGN.md) - LLM-based NER
+- [design/ENCODER_TRAIT_DESIGN.md](design/ENCODER_TRAIT_DESIGN.md) - Text encoder trait
+- [design/INTER_INTRA_DOC_ABSTRACTIONS.md](design/INTER_INTRA_DOC_ABSTRACTIONS.md) - Coreference abstractions
+- [design/FEATURE_CACHE_DESIGN.md](design/FEATURE_CACHE_DESIGN.md) - Feature cache
+- [design/LLM_NER_DESIGN.md](design/LLM_NER_DESIGN.md) - LLM-based NER
 
 ## Datasets & Models
 
@@ -39,7 +39,7 @@ Documentation for the `anno` crate.
 - [GRAPH_EXPORT.md](GRAPH_EXPORT.md) - Graph export (Neo4j, NetworkX, JSON-LD)
 - [URL_REFERENCE_SUPPORT.md](URL_REFERENCE_SUPPORT.md) - URL resolution and document reference support
 - [CROSSDOC_COREF_ARCHITECTURE.md](CROSSDOC_COREF_ARCHITECTURE.md) - Cross-document coreference architecture
-- [DOCUMENT_INGESTION_DESIGN.md](DOCUMENT_INGESTION_DESIGN.md) - Document ingestion and preparation design
+- [design/DOCUMENT_INGESTION_DESIGN.md](design/DOCUMENT_INGESTION_DESIGN.md) - Document ingestion and preparation design
 
 ## Design & Development
 
