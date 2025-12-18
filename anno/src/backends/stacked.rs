@@ -383,8 +383,20 @@ impl StackedNERBuilder {
     /// Panics if no layers are provided (empty stack is invalid).
     #[must_use]
     pub fn build(self) -> StackedNER {
+        self.try_build().expect(
+            "StackedNER requires at least one layer. Use StackedNER::builder().layer(...).build()",
+        )
+    }
+
+    /// Build the configured StackedNER without panicking.
+    ///
+    /// This is useful when the stack is assembled dynamically (e.g., from CLI flags)
+    /// and an empty stack should be handled as an error instead of aborting.
+    pub fn try_build(self) -> crate::Result<StackedNER> {
         if self.layers.is_empty() {
-            panic!("StackedNER requires at least one layer. Use StackedNER::builder().layer(...).build()");
+            return Err(crate::Error::InvalidInput(
+                "StackedNER requires at least one layer".to_string(),
+            ));
         }
 
         let name = format!(
@@ -396,12 +408,12 @@ impl StackedNERBuilder {
                 .join("+")
         );
 
-        StackedNER {
+        Ok(StackedNER {
             layers: self.layers.into_iter().map(Arc::from).collect(),
             strategy: self.strategy,
             name,
             name_static: std::sync::OnceLock::new(),
-        }
+        })
     }
 }
 
