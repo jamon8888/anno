@@ -8,9 +8,15 @@ default:
 
 # Run fast checks (fmt + clippy + quick tests) - matches pre-push hook
 check:
+    #!/usr/bin/env bash
+    set -e
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets --features "eval-advanced discourse" -- -D warnings
-    cargo test --workspace --lib --features "eval-advanced discourse"
+    if command -v cargo-nextest >/dev/null 2>&1; then
+        cargo nextest run --profile quick --workspace --features "eval-advanced discourse"
+    else
+        cargo test --workspace --lib --features "eval-advanced discourse"
+    fi
 
 # Run fast checks without features (minimal, for quick iteration)
 check-minimal:

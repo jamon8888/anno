@@ -1,6 +1,6 @@
 #!/bin/bash
 # Pre-push hook for anno project
-# COMPREHENSIVE checks (~30-60 seconds)
+# COMPREHENSIVE checks (~30-60 seconds cold; faster with incremental builds)
 # Goal: Ensure code quality before sharing with others
 #
 # Install: just setup-hooks
@@ -20,7 +20,7 @@ WARNINGS=0
 # 1. Format check (should be clean from pre-commit)
 # ============================================================================
 echo -n "  [1/5] format ....... "
-if ! cargo fmt --all -- --check 2>/dev/null; then
+if ! cargo fmt --all -- --check; then
     echo "FAILED"
     echo ""
     echo "error: code not formatted"
@@ -39,7 +39,7 @@ CLIPPY_OUTPUT=$(cargo clippy --workspace --lib --features "eval-advanced discour
     echo "FAILED"
     echo ""
     echo "error: clippy found issues:"
-    echo "$CLIPPY_OUTPUT" | grep -E "^error" | head -20
+    echo "$CLIPPY_OUTPUT"
     echo ""
     echo "  run: cargo clippy --workspace --lib --features 'eval-advanced discourse' -- -D warnings"
     exit 1
@@ -47,22 +47,22 @@ CLIPPY_OUTPUT=$(cargo clippy --workspace --lib --features "eval-advanced discour
 echo "ok"
 
 # ============================================================================
-# 3. Quick tests (lib only, matches CI test-minimal job)
+# 3. Quick tests (blocking)
 # ============================================================================
-# Note: Some tests may be flaky or have known issues - CI will catch these
+# Prefers cargo-nextest quick profile when available.
 echo -n "  [3/5] tests ........ "
-if ! cargo test --workspace --lib --features "eval-advanced discourse" --quiet 2>/dev/null; then
-    echo "WARNING (non-blocking)"
-    echo "        some tests failed, but continuing (CI will validate)"
+if command -v cargo-nextest >/dev/null 2>&1; then
+    cargo nextest run --profile quick --workspace --features "eval-advanced discourse"
 else
-    echo "ok"
+    cargo test --workspace --lib --features "eval-advanced discourse"
 fi
+echo "ok"
 
 # ============================================================================
 # 4. Doc tests (often forgotten, non-blocking)
 # ============================================================================
 echo -n "  [4/5] doc tests .... "
-if ! cargo test --workspace --doc --features "eval-advanced discourse" --quiet 2>/dev/null; then
+if ! cargo test --workspace --doc --features "eval-advanced discourse"; then
     echo "warning (failures)"
     WARNINGS=$((WARNINGS + 1))
 else
@@ -77,7 +77,7 @@ UNCOMMITTED=$(git status --porcelain | grep -v '^??' | wc -l | tr -d ' ')
 if [ "$UNCOMMITTED" -gt 0 ]; then
     echo "warning"
     echo "        uncommitted changes:"
-    git status --porcelain | grep -v '^??' | head -5 | sed 's/^/        /'
+    git status --porcelain | grep -v '^??' | sed 's/^/        /'
     WARNINGS=$((WARNINGS + 1))
 else
     echo "ok"
