@@ -842,9 +842,10 @@ mod statistical_ner {
         fn entities_within_bounds() {
             let text = "Dr. Smith founded Google Inc.";
             let e = extract(text);
+            let text_char_len = text.chars().count();
             for entity in &e {
-                assert!(entity.start <= text.len());
-                assert!(entity.end <= text.len());
+                assert!(entity.start <= text_char_len);
+                assert!(entity.end <= text_char_len);
                 assert!(entity.start <= entity.end);
             }
         }
