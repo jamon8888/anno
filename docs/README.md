@@ -20,8 +20,8 @@ Documentation for the `anno` crate.
 ## Datasets & Models
 
 - [DATASETS.md](DATASETS.md) - Supported datasets
-- [DATASET_DOWNLOADS.md](DATASET_DOWNLOADS.md) - Dataset downloads
-- [MODEL_DOWNLOADS.md](MODEL_DOWNLOADS.md) - Model downloads
+- [guides/DATASET_DOWNLOADS.md](guides/DATASET_DOWNLOADS.md) - Dataset downloads
+- [guides/MODEL_DOWNLOADS.md](guides/MODEL_DOWNLOADS.md) - Model downloads
 
 ## Performance
 
@@ -37,7 +37,7 @@ Documentation for the `anno` crate.
 ## Features
 
 - [design/graph/GRAPH_EXPORT.md](design/graph/GRAPH_EXPORT.md) - Graph export (Neo4j, NetworkX, JSON-LD)
-- [URL_REFERENCE_SUPPORT.md](URL_REFERENCE_SUPPORT.md) - URL resolution and document reference support
+- [guides/URL_REFERENCE_SUPPORT.md](guides/URL_REFERENCE_SUPPORT.md) - URL resolution and document reference support
 - [design/coref/CROSSDOC_COREF_ARCHITECTURE.md](design/coref/CROSSDOC_COREF_ARCHITECTURE.md) - Cross-document coreference architecture
 - [design/DOCUMENT_INGESTION_DESIGN.md](design/DOCUMENT_INGESTION_DESIGN.md) - Document ingestion and preparation design
 
@@ -46,7 +46,7 @@ Documentation for the `anno` crate.
 - [design/OUTPUT_DESIGN.md](design/OUTPUT_DESIGN.md) - CLI output design philosophy and implementation
 - [design/CLI_DESIGN.md](design/CLI_DESIGN.md) - CLI structure, analysis, and improvements
 - [TESTING.md](TESTING.md) - Testing strategy, findings, and recommendations
-- [MATH_DOCUMENTATION_GUIDE.md](MATH_DOCUMENTATION_GUIDE.md) - Mathematical documentation style guide
+- [guides/MATH_DOCUMENTATION_GUIDE.md](guides/MATH_DOCUMENTATION_GUIDE.md) - Mathematical documentation style guide
 - [design/STATIC_ANALYSIS.md](design/STATIC_ANALYSIS.md) - Static analysis tools and setup
 - [design/embeddings/BOX_EMBEDDINGS.md](design/embeddings/BOX_EMBEDDINGS.md) - Box embeddings implementation and usage
 - [design/embeddings/BOX_EMBEDDINGS_TRAINING.md](design/embeddings/BOX_EMBEDDINGS_TRAINING.md) - Box embeddings training details
@@ -54,13 +54,13 @@ Documentation for the `anno` crate.
 ## Development
 
 - [design/GIT_HOOKS_RECOMMENDATIONS.md](design/GIT_HOOKS_RECOMMENDATIONS.md) - Git hooks recommendations
-- [TESTDATA_REAL_WORLD.md](TESTDATA_REAL_WORLD.md) - Real-world test data guide
+- [guides/TESTDATA_REAL_WORLD.md](guides/TESTDATA_REAL_WORLD.md) - Real-world test data guide
 
 ## Reference
 
 - [reference/TASK_DATASET_MAPPING.md](reference/TASK_DATASET_MAPPING.md) - Task to dataset mapping
 - [reference/TASKS_MODELS_DATASETS_EVALS_TESTS_MATRIX.md](reference/TASKS_MODELS_DATASETS_EVALS_TESTS_MATRIX.md) - Task/model/dataset matrix
-- [BUGS.md](BUGS.md) - Known bugs, fixes, and issues
+- [guides/BUGS.md](guides/BUGS.md) - Known bugs, fixes, and issues
 
 ## Archive
 
