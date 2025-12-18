@@ -403,8 +403,11 @@ impl EntityType {
         match label.to_uppercase().as_str() {
             // Named entities
             "PER" | "PERSON" => EntityType::Person,
-            "ORG" | "ORGANIZATION" => EntityType::Organization,
-            "LOC" | "LOCATION" | "GPE" => EntityType::Location,
+            "ORG" | "ORGANIZATION" | "COMPANY" => EntityType::Organization,
+            "LOC" | "LOCATION" | "GPE" | "GEO-LOC" => EntityType::Location,
+            // WNUT-specific types
+            "FACILITY" | "FAC" => EntityType::custom("FACILITY", EntityCategory::Place),
+            "PRODUCT" | "PROD" => EntityType::custom("PRODUCT", EntityCategory::Misc),
             // Temporal
             "DATE" => EntityType::Date,
             "TIME" => EntityType::Time,
