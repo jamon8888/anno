@@ -319,17 +319,20 @@ mod batch_property_tests {
 
 mod streaming_property_tests {
     use super::*;
+    use anno::offset::TextSpan;
 
     proptest! {
         /// Streaming extraction should preserve entity offsets correctly
         #[test]
-        fn streaming_offset_preservation(
-            offset in 0..10000usize,
-            text in "[A-Za-z0-9 @.]{20,100}"
-        ) {
+        fn streaming_offset_preservation(prefix in "\\PC{0,40}") {
             let ner = RegexNER::new();
 
-            let entities = ner.extract_entities_streaming(&text, offset).unwrap();
+            // Force at least one extractable entity in the chunk.
+            let chunk = "Total: $100 — test@example.com";
+            let full_text = format!("{prefix}{chunk}");
+            let offset = prefix.chars().count();
+
+            let entities = ner.extract_entities_streaming(chunk, offset).unwrap();
 
             for e in &entities {
                 // All entity offsets should be >= the chunk offset
@@ -340,10 +343,17 @@ mod streaming_property_tests {
                 );
 
                 // Entity span should be within chunk bounds (adjusted by offset)
+                let full_char_len = full_text.chars().count();
                 prop_assert!(
-                    e.end <= offset + text.len(),
-                    "Entity end {} should be <= offset + text.len() = {}",
-                    e.end, offset + text.len()
+                    e.end <= full_char_len,
+                    "Entity end {} should be <= full char len {}",
+                    e.end, full_char_len
+                );
+
+                // Entity text should match the referenced span in the full text
+                prop_assert_eq!(
+                    TextSpan::from_chars(&full_text, e.start, e.end).extract(&full_text),
+                    e.text
                 );
             }
         }
@@ -365,7 +375,7 @@ mod streaming_property_tests {
         /// Streaming over full document should find all entities
         #[test]
         fn streaming_completeness(
-            chunks in prop::collection::vec("[A-Za-z ]{5,20}", 2..5)
+            chunks in prop::collection::vec("\\PC{5,20}", 2..5)
         ) {
             let full_text = chunks.join(" test@example.com ");
 
@@ -380,11 +390,12 @@ mod streaming_property_tests {
             // Streaming extraction
             let mut stream_entities = Vec::new();
             let chunk_size = ner.recommended_chunk_size();
-            let mut offset = 0;
+            let full_char_len = full_text.chars().count();
+            let mut offset = 0usize;
 
-            while offset < full_text.len() {
-                let end = (offset + chunk_size).min(full_text.len());
-                let chunk = &full_text[offset..end];
+            while offset < full_char_len {
+                let end = (offset + chunk_size).min(full_char_len);
+                let chunk = TextSpan::from_chars(&full_text, offset, end).extract(&full_text);
 
                 if let Ok(entities) = ner.extract_entities_streaming(chunk, offset) {
                     stream_entities.extend(entities);
