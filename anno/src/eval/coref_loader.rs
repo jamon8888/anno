@@ -138,8 +138,6 @@ pub fn parse_corefud_conllu(content: &str) -> Result<Vec<CorefDocument>> {
         // - descriptor + ')'              => Close marker
         //
         // The format allows concatenation: "(e8-place-1)e9)e7)"
-        // We intentionally only support unambiguous cases:
-        // - Open-without-')' is assumed to run to end-of-value.
         let mut marks = Vec::new();
         let mut i = 0usize;
         let bytes = entity_value.as_bytes();
@@ -149,7 +147,11 @@ pub fn parse_corefud_conllu(content: &str) -> Result<Vec<CorefDocument>> {
                 '(' => {
                     i += 1;
                     let start = i;
-                    while i < bytes.len() && (bytes[i] as char) != ')' {
+                    // Descriptor ends at ')' (self-contained) OR at the next '(' (multiple opens).
+                    while i < bytes.len()
+                        && (bytes[i] as char) != ')'
+                        && (bytes[i] as char) != '('
+                    {
                         i += 1;
                     }
                     if i < bytes.len() && (bytes[i] as char) == ')' {
@@ -163,15 +165,18 @@ pub fn parse_corefud_conllu(content: &str) -> Result<Vec<CorefDocument>> {
                         });
                         i += 1;
                     } else {
-                        // No closing ')': open marker to end-of-value
-                        let descriptor = entity_value[start..].to_string();
+                        // No closing ')': open marker continues.
+                        // If we stopped because we hit another '(', allow parsing the next marker too.
+                        let descriptor = entity_value[start..i].to_string();
                         let (cluster, etype) = split_cluster_and_type(&descriptor);
                         marks.push(EntityMark::Open {
                             cluster,
                             entity_type: etype,
                             self_close: false,
                         });
-                        break;
+                        if i >= bytes.len() {
+                            break;
+                        }
                     }
                 }
                 'e' => {
