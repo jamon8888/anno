@@ -298,16 +298,20 @@ impl LowResourceEvaluator {
             let text_char_len = text.chars().count();
             let mut gold_mask = vec![false; text_char_len];
             for entity in gold_entities {
-                for i in entity.start..entity.end.min(text_char_len) {
-                    gold_mask[i] = true;
+                let start = entity.start.min(text_char_len);
+                let end = entity.end.min(text_char_len);
+                for slot in gold_mask.iter_mut().take(end).skip(start) {
+                    *slot = true;
                 }
             }
 
             // Create character-level prediction mask
             let mut pred_mask = vec![false; text_char_len];
             for entity in &predictions {
-                for i in entity.start..entity.end.min(text_char_len) {
-                    pred_mask[i] = true;
+                let start = entity.start.min(text_char_len);
+                let end = entity.end.min(text_char_len);
+                for slot in pred_mask.iter_mut().take(end).skip(start) {
+                    *slot = true;
                 }
             }
 
@@ -350,7 +354,11 @@ impl LowResourceEvaluator {
         model: &dyn Model,
         test_cases: &[(String, Vec<super::GoldEntity>)],
     ) -> Result<f64> {
-        let config = self.morpheme_config.as_ref().unwrap();
+        let config = self.morpheme_config.as_ref().ok_or_else(|| {
+            Error::evaluation(
+                "morpheme-level evaluation requested without MorphemeConfig (call with_morpheme_boundaries(true))",
+            )
+        })?;
 
         let mut total_gold_morphemes = 0;
         let mut total_pred_morphemes = 0;
@@ -421,7 +429,11 @@ impl LowResourceEvaluator {
         model: &dyn Model,
         test_cases: &[(String, Vec<super::GoldEntity>)],
     ) -> Result<NormalizationImpact> {
-        let config = self.orthographic_config.as_ref().unwrap();
+        let config = self.orthographic_config.as_ref().ok_or_else(|| {
+            Error::evaluation(
+                "normalization impact requested without OrthographicConfig (call with_orthographic_normalization(true))",
+            )
+        })?;
 
         // Evaluate without normalization
         let raw_results = super::evaluate_ner_model(model, test_cases)?;
