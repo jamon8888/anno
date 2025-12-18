@@ -1,6 +1,6 @@
 # Documentation Status
 
-Last reviewed: 2024-12-10
+Last reviewed: 2025-12-18
 
 ## Legend
 
@@ -47,10 +47,7 @@ May describe features not implemented or plans that changed.
 |------|-------|
 | HYPERGRAPH_EVIDENCE_DESIGN.md | Not implemented. Archive or implement. |
 | XCORE_INTEGRATION.md | xCoRe not integrated. |
-| MULTIMODAL_EVAL_DESIGN.md | Multimodal is out of scope per SCOPE.md. |
-| BYTE_EMBEDDINGS_DESIGN.md | Never implemented. |
 | FEATURE_CACHE_DESIGN.md | Status unclear. |
-| FRECO_DESIGN.md | Not implemented. |
 | BOX_COREF_INTEGRATION.md | box-coref is external project. |
 | BOX_EMBEDDINGS*.md | Research code. Unclear if used. |
 | JOINT_MODEL_DESIGN.md | Large design doc. Verify implementation status. |
