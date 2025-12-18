@@ -446,10 +446,7 @@ See `tests/multilingual_ner_tests.rs` for cross-lingual test coverage.
 - **False errors**: 47% of "errors" on CoNLL-03 are actually correct predictions penalized by annotation mistakes
 - **Single-score blindness**: F1 hides boundary vs type errors, rare entity performance, error severity
 
-See [`docs/EVALUATION_CRITIQUE.md`](EVALUATION_CRITIQUE.md) for:
-- Research citations on evaluation limitations
-- What `anno` does differently (dataset quality metrics, error taxonomy)
-- Recommended modern evaluation workflow
+Research citations are included in the references below.
 
 For 2024+ evaluation, prefer:
 - `anno::eval::dataset_quality` — unseen entity ratio, ambiguity metrics

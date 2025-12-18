@@ -25,14 +25,14 @@ Documentation for the `anno` crate.
 
 ## Performance
 
-- [PERFORMANCE_ANALYSIS.md](PERFORMANCE_ANALYSIS.md) - Performance analysis and optimization opportunities
-- [PROFILING.md](PROFILING.md) - Profiling guide (see also PERFORMANCE_ANALYSIS.md)
+- [design/PERFORMANCE_ANALYSIS.md](design/PERFORMANCE_ANALYSIS.md) - Performance analysis and optimization opportunities
+- [design/PROFILING.md](design/PROFILING.md) - Profiling guide (see also PERFORMANCE_ANALYSIS.md)
 
 ## Advanced
 
 - [MODERNBERT.md](MODERNBERT.md) - ModernBERT implementation
 - [LEXICON_DESIGN.md](LEXICON_DESIGN.md) - Lexicon design
-- [ABSTRACT_ANAPHORA_RESEARCH.md](ABSTRACT_ANAPHORA_RESEARCH.md) - Abstract anaphora
+- [research/ABSTRACT_ANAPHORA_RESEARCH.md](research/ABSTRACT_ANAPHORA_RESEARCH.md) - Abstract anaphora
 
 ## Features
 
@@ -43,17 +43,17 @@ Documentation for the `anno` crate.
 
 ## Design & Development
 
-- [OUTPUT_DESIGN.md](OUTPUT_DESIGN.md) - CLI output design philosophy and implementation
-- [CLI_DESIGN.md](CLI_DESIGN.md) - CLI structure, analysis, and improvements
+- [design/OUTPUT_DESIGN.md](design/OUTPUT_DESIGN.md) - CLI output design philosophy and implementation
+- [design/CLI_DESIGN.md](design/CLI_DESIGN.md) - CLI structure, analysis, and improvements
 - [TESTING.md](TESTING.md) - Testing strategy, findings, and recommendations
 - [MATH_DOCUMENTATION_GUIDE.md](MATH_DOCUMENTATION_GUIDE.md) - Mathematical documentation style guide
-- [STATIC_ANALYSIS.md](STATIC_ANALYSIS.md) - Static analysis tools and setup
+- [design/STATIC_ANALYSIS.md](design/STATIC_ANALYSIS.md) - Static analysis tools and setup
 - [BOX_EMBEDDINGS.md](BOX_EMBEDDINGS.md) - Box embeddings implementation and usage
 - [BOX_EMBEDDINGS_TRAINING.md](BOX_EMBEDDINGS_TRAINING.md) - Box embeddings training details
 
 ## Development
 
-- [GIT_HOOKS_RECOMMENDATIONS.md](GIT_HOOKS_RECOMMENDATIONS.md) - Git hooks recommendations
+- [design/GIT_HOOKS_RECOMMENDATIONS.md](design/GIT_HOOKS_RECOMMENDATIONS.md) - Git hooks recommendations
 - [TESTDATA_REAL_WORLD.md](TESTDATA_REAL_WORLD.md) - Real-world test data guide
 
 ## Reference

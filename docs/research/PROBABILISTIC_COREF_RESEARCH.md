@@ -222,7 +222,7 @@ Mediation strategies are **proof combinators**:
 3. **Composition preserves validity**: Combining valid entities yields valid results
 4. **Testing verifies contracts**: Tests discharge proof obligations types can't
 
-See `docs/TYPE_THEORY_AND_NER.md` for full treatment.
+See `TYPE_THEORY_AND_NER.md` for full treatment.
 
 ---
 

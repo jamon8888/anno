@@ -18,11 +18,11 @@ Last reviewed: 2025-12-18
 | EVALUATION.md | Eval framework overview. |
 | UNICODE_OFFSETS.md | Character offset rationale. |
 | TESTING.md | Test strategy. |
-| TESTING_GAPS_ANALYSIS.md | Current gaps. Update as fixed. |
-| CRATE_BOUNDARY_ANALYSIS.md | Type duplication analysis. Still relevant. |
+| design/TESTING_GAPS_ANALYSIS.md | Current gaps. Update as fixed. |
+| design/CRATE_BOUNDARY_ANALYSIS.md | Type duplication analysis. Still relevant. |
 | RESEARCH_SYNTHESIS.md | Research integration priorities. Active. |
 | PIPELINE.md | End-to-end guide. |
-| CLI_DESIGN.md | CLI architecture. |
+| design/CLI_DESIGN.md | CLI architecture. |
 
 ## Reference
 
@@ -30,13 +30,13 @@ Historical context, theory, or external research. Not expected to match code.
 
 | File | Notes |
 |------|-------|
-| HISTORICAL_SYSTEMS.md | Pre-transformer systems catalog. |
+| research/HISTORICAL_SYSTEMS.md | Pre-transformer systems catalog. |
 | RESEARCH.md | What's novel vs implementation. |
 | CLUSTERING_FOUNDATIONS.md | Math background for coalesce. |
-| DYNAMIC_SEMANTICS_THEORY.md | Theory. No code. |
-| TYPE_THEORY_AND_NER.md | Curry-Howard perspective. Aspirational. |
-| CENTERING_THEORY_GUIDE.md | Centering implementation. |
-| PROBABILISTIC_COREF_RESEARCH.md | Research notes. |
+| research/DYNAMIC_SEMANTICS_THEORY.md | Theory. No code. |
+| research/TYPE_THEORY_AND_NER.md | Curry-Howard perspective. Aspirational. |
+| research/CENTERING_THEORY_GUIDE.md | Centering implementation. |
+| research/PROBABILISTIC_COREF_RESEARCH.md | Research notes. |
 | MATH_DOCUMENTATION_GUIDE.md | Writing guidelines. |
 
 ## Stale / Needs Review
