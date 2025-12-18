@@ -2,6 +2,7 @@
 # /// script
 # requires-python = ">=3.8"
 # dependencies = [
+#     "numpy>=1.21.0",
 #     "torch>=2.0.0",
 #     "safetensors>=0.4.0",
 #     "packaging>=21.0",

@@ -26,7 +26,9 @@ status-level = "pass"
 # =============================================================================
 
 [profile.ci]
-retries = 2
+# Avoid re-running expensive timeouts: if it times out once, it almost always
+# times out again (and retries multiply CI energy/time).
+retries = 0
 slow-timeout = { period = "60s", terminate-after = 2 }
 fail-fast = true
 status-level = "all"
@@ -39,9 +41,10 @@ status-level = "all"
 retries = 0
 slow-timeout = { period = "10s", terminate-after = 1 }
 
-# Filter out slow tests: property tests, eval harness, flaky ensemble tests
-# Also exclude backend availability matrix (slow with ONNX models)
-default-filter = "not test(/property/) and not test(/proptest/) and not test(/eval.*harness/) and not test(/backend_availability_matrix/)"
+# Filter out slow tests: property tests, eval harness, flaky/slow binaries.
+# NOTE: nextest `test(/.../)` matches the test name; for integration tests, that name
+# often does not include the filename/module. Excluding by `binary(...)` is more robust.
+default-filter = "not test(/property/) and not test(/proptest/) and not test(/eval::/) and not test(/eval.*harness/) and not test(/backend_availability_matrix/) and not binary(offset_fuzz_tests) and not binary(randomized_matrix_ci) and not binary(combiner_variance) and not binary(e2e_cli_workflows) and not binary(e2e_backend_scenarios) and not binary(e2e_eval_workflow) and not binary(e2e_full_pipeline) and not binary(compare_command) and not binary(cli_context_output) and not binary(backend_factory_parity) and not binary(backend_integration) and not binary(candle_ner_regression) and not binary(eval_integration)"
 
 # =============================================================================
 # ML Profile - for ML backend tests
