@@ -227,11 +227,12 @@ fn test_evaluator_output_format() {
     let model = RegexNER::new();
     let text = "Meeting on January 15 at 3:00 PM";
     let entities = model.extract_entities(text, None).unwrap();
+    let text_char_len = text.chars().count();
 
     // Verify we get entities with expected fields
     for entity in &entities {
         assert!(entity.start < entity.end, "Start should be before end");
-        assert!(entity.end <= text.len(), "End should be within text");
+        assert!(entity.end <= text_char_len, "End should be within text");
         // Confidence should be in [0, 1]
         assert!(
             (0.0..=1.0).contains(&entity.confidence),

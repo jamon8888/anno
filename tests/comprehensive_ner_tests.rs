@@ -1022,10 +1022,11 @@ mod tiered_ner {
             // Unicode names need careful byte offset handling
             let text = "Meeting with José García";
             let e = extract(text);
+            let text_char_len = text.chars().count();
             // Just verify no panic - span validation with unicode is complex
             for entity in &e {
                 assert!(entity.start <= entity.end);
-                assert!(entity.end <= text.len());
+                assert!(entity.end <= text_char_len);
             }
         }
     }
@@ -1386,9 +1387,10 @@ mod proptests {
         #[test]
         fn entities_within_bounds(text in ".{0,1000}") {
             let e = StackedNER::new().extract_entities(&text, None).unwrap();
+            let text_char_len = text.chars().count();
             for entity in e {
                 prop_assert!(entity.start <= entity.end);
-                prop_assert!(entity.end <= text.len());
+                prop_assert!(entity.end <= text_char_len);
             }
         }
 
