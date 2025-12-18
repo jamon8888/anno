@@ -122,6 +122,11 @@
 //! ```
 
 // Always available (zero deps beyond std)
+/// BiLSTM + CRF NER - neural baseline from 2015-2018.
+///
+/// Bidirectional LSTM with Conditional Random Field output layer.
+/// The dominant neural NER architecture before BERT/transformers.
+pub mod bilstm_crf;
 /// Box embeddings for geometric coreference resolution.
 pub mod box_embeddings;
 /// Training system for box embeddings.
@@ -192,7 +197,6 @@ pub mod llm_prompt;
 pub mod demonstration;
 
 // GLiNER via ONNX (uses same feature as other ONNX models)
-// Note: gline-rs crate not yet published to crates.io
 
 // ONNX implementations
 #[cfg(feature = "onnx")]
@@ -239,6 +243,7 @@ pub mod graph_coref;
 pub mod mention_ranking;
 
 // Re-exports (always available)
+pub use bilstm_crf::BiLstmCrfNER;
 pub use crf::CrfNER;
 pub use ensemble::EnsembleNER;
 pub use extractor::{BackendType, NERExtractor};

@@ -149,6 +149,10 @@ impl ZeroShotNER for GLiNERPoly {
         self.bi_encoder
             .extract_with_descriptions(text, descriptions, threshold)
     }
+
+    fn default_types(&self) -> &[&'static str] {
+        self.bi_encoder.default_types()
+    }
 }
 
 #[cfg(not(feature = "onnx"))]
