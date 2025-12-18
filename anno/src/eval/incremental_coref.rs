@@ -625,21 +625,69 @@ impl IncrementalCorefResolver {
         let mut offset = 0;
 
         if self.config.token_based {
-            let tokens: Vec<&str> = text.split_whitespace().collect();
+            // Token-based windowing, but offsets are still character offsets.
+            // We tokenize in a Unicode-safe way and keep (start_char, end_char) per token.
+            #[derive(Debug, Clone, Copy)]
+            struct TokenSpan<'a> {
+                token: &'a str,
+                start_char: usize,
+                end_char: usize,
+            }
+
+            fn tokenize_with_char_offsets(text: &str) -> Vec<TokenSpan<'_>> {
+                let mut tokens = Vec::new();
+
+                let mut in_word = false;
+                let mut word_start_byte = 0;
+                let mut word_start_char = 0;
+                let mut char_pos = 0;
+
+                for (byte_idx, c) in text.char_indices() {
+                    if c.is_whitespace() {
+                        if in_word {
+                            tokens.push(TokenSpan {
+                                token: &text[word_start_byte..byte_idx],
+                                start_char: word_start_char,
+                                end_char: char_pos,
+                            });
+                            in_word = false;
+                        }
+                    } else if !in_word {
+                        in_word = true;
+                        word_start_byte = byte_idx;
+                        word_start_char = char_pos;
+                    }
+                    char_pos += 1;
+                }
+
+                if in_word {
+                    tokens.push(TokenSpan {
+                        token: &text[word_start_byte..],
+                        start_char: word_start_char,
+                        end_char: char_pos,
+                    });
+                }
+
+                tokens
+            }
+
+            let tokens = tokenize_with_char_offsets(text);
             let step = self.config.window_size.saturating_sub(self.config.window_overlap);
 
             while offset < tokens.len() {
                 let end = (offset + self.config.window_size).min(tokens.len());
-                let window_tokens = &tokens[offset..end];
-                let window_text = window_tokens.join(" ");
+                if end == 0 || offset >= end {
+                    break;
+                }
 
-                // Calculate character offset of this window
-                let char_offset: usize = tokens[..offset]
-                    .iter()
-                    .map(|t| t.len() + 1) // +1 for space
-                    .sum();
+                let char_start = tokens[offset].start_char;
+                let char_end = tokens[end - 1].end_char;
+                let window_text =
+                    crate::offset::TextSpan::from_chars(text, char_start, char_end)
+                        .extract(text)
+                        .to_string();
 
-                windows.push((window_text, char_offset));
+                windows.push((window_text, char_start));
 
                 if end >= tokens.len() {
                     break;
@@ -648,25 +696,57 @@ impl IncrementalCorefResolver {
             }
         } else {
             // Character-based windowing
+            let text_char_len = text.chars().count();
             let step = self.config.window_size.saturating_sub(self.config.window_overlap);
 
-            while offset < text.len() {
-                let end = (offset + self.config.window_size).min(text.len());
+            while offset < text_char_len {
+                let end = (offset + self.config.window_size).min(text_char_len);
 
-                // Adjust to word boundary if possible
-                let adjusted_end = if end < text.len() {
-                    text[..end]
-                        .rfind(char::is_whitespace)
-                        .map(|p| p + 1)
-                        .unwrap_or(end)
+                // Adjust to word boundary if possible.
+                // NOTE: `offset`/`end` are character offsets; we convert to byte offsets for rfind.
+                let adjusted_end = if end < text_char_len {
+                    let end_byte =
+                        crate::offset::TextSpan::from_chars(text, end, end).byte_start;
+                    let mut adjusted_end_byte = end_byte;
+
+                    if let Some(ws_byte_pos) = text[..end_byte].rfind(char::is_whitespace) {
+                        // Move past the whitespace character (not just +1 byte).
+                        let ws_len = text[ws_byte_pos..]
+                            .chars()
+                            .next()
+                            .map(|c| c.len_utf8())
+                            .unwrap_or(1);
+                        adjusted_end_byte = ws_byte_pos + ws_len;
+
+                        // Skip consecutive whitespace
+                        while adjusted_end_byte < end_byte {
+                            match text[adjusted_end_byte..].chars().next() {
+                                Some(c) if c.is_whitespace() => {
+                                    adjusted_end_byte += c.len_utf8();
+                                }
+                                _ => break,
+                            }
+                        }
+                    }
+
+                    let (adjusted_end_char, _) =
+                        crate::offset::bytes_to_chars(text, adjusted_end_byte, adjusted_end_byte);
+                    if adjusted_end_char > offset {
+                        adjusted_end_char.min(text_char_len)
+                    } else {
+                        end
+                    }
                 } else {
                     end
                 };
 
-                let window_text = text[offset..adjusted_end].to_string();
+                let window_text =
+                    crate::offset::TextSpan::from_chars(text, offset, adjusted_end)
+                        .extract(text)
+                        .to_string();
                 windows.push((window_text, offset));
 
-                if adjusted_end >= text.len() {
+                if adjusted_end >= text_char_len {
                     break;
                 }
                 offset += step.max(1);
@@ -683,18 +763,14 @@ impl IncrementalCorefResolver {
     fn extract_mentions(&self, text: &str, offset: usize) -> Vec<MentionRecord> {
         let mut mentions = Vec::new();
 
-        // Simple tokenization for demonstration
-        // In production, use proper NER + mention detection
-        let words: Vec<(usize, &str)> = text
-            .split_whitespace()
-            .scan(0usize, |pos, word| {
-                let start = text[*pos..].find(word).map(|p| *pos + p).unwrap_or(*pos);
-                *pos = start + word.len();
-                Some((start, word))
-            })
-            .collect();
+        // Unicode-safe tokenization that preserves character offsets.
+        let mut in_word = false;
+        let mut word_start_byte = 0;
+        let mut word_start_char = 0;
+        let mut char_pos = 0;
 
-        for (local_start, word) in &words {
+        let mut flush_word = |word_end_byte: usize, word_end_char: usize| {
+            let word = &text[word_start_byte..word_end_byte];
             let mention_type = self.classify_mention_type(word);
 
             // Only track pronouns and capitalized words (potential names)
@@ -705,14 +781,34 @@ impl IncrementalCorefResolver {
             };
 
             if should_track {
+                let local_start = word_start_char;
+                let local_end = word_end_char;
                 mentions.push(MentionRecord {
                     text: word.to_string(),
                     start: offset + local_start,
-                    end: offset + local_start + word.len(),
+                    end: offset + local_end,
                     window_index: 0, // Will be set by caller
                     mention_type,
                 });
             }
+        };
+
+        for (byte_idx, c) in text.char_indices() {
+            if c.is_whitespace() {
+                if in_word {
+                    flush_word(byte_idx, char_pos);
+                    in_word = false;
+                }
+            } else if !in_word {
+                in_word = true;
+                word_start_byte = byte_idx;
+                word_start_char = char_pos;
+            }
+            char_pos += 1;
+        }
+
+        if in_word {
+            flush_word(text.len(), char_pos);
         }
 
         mentions
@@ -935,6 +1031,47 @@ impl IncrementalStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_windowing_and_mentions_use_character_offsets_on_unicode() {
+        use crate::offset::TextSpan;
+
+        let config = IncrementalConfig {
+            token_based: false,
+            window_size: 12,
+            window_overlap: 3,
+            ..Default::default()
+        };
+        let resolver = IncrementalCorefResolver::new(config);
+
+        // Mixed-script + emoji prefix: byte offsets and char offsets diverge immediately.
+        let text = "🎉 Dr. John went to 東京. He waved.";
+
+        let windows = resolver.split_into_windows(text);
+        assert!(!windows.is_empty());
+
+        // Each window's offset is a char offset into the original text, and the window text must
+        // equal the corresponding substring in the original text.
+        for (window_text, window_offset) in &windows {
+            let span = TextSpan::from_chars(
+                text,
+                *window_offset,
+                *window_offset + window_text.chars().count(),
+            );
+            assert_eq!(span.extract(text), window_text);
+        }
+
+        // Mention extraction should produce character offsets that are Unicode-safe.
+        let mentions = resolver.extract_mentions(text, 0);
+        let john = mentions
+            .iter()
+            .find(|m| m.text == "John")
+            .expect("expected to detect 'John'");
+        let extracted = TextSpan::from_chars(text, john.start, john.end).extract(text);
+        assert_eq!(extracted, "John");
+        assert_eq!(john.start, 6, "🎉(1) + space(1) + Dr.(2) + .(1) + space(1) = 6");
+        assert_eq!(john.end, 10);
+    }
 
     #[test]
     fn test_trigram_similarity() {
