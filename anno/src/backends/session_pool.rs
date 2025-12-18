@@ -312,6 +312,15 @@ pub struct GLiNERPool {
 
 #[cfg(feature = "onnx")]
 impl GLiNERPool {
+    fn validate_output(output_data: &[f32], shape: &[i64]) -> Result<()> {
+        if output_data.is_empty() || shape.iter().any(|&d| d == 0) {
+            return Err(Error::Inference(
+                "GLiNER session-pool returned empty/degenerate output tensor. This usually indicates an incompatible ONNX export (shape mismatch or missing dynamic axes).".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Create a new GLiNER pool.
     pub fn new(model_name: &str, config: PoolConfig) -> Result<Self> {
         let pool = SessionPool::new(model_name, config)?;
@@ -564,9 +573,7 @@ impl GLiNERPool {
             _ => return Err(Error::Parse("Not a tensor".to_string())),
         };
 
-        if output_data.is_empty() || shape.iter().any(|&d| d == 0) {
-            return Ok(vec![]);
-        }
+        Self::validate_output(&output_data, &shape)?;
 
         let mut entities = Vec::new();
         let num_words = words.len();
@@ -577,7 +584,9 @@ impl GLiNERPool {
             let num_classes = shape[3] as usize;
 
             if num_classes == 0 {
-                return Ok(vec![]);
+                return Err(Error::Inference(
+                    "GLiNER session-pool model produced num_classes=0. This export likely does not support dynamic entity types for the requested schema.".to_string(),
+                ));
             }
 
             for word_idx in 0..out_num_words.min(num_words) {
@@ -678,6 +687,18 @@ impl GLiNERPool {
     /// Get underlying pool.
     pub fn pool(&self) -> &SessionPool {
         &self.pool
+    }
+}
+
+#[cfg(all(test, feature = "onnx"))]
+mod output_contract_tests {
+    use super::GLiNERPool;
+
+    #[test]
+    fn validate_output_rejects_empty_or_degenerate() {
+        assert!(GLiNERPool::validate_output(&[], &[1, 1, 1, 1]).is_err());
+        assert!(GLiNERPool::validate_output(&[0.0], &[1, 0, 1, 1]).is_err());
+        assert!(GLiNERPool::validate_output(&[0.0], &[1, 1, 1, 1]).is_ok());
     }
 }
 
