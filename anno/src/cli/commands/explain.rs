@@ -210,8 +210,8 @@ pub fn run(args: ExplainArgs) -> Result<(), String> {
 
         // Span info
         println!("{}:", color("1;33", "Span"));
-        println!("  start: {} (byte offset)", entity.start);
-        println!("  end: {} (exclusive)", entity.end);
+        println!("  start: {} (character offset)", entity.start);
+        println!("  end: {} (exclusive, character offset)", entity.end);
         println!("  length: {} chars", entity.end - entity.start);
 
         // If showing all candidates, show other potential extractions
