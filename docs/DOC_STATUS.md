@@ -16,7 +16,7 @@ Last reviewed: 2025-12-18
 | SCOPE.md | Canonical. What's in/out of scope. |
 | BACKENDS.md | Backend selection guide. Keep updated. |
 | EVALUATION.md | Eval framework overview. |
-| UNICODE_OFFSETS.md | Character offset rationale. |
+| guides/UNICODE_OFFSETS.md | Character offset rationale. |
 | TESTING.md | Test strategy. |
 | design/TESTING_GAPS_ANALYSIS.md | Current gaps. Update as fixed. |
 | design/CRATE_BOUNDARY_ANALYSIS.md | Type duplication analysis. Still relevant. |
@@ -37,7 +37,7 @@ Historical context, theory, or external research. Not expected to match code.
 | research/TYPE_THEORY_AND_NER.md | Curry-Howard perspective. Aspirational. |
 | research/CENTERING_THEORY_GUIDE.md | Centering implementation. |
 | research/PROBABILISTIC_COREF_RESEARCH.md | Research notes. |
-| MATH_DOCUMENTATION_GUIDE.md | Writing guidelines. |
+| guides/MATH_DOCUMENTATION_GUIDE.md | Writing guidelines. |
 
 ## Stale / Needs Review
 

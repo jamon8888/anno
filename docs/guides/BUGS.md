@@ -184,7 +184,7 @@ DATE:2 "2024-12-25" "2024-12-25"
 **Issue:** URLs mentioned in text are NOT automatically resolved
 - Must manually: extract → resolve URLs → crossdoc
 
-**Fix:** Add `--follow-urls` flag (see `docs/URL_REFERENCE_SUPPORT.md`)
+**Fix:** Add `--follow-urls` flag (see `URL_REFERENCE_SUPPORT.md`)
 
 ### 2. Crossdoc Performance for Large Corpora
 **Issue:** O(n²) track comparisons for large document sets
