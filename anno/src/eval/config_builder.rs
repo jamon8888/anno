@@ -25,6 +25,7 @@ pub struct TaskEvalConfigBuilder {
     compute_familiarity: bool,
     temporal_stratification: bool,
     confidence_intervals: bool,
+    coref_use_gold_mentions: bool,
 }
 
 #[cfg(feature = "eval-advanced")]
@@ -125,6 +126,12 @@ impl TaskEvalConfigBuilder {
         self
     }
 
+    /// Coreference evaluation: use gold mentions (evaluate clustering only).
+    pub fn with_coref_use_gold_mentions(mut self, enable: bool) -> Self {
+        self.coref_use_gold_mentions = enable;
+        self
+    }
+
     /// Build the configuration.
     pub fn build(self) -> crate::eval::task_evaluator::TaskEvalConfig {
         crate::eval::task_evaluator::TaskEvalConfig {
@@ -140,6 +147,7 @@ impl TaskEvalConfigBuilder {
             temporal_stratification: self.temporal_stratification,
             confidence_intervals: self.confidence_intervals,
             custom_coref_resolver: None,
+            coref_use_gold_mentions: self.coref_use_gold_mentions,
         }
     }
 }
@@ -159,6 +167,7 @@ impl Default for TaskEvalConfigBuilder {
             compute_familiarity: true,
             temporal_stratification: false,
             confidence_intervals: true,
+            coref_use_gold_mentions: false,
         }
     }
 }
