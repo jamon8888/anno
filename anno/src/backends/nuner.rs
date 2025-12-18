@@ -68,7 +68,7 @@
 //!
 //! - [NuNER Zero on HuggingFace](https://huggingface.co/numind/NuNER_Zero)
 //! - [NuNER ONNX](https://huggingface.co/deepanwa/NuNerZero_onnx)
-//! - [gline-rs](https://github.com/fbilhaut/gline-rs) - Rust GLiNER inference
+//! - GLiNER paper (for span-based prompting inspiration)
 
 use crate::{Entity, EntityType, Model, Result};
 
@@ -89,9 +89,11 @@ const TOKEN_ENT: u32 = 128002;
 #[cfg(feature = "onnx")]
 const TOKEN_SEP: u32 = 128003;
 
-/// Maximum span width for span-based inference (if model requires it)
+/// Maximum span width for span-based inference.
+/// NuNER uses max_width=1 (single-word spans only) per its gliner_config.json.
+/// This matches the Python GLiNER implementation's prepare_span_idx function.
 #[cfg(feature = "onnx")]
-const MAX_SPAN_WIDTH: usize = 12;
+const MAX_SPAN_WIDTH: usize = 1;
 
 /// NuNER Zero-shot NER model.
 ///
@@ -163,6 +165,8 @@ impl NuNER {
 
     /// Load NuNER model from HuggingFace.
     ///
+    /// Automatically loads `.env` for HF_TOKEN if present.
+    ///
     /// # Arguments
     /// * `model_id` - HuggingFace model ID (e.g., "deepanwa/NuNerZero_onnx")
     ///
@@ -172,13 +176,23 @@ impl NuNER {
     /// ```
     #[cfg(feature = "onnx")]
     pub fn from_pretrained(model_id: &str) -> Result<Self> {
-        use hf_hub::api::sync::Api;
+        use hf_hub::api::sync::{Api, ApiBuilder};
         use ort::execution_providers::CPUExecutionProvider;
         use ort::session::Session;
 
-        let api = Api::new().map_err(|e| {
-            Error::Retrieval(format!("Failed to initialize HuggingFace API: {}", e))
-        })?;
+        // Load .env if present (for HF_TOKEN)
+        crate::env::load_dotenv();
+
+        let api = if let Some(token) = crate::env::hf_token() {
+            ApiBuilder::new()
+                .with_token(Some(token))
+                .build()
+                .map_err(|e| Error::Retrieval(format!("HuggingFace API with token: {}", e)))?
+        } else {
+            Api::new().map_err(|e| {
+                Error::Retrieval(format!("Failed to initialize HuggingFace API: {}", e))
+            })?
+        };
 
         let repo = api.model(model_id.to_string());
 
@@ -282,6 +296,15 @@ impl NuNER {
             return Ok(vec![]);
         }
 
+        // Debug tracing
+        if std::env::var("ANNO_DEBUG_NUNER_EXTRACT").is_ok() {
+            eprintln!(
+                "DEBUG nuner extract: text.len={} entity_types={:?}",
+                text.len(),
+                entity_types
+            );
+        }
+
         let session = self.session.as_ref().ok_or_else(|| {
             Error::Retrieval("Model not loaded. Call from_pretrained() first.".to_string())
         })?;
@@ -330,7 +353,8 @@ impl NuNER {
         // The model will error if span_mask is missing, so we always generate it
         let needs_span_tensors = true;
 
-        let mut session_guard = crate::sync::try_lock(session)?;
+        // Use blocking lock for thread-safe parallel access
+        let mut session_guard = crate::sync::lock(session);
 
         let outputs = if needs_span_tensors {
             // Generate span tensors similar to GLiNER
@@ -381,20 +405,24 @@ impl NuNER {
                 .map_err(|e| Error::Parse(format!("ONNX inference failed: {}", e)))?
         };
 
-        // Decode BIO output to entities
+        // Decode span-level output to entities
+        // NuNER with span_mode=marker and max_width=1 outputs: [batch, num_words, max_width, num_classes]
         let entities =
-            self.decode_token_output(&outputs, text, &text_words, entity_types, threshold)?;
+            self.decode_span_output(&outputs, text, &text_words, entity_types, threshold)?;
 
         Ok(entities)
     }
 
     /// Generate span tensors for span-based inference (if model requires it).
     ///
-    /// Similar to GLiNER's span tensor generation, creates all possible spans
-    /// up to MAX_SPAN_WIDTH words.
+    /// Matches Python GLiNER's prepare_span_idx function:
+    /// `span_idx = [(i, i + j) for i in range(num_tokens) for j in range(max_width)]`
+    ///
+    /// With MAX_SPAN_WIDTH=1, generates single-word spans only: (0,0), (1,1), etc.
+    /// Span indices use INCLUSIVE end positions (matching Python GLiNER).
     ///
     /// Returns: (span_idx, span_mask)
-    /// - span_idx: [num_spans, 2] - (start, end) word indices for each span
+    /// - span_idx: [num_spans, 2] - (start, end) word indices (both 0-indexed, inclusive)
     /// - span_mask: [num_spans] - boolean mask indicating valid spans
     #[cfg(feature = "onnx")]
     pub(crate) fn make_span_tensors(num_words: usize) -> (Vec<i64>, Vec<bool>) {
@@ -456,8 +484,8 @@ impl NuNER {
                 // Check bounds before array access (dim * 2 could overflow or exceed span_idx_len)
                 if let Some(dim2) = dim.checked_mul(2) {
                     if dim2 + 1 < span_idx_len && dim < num_spans {
-                        span_idx[dim2] = start as i64; // start offset
-                        span_idx[dim2 + 1] = (start + width + 1) as i64; // end offset (exclusive)
+                        span_idx[dim2] = start as i64; // start offset (0-indexed, inclusive)
+                        span_idx[dim2 + 1] = (start + width) as i64; // end offset (0-indexed, INCLUSIVE per Python GLiNER)
                         span_mask[dim] = true;
                     } else {
                         log::warn!(
@@ -563,6 +591,19 @@ impl NuNER {
             _ => return Err(Error::Parse("Expected tensor output".to_string())),
         };
 
+        // Debug output shape
+        if std::env::var("ANNO_DEBUG_NUNER_DECODE").is_ok() {
+            eprintln!(
+                "DEBUG nuner decode: shape={:?} text_words.len={} data.len={}",
+                shape,
+                text_words.len(),
+                output_data.len()
+            );
+            // Sample first few values
+            let sample: Vec<f32> = output_data.iter().take(10).copied().collect();
+            eprintln!("DEBUG nuner decode: sample data={:?}", sample);
+        }
+
         if shape.len() < 3 {
             return Err(Error::Parse(format!(
                 "Unexpected output shape: {:?}",
@@ -572,6 +613,15 @@ impl NuNER {
 
         let num_words = shape[1] as usize;
         let num_classes = shape[2] as usize;
+
+        if std::env::var("ANNO_DEBUG_NUNER_DECODE").is_ok() {
+            eprintln!(
+                "DEBUG nuner decode: num_words={} num_classes={} entity_types.len={}",
+                num_words,
+                num_classes,
+                entity_types.len()
+            );
+        }
 
         // Calculate word positions in original text
         // Validate that all words are found to prevent silent failures
@@ -707,6 +757,170 @@ impl NuNER {
             ) {
                 entities.push(e);
             }
+        }
+
+        Ok(entities)
+    }
+
+    /// Decode span classification output to entities.
+    ///
+    /// Span mode output shape: [batch, num_words, max_width, num_classes]
+    /// With max_width=1, each word has logits for each entity type.
+    /// We apply sigmoid and compare to threshold.
+    #[cfg(feature = "onnx")]
+    fn decode_span_output(
+        &self,
+        outputs: &ort::session::SessionOutputs,
+        text: &str,
+        text_words: &[&str],
+        entity_types: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<Entity>> {
+        // Find the logits output
+        let logits_output = outputs
+            .iter()
+            .find(|(name, _)| name.contains("logits"))
+            .map(|(_, v)| v)
+            .or_else(|| outputs.iter().next().map(|(_, v)| v))
+            .ok_or_else(|| Error::Parse("No logits output from NuNER model".to_string()))?;
+
+        let (_, data_slice) = logits_output
+            .try_extract_tensor::<f32>()
+            .map_err(|e| Error::Parse(format!("Failed to extract output tensor: {}", e)))?;
+        let output_data: Vec<f32> = data_slice.to_vec();
+
+        // Get shape: [batch, num_words, max_width, num_classes]
+        let shape: Vec<i64> = match logits_output.dtype() {
+            ort::value::ValueType::Tensor { shape, .. } => shape.iter().copied().collect(),
+            _ => return Err(Error::Parse("Expected tensor output".to_string())),
+        };
+
+        if shape.len() != 4 {
+            // Fall back to token decoding if shape doesn't match span format
+            return self.decode_token_output(outputs, text, text_words, entity_types, threshold);
+        }
+
+        let num_words = shape[1] as usize;
+        let max_width = shape[2] as usize; // Should be 1 for NuNER
+        let num_classes = shape[3] as usize;
+
+        // Debug
+        if std::env::var("ANNO_DEBUG_NUNER_DECODE").is_ok() {
+            eprintln!(
+                "DEBUG nuner decode_span: shape={:?} num_words={} max_width={} num_classes={} entity_types.len={}",
+                shape, num_words, max_width, num_classes, entity_types.len()
+            );
+        }
+
+        // Calculate word positions in original text
+        let word_positions: Vec<(usize, usize)> = {
+            let mut positions = Vec::with_capacity(text_words.len());
+            let mut pos = 0;
+            for word in text_words.iter() {
+                if let Some(start) = text[pos..].find(word) {
+                    let abs_start = pos + start;
+                    let abs_end = abs_start + word.len();
+                    positions.push((abs_start, abs_end));
+                    pos = abs_end;
+                } else {
+                    // Word not found - this shouldn't happen with whitespace split
+                    return Err(Error::Parse(format!(
+                        "Word '{}' not found in text starting at position {}",
+                        word, pos
+                    )));
+                }
+            }
+            positions
+        };
+
+        let mut entities = Vec::with_capacity(16);
+        let mut current_entity: Option<(usize, usize, usize, f32)> = None; // (start_word, end_word, type_idx, score)
+
+        // Process each word
+        for word_idx in 0..num_words.min(text_words.len()) {
+            // For span mode with max_width=1, each word has one set of class logits
+            // Index: [batch=0, word_idx, width=0, class_idx]
+            let base_idx = word_idx * max_width * num_classes;
+
+            // Find best class above threshold
+            let mut best_class: Option<usize> = None;
+            let mut best_prob = 0.0f32;
+
+            for class_idx in 0..num_classes {
+                let logit = output_data
+                    .get(base_idx + class_idx)
+                    .copied()
+                    .unwrap_or(f32::NEG_INFINITY);
+                // Apply sigmoid: prob = 1 / (1 + exp(-logit))
+                let prob = 1.0 / (1.0 + (-logit).exp());
+
+                if prob >= threshold && prob > best_prob {
+                    best_prob = prob;
+                    best_class = Some(class_idx);
+                }
+            }
+
+            if let Some(class_idx) = best_class {
+                // We found an entity at this word
+                if let Some((start, end, etype, score)) = current_entity.as_mut() {
+                    if *etype == class_idx {
+                        // Extend current entity (same type)
+                        *end = word_idx + 1;
+                        *score = (*score + best_prob) / 2.0;
+                    } else {
+                        // Different type - flush and start new
+                        if let Some(e) = self.create_entity(
+                            text,
+                            &word_positions,
+                            *start,
+                            *end,
+                            *etype,
+                            *score,
+                            entity_types,
+                        ) {
+                            entities.push(e);
+                        }
+                        current_entity = Some((word_idx, word_idx + 1, class_idx, best_prob));
+                    }
+                } else {
+                    // Start new entity
+                    current_entity = Some((word_idx, word_idx + 1, class_idx, best_prob));
+                }
+            } else {
+                // No entity at this word - flush current
+                if let Some((start, end, etype, score)) = current_entity.take() {
+                    if let Some(e) = self.create_entity(
+                        text,
+                        &word_positions,
+                        start,
+                        end,
+                        etype,
+                        score,
+                        entity_types,
+                    ) {
+                        entities.push(e);
+                    }
+                }
+            }
+        }
+
+        // Flush final entity
+        if let Some((start, end, etype, score)) = current_entity.take() {
+            if let Some(e) = self.create_entity(
+                text,
+                &word_positions,
+                start,
+                end,
+                etype,
+                score,
+                entity_types,
+            ) {
+                entities.push(e);
+            }
+        }
+
+        if std::env::var("ANNO_DEBUG_NUNER_DECODE").is_ok() {
+            eprintln!("DEBUG nuner decode_span: found {} entities", entities.len());
         }
 
         Ok(entities)
