@@ -1015,6 +1015,7 @@ fn test_randomized_matrix_sample() {
         temporal_stratification: false,
         confidence_intervals: false,
         custom_coref_resolver: None,
+        coref_use_gold_mentions: false,
     };
 
     let eval_start = Instant::now();
@@ -2026,6 +2027,7 @@ fn test_multi_seed_variance() {
             temporal_stratification: false,
             confidence_intervals: false,
             custom_coref_resolver: None,
+            coref_use_gold_mentions: false,
         };
 
         if let Ok(results) = evaluator.evaluate_all(config) {
