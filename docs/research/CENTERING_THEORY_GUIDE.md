@@ -186,7 +186,7 @@ as CONTINUE (smooth establishment), otherwise RETAIN.
 - `anno/src/discourse/centering.rs` — Implementation
 - `anno/src/discourse/uncertain_reference.rs` — Epsilon-term deferred resolution
 - `anno/src/eval/incremental_coref.rs` — EntityMemory with LRU/LFU
-- `docs/DYNAMIC_SEMANTICS_THEORY.md` — Theoretical foundations
+- `docs/research/DYNAMIC_SEMANTICS_THEORY.md` — Theoretical foundations
 
 ## References
 

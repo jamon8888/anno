@@ -293,8 +293,8 @@ referents have uncertain identity until resolved.
 
 - `anno/src/discourse/uncertain_reference.rs` — Implementation
 - `anno/src/discourse/centering.rs` — Centering theory integration
-- `docs/DYNAMIC_SEMANTICS_THEORY.md` — Theoretical foundations
-- `docs/ABSTRACT_ANAPHORA_RESEARCH.md` — Abstract anaphora handling
+- `docs/research/DYNAMIC_SEMANTICS_THEORY.md` — Theoretical foundations
+- `docs/research/ABSTRACT_ANAPHORA_RESEARCH.md` — Abstract anaphora handling
 
 ## References
 

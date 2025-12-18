@@ -135,14 +135,14 @@ The Dalrymple, Shieber & Pereira (1991) paper provides a rigorous equational fra
 
 8. **Obligatory sloppy readings** in control ("John tried to run, and Bill did too") and certain reflexives—controlled elements are primary occurrences.
 
-See `ABSTRACT_ANAPHORA_RESEARCH.md` for detailed treatment with examples.
+See `research/ABSTRACT_ANAPHORA_RESEARCH.md` for detailed treatment with examples.
 
 ### Current State in Anno
 - `abstract_anaphora.rs` exists
 - `shell_nouns.rs` exists  
 - `discourse_deixis.rs` exists
 - `bridging.rs` exists
-- Good documentation in `ABSTRACT_ANAPHORA_RESEARCH.md`
+- Good documentation in `research/ABSTRACT_ANAPHORA_RESEARCH.md`
 - `discourse/types.rs` now includes theoretical foundations
 - **NEW**: Givenness Hierarchy cognitive status modeling (see below)
 

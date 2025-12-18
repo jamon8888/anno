@@ -338,7 +338,7 @@ This script tests:
 
 ## See Also
 
-- [CLI Design](CLI_DESIGN.md) - Output format rationale
+- [CLI Design](design/CLI_DESIGN.md) - Output format rationale
 - [Backends](BACKENDS.md) - Backend selection for different use cases
 - [Evaluation](EVALUATION.md) - Quality metrics
 

@@ -192,7 +192,7 @@ The shared task used:
 
 ## Files in This Research Track
 
-- `docs/ABSTRACT_ANAPHORA_RESEARCH.md` - This document
+- `docs/research/ABSTRACT_ANAPHORA_RESEARCH.md` - This document
 - `anno/src/discourse/` - Core discourse module (EventMention, DiscourseReferent, ShellNoun)
 - `anno/src/eval/abstract_anaphora.rs` - Evaluation infrastructure
 - `examples/abstract_anaphora_eval.rs` - Run evaluation
