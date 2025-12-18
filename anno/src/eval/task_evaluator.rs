@@ -139,6 +139,14 @@ pub struct TaskEvalConfig {
     #[serde(skip)]
     pub custom_coref_resolver:
         Option<std::sync::Arc<dyn crate::eval::coref_resolver::CoreferenceResolver>>,
+
+    /// Coreference evaluation mode:
+    /// - `false` (default): run NER to get mentions, then resolve coref on those mentions.
+    /// - `true`: use GOLD mentions from the coref dataset and evaluate clustering only.
+    ///
+    /// This is critical for datasets like CorefUD where mentions include pronouns/nominals
+    /// and empty nodes (zero anaphora) that typical NER backends do not emit.
+    pub coref_use_gold_mentions: bool,
 }
 
 impl Default for TaskEvalConfig {
@@ -156,6 +164,7 @@ impl Default for TaskEvalConfig {
             temporal_stratification: false,
             confidence_intervals: true, // Default to true for better reporting
             custom_coref_resolver: None,
+            coref_use_gold_mentions: false,
         }
     }
 }
@@ -174,6 +183,7 @@ impl std::fmt::Debug for TaskEvalConfig {
             .field("compute_familiarity", &self.compute_familiarity)
             .field("temporal_stratification", &self.temporal_stratification)
             .field("confidence_intervals", &self.confidence_intervals)
+            .field("coref_use_gold_mentions", &self.coref_use_gold_mentions)
             .field(
                 "custom_coref_resolver",
                 &if self.custom_coref_resolver.is_some() {
@@ -796,6 +806,7 @@ impl TaskEvaluator {
         dataset_data: &LoadedDataset,
         _config: &TaskEvalConfig,
     ) -> Result<HashMap<String, f64>> {
+        use crate::eval::metrics::compute_extraction_quality_metrics;
         use crate::eval::ner_metrics::evaluate_entities;
 
         #[cfg(feature = "eval-profiling")]
@@ -1165,6 +1176,13 @@ impl TaskEvaluator {
         metrics.insert("chars_per_second".to_string(), chars_per_second);
         metrics.insert("num_gold".to_string(), all_gold.len() as f64);
         metrics.insert("num_predicted".to_string(), all_predicted.len() as f64);
+
+        // CORE-KG-inspired diagnostics (heuristic): duplication + noise in predictions.
+        let q = compute_extraction_quality_metrics(&all_predicted);
+        metrics.insert("pred_duplication_rate".to_string(), q.duplication_rate);
+        metrics.insert("pred_noise_rate".to_string(), q.noise_rate);
+        metrics.insert("pred_duplicates".to_string(), q.duplicates as f64);
+        metrics.insert("pred_noisy".to_string(), q.noisy as f64);
 
         // Store per-example scores for later use in stratified metrics and confidence intervals
         {
@@ -1637,7 +1655,7 @@ impl TaskEvaluator {
     ) -> Result<HashMap<String, f64>> {
         use crate::eval::backend_factory::create_coref_resolver;
         use crate::eval::coref::entities_to_chains;
-        use crate::eval::coref_metrics::CorefEvaluation;
+        use crate::eval::coref_metrics::{CorefEvaluation, WindowFragmentationStats};
 
         // Try to load coreference documents if dataset supports it
         let gold_docs = if dataset_data.id.is_coreference() {
@@ -1711,35 +1729,131 @@ impl TaskEvaluator {
                 std::sync::Arc::from(create_coref_resolver(backend_name)?)
             };
 
-        // Use a NER backend to extract entities first (heuristic or stacked as default)
-        let ner_backend_name = if backend_name == "coref_resolver" {
-            "stacked" // Default NER backend for coref evaluation
-        } else {
-            backend_name // If a specific NER backend was requested
-        };
-
-        let ner_backend = BackendFactory::create(ner_backend_name)?;
         let mut all_predicted_chains = Vec::new();
         let mut all_gold_chains = Vec::new();
 
-        for doc in &gold_docs {
-            // Collect gold chains from the document
-            all_gold_chains.extend(doc.chains.clone());
+        // Long-document stitching diagnostics (CorefInst-style window fragmentation).
+        // We use a fixed default windowing scheme matching other long-doc configs in this repo.
+        let frag_window_size: usize = 4000;
+        let frag_window_overlap: usize = 256;
+        let mut frag_multiwindow_gold_chains: usize = 0;
+        let mut frag_fragmented_gold_chains: usize = 0;
+        let mut frag_boundary_checks: usize = 0;
+        let mut frag_boundary_splits: usize = 0;
+        let mut frag_missing_mentions_in_multiwindow_chains: usize = 0;
 
-            // Extract entities from the document text using NER backend
-            match ner_backend.extract_entities(&doc.text, None) {
-                Ok(entities) => {
-                    // Resolve coreference on predicted entities
-                    let resolved_entities = resolver.resolve(&entities);
-                    // Convert resolved entities to chains
-                    let predicted_chains = entities_to_chains(&resolved_entities);
-                    all_predicted_chains.extend(predicted_chains);
-                }
-                Err(e) => {
-                    // Log error but continue with other documents
-                    eprintln!("Warning: NER backend inference failed for document: {}", e);
+        // IMPORTANT: Coref metrics in `coref_metrics.rs` key mentions only by (start,end).
+        // If we concatenate multiple documents without offsetting spans, identical spans across docs
+        // collide and corrupt metrics. We avoid this by assigning a monotonically increasing
+        // character base offset per document.
+        let mut cumulative_char_base: usize = 0;
+
+        fn offset_chains(
+            mut chains: Vec<crate::eval::coref::CorefChain>,
+            base: usize,
+        ) -> Vec<crate::eval::coref::CorefChain> {
+            if base == 0 {
+                return chains;
+            }
+            for chain in &mut chains {
+                for m in &mut chain.mentions {
+                    m.start = m.start.saturating_add(base);
+                    m.end = m.end.saturating_add(base);
+                    if let Some(hs) = m.head_start.as_mut() {
+                        *hs = hs.saturating_add(base);
+                    }
+                    if let Some(he) = m.head_end.as_mut() {
+                        *he = he.saturating_add(base);
+                    }
                 }
             }
+            chains
+        }
+
+        for doc in &gold_docs {
+            let doc_base = cumulative_char_base;
+            let doc_char_len = doc.text.chars().count();
+            cumulative_char_base =
+                cumulative_char_base.saturating_add(doc_char_len.saturating_add(1));
+
+            // Collect gold chains from the document
+            all_gold_chains.extend(offset_chains(doc.chains.clone(), doc_base));
+
+            let predicted_chains = if config.coref_use_gold_mentions {
+                // Gold-mention mode: evaluate clustering only.
+                //
+                // We deliberately exclude zero-length mentions (CorefUD empty nodes) from the
+                // resolver input because most resolvers operate on overt spans.
+                let mut gold_entities: Vec<crate::Entity> = Vec::new();
+                for chain in &doc.chains {
+                    for m in &chain.mentions {
+                        let is_zero = m.mention_type == Some(anno_core::types::MentionType::Zero)
+                            || m.start == m.end;
+                        if is_zero {
+                            continue;
+                        }
+                        let et = m
+                            .entity_type
+                            .as_deref()
+                            .map(|t| {
+                                // Best-effort mapping from CorefUD etype (person/place/organization/...)
+                                // to our coarse EntityType. Everything else becomes Other.
+                                let tl = t.to_lowercase();
+                                if tl.contains("person") {
+                                    crate::EntityType::Person
+                                } else if tl.contains("place") || tl.contains("loc") {
+                                    crate::EntityType::Location
+                                } else if tl.contains("org") {
+                                    crate::EntityType::Organization
+                                } else {
+                                    crate::EntityType::Other(t.to_string())
+                                }
+                            })
+                            .unwrap_or_else(|| crate::EntityType::Other("mention".to_string()));
+
+                        gold_entities.push(crate::Entity::new(&m.text, et, m.start, m.end, 1.0));
+                    }
+                }
+
+                let resolved_entities = resolver.resolve(&gold_entities);
+                entities_to_chains(&resolved_entities)
+            } else {
+                // End-to-end mode: extract mentions via NER backend, then cluster.
+                // Use a NER backend to extract entities first (heuristic or stacked as default)
+                let ner_backend_name = if backend_name == "coref_resolver" {
+                    "stacked" // Default NER backend for coref evaluation
+                } else {
+                    backend_name // If a specific NER backend was requested
+                };
+                let ner_backend = BackendFactory::create(ner_backend_name)?;
+
+                match ner_backend.extract_entities(&doc.text, None) {
+                    Ok(entities) => {
+                        let resolved_entities = resolver.resolve(&entities);
+                        entities_to_chains(&resolved_entities)
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: NER backend inference failed for document: {}", e);
+                        Vec::new()
+                    }
+                }
+            };
+
+            if let Some(fs) = WindowFragmentationStats::compute(
+                &predicted_chains,
+                &doc.chains,
+                frag_window_size,
+                frag_window_overlap,
+            ) {
+                frag_multiwindow_gold_chains += fs.multiwindow_gold_chains;
+                frag_fragmented_gold_chains += fs.fragmented_gold_chains;
+                frag_boundary_checks += fs.boundary_checks;
+                frag_boundary_splits += fs.boundary_splits;
+                frag_missing_mentions_in_multiwindow_chains +=
+                    fs.missing_mentions_in_multiwindow_chains;
+            }
+
+            all_predicted_chains.extend(offset_chains(predicted_chains, doc_base));
         }
 
         // Compute coreference metrics
@@ -1784,6 +1898,53 @@ impl TaskEvaluator {
         metrics.insert("blanc_recall".to_string(), eval.blanc.recall);
         metrics.insert("blanc_f1".to_string(), eval.blanc.f1);
         metrics.insert("conll_f1".to_string(), eval.conll_f1);
+
+        if let Some(z) = eval.zero_anaphor {
+            metrics.insert("zero_precision".to_string(), z.precision);
+            metrics.insert("zero_recall".to_string(), z.recall);
+            metrics.insert("zero_f1".to_string(), z.f1);
+            metrics.insert("zero_tp".to_string(), z.tp as f64);
+            metrics.insert("zero_wl".to_string(), z.wl as f64);
+            metrics.insert("zero_fp".to_string(), z.fp as f64);
+            metrics.insert("zero_fn".to_string(), z.fn_ as f64);
+            metrics.insert("zero_gold_anaphors".to_string(), z.gold_anaphors as f64);
+            metrics.insert("zero_pred_anaphors".to_string(), z.pred_anaphors as f64);
+        }
+
+        if frag_multiwindow_gold_chains > 0 {
+            metrics.insert(
+                "window_multiwindow_gold_chains".to_string(),
+                frag_multiwindow_gold_chains as f64,
+            );
+            metrics.insert(
+                "window_fragmented_gold_chains".to_string(),
+                frag_fragmented_gold_chains as f64,
+            );
+            metrics.insert(
+                "window_fragmentation_rate".to_string(),
+                frag_fragmented_gold_chains as f64 / frag_multiwindow_gold_chains as f64,
+            );
+            metrics.insert(
+                "window_boundary_checks".to_string(),
+                frag_boundary_checks as f64,
+            );
+            metrics.insert(
+                "window_boundary_splits".to_string(),
+                frag_boundary_splits as f64,
+            );
+            if frag_boundary_checks > 0 {
+                metrics.insert(
+                    "window_boundary_split_rate".to_string(),
+                    frag_boundary_splits as f64 / frag_boundary_checks as f64,
+                );
+            }
+            metrics.insert(
+                "window_missing_mentions_in_multiwindow_chains".to_string(),
+                frag_missing_mentions_in_multiwindow_chains as f64,
+            );
+            metrics.insert("window_size".to_string(), frag_window_size as f64);
+            metrics.insert("window_overlap".to_string(), frag_window_overlap as f64);
+        }
         metrics.insert("num_documents".to_string(), gold_docs.len() as f64);
         metrics.insert("num_gold_chains".to_string(), all_gold_chains.len() as f64);
         metrics.insert(
