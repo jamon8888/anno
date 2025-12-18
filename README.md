@@ -227,7 +227,7 @@ let entities = ner.extract_with_types(
 
 ¹ Pattern accuracy on structured entities only. ² F1 on Person/Org/Location. ³ Zero-shot F1 varies by entity types. ⁴ F1 on CoNLL-2003.
 
-**See [`docs/TASK_DATASET_MAPPING.md`](docs/TASK_DATASET_MAPPING.md) for complete backend list and task support.**
+**See [`docs/reference/TASK_DATASET_MAPPING.md`](docs/reference/TASK_DATASET_MAPPING.md) for complete backend list and task support.**
 
 ## Features
 

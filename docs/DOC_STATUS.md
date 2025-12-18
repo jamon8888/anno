@@ -32,7 +32,7 @@ Historical context, theory, or external research. Not expected to match code.
 |------|-------|
 | research/HISTORICAL_SYSTEMS.md | Pre-transformer systems catalog. |
 | RESEARCH.md | What's novel vs implementation. |
-| CLUSTERING_FOUNDATIONS.md | Math background for coalesce. |
+| design/clustering/CLUSTERING_FOUNDATIONS.md | Math background for coalesce. |
 | research/DYNAMIC_SEMANTICS_THEORY.md | Theory. No code. |
 | research/TYPE_THEORY_AND_NER.md | Curry-Howard perspective. Aspirational. |
 | research/CENTERING_THEORY_GUIDE.md | Centering implementation. |
@@ -48,9 +48,9 @@ May describe features not implemented or plans that changed.
 | research/HYPERGRAPH_EVIDENCE_DESIGN.md | Not implemented. Research note. |
 | research/XCORE_INTEGRATION.md | xCoRe not integrated. Research note. |
 | design/FEATURE_CACHE_DESIGN.md | Status unclear. |
-| BOX_COREF_INTEGRATION.md | box-coref is external project. |
-| BOX_EMBEDDINGS*.md | Research code. Unclear if used. |
-| JOINT_MODEL_DESIGN.md | Large design doc. Verify implementation status. |
+| design/embeddings/BOX_COREF_INTEGRATION.md | box-coref is external project. |
+| design/embeddings/BOX_EMBEDDINGS*.md | Research code. Unclear if used. |
+| design/joint/JOINT_MODEL_DESIGN.md | Large design doc. Verify implementation status. |
 | research/GRAPH_STRUCTURE_UNIFICATION.md | Unifying framework. Mostly conceptual. |
 
 ## Auto-Generated

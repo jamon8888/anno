@@ -435,5 +435,5 @@ pub fn extract_entities_wasm(text: &str) -> JsValue {
 
 - [BACKENDS.md](BACKENDS.md) - Backend comparison
 - [UNICODE_OFFSETS.md](UNICODE_OFFSETS.md) - Character offset handling
-- [research/HISTORICAL_SYSTEMS.md](research/HISTORICAL_SYSTEMS.md) - Classical NER systems
+- [research/HISTORICAL_SYSTEMS.md](../research/HISTORICAL_SYSTEMS.md) - Classical NER systems
 

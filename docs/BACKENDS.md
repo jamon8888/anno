@@ -311,7 +311,7 @@ let ner = LlmNER::new(config, &[EntityType::Person, EntityType::Organization])?;
 - **Types:** Any types you specify
 
 **Note:** This backend is experimental and requires configuring an external LLM endpoint.
-See `LLM_CLI_INTEGRATION.md` for setup details.
+See `design/LLM_CLI_INTEGRATION.md` for setup details.
 
 ## Feature Comparison
 
@@ -576,5 +576,5 @@ Accuracy ↑
 
 - [Architecture](ARCHITECTURE.md) - System design
 - [Evaluation](EVALUATION.md) - Metrics and benchmarks
-- [Task Matrix](TASKS_MODELS_DATASETS_EVALS_TESTS_MATRIX.md) - Full coverage
+- [Task Matrix](reference/TASKS_MODELS_DATASETS_EVALS_TESTS_MATRIX.md) - Full coverage
 
