@@ -290,6 +290,7 @@ pub mod prelude;
 pub mod relation;
 pub mod report;
 pub mod sampling;
+pub mod shell_nouns;
 pub mod synthetic;
 pub mod synthetic_gen;
 pub mod task_evaluator;

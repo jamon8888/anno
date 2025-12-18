@@ -222,7 +222,10 @@ impl EntityLengthEvaluator {
                 e.entity_type == example.entity_type
                     && example
                         .sentence
-                        .get(e.start..e.end)
+                        .get(
+                            crate::offset::TextSpan::from_chars(&example.sentence, e.start, e.end)
+                                .byte_range(),
+                        )
                         .map(|s| s.contains(&example.entity_text))
                         .unwrap_or(false)
             });
