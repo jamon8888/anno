@@ -4612,6 +4612,15 @@ impl DatasetLoader {
         id: DatasetId,
     ) -> Result<Vec<super::coref::CorefDocument>> {
         if !self.is_cached_for(id) {
+            if matches!(id, DatasetId::CorefUD) {
+                let cache_path = self.cache_path_for(id);
+                return Err(Error::InvalidInput(format!(
+                    "CorefUD is not downloadable via anno yet. Please provide a local CorefUD .conllu file.\n\
+                     - Option A: copy it to the cache path {:?}\n\
+                     - Option B: use CorefLoader::load_corefud_from_path(<path>)",
+                    cache_path
+                )));
+            }
             let (content, _) = self.download_with_resolved_url(id)?;
             let cache_path = self.cache_path_for(id);
             std::fs::write(&cache_path, &content).map_err(|e| {
