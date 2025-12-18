@@ -1118,7 +1118,7 @@ For production use, Option 2 (ONNX) provides the best balance of accuracy and de
 
 15. [x] **Sheaf Neural Networks**: Stub implementation with trait definitions
     - See `anno/src/geometric/sheaf.rs` for `SheafGraph`, `RestrictionMap`, `SheafCoref` trait
-    - See [`GEOMETRIC_FOUNDATIONS.md`](GEOMETRIC_FOUNDATIONS.md) for theory
+    - See [`design/embeddings/GEOMETRIC_FOUNDATIONS.md`](design/embeddings/GEOMETRIC_FOUNDATIONS.md) for theory
     - Apache 2.0 reference: twitter-research/neural-sheaf-diffusion
     - [ ] TODO: Port diffusion layer from PyTorch to Candle
 16. [x] **Hyperbolic Embeddings**: Stub implementation with core operations

@@ -78,7 +78,7 @@ trait Lexicon: Send + Sync {
   - **Replace, don't union**: Completely replaces default entity types. Model only extracts the specified types. To include defaults, pass them explicitly.
   - **Semantic matching**: Uses cosine similarity between span embeddings and label embeddings (bi-encoder architecture).
   - Example: `["person", "organization"]` → model extracts only those types, not defaults.
-- **Gazetteers** (`Lexicon` trait): Exact-match lookup of known entities. Example: `"AAPL"` → `Organization`. Currently defined but not integrated into NER pipeline (see `docs/LEXICON_DESIGN.md`).
+- **Gazetteers** (`Lexicon` trait): Exact-match lookup of known entities. Example: `"AAPL"` → `Organization`. Currently defined but not integrated into NER pipeline (see `docs/design/LEXICON_DESIGN.md`).
 
 ### Backend philosophy
 

@@ -2,7 +2,7 @@
 
 **Implementation Status**: Core evidence types implemented in `coalesce/src/evidence.rs`.
 Integrated with `StreamingResolver` via `StreamingConfig::with_evidence()`.
-See also `research/HYPERGRAPH_EVIDENCE_DESIGN.md` for future hypergraph-based extensions.
+See also `../../research/HYPERGRAPH_EVIDENCE_DESIGN.md` for future hypergraph-based extensions.
 
 ## Current State Issues
 
