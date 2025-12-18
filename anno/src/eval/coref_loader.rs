@@ -148,9 +148,7 @@ pub fn parse_corefud_conllu(content: &str) -> Result<Vec<CorefDocument>> {
                     i += 1;
                     let start = i;
                     // Descriptor ends at ')' (self-contained) OR at the next '(' (multiple opens).
-                    while i < bytes.len()
-                        && (bytes[i] as char) != ')'
-                        && (bytes[i] as char) != '('
+                    while i < bytes.len() && (bytes[i] as char) != ')' && (bytes[i] as char) != '('
                     {
                         i += 1;
                     }
