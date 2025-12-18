@@ -6,6 +6,7 @@
 //! Run: cargo run --example bias
 
 use anno::eval::length_bias::create_length_varied_dataset;
+use anno::offset::TextSpan;
 use anno::Model;
 use anno::RegexNER;
 
@@ -39,7 +40,7 @@ fn main() {
         // Check if entity was found
         let found = predictions.iter().any(|p| {
             // Check if prediction contains the expected entity text
-            let pred_text = &sentence[p.start..p.end];
+            let pred_text = TextSpan::from_chars(sentence, p.start, p.end).extract(sentence);
             pred_text == example.entity_text
         });
 
@@ -115,7 +116,7 @@ fn main() {
             let predictions = model.extract_entities(&text, None).unwrap_or_default();
             if predictions
                 .iter()
-                .any(|p| &text[p.start..p.end] == *example)
+                .any(|p| TextSpan::from_chars(&text, p.start, p.end).extract(&text) == *example)
             {
                 found += 1;
             }
