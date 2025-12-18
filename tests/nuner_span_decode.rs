@@ -101,6 +101,8 @@ fn decode_span_output_uses_character_offsets_for_unicode() {
         ("محمد", "الرياض"),
         // Devanagari
         ("शर्मा", "दिल्ली"),
+        // Emoji (4-byte scalars)
+        ("Hello", "👋"),
     ];
 
     for (w1, w2) in cases {
