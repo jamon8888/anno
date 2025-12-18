@@ -272,6 +272,7 @@ pub mod coref;
 pub mod coref_loader;
 pub mod coref_metrics;
 pub mod coref_resolver;
+pub mod incremental_coref;
 pub mod dataset;
 pub mod dataset_metadata;
 pub mod dataset_registry;
@@ -341,6 +342,8 @@ pub mod few_shot;
 pub mod learning_curve;
 #[cfg(feature = "eval-advanced")]
 pub mod long_tail;
+#[cfg(feature = "eval-advanced")]
+pub mod low_resource;
 #[cfg(feature = "eval-advanced")]
 pub mod ood_detection;
 #[cfg(feature = "eval-advanced")]
