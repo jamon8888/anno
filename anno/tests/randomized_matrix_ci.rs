@@ -184,7 +184,7 @@ fn compute_badness(f1: Option<f64>, error: bool, predicted: usize, gold: usize) 
         None => 30,                                  // Untested
         Some(f) if f == 0.0 && predicted > 0 => 100, // All wrong
         Some(f) if f == 0.0 && gold == 0 => 60,      // No gold (parsing issue)
-        Some(f) if f == 0.0 => 80,                   // No predictions
+        Some(0.0) => 80,                             // No predictions
         Some(f) if f < 0.10 => 70,                   // Very low
         Some(f) if f < 0.30 => 50,                   // Low
         Some(f) if f < 0.50 => 30,                   // Medium
@@ -351,7 +351,7 @@ fn select_backends(strategy: SamplingStrategy, count: usize, seed: u64) -> Vec<&
                 // If we have room, add baseline backends for comparison
                 if selected.len() < count {
                     let remaining = count - selected.len();
-                    let baseline_candidates: Vec<&str> = BUILTIN_BACKENDS.iter().copied().collect();
+                    let baseline_candidates: Vec<&str> = BUILTIN_BACKENDS.to_vec();
                     if !baseline_candidates.is_empty() {
                         let additional = select_random(
                             &baseline_candidates,
@@ -858,9 +858,9 @@ fn test_randomized_matrix_sample() {
             }
             // Check if loadable and either cached or downloadable
             if let Ok(loadable) = anno::eval::LoadableDatasetId::try_from(ds) {
-                if loader.is_cached(loadable) {
-                    candidates.push(ds);
-                } else if allow_downloads && download_candidates.contains(&ds) {
+                if loader.is_cached(loadable)
+                    || (allow_downloads && download_candidates.contains(&ds))
+                {
                     candidates.push(ds);
                 }
             }
@@ -1066,10 +1066,7 @@ fn test_randomized_matrix_sample() {
 
             // Track F1 by backend-dataset for variance analysis
             let key = (result.backend.clone(), format!("{:?}", result.dataset));
-            backend_dataset_f1
-                .entry(key)
-                .or_insert_with(Vec::new)
-                .push(f1);
+            backend_dataset_f1.entry(key).or_default().push(f1);
 
             ("PASS", None)
         } else if let Some(err) = &result.error {
@@ -1305,12 +1302,9 @@ fn test_randomized_matrix_sample() {
             }
 
             // Range check [0.0, 1.0]
-            let in_range = precision >= 0.0
-                && precision <= 1.0
-                && recall >= 0.0
-                && recall <= 1.0
-                && f1 >= 0.0
-                && f1 <= 1.0;
+            let in_range = (0.0..=1.0).contains(&precision)
+                && (0.0..=1.0).contains(&recall)
+                && (0.0..=1.0).contains(&f1);
             if !in_range {
                 eprintln!("        RANGE FAIL: precision={:.6}, recall={:.6}, f1={:.6} (must be in [0,1])", 
                     precision, recall, f1);
@@ -1442,7 +1436,7 @@ fn test_randomized_matrix_sample() {
 
                     // Check if types look like character IDs (LitBank coreference issue)
                     let mut suspicious_types = Vec::new();
-                    for (entity_type, _) in &stratified.by_entity_type {
+                    for entity_type in stratified.by_entity_type.keys() {
                         // LitBank character IDs look like "ANCIENT_GREENWICH_PENSIONERS-24"
                         // They're long, contain underscores and hyphens, and have numeric suffixes
                         if entity_type.contains('-')
@@ -1598,7 +1592,8 @@ fn test_randomized_matrix_sample() {
         // For cross-seed variance, run multiple seeds and aggregate externally
         if backend_dataset_f1.len() > 1 {
             eprintln!("\nBackend-Dataset F1 variance (within this run):");
-            let mut variances: Vec<((String, String), f64, f64, Vec<f64>)> = backend_dataset_f1
+            type VarianceRow = ((String, String), f64, f64, Vec<f64>);
+            let mut variances: Vec<VarianceRow> = backend_dataset_f1
                 .iter()
                 .filter(|(_, scores)| scores.len() > 1)
                 .map(|((backend, dataset), scores)| {
@@ -1841,38 +1836,38 @@ fn test_randomized_matrix_sample() {
                 "      \"recall\": {:.6}",
                 r.metrics.get("recall").copied().unwrap_or(0.0)
             ));
-            let mut has_more = r.metrics.get("num_examples").is_some()
-                || r.metrics.get("num_gold").is_some()
-                || r.metrics.get("num_predicted").is_some()
+            let mut has_more = r.metrics.contains_key("num_examples")
+                || r.metrics.contains_key("num_gold")
+                || r.metrics.contains_key("num_predicted")
                 || r.error.is_some();
             if has_more {
-                output.push_str(",");
+                output.push(',');
             }
-            output.push_str("\n");
+            output.push('\n');
             if let Some(n) = r.metrics.get("num_examples") {
                 output.push_str(&format!("      \"num_examples\": {}", n));
-                has_more = r.metrics.get("num_gold").is_some()
-                    || r.metrics.get("num_predicted").is_some()
+                has_more = r.metrics.contains_key("num_gold")
+                    || r.metrics.contains_key("num_predicted")
                     || r.error.is_some();
                 if has_more {
-                    output.push_str(",");
+                    output.push(',');
                 }
-                output.push_str("\n");
+                output.push('\n');
             }
             if let Some(n) = r.metrics.get("num_gold") {
                 output.push_str(&format!("      \"num_gold\": {}", n));
-                has_more = r.metrics.get("num_predicted").is_some() || r.error.is_some();
+                has_more = r.metrics.contains_key("num_predicted") || r.error.is_some();
                 if has_more {
-                    output.push_str(",");
+                    output.push(',');
                 }
-                output.push_str("\n");
+                output.push('\n');
             }
             if let Some(n) = r.metrics.get("num_predicted") {
                 output.push_str(&format!("      \"num_predicted\": {}", n));
                 if r.error.is_some() {
-                    output.push_str(",");
+                    output.push(',');
                 }
-                output.push_str("\n");
+                output.push('\n');
             }
             if let Some(err) = &r.error {
                 let escaped = err
