@@ -295,23 +295,24 @@ impl LowResourceEvaluator {
             let predictions = model.extract_entities(text, None)?;
 
             // Create character-level gold mask
-            let mut gold_mask = vec![false; text.len()];
+            let text_char_len = text.chars().count();
+            let mut gold_mask = vec![false; text_char_len];
             for entity in gold_entities {
-                for i in entity.start..entity.end.min(text.len()) {
+                for i in entity.start..entity.end.min(text_char_len) {
                     gold_mask[i] = true;
                 }
             }
 
             // Create character-level prediction mask
-            let mut pred_mask = vec![false; text.len()];
+            let mut pred_mask = vec![false; text_char_len];
             for entity in &predictions {
-                for i in entity.start..entity.end.min(text.len()) {
+                for i in entity.start..entity.end.min(text_char_len) {
                     pred_mask[i] = true;
                 }
             }
 
             // Count matches
-            for i in 0..text.len() {
+            for i in 0..text_char_len {
                 if gold_mask[i] {
                     total_gold_chars += 1;
                 }
@@ -350,7 +351,7 @@ impl LowResourceEvaluator {
         test_cases: &[(String, Vec<super::GoldEntity>)],
     ) -> Result<f64> {
         let config = self.morpheme_config.as_ref().unwrap();
-        
+
         let mut total_gold_morphemes = 0;
         let mut total_pred_morphemes = 0;
         let mut total_correct_morphemes = 0;
@@ -373,7 +374,8 @@ impl LowResourceEvaluator {
             for entity in &predictions {
                 // Note: entity.start/end are CHARACTER offsets, not byte offsets
                 let char_count = text.chars().count();
-                let entity_text: String = text.chars()
+                let entity_text: String = text
+                    .chars()
                     .skip(entity.start)
                     .take(entity.end.min(char_count).saturating_sub(entity.start))
                     .collect();
@@ -899,4 +901,3 @@ mod tests {
         assert_eq!(evaluator.english_baseline_f1, Some(0.92));
     }
 }
-

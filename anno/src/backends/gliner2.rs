@@ -2735,7 +2735,8 @@ mod tests {
         // Should not panic on Unicode text; should detect at least one trigger relation.
         let rels: Vec<RelationTriple> = extract_relations_heuristic(&entities, text, &[], 0.0);
         assert!(
-            rels.iter().any(|r| r.relation_type == "CEO_OF" || r.relation_type == "WORKS_FOR"),
+            rels.iter()
+                .any(|r| r.relation_type == "CEO_OF" || r.relation_type == "WORKS_FOR"),
             "expected at least one trigger-based relation, got {:?}",
             rels
         );
@@ -2774,7 +2775,10 @@ mod tests {
         assert_eq!(TextSpan::from_chars(text, start, end).extract(text), "John");
 
         let (start, end) = word_span_to_char_offsets(text, &words, 3, 3);
-        assert_eq!(TextSpan::from_chars(text, start, end).extract(text), "Apple");
+        assert_eq!(
+            TextSpan::from_chars(text, start, end).extract(text),
+            "Apple"
+        );
 
         let (start, end) = word_span_to_char_offsets(text, &words, 0, 2);
         assert_eq!(
