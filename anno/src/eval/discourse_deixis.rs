@@ -32,6 +32,7 @@
 //! - Webber (1991): "Structure and Ostension in the Interpretation of Discourse Deixis"
 //! - Poesio et al. (2024): "ARRAU 3.0"
 
+use crate::offset::TextSpan;
 use serde::{Deserialize, Serialize};
 
 /// Type of discourse deictic expression.
@@ -281,19 +282,23 @@ impl DiscourseDeicticDetector {
     /// syntactic parsing and semantic analysis.
     pub fn detect(&self, text: &str) -> Vec<DiscourseDeictic> {
         let mut deictics = Vec::new();
-        let lower = text.to_lowercase();
 
         // Detect demonstratives that likely refer to propositions
         // Pattern: "That + verb" at sentence start or after punctuation
         let sentence_initial_that =
-            regex::Regex::new(r"(?:^|[.!?]\s+)([Tt]hat)\s+(?:was|is|seems|appears|means|shows)")
+            regex::Regex::new(r"(?i)(?:^|[.!?]\s+)(that)\s+(?:was|is|seems|appears|means|shows)")
                 .ok();
 
         if let Some(re) = sentence_initial_that {
-            for cap in re.captures_iter(&lower) {
+            for cap in re.captures_iter(text) {
                 if let Some(m) = cap.get(1) {
-                    let original = &text[m.start()..m.end()];
-                    deictics.push(DiscourseDeictic::new(original, m.start(), m.end()));
+                    let span = TextSpan::from_bytes(text, m.start(), m.end());
+                    let original = span.extract(text);
+                    deictics.push(DiscourseDeictic::new(
+                        &original,
+                        span.char_start,
+                        span.char_end,
+                    ));
                 }
             }
         }
@@ -301,25 +306,48 @@ impl DiscourseDeicticDetector {
         // Detect "this" that refers to prior discourse
         // Pattern: "This + verb" (not followed by noun)
         let this_propositional =
-            regex::Regex::new(r"\b([Tt]his)\s+(?:is|was|means|suggests|shows|indicates|explains)")
+            regex::Regex::new(r"(?i)\b(this)\s+(?:is|was|means|suggests|shows|indicates|explains)")
                 .ok();
 
         if let Some(re) = this_propositional {
-            for cap in re.captures_iter(&lower) {
+            for cap in re.captures_iter(text) {
                 if let Some(m) = cap.get(1) {
-                    let original = &text[m.start()..m.end()];
-                    deictics.push(DiscourseDeictic::new(original, m.start(), m.end()));
+                    let span = TextSpan::from_bytes(text, m.start(), m.end());
+                    let original = span.extract(text);
+                    deictics.push(DiscourseDeictic::new(
+                        &original,
+                        span.char_start,
+                        span.char_end,
+                    ));
                 }
             }
         }
 
         // Detect propositional "it"
         for pattern in &self.propositional_it_contexts {
-            for (idx, _) in lower.match_indices(pattern) {
-                // Find "it" within the pattern
+            let pattern_len = pattern.len();
+            if pattern_len == 0 {
+                continue;
+            }
+            // ASCII-only patterns; use index-preserving ASCII case-insensitive scan.
+            for (idx, _) in text.char_indices() {
+                let Some(hay) = text.get(idx..idx + pattern_len) else {
+                    continue;
+                };
+                if !hay.eq_ignore_ascii_case(pattern) {
+                    continue;
+                }
+                // Find "it" within the pattern (byte offsets; "it" is ASCII)
                 if let Some(it_pos) = pattern.find("it") {
-                    let global_pos = idx + it_pos;
-                    deictics.push(DiscourseDeictic::new("it", global_pos, global_pos + 2));
+                    let it_start = idx + it_pos;
+                    let it_end = it_start + 2;
+                    let span = TextSpan::from_bytes(text, it_start, it_end);
+                    let original = span.extract(text);
+                    deictics.push(DiscourseDeictic::new(
+                        &original,
+                        span.char_start,
+                        span.char_end,
+                    ));
                 }
             }
         }
@@ -348,6 +376,7 @@ pub struct DiscourseDeicticMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::offset::TextSpan;
 
     #[test]
     fn test_deictic_type() {
@@ -401,5 +430,22 @@ mod tests {
 
         assert_eq!(doc.len(), 1);
         assert_eq!(doc.demonstratives().len(), 1);
+    }
+
+    #[test]
+    fn test_detector_offsets_are_character_offsets_on_unicode_text() {
+        // Mixed-script text ensures we don't accidentally treat byte offsets as char offsets.
+        let text = "東京で事件が起きた。That was unexpected. Müller noted: This means delays.";
+        let detector = DiscourseDeicticDetector::new();
+        let deictics = detector.detect(text);
+        assert!(!deictics.is_empty(), "expected at least one deictic");
+
+        for d in deictics {
+            let extracted = TextSpan::from_chars(text, d.start, d.end).extract(text);
+            assert_eq!(
+                extracted, d.text,
+                "deictic span should round-trip via char offsets"
+            );
+        }
     }
 }

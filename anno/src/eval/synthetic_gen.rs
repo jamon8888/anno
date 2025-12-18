@@ -153,14 +153,18 @@ pub fn generate_test_cases(templates: &[Template]) -> Vec<TestCase> {
             // Replace placeholder with value
             let before = &text[..adjusted_start];
             let after = &text[adjusted_start + placeholder_len..];
+            // `adjusted_start` is a byte offset (placeholders are found via `char_indices()`).
+            // Gold entities must use **character offsets** for Unicode correctness.
+            let char_start = before.chars().count();
+            let char_end = char_start + value.chars().count();
             text = format!("{}{}{}", before, value, after);
 
             // Record entity
             entities.push(SimpleGoldEntity {
                 text: value.clone(),
                 entity_type: entity_type.to_string(),
-                start: adjusted_start,
-                end: adjusted_start + value_len,
+                start: char_start,
+                end: char_end,
             });
 
             // Update offset for next placeholder
@@ -311,6 +315,20 @@ mod tests {
                 "Offset mismatch for {}",
                 entity.entity_type
             );
+        }
+    }
+
+    #[test]
+    fn test_offsets_are_character_offsets_for_unicode_values() {
+        // Regression: when values contain non-ASCII characters, offsets must still be in chars.
+        let templates = vec![Template::new("{PERSON} met {PERSON}")];
+        let cases = generate_test_cases(&templates);
+        let case = &cases[0];
+        assert_eq!(case.gold_entities.len(), 2);
+
+        for entity in &case.gold_entities {
+            let extracted = entity.extract_text(&case.text);
+            assert_eq!(extracted, entity.text);
         }
     }
 

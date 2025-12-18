@@ -49,11 +49,11 @@
 //! - Kolhatkar & Hirst (2014): "Resolving Shell Nouns"
 //! - Dalrymple, Shieber & Pereira (1991): "Ellipsis and Higher-Order Unification"
 
+use crate::offset::TextSpan;
 use serde::{Deserialize, Serialize};
 
 /// Category of shell noun (Schmid's taxonomy).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum ShellNounCategory {
     /// Factual: fact, truth, point
     #[default]
@@ -71,7 +71,6 @@ pub enum ShellNounCategory {
     /// Unknown or unclassified
     Other(String),
 }
-
 
 impl ShellNounCategory {
     /// Create from string label.
@@ -253,8 +252,7 @@ impl ShellNounAntecedent {
 }
 
 /// Type of shell noun antecedent.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AntecedentType {
     /// Full clause/sentence
     #[default]
@@ -268,7 +266,6 @@ pub enum AntecedentType {
     /// Implicit (must be inferred)
     Implicit,
 }
-
 
 /// Shell noun resolution for a document.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -344,7 +341,10 @@ impl ShellNounDetector {
     /// Looks for patterns like "this [shell noun]", "the [shell noun] that", etc.
     pub fn detect(&self, text: &str) -> Vec<ShellNounInstance> {
         let mut instances = Vec::new();
-        let lower = text.to_lowercase();
+        // Use ASCII-only lowercasing so match indices stay aligned with the original text.
+        // Unicode `to_lowercase()` can change string length (e.g., ß → ss), invalidating indices.
+        // Shell noun patterns are English/ASCII, so this is the correct behavior here.
+        let lower = text.to_ascii_lowercase();
 
         // Pattern: "this/that/the [shell noun]"
         for noun in &self.lexicon {
@@ -352,8 +352,10 @@ impl ShellNounDetector {
             let pattern = format!("this {}", noun);
             for (idx, _) in lower.match_indices(&pattern) {
                 let end = idx + pattern.len();
-                let shell_phrase = &text[idx..end];
-                let mut instance = ShellNounInstance::new(shell_phrase, noun, idx, end);
+                let span = TextSpan::from_bytes(text, idx, end);
+                let shell_phrase = span.extract(text);
+                let mut instance =
+                    ShellNounInstance::new(shell_phrase, noun, span.char_start, span.char_end);
                 instance.is_cataphoric = true;
                 instances.push(instance);
             }
@@ -362,16 +364,24 @@ impl ShellNounDetector {
             let pattern = format!("that {}", noun);
             for (idx, _) in lower.match_indices(&pattern) {
                 let end = idx + pattern.len();
-                let shell_phrase = &text[idx..end];
-                instances.push(ShellNounInstance::new(shell_phrase, noun, idx, end));
+                let span = TextSpan::from_bytes(text, idx, end);
+                let shell_phrase = span.extract(text);
+                instances.push(ShellNounInstance::new(
+                    shell_phrase,
+                    noun,
+                    span.char_start,
+                    span.char_end,
+                ));
             }
 
             // "the [noun] that" pattern (cataphoric)
             let pattern = format!("the {} that", noun);
             for (idx, _) in lower.match_indices(&pattern) {
                 let end = idx + format!("the {}", noun).len();
-                let shell_phrase = &text[idx..end];
-                let mut instance = ShellNounInstance::new(shell_phrase, noun, idx, end);
+                let span = TextSpan::from_bytes(text, idx, end);
+                let shell_phrase = span.extract(text);
+                let mut instance =
+                    ShellNounInstance::new(shell_phrase, noun, span.char_start, span.char_end);
                 instance.is_cataphoric = true;
                 instances.push(instance);
             }
@@ -391,6 +401,7 @@ impl ShellNounDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::offset::TextSpan;
 
     #[test]
     fn test_shell_noun_category() {
@@ -436,6 +447,21 @@ mod tests {
     }
 
     #[test]
+    fn test_shell_noun_detector_unicode_safe_indices() {
+        // Regression: Unicode before the pattern must not break match indexing, and offsets
+        // must be character offsets (not bytes).
+        let detector = ShellNounDetector::new();
+        let text = "Müller said: this fact matters.";
+        let instances = detector.detect(text);
+        let inst = instances
+            .iter()
+            .find(|i| i.shell_phrase == "this fact")
+            .expect("expected to detect 'this fact'");
+        let round_trip = TextSpan::from_chars(text, inst.shell_start, inst.shell_end).extract(text);
+        assert_eq!(round_trip, inst.shell_phrase);
+    }
+
+    #[test]
     fn test_shell_noun_document() {
         let mut doc = ShellNounDocument::new("doc1", "This fact is important.");
 
@@ -450,4 +476,3 @@ mod tests {
         assert_eq!(doc.unresolved().len(), 0);
     }
 }
-

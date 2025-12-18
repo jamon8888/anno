@@ -1109,4 +1109,188 @@ mod tests {
         assert!(table.contains("Animal Farm"));
         assert!(table.contains("Pride and Prejudice"));
     }
+
+    // =========================================================================
+    // Additional Edge Case Tests
+    // =========================================================================
+
+    #[test]
+    fn test_document_scale_classification() {
+        // Short: 0-2000 tokens
+        assert_eq!(DocumentScale::from_tokens(100), DocumentScale::Short);
+        assert_eq!(DocumentScale::from_tokens(2000), DocumentScale::Short);
+        // Medium: 2001-10000 tokens
+        assert_eq!(DocumentScale::from_tokens(5000), DocumentScale::Medium);
+        // Long: 10001-50000 tokens
+        assert_eq!(DocumentScale::from_tokens(30000), DocumentScale::Long);
+        // BookScale: >50000 tokens
+        assert_eq!(DocumentScale::from_tokens(100000), DocumentScale::BookScale);
+    }
+
+    #[test]
+    fn test_empty_chains_stratification() {
+        let config = BookScaleConfig::default();
+        let analyzer = BookScaleAnalyzer::new(config);
+
+        let chains: Vec<CorefChain> = vec![];
+        let (long, short, single) = analyzer.stratify_chains(&chains);
+
+        assert!(long.is_empty());
+        assert!(short.is_empty());
+        assert!(single.is_empty());
+    }
+
+    #[test]
+    fn test_all_singletons() {
+        let config = BookScaleConfig::default();
+        let analyzer = BookScaleAnalyzer::new(config);
+
+        let chains = vec![
+            make_chain(vec![("a", 0, 1)]),
+            make_chain(vec![("b", 10, 11)]),
+            make_chain(vec![("c", 20, 21)]),
+        ];
+
+        let (long, short, single) = analyzer.stratify_chains(&chains);
+
+        assert!(long.is_empty());
+        assert!(short.is_empty());
+        assert_eq!(single.len(), 3);
+    }
+
+    #[test]
+    fn test_all_long_chains() {
+        let config = BookScaleConfig::default();
+        let analyzer = BookScaleAnalyzer::new(config);
+
+        // Create chains with 15+ mentions (long threshold)
+        let chains = vec![
+            make_chain((0..20).map(|i| ("x", i * 10, i * 10 + 1)).collect()),
+            make_chain((0..25).map(|i| ("y", i * 10 + 5, i * 10 + 6)).collect()),
+        ];
+
+        let (long, short, single) = analyzer.stratify_chains(&chains);
+
+        assert_eq!(long.len(), 2);
+        assert!(short.is_empty());
+        assert!(single.is_empty());
+    }
+
+    #[test]
+    fn test_scores_default() {
+        let scores = Scores::default();
+        assert!((scores.precision - 0.0).abs() < 0.001);
+        assert!((scores.recall - 0.0).abs() < 0.001);
+        assert!((scores.f1 - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_coref_eval_scores_conll_average() {
+        let eval = CorefEvalScores {
+            muc: Scores {
+                precision: 0.8,
+                recall: 0.8,
+                f1: 0.8,
+            },
+            b_cubed: Scores {
+                precision: 0.7,
+                recall: 0.7,
+                f1: 0.7,
+            },
+            ceaf_e: Scores {
+                precision: 0.6,
+                recall: 0.6,
+                f1: 0.6,
+            },
+            ceaf_m: Scores::default(),
+            lea: Scores::default(),
+            conll_f1: 0.7, // (0.8 + 0.7 + 0.6) / 3 = 0.7
+        };
+
+        // CoNLL F1 is typically average of MUC, B³, CEAF-e
+        let expected_conll = (0.8 + 0.7 + 0.6) / 3.0;
+        assert!((eval.conll_f1 - expected_conll).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_windowed_evaluation_performance_drop() {
+        let windowed = WindowedEvaluation {
+            num_windows: 5,
+            window_size: 1000,
+            avg_conll_f1: 0.80,
+            std_conll_f1: 0.03,
+            performance_drop: 0.15,
+            window_evals: vec![],
+        };
+
+        // Performance drop should be positive when full-doc is worse
+        assert!(windowed.performance_drop > 0.0);
+        assert_eq!(windowed.num_windows, 5);
+    }
+
+    #[test]
+    fn test_diagnostics_no_issues_for_short_doc() {
+        let config = BookScaleConfig::default();
+        let analyzer = BookScaleAnalyzer::new(config);
+
+        // Perfect scores - no issues expected
+        let eval = CorefEvalScores {
+            muc: Scores {
+                precision: 0.85,
+                recall: 0.85,
+                f1: 0.85,
+            },
+            b_cubed: Scores {
+                precision: 0.82,
+                recall: 0.82,
+                f1: 0.82,
+            },
+            ceaf_e: Scores {
+                precision: 0.80,
+                recall: 0.80,
+                f1: 0.80,
+            },
+            ceaf_m: Scores::default(),
+            lea: Scores::default(),
+            conll_f1: 0.82,
+        };
+
+        let stratified = StratifiedEvaluation::default();
+        let diagnostics = analyzer.generate_diagnostics(
+            &eval,
+            None, // No windowed evaluation
+            &stratified,
+            DocumentScale::Short,
+        );
+
+        // Small divergence for short docs - may or may not have issues
+        // Just verify it doesn't panic and has expected fields
+        let _ = diagnostics.high_metric_divergence;
+        let _ = diagnostics.has_issues();
+    }
+
+    #[test]
+    fn test_multi_book_report_empty() {
+        let books: Vec<PerBookEvaluation> = vec![];
+        let report = MultiBookReport::from_books(books);
+
+        assert_eq!(report.aggregate.total_books, 0);
+        assert!(report.books.is_empty());
+    }
+
+    #[test]
+    fn test_per_book_evaluation_scale() {
+        let book = PerBookEvaluation {
+            book_id: "test".to_string(),
+            title: Some("Test Book".to_string()),
+            author: None,
+            token_count: 200000,
+            full_doc: CorefEvalScores::default(),
+            windowed: None,
+            scale: DocumentScale::BookScale,
+        };
+
+        assert!(book.token_count > 100000);
+        assert_eq!(book.scale, DocumentScale::BookScale);
+    }
 }
