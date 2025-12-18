@@ -31,7 +31,6 @@ Documentation for the `anno` crate.
 ## Advanced
 
 - [MODERNBERT.md](MODERNBERT.md) - ModernBERT implementation
-- [MULTIMODAL_EVAL_DESIGN.md](MULTIMODAL_EVAL_DESIGN.md) - Multimodal evaluation
 - [LEXICON_DESIGN.md](LEXICON_DESIGN.md) - Lexicon design
 - [ABSTRACT_ANAPHORA_RESEARCH.md](ABSTRACT_ANAPHORA_RESEARCH.md) - Abstract anaphora
 
