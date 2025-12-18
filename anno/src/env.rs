@@ -22,6 +22,7 @@
 //! |----------|---------|
 //! | `HF_TOKEN` | HuggingFace API token for gated models |
 //! | `OPENAI_API_KEY` | OpenAI API key for LLM backends |
+//! | `ANTHROPIC_API_KEY` | Anthropic API key for Claude LLM backends |
 //! | `OPENROUTER_API_KEY` | OpenRouter API key for LLM backends |
 //! | `GEMINI_API_KEY` | Google Gemini API key |
 //! | `ANNO_CACHE_DIR` | Custom cache directory for models/datasets |
@@ -84,11 +85,16 @@ fn load_dotenv_impl() {
 
 fn parse_dotenv(contents: &str) {
     for line in contents.lines() {
-        let line = line.trim();
+        let mut line = line.trim();
 
         // Skip empty lines and comments
         if line.is_empty() || line.starts_with('#') {
             continue;
+        }
+
+        // Common .env style: `export KEY=value`
+        if let Some(rest) = line.strip_prefix("export ") {
+            line = rest.trim();
         }
 
         // Parse KEY=VALUE (handle quoted values)
@@ -123,12 +129,42 @@ pub fn hf_token() -> Option<String> {
     std::env::var("HF_TOKEN").ok()
 }
 
-/// Check if any OpenAI-compatible API key is available.
+/// Check if any LLM API key is available.
 #[must_use]
 pub fn has_llm_api_key() -> bool {
-    std::env::var("OPENAI_API_KEY").is_ok()
-        || std::env::var("OPENROUTER_API_KEY").is_ok()
-        || std::env::var("GEMINI_API_KEY").is_ok()
+    fn nonempty(name: &str) -> bool {
+        std::env::var(name)
+            .ok()
+            .is_some_and(|v| !v.trim().is_empty())
+    }
+
+    nonempty("OPENAI_API_KEY")
+        || nonempty("ANTHROPIC_API_KEY")
+        || nonempty("OPENROUTER_API_KEY")
+        || nonempty("GEMINI_API_KEY")
+}
+
+/// Get the best available LLM API key and provider.
+/// Returns (key, provider) tuple.
+#[must_use]
+pub fn llm_api_key() -> Option<(String, &'static str)> {
+    let nonempty = |name: &str| -> Option<String> {
+        std::env::var(name).ok().filter(|v| !v.trim().is_empty())
+    };
+
+    if let Some(key) = nonempty("OPENAI_API_KEY") {
+        return Some((key, "openai"));
+    }
+    if let Some(key) = nonempty("ANTHROPIC_API_KEY") {
+        return Some((key, "anthropic"));
+    }
+    if let Some(key) = nonempty("OPENROUTER_API_KEY") {
+        return Some((key, "openrouter"));
+    }
+    if let Some(key) = nonempty("GEMINI_API_KEY") {
+        return Some((key, "gemini"));
+    }
+    None
 }
 
 /// Get the cache directory for models and datasets.
@@ -196,6 +232,47 @@ KEY3='single quoted'
         parse_dotenv(&test_contents);
 
         // The test environment might have these set already, so just check parsing works
+    }
+
+    #[test]
+    fn test_parse_dotenv_supports_export_prefix_and_sets_values() {
+        let pid = std::process::id();
+        let k1 = format!("ANNO_TEST_EXPORT_{}_K1", pid);
+        let k2 = format!("ANNO_TEST_EXPORT_{}_K2", pid);
+
+        // Ensure clean slate
+        std::env::remove_var(&k1);
+        std::env::remove_var(&k2);
+
+        let contents = format!(
+            r#"
+export {k1}=value1
+{k2}="quoted value"
+"#
+        );
+        parse_dotenv(&contents);
+
+        assert_eq!(std::env::var(&k1).as_deref(), Ok("value1"));
+        assert_eq!(std::env::var(&k2).as_deref(), Ok("quoted value"));
+
+        // Clean up
+        std::env::remove_var(&k1);
+        std::env::remove_var(&k2);
+    }
+
+    #[test]
+    fn test_parse_dotenv_does_not_override_existing_env() {
+        let pid = std::process::id();
+        let key = format!("ANNO_TEST_NO_OVERRIDE_{}", pid);
+
+        std::env::set_var(&key, "from_env");
+
+        let contents = format!(r#"{key}=from_dotenv"#);
+        parse_dotenv(&contents);
+
+        assert_eq!(std::env::var(&key).as_deref(), Ok("from_env"));
+
+        std::env::remove_var(&key);
     }
 
     #[test]

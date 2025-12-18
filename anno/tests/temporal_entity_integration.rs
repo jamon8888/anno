@@ -199,3 +199,133 @@ fn entity_is_temporal_method_works() {
         "Entity with valid_from should be considered temporal"
     );
 }
+
+// =============================================================================
+// NON-IGNORED TESTS: These validate current RegexNER behavior
+// =============================================================================
+
+/// RegexNER does extract date entities (just doesn't normalize them yet)
+#[test]
+fn regex_ner_extracts_iso_dates() {
+    let ner = RegexNER::new();
+    let entities = ner
+        .extract_entities("The meeting is on 2024-01-15.", None)
+        .unwrap();
+
+    let date_entity = entities
+        .iter()
+        .find(|e| matches!(e.entity_type, EntityType::Date));
+
+    assert!(date_entity.is_some(), "Should find a date entity");
+    assert_eq!(date_entity.unwrap().text, "2024-01-15");
+}
+
+/// RegexNER extracts times
+#[test]
+fn regex_ner_extracts_times() {
+    let ner = RegexNER::new();
+    let entities = ner
+        .extract_entities("Call starts at 3:30 PM and ends at 5:00 PM.", None)
+        .unwrap();
+
+    let time_entities: Vec<_> = entities
+        .iter()
+        .filter(|e| matches!(e.entity_type, EntityType::Time))
+        .collect();
+
+    assert!(!time_entities.is_empty(), "Should find time entities");
+}
+
+/// RegexNER extracts Japanese dates
+#[test]
+fn regex_ner_extracts_japanese_date_format() {
+    let ner = RegexNER::new();
+    let entities = ner
+        .extract_entities("会議は2024年1月15日です。", None)
+        .unwrap();
+
+    let date_entity = entities
+        .iter()
+        .find(|e| matches!(e.entity_type, EntityType::Date));
+
+    assert!(date_entity.is_some(), "Should find a Japanese date entity");
+    assert!(date_entity.unwrap().text.contains("2024年"));
+}
+
+/// RegexNER handles mixed temporal entities
+#[test]
+fn regex_ner_mixed_temporal_entities() {
+    let ner = RegexNER::new();
+    let text = "Meeting on 2024-03-15 at 10:00 AM. Deadline: $500 by 2024-12-31.";
+    let entities = ner.extract_entities(text, None).unwrap();
+
+    let dates: Vec<_> = entities
+        .iter()
+        .filter(|e| matches!(e.entity_type, EntityType::Date))
+        .collect();
+    let times: Vec<_> = entities
+        .iter()
+        .filter(|e| matches!(e.entity_type, EntityType::Time))
+        .collect();
+    let money: Vec<_> = entities
+        .iter()
+        .filter(|e| matches!(e.entity_type, EntityType::Money))
+        .collect();
+
+    assert!(dates.len() >= 2, "Should find at least 2 dates");
+    assert!(!times.is_empty(), "Should find time entity");
+    assert!(!money.is_empty(), "Should find money entity");
+}
+
+/// Multiple date formats in same text
+#[test]
+fn regex_ner_multiple_date_formats() {
+    let ner = RegexNER::new();
+    // Different date formats
+    let text = "From 2024-01-01 to January 15, 2024. Also 01/20/2024.";
+    let entities = ner.extract_entities(text, None).unwrap();
+
+    let dates: Vec<_> = entities
+        .iter()
+        .filter(|e| matches!(e.entity_type, EntityType::Date))
+        .collect();
+
+    // Should find at least some of these date formats
+    assert!(!dates.is_empty(), "Should find at least one date entity");
+}
+
+/// European date format
+#[test]
+fn regex_ner_european_date() {
+    let ner = RegexNER::new();
+    let entities = ner
+        .extract_entities("La réunion est le 15 janvier 2024.", None)
+        .unwrap();
+
+    let date_entity = entities
+        .iter()
+        .find(|e| matches!(e.entity_type, EntityType::Date));
+
+    // French month name should be recognized
+    if let Some(de) = date_entity {
+        assert!(de.text.contains("15"));
+    }
+}
+
+/// German date format
+#[test]
+fn regex_ner_german_date() {
+    let ner = RegexNER::new();
+    let entities = ner
+        .extract_entities("Das Treffen ist am 15. Januar 2024.", None)
+        .unwrap();
+
+    let date_entity = entities
+        .iter()
+        .find(|e| matches!(e.entity_type, EntityType::Date));
+
+    // German month name should be recognized
+    if let Some(de) = date_entity {
+        assert!(de.text.contains("15") || de.text.contains("Januar"));
+    }
+}

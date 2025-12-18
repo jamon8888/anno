@@ -93,3 +93,82 @@ pub fn try_lock<T>(mutex: &Mutex<T>) -> crate::Result<std::sync::MutexGuard<'_, 
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mutex_new_and_lock() {
+        let mutex = Mutex::new(42);
+        let guard = lock(&mutex);
+        assert_eq!(*guard, 42);
+    }
+
+    #[test]
+    fn test_mutex_modify_value() {
+        let mutex = Mutex::new(0);
+        {
+            let mut guard = lock(&mutex);
+            *guard = 100;
+        }
+        let guard = lock(&mutex);
+        assert_eq!(*guard, 100);
+    }
+
+    #[test]
+    fn test_try_lock_success() {
+        let mutex = Mutex::new("test");
+        let result = try_lock(&mutex);
+        assert!(result.is_ok());
+        assert_eq!(*result.unwrap(), "test");
+    }
+
+    #[test]
+    fn test_mutex_with_struct() {
+        #[derive(Debug, PartialEq)]
+        struct Data {
+            value: i32,
+            name: String,
+        }
+
+        let mutex = Mutex::new(Data {
+            value: 42,
+            name: "test".to_string(),
+        });
+
+        let guard = lock(&mutex);
+        assert_eq!(guard.value, 42);
+        assert_eq!(guard.name, "test");
+    }
+
+    #[test]
+    fn test_multiple_locks_sequential() {
+        let mutex = Mutex::new(0);
+
+        for i in 0..10 {
+            let mut guard = lock(&mutex);
+            *guard = i;
+        }
+
+        let guard = lock(&mutex);
+        assert_eq!(*guard, 9);
+    }
+
+    #[test]
+    fn test_try_lock_returns_correct_value() {
+        let mutex = Mutex::new(vec![1, 2, 3]);
+
+        // Must bind the guard explicitly to control its lifetime
+        let result = try_lock(&mutex);
+        match result {
+            Ok(guard) => {
+                assert_eq!(guard.len(), 3);
+                assert_eq!(guard[0], 1);
+            }
+            Err(_) => {
+                panic!("try_lock should succeed when not contested");
+            }
+        }
+    }
+}

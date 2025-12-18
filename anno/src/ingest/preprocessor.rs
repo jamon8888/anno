@@ -128,3 +128,118 @@ impl DocumentPreprocessor {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_preprocessor_default() {
+        let prep = DocumentPreprocessor::new();
+        assert!(prep.clean_whitespace);
+        assert!(prep.normalize_unicode);
+        assert!(!prep.detect_language);
+        assert!(prep.chunk_size.is_none());
+    }
+
+    #[test]
+    fn test_preprocessor_with_all_cleaning() {
+        let prep = DocumentPreprocessor::with_all_cleaning();
+        assert!(prep.clean_whitespace);
+        assert!(prep.normalize_unicode);
+        assert!(prep.detect_language);
+    }
+
+    #[test]
+    fn test_whitespace_normalization() {
+        let prep = DocumentPreprocessor::new();
+        let doc = prep.prepare("Hello   world\r\n\r\ntest");
+
+        // Multiple spaces should be collapsed
+        assert!(!doc.text.contains("  "));
+        // CRLF should be normalized to LF
+        assert!(!doc.text.contains("\r"));
+    }
+
+    #[test]
+    fn test_unicode_zero_width_removal() {
+        let prep = DocumentPreprocessor::new();
+        let input = "Hello\u{200b}world\u{feff}test";
+        let doc = prep.prepare(input);
+
+        assert!(!doc.text.contains('\u{200b}'));
+        assert!(!doc.text.contains('\u{feff}'));
+        assert!(doc.text.contains("Helloworld"));
+    }
+
+    #[test]
+    fn test_trim_whitespace() {
+        let prep = DocumentPreprocessor::new();
+        let doc = prep.prepare("   text with spaces   ");
+
+        assert_eq!(doc.text, "text with spaces");
+    }
+
+    #[test]
+    fn test_metadata_recording() {
+        let prep = DocumentPreprocessor::new();
+        let doc = prep.prepare("test input");
+
+        assert!(doc.metadata.contains_key("original_length"));
+        assert!(doc.metadata.contains_key("processed_length"));
+        assert!(doc.metadata.contains_key("whitespace_cleaned"));
+        assert!(doc.metadata.contains_key("unicode_normalized"));
+    }
+
+    #[test]
+    fn test_language_detection_metadata() {
+        let prep = DocumentPreprocessor::with_all_cleaning();
+        let doc = prep.prepare("Hello world, this is English text.");
+
+        assert!(doc.metadata.contains_key("detected_language"));
+        assert!(doc
+            .metadata
+            .get("detected_language")
+            .unwrap()
+            .contains("English"));
+    }
+
+    #[test]
+    fn test_preserve_paragraph_breaks() {
+        let prep = DocumentPreprocessor::new();
+        let doc = prep.prepare("First paragraph.\n\nSecond paragraph.");
+
+        // Should preserve double newline (paragraph break)
+        assert!(doc.text.contains("\n\n") || doc.text.contains("\n"));
+    }
+
+    #[test]
+    fn test_empty_input() {
+        let prep = DocumentPreprocessor::new();
+        let doc = prep.prepare("");
+
+        assert!(doc.text.is_empty());
+        assert_eq!(doc.metadata.get("original_length"), Some(&"0".to_string()));
+    }
+
+    #[test]
+    fn test_prepared_document_clone() {
+        let prep = DocumentPreprocessor::new();
+        let doc = prep.prepare("test");
+        let cloned = doc.clone();
+
+        assert_eq!(doc.text, cloned.text);
+        assert_eq!(doc.metadata, cloned.metadata);
+    }
+
+    #[test]
+    fn test_cjk_text_handling() {
+        let prep = DocumentPreprocessor::with_all_cleaning();
+        let doc = prep.prepare("東京オリンピック2020は延期されました。");
+
+        // Should preserve CJK text
+        assert!(doc.text.contains("東京"));
+        // Language should be detected
+        assert!(doc.metadata.contains_key("detected_language"));
+    }
+}

@@ -36,7 +36,17 @@ fn anno_cli_cmd() -> Command {
     }
 
     let mut cmd = Command::new("cargo");
-    cmd.args(["run", "-p", "anno-cli", "--"]);
+    // Note: the CLI binary lives in the `anno` crate.
+    cmd.args([
+        "run",
+        "-p",
+        "anno",
+        "--bin",
+        "anno",
+        "--features",
+        "cli eval",
+        "--",
+    ]);
     cmd
 }
 

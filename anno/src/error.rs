@@ -119,3 +119,73 @@ impl From<hf_hub::api::sync::ApiError> for Error {
         Error::Retrieval(format!("{}", err))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_constructors() {
+        let e = Error::model_init("test model init");
+        assert!(e.to_string().contains("Model initialization failed"));
+        assert!(e.to_string().contains("test model init"));
+
+        let e = Error::inference("test inference");
+        assert!(e.to_string().contains("Inference failed"));
+
+        let e = Error::invalid_input("test input");
+        assert!(e.to_string().contains("Invalid input"));
+
+        let e = Error::dataset("test dataset");
+        assert!(e.to_string().contains("Dataset error"));
+
+        let e = Error::feature_not_available("test feature");
+        assert!(e.to_string().contains("Feature not available"));
+
+        let e = Error::parse("test parse");
+        assert!(e.to_string().contains("Parse error"));
+
+        let e = Error::evaluation("test eval");
+        assert!(e.to_string().contains("Evaluation error"));
+
+        let e = Error::retrieval("test retrieval");
+        assert!(e.to_string().contains("Retrieval error"));
+
+        let e = Error::corpus("test corpus");
+        assert!(e.to_string().contains("Corpus error"));
+
+        let e = Error::track_ref("test track");
+        assert!(e.to_string().contains("Track reference error"));
+    }
+
+    #[test]
+    fn test_error_debug_display() {
+        let e = Error::ModelInit("debug test".to_string());
+        let debug = format!("{:?}", e);
+        assert!(debug.contains("ModelInit"));
+        assert!(debug.contains("debug test"));
+
+        let display = format!("{}", e);
+        assert!(display.contains("Model initialization failed"));
+    }
+
+    #[test]
+    fn test_io_error_conversion() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let e: Error = io_err.into();
+        assert!(e.to_string().contains("IO error"));
+    }
+
+    #[test]
+    fn test_result_type_alias() {
+        fn returns_result() -> Result<i32> {
+            Ok(42)
+        }
+        assert_eq!(returns_result().unwrap(), 42);
+
+        fn returns_error() -> Result<i32> {
+            Err(Error::invalid_input("bad"))
+        }
+        assert!(returns_error().is_err());
+    }
+}

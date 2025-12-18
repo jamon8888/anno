@@ -531,4 +531,152 @@ mod tests {
         // Just verify it doesn't panic - pandoc may or may not be available
         let _ = converter.is_available();
     }
+
+    #[test]
+    fn test_format_detection_all_types() {
+        // Test all supported extensions
+        let test_cases = [
+            ("txt", DocumentFormat::PlainText),
+            ("text", DocumentFormat::PlainText),
+            ("html", DocumentFormat::Html),
+            ("htm", DocumentFormat::Html),
+            ("md", DocumentFormat::Markdown),
+            ("markdown", DocumentFormat::Markdown),
+            ("docx", DocumentFormat::Docx),
+            ("pdf", DocumentFormat::Pdf),
+            ("rtf", DocumentFormat::Rtf),
+            ("tex", DocumentFormat::Latex),
+            ("latex", DocumentFormat::Latex),
+            ("epub", DocumentFormat::Epub),
+            ("rst", DocumentFormat::Rst),
+            ("org", DocumentFormat::Org),
+            ("wiki", DocumentFormat::MediaWiki),
+            ("mediawiki", DocumentFormat::MediaWiki),
+            ("xyz", DocumentFormat::Unknown),
+            ("", DocumentFormat::Unknown),
+        ];
+
+        for (ext, expected) in test_cases {
+            assert_eq!(
+                DocumentFormat::from_extension(ext),
+                expected,
+                "Extension '{}' should map to {:?}",
+                ext,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_format_detection_case_insensitive() {
+        assert_eq!(DocumentFormat::from_extension("HTML"), DocumentFormat::Html);
+        assert_eq!(DocumentFormat::from_extension("PDF"), DocumentFormat::Pdf);
+        assert_eq!(
+            DocumentFormat::from_extension("Markdown"),
+            DocumentFormat::Markdown
+        );
+    }
+
+    #[test]
+    fn test_format_from_path() {
+        use std::path::PathBuf;
+
+        let path = PathBuf::from("/some/path/document.html");
+        assert_eq!(DocumentFormat::from_path(&path), DocumentFormat::Html);
+
+        let path = PathBuf::from("file.pdf");
+        assert_eq!(DocumentFormat::from_path(&path), DocumentFormat::Pdf);
+
+        let path = PathBuf::from("no_extension");
+        assert_eq!(DocumentFormat::from_path(&path), DocumentFormat::Unknown);
+    }
+
+    #[test]
+    fn test_converter_backend_commands() {
+        assert_eq!(ConverterBackend::Pandoc.command(), "pandoc");
+        assert_eq!(ConverterBackend::PdfToText.command(), "pdftotext");
+        assert_eq!(ConverterBackend::Html2Text.command(), "html2text");
+        assert_eq!(ConverterBackend::Lynx.command(), "lynx");
+        assert_eq!(ConverterBackend::Antiword.command(), "antiword");
+        assert_eq!(ConverterBackend::Unrtf.command(), "unrtf");
+    }
+
+    #[test]
+    fn test_converter_backend_supported_formats() {
+        let pandoc_formats = ConverterBackend::Pandoc.supported_formats();
+        assert!(pandoc_formats.contains(&DocumentFormat::Html));
+        assert!(pandoc_formats.contains(&DocumentFormat::Markdown));
+        assert!(!pandoc_formats.contains(&DocumentFormat::Pdf)); // pandoc can't read PDF
+
+        let pdf_formats = ConverterBackend::PdfToText.supported_formats();
+        assert!(pdf_formats.contains(&DocumentFormat::Pdf));
+        assert_eq!(pdf_formats.len(), 1);
+    }
+
+    #[test]
+    fn test_unknown_format_passthrough() {
+        let converter = DocumentConverter::new();
+        let text = b"Some content";
+        let result = converter.convert(text, DocumentFormat::Unknown);
+        assert_eq!(result.unwrap(), "Some content");
+    }
+
+    #[test]
+    fn test_invalid_utf8() {
+        let converter = DocumentConverter::new();
+        let invalid_utf8 = vec![0xFF, 0xFE, 0x00, 0x01];
+        let result = converter.convert(&invalid_utf8, DocumentFormat::PlainText);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("UTF-8"));
+    }
+
+    #[test]
+    fn test_document_format_debug() {
+        let format = DocumentFormat::Html;
+        let debug = format!("{:?}", format);
+        assert!(debug.contains("Html"));
+    }
+
+    #[test]
+    fn test_document_format_clone_eq() {
+        let format1 = DocumentFormat::Pdf;
+        let format2 = format1;
+        assert_eq!(format1, format2);
+    }
+
+    #[test]
+    fn test_converter_backend_hash() {
+        use std::collections::HashSet;
+
+        let mut set = HashSet::new();
+        set.insert(ConverterBackend::Pandoc);
+        set.insert(ConverterBackend::PdfToText);
+        set.insert(ConverterBackend::Pandoc); // Duplicate
+
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_converter_default() {
+        let converter = DocumentConverter::default();
+        // Should be same as new()
+        let _ = converter.available_backends();
+    }
+
+    #[test]
+    fn test_has_backend() {
+        let converter = DocumentConverter::new();
+        // Results depend on installed tools, but method should not panic
+        let _ = converter.has_backend(ConverterBackend::Pandoc);
+        let _ = converter.has_backend(ConverterBackend::PdfToText);
+    }
+
+    #[test]
+    fn test_best_backend_for_format() {
+        let converter = DocumentConverter::new();
+        // Results depend on installed tools, but method should not panic
+        let _ = converter.best_backend_for(DocumentFormat::Pdf);
+        let _ = converter.best_backend_for(DocumentFormat::Html);
+        let _ = converter.best_backend_for(DocumentFormat::Markdown);
+    }
 }

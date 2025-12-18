@@ -44,6 +44,7 @@
 //! assert_eq!(refs[0].reference_type, ReferenceType::WikipediaUrl);
 //! ```
 
+use crate::offset::TextSpan;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -252,7 +253,9 @@ impl ReferenceExtractor {
                     continue;
                 }
 
-                let mut reference = Reference::new(url, m.start(), m.end(), ref_type.clone());
+                let span = TextSpan::from_bytes(text, m.start(), m.end());
+                let mut reference =
+                    Reference::new(url, span.char_start, span.char_end, ref_type.clone());
                 reference.url = Some(url.to_string());
 
                 // Extract entity ID for KB URLs
@@ -319,10 +322,11 @@ impl ReferenceExtractor {
         for pattern in &citation_patterns {
             if let Ok(re) = regex::Regex::new(pattern) {
                 for m in re.find_iter(text) {
+                    let span = TextSpan::from_bytes(text, m.start(), m.end());
                     refs.push(Reference::new(
                         m.as_str(),
-                        m.start(),
-                        m.end(),
+                        span.char_start,
+                        span.char_end,
                         ReferenceType::AcademicCitation,
                     ));
                 }
@@ -341,8 +345,13 @@ impl ReferenceExtractor {
 
         if let Some(re) = doi_pattern {
             for m in re.find_iter(text) {
-                let mut reference =
-                    Reference::new(m.as_str(), m.start(), m.end(), ReferenceType::Doi);
+                let span = TextSpan::from_bytes(text, m.start(), m.end());
+                let mut reference = Reference::new(
+                    m.as_str(),
+                    span.char_start,
+                    span.char_end,
+                    ReferenceType::Doi,
+                );
                 reference.url = Some(format!("https://doi.org/{}", m.as_str()));
                 refs.push(reference);
             }
@@ -366,10 +375,11 @@ impl ReferenceExtractor {
         for pattern in &patterns {
             if let Ok(re) = regex::Regex::new(pattern) {
                 for m in re.find_iter(text) {
+                    let span = TextSpan::from_bytes(text, m.start(), m.end());
                     refs.push(Reference::new(
                         m.as_str(),
-                        m.start(),
-                        m.end(),
+                        span.char_start,
+                        span.char_end,
                         ReferenceType::CrossReference,
                     ));
                 }
@@ -386,10 +396,11 @@ impl ReferenceExtractor {
         // @username pattern
         if let Ok(re) = regex::Regex::new(r"@[A-Za-z_][A-Za-z0-9_]{0,14}") {
             for m in re.find_iter(text) {
+                let span = TextSpan::from_bytes(text, m.start(), m.end());
                 refs.push(Reference::new(
                     m.as_str(),
-                    m.start(),
-                    m.end(),
+                    span.char_start,
+                    span.char_end,
                     ReferenceType::SocialHandle,
                 ));
             }
@@ -398,10 +409,11 @@ impl ReferenceExtractor {
         // #hashtag pattern
         if let Ok(re) = regex::Regex::new(r"#[A-Za-z][A-Za-z0-9_]*") {
             for m in re.find_iter(text) {
+                let span = TextSpan::from_bytes(text, m.start(), m.end());
                 refs.push(Reference::new(
                     m.as_str(),
-                    m.start(),
-                    m.end(),
+                    span.char_start,
+                    span.char_end,
                     ReferenceType::Hashtag,
                 ));
             }
@@ -565,6 +577,7 @@ impl ReferenceGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::offset::TextSpan;
 
     #[test]
     fn test_wikipedia_url_extraction() {
@@ -575,6 +588,18 @@ mod tests {
         assert_eq!(refs.len(), 1);
         assert_eq!(refs[0].reference_type, ReferenceType::WikipediaUrl);
         assert_eq!(refs[0].entity_id, Some("Albert_Einstein".to_string()));
+    }
+
+    #[test]
+    fn test_reference_offsets_are_character_offsets_with_unicode_prefix() {
+        let extractor = ReferenceExtractor::new();
+        let text = "Müller: see https://en.wikipedia.org/wiki/Paris for travel tips.";
+        let refs = extractor.extract(text);
+        assert_eq!(refs.len(), 1);
+
+        let r = &refs[0];
+        let extracted = TextSpan::from_chars(text, r.start, r.end).extract(text);
+        assert_eq!(extracted, r.text);
     }
 
     #[test]
