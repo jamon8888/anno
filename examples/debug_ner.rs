@@ -22,6 +22,7 @@ use anno::grounded::{
     render_document_html, render_eval_html, EvalComparison, EvalMatch, GroundedDocument, Location,
     Signal,
 };
+use anno::offset::TextSpan;
 use anno::{Model, StackedNER};
 use std::env;
 use std::fs;
@@ -505,12 +506,14 @@ fn print_annotated_text(text: &str, entities: &[anno::Entity]) {
 
     // Wrap long lines
     for line in result.lines() {
-        if line.len() > 100 {
-            // Simple wrapping
-            let mut pos = 0;
-            while pos < line.len() {
-                let end = (pos + 100).min(line.len());
-                println!("  {}", &line[pos..end]);
+        let char_count = line.chars().count();
+        if char_count > 100 {
+            // Simple wrapping by character count (not bytes) to avoid panics on Unicode.
+            let mut pos = 0usize;
+            while pos < char_count {
+                let end = (pos + 100).min(char_count);
+                let chunk = TextSpan::from_chars(line, pos, end).extract(line);
+                println!("  {}", chunk);
                 pos = end;
             }
         } else {
