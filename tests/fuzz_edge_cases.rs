@@ -40,11 +40,12 @@ fn unicode_cjk_text() {
     let ner = HeuristicNER::new();
     let text = "日本東京 is a beautiful city. Visit Tokyo!";
     let entities = ner.extract_entities(text, None).unwrap();
+    let text_char_len = text.chars().count();
 
     // Should handle CJK characters gracefully
     for e in &entities {
         assert!(e.start <= e.end);
-        assert!(e.end <= text.len());
+        assert!(e.end <= text_char_len);
     }
 }
 
@@ -145,6 +146,7 @@ fn very_long_text() {
     // 100KB of repeated text
     let unit = "John Smith visited test@example.com on January 15, 2024. ";
     let text: String = unit.repeat(2000);
+    let text_char_len = text.chars().count();
 
     let entities = ner.extract_entities(&text, None).unwrap();
 
@@ -154,7 +156,7 @@ fn very_long_text() {
     // All entities should have valid offsets
     for e in &entities {
         assert!(e.start <= e.end);
-        assert!(e.end <= text.len());
+        assert!(e.end <= text_char_len);
     }
 }
 
@@ -321,9 +323,10 @@ proptest! {
     fn extracted_offsets_within_bounds(text in "[A-Za-z0-9 @.]{10,100}") {
         let ner = RegexNER::new();
         if let Ok(entities) = ner.extract_entities(&text, None) {
+            let text_char_len = text.chars().count();
             for e in &entities {
                 prop_assert!(e.start <= e.end, "start > end");
-                prop_assert!(e.end <= text.len(), "end > text.len()");
+                prop_assert!(e.end <= text_char_len, "end > text.len()");
             }
         }
     }
