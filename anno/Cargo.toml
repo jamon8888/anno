@@ -80,6 +80,7 @@ clap_complete = { workspace = true, optional = true }
 is-terminal = { workspace = true, optional = true }
 indicatif = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
+xxhash-rust = { version = "0.8.15", features = ["xxh3"], optional = true }
 
 [build-dependencies]
 toml = "0.8"
@@ -88,10 +89,11 @@ serde = { version = "1", features = ["derive"] }
 [features]
 # Default includes cli + eval so `cargo install anno` works
 default = ["cli", "eval"]
-cli = ["clap", "clap_complete", "is-terminal", "indicatif", "toml"]
+cli = ["clap", "clap_complete", "is-terminal", "indicatif", "toml", "xxhash-rust"]
 eval = ["dirs", "glob"]
 eval-bias = ["eval"]
-eval-advanced = ["eval", "rand", "ureq", "sha2", "anno-strata"]
+llm = ["dep:ureq"]
+eval-advanced = ["eval", "rand", "sha2", "anno-strata", "llm"]
 eval-full = ["eval", "eval-bias", "eval-advanced"]
 eval-parallel = ["eval", "rayon"]
 eval-profiling = ["eval"]
