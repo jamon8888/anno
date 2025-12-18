@@ -495,6 +495,7 @@ mod span_validity {
     use super::*;
 
     fn check_spans(text: &str, entities: &[Entity]) {
+        let text_char_len = text.chars().count();
         for entity in entities {
             assert!(
                 entity.start <= entity.end,
@@ -504,14 +505,15 @@ mod span_validity {
                 entity.text
             );
             assert!(
-                entity.end <= text.len(),
-                "End {} should be <= text len {} for '{}'",
+                entity.end <= text_char_len,
+                "End {} should be <= text len {} (chars) for '{}'",
                 entity.end,
-                text.len(),
+                text_char_len,
                 entity.text
             );
             // Verify extractable
-            let extracted = &text[entity.start..entity.end];
+            let extracted = anno::offset::TextSpan::from_chars(text, entity.start, entity.end)
+                .extract(text);
             assert!(
                 extracted.contains(&entity.text) || entity.text.contains(extracted),
                 "Extracted '{}' should relate to entity text '{}'",

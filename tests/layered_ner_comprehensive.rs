@@ -478,7 +478,9 @@ mod regex_ner {
             let text = "Cost: $100.00";
             let e = extract(text);
             for entity in &e {
-                assert_eq!(&text[entity.start..entity.end], entity.text);
+                let extracted = anno::offset::TextSpan::from_chars(text, entity.start, entity.end)
+                    .extract(text);
+                assert_eq!(extracted, entity.text);
             }
         }
 
@@ -1120,9 +1122,10 @@ mod proptests {
         fn entities_within_bounds(text in ".{1,200}") {
             let ner = StackedNER::new();
             if let Ok(entities) = ner.extract_entities(&text, None) {
+                let text_char_len = text.chars().count();
                 for e in entities {
-                    prop_assert!(e.start <= text.len(), "Start {} > len {}", e.start, text.len());
-                    prop_assert!(e.end <= text.len(), "End {} > len {}", e.end, text.len());
+                    prop_assert!(e.start <= text_char_len, "Start {} > len {}", e.start, text_char_len);
+                    prop_assert!(e.end <= text_char_len, "End {} > len {}", e.end, text_char_len);
                     prop_assert!(e.start <= e.end, "Start {} > end {}", e.start, e.end);
                 }
             }

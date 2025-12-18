@@ -118,55 +118,41 @@ fn generate_tree_output(
                 if let Some(doc) = doc_index.get(doc_id.as_str()) {
                     if let Some(entity) = doc.entities.get(*entity_idx) {
                         if verbose {
-                            // Extract context safely
+                            // Extract context safely (entity offsets are character offsets)
+                            use anno::offset::TextSpan;
+
                             let context_window = 50;
-                            let start = entity.start.saturating_sub(context_window);
-                            let end = (entity.end + context_window).min(doc.text.len());
+                            let text_char_len = doc.text.chars().count();
+                            let ent_start = entity.start.min(text_char_len);
+                            let ent_end = entity.end.min(text_char_len).max(ent_start);
 
-                            let safe_start = doc
-                                .text
-                                .char_indices()
-                                .position(|(i, _)| i >= start)
-                                .map(|pos| {
-                                    doc.text
-                                        .char_indices()
-                                        .nth(pos)
-                                        .map(|(i, _)| i)
-                                        .unwrap_or(start)
-                                })
-                                .unwrap_or(start);
-                            let safe_end = doc
-                                .text
-                                .char_indices()
-                                .position(|(i, _)| i >= end)
-                                .map(|pos| {
-                                    doc.text
-                                        .char_indices()
-                                        .nth(pos)
-                                        .map(|(i, _)| i)
-                                        .unwrap_or(end)
-                                })
-                                .unwrap_or(end);
+                            let context_char_start = ent_start.saturating_sub(context_window);
+                            let context_char_end =
+                                (ent_end + context_window).min(text_char_len);
 
-                            let context = &doc.text[safe_start..safe_end];
-                            let entity_text = &doc.text[entity.start..entity.end];
+                            let context = TextSpan::from_chars(
+                                doc.text.as_str(),
+                                context_char_start,
+                                context_char_end,
+                            )
+                            .extract(doc.text.as_str());
 
-                            let before_len = entity.start.saturating_sub(safe_start);
-                            let after_start = (entity.end - safe_start).min(context.len());
+                            let rel_start = ent_start - context_char_start;
+                            let rel_end = ent_end - context_char_start;
+                            let context_len_chars = context.chars().count();
 
-                            let before = if safe_start < entity.start {
-                                &context[..before_len.min(context.len())]
-                            } else {
-                                ""
-                            };
-                            let after = if after_start < context.len() {
-                                &context[after_start..]
-                            } else {
-                                ""
-                            };
+                            let entity_text =
+                                TextSpan::from_chars(context, rel_start, rel_end).extract(context);
+                            let before =
+                                TextSpan::from_chars(context, 0, rel_start).extract(context);
+                            let after =
+                                TextSpan::from_chars(context, rel_end, context_len_chars)
+                                    .extract(context);
 
-                            let before_marker = if safe_start < entity.start { "..." } else { "" };
-                            let after_marker = if entity.end < safe_end { "..." } else { "" };
+                            let before_marker =
+                                if context_char_start < ent_start { "..." } else { "" };
+                            let after_marker =
+                                if ent_end < context_char_end { "..." } else { "" };
 
                             output.push_str(&format!(
                                 "    • {}: {}{}[{}]{}{}\n",
