@@ -664,7 +664,13 @@ mod morphology_proptests {
             
             for (start, end) in &result.span_map {
                 prop_assert!(*start <= *end, "Invalid span: {} > {}", start, end);
-                prop_assert!(*end <= text.len(), "Span exceeds text: {} > {}", end, text.len());
+                let text_char_len = text.chars().count();
+                prop_assert!(
+                    *end <= text_char_len,
+                    "Span exceeds text: {} > {}",
+                    end,
+                    text_char_len
+                );
             }
         }
 

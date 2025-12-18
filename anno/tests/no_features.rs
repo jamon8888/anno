@@ -189,14 +189,16 @@ fn test_entity_has_span() {
     let model = RegexNER::new();
     let text = "Pay $50 now";
     let entities = model.extract_entities(text, None).unwrap();
+    let text_char_len = text.chars().count();
 
     assert!(!entities.is_empty());
     let e = &entities[0];
     assert!(e.start < e.end);
-    assert!(e.end <= text.len());
+    assert!(e.end <= text_char_len);
 
     // Verify span extracts correct text
-    assert_eq!(&text[e.start..e.end], e.text);
+    let extracted = anno::offset::TextSpan::from_chars(text, e.start, e.end).extract(text);
+    assert_eq!(extracted, e.text);
 }
 
 #[test]
