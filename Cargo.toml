@@ -101,6 +101,7 @@ rayon = "1"
 itertools = "0.14"
 smallvec = { version = "1.13", features = ["serde"] }
 dashmap = "6"
+unicode-normalization = "0.1.25"
 
 # Observability
 tracing = "0.1"
