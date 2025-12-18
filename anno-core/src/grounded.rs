@@ -4626,10 +4626,11 @@ mod proptests {
             surface_start in 0usize..15,
             surface_len in 1usize..8,
         ) {
-            let surface_end = (surface_start + surface_len).min(text.len());
+            let text_char_len = text.chars().count();
+            let surface_end = (surface_start + surface_len).min(text_char_len);
             let surface_start = surface_start.min(surface_end.saturating_sub(1));
 
-            if surface_start < surface_end && surface_end <= text.len() {
+            if surface_start < surface_end && surface_end <= text_char_len {
                 let surface: String = text.chars()
                     .skip(surface_start)
                     .take(surface_end - surface_start)
