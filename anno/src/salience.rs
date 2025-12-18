@@ -899,4 +899,264 @@ mod tests {
         let ranked = ranker.rank("some text", &[]);
         assert!(ranked.is_empty());
     }
+
+    // =========================================================================
+    // Edge Case and Integration Tests
+    // =========================================================================
+
+    /// Test: Single entity should still work
+    #[test]
+    fn test_single_entity() {
+        let text = "Barack Obama spoke.";
+        let entities = vec![Entity::new("Barack Obama", EntityType::Person, 0, 12, 0.9)];
+
+        let ranker = TextRankSalience::default();
+        let ranked = ranker.rank(text, &entities);
+
+        assert_eq!(ranked.len(), 1);
+        assert!(
+            ranked[0].1 > 0.0,
+            "Single entity should have positive score"
+        );
+    }
+
+    /// Test: All entities with equal mentions
+    #[test]
+    fn test_equal_frequency_entities() {
+        let text = "Alice met Bob. Carol met Dave.";
+        let entities = vec![
+            Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
+            Entity::new("Bob", EntityType::Person, 10, 13, 0.9),
+            Entity::new("Carol", EntityType::Person, 15, 20, 0.9),
+            Entity::new("Dave", EntityType::Person, 25, 29, 0.9),
+        ];
+
+        let ranker = TfIdfSalience::default();
+        let ranked = ranker.rank(text, &entities);
+
+        assert_eq!(ranked.len(), 4);
+        // All should have similar (possibly equal) scores
+        let scores: Vec<_> = ranked.iter().map(|(_, s)| *s).collect();
+        let max_diff = scores
+            .iter()
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap()
+            - scores
+                .iter()
+                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap();
+        // Equal frequency should give relatively similar scores
+        assert!(
+            max_diff < 0.5,
+            "Equal frequency entities should have similar scores"
+        );
+    }
+
+    /// Test: Repeated entity should rank higher
+    #[test]
+    fn test_repeated_entity_ranks_higher() {
+        let text = "Obama Obama Obama Obama. Merkel.";
+        let entities = vec![
+            Entity::new("Obama", EntityType::Person, 0, 5, 0.9),
+            Entity::new("Obama", EntityType::Person, 6, 11, 0.9),
+            Entity::new("Obama", EntityType::Person, 12, 17, 0.9),
+            Entity::new("Obama", EntityType::Person, 18, 23, 0.9),
+            Entity::new("Merkel", EntityType::Person, 25, 31, 0.9),
+        ];
+
+        let ranker = TfIdfSalience::default();
+        let ranked = ranker.rank(text, &entities);
+
+        // Obama should rank higher than Merkel
+        assert_eq!(
+            ranked[0].0.text.to_lowercase(),
+            "obama",
+            "Most frequent entity should rank first"
+        );
+    }
+
+    /// Test: Entity at beginning ranks higher (position salience)
+    #[test]
+    fn test_position_salience_first_sentence() {
+        let text = "Alice is important. Later we mention Bob. Finally Carol.";
+        let entities = vec![
+            Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
+            Entity::new("Bob", EntityType::Person, 37, 40, 0.9),
+            Entity::new("Carol", EntityType::Person, 50, 55, 0.9),
+        ];
+
+        let ranker = PositionSalience::new();
+        let ranked = ranker.rank(text, &entities);
+
+        assert_eq!(
+            ranked[0].0.text, "Alice",
+            "First entity should rank highest"
+        );
+    }
+
+    /// Test: Multilingual entities
+    #[test]
+    fn test_multilingual_salience() {
+        let text = "習近平在北京會見普京。習近平發表講話。";
+        let entities = vec![
+            Entity::new("習近平", EntityType::Person, 0, 9, 0.9),
+            Entity::new("北京", EntityType::Location, 12, 18, 0.9),
+            Entity::new("普京", EntityType::Person, 21, 27, 0.9),
+            Entity::new("習近平", EntityType::Person, 30, 39, 0.9),
+        ];
+
+        let ranker = TfIdfSalience::default();
+        let ranked = ranker.rank(text, &entities);
+
+        // 習近平 mentioned twice, should rank higher
+        assert_eq!(ranked[0].0.text, "習近平");
+    }
+
+    /// Test: Unicode normalization in salience
+    #[test]
+    fn test_unicode_entities_salience() {
+        let text = "Müller met Müller again."; // same name, different normalization possible
+        let entities = vec![
+            Entity::new("Müller", EntityType::Person, 0, 6, 0.9),
+            Entity::new("Müller", EntityType::Person, 11, 17, 0.9),
+        ];
+
+        let ranker = TextRankSalience::default();
+        let ranked = ranker.rank(text, &entities);
+
+        // Should handle unicode gracefully
+        assert!(!ranked.is_empty());
+    }
+
+    /// Test: Very long text with many entities
+    #[test]
+    fn test_many_entities_performance() {
+        let mut text = String::new();
+        let mut entities = Vec::new();
+
+        for i in 0..50 {
+            let name = format!("Entity{}", i);
+            let start = text.len();
+            text.push_str(&name);
+            text.push(' ');
+            entities.push(Entity::new(name, EntityType::Person, start, start + 7, 0.9));
+        }
+
+        let ranker = TextRankSalience::default();
+        let ranked = ranker.rank(&text, &entities);
+
+        assert_eq!(ranked.len(), 50);
+    }
+
+    /// Test: CompositeRanker with different weights
+    #[test]
+    fn test_composite_ranker_weights() {
+        let text = "First Entity. Second Entity Second Entity.";
+        let entities = vec![
+            Entity::new("First Entity", EntityType::Person, 0, 12, 0.9),
+            Entity::new("Second Entity", EntityType::Person, 14, 27, 0.9),
+            Entity::new("Second Entity", EntityType::Person, 28, 41, 0.9),
+        ];
+
+        // Position-heavy weighting
+        let pos_heavy = CompositeRanker::new()
+            .add(PositionSalience::new(), 10.0)
+            .add(TfIdfSalience::default(), 1.0);
+        let ranked_pos = pos_heavy.rank(text, &entities);
+
+        // Frequency-heavy weighting
+        let freq_heavy = CompositeRanker::new()
+            .add(PositionSalience::new(), 1.0)
+            .add(TfIdfSalience::default(), 10.0);
+        let ranked_freq = freq_heavy.rank(text, &entities);
+
+        // Position-heavy should favor "First Entity"
+        // Frequency-heavy should favor "Second Entity"
+        // (Both are valid rankings depending on use case)
+        assert!(!ranked_pos.is_empty());
+        assert!(!ranked_freq.is_empty());
+    }
+
+    /// Test: top_k with k > entities.len()
+    #[test]
+    fn test_top_k_exceeds_count() {
+        let text = "A B";
+        let entities = vec![
+            Entity::new("A", EntityType::Person, 0, 1, 0.9),
+            Entity::new("B", EntityType::Person, 2, 3, 0.9),
+        ];
+
+        let ranker = PositionSalience::new();
+        let top10 = ranker.top_k(text, &entities, 10);
+
+        assert_eq!(top10.len(), 2, "Should return all entities if k > count");
+    }
+
+    /// Test: top_k with k = 0
+    #[test]
+    fn test_top_k_zero() {
+        let text = "A B C";
+        let entities = vec![
+            Entity::new("A", EntityType::Person, 0, 1, 0.9),
+            Entity::new("B", EntityType::Person, 2, 3, 0.9),
+            Entity::new("C", EntityType::Person, 4, 5, 0.9),
+        ];
+
+        let ranker = PositionSalience::new();
+        let top0 = ranker.top_k(text, &entities, 0);
+
+        assert!(top0.is_empty(), "top_k(0) should return empty");
+    }
+
+    /// Test: Entities with overlapping spans
+    #[test]
+    fn test_overlapping_entity_spans() {
+        // "New York City" contains "York"
+        let text = "New York City is nice.";
+        let entities = vec![
+            Entity::new("New York City", EntityType::Location, 0, 13, 0.9),
+            Entity::new("York", EntityType::Location, 4, 8, 0.8),
+        ];
+
+        let ranker = TextRankSalience::default();
+        let ranked = ranker.rank(text, &entities);
+
+        // Should handle overlapping spans
+        assert_eq!(ranked.len(), 2);
+    }
+
+    /// Test: Very short text
+    #[test]
+    fn test_very_short_text() {
+        let text = "Hi";
+        let entities = vec![Entity::new(
+            "Hi",
+            EntityType::Other("greeting".to_string()),
+            0,
+            2,
+            0.9,
+        )];
+
+        let ranker = TextRankSalience::default();
+        let ranked = ranker.rank(text, &entities);
+
+        assert_eq!(ranked.len(), 1);
+    }
+
+    /// Test: Entity types preserved in ranking
+    #[test]
+    fn test_entity_types_preserved() {
+        let text = "Obama in Berlin";
+        let entities = vec![
+            Entity::new("Obama", EntityType::Person, 0, 5, 0.9),
+            Entity::new("Berlin", EntityType::Location, 9, 15, 0.9),
+        ];
+
+        let ranker = PositionSalience::new();
+        let ranked = ranker.rank(text, &entities);
+
+        // Types should be preserved
+        assert!(matches!(ranked[0].0.entity_type, EntityType::Person));
+        assert!(matches!(ranked[1].0.entity_type, EntityType::Location));
+    }
 }

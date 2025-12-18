@@ -98,6 +98,7 @@
 //! | `metal` | Candle + Metal | Apple Silicon GPU acceleration |
 //! | `cuda` | Candle + CUDA | NVIDIA GPU acceleration |
 //! | `burn` | Burn (Rust) | Training support, multiple backends |
+//! | `llm` | ureq (HTTP) | Enables UniversalNER network calls (API-key required) |
 //!
 //! **Recommendation**: Start with `onnx` for best accuracy/speed tradeoff.
 //!
@@ -270,6 +271,18 @@ mod sealed {
 
     #[cfg(feature = "candle")]
     impl Sealed for super::CandleNER {}
+
+    #[cfg(feature = "candle")]
+    impl Sealed for super::backends::gliner_candle::GLiNERCandle {}
+
+    #[cfg(feature = "candle")]
+    impl Sealed for super::backends::gliner2::GLiNER2Candle {}
+
+    #[cfg(feature = "candle")]
+    impl<E: Send + Sync> Sealed for super::backends::gliner_pipeline::GLiNERPipeline<E> {}
+
+    #[cfg(feature = "burn")]
+    impl Sealed for super::backends::burn::BurnNER {}
 
     impl Sealed for super::backends::tplinker::TPLinker {}
     impl Sealed for super::backends::universal_ner::UniversalNER {}
@@ -487,7 +500,15 @@ pub const DEFAULT_GLINER_MODEL: &str = "onnx-community/gliner_small-v2.1";
 pub const DEFAULT_GLINER2_MODEL: &str = "onnx-community/gliner-multitask-large-v0.5";
 
 /// Default Candle model identifier (HuggingFace model ID).
+/// Uses dbmdz's model which has both tokenizer.json and safetensors.
 pub const DEFAULT_CANDLE_MODEL: &str = "dslim/bert-base-NER";
+
+/// Default GLiNER Candle model identifier (HuggingFace model ID).
+/// Uses a model with tokenizer.json and pytorch_model.bin for Candle compatibility.
+/// The backend converts pytorch_model.bin to safetensors automatically.
+// NeuML/gliner-bert-tiny uses BERT (not DeBERTa) which is compatible with CandleEncoder
+// Other GLiNER models use DeBERTa-v3 which has different architecture (relative attention)
+pub const DEFAULT_GLINER_CANDLE_MODEL: &str = "NeuML/gliner-bert-tiny";
 
 /// Default NuNER ONNX model identifier (HuggingFace model ID).
 pub const DEFAULT_NUNER_MODEL: &str = "deepanwa/NuNerZero_onnx";
@@ -517,7 +538,8 @@ pub fn auto() -> Result<Box<dyn Model>> {
 
 /// Check which backends are currently available.
 pub fn available_backends() -> Vec<(&'static str, bool)> {
-    let backends = vec![
+    #[allow(unused_mut)] // mut needed when onnx/candle features enabled
+    let mut backends = vec![
         ("RegexNER", true),
         ("HeuristicNER", true),
         ("StackedNER", true),

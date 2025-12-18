@@ -34,6 +34,7 @@
 //! assert_eq!(results[0].parenthetical_type, ParentheticalType::Ticker);
 //! ```
 
+use crate::offset::TextSpan;
 use serde::{Deserialize, Serialize};
 
 /// Type of parenthetical content.
@@ -199,21 +200,25 @@ impl ParentheticalExtractor {
                     let content = &text[content_start..content_end];
 
                     // Skip if content too long
-                    if content.len() <= self.max_content_len {
+                    if content.chars().count() <= self.max_content_len {
                         // Find antecedent (text before the parenthetical)
-                        let antecedent = self.find_antecedent(text, open_idx);
+                        let (antecedent, antecedent_start_byte, _antecedent_end_byte) =
+                            self.find_antecedent(text, open_idx);
 
-                        if antecedent.len() >= self.min_antecedent_len {
-                            let start = open_idx - antecedent.len();
-                            let end = close_idx + 1;
+                        if antecedent.chars().count() >= self.min_antecedent_len {
+                            let start_byte = antecedent_start_byte;
+                            let end_byte = close_idx + 1; // ')' is ASCII
+                            let span = TextSpan::from_bytes(text, start_byte, end_byte);
+                            let content_span =
+                                TextSpan::from_bytes(text, content_start, content_end);
 
                             let mut paren = Parenthetical::new(
                                 &antecedent,
                                 content,
-                                start,
-                                end,
-                                content_start,
-                                content_end,
+                                span.char_start,
+                                span.char_end,
+                                content_span.char_start,
+                                content_span.char_end,
                             );
 
                             // Classify the parenthetical
@@ -233,14 +238,20 @@ impl ParentheticalExtractor {
     }
 
     /// Find the antecedent (text before the parenthetical).
-    fn find_antecedent(&self, text: &str, paren_start: usize) -> String {
+    ///
+    /// Returns:
+    /// - antecedent text (trimmed)
+    /// - antecedent start byte offset (inclusive)
+    /// - antecedent end byte offset (exclusive)
+    fn find_antecedent(&self, text: &str, paren_start: usize) -> (String, usize, usize) {
         if paren_start == 0 {
-            return String::new();
+            return (String::new(), 0, 0);
         }
 
         // Work backwards from the parenthesis
         let before = &text[..paren_start];
         let trimmed = before.trim_end();
+        let trimmed_end = trimmed.len(); // byte offset in `text` (trimmed is a prefix slice)
 
         // Find the start of the phrase, but ignore periods in common abbreviations
         // like "Inc.", "Corp.", "Ltd.", "Dr.", "Mr.", "Mrs.", "Ms.", "Jr.", "Sr."
@@ -268,8 +279,17 @@ impl ParentheticalExtractor {
             }
         }
 
-        let antecedent = &trimmed[phrase_start..];
-        antecedent.trim().to_string()
+        // Skip any leading whitespace between phrase_start and trimmed_end.
+        let mut antecedent_start = phrase_start;
+        for (rel, c) in trimmed[phrase_start..].char_indices() {
+            if !c.is_whitespace() {
+                antecedent_start = phrase_start + rel;
+                break;
+            }
+        }
+
+        let antecedent = trimmed[antecedent_start..trimmed_end].to_string();
+        (antecedent, antecedent_start, trimmed_end)
     }
 
     /// Classify the type of parenthetical.
@@ -515,6 +535,7 @@ pub fn extract_aliases(text: &str, doc_id: Option<&str>) -> Vec<AliasPair> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::offset::TextSpan;
 
     #[test]
     fn test_abbreviation_extraction() {
@@ -578,6 +599,22 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].parenthetical_type, ParentheticalType::Role);
+    }
+
+    #[test]
+    fn test_parenthetical_offsets_are_character_offsets_with_unicode_prefix() {
+        // ü is multi-byte, so byte offsets != char offsets; ensure we store char offsets.
+        let extractor = ParentheticalExtractor::new();
+        let text = "Müller (CEO) spoke.";
+        let results = extractor.extract(text);
+        assert_eq!(results.len(), 1);
+
+        let p = &results[0];
+        let span_text = TextSpan::from_chars(text, p.start, p.end).extract(text);
+        assert_eq!(span_text, "Müller (CEO)");
+
+        let content_text = TextSpan::from_chars(text, p.content_start, p.content_end).extract(text);
+        assert_eq!(content_text, "CEO");
     }
 
     #[test]

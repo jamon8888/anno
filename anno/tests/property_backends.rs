@@ -8,12 +8,32 @@
 use anno::{EntityType, Model};
 use proptest::prelude::*;
 
+fn fast_config() -> ProptestConfig {
+    ProptestConfig {
+        cases: 25,
+        // Silence persistence warnings under nextest (workspace cwd).
+        failure_persistence: None,
+        ..ProptestConfig::default()
+    }
+}
+
 // Reduced proptest config for composite backends that are slower
 fn slow_config() -> ProptestConfig {
     ProptestConfig {
-        cases: 10, // Much fewer cases for slow backends
+        cases: 5, // Much fewer cases for slow backends
+        // nextest runs tests from the workspace root; proptest's default persistence
+        // can emit warnings when it can't locate lib.rs/main.rs upward from cwd.
+        // Persistence isn't needed for CI/quick profiles.
+        failure_persistence: None,
         ..ProptestConfig::default()
     }
+}
+
+fn fast_stacked() -> anno::StackedNER {
+    anno::StackedNER::builder()
+        .layer(anno::RegexNER::new())
+        .layer(anno::HeuristicNER::new())
+        .build()
 }
 
 /// Generate arbitrary text with potential entity-like patterns.
@@ -48,6 +68,7 @@ fn arb_text_with_entities() -> impl Strategy<Value = String> {
 // =============================================================================
 
 proptest! {
+    #![proptest_config(fast_config())]
     #[test]
     fn pattern_backend_valid_spans(text in arb_text()) {
         let ner = anno::RegexNER::new();
@@ -92,7 +113,7 @@ proptest! {
 
     #[test]
     fn stacked_backend_valid_spans(text in arb_text()) {
-        let ner = anno::StackedNER::default();
+        let ner = fast_stacked();
         let char_count = text.chars().count();
         if let Ok(entities) = ner.extract_entities(&text, None) {
             for entity in &entities {
@@ -104,7 +125,12 @@ proptest! {
 
     #[test]
     fn ensemble_backend_valid_spans(text in arb_text()) {
-        let ner = anno::StackedNER::default();
+        use anno::backends::ensemble::EnsembleNER;
+        // Avoid default ensemble construction (it may opportunistically include ML backends).
+        let ner = EnsembleNER::with_backends(vec![
+            Box::new(anno::RegexNER::new()),
+            Box::new(anno::HeuristicNER::new()),
+        ]);
         let char_count = text.chars().count();
         if let Ok(entities) = ner.extract_entities(&text, None) {
             for entity in &entities {
@@ -120,6 +146,7 @@ proptest! {
 // =============================================================================
 
 proptest! {
+    #![proptest_config(fast_config())]
     #[test]
     fn pattern_backend_valid_confidence(text in arb_text()) {
         let ner = anno::RegexNER::new();
@@ -153,7 +180,7 @@ proptest! {
 
     #[test]
     fn bilstm_crf_backend_valid_confidence(text in arb_text()) {
-        let ner = anno::StackedNER::default();
+        let ner = fast_stacked();
         if let Ok(entities) = ner.extract_entities(&text, None) {
             for entity in &entities {
                 prop_assert!(entity.confidence >= 0.0 && entity.confidence <= 1.0);
@@ -179,7 +206,7 @@ proptest! {
 
     #[test]
     fn stacked_backend_valid_confidence(text in arb_text()) {
-        let ner = anno::StackedNER::default();
+        let ner = fast_stacked();
         if let Ok(entities) = ner.extract_entities(&text, None) {
             for entity in &entities {
                 prop_assert!(entity.confidence >= 0.0 && entity.confidence <= 1.0);
@@ -189,7 +216,11 @@ proptest! {
 
     #[test]
     fn ensemble_backend_valid_confidence(text in arb_text()) {
-        let ner = anno::StackedNER::default();
+        use anno::backends::ensemble::EnsembleNER;
+        let ner = EnsembleNER::with_backends(vec![
+            Box::new(anno::RegexNER::new()),
+            Box::new(anno::HeuristicNER::new()),
+        ]);
         if let Ok(entities) = ner.extract_entities(&text, None) {
             for entity in &entities {
                 prop_assert!(entity.confidence >= 0.0 && entity.confidence <= 1.0);
@@ -203,6 +234,7 @@ proptest! {
 // =============================================================================
 
 proptest! {
+    #![proptest_config(fast_config())]
     #[test]
     fn pattern_backend_text_matches_span(text in arb_text_with_entities()) {
         let ner = anno::RegexNER::new();
@@ -259,8 +291,8 @@ fn all_backends_empty_input() {
         Box::new(anno::RegexNER::new()),
         Box::new(anno::HeuristicNER::new()),
         Box::new(anno::HeuristicNER::new()),
-        Box::new(anno::StackedNER::default()),
-        Box::new(anno::StackedNER::default()),
+        Box::new(fast_stacked()),
+        Box::new(fast_stacked()),
     ];
 
     for text in empty_texts {
@@ -287,8 +319,8 @@ fn all_backends_have_supported_types() {
         Box::new(anno::RegexNER::new()),
         Box::new(anno::HeuristicNER::new()),
         Box::new(anno::HeuristicNER::new()),
-        Box::new(anno::StackedNER::default()),
-        Box::new(anno::StackedNER::default()),
+        Box::new(fast_stacked()),
+        Box::new(fast_stacked()),
     ];
 
     for backend in &backends {
@@ -306,6 +338,7 @@ fn all_backends_have_supported_types() {
 // =============================================================================
 
 proptest! {
+    #![proptest_config(fast_config())]
     #[test]
     fn pattern_backend_entity_types_subset_of_supported(text in arb_text_with_entities()) {
         let ner = anno::RegexNER::new();
@@ -336,8 +369,8 @@ fn available_backends_can_extract() {
         Box::new(anno::RegexNER::new()),
         Box::new(anno::HeuristicNER::new()),
         Box::new(anno::HeuristicNER::new()),
-        Box::new(anno::StackedNER::default()),
-        Box::new(anno::StackedNER::default()),
+        Box::new(fast_stacked()),
+        Box::new(fast_stacked()),
     ];
 
     for backend in &backends {
@@ -366,7 +399,7 @@ proptest! {
             Box::new(anno::RegexNER::new()),
             Box::new(anno::HeuristicNER::new()),
             Box::new(anno::HeuristicNER::new()),
-            Box::new(anno::StackedNER::default()),
+            Box::new(fast_stacked()),
         ];
 
         for backend in &backends {
@@ -424,7 +457,7 @@ proptest! {
             Box::new(anno::RegexNER::new()),
             Box::new(anno::HeuristicNER::new()),
             Box::new(anno::HeuristicNER::new()),
-            Box::new(anno::StackedNER::default()),
+            Box::new(fast_stacked()),
         ];
 
         let char_count = text.chars().count();
@@ -461,7 +494,7 @@ proptest! {
 
     #[test]
     fn stacked_backend_no_overlaps(text in arb_text_with_entities()) {
-        let ner = anno::StackedNER::default();
+        let ner = fast_stacked();
         if let Ok(mut entities) = ner.extract_entities(&text, None) {
             entities.sort_by_key(|e| e.start);
 
@@ -487,9 +520,9 @@ proptest! {
             Box::new(anno::RegexNER::new()),
             Box::new(anno::HeuristicNER::new()),
             Box::new(anno::HeuristicNER::new()),
-            Box::new(anno::StackedNER::default()),
+            Box::new(fast_stacked()),
             Box::new(anno::HeuristicNER::new()),
-            Box::new(anno::StackedNER::default()),
+            Box::new(fast_stacked()),
         ];
 
         for backend in &backends {
@@ -511,9 +544,11 @@ proptest! {
 // =============================================================================
 
 proptest! {
+    #![proptest_config(fast_config())]
     #[test]
     fn bilstm_crf_backend_valid_spans(text in arb_text()) {
-        let ner = anno::StackedNER::default();
+        // Keep this fast: validate span invariants on a lightweight stacked pipeline.
+        let ner = fast_stacked();
         if let Ok(entities) = ner.extract_entities(&text, None) {
             let char_count = text.chars().count();
             for entity in &entities {

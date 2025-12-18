@@ -501,25 +501,43 @@ impl WindowSplitter {
         let mut start_word = 0;
         let mut window_idx = 0;
 
+        // Precompute word byte spans (start/end) by searching forward through the original text.
+        // This is Unicode-safe because spans are computed in byte offsets and only at UTF-8
+        // character boundaries (from `find(word)` where `word` is a substring of `text`).
+        let mut word_byte_spans: Vec<(usize, usize)> = Vec::with_capacity(words.len());
+        let mut search_byte = 0usize;
+        for w in &words {
+            if let Some(rel) = text.get(search_byte..).and_then(|s| s.find(w)) {
+                let start_byte = search_byte + rel;
+                let end_byte = start_byte + w.len();
+                word_byte_spans.push((start_byte, end_byte));
+                search_byte = end_byte;
+            } else {
+                // If we can't locate the word, fall back to an empty span at the current search position.
+                word_byte_spans.push((search_byte, search_byte));
+            }
+        }
+
         while start_word < words.len() {
             let end_word = (start_word + self.max_tokens).min(words.len());
 
-            // Find character offsets
-            let mut char_start = 0;
-            for (i, w) in words.iter().enumerate() {
-                if i == start_word {
-                    break;
-                }
-                char_start += w.len() + 1; // +1 for space
-            }
+            // Compute byte window bounds from the word spans.
+            let start_byte = word_byte_spans
+                .get(start_word)
+                .map(|(s, _)| *s)
+                .unwrap_or(0);
+            let end_byte = word_byte_spans
+                .get(end_word.saturating_sub(1))
+                .map(|(_, e)| *e)
+                .unwrap_or(start_byte)
+                .min(text.len());
 
-            let mut char_end = char_start;
-            for w in words.iter().take(end_word).skip(start_word) {
-                char_end += w.len() + 1;
-            }
-            char_end = char_end.min(text.len());
+            // Convert byte offsets to character offsets for entity filtering/adjustment.
+            let span = crate::offset::TextSpan::from_bytes(text, start_byte, end_byte);
+            let char_start = span.char_start;
+            let char_end = span.char_end;
 
-            let window_text = &text[char_start..char_end];
+            let window_text = text.get(start_byte..end_byte).unwrap_or("");
 
             // Filter entities to this window
             let window_entities: Vec<Entity> = entities
@@ -606,6 +624,35 @@ mod tests {
             assert_eq!(ctx.doc_id, Some("doc1".to_string()));
             assert_eq!(ctx.window_idx, Some(i));
         }
+    }
+
+    #[test]
+    fn test_window_splitter_unicode_entity_offsets_do_not_panic() {
+        let splitter = WindowSplitter {
+            max_tokens: 3,
+            overlap: 1,
+        };
+        let text = "Dr. Müller visited 北京 yesterday";
+        // Entity offsets are character offsets in anno.
+        // "Müller" starts after "Dr. " (4 chars) and is 6 chars.
+        let entity = Entity::new("Müller", EntityType::Person, 4, 10, 0.9);
+        let contexts = splitter.split("doc1", text, &[entity]);
+        assert!(!contexts.is_empty());
+
+        // At least one context should contain the entity in-range and adjusted spans should be valid.
+        let mut saw_entity = false;
+        for ctx in &contexts {
+            for e in &ctx.entities {
+                saw_entity = true;
+                let char_len = ctx.text.chars().count();
+                assert!(e.start <= e.end);
+                assert!(e.end <= char_len);
+            }
+        }
+        assert!(
+            saw_entity,
+            "Expected entity to appear in at least one window"
+        );
     }
 
     #[test]

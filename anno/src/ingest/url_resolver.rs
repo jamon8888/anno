@@ -312,3 +312,137 @@ impl UrlResolver for CompositeResolver {
         )))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_http_resolver_can_resolve_http() {
+        let resolver = HttpResolver::new();
+        assert!(resolver.can_resolve("http://example.com"));
+        assert!(resolver.can_resolve("https://example.com"));
+        assert!(resolver.can_resolve("http://example.com/path?query=1"));
+        assert!(resolver.can_resolve("https://subdomain.example.com/path"));
+    }
+
+    #[test]
+    fn test_http_resolver_case_sensitive() {
+        // Note: Implementation is case-sensitive (lowercase only)
+        let resolver = HttpResolver::new();
+        assert!(!resolver.can_resolve("HTTP://example.com"));
+        assert!(!resolver.can_resolve("HTTPS://example.com"));
+    }
+
+    #[test]
+    fn test_http_resolver_cannot_resolve_other_schemes() {
+        let resolver = HttpResolver::new();
+        assert!(!resolver.can_resolve("ftp://example.com"));
+        assert!(!resolver.can_resolve("file:///path/to/file"));
+        assert!(!resolver.can_resolve("mailto:test@example.com"));
+        assert!(!resolver.can_resolve("not_a_url"));
+    }
+
+    #[test]
+    fn test_resolved_content_struct() {
+        let content = ResolvedContent {
+            text: "Hello world".to_string(),
+            metadata: HashMap::new(),
+            source_url: "https://example.com".to_string(),
+        };
+
+        assert_eq!(content.text, "Hello world");
+        assert!(content.metadata.is_empty());
+        assert_eq!(content.source_url, "https://example.com");
+    }
+
+    #[test]
+    fn test_resolved_content_with_metadata() {
+        let mut metadata = HashMap::new();
+        metadata.insert("content-type".to_string(), "text/html".to_string());
+
+        let content = ResolvedContent {
+            text: "Test".to_string(),
+            metadata,
+            source_url: "https://test.com".to_string(),
+        };
+
+        assert_eq!(
+            content.metadata.get("content-type"),
+            Some(&"text/html".to_string())
+        );
+    }
+
+    #[test]
+    fn test_composite_resolver_creation() {
+        let resolver = CompositeResolver::new();
+        assert!(resolver.can_resolve("https://example.com"));
+    }
+
+    #[test]
+    fn test_composite_resolver_default() {
+        let resolver = CompositeResolver::default();
+        // Should have at least one resolver (HttpResolver)
+        assert!(resolver.can_resolve("http://example.com"));
+    }
+
+    #[test]
+    fn test_composite_resolver_cannot_resolve_unknown() {
+        let resolver = CompositeResolver::new();
+        assert!(!resolver.can_resolve("custom://unknown"));
+    }
+
+    #[test]
+    fn test_composite_resolver_debug() {
+        let resolver = CompositeResolver::new();
+        let debug = format!("{:?}", resolver);
+        assert!(debug.contains("CompositeResolver"));
+        assert!(debug.contains("resolver_count"));
+    }
+
+    #[test]
+    fn test_http_resolver_debug() {
+        let resolver = HttpResolver::new();
+        let debug = format!("{:?}", resolver);
+        assert!(debug.contains("HttpResolver"));
+    }
+
+    #[test]
+    fn test_resolved_content_clone() {
+        let mut metadata = HashMap::new();
+        metadata.insert("key".to_string(), "value".to_string());
+
+        let content = ResolvedContent {
+            text: "test".to_string(),
+            metadata,
+            source_url: "http://test.com".to_string(),
+        };
+
+        let cloned = content.clone();
+        assert_eq!(content.text, cloned.text);
+        assert_eq!(content.source_url, cloned.source_url);
+        assert_eq!(content.metadata, cloned.metadata);
+    }
+
+    #[test]
+    #[cfg(not(feature = "eval-advanced"))]
+    fn test_http_resolver_without_feature() {
+        let resolver = HttpResolver::new();
+        let result = resolver.resolve("https://example.com");
+        // Without eval-advanced feature, should return an error
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("eval-advanced"));
+    }
+
+    #[test]
+    fn test_composite_resolver_no_matching_resolver() {
+        let resolver = CompositeResolver { resolvers: vec![] };
+        let result = resolver.resolve("any://url");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No resolver available"));
+    }
+}
