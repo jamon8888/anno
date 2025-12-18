@@ -53,7 +53,7 @@ use std::path::{Path, PathBuf};
 use {
     super::encoder_candle::{CandleEncoder, TextEncoder},
     candle_core::{DType, Device, IndexOp, Module, Tensor, D},
-    candle_nn::{embedding, linear, Embedding, Linear, VarBuilder},
+    candle_nn::{linear, Linear, VarBuilder},
     tokenizers::Tokenizer,
 };
 
@@ -98,38 +98,72 @@ pub fn best_device() -> Result<Device> {
 }
 
 // =============================================================================
-// Span Representation Layer
+// Span Representation Layer (SpanMarker style)
 // =============================================================================
 
-/// Span representation: combines start, end, and width embeddings.
+/// Span representation using the SpanMarker approach from GLiNER.
+/// Projects start and end positions separately and combines them.
 #[cfg(feature = "candle")]
 pub struct SpanRepLayer {
-    projection: Linear,
-    width_embeddings: Embedding,
+    /// MLP for projecting start positions (Linear -> ReLU -> Dropout -> Linear)
+    project_start_0: Linear,
+    project_start_3: Linear,
+    /// MLP for projecting end positions
+    project_end_0: Linear,
+    project_end_3: Linear,
+    /// Final projection layer
+    out_project_0: Linear,
+    out_project_3: Linear,
     hidden_size: usize,
+    #[allow(dead_code)]
+    max_width: usize,
 }
 
 #[cfg(feature = "candle")]
 impl SpanRepLayer {
-    /// Create a new span representation layer.
+    /// Create a new span representation layer from GLiNER weights.
+    ///
+    /// GLiNER uses the SpanMarker architecture with:
+    /// - project_start: Linear(D, 4D) -> ReLU -> Dropout -> Linear(4D, D)
+    /// - project_end: Linear(D, 4D) -> ReLU -> Dropout -> Linear(4D, D)
+    /// - out_project: Linear(2D, 4D) -> ReLU -> Dropout -> Linear(4D, D)
     pub fn new(hidden_size: usize, max_width: usize, vb: VarBuilder) -> Result<Self> {
-        let width_emb_size = hidden_size / 4;
-        let input_size = hidden_size * 2 + width_emb_size;
+        // Load project_start MLP (layers 0 and 3, indices match PyTorch Sequential)
+        // Hidden multiplier is 4x for these models
+        let project_start_0 = linear(hidden_size, hidden_size * 4, vb.pp("project_start").pp("0"))
+            .map_err(|e| Error::Retrieval(format!("SpanRepLayer project_start.0: {}", e)))?;
+        let project_start_3 = linear(hidden_size * 4, hidden_size, vb.pp("project_start").pp("3"))
+            .map_err(|e| Error::Retrieval(format!("SpanRepLayer project_start.3: {}", e)))?;
 
-        let projection = linear(input_size, hidden_size, vb.pp("projection"))
-            .map_err(|e| Error::Retrieval(format!("SpanRepLayer projection: {}", e)))?;
+        // Load project_end MLP
+        let project_end_0 = linear(hidden_size, hidden_size * 4, vb.pp("project_end").pp("0"))
+            .map_err(|e| Error::Retrieval(format!("SpanRepLayer project_end.0: {}", e)))?;
+        let project_end_3 = linear(hidden_size * 4, hidden_size, vb.pp("project_end").pp("3"))
+            .map_err(|e| Error::Retrieval(format!("SpanRepLayer project_end.3: {}", e)))?;
 
-        let width_embeddings = embedding(max_width, width_emb_size, vb.pp("width_embeddings"))
-            .map_err(|e| Error::Retrieval(format!("SpanRepLayer width_embeddings: {}", e)))?;
+        // Load out_project MLP (input is 2*hidden_size = concatenated start+end)
+        let out_project_0 = linear(
+            hidden_size * 2,
+            hidden_size * 4,
+            vb.pp("out_project").pp("0"),
+        )
+        .map_err(|e| Error::Retrieval(format!("SpanRepLayer out_project.0: {}", e)))?;
+        let out_project_3 = linear(hidden_size * 4, hidden_size, vb.pp("out_project").pp("3"))
+            .map_err(|e| Error::Retrieval(format!("SpanRepLayer out_project.3: {}", e)))?;
 
         Ok(Self {
-            projection,
-            width_embeddings,
+            project_start_0,
+            project_start_3,
+            project_end_0,
+            project_end_3,
+            out_project_0,
+            out_project_3,
             hidden_size,
+            max_width,
         })
     }
 
-    /// Compute span embeddings from token embeddings.
+    /// Compute span embeddings from token embeddings using SpanMarker approach.
     ///
     /// # Arguments
     /// * `token_embeddings` - [batch, seq_len, hidden]
@@ -138,47 +172,58 @@ impl SpanRepLayer {
     /// # Returns
     /// [batch, num_spans, hidden]
     pub fn forward(&self, token_embeddings: &Tensor, span_indices: &Tensor) -> Result<Tensor> {
-        let (batch_size, _seq_len, _hidden) = token_embeddings
+        let (batch_size, seq_len, _hidden) = token_embeddings
             .dims3()
             .map_err(|e| Error::Parse(format!("token_embeddings dims: {}", e)))?;
         let (_, _num_spans, _) = span_indices
             .dims3()
             .map_err(|e| Error::Parse(format!("span_indices dims: {}", e)))?;
 
+        // Project start and end representations for all tokens first
+        // project_start: Linear -> ReLU (at layer 2, which is dropout in PyTorch) -> Linear
+        let start_rep = self.project_start_0.forward(token_embeddings)?;
+        let start_rep = start_rep.relu()?;
+        let start_rep = self.project_start_3.forward(&start_rep)?;
+
+        let end_rep = self.project_end_0.forward(token_embeddings)?;
+        let end_rep = end_rep.relu()?;
+        let end_rep = self.project_end_3.forward(&end_rep)?;
+
+        // Extract start and end indices
         let start_idx = span_indices.i((.., .., 0))?.to_dtype(DType::U32)?;
         let end_idx = span_indices.i((.., .., 1))?.to_dtype(DType::U32)?;
 
         let mut span_embs = Vec::new();
 
         for b in 0..batch_size {
-            let batch_tokens = token_embeddings.i(b)?;
+            let batch_start_rep = start_rep.i(b)?;
+            let batch_end_rep = end_rep.i(b)?;
             let batch_starts = start_idx.i(b)?;
             let batch_ends = end_idx.i(b)?;
 
-            // Validate indices are within bounds before selection
-            let seq_len = batch_tokens.dims()[0];
-            // Candle's index_select will validate, but we check explicitly for clearer errors
-            // The actual validation happens in index_select, but this helps with debugging
+            // Clamp indices to valid range
+            let max_idx = (seq_len - 1) as u32;
+            let batch_starts = batch_starts.clamp(0f64, max_idx as f64)?;
+            let batch_ends = batch_ends.clamp(0f64, max_idx as f64)?;
 
-            let widths = (&batch_ends - &batch_starts)?;
-            let width_embs = self.width_embeddings.forward(&widths)?;
+            // Extract start and end representations for each span
+            let start_span_rep = batch_start_rep
+                .index_select(&batch_starts.to_dtype(DType::U32)?, 0)
+                .map_err(|e| Error::Parse(format!("start index_select: {}", e)))?;
+            let end_span_rep = batch_end_rep
+                .index_select(&batch_ends.to_dtype(DType::U32)?, 0)
+                .map_err(|e| Error::Parse(format!("end index_select: {}", e)))?;
 
-            let start_embs = batch_tokens.index_select(&batch_starts, 0).map_err(|e| {
-                Error::Parse(format!(
-                    "Span start indices out of bounds for seq_len={}: {}",
-                    seq_len, e
-                ))
-            })?;
-            let end_embs = batch_tokens.index_select(&batch_ends, 0).map_err(|e| {
-                Error::Parse(format!(
-                    "Span end indices out of bounds for seq_len={}: {}",
-                    seq_len, e
-                ))
-            })?;
+            // Concatenate and apply ReLU
+            let cat = Tensor::cat(&[&start_span_rep, &end_span_rep], D::Minus1)?;
+            let cat = cat.relu()?;
 
-            let combined = Tensor::cat(&[&start_embs, &end_embs, &width_embs], D::Minus1)?;
-            let span_emb = self.projection.forward(&combined)?;
-            span_embs.push(span_emb);
+            // Apply output projection: Linear -> ReLU -> Linear
+            let out = self.out_project_0.forward(&cat)?;
+            let out = out.relu()?;
+            let out = self.out_project_3.forward(&out)?;
+
+            span_embs.push(out);
         }
 
         Tensor::stack(&span_embs, 0).map_err(|e| Error::Parse(format!("stack span_embs: {}", e)))
@@ -186,30 +231,43 @@ impl SpanRepLayer {
 }
 
 // =============================================================================
-// Label Encoder
+// Label Encoder (prompt_rep_layer in GLiNER)
 // =============================================================================
 
 /// Projects label embeddings to matching space.
+/// Maps to GLiNER's prompt_rep_layer MLP.
 #[cfg(feature = "candle")]
 pub struct LabelEncoder {
-    projection: Linear,
+    linear_0: Linear,
+    linear_3: Linear,
 }
 
 #[cfg(feature = "candle")]
 impl LabelEncoder {
-    /// Create a new label encoder.
+    /// Create a new label encoder from GLiNER prompt_rep_layer weights.
+    ///
+    /// GLiNER structure: Linear(D, 4D) -> ReLU -> Dropout -> Linear(4D, D)
     pub fn new(hidden_size: usize, vb: VarBuilder) -> Result<Self> {
-        let projection = linear(hidden_size, hidden_size, vb.pp("label_projection"))
-            .map_err(|e| Error::Retrieval(format!("LabelEncoder: {}", e)))?;
+        let linear_0 = linear(hidden_size, hidden_size * 4, vb.pp("0"))
+            .map_err(|e| Error::Retrieval(format!("LabelEncoder.0: {}", e)))?;
+        let linear_3 = linear(hidden_size * 4, hidden_size, vb.pp("3"))
+            .map_err(|e| Error::Retrieval(format!("LabelEncoder.3: {}", e)))?;
 
-        Ok(Self { projection })
+        Ok(Self { linear_0, linear_3 })
     }
 
     /// Project label embeddings to matching space.
     pub fn forward(&self, label_embeddings: &Tensor) -> Result<Tensor> {
-        self.projection
+        let out = self
+            .linear_0
             .forward(label_embeddings)
-            .map_err(|e| Error::Parse(format!("label projection: {}", e)))
+            .map_err(|e| Error::Parse(format!("label projection 0: {}", e)))?;
+        let out = out
+            .relu()
+            .map_err(|e| Error::Parse(format!("label relu: {}", e)))?;
+        self.linear_3
+            .forward(&out)
+            .map_err(|e| Error::Parse(format!("label projection 3: {}", e)))
     }
 }
 
@@ -410,14 +468,26 @@ pub(crate) fn convert_pytorch_to_safetensors(pytorch_path: &Path) -> Result<Path
 impl GLiNERCandle {
     /// Load GLiNER from HuggingFace.
     ///
+    /// Automatically loads `.env` for HF_TOKEN if present.
+    ///
     /// # Arguments
     /// * `model_id` - HuggingFace model ID (e.g., "urchade/gliner_small-v2.1")
     pub fn from_pretrained(model_id: &str) -> Result<Self> {
-        use hf_hub::api::sync::Api;
+        use hf_hub::api::sync::{Api, ApiBuilder};
+
+        // Load .env if present (for HF_TOKEN)
+        crate::env::load_dotenv();
 
         let device = best_device()?;
 
-        let api = Api::new().map_err(|e| Error::Retrieval(format!("HuggingFace API: {}", e)))?;
+        let api = if let Some(token) = crate::env::hf_token() {
+            ApiBuilder::new()
+                .with_token(Some(token))
+                .build()
+                .map_err(|e| Error::Retrieval(format!("HuggingFace API with token: {}", e)))?
+        } else {
+            Api::new().map_err(|e| Error::Retrieval(format!("HuggingFace API: {}", e)))?
+        };
 
         let repo = api.model(model_id.to_string());
 
@@ -453,10 +523,16 @@ impl GLiNERCandle {
                  Original error: {}",
                 e
             )))?;
+        // GLiNER models use gliner_config.json instead of standard config.json
         let config_path = repo
             .get("config.json")
             .or_else(|_| repo.get("gliner_config.json"))
-            .map_err(|e| Error::Retrieval(format!("config.json: {}", e)))?;
+            .map_err(|e| {
+                Error::Retrieval(format!(
+                    "config (tried config.json and gliner_config.json): {}",
+                    e
+                ))
+            })?;
 
         // Load tokenizer (only if tokenizer.json, not tokenizer_config.json)
         let tokenizer = if tokenizer_path.ends_with("tokenizer.json") {
@@ -474,13 +550,21 @@ impl GLiNERCandle {
             )));
         };
 
-        // Parse config for hidden size
+        // Parse config - GLiNER config has encoder_config nested inside
         let config_str = std::fs::read_to_string(&config_path)
             .map_err(|e| Error::Retrieval(format!("config: {}", e)))?;
         let config: serde_json::Value = serde_json::from_str(&config_str)
             .map_err(|e| Error::Parse(format!("config JSON: {}", e)))?;
 
-        let hidden_size = config["hidden_size"].as_u64().unwrap_or(768) as usize;
+        // GLiNER has encoder config nested inside encoder_config key
+        let encoder_config_json = if config.get("encoder_config").is_some() {
+            config["encoder_config"].clone()
+        } else {
+            // Fallback to top-level for non-GLiNER models
+            config.clone()
+        };
+
+        let hidden_size = encoder_config_json["hidden_size"].as_u64().unwrap_or(768) as usize;
 
         // Load weights
         // SAFETY: VarBuilder::from_mmaped_safetensors uses unsafe internally for memory mapping.
@@ -491,12 +575,25 @@ impl GLiNERCandle {
                 .map_err(|e| Error::Retrieval(format!("safetensors: {}", e)))?
         };
 
-        // Build encoder from the same model
-        let encoder = CandleEncoder::from_pretrained(model_id)?;
+        // Build encoder from the GLiNER-specific path
+        // GLiNER stores BERT weights under token_rep_layer.bert_layer.model.*
+        let bert_vb = vb.pp("token_rep_layer").pp("bert_layer").pp("model");
+
+        // Build encoder config from the encoder_config section
+        let encoder_config_str = serde_json::to_string(&encoder_config_json)
+            .map_err(|e| Error::Parse(format!("encoder config JSON: {}", e)))?;
+        let encoder_config = CandleEncoder::parse_config(&encoder_config_str)?;
+        let encoder =
+            CandleEncoder::from_vb(encoder_config, bert_vb, tokenizer.clone(), device.clone())?;
 
         // Build GLiNER-specific components
-        let span_rep = SpanRepLayer::new(hidden_size, MAX_SPAN_WIDTH, vb.pp("span_rep"))?;
-        let label_encoder = LabelEncoder::new(hidden_size, vb.pp("label_encoder"))?;
+        // GLiNER uses span_rep_layer.span_rep_layer.* and prompt_rep_layer.* paths
+        let span_rep = SpanRepLayer::new(
+            hidden_size,
+            MAX_SPAN_WIDTH,
+            vb.pp("span_rep_layer").pp("span_rep_layer"),
+        )?;
+        let label_encoder = LabelEncoder::new(hidden_size, vb.pp("prompt_rep_layer"))?;
         let matcher = SpanLabelMatcher::new(1.0);
 
         log::info!(
@@ -555,6 +652,21 @@ impl GLiNERCandle {
 
         // Match spans to labels
         let scores = self.matcher.forward(&span_embs, &label_embs)?;
+
+        // Debug: Log score statistics (only when debug logging is enabled)
+        if log::log_enabled!(log::Level::Debug) {
+            if let Ok(scores_vec) = scores.flatten_all()?.to_vec1::<f32>() {
+                if !scores_vec.is_empty() {
+                    let max_score = scores_vec.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                    let min_score = scores_vec.iter().cloned().fold(f32::INFINITY, f32::min);
+                    let mean_score: f32 = scores_vec.iter().sum::<f32>() / scores_vec.len() as f32;
+                    log::debug!(
+                        "[GLiNER-Candle] Score stats: min={:.4}, max={:.4}, mean={:.4}, threshold={:.4}, n={}",
+                        min_score, max_score, mean_score, threshold, scores_vec.len()
+                    );
+                }
+            }
+        }
 
         // Decode to entities
         let entities =
@@ -828,7 +940,9 @@ const DEFAULT_GLINER_LABELS: &[&str] = &[
 #[cfg(feature = "candle")]
 impl crate::Model for GLiNERCandle {
     fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
-        self.extract(text, DEFAULT_GLINER_LABELS, 0.5)
+        // Use lower threshold for smaller models (NeuML/gliner-bert-tiny)
+        // The threshold may need tuning based on the specific model
+        self.extract(text, DEFAULT_GLINER_LABELS, 0.3)
     }
 
     fn supported_types(&self) -> Vec<EntityType> {
@@ -870,6 +984,10 @@ impl crate::backends::inference::ZeroShotNER for GLiNERCandle {
     ) -> Result<Vec<Entity>> {
         // GLiNER can use descriptions directly as label text
         self.extract(text, descriptions, threshold)
+    }
+
+    fn default_types(&self) -> &[&'static str] {
+        &["person", "organization", "location", "date", "event"]
     }
 }
 
