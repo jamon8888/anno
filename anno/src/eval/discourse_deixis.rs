@@ -295,7 +295,7 @@ impl DiscourseDeicticDetector {
                     let span = TextSpan::from_bytes(text, m.start(), m.end());
                     let original = span.extract(text);
                     deictics.push(DiscourseDeictic::new(
-                        &original,
+                        original,
                         span.char_start,
                         span.char_end,
                     ));
@@ -315,7 +315,7 @@ impl DiscourseDeicticDetector {
                     let span = TextSpan::from_bytes(text, m.start(), m.end());
                     let original = span.extract(text);
                     deictics.push(DiscourseDeictic::new(
-                        &original,
+                        original,
                         span.char_start,
                         span.char_end,
                     ));
@@ -344,7 +344,7 @@ impl DiscourseDeicticDetector {
                     let span = TextSpan::from_bytes(text, it_start, it_end);
                     let original = span.extract(text);
                     deictics.push(DiscourseDeictic::new(
-                        &original,
+                        original,
                         span.char_start,
                         span.char_end,
                     ));
