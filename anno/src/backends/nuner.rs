@@ -1132,10 +1132,23 @@ mod tests {
 
         // Select the second word ("Beijing"): start_word=1, end_word=2 (exclusive)
         let e = ner
-            .create_entity(text, &span_converter, &word_positions, 1, 2, 0, 0.9, &entity_types)
+            .create_entity(
+                text,
+                &span_converter,
+                &word_positions,
+                1,
+                2,
+                0,
+                0.9,
+                &entity_types,
+            )
             .expect("expected entity");
 
         assert_eq!(e.text, "Beijing");
-        assert_eq!((e.start, e.end), (3, 10), "expected char offsets for Beijing");
+        assert_eq!(
+            (e.start, e.end),
+            (3, 10),
+            "expected char offsets for Beijing"
+        );
     }
 }
