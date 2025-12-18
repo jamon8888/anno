@@ -90,20 +90,20 @@ async def test_readme_rendering(url: str, output_dir: Path):
 
 **Project Documentation Standards (from codebase docs):**
 
-**Style Philosophy** (from `docs/MATH_DOCUMENTATION_GUIDE.md`):
+**Style Philosophy** (from `docs/guides/MATH_DOCUMENTATION_GUIDE.md`):
 - **Brutalist**: Simple, clear, understandable, quintessential, technical - no marketing fluff
 - **Definition first**: State what it is before explaining how it works (FOCS principle)
 - **Incremental building**: Introduce concepts step-by-step, building on previous understanding
 - **Illustrative examples**: Show practical applications that bridge theory and implementation
 - **Precise notation**: Use clear, consistent mathematical notation
 
-**Math Notation** (from `docs/MATH_DOCUMENTATION_GUIDE.md`):
+**Math Notation** (from `docs/guides/MATH_DOCUMENTATION_GUIDE.md`):
     - **ASCII math preferred**: `similarity(a, b) = (a * b) / (||a|| * ||b||)` (works everywhere, no dependencies)
 - **When to add formulas**: Complex algorithms (Leiden, box embeddings), evaluation metrics (P/R/F1), calibration metrics (ECE, Brier)
 - **When to keep minimal**: Well-known formulas (cosine similarity, F1), simple utilities, obvious calculations
 - **Structure for complex cases**: Definition → Formula → Brief intuition → Example → Reference paper
 
-**Stanford/FOCS Documentation Style** (from `docs/MATH_DOCUMENTATION_GUIDE.md`):
+**Stanford/FOCS Documentation Style** (from `docs/guides/MATH_DOCUMENTATION_GUIDE.md`):
 - **Introduction to Information Retrieval** (Manning et al. 2008): Clear, technical, accessible; structured sections; formulas with context; practical examples
 - **Foundations of Computer Science** (Aho & Ullman 1992): Methodical presentation; clear definitions before explanations; illustrative examples bridging theory and practice; incremental concept building
 - **Stanford CoreNLP**: Structured, technical but accessible; clear headings; reference papers for complex concepts
@@ -156,7 +156,7 @@ async def test_readme_rendering(url: str, output_dir: Path):
    ```
    ASCII art hierarchy that's clear and technical.
 
-3. **Good Math Example** (from `docs/MATH_DOCUMENTATION_GUIDE.md`):
+3. **Good Math Example** (from `docs/guides/MATH_DOCUMENTATION_GUIDE.md`):
    ```rust
    /// Expected Calibration Error (ECE).
    ///

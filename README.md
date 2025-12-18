@@ -44,7 +44,7 @@ $ anno extract --format json "Marie Curie won the Nobel Prize in Paris"
 [{"text":"Marie Curie","type":"PER","start":0,"end":11,"confidence":0.75},...]
 ```
 
-**Offsets**: `start`/`end` are character offsets (Unicode-safe). See [`docs/UNICODE_OFFSETS.md`](docs/UNICODE_OFFSETS.md).
+**Offsets**: `start`/`end` are character offsets (Unicode-safe). See [`docs/guides/UNICODE_OFFSETS.md`](docs/guides/UNICODE_OFFSETS.md).
 
 ### Coref
 
