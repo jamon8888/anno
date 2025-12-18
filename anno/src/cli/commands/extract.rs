@@ -18,6 +18,9 @@ use crate::ingest::DocumentPreprocessor;
 
 use crate::cli::CliError;
 
+#[cfg(feature = "cli")]
+use xxhash_rust::xxh3::xxh3_64;
+
 /// Extract entities from text
 #[derive(Parser, Debug)]
 pub struct ExtractArgs {
@@ -40,6 +43,14 @@ pub struct ExtractArgs {
     /// Output format
     #[arg(long, default_value = "human")]
     pub format: OutputFormat,
+
+    /// Include a character context window around each extracted entity (adds `context_before` / `context_after`)
+    #[arg(long, value_name = "CHARS")]
+    pub context_window: Option<usize>,
+
+    /// Include the containing sentence for each extracted entity (adds `sentence`)
+    #[arg(long)]
+    pub include_sentence: bool,
 
     /// Export GroundedDocument JSON to file
     #[arg(long, value_name = "PATH")]
@@ -86,7 +97,7 @@ pub struct ExtractArgs {
     pub quiet: bool,
 
     /// Positional text argument
-    #[arg(trailing_var_arg = true)]
+    /// Positional text input (alternative to --text or --file)
     pub positional: Vec<String>,
 }
 
@@ -213,12 +224,13 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
     // Output
     match args.format {
         OutputFormat::Json => {
-            let output: Vec<_> = doc
+            let entities_out: Vec<serde_json::Value> = doc
                 .signals()
                 .iter()
                 .map(|s| {
                     let (start, end) = s.text_offsets().unwrap_or((0, 0));
-                    serde_json::json!({
+                    let mut obj = serde_json::json!({
+                        "id": compute_entity_id(&text, s.surface(), s.label(), start, end),
                         "text": s.surface(),
                         "type": s.label(),
                         "start": start,
@@ -226,24 +238,68 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
                         "confidence": s.confidence,
                         "negated": s.negated,
                         "quantifier": s.quantifier.map(|q| format!("{:?}", q)),
-                    })
+                    });
+
+                    if let Some(window) = args.context_window {
+                        let (before, after) = get_context_window(&text, start, end, window);
+                        obj["context_before"] = serde_json::Value::String(before);
+                        obj["context_after"] = serde_json::Value::String(after);
+                    }
+
+                    if args.include_sentence {
+                        let sent = get_sentence_for_span(&text, start, end);
+                        obj["sentence"] = serde_json::Value::String(sent);
+                    }
+
+                    obj
                 })
                 .collect();
+
+            let provenance = build_provenance(&text, args.model.name(), &entities_out, elapsed);
+            let output = serde_json::json!({
+                "provenance": provenance,
+                "entities": entities_out,
+            });
+
             println!(
                 "{}",
                 serde_json::to_string_pretty(&output).unwrap_or_default()
             );
         }
         OutputFormat::Jsonl => {
-            for s in doc.signals() {
-                let (start, end) = s.text_offsets().unwrap_or((0, 0));
-                let obj = serde_json::json!({
-                    "text": s.surface(),
-                    "type": s.label(),
-                    "start": start,
-                    "end": end,
-                    "confidence": s.confidence,
-                });
+            let entities_out: Vec<serde_json::Value> = doc
+                .signals()
+                .iter()
+                .map(|s| {
+                    let (start, end) = s.text_offsets().unwrap_or((0, 0));
+                    let mut obj = serde_json::json!({
+                        "id": compute_entity_id(&text, s.surface(), s.label(), start, end),
+                        "text": s.surface(),
+                        "type": s.label(),
+                        "start": start,
+                        "end": end,
+                        "confidence": s.confidence,
+                        "negated": s.negated,
+                    });
+
+                    if let Some(window) = args.context_window {
+                        let (before, after) = get_context_window(&text, start, end, window);
+                        obj["context_before"] = serde_json::Value::String(before);
+                        obj["context_after"] = serde_json::Value::String(after);
+                    }
+
+                    if args.include_sentence {
+                        let sent = get_sentence_for_span(&text, start, end);
+                        obj["sentence"] = serde_json::Value::String(sent);
+                    }
+
+                    obj
+                })
+                .collect();
+
+            let provenance = build_provenance(&text, args.model.name(), &entities_out, elapsed);
+            println!("{}", serde_json::json!({ "provenance": provenance }));
+            for obj in entities_out {
                 println!("{}", obj);
             }
         }
@@ -445,4 +501,173 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+fn get_context_window(text: &str, start: usize, end: usize, window: usize) -> (String, String) {
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    if start > len || end > len || start > end {
+        return (String::new(), String::new());
+    }
+
+    let ctx_start = start.saturating_sub(window);
+    let ctx_end = (end + window).min(len);
+
+    let before: String = chars[ctx_start..start].iter().collect();
+    let after: String = chars[end..ctx_end].iter().collect();
+    (before, after)
+}
+
+fn get_sentence_for_span(text: &str, start: usize, end: usize) -> String {
+    // Heuristic: find the nearest sentence boundary punctuation around the span.
+    // Unicode-safe: operate in character space.
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    if start > len || end > len || start > end {
+        return String::new();
+    }
+    if len == 0 {
+        return String::new();
+    }
+
+    let is_boundary = |c: char| matches!(c, '.' | '!' | '?' | '。' | '！' | '？' | '\n');
+
+    // Search backward for a boundary; start the sentence after it.
+    let mut sent_start = 0usize;
+    for i in (0..start.min(len)).rev() {
+        if is_boundary(chars[i]) {
+            sent_start = (i + 1).min(len);
+            break;
+        }
+    }
+
+    // Search forward for a boundary; end the sentence at it (inclusive).
+    let mut sent_end = len;
+    for (i, &ch) in chars.iter().enumerate().skip(end.min(len)) {
+        if is_boundary(ch) {
+            sent_end = (i + 1).min(len);
+            break;
+        }
+    }
+
+    chars[sent_start..sent_end]
+        .iter()
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+fn compute_entity_id(text: &str, surface: &str, label: &str, start: usize, end: usize) -> String {
+    // Content-addressed entity id: stable across runs, sensitive to (text + span + label).
+    // Note: include full text so the same span indices in different docs can't collide.
+    let mut data = Vec::new();
+    data.extend_from_slice(text.as_bytes());
+    data.extend_from_slice(surface.as_bytes());
+    data.extend_from_slice(label.as_bytes());
+    data.extend_from_slice(&start.to_le_bytes());
+    data.extend_from_slice(&end.to_le_bytes());
+    format!("xxh3:{:016x}", xxh3_64(&data))
+}
+
+fn build_provenance(
+    text: &str,
+    model: &str,
+    entities: &[serde_json::Value],
+    elapsed: std::time::Duration,
+) -> serde_json::Value {
+    // Result hash mirrors eval/property_tests.rs: sorted, order-independent, deterministic.
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    struct HashEnt {
+        text: String,
+        entity_type: String,
+        start: usize,
+        end: usize,
+    }
+
+    let mut ents: Vec<HashEnt> = entities
+        .iter()
+        .filter_map(|e| {
+            Some(HashEnt {
+                text: e.get("text")?.as_str()?.to_string(),
+                entity_type: e.get("type")?.as_str()?.to_string(),
+                start: e.get("start")?.as_u64()? as usize,
+                end: e.get("end")?.as_u64()? as usize,
+            })
+        })
+        .collect();
+
+    ents.sort_by(|a, b| {
+        a.start
+            .cmp(&b.start)
+            .then_with(|| a.end.cmp(&b.end))
+            .then_with(|| a.entity_type.cmp(&b.entity_type))
+            .then_with(|| a.text.cmp(&b.text))
+    });
+
+    let mut data = Vec::new();
+    data.extend_from_slice(text.as_bytes());
+    for e in &ents {
+        data.extend_from_slice(e.text.as_bytes());
+        data.extend_from_slice(e.entity_type.as_bytes());
+        data.extend_from_slice(&e.start.to_le_bytes());
+        data.extend_from_slice(&e.end.to_le_bytes());
+    }
+    let result_hash = format!("xxh3:{:016x}", xxh3_64(&data));
+
+    let confs: Vec<f64> = entities
+        .iter()
+        .filter_map(|e| e.get("confidence").and_then(|v| v.as_f64()))
+        .collect();
+    let confidence_stats = compute_confidence_stats(&confs);
+
+    serde_json::json!({
+        "model": model,
+        "text_chars": text.chars().count(),
+        "entity_count": ents.len(),
+        "elapsed_ms": (elapsed.as_secs_f64() * 1000.0),
+        "result_hash": result_hash,
+        "confidence_stats": confidence_stats,
+    })
+}
+
+fn compute_confidence_stats(confs: &[f64]) -> serde_json::Value {
+    if confs.is_empty() {
+        return serde_json::json!({
+            "count": 0,
+            "mean": 0.0,
+            "median": 0.0,
+            "std_dev": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+        });
+    }
+
+    let mut sorted = confs.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let count = sorted.len();
+    let sum: f64 = sorted.iter().sum();
+    let mean = sum / count as f64;
+    let median = if count % 2 == 1 {
+        sorted[count / 2]
+    } else {
+        (sorted[count / 2 - 1] + sorted[count / 2]) / 2.0
+    };
+    let var = sorted
+        .iter()
+        .map(|x| {
+            let d = x - mean;
+            d * d
+        })
+        .sum::<f64>()
+        / count as f64;
+    let std_dev = var.sqrt();
+
+    serde_json::json!({
+        "count": count,
+        "mean": mean,
+        "median": median,
+        "std_dev": std_dev,
+        "min": sorted.first().copied().unwrap_or(0.0),
+        "max": sorted.last().copied().unwrap_or(0.0),
+    })
 }
