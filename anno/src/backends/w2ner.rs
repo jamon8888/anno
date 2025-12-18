@@ -190,14 +190,19 @@ impl W2NER {
 
     /// Load W2NER model from path or HuggingFace.
     ///
+    /// Automatically loads `.env` for HF_TOKEN if present.
+    ///
     /// # Arguments
     /// * `model_path` - Local path or HuggingFace model ID
     #[cfg(feature = "onnx")]
     pub fn from_pretrained(model_path: &str) -> Result<Self> {
-        use hf_hub::api::sync::Api;
+        use hf_hub::api::sync::{Api, ApiBuilder};
         use ort::execution_providers::CPUExecutionProvider;
         use ort::session::Session;
         use std::path::Path;
+
+        // Load .env if present (for HF_TOKEN)
+        crate::env::load_dotenv();
 
         let (model_file, tokenizer_file) = if Path::new(model_path).exists() {
             // Local path
@@ -205,10 +210,22 @@ impl W2NER {
             let tokenizer_file = Path::new(model_path).join("tokenizer.json");
             (model_file, tokenizer_file)
         } else {
-            // HuggingFace download
-            let api = Api::new().map_err(|e| {
-                Error::Retrieval(format!("Failed to initialize HuggingFace API: {}", e))
-            })?;
+            // HuggingFace download - explicitly use token if available
+            let api = if let Some(token) = crate::env::hf_token() {
+                ApiBuilder::new()
+                    .with_token(Some(token))
+                    .build()
+                    .map_err(|e| {
+                        Error::Retrieval(format!(
+                            "Failed to initialize HuggingFace API with token: {}",
+                            e
+                        ))
+                    })?
+            } else {
+                Api::new().map_err(|e| {
+                    Error::Retrieval(format!("Failed to initialize HuggingFace API: {}", e))
+                })?
+            };
             let repo = api.model(model_path.to_string());
 
             let model_file = repo
@@ -216,7 +233,7 @@ impl W2NER {
                 .or_else(|_| repo.get("onnx/model.onnx"))
                 .map_err(|e| {
                     let error_msg = format!("{}", e);
-                    // Check if it's an authentication error (401)
+                    // Check if it's an authentication error (401) or gated model
                     if error_msg.contains("401") || error_msg.contains("Unauthorized") {
                         Error::Retrieval(format!(
                             "W2NER model '{}' requires HuggingFace authentication.\n\
@@ -225,10 +242,22 @@ impl W2NER {
                              1. Get a HuggingFace token from https://huggingface.co/settings/tokens\n\
                              2. Request access to the model on HuggingFace (if it's gated)\n\
                              3. Set the token: export HF_TOKEN=your_token_here\n\
-                             4. The hf_hub crate automatically reads HF_TOKEN from environment\n\
                              \n\
                              Alternative: Use a different nested/discontinuous NER backend or skip W2NER in evaluation.",
                             model_path
+                        ))
+                    } else if error_msg.contains("404") || error_msg.contains("Not Found") {
+                        Error::Retrieval(format!(
+                            "W2NER model '{}' not found or missing ONNX files.\n\
+                             \n\
+                             The model may be:\n\
+                             - A gated model requiring access approval at https://huggingface.co/{}\n\
+                             - Missing pre-exported ONNX files (model.onnx or onnx/model.onnx)\n\
+                             - Removed or renamed on HuggingFace\n\
+                             \n\
+                             If you have HF_TOKEN set, ensure you've requested and received access to this model.\n\
+                             Alternative: Use nuner, gliner2, or other available NER backends.",
+                            model_path, model_path
                         ))
                     } else {
                         Error::Retrieval(format!("Failed to download W2NER model: {}", e))
@@ -460,8 +489,8 @@ impl W2NER {
         let attention_t = Tensor::from_array(attention_arr)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
 
-        // Run inference
-        let mut session_guard = crate::sync::try_lock(session)?;
+        // Run inference with blocking lock for thread-safe parallel access
+        let mut session_guard = crate::sync::lock(session);
 
         let outputs = session_guard
             .run(ort::inputs![
@@ -581,7 +610,7 @@ impl Model for W2NER {
             }
         }
 
-        // Without model, return empty
+        // Without model, return empty (model not loaded)
         Ok(Vec::new())
     }
 
@@ -807,6 +836,16 @@ mod tests {
     #[test]
     fn test_not_available_without_model() {
         let w2ner = W2NER::new();
+        // Without model loaded, should not be available
         assert!(!w2ner.is_available());
+    }
+
+    #[test]
+    fn test_returns_empty_without_model() {
+        let w2ner = W2NER::new();
+        // Without model, should return empty (not error)
+        let result = w2ner.extract_entities("Steve Jobs founded Apple", None);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
     }
 }

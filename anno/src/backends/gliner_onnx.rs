@@ -1,7 +1,8 @@
 //! GLiNER-based NER implementation using ONNX Runtime.
 //!
 //! GLiNER (Generalist and Lightweight Model for Named Entity Recognition) is
-//! state-of-the-art for zero-shot NER. This implementation follows gline-rs patterns.
+//! state-of-the-art for zero-shot NER. This implementation follows the GLiNER prompt format
+//! and common community conventions.
 //!
 //! ## Prompt Format
 //!
@@ -17,7 +18,7 @@
 //! - `<<ENT>>` = 128002
 //! - `<<SEP>>` = 128003
 //!
-//! ## Key Insight (from gline-rs)
+//! ## Key Insight
 //!
 //! Each word is encoded SEPARATELY, preserving word boundaries.
 //! Output shape: [batch, num_words, max_width, num_entity_types]
@@ -149,15 +150,27 @@ impl GLiNEROnnx {
     /// };
     /// let model = GLiNEROnnx::with_config("onnx-community/gliner_small-v2.1", config)?;
     /// ```
+    ///
+    /// Automatically loads `.env` for HF_TOKEN if present.
     pub fn with_config(model_name: &str, config: GLiNERConfig) -> Result<Self> {
-        use hf_hub::api::sync::Api;
+        use hf_hub::api::sync::{Api, ApiBuilder};
         use ort::execution_providers::CPUExecutionProvider;
         use ort::session::builder::GraphOptimizationLevel;
         use ort::session::Session;
 
-        let api = Api::new().map_err(|e| {
-            Error::Retrieval(format!("Failed to initialize HuggingFace API: {}", e))
-        })?;
+        // Load .env if present (for HF_TOKEN)
+        crate::env::load_dotenv();
+
+        let api = if let Some(token) = crate::env::hf_token() {
+            ApiBuilder::new()
+                .with_token(Some(token))
+                .build()
+                .map_err(|e| Error::Retrieval(format!("HuggingFace API with token: {}", e)))?
+        } else {
+            Api::new().map_err(|e| {
+                Error::Retrieval(format!("Failed to initialize HuggingFace API: {}", e))
+            })?
+        };
 
         let repo = api.model(model_name.to_string());
 
@@ -292,7 +305,7 @@ impl GLiNEROnnx {
             return Ok(vec![]);
         }
 
-        // Split text into words (gline-rs uses regex splitter, we use whitespace)
+        // Split text into words (this implementation uses whitespace splitting)
         let text_words: Vec<&str> = text.split_whitespace().collect();
         let num_text_words = text_words.len();
 
@@ -300,7 +313,7 @@ impl GLiNEROnnx {
             return Ok(vec![]);
         }
 
-        // Encode input following gline-rs pattern: word-by-word encoding
+        // Encode input following the GLiNER prompt format: word-by-word encoding
         // Use cached version if cache is enabled
         let (input_ids, attention_mask, words_mask, text_lengths, entity_count) =
             self.encode_prompt_cached(&text_words, entity_types)?;
@@ -349,8 +362,8 @@ impl GLiNEROnnx {
         let span_mask_t = Tensor::from_array(span_mask_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
 
-        // Run inference
-        let mut session = try_lock(&self.session)?;
+        // Run inference with blocking lock for thread-safe parallel access
+        let mut session = lock(&self.session);
 
         let outputs = session
             .run(ort::inputs![
@@ -474,7 +487,7 @@ impl GLiNEROnnx {
         Ok(result)
     }
 
-    /// Encode prompt following gline-rs pattern: word-by-word encoding.
+    /// Encode prompt following the GLiNER prompt format: word-by-word encoding.
     ///
     /// Structure: [START] <<ENT>> type1 <<ENT>> type2 <<SEP>> word1 word2 ... [END]
     ///
@@ -561,7 +574,7 @@ impl GLiNEROnnx {
         ))
     }
 
-    /// Generate span tensors following gline-rs pattern.
+    /// Generate span tensors following the GLiNER span layout.
     ///
     /// Shape: [num_words * max_width, 2] for span_idx
     /// Shape: [num_words * max_width] for span_mask
@@ -635,7 +648,7 @@ impl GLiNEROnnx {
         (span_idx, span_mask)
     }
 
-    /// Decode model output following gline-rs pattern.
+    /// Decode model output following the GLiNER output layout.
     ///
     /// Expected output shape: [batch, num_words, max_width, num_entity_types]
     fn decode_output(
@@ -677,8 +690,9 @@ impl GLiNEROnnx {
         );
 
         if output_data.is_empty() || shape.iter().any(|&d| d == 0) {
-            log::warn!("[GLiNER] Empty output - model may have incompatible ONNX export");
-            return Ok(vec![]);
+            return Err(Error::Inference(
+                "GLiNER ONNX returned empty/degenerate output tensor. This usually indicates an incompatible ONNX export for this implementation (shape mismatch or missing dynamic axes).".to_string(),
+            ));
         }
 
         // Performance: Pre-allocate entities vec with estimated capacity
@@ -700,8 +714,9 @@ impl GLiNEROnnx {
             );
 
             if num_classes == 0 {
-                log::warn!("[GLiNER] num_classes is 0 - this ONNX model export may not support dynamic entity types");
-                return Ok(vec![]);
+                return Err(Error::Inference(
+                    "GLiNER ONNX model produced num_classes=0. This export likely does not support dynamic entity types for the requested schema.".to_string(),
+                ));
             }
 
             // Iterate over spans and apply sigmoid threshold
@@ -758,8 +773,9 @@ impl GLiNEROnnx {
             let num_classes = shape[2] as usize;
 
             if num_classes == 0 {
-                log::warn!("[GLiNER] num_classes is 0");
-                return Ok(vec![]);
+                return Err(Error::Inference(
+                    "GLiNER ONNX model produced num_classes=0. This export likely does not support dynamic entity types for the requested schema.".to_string(),
+                ));
             }
 
             for span_idx in 0..num_spans {
@@ -833,20 +849,14 @@ impl GLiNEROnnx {
             .into_iter()
             .map(|mut e| {
                 // Strip trailing punctuation that shouldn't be part of entities
-                while e
-                    .text
-                    .ends_with(|c: char| matches!(c, '.' | ',' | ';' | ':' | '!' | '?'))
-                {
+                while e.text.ends_with(['.', ',', ';', ':', '!', '?']) {
                     e.text.pop();
                     if e.end > e.start {
                         e.end -= 1;
                     }
                 }
                 // Also strip leading punctuation
-                while e
-                    .text
-                    .starts_with(|c: char| matches!(c, '.' | ',' | ';' | ':' | '!' | '?'))
-                {
+                while e.text.starts_with(['.', ',', ';', ':', '!', '?']) {
                     e.text.remove(0);
                     e.start += 1;
                 }
@@ -862,8 +872,11 @@ impl GLiNEROnnx {
     fn map_entity_type(type_str: &str) -> EntityType {
         match type_str.to_lowercase().as_str() {
             "person" | "per" => EntityType::Person,
-            "organization" | "org" => EntityType::Organization,
-            "location" | "loc" | "gpe" => EntityType::Location,
+            "organization" | "org" | "company" => EntityType::Organization,
+            "location" | "loc" | "gpe" | "geo-loc" => EntityType::Location,
+            "facility" | "fac" => EntityType::custom("FACILITY", anno_core::EntityCategory::Place),
+            "product" | "prod" => EntityType::custom("PRODUCT", anno_core::EntityCategory::Misc),
+            "misc" | "other" => EntityType::Other("MISC".to_string()),
             "date" | "time" => EntityType::Date,
             "money" | "currency" => EntityType::Money,
             "percent" | "percentage" => EntityType::Percent,
