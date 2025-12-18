@@ -10303,7 +10303,10 @@ mod tests {
     #[ignore] // Run manually: cargo test generate_datasets_markdown -- --ignored
     fn generate_datasets_markdown() {
         let md = generate_markdown();
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../docs/DATASETS_GENERATED.md");
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../docs/generated/DATASETS_GENERATED.md"
+        );
         std::fs::write(path, md).expect("write markdown");
         println!("Generated: {}", path);
     }

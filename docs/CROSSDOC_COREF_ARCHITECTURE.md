@@ -1,6 +1,6 @@
 # Cross-Document Coreference Architecture
 
-**Related**: See [INTER_INTRA_DOC_ABSTRACTIONS.md](INTER_INTRA_DOC_ABSTRACTIONS.md) for coreference abstractions.
+**Related**: See [design/INTER_INTRA_DOC_ABSTRACTIONS.md](design/INTER_INTRA_DOC_ABSTRACTIONS.md) for coreference abstractions.
 
 ## How Crossdoc Coref Works via Tracks
 
