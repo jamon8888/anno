@@ -597,6 +597,7 @@ impl EvalSystem {
             temporal_stratification: false,
             confidence_intervals: true,
             custom_coref_resolver: self.coref_resolver.clone(),
+            coref_use_gold_mentions: false,
         };
 
         let comprehensive_results = evaluator.evaluate_all(config)?;
