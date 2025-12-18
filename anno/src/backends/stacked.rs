@@ -828,7 +828,13 @@ impl Model for StackedNER {
                 .map(|p| p.source.as_ref())
                 .unwrap_or("");
 
-            (a.start, a.end, a_ty, a_src, a.text.as_str()).cmp(&(b.start, b.end, b_ty, b_src, b.text.as_str()))
+            (a.start, a.end, a_ty, a_src, a.text.as_str()).cmp(&(
+                b.start,
+                b.end,
+                b_ty,
+                b_src,
+                b.text.as_str(),
+            ))
         });
 
         // Remove any duplicates that might have been created (defensive)
@@ -1211,10 +1217,7 @@ mod tests {
             ],
         );
         // Candidate spans across both existing entities, but is low confidence.
-        let layer2 = mock_model(
-            "l2",
-            vec![mock_entity(text, 0, EntityType::Person, 0.1)],
-        );
+        let layer2 = mock_model("l2", vec![mock_entity(text, 0, EntityType::Person, 0.1)]);
 
         let ner = StackedNER::builder()
             .layer(layer1)
@@ -1255,7 +1258,13 @@ mod tests {
         // If a buggy backend produces an out-of-bounds end offset, StackedNER clamps the span.
         // The returned entity should have `text` matching the adjusted span.
         let layer = MockModel::new("l1")
-            .with_entities(vec![Entity::new("hello world", EntityType::Person, 0, 100, 0.9)])
+            .with_entities(vec![Entity::new(
+                "hello world",
+                EntityType::Person,
+                0,
+                100,
+                0.9,
+            )])
             .without_validation();
 
         let ner = StackedNER::builder()
