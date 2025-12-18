@@ -17,8 +17,9 @@ Based on historical errors and CI failures, here are recommended checks for git 
   - Tests:
     - prefers `cargo nextest run --profile quick` when `cargo-nextest` is installed
     - falls back to `cargo test --workspace --lib`
+- Skipped by default:
+  - Doc tests (TLS/ring/rustls doctests can fail without full toolchain) — run manually if needed
 - Non-blocking warnings:
-  - doc tests
   - uncommitted (tracked) changes
 
 ## Recommended Additions
