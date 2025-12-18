@@ -33,6 +33,420 @@ use std::fs;
 use std::path::PathBuf;
 
 // =============================================================================
+// CorefUD (CoNLL-U + Entity brackets in MISC)
+// =============================================================================
+
+/// Parse CorefUD CoNLL-U format into coreference documents.
+///
+/// CorefUD encodes coreference in the CoNLL-U MISC column via the `Entity` attribute.
+/// The value of `Entity=` is a bracketed stream of mention boundary markers:
+/// - Opening marker at the first token of a mention: `Entity=(e5-person-...)`
+/// - Closing marker at the last token of a mention: `Entity=e5)`
+/// - One-token mentions can be encoded as a self-contained marker: `Entity=(e8-place-1)`
+/// - Multiple markers can be concatenated in one value: `Entity=(e8-place-1)e9)`
+/// - Discontinuous mentions may include part tags after the cluster id: `e10[1/2]`
+///
+/// This parser is intentionally conservative:
+/// - It extracts clusters and **contiguous character spans**.
+/// - It preserves `MentionType::Zero` for mentions that are empty nodes (ID with `.`).
+/// - It ignores bridging/split antecedents and other CorefUD extras.
+///
+/// Note: CorefUD supports discontinuous mentions. `anno` currently represents mentions
+/// as contiguous character spans, so discontinuous mentions are approximated by their
+/// minimal bounding span in surface character space.
+pub fn parse_corefud_conllu(content: &str) -> Result<Vec<CorefDocument>> {
+    #[derive(Debug, Clone)]
+    struct TokenSpan {
+        is_empty_node: bool,
+        entity_value: Option<String>,
+    }
+
+    #[derive(Debug, Clone)]
+    struct OpenMention {
+        start_char: usize,
+        entity_type: Option<String>,
+        is_empty_node: bool,
+    }
+
+    #[derive(Debug, Clone)]
+    enum EntityMark {
+        Open {
+            cluster: String,
+            entity_type: Option<String>,
+            self_close: bool,
+        },
+        Close {
+            cluster: String,
+        },
+    }
+
+    fn parse_misc_entity(misc: &str) -> Option<String> {
+        if misc.trim().is_empty() || misc.trim() == "_" {
+            return None;
+        }
+        for part in misc.split('|') {
+            if let Some(rest) = part.strip_prefix("Entity=") {
+                if !rest.is_empty() && rest != "_" {
+                    return Some(rest.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    fn parse_space_after_no(misc: &str) -> bool {
+        if misc.trim().is_empty() || misc.trim() == "_" {
+            return false;
+        }
+        misc.split('|').any(|p| p == "SpaceAfter=No")
+    }
+
+    fn split_cluster_and_type(open_descriptor: &str) -> (String, Option<String>) {
+        // Descriptor example: "e5-person-1-1,2,4-new-coref"
+        // We only reliably extract:
+        // - cluster id: first field before '-'
+        // - entity type: second field (if present)
+        let mut parts = open_descriptor.splitn(3, '-');
+        let raw_cluster = parts.next().unwrap_or("").to_string();
+        let etype = parts.next().map(|s| s.to_string());
+
+        // Handle discontinuous tags like e10[1/2] by stripping bracket suffix.
+        let cluster = if let Some((base, _rest)) = raw_cluster.split_once('[') {
+            base.to_string()
+        } else {
+            raw_cluster
+        };
+        (cluster, etype)
+    }
+
+    fn split_cluster(close_descriptor: &str) -> String {
+        // Close descriptor example: "e9" (from "e9)")
+        // May include discontinuous tag suffix e10[1/2]
+        if let Some((base, _)) = close_descriptor.split_once('[') {
+            base.to_string()
+        } else {
+            close_descriptor.to_string()
+        }
+    }
+
+    fn parse_entity_marks(entity_value: &str) -> Vec<EntityMark> {
+        // Parse a stream of markers from left-to-right.
+        //
+        // Markers are either:
+        // - '(' + descriptor + ')'        => Open marker that self-closes (one-token mention)
+        // - '(' + descriptor (no ')')     => Open marker (mention continues)
+        // - descriptor + ')'              => Close marker
+        //
+        // The format allows concatenation: "(e8-place-1)e9)e7)"
+        // We intentionally only support unambiguous cases:
+        // - Open-without-')' is assumed to run to end-of-value.
+        let mut marks = Vec::new();
+        let mut i = 0usize;
+        let bytes = entity_value.as_bytes();
+
+        while i < bytes.len() {
+            match bytes[i] as char {
+                '(' => {
+                    i += 1;
+                    let start = i;
+                    while i < bytes.len() && (bytes[i] as char) != ')' {
+                        i += 1;
+                    }
+                    if i < bytes.len() && (bytes[i] as char) == ')' {
+                        // Self-contained marker "(...)" (one-token mention)
+                        let descriptor = entity_value[start..i].to_string();
+                        let (cluster, etype) = split_cluster_and_type(&descriptor);
+                        marks.push(EntityMark::Open {
+                            cluster,
+                            entity_type: etype,
+                            self_close: true,
+                        });
+                        i += 1;
+                    } else {
+                        // No closing ')': open marker to end-of-value
+                        let descriptor = entity_value[start..].to_string();
+                        let (cluster, etype) = split_cluster_and_type(&descriptor);
+                        marks.push(EntityMark::Open {
+                            cluster,
+                            entity_type: etype,
+                            self_close: false,
+                        });
+                        break;
+                    }
+                }
+                'e' => {
+                    // Parse closing marker: "e123...)" possibly repeated.
+                    let start = i;
+                    while i < bytes.len() && (bytes[i] as char) != ')' {
+                        if (bytes[i] as char) == '(' {
+                            break;
+                        }
+                        i += 1;
+                    }
+                    if i < bytes.len() && (bytes[i] as char) == ')' {
+                        let raw = entity_value[start..i].to_string();
+                        marks.push(EntityMark::Close {
+                            cluster: split_cluster(&raw),
+                        });
+                        i += 1;
+                    } else {
+                        break;
+                    }
+                }
+                _ => i += 1,
+            }
+        }
+
+        marks
+    }
+
+    fn extract_span_text(text: &str, start: usize, end: usize) -> String {
+        if end <= start {
+            return String::new();
+        }
+        text.chars().skip(start).take(end - start).collect()
+    }
+
+    // Document accumulators
+    let mut docs: Vec<CorefDocument> = Vec::new();
+    let mut doc_idx: usize = 0;
+    let mut current_doc_id: Option<String> = None;
+    let mut text = String::new();
+    let mut text_char_len: usize = 0;
+
+    let mut tokens: Vec<TokenSpan> = Vec::new();
+    let mut clusters: HashMap<String, Vec<Mention>> = HashMap::new();
+    let mut open: HashMap<String, Vec<OpenMention>> = HashMap::new();
+
+    let mut prev_space_after_no = false;
+
+    let flush_doc = |docs: &mut Vec<CorefDocument>,
+                     doc_idx: &mut usize,
+                     current_doc_id: &mut Option<String>,
+                     text: &mut String,
+                     clusters: &mut HashMap<String, Vec<Mention>>,
+                     open: &mut HashMap<String, Vec<OpenMention>>|
+     -> Result<()> {
+        if text.is_empty() && clusters.is_empty() {
+            *current_doc_id = None;
+            open.clear();
+            return Ok(());
+        }
+
+        if open.values().any(|stk| !stk.is_empty()) {
+            return Err(Error::InvalidInput(
+                "CorefUD parse error: document ended with unclosed Entity brackets".to_string(),
+            ));
+        }
+
+        // Build chains.
+        let mut coref_chains: Vec<CorefChain> = Vec::new();
+        for (cluster_id, mut mentions) in std::mem::take(clusters).into_iter() {
+            // Fill mention texts now that doc text is finalized.
+            for m in &mut mentions {
+                if m.mention_type == Some(MentionType::Zero) {
+                    m.text = String::new();
+                } else {
+                    m.text = extract_span_text(text, m.start, m.end);
+                }
+            }
+
+            // Convert "e123" -> 123 if possible.
+            let numeric_id = cluster_id.strip_prefix('e').and_then(|rest| {
+                rest.chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect::<String>()
+                    .parse::<u64>()
+                    .ok()
+            });
+
+            if let Some(cid) = numeric_id {
+                coref_chains.push(CorefChain::with_id(mentions, cid));
+            } else {
+                coref_chains.push(CorefChain::new(mentions));
+            }
+        }
+
+        if coref_chains.is_empty() {
+            return Err(Error::InvalidInput(
+                "CorefUD CoNLL-U contains no coreference chains".to_string(),
+            ));
+        }
+
+        let doc_id = current_doc_id
+            .clone()
+            .unwrap_or_else(|| format!("corefud_doc_{}", *doc_idx));
+        *doc_idx += 1;
+
+        docs.push(CorefDocument::with_id(
+            std::mem::take(text),
+            doc_id,
+            coref_chains,
+        ));
+
+        // Reset
+        *current_doc_id = None;
+        open.clear();
+        Ok(())
+    };
+
+    for raw_line in content.lines() {
+        let line = raw_line.trim_end();
+
+        // Document boundary
+        if line.starts_with("# newdoc") {
+            flush_doc(
+                &mut docs,
+                &mut doc_idx,
+                &mut current_doc_id,
+                &mut text,
+                &mut clusters,
+                &mut open,
+            )?;
+            tokens.clear();
+            text_char_len = 0;
+            prev_space_after_no = false;
+
+            // Parse optional doc id
+            if let Some(pos) = line.find("id") {
+                let maybe = line[pos..].split('=').nth(1).map(|s| s.trim());
+                if let Some(id) = maybe {
+                    if !id.is_empty() {
+                        current_doc_id = Some(id.to_string());
+                    }
+                }
+            }
+            continue;
+        }
+
+        // Comments
+        if line.starts_with('#') {
+            continue;
+        }
+
+        // Sentence boundary
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let fields: Vec<&str> = line.split('\t').collect();
+        if fields.len() < 2 {
+            continue;
+        }
+
+        let id_field = fields[0];
+        // Skip multi-word token lines (e.g., 1-2)
+        if id_field.contains('-') {
+            continue;
+        }
+
+        let is_empty_node = id_field.contains('.');
+        let form = fields.get(1).copied().unwrap_or("_");
+        let misc = fields.get(9).copied().unwrap_or("_");
+        let entity_value = parse_misc_entity(misc);
+        let space_after_no = parse_space_after_no(misc);
+
+        let (char_start, char_end) = if is_empty_node {
+            (text_char_len, text_char_len)
+        } else {
+            if !text.is_empty() && !prev_space_after_no {
+                text.push(' ');
+                text_char_len += 1;
+            }
+            let start = text_char_len;
+            text.push_str(form);
+            text_char_len += form.chars().count();
+            (start, text_char_len)
+        };
+
+        if !is_empty_node {
+            prev_space_after_no = space_after_no;
+        }
+
+        let token_idx = tokens.len();
+        tokens.push(TokenSpan {
+            is_empty_node,
+            entity_value,
+        });
+
+        // Apply entity boundary markers to build mentions.
+        if let Some(ref ev) = tokens[token_idx].entity_value {
+            let marks = parse_entity_marks(ev);
+            for mark in marks {
+                match mark {
+                    EntityMark::Open {
+                        cluster,
+                        entity_type,
+                        self_close,
+                    } => {
+                        if self_close {
+                            let mut m = Mention::new("", char_start, char_end);
+                            if tokens[token_idx].is_empty_node {
+                                m.mention_type = Some(MentionType::Zero);
+                            }
+                            if let Some(et) = entity_type {
+                                m.entity_type = Some(et);
+                            }
+                            clusters.entry(cluster).or_default().push(m);
+                        } else {
+                            open.entry(cluster).or_default().push(OpenMention {
+                                start_char: char_start,
+                                entity_type,
+                                is_empty_node: tokens[token_idx].is_empty_node,
+                            });
+                        }
+                    }
+                    EntityMark::Close { cluster } => {
+                        let Some(stack) = open.get_mut(&cluster) else {
+                            return Err(Error::InvalidInput(format!(
+                                "CorefUD parse error: closing Entity for {} with no open mention",
+                                cluster
+                            )));
+                        };
+                        let Some(opened) = stack.pop() else {
+                            return Err(Error::InvalidInput(format!(
+                                "CorefUD parse error: closing Entity for {} with empty stack",
+                                cluster
+                            )));
+                        };
+
+                        let mut m = Mention::new("", opened.start_char, char_end);
+                        if opened.is_empty_node
+                            && tokens[token_idx].is_empty_node
+                            && opened.start_char == char_end
+                        {
+                            m.mention_type = Some(MentionType::Zero);
+                        }
+                        if let Some(et) = opened.entity_type {
+                            m.entity_type = Some(et);
+                        }
+                        clusters.entry(cluster).or_default().push(m);
+                    }
+                }
+            }
+        }
+    }
+
+    // Final flush
+    flush_doc(
+        &mut docs,
+        &mut doc_idx,
+        &mut current_doc_id,
+        &mut text,
+        &mut clusters,
+        &mut open,
+    )?;
+
+    if docs.is_empty() {
+        return Err(Error::InvalidInput(
+            "CorefUD CoNLL-U contains no documents".to_string(),
+        ));
+    }
+
+    Ok(docs)
+}
+
+// =============================================================================
 // GAP Dataset Structures
 // =============================================================================
 
@@ -243,6 +657,20 @@ impl CorefLoader {
     /// Load PreCo dataset as coreference documents.
     pub fn load_preco(&self) -> Result<Vec<CorefDocument>> {
         self.inner.load_coref(DatasetId::PreCo)
+    }
+
+    /// Load a CorefUD CoNLL-U file from an explicit local path (no caching, no network).
+    ///
+    /// This is the easiest way to run CorefUD experiments without wiring up downloads:
+    /// download/extract the desired `*.conllu` locally and point this method at it.
+    pub fn load_corefud_from_path(
+        &self,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<Vec<CorefDocument>> {
+        let path = path.as_ref();
+        let content = fs::read_to_string(path)
+            .map_err(|e| Error::InvalidInput(format!("Failed to read {:?}: {}", path, e)))?;
+        parse_corefud_conllu(&content)
     }
 
     /// Check if a coreference dataset is cached.
@@ -1007,5 +1435,102 @@ mod tests {
 
         let docs = parse_bookcoref_json(jsonl).unwrap();
         assert_eq!(docs.len(), 2);
+    }
+
+    #[test]
+    fn test_corefud_conllu_parsing_multilingual_and_zero() {
+        // A tiny CorefUD-like CoNLL-U with:
+        // - multiple documents via # newdoc id
+        // - multi-script tokens
+        // - one empty node (ID with .) representing a zero mention
+        //
+        // Entity bracketing follows CorefUD 1.0/1.2 format:
+        // - open: Entity=(eX-type-...)
+        // - close: Entity=eX)
+        // - one-token mention: Entity=(eX-type-1)
+        let conllu = r#"# newdoc id = doc_en
+# sent_id = 1
+1	Marie	_	PROPN	_	_	0	root	_	Entity=(e1-person-1
+2	Curie	_	PROPN	_	_	1	flat	_	Entity=e1)
+3	met	_	VERB	_	_	1	dep	_	_
+4	Cher	_	PROPN	_	_	3	obj	_	Entity=(e2-person-1)
+5	.	_	PUNCT	_	_	3	punct	_	_
+
+# newdoc id = doc_multi
+# sent_id = 1
+1	習近平	_	PROPN	_	_	0	root	_	Entity=(e10-person-1)
+2	在	_	ADP	_	_	1	case	_	_
+3	北京	_	PROPN	_	_	1	obl	_	Entity=(e11-place-1)
+4	會見	_	VERB	_	_	1	dep	_	_
+5	了	_	AUX	_	_	4	aux	_	_
+6	普京	_	PROPN	_	_	4	obj	_	Entity=(e12-person-1)
+7	。	_	PUNCT	_	_	4	punct	_	_
+8.1	_	_	_	_	_	_	_	_	Entity=(e13-person-1)
+
+# newdoc id = doc_ar
+# sent_id = 1
+1	محمد	_	PROPN	_	_	0	root	_	Entity=(e20-person-1
+2	بن	_	PART	_	_	1	flat	_	SpaceAfter=No
+3	سلمان	_	PROPN	_	_	1	flat	_	Entity=e20)
+4	.	_	PUNCT	_	_	1	punct	_	_
+
+# newdoc id = doc_ru
+# sent_id = 1
+1	Путин	_	PROPN	_	_	0	root	_	Entity=(e30-person-1)
+2	встретился	_	VERB	_	_	1	dep	_	_
+3	с	_	ADP	_	_	1	case	_	_
+4	Си	_	PROPN	_	_	1	obl	_	Entity=(e31-person-1
+5	Цзиньпином	_	PROPN	_	_	4	flat	_	Entity=e31)
+6	.	_	PUNCT	_	_	1	punct	_	_
+
+# newdoc id = doc_hi
+# sent_id = 1
+1	प्रधानमंत्री	_	NOUN	_	_	0	root	_	Entity=(e40-person-1
+2	शर्मा	_	PROPN	_	_	1	flat	_	Entity=e40)
+3	दिल्ली	_	PROPN	_	_	1	obl	_	Entity=(e41-place-1)
+4	में	_	ADP	_	_	3	case	_	_
+5	थे	_	AUX	_	_	1	cop	_	_
+6	।	_	PUNCT	_	_	1	punct	_	_
+"#;
+
+        let docs = parse_corefud_conllu(conllu).unwrap();
+        assert_eq!(docs.len(), 5);
+
+        // doc_en: spans should be valid char offsets.
+        let doc_en = docs
+            .iter()
+            .find(|d| d.doc_id.as_deref() == Some("doc_en"))
+            .unwrap();
+        let char_len = doc_en.text.chars().count();
+        for m in doc_en.all_mentions() {
+            assert!(m.start <= m.end);
+            assert!(m.end <= char_len);
+        }
+
+        // doc_multi: should include a zero mention (empty node 8.1)
+        let doc_multi = docs
+            .iter()
+            .find(|d| d.doc_id.as_deref() == Some("doc_multi"))
+            .unwrap();
+        let zeros: Vec<_> = doc_multi
+            .all_mentions()
+            .into_iter()
+            .filter(|m| m.mention_type == Some(MentionType::Zero) || (m.start == m.end))
+            .collect();
+        assert!(
+            !zeros.is_empty(),
+            "Expected at least one zero/empty mention in doc_multi"
+        );
+
+        // doc_ar: SpaceAfter=No should glue بن + سلمان without inserting a space after بن.
+        let doc_ar = docs
+            .iter()
+            .find(|d| d.doc_id.as_deref() == Some("doc_ar"))
+            .unwrap();
+        assert!(
+            doc_ar.text.contains("محمد بنسلمان") || doc_ar.text.contains("محمد بن سلمان"),
+            "Arabic spacing should be Unicode-safe; got: {:?}",
+            doc_ar.text
+        );
     }
 }
