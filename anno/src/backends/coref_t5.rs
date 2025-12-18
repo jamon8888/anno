@@ -76,7 +76,7 @@
 //! - OntoNotes 5.0: ~80% F1
 //! - GAP (gendered pronouns): ~90% accuracy
 
-#![cfg(feature = "onnx")]
+// Note: This module is feature-gated via `#[cfg(feature = "onnx")]` in mod.rs
 
 use crate::{Entity, Error, Result};
 use std::collections::HashMap;
@@ -431,6 +431,7 @@ impl T5Coref {
     }
 
     /// Extract mentions from marked text.
+    #[allow(clippy::type_complexity)] // Return type is clear in context
     fn extract_mentions(&self, marked_text: &str) -> Result<(String, Vec<(String, usize, usize)>)> {
         let mut plain_text = String::new();
         let mut mentions = Vec::new();

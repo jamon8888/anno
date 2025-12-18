@@ -29,7 +29,7 @@ use anno_core::EntityType;
 
 #[cfg(feature = "onnx")]
 use {
-    crate::sync::try_lock,
+    crate::sync::lock,
     hf_hub::api::sync::Api,
     ndarray::Array2,
     ort::{session::builder::GraphOptimizationLevel, session::Session, value::Tensor},
@@ -316,8 +316,8 @@ impl BertNEROnnx {
         let token_type_ids_tensor = Tensor::from_array(token_type_ids_array)
             .map_err(|e| Error::Parse(format!("Failed to create token_type_ids tensor: {}", e)))?;
 
-        // Run inference
-        let mut session = try_lock(&self.session)?;
+        // Run inference with blocking lock for thread-safe parallel access
+        let mut session = lock(&self.session);
 
         let outputs = session
             .run(ort::inputs![

@@ -345,7 +345,9 @@ impl<E: TextEncoder> GLiNERPipeline<E> {
         let candidates = generate_span_candidates(&batch, self.config.max_span_width);
 
         if candidates.is_empty() {
-            return Ok(vec![]);
+            return Err(crate::Error::Inference(
+                "GLiNERPipeline produced no span candidates for non-empty text. This suggests an encoder/tokenization failure (seq_len=0) or an invalid max_span_width configuration.".to_string(),
+            ));
         }
 
         // Step 4: Compute span embeddings
