@@ -132,6 +132,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "unicode-normalization",
  "ureq 2.12.1",
  "xxhash-rust",
 ]
