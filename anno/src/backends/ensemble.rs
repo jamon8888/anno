@@ -114,6 +114,18 @@ use std::sync::Arc;
 
 use crate::{Entity, EntityType, Model, Result};
 
+fn method_for_backend_id(backend_id: &str) -> anno_core::entity::ExtractionMethod {
+    match backend_id {
+        // Stable IDs used by `EnsembleNER::new()`.
+        "regex" => anno_core::entity::ExtractionMethod::Pattern,
+        "heuristic" => anno_core::entity::ExtractionMethod::Heuristic,
+        // Legacy backend id (deprecated, but still used in tests/compositions).
+        "rule" => anno_core::entity::ExtractionMethod::Heuristic,
+        // Everything else: treat as neural by default.
+        _ => anno_core::entity::ExtractionMethod::Neural,
+    }
+}
+
 // =============================================================================
 // Backend Weights
 // =============================================================================
@@ -354,11 +366,18 @@ impl SpanKey {
 /// [`StackedNER`]: super::stacked::StackedNER
 pub struct EnsembleNER {
     backends: Vec<Arc<dyn Model + Send + Sync>>,
+    /// Stable backend IDs used for weighting and source tracking.
+    ///
+    /// This is intentionally decoupled from `backend.name()`, which is a
+    /// human-facing label and may vary across implementations (e.g. "GLiNER-ONNX").
+    backend_ids: Vec<String>,
     weights: HashMap<String, BackendWeight>,
     agreement_bonus: f64,
     min_confidence: f64,
-    /// Transparent name showing constituent backends (e.g., "ensemble(pattern+heuristic)")
+    /// Transparent name showing constituent backends (e.g., "ensemble(regex|gliner|heuristic)")
     name: String,
+    /// Cached static name (avoids Box::leak on every name() call)
+    name_static: std::sync::OnceLock<&'static str>,
 }
 
 impl Default for EnsembleNER {
@@ -372,11 +391,11 @@ impl EnsembleNER {
     #[must_use]
     pub fn new() -> Self {
         let mut backends: Vec<Arc<dyn Model + Send + Sync>> = Vec::new();
-        let mut backend_names: Vec<&'static str> = Vec::new();
+        let mut backend_ids: Vec<&'static str> = Vec::new();
 
         // Always add pattern (high precision for structured data)
         backends.push(Arc::new(crate::RegexNER::new()));
-        backend_names.push("pattern");
+        backend_ids.push("regex");
 
         // Add GLiNER if available
         #[cfg(feature = "onnx")]
@@ -385,7 +404,7 @@ impl EnsembleNER {
             use crate::DEFAULT_GLINER_MODEL;
             if let Ok(gliner) = GLiNEROnnx::new(DEFAULT_GLINER_MODEL) {
                 backends.push(Arc::new(gliner));
-                backend_names.push("gliner");
+                backend_ids.push("gliner");
             }
         }
 
@@ -396,17 +415,17 @@ impl EnsembleNER {
             use crate::DEFAULT_GLINER_MODEL;
             if let Ok(candle) = GLiNERCandle::from_pretrained(DEFAULT_GLINER_MODEL) {
                 backends.push(Arc::new(candle));
-                backend_names.push("gliner-candle");
+                backend_ids.push("gliner-candle");
             }
         }
 
         // Always add heuristic as fallback
         backends.push(Arc::new(crate::HeuristicNER::new()));
-        backend_names.push("heuristic");
+        backend_ids.push("heuristic");
 
         // Build transparent name showing constituents
         // Use '|' for parallel weighted voting (no priority ordering)
-        let name = format!("ensemble({})", backend_names.join("|"));
+        let name = format!("ensemble({})", backend_ids.join("|"));
 
         // Convert default weights to owned strings
         let weights: HashMap<String, BackendWeight> = default_backend_weights()
@@ -416,20 +435,21 @@ impl EnsembleNER {
 
         Self {
             backends,
+            backend_ids: backend_ids.into_iter().map(str::to_string).collect(),
             weights,
             agreement_bonus: 0.10,
             min_confidence: 0.30,
             name,
+            name_static: std::sync::OnceLock::new(),
         }
     }
 
     /// Create with custom backends.
     #[must_use]
     pub fn with_backends(backends: Vec<Box<dyn Model + Send + Sync>>) -> Self {
-        // Build transparent name from backend names
-        // Use '|' for parallel weighted voting (no priority ordering)
-        let backend_names: Vec<String> = backends.iter().map(|b| b.name().to_string()).collect();
-        let name = format!("ensemble({})", backend_names.join("|"));
+        // For custom backends, use the backend's reported name as both ID and display string.
+        let backend_ids: Vec<String> = backends.iter().map(|b| b.name().to_string()).collect();
+        let name = format!("ensemble({})", backend_ids.join("|"));
 
         let backends: Vec<Arc<dyn Model + Send + Sync>> =
             backends.into_iter().map(Arc::from).collect();
@@ -441,10 +461,12 @@ impl EnsembleNER {
 
         Self {
             backends,
+            backend_ids,
             weights,
             agreement_bonus: 0.10,
             min_confidence: 0.30,
             name,
+            name_static: std::sync::OnceLock::new(),
         }
     }
 
@@ -491,13 +513,31 @@ impl EnsembleNER {
 
         if candidates.len() == 1 {
             // Single candidate - use its confidence directly
-            let mut entity = candidates
+            let candidate = candidates
                 .into_iter()
                 .next()
-                .expect("candidates.len() == 1 guarantees next() is Some")
-                .entity;
+                .expect("candidates.len() == 1 guarantees next() is Some");
+            let mut entity = candidate.entity;
+            let original_prov = entity.provenance.clone();
+            let original_confidence = entity.confidence;
             // Slight penalty for single-source
             entity.confidence *= 0.95;
+            // Set provenance for single-source entities
+            entity.provenance = Some(anno_core::entity::Provenance {
+                source: std::borrow::Cow::Owned(format!("ensemble({})", candidate.source)),
+                // Preserve underlying method/pattern when possible (important for nested ensembles).
+                method: original_prov
+                    .as_ref()
+                    .map(|p| p.method)
+                    .unwrap_or_else(|| method_for_backend_id(&candidate.source)),
+                pattern: original_prov.as_ref().and_then(|p| p.pattern.clone()),
+                raw_confidence: original_prov
+                    .as_ref()
+                    .and_then(|p| p.raw_confidence)
+                    .or(Some(original_confidence)),
+                model_version: None,
+                timestamp: None,
+            });
             return Some(entity);
         }
 
@@ -508,27 +548,51 @@ impl EnsembleNER {
             type_votes.entry(type_key).or_default().push(c);
         }
 
-        // Find the type with highest weighted vote
-        let mut best_type: Option<(&str, f64, Vec<&Candidate>)> = None;
-
+        // Find the type with highest weighted vote (deterministic tie-breaking).
+        //
+        // HashMap iteration order can vary across process runs. If two types tie on
+        // weighted_sum, we still need a stable selection.
+        //
+        // Ordering:
+        // 1) Higher weighted_sum wins
+        // 2) If tied, more candidates (more votes) wins
+        // 3) If tied, lexicographically smaller type key wins
+        let mut best_type: Option<(String, f64, usize, Vec<&Candidate>)> = None;
         for (type_key, type_candidates) in &type_votes {
             let weighted_sum: f64 = type_candidates
                 .iter()
                 .map(|c| c.backend_weight * c.entity.confidence)
                 .sum();
+            let count = type_candidates.len();
 
-            if best_type.is_none()
-                || weighted_sum
-                    > best_type
-                        .as_ref()
-                        .expect("best_type.is_none() checked above")
-                        .1
-            {
-                best_type = Some((type_key, weighted_sum, type_candidates.clone()));
+            let should_replace = match &best_type {
+                None => true,
+                Some((best_key, best_sum, best_count, _)) => {
+                    if weighted_sum > *best_sum {
+                        true
+                    } else if weighted_sum < *best_sum {
+                        false
+                    } else if count > *best_count {
+                        true
+                    } else if count < *best_count {
+                        false
+                    } else {
+                        type_key < best_key
+                    }
+                }
+            };
+
+            if should_replace {
+                best_type = Some((
+                    type_key.clone(),
+                    weighted_sum,
+                    count,
+                    type_candidates.clone(),
+                ));
             }
         }
 
-        let (_, weighted_sum, winning_candidates) = best_type?;
+        let (_type_key, weighted_sum, _count, winning_candidates) = best_type?;
 
         // Calculate ensemble confidence
         let num_sources = winning_candidates.len();
@@ -622,23 +686,32 @@ impl Model for EnsembleNER {
         // Phase 1: Collect candidates from all backends
         let mut all_candidates: Vec<Candidate> = Vec::new();
 
-        for backend in &self.backends {
-            let backend_name = backend.name().to_string();
+        for (i, backend) in self.backends.iter().enumerate() {
+            let backend_id = self
+                .backend_ids
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| backend.name().to_string());
 
             match backend.extract_entities(text, language) {
                 Ok(entities) => {
                     for entity in entities {
-                        let weight = self.get_weight(&backend_name, &entity.entity_type);
+                        let weight = self.get_weight(&backend_id, &entity.entity_type);
                         all_candidates.push(Candidate {
                             entity,
-                            source: backend_name.clone(),
+                            source: backend_id.clone(),
                             backend_weight: weight,
                         });
                     }
                 }
                 Err(e) => {
                     // Log but continue (opportunistic)
-                    log::debug!("EnsembleNER: Backend {} failed: {}", backend_name, e);
+                    log::debug!(
+                        "EnsembleNER: Backend {} (id={}) failed: {}",
+                        backend.name(),
+                        backend_id,
+                        e
+                    );
                 }
             }
         }
@@ -707,8 +780,9 @@ impl Model for EnsembleNER {
     }
 
     fn name(&self) -> &'static str {
-        // Leak for static lifetime - EnsembleNER instances are typically long-lived
-        Box::leak(self.name.clone().into_boxed_str())
+        // Use OnceLock to cache the static string, avoiding repeated memory leaks
+        self.name_static
+            .get_or_init(|| Box::leak(self.name.clone().into_boxed_str()))
     }
 
     fn description(&self) -> &'static str {
@@ -962,10 +1036,38 @@ impl WeightLearner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anno_core::ExtractionMethod;
+
+    fn fast_ensemble() -> EnsembleNER {
+        // Keep unit tests deterministic and fast: do not initialize model-loading backends here.
+        EnsembleNER::with_backends(vec![
+            Box::new(crate::RegexNER::new()),
+            Box::new(crate::HeuristicNER::new()),
+        ])
+    }
+
+    #[test]
+    fn test_new_backend_ids_have_weights() {
+        let ner = EnsembleNER::new();
+
+        // For the built-in constructor, we require stable IDs so weights apply as intended.
+        assert!(
+            !ner.backend_ids.is_empty(),
+            "EnsembleNER::new() should have at least one backend"
+        );
+
+        for id in &ner.backend_ids {
+            assert!(
+                ner.weights.contains_key(id),
+                "EnsembleNER::new(): missing weight for backend id={:?}. This usually means the ensemble's advertised IDs drifted from default_backend_weights keys.",
+                id
+            );
+        }
+    }
 
     #[test]
     fn test_ensemble_basic() {
-        let ner = EnsembleNER::new();
+        let ner = fast_ensemble();
         let entities = ner
             .extract_entities("Tim Cook is the CEO of Apple Inc.", None)
             .unwrap();
@@ -1028,7 +1130,7 @@ mod tests {
 
     #[test]
     fn test_agreement_bonus() {
-        let ner = EnsembleNER::new().with_agreement_bonus(0.15);
+        let ner = fast_ensemble().with_agreement_bonus(0.15);
         assert!((ner.agreement_bonus - 0.15).abs() < 0.001);
     }
 
@@ -1086,5 +1188,230 @@ mod tests {
         assert!((stats.precision() - 0.8).abs() < 0.01);
         assert!((stats.type_precision("PER") - 0.833).abs() < 0.01);
         assert!((stats.type_precision("ORG") - 0.0).abs() < 0.01); // Unknown type
+    }
+
+    // =========================================================================
+    // Additional Edge Case Tests
+    // =========================================================================
+
+    #[test]
+    fn test_empty_text() {
+        let ner = fast_ensemble();
+        let entities = ner.extract_entities("", None).unwrap();
+        assert!(entities.is_empty());
+    }
+
+    #[test]
+    fn test_whitespace_only_text() {
+        let ner = fast_ensemble();
+        let entities = ner.extract_entities("   \t\n   ", None).unwrap();
+        assert!(entities.is_empty());
+    }
+
+    #[test]
+    fn test_resolve_candidates_tie_break_is_order_independent() {
+        let ner = fast_ensemble();
+        let span_text = "Apple";
+        let span = (0, 5);
+
+        let e_person = Entity::new(span_text, EntityType::Person, span.0, span.1, 0.5);
+        let e_org = Entity::new(span_text, EntityType::Organization, span.0, span.1, 0.5);
+
+        let c1 = Candidate {
+            entity: e_person,
+            source: "heuristic".to_string(),
+            backend_weight: 1.0,
+        };
+        let c2 = Candidate {
+            entity: e_org,
+            source: "heuristic".to_string(),
+            backend_weight: 1.0,
+        };
+
+        let out_a = ner
+            .resolve_candidates(vec![c1.clone(), c2.clone()])
+            .expect("should resolve");
+        let out_b = ner
+            .resolve_candidates(vec![c2, c1])
+            .expect("should resolve");
+
+        assert_eq!(
+            out_a.entity_type, out_b.entity_type,
+            "tie resolution should not depend on candidate order"
+        );
+
+        let key_a = out_a.entity_type.as_label().to_string();
+        let person_key = EntityType::Person.as_label().to_string();
+        let org_key = EntityType::Organization.as_label().to_string();
+        let expected = std::cmp::min(person_key, org_key);
+        assert_eq!(
+            key_a, expected,
+            "tie-break should choose lexicographically smallest type label"
+        );
+    }
+
+    #[test]
+    fn test_single_source_preserves_underlying_method_and_pattern() {
+        // With a single backend, ensemble should preserve the backend's extraction method/pattern
+        // (important for explainability and nested composition).
+        let ner = EnsembleNER::with_backends(vec![Box::new(crate::RegexNER::new())]);
+        let text = "Contact test@email.com on 2024-01-15";
+        let entities = ner.extract_entities(text, None).expect("extract");
+        assert!(!entities.is_empty());
+
+        let email = entities
+            .iter()
+            .find(|e| e.text == "test@email.com")
+            .expect("email entity should exist");
+        let prov = email.provenance.as_ref().expect("provenance");
+
+        assert_eq!(prov.method, ExtractionMethod::Pattern);
+        assert!(
+            prov.pattern.is_some(),
+            "expected to preserve regex pattern name"
+        );
+    }
+
+    #[test]
+    fn test_nested_single_source_preserves_inner_method() {
+        // Inner ensemble produces provenance.method = Heuristic; outer should not overwrite it
+        // to Neural just because the backend id is "ensemble(...)".
+        let inner = EnsembleNER::with_backends(vec![Box::new(crate::HeuristicNER::new())]);
+        let outer = EnsembleNER::with_backends(vec![Box::new(inner)]);
+
+        let text = "John Smith visited Paris.";
+        let entities = outer.extract_entities(text, None).expect("extract");
+        assert!(!entities.is_empty());
+
+        for e in &entities {
+            let prov = e.provenance.as_ref().expect("provenance");
+            assert_eq!(
+                prov.method,
+                ExtractionMethod::Heuristic,
+                "expected outer to preserve inner method"
+            );
+        }
+    }
+
+    #[test]
+    fn test_span_key_self_overlap() {
+        let span = SpanKey { start: 0, end: 10 };
+        assert!(span.overlaps(&span), "Span should overlap with itself");
+    }
+
+    #[test]
+    fn test_span_key_adjacent_no_overlap() {
+        let span1 = SpanKey { start: 0, end: 10 };
+        let span2 = SpanKey { start: 10, end: 20 };
+        assert!(!span1.overlaps(&span2), "Adjacent spans should not overlap");
+    }
+
+    #[test]
+    fn test_span_key_contained() {
+        let outer = SpanKey { start: 0, end: 20 };
+        let inner = SpanKey { start: 5, end: 15 };
+        assert!(outer.overlaps(&inner), "Contained spans should overlap");
+        assert!(inner.overlaps(&outer), "Overlap should be symmetric");
+    }
+
+    #[test]
+    fn test_backend_stats_empty() {
+        let stats = BackendStats::default();
+        assert!((stats.precision() - 0.0).abs() < 0.001);
+        assert!((stats.type_precision("ANY") - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_weight_learner_empty() {
+        let learner = WeightLearner::new();
+        let weights = learner.learn_weights();
+        // Empty learner returns empty weights (caller should use defaults)
+        // Just verify it doesn't panic and returns a valid HashMap
+        let _ = weights.len();
+    }
+
+    #[test]
+    fn test_ensemble_with_language() {
+        let ner = fast_ensemble();
+
+        // Try with English language hint
+        let entities = ner
+            .extract_entities("Tim Cook is the CEO of Apple.", Some("en"))
+            .unwrap();
+
+        // Should find entities (language hint shouldn't break anything)
+        assert!(
+            !entities.is_empty(),
+            "Should find entities with language hint"
+        );
+    }
+
+    #[test]
+    fn test_type_weights_structure() {
+        let weights = TypeWeights {
+            person: 0.9,
+            location: 0.85,
+            organization: 0.88,
+            date: 0.95,
+            money: 0.8,
+            other: 0.7,
+        };
+
+        assert!(weights.person > 0.0);
+        assert!(weights.date > weights.other);
+    }
+
+    #[test]
+    fn test_backend_weight_structure() {
+        let weight = BackendWeight {
+            overall: 0.85,
+            per_type: Some(TypeWeights {
+                person: 0.9,
+                location: 0.88,
+                organization: 0.87,
+                date: 0.92,
+                money: 0.85,
+                other: 0.75,
+            }),
+        };
+
+        assert!(weight.overall > 0.0);
+        assert!(weight.per_type.is_some());
+    }
+
+    #[test]
+    fn test_unicode_extraction() {
+        let ner = EnsembleNER::new();
+        let entities = ner
+            .extract_entities("東京で会議がありました。", None)
+            .unwrap();
+
+        // Should not crash on Unicode
+        for e in &entities {
+            assert!(e.confidence >= 0.0 && e.confidence <= 1.0);
+        }
+    }
+
+    #[test]
+    fn test_ensemble_provenance_tracking() {
+        let ner = EnsembleNER::new();
+        let entities = ner
+            .extract_entities("Barack Obama visited Paris yesterday.", None)
+            .unwrap();
+
+        for e in &entities {
+            // All entities should have provenance
+            assert!(
+                e.provenance.is_some(),
+                "Entity '{}' ({:?}) at {}..{} has no provenance",
+                e.text,
+                e.entity_type,
+                e.start,
+                e.end
+            );
+            let prov = e.provenance.as_ref().unwrap();
+            // Provenance source should not be empty
+            assert!(!prov.source.is_empty());
+        }
     }
 }

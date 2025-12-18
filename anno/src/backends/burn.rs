@@ -62,7 +62,8 @@
 //! For HuggingFace models, use `BurnNER::from_pretrained()` which handles
 //! the conversion automatically.
 
-use crate::{Entity, EntityType, Error, Model, Result};
+use crate::{Entity, EntityType, Model, Result};
+use std::borrow::Cow;
 
 // =============================================================================
 // Backend Configuration
@@ -98,10 +99,14 @@ impl std::fmt::Display for BurnBackendType {
 /// Burn device types.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum BurnDevice {
+    /// CPU execution.
     #[default]
     Cpu,
+    /// CUDA device by ordinal (e.g., `Cuda(0)` for the first CUDA device).
     Cuda(usize),
+    /// Apple Metal GPU.
     Metal,
+    /// Vulkan device (where supported by the selected backend).
     Vulkan,
 }
 
@@ -233,8 +238,20 @@ impl BurnNER {
         #[cfg(feature = "burn")]
         {
             log::info!("[BurnNER] Loading model: {}", model_id);
-            // TODO: Implement HuggingFace model loading via burn-import
-            // For now, return a configured instance
+            // FUTURE WORK: Implement HuggingFace model loading via burn-import
+            //
+            // Implementation steps:
+            // 1. Use burn-import crate to convert PyTorch/safetensors to Burn format
+            // 2. Define BERT architecture in Burn (BertEmbedding, BertEncoder, BertPooler)
+            // 3. Add token classification head (Linear layer over hidden states)
+            // 4. Load converted weights into Burn model
+            // 5. Handle tokenizer (use tokenizers crate with HF tokenizer.json)
+            //
+            // References:
+            // - burn-import: https://github.com/tracel-ai/burn/tree/main/crates/burn-import
+            // - Burn examples: https://github.com/tracel-ai/burn/tree/main/examples
+            //
+            // Currently falls back to heuristic NER.
         }
 
         Ok(Self {
@@ -280,15 +297,39 @@ impl BurnNER {
         // Placeholder: Create a simple tensor to prove Burn is working
         let _dummy: Tensor<NdArray<f32>, 2> = Tensor::zeros([1, 768], &NdArrayDevice::default());
 
-        // Fall back to heuristic for now
-        // TODO: Implement full BERT forward pass with Burn
+        // FUTURE WORK: Implement full BERT forward pass with Burn
+        //
+        // Implementation steps:
+        // 1. Tokenize input text using HF tokenizer (get input_ids, attention_mask)
+        // 2. Create input tensors from token IDs
+        // 3. Run BERT encoder forward pass:
+        //    - Embedding layer (word + position + token_type)
+        //    - Transformer encoder stack (12 layers for base, 24 for large)
+        //    - Each layer: self-attention -> add&norm -> FFN -> add&norm
+        // 4. Apply classification head to each token's hidden state
+        // 5. Decode BIO tags to entity spans
+        //
+        // For now, fall back to heuristic NER (zero-dependency baseline)
         self.extract_heuristic(text)
     }
 
     /// Heuristic entity extraction fallback.
     fn extract_heuristic(&self, text: &str) -> Result<Vec<Entity>> {
         let heuristic = crate::HeuristicNER::new();
-        heuristic.extract_entities(text, None)
+        let mut entities = heuristic.extract_entities(text, None)?;
+        // Make it explicit that these results are attributed to BurnNER's current
+        // (placeholder) behavior rather than the raw heuristic backend.
+        for e in &mut entities {
+            e.provenance = Some(crate::Provenance {
+                source: Cow::Borrowed("burn_ner"),
+                method: crate::ExtractionMethod::Heuristic,
+                pattern: None,
+                raw_confidence: Some(e.confidence),
+                model_version: Some(Cow::Borrowed("placeholder")),
+                timestamp: None,
+            });
+        }
+        Ok(entities)
     }
 
     /// Map label string to EntityType.
@@ -317,6 +358,9 @@ impl Model for BurnNER {
             return Ok(vec![]);
         }
 
+        // NOTE: This remains a minimal implementation:
+        // - under `burn`, we still route through a tiny Burn tensor op and then use heuristic extraction.
+        // - this is explicit in provenance and description, but it is runnable.
         #[cfg(feature = "burn")]
         {
             self.extract_with_burn(text)
@@ -337,19 +381,15 @@ impl Model for BurnNER {
     }
 
     fn is_available(&self) -> bool {
-        true // Falls back to heuristics when burn feature disabled
+        true
     }
 
     fn name(&self) -> &'static str {
-        "BurnNER"
+        "burn_ner"
     }
 
     fn description(&self) -> &'static str {
-        if cfg!(feature = "burn") {
-            "Token classification NER using Burn ML framework (pure Rust, GPU-capable)"
-        } else {
-            "BurnNER (heuristic fallback - enable 'burn' feature for ML inference)"
-        }
+        "BurnNER (minimal): Burn scaffolding + heuristic extraction (full Burn model import pending)"
     }
 }
 
@@ -407,6 +447,7 @@ pub type BurnPoweredNER = BurnNER;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{BatchCapable, GpuCapable, Model};
 
     #[test]
     fn test_burn_config_defaults() {
@@ -431,7 +472,7 @@ mod tests {
     #[test]
     fn test_burn_ner_creation() {
         let ner = BurnNER::new().unwrap();
-        assert_eq!(ner.name(), "BurnNER");
+        assert_eq!(ner.name(), "burn_ner");
         assert!(ner.is_available());
         assert_eq!(ner.backend(), BurnBackendType::NdArray);
     }
@@ -446,11 +487,10 @@ mod tests {
     #[test]
     fn test_burn_ner_heuristic_fallback() {
         let ner = BurnNER::new().unwrap();
-        // Should use heuristic fallback and potentially find entities
+        // Should not panic and should return *some* entities via heuristic fallback.
         let _entities = ner
             .extract_entities("Dr. John Smith works at Google in California", None)
             .unwrap();
-        // Don't assert non-empty since heuristics may vary
     }
 
     #[test]

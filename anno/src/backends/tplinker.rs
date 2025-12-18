@@ -47,6 +47,7 @@
 
 use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, RelationTriple};
 use crate::{Entity, EntityType, Model, Result};
+use std::borrow::Cow;
 
 /// TPLinker backend for joint entity-relation extraction.
 ///
@@ -84,57 +85,28 @@ impl TPLinker {
     /// 1. Run ONNX model to get handshaking matrix predictions
     /// 2. Decode entity boundaries from SH2OH/OH2SH tags
     /// 3. Decode relations from handshaking between entity pairs
+    #[allow(dead_code)] // Placeholder helper; kept for future TPLinker ONNX decoding work.
     fn extract_with_handshaking(
         &self,
         text: &str,
         _entity_types: &[&str],
         relation_types: &[&str],
     ) -> Result<ExtractionWithRelations> {
-        // Placeholder: Use simple regex matching for now
-        // Full implementation would use ONNX model with handshaking matrix
+        // Placeholder: Use HeuristicNER for entity extraction
+        // This properly handles multi-word entity names
+        let heuristic = crate::HeuristicNER::new();
+        let mut entities = heuristic.extract_entities(text, None)?;
 
-        // Extract entities first (using simple heuristics as placeholder)
-        // Performance: Pre-allocate entities vec with estimated capacity
-        let mut entities = Vec::with_capacity(8);
-        let words: Vec<&str> = text.split_whitespace().collect();
-
-        // Simple entity detection (placeholder)
-        // Track byte position to avoid finding wrong occurrences
-        let mut byte_pos = 0;
-        for word in &words {
-            // Capitalized words might be entities
-            if word
-                .chars()
-                .next()
-                .map(|c| c.is_uppercase())
-                .unwrap_or(false)
-                && word.len() > 1
-            {
-                // Find word starting from current byte position
-                if let Some(rel_pos) = text[byte_pos..].find(word) {
-                    let start = byte_pos + rel_pos;
-                    let end = start + word.len();
-                    byte_pos = end; // Update position for next search
-
-                    // Determine entity type (placeholder logic)
-                    let entity_type = if word.ends_with("Inc") || word.ends_with("Corp") {
-                        EntityType::Organization
-                    } else if word.chars().all(|c| c.is_uppercase() || c.is_whitespace()) {
-                        EntityType::Location
-                    } else {
-                        EntityType::Person
-                    };
-
-                    let mut entity = Entity::new(word.to_string(), entity_type, start, end, 0.7);
-                    entity.provenance = Some(crate::Provenance::ml("TPLinker-Placeholder", 0.7));
-                    entities.push(entity);
-                }
-            } else {
-                // Update byte position even if not an entity
-                if let Some(rel_pos) = text[byte_pos..].find(word) {
-                    byte_pos += rel_pos + word.len();
-                }
-            }
+        // Add provenance to indicate placeholder
+        for entity in &mut entities {
+            entity.provenance = Some(crate::Provenance {
+                source: Cow::Borrowed("tplinker"),
+                method: crate::ExtractionMethod::Heuristic,
+                pattern: None,
+                raw_confidence: Some(entity.confidence),
+                model_version: Some(Cow::Borrowed("placeholder")),
+                timestamp: None,
+            });
         }
 
         // Extract relations (placeholder: simple proximity-based)
@@ -156,21 +128,23 @@ impl TPLinker {
                     continue;
                 };
 
-                let between_text = if between_start < text.len()
-                    && between_end <= text.len()
-                    && between_start < between_end
-                {
-                    &text[between_start..between_end]
+                // `Entity` offsets in anno are **character offsets**.
+                // Convert char offsets to byte offsets safely before slicing.
+                let char_len = text.chars().count();
+                let between_start = between_start.min(char_len);
+                let between_end = between_end.min(char_len);
+                let between_text = if between_start < between_end {
+                    crate::offset::TextSpan::from_chars(text, between_start, between_end)
+                        .extract(text)
                 } else {
                     ""
                 };
 
                 // Simple relation detection (placeholder)
-                let relation_type = if between_text.to_lowercase().contains("founded") {
+                let between_lower = between_text.to_lowercase();
+                let relation_type = if between_lower.contains("founded") {
                     "founded".to_string()
-                } else if between_text.to_lowercase().contains("works")
-                    || between_text.to_lowercase().contains("employee")
-                {
+                } else if between_lower.contains("works") || between_lower.contains("employee") {
                     "works_for".to_string()
                 } else if relation_types.contains(&"related") {
                     "related".to_string()
@@ -213,7 +187,7 @@ impl Model for TPLinker {
     }
 
     fn is_available(&self) -> bool {
-        true // Placeholder implementation is always available
+        true
     }
 
     fn name(&self) -> &'static str {
@@ -293,8 +267,6 @@ mod tests {
                 0.5,
             )
             .unwrap();
-
         assert!(!result.entities.is_empty());
-        // Relations might be empty in placeholder implementation
     }
 }

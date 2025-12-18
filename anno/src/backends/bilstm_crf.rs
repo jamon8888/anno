@@ -216,8 +216,7 @@ impl BiLstmCrfNER {
                 let from_label = &labels[i];
                 let to_label = &labels[j];
 
-                if to_label.starts_with("I-") {
-                    let entity_type = &to_label[2..];
+                if let Some(entity_type) = to_label.strip_prefix("I-") {
                     let valid_prev = format!("B-{}", entity_type);
                     let valid_cont = format!("I-{}", entity_type);
 
@@ -278,30 +277,129 @@ impl BiLstmCrfNER {
 
         // Gazetteers for better heuristic accuracy
         const PERSON_NAMES: &[&str] = &[
-            "john", "mary", "james", "david", "michael", "robert", "william", "richard",
-            "sarah", "jennifer", "elizabeth", "lisa", "marie", "jane", "emily", "anna",
-            "barack", "donald", "joe", "george", "bill", "hillary", "elon", "jeff",
-            "mr", "mrs", "ms", "dr", "prof", "sir", "lord", "president", "ceo",
+            "john",
+            "mary",
+            "james",
+            "david",
+            "michael",
+            "robert",
+            "william",
+            "richard",
+            "sarah",
+            "jennifer",
+            "elizabeth",
+            "lisa",
+            "marie",
+            "jane",
+            "emily",
+            "anna",
+            "barack",
+            "donald",
+            "joe",
+            "george",
+            "bill",
+            "hillary",
+            "elon",
+            "jeff",
+            "mr",
+            "mrs",
+            "ms",
+            "dr",
+            "prof",
+            "sir",
+            "lord",
+            "president",
+            "ceo",
         ];
         const ORG_NAMES: &[&str] = &[
-            "google", "apple", "microsoft", "amazon", "facebook", "meta", "tesla",
-            "ibm", "intel", "nvidia", "oracle", "cisco", "adobe", "netflix", "uber",
-            "university", "institute", "corporation", "company", "inc", "corp", "ltd",
-            "llc", "foundation", "association", "organization", "department", "agency",
-            "fbi", "cia", "nsa", "nasa", "un", "nato", "who", "imf", "eu", "usa",
+            "google",
+            "apple",
+            "microsoft",
+            "amazon",
+            "facebook",
+            "meta",
+            "tesla",
+            "ibm",
+            "intel",
+            "nvidia",
+            "oracle",
+            "cisco",
+            "adobe",
+            "netflix",
+            "uber",
+            "university",
+            "institute",
+            "corporation",
+            "company",
+            "inc",
+            "corp",
+            "ltd",
+            "llc",
+            "foundation",
+            "association",
+            "organization",
+            "department",
+            "agency",
+            "fbi",
+            "cia",
+            "nsa",
+            "nasa",
+            "un",
+            "nato",
+            "who",
+            "imf",
+            "eu",
+            "usa",
         ];
         const LOC_NAMES: &[&str] = &[
-            "new", "york", "california", "texas", "florida", "london", "paris", "berlin",
-            "tokyo", "beijing", "moscow", "washington", "chicago", "boston", "seattle",
-            "san", "francisco", "los", "angeles", "las", "vegas", "united", "states",
-            "america", "china", "russia", "germany", "france", "japan", "india", "brazil",
-            "city", "county", "state", "country", "river", "mountain", "lake", "ocean",
+            "new",
+            "york",
+            "california",
+            "texas",
+            "florida",
+            "london",
+            "paris",
+            "berlin",
+            "tokyo",
+            "beijing",
+            "moscow",
+            "washington",
+            "chicago",
+            "boston",
+            "seattle",
+            "san",
+            "francisco",
+            "los",
+            "angeles",
+            "las",
+            "vegas",
+            "united",
+            "states",
+            "america",
+            "china",
+            "russia",
+            "germany",
+            "france",
+            "japan",
+            "india",
+            "brazil",
+            "city",
+            "county",
+            "state",
+            "country",
+            "river",
+            "mountain",
+            "lake",
+            "ocean",
         ];
 
         for (i, token) in tokens.iter().enumerate() {
             let lower = token.to_lowercase();
             let is_capitalized = token.chars().next().is_some_and(|c| c.is_uppercase());
-            let is_all_caps = token.chars().all(|c| c.is_uppercase() || !c.is_alphabetic()) && token.len() > 1;
+            let is_all_caps = token
+                .chars()
+                .all(|c| c.is_uppercase() || !c.is_alphabetic())
+                && token.len() > 1;
             let has_digit = token.chars().any(|c| c.is_ascii_digit());
             let is_first = i == 0;
 
@@ -330,9 +428,12 @@ impl BiLstmCrfNER {
             }
 
             // Organization suffixes
-            if lower.ends_with("inc.") || lower.ends_with("corp.")
-                || lower.ends_with("ltd.") || lower.ends_with("llc")
-                || lower.ends_with("co.") {
+            if lower.ends_with("inc.")
+                || lower.ends_with("corp.")
+                || lower.ends_with("ltd.")
+                || lower.ends_with("llc")
+                || lower.ends_with("co.")
+            {
                 emissions[i][self.label_to_idx["B-ORG"]] += 1.5;
                 emissions[i][self.label_to_idx["I-ORG"]] += 1.0;
             }
@@ -355,7 +456,10 @@ impl BiLstmCrfNER {
 
             // Multi-word entity continuation
             if i > 0 {
-                let prev_cap = tokens[i - 1].chars().next().is_some_and(|c| c.is_uppercase());
+                let prev_cap = tokens[i - 1]
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_uppercase());
                 if prev_cap && is_capitalized && !is_first {
                     // Likely continuation of entity
                     emissions[i][self.label_to_idx["I-PER"]] += 0.6;
@@ -392,6 +496,7 @@ impl BiLstmCrfNER {
                 let mut best_score = f64::NEG_INFINITY;
                 let mut best_prev = 0;
 
+                #[allow(clippy::needless_range_loop)]
                 for k in 0..m {
                     let score = scores[i - 1][k] + self.transitions[k][j] + emissions[i][j];
                     if score > best_score {
@@ -430,7 +535,12 @@ impl BiLstmCrfNER {
     /// Uses token position tracking to correctly handle duplicate entity texts.
     /// The previous implementation used `text.find()` which always returned the
     /// first occurrence, causing incorrect offsets for duplicate entities.
-    fn labels_to_entities(&self, text: &str, tokens: &[&str], label_indices: &[usize]) -> Vec<Entity> {
+    fn labels_to_entities(
+        &self,
+        text: &str,
+        tokens: &[&str],
+        label_indices: &[usize],
+    ) -> Vec<Entity> {
         use crate::offset::SpanConverter;
 
         let converter = SpanConverter::new(text);
@@ -444,17 +554,24 @@ impl BiLstmCrfNER {
         for (i, (&label_idx, &token)) in label_indices.iter().zip(tokens.iter()).enumerate() {
             let label = &self.labels[label_idx];
 
-            if label.starts_with("B-") {
+            if let Some(entity_suffix) = label.strip_prefix("B-") {
                 // Save previous entity if any
-                if let Some((start_token_idx, end_token_idx, entity_type, words)) = current_entity.take() {
+                if let Some((start_token_idx, end_token_idx, entity_type, words)) =
+                    current_entity.take()
+                {
                     Self::push_entity_from_positions(
-                        &converter, &token_positions, start_token_idx, end_token_idx,
-                        &words, entity_type, &mut entities
+                        &converter,
+                        &token_positions,
+                        start_token_idx,
+                        end_token_idx,
+                        &words,
+                        entity_type,
+                        &mut entities,
                     );
                 }
 
                 // Start new entity
-                let entity_type = match &label[2..] {
+                let entity_type = match entity_suffix {
                     "PER" => EntityType::Person,
                     "ORG" => EntityType::Organization,
                     "LOC" => EntityType::Location,
@@ -469,10 +586,17 @@ impl BiLstmCrfNER {
                 }
             } else {
                 // O label - save and reset
-                if let Some((start_token_idx, end_token_idx, entity_type, words)) = current_entity.take() {
+                if let Some((start_token_idx, end_token_idx, entity_type, words)) =
+                    current_entity.take()
+                {
                     Self::push_entity_from_positions(
-                        &converter, &token_positions, start_token_idx, end_token_idx,
-                        &words, entity_type, &mut entities
+                        &converter,
+                        &token_positions,
+                        start_token_idx,
+                        end_token_idx,
+                        &words,
+                        entity_type,
+                        &mut entities,
                     );
                 }
             }
@@ -481,8 +605,13 @@ impl BiLstmCrfNER {
         // Don't forget last entity
         if let Some((start_token_idx, end_token_idx, entity_type, words)) = current_entity.take() {
             Self::push_entity_from_positions(
-                &converter, &token_positions, start_token_idx, end_token_idx,
-                &words, entity_type, &mut entities
+                &converter,
+                &token_positions,
+                start_token_idx,
+                end_token_idx,
+                &words,
+                entity_type,
+                &mut entities,
             );
         }
 
@@ -604,7 +733,9 @@ mod tests {
 
         // Should find some entities with the heuristic fallback
         // (Exact results depend on heuristic tuning)
-        assert!(entities.iter().all(|e| e.confidence > 0.0 && e.confidence <= 1.0));
+        assert!(entities
+            .iter()
+            .all(|e| e.confidence > 0.0 && e.confidence <= 1.0));
     }
 
     #[test]
@@ -715,15 +846,24 @@ mod tests {
 
         // "Google" appears at indices 0 and 2 in tokens
         // First "Google" at byte 0-6
-        assert_eq!(positions[0], (0, 6), "First 'Google' should be at bytes 0-6");
+        assert_eq!(
+            positions[0],
+            (0, 6),
+            "First 'Google' should be at bytes 0-6"
+        );
         // Second "Google" at byte 14-20 (after "Google bought ")
-        assert_eq!(positions[2], (14, 20), "Second 'Google' should be at bytes 14-20");
+        assert_eq!(
+            positions[2],
+            (14, 20),
+            "Second 'Google' should be at bytes 14-20"
+        );
 
         // Also test with the full extraction
         let entities = ner.extract_entities(text, None).unwrap();
 
         // If any Google entities are found, verify they have distinct offsets
-        let google_entities: Vec<_> = entities.iter()
+        let google_entities: Vec<_> = entities
+            .iter()
             .filter(|e| e.text.contains("Google"))
             .collect();
 
@@ -749,4 +889,3 @@ mod tests {
         assert_eq!(positions[3], (20, 25), "Osaka at bytes 20-25");
     }
 }
-
