@@ -56,6 +56,7 @@
 //! ```
 
 use super::coref::CorefChain;
+use anno_core::types::MentionType;
 use std::collections::{HashMap, HashSet};
 
 // =============================================================================
@@ -119,6 +120,309 @@ pub struct CorefEvaluation {
     pub conll_f1: f64,
     /// Chain-length stratified metrics (if computed)
     pub chain_stats: Option<super::types::CorefChainStats>,
+    /// Zero-anaphor (empty-node) evaluation (CorefUD-style), if zeros are present.
+    pub zero_anaphor: Option<ZeroAnaphorEvaluation>,
+}
+
+/// CorefUD-style anaphor-decomposable evaluation for zero mentions.
+///
+/// This mirrors the CRAC/CorefUD shared task “zeros” reporting:
+/// - Evaluate only zero mentions (`MentionType::Zero`) by their anaphoric behavior.
+/// - A zero mention is **anaphoric** if it is NOT the first mention in its cluster
+///   (i.e., there exists a preceding mention in the same cluster).
+/// - True positive (tp): gold is anaphoric, prediction is anaphoric, and there exists at least
+///   one **preceding mention** shared between gold and predicted clusters.
+/// - Wrong linkage (wl): gold is anaphoric, prediction is anaphoric, but no shared preceding mention.
+/// - False negative (fn): gold is anaphoric, but prediction is not anaphoric or missing.
+/// - False positive (fp): gold is NOT anaphoric (or missing), but prediction is anaphoric.
+///
+/// Precision = tp / (tp + wl + fp)
+/// Recall    = tp / (tp + wl + fn)
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
+pub struct ZeroAnaphorEvaluation {
+    /// Precision for CorefUD-style zero-anaphor scoring.
+    pub precision: f64,
+    /// Recall for CorefUD-style zero-anaphor scoring.
+    pub recall: f64,
+    /// F1 for CorefUD-style zero-anaphor scoring.
+    pub f1: f64,
+    /// True positives (gold anaphoric, predicted anaphoric, and a shared preceding mention exists).
+    pub tp: usize,
+    /// Wrong linkage (gold anaphoric and predicted anaphoric, but no shared preceding mention).
+    pub wl: usize,
+    /// False positives (predicted anaphoric but gold not anaphoric or missing).
+    pub fp: usize,
+    /// False negatives (gold anaphoric but predicted not anaphoric or missing).
+    pub fn_: usize,
+    /// Number of gold zero mentions that are anaphoric (have a preceding mention).
+    pub gold_anaphors: usize,
+    /// Number of predicted zero mentions that are anaphoric (have a preceding mention).
+    pub pred_anaphors: usize,
+}
+
+impl ZeroAnaphorEvaluation {
+    /// Compute CorefUD-style anaphor-decomposable evaluation for zero mentions.
+    ///
+    /// Returns `None` when neither gold nor predicted contains any zero/empty mentions.
+    #[must_use]
+    pub fn compute(predicted: &[CorefChain], gold: &[CorefChain]) -> Option<Self> {
+        type SpanId = (usize, usize);
+
+        fn build_mention_index(chains: &[CorefChain]) -> HashMap<SpanId, usize> {
+            let mut index = HashMap::new();
+            for (chain_idx, chain) in chains.iter().enumerate() {
+                for mention in &chain.mentions {
+                    index.insert(mention.span_id(), chain_idx);
+                }
+            }
+            index
+        }
+
+        fn zero_spans(chains: &[CorefChain]) -> HashSet<SpanId> {
+            chains
+                .iter()
+                .flat_map(|c| c.mentions.iter())
+                .filter(|m| m.mention_type == Some(MentionType::Zero) || m.start == m.end)
+                .map(|m| m.span_id())
+                .collect()
+        }
+
+        fn preceding_spans(chain: &CorefChain, anchor_start: usize) -> HashSet<SpanId> {
+            chain
+                .mentions
+                .iter()
+                .filter(|m| m.end <= anchor_start)
+                .map(|m| m.span_id())
+                .collect()
+        }
+
+        let gold_zero = zero_spans(gold);
+        let pred_zero = zero_spans(predicted);
+        let all_zero: HashSet<SpanId> = gold_zero.union(&pred_zero).copied().collect();
+
+        if all_zero.is_empty() {
+            return None;
+        }
+
+        let gold_index = build_mention_index(gold);
+        let pred_index = build_mention_index(predicted);
+
+        let mut tp = 0usize;
+        let mut wl = 0usize;
+        let mut fp = 0usize;
+        let mut fn_ = 0usize;
+        let mut gold_anaphors = 0usize;
+        let mut pred_anaphors = 0usize;
+
+        for (z_start, z_end) in all_zero {
+            // Gold side
+            let gold_chain = gold_index
+                .get(&(z_start, z_end))
+                .and_then(|&idx| gold.get(idx));
+            let gold_pre = gold_chain
+                .map(|c| preceding_spans(c, z_start))
+                .unwrap_or_default();
+            // If the zero mention itself has span (start==end), it will be included in preceding_spans.
+            // Remove it to avoid trivial overlap.
+            let mut gold_pre = gold_pre;
+            gold_pre.remove(&(z_start, z_end));
+            let gold_anaphoric = !gold_pre.is_empty();
+
+            // Pred side
+            let pred_chain = pred_index
+                .get(&(z_start, z_end))
+                .and_then(|&idx| predicted.get(idx));
+            let pred_pre = pred_chain
+                .map(|c| preceding_spans(c, z_start))
+                .unwrap_or_default();
+            let mut pred_pre = pred_pre;
+            pred_pre.remove(&(z_start, z_end));
+            let pred_anaphoric = !pred_pre.is_empty();
+
+            if gold_anaphoric {
+                gold_anaphors += 1;
+                if !pred_anaphoric {
+                    fn_ += 1;
+                    continue;
+                }
+                pred_anaphors += 1;
+
+                if gold_pre.intersection(&pred_pre).next().is_some() {
+                    tp += 1;
+                } else {
+                    wl += 1;
+                }
+            } else if pred_anaphoric {
+                pred_anaphors += 1;
+                fp += 1;
+            }
+        }
+
+        let precision = if tp + wl + fp > 0 {
+            tp as f64 / (tp + wl + fp) as f64
+        } else {
+            0.0
+        };
+        let recall = if tp + wl + fn_ > 0 {
+            tp as f64 / (tp + wl + fn_) as f64
+        } else {
+            0.0
+        };
+        let f1 = if precision + recall > 0.0 {
+            2.0 * precision * recall / (precision + recall)
+        } else {
+            0.0
+        };
+
+        Some(Self {
+            precision,
+            recall,
+            f1,
+            tp,
+            wl,
+            fp,
+            fn_,
+            gold_anaphors,
+            pred_anaphors,
+        })
+    }
+}
+
+/// Diagnostics for long-document / windowed coreference: fragmentation across windows.
+///
+/// This is a supplemental metric intended to catch a common long-doc failure mode:
+/// a gold entity is mentioned across multiple windows, but the system splits it into
+/// multiple predicted clusters because it fails to “stitch” across the boundary.
+///
+/// This diagnostic is intentionally simple and mention-span based (exact span match),
+/// aligned with the rest of `coref_metrics.rs`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct WindowFragmentationStats {
+    /// Window size (in characters) used for diagnostics.
+    pub window_size: usize,
+    /// Window overlap (in characters) used for diagnostics.
+    pub window_overlap: usize,
+    /// Number of gold chains whose mentions span 2+ windows.
+    pub multiwindow_gold_chains: usize,
+    /// Number of multiwindow gold chains that are fragmented in predictions.
+    pub fragmented_gold_chains: usize,
+    /// Number of adjacent-window boundary checks performed.
+    pub boundary_checks: usize,
+    /// Number of boundary checks where mentions fall into different predicted clusters.
+    pub boundary_splits: usize,
+    /// Number of gold mentions in multiwindow chains that are missing from predictions.
+    pub missing_mentions_in_multiwindow_chains: usize,
+}
+
+impl WindowFragmentationStats {
+    /// Compute fragmentation stats for one document.
+    ///
+    /// - Mentions are assigned to a window by their `start` offset.
+    /// - Only gold chains that touch 2+ windows are counted as “multiwindow”.
+    /// - A chain is “fragmented” if its mentions map to 2+ predicted clusters, or if
+    ///   any mention is missing from predictions.
+    #[must_use]
+    pub fn compute(
+        predicted: &[CorefChain],
+        gold: &[CorefChain],
+        window_size: usize,
+        window_overlap: usize,
+    ) -> Option<Self> {
+        type SpanId = (usize, usize);
+
+        if window_size == 0 {
+            return None;
+        }
+        let step = window_size.saturating_sub(window_overlap).max(1);
+
+        fn build_mention_index(chains: &[CorefChain]) -> HashMap<SpanId, usize> {
+            let mut index = HashMap::new();
+            for (chain_idx, chain) in chains.iter().enumerate() {
+                for mention in &chain.mentions {
+                    index.insert(mention.span_id(), chain_idx);
+                }
+            }
+            index
+        }
+
+        fn window_idx_for(start: usize, step: usize) -> usize {
+            start / step
+        }
+
+        let pred_index = build_mention_index(predicted);
+        let mut stats = Self {
+            window_size,
+            window_overlap,
+            ..Default::default()
+        };
+
+        for gold_chain in gold {
+            if gold_chain.mentions.len() <= 1 {
+                continue;
+            }
+
+            let mut windows: HashSet<usize> = HashSet::new();
+            let mut pred_clusters: HashSet<Option<usize>> = HashSet::new();
+
+            for m in &gold_chain.mentions {
+                windows.insert(window_idx_for(m.start, step));
+                let span = m.span_id();
+                let pred = pred_index.get(&span).copied();
+                if pred.is_none() {
+                    stats.missing_mentions_in_multiwindow_chains += 1;
+                }
+                pred_clusters.insert(pred);
+            }
+
+            if windows.len() <= 1 {
+                continue;
+            }
+
+            stats.multiwindow_gold_chains += 1;
+
+            // Fragmentation: more than one predicted cluster, or any missing mention.
+            let fragmented = pred_clusters.len() > 1 || pred_clusters.contains(&None);
+            if fragmented {
+                stats.fragmented_gold_chains += 1;
+            }
+
+            // Boundary splits: check adjacent windows for shared predicted cluster membership.
+            let mut sorted_windows: Vec<usize> = windows.into_iter().collect();
+            sorted_windows.sort_unstable();
+            for pair in sorted_windows.windows(2) {
+                let w0 = pair[0];
+                let w1 = pair[1];
+                stats.boundary_checks += 1;
+
+                let mut pred_in_w0: HashSet<usize> = HashSet::new();
+                let mut pred_in_w1: HashSet<usize> = HashSet::new();
+
+                for m in &gold_chain.mentions {
+                    let w = window_idx_for(m.start, step);
+                    let Some(&pidx) = pred_index.get(&m.span_id()) else {
+                        continue;
+                    };
+                    if w == w0 {
+                        pred_in_w0.insert(pidx);
+                    } else if w == w1 {
+                        pred_in_w1.insert(pidx);
+                    }
+                }
+
+                // If we have no predicted mentions in one side, consider it a split.
+                let shared = pred_in_w0.intersection(&pred_in_w1).next().is_some();
+                if !shared {
+                    stats.boundary_splits += 1;
+                }
+            }
+        }
+
+        if stats.multiwindow_gold_chains == 0 {
+            None
+        } else {
+            Some(stats)
+        }
+    }
 }
 
 impl CorefEvaluation {
@@ -133,6 +437,7 @@ impl CorefEvaluation {
         let blanc = CorefScores::from_tuple(blanc_score(predicted, gold));
         let conll = conll_f1(predicted, gold);
         let chain_stats = compute_chain_length_stratified(predicted, gold);
+        let zero_anaphor = ZeroAnaphorEvaluation::compute(predicted, gold);
 
         Self {
             muc,
@@ -143,6 +448,7 @@ impl CorefEvaluation {
             blanc,
             conll_f1: conll,
             chain_stats: Some(chain_stats),
+            zero_anaphor,
         }
     }
 }
@@ -251,6 +557,20 @@ impl std::fmt::Display for CorefEvaluation {
             self.blanc.f1 * 100.0
         )?;
         writeln!(f, "  CoNLL:   F1={:.1}%", self.conll_f1 * 100.0)?;
+
+        if let Some(z) = self.zero_anaphor {
+            writeln!(
+                f,
+                "  Zero-Anaphor: P={:.1}%  R={:.1}%  F1={:.1}% (tp={} wl={} fp={} fn={})",
+                z.precision * 100.0,
+                z.recall * 100.0,
+                z.f1 * 100.0,
+                z.tp,
+                z.wl,
+                z.fp,
+                z.fn_
+            )?;
+        }
 
         // Add chain-length stratification if available
         if let Some(ref stats) = self.chain_stats {
@@ -1039,6 +1359,8 @@ impl AggregateCorefEvaluation {
             blanc: CorefScores::new(mean_blanc_p, mean_blanc_r),
             conll_f1: evaluations.iter().map(|e| e.conll_f1).sum::<f64>() / n,
             chain_stats: None, // Aggregate doesn't compute per-document chain stats
+            // Aggregate doesn't compute zero-anaphor breakdown; keep None.
+            zero_anaphor: None,
         };
 
         // Compute standard deviations
@@ -1532,6 +1854,76 @@ pub fn compare_systems(
 mod tests {
     use super::super::coref::Mention;
     use super::*;
+
+    #[test]
+    fn test_zero_anaphor_eval_tp_wl_fn_fp() {
+        // Gold: John ... ∅ (zero) where ∅ is anaphoric and should link to John.
+        let john = Mention::new("John", 0, 4);
+        let zero = Mention::with_type("", 5, 5, MentionType::Zero);
+        let gold = vec![CorefChain::with_id(vec![john.clone(), zero.clone()], 1)];
+
+        // TP: predicted antecedent set overlaps (John).
+        let pred_tp = vec![CorefChain::with_id(vec![john.clone(), zero.clone()], 10)];
+        let tp = ZeroAnaphorEvaluation::compute(&pred_tp, &gold).unwrap();
+        assert_eq!(tp.tp, 1);
+        assert_eq!(tp.wl, 0);
+        assert_eq!(tp.fn_, 0);
+        assert_eq!(tp.fp, 0);
+
+        // WL: predicted is anaphoric but links to a different antecedent.
+        let mary = Mention::new("Mary", 0, 4);
+        let pred_wl = vec![
+            CorefChain::with_id(vec![mary.clone(), zero.clone()], 11),
+            CorefChain::singleton(john.clone()),
+        ];
+        let wl = ZeroAnaphorEvaluation::compute(&pred_wl, &gold).unwrap();
+        assert_eq!(wl.tp, 0);
+        assert_eq!(wl.wl, 1);
+        assert_eq!(wl.fn_, 0);
+        assert_eq!(wl.fp, 0);
+
+        // FN: predicted contains zero but treats it as non-anaphoric (singleton) or misses it.
+        let pred_fn = vec![CorefChain::singleton(zero.clone())];
+        let fn_eval = ZeroAnaphorEvaluation::compute(&pred_fn, &gold).unwrap();
+        assert_eq!(fn_eval.tp, 0);
+        assert_eq!(fn_eval.wl, 0);
+        assert_eq!(fn_eval.fn_, 1);
+
+        // FP: gold zero is NOT anaphoric (singleton cluster), but prediction treats it as anaphoric.
+        let gold_singleton_zero = vec![CorefChain::with_id(vec![zero.clone()], 2)];
+        let pred_fp = vec![CorefChain::with_id(vec![john.clone(), zero.clone()], 12)];
+        let fp_eval = ZeroAnaphorEvaluation::compute(&pred_fp, &gold_singleton_zero).unwrap();
+        assert_eq!(fp_eval.tp, 0);
+        assert_eq!(fp_eval.fp, 1);
+    }
+
+    #[test]
+    fn test_window_fragmentation_stats_basic() {
+        // window_size=10, overlap=0 => step=10.
+        // Mentions at 0..1 and 20..21 are in windows 0 and 2.
+        let m1 = Mention::new("A", 0, 1);
+        let m2 = Mention::new("A", 20, 21);
+        let gold = vec![CorefChain::with_id(vec![m1.clone(), m2.clone()], 1)];
+
+        // Fragmented prediction: split across two clusters.
+        let pred_split = vec![
+            CorefChain::with_id(vec![m1.clone()], 10),
+            CorefChain::with_id(vec![m2.clone()], 11),
+        ];
+        let s = WindowFragmentationStats::compute(&pred_split, &gold, 10, 0).unwrap();
+        assert_eq!(s.multiwindow_gold_chains, 1);
+        assert_eq!(s.fragmented_gold_chains, 1);
+        assert_eq!(s.boundary_checks, 1);
+        assert_eq!(s.boundary_splits, 1);
+
+        // Not fragmented: same predicted cluster spans both windows.
+        let pred_join = vec![CorefChain::with_id(vec![m1.clone(), m2.clone()], 10)];
+        let s2 = WindowFragmentationStats::compute(&pred_join, &gold, 10, 0).unwrap();
+        assert_eq!(s2.multiwindow_gold_chains, 1);
+        assert_eq!(s2.fragmented_gold_chains, 0);
+        assert_eq!(s2.boundary_checks, 1);
+        assert_eq!(s2.boundary_splits, 0);
+    }
 
     // =========================================================================
     // Property-Based Tests

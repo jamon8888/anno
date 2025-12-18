@@ -8,6 +8,7 @@
 
 use super::datasets::GoldEntity;
 use anno_core::Entity;
+use std::collections::HashSet;
 
 /// Partial match metrics (overlap-based).
 ///
@@ -132,6 +133,98 @@ pub fn calculate_partial_match_metrics(
         recall,
         f1,
         partial_matches: true_positives,
+    }
+}
+
+// =============================================================================
+// CORE-KG-inspired Extraction Diagnostics (Duplication / Noise)
+// =============================================================================
+
+/// Lightweight extraction-quality diagnostics inspired by CORE-KG.
+///
+/// These are **heuristics**. They are useful for monitoring regressions and surfacing
+/// obvious quality problems (e.g., repeated identical nodes, garbage spans) but they
+/// are not “ground truth” correctness metrics.
+#[derive(Debug, Clone, Default)]
+pub struct ExtractionQualityMetrics {
+    /// Total number of extracted entities.
+    pub total: usize,
+    /// Count of entities considered duplicates under conservative normalization.
+    pub duplicates: usize,
+    /// Duplicate rate (duplicates / total).
+    pub duplication_rate: f64,
+    /// Count of entities considered “noisy” spans (punctuation-only, numeric-only, etc.).
+    pub noisy: usize,
+    /// Noise rate (noisy / total).
+    pub noise_rate: f64,
+}
+
+fn normalize_for_duplication(text: &str) -> String {
+    // Conservative normalization:
+    // - Unicode-aware lowercasing
+    // - Keep only alphanumeric codepoints
+    text.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
+}
+
+fn is_noisy_span(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() {
+        return true;
+    }
+
+    // Punctuation/whitespace-only
+    if t.chars()
+        .all(|c| c.is_whitespace() || c.is_ascii_punctuation())
+    {
+        return true;
+    }
+
+    // Numeric-only (common “legal noise” / artifacts)
+    if t.chars().all(|c| c.is_ascii_digit() || c.is_whitespace()) {
+        return true;
+    }
+
+    // If normalization removes everything, it's effectively garbage.
+    normalize_for_duplication(t).is_empty()
+}
+
+/// Compute duplication/noise metrics for a set of extracted entities.
+#[must_use]
+pub fn compute_extraction_quality_metrics(entities: &[Entity]) -> ExtractionQualityMetrics {
+    let total = entities.len();
+    if total == 0 {
+        return ExtractionQualityMetrics::default();
+    }
+
+    let mut seen: HashSet<(String, String)> = HashSet::new();
+    let mut duplicates = 0usize;
+    let mut noisy = 0usize;
+
+    for e in entities {
+        if is_noisy_span(&e.text) {
+            noisy += 1;
+        }
+
+        let key = (
+            format!("{:?}", e.entity_type),
+            normalize_for_duplication(&e.text),
+        );
+        if seen.contains(&key) {
+            duplicates += 1;
+        } else {
+            seen.insert(key);
+        }
+    }
+
+    ExtractionQualityMetrics {
+        total,
+        duplicates,
+        duplication_rate: duplicates as f64 / total as f64,
+        noisy,
+        noise_rate: noisy as f64 / total as f64,
     }
 }
 
