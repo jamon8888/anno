@@ -5,13 +5,21 @@ Based on historical errors and CI failures, here are recommended checks for git 
 ## Current Hooks
 
 ### Pre-commit (`/.git/hooks/pre-commit`)
-- ✅ Files with spaces in names
-- ✅ Duplicate test files (`* 2.rs`)
-- ✅ Format check (`just fmt-check`)
-- ✅ Clippy warnings (non-blocking)
+- Removes trailing whitespace in staged `.rs` files and re-stages them
+- Runs `cargo fmt` (auto-fixes and re-stages if needed)
+- Blocks files with spaces in filenames
+- Warns (non-blocking) on staged files >1MB
 
 ### Pre-push (`/.git/hooks/pre-push`)
-- ✅ Quick checks (`just check`)
+- Blocks on:
+  - `cargo fmt --check`
+  - `cargo clippy --workspace --lib --features "eval-advanced discourse" -- -D warnings`
+  - Tests:
+    - prefers `cargo nextest run --profile quick` when `cargo-nextest` is installed
+    - falls back to `cargo test --workspace --lib`
+- Non-blocking warnings:
+  - doc tests
+  - uncommitted (tracked) changes
 
 ## Recommended Additions
 
@@ -82,7 +90,7 @@ fi
 ```bash
 # Only if cargo-machete is installed
 if command -v cargo-machete &> /dev/null; then
-  cargo machete --check || echo "⚠️  Unused dependencies found (not blocking)"
+  cargo machete --check || echo "warning: unused dependencies found (not blocking)"
 fi
 ```
 **Why**: Keeps dependencies clean, but can be slow.
@@ -92,7 +100,7 @@ fi
 ```bash
 # Only if cargo-deny is installed
 if command -v cargo-deny &> /dev/null; then
-  cargo deny check --workspace || echo "⚠️  License/security issues found (not blocking)"
+  cargo deny check --workspace || echo "warning: license/security issues found (not blocking)"
 fi
 ```
 **Why**: Catches license and security issues early.
@@ -123,9 +131,9 @@ fi
 ## Recommended Implementation Priority
 
 ### Phase 1: Critical (Add Now)
-1. ✅ Compilation check (`cargo check`)
-2. ✅ Secrets detection (basic patterns)
-3. ✅ Commit message validation
+1. Compilation check (`cargo check`)
+2. Secrets detection (basic patterns)
+3. Commit message validation
 
 ### Phase 2: Important (Add Soon)
 4. Test compilation check
@@ -151,21 +159,21 @@ Use `--message-format=short` and `--quiet` flags where possible to reduce output
 set -e
 
 # Fast checks first
-echo "🔍 Checking for invalid filenames..."
+echo "Checking for invalid filenames..."
 # ... existing checks ...
 
-echo "🔍 Checking for secrets..."
+echo "Checking for secrets..."
 # ... secrets check ...
 
-echo "🔍 Checking compilation..."
+echo "Checking compilation..."
 cargo check --workspace --all-targets --message-format=short --quiet
 
-echo "🔍 Checking test compilation..."
+echo "Checking test compilation..."
 cargo check --workspace --tests --message-format=short --quiet
 
-echo "🔍 Checking formatting..."
+echo "Checking formatting..."
 just fmt-check
 
-echo "✅ Pre-commit checks passed!"
+echo "Pre-commit checks passed"
 ```
 

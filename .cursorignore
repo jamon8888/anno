@@ -1,5 +1,7 @@
 # Build artifacts
 target/
+target*/
+target */
 
 # Test output
 test_output/
@@ -18,6 +20,12 @@ models/
 
 # Proptest regressions (keep for reproducibility but don't index)
 proptest-regressions/
+
+# Archived docs (historical/progress)
+docs/archive/
+
+# Archived code (historical/branch salvage)
+archive/
 
 # Generated HTML debug files
 *_debug.html
