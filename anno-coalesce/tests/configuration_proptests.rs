@@ -6,7 +6,7 @@
 //! - Cross-entropy is non-negative
 //! - Dempster combination properties hold
 //!
-//! Based on Kehler (1997) and Curry-Howard analysis in TYPE_THEORY_AND_NER.md.
+//! Based on Kehler (1997) and Curry-Howard analysis in docs/research/TYPE_THEORY_AND_NER.md.
 
 use anno_coalesce::configuration::{bell_number, ConfigurationBuilder, CorefConfiguration};
 use proptest::prelude::*;

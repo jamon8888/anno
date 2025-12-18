@@ -26,7 +26,7 @@ Research (2023-2024) has revealed significant annotation errors in standard NER 
 - Use **cleaned benchmarks** (CleanCoNLL) for true error analysis
 - Use **original benchmarks** only for paper comparisons
 
-See [`docs/EVALUATION_CRITIQUE.md`](EVALUATION_CRITIQUE.md) for full research citations.
+See [`docs/EVALUATION.md`](EVALUATION.md) for citations and evaluation notes.
 
 ---
 

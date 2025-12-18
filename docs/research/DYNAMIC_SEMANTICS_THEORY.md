@@ -251,4 +251,4 @@ At book scale (200k+ tokens):
 - `anno/src/discourse/types.rs` — Discourse referent types
 - `anno/src/eval/incremental_coref.rs` — Incremental coreference
 - `anno/src/backends/mention_ranking.rs` — Mention-ranking coreference
-- `docs/ABSTRACT_ANAPHORA_RESEARCH.md` — Abstract anaphora background
+- `docs/research/ABSTRACT_ANAPHORA_RESEARCH.md` — Abstract anaphora background
