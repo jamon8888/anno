@@ -447,6 +447,7 @@ mod batch_capable {
 
 mod streaming_capable {
     use anno::backends::{RegexNER, StackedNER};
+    use anno::offset::TextSpan;
     use anno::StreamingCapable;
 
     #[test]
@@ -462,20 +463,25 @@ mod streaming_capable {
     #[test]
     fn test_streaming_extraction() {
         let model = RegexNER::new();
-        let full_text = "Steve Jobs was born in California. Tim Cook works at Apple.";
+        let full_text = "🎉 東京. Total: $100. Done.";
 
         // Extract from a chunk with offset
-        let chunk = "Tim Cook works at Apple.";
-        let offset = full_text.find(chunk).unwrap();
+        let chunk = "Total: $100.";
+        let start_byte = full_text.find(chunk).unwrap();
+        let offset = TextSpan::from_bytes(full_text, start_byte, start_byte).char_start;
 
         let entities = model.extract_entities_streaming(chunk, offset);
         assert!(entities.is_ok());
 
         let entities = entities.unwrap();
-        // Entities should have adjusted offsets
-        for entity in &entities {
-            assert!(entity.start >= offset);
-        }
+        let money = entities
+            .iter()
+            .find(|e| e.text == "$100")
+            .expect("RegexNER should extract $100");
+        assert_eq!(
+            TextSpan::from_chars(full_text, money.start, money.end).extract(full_text),
+            "$100"
+        );
     }
 
     #[cfg(feature = "onnx")]
@@ -502,11 +508,12 @@ mod streaming_capable {
 
         let chunk_size = model.recommended_chunk_size();
         let mut all_entities = Vec::new();
-        let mut offset = 0;
+        let text_char_len = long_text.chars().count();
+        let mut offset = 0usize;
 
-        while offset < long_text.len() {
-            let end = (offset + chunk_size).min(long_text.len());
-            let chunk = &long_text[offset..end];
+        while offset < text_char_len {
+            let end = (offset + chunk_size).min(text_char_len);
+            let chunk = TextSpan::from_chars(&long_text, offset, end).extract(&long_text);
 
             if let Ok(entities) = model.extract_entities_streaming(chunk, offset) {
                 all_entities.extend(entities);
@@ -520,7 +527,7 @@ mod streaming_capable {
 
         // All entities should have valid offsets within the full text
         for entity in &all_entities {
-            assert!(entity.end <= long_text.len());
+            assert!(entity.end <= text_char_len);
         }
     }
 }

@@ -7,6 +7,7 @@ use anno::{
     backends::{HeuristicNER, RegexNER, StackedNER},
     BatchCapable, Entity, Model, StreamingCapable,
 };
+use anno::offset::TextSpan;
 
 // =============================================================================
 // BatchCapable Integration Tests
@@ -17,7 +18,7 @@ fn test_batch_extraction_with_varying_lengths() {
     let backend = RegexNER::new();
     let texts = vec![
         "Short",
-        "This is a medium length text with some entities like $100 and 2024-01-15",
+        "هذه جملة فيها $100 وتاريخ 2024-01-15", // Arabic + patterns (multibyte)
         "A",
         "Very long text with multiple entities: $500, 2024-12-31, test@example.com, and more entities to test batch processing capabilities",
     ];
@@ -30,6 +31,8 @@ fn test_batch_extraction_with_varying_lengths() {
 
     // Verify each result is valid
     for (i, entities) in results.iter().enumerate() {
+        let text = texts[i];
+        let text_char_len = text.chars().count();
         for entity in entities {
             assert!(
                 entity.start <= entity.end,
@@ -37,8 +40,14 @@ fn test_batch_extraction_with_varying_lengths() {
                 i
             );
             assert!(
-                entity.end <= texts[i].len(),
+                entity.end <= text_char_len,
                 "Entity in batch {} extends beyond text",
+                i
+            );
+            assert_eq!(
+                TextSpan::from_chars(text, entity.start, entity.end).extract(text),
+                entity.text,
+                "Entity in batch {} has mismatched span text",
                 i
             );
             assert!(
@@ -121,18 +130,28 @@ fn test_streaming_multiple_chunks() {
     // Simulate processing multiple chunks
     let chunk1 = "First chunk with John Smith".repeat(chunk_size / 30);
     let chunk2 = "Second chunk with Jane Doe".repeat(chunk_size / 30);
+    let full_text = format!("{chunk1} {chunk2}");
 
     let entities1 = backend.extract_entities_streaming(&chunk1, 0).unwrap();
-    let offset = chunk1.len() + 1; // +1 for separator
+    let offset = chunk1.chars().count() + 1; // +1 for separator
     let entities2 = backend.extract_entities_streaming(&chunk2, offset).unwrap();
 
     // Verify offsets are adjusted correctly
+    let chunk1_len = chunk1.chars().count();
     for entity in entities1 {
-        assert!(entity.end <= chunk1.len());
+        assert!(entity.end <= chunk1_len);
+        assert_eq!(
+            TextSpan::from_chars(&full_text, entity.start, entity.end).extract(&full_text),
+            entity.text
+        );
     }
     for entity in entities2 {
         assert!(entity.start >= offset);
         assert!(entity.end >= offset);
+        assert_eq!(
+            TextSpan::from_chars(&full_text, entity.start, entity.end).extract(&full_text),
+            entity.text
+        );
     }
 }
 
@@ -180,7 +199,7 @@ fn test_batch_and_streaming_together() {
         .extract_entities_streaming(texts[0], offset)
         .unwrap();
     let stream_result2 = backend
-        .extract_entities_streaming(texts[1], offset + texts[0].len() + 1)
+        .extract_entities_streaming(texts[1], offset + texts[0].chars().count() + 1)
         .unwrap();
 
     // Batch and streaming should extract same entities (with offset adjustment)
@@ -223,18 +242,22 @@ fn test_batch_with_all_empty_strings() {
 #[test]
 fn test_streaming_with_unicode_boundaries() {
     let backend = RegexNER::new();
-    // Text with Unicode characters that might affect offset calculation
-    let text = "Test with émojis 🎉 and 中文 characters";
-    let offset = 50;
+    // Use a Unicode prefix + a chunk containing extractable patterns.
+    // This catches mistakes where callers treat `offset` as bytes, not chars.
+    let prefix = "🎉 東京 ";
+    let chunk = "Total: $100";
+    let full_text = format!("{prefix}{chunk}");
+    let offset = prefix.chars().count();
 
-    let result = backend.extract_entities_streaming(text, offset);
-    assert!(result.is_ok());
-    let entities = result.unwrap();
-
-    for entity in entities {
-        assert!(entity.start >= offset);
-        assert!(entity.end >= offset);
-    }
+    let entities = backend.extract_entities_streaming(chunk, offset).unwrap();
+    let money = entities
+        .iter()
+        .find(|e| e.text == "$100")
+        .expect("RegexNER should extract $100");
+    assert_eq!(
+        TextSpan::from_chars(&full_text, money.start, money.end).extract(&full_text),
+        "$100"
+    );
 }
 
 #[test]
