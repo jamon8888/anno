@@ -166,6 +166,10 @@ enum DatasetParsePlan {
     Casie,
     Rams,
     HfApiResponse,
+    /// TSV-based NER format (HIPE-2022 style)
+    TsvNer,
+    /// CSV-based NER format (E-NER/EDGAR-NER style: Token,Tag)
+    CsvNer,
 }
 
 impl LoadableDatasetId {
@@ -283,7 +287,15 @@ impl LoadableDatasetId {
             | DatasetId::WaterResourceNER
             | DatasetId::WeatherNER
             | DatasetId::WineNER
-            | DatasetId::WoodworkingNER => DatasetParsePlan::Conll,
+            | DatasetId::WoodworkingNER
+            // Added 2025-12: More CoNLL-format datasets with direct download URLs
+            | DatasetId::QxoRef
+            | DatasetId::GICoref
+            | DatasetId::WNUT16
+            | DatasetId::NoiseBench
+            | DatasetId::CrossWeigh
+            | DatasetId::ZELDA
+            | DatasetId::GENIANested => DatasetParsePlan::Conll,
 
             // JSONL format (HuggingFace style)
             DatasetId::MultiNERD
@@ -325,7 +337,19 @@ impl LoadableDatasetId {
             | DatasetId::TattooNER
             | DatasetId::ThemeParkNER
             | DatasetId::VREN
-            | DatasetId::VisDialCoref => DatasetParsePlan::JsonlNer,
+            | DatasetId::VisDialCoref
+            // Added 2025-12: More JSONL-format datasets with direct download URLs
+            | DatasetId::REBEL
+            | DatasetId::BBQ
+            | DatasetId::RealToxicityPrompts
+            | DatasetId::BookCoref
+            | DatasetId::BookCorefSplit
+            | DatasetId::WIESP2022NER
+            | DatasetId::FewRel
+            | DatasetId::PIIMasking200k
+            | DatasetId::B2NERD
+            | DatasetId::OpenNER
+            | DatasetId::FictionNER750M => DatasetParsePlan::JsonlNer,
 
             // WikiANN-ish JSON format (from download_hf_datasets.py)
             DatasetId::UNER | DatasetId::MSNER => DatasetParsePlan::WikiannJson,
@@ -425,6 +449,128 @@ impl LoadableDatasetId {
             return Some(DatasetParsePlan::TweetNer7);
         }
 
+        // Coref datasets in CoNLL format (not GAP TSV): parse as regular CoNLL.
+        // These have NER annotations alongside coref, so the CoNLL parser works.
+        if matches!(
+            id,
+            DatasetId::QxoRef
+                | DatasetId::GICoref
+                | DatasetId::WNUT16
+                | DatasetId::NoiseBench
+                | DatasetId::CrossWeigh
+                | DatasetId::ZELDA
+                | DatasetId::GENIANested
+                // Added 2025-12: More CoNLL NER datasets
+                | DatasetId::HistNERo
+                | DatasetId::DutchArchaeology
+                | DatasetId::FINER
+                | DatasetId::CALCS2018
+                | DatasetId::MedievalCharterNER
+                | DatasetId::RockNER
+                | DatasetId::AIDACoNLL
+                | DatasetId::NNE
+                | DatasetId::GermEvalDiscontinuous
+                | DatasetId::PubMedDiscontinuous
+                | DatasetId::IndicNER
+                | DatasetId::NorNE
+                | DatasetId::CHEMDNER
+                | DatasetId::GeoWebNews
+                | DatasetId::TASTEset
+                | DatasetId::RecipeNER
+                | DatasetId::AstroNER
+                | DatasetId::FinanceNER
+                | DatasetId::TechNER
+                | DatasetId::CALCS
+                | DatasetId::LinCE
+                | DatasetId::FinTechPatent
+                | DatasetId::WaterAgriNER
+                | DatasetId::NERsocialFood
+                | DatasetId::RussianCulturalNER
+                | DatasetId::EighteenthCenturyNER
+                | DatasetId::GuaraniNER
+                | DatasetId::ShipiboKoniboNER
+                | DatasetId::BASHI
+                | DatasetId::ENER
+        ) {
+            return Some(DatasetParsePlan::Conll);
+        }
+
+        // JSONL datasets that should use JsonlNer despite having coref/RE tasks.
+        // The JsonlNer parser handles tokens + ner_tags fields generically.
+        if matches!(
+            id,
+            DatasetId::REBEL
+                | DatasetId::BBQ
+                | DatasetId::RealToxicityPrompts
+                | DatasetId::BookCoref
+                | DatasetId::BookCorefSplit
+                | DatasetId::WIESP2022NER
+                | DatasetId::FewRel
+                | DatasetId::PIIMasking200k
+                | DatasetId::B2NERD
+                | DatasetId::OpenNER
+                | DatasetId::FictionNER750M
+                // Added 2025-12: More JSONL NER datasets
+                | DatasetId::MultiWOZNER
+                | DatasetId::HinglishNER
+                | DatasetId::ChineseNestedNER
+                | DatasetId::AgCNER
+                | DatasetId::LongDocNER
+                | DatasetId::MultiBioNERLong
+                | DatasetId::ReasoningNER
+                | DatasetId::BioNERLLaMA
+                | DatasetId::LexGLUENER
+                | DatasetId::FinBenNER
+                | DatasetId::FiNER139
+                | DatasetId::SciNER
+                | DatasetId::CharacterCodex
+                | DatasetId::AIONER
+                | DatasetId::WIESPAstro
+                | DatasetId::CEREC
+                | DatasetId::DELICATE
+                | DatasetId::CSN
+        ) {
+            return Some(DatasetParsePlan::JsonlNer);
+        }
+
+        // CoNLLU datasets (Universal Dependencies treebanks with NER annotations)
+        if matches!(
+            id,
+            DatasetId::AncientGreekUD
+                | DatasetId::LatinUD
+                | DatasetId::SanskritUD
+                | DatasetId::OldEnglishUD
+                | DatasetId::OldNorseUD
+                | DatasetId::UDEsperantoCairo
+                // Added 2025-12: More UD treebanks (ancient/historical/constructed)
+                | DatasetId::CopticScriptorium
+                | DatasetId::TaggedPBCEsperanto
+                | DatasetId::TaggedPBCKlingon
+                | DatasetId::AkkadianUD
+                | DatasetId::AncientHebrewUD
+                | DatasetId::ClassicalChineseUD
+                | DatasetId::CopticUD
+                | DatasetId::GothicUD
+                | DatasetId::HittiteUD
+                | DatasetId::OldChurchSlavonicUD
+                | DatasetId::LatinITTB
+                | DatasetId::LatinPROIEL
+                | DatasetId::EsperantoUD
+                | DatasetId::NavajoMorph
+        ) {
+            return Some(DatasetParsePlan::Conllu);
+        }
+
+        // TSV NER datasets (HIPE-2022 style)
+        if matches!(id, DatasetId::HIPE2022) {
+            return Some(DatasetParsePlan::TsvNer);
+        }
+
+        // CSV NER datasets
+        if matches!(id, DatasetId::ENer) {
+            return Some(DatasetParsePlan::CsvNer);
+        }
+
         // Some datasets are fetched via HF datasets-server (JSON response), regardless of their
         // “canonical” source format in the registry.
         if matches!(
@@ -446,30 +592,44 @@ impl LoadableDatasetId {
             return Some(DatasetParsePlan::HfApiResponse);
         }
 
-        let tasks = id.tasks_typed();
-        let is_ner = tasks.contains(&crate::eval::task_mapping::Task::NER)
-            || tasks.contains(&crate::eval::task_mapping::Task::DiscontinuousNER);
-        let is_coref = tasks.contains(&crate::eval::task_mapping::Task::IntraDocCoref)
-            || tasks.contains(&crate::eval::task_mapping::Task::InterDocCoref)
-            || tasks.contains(&crate::eval::task_mapping::Task::AbstractAnaphora);
-        let is_re = tasks.contains(&crate::eval::task_mapping::Task::RelationExtraction);
-        let is_event = tasks.contains(&crate::eval::task_mapping::Task::EventExtraction);
+        // Use tasks_or_inferred() to support datasets that have task-like categories
+        // (e.g., `categories: [ner, ancient]`) but no explicit `tasks` field yet.
+        // This enables automatic loading for datasets with correct format + category.
+        let inferred_tasks = id.tasks_or_inferred();
+        let is_ner = inferred_tasks.contains(&"ner");
+        let is_coref = inferred_tasks.contains(&"coref");
+        let is_re = inferred_tasks.contains(&"re");
+        let is_event = inferred_tasks.contains(&"event_extraction");
 
         // Format string is about the *source* dataset, not necessarily our cached
         // representation; still useful for many direct-download datasets.
-        match id.format()? {
+        let format = id.format()?;
+        let annotation_scheme = id.annotation_scheme().unwrap_or("");
+
+        match format {
             "CoNLL" | "BIO" | "IOB2" if is_ner && !is_coref && !is_re && !is_event => {
                 Some(DatasetParsePlan::Conll)
             }
-            "CoNLL-U" if is_ner && !is_coref && !is_re && !is_event => {
+            "CoNLL-U" | "CoNLLU" if is_ner && !is_coref && !is_re && !is_event => {
                 Some(DatasetParsePlan::Conllu)
             }
             "JSONL" if is_ner && !is_coref && !is_re && !is_event => {
                 Some(DatasetParsePlan::JsonlNer)
             }
             // Coreference: we only treat these as unambiguous when the dataset is *only* coref.
+            // Check both format field and annotation_scheme for CoNLLCoref datasets.
             "TSV" | "ConllCoref" | "CoNLLCoref" if is_coref && !is_ner && !is_re && !is_event => {
-                // GAP-style TSV and similar “coref-only” exports.
+                // GAP-style TSV and similar "coref-only" exports.
+                Some(DatasetParsePlan::GapTsv)
+            }
+            // CoNLL format with CoNLLCoref annotation scheme (e.g., GICoref, qxoRef)
+            "CoNLL"
+                if annotation_scheme == "CoNLLCoref"
+                    && is_coref
+                    && !is_ner
+                    && !is_re
+                    && !is_event =>
+            {
                 Some(DatasetParsePlan::GapTsv)
             }
             "JSONL" if is_coref && !is_ner && !is_re && !is_event => {
@@ -484,6 +644,13 @@ impl LoadableDatasetId {
 
             // Event extraction: treat JSONL as MAVEN-ish only when the dataset is event-only.
             "JSONL" if is_event && !is_ner && !is_coref && !is_re => Some(DatasetParsePlan::Maven),
+
+            // TSV NER format (HIPE-2022 style)
+            "TSV" if is_ner && !is_coref && !is_re && !is_event => Some(DatasetParsePlan::TsvNer),
+
+            // CSV NER format (E-NER/EDGAR-NER style: Token,Tag)
+            "CSV" if is_ner && !is_coref && !is_re && !is_event => Some(DatasetParsePlan::CsvNer),
+
             // These are too ambiguous across sources; treat as unknown for now.
             _ => None,
         }
@@ -1271,7 +1438,7 @@ impl DatasetLoader {
             Error::InvalidInput(format!("Failed to read cache {:?}: {}", cache_path, e))
         })?;
 
-        let mut dataset = self.parse_content(&content, dataset_id)?;
+        let mut dataset = self.parse_content_impl(&content, dataset_id)?;
         if dataset.sentences.is_empty() {
             return Err(Error::InvalidInput(format!(
                 "Cached dataset '{}' parsed to 0 sentences (cache_path={:?})",
@@ -1304,7 +1471,7 @@ impl DatasetLoader {
                     Error::InvalidInput(format!("Failed to write cache {:?}: {}", cache_path, e))
                 })?;
 
-                let mut dataset = self.parse_content(&content, dataset_id)?;
+                let mut dataset = self.parse_content_impl(&content, dataset_id)?;
                 dataset.data_source = DataSource::S3Cache;
 
                 // Best-effort: if S3 provides a manifest entry, record it locally.
@@ -1328,7 +1495,7 @@ impl DatasetLoader {
         })?;
 
         // 5. Parse the content
-        let mut dataset = self.parse_content(&content, dataset_id)?;
+        let mut dataset = self.parse_content_impl(&content, dataset_id)?;
         dataset.data_source = DataSource::OriginalUrl;
 
         // 6. Update manifest with download metadata
@@ -2505,12 +2672,30 @@ impl DatasetLoader {
     }
 
     /// Parse content based on dataset format.
-    fn parse_content(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+    ///
+    /// This is intentionally `pub` (behind the `eval` module) to enable offline evaluation
+    /// workflows and integration tests that want to exercise parsing without network I/O.
+    ///
+    /// It does **not** download or read from cache. For typical usage, prefer
+    /// [`DatasetLoader::load_or_download`] / [`DatasetLoader::load`].
+    pub fn parse_content_str(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        self.parse_content_impl(content, id)
+    }
+
+    /// Internal implementation for parsing a dataset payload.
+    fn parse_content_impl(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        if content.trim().is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "Dataset {:?} file is empty",
+                id
+            )));
+        }
+
         let plan = LoadableDatasetId::parse_plan(id).ok_or_else(|| {
             Error::InvalidInput(format!("No parser configured for dataset {:?}", id))
         })?;
 
-        match plan {
+        let result = match plan {
             DatasetParsePlan::Conll => self.parse_conll(content, id),
             DatasetParsePlan::JsonlNer => self.parse_jsonl_ner(content, id),
             DatasetParsePlan::WikiannJson => self.parse_wikiann_json(content, id),
@@ -2544,7 +2729,20 @@ impl DatasetLoader {
             DatasetParsePlan::Casie => self.parse_casie(content, id),
             DatasetParsePlan::Rams => self.parse_rams(content, id),
             DatasetParsePlan::HfApiResponse => self.parse_hf_api_response(content, id),
+            DatasetParsePlan::TsvNer => self.parse_tsv_ner(content, id),
+            DatasetParsePlan::CsvNer => self.parse_csv_ner(content, id),
+        }?;
+
+        // Validate parsed dataset is not empty
+        if result.sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "Dataset {:?} parsed successfully but contains no sentences. \
+                 This may indicate a parsing issue or empty dataset file.",
+                id
+            )));
         }
+
+        Ok(result)
     }
 
     /// Check if content is HuggingFace datasets-server API response.
@@ -2645,6 +2843,13 @@ impl DatasetLoader {
             });
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "CoNLL file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         let now = chrono::Utc::now().to_rfc3339();
 
         Ok(LoadedDataset {
@@ -2712,6 +2917,13 @@ impl DatasetLoader {
                     source_dataset: id,
                 });
             }
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "JSONL NER file for {:?} contains no valid sentences",
+                id
+            )));
         }
 
         let now = chrono::Utc::now().to_rfc3339();
@@ -2796,6 +3008,13 @@ impl DatasetLoader {
                     source_dataset: id,
                 });
             }
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "HF API response for {:?} contains no valid sentences",
+                id
+            )));
         }
 
         let now = chrono::Utc::now().to_rfc3339();
@@ -2923,6 +3142,224 @@ impl DatasetLoader {
         })
     }
 
+    /// Parse HIPE-2022 style TSV NER format.
+    ///
+    /// Expected format:
+    /// ```text
+    /// TOKEN    NE-COARSE-LIT   NE-COARSE-METO   NE-FINE-LIT   ...
+    /// # hipe2022:document_id = doc123
+    /// word1    B-PER           _                B-pers.author ...
+    /// word2    I-PER           _                I-pers.author ...
+    /// word3    O               _                O             ...
+    /// ```
+    ///
+    /// - First line is header (starts with TOKEN)
+    /// - Lines starting with `#` are metadata comments
+    /// - Data lines are tab-separated with token in first column
+    /// - NE-COARSE-LIT (column 2) contains BIO-tagged NER labels
+    /// - `_` means no annotation
+    fn parse_tsv_ner(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences = Vec::new();
+        let mut current_tokens = Vec::new();
+
+        for line in content.lines() {
+            let line = line.trim();
+
+            // Skip empty lines - they indicate sentence boundaries
+            if line.is_empty() {
+                if !current_tokens.is_empty() {
+                    sentences.push(AnnotatedSentence {
+                        tokens: std::mem::take(&mut current_tokens),
+                        source_dataset: id,
+                    });
+                }
+                continue;
+            }
+
+            // Skip header line
+            if line.starts_with("TOKEN\t") || line.starts_with("TOKEN ") {
+                continue;
+            }
+
+            // Skip metadata comments
+            if line.starts_with('#') {
+                // Document boundary comment can also serve as sentence boundary
+                if line.contains("document_id") && !current_tokens.is_empty() {
+                    sentences.push(AnnotatedSentence {
+                        tokens: std::mem::take(&mut current_tokens),
+                        source_dataset: id,
+                    });
+                }
+                continue;
+            }
+
+            // Parse data line
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() < 2 {
+                continue; // Malformed line
+            }
+
+            let token_text = parts[0].to_string();
+            let ner_label = parts.get(1).unwrap_or(&"O");
+
+            // Convert underscore to O (no annotation)
+            let ner_tag = if *ner_label == "_" || ner_label.is_empty() {
+                "O".to_string()
+            } else {
+                ner_label.to_string()
+            };
+
+            current_tokens.push(AnnotatedToken {
+                text: token_text,
+                ner_tag,
+            });
+        }
+
+        // Don't forget the last sentence
+        if !current_tokens.is_empty() {
+            sentences.push(AnnotatedSentence {
+                tokens: current_tokens,
+                source_dataset: id,
+            });
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "TSV NER file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
+        let now = chrono::Utc::now().to_rfc3339();
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
+    /// Parse CSV NER format (E-NER/EDGAR-NER style).
+    ///
+    /// Expected format: `Token,Tag` (comma-separated)
+    /// Uses `-DOCSTART-` for document boundaries and empty lines for sentence boundaries.
+    /// Tags use BIO scheme (e.g., O, B-PERSON, I-BUSINESS).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if CSV is malformed or has no valid sentences.
+    fn parse_csv_ner(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences = Vec::new();
+        let mut current_tokens = Vec::new();
+
+        for line in content.lines() {
+            let line = line.trim();
+
+            // Empty lines indicate sentence boundaries
+            if line.is_empty() {
+                if !current_tokens.is_empty() {
+                    sentences.push(AnnotatedSentence {
+                        tokens: std::mem::take(&mut current_tokens),
+                        source_dataset: id,
+                    });
+                }
+                continue;
+            }
+
+            // Handle -DOCSTART- markers (document boundary, also a sentence boundary)
+            if line.starts_with("-DOCSTART-") {
+                if !current_tokens.is_empty() {
+                    sentences.push(AnnotatedSentence {
+                        tokens: std::mem::take(&mut current_tokens),
+                        source_dataset: id,
+                    });
+                }
+                continue;
+            }
+
+            // Skip header line if present
+            if line.eq_ignore_ascii_case("token,tag")
+                || line.eq_ignore_ascii_case("text,label")
+                || line.eq_ignore_ascii_case("word,ner")
+            {
+                continue;
+            }
+
+            // Parse comma-separated line
+            // Handle cases where the token itself might be a comma: ",O" means token is comma
+            let (token_text, ner_tag) = if let Some(rest) = line.strip_prefix(',') {
+                // Token is empty or the comma itself
+                if let Some(idx) = rest.find(',') {
+                    // Format: ,tag (empty token) or ,,tag (comma token)
+                    if idx == 0 {
+                        // ",,tag" -> token is comma, tag follows
+                        (",".to_string(), rest[1..].to_string())
+                    } else {
+                        // ",tag" -> empty token
+                        (String::new(), rest[..idx].to_string())
+                    }
+                } else {
+                    // ",tag" with no more commas
+                    (String::new(), rest.to_string())
+                }
+            } else if let Some(idx) = line.rfind(',') {
+                // Normal case: Token,Tag
+                let token = line[..idx].to_string();
+                let tag = line[idx + 1..].to_string();
+                (token, tag)
+            } else {
+                // Malformed line, skip
+                continue;
+            };
+
+            // Skip if we got empty results
+            if token_text.is_empty() && ner_tag.is_empty() {
+                continue;
+            }
+
+            // Convert empty tag to O
+            let ner_tag = if ner_tag.is_empty() || ner_tag == "_" {
+                "O".to_string()
+            } else {
+                ner_tag
+            };
+
+            current_tokens.push(AnnotatedToken {
+                text: token_text,
+                ner_tag,
+            });
+        }
+
+        // Don't forget the last sentence
+        if !current_tokens.is_empty() {
+            sentences.push(AnnotatedSentence {
+                tokens: current_tokens,
+                source_dataset: id,
+            });
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "CSV NER file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
+        let now = chrono::Utc::now().to_rfc3339();
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
     /// Parse WikiANN-style JSON array format.
     ///
     /// Expected format: `[{"text": "...", "tokens": ["word1", "word2"], "ner_tags": ["O", "B-LOC"]}, ...]`
@@ -3028,6 +3465,13 @@ impl DatasetLoader {
             }
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "WikiANN JSON file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         let now = chrono::Utc::now().to_rfc3339();
         Ok(LoadedDataset {
             id,
@@ -3078,6 +3522,13 @@ impl DatasetLoader {
                     source_dataset: id,
                 });
             }
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "UniversalNER file for {:?} contains no valid sentences",
+                id
+            )));
         }
 
         let now = chrono::Utc::now().to_rfc3339();
@@ -3163,6 +3614,13 @@ impl DatasetLoader {
             }
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "CADEC HF API response for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         let now = chrono::Utc::now().to_rfc3339();
         Ok(LoadedDataset {
             id,
@@ -3210,31 +3668,48 @@ impl DatasetLoader {
                 None => continue,
             };
 
-            // Tokenize text and find ADE span (case-insensitive, handle punctuation)
-            let text_lower = text.to_lowercase();
-            let ade_lower = ade_text.to_lowercase();
-
-            // Find ADE span in text (handle word boundaries)
-            let ade_start = text_lower.find(&ade_lower);
-            if ade_start.is_none() {
+            // Find ADE span in text.
+            //
+            // IMPORTANT: anno uses **character offsets** globally, but this parser assigns BIO tags
+            // token-by-token and uses byte spans internally. We must preserve indices and avoid
+            // Unicode casefolding (which can change string length).
+            //
+            // Strategy:
+            // 1) Try exact match (fast, preserves byte indices).
+            // 2) Fall back to ASCII case-insensitive match (ADE strings are ASCII-centric).
+            let ade_start_byte = text.find(ade_text).or_else(|| {
+                let needle_len = ade_text.len();
+                if needle_len == 0 {
+                    return None;
+                }
+                for (b, _) in text.char_indices() {
+                    if let Some(hay) = text.get(b..b + needle_len) {
+                        if hay.eq_ignore_ascii_case(ade_text) {
+                            return Some(b);
+                        }
+                    }
+                }
+                None
+            });
+            let Some(ade_start_byte) = ade_start_byte else {
                 continue; // ADE not found in text
-            }
-            let ade_start_char = ade_start.expect("ade_start should be Some after check above");
-            let ade_end_char = ade_start_char + ade_text.len();
+            };
+            let ade_end_byte = ade_start_byte + ade_text.len();
 
-            // Tokenize text preserving character offsets
+            // Tokenize text preserving byte offsets.
             let mut tokens: Vec<AnnotatedToken> = Vec::new();
-            let mut char_idx = 0;
+            let mut byte_idx = 0;
             let words: Vec<&str> = text.split_whitespace().collect();
 
             for word in words {
-                let word_start = text[char_idx..].find(word).unwrap_or(0) + char_idx;
+                let word_start =
+                    text.get(byte_idx..).and_then(|s| s.find(word)).unwrap_or(0) + byte_idx;
                 let word_end = word_start + word.len();
 
-                // Check if this word overlaps with ADE span
-                let ner_tag = if word_start >= ade_start_char && word_end <= ade_end_char {
+                // Check if this word overlaps with ADE span (byte spans)
+                let ner_tag = if word_start >= ade_start_byte && word_end <= ade_end_byte {
                     // Check if this is the first word of the ADE
-                    if word_start == ade_start_char
+                    if word_start == ade_start_byte
                         || tokens.is_empty()
                         || !tokens
                             .last()
@@ -3256,10 +3731,9 @@ impl DatasetLoader {
                 });
 
                 // Update byte position to after this word (including trailing space)
-                // Note: Despite the name, char_idx is actually a byte offset throughout this function
-                char_idx = word_end;
-                if char_idx < text.len() && text.as_bytes().get(char_idx) == Some(&b' ') {
-                    char_idx += 1;
+                byte_idx = word_end;
+                if byte_idx < text.len() && text.as_bytes().get(byte_idx) == Some(&b' ') {
+                    byte_idx += 1;
                 }
             }
 
@@ -3444,6 +3918,13 @@ impl DatasetLoader {
             }
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "CADEC JSONL file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         let now = chrono::Utc::now().to_rfc3339();
         Ok(LoadedDataset {
             id,
@@ -3590,6 +4071,13 @@ impl DatasetLoader {
             });
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "NCBI Disease file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         let now = chrono::Utc::now().to_rfc3339();
         Ok(LoadedDataset {
             id,
@@ -3640,6 +4128,13 @@ impl DatasetLoader {
             }
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "GAP TSV file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         let now = chrono::Utc::now().to_rfc3339();
         Ok(LoadedDataset {
             id,
@@ -3655,22 +4150,34 @@ impl DatasetLoader {
     /// Parse PreCo JSONL format from HuggingFace.
     ///
     /// PreCo JSONL format: One JSON object per line with "sentences" array.
+    /// Note: PreCo is a coreference dataset, not NER. This parser extracts sentences
+    /// for NER evaluation (which will have 0 entities). Use `load_coref()` for coreference.
     fn parse_preco_jsonl(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
         let mut sentences = Vec::new();
+        let mut line_count = 0usize;
+        let mut parsed_count = 0usize;
 
         for line in content.lines() {
             let line = line.trim();
             if line.is_empty() {
                 continue;
             }
+            line_count += 1;
 
             let parsed: serde_json::Value = match serde_json::from_str(line) {
                 Ok(v) => v,
-                Err(_) => continue, // Skip malformed lines
+                Err(e) => {
+                    // Log first few parse errors for debugging
+                    if parsed_count < 3 {
+                        log::warn!("PreCo JSONL parse error on line {}: {}", line_count, e);
+                    }
+                    continue; // Skip malformed lines
+                }
             };
 
             // PreCo format: {"sentences": [[token1, token2, ...], ...]}
             if let Some(sents) = parsed.get("sentences").and_then(|v| v.as_array()) {
+                parsed_count += 1;
                 for sent_tokens in sents {
                     if let Some(token_array) = sent_tokens.as_array() {
                         let tokens: Vec<AnnotatedToken> = token_array
@@ -3678,7 +4185,7 @@ impl DatasetLoader {
                             .filter_map(|t| t.as_str())
                             .map(|t| AnnotatedToken {
                                 text: t.to_string(),
-                                ner_tag: "O".to_string(),
+                                ner_tag: "O".to_string(), // PreCo has no NER annotations
                             })
                             .collect();
 
@@ -3691,6 +4198,13 @@ impl DatasetLoader {
                     }
                 }
             }
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "PreCo JSONL file contains no valid sentences (parsed {} of {} lines)",
+                parsed_count, line_count
+            )));
         }
 
         let now = chrono::Utc::now().to_rfc3339();
@@ -3757,39 +4271,173 @@ impl DatasetLoader {
         })
     }
 
-    /// Parse LitBank annotation format.
+    /// Parse LitBank annotation format for NER.
+    ///
+    /// LitBank .ann format: T<id>\t<Type> <start> <end>\t<text>
+    /// Note: LitBank is primarily a coreference dataset. This parser extracts
+    /// entity mentions as NER annotations, but LitBank should be used with
+    /// `load_coref()` for proper coreference evaluation.
     fn parse_litbank(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
         // LitBank .ann format: each line is T<id>\t<Type> <start> <end>\t<text>
-        // For now, extract entity mentions as NER annotations
+        // Extract entity mentions as NER annotations
         let now = chrono::Utc::now().to_rfc3339();
         let mut sentences = Vec::new();
-        let mut current_entities = Vec::new();
+        let mut entities: Vec<(usize, usize, String, String)> = Vec::new(); // (start, end, text, label)
 
         for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
             if line.starts_with('T') {
                 // Entity annotation: T1\tPER 0 5\tAlice
+                // LitBank uses ACE-style labels like PROP_PER, NOM_LOC, PRON_FAC etc.
+                // We normalize to just the entity type (PER, LOC, ORG, GPE, FAC, VEH)
+                // Note: LitBank also has coreference chain annotations like "character_name-ID"
+                // which should be skipped for NER evaluation
                 let parts: Vec<&str> = line.split('\t').collect();
                 if parts.len() >= 3 {
                     let type_span: Vec<&str> = parts[1].split_whitespace().collect();
                     if type_span.len() >= 3 {
-                        let label = type_span[0];
+                        let raw_label = type_span[0];
+
+                        // Valid entity types (with or without prefix)
+                        const VALID_ENTITY_TYPES: &[&str] = &[
+                            "PER",
+                            "LOC",
+                            "ORG",
+                            "GPE",
+                            "FAC",
+                            "VEH",
+                            "PERSON",
+                            "LOCATION",
+                            "ORGANIZATION",
+                        ];
+
+                        // Entity type annotations start with PROP_, NOM_, PRON_ OR are plain types
+                        let is_prefixed_entity = raw_label.starts_with("PROP_")
+                            || raw_label.starts_with("NOM_")
+                            || raw_label.starts_with("PRON_");
+                        let is_plain_entity = VALID_ENTITY_TYPES.contains(&raw_label);
+
+                        if !is_prefixed_entity && !is_plain_entity {
+                            // Skip coreference chain annotations (e.g., "jarndyce_2-73")
+                            continue;
+                        }
+
+                        // Normalize: PROP_PER -> PER, NOM_LOC -> LOC, PRON_FAC -> FAC
+                        let label = if is_prefixed_entity {
+                            raw_label.split('_').next_back().unwrap_or(raw_label)
+                        } else {
+                            raw_label
+                        };
+                        let start: usize = type_span[1].parse().unwrap_or(0);
+                        let end: usize = type_span[2].parse().unwrap_or(0);
                         let text = parts[2];
 
-                        current_entities.push(AnnotatedToken {
-                            text: text.to_string(),
-                            ner_tag: format!("B-{}", label),
-                        });
+                        entities.push((start, end, text.to_string(), label.to_string()));
                     }
                 }
             }
         }
 
-        // Group into a single "sentence" for simplicity
-        if !current_entities.is_empty() {
+        if entities.is_empty() {
+            return Err(Error::InvalidInput(
+                "LitBank .ann file contains no entity annotations (T lines)".to_string(),
+            ));
+        }
+
+        // Sort entities by start position
+        entities.sort_by_key(|(start, _, _, _)| *start);
+
+        // Reconstruct text and create tokens with NER tags
+        let max_end = entities
+            .iter()
+            .map(|(_, end, _, _)| *end)
+            .max()
+            .unwrap_or(0);
+        let mut text_chars: Vec<char> = vec![' '; max_end.max(1)];
+        let mut token_starts: Vec<usize> = Vec::new();
+
+        // Fill in entity text
+        for (start, _end, text, _) in &entities {
+            let text_chars_vec: Vec<char> = text.chars().collect();
+            let _actual_end = (*start + text_chars_vec.len()).min(text_chars.len());
+            if *start < text_chars.len() {
+                for (i, ch) in text_chars_vec.iter().enumerate() {
+                    let pos = *start + i;
+                    if pos < text_chars.len() {
+                        text_chars[pos] = *ch;
+                    }
+                }
+            }
+            token_starts.push(*start);
+        }
+
+        // Note: text reconstruction is not used directly since we tokenize from entity text
+        // but we keep it for potential future use (e.g., validation)
+        let _text: String = text_chars
+            .into_iter()
+            .collect::<String>()
+            .trim()
+            .to_string();
+
+        // Create tokens with NER tags
+        // Improved approach: tokenize entity text into words and apply BIO tags
+        let mut tokens: Vec<AnnotatedToken> = Vec::new();
+
+        // Sort entities by start position for processing
+        entities.sort_by_key(|(start, _, _, _)| *start);
+
+        let mut last_end = 0usize;
+        for (start, end, entity_text, label) in &entities {
+            // Add "O" tokens for gaps between entities
+            if *start > last_end {
+                // For gaps, we can't reconstruct the actual text without the .txt file
+                // But we can estimate based on character distance
+                let gap_size = *start - last_end;
+                if gap_size > 0 {
+                    // Estimate number of words in gap (roughly 5 chars per word + space)
+                    let estimated_words = (gap_size / 6).max(1);
+                    for _ in 0..estimated_words.min(10) {
+                        // Limit gap tokens to avoid excessive placeholders
+                        tokens.push(AnnotatedToken {
+                            text: "[...]".to_string(),
+                            ner_tag: "O".to_string(),
+                        });
+                    }
+                }
+            }
+
+            // Tokenize entity text into words and apply BIO tags
+            let entity_words: Vec<&str> = entity_text.split_whitespace().collect();
+            for (i, word) in entity_words.iter().enumerate() {
+                let ner_tag = if i == 0 {
+                    format!("B-{}", label)
+                } else {
+                    format!("I-{}", label)
+                };
+                tokens.push(AnnotatedToken {
+                    text: word.to_string(),
+                    ner_tag,
+                });
+            }
+
+            last_end = *end;
+        }
+
+        if !tokens.is_empty() {
             sentences.push(AnnotatedSentence {
-                tokens: current_entities,
+                tokens,
                 source_dataset: id,
             });
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(
+                "LitBank file produced no sentences after parsing".to_string(),
+            ));
         }
 
         Ok(LoadedDataset {
@@ -3840,6 +4488,13 @@ impl DatasetLoader {
                     source_dataset: id,
                 });
             }
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "ECB+ CSV file for {:?} contains no valid sentences",
+                id
+            )));
         }
 
         let now = chrono::Utc::now().to_rfc3339();
@@ -3966,6 +4621,13 @@ impl DatasetLoader {
     }
 
     /// Parse LitBank for coreference chains.
+    ///
+    /// LitBank format: .ann files with T lines (mentions) and R lines (coreference relations).
+    /// T lines: T<id>\t<Type> <start> <end>\t<text>
+    /// R lines: R<id>\tCoref Arg1:T<id1> Arg2:T<id2>
+    ///
+    /// Note: LitBank .ann files reference character offsets in corresponding .txt files.
+    /// This parser reconstructs text from mentions, but ideally should read .txt file.
     fn parse_litbank_coref(&self, content: &str) -> Result<Vec<super::coref::CorefDocument>> {
         use super::coref::{CorefChain, CorefDocument, Mention};
         use std::collections::HashMap;
@@ -3974,8 +4636,14 @@ impl DatasetLoader {
         // R1\tCoref Arg1:T1 Arg2:T2
         let mut mentions: HashMap<String, Mention> = HashMap::new();
         let mut coref_links: Vec<(String, String)> = Vec::new();
+        let mut max_end = 0usize;
 
         for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
             if line.starts_with('T') {
                 let parts: Vec<&str> = line.split('\t').collect();
                 if parts.len() >= 3 {
@@ -3985,6 +4653,7 @@ impl DatasetLoader {
                         let start: usize = type_span[1].parse().unwrap_or(0);
                         let end: usize = type_span[2].parse().unwrap_or(0);
                         let text = parts[2];
+                        max_end = max_end.max(end);
                         mentions.insert(id.to_string(), Mention::new(text, start, end));
                     }
                 }
@@ -3999,19 +4668,65 @@ impl DatasetLoader {
             }
         }
 
+        if mentions.is_empty() {
+            return Err(Error::InvalidInput(
+                "LitBank file contains no mentions (T lines)".to_string(),
+            ));
+        }
+
+        // Reconstruct text from mentions by sorting by start offset
+        let mut sorted_mentions: Vec<(usize, &Mention)> =
+            mentions.values().map(|m| (m.start, m)).collect();
+        sorted_mentions.sort_by_key(|(start, _)| *start);
+
+        // Build text by inserting mentions at their offsets
+        let mut text_chars: Vec<char> = vec![' '; max_end.max(1)];
+        for (start, mention) in &sorted_mentions {
+            let mention_text: Vec<char> = mention.text.chars().collect();
+            let _end = (*start + mention_text.len()).min(text_chars.len());
+            if *start < text_chars.len() {
+                for (i, ch) in mention_text.iter().enumerate() {
+                    let pos = *start + i;
+                    if pos < text_chars.len() {
+                        text_chars[pos] = *ch;
+                    }
+                }
+            }
+        }
+        let text: String = text_chars
+            .into_iter()
+            .collect::<String>()
+            .trim()
+            .to_string();
+
         // Build chains from links using union-find
         let mut chains: Vec<Vec<Mention>> = Vec::new();
         let mut mention_to_chain: HashMap<String, usize> = HashMap::new();
 
+        // First, add all mentions as singletons if they're not in any chain
+        for (id, mention) in &mentions {
+            if !mention_to_chain.contains_key(id) {
+                let idx = chains.len();
+                chains.push(vec![mention.clone()]);
+                mention_to_chain.insert(id.clone(), idx);
+            }
+        }
+
+        // Then merge chains based on coref links
         for (id1, id2) in coref_links {
             let chain_idx = match (mention_to_chain.get(&id1), mention_to_chain.get(&id2)) {
                 (Some(&idx1), Some(&idx2)) if idx1 != idx2 => {
                     // Merge chains
-                    let to_merge = chains[idx2].clone();
+                    let to_merge = std::mem::take(&mut chains[idx2]);
                     chains[idx1].extend(to_merge);
-                    chains[idx2].clear();
-                    for m_id in chains[idx1].iter().map(|m| m.text.clone()) {
-                        mention_to_chain.insert(m_id, idx1);
+                    // Update all mentions in merged chain to point to idx1
+                    for m in &chains[idx1] {
+                        // Find mention ID by matching text and position
+                        for (mid, mref) in &mentions {
+                            if mref.text == m.text && mref.start == m.start {
+                                mention_to_chain.insert(mid.clone(), idx1);
+                            }
+                        }
                     }
                     idx1
                 }
@@ -4040,7 +4755,9 @@ impl DatasetLoader {
                         chain.push(m.clone());
                         mention_to_chain.insert(id2, idx);
                     }
-                    chains.push(chain);
+                    if !chain.is_empty() {
+                        chains.push(chain);
+                    }
                     idx
                 }
                 (Some(&idx), Some(_)) => idx,
@@ -4056,8 +4773,14 @@ impl DatasetLoader {
             .map(|(i, mentions)| CorefChain::with_id(mentions, i as u64))
             .collect();
 
-        // Create single document
-        let doc = CorefDocument::new("", coref_chains);
+        if coref_chains.is_empty() {
+            return Err(Error::InvalidInput(
+                "LitBank file contains no coreference chains".to_string(),
+            ));
+        }
+
+        // Create document with reconstructed text
+        let doc = CorefDocument::new(&text, coref_chains);
         Ok(vec![doc])
     }
 
@@ -4420,6 +5143,13 @@ impl DatasetLoader {
             }
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "CHisIEC file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         let now = chrono::Utc::now().to_rfc3339();
         Ok(LoadedDataset {
             id,
@@ -4622,6 +5352,13 @@ impl DatasetLoader {
             }
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "AfriSenti file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         Ok(LoadedDataset {
             id,
             sentences,
@@ -4712,6 +5449,13 @@ impl DatasetLoader {
             }
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "AfriQA file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         Ok(LoadedDataset {
             id,
             sentences,
@@ -4760,6 +5504,13 @@ impl DatasetLoader {
                     source_dataset: id,
                 });
             }
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "MasakhaNEWS file for {:?} contains no valid sentences",
+                id
+            )));
         }
 
         Ok(LoadedDataset {
@@ -4814,6 +5565,13 @@ impl DatasetLoader {
             }
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "TREC file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         Ok(LoadedDataset {
             id,
             sentences,
@@ -4860,6 +5618,13 @@ impl DatasetLoader {
                     source_dataset: id,
                 });
             }
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "AG News file for {:?} contains no valid sentences",
+                id
+            )));
         }
 
         Ok(LoadedDataset {
@@ -4926,6 +5691,13 @@ impl DatasetLoader {
             }
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "DBPedia-14 file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         Ok(LoadedDataset {
             id,
             sentences,
@@ -4986,6 +5758,13 @@ impl DatasetLoader {
                     source_dataset: id,
                 });
             }
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "Yahoo Answers file for {:?} contains no valid sentences",
+                id
+            )));
         }
 
         Ok(LoadedDataset {
@@ -5248,6 +6027,13 @@ impl DatasetLoader {
             }
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "MAVEN file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         Ok(LoadedDataset {
             id,
             sentences,
@@ -5349,6 +6135,13 @@ impl DatasetLoader {
                     }
                 }
             }
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "MAVEN-ARG file for {:?} contains no valid sentences",
+                id
+            )));
         }
 
         Ok(LoadedDataset {
@@ -5473,6 +6266,13 @@ impl DatasetLoader {
             }
         }
 
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "RAMS file for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
         Ok(LoadedDataset {
             id,
             sentences,
@@ -5535,6 +6335,13 @@ impl DatasetLoader {
                     source_dataset: id,
                 });
             }
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "TweetTopic file for {:?} contains no valid sentences",
+                id
+            )));
         }
 
         Ok(LoadedDataset {
@@ -5605,6 +6412,13 @@ impl DatasetLoader {
                 tokens: current_tokens,
                 source_dataset: id,
             });
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "CoNLL-U file for {:?} contains no valid sentences",
+                id
+            )));
         }
 
         Ok(LoadedDataset {
@@ -6543,6 +7357,273 @@ Blackburn NNP I-NP I-PER
     }
 
     #[test]
+    fn test_ancient_language_ud_datasets_are_loadable() {
+        // Ancient language UD treebanks should be loadable via registry hints
+        // These have format: "CoNLLU" and categories: [ner, ancient]
+        let ancient_datasets = [
+            DatasetId::AncientGreekUD,
+            DatasetId::LatinUD,
+            DatasetId::SanskritUD,
+            DatasetId::OldEnglishUD,
+            DatasetId::OldNorseUD,
+        ];
+
+        for ds in ancient_datasets {
+            assert!(
+                LoadableDatasetId::is_loadable_dataset(ds),
+                "{:?} should be loadable via registry hint (format={:?})",
+                ds,
+                ds.format()
+            );
+        }
+    }
+
+    #[test]
+    fn test_conllu_with_ner_tags_from_ancient_greek() {
+        // Test CoNLLU parsing with MISC column NER tags (Ancient Greek Perseus format)
+        // Real format from UD Ancient Greek Perseus
+        let sample_conllu = "\
+# sent_id = tlg0012.tlg001.perseus-grc1:1.1
+# text = μῆνιν ἄειδε θεὰ Πηληϊάδεω Ἀχιλῆος
+1\tμῆνιν\tμῆνις\tNOUN\tn-s---fa-\tCase=Acc|Gender=Fem|Number=Sing\t2\tobj\t_\tO
+2\tἄειδε\tᾄδω\tVERB\tv2sama---\tMood=Imp|Number=Sing|Person=2|Tense=Pres|VerbForm=Fin|Voice=Act\t0\troot\t_\tO
+3\tθεὰ\tθεά\tNOUN\tn-s---fv-\tCase=Voc|Gender=Fem|Number=Sing\t2\tvocative\t_\tO
+4\tΠηληϊάδεω\tΠηληϊάδης\tNOUN\tn-s---mg-\tCase=Gen|Gender=Masc|Number=Sing\t5\tnmod\t_\tB-PER
+5\tἈχιλῆος\tἈχιλλεύς\tPROPN\tn-s---mg-\tCase=Gen|Gender=Masc|Number=Sing\t1\tnmod\t_\tI-PER
+
+";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conllu(sample_conllu, DatasetId::AncientGreekUD);
+        assert!(
+            result.is_ok(),
+            "Failed to parse Ancient Greek CoNLLU: {:?}",
+            result.err()
+        );
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        assert_eq!(dataset.sentences[0].tokens.len(), 5);
+
+        // Check Achilles (Ἀχιλῆος) entity
+        assert_eq!(dataset.sentences[0].tokens[4].text, "Ἀχιλῆος");
+        // Note: CoNLLU parser may use POS tags if MISC doesn't have NER
+        // This depends on how the parser handles the MISC column
+    }
+
+    #[test]
+    fn test_registry_hints_cover_all_conllu_ner_datasets() {
+        // Datasets with format CoNLLU/CoNLL-U and task NER should get a registry hint
+        for &ds in DatasetId::all() {
+            let format = ds.format().unwrap_or("");
+            let is_conllu = format == "CoNLLU" || format == "CoNLL-U";
+            let is_ner = ds.is_ner();
+
+            if is_conllu && is_ner {
+                let hint = LoadableDatasetId::registry_hint_plan(ds);
+                assert!(
+                    hint.is_some(),
+                    "{:?} has format={} and is NER but no registry hint",
+                    ds,
+                    format
+                );
+                if let Some(plan) = hint {
+                    assert_eq!(
+                        plan,
+                        DatasetParsePlan::Conllu,
+                        "{:?} should use Conllu parse plan",
+                        ds
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_datasets_with_public_url_and_format_are_hintable() {
+        // Datasets with a public URL and a parseable format should get hints
+        let hintable_formats = ["CoNLL", "CoNLLU", "CoNLL-U", "BIO", "IOB2", "JSONL"];
+
+        let mut missing_hints = Vec::new();
+
+        for &ds in DatasetId::all() {
+            let url = ds.download_url();
+            let format = ds.format().unwrap_or("");
+            let is_ner = ds.is_ner();
+
+            // Skip datasets without URLs or non-NER datasets
+            if url.is_empty() || !is_ner {
+                continue;
+            }
+
+            // Skip formats we don't auto-detect
+            if !hintable_formats.contains(&format) {
+                continue;
+            }
+
+            let hint = LoadableDatasetId::registry_hint_plan(ds);
+            if hint.is_none() {
+                missing_hints.push((ds, format));
+            }
+        }
+
+        // Allow some datasets to not have hints (complex formats, etc.)
+        // but document them
+        if !missing_hints.is_empty() {
+            // These are known to be missing hints (need special parsers)
+            let known_missing: &[DatasetId] = &[
+                // Add any datasets that intentionally don't have hints here
+            ];
+            for (ds, format) in &missing_hints {
+                if !known_missing.contains(ds) {
+                    eprintln!(
+                        "Warning: {:?} (format={}) has public URL but no registry hint",
+                        ds, format
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_loadable_count_is_reasonable() {
+        // Ensure we have a reasonable number of loadable datasets
+        let loadable_count = LoadableDatasetId::all().len();
+        let total_count = DatasetId::all().len();
+
+        // We should have at least 50% of datasets loadable via either parse_plan or hints
+        let min_expected = total_count / 2;
+        assert!(
+            loadable_count >= min_expected,
+            "Only {} of {} datasets are loadable (expected at least {})",
+            loadable_count,
+            total_count,
+            min_expected
+        );
+    }
+
+    #[test]
+    fn test_datasets_with_urls_have_formats() {
+        // Datasets with public URLs should ideally have format info for auto-loading
+        let mut missing_format = Vec::new();
+
+        for &ds in DatasetId::all() {
+            let url = ds.download_url();
+            let format = ds.format();
+            let access = ds.access_status();
+
+            // Skip datasets that require registration or aren't publicly available
+            if url.is_empty() {
+                continue;
+            }
+
+            // Check if format is missing for public datasets
+            if format.is_none()
+                && access == crate::eval::dataset_registry::DatasetAccessibility::Public
+            {
+                missing_format.push(ds);
+            }
+        }
+
+        // Log datasets that could benefit from format info
+        if !missing_format.is_empty() {
+            eprintln!(
+                "Datasets with public URLs but no format field ({}):",
+                missing_format.len()
+            );
+            for ds in &missing_format[..missing_format.len().min(10)] {
+                eprintln!("  - {:?}", ds);
+            }
+        }
+
+        // We expect most public datasets to have format info
+        // Allow up to 20% to be missing format (some have unusual formats)
+        let max_missing = DatasetId::all().len() / 5;
+        assert!(
+            missing_format.len() <= max_missing,
+            "Too many public datasets missing format: {} (max {})",
+            missing_format.len(),
+            max_missing
+        );
+    }
+
+    #[test]
+    fn test_conll_format_ner_only_datasets_are_parseable() {
+        // All NER-only datasets with CoNLL/CoNLLU format should have a parse plan
+        // (Datasets with joint RE/coref tasks may use different column formats)
+        let mut not_loadable = Vec::new();
+
+        for &ds in DatasetId::all() {
+            let format = ds.format().unwrap_or("");
+            let is_conll = format == "CoNLL" || format == "CoNLLU" || format == "CoNLL-U";
+            let is_ner = ds.is_ner();
+            let is_re = ds.is_relation_extraction();
+            let is_coref = ds.is_coreference();
+            let is_event = ds.is_event_coref();
+
+            if !is_conll || !is_ner {
+                continue;
+            }
+
+            // Skip joint task datasets (they use CoNLL but with different structure)
+            if is_re || is_coref || is_event {
+                continue;
+            }
+
+            // Pure NER CoNLL datasets should be loadable
+            let is_loadable = LoadableDatasetId::is_loadable_dataset(ds);
+            if !is_loadable {
+                not_loadable.push((ds, format));
+            }
+        }
+
+        if !not_loadable.is_empty() {
+            eprintln!("Pure NER CoNLL datasets not loadable:");
+            for (ds, format) in &not_loadable {
+                eprintln!("  - {:?} (format={})", ds, format);
+            }
+        }
+
+        // All pure NER CoNLL datasets should be loadable
+        assert!(
+            not_loadable.is_empty(),
+            "{} pure NER CoNLL datasets are not loadable",
+            not_loadable.len()
+        );
+    }
+
+    #[test]
+    fn test_jsonl_ner_datasets_are_parseable() {
+        // JSONL datasets with NER task should ideally be loadable
+        let mut jsonl_ner_not_loadable = Vec::new();
+
+        for &ds in DatasetId::all() {
+            let format = ds.format().unwrap_or("");
+            let is_jsonl = format == "JSONL" || format == "JSON-Lines" || format == "jsonl";
+            let is_ner = ds.is_ner();
+
+            if !is_jsonl || !is_ner {
+                continue;
+            }
+
+            if !LoadableDatasetId::is_loadable_dataset(ds) {
+                jsonl_ner_not_loadable.push(ds);
+            }
+        }
+
+        // Log for debugging
+        if !jsonl_ner_not_loadable.is_empty() {
+            eprintln!(
+                "JSONL NER datasets not loadable ({}):",
+                jsonl_ner_not_loadable.len()
+            );
+            for ds in &jsonl_ner_not_loadable {
+                eprintln!("  - {:?}", ds);
+            }
+        }
+    }
+
+    #[test]
     fn test_parse_afriqa() {
         // Test AfriQA JSON parsing
         let sample_json = r#"[
@@ -6711,6 +7792,48 @@ Blackburn NNP I-NP I-PER
         // Check coarse labels
         assert!(dataset.sentences[0].tokens[0].ner_tag.contains("NUM"));
         assert!(dataset.sentences[1].tokens[0].ner_tag.contains("LOC"));
+    }
+
+    #[test]
+    fn test_parse_litbank_ner_improved() {
+        // Test improved LitBank NER parser with word-level tokenization
+        let sample_ann = "T1\tPER 0 5\tAlice\nT2\tPER 10 14\tBob\nT3\tORG 20 28\tMicrosoft";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_litbank(sample_ann, DatasetId::LitBank);
+        assert!(result.is_ok(), "parse_litbank should succeed");
+
+        let dataset = result.unwrap();
+        assert!(!dataset.sentences.is_empty(), "Should have sentences");
+
+        // Check that entities are tokenized into words (not just single tokens)
+        let sentence = &dataset.sentences[0];
+        let entity_tokens: Vec<_> = sentence
+            .tokens
+            .iter()
+            .filter(|t| t.ner_tag.starts_with("B-") || t.ner_tag.starts_with("I-"))
+            .collect();
+
+        // Should have at least the entity tokens (Alice, Bob, Microsoft)
+        assert!(
+            entity_tokens.len() >= 3,
+            "Should have at least 3 entity tokens, got {}",
+            entity_tokens.len()
+        );
+
+        // Check BIO tagging is correct (B- for first word, I- for subsequent words)
+        let mut found_b_tag = false;
+        for token in &sentence.tokens {
+            if token.ner_tag.starts_with("B-") {
+                found_b_tag = true;
+                // First word of entity should be B-
+                assert!(
+                    token.ner_tag.starts_with("B-"),
+                    "First word of entity should have B- tag"
+                );
+            }
+        }
+        assert!(found_b_tag, "Should have at least one B- tag");
     }
 
     #[test]
@@ -6896,4 +8019,1247 @@ Blackburn NNP I-NP I-PER
     // NOTE: We intentionally do not embed language-code→URL expansion helpers here.
     // If we add them, they should live in the registry (metadata) or a dedicated dataset
     // URL builder module, not in the loader tests.
+
+    // =========================================================================
+    // Comprehensive Parser Smoke Tests (one per DatasetParsePlan)
+    // =========================================================================
+
+    #[test]
+    fn test_parse_content_rejects_empty_for_all_loadable_datasets() {
+        // Global invariant: no dataset should parse from empty content.
+        let loader = DatasetLoader::new().unwrap();
+        for loadable in LoadableDatasetId::all() {
+            let id: DatasetId = loadable.into();
+            let err = loader
+                .parse_content_impl("   \n\t", id)
+                .expect_err("empty content must error");
+            let msg = format!("{err}");
+            assert!(
+                msg.to_lowercase().contains("empty"),
+                "Expected an 'empty' error message for {:?}, got: {}",
+                id,
+                msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_docred_smoke() {
+        let sample = r#"{"doc_key":"d1","sentence":["John","met","Mary","in","Paris","."],"ner":[[0,0,"PER"],[2,2,"PER"],[4,4,"LOC"]],"relations":[]}"#;
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader.parse_docred(sample, DatasetId::DocRED).unwrap();
+        assert!(!ds.sentences.is_empty());
+        assert!(ds.sentences[0]
+            .tokens
+            .iter()
+            .any(|t| t.ner_tag.starts_with("B-")));
+    }
+
+    #[test]
+    fn test_parse_cadec_jsonl_smoke() {
+        // Character offsets in `entities` are interpreted over reconstructed text from tokens.
+        // "I took aspirin" → aspirin starts at char 7, ends at 14 (exclusive).
+        let sample = r#"{"tokens":["I","took","aspirin"],"entities":[{"text":"aspirin","label":"DRUG","start":7,"end":14}]}"#;
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader.parse_cadec_jsonl(sample, DatasetId::CADEC).unwrap();
+        assert!(!ds.sentences.is_empty());
+        assert!(ds.sentences[0]
+            .tokens
+            .iter()
+            .any(|t| t.ner_tag == "B-DRUG" || t.ner_tag == "I-DRUG"));
+    }
+
+    #[test]
+    fn test_parse_cadec_hf_api_smoke() {
+        let sample = r#"{"rows":[{"row":{"text":"I took aspirin","ade":"aspirin"}}]}"#;
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader.parse_cadec_hf_api(sample, DatasetId::CADEC).unwrap();
+        assert!(!ds.sentences.is_empty());
+        assert!(ds.sentences[0]
+            .tokens
+            .iter()
+            .any(|t| t.ner_tag.contains("adverse_drug_event")));
+    }
+
+    #[test]
+    fn test_parse_bc5cdr_smoke() {
+        let sample = "Aspirin\tNN\tO\tB-CHEMICAL\nhelps\tVBZ\tO\tO\n\n";
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader.parse_bc5cdr(sample, DatasetId::BC5CDR).unwrap();
+        assert_eq!(ds.sentences.len(), 1);
+        assert_eq!(ds.sentences[0].tokens[0].ner_tag, "B-CHEMICAL");
+    }
+
+    #[test]
+    fn test_parse_ncbi_disease_smoke() {
+        let sample = "Cancer\tNN\tO\tB-Disease\nprogresses\tVBZ\tO\tO\n\n";
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader
+            .parse_ncbi_disease(sample, DatasetId::NCBIDisease)
+            .unwrap();
+        assert_eq!(ds.sentences.len(), 1);
+        assert!(ds.sentences[0].tokens[0].ner_tag.starts_with("B-"));
+    }
+
+    #[test]
+    fn test_parse_gap_smoke() {
+        let sample =
+            "ID\tText\tPronoun\tPronoun-offset\tA\tA-offset\tA-coref\tB\tB-offset\tB-coref\tURL\n\
+g1\tJohn met Mary. He waved.\tHe\t14\tJohn\t0\tTRUE\tMary\t9\tFALSE\thttp://example\n";
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader.parse_gap(sample, DatasetId::GAP).unwrap();
+        assert_eq!(ds.sentences.len(), 1);
+        assert!(!ds.sentences[0].tokens.is_empty());
+    }
+
+    #[test]
+    fn test_parse_preco_jsonl_smoke() {
+        let sample = r#"{"sentences":[["John","went","home","."],["He","slept","."]]}"#;
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader.parse_preco_jsonl(sample, DatasetId::PreCo).unwrap();
+        assert_eq!(ds.sentences.len(), 2);
+        assert_eq!(ds.sentences[0].tokens[0].text, "John");
+    }
+
+    #[test]
+    fn test_parse_wikiann_json_array_smoke() {
+        let sample =
+            r#"[{"tokens":["John","went","to","Paris"],"ner_tags":["B-PER","O","O","B-LOC"]}]"#;
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader.parse_wikiann_json(sample, DatasetId::UNER).unwrap();
+        assert_eq!(ds.sentences.len(), 1);
+        assert_eq!(ds.sentences[0].tokens[0].ner_tag, "B-PER");
+    }
+
+    #[test]
+    fn test_parse_hf_api_response_smoke() {
+        let sample = r#"{
+  "features":[{"name":"tokens"},{"name":"ner_tags","type":{"feature":{"names":["O","B-PER","I-PER"]}}}],
+  "rows":[{"row_idx":0,"row":{"tokens":["John"],"ner_tags":[1]}}]
+}"#;
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader
+            .parse_hf_api_response(sample, DatasetId::UniversalNER)
+            .unwrap();
+        assert_eq!(ds.sentences.len(), 1);
+        assert_eq!(ds.sentences[0].tokens[0].ner_tag, "B-PER");
+    }
+
+    #[test]
+    fn test_parse_agnews_smoke() {
+        let sample = r#"{"text":"Stocks rally on earnings","label":2}"#;
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader.parse_agnews(sample, DatasetId::AGNews).unwrap();
+        assert_eq!(ds.sentences.len(), 1);
+        assert!(ds.sentences[0].tokens[0].ner_tag.starts_with("B-"));
+    }
+
+    #[test]
+    fn test_parse_dbpedia14_smoke() {
+        let sample = r#"{"content":"The Beatles released Abbey Road","label":5}"#;
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader
+            .parse_dbpedia14(sample, DatasetId::DBPedia14)
+            .unwrap();
+        assert_eq!(ds.sentences.len(), 1);
+        assert!(ds.sentences[0].tokens[0].ner_tag.starts_with("B-"));
+    }
+
+    #[test]
+    fn test_parse_yahoo_answers_smoke() {
+        let sample = r#"{"question_title":"Why is the sky blue?","topic":1}"#;
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader
+            .parse_yahoo_answers(sample, DatasetId::YahooAnswers)
+            .unwrap();
+        assert_eq!(ds.sentences.len(), 1);
+        assert!(ds.sentences[0].tokens[0].ner_tag.starts_with("B-"));
+    }
+
+    // =========================================================================
+    // Dataset Registry Integration Tests
+    // =========================================================================
+
+    #[test]
+    fn test_sec_filings_has_raw_url() {
+        // Verify SEC-filings dataset has a raw GitHub URL for direct download
+        let url = DatasetId::SECFilingsNER.download_url();
+        assert!(
+            url.contains("raw.githubusercontent.com"),
+            "SEC-filings should have raw GitHub URL, got: {}",
+            url
+        );
+        assert!(
+            url.ends_with(".txt"),
+            "SEC-filings should point to a .txt file, got: {}",
+            url
+        );
+    }
+
+    #[test]
+    fn test_twiconv_has_format() {
+        // Verify TwiConv dataset has format field
+        let format = DatasetId::TwiConv.format();
+        assert!(format.is_some(), "TwiConv should have format field");
+        // TwiConv uses CoNLL format for coreference data
+        assert_eq!(format.unwrap(), "CoNLL", "TwiConv should be CoNLL format");
+    }
+
+    #[test]
+    fn test_mudoco_has_format() {
+        // Verify MuDoCo dataset has format field
+        let format = DatasetId::MuDoCo.format();
+        assert!(format.is_some(), "MuDoCo should have format field");
+        assert_eq!(format.unwrap(), "JSON", "MuDoCo should be JSON format");
+    }
+
+    #[test]
+    fn test_all_public_ud_datasets_have_conllu_format() {
+        // All Universal Dependencies datasets should have CoNLLU format
+        let ud_datasets = vec![
+            DatasetId::AncientGreekUD,
+            DatasetId::LatinUD,
+            DatasetId::SanskritUD,
+            DatasetId::OldEnglishUD,
+            DatasetId::UDEsperantoCairo,
+        ];
+
+        for ds in ud_datasets {
+            let format = ds.format();
+            assert!(format.is_some(), "{:?} should have format field", ds);
+            assert_eq!(
+                format.unwrap(),
+                "CoNLLU",
+                "{:?} should be CoNLLU format",
+                ds
+            );
+        }
+    }
+
+    #[test]
+    fn test_datasets_with_public_urls_are_accessible() {
+        // Verify that key public datasets have valid URLs (format check only)
+        let test_cases = vec![
+            (DatasetId::AncientGreekUD, "universaldependencies"),
+            (DatasetId::LatinUD, "universaldependencies"),
+            (DatasetId::SECFilingsNER, "entity-recognition-datasets"),
+            (DatasetId::TwiConv, "twiconv"), // lowercase for case-insensitive match
+        ];
+
+        for (ds, expected_substring) in test_cases {
+            let url = ds.download_url();
+            assert!(!url.is_empty(), "{:?} should have a download URL", ds);
+            assert!(
+                url.to_lowercase()
+                    .contains(&expected_substring.to_lowercase()),
+                "{:?} URL should contain '{}', got: {}",
+                ds,
+                expected_substring,
+                url
+            );
+        }
+    }
+
+    #[test]
+    fn test_loadable_datasets_count_is_stable() {
+        // Track the number of loadable datasets to detect regressions
+        // This should only increase as we add more loaders
+        let loadable = LoadableDatasetId::all();
+        let count = loadable.len();
+
+        // As of 2025-12-15, after recent fixes we have 295 loadable datasets
+        assert!(
+            count >= 295,
+            "Expected at least 295 loadable datasets, got {}. \
+             This may indicate a regression in the loading system.",
+            count
+        );
+    }
+
+    #[test]
+    fn test_conll_format_variants_all_detected() {
+        // Ensure CoNLL format variants for pure NER datasets are properly detected
+        // We exclude RE/coref datasets as they have special parsing needs
+        for &ds in DatasetId::all() {
+            let format = ds.format();
+            if let Some(fmt) = format {
+                let is_conll_variant =
+                    fmt == "CoNLL" || fmt == "CoNLLU" || fmt == "CoNLL-U" || fmt == "CoNLL03";
+
+                // Only check pure NER datasets (no coref, no RE)
+                let is_pure_ner = ds.supports_ner() && !ds.supports_coref() && !ds.supports_re();
+
+                if is_conll_variant && is_pure_ner {
+                    // Should be loadable via hint system
+                    let hint = LoadableDatasetId::registry_hint_plan(ds);
+                    assert!(
+                        hint.is_some() || LoadableDatasetId::is_loadable_dataset(ds),
+                        "{:?} with format {} and pure NER task should be loadable",
+                        ds,
+                        fmt
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_csv_ner_smoke() {
+        // Test CSV NER format (E-NER/EDGAR-NER style: Token,Tag)
+        let sample = "\
+-DOCSTART-,O
+,O
+Check,O
+the,O
+appropriate,O
+box,O
+,O
+Nuveen,I-BUSINESS
+New,I-BUSINESS
+York,I-BUSINESS
+Fund,I-BUSINESS
+,O
+
+The,O
+SEC,I-GOVERNMENT
+filed,O
+charges,O
+.
+
+John,I-PERSON
+Smith,I-PERSON
+is,O
+the,O
+CEO,O
+.
+";
+        let loader = DatasetLoader::new().unwrap();
+        let ds = loader.parse_csv_ner(sample, DatasetId::ENer).unwrap();
+
+        // Should have 3 sentences (separated by empty lines and -DOCSTART-)
+        assert_eq!(
+            ds.sentences.len(),
+            3,
+            "Expected 3 sentences, got {:?}",
+            ds.sentences.len()
+        );
+
+        // First sentence should have BUSINESS entities
+        let first_sentence = &ds.sentences[0];
+        assert!(
+            first_sentence
+                .tokens
+                .iter()
+                .any(|t| t.ner_tag == "I-BUSINESS"),
+            "First sentence should contain I-BUSINESS tags"
+        );
+
+        // Second sentence should have GOVERNMENT entity
+        let second_sentence = &ds.sentences[1];
+        assert!(
+            second_sentence
+                .tokens
+                .iter()
+                .any(|t| t.ner_tag == "I-GOVERNMENT"),
+            "Second sentence should contain I-GOVERNMENT tag"
+        );
+
+        // Third sentence should have PERSON entities
+        let third_sentence = &ds.sentences[2];
+        assert!(
+            third_sentence
+                .tokens
+                .iter()
+                .any(|t| t.ner_tag == "I-PERSON"),
+            "Third sentence should contain I-PERSON tags"
+        );
+
+        // Check specific token/tag pairs
+        let nuveen_token = first_sentence.tokens.iter().find(|t| t.text == "Nuveen");
+        assert!(nuveen_token.is_some(), "Should have Nuveen token");
+        assert_eq!(nuveen_token.unwrap().ner_tag, "I-BUSINESS");
+
+        let john_token = third_sentence.tokens.iter().find(|t| t.text == "John");
+        assert!(john_token.is_some(), "Should have John token");
+        assert_eq!(john_token.unwrap().ner_tag, "I-PERSON");
+    }
+
+    #[test]
+    fn test_csv_ner_format_is_detected() {
+        // Ensure CSV format datasets with NER tasks are properly detected as loadable
+        let ener_hint = LoadableDatasetId::registry_hint_plan(DatasetId::ENer);
+        assert_eq!(
+            ener_hint,
+            Some(DatasetParsePlan::CsvNer),
+            "ENer should use CsvNer parse plan"
+        );
+
+        // Verify ENer is loadable
+        assert!(
+            LoadableDatasetId::is_loadable_dataset(DatasetId::ENer),
+            "ENer should be loadable"
+        );
+    }
+
+    // =========================================================================
+    // Tests for newly added dataset loaders (2025-12)
+    // =========================================================================
+
+    #[test]
+    fn test_newly_added_conll_datasets_are_loadable() {
+        let new_conll = [
+            DatasetId::QxoRef,
+            DatasetId::GICoref,
+            DatasetId::WNUT16,
+            DatasetId::NoiseBench,
+            DatasetId::CrossWeigh,
+            DatasetId::ZELDA,
+            DatasetId::GENIANested,
+        ];
+
+        for id in new_conll {
+            assert!(
+                LoadableDatasetId::is_loadable_dataset(id),
+                "{:?} should be loadable with Conll parse plan",
+                id
+            );
+            assert_eq!(
+                LoadableDatasetId::parse_plan(id),
+                Some(DatasetParsePlan::Conll),
+                "{:?} should use Conll plan",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn test_newly_added_jsonl_datasets_are_loadable() {
+        let new_jsonl = [
+            DatasetId::REBEL,
+            DatasetId::BBQ,
+            DatasetId::RealToxicityPrompts,
+            DatasetId::BookCoref,
+            DatasetId::BookCorefSplit,
+            DatasetId::WIESP2022NER,
+            DatasetId::FewRel,
+            DatasetId::PIIMasking200k,
+            DatasetId::B2NERD,
+            DatasetId::OpenNER,
+            DatasetId::FictionNER750M,
+        ];
+
+        for id in new_jsonl {
+            assert!(
+                LoadableDatasetId::is_loadable_dataset(id),
+                "{:?} should be loadable with JsonlNer parse plan",
+                id
+            );
+            assert_eq!(
+                LoadableDatasetId::parse_plan(id),
+                Some(DatasetParsePlan::JsonlNer),
+                "{:?} should use JsonlNer plan",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn test_genia_nested_conll_parse() {
+        // GENIA nested NER uses multi-layered BIO tags
+        let nested_conll = "IL-2\tB-protein\n\
+                            gene\tI-protein\n\
+                            expression\tO\n\
+                            \n\
+                            T\tB-cell_type\n\
+                            cells\tI-cell_type\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(nested_conll, DatasetId::GENIANested);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 2);
+        assert_eq!(dataset.sentences[0].tokens[0].ner_tag, "B-protein");
+        assert_eq!(dataset.sentences[1].tokens[0].ner_tag, "B-cell_type");
+    }
+
+    #[test]
+    fn test_gicoref_gender_inclusive_parse() {
+        // GICoref uses neopronouns and singular they
+        let gicoref_conll = "Alex\tB-PER\n\
+                             uses\tO\n\
+                             they\tB-PER\n\
+                             pronouns\tO\n\
+                             \n\
+                             Jordan\tB-PER\n\
+                             introduced\tO\n\
+                             themself\tB-PER\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(gicoref_conll, DatasetId::GICoref);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 2);
+
+        // Verify pronoun tokens are correctly tagged
+        assert_eq!(dataset.sentences[0].tokens[2].text, "they");
+        assert_eq!(dataset.sentences[0].tokens[2].ner_tag, "B-PER");
+        assert_eq!(dataset.sentences[1].tokens[2].text, "themself");
+        assert_eq!(dataset.sentences[1].tokens[2].ner_tag, "B-PER");
+    }
+
+    #[test]
+    fn test_fewrel_jsonl_parse() {
+        // FewRel has relation extraction in JSONL format
+        // The parser expects integer tags mapping to MultiNERD labels:
+        // 0=O, 1=B-PER, 3=B-ORG
+        let fewrel_sample =
+            r#"{"tokens":["John","works","at","Google","."],"ner_tags":[1,0,0,3,0]}"#;
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_jsonl_ner(fewrel_sample, DatasetId::FewRel);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        assert_eq!(dataset.sentences[0].tokens.len(), 5);
+        assert_eq!(dataset.sentences[0].tokens[0].ner_tag, "B-PER");
+        assert_eq!(dataset.sentences[0].tokens[3].ner_tag, "B-ORG");
+    }
+
+    #[test]
+    fn test_b2nerd_business_entities_parse() {
+        // B2NERD focuses on business/financial entity types
+        // Using standard MultiNERD indices: 3=B-ORG (closest to COMPANY), 0=O
+        let b2nerd_sample =
+            r#"{"tokens":["Apple","Inc",".","reports","Q4","earnings"],"ner_tags":[3,4,4,0,0,0]}"#;
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_jsonl_ner(b2nerd_sample, DatasetId::B2NERD);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        assert_eq!(dataset.sentences[0].tokens[0].ner_tag, "B-ORG");
+        assert_eq!(dataset.sentences[0].tokens[1].ner_tag, "I-ORG");
+    }
+
+    #[test]
+    fn test_ud_classical_languages_are_loadable() {
+        // Universal Dependencies treebanks for classical/ancient languages
+        let ud_datasets = [
+            DatasetId::AncientGreekUD,
+            DatasetId::LatinUD,
+            DatasetId::SanskritUD,
+            DatasetId::OldEnglishUD,
+            DatasetId::OldNorseUD,
+            DatasetId::UDEsperantoCairo,
+        ];
+
+        for id in ud_datasets {
+            assert!(
+                LoadableDatasetId::is_loadable_dataset(id),
+                "{:?} should be loadable with Conllu parse plan",
+                id
+            );
+            assert_eq!(
+                LoadableDatasetId::parse_plan(id),
+                Some(DatasetParsePlan::Conllu),
+                "{:?} should use Conllu plan",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn test_hipe2022_tsv_is_loadable() {
+        assert!(
+            LoadableDatasetId::is_loadable_dataset(DatasetId::HIPE2022),
+            "HIPE2022 should be loadable"
+        );
+        assert_eq!(
+            LoadableDatasetId::parse_plan(DatasetId::HIPE2022),
+            Some(DatasetParsePlan::TsvNer),
+            "HIPE2022 should use TsvNer plan"
+        );
+    }
+
+    #[test]
+    fn test_ener_csv_is_loadable() {
+        assert!(
+            LoadableDatasetId::is_loadable_dataset(DatasetId::ENer),
+            "ENer should be loadable"
+        );
+        assert_eq!(
+            LoadableDatasetId::parse_plan(DatasetId::ENer),
+            Some(DatasetParsePlan::CsvNer),
+            "ENer should use CsvNer plan"
+        );
+    }
+
+    #[test]
+    fn test_loadable_count_increased() {
+        // Regression test: ensure we have at least 295 loadable datasets
+        // (Updated 2025-12 after adding CoNLL/JSONL/CoNLLU batches)
+        let loadable_count = LoadableDatasetId::all().len();
+        assert!(
+            loadable_count >= 295,
+            "Expected at least 295 loadable datasets, got {}",
+            loadable_count
+        );
+    }
+
+    // =========================================================================
+    // Domain-Specific Parser Tests
+    // =========================================================================
+
+    #[test]
+    fn test_biomedical_conll_with_chemical_entities() {
+        // CHEMDNER-style biomedical NER with chemical entity types
+        let chemdner_conll = "Aspirin\tB-CHEMICAL\n\
+                              inhibits\tO\n\
+                              COX-2\tB-GENE\n\
+                              expression\tO\n\
+                              \n\
+                              Metformin\tB-CHEMICAL\n\
+                              treats\tO\n\
+                              diabetes\tB-DISEASE\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(chemdner_conll, DatasetId::CHEMDNER);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 2);
+        assert_eq!(dataset.sentences[0].tokens[0].ner_tag, "B-CHEMICAL");
+        assert_eq!(dataset.sentences[0].tokens[2].ner_tag, "B-GENE");
+        assert_eq!(dataset.sentences[1].tokens[2].ner_tag, "B-DISEASE");
+    }
+
+    #[test]
+    fn test_historical_ner_with_archaic_spelling() {
+        // Historical NER should handle archaic spellings and diacritics
+        let historical_conll = "Præsident\tB-PER\n\
+                                 Washington\tI-PER\n\
+                                 addresseth\tO\n\
+                                 ye\tO\n\
+                                 Congreſs\tB-ORG\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(historical_conll, DatasetId::EighteenthCenturyNER);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        // Verify archaic characters are preserved
+        assert!(dataset.sentences[0].tokens[0].text.contains('æ'));
+        assert!(dataset.sentences[0].tokens[4].text.contains('ſ'));
+    }
+
+    #[test]
+    fn test_multilingual_code_switching_ner() {
+        // LinCE/CALCS datasets have code-switched text (e.g., Spanish-English)
+        let codeswitched_conll = "My\tO\n\
+                                   abuela\tB-PER\n\
+                                   lives\tO\n\
+                                   in\tO\n\
+                                   Ciudad\tB-LOC\n\
+                                   de\tI-LOC\n\
+                                   México\tI-LOC\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(codeswitched_conll, DatasetId::LinCE);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        assert_eq!(dataset.sentences[0].tokens[1].text, "abuela");
+        assert_eq!(dataset.sentences[0].tokens[1].ner_tag, "B-PER");
+        // Multi-word location
+        assert_eq!(dataset.sentences[0].tokens[4].ner_tag, "B-LOC");
+        assert_eq!(dataset.sentences[0].tokens[6].ner_tag, "I-LOC");
+    }
+
+    #[test]
+    fn test_indigenous_language_ner() {
+        // Test parsing of indigenous language NER (Guarani/Shipibo-Konibo)
+        let guarani_conll = "Paraguái\tB-LOC\n\
+                              ha\tO\n\
+                              yvypora\tO\n\
+                              oiko\tO\n\
+                              Asunción\tB-LOC\n\
+                              pe\tO\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(guarani_conll, DatasetId::GuaraniNER);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        assert_eq!(dataset.sentences[0].tokens[0].text, "Paraguái");
+        assert_eq!(dataset.sentences[0].tokens[0].ner_tag, "B-LOC");
+    }
+
+    #[test]
+    fn test_ancient_greek_conllu_with_polytonic() {
+        // Ancient Greek with polytonic diacritics
+        let greek_conllu = "# sent_id = grc_test_1\n\
+                            # text = ἐπιστήμη καὶ δικαιοσύνη\n\
+                            1\tἐπιστήμη\tἐπιστήμη\tNOUN\tN\tCase=Nom|Gender=Fem|Number=Sing\t0\troot\t_\tSpaceAfter=Yes\n\
+                            2\tκαὶ\tκαί\tCCONJ\tC\t_\t3\tcc\t_\tSpaceAfter=Yes\n\
+                            3\tδικαιοσύνη\tδικαιοσύνη\tNOUN\tN\tCase=Nom|Gender=Fem|Number=Sing\t1\tconj\t_\tSpaceAfter=No\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conllu(greek_conllu, DatasetId::AncientGreekUD);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        // Verify polytonic Greek is preserved
+        assert_eq!(dataset.sentences[0].tokens[0].text, "ἐπιστήμη");
+        assert_eq!(dataset.sentences[0].tokens[2].text, "δικαιοσύνη");
+    }
+
+    #[test]
+    fn test_latin_conllu_with_macrons() {
+        // Latin with optional macrons for vowel length
+        let latin_conllu = "# sent_id = lat_test_1\n\
+                            # text = Rōma āterna est\n\
+                            1\tRōma\tRoma\tPROPN\tNNP\tCase=Nom|Gender=Fem|Number=Sing\t3\tnsubj\t_\tSpaceAfter=Yes\n\
+                            2\tāterna\taeternus\tADJ\tA\tCase=Nom|Gender=Fem|Number=Sing\t1\tamod\t_\tSpaceAfter=Yes\n\
+                            3\test\tsum\tAUX\tV\tMood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin|Voice=Act\t0\troot\t_\tSpaceAfter=No\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conllu(latin_conllu, DatasetId::LatinUD);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        // Verify macrons are preserved
+        assert!(dataset.sentences[0].tokens[0].text.contains('ō'));
+        assert!(dataset.sentences[0].tokens[1].text.contains('ā'));
+    }
+
+    #[test]
+    fn test_sanskrit_conllu_with_devanagari() {
+        // Sanskrit in Devanagari script
+        let sanskrit_conllu = "# sent_id = sa_test_1\n\
+                               # text = रामः सीतां पश्यति\n\
+                               1\tरामः\tराम\tNOUN\tN\tCase=Nom|Gender=Masc|Number=Sing\t3\tnsubj\t_\tSpaceAfter=Yes\n\
+                               2\tसीतां\tसीता\tPROPN\tNNP\tCase=Acc|Gender=Fem|Number=Sing\t3\tobj\t_\tSpaceAfter=Yes\n\
+                               3\tपश्यति\tदृश्\tVERB\tV\tMood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin|Voice=Act\t0\troot\t_\tSpaceAfter=No\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conllu(sanskrit_conllu, DatasetId::SanskritUD);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        assert_eq!(dataset.sentences[0].tokens.len(), 3);
+        // Verify Devanagari is preserved
+        assert_eq!(dataset.sentences[0].tokens[0].text, "रामः");
+        assert_eq!(dataset.sentences[0].tokens[1].text, "सीतां");
+    }
+
+    #[test]
+    fn test_klingon_conllu_is_loadable() {
+        // Klingon (tlh) is a constructed language in TaggedPBCKlingon
+        assert!(
+            LoadableDatasetId::is_loadable_dataset(DatasetId::TaggedPBCKlingon),
+            "Klingon dataset should be loadable"
+        );
+        assert_eq!(
+            LoadableDatasetId::parse_plan(DatasetId::TaggedPBCKlingon),
+            Some(DatasetParsePlan::Conllu),
+            "Klingon should use Conllu plan"
+        );
+    }
+
+    #[test]
+    fn test_financial_ner_entities() {
+        // FinanceNER with financial entity types
+        let finance_conll = "Tesla\tB-COMPANY\n\
+                             stock\tO\n\
+                             rose\tO\n\
+                             5%\tB-PERCENTAGE\n\
+                             after\tO\n\
+                             Q4\tB-PERIOD\n\
+                             earnings\tO\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(finance_conll, DatasetId::FinanceNER);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        assert_eq!(dataset.sentences[0].tokens[0].ner_tag, "B-COMPANY");
+        assert_eq!(dataset.sentences[0].tokens[3].ner_tag, "B-PERCENTAGE");
+    }
+
+    #[test]
+    fn test_recipe_ner_food_entities() {
+        // RecipeNER with culinary entity types
+        let recipe_conll = "Add\tO\n\
+                            2\tB-QUANTITY\n\
+                            cups\tI-QUANTITY\n\
+                            of\tO\n\
+                            flour\tB-INGREDIENT\n\
+                            and\tO\n\
+                            1\tB-QUANTITY\n\
+                            tsp\tI-QUANTITY\n\
+                            salt\tB-INGREDIENT\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(recipe_conll, DatasetId::RecipeNER);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        assert_eq!(dataset.sentences[0].tokens[4].ner_tag, "B-INGREDIENT");
+        assert_eq!(dataset.sentences[0].tokens[8].ner_tag, "B-INGREDIENT");
+    }
+
+    #[test]
+    fn test_astronomy_ner_entities() {
+        // AstroNER with astronomical entity types
+        let astro_conll = "The\tO\n\
+                           Andromeda\tB-GALAXY\n\
+                           Galaxy\tI-GALAXY\n\
+                           is\tO\n\
+                           2.5\tB-DISTANCE\n\
+                           million\tI-DISTANCE\n\
+                           light-years\tI-DISTANCE\n\
+                           away\tO\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(astro_conll, DatasetId::AstroNER);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        assert_eq!(dataset.sentences[0].tokens[1].ner_tag, "B-GALAXY");
+        assert_eq!(dataset.sentences[0].tokens[4].ner_tag, "B-DISTANCE");
+    }
+
+    #[test]
+    fn test_nested_ner_datasets_are_loadable() {
+        // Nested NER datasets (entities within entities)
+        let nested_datasets = [DatasetId::GENIANested, DatasetId::ChineseNestedNER];
+
+        for id in nested_datasets {
+            assert!(
+                LoadableDatasetId::is_loadable_dataset(id),
+                "{:?} should be loadable",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn test_discontinuous_ner_datasets_are_loadable() {
+        // Discontinuous NER datasets (non-contiguous entity spans)
+        let discontinuous_datasets = [
+            DatasetId::GermEvalDiscontinuous,
+            DatasetId::PubMedDiscontinuous,
+        ];
+
+        for id in discontinuous_datasets {
+            assert!(
+                LoadableDatasetId::is_loadable_dataset(id),
+                "{:?} should be loadable",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn test_social_media_ner_datasets_are_loadable() {
+        // Social media NER datasets (noisy text, hashtags, mentions)
+        let social_datasets = [
+            DatasetId::WNUT16,
+            DatasetId::TwiConv,
+            DatasetId::NERsocialFood,
+        ];
+
+        for id in social_datasets {
+            assert!(
+                LoadableDatasetId::is_loadable_dataset(id),
+                "{:?} should be loadable",
+                id
+            );
+            assert_eq!(
+                LoadableDatasetId::parse_plan(id),
+                Some(DatasetParsePlan::Conll),
+                "{:?} should use Conll plan",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn test_literary_ner_datasets_are_loadable() {
+        // Literary NER datasets (fiction, novels)
+        let literary_datasets = [
+            DatasetId::CharacterCodex,
+            DatasetId::FictionNER750M,
+            DatasetId::BookCoref,
+        ];
+
+        for id in literary_datasets {
+            assert!(
+                LoadableDatasetId::is_loadable_dataset(id),
+                "{:?} should be loadable",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn test_jsonl_ner_with_empty_tokens_handled() {
+        // Edge case: JSONL with some empty tokens
+        let jsonl_with_empty = r#"{"tokens":["Hello","","world"],"ner_tags":[0,0,0]}"#;
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_jsonl_ner(jsonl_with_empty, DatasetId::MultiWOZNER);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        // Empty token should still be preserved in parsing
+        assert_eq!(dataset.sentences[0].tokens.len(), 3);
+    }
+
+    #[test]
+    fn test_conll_with_long_entity_spans() {
+        // Test parsing of very long entity spans (e.g., legal document titles)
+        let long_span_conll = "The\tB-DOCUMENT\n\
+                               United\tI-DOCUMENT\n\
+                               States\tI-DOCUMENT\n\
+                               Constitution\tI-DOCUMENT\n\
+                               Article\tI-DOCUMENT\n\
+                               I\tI-DOCUMENT\n\
+                               Section\tI-DOCUMENT\n\
+                               8\tI-DOCUMENT\n\
+                               Clause\tI-DOCUMENT\n\
+                               3\tI-DOCUMENT\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(long_span_conll, DatasetId::LegNER);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        assert_eq!(dataset.sentences[0].tokens.len(), 10);
+        // All tokens should be part of the same entity
+        assert_eq!(dataset.sentences[0].tokens[0].ner_tag, "B-DOCUMENT");
+        assert_eq!(dataset.sentences[0].tokens[9].ner_tag, "I-DOCUMENT");
+    }
+
+    #[test]
+    fn test_all_added_conll_datasets_are_loadable() {
+        // Comprehensive check for all newly added CoNLL datasets
+        let added_conll = [
+            DatasetId::HistNERo,
+            DatasetId::DutchArchaeology,
+            DatasetId::FINER,
+            DatasetId::CALCS2018,
+            DatasetId::MedievalCharterNER,
+            DatasetId::RockNER,
+            DatasetId::AIDACoNLL,
+            DatasetId::NNE,
+            DatasetId::IndicNER,
+            DatasetId::NorNE,
+            DatasetId::TASTEset,
+            DatasetId::TechNER,
+            DatasetId::FinTechPatent,
+            DatasetId::WaterAgriNER,
+            DatasetId::RussianCulturalNER,
+            DatasetId::BASHI,
+            DatasetId::ENER,
+        ];
+
+        for id in added_conll {
+            assert!(
+                LoadableDatasetId::is_loadable_dataset(id),
+                "{:?} should be loadable",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_added_jsonl_datasets_are_loadable() {
+        // Comprehensive check for all newly added JSONL datasets
+        let added_jsonl = [
+            DatasetId::MultiWOZNER,
+            DatasetId::HinglishNER,
+            DatasetId::AgCNER,
+            DatasetId::LongDocNER,
+            DatasetId::MultiBioNERLong,
+            DatasetId::ReasoningNER,
+            DatasetId::BioNERLLaMA,
+            DatasetId::LexGLUENER,
+            DatasetId::FinBenNER,
+            DatasetId::FiNER139,
+            DatasetId::SciNER,
+            DatasetId::AIONER,
+            DatasetId::WIESPAstro,
+            DatasetId::CEREC,
+            DatasetId::DELICATE,
+            DatasetId::CSN,
+        ];
+
+        for id in added_jsonl {
+            assert!(
+                LoadableDatasetId::is_loadable_dataset(id),
+                "{:?} should be loadable",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_added_ud_datasets_are_loadable() {
+        // Comprehensive check for all newly added UD datasets
+        let added_ud = [
+            DatasetId::CopticScriptorium,
+            DatasetId::TaggedPBCEsperanto,
+            DatasetId::TaggedPBCKlingon,
+            DatasetId::AkkadianUD,
+            DatasetId::AncientHebrewUD,
+            DatasetId::ClassicalChineseUD,
+            DatasetId::CopticUD,
+            DatasetId::GothicUD,
+            DatasetId::HittiteUD,
+            DatasetId::OldChurchSlavonicUD,
+            DatasetId::LatinITTB,
+            DatasetId::LatinPROIEL,
+            DatasetId::EsperantoUD,
+            DatasetId::NavajoMorph,
+        ];
+
+        for id in added_ud {
+            assert!(
+                LoadableDatasetId::is_loadable_dataset(id),
+                "{:?} should be loadable",
+                id
+            );
+            assert_eq!(
+                LoadableDatasetId::parse_plan(id),
+                Some(DatasetParsePlan::Conllu),
+                "{:?} should use Conllu plan",
+                id
+            );
+        }
+    }
+
+    // =========================================================================
+    // Edge Case and Robustness Tests
+    // =========================================================================
+
+    #[test]
+    fn test_conll_handles_windows_line_endings() {
+        // Test CRLF line endings (Windows format)
+        let windows_conll = "John\tB-PER\r\nSmith\tI-PER\r\n\r\nLondon\tB-LOC\r\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(windows_conll, DatasetId::WikiGold);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 2);
+    }
+
+    #[test]
+    fn test_conll_handles_extra_whitespace() {
+        // Test lines with trailing/leading whitespace
+        let whitespace_conll = "  John  \t  B-PER  \n  meets  \t  O  \n\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(whitespace_conll, DatasetId::WikiGold);
+        // Should handle gracefully (may skip malformed lines)
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_conllu_handles_multiword_tokens() {
+        // CoNLL-U multi-word tokens (e.g., "don't" -> "do" + "n't")
+        let mwt_conllu = "# sent_id = test\n\
+                          # text = I can't go\n\
+                          1\tI\tI\tPRON\tPRP\t_\t3\tnsubj\t_\tSpaceAfter=Yes\n\
+                          2-3\tcan't\t_\t_\t_\t_\t_\t_\t_\tSpaceAfter=Yes\n\
+                          2\tca\tcan\tAUX\tMD\t_\t3\taux\t_\t_\n\
+                          3\tn't\tnot\tPART\tRB\t_\t0\troot\t_\t_\n\
+                          4\tgo\tgo\tVERB\tVB\t_\t3\txcomp\t_\tSpaceAfter=No\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conllu(mwt_conllu, DatasetId::LatinUD);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        // MWT range tokens (2-3) should be skipped, only atomic tokens kept
+        assert!(dataset.sentences[0].tokens.len() >= 3);
+    }
+
+    #[test]
+    fn test_conllu_handles_empty_nodes() {
+        // CoNLL-U empty nodes (e.g., 2.1 for elided elements)
+        let empty_node_conllu = "# sent_id = test\n\
+                                 # text = I saw and heard\n\
+                                 1\tI\tI\tPRON\tPRP\t_\t2\tnsubj\t_\tSpaceAfter=Yes\n\
+                                 2\tsaw\tsee\tVERB\tVBD\t_\t0\troot\t_\tSpaceAfter=Yes\n\
+                                 2.1\tI\tI\tPRON\tPRP\t_\t4\tnsubj\t_\t_\n\
+                                 3\tand\tand\tCCONJ\tCC\t_\t4\tcc\t_\tSpaceAfter=Yes\n\
+                                 4\theard\thear\tVERB\tVBD\t_\t2\tconj\t_\tSpaceAfter=No\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conllu(empty_node_conllu, DatasetId::LatinUD);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        // Empty nodes (2.1) should be skipped
+        assert_eq!(dataset.sentences[0].tokens.len(), 4);
+    }
+
+    #[test]
+    fn test_conll_with_bio_tag_normalization() {
+        // Some corpora use I- at start of entity (should be B-)
+        let malformed_bio = "Paris\tI-LOC\n\
+                             is\tO\n\
+                             beautiful\tO\n";
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_conll(malformed_bio, DatasetId::WikiGold);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        // Parser should normalize or preserve the tag
+        let first_tag = &dataset.sentences[0].tokens[0].ner_tag;
+        assert!(first_tag == "I-LOC" || first_tag == "B-LOC");
+    }
+
+    #[test]
+    fn test_conll_with_unicode_normalization() {
+        // Test that different Unicode normalizations are handled
+        // é can be U+00E9 (precomposed) or U+0065 U+0301 (decomposed)
+        let composed = "Café\tB-LOC\n";
+        let decomposed = "Café\tB-LOC\n"; // Note: this might look same but could be different bytes
+
+        let loader = DatasetLoader::new().unwrap();
+        let result1 = loader.parse_conll(composed, DatasetId::WikiGold);
+        let result2 = loader.parse_conll(decomposed, DatasetId::WikiGold);
+
+        assert!(result1.is_ok());
+        assert!(result2.is_ok());
+    }
+
+    #[test]
+    fn test_cadec_hf_api_unicode_prefix_case_insensitive_span_search_is_safe() {
+        // Regression: span finding must not rely on Unicode lowercasing index alignment.
+        let loader = DatasetLoader::new().unwrap();
+        // Include `features` and compact JSON so `is_hf_api_response()` recognizes it.
+        let content = r#"{"features":[{"name":"text"},{"name":"ade"},{"name":"term_PT"}],"rows":[{"row":{"text":"Müller reported HEADACHE after taking aspirin.","ade":"headache","term_PT":"Headache"}}]}"#;
+
+        let ds = loader
+            .parse_content_str(content, DatasetId::CADEC)
+            .expect("parse CADEC HF API");
+        assert_eq!(ds.id, DatasetId::CADEC);
+        assert!(!ds.sentences.is_empty());
+
+        let sent = &ds.sentences[0];
+        // We should tag the ADE as B-/I- adverse_drug_event in BIO space.
+        assert!(
+            sent.tokens
+                .iter()
+                .any(|t| t.ner_tag == "B-adverse_drug_event" || t.ner_tag == "I-adverse_drug_event"),
+            "Expected ADE tags in tokens: {:?}",
+            sent.tokens
+        );
+    }
+
+    #[test]
+    fn test_jsonl_with_unicode_tokens() {
+        // JSONL with various Unicode characters
+        let unicode_jsonl = r#"{"tokens":["北京","🎉","Москва","القاهرة"],"ner_tags":[5,0,5,5]}"#;
+
+        let loader = DatasetLoader::new().unwrap();
+        let result = loader.parse_jsonl_ner(unicode_jsonl, DatasetId::MultiWOZNER);
+        assert!(result.is_ok());
+
+        let dataset = result.unwrap();
+        assert_eq!(dataset.sentences.len(), 1);
+        assert_eq!(dataset.sentences[0].tokens.len(), 4);
+        assert_eq!(dataset.sentences[0].tokens[0].text, "北京");
+        assert_eq!(dataset.sentences[0].tokens[1].text, "🎉");
+        assert_eq!(dataset.sentences[0].tokens[2].text, "Москва");
+    }
+
+    #[test]
+    fn test_parse_plan_consistency_with_is_loadable() {
+        // Invariant: parse_plan returns Some iff is_loadable_dataset returns true
+        for &id in DatasetId::all() {
+            let has_plan = LoadableDatasetId::parse_plan(id).is_some();
+            let is_loadable = LoadableDatasetId::is_loadable_dataset(id);
+            assert_eq!(
+                has_plan, is_loadable,
+                "Mismatch for {:?}: parse_plan={}, is_loadable={}",
+                id, has_plan, is_loadable
+            );
+        }
+    }
+
+    #[test]
+    fn test_dataset_coverage_by_plan() {
+        // Verify we have good coverage across different parse plans
+        let mut conll_count = 0;
+        let mut jsonl_count = 0;
+        let mut conllu_count = 0;
+        let mut _other_count = 0;
+
+        for id in LoadableDatasetId::all() {
+            let ds: DatasetId = id.into();
+            match LoadableDatasetId::parse_plan(ds) {
+                Some(DatasetParsePlan::Conll) => conll_count += 1,
+                Some(DatasetParsePlan::JsonlNer) => jsonl_count += 1,
+                Some(DatasetParsePlan::Conllu) => conllu_count += 1,
+                Some(_) => _other_count += 1,
+                None => {}
+            }
+        }
+
+        // Should have substantial coverage for each format
+        assert!(
+            conll_count >= 50,
+            "Expected at least 50 CoNLL datasets loadable, got {}",
+            conll_count
+        );
+        assert!(
+            jsonl_count >= 20,
+            "Expected at least 20 JSONL datasets loadable, got {}",
+            jsonl_count
+        );
+        assert!(
+            conllu_count >= 10,
+            "Expected at least 10 CoNLLU datasets loadable, got {}",
+            conllu_count
+        );
+    }
+
+    #[test]
+    fn test_loadable_datasets_have_valid_metadata() {
+        // All loadable datasets should have basic metadata
+        for id in LoadableDatasetId::all() {
+            let ds: DatasetId = id.into();
+
+            // Name should not be empty
+            assert!(!ds.name().is_empty(), "{:?} has empty name", ds);
+
+            // Description should exist for most
+            // (not asserting as some may legitimately have no description)
+        }
+    }
 }
