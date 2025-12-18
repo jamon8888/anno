@@ -1,7 +1,11 @@
 //! Language detection and classification utilities.
 
 /// Supported languages for text analysis.
+///
+/// Variants are intentionally ordered for indexed access in `detect_language`.
+/// The `repr(u8)` is required for safe conversion from index to enum variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
 pub enum Language {
     /// English language
     English,
@@ -112,9 +116,131 @@ pub fn detect_language(text: &str) -> Language {
         return Language::Japanese; // Japanese uses Kanji (Chinese chars) too
     }
 
-    // SAFETY: max_idx is guaranteed to be in range [0, 255] because it comes from
-    // argmax over a fixed-size array (Language enum has < 256 variants).
-    // The cast to u8 is safe, and transmute from u8 to Language is safe because
-    // Language is repr(u8) and max_idx corresponds to a valid Language variant.
-    unsafe { std::mem::transmute(max_idx as u8) }
+    // Convert index to Language variant safely
+    // Using explicit match instead of transmute for compile-time safety
+    match max_idx {
+        0 => Language::English,
+        1 => Language::German,
+        2 => Language::French,
+        3 => Language::Spanish,
+        4 => Language::Italian,
+        5 => Language::Portuguese,
+        6 => Language::Russian,
+        7 => Language::Chinese,
+        8 => Language::Japanese,
+        9 => Language::Korean,
+        10 => Language::Arabic,
+        11 => Language::Hebrew,
+        _ => Language::Other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_english() {
+        assert_eq!(detect_language("Hello, world!"), Language::English);
+        assert_eq!(detect_language("The quick brown fox"), Language::English);
+    }
+
+    #[test]
+    fn test_detect_german() {
+        // Need enough German-specific characters to outweigh generic Latin
+        assert_eq!(
+            detect_language("Größe Müller Öffentlichkeit Übung"),
+            Language::German
+        );
+        assert_eq!(detect_language("ß ä ö ü ß Ä Ö Ü"), Language::German);
+    }
+
+    #[test]
+    fn test_detect_french() {
+        assert_eq!(detect_language("Café à Paris"), Language::French);
+        assert_eq!(detect_language("être où ça"), Language::French);
+    }
+
+    #[test]
+    fn test_detect_spanish() {
+        assert_eq!(detect_language("¿Cómo estás? Mañana"), Language::Spanish);
+    }
+
+    #[test]
+    fn test_detect_chinese() {
+        assert_eq!(detect_language("北京欢迎您"), Language::Chinese);
+        assert_eq!(detect_language("习近平"), Language::Chinese);
+    }
+
+    #[test]
+    fn test_detect_japanese() {
+        // Hiragana/Katakana triggers Japanese detection
+        assert_eq!(detect_language("こんにちは"), Language::Japanese);
+        assert_eq!(detect_language("東京タワー"), Language::Japanese);
+    }
+
+    #[test]
+    fn test_detect_korean() {
+        assert_eq!(detect_language("안녕하세요"), Language::Korean);
+        assert_eq!(detect_language("서울"), Language::Korean);
+    }
+
+    #[test]
+    fn test_detect_arabic() {
+        assert_eq!(detect_language("مرحبا"), Language::Arabic);
+        assert_eq!(detect_language("القاهرة"), Language::Arabic);
+    }
+
+    #[test]
+    fn test_detect_hebrew() {
+        assert_eq!(detect_language("שלום"), Language::Hebrew);
+        assert_eq!(detect_language("ירושלים"), Language::Hebrew);
+    }
+
+    #[test]
+    fn test_detect_russian() {
+        assert_eq!(detect_language("Привет, мир!"), Language::Russian);
+        assert_eq!(detect_language("Москва"), Language::Russian);
+    }
+
+    #[test]
+    fn test_empty_text_defaults_to_english() {
+        assert_eq!(detect_language(""), Language::English);
+        assert_eq!(detect_language("123 !@# "), Language::English);
+    }
+
+    #[test]
+    fn test_is_cjk() {
+        assert!(Language::Chinese.is_cjk());
+        assert!(Language::Japanese.is_cjk());
+        assert!(Language::Korean.is_cjk());
+        assert!(!Language::English.is_cjk());
+        assert!(!Language::Arabic.is_cjk());
+    }
+
+    #[test]
+    fn test_is_rtl() {
+        assert!(Language::Arabic.is_rtl());
+        assert!(Language::Hebrew.is_rtl());
+        assert!(!Language::English.is_rtl());
+        assert!(!Language::Chinese.is_rtl());
+    }
+
+    #[test]
+    fn test_language_repr_matches_index() {
+        // Verify the repr(u8) matches our index expectations
+        assert_eq!(Language::English as u8, 0);
+        assert_eq!(Language::German as u8, 1);
+        assert_eq!(Language::French as u8, 2);
+        assert_eq!(Language::Spanish as u8, 3);
+        assert_eq!(Language::Italian as u8, 4);
+        assert_eq!(Language::Portuguese as u8, 5);
+        assert_eq!(Language::Russian as u8, 6);
+        assert_eq!(Language::Chinese as u8, 7);
+        assert_eq!(Language::Japanese as u8, 8);
+        assert_eq!(Language::Korean as u8, 9);
+        assert_eq!(Language::Arabic as u8, 10);
+        assert_eq!(Language::Hebrew as u8, 11);
+        assert_eq!(Language::Other as u8, 12);
+    }
 }

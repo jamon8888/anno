@@ -451,6 +451,53 @@ fn test_stats_serialization() {
 }
 
 // =============================================================================
+// CSV NER Format (E-NER)
+// =============================================================================
+
+/// Verify E-NER (EDGAR-NER) CSV format parses correctly.
+#[test]
+fn test_ener_csv_structure() {
+    let loader = DatasetLoader::new().expect("loader");
+    let ener = LoadableDatasetId::try_from(DatasetId::ENer).expect("ENer loadable");
+    if !loader.is_cached(ener) {
+        eprintln!("E-NER not cached, skipping structure test");
+        return;
+    }
+
+    let dataset = loader.load(ener).expect("load E-NER");
+    let stats = dataset.stats();
+
+    // E-NER should have substantial content
+    // Note: HuggingFace API may return a sample (~54 sentences) rather than the full dataset
+    assert!(
+        stats.sentences > 10,
+        "E-NER should have >10 sentences, got {}",
+        stats.sentences
+    );
+    assert!(
+        stats.entities > 10,
+        "E-NER should have >10 entities, got {}",
+        stats.entities
+    );
+    assert!(
+        stats.tokens > 100,
+        "E-NER should have >100 tokens, got {}",
+        stats.tokens
+    );
+
+    // Should have legal/financial entity types
+    let has_business = stats.entities_by_type.contains_key("BUSINESS")
+        || stats.entities_by_type.contains_key("I-BUSINESS");
+    let has_person = stats.entities_by_type.contains_key("PERSON")
+        || stats.entities_by_type.contains_key("I-PERSON");
+    assert!(
+        has_business || has_person,
+        "E-NER should contain BUSINESS or PERSON entities: {:?}",
+        stats.entities_by_type.keys().collect::<Vec<_>>()
+    );
+}
+
+// =============================================================================
 // Test Cases Conversion
 // =============================================================================
 

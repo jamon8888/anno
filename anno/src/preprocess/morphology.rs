@@ -43,6 +43,7 @@
 //! - Cherokee syllabary: 85 characters representing CV syllables
 //! - Navajo: Complex verbal morphology with prefix templates
 
+use crate::offset::TextSpan;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -265,10 +266,11 @@ impl MorphologicalPreprocessor {
             if boundary_chars.contains(&c) {
                 // Save current morpheme if non-empty
                 if !current_text.is_empty() {
+                    let span = TextSpan::from_bytes(text, current_start, i);
                     morphemes.push(Morpheme {
                         text: current_text.clone(),
-                        start: current_start,
-                        end: i,
+                        start: span.char_start,
+                        end: span.char_end,
                         morph_type: Some(MorphemeType::Unknown),
                         gloss: None,
                     });
@@ -285,10 +287,11 @@ impl MorphologicalPreprocessor {
 
         // Don't forget the last morpheme
         if !current_text.is_empty() {
+            let span = TextSpan::from_bytes(text, current_start, text.len());
             morphemes.push(Morpheme {
                 text: current_text,
-                start: current_start,
-                end: text.len(),
+                start: span.char_start,
+                end: span.char_end,
                 morph_type: Some(MorphemeType::Unknown),
                 gloss: None,
             });
@@ -305,7 +308,7 @@ impl MorphologicalPreprocessor {
             .ok_or_else(|| Error::InvalidInput("Syllable inventory not loaded".to_string()))?;
 
         let mut morphemes = Vec::new();
-        let mut pos = 0;
+        let mut pos = 0; // byte offset
 
         // Greedy matching from syllable inventory
         while pos < text.len() {
@@ -316,10 +319,11 @@ impl MorphologicalPreprocessor {
             for syllable in inventory.iter().rev() {
                 // Assumes sorted by length
                 if remaining.starts_with(syllable) {
+                    let span = TextSpan::from_bytes(text, pos, pos + syllable.len());
                     morphemes.push(Morpheme {
                         text: syllable.clone(),
-                        start: pos,
-                        end: pos + syllable.len(),
+                        start: span.char_start,
+                        end: span.char_end,
                         morph_type: Some(MorphemeType::Unknown),
                         gloss: None,
                     });
@@ -335,10 +339,11 @@ impl MorphologicalPreprocessor {
                     .chars()
                     .next()
                     .expect("pos should be within text bounds");
+                let span = TextSpan::from_bytes(text, pos, pos + c.len_utf8());
                 morphemes.push(Morpheme {
                     text: c.to_string(),
-                    start: pos,
-                    end: pos + c.len_utf8(),
+                    start: span.char_start,
+                    end: span.char_end,
                     morph_type: Some(MorphemeType::Unknown),
                     gloss: None,
                 });
@@ -424,6 +429,27 @@ pub trait MorphologicalAnalyzer: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_rule_based_segmentation_offsets_are_character_offsets_on_unicode() {
+        let preprocessor =
+            MorphologicalPreprocessor::new().with_strategy(SegmentationStrategy::RuleBased {
+                boundary_chars: vec!['-'],
+            });
+
+        // ü is multi-byte; offsets must still be character offsets.
+        let text = "über-alles";
+        let result = preprocessor.segment(text).expect("segment");
+        assert_eq!(result.morphemes.len(), 2);
+
+        assert_eq!(result.morphemes[0].text, "über");
+        assert_eq!(result.morphemes[0].start, 0);
+        assert_eq!(result.morphemes[0].end, 4);
+
+        assert_eq!(result.morphemes[1].text, "alles");
+        assert_eq!(result.morphemes[1].start, 5);
+        assert_eq!(result.morphemes[1].end, 10);
+    }
 
     #[test]
     fn test_rule_based_segmentation() {
