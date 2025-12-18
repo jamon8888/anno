@@ -179,7 +179,8 @@ proptest! {
         };
 
         let full_text = format!("{} {}", chunk1, chunk2);
-        let chunk1_len = chunk1.len();
+        let chunk1_len = chunk1.chars().count();
+        let full_text_len = full_text.chars().count();
 
         // Extract from full text (for reference)
         let _full_entities = backend.extract_entities(&full_text, None).unwrap();
@@ -191,10 +192,10 @@ proptest! {
         // All chunk entities should have adjusted offsets
         for entity in chunk1_entities.iter().chain(chunk2_entities.iter()) {
             prop_assert!(
-                entity.end <= full_text.len(),
-                "Streaming entity end {} > full text length {}",
+                entity.end <= full_text_len,
+                "Streaming entity end {} > full text char length {}",
                 entity.end,
-                full_text.len()
+                full_text_len
             );
         }
     }
