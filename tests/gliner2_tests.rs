@@ -652,6 +652,8 @@ mod streaming_processing {
     #[test]
     fn test_chunk_boundary_handling() {
         // Test that chunk boundaries don't break entities
+        // NOTE: this test is about boundary behavior; keep slices ASCII-only to avoid
+        // mixing char offsets with byte offsets.
         let text = "Steve Jobs founded Apple in California.";
         let chunk1 = &text[0..20]; // "Steve Jobs founded A"
         let _chunk2 = &text[15..]; // "unded Apple in California."

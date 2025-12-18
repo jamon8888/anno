@@ -667,6 +667,9 @@ impl NuNER {
             )));
         }
 
+        // Word positions are byte offsets; `Entity` requires character offsets.
+        let span_converter = crate::offset::SpanConverter::new(text);
+
         // Performance: Pre-allocate entities vec with estimated capacity
         let mut entities = Vec::with_capacity(16);
         let mut current_entity: Option<(usize, usize, usize, f32)> = None; // (start_word, end_word, type_idx, score)
@@ -705,6 +708,7 @@ impl NuNER {
                     if let Some((start, end, etype, score)) = current_entity.take() {
                         if let Some(e) = self.create_entity(
                             text,
+                            &span_converter,
                             &word_positions,
                             start,
                             end,
@@ -731,6 +735,7 @@ impl NuNER {
                 if let Some((start, end, etype, score)) = current_entity.take() {
                     if let Some(e) = self.create_entity(
                         text,
+                        &span_converter,
                         &word_positions,
                         start,
                         end,
@@ -748,6 +753,7 @@ impl NuNER {
         if let Some((start, end, etype, score)) = current_entity.take() {
             if let Some(e) = self.create_entity(
                 text,
+                &span_converter,
                 &word_positions,
                 start,
                 end,
@@ -833,6 +839,9 @@ impl NuNER {
             positions
         };
 
+        // Word positions are byte offsets; `Entity` requires character offsets.
+        let span_converter = crate::offset::SpanConverter::new(text);
+
         let mut entities = Vec::with_capacity(16);
         let mut current_entity: Option<(usize, usize, usize, f32)> = None; // (start_word, end_word, type_idx, score)
 
@@ -871,6 +880,7 @@ impl NuNER {
                         // Different type - flush and start new
                         if let Some(e) = self.create_entity(
                             text,
+                            &span_converter,
                             &word_positions,
                             *start,
                             *end,
@@ -891,6 +901,7 @@ impl NuNER {
                 if let Some((start, end, etype, score)) = current_entity.take() {
                     if let Some(e) = self.create_entity(
                         text,
+                        &span_converter,
                         &word_positions,
                         start,
                         end,
@@ -908,6 +919,7 @@ impl NuNER {
         if let Some((start, end, etype, score)) = current_entity.take() {
             if let Some(e) = self.create_entity(
                 text,
+                &span_converter,
                 &word_positions,
                 start,
                 end,
@@ -931,6 +943,7 @@ impl NuNER {
     fn create_entity(
         &self,
         text: &str,
+        span_converter: &crate::offset::SpanConverter,
         word_positions: &[(usize, usize)],
         start_word: usize,
         end_word: usize,
@@ -949,11 +962,14 @@ impl NuNER {
         let label = entity_types.get(type_idx)?;
         let entity_type = Self::map_label_to_entity_type(label);
 
+        let char_start = span_converter.byte_to_char(start_pos);
+        let char_end = span_converter.byte_to_char(end_pos);
+
         Some(Entity::new(
             entity_text,
             entity_type,
-            start_pos,
-            end_pos,
+            char_start,
+            char_end,
             score as f64,
         ))
     }

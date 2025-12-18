@@ -88,3 +88,56 @@ fn overlapping_spans_keep_highest_confidence() {
     );
 }
 
+#[test]
+fn decode_span_output_uses_character_offsets_for_unicode() {
+    // `decode_span_output` internally finds word spans using byte offsets, but `Entity` requires
+    // character offsets. This test ensures we convert correctly across diverse scripts.
+    let cases = [
+        // CJK + Latin
+        ("北京", "Beijing"),
+        // Cyrillic + Latin
+        ("Москва", "Moscow"),
+        // Arabic (RTL)
+        ("محمد", "الرياض"),
+        // Devanagari
+        ("शर्मा", "दिल्ली"),
+    ];
+
+    for (w1, w2) in cases {
+        let text = format!("{w1} {w2}");
+        let text_words: Vec<&str> = text.split_whitespace().collect();
+        assert_eq!(text_words.len(), 2);
+
+        // Shape: [batch=1, num_words=2, max_width=1, num_classes=1]
+        // We only allow width=0 (single-word spans). Make word 2 the only entity.
+        let output_data = vec![
+            0.0, // start 0, width 0
+            0.9, // start 1, width 0  -> selects w2
+        ];
+        let shape = [1, 2, 1, 1];
+        let entity_types = ["loc"];
+        let config = SpanConfig {
+            max_span_width: 1,
+            threshold: 0.5,
+        };
+
+        let entities =
+            decode_span_output(&output_data, &shape, &text, &text_words, &entity_types, &config)
+                .expect("decode should succeed");
+
+        assert_eq!(entities.len(), 1);
+        let e = &entities[0];
+        assert_eq!(e.text, w2);
+
+        let expected_start = w1.chars().count() + 1; // one ASCII space
+        let expected_end = expected_start + w2.chars().count();
+        assert_eq!(
+            (e.start, e.end),
+            (expected_start, expected_end),
+            "unexpected offsets for text={:?} entity={:?}",
+            text,
+            e.text
+        );
+    }
+}
+

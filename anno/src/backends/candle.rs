@@ -300,20 +300,29 @@ impl CandleNER {
     ) -> Result<Vec<Entity>> {
         let mut entities = Vec::with_capacity(16);
         let mut current_entity: Option<(usize, usize, String, f64)> = None;
+        // `tokenizers::Encoding::get_offsets()` are byte offsets. `Entity` expects char offsets.
+        // Build once so conversion is O(1) per entity.
+        let span_converter = crate::offset::SpanConverter::new(text);
 
         for (token_idx, &pred) in predictions.iter().enumerate() {
             if token_idx >= offsets.len() {
                 break;
             }
 
-            let (char_start, char_end) = offsets[token_idx];
+            let (byte_start, byte_end) = offsets[token_idx];
 
             // Skip special tokens (offset 0,0)
-            if char_start == char_end {
+            if byte_start == byte_end {
                 // Finalize current entity if any
                 if let Some((start, end, etype, conf)) = current_entity.take() {
-                    if let Some(e) = self.create_entity_from_offsets(text, start, end, &etype, conf)
-                    {
+                    if let Some(e) = self.create_entity_from_offsets(
+                        text,
+                        &span_converter,
+                        start,
+                        end,
+                        &etype,
+                        conf,
+                    ) {
                         entities.push(e);
                     }
                 }
@@ -329,47 +338,63 @@ impl CandleNER {
             if label == "O" {
                 // Outside label - finalize current entity
                 if let Some((start, end, etype, conf)) = current_entity.take() {
-                    if let Some(e) = self.create_entity_from_offsets(text, start, end, &etype, conf)
-                    {
+                    if let Some(e) = self.create_entity_from_offsets(
+                        text,
+                        &span_converter,
+                        start,
+                        end,
+                        &etype,
+                        conf,
+                    ) {
                         entities.push(e);
                     }
                 }
             } else if label.starts_with("B-") {
                 // Begin new entity - finalize previous if any
                 if let Some((start, end, etype, conf)) = current_entity.take() {
-                    if let Some(e) = self.create_entity_from_offsets(text, start, end, &etype, conf)
-                    {
+                    if let Some(e) = self.create_entity_from_offsets(
+                        text,
+                        &span_converter,
+                        start,
+                        end,
+                        &etype,
+                        conf,
+                    ) {
                         entities.push(e);
                     }
                 }
                 let entity_type = label.strip_prefix("B-").unwrap_or("MISC");
-                current_entity = Some((char_start, char_end, entity_type.to_string(), 0.9));
+                current_entity = Some((byte_start, byte_end, entity_type.to_string(), 0.9));
             } else if label.starts_with("I-") {
                 // Inside continuation
                 let entity_type = label.strip_prefix("I-").unwrap_or("MISC");
                 if let Some((start, _, ref etype, conf)) = current_entity {
                     if entity_type == etype {
                         // Continue entity
-                        current_entity = Some((start, char_end, etype.clone(), conf));
+                        current_entity = Some((start, byte_end, etype.clone(), conf));
                     } else {
                         // Type mismatch - start new entity
                         if let Some((s, e, t, c)) = current_entity.take() {
-                            if let Some(ent) = self.create_entity_from_offsets(text, s, e, &t, c) {
+                            if let Some(ent) =
+                                self.create_entity_from_offsets(text, &span_converter, s, e, &t, c)
+                            {
                                 entities.push(ent);
                             }
                         }
-                        current_entity = Some((char_start, char_end, entity_type.to_string(), 0.9));
+                        current_entity = Some((byte_start, byte_end, entity_type.to_string(), 0.9));
                     }
                 } else {
                     // No current entity - start new one (treat I- as B-)
-                    current_entity = Some((char_start, char_end, entity_type.to_string(), 0.9));
+                    current_entity = Some((byte_start, byte_end, entity_type.to_string(), 0.9));
                 }
             }
         }
 
         // Flush final entity
         if let Some((start, end, etype, conf)) = current_entity.take() {
-            if let Some(e) = self.create_entity_from_offsets(text, start, end, &etype, conf) {
+            if let Some(e) =
+                self.create_entity_from_offsets(text, &span_converter, start, end, &etype, conf)
+            {
                 entities.push(e);
             }
         }
@@ -377,26 +402,30 @@ impl CandleNER {
         Ok(entities)
     }
 
-    /// Create an entity from character offsets.
+    /// Create an entity from tokenizer byte offsets, converting to character offsets for `Entity`.
     fn create_entity_from_offsets(
         &self,
         text: &str,
-        char_start: usize,
-        char_end: usize,
+        span_converter: &crate::offset::SpanConverter,
+        byte_start: usize,
+        byte_end: usize,
         entity_type: &str,
         confidence: f64,
     ) -> Option<Entity> {
-        if char_start >= char_end || char_end > text.len() {
+        if byte_start >= byte_end || byte_end > text.len() {
             return None;
         }
 
-        // Extract text using byte offsets (tokenizer returns byte offsets)
-        let entity_text = text.get(char_start..char_end)?;
+        // Extract text using byte offsets (tokenizers use byte indices in Rust).
+        let entity_text = text.get(byte_start..byte_end)?;
 
         // Skip empty or whitespace-only entities
         if entity_text.trim().is_empty() {
             return None;
         }
+
+        let char_start = span_converter.byte_to_char(byte_start);
+        let char_end = span_converter.byte_to_char(byte_end);
 
         let etype = match entity_type.to_uppercase().as_str() {
             "PER" | "PERSON" => EntityType::Person,
