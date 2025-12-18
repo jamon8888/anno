@@ -90,9 +90,9 @@ pub mod types;
 
 // Re-exports for convenience
 pub use entity::{
-    DiscontinuousSpan, Entity, EntityBuilder, EntityCategory, EntityType, EntityViewport,
-    ExtractionMethod, HashMapLexicon, HierarchicalConfidence, Lexicon, Provenance, RaggedBatch,
-    Relation, Span, SpanCandidate, TypeMapper, ValidationIssue,
+    generate_span_candidates, DiscontinuousSpan, Entity, EntityBuilder, EntityCategory, EntityType,
+    EntityViewport, ExtractionMethod, HashMapLexicon, HierarchicalConfidence, Lexicon, Provenance,
+    RaggedBatch, Relation, Span, SpanCandidate, TypeMapper, ValidationIssue,
 };
 
 pub use grounded::{
