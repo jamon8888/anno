@@ -121,8 +121,7 @@ use std::collections::{HashMap, VecDeque};
 // =============================================================================
 
 /// Memory eviction policy for incremental coreference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum MemoryPolicy {
     /// Keep all clusters (unbounded memory, most accurate)
     #[default]
@@ -147,7 +146,6 @@ pub enum MemoryPolicy {
         g_cache_size: usize,
     },
 }
-
 
 /// Configuration for incremental coreference resolution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -321,10 +319,15 @@ impl EntityMemory {
                 use_substring_match,
             );
 
-            if score >= similarity_threshold
-                && (best_match.is_none() || score > best_match.unwrap().1) {
+            if score >= similarity_threshold {
+                let should_update = match best_match {
+                    None => true,
+                    Some((_, best_score)) => score > best_score,
+                };
+                if should_update {
                     best_match = Some((*id, score));
                 }
+            }
         }
 
         best_match.map(|(id, _)| id)
@@ -628,25 +631,22 @@ impl IncrementalCorefResolver {
             // Token-based windowing, but offsets are still character offsets.
             // We tokenize in a Unicode-safe way and keep (start_char, end_char) per token.
             #[derive(Debug, Clone, Copy)]
-            struct TokenSpan<'a> {
-                token: &'a str,
+            struct TokenSpan {
                 start_char: usize,
                 end_char: usize,
             }
 
-            fn tokenize_with_char_offsets(text: &str) -> Vec<TokenSpan<'_>> {
+            fn tokenize_with_char_offsets(text: &str) -> Vec<TokenSpan> {
                 let mut tokens = Vec::new();
 
                 let mut in_word = false;
-                let mut word_start_byte = 0;
                 let mut word_start_char = 0;
                 let mut char_pos = 0;
 
-                for (byte_idx, c) in text.char_indices() {
+                for c in text.chars() {
                     if c.is_whitespace() {
                         if in_word {
                             tokens.push(TokenSpan {
-                                token: &text[word_start_byte..byte_idx],
                                 start_char: word_start_char,
                                 end_char: char_pos,
                             });
@@ -654,7 +654,6 @@ impl IncrementalCorefResolver {
                         }
                     } else if !in_word {
                         in_word = true;
-                        word_start_byte = byte_idx;
                         word_start_char = char_pos;
                     }
                     char_pos += 1;
@@ -662,7 +661,6 @@ impl IncrementalCorefResolver {
 
                 if in_word {
                     tokens.push(TokenSpan {
-                        token: &text[word_start_byte..],
                         start_char: word_start_char,
                         end_char: char_pos,
                     });
@@ -672,7 +670,10 @@ impl IncrementalCorefResolver {
             }
 
             let tokens = tokenize_with_char_offsets(text);
-            let step = self.config.window_size.saturating_sub(self.config.window_overlap);
+            let step = self
+                .config
+                .window_size
+                .saturating_sub(self.config.window_overlap);
 
             while offset < tokens.len() {
                 let end = (offset + self.config.window_size).min(tokens.len());
@@ -682,10 +683,9 @@ impl IncrementalCorefResolver {
 
                 let char_start = tokens[offset].start_char;
                 let char_end = tokens[end - 1].end_char;
-                let window_text =
-                    crate::offset::TextSpan::from_chars(text, char_start, char_end)
-                        .extract(text)
-                        .to_string();
+                let window_text = crate::offset::TextSpan::from_chars(text, char_start, char_end)
+                    .extract(text)
+                    .to_string();
 
                 windows.push((window_text, char_start));
 
@@ -697,7 +697,10 @@ impl IncrementalCorefResolver {
         } else {
             // Character-based windowing
             let text_char_len = text.chars().count();
-            let step = self.config.window_size.saturating_sub(self.config.window_overlap);
+            let step = self
+                .config
+                .window_size
+                .saturating_sub(self.config.window_overlap);
 
             while offset < text_char_len {
                 let end = (offset + self.config.window_size).min(text_char_len);
@@ -705,8 +708,7 @@ impl IncrementalCorefResolver {
                 // Adjust to word boundary if possible.
                 // NOTE: `offset`/`end` are character offsets; we convert to byte offsets for rfind.
                 let adjusted_end = if end < text_char_len {
-                    let end_byte =
-                        crate::offset::TextSpan::from_chars(text, end, end).byte_start;
+                    let end_byte = crate::offset::TextSpan::from_chars(text, end, end).byte_start;
                     let mut adjusted_end_byte = end_byte;
 
                     if let Some(ws_byte_pos) = text[..end_byte].rfind(char::is_whitespace) {
@@ -740,10 +742,9 @@ impl IncrementalCorefResolver {
                     end
                 };
 
-                let window_text =
-                    crate::offset::TextSpan::from_chars(text, offset, adjusted_end)
-                        .extract(text)
-                        .to_string();
+                let window_text = crate::offset::TextSpan::from_chars(text, offset, adjusted_end)
+                    .extract(text)
+                    .to_string();
                 windows.push((window_text, offset));
 
                 if adjusted_end >= text_char_len {
@@ -769,20 +770,21 @@ impl IncrementalCorefResolver {
         let mut word_start_char = 0;
         let mut char_pos = 0;
 
-        let mut flush_word = |word_end_byte: usize, word_end_char: usize| {
-            let word = &text[word_start_byte..word_end_byte];
+        let mut maybe_push_mention = |word: &str, local_start: usize, local_end: usize| {
             let mention_type = self.classify_mention_type(word);
 
             // Only track pronouns and capitalized words (potential names)
             let should_track = match mention_type {
                 MentionType::Pronominal => true,
                 MentionType::Proper => true,
-                _ => word.chars().next().map(|c| c.is_uppercase()).unwrap_or(false),
+                _ => word
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false),
             };
 
             if should_track {
-                let local_start = word_start_char;
-                let local_end = word_end_char;
                 mentions.push(MentionRecord {
                     text: word.to_string(),
                     start: offset + local_start,
@@ -796,7 +798,8 @@ impl IncrementalCorefResolver {
         for (byte_idx, c) in text.char_indices() {
             if c.is_whitespace() {
                 if in_word {
-                    flush_word(byte_idx, char_pos);
+                    let word = &text[word_start_byte..byte_idx];
+                    maybe_push_mention(word, word_start_char, char_pos);
                     in_word = false;
                 }
             } else if !in_word {
@@ -808,7 +811,8 @@ impl IncrementalCorefResolver {
         }
 
         if in_word {
-            flush_word(text.len(), char_pos);
+            let word = &text[word_start_byte..];
+            maybe_push_mention(word, word_start_char, char_pos);
         }
 
         mentions
@@ -820,17 +824,50 @@ impl IncrementalCorefResolver {
 
         // Pronouns
         let pronouns = [
-            "he", "him", "his", "himself",
-            "she", "her", "hers", "herself",
-            "they", "them", "their", "theirs", "themself", "themselves",
-            "it", "its", "itself",
-            "i", "me", "my", "mine", "myself",
-            "we", "us", "our", "ours", "ourselves",
-            "you", "your", "yours", "yourself", "yourselves",
+            "he",
+            "him",
+            "his",
+            "himself",
+            "she",
+            "her",
+            "hers",
+            "herself",
+            "they",
+            "them",
+            "their",
+            "theirs",
+            "themself",
+            "themselves",
+            "it",
+            "its",
+            "itself",
+            "i",
+            "me",
+            "my",
+            "mine",
+            "myself",
+            "we",
+            "us",
+            "our",
+            "ours",
+            "ourselves",
+            "you",
+            "your",
+            "yours",
+            "yourself",
+            "yourselves",
             // Neopronouns
-            "xe", "xem", "xyr", "xyrs",
-            "ze", "zir", "zirs",
-            "ey", "em", "eir", "eirs",
+            "xe",
+            "xem",
+            "xyr",
+            "xyrs",
+            "ze",
+            "zir",
+            "zirs",
+            "ey",
+            "em",
+            "eir",
+            "eirs",
         ];
 
         if pronouns.contains(&lower.as_str()) {
@@ -838,7 +875,12 @@ impl IncrementalCorefResolver {
         }
 
         // Proper nouns (capitalized, not sentence-initial)
-        if text.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+        if text
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        {
             return MentionType::Proper;
         }
 
@@ -907,7 +949,8 @@ impl IncrementalCorefResolver {
 
     /// Check if two clusters should be merged.
     fn should_merge_clusters(&self, memory: &EntityMemory, id_a: u64, id_b: u64) -> bool {
-        let (cluster_a, cluster_b) = match (memory.clusters.get(&id_a), memory.clusters.get(&id_b)) {
+        let (cluster_a, cluster_b) = match (memory.clusters.get(&id_a), memory.clusters.get(&id_b))
+        {
             (Some(a), Some(b)) => (a, b),
             _ => return false,
         };
@@ -1007,7 +1050,8 @@ pub struct IncrementalStats {
 impl IncrementalStats {
     /// Compute statistics from entity memory.
     pub fn from_memory(memory: &EntityMemory, windows: usize) -> Self {
-        let cluster_sizes: Vec<usize> = memory.clusters.values().map(|c| c.mentions.len()).collect();
+        let cluster_sizes: Vec<usize> =
+            memory.clusters.values().map(|c| c.mentions.len()).collect();
 
         Self {
             windows_processed: windows,
@@ -1069,7 +1113,10 @@ mod tests {
             .expect("expected to detect 'John'");
         let extracted = TextSpan::from_chars(text, john.start, john.end).extract(text);
         assert_eq!(extracted, "John");
-        assert_eq!(john.start, 6, "🎉(1) + space(1) + Dr.(2) + .(1) + space(1) = 6");
+        assert_eq!(
+            john.start, 6,
+            "🎉(1) + space(1) + Dr.(2) + .(1) + space(1) = 6"
+        );
         assert_eq!(john.end, 10);
     }
 
@@ -1161,13 +1208,7 @@ mod tests {
         memory.create_cluster(&mention1, Some(EntityType::Person));
 
         // Should match "Smith" to "John Smith"
-        let match_result = memory.find_best_match(
-            "Smith",
-            MentionType::Proper,
-            0.7,
-            true,
-            true,
-        );
+        let match_result = memory.find_best_match("Smith", MentionType::Proper, 0.7, true, true);
         assert!(match_result.is_some());
     }
 
@@ -1209,10 +1250,22 @@ mod tests {
     fn test_mention_type_classification() {
         let resolver = IncrementalCorefResolver::default();
 
-        assert_eq!(resolver.classify_mention_type("he"), MentionType::Pronominal);
-        assert_eq!(resolver.classify_mention_type("she"), MentionType::Pronominal);
-        assert_eq!(resolver.classify_mention_type("they"), MentionType::Pronominal);
-        assert_eq!(resolver.classify_mention_type("xe"), MentionType::Pronominal);
+        assert_eq!(
+            resolver.classify_mention_type("he"),
+            MentionType::Pronominal
+        );
+        assert_eq!(
+            resolver.classify_mention_type("she"),
+            MentionType::Pronominal
+        );
+        assert_eq!(
+            resolver.classify_mention_type("they"),
+            MentionType::Pronominal
+        );
+        assert_eq!(
+            resolver.classify_mention_type("xe"),
+            MentionType::Pronominal
+        );
         assert_eq!(resolver.classify_mention_type("John"), MentionType::Proper);
     }
 
@@ -1225,4 +1278,3 @@ mod tests {
         assert_eq!(memory.cluster_count(), 0);
     }
 }
-
