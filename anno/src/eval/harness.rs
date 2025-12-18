@@ -140,11 +140,11 @@ impl EvalConfig {
         let in_ci = std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok();
 
         // Sensible defaults:
-        // - CI: small (fast + deterministic)
-        // - local: bounded (avoid accidental “full dataset” runs)
+        // - CI: moderate (50 examples for stability while staying fast)
+        // - local: larger (100 examples for more stable results)
         //
         // Opt-out by setting `ANNO_MAX_EXAMPLES=0` (unlimited).
-        let default_max = if in_ci { 50 } else { 200 };
+        let default_max = if in_ci { 50 } else { 100 };
         let max_examples = std::env::var("ANNO_MAX_EXAMPLES")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -1345,7 +1345,21 @@ mod tests {
 
     #[test]
     fn test_synthetic_eval() {
-        let harness = EvalHarness::with_defaults().unwrap();
+        // Keep this test fast and deterministic: avoid `with_defaults()` which may
+        // initialize optional ML backends depending on feature flags.
+        let mut harness = EvalHarness::new(EvalConfig {
+            max_examples_per_dataset: 5,
+            breakdown_by_difficulty: false,
+            breakdown_by_domain: false,
+            breakdown_by_type: true,
+            warmup: false,
+            warmup_iterations: 0,
+            min_confidence: None,
+            cache_dir: None,
+            normalize_types: false,
+        })
+        .unwrap();
+        harness.registry.register_defaults();
         let results = harness.run_synthetic();
         assert!(results.is_ok());
 
@@ -1355,7 +1369,20 @@ mod tests {
 
     #[test]
     fn test_html_generation() {
-        let harness = EvalHarness::with_defaults().unwrap();
+        // Same rationale as test_synthetic_eval(): keep this fast and local-only.
+        let mut harness = EvalHarness::new(EvalConfig {
+            max_examples_per_dataset: 5,
+            breakdown_by_difficulty: false,
+            breakdown_by_domain: false,
+            breakdown_by_type: true,
+            warmup: false,
+            warmup_iterations: 0,
+            min_confidence: None,
+            cache_dir: None,
+            normalize_types: false,
+        })
+        .unwrap();
+        harness.registry.register_defaults();
         let results = harness.run_synthetic().unwrap();
         let html = results.to_html();
 

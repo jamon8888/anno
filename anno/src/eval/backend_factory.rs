@@ -55,10 +55,30 @@ impl BackendFactory {
             "heuristic" | "heuristicner" => Ok(Box::new(crate::HeuristicNER::new())),
             "stacked" | "stackedner" => Ok(Box::new(crate::StackedNER::default())),
             "crf" | "crfner" => Ok(Box::new(crate::backends::crf::CrfNER::new())),
+            "hmm" | "hmmner" => Ok(Box::new(crate::backends::hmm::HmmNER::new())),
             "ensemble" | "ensemblener" => {
                 use crate::backends::ensemble::EnsembleNER;
                 Ok(Box::new(EnsembleNER::default()) as Box<dyn Model>)
             }
+            "bilstm_crf" | "bilstm-crf" | "bilstmcrf" | "bilstmcrfner" => {
+                use crate::backends::bilstm_crf::BiLstmCrfNER;
+                Ok(Box::new(BiLstmCrfNER::new()) as Box<dyn Model>)
+            }
+
+            // Burn backend
+            #[cfg(feature = "burn")]
+            "burn" | "burnner" | "burn_ner" | "burn-ner" => {
+                use crate::backends::burn::BurnNER;
+                BurnNER::new()
+                    .map(|m| Box::new(m) as Box<dyn Model>)
+                    .map_err(|e| {
+                        crate::Error::FeatureNotAvailable(format!("BurnNER unavailable: {}", e))
+                    })
+            }
+            #[cfg(not(feature = "burn"))]
+            "burn" | "burnner" | "burn_ner" | "burn-ner" => Err(crate::Error::FeatureNotAvailable(
+                "BurnNER requires 'burn' feature".to_string(),
+            )),
 
             // ONNX backends
             #[cfg(feature = "onnx")]
@@ -77,6 +97,39 @@ impl BackendFactory {
             #[cfg(not(feature = "onnx"))]
             "bert_onnx" | "bertneronnx" => Err(crate::Error::FeatureNotAvailable(
                 "BertNEROnnx requires 'onnx' feature".to_string(),
+            )),
+
+            #[cfg(feature = "onnx")]
+            "gliner" => {
+                // First-class alias: prefer ONNX when available.
+                use crate::backends::gliner_onnx::GLiNEROnnx;
+                use crate::DEFAULT_GLINER_MODEL;
+                GLiNEROnnx::new(DEFAULT_GLINER_MODEL)
+                    .map(|m| Box::new(m) as Box<dyn Model>)
+                    .map_err(|e| {
+                        crate::Error::FeatureNotAvailable(format!(
+                            "Failed to create GLiNER (onnx): {}",
+                            e
+                        ))
+                    })
+            }
+            #[cfg(all(not(feature = "onnx"), feature = "candle"))]
+            "gliner" => {
+                // Fallback alias: Candle implementation when ONNX isn't enabled.
+                use crate::backends::gliner_candle::GLiNERCandle;
+                use crate::DEFAULT_GLINER_CANDLE_MODEL;
+                GLiNERCandle::from_pretrained(DEFAULT_GLINER_CANDLE_MODEL)
+                    .map(|m| Box::new(m) as Box<dyn Model>)
+                    .map_err(|e| {
+                        crate::Error::FeatureNotAvailable(format!(
+                            "Failed to create GLiNER (candle): {}",
+                            e
+                        ))
+                    })
+            }
+            #[cfg(all(not(feature = "onnx"), not(feature = "candle")))]
+            "gliner" => Err(crate::Error::FeatureNotAvailable(
+                "GLiNER requires 'onnx' (preferred) or 'candle' feature".to_string(),
             )),
 
             #[cfg(feature = "onnx")]
@@ -116,10 +169,20 @@ impl BackendFactory {
             "w2ner" => {
                 use crate::backends::w2ner::W2NER;
                 use crate::DEFAULT_W2NER_MODEL;
-                W2NER::from_pretrained(DEFAULT_W2NER_MODEL)
+                // Allow override via environment variable for custom/exported models
+                let model_path = std::env::var("W2NER_MODEL_PATH")
+                    .unwrap_or_else(|_| DEFAULT_W2NER_MODEL.to_string());
+                W2NER::from_pretrained(&model_path)
                     .map(|m| Box::new(m) as Box<dyn Model>)
                     .map_err(|e| {
-                        crate::Error::FeatureNotAvailable(format!("Failed to create W2NER: {}", e))
+                        crate::Error::FeatureNotAvailable(format!(
+                            "W2NER model unavailable: {}\n\n\
+                             Options:\n\
+                             1. Set W2NER_MODEL_PATH to a local model directory\n\
+                             2. Export your own: uv run scripts/export_w2ner_to_onnx.py\n\
+                             3. For HF models, set HF_TOKEN and request access",
+                            e
+                        ))
                     })
             }
             #[cfg(not(feature = "onnx"))]
@@ -154,7 +217,7 @@ impl BackendFactory {
                     .map(|m| Box::new(m) as Box<dyn Model>)
                     .map_err(|e| {
                         crate::Error::FeatureNotAvailable(format!(
-                            "Failed to create CandleNER: {}",
+                            "CandleNER model unavailable: {}",
                             e
                         ))
                     })
@@ -172,7 +235,7 @@ impl BackendFactory {
                     .map(|m| Box::new(m) as Box<dyn Model>)
                     .map_err(|e| {
                         crate::Error::FeatureNotAvailable(format!(
-                            "Failed to create GLiNERCandle: {}",
+                            "GLiNERCandle model unavailable: {}",
                             e
                         ))
                     })
@@ -221,14 +284,42 @@ impl BackendFactory {
             #[cfg(feature = "onnx")]
             "deberta_v3" | "deberta-v3" | "deberta" => {
                 use crate::backends::deberta_v3::DeBERTaV3NER;
-                Ok(Box::new(DeBERTaV3NER::new("microsoft/deberta-v3-base")?) as Box<dyn Model>)
+                // Allow override via environment variable for custom/exported models
+                let model_path = std::env::var("DEBERTA_MODEL_PATH")
+                    .unwrap_or_else(|_| "microsoft/deberta-v3-base".to_string());
+                DeBERTaV3NER::new(&model_path)
+                    .map(|m| Box::new(m) as Box<dyn Model>)
+                    .map_err(|e| {
+                        crate::Error::Retrieval(format!(
+                            "DeBERTa-v3 model unavailable: {}\n\n\
+                             Options:\n\
+                             1. Export your own: uv run scripts/export_deberta_ner_to_onnx.py\n\
+                             2. Set DEBERTA_MODEL_PATH to a local model directory\n\
+                             3. Use --model bert-onnx or --model candle-ner instead",
+                            e
+                        ))
+                    })
             }
 
             // ALBERT NER (requires onnx)
             #[cfg(feature = "onnx")]
             "albert" | "albert_ner" => {
                 use crate::backends::albert::ALBERTNER;
-                Ok(Box::new(ALBERTNER::new("albert-base-v2")?) as Box<dyn Model>)
+                // Allow override via environment variable for custom/exported models
+                let model_path = std::env::var("ALBERT_MODEL_PATH")
+                    .unwrap_or_else(|_| "albert-base-v2".to_string());
+                ALBERTNER::new(&model_path)
+                    .map(|m| Box::new(m) as Box<dyn Model>)
+                    .map_err(|e| {
+                        crate::Error::Retrieval(format!(
+                            "ALBERT model unavailable: {}\n\n\
+                             Options:\n\
+                             1. Export your own ONNX model\n\
+                             2. Set ALBERT_MODEL_PATH to a local model directory\n\
+                             3. Use --model bert-onnx or --model candle-ner instead",
+                            e
+                        ))
+                    })
             }
 
             // UniversalNER (placeholder - LLM integration pending)
@@ -239,10 +330,10 @@ impl BackendFactory {
 
             // Unknown backend
             _ => Err(crate::Error::InvalidInput(format!(
-                "Unknown backend: '{}'. Available: pattern, heuristic, stacked, crf, ensemble, tplinker{}",
+                "Unknown backend: '{}'. Available: pattern, heuristic, stacked, crf, hmm, ensemble, bilstm_crf, tplinker{}",
                 backend_name,
                 if cfg!(feature = "onnx") {
-                    ", bert_onnx, gliner_onnx, nuner, w2ner, gliner2"
+                    ", bert_onnx, gliner_onnx, nuner, w2ner, gliner2, gliner_poly, deberta_v3, albert"
                 } else {
                     ""
                 }
@@ -259,7 +350,9 @@ impl BackendFactory {
             "heuristic",
             "stacked",
             "crf",
+            "hmm",
             "ensemble",
+            "bilstm_crf",
             "tplinker",
             "universal_ner",
         ];
@@ -268,6 +361,7 @@ impl BackendFactory {
         {
             backends.extend(&[
                 "bert_onnx",
+                "gliner",
                 "gliner_onnx",
                 "nuner",
                 "w2ner",
@@ -281,6 +375,11 @@ impl BackendFactory {
         #[cfg(feature = "candle")]
         {
             backends.extend(&["candle_ner", "gliner_candle"]);
+            // `gliner` is also available as an alias when candle is enabled
+            // (and onnx is not required).
+            if !cfg!(feature = "onnx") {
+                backends.push("gliner");
+            }
         }
 
         #[cfg(all(feature = "candle", feature = "onnx"))]
@@ -355,5 +454,36 @@ mod tests {
         assert!(backends.contains(&"pattern"));
         assert!(backends.contains(&"heuristic"));
         assert!(backends.contains(&"stacked"));
+    }
+}
+
+#[cfg(test)]
+mod additional_tests {
+    use super::*;
+
+    #[test]
+    fn test_backend_factory_pattern_returns_regex_only() {
+        let model = BackendFactory::create("pattern").unwrap();
+        println!("Model name: {}", model.name());
+        assert_eq!(model.name(), "regex", "pattern should return RegexNER");
+
+        let entities = model
+            .extract_entities("John Smith went to Paris", None)
+            .unwrap();
+        println!("Entities: {:?}", entities);
+
+        // Should NOT have PER or LOC
+        for e in &entities {
+            assert!(
+                !matches!(e.entity_type, crate::EntityType::Person),
+                "Unexpected Person entity: {:?}",
+                e
+            );
+            assert!(
+                !matches!(e.entity_type, crate::EntityType::Location),
+                "Unexpected Location entity: {:?}",
+                e
+            );
+        }
     }
 }

@@ -170,8 +170,11 @@ pub struct BiasEvalResults {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "eval-bias")]
 pub struct GenderBiasSummary {
+    /// Difference between pro- and anti-stereotype accuracy.
     pub bias_gap: f64,
+    /// Accuracy on pro-stereotype examples.
     pub pro_stereotype_accuracy: f64,
+    /// Accuracy on anti-stereotype examples.
     pub anti_stereotype_accuracy: f64,
 }
 
@@ -179,8 +182,11 @@ pub struct GenderBiasSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "eval-bias")]
 pub struct DemographicBiasSummary {
+    /// Parity gap across ethnicity groups.
     pub ethnicity_parity_gap: f64,
+    /// Bias gap across different scripts (Latin vs non-Latin).
     pub script_bias_gap: f64,
+    /// Overall recognition rate across all demographic groups.
     pub overall_recognition_rate: f64,
 }
 
@@ -188,8 +194,11 @@ pub struct DemographicBiasSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "eval-bias")]
 pub struct TemporalBiasSummary {
+    /// Gap between historical and modern entity recognition.
     pub historical_modern_gap: f64,
+    /// Recognition rate for historical entities.
     pub historical_rate: f64,
+    /// Recognition rate for modern entities.
     pub modern_rate: f64,
 }
 
@@ -197,8 +206,11 @@ pub struct TemporalBiasSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "eval-bias")]
 pub struct LengthBiasSummary {
+    /// Gap between short and long entity recognition.
     pub short_vs_long_gap: f64,
+    /// F1 score for single-word entities.
     pub short_entity_f1: f64,
+    /// F1 score for four-or-more-word entities.
     pub long_entity_f1: f64,
 }
 
@@ -733,11 +745,6 @@ impl EvalSystem {
                 .with_validation()
         });
 
-        let mut gender: Option<GenderBiasSummary> = None;
-        let mut demographic: Option<DemographicBiasSummary> = None;
-        let mut temporal: Option<TemporalBiasSummary> = None;
-        let mut length: Option<LengthBiasSummary> = None;
-
         // Gender bias (coreference)
         // Note: Gender bias requires CoreferenceResolver, not Model.
         // If the provided model implements CoreferenceResolver, we could use it,
@@ -750,7 +757,7 @@ impl EvalSystem {
         let templates = create_winobias_templates();
         let evaluator = GenderBiasEvaluator::new(true);
         let gender_results = evaluator.evaluate_resolver(&resolver, &templates);
-        gender = Some(GenderBiasSummary {
+        let gender = Some(GenderBiasSummary {
             bias_gap: gender_results.bias_gap,
             pro_stereotype_accuracy: gender_results.pro_stereotype_accuracy,
             anti_stereotype_accuracy: gender_results.anti_stereotype_accuracy,
@@ -760,7 +767,7 @@ impl EvalSystem {
         let names = create_diverse_name_dataset();
         let demo_evaluator = DemographicBiasEvaluator::with_config(true, config.clone());
         let demo_results = demo_evaluator.evaluate_ner(model, &names);
-        demographic = Some(DemographicBiasSummary {
+        let demographic = Some(DemographicBiasSummary {
             ethnicity_parity_gap: demo_results.ethnicity_parity_gap,
             script_bias_gap: demo_results.script_bias_gap,
             overall_recognition_rate: demo_results.overall_recognition_rate,
@@ -770,7 +777,7 @@ impl EvalSystem {
         let temporal_names = create_temporal_name_dataset();
         let temporal_evaluator = TemporalBiasEvaluator::new(true);
         let temporal_results = temporal_evaluator.evaluate(model, &temporal_names);
-        temporal = Some(TemporalBiasSummary {
+        let temporal = Some(TemporalBiasSummary {
             historical_modern_gap: temporal_results.historical_modern_gap,
             historical_rate: temporal_results.historical_rate,
             modern_rate: temporal_results.modern_rate,
@@ -780,7 +787,7 @@ impl EvalSystem {
         let length_examples = create_length_varied_dataset();
         let length_evaluator = EntityLengthEvaluator::new(true);
         let length_results = length_evaluator.evaluate(model, &length_examples);
-        length = Some(LengthBiasSummary {
+        let length = Some(LengthBiasSummary {
             short_vs_long_gap: length_results.short_vs_long_gap,
             short_entity_f1: length_results
                 .by_word_bucket

@@ -334,28 +334,36 @@ impl MaverickCpu {
         let mut mentions = Vec::new();
 
         // Simple tokenization
-        let words: Vec<(&str, usize, usize)> = {
+        let words: Vec<(&str, usize, usize, usize, usize)> = {
             let mut result = Vec::new();
-            let mut char_pos = 0;
+            // Track position in bytes for searching; convert to char offsets via `TextSpan`.
+            let mut byte_pos = 0;
             for word in text.split_whitespace() {
-                if let Some(start) = text[char_pos..].find(word) {
-                    let word_start = char_pos + start;
-                    let word_end = word_start + word.len();
-                    result.push((word, word_start, word_end));
-                    char_pos = word_end;
+                if let Some(start) = text.get(byte_pos..).and_then(|s| s.find(word)) {
+                    let word_start_byte = byte_pos + start;
+                    let word_end_byte = word_start_byte + word.len();
+                    let span = crate::offset::TextSpan::from_bytes(text, word_start_byte, word_end_byte);
+                    result.push((
+                        word,
+                        word_start_byte,
+                        word_end_byte,
+                        span.char_start,
+                        span.char_end,
+                    ));
+                    byte_pos = word_end_byte;
                 }
             }
             result
         };
 
         // Extract proper nouns (capitalized words)
-        for (i, (word, char_start, char_end)) in words.iter().enumerate() {
+        for (i, (word, word_start_byte, _word_end_byte, char_start, char_end)) in words.iter().enumerate() {
             let first_char = word.chars().next().unwrap_or(' ');
             
             // Skip sentence starters (first word after period)
             let is_sentence_start = i == 0 || {
-                let prev_end = if i > 0 { words[i-1].2 } else { 0 };
-                let between = &text[prev_end..*char_start];
+                let prev_end_byte = if i > 0 { words[i - 1].2 } else { 0 };
+                let between = text.get(prev_end_byte..*word_start_byte).unwrap_or("");
                 between.contains('.') || between.contains('!') || between.contains('?')
             };
 
