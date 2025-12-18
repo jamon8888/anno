@@ -157,6 +157,7 @@ pub enum Commands {
 /// Model backend selection
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 pub enum ModelBackend {
+    // === Always Available (Zero Dependencies) ===
     /// Regex matching only (dates, emails, etc.)
     Pattern,
     /// Heuristic NER (persons, orgs, locs via capitalization + context)
@@ -169,6 +170,23 @@ pub enum ModelBackend {
     /// Stacked: Pattern + Heuristic (default)
     #[default]
     Stacked,
+    /// CRF sequence labeling (classical ML)
+    Crf,
+    /// Hidden Markov Model (classical statistical)
+    Hmm,
+    /// Ensemble: weighted voting across multiple backends
+    Ensemble,
+    /// BiLSTM + CRF (neural baseline, heuristic weights)
+    #[value(alias = "bilstm-crf")]
+    BiLstmCrf,
+    /// TPLinker: joint entity-relation extraction
+    #[value(alias = "tplink")]
+    Tplinker,
+    /// Universal NER: LLM-based zero-shot (requires API key)
+    #[value(alias = "universal-ner")]
+    UniversalNer,
+
+    // === ONNX Feature Required ===
     /// GLiNER via ONNX (requires --features onnx)
     #[cfg(feature = "onnx")]
     Gliner,
@@ -181,9 +199,35 @@ pub enum ModelBackend {
     /// W2NER for nested entities (requires --features onnx)
     #[cfg(feature = "onnx")]
     W2ner,
+    /// BERT ONNX for CoNLL-style NER (requires --features onnx)
+    #[cfg(feature = "onnx")]
+    #[value(alias = "bert")]
+    BertOnnx,
+    /// DeBERTa-v3 NER (requires --features onnx)
+    #[cfg(feature = "onnx")]
+    #[value(alias = "deberta")]
+    DebertaV3,
+    /// ALBERT NER (requires --features onnx)
+    #[cfg(feature = "onnx")]
+    Albert,
+    /// GLiNER Poly-Encoder (requires --features onnx)
+    #[cfg(feature = "onnx")]
+    #[value(alias = "gliner-poly")]
+    GlinerPoly,
+
+    // === Candle Feature Required ===
     /// GLiNER via Candle (requires --features candle)
     #[cfg(feature = "candle")]
     GlinerCandle,
+    /// Candle BERT NER (requires --features candle)
+    #[cfg(feature = "candle")]
+    CandleNer,
+
+    // === Burn Feature Required ===
+    /// Burn ML framework NER (requires --features burn)
+    #[cfg(feature = "burn")]
+    #[value(alias = "burn-ner")]
+    Burn,
 }
 
 impl ModelBackend {
@@ -193,11 +237,19 @@ impl ModelBackend {
         {
             use crate::eval::backend_factory::BackendFactory;
             let factory_name = match self {
+                // Always available
                 Self::Pattern => "pattern",
                 Self::Heuristic => "heuristic",
                 Self::Minimal => "heuristic",
                 Self::Auto => "stacked",
                 Self::Stacked => "stacked",
+                Self::Crf => "crf",
+                Self::Hmm => "hmm",
+                Self::Ensemble => "ensemble",
+                Self::BiLstmCrf => "bilstm_crf",
+                Self::Tplinker => "tplinker",
+                Self::UniversalNer => "universal_ner",
+                // ONNX
                 #[cfg(feature = "onnx")]
                 Self::Gliner => "gliner_onnx",
                 #[cfg(feature = "onnx")]
@@ -206,8 +258,22 @@ impl ModelBackend {
                 Self::Nuner => "nuner",
                 #[cfg(feature = "onnx")]
                 Self::W2ner => "w2ner",
+                #[cfg(feature = "onnx")]
+                Self::BertOnnx => "bert_onnx",
+                #[cfg(feature = "onnx")]
+                Self::DebertaV3 => "deberta_v3",
+                #[cfg(feature = "onnx")]
+                Self::Albert => "albert",
+                #[cfg(feature = "onnx")]
+                Self::GlinerPoly => "gliner_poly",
+                // Candle
                 #[cfg(feature = "candle")]
                 Self::GlinerCandle => "gliner_candle",
+                #[cfg(feature = "candle")]
+                Self::CandleNer => "candle_ner",
+                // Burn
+                #[cfg(feature = "burn")]
+                Self::Burn => "burn",
             };
             BackendFactory::create(factory_name)
                 .map_err(|e| format!("Failed to create model '{}': {}", self.name(), e))
@@ -216,11 +282,23 @@ impl ModelBackend {
         {
             use crate::{AutoNER, HeuristicNER, RegexNER, StackedNER};
             match self {
+                // Always available
                 Self::Pattern => Ok(Box::new(RegexNER::new())),
                 Self::Heuristic => Ok(Box::new(HeuristicNER::new())),
                 Self::Minimal => Ok(Box::new(HeuristicNER::new())),
                 Self::Auto => Ok(Box::new(AutoNER::new())),
                 Self::Stacked => Ok(Box::new(StackedNER::default())),
+                Self::Crf => Ok(Box::new(crate::backends::crf::CrfNER::new())),
+                Self::Hmm => Ok(Box::new(crate::backends::hmm::HmmNER::new())),
+                Self::Ensemble => Ok(Box::new(crate::backends::ensemble::EnsembleNER::default())),
+                Self::BiLstmCrf => Ok(Box::new(crate::backends::bilstm_crf::BiLstmCrfNER::new())),
+                Self::Tplinker => crate::backends::tplinker::TPLinker::new()
+                    .map(|m| Box::new(m) as Box<dyn crate::Model>)
+                    .map_err(|e| format!("Failed to create TPLinker: {}", e)),
+                Self::UniversalNer => crate::backends::universal_ner::UniversalNER::new()
+                    .map(|m| Box::new(m) as Box<dyn crate::Model>)
+                    .map_err(|e| format!("Failed to create UniversalNER: {}", e)),
+                // ONNX
                 #[cfg(feature = "onnx")]
                 Self::Gliner => crate::GLiNEROnnx::new(crate::DEFAULT_GLINER_MODEL)
                     .map(|m| Box::new(m) as Box<dyn crate::Model>)
@@ -230,11 +308,96 @@ impl ModelBackend {
                     .map(|m| Box::new(m) as Box<dyn crate::Model>)
                     .map_err(|e| format!("Failed to load GLiNER2: {}\n  Tip: Use 'anno models info gliner2' to check model status.", e)),
                 #[cfg(feature = "onnx")]
-                Self::Nuner => Err("NuNER not yet implemented in CLI.\n  Tip: Use 'anno models list' to see available models.".to_string()),
+                Self::Nuner => crate::backends::nuner::NuNER::from_pretrained(crate::DEFAULT_NUNER_MODEL)
+                    .map(|m| Box::new(m) as Box<dyn crate::Model>)
+                    .map_err(|e| format!("Failed to load NuNER: {}\n  Tip: Use 'anno models info nuner' to check model status.", e)),
                 #[cfg(feature = "onnx")]
-                Self::W2ner => Err("W2NER not yet implemented in CLI.\n  Tip: Use 'anno models list' to see available models.".to_string()),
+                Self::W2ner => {
+                    // Allow override via environment variable for custom/exported models
+                    let model_path = std::env::var("W2NER_MODEL_PATH")
+                        .unwrap_or_else(|_| crate::DEFAULT_W2NER_MODEL.to_string());
+                    crate::backends::w2ner::W2NER::from_pretrained(&model_path)
+                        .map(|m| Box::new(m) as Box<dyn crate::Model>)
+                        .map_err(|e| format!(
+                            "W2NER model unavailable: {}\n\n\
+                             Options:\n\
+                             1. Set W2NER_MODEL_PATH to a local model directory\n\
+                             2. Export your own model: uv run scripts/export_w2ner_to_onnx.py\n\
+                             3. For HuggingFace models, set HF_TOKEN and request model access\n\n\
+                             Alternatives:\n\
+                             - Use --model gliner for zero-shot NER\n\
+                             - Use --model gliner2 for nested entity support",
+                            e
+                        ))
+                }
+                #[cfg(feature = "onnx")]
+                Self::BertOnnx => crate::backends::onnx::BertNEROnnx::new(crate::DEFAULT_BERT_ONNX_MODEL)
+                    .map(|m| Box::new(m) as Box<dyn crate::Model>)
+                    .map_err(|e| format!("Failed to load BERT ONNX: {}", e)),
+                #[cfg(feature = "onnx")]
+                Self::DebertaV3 => {
+                    // Support custom export via environment variable
+                    if let Ok(model_path) = std::env::var("DEBERTA_MODEL_PATH") {
+                        crate::backends::deberta_v3::DeBERTaV3NER::new(&model_path)
+                            .map(|m| Box::new(m) as Box<dyn crate::Model>)
+                            .map_err(|e| format!("DeBERTa-v3 failed to load from {}: {}", model_path, e))
+                    } else {
+                        Err("DeBERTa-v3 requires custom ONNX export.\n\
+                             Export: uv run scripts/export_deberta_ner_to_onnx.py\n\
+                             Then: DEBERTA_MODEL_PATH=/path/to/model anno extract --model deberta-v3\n\n\
+                             Ready alternatives: --model candle-ner, --model bert-onnx".to_string())
+                    }
+                }
+                #[cfg(feature = "onnx")]
+                Self::Albert => {
+                    // Support custom export via environment variable
+                    if let Ok(model_path) = std::env::var("ALBERT_MODEL_PATH") {
+                        crate::backends::albert::ALBERTNER::new(&model_path)
+                            .map(|m| Box::new(m) as Box<dyn crate::Model>)
+                            .map_err(|e| format!("ALBERT failed to load from {}: {}", model_path, e))
+                    } else {
+                        Err("ALBERT requires custom ONNX export.\n\
+                             Ready alternatives: --model candle-ner, --model bert-onnx".to_string())
+                    }
+                }
+                #[cfg(feature = "onnx")]
+                Self::GlinerPoly => crate::backends::gliner_poly::GLiNERPoly::new("onnx-community/gliner_small-v2.1")
+                    .map(|m| Box::new(m) as Box<dyn crate::Model>)
+                    .map_err(|e| format!("Failed to load GLiNER Poly: {}", e)),
+                // Candle
                 #[cfg(feature = "candle")]
-                Self::GlinerCandle => Err("GLiNER Candle not yet implemented in CLI.\n  Tip: Use 'anno models list' to see available models.".to_string()),
+                Self::GlinerCandle => crate::backends::gliner_candle::GLiNERCandle::from_pretrained(crate::DEFAULT_GLINER_CANDLE_MODEL)
+                    .map(|m| Box::new(m) as Box<dyn crate::Model>)
+                    .map_err(|e| format!(
+                        "GLiNER-Candle model unavailable: {}\n\n\
+                         GLiNER Candle is experimental and has compatibility issues with\n\
+                         most GLiNER models due to non-standard weight formats.\n\n\
+                         Recommended: Use --model gliner (ONNX version) instead.\n\
+                         It works with all GLiNER models and provides better performance.",
+                        e
+                    )),
+                #[cfg(feature = "candle")]
+                Self::CandleNer => crate::backends::candle::CandleNER::from_pretrained(crate::DEFAULT_CANDLE_MODEL)
+                    .map(|m| Box::new(m) as Box<dyn crate::Model>)
+                    .map_err(|e| format!(
+                        "CandleNER model unavailable: {}\n\n\
+                         The model may lack tokenizer.json or safetensors files.\n\n\
+                         Alternatives:\n\
+                         - Use --model bert-onnx (ONNX version, more compatible)\n\
+                         - Use --model heuristic for pattern-based extraction",
+                        e
+                    )),
+                // Burn
+                #[cfg(feature = "burn")]
+                Self::Burn => crate::backends::burn::BurnNER::new()
+                    .map(|m| Box::new(m) as Box<dyn crate::Model>)
+                    .map_err(|e| format!(
+                        "BurnNER unavailable: {}\n\n\
+                         BurnNER is experimental. For production use:\n\
+                         - Use --model candle-ner for pure Rust inference\n\
+                         - Use --model bert-onnx for ONNX inference",
+                        e
+                    ))
             }
         }
     }
@@ -242,11 +405,19 @@ impl ModelBackend {
     /// Get the canonical string name for this backend.
     pub fn name(self) -> &'static str {
         match self {
+            // Always available
             Self::Pattern => "pattern",
             Self::Heuristic => "heuristic",
             Self::Minimal => "minimal",
             Self::Auto => "auto",
             Self::Stacked => "stacked",
+            Self::Crf => "crf",
+            Self::Hmm => "hmm",
+            Self::Ensemble => "ensemble",
+            Self::BiLstmCrf => "bilstm-crf",
+            Self::Tplinker => "tplinker",
+            Self::UniversalNer => "universal-ner",
+            // ONNX
             #[cfg(feature = "onnx")]
             Self::Gliner => "gliner",
             #[cfg(feature = "onnx")]
@@ -255,8 +426,22 @@ impl ModelBackend {
             Self::Nuner => "nuner",
             #[cfg(feature = "onnx")]
             Self::W2ner => "w2ner",
+            #[cfg(feature = "onnx")]
+            Self::BertOnnx => "bert-onnx",
+            #[cfg(feature = "onnx")]
+            Self::DebertaV3 => "deberta-v3",
+            #[cfg(feature = "onnx")]
+            Self::Albert => "albert",
+            #[cfg(feature = "onnx")]
+            Self::GlinerPoly => "gliner-poly",
+            // Candle
             #[cfg(feature = "candle")]
             Self::GlinerCandle => "gliner-candle",
+            #[cfg(feature = "candle")]
+            Self::CandleNer => "candle-ner",
+            // Burn
+            #[cfg(feature = "burn")]
+            Self::Burn => "burn",
         }
     }
 }

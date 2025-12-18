@@ -40,19 +40,23 @@ pub fn run() -> Result<(), String> {
     println!();
 
     println!("{}:", color("1;33", "Enabled Features"));
-    let mut features: Vec<&str> = Vec::with_capacity(4);
-    #[cfg(feature = "onnx")]
-    features.push("onnx");
-    #[cfg(feature = "candle")]
-    features.push("candle");
-    #[cfg(feature = "eval")]
-    features.push("eval");
-    #[cfg(feature = "eval-bias")]
-    features.push("eval-bias");
-    #[cfg(feature = "eval-advanced")]
-    features.push("eval-advanced");
-    #[cfg(feature = "discourse")]
-    features.push("discourse");
+    #[allow(clippy::vec_init_then_push)] // Feature-gated pushes can't use vec![]
+    let features: Vec<&str> = {
+        let mut v = Vec::with_capacity(4);
+        #[cfg(feature = "onnx")]
+        v.push("onnx");
+        #[cfg(feature = "candle")]
+        v.push("candle");
+        #[cfg(feature = "eval")]
+        v.push("eval");
+        #[cfg(feature = "eval-bias")]
+        v.push("eval-bias");
+        #[cfg(feature = "eval-advanced")]
+        v.push("eval-advanced");
+        #[cfg(feature = "discourse")]
+        v.push("discourse");
+        v
+    };
     if features.is_empty() {
         println!("  (default features only)");
     } else {
