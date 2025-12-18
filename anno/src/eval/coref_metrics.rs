@@ -1066,11 +1066,16 @@ impl AggregateCorefEvaluation {
         }
     }
 
-    /// 95% confidence interval (mean ± 1.96*std/sqrt(n)).
+    /// 95% confidence interval (mean ± z*std/sqrt(n)).
+    ///
+    /// Uses z = 1.96 for the 95% confidence level (two-tailed test).
     #[must_use]
     pub fn confidence_interval_95(&self) -> (f64, f64) {
-        let z = 1.96;
-        let margin = z * self.std_dev.conll / (self.num_documents as f64).sqrt();
+        /// Z-score for 95% confidence interval (two-tailed).
+        /// Corresponds to the 97.5th percentile of the standard normal distribution.
+        const Z_SCORE_95: f64 = 1.96;
+
+        let margin = Z_SCORE_95 * self.std_dev.conll / (self.num_documents as f64).sqrt();
         (
             (self.mean.conll_f1 - margin).max(0.0),
             (self.mean.conll_f1 + margin).min(1.0),
@@ -2078,5 +2083,345 @@ mod tests {
                 prop_assert!(eval.conll_f1.is_finite(), "Empty gold should not produce NaN");
             }
         }
+    }
+
+    // =========================================================================
+    // Edge Case Tests (arXiv:2401.00238 recommendations)
+    // =========================================================================
+
+    /// Test: All singletons (single-mention chains)
+    /// Per arXiv:2401.00238, models often fail on short chains
+    #[test]
+    fn edge_case_all_singletons() {
+        let gold = vec![
+            make_chain(&[("a", 0, 1)]),
+            make_chain(&[("b", 2, 3)]),
+            make_chain(&[("c", 4, 5)]),
+        ];
+        let pred = gold.clone();
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        // MUC ignores singletons, so should be undefined/0
+        // B³ should be 1.0 for perfect singleton match
+        assert!(
+            eval.b_cubed.f1 >= 0.99,
+            "B³ should be 1.0 for perfect singleton match, got {}",
+            eval.b_cubed.f1
+        );
+    }
+
+    /// Test: Mixed singleton and multi-mention chains
+    #[test]
+    fn edge_case_mixed_singletons() {
+        let gold = vec![
+            make_chain(&[("john", 0, 4), ("he", 10, 12), ("him", 20, 23)]),
+            make_chain(&[("mary", 5, 9)]),  // singleton
+            make_chain(&[("bob", 30, 33)]), // singleton
+        ];
+
+        // Prediction merges all singletons incorrectly
+        let pred = vec![
+            make_chain(&[("john", 0, 4), ("he", 10, 12), ("him", 20, 23)]),
+            make_chain(&[("mary", 5, 9), ("bob", 30, 33)]), // wrong merge
+        ];
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        // Should detect the error
+        assert!(
+            eval.conll_f1 < 1.0,
+            "Merging singletons incorrectly should reduce F1"
+        );
+    }
+
+    /// Test: Very long chain (main character in novel)
+    #[test]
+    fn edge_case_long_chain() {
+        // Simulate a main character mentioned 20 times
+        let mentions: Vec<_> = (0..20)
+            .map(|i| (format!("mention_{}", i), i * 10, i * 10 + 5))
+            .collect();
+        let mention_refs: Vec<_> = mentions
+            .iter()
+            .map(|(t, s, e)| (t.as_str(), *s, *e))
+            .collect();
+
+        let gold = vec![make_chain(&mention_refs)];
+        let pred = gold.clone();
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+        assert!(
+            (eval.conll_f1 - 1.0).abs() < 0.001,
+            "Long chain perfect match should be 1.0"
+        );
+    }
+
+    /// Test: Splitting a long chain in half
+    #[test]
+    fn edge_case_split_long_chain() {
+        let mentions: Vec<_> = (0..10)
+            .map(|i| (format!("m{}", i), i * 10, i * 10 + 5))
+            .collect();
+        let mention_refs: Vec<_> = mentions
+            .iter()
+            .map(|(t, s, e)| (t.as_str(), *s, *e))
+            .collect();
+
+        let gold = vec![make_chain(&mention_refs)];
+
+        // Split into two chains
+        let first_half: Vec<_> = mention_refs[..5].to_vec();
+        let second_half: Vec<_> = mention_refs[5..].to_vec();
+        let pred = vec![make_chain(&first_half), make_chain(&second_half)];
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        // Should penalize splitting
+        assert!(eval.muc.f1 < 1.0, "Splitting chain should reduce MUC F1");
+        assert!(eval.lea.f1 < 1.0, "Splitting chain should reduce LEA F1");
+    }
+
+    /// Test: Complete disjoint (no overlap between pred and gold)
+    #[test]
+    fn edge_case_complete_disjoint() {
+        let gold = vec![make_chain(&[("a", 0, 1), ("b", 2, 3)])];
+        let pred = vec![make_chain(&[("c", 4, 5), ("d", 6, 7)])];
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        // No mention overlap means all metrics should reflect this
+        // Scores depend on how metrics handle non-overlapping mentions
+        assert!(
+            eval.conll_f1.is_finite(),
+            "Disjoint sets should not produce NaN"
+        );
+    }
+
+    /// Test: Duplicate mentions in chain (edge case)
+    #[test]
+    fn edge_case_duplicate_mentions() {
+        // Same span mentioned twice (shouldn't happen but should handle gracefully)
+        let gold = vec![make_chain(&[("a", 0, 1), ("b", 2, 3)])];
+        let pred = vec![make_chain(&[("a", 0, 1), ("a", 0, 1), ("b", 2, 3)])];
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        // Should not crash
+        assert!(
+            eval.conll_f1.is_finite(),
+            "Duplicate mentions should not produce NaN"
+        );
+    }
+
+    /// Test: Single two-mention chain (minimal non-trivial case)
+    #[test]
+    fn edge_case_minimal_chain() {
+        let gold = vec![make_chain(&[("john", 0, 4), ("he", 10, 12)])];
+        let pred = gold.clone();
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        assert!(
+            (eval.muc.f1 - 1.0).abs() < 0.001,
+            "Minimal chain perfect match MUC should be 1.0"
+        );
+        assert!(
+            (eval.b_cubed.f1 - 1.0).abs() < 0.001,
+            "Minimal chain perfect match B³ should be 1.0"
+        );
+    }
+
+    /// Test: Over-clustering (too few chains) - MUC recall > precision
+    #[test]
+    fn edge_case_over_clustering() {
+        // Use multi-mention chains to trigger MUC (MUC ignores singletons)
+        let gold = vec![
+            make_chain(&[("a1", 0, 2), ("a2", 3, 5)]),
+            make_chain(&[("b1", 10, 12), ("b2", 13, 15)]),
+            make_chain(&[("c1", 20, 22), ("c2", 23, 25)]),
+        ];
+        // Merge all into one chain (over-clustering)
+        let pred = vec![make_chain(&[
+            ("a1", 0, 2),
+            ("a2", 3, 5),
+            ("b1", 10, 12),
+            ("b2", 13, 15),
+            ("c1", 20, 22),
+            ("c2", 23, 25),
+        ])];
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        // Over-clustering: high recall (found all links) but low precision (spurious links)
+        assert!(
+            eval.muc.recall > eval.muc.precision,
+            "Over-clustering should have MUC recall > precision: R={:.3} P={:.3}",
+            eval.muc.recall,
+            eval.muc.precision
+        );
+    }
+
+    /// Test: Under-clustering (too many chains) - MUC precision > recall
+    #[test]
+    fn edge_case_under_clustering() {
+        // One long chain
+        let gold = vec![make_chain(&[
+            ("a", 0, 1),
+            ("b", 2, 3),
+            ("c", 4, 5),
+            ("d", 6, 7),
+            ("e", 8, 9),
+            ("f", 10, 11),
+        ])];
+        // Split into many chains (under-clustering)
+        let pred = vec![
+            make_chain(&[("a", 0, 1), ("b", 2, 3)]),
+            make_chain(&[("c", 4, 5), ("d", 6, 7)]),
+            make_chain(&[("e", 8, 9), ("f", 10, 11)]),
+        ];
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        // Under-clustering: high precision (links made are correct) but low recall (missing links)
+        assert!(
+            eval.muc.precision > eval.muc.recall,
+            "Under-clustering should have MUC precision > recall: P={:.3} R={:.3}",
+            eval.muc.precision,
+            eval.muc.recall
+        );
+    }
+
+    /// Test: Stratified evaluation by chain length
+    #[test]
+    fn stratified_by_chain_length() {
+        // Gold has chains of different lengths
+        let gold = vec![
+            make_chain(&[
+                ("main", 0, 4),
+                ("protagonist", 10, 21),
+                ("hero", 30, 34),
+                ("she", 40, 43),
+            ]),
+            make_chain(&[("sidekick", 50, 58), ("friend", 60, 66)]),
+            make_chain(&[("villain", 70, 77)]), // singleton
+        ];
+
+        // Pred gets long chain right, short chain wrong
+        let pred = vec![
+            make_chain(&[
+                ("main", 0, 4),
+                ("protagonist", 10, 21),
+                ("hero", 30, 34),
+                ("she", 40, 43),
+            ]),
+            make_chain(&[("sidekick", 50, 58)]), // split
+            make_chain(&[("friend", 60, 66)]),   // split
+            make_chain(&[("villain", 70, 77)]),
+        ];
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        // Overall F1 hides the problem with short chains
+        assert!(
+            eval.conll_f1 > 0.5,
+            "CoNLL F1 should be reasonable due to long chain success"
+        );
+
+        // But if we had per-length stats, short chains would show worse performance
+        // This test validates the setup for stratified analysis
+    }
+
+    /// Test: Empty chains in input (should be filtered/handled)
+    #[test]
+    fn edge_case_empty_chains() {
+        let gold = vec![
+            make_chain(&[("a", 0, 1), ("b", 2, 3)]),
+            CorefChain::new(vec![]), // empty chain
+        ];
+        let pred = vec![make_chain(&[("a", 0, 1), ("b", 2, 3)])];
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        // Should handle empty chains gracefully
+        assert!(
+            eval.conll_f1.is_finite(),
+            "Empty chains should not produce NaN"
+        );
+    }
+
+    /// Test: Zero-length mentions (degenerate case)
+    #[test]
+    fn edge_case_zero_length_mentions() {
+        let gold = vec![make_chain(&[("", 0, 0), ("b", 2, 3)])];
+        let pred = gold.clone();
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        // Should handle gracefully
+        assert!(
+            eval.conll_f1.is_finite(),
+            "Zero-length mentions should not produce NaN"
+        );
+    }
+
+    /// Test: Overlapping mention spans (nested entities)
+    #[test]
+    fn edge_case_overlapping_spans() {
+        // "New York City" contains "York"
+        let gold = vec![
+            make_chain(&[("new york city", 0, 13), ("nyc", 20, 23)]),
+            make_chain(&[("york", 4, 8)]), // overlaps with above
+        ];
+        let pred = gold.clone();
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        assert!(
+            (eval.conll_f1 - 1.0).abs() < 0.001,
+            "Overlapping spans with perfect match should be 1.0"
+        );
+    }
+
+    /// Test: Unicode mentions
+    #[test]
+    fn edge_case_unicode_mentions() {
+        let gold = vec![
+            make_chain(&[("習近平", 0, 9), ("他", 20, 26)]),
+            make_chain(&[("Müller", 30, 36), ("er", 40, 42)]),
+        ];
+        let pred = gold.clone();
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        assert!(
+            (eval.conll_f1 - 1.0).abs() < 0.001,
+            "Unicode mentions should work correctly"
+        );
+    }
+
+    /// Test: Metrics disagree (MUC vs B³ vs CEAF)
+    #[test]
+    fn metrics_disagreement_scenario() {
+        // Scenario where metrics give different signals
+        let gold = vec![
+            make_chain(&[("a", 0, 1), ("b", 2, 3)]),
+            make_chain(&[("c", 4, 5)]),
+        ];
+
+        // Pred adds singleton to first chain
+        let pred = vec![make_chain(&[("a", 0, 1), ("b", 2, 3), ("c", 4, 5)])];
+
+        let eval = CorefEvaluation::compute(&pred, &gold);
+
+        // MUC focuses on links - adding c doesn't help
+        // B³ penalizes the incorrect merge
+        // Check that metrics give sensible (possibly different) values
+        assert!(eval.muc.f1.is_finite());
+        assert!(eval.b_cubed.f1.is_finite());
+        assert!(eval.ceaf_e.f1.is_finite());
+
+        // B³ and CEAF should penalize the incorrect merge more than MUC
+        // (MUC doesn't care about singletons)
     }
 }
