@@ -43,10 +43,10 @@
 //! | `CandleNER` | `candle` | No | No | varies | ✅ Complete |
 //! | `GLiNERCandle` | `candle` | **Yes** | No | varies | Complete |
 //! | `GLiNERPoly` | `onnx` | **Yes** | No | ~120ms | Placeholder |
-//! | `TPLinker` | - | No | No | varies | Placeholder |
-//! | `DeBERTaV3NER` | `onnx` | No | No | ~50ms | Complete |
-//! | `ALBERTNER` | `onnx` | No | No | ~40ms | Complete |
-//! | `UniversalNER` | - | **Yes** | No | varies | Placeholder |
+//! | `TPLinker` | - | No | No | varies | Placeholder (not implemented) |
+//! | `DeBERTaV3NER` | `onnx` | No | No | ~50ms | Beta (wrapper around BERT ONNX; requires exported ONNX artifacts) |
+//! | `ALBERTNER` | `onnx` | No | No | ~40ms | Beta (wrapper around BERT ONNX; requires exported ONNX artifacts) |
+//! | `UniversalNER` | - | **Yes** | No | varies | Beta (requires LLM API key; errors when unavailable) |
 //!
 //! # Research Landscape (2024-2025)
 //!
@@ -135,8 +135,7 @@
 //! - **Deps**: `ort`, `tokenizers`, `hf-hub`
 //! - **Status**: Implemented and tested
 //!
-//! **Why**: Full control over tokenization, custom error handling,
-//! no external crate dependency on gline-rs.
+//! **Why**: Full control over tokenization and custom error handling.
 //!
 //! ## 2. `GLiNERCandle` (Pure Rust, GPU)
 //!
@@ -155,26 +154,16 @@
 //! - `LabelEncoder`: Project label embeddings
 //! - `SpanLabelMatcher`: Cosine similarity matching
 //!
-//! ## 3. `gline-rs` (External Crate)
-//!
-//! Production-ready library by Frédérik Bilhaut.
-//!
-//! - **Crate**: `gline-rs` (crates.io)
-//! - **Status**: Referenced, not integrated
-//!
-//! **Why not integrated**: Users can add it themselves.
-//! We provide manual impl for those who want control.
-//!
 //! # Default Thresholds (Data-Motivated)
 //!
 //! | Parameter | Default | Source |
 //! |-----------|---------|--------|
-//! | `threshold` | 0.5 | gline-rs, GLiNER paper |
+//! | `threshold` | 0.5 | GLiNER paper |
 //! | `max_width` | 12 | Standard span width |
 //! | `max_length` | 512 | BERT context limit |
 //! | `flat_ner` | true | No overlapping entities |
 //!
-//! These match the gline-rs defaults and GLiNER paper recommendations.
+//! These match common defaults used in GLiNER implementations.
 
 /// Backend implementation status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -238,15 +227,14 @@ pub static BACKEND_CATALOG: &[BackendInfo] = &[
     },
     BackendInfo {
         name: "gliner",
-        feature: Some("gliner"),
+        feature: Some("onnx"),
         status: BackendStatus::Stable,
         zero_shot: true,
         gpu_support: true,
-        description: "GLiNER via gline-rs library (SOTA zero-shot NER)",
+        description: "GLiNER zero-shot NER (alias for gliner_onnx in this repo)",
         recommended_models: &[
             "onnx-community/gliner_small-v2.1",
             "onnx-community/gliner_large-v2.1",
-            "knowledgator/modern-gliner-bi-large-v1.0",
         ],
     },
     BackendInfo {
@@ -277,7 +265,10 @@ pub static BACKEND_CATALOG: &[BackendInfo] = &[
         zero_shot: true,
         gpu_support: true,
         description: "GLiNER via Candle (pure Rust, Metal/CUDA)",
-        recommended_models: &["answerdotai/ModernBERT-base"],
+        recommended_models: &[
+            // Default factory model (kept small to reduce friction).
+            "NeuML/gliner-bert-tiny",
+        ],
     },
     BackendInfo {
         name: "nuner",

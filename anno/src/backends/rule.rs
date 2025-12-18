@@ -35,6 +35,7 @@
 //!
 //! But understand: it cannot generalize to unseen entities.
 
+use crate::offset::TextSpan;
 use crate::{Entity, EntityType, Model, Result};
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -109,11 +110,12 @@ impl Model for RuleBasedNER {
         });
 
         for cap in KNOWN_ORGS.find_iter(text) {
+            let span = TextSpan::from_bytes(text, cap.start(), cap.end());
             entities.push(Entity::new(
                 cap.as_str(),
                 EntityType::Organization,
-                cap.start(),
-                cap.end(),
+                span.char_start,
+                span.char_end,
                 0.95, // Very high confidence for known orgs
             ));
         }
@@ -126,20 +128,22 @@ impl Model for RuleBasedNER {
         });
 
         for cap in ORG_PATTERN.find_iter(text) {
+            let cap_span = TextSpan::from_bytes(text, cap.start(), cap.end());
             // Skip if already covered
             if entities
                 .iter()
-                .any(|e| spans_overlap(e.start, e.end, cap.start(), cap.end()))
+                .any(|e| spans_overlap(e.start, e.end, cap_span.char_start, cap_span.char_end))
             {
                 continue;
             }
             let text_str = strip_leading_article(cap.as_str());
             let start_adj = cap.start() + (cap.as_str().len() - text_str.len());
+            let span = TextSpan::from_bytes(text, start_adj, cap.end());
             entities.push(Entity::new(
                 text_str,
                 EntityType::Organization,
-                start_adj,
-                cap.end(),
+                span.char_start,
+                span.char_end,
                 0.85, // High confidence for explicit org suffixes
             ));
         }
@@ -151,20 +155,22 @@ impl Model for RuleBasedNER {
         });
 
         for cap in LOCATION_PATTERN.find_iter(text) {
+            let cap_span = TextSpan::from_bytes(text, cap.start(), cap.end());
             // Skip if already covered by organization
             if entities
                 .iter()
-                .any(|e| spans_overlap(e.start, e.end, cap.start(), cap.end()))
+                .any(|e| spans_overlap(e.start, e.end, cap_span.char_start, cap_span.char_end))
             {
                 continue;
             }
             let text_str = strip_leading_article(cap.as_str());
             let start_adj = cap.start() + (cap.as_str().len() - text_str.len());
+            let span = TextSpan::from_bytes(text, start_adj, cap.end());
             entities.push(Entity::new(
                 text_str,
                 EntityType::Location,
-                start_adj,
-                cap.end(),
+                span.char_start,
+                span.char_end,
                 0.9,
             ));
         }
@@ -182,10 +188,11 @@ impl Model for RuleBasedNER {
             // Strip leading "The " if present
             text_str = strip_leading_article(text_str);
 
+            let cap_span = TextSpan::from_bytes(text, cap.start(), cap.end());
             // Skip if overlaps with already-extracted org/location (higher priority)
             if entities
                 .iter()
-                .any(|e| spans_overlap(e.start, e.end, cap.start(), cap.end()))
+                .any(|e| spans_overlap(e.start, e.end, cap_span.char_start, cap_span.char_end))
             {
                 continue;
             }
@@ -196,11 +203,12 @@ impl Model for RuleBasedNER {
                 continue;
             }
             let start_adj = cap.start() + (cap.as_str().len() - text_str.len());
+            let span = TextSpan::from_bytes(text, start_adj, cap.end());
             entities.push(Entity::new(
                 text_str,
                 EntityType::Person,
-                start_adj,
-                cap.end(),
+                span.char_start,
+                span.char_end,
                 0.7,
             ));
         }
@@ -224,21 +232,23 @@ impl Model for RuleBasedNER {
             {
                 continue;
             }
+            let cap_span = TextSpan::from_bytes(text, cap.start(), cap.end());
             // Skip if already matched by more specific patterns (org, location, person)
             if entities
                 .iter()
-                .any(|e| spans_overlap(e.start, e.end, cap.start(), cap.end()))
+                .any(|e| spans_overlap(e.start, e.end, cap_span.char_start, cap_span.char_end))
             {
                 continue;
             }
             // Use heuristics to infer type
             let entity_type = infer_entity_type(text_str);
             let start_adj = cap.start() + (cap.as_str().len() - text_str.len());
+            let span = TextSpan::from_bytes(text, start_adj, cap.end());
             entities.push(Entity::new(
                 text_str,
                 entity_type,
-                start_adj,
-                cap.end(),
+                span.char_start,
+                span.char_end,
                 0.4, // Lower confidence for generic matches
             ));
         }
@@ -250,18 +260,19 @@ impl Model for RuleBasedNER {
         });
 
         for date_match in DATE_PATTERN.find_iter(text) {
+            let span = TextSpan::from_bytes(text, date_match.start(), date_match.end());
             // Skip if overlaps with existing entity
             if entities
                 .iter()
-                .any(|e| spans_overlap(e.start, e.end, date_match.start(), date_match.end()))
+                .any(|e| spans_overlap(e.start, e.end, span.char_start, span.char_end))
             {
                 continue;
             }
             entities.push(Entity::new(
                 date_match.as_str(),
                 EntityType::Date,
-                date_match.start(),
-                date_match.end(),
+                span.char_start,
+                span.char_end,
                 0.8,
             ));
         }
@@ -273,18 +284,19 @@ impl Model for RuleBasedNER {
         });
 
         for money_match in MONEY_PATTERN.find_iter(text) {
+            let span = TextSpan::from_bytes(text, money_match.start(), money_match.end());
             // Skip if overlaps with existing entity
             if entities
                 .iter()
-                .any(|e| spans_overlap(e.start, e.end, money_match.start(), money_match.end()))
+                .any(|e| spans_overlap(e.start, e.end, span.char_start, span.char_end))
             {
                 continue;
             }
             entities.push(Entity::new(
                 money_match.as_str(),
                 EntityType::Money,
-                money_match.start(),
-                money_match.end(),
+                span.char_start,
+                span.char_end,
                 0.8,
             ));
         }
@@ -294,18 +306,19 @@ impl Model for RuleBasedNER {
             Lazy::new(|| Regex::new(r"\d+\.?\d*\s*%").expect("Failed to compile percent pattern"));
 
         for percent_match in PERCENT_PATTERN.find_iter(text) {
+            let span = TextSpan::from_bytes(text, percent_match.start(), percent_match.end());
             // Skip if overlaps with existing entity
             if entities
                 .iter()
-                .any(|e| spans_overlap(e.start, e.end, percent_match.start(), percent_match.end()))
+                .any(|e| spans_overlap(e.start, e.end, span.char_start, span.char_end))
             {
                 continue;
             }
             entities.push(Entity::new(
                 percent_match.as_str(),
                 EntityType::Percent,
-                percent_match.start(),
-                percent_match.end(),
+                span.char_start,
+                span.char_end,
                 0.8,
             ));
         }
