@@ -2,7 +2,7 @@
 
 # anno
 
-Information extraction: NER, relation extraction, and coref.
+Information extraction: NER and coref.
 
 [![CI](https://github.com/arclabs561/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/anno/actions)
 [![Crates.io](https://img.shields.io/crates/v/anno.svg)](https://crates.io/crates/anno)
@@ -10,15 +10,16 @@ Information extraction: NER, relation extraction, and coref.
 
 </div>
 
-Library and CLI for named entity recognition, relation extraction, and coref. Multiple backends: regex (~400ns), transformers (~50-150ms), zero-shot NER.
+Library and CLI for named entity recognition and coref, with a built-in evaluation framework. Multiple backends: regex (~400ns), transformers (~50-150ms), zero-shot NER.
 
 ## Installation
 
 ```bash
-cargo install anno --features cli
+cargo install anno
 # or from source:
 git clone https://github.com/arclabs561/anno
-cd anno && cargo build --release --bin anno --features cli
+cd anno
+cargo build --release -p anno --bin anno
 ```
 
 ## Usage
@@ -42,6 +43,8 @@ JSON output:
 $ anno extract --format json "Marie Curie won the Nobel Prize in Paris"
 [{"text":"Marie Curie","type":"PER","start":0,"end":11,"confidence":0.75},...]
 ```
+
+**Offsets**: `start`/`end` are character offsets (Unicode-safe). See [`docs/UNICODE_OFFSETS.md`](docs/UNICODE_OFFSETS.md).
 
 ### Coref
 
@@ -211,7 +214,7 @@ let entities = ner.extract_with_types(
 )?;
 ```
 
-**See [`docs/SCOPE.md`](docs/SCOPE.md) for complete API documentation.**
+**See [`docs/SCOPE.md`](docs/SCOPE.md) for scope and maturity notes.**
 
 ## Backends
 
@@ -228,7 +231,7 @@ let entities = ner.extract_with_types(
 
 ## Features
 
-- `onnx`: BERT, GLiNER, GLiNER2 via ONNX Runtime
+- `onnx`: BERT, GLiNER, GLiNER2 via ONNX Runtime (GLiNER2 is multi-task: entities + relations)
 - `eval`: Evaluation framework, datasets, metrics
 - `eval-advanced`: Coref, advanced evaluation
 

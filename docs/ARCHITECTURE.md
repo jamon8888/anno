@@ -5,10 +5,9 @@
 ```
 anno/
 ├── anno-core/      # Foundation: Entity, GroundedDocument, GraphDocument
-├── anno/           # NER backends, evaluation framework
-├── coalesce/       # Cross-document entity coalescing
-├── strata/         # Hierarchical clustering (Leiden, RAPTOR)
-└── anno-cli/       # Unified CLI binary
+├── anno/           # NER backends, coref, eval, CLI (src/bin/anno.rs)
+├── anno-coalesce/  # Cross-document entity coalescing
+└── anno-strata/    # Hierarchical clustering (Leiden, Louvain)
 ```
 
 ## Dependencies
@@ -16,11 +15,9 @@ anno/
 ```
 anno-core (no workspace deps)
     ↑
-    ├── anno
-    ├── coalesce
-    └── strata
-            ↑
-            └── anno-cli
+    ├── anno-coalesce
+    ├── anno-strata
+    └── anno  (depends on anno-coalesce; optionally anno-strata)
 ```
 
 Each crate is independent. Use what you need:
@@ -29,7 +26,7 @@ Each crate is independent. Use what you need:
 - `anno-coalesce`: Entity resolution without NER
 - `anno-strata`: Clustering without NER
 
-Or use together via `anno-cli`.
+Or use together via the `anno` CLI binary (see `anno/src/bin/anno.rs`).
 
 ## Library
 
