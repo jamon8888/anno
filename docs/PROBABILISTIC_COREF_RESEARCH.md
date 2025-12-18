@@ -243,7 +243,7 @@ See `docs/TYPE_THEORY_AND_NER.md` for full treatment.
 5. **Graph encoding in attention** for transformer backends (G2GT-style)
 
 ### Long-term
-1. Full hypergraph evidence aggregation (see HYPERGRAPH_EVIDENCE_DESIGN.md)
+1. Full hypergraph evidence aggregation (see `research/HYPERGRAPH_EVIDENCE_DESIGN.md`)
 2. Learned evidence combination (attention over sources) vs. fixed strategies
 3. Cross-document configuration distributions with scalable inference
 4. Explore dependent types for stronger compile-time guarantees

@@ -217,7 +217,7 @@ pairwise judgments.
 
 ### Hypergraph Evidence
 
-The proposed hypergraph design (see `HYPERGRAPH_EVIDENCE_DESIGN.md`) extends this:
+The proposed hypergraph design (see `research/HYPERGRAPH_EVIDENCE_DESIGN.md`) extends this:
 
 ```
 Hyperedge: {mention₁, mention₃, mention₇}
