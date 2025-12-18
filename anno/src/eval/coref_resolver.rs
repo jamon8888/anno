@@ -469,6 +469,7 @@ impl CoreferenceResolver for SimpleCorefResolver {
 // =============================================================================
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
 
@@ -806,9 +807,17 @@ impl DiscourseAwareResolver {
                     let cluster_id = 10000 + i as u64; // High ID to distinguish
                     entity.canonical_id = Some(cluster_id);
 
-                    // Store the antecedent info in normalized field as a temporary solution
-                    // TODO: Make discourse referents first-class citizens with proper linking
-                    // This format allows later extraction of discourse reference information
+                    // Store the antecedent info in normalized field as a temporary solution.
+                    //
+                    // FUTURE WORK: Make discourse referents first-class citizens.
+                    // This would require:
+                    // 1. Add `discourse_referent: Option<DiscourseReferent>` field to Entity (anno-core)
+                    // 2. Define DiscourseReferent struct with referent_type, span, and linked_entity_id
+                    // 3. Update Entity serialization/deserialization
+                    // 4. Modify evaluation metrics to handle discourse chains separately
+                    // 5. Update downstream consumers (CLI, coalesce, etc.)
+                    //
+                    // Current workaround: Encode referent info in normalized field for later extraction.
                     entity.normalized = Some(format!(
                         "DISCOURSE_REF:{:?}@{}-{}",
                         antecedent.referent_type, antecedent.start, antecedent.end
