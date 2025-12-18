@@ -133,7 +133,8 @@
 //! - twitter-research/neural-sheaf-diffusion (Apache 2.0): reference implementation
 
 use anno_core::coref::{CorefChain, Mention, MentionType};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::hash::{Hash, Hasher};
 
 // =============================================================================
 // Types
@@ -492,6 +493,38 @@ pub struct GraphCorefConfig {
     ///
     /// Pronouns are weak signals alone but should link to antecedents.
     pub pronoun_proper_bonus: f64,
+
+    /// Optional early-stop controls for iterative refinement.
+    ///
+    /// GraphCoref already stops when it reaches a fixed point (Gₜ == Gₜ₋₁).
+    /// This option additionally stops on:
+    /// - **Cycle detection** (e.g., A→B→A oscillation across iterations)
+    /// - **Stagnation** (edge count stops changing for N iterations)
+    ///
+    /// This is an analogue of “overthinking” / redundancy detection (CoRE-Eval),
+    /// implemented using observable signals (graph structure) rather than hidden states.
+    pub early_stop: Option<GraphCorefEarlyStopConfig>,
+}
+
+/// Configuration for early stopping in iterative graph refinement.
+#[derive(Debug, Clone)]
+pub struct GraphCorefEarlyStopConfig {
+    /// Stop if we detect a repeated graph state (cycle) within the configured history.
+    pub detect_cycles: bool,
+    /// How many past graph fingerprints to remember (0 = unbounded).
+    pub cycle_history: usize,
+    /// Stop if the edge count hasn't changed for this many consecutive iterations.
+    pub stagnation_patience: usize,
+}
+
+impl Default for GraphCorefEarlyStopConfig {
+    fn default() -> Self {
+        Self {
+            detect_cycles: true,
+            cycle_history: 8,
+            stagnation_patience: 2,
+        }
+    }
 }
 
 impl Default for GraphCorefConfig {
@@ -507,6 +540,7 @@ impl Default for GraphCorefConfig {
             max_distance: Some(1000),
             include_singletons: false,
             pronoun_proper_bonus: 0.3,
+            early_stop: None,
         }
     }
 }
@@ -563,6 +597,28 @@ impl GraphCoref {
         Self { config }
     }
 
+    fn graph_fingerprint(graph: &CorefGraph) -> u64 {
+        // Order-independent fingerprint of the edge set.
+        // We sort per-edge hashes to avoid HashSet iteration nondeterminism.
+        let mut edge_hashes: Vec<u64> = graph
+            .edges
+            .iter()
+            .map(|e| {
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                e.hash(&mut h);
+                h.finish()
+            })
+            .collect();
+        edge_hashes.sort_unstable();
+
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        graph.num_mentions.hash(&mut h);
+        for eh in edge_hashes {
+            eh.hash(&mut h);
+        }
+        h.finish()
+    }
+
     /// Resolve coreferences among mentions using iterative graph refinement.
     ///
     /// # Arguments
@@ -616,13 +672,56 @@ impl GraphCoref {
         let mut graph = CorefGraph::new(valid_mentions.len());
 
         // Iterative refinement
-        for _iteration in 0..self.config.max_iterations {
+        let mut stagnation: usize = 0;
+        let mut last_edge_count = graph.edge_count();
+        let mut seen: HashMap<u64, usize> = HashMap::new();
+        let mut history: VecDeque<u64> = VecDeque::new();
+        if let Some(cfg) = &self.config.early_stop {
+            if cfg.detect_cycles {
+                let fp0 = Self::graph_fingerprint(&graph);
+                seen.insert(fp0, 0);
+                history.push_back(fp0);
+            }
+        }
+
+        for iteration in 0..self.config.max_iterations {
             let prev_graph = graph.clone();
             graph = self.refine_iteration(&valid_mentions, &graph);
 
             // Check convergence
             if graph == prev_graph {
                 break;
+            }
+
+            // Optional early stop: stagnation / cycles.
+            if let Some(cfg) = &self.config.early_stop {
+                // Stagnation: edge count stops changing.
+                let ec = graph.edge_count();
+                if ec == last_edge_count {
+                    stagnation += 1;
+                } else {
+                    stagnation = 0;
+                    last_edge_count = ec;
+                }
+                if cfg.stagnation_patience > 0 && stagnation >= cfg.stagnation_patience {
+                    break;
+                }
+
+                if cfg.detect_cycles {
+                    let fp = Self::graph_fingerprint(&graph);
+                    if seen.contains_key(&fp) {
+                        break;
+                    }
+                    seen.insert(fp, iteration + 1);
+                    history.push_back(fp);
+                    if cfg.cycle_history > 0 {
+                        while history.len() > cfg.cycle_history {
+                            if let Some(old) = history.pop_front() {
+                                seen.remove(&old);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -913,6 +1012,12 @@ pub struct GraphCorefStats {
     pub edge_history: Vec<usize>,
     /// Whether the algorithm converged before max_iterations.
     pub converged: bool,
+    /// Whether we stopped early for a non-fixed-point reason (cycle/stagnation).
+    pub early_stopped: bool,
+    /// Cycle detected (graph fingerprint repeated).
+    pub cycle_detected: bool,
+    /// Stagnation detected (edge count stopped changing).
+    pub stagnation_detected: bool,
 }
 
 impl GraphCoref {
@@ -956,6 +1061,18 @@ impl GraphCoref {
         let mut graph = CorefGraph::new(valid_mentions.len());
         stats.edge_history.push(0);
 
+        let mut stagnation: usize = 0;
+        let mut last_edge_count = graph.edge_count();
+        let mut seen: HashMap<u64, usize> = HashMap::new();
+        let mut history: VecDeque<u64> = VecDeque::new();
+        if let Some(cfg) = &self.config.early_stop {
+            if cfg.detect_cycles {
+                let fp0 = Self::graph_fingerprint(&graph);
+                seen.insert(fp0, 0);
+                history.push_back(fp0);
+            }
+        }
+
         for iteration in 0..self.config.max_iterations {
             let prev_graph = graph.clone();
             graph = self.refine_iteration(&valid_mentions, &graph);
@@ -965,6 +1082,39 @@ impl GraphCoref {
             if graph == prev_graph {
                 stats.converged = true;
                 break;
+            }
+
+            if let Some(cfg) = &self.config.early_stop {
+                let ec = graph.edge_count();
+                if ec == last_edge_count {
+                    stagnation += 1;
+                } else {
+                    stagnation = 0;
+                    last_edge_count = ec;
+                }
+                if cfg.stagnation_patience > 0 && stagnation >= cfg.stagnation_patience {
+                    stats.early_stopped = true;
+                    stats.stagnation_detected = true;
+                    break;
+                }
+
+                if cfg.detect_cycles {
+                    let fp = Self::graph_fingerprint(&graph);
+                    if seen.contains_key(&fp) {
+                        stats.early_stopped = true;
+                        stats.cycle_detected = true;
+                        break;
+                    }
+                    seen.insert(fp, iteration + 1);
+                    history.push_back(fp);
+                    if cfg.cycle_history > 0 {
+                        while history.len() > cfg.cycle_history {
+                            if let Some(old) = history.pop_front() {
+                                seen.remove(&old);
+                            }
+                        }
+                    }
+                }
             }
         }
 
