@@ -12,6 +12,8 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "eval-advanced")]
 use crate::eval::cdcr::{CDCRConfig, CDCRResolver, CrossDocCluster, Document};
 #[cfg(feature = "eval-advanced")]
+use crate::offset::TextSpan;
+#[cfg(feature = "eval-advanced")]
 use crate::{
     Corpus, Entity, EntityType, GroundedDocument, Identity, IdentitySource, Location, Signal,
     SignalId,
@@ -88,6 +90,51 @@ pub struct CrossDocArgs {
     /// Show progress and detailed cluster information
     #[arg(short, long)]
     pub verbose: bool,
+}
+
+#[cfg(feature = "eval-advanced")]
+struct ContextSnippet<'a> {
+    before_marker: &'static str,
+    before: &'a str,
+    entity_text: &'a str,
+    after: &'a str,
+    after_marker: &'static str,
+}
+
+#[cfg(feature = "eval-advanced")]
+fn context_snippet<'a>(
+    text: &'a str,
+    entity_start_char: usize,
+    entity_end_char: usize,
+    context_window_chars: usize,
+) -> ContextSnippet<'a> {
+    let text_char_count = text.chars().count();
+    let start = entity_start_char.min(text_char_count);
+    let mut end = entity_end_char.min(text_char_count);
+    if end < start {
+        end = start;
+    }
+
+    let context_start = start.saturating_sub(context_window_chars);
+    let context_end = (end + context_window_chars).min(text_char_count);
+
+    let before = TextSpan::from_chars(text, context_start, start).extract(text);
+    let entity_text = TextSpan::from_chars(text, start, end).extract(text);
+    let after = TextSpan::from_chars(text, end, context_end).extract(text);
+
+    ContextSnippet {
+        // Only show ellipses when the context is clipped, not merely because there is
+        // non-empty text before/after the entity.
+        before_marker: if context_start > 0 { "..." } else { "" },
+        before,
+        entity_text,
+        after,
+        after_marker: if context_end < text_char_count {
+            "..."
+        } else {
+            ""
+        },
+    }
 }
 
 #[cfg(feature = "eval-advanced")]
@@ -911,105 +958,22 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                             if let Some(doc) = doc_index.get(doc_id.as_str()) {
                                 if let Some(entity) = doc.entities.get(*entity_idx) {
                                     if args.verbose {
-                                        // Extract context safely (50 chars before/after)
-                                        let context_window = 50;
-
-                                        // Find character boundaries for entity
-                                        let entity_start_char = doc
-                                            .text
-                                            .char_indices()
-                                            .position(|(byte_idx, _)| byte_idx >= entity.start)
-                                            .unwrap_or(0);
-                                        let entity_end_char = doc
-                                            .text
-                                            .char_indices()
-                                            .position(|(byte_idx, _)| byte_idx >= entity.end)
-                                            .unwrap_or(doc.text.chars().count());
-
-                                        // Calculate context character range
-                                        let context_start_char =
-                                            entity_start_char.saturating_sub(context_window);
-                                        let context_end_char = (entity_end_char + context_window)
-                                            .min(doc.text.chars().count());
-
-                                        // Convert back to byte positions
-                                        let safe_start = doc
-                                            .text
-                                            .char_indices()
-                                            .nth(context_start_char)
-                                            .map(|(byte_idx, _)| byte_idx)
-                                            .unwrap_or(0);
-                                        let safe_end = doc
-                                            .text
-                                            .char_indices()
-                                            .nth(context_end_char)
-                                            .map(|(byte_idx, _)| byte_idx)
-                                            .unwrap_or(doc.text.len());
-
-                                        let context = &doc.text[safe_start..safe_end];
-
-                                        // Ensure entity positions are at character boundaries
-                                        let entity_start_byte = doc
-                                            .text
-                                            .char_indices()
-                                            .find(|&(byte_idx, _)| byte_idx >= entity.start)
-                                            .map(|(byte_idx, _)| byte_idx)
-                                            .unwrap_or(entity.start);
-                                        let entity_end_byte = doc
-                                            .text
-                                            .char_indices()
-                                            .find(|&(byte_idx, _)| byte_idx >= entity.end)
-                                            .map(|(byte_idx, _)| byte_idx)
-                                            .unwrap_or(entity.end);
-                                        let entity_text =
-                                            &doc.text[entity_start_byte..entity_end_byte];
-
-                                        // Calculate offsets within the safe context window (in bytes)
-                                        let before_len = entity.start.saturating_sub(safe_start);
-                                        let after_start =
-                                            (entity.end - safe_start).min(context.len());
-
-                                        // Find character boundaries for safe slicing
-                                        let before = if safe_start < entity.start && before_len > 0
-                                        {
-                                            // Find the character boundary closest to before_len
-                                            let target_byte = before_len.min(context.len());
-                                            let char_boundary = context
-                                                .char_indices()
-                                                .find(|&(byte_idx, _)| byte_idx >= target_byte)
-                                                .map(|(byte_idx, _)| byte_idx)
-                                                .unwrap_or(context.len());
-                                            &context[..char_boundary.min(context.len())]
-                                        } else {
-                                            ""
-                                        };
-
-                                        let after = if after_start < context.len() {
-                                            // Find the character boundary at after_start
-                                            let char_boundary = context
-                                                .char_indices()
-                                                .find(|&(byte_idx, _)| byte_idx >= after_start)
-                                                .map(|(byte_idx, _)| byte_idx)
-                                                .unwrap_or(context.len());
-                                            &context[char_boundary.min(context.len())..]
-                                        } else {
-                                            ""
-                                        };
-
-                                        let before_marker =
-                                            if safe_start < entity.start { "..." } else { "" };
-                                        let after_marker =
-                                            if entity.end < safe_end { "..." } else { "" };
+                                        let snippet = context_snippet(
+                                            &doc.text,
+                                            entity.start,
+                                            entity.end,
+                                            50,
+                                        );
 
                                         output.push_str(&format!(
                                             "    {} {}: {}{}[{}]{}{}\n",
                                             color("90", "•"),
                                             color("36", doc_id),
-                                            before_marker,
-                                            before,
-                                            color("1;32", entity_text),
-                                            after,
-                                            after_marker
+                                            snippet.before_marker,
+                                            snippet.before,
+                                            color("1;32", snippet.entity_text),
+                                            snippet.after,
+                                            snippet.after_marker
                                         ));
                                     } else {
                                         // Non-verbose: just show entity text
@@ -1183,6 +1147,30 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(all(test, feature = "eval-advanced"))]
+mod tests {
+    use super::context_snippet;
+    use crate::offset::TextSpan;
+
+    #[test]
+    fn test_context_snippet_uses_char_offsets_and_is_unicode_safe() {
+        let text = "🎉 東京に行った。Barack Obama visited São Paulo. التقى محمد في الرياض.";
+        let needle = "São Paulo";
+        let start_byte = text.find(needle).expect("needle should exist");
+        let end_byte = start_byte + needle.len();
+        let span = TextSpan::from_bytes(text, start_byte, end_byte);
+
+        // Ensure our offsets are truly character offsets.
+        assert_eq!(
+            TextSpan::from_chars(text, span.char_start, span.char_end).extract(text),
+            needle
+        );
+
+        let snippet = context_snippet(text, span.char_start, span.char_end, 5);
+        assert_eq!(snippet.entity_text, needle);
     }
 }
 
