@@ -42,7 +42,18 @@ fn anno_cli_cmd() -> Command {
     }
 
     let mut cmd = Command::new("cargo");
-    cmd.args(["run", "-p", "anno-cli", "--"]);
+    // Slow fallback: build+run the binary via Cargo. Prefer setting ANNO_CLI_BIN or pre-building
+    // `target/debug/anno` / `target/release/anno` for stable and fast e2e runs.
+    cmd.args([
+        "run",
+        "-p",
+        "anno",
+        "--bin",
+        "anno",
+        "--features",
+        "eval-advanced",
+        "--",
+    ]);
     cmd
 }
 
@@ -178,12 +189,8 @@ fn e2e_cli_crossdoc_directory() {
     let dir_str = dir.to_str().unwrap();
 
     // Run crossdoc on directory
-    let output = Command::new("cargo")
+    let output = anno_cli_cmd()
         .args([
-            "run",
-            "--features",
-            "eval-advanced",
-            "--",
             "crossdoc",
             "--directory",
             dir_str,
@@ -236,7 +243,7 @@ fn e2e_cli_pipeline_full() {
 #[test]
 #[cfg(feature = "eval-advanced")]
 fn e2e_cli_batch_stdin() {
-    use std::process::{Command, Stdio};
+    use std::process::Stdio;
 
     // Create JSONL input
     let jsonl = r#"{"id": "doc1", "text": "Barack Obama was president."}
@@ -244,15 +251,10 @@ fn e2e_cli_batch_stdin() {
 {"id": "doc3", "text": "The White House is in Washington."}
 "#;
 
-    let mut child = Command::new("cargo")
-        .args([
-            "run",
-            "--features",
-            "eval-advanced",
-            "--",
-            "batch",
-            "--stdin",
-        ])
+    // Prefer running the already-built binary. Spawning `cargo run` inside tests is flaky
+    // under nextest timeouts (build directory locks, rebuilds, etc.).
+    let mut child = anno_cli_cmd()
+        .args(["batch", "--stdin"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -286,12 +288,8 @@ fn e2e_cli_debug_html() {
     let output_path = output_file.path().to_str().unwrap();
 
     // Run debug with HTML output
-    let output = Command::new("cargo")
+    let output = anno_cli_cmd()
         .args([
-            "run",
-            "--features",
-            "eval-advanced",
-            "--",
             "debug",
             "--file",
             file_path,
@@ -366,18 +364,10 @@ fn e2e_cli_extract_models() {
 #[test]
 #[cfg(feature = "eval-advanced")]
 fn e2e_cli_extract_url() {
-    // Use a simple, stable URL for testing
-    // Note: This may fail if URL is unreachable, so we check for graceful failure
-    let output = Command::new("cargo")
-        .args([
-            "run",
-            "--features",
-            "eval-advanced",
-            "--",
-            "extract",
-            "--url",
-            "https://example.com",
-        ])
+    // Avoid external network dependency in CI/dev. Use a non-HTTP scheme so the resolver fails
+    // fast and we can still assert "no panic / graceful exit".
+    let output = anno_cli_cmd()
+        .args(["extract", "--url", "file:///tmp/anno-e2e-url.txt"])
         .output()
         .unwrap();
 
