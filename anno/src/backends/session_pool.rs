@@ -577,6 +577,8 @@ impl GLiNERPool {
 
         let mut entities = Vec::new();
         let num_words = words.len();
+        // Word offsets from `word_offsets` are byte indices; `Entity` requires character offsets.
+        let span_converter = crate::offset::SpanConverter::new(text);
 
         if shape.len() == 4 && shape[0] == 1 {
             let out_num_words = shape[1] as usize;
@@ -616,8 +618,8 @@ impl GLiNERPool {
                                 entities.push(Entity::new(
                                     span_text,
                                     entity_type,
-                                    start,
-                                    end,
+                                    span_converter.byte_to_char(start),
+                                    span_converter.byte_to_char(end),
                                     score as f64,
                                 ));
                             }
