@@ -794,7 +794,7 @@ impl TaskEvaluator {
         backend: &dyn Model,
         dataset: DatasetId,
         dataset_data: &LoadedDataset,
-        config: &TaskEvalConfig,
+        _config: &TaskEvalConfig,
     ) -> Result<HashMap<String, f64>> {
         use crate::eval::ner_metrics::evaluate_entities;
 
@@ -809,12 +809,22 @@ impl TaskEvaluator {
         let start_time = Instant::now();
 
         // Track per-example scores for stratified metrics and confidence intervals
-        let track_per_example = config.confidence_intervals || config.temporal_stratification;
+        // Always track for NER tasks (needed for per-type metrics)
+        // Note: This function is only called for NER/DiscontinuousNER tasks
+        let track_per_example = true;
         let mut per_example_scores: Vec<(Vec<Entity>, Vec<Entity>, String)> = Vec::new();
 
         // Extract dataset entity types and map to model-compatible labels
         let dataset_labels = dataset.entity_types();
         let mapped_labels = Self::map_dataset_labels_to_model(dataset_labels, backend_name);
+
+        // Debug: log mapped labels for zero-shot models
+        if std::env::var("ANNO_DEBUG_LABELS").is_ok() {
+            eprintln!(
+                "DEBUG [{}]: dataset_labels={:?} mapped_labels={:?}",
+                backend_name, dataset_labels, mapped_labels
+            );
+        }
 
         // Check if this is a zero-shot backend that needs custom labels
         let is_zero_shot = matches!(
@@ -1039,9 +1049,10 @@ impl TaskEvaluator {
                 profiling::start("backend_inference");
                 // Run inference - use extract() for zero-shot models, extract_entities() for others
                 let entities = if let Some(ref cached) = zero_shot_backend {
+                    // Dereference Box to get &dyn Any (not &Box<dyn Any>)
                     Self::extract_with_cached_backend_any(
                         backend_name,
-                        cached,
+                        cached.as_ref(),
                         &text,
                         &mapped_labels,
                     )
@@ -1174,11 +1185,27 @@ impl TaskEvaluator {
     /// Map dataset entity type labels to model-compatible labels.
     ///
     /// Handles common label variations (e.g., "PER" → "person", "PERSON" → "person").
+    /// Also handles domain-specific mappings (e.g., MIT Movie "Actor" → "person").
+    /// Also limits labels for backends with restrictions (e.g., NuNER only supports 3 labels).
     /// Public for testing purposes.
     pub(crate) fn map_dataset_labels_to_model(
         dataset_labels: &[&str],
         backend_name: &str,
     ) -> Vec<String> {
+        let backend_lower = backend_name.to_lowercase();
+
+        // NuNER has a limitation - it fails with GatherElements errors when using more than
+        // its default 3 labels. Always use the exact default labels in the exact order.
+        // The order matters because the model internally maps label index to entity type.
+        if backend_lower == "nuner" {
+            // Must match NuNER::from_pretrained default_labels exactly: person, organization, location
+            return vec![
+                "person".to_string(),
+                "organization".to_string(),
+                "location".to_string(),
+            ];
+        }
+
         dataset_labels
             .iter()
             .map(|label| {
@@ -1191,26 +1218,34 @@ impl TaskEvaluator {
                     "org" | "organization" | "organisation" | "corporation" | "company" => {
                         "organization".to_string()
                     }
-                    // Location variations
-                    "loc" | "location" | "place" | "gpe" => "location".to_string(),
+                    // Location variations (including WNUT geo-loc)
+                    "loc" | "location" | "place" | "gpe" | "geo-loc" => "location".to_string(),
                     // Other common types
-                    "misc" | "miscellaneous" => "misc".to_string(),
+                    "misc" | "miscellaneous" | "other" => "misc".to_string(),
                     "date" => "date".to_string(),
                     "time" => "time".to_string(),
                     "money" | "currency" => "money".to_string(),
                     "percent" | "percentage" => "percent".to_string(),
-                    "product" => "product".to_string(),
+                    "product" | "prod" => "product".to_string(),
                     "event" => "event".to_string(),
                     "facility" | "fac" => "facility".to_string(),
                     "work_of_art" | "workofart" => "work_of_art".to_string(),
                     "law" => "law".to_string(),
                     "language" => "language".to_string(),
                     "norp" => "norp".to_string(),
+                    // Domain-specific mappings (MIT Movie, MIT Restaurant, etc.)
+                    "actor" | "character" | "director" | "producer" | "writer" | "cast" => {
+                        "person".to_string()
+                    }
+                    "restaurant_name" | "restaurant" | "cuisine" | "dish" | "food" => {
+                        "organization".to_string()
+                    }
+                    "disease" | "disorder" | "syndrome" => "disease".to_string(),
+                    "chemical" | "drug" | "medication" | "compound" => "chemical".to_string(),
                     // For zero-shot backends, preserve original labels (they can handle any type)
                     _ if matches!(
-                        backend_name.to_lowercase().as_str(),
-                        "nuner"
-                            | "gliner_onnx"
+                        backend_lower.as_str(),
+                        "gliner_onnx"
                             | "gliner_candle"
                             | "gliner2"
                             | "gliner_poly"
@@ -1411,16 +1446,17 @@ impl TaskEvaluator {
         match cached {
             #[cfg(feature = "onnx")]
             CachedBackend::NuNER(nuner) => nuner.extract(text, &label_strs, 0.5),
-            #[cfg(not(feature = "onnx"))]
-            CachedBackend::NuNER(_) => Err(crate::Error::FeatureNotAvailable(
-                "NuNER requires the 'onnx' feature".to_string(),
-            )),
             #[cfg(feature = "onnx")]
-            CachedBackend::GLiNEROnnx(gliner) => gliner.extract(text, &label_strs, 0.5),
-            #[cfg(not(feature = "onnx"))]
-            CachedBackend::GLiNEROnnx(_) => Err(crate::Error::FeatureNotAvailable(
-                "GLiNER requires the 'onnx' feature".to_string(),
-            )),
+            CachedBackend::GLiNEROnnx(gliner) => {
+                let result = gliner.extract(text, &label_strs, 0.5);
+                if std::env::var("ANNO_DEBUG_EXTRACT").is_ok() {
+                    eprintln!(
+                        "DEBUG gliner result: {:?}",
+                        result.as_ref().map(|v| v.len())
+                    );
+                }
+                result
+            }
             #[cfg(feature = "onnx")]
             CachedBackend::GLiNER2Onnx(gliner2) => {
                 use crate::backends::gliner2::TaskSchema;
@@ -1428,24 +1464,12 @@ impl TaskEvaluator {
                 let result = gliner2.extract(text, &schema)?;
                 Ok(result.entities)
             }
-            #[cfg(not(feature = "onnx"))]
-            CachedBackend::GLiNER2Onnx(_) => Err(crate::Error::FeatureNotAvailable(
-                "GLiNER2 requires the 'onnx' feature".to_string(),
-            )),
             #[cfg(feature = "candle")]
             CachedBackend::GLiNERCandle(gliner) => gliner.extract(text, &label_strs, 0.5),
-            #[cfg(not(feature = "candle"))]
-            CachedBackend::GLiNERCandle(_) => Err(crate::Error::FeatureNotAvailable(
-                "GLiNER Candle requires the 'candle' feature".to_string(),
-            )),
             #[cfg(feature = "onnx")]
             CachedBackend::GLiNERPoly(gliner_poly) => {
                 gliner_poly.extract_with_types(text, &label_strs, 0.5)
             }
-            #[cfg(not(feature = "onnx"))]
-            CachedBackend::GLiNERPoly(_) => Err(crate::Error::FeatureNotAvailable(
-                "GLiNER Poly requires the 'onnx' feature".to_string(),
-            )),
             CachedBackend::UniversalNER(universal_ner) => {
                 universal_ner.extract_with_types(text, &label_strs, 0.5)
             }
@@ -1469,7 +1493,16 @@ impl TaskEvaluator {
                 #[cfg(feature = "onnx")]
                 {
                     if let Some(nuner) = cached.downcast_ref::<crate::backends::nuner::NuNER>() {
-                        nuner.extract(text, &label_strs, 0.5)
+                        let result = nuner.extract(text, &label_strs, 0.5);
+                        if std::env::var("ANNO_DEBUG_NUNER").is_ok() {
+                            eprintln!(
+                                "DEBUG nuner: text={:?} labels={:?} result={:?}",
+                                &text[..text.len().min(30)],
+                                label_strs,
+                                result.as_ref().map(|v| v.len())
+                            );
+                        }
+                        result
                     } else {
                         Err(crate::Error::InvalidInput(
                             "Failed to downcast cached NuNER backend".to_string(),
@@ -1511,9 +1544,20 @@ impl TaskEvaluator {
                         cached.downcast_ref::<crate::backends::gliner2::GLiNER2Onnx>()
                     {
                         let schema = TaskSchema::new().with_entities(&label_strs);
-                        let result = gliner2.extract(text, &schema)?;
-                        Ok(result.entities)
+                        let result = gliner2.extract(text, &schema);
+                        if std::env::var("ANNO_DEBUG_GLINER2").is_ok() {
+                            eprintln!(
+                                "DEBUG gliner2: text={:?} labels={:?} result={:?}",
+                                &text[..text.len().min(50)],
+                                label_strs,
+                                result.as_ref().map(|r| r.entities.len())
+                            );
+                        }
+                        Ok(result?.entities)
                     } else {
+                        if std::env::var("ANNO_DEBUG_GLINER2").is_ok() {
+                            eprintln!("DEBUG gliner2: downcast FAILED");
+                        }
                         Err(crate::Error::InvalidInput(
                             "Failed to downcast cached GLiNER2 backend".to_string(),
                         ))
@@ -3179,25 +3223,24 @@ impl TaskEvaluator {
 
     /// Compute stratified metrics across multiple dimensions.
     ///
-    /// # Limitations
+    /// # Fallback Behavior
     ///
-    /// **Current Implementation**: This is a simplified version that uses aggregate metrics
-    /// as placeholders for all entity types. A full implementation would require:
-    /// - Per-example predictions for each entity type
-    /// - Per-type F1, precision, recall computation
-    /// - Proper confidence intervals from per-type variance
+    /// This is a **fallback** when per-example predictions are not available.
+    /// All entity types will show the same aggregate F1 metrics because we lack
+    /// the per-prediction data needed for true per-type stratification.
     ///
-    /// **Why Simplified**: Computing per-type metrics requires re-running inference with
-    /// per-example tracking, which is expensive. The current implementation provides
-    /// entity type distribution but uses aggregate metrics as placeholders.
+    /// # Preferred Path
     ///
-    /// # Future Improvements
+    /// For proper per-type stratification, use [`Self::compute_stratified_metrics_from_scores`]
+    /// which computes actual per-type F1/precision/recall from per-example predictions.
+    /// That method is automatically used when per-example scores are available via
+    /// the evaluation pipeline (see `evaluate_ner_internal`).
     ///
-    /// To implement proper stratification:
-    /// 1. Collect per-example predictions during main evaluation
-    /// 2. Group predictions by entity type
-    /// 3. Compute per-type metrics from grouped predictions
-    /// 4. Calculate proper confidence intervals from per-type variance
+    /// # When This Fallback Is Used
+    ///
+    /// - External evaluation without per-example tracking
+    /// - Legacy integrations that only provide aggregate metrics
+    /// - Quick estimates when full stratification isn't needed
     pub(crate) fn compute_stratified_metrics(
         &self,
         dataset_data: &LoadedDataset,
@@ -3216,17 +3259,15 @@ impl TaskEvaluator {
             return None;
         }
 
-        // Build per-type metrics (simplified - uses aggregate metrics as placeholder)
-        // NOTE: This is a placeholder implementation. All entity types show the same
-        // aggregate metrics. For proper stratification, we'd need per-example predictions
-        // grouped by entity type.
+        // Build per-type metrics (fallback: uses aggregate F1 for all types)
+        // Proper per-type stratification is done by compute_stratified_metrics_from_scores
+        // when per-example scores are available from the evaluation pipeline.
         let mut by_entity_type = HashMap::new();
         let aggregate_f1 = metrics.get("f1").copied().unwrap_or(0.0);
         for (type_str, count) in type_counts {
-            // Use aggregate metrics as placeholder (proper implementation needs per-type scores)
-            // TODO: Compute actual per-type metrics from per-example predictions
-            let mean = aggregate_f1; // All types use aggregate F1 (placeholder)
-            let std_dev = DEFAULT_PLACEHOLDER_STD_DEV; // Placeholder - should compute from per-type scores
+            // Fallback: all types get aggregate F1 (proper per-type metrics need per-example data)
+            let mean = aggregate_f1;
+            let std_dev = DEFAULT_PLACEHOLDER_STD_DEV;
             let z = DEFAULT_Z_SCORE_95;
             let margin = z * std_dev;
             by_entity_type.insert(
@@ -3266,6 +3307,40 @@ mod tests {
     }
 
     #[test]
+    fn test_type_mapping_domain_specific() {
+        // Test domain-specific type mappings (MIT Movie, MIT Restaurant, etc.)
+        use super::TaskEvaluator;
+
+        // MIT Movie types should map Actor/Director → person
+        let mit_movie_types = vec!["Actor", "Director", "Character"];
+        let mapped = TaskEvaluator::map_dataset_labels_to_model(&mit_movie_types, "stacked");
+        assert!(
+            mapped.iter().any(|t| t == "person"),
+            "MIT Movie Actor/Director should map to person"
+        );
+
+        // MIT Restaurant types should map Restaurant_Name → organization
+        let mit_restaurant_types = vec!["Restaurant_Name", "Cuisine", "Dish"];
+        let mapped = TaskEvaluator::map_dataset_labels_to_model(&mit_restaurant_types, "stacked");
+        assert!(
+            mapped.iter().any(|t| t == "organization"),
+            "MIT Restaurant Restaurant_Name should map to organization"
+        );
+
+        // Biomedical types should map Disease → disease
+        let bio_types = vec!["Disease", "Chemical", "Disorder"];
+        let mapped = TaskEvaluator::map_dataset_labels_to_model(&bio_types, "stacked");
+        assert!(
+            mapped.iter().any(|t| t == "disease"),
+            "Biomedical Disease should map to disease"
+        );
+        assert!(
+            mapped.iter().any(|t| t == "chemical"),
+            "Biomedical Chemical should map to chemical"
+        );
+    }
+
+    #[test]
     fn test_task_evaluator_creation() {
         let evaluator = TaskEvaluator::new();
         assert!(evaluator.is_ok());
@@ -3277,5 +3352,330 @@ mod tests {
         assert!(tasks.contains(&Task::NER));
         assert!(tasks.contains(&Task::RelationExtraction));
         assert!(tasks.contains(&Task::TextClassification));
+    }
+
+    // =========================================================================
+    // MetricWithCI Tests
+    // =========================================================================
+
+    #[test]
+    fn test_metric_with_ci_structure() {
+        let metric = MetricWithCI {
+            mean: 0.8,
+            std_dev: 0.05,
+            ci_95: (0.75, 0.85),
+            n: 10,
+        };
+
+        assert!((metric.mean - 0.8).abs() < 0.001);
+        assert_eq!(metric.n, 10);
+        assert!(metric.ci_95.0 < metric.mean);
+        assert!(metric.ci_95.1 > metric.mean);
+    }
+
+    #[test]
+    fn test_metric_with_ci_serialization() {
+        let metric = MetricWithCI {
+            mean: 0.75,
+            std_dev: 0.1,
+            ci_95: (0.65, 0.85),
+            n: 50,
+        };
+
+        // Should serialize/deserialize correctly
+        let json = serde_json::to_string(&metric).unwrap();
+        let parsed: MetricWithCI = serde_json::from_str(&json).unwrap();
+
+        assert!((parsed.mean - 0.75).abs() < 0.001);
+        assert_eq!(parsed.n, 50);
+    }
+
+    // =========================================================================
+    // StratifiedMetrics Tests
+    // =========================================================================
+
+    #[test]
+    fn test_stratified_metrics_default() {
+        let strat = StratifiedMetrics {
+            by_entity_type: HashMap::new(),
+            by_temporal_stratum: None,
+            by_surface_form: None,
+            by_mention_char: None,
+        };
+
+        assert!(strat.by_entity_type.is_empty());
+        assert!(strat.by_temporal_stratum.is_none());
+    }
+
+    #[test]
+    fn test_stratified_metrics_with_types() {
+        let mut by_type = HashMap::new();
+        by_type.insert(
+            "person".to_string(),
+            MetricWithCI {
+                mean: 0.87,
+                std_dev: 0.03,
+                ci_95: (0.84, 0.90),
+                n: 100,
+            },
+        );
+        by_type.insert(
+            "location".to_string(),
+            MetricWithCI {
+                mean: 0.78,
+                std_dev: 0.05,
+                ci_95: (0.73, 0.83),
+                n: 80,
+            },
+        );
+
+        let strat = StratifiedMetrics {
+            by_entity_type: by_type,
+            by_temporal_stratum: None,
+            by_surface_form: None,
+            by_mention_char: None,
+        };
+
+        assert_eq!(strat.by_entity_type.len(), 2);
+        assert!(strat.by_entity_type.contains_key("person"));
+        assert!(strat.by_entity_type.contains_key("location"));
+    }
+
+    // =========================================================================
+    // TaskEvalResult Tests
+    // =========================================================================
+
+    fn make_test_result(success: bool, error: Option<&str>, f1: Option<f64>) -> TaskEvalResult {
+        let mut metrics = HashMap::new();
+        if let Some(f1_val) = f1 {
+            metrics.insert("f1".to_string(), f1_val);
+            metrics.insert("precision".to_string(), 0.8);
+            metrics.insert("recall".to_string(), 0.75);
+        }
+
+        TaskEvalResult {
+            task: Task::NER,
+            dataset: DatasetId::WikiGold,
+            backend: "stacked".to_string(),
+            success,
+            error: error.map(|s| s.to_string()),
+            metrics,
+            num_examples: 100,
+            duration_ms: Some(500.0),
+            label_shift: None,
+            robustness: None,
+            stratified: None,
+            confidence_intervals: None,
+            kb_version: None,
+        }
+    }
+
+    #[test]
+    fn test_task_eval_result_success() {
+        let result = make_test_result(true, None, Some(0.85));
+
+        assert!(result.success);
+        assert!(result.error.is_none());
+        assert!(result.metrics.contains_key("f1"));
+        assert!((result.metrics["f1"] - 0.85).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_task_eval_result_failure() {
+        let result = make_test_result(false, Some("Model failed to load"), None);
+
+        assert!(!result.success);
+        assert!(result.error.is_some());
+        assert_eq!(result.error.as_ref().unwrap(), "Model failed to load");
+    }
+
+    #[test]
+    fn test_task_eval_result_is_skipped() {
+        let skipped = TaskEvalResult {
+            task: Task::NER,
+            dataset: DatasetId::WikiGold,
+            backend: "missing".to_string(),
+            success: false,
+            error: Some("Feature not available".to_string()),
+            metrics: HashMap::new(),
+            num_examples: 0,
+            duration_ms: None,
+            label_shift: None,
+            robustness: None,
+            stratified: None,
+            confidence_intervals: None,
+            kb_version: None,
+        };
+
+        assert!(skipped.is_skipped());
+    }
+
+    #[test]
+    fn test_task_eval_result_not_skipped() {
+        let not_skipped = TaskEvalResult {
+            task: Task::NER,
+            dataset: DatasetId::WikiGold,
+            backend: "missing".to_string(),
+            success: false,
+            error: Some("Connection timeout".to_string()),
+            metrics: HashMap::new(),
+            num_examples: 0,
+            duration_ms: None,
+            label_shift: None,
+            robustness: None,
+            stratified: None,
+            confidence_intervals: None,
+            kb_version: None,
+        };
+
+        assert!(!not_skipped.is_skipped());
+    }
+
+    #[test]
+    fn test_task_eval_result_primary_f1() {
+        let result = make_test_result(true, None, Some(0.824));
+        assert_eq!(result.primary_f1(), Some(0.824));
+    }
+
+    #[test]
+    fn test_task_eval_result_primary_f1_missing() {
+        let result = make_test_result(false, Some("Error"), None);
+        assert_eq!(result.primary_f1(), None);
+    }
+
+    // =========================================================================
+    // Task Mapping Tests
+    // =========================================================================
+
+    #[test]
+    fn test_all_tasks_have_datasets() {
+        let mapping = TaskMapping::build();
+
+        // Just check that the mapping was built successfully
+        assert!(
+            !mapping.task_to_datasets.is_empty(),
+            "Task mapping should have some tasks"
+        );
+
+        // Check that NER task has datasets (core task that should always have datasets)
+        let ner_code = Task::NER.code();
+        let datasets = mapping.datasets_for_task(ner_code);
+        assert!(
+            datasets.is_some() && !datasets.unwrap().is_empty(),
+            "NER task should have at least one dataset"
+        );
+    }
+
+    #[test]
+    fn test_get_task_datasets_ner() {
+        let datasets = get_task_datasets(Task::NER);
+        assert!(!datasets.is_empty(), "NER should have datasets");
+    }
+
+    #[test]
+    fn test_get_task_backends_ner() {
+        let backends = get_task_backends(Task::NER);
+        assert!(!backends.is_empty(), "NER should have backends");
+    }
+
+    #[test]
+    fn test_dataset_tasks_wikigold() {
+        let tasks = dataset_tasks(DatasetId::WikiGold);
+        assert!(
+            tasks.contains(&Task::NER),
+            "WikiGold should support NER task"
+        );
+    }
+
+    // =========================================================================
+    // Type Mapping Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_type_mapping_preserves_standard_types() {
+        let standard_types = vec!["PER", "LOC", "ORG", "MISC"];
+        let mapped = TaskEvaluator::map_dataset_labels_to_model(&standard_types, "stacked");
+
+        // Standard types should be recognized
+        assert!(
+            mapped.iter().any(|t| t == "person" || t == "PER"),
+            "PER should map to person or stay as PER"
+        );
+    }
+
+    #[test]
+    fn test_type_mapping_unknown_types() {
+        let unknown_types = vec!["UNKNOWN_TYPE_XYZ"];
+        let mapped = TaskEvaluator::map_dataset_labels_to_model(&unknown_types, "stacked");
+
+        // Unknown types should be preserved or mapped to misc/other
+        assert!(!mapped.is_empty());
+    }
+
+    #[test]
+    fn test_type_mapping_empty_input() {
+        let empty_types: Vec<&str> = vec![];
+        let mapped = TaskEvaluator::map_dataset_labels_to_model(&empty_types, "stacked");
+
+        assert!(mapped.is_empty());
+    }
+
+    #[test]
+    fn test_type_mapping_case_insensitive() {
+        // Test that mapping handles case variations
+        let types1 = vec!["Person", "PERSON", "person"];
+        let mapped1 = TaskEvaluator::map_dataset_labels_to_model(&types1, "stacked");
+
+        // All should map to the same canonical form
+        assert!(mapped1.iter().all(|t| t.to_lowercase() == "person"));
+    }
+
+    // =========================================================================
+    // ComprehensiveEvalResults Tests
+    // =========================================================================
+
+    #[test]
+    fn test_comprehensive_eval_results_average_f1() {
+        let results = [
+            make_test_result(true, None, Some(0.8)),
+            make_test_result(true, None, Some(0.6)),
+        ];
+
+        // Compute average F1
+        let avg_f1: f64 = results.iter().filter_map(|r| r.primary_f1()).sum::<f64>()
+            / results.iter().filter(|r| r.primary_f1().is_some()).count() as f64;
+        assert!((avg_f1 - 0.7).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_comprehensive_eval_results_mixed_success() {
+        let results = [
+            make_test_result(true, None, Some(0.824)),
+            make_test_result(false, Some("Backend unavailable"), None),
+        ];
+
+        let success_count = results.iter().filter(|r| r.success).count();
+        let failure_count = results.iter().filter(|r| !r.success).count();
+
+        assert_eq!(success_count, 1);
+        assert_eq!(failure_count, 1);
+    }
+
+    #[test]
+    fn test_eval_summary_structure() {
+        let summary = EvalSummary {
+            total_combinations: 100,
+            successful: 85,
+            failed: 10,
+            skipped: 5,
+            tasks: vec![Task::NER],
+            datasets: vec![DatasetId::WikiGold],
+            backends: vec!["stacked".to_string()],
+        };
+
+        assert_eq!(summary.total_combinations, 100);
+        assert_eq!(summary.successful + summary.failed + summary.skipped, 100);
+        assert!(!summary.tasks.is_empty());
+        assert!(!summary.backends.is_empty());
     }
 }

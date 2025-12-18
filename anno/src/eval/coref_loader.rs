@@ -393,6 +393,12 @@ pub fn parse_preco_json(content: &str) -> Result<Vec<PreCoDocument>> {
         }
     }
 
+    if docs.is_empty() {
+        return Err(Error::InvalidInput(
+            "PreCo JSON contains no valid documents".to_string(),
+        ));
+    }
+
     Ok(docs)
 }
 
@@ -691,26 +697,155 @@ pub fn adversarial_coref_examples() -> Vec<(CorefDocument, CorefDocument, &'stat
 }
 
 // =============================================================================
-// BookCoref Support (Stub)
+// BookCoref Support
 // =============================================================================
 
-/// Parse BookCoref JSON format.
+/// Parse BookCoref JSON/JSONL format.
 ///
 /// BookCoref (Martinelli et al. 2025) provides book-scale coreference data.
-/// This function is a placeholder - actual implementation requires the
-/// HuggingFace datasets library to download from Project Gutenberg.
+///
+/// The format follows OntoNotes-style with character metadata:
+/// ```json
+/// {
+///   "doc_key": "pride_and_prejudice_1342",
+///   "gutenberg_key": "1342",
+///   "sentences": [["CHAPTER", "I."], ["It", "is", "a", "truth", ...], ...],
+///   "clusters": [[[79,80], [81,82], ...], [[2727,2728], ...], ...],
+///   "characters": [{"name": "Mr Bennet", "cluster": [[79,80], ...]}, ...]
+/// }
+/// ```
+///
+/// - `sentences`: nested arrays of tokens (word-tokenized)
+/// - `clusters`: list of clusters, each cluster is list of [start, end] token spans (inclusive)
+/// - `characters`: optional character metadata (not used for coreference eval)
 ///
 /// # Errors
 ///
-/// Returns error until full implementation is available.
-pub fn parse_bookcoref_json(_content: &str) -> Result<Vec<CorefDocument>> {
-    // TODO: Implement BookCoref JSON parsing
-    // Format follows OntoNotes-style with character metadata
-    Err(Error::InvalidInput(
-        "BookCoref parsing not yet implemented. \
-         Use HuggingFace datasets library to load this dataset."
-            .to_string(),
-    ))
+/// Returns error if JSON is malformed or has invalid structure.
+pub fn parse_bookcoref_json(content: &str) -> Result<Vec<CorefDocument>> {
+    let mut documents = Vec::new();
+
+    // Parse as JSONL (one JSON object per line) or JSON array
+    if content.trim().starts_with('[') {
+        // JSON array format
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(content).map_err(|e| {
+            Error::InvalidInput(format!("Failed to parse BookCoref JSON array: {}", e))
+        })?;
+        for item in parsed {
+            if let Some(doc) = parse_bookcoref_item(&item)? {
+                documents.push(doc);
+            }
+        }
+    } else {
+        // JSONL format - one JSON per line
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            let item: serde_json::Value = serde_json::from_str(line).map_err(|e| {
+                Error::InvalidInput(format!("Failed to parse BookCoref JSONL: {}", e))
+            })?;
+
+            if let Some(doc) = parse_bookcoref_item(&item)? {
+                documents.push(doc);
+            }
+        }
+    }
+
+    if documents.is_empty() {
+        return Err(Error::InvalidInput(
+            "BookCoref content contains no valid documents".to_string(),
+        ));
+    }
+
+    Ok(documents)
+}
+
+/// Parse a single BookCoref item.
+fn parse_bookcoref_item(item: &serde_json::Value) -> Result<Option<CorefDocument>> {
+    // Get sentences array
+    let sentences = match item.get("sentences").and_then(|v| v.as_array()) {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+
+    // Get clusters array
+    let clusters = match item.get("clusters").and_then(|v| v.as_array()) {
+        Some(c) => c,
+        None => return Ok(None),
+    };
+
+    // Flatten sentences to get tokens and build token-to-char offset map
+    let mut tokens: Vec<String> = Vec::new();
+    for sentence in sentences {
+        if let Some(sent_tokens) = sentence.as_array() {
+            for token in sent_tokens {
+                if let Some(t) = token.as_str() {
+                    tokens.push(t.to_string());
+                }
+            }
+        }
+    }
+
+    if tokens.is_empty() {
+        return Ok(None);
+    }
+
+    // Build text and token offset map
+    // We need to reconstruct text from tokens (space-separated)
+    let mut text = String::new();
+    let mut token_char_starts: Vec<usize> = Vec::new();
+    let mut token_char_ends: Vec<usize> = Vec::new();
+
+    for (i, token) in tokens.iter().enumerate() {
+        if i > 0 {
+            text.push(' ');
+        }
+        let start = text.chars().count();
+        text.push_str(token);
+        let end = text.chars().count();
+        token_char_starts.push(start);
+        token_char_ends.push(end);
+    }
+
+    // Parse clusters - each cluster is a list of [start_token, end_token] spans (inclusive)
+    let mut coref_chains = Vec::new();
+    for cluster in clusters {
+        if let Some(spans) = cluster.as_array() {
+            let mut mentions = Vec::new();
+            for span in spans {
+                if let Some(span_arr) = span.as_array() {
+                    if span_arr.len() >= 2 {
+                        let start_tok = span_arr[0].as_u64().unwrap_or(0) as usize;
+                        let end_tok = span_arr[1].as_u64().unwrap_or(0) as usize;
+
+                        // Convert token indices to char offsets
+                        if start_tok < token_char_starts.len() && end_tok < token_char_ends.len() {
+                            let char_start = token_char_starts[start_tok];
+                            let char_end = token_char_ends[end_tok];
+
+                            // Extract mention text
+                            let mention_text: String = text
+                                .chars()
+                                .skip(char_start)
+                                .take(char_end - char_start)
+                                .collect();
+
+                            mentions.push(Mention::new(&mention_text, char_start, char_end));
+                        }
+                    }
+                }
+            }
+
+            if !mentions.is_empty() {
+                coref_chains.push(CorefChain::new(mentions));
+            }
+        }
+    }
+
+    Ok(Some(CorefDocument::new(&text, coref_chains)))
 }
 
 // =============================================================================
@@ -819,5 +954,58 @@ mod tests {
         assert_eq!(examples[0].id, "1");
         assert!(examples[0].coref_a);
         assert!(!examples[0].coref_b);
+    }
+
+    #[test]
+    fn test_bookcoref_json_parsing() {
+        // BookCoref format: nested sentences, token-span clusters
+        // Use single line to test JSONL parsing
+        let json = r#"{"doc_key": "test_book_1", "gutenberg_key": "1", "sentences": [["Alice", "met", "Bob", "."], ["She", "waved", "."]], "clusters": [[[0, 0], [4, 4]], [[2, 2]]], "characters": [{"name": "Alice", "cluster": [[0, 0], [4, 4]]}]}"#;
+
+        let docs = parse_bookcoref_json(json).unwrap();
+        assert_eq!(docs.len(), 1);
+
+        let doc = &docs[0];
+        // Text should be tokens joined by space
+        assert!(doc.text.contains("Alice"));
+        assert!(doc.text.contains("She"));
+
+        // Should have 2 clusters: Alice+She, Bob
+        assert_eq!(doc.chain_count(), 2);
+
+        // First cluster should have 2 mentions (Alice, She)
+        let alice_cluster = doc
+            .chains
+            .iter()
+            .find(|c| c.mentions.iter().any(|m| m.text == "Alice"));
+        assert!(alice_cluster.is_some());
+        assert_eq!(alice_cluster.unwrap().mentions.len(), 2);
+
+        // Second cluster should have 1 mention (Bob)
+        let bob_cluster = doc
+            .chains
+            .iter()
+            .find(|c| c.mentions.iter().any(|m| m.text == "Bob"));
+        assert!(bob_cluster.is_some());
+        assert_eq!(bob_cluster.unwrap().mentions.len(), 1);
+    }
+
+    #[test]
+    fn test_bookcoref_json_array_parsing() {
+        // Test JSON array format
+        let json_array = r#"[{"doc_key": "book1", "sentences": [["He", "ran", "."]], "clusters": [[[0, 0]]]}, {"doc_key": "book2", "sentences": [["She", "walked", "."]], "clusters": [[[0, 0]]]}]"#;
+
+        let docs = parse_bookcoref_json(json_array).unwrap();
+        assert_eq!(docs.len(), 2);
+    }
+
+    #[test]
+    fn test_bookcoref_jsonl_parsing() {
+        // Test JSONL format (one JSON per line)
+        let jsonl = r#"{"doc_key": "book1", "sentences": [["He", "ran", "."]], "clusters": [[[0, 0]]]}
+{"doc_key": "book2", "sentences": [["She", "walked", "."]], "clusters": [[[0, 0]]]}"#;
+
+        let docs = parse_bookcoref_json(jsonl).unwrap();
+        assert_eq!(docs.len(), 2);
     }
 }
