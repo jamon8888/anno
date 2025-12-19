@@ -50,8 +50,13 @@ echo "ok"
 # 3. Quick tests (blocking)
 # ============================================================================
 # Prefers cargo-nextest quick profile when available.
+# NOTE (macOS): `cargo nextest` can be *very* slow on some setups due to Gatekeeper.
+# If you're on macOS and pushes feel stuck during nextest "list" or startup, either:
+# - add your terminal to Developer Tools exclusions (see nextest docs), or
+# - set ANNO_USE_NEXTEST=1 to force nextest, otherwise we fall back to `cargo test`.
 echo -n "  [3/5] tests ........ "
-if command -v cargo-nextest >/dev/null 2>&1; then
+OS_NAME="$(uname -s 2>/dev/null || echo unknown)"
+if command -v cargo-nextest >/dev/null 2>&1 && { [ "$OS_NAME" != "Darwin" ] || [ "${ANNO_USE_NEXTEST:-}" = "1" ]; }; then
     cargo nextest run --profile quick --workspace --features "eval-advanced discourse"
 else
     cargo test --workspace --lib --features "eval-advanced discourse"
