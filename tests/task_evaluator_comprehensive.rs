@@ -12,11 +12,15 @@
 
 #![cfg(feature = "eval-advanced")]
 
-use anno::eval::loader::{DatasetId, DatasetLoader};
+use anno::eval::loader::{DataSource, DatasetId, DatasetLoader, LoadableDatasetId, LoadedDataset};
 use anno::eval::task_evaluator::{TaskEvalConfig, TaskEvaluator};
 use anno::eval::task_mapping::Task;
 use anno::Entity;
 use std::collections::HashMap;
+
+fn loadable(id: DatasetId) -> LoadableDatasetId {
+    LoadableDatasetId::try_from(id).expect("dataset should be loadable by DatasetLoader")
+}
 
 // =============================================================================
 // Thread-Local Backend Caching Tests
@@ -31,7 +35,7 @@ fn test_thread_local_backend_caching() {
     let loader = DatasetLoader::new().unwrap();
 
     // Create a small synthetic dataset
-    let dataset = loader.load(DatasetId::CoNLL2003Sample).ok();
+    let dataset = loader.load(loadable(DatasetId::CoNLL2003Sample)).ok();
     if dataset.is_none() {
         eprintln!("Skipping test: CoNLL2003Sample not cached");
         return;
@@ -45,14 +49,12 @@ fn test_thread_local_backend_caching() {
         datasets: vec![DatasetId::CoNLL2003Sample],
         backends: vec![backend_name.to_string()],
         max_examples: Some(5),
-        seed: Some(42),
         require_cached: true,
-        relation_threshold: 0.5,
         robustness: false,
         compute_familiarity: false,
         temporal_stratification: false,
         confidence_intervals: false,
-        custom_coref_resolver: None,
+        ..Default::default()
     };
 
     // Run evaluation - should cache backend per thread
@@ -86,7 +88,7 @@ fn test_case_insensitive_backend_matching() {
     let evaluator = TaskEvaluator::new().unwrap();
     let loader = DatasetLoader::new().unwrap();
 
-    let dataset = loader.load(DatasetId::CoNLL2003Sample).ok();
+    let dataset = loader.load(loadable(DatasetId::CoNLL2003Sample)).ok();
     if dataset.is_none() {
         eprintln!("Skipping test: CoNLL2003Sample not cached");
         return;
@@ -98,14 +100,12 @@ fn test_case_insensitive_backend_matching() {
         datasets: vec![DatasetId::CoNLL2003Sample],
         backends: vec!["GLiNER".to_string(), "gliner_onnx".to_string()],
         max_examples: Some(2),
-        seed: Some(42),
         require_cached: true,
-        relation_threshold: 0.5,
         robustness: false,
         compute_familiarity: false,
         temporal_stratification: false,
         confidence_intervals: false,
-        custom_coref_resolver: None,
+        ..Default::default()
     };
 
     let results = evaluator.evaluate_all(config).unwrap();
@@ -166,7 +166,7 @@ fn test_universal_ner_graceful_skip() {
     let evaluator = TaskEvaluator::new().unwrap();
     let loader = DatasetLoader::new().unwrap();
 
-    let dataset = loader.load(DatasetId::CoNLL2003Sample).ok();
+    let dataset = loader.load(loadable(DatasetId::CoNLL2003Sample)).ok();
     if dataset.is_none() {
         eprintln!("Skipping test: CoNLL2003Sample not cached");
         return;
@@ -178,14 +178,12 @@ fn test_universal_ner_graceful_skip() {
         datasets: vec![DatasetId::CoNLL2003Sample],
         backends: vec!["universal_ner".to_string()],
         max_examples: Some(2),
-        seed: Some(42),
         require_cached: true,
-        relation_threshold: 0.5,
         robustness: false,
         compute_familiarity: false,
         temporal_stratification: false,
         confidence_intervals: false,
-        custom_coref_resolver: None,
+        ..Default::default()
     };
 
     let results = evaluator.evaluate_all(config).unwrap();
@@ -203,26 +201,16 @@ fn test_universal_ner_graceful_skip() {
 
 #[test]
 fn test_confidence_intervals_empty_sample() {
-    let evaluator = TaskEvaluator::new().unwrap();
-    let loader = DatasetLoader::new().unwrap();
-
     // Create empty dataset
-    use anno::eval::loader::LoadedDataset;
-    let empty_dataset = LoadedDataset {
+    let _empty_dataset = LoadedDataset {
         id: DatasetId::CoNLL2003Sample,
         sentences: vec![],
         loaded_at: chrono::Utc::now().to_rfc3339(),
         source_url: "test".to_string(),
+        data_source: DataSource::Skipped,
         temporal_metadata: None,
+        metadata: DatasetId::CoNLL2003Sample.default_metadata(),
     };
-
-    let metrics = HashMap::new();
-
-    // Should handle empty dataset gracefully
-    // Note: compute_confidence_intervals_improved is now compute_confidence_intervals
-    // This test verifies that empty datasets are handled gracefully
-    // The actual CI computation would require a non-empty dataset
-    // Empty dataset handling is tested implicitly in other tests
 }
 
 #[test]
@@ -230,12 +218,10 @@ fn test_confidence_intervals_computation() {
     let evaluator = TaskEvaluator::new().unwrap();
     let loader = DatasetLoader::new().unwrap();
 
-    let dataset = loader.load(DatasetId::CoNLL2003Sample).ok();
-    if dataset.is_none() {
+    if loader.load(loadable(DatasetId::CoNLL2003Sample)).is_err() {
         eprintln!("Skipping test: CoNLL2003Sample not cached");
         return;
     }
-    let dataset = dataset.unwrap();
 
     // Test with pattern backend (always available)
     let config = TaskEvalConfig {
@@ -243,14 +229,12 @@ fn test_confidence_intervals_computation() {
         datasets: vec![DatasetId::CoNLL2003Sample],
         backends: vec!["pattern".to_string()],
         max_examples: Some(10),
-        seed: Some(42),
         require_cached: true,
-        relation_threshold: 0.5,
-        robustness: false,
         compute_familiarity: false,
         temporal_stratification: false,
         confidence_intervals: true, // Enable CI computation
-        custom_coref_resolver: None,
+        robustness: false,
+        ..Default::default()
     };
 
     let results = evaluator.evaluate_all(config).unwrap();
@@ -289,7 +273,7 @@ fn test_robustness_backend_creation_failure() {
     let evaluator = TaskEvaluator::new().unwrap();
     let loader = DatasetLoader::new().unwrap();
 
-    let dataset = loader.load(DatasetId::CoNLL2003Sample).ok();
+    let dataset = loader.load(loadable(DatasetId::CoNLL2003Sample)).ok();
     if dataset.is_none() {
         eprintln!("Skipping test: CoNLL2003Sample not cached");
         return;
@@ -313,8 +297,6 @@ fn test_robustness_backend_creation_failure() {
 #[cfg(feature = "eval-advanced")]
 #[test]
 fn test_robustness_empty_test_cases() {
-    use anno::eval::loader::LoadedDataset;
-
     let evaluator = TaskEvaluator::new().unwrap();
 
     // Create empty dataset
@@ -323,7 +305,9 @@ fn test_robustness_empty_test_cases() {
         sentences: vec![],
         loaded_at: chrono::Utc::now().to_rfc3339(),
         source_url: "test".to_string(),
+        data_source: DataSource::Skipped,
         temporal_metadata: None,
+        metadata: DatasetId::CoNLL2003Sample.default_metadata(),
     };
 
     let robustness =
@@ -342,7 +326,7 @@ fn test_stratified_metrics_per_type() {
     let evaluator = TaskEvaluator::new().unwrap();
     let loader = DatasetLoader::new().unwrap();
 
-    let dataset = loader.load(DatasetId::CoNLL2003Sample).ok();
+    let dataset = loader.load(loadable(DatasetId::CoNLL2003Sample)).ok();
     if dataset.is_none() {
         eprintln!("Skipping test: CoNLL2003Sample not cached");
         return;
@@ -404,7 +388,9 @@ fn test_stratified_metrics_empty_types() {
         }],
         loaded_at: chrono::Utc::now().to_rfc3339(),
         source_url: "test".to_string(),
+        data_source: DataSource::Embedded,
         temporal_metadata: None,
+        metadata: DatasetId::CoNLL2003Sample.default_metadata(),
     };
 
     let mut metrics = HashMap::new();
@@ -436,21 +422,19 @@ fn test_tplinker_in_evaluation() {
         datasets: vec![DatasetId::DocRED],
         backends: vec!["tplinker".to_string()],
         max_examples: Some(2),
-        seed: Some(42),
         require_cached: true,
-        relation_threshold: 0.5,
         robustness: false,
         compute_familiarity: false,
         temporal_stratification: false,
         confidence_intervals: false,
-        custom_coref_resolver: None,
+        ..Default::default()
     };
 
     let results = evaluator.evaluate_all(config).unwrap();
 
     // Should not panic, may skip if dataset not cached
     assert!(
-        !results.results.is_empty() || loader.is_cached(DatasetId::DocRED),
+        !results.results.is_empty() || loader.is_cached(loadable(DatasetId::DocRED)),
         "Should handle TPLinker evaluation"
     );
 }
@@ -470,14 +454,12 @@ fn test_new_backends_graceful_handling() {
             "universal_ner".to_string(),
         ],
         max_examples: Some(2),
-        seed: Some(42),
         require_cached: true,
-        relation_threshold: 0.5,
         robustness: false,
         compute_familiarity: false,
         temporal_stratification: false,
         confidence_intervals: false,
-        custom_coref_resolver: None,
+        ..Default::default()
     };
 
     let results = evaluator.evaluate_all(config).unwrap();
@@ -514,8 +496,16 @@ fn test_new_datasets_parsing() {
     ];
 
     for dataset_id in new_datasets {
-        if loader.is_cached(dataset_id) {
-            match loader.load(dataset_id) {
+        let Ok(loadable_id) = LoadableDatasetId::try_from(dataset_id) else {
+            eprintln!(
+                "Skipping {}: not loadable by DatasetLoader",
+                dataset_id.name()
+            );
+            continue;
+        };
+
+        if loader.is_cached(loadable_id) {
+            match loader.load(loadable_id) {
                 Ok(dataset) => {
                     assert!(
                         !dataset.id.name().is_empty(),
@@ -539,7 +529,7 @@ fn test_new_datasets_parsing() {
 fn test_scier_relation_extraction_parsing() {
     let loader = DatasetLoader::new().unwrap();
 
-    if loader.is_cached(DatasetId::SciER) {
+    if loader.is_cached(loadable(DatasetId::SciER)) {
         match loader.load_relation(DatasetId::SciER) {
             Ok(relations) => {
                 // Should parse without error
@@ -567,7 +557,7 @@ fn test_parallel_evaluation_error_handling() {
     let evaluator = TaskEvaluator::new().unwrap();
     let loader = DatasetLoader::new().unwrap();
 
-    let dataset = loader.load(DatasetId::CoNLL2003Sample).ok();
+    let dataset = loader.load(loadable(DatasetId::CoNLL2003Sample)).ok();
     if dataset.is_none() {
         eprintln!("Skipping test: CoNLL2003Sample not cached");
         return;
@@ -579,14 +569,12 @@ fn test_parallel_evaluation_error_handling() {
         datasets: vec![DatasetId::CoNLL2003Sample],
         backends: vec!["pattern".to_string()], // Should always work
         max_examples: Some(5),
-        seed: Some(42),
         require_cached: true,
-        relation_threshold: 0.5,
         robustness: false,
         compute_familiarity: false,
         temporal_stratification: false,
         confidence_intervals: false,
-        custom_coref_resolver: None,
+        ..Default::default()
     };
 
     // Should not panic even if some sentences fail
@@ -619,14 +607,12 @@ fn test_full_evaluation_pipeline() {
         datasets: vec![DatasetId::CoNLL2003Sample],
         backends: vec!["pattern".to_string(), "heuristic".to_string()],
         max_examples: Some(5),
-        seed: Some(42),
         require_cached: true,
-        relation_threshold: 0.5,
         robustness: false,
         compute_familiarity: true,
         temporal_stratification: false,
         confidence_intervals: true,
-        custom_coref_resolver: None,
+        ..Default::default()
     };
 
     let results = evaluator.evaluate_all(config).unwrap();
@@ -712,12 +698,10 @@ fn test_per_example_scores_cache_poisoning_recovery() {
     );
 
     // Test clearing the cache (as done in evaluate_combination)
-    if let Ok(mut cache_guard) = cache.lock() {
-        *cache_guard = None;
-    } else {
-        // If mutex is poisoned, reset it (as done in evaluate_combination)
-        let _ = cache.lock().unwrap_or_else(|e| e.into_inner());
-    }
+    // If the mutex is poisoned, recover the guard and still clear the cache.
+    let mut cache_guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+    *cache_guard = None;
+    drop(cache_guard);
 
     // Verify cache is cleared
     let cleared = cache.lock().unwrap_or_else(|e| e.into_inner());

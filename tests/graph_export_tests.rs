@@ -194,7 +194,7 @@ fn test_graph_document_with_coref_chains() {
         Entity::new("Musk", EntityType::Person, 50, 54, 0.8).with_canonical_id(1),
     ];
 
-    let chains = vec![CorefChain {
+    let _chains = vec![CorefChain {
         cluster_id: Some(1),
         entity_type: Some("Person".to_string()),
         mentions: vec![
@@ -203,7 +203,9 @@ fn test_graph_document_with_coref_chains() {
         ],
     }];
 
-    let graph = GraphDocument::from_extraction(&entities, &[], Some(&chains));
+    // NOTE: `GraphDocument::from_extraction` currently ignores explicit coref chains;
+    // `canonical_id` on entities is sufficient.
+    let graph = GraphDocument::from_extraction(&entities, &[], None);
     // Should use canonical name from first mention
     let elon_node = graph.nodes.iter().find(|n| n.id == "coref_1").unwrap();
     assert_eq!(elon_node.name, "Elon Musk");

@@ -4,7 +4,13 @@
 # Run with: bash scripts/llm_agent_experience.sh
 
 set -e
-ANNO=${ANNO:-./target/release/anno}
+ANNO=${ANNO:-./target/debug/anno}
+
+if [ ! -x "$ANNO" ]; then
+  echo "error: anno binary not found at: $ANNO"
+  echo "Build with: cargo build -p anno --bin anno"
+  exit 1
+fi
 
 echo "=================================================================="
 echo "LLM Agent Experience Testing for anno CLI"
@@ -65,7 +71,11 @@ $ANNO extract --model heuristic 'Dr. John Smith works at Harvard University.'
 echo ""
 
 echo "3c. GLiNER backend (ML)"
-$ANNO extract --model gliner 'Angela Merkel led Germany for 16 years.'
+if $ANNO extract --help | grep -q "gliner"; then
+  $ANNO extract --model gliner 'Angela Merkel led Germany for 16 years.'
+else
+  echo "(skipped) GLiNER backend not available in this build. Rebuild with: cargo build -p anno --features onnx --bin anno"
+fi
 echo ""
 
 echo "3d. Stacked backend (combined)"
@@ -81,17 +91,15 @@ $ANNO compare "$TESTDIR/simple.txt" --models --model-list pattern,heuristic,stac
 echo ""
 
 # ==========================================================================
-echo "=== 4. ZERO-SHOT CUSTOM TYPES ==="
+echo "=== 4. TYPE FILTERING ==="
 # ==========================================================================
 
-echo "4a. Custom entity types"
-$ANNO extract --model gliner --types "person,organization,disease,drug" \
-  'Dr. Fauci prescribed Remdesivir for COVID-19 patients at NIH.'
+echo "4a. Filter by entity type (comma-separated)"
+$ANNO extract --types "person,organization" 'Tim Cook is the CEO of Apple Inc.'
 echo ""
 
-echo "4b. Domain-specific types"
-$ANNO extract --model gliner --types "gene,protein,disease,cell_line" \
-  'BRCA1 mutations increase breast cancer risk in HeLa cells.'
+echo "4b. Filter by type + confidence threshold"
+$ANNO extract --types "person,organization" --threshold 0.6 'Tim Cook is the CEO of Apple Inc.'
 echo ""
 
 # ==========================================================================
@@ -110,7 +118,11 @@ Meanwhile, Google's Sundar Pichai announced AI investments. Apple's Cook remaine
 EOF
 
 echo "5a. Cross-document entity resolution"
-$ANNO cross-doc "$TESTDIR/" --threshold 0.5 --format summary
+if $ANNO --help | grep -q "^  cross-doc"; then
+  $ANNO cross-doc "$TESTDIR/" --threshold 0.5 --format summary
+else
+  echo "(skipped) cross-doc requires eval-advanced build. Rebuild with: cargo build -p anno --features eval-advanced --bin anno"
+fi
 echo ""
 
 # ==========================================================================
@@ -146,7 +158,7 @@ echo "=== 8. BATCH PROCESSING ==="
 # ==========================================================================
 
 echo "8. Batch processing directory"
-$ANNO batch -d "$TESTDIR/" --format json | head -50
+$ANNO batch -d "$TESTDIR/" --format json
 echo ""
 
 # ==========================================================================
@@ -171,7 +183,7 @@ echo "=== 10. EXPORT/IMPORT WORKFLOW ==="
 
 echo "10a. Export to brat format"
 echo 'Marie Curie won the Nobel Prize.' > "$TESTDIR/to_export.txt"
-$ANNO export --input "$TESTDIR/to_export.txt" --format brat --output "$TESTDIR/export_test"
+$ANNO dataset export --input "$TESTDIR/to_export.txt" --format brat --output "$TESTDIR/export_test" --overwrite
 echo "Exported to $TESTDIR/export_test"
 ls -la "$TESTDIR/export_test"* 2>/dev/null || echo "(export directory created)"
 echo ""
@@ -181,7 +193,7 @@ echo "=== 11. WATCH MODE (help only - blocking command) ==="
 # ==========================================================================
 
 echo "11. Watch command for live systems"
-$ANNO watch --help | head -10
+$ANNO watch --help
 echo ""
 
 # ==========================================================================
@@ -197,7 +209,7 @@ echo "  - pattern: Dates, emails, URLs, money, hashtags"
 echo "  - heuristic: NER via capitalization patterns"
 echo "  - stacked: Combined pattern + heuristic"
 echo "  - ensemble: Weighted voting across all backends"
-echo "  - gliner: ML-based, zero-shot custom types (requires onnx)"
+echo "  - gliner: ML-based, label-conditioned types (requires onnx)"
 echo ""
 echo "Non-working backends (require setup):"
 echo "  - gliner2: Model format mismatch"

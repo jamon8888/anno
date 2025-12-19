@@ -377,9 +377,9 @@ impl CrfNER {
         w.insert("bias:O".to_string(), 3.0);
 
         // Extra strong bias for lowercase words
-        w.insert("shape=x:O".to_string(), 2.5);
-        w.insert("shape=x:B-PER".to_string(), -3.0);
-        w.insert("shape=x:I-PER".to_string(), -2.0);
+        w.insert("word.shape=x:O".to_string(), 2.5);
+        w.insert("word.shape=x:B-PER".to_string(), -3.0);
+        w.insert("word.shape=x:I-PER".to_string(), -2.0);
 
         // Gazetteer features are very strong signals for B- tags
         w.insert("gaz:PER:B-PER".to_string(), 4.0);
@@ -387,17 +387,17 @@ impl CrfNER {
         w.insert("gaz:ORG:B-ORG".to_string(), 4.0);
 
         // Capitalization patterns - only for B- tags
-        w.insert("shape=Xx:B-PER".to_string(), 2.0);
-        w.insert("shape=Xx:B-LOC".to_string(), 1.5);
-        w.insert("shape=Xx:B-ORG".to_string(), 1.5);
-        w.insert("shape=Xx:I-PER".to_string(), 1.0); // Continue if already in entity
-        w.insert("shape=Xx:I-ORG".to_string(), 1.0);
-        w.insert("shape=XX:B-ORG".to_string(), 2.5); // Acronyms like IBM, NASA
+        w.insert("word.shape=Xx:B-PER".to_string(), 2.0);
+        w.insert("word.shape=Xx:B-LOC".to_string(), 1.5);
+        w.insert("word.shape=Xx:B-ORG".to_string(), 1.5);
+        w.insert("word.shape=Xx:I-PER".to_string(), 1.0); // Continue if already in entity
+        w.insert("word.shape=Xx:I-ORG".to_string(), 1.0);
+        w.insert("word.shape=XX:B-ORG".to_string(), 2.5); // Acronyms like IBM, NASA
 
         // Lowercase words are unlikely to be entity starts
-        w.insert("shape=x:B-PER".to_string(), -2.0);
-        w.insert("shape=x:B-ORG".to_string(), -2.0);
-        w.insert("shape=x:B-LOC".to_string(), -2.0);
+        w.insert("word.shape=x:B-PER".to_string(), -2.0);
+        w.insert("word.shape=x:B-ORG".to_string(), -2.0);
+        w.insert("word.shape=x:B-LOC".to_string(), -2.0);
 
         // Common words that are NOT entities - strongly bias toward O
         for word in [
@@ -485,36 +485,37 @@ impl CrfNER {
             "too",
             "very",
         ] {
-            w.insert(format!("w={}:O", word), 5.0);
-            w.insert(format!("w={}:B-PER", word), -5.0);
-            w.insert(format!("w={}:B-ORG", word), -5.0);
-            w.insert(format!("w={}:B-LOC", word), -5.0);
-            w.insert(format!("w={}:I-PER", word), -4.0);
-            w.insert(format!("w={}:I-ORG", word), -4.0);
-            w.insert(format!("w={}:I-LOC", word), -4.0);
+            w.insert(format!("word.lower={}:O", word), 5.0);
+            w.insert(format!("word.lower={}:B-PER", word), -5.0);
+            w.insert(format!("word.lower={}:B-ORG", word), -5.0);
+            w.insert(format!("word.lower={}:B-LOC", word), -5.0);
+            w.insert(format!("word.lower={}:I-PER", word), -4.0);
+            w.insert(format!("word.lower={}:I-ORG", word), -4.0);
+            w.insert(format!("word.lower={}:I-LOC", word), -4.0);
         }
 
         // Common suffixes for organizations
-        w.insert("suf3=inc:B-ORG".to_string(), 3.0);
-        w.insert("suf4=corp:B-ORG".to_string(), 3.0);
-        w.insert("suf3=ltd:B-ORG".to_string(), 3.0);
-        w.insert("suf3=llc:B-ORG".to_string(), 3.0);
+        w.insert("suffix3=inc:B-ORG".to_string(), 3.0);
+        // Note: we intentionally do not add a suffix4 feature here; keep default weights aligned
+        // with `scripts/train_crf_weights.py` (prefix/suffix lengths 2-3).
+        w.insert("suffix3=ltd:B-ORG".to_string(), 3.0);
+        w.insert("suffix3=llc:B-ORG".to_string(), 3.0);
 
         // Context words that suggest entities
-        w.insert("w[-1]=dr:B-PER".to_string(), 2.5);
-        w.insert("w[-1]=mr:B-PER".to_string(), 2.5);
-        w.insert("w[-1]=mrs:B-PER".to_string(), 2.5);
-        w.insert("w[-1]=ms:B-PER".to_string(), 2.5);
-        w.insert("w[-1]=prof:B-PER".to_string(), 2.5);
-        w.insert("w[-1]=president:B-PER".to_string(), 2.0);
-        w.insert("w[-1]=ceo:B-PER".to_string(), 2.0);
+        w.insert("-1:word.lower=dr:B-PER".to_string(), 2.5);
+        w.insert("-1:word.lower=mr:B-PER".to_string(), 2.5);
+        w.insert("-1:word.lower=mrs:B-PER".to_string(), 2.5);
+        w.insert("-1:word.lower=ms:B-PER".to_string(), 2.5);
+        w.insert("-1:word.lower=prof:B-PER".to_string(), 2.5);
+        w.insert("-1:word.lower=president:B-PER".to_string(), 2.0);
+        w.insert("-1:word.lower=ceo:B-PER".to_string(), 2.0);
 
         // Location context
-        w.insert("w[-1]=in:B-LOC".to_string(), 1.5);
-        w.insert("w[-1]=at:B-LOC".to_string(), 1.5);
-        w.insert("w[-1]=from:B-LOC".to_string(), 1.5);
-        w.insert("w[-1]=of:B-LOC".to_string(), 1.0);
-        w.insert("w[-1]=of:B-ORG".to_string(), 1.0);
+        w.insert("-1:word.lower=in:B-LOC".to_string(), 1.5);
+        w.insert("-1:word.lower=at:B-LOC".to_string(), 1.5);
+        w.insert("-1:word.lower=from:B-LOC".to_string(), 1.5);
+        w.insert("-1:word.lower=of:B-LOC".to_string(), 1.0);
+        w.insert("-1:word.lower=of:B-ORG".to_string(), 1.0);
 
         // Transition features (BIO constraints) - very important
         // Valid transitions
@@ -554,11 +555,11 @@ impl CrfNER {
     fn word_shape(word: &str) -> String {
         word.chars()
             .map(|c| {
-                if c.is_ascii_uppercase() {
+                if c.is_uppercase() {
                     'X'
-                } else if c.is_ascii_lowercase() {
+                } else if c.is_lowercase() {
                     'x'
-                } else if c.is_ascii_digit() {
+                } else if c.is_digit(10) {
                     '0'
                 } else {
                     c
@@ -598,6 +599,14 @@ impl CrfNER {
         let mut features = Vec::with_capacity(20);
         let word = tokens[pos];
 
+        fn bool_py(v: bool) -> &'static str {
+            if v {
+                "True"
+            } else {
+                "False"
+            }
+        }
+
         // Bias feature (always present)
         features.push("bias".to_string());
 
@@ -606,16 +615,18 @@ impl CrfNER {
         features.push(format!("word.shape={}", Self::word_shape(word)));
         features.push(format!(
             "word.isdigit={}",
-            word.chars().all(|c| c.is_ascii_digit())
+            bool_py(word.chars().all(|c| c.is_digit(10)))
         ));
         features.push(format!(
             "word.istitle={}",
-            word.chars().next().is_some_and(|c| c.is_uppercase())
-                && word.chars().skip(1).all(|c| c.is_lowercase())
+            bool_py(
+                word.chars().next().is_some_and(|c| c.is_uppercase())
+                    && word.chars().skip(1).all(|c| c.is_lowercase())
+            )
         ));
         features.push(format!(
             "word.isupper={}",
-            word.chars().all(|c| c.is_uppercase())
+            bool_py(word.chars().all(|c| c.is_uppercase()))
         ));
 
         // Prefix/suffix features
@@ -639,12 +650,14 @@ impl CrfNER {
             features.push(format!("-1:word.lower={}", prev_word.to_lowercase()));
             features.push(format!(
                 "-1:word.istitle={}",
-                prev_word.chars().next().is_some_and(|c| c.is_uppercase())
-                    && prev_word.chars().skip(1).all(|c| c.is_lowercase())
+                bool_py(
+                    prev_word.chars().next().is_some_and(|c| c.is_uppercase())
+                        && prev_word.chars().skip(1).all(|c| c.is_lowercase())
+                )
             ));
             features.push(format!(
                 "-1:word.isupper={}",
-                prev_word.chars().all(|c| c.is_uppercase())
+                bool_py(prev_word.chars().all(|c| c.is_uppercase()))
             ));
             features.push(format!("-1:word.shape={}", Self::word_shape(prev_word)));
         } else {
@@ -657,12 +670,14 @@ impl CrfNER {
             features.push(format!("+1:word.lower={}", next_word.to_lowercase()));
             features.push(format!(
                 "+1:word.istitle={}",
-                next_word.chars().next().is_some_and(|c| c.is_uppercase())
-                    && next_word.chars().skip(1).all(|c| c.is_lowercase())
+                bool_py(
+                    next_word.chars().next().is_some_and(|c| c.is_uppercase())
+                        && next_word.chars().skip(1).all(|c| c.is_lowercase())
+                )
             ));
             features.push(format!(
                 "+1:word.isupper={}",
-                next_word.chars().all(|c| c.is_uppercase())
+                bool_py(next_word.chars().all(|c| c.is_uppercase()))
             ));
             features.push(format!("+1:word.shape={}", Self::word_shape(next_word)));
         } else {
@@ -972,11 +987,12 @@ mod tests {
     fn test_crf_basic() {
         let ner = CrfNER::new();
         let entities = ner
-            .extract_entities("John Smith works at Google in California.", None)
+            .extract_entities("John Smith works at Google in California", None)
             .unwrap();
 
-        // Heuristic CRF weights may yield empty output; this test only asserts no panic / error.
-        let _ = entities;
+        // With our default heuristic weights + gazetteers, we should usually get some entities.
+        // (Trained weights will do better, but defaults should not be totally dead.)
+        assert!(!entities.is_empty(), "Expected some entities, got none");
     }
 
     #[test]
@@ -1049,17 +1065,17 @@ mod tests {
 
         // Check that weights exist for common stop words
         assert!(
-            ner.weights.contains_key("w=works:O"),
-            "Missing weight for w=works:O"
+            ner.weights.contains_key("word.lower=works:O"),
+            "Missing weight for word.lower=works:O"
         );
         assert!(
-            ner.weights.contains_key("w=works:I-PER"),
-            "Missing weight for w=works:I-PER"
+            ner.weights.contains_key("word.lower=works:I-PER"),
+            "Missing weight for word.lower=works:I-PER"
         );
 
         // Check that O weight is positive and I-* weight is negative
-        let o_weight = *ner.weights.get("w=works:O").unwrap();
-        let i_per_weight = *ner.weights.get("w=works:I-PER").unwrap();
+        let o_weight = *ner.weights.get("word.lower=works:O").unwrap();
+        let i_per_weight = *ner.weights.get("word.lower=works:I-PER").unwrap();
         assert!(
             o_weight > 0.0,
             "O weight should be positive, got {}",
@@ -1115,6 +1131,33 @@ mod tests {
                 entity.end,
                 text
             );
+        }
+    }
+
+    #[test]
+    fn test_multilingual_inputs_no_panic_and_valid_spans() {
+        let ner = CrfNER::new();
+        let texts = [
+            // Latin
+            "Marie Curie discovered radium in Paris.",
+            // CJK
+            "習近平在北京會見了普京。",
+            // Arabic (RTL)
+            "التقى محمد بن سلمان بالرئيس في الرياض",
+            // Cyrillic
+            "Путин встретился с Си Цзиньпином в Москве.",
+            // Devanagari
+            "प्रधान मंत्री शर्मा दिल्ली में मिले।",
+        ];
+
+        for text in texts {
+            let entities = ner.extract_entities(text, None).unwrap();
+            let char_count = text.chars().count();
+            for e in entities {
+                assert!(e.start <= e.end);
+                assert!(e.end <= char_count);
+                let _span: String = text.chars().skip(e.start).take(e.end - e.start).collect();
+            }
         }
     }
 

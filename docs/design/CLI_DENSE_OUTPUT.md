@@ -218,6 +218,6 @@ Implementation: Add to `eval` command.
 
 The ideal NER/coref CLI is less like `grep` (stateless text transformation) and more like `git` (stateful, versioned, with porcelain and plumbing layers).
 
-- **Porcelain**: `anno extract`, `anno debug`, `anno crossdoc`
+- **Porcelain**: `anno extract`, `anno debug`, `anno cross-doc`
 - **Plumbing**: `--format grounded`, `--export`, `--import`
 

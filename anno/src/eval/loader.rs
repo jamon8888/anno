@@ -144,6 +144,7 @@ enum DatasetParsePlan {
     WikiannJson,
     TweetNer7,
     DocredJson,
+    GoogleReCorpus,
     ChisiecJson,
     CadecHybrid,
     Bc5cdr,
@@ -444,6 +445,11 @@ impl LoadableDatasetId {
             DatasetId::CADEC | DatasetId::ShARe13 | DatasetId::ShARe14
         ) {
             return Some(DatasetParsePlan::CadecHybrid);
+        }
+        if id == DatasetId::GoogleRE {
+            // The Google relation-extraction-corpus files are not DocRED/CrossRE.
+            // They are JSONL records with fields like {pred, sub, obj, evidences[], judgments[]}.
+            return Some(DatasetParsePlan::GoogleReCorpus);
         }
         if id == DatasetId::TweetNER7 {
             return Some(DatasetParsePlan::TweetNer7);
@@ -2701,6 +2707,7 @@ impl DatasetLoader {
             DatasetParsePlan::WikiannJson => self.parse_wikiann_json(content, id),
             DatasetParsePlan::TweetNer7 => self.parse_tweetner7(content, id),
             DatasetParsePlan::DocredJson => self.parse_docred(content, id),
+            DatasetParsePlan::GoogleReCorpus => self.parse_google_re_corpus(content, id),
             DatasetParsePlan::ChisiecJson => self.parse_chisiec(content, id),
             DatasetParsePlan::CadecHybrid => {
                 if self.is_hf_api_response(content) {
@@ -3616,7 +3623,79 @@ impl DatasetLoader {
 
         if sentences.is_empty() {
             return Err(Error::InvalidInput(format!(
-                "CADEC HF API response for {:?} contains no valid sentences",
+                "DocRED/CrossRE JSON for {:?} contains no valid sentences",
+                id
+            )));
+        }
+
+        let now = chrono::Utc::now().to_rfc3339();
+        Ok(LoadedDataset {
+            id,
+            sentences,
+            loaded_at: now,
+            source_url: id.download_url().to_string(),
+            data_source: DataSource::LocalCache,
+            temporal_metadata: Self::get_temporal_metadata(id),
+            metadata: id.default_metadata(),
+        })
+    }
+
+    /// Parse Google's relation-extraction-corpus JSONL format.
+    ///
+    /// Example record (one per line):
+    /// ```json
+    /// {"pred":"/people/person/place_of_birth","sub":"/m/...","obj":"/m/...","evidences":[{"url":"...","snippet":"..."}],"judgments":[{"rater":"...","judgment":"yes"}]}
+    /// ```
+    ///
+    /// This dataset does **not** include token-level entity spans. For now we treat each
+    /// evidence snippet as a plain sentence with all tokens tagged as `O`, which is
+    /// sufficient for sanity evaluation plumbing (and avoids failing dataset loads).
+    fn parse_google_re_corpus(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
+        let mut sentences: Vec<AnnotatedSentence> = Vec::new();
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            let rec: serde_json::Value = match serde_json::from_str(line) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let snippet = rec
+                .get("evidences")
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|ev| ev.get("snippet"))
+                .and_then(|s| s.as_str());
+            let Some(snippet) = snippet else {
+                continue;
+            };
+
+            let tokens: Vec<AnnotatedToken> = snippet
+                .split_whitespace()
+                .filter(|t| !t.is_empty())
+                .map(|t| AnnotatedToken {
+                    text: t.to_string(),
+                    ner_tag: "O".to_string(),
+                })
+                .collect();
+
+            if tokens.is_empty() {
+                continue;
+            }
+
+            sentences.push(AnnotatedSentence {
+                tokens,
+                source_dataset: id,
+            });
+        }
+
+        if sentences.is_empty() {
+            return Err(Error::InvalidInput(format!(
+                "Google relation-extraction-corpus file for {:?} contains no usable evidence snippets",
                 id
             )));
         }

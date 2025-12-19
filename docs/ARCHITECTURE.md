@@ -60,11 +60,11 @@ let hierarchy = HierarchicalLeiden::cluster(&graph)?;
 
 ```bash
 # Extract
-anno extract "Marie Curie won the Nobel Prize"
+anno extract "Marie Curie was born in Paris."
 
 # Coalesce (cross-doc entity resolution)
-anno crossdoc --directory ./docs --threshold 0.6
-# or: anno coalesce --directory ./docs --threshold 0.6
+anno cross-doc ./docs --threshold 0.6
+# or: anno coalesce ./docs --threshold 0.6
 
 # Stratify (hierarchical clustering)
 anno strata --input graph.json --method leiden --levels 3
@@ -83,7 +83,7 @@ anno strata --input graph.json --method leiden --levels 3
    - Output: canonical entities (Identity) linking mentions across documents
    - Purpose: Identity resolution - "Marie Curie" in doc1 and doc2 → same Identity
    - Algorithm: Similarity-based clustering (embeddings or string similarity)
-   - Example: `anno crossdoc --directory ./docs --threshold 0.7`
+   - Example: `anno cross-doc ./docs --threshold 0.7`
 
 3. **Stratify**: Hierarchical community detection
    - Input: graph of entities and relations (GraphDocument)

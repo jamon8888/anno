@@ -22,8 +22,8 @@
 //! 3. **Label bias**: Demonstrate CRF advantage over local models
 //! 4. **Determinism**: Same inputs → same outputs
 
-use anno::{CrfNER, HeuristicNER, Model, RegexNER};
 use anno::backends::{BiLstmCrfNER, HmmNER};
+use anno::{CrfNER, HeuristicNER, Model, RegexNER};
 use std::collections::HashSet;
 
 // =============================================================================
@@ -53,7 +53,7 @@ const TEST_SENTENCES: &[&str] = &[
 /// Returns true if the sequence is valid BIO (no I- without preceding B- of same type).
 fn is_valid_bio_sequence(tags: &[&str]) -> bool {
     let mut current_entity: Option<&str> = None;
-    
+
     for tag in tags {
         if tag.starts_with("B-") {
             current_entity = Some(&tag[2..]);
@@ -91,7 +91,7 @@ mod statistical_era {
         for text in TEST_SENTENCES {
             for (name, backend) in [("HMM", &hmm as &dyn Model), ("CRF", &crf as &dyn Model)] {
                 let entities = backend.extract_entities(text, None).unwrap();
-                
+
                 // Check no overlaps
                 for i in 0..entities.len() {
                     for j in (i + 1)..entities.len() {
@@ -121,18 +121,27 @@ mod statistical_era {
         for text in TEST_SENTENCES {
             let hmm_entities = hmm.extract_entities(text, None).unwrap();
             let crf_entities = crf.extract_entities(text, None).unwrap();
-            
+
             hmm_total += hmm_entities.len();
             crf_total += crf_entities.len();
         }
 
         // Both should find some entities
-        assert!(hmm_total > 0, "HMM found no entities across all test sentences");
-        assert!(crf_total > 0, "CRF found no entities across all test sentences");
-        
+        assert!(
+            hmm_total > 0,
+            "HMM found no entities across all test sentences"
+        );
+        assert!(
+            crf_total > 0,
+            "CRF found no entities across all test sentences"
+        );
+
         // Note: With heuristic weights, these may perform differently.
         // This test mainly ensures both are functional.
-        println!("HMM found {} entities, CRF found {} entities", hmm_total, crf_total);
+        println!(
+            "HMM found {} entities, CRF found {} entities",
+            hmm_total, crf_total
+        );
     }
 
     /// Both methods should be deterministic (same input → same output).
@@ -145,12 +154,22 @@ mod statistical_era {
             // HMM determinism
             let hmm1 = hmm.extract_entities(text, None).unwrap();
             let hmm2 = hmm.extract_entities(text, None).unwrap();
-            assert_eq!(hmm1.len(), hmm2.len(), "HMM not deterministic on '{}'", text);
-            
+            assert_eq!(
+                hmm1.len(),
+                hmm2.len(),
+                "HMM not deterministic on '{}'",
+                text
+            );
+
             // CRF determinism
             let crf1 = crf.extract_entities(text, None).unwrap();
             let crf2 = crf.extract_entities(text, None).unwrap();
-            assert_eq!(crf1.len(), crf2.len(), "CRF not deterministic on '{}'", text);
+            assert_eq!(
+                crf1.len(),
+                crf2.len(),
+                "CRF not deterministic on '{}'",
+                text
+            );
         }
     }
 }
@@ -170,22 +189,27 @@ mod neural_era {
         for text in TEST_SENTENCES {
             let entities = bilstm.extract_entities(text, None).unwrap();
             let char_count = text.chars().count();
-            
+
             for entity in &entities {
                 assert!(
                     entity.start <= entity.end,
                     "Invalid span in '{}': start {} > end {}",
-                    text, entity.start, entity.end
+                    text,
+                    entity.start,
+                    entity.end
                 );
                 assert!(
                     entity.end <= char_count,
                     "Span exceeds text in '{}': end {} > char_count {}",
-                    text, entity.end, char_count
+                    text,
+                    entity.end,
+                    char_count
                 );
                 assert!(
                     entity.confidence >= 0.0 && entity.confidence <= 1.0,
                     "Invalid confidence {} in '{}'",
-                    entity.confidence, text
+                    entity.confidence,
+                    text
                 );
             }
         }
@@ -225,7 +249,7 @@ mod cross_era {
     #[test]
     fn all_eras_find_obvious_entities() {
         let text = "John Smith works at Google.";
-        
+
         let hmm = HmmNER::new();
         let crf = CrfNER::new();
         let bilstm = BiLstmCrfNER::new();
@@ -241,12 +265,16 @@ mod cross_era {
         for (name, method) in &methods {
             let entities = method.extract_entities(text, None).unwrap();
             let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
-            
+
             // All methods should find at least one of: John, Smith, John Smith, Google
             assert!(
-                texts.iter().any(|t| t.contains("John") || t.contains("Google")),
+                texts
+                    .iter()
+                    .any(|t| t.contains("John") || t.contains("Google")),
                 "{} failed to find obvious entities in '{}'. Found: {:?}",
-                name, text, texts
+                name,
+                text,
+                texts
             );
         }
     }
@@ -255,7 +283,7 @@ mod cross_era {
     #[test]
     fn era_comparison_on_dense_text() {
         let text = "Barack Obama and Joe Biden met at the White House in Washington D.C.";
-        
+
         let methods: Vec<(&str, Box<dyn Model>)> = vec![
             ("Pattern", Box::new(RegexNER::new())),
             ("Heuristic", Box::new(HeuristicNER::new())),
@@ -292,7 +320,7 @@ mod bio_validity {
     fn viterbi_produces_valid_bio_sequences() {
         // We can't directly inspect the BIO tags, but we can verify
         // entities don't overlap (which would indicate invalid sequences).
-        
+
         let hmm = HmmNER::new();
         let crf = CrfNER::new();
         let bilstm = BiLstmCrfNER::new();
@@ -304,7 +332,7 @@ mod bio_validity {
                 ("BiLSTM-CRF", &bilstm as &dyn Model),
             ] {
                 let entities = backend.extract_entities(text, None).unwrap();
-                
+
                 // Check for overlaps (would indicate BIO violation)
                 let mut char_positions: HashSet<usize> = HashSet::new();
                 for entity in &entities {
@@ -312,7 +340,9 @@ mod bio_validity {
                         assert!(
                             char_positions.insert(pos),
                             "{} produced overlapping spans at position {} in '{}' (BIO violation)",
-                            name, pos, text
+                            name,
+                            pos,
+                            text
                         );
                     }
                 }
@@ -328,7 +358,7 @@ mod bio_validity {
         assert!(is_valid_bio_sequence(&["B-PER", "I-PER", "O"]));
         assert!(is_valid_bio_sequence(&["B-PER", "O", "B-ORG"]));
         assert!(is_valid_bio_sequence(&["B-PER", "I-PER", "I-PER", "O"]));
-        
+
         // Invalid sequences (I- without matching B-)
         assert!(!is_valid_bio_sequence(&["O", "I-PER", "O"])); // I- after O
         assert!(!is_valid_bio_sequence(&["B-ORG", "I-PER", "O"])); // I-PER after B-ORG
@@ -359,7 +389,10 @@ mod confidence_analysis {
                     assert!(
                         entity.confidence >= 0.0 && entity.confidence <= 1.0,
                         "{} returned invalid confidence {} for '{}' in '{}'",
-                        name, entity.confidence, entity.text, text
+                        name,
+                        entity.confidence,
+                        entity.text,
+                        text
                     );
                 }
             }
@@ -370,26 +403,35 @@ mod confidence_analysis {
     #[test]
     fn confidence_correlates_with_clarity() {
         let crf = CrfNER::new();
-        
+
         // Clear entity
-        let clear = crf.extract_entities("John Smith works at Google Inc.", None).unwrap();
-        
+        let clear = crf
+            .extract_entities("John Smith works at Google Inc.", None)
+            .unwrap();
+
         // Ambiguous entity (could be person or org)
-        let ambiguous = crf.extract_entities("Apple announced profits.", None).unwrap();
+        let ambiguous = crf
+            .extract_entities("Apple announced profits.", None)
+            .unwrap();
 
         // Find "Google Inc." confidence
-        let google_conf = clear.iter()
+        let google_conf = clear
+            .iter()
             .find(|e| e.text.contains("Google"))
             .map(|e| e.confidence);
-            
+
         // Find "Apple" confidence
-        let apple_conf = ambiguous.iter()
+        let apple_conf = ambiguous
+            .iter()
             .find(|e| e.text.contains("Apple"))
             .map(|e| e.confidence);
 
         // Both should have valid confidence (test documents behavior)
         if let (Some(g), Some(a)) = (google_conf, apple_conf) {
-            println!("Google Inc. confidence: {:.3}, Apple confidence: {:.3}", g, a);
+            println!(
+                "Google Inc. confidence: {:.3}, Apple confidence: {:.3}",
+                g, a
+            );
         }
     }
 }
@@ -405,9 +447,9 @@ mod multilingual {
     #[test]
     fn historical_methods_handle_unicode() {
         let texts = [
-            "François Hollande visited Élysée Palace.",  // French
-            "東京オリンピック opened in Tokyo.",  // Japanese
-            "Москва hosted the summit.",  // Russian
+            "François Hollande visited Élysée Palace.", // French
+            "東京オリンピック opened in Tokyo.",        // Japanese
+            "Москва hosted the summit.",                // Russian
         ];
 
         let crf = CrfNER::new();
@@ -415,24 +457,28 @@ mod multilingual {
 
         for text in texts {
             let char_count = text.chars().count();
-            
+
             // CRF
             let crf_entities = crf.extract_entities(text, None).unwrap();
             for entity in &crf_entities {
                 assert!(
                     entity.end <= char_count,
                     "CRF produced invalid char offset {} for '{}' (char_count: {})",
-                    entity.end, text, char_count
+                    entity.end,
+                    text,
+                    char_count
                 );
             }
-            
+
             // HMM
             let hmm_entities = hmm.extract_entities(text, None).unwrap();
             for entity in &hmm_entities {
                 assert!(
                     entity.end <= char_count,
                     "HMM produced invalid char offset {} for '{}' (char_count: {})",
-                    entity.end, text, char_count
+                    entity.end,
+                    text,
+                    char_count
                 );
             }
         }
@@ -466,26 +512,40 @@ mod label_bias {
     #[test]
     fn crf_uses_global_context() {
         let crf = CrfNER::new();
-        
+
         // "Washington" is ambiguous: could be PER (George Washington) or LOC
         // Context should help disambiguate
         let person_context = "President Washington signed the bill.";
         let location_context = "The meeting was held in Washington.";
-        
+
         let person_entities = crf.extract_entities(person_context, None).unwrap();
         let location_entities = crf.extract_entities(location_context, None).unwrap();
-        
+
         // CRF should find "Washington" in both (even if type differs)
-        let person_found = person_entities.iter().any(|e| e.text.contains("Washington"));
-        let location_found = location_entities.iter().any(|e| e.text.contains("Washington"));
-        
+        let person_found = person_entities
+            .iter()
+            .any(|e| e.text.contains("Washington"));
+        let location_found = location_entities
+            .iter()
+            .any(|e| e.text.contains("Washington"));
+
         // At minimum, CRF should recognize these as entities
         // (type classification may vary with heuristic weights)
-        println!("Person context entities: {:?}", 
-            person_entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
-        println!("Location context entities: {:?}", 
-            location_entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
-        
+        println!(
+            "Person context entities: {:?}",
+            person_entities
+                .iter()
+                .map(|e| (&e.text, &e.entity_type))
+                .collect::<Vec<_>>()
+        );
+        println!(
+            "Location context entities: {:?}",
+            location_entities
+                .iter()
+                .map(|e| (&e.text, &e.entity_type))
+                .collect::<Vec<_>>()
+        );
+
         // Document behavior (not assertion, since heuristic weights vary)
         if person_found && location_found {
             println!("CRF recognized 'Washington' in both contexts.");
@@ -499,11 +559,11 @@ mod label_bias {
     #[test]
     fn crf_transition_constraints_example() {
         let crf = CrfNER::new();
-        
+
         // Text with adjacent entities of different types
         let text = "John Smith and Google Inc. are partners.";
         let entities = crf.extract_entities(text, None).unwrap();
-        
+
         // If CRF finds both, they should not overlap (valid BIO)
         for i in 0..entities.len() {
             for j in (i + 1)..entities.len() {
@@ -512,16 +572,23 @@ mod label_bias {
                 assert!(
                     a.end <= b.start || b.end <= a.start,
                     "BIO violation: '{}' ({}-{}) overlaps '{}' ({}-{})",
-                    a.text, a.start, a.end, b.text, b.start, b.end
+                    a.text,
+                    a.start,
+                    a.end,
+                    b.text,
+                    b.start,
+                    b.end
                 );
             }
         }
-        
+
         // Document what was found
         println!("Adjacent entities test:");
         for entity in &entities {
-            println!("  {} [{}] at {}-{}", 
-                entity.text, entity.entity_type, entity.start, entity.end);
+            println!(
+                "  {} [{}] at {}-{}",
+                entity.text, entity.entity_type, entity.start, entity.end
+            );
         }
     }
 
@@ -533,22 +600,26 @@ mod label_bias {
     fn hmm_vs_crf_feature_usage() {
         let hmm = HmmNER::new();
         let crf = CrfNER::new();
-        
+
         // Text with rich features: capitalization, suffix patterns
         let text = "Dr. Jane Smith-Williams visited IBM Corp.";
-        
+
         let hmm_entities = hmm.extract_entities(text, None).unwrap();
         let crf_entities = crf.extract_entities(text, None).unwrap();
-        
+
         println!("\nHMM vs CRF feature usage comparison:");
         println!("Text: '{}'", text);
-        println!("HMM found {} entities: {:?}",
+        println!(
+            "HMM found {} entities: {:?}",
             hmm_entities.len(),
-            hmm_entities.iter().map(|e| &e.text).collect::<Vec<_>>());
-        println!("CRF found {} entities: {:?}",
+            hmm_entities.iter().map(|e| &e.text).collect::<Vec<_>>()
+        );
+        println!(
+            "CRF found {} entities: {:?}",
             crf_entities.len(),
-            crf_entities.iter().map(|e| &e.text).collect::<Vec<_>>());
-        
+            crf_entities.iter().map(|e| &e.text).collect::<Vec<_>>()
+        );
+
         // CRF should leverage:
         // - Title prefix "Dr." (feature)
         // - Capitalization pattern (feature)
@@ -557,9 +628,9 @@ mod label_bias {
         //
         // HMM only sees: word identity and transition probabilities
     }
-    
+
     /// Explain label bias via documentation.
-    /// 
+    ///
     /// This test exists to document the label bias problem for reference.
     #[test]
     fn label_bias_documentation() {
@@ -587,8 +658,7 @@ mod label_bias {
         // Reference: Lafferty et al. (2001), Section 2.3
         // "Conditional Random Fields: Probabilistic Models for Segmenting
         // and Labeling Sequence Data" (ICML)
-        
+
         assert!(true, "Documentation test - see comments above");
     }
 }
-

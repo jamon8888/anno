@@ -68,14 +68,11 @@ mod tests {
             datasets: vec![], // Will use default datasets for NER
             backends: vec!["pattern".to_string()],
             max_examples: Some(5), // Limit for quick testing
-            require_cached: false,
-            seed: None,
-            relation_threshold: 0.5,
-            robustness: false,
             compute_familiarity: false,
             temporal_stratification: false,
             confidence_intervals: false,
-            custom_coref_resolver: None,
+            robustness: false,
+            ..Default::default()
         };
 
         // This will attempt to download datasets if not cached
@@ -172,14 +169,11 @@ mod tests {
             datasets: vec![], // Empty - will use defaults
             backends: vec!["nonexistent".to_string()],
             max_examples: Some(1),
-            require_cached: false,
-            seed: None,
-            relation_threshold: 0.5,
-            robustness: false,
             compute_familiarity: false,
             temporal_stratification: false,
             confidence_intervals: false,
-            custom_coref_resolver: None,
+            robustness: false,
+            ..Default::default()
         };
 
         let result = evaluator.evaluate_all(config);

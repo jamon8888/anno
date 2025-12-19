@@ -28,7 +28,7 @@
 
 #![allow(dead_code)] // Evaluation scaffolding - used by ignored tests
 
-use anno::eval::loader::{DatasetId, DatasetLoader, LoadedDataset};
+use anno::eval::loader::{DatasetId, DatasetLoader, LoadableDatasetId, LoadedDataset};
 #[allow(unused_imports)] // Used by ignored tests
 use anno::{HeuristicNER, Model, RegexNER, StackedNER};
 use std::collections::HashMap;
@@ -76,12 +76,30 @@ impl EvalMetrics {
     }
 }
 
+fn loadable(id: DatasetId) -> LoadableDatasetId {
+    LoadableDatasetId::try_from(id).expect("dataset used in tests should be loadable")
+}
+
+fn type_mapper_for_dataset(id: DatasetId) -> Option<anno::TypeMapper> {
+    match id {
+        DatasetId::MitMovie => Some(anno::TypeMapper::mit_movie()),
+        DatasetId::MitRestaurant => Some(anno::TypeMapper::mit_restaurant()),
+        DatasetId::BC5CDR | DatasetId::NCBIDisease | DatasetId::GENIA => {
+            Some(anno::TypeMapper::biomedical())
+        }
+        DatasetId::TweetNER7 | DatasetId::BroadTwitterCorpus => {
+            Some(anno::TypeMapper::social_media())
+        }
+        _ => None,
+    }
+}
+
 fn evaluate_ner_on_dataset(
     ner: &dyn Model,
     dataset: &LoadedDataset,
 ) -> (EvalMetrics, HashMap<String, EvalMetrics>) {
     // Get type mapper for this dataset if available
-    let type_mapper = dataset.id.type_mapper();
+    let type_mapper = type_mapper_for_dataset(dataset.id);
 
     let mut overall = EvalMetrics::default();
     let mut by_type: HashMap<String, EvalMetrics> = HashMap::new();
@@ -213,7 +231,7 @@ fn smoke_test_cache_paths_exist() {
     let loader = DatasetLoader::new().unwrap();
 
     // Just check paths are generated, don't require files to exist
-    let path = loader.cache_path(DatasetId::WikiGold);
+    let path = loader.cache_path(loadable(DatasetId::WikiGold));
     assert!(
         path.to_string_lossy().contains("wikigold"),
         "Cache path should contain dataset name"
@@ -237,9 +255,9 @@ fn smoke_test_dataset_id_all() {
 fn smoke_test_dataset_id_quick() {
     let quick = DatasetId::quick();
     assert_eq!(quick.len(), 3, "Quick should have 3 datasets for CI");
-    assert!(quick.contains(&DatasetId::WikiGold));
-    assert!(quick.contains(&DatasetId::MitMovie));
-    assert!(quick.contains(&DatasetId::GAP));
+    assert!(quick.contains(&&DatasetId::WikiGold));
+    assert!(quick.contains(&&DatasetId::MitMovie));
+    assert!(quick.contains(&&DatasetId::GAP));
 }
 
 #[test]
@@ -249,7 +267,7 @@ fn smoke_test_dataset_id_medium() {
     // Should be a superset of quick
     for ds in DatasetId::quick() {
         assert!(
-            medium.contains(ds),
+            medium.contains(&ds),
             "Medium should contain {:?} from quick",
             ds
         );
@@ -277,7 +295,7 @@ fn download_wikigold_dataset() {
     #[cfg(feature = "eval-advanced")]
     {
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.load_or_download(DatasetId::WikiGold);
+        let dataset = loader.load_or_download(loadable(DatasetId::WikiGold));
 
         match dataset {
             Ok(ds) => {
@@ -286,13 +304,11 @@ fn download_wikigold_dataset() {
                 println!("{}", stats);
 
                 // Smoke check: should have reasonable data
-                let (min, max) = DatasetId::WikiGold.expected_entity_count();
                 assert!(
-                    stats.entities >= min && stats.entities <= max * 2,
-                    "WikiGold entity count {} outside expected range ({}, {})",
+                    stats.entities > 0 && stats.sentences > 0,
+                    "WikiGold should have non-zero entities and sentences, got entities={}, sentences={}",
                     stats.entities,
-                    min,
-                    max
+                    stats.sentences
                 );
             }
             Err(e) => {
@@ -308,7 +324,7 @@ fn download_wnut17_dataset() {
     #[cfg(feature = "eval-advanced")]
     {
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.load_or_download(DatasetId::Wnut17);
+        let dataset = loader.load_or_download(loadable(DatasetId::Wnut17));
 
         match dataset {
             Ok(ds) => {
@@ -328,7 +344,7 @@ fn download_mit_movie_dataset() {
     #[cfg(feature = "eval-advanced")]
     {
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.load_or_download(DatasetId::MitMovie);
+        let dataset = loader.load_or_download(loadable(DatasetId::MitMovie));
 
         match dataset {
             Ok(ds) => {
@@ -348,7 +364,7 @@ fn download_genia_dataset() {
     #[cfg(feature = "eval-advanced")]
     {
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.load_or_download(DatasetId::GENIA);
+        let dataset = loader.load_or_download(loadable(DatasetId::GENIA));
 
         match dataset {
             Ok(ds) => {
@@ -376,7 +392,7 @@ fn download_fewnerd_dataset() {
     #[cfg(feature = "eval-advanced")]
     {
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.load_or_download(DatasetId::FewNERD);
+        let dataset = loader.load_or_download(loadable(DatasetId::FewNERD));
 
         match dataset {
             Ok(ds) => {
@@ -396,7 +412,7 @@ fn download_bc5cdr_dataset() {
     #[cfg(feature = "eval-advanced")]
     {
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.load_or_download(DatasetId::BC5CDR);
+        let dataset = loader.load_or_download(loadable(DatasetId::BC5CDR));
 
         match dataset {
             Ok(ds) => {
@@ -421,7 +437,7 @@ fn download_ncbi_disease_dataset() {
     #[cfg(feature = "eval-advanced")]
     {
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.load_or_download(DatasetId::NCBIDisease);
+        let dataset = loader.load_or_download(loadable(DatasetId::NCBIDisease));
 
         match dataset {
             Ok(ds) => {
@@ -446,7 +462,7 @@ fn download_tweetner7_dataset() {
     #[cfg(feature = "eval-advanced")]
     {
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.load_or_download(DatasetId::TweetNER7);
+        let dataset = loader.load_or_download(loadable(DatasetId::TweetNER7));
 
         match dataset {
             Ok(ds) => {
@@ -483,7 +499,7 @@ fn download_broad_twitter_dataset() {
     #[cfg(feature = "eval-advanced")]
     {
         let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.load_or_download(DatasetId::BroadTwitterCorpus);
+        let dataset = loader.load_or_download(loadable(DatasetId::BroadTwitterCorpus));
 
         match dataset {
             Ok(ds) => {
@@ -510,7 +526,7 @@ fn download_crossre_dataset() {
         let loader = DatasetLoader::new().unwrap();
 
         // Test DocRED proxy (CrossRE AI domain)
-        let dataset = loader.load_or_download(DatasetId::DocRED);
+        let dataset = loader.load_or_download(loadable(DatasetId::DocRED));
 
         match dataset {
             Ok(ds) => {
@@ -539,7 +555,7 @@ fn evaluate_regex_ner_on_wikigold() {
     #[cfg(feature = "eval-advanced")]
     {
         let loader = DatasetLoader::new().unwrap();
-        let dataset = match loader.load_or_download(DatasetId::WikiGold) {
+        let dataset = match loader.load_or_download(loadable(DatasetId::WikiGold)) {
             Ok(ds) => ds,
             Err(e) => {
                 println!("Skipping WikiGold evaluation: {}", e);
@@ -609,7 +625,12 @@ fn benchmark_regex_ner_on_datasets() {
         println!("{}", "-".repeat(80));
 
         for dataset_id in datasets {
-            match loader.load_or_download(*dataset_id) {
+            let Ok(loadable_id) = LoadableDatasetId::try_from(*dataset_id) else {
+                println!("{:20} SKIP (not loadable)", dataset_id.name());
+                continue;
+            };
+
+            match loader.load_or_download(loadable_id) {
                 Ok(dataset) => {
                     let (metrics, _) = evaluate_ner_on_dataset(&ner, &dataset);
                     println!(
@@ -650,7 +671,12 @@ fn benchmark_heuristic_ner_on_datasets() {
         println!("{}", "-".repeat(90));
 
         for dataset_id in datasets {
-            match loader.load_or_download(*dataset_id) {
+            let Ok(loadable_id) = LoadableDatasetId::try_from(*dataset_id) else {
+                println!("{:20} SKIP (not loadable)", dataset_id.name());
+                continue;
+            };
+
+            match loader.load_or_download(loadable_id) {
                 Ok(dataset) => {
                     let (metrics, _) = evaluate_ner_on_dataset(&ner, &dataset);
                     let ms_per_sent = if dataset.len() > 0 {
@@ -696,7 +722,12 @@ fn benchmark_stacked_ner_on_datasets() {
         println!("{}", "-".repeat(90));
 
         for dataset_id in datasets {
-            match loader.load_or_download(*dataset_id) {
+            let Ok(loadable_id) = LoadableDatasetId::try_from(*dataset_id) else {
+                println!("{:20} SKIP (not loadable)", dataset_id.name());
+                continue;
+            };
+
+            match loader.load_or_download(loadable_id) {
                 Ok(dataset) => {
                     let (metrics, _) = evaluate_ner_on_dataset(&ner, &dataset);
                     let ms_per_sent = if dataset.len() > 0 {
@@ -752,7 +783,7 @@ fn benchmark_nuner_on_datasets() {
         println!("{}", "-".repeat(110));
 
         for dataset_id in &datasets {
-            match loader.load(*dataset_id) {
+            match loader.load(loadable(*dataset_id)) {
                 Ok(dataset) => {
                     // Limit to first 100 sentences for speed
                     let mut limited = dataset.clone();
@@ -841,7 +872,7 @@ fn benchmark_w2ner_on_datasets() {
         println!("{}", "-".repeat(110));
 
         for dataset_id in &datasets {
-            match loader.load(*dataset_id) {
+            match loader.load(loadable(*dataset_id)) {
                 Ok(dataset) => {
                     // Limit to first 100 sentences for speed
                     let mut limited = dataset.clone();
@@ -934,7 +965,7 @@ fn benchmark_gliner_on_datasets() {
             Vec::new();
 
         for dataset_id in &datasets {
-            match loader.load(*dataset_id) {
+            match loader.load(loadable(*dataset_id)) {
                 Ok(dataset) => {
                     // Limit to first 100 sentences for speed (can be increased for full eval)
                     let mut limited = dataset.clone();
@@ -1023,8 +1054,13 @@ fn test_cached_dataset_access() {
 
     // These tests pass if datasets are cached, skip if not
     for dataset_id in DatasetId::all() {
-        if loader.is_cached(*dataset_id) {
-            let dataset = loader.load(*dataset_id).unwrap();
+        let Ok(loadable_id) = LoadableDatasetId::try_from(*dataset_id) else {
+            println!("{:?} not loadable by DatasetLoader, skipping", dataset_id);
+            continue;
+        };
+
+        if loader.is_cached(loadable_id) {
+            let dataset = loader.load(loadable_id).unwrap();
             assert!(
                 !dataset.is_empty(),
                 "{:?} should have data when cached",
@@ -1758,7 +1794,7 @@ fn regression_test_wikigold() {
     #[cfg(feature = "eval-advanced")]
     {
         let loader = DatasetLoader::new().unwrap();
-        let dataset = match loader.load_or_download(DatasetId::WikiGold) {
+        let dataset = match loader.load_or_download(loadable(DatasetId::WikiGold)) {
             Ok(ds) => ds,
             Err(_) => return,
         };

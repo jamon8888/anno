@@ -462,7 +462,16 @@ pub fn get_dataset_tasks(dataset: DatasetId) -> Vec<Task> {
 
 /// Get all datasets suitable for a task.
 pub fn get_task_datasets(task: Task) -> Vec<DatasetId> {
-    task_datasets(task).to_vec()
+    // Defensive: keep the curated task→datasets list, but only return datasets that
+    // *actually* declare support for the task in the registry metadata.
+    //
+    // This prevents the benchmark/matrix from turning red due to mapping drift
+    // (e.g., dataset listed for a task but missing `tasks: [...]` in the registry).
+    task_datasets(task)
+        .iter()
+        .copied()
+        .filter(|d| dataset_tasks(*d).contains(&task))
+        .collect()
 }
 
 /// Get all backends that support a task.

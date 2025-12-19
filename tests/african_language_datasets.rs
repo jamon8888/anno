@@ -35,7 +35,10 @@ use anno::eval::loader::{DatasetId, DatasetLoader};
 fn test_african_datasets_exist_in_loader() {
     // All African datasets should be defined
     let african_datasets = DatasetId::all_african_languages();
-    assert!(african_datasets.len() >= 6, "Should have at least 6 African datasets");
+    assert!(
+        african_datasets.len() >= 6,
+        "Should have at least 6 African datasets"
+    );
 
     // Specific datasets should exist
     assert!(african_datasets.contains(&&DatasetId::MasakhaNER));
@@ -63,7 +66,11 @@ fn test_african_datasets_have_metadata() {
         assert!(!url.is_empty(), "{:?} should have a download URL", dataset);
 
         // Each should be classified as African language
-        assert!(dataset.is_african_language(), "{:?} should be African language", dataset);
+        assert!(
+            dataset.is_african_language(),
+            "{:?} should be African language",
+            dataset
+        );
     }
 }
 
@@ -130,9 +137,18 @@ fn test_african_dataset_entity_types() {
 
     // AfriSenti uses sentiment labels
     let senti_types = DatasetId::AfriSenti.entity_types();
-    assert!(senti_types.contains(&"positive"), "Should have positive label");
-    assert!(senti_types.contains(&"negative"), "Should have negative label");
-    assert!(senti_types.contains(&"neutral"), "Should have neutral label");
+    assert!(
+        senti_types.contains(&"positive"),
+        "Should have positive label"
+    );
+    assert!(
+        senti_types.contains(&"negative"),
+        "Should have negative label"
+    );
+    assert!(
+        senti_types.contains(&"neutral"),
+        "Should have neutral label"
+    );
 }
 
 // =============================================================================
@@ -146,10 +162,17 @@ fn test_yoruba_tonal_diacritics_handling() {
 
     // Verify character counting handles combining diacritics
     let char_count = yoruba_text.chars().count();
-    assert!(char_count > 30, "Should have significant char count: {}", char_count);
+    assert!(
+        char_count > 30,
+        "Should have significant char count: {}",
+        char_count
+    );
 
     // Verify we can extract substrings correctly
-    let first_word: String = yoruba_text.chars().take_while(|c| !c.is_whitespace()).collect();
+    let first_word: String = yoruba_text
+        .chars()
+        .take_while(|c| !c.is_whitespace())
+        .collect();
     assert!(first_word.contains('ú'), "Should preserve tonal marks");
 }
 
@@ -160,12 +183,18 @@ fn test_ethiopic_script_handling() {
 
     // Verify character counting
     let char_count = amharic_text.chars().count();
-    assert!(char_count > 20, "Should have valid char count: {}", char_count);
+    assert!(
+        char_count > 20,
+        "Should have valid char count: {}",
+        char_count
+    );
 
     // Ethiopic characters should be single codepoints
     let first_char = amharic_text.chars().next().unwrap();
-    assert!(first_char as u32 >= 0x1200 && first_char as u32 <= 0x137F,
-            "First char should be Ethiopic");
+    assert!(
+        first_char as u32 >= 0x1200 && first_char as u32 <= 0x137F,
+        "First char should be Ethiopic"
+    );
 }
 
 #[test]
@@ -178,7 +207,11 @@ fn test_mixed_script_handling() {
 
     // Character count should be straightforward (Latin script)
     let char_count = pidgin_text.chars().count();
-    assert_eq!(char_count, pidgin_text.len(), "ASCII text should have equal char/byte count");
+    assert_eq!(
+        char_count,
+        pidgin_text.len(),
+        "ASCII text should have equal char/byte count"
+    );
 }
 
 // =============================================================================
@@ -200,7 +233,11 @@ fn test_cache_filename_mapping() {
     let african_datasets = DatasetId::all_african_languages();
     for dataset in african_datasets {
         let filename = dataset.cache_filename();
-        assert!(!filename.is_empty(), "{:?} should have cache filename", dataset);
+        assert!(
+            !filename.is_empty(),
+            "{:?} should have cache filename",
+            dataset
+        );
         assert!(
             filenames.insert(filename),
             "{:?} has duplicate cache filename: {}",
@@ -266,8 +303,13 @@ fn test_download_masakhaner_sample() {
 
     // Try to load MasakhaNER (should download if not cached)
     use anno::eval::LoadableDatasetId;
-    let loadable_id = LoadableDatasetId::try_from(DatasetId::MasakhaNER)
-        .map_err(|_| "MasakhaNER is not loadable")?;
+    let loadable_id = match LoadableDatasetId::try_from(DatasetId::MasakhaNER) {
+        Ok(id) => id,
+        Err(_) => {
+            eprintln!("Skipping: MasakhaNER is not loadable");
+            return;
+        }
+    };
     let result = loader.load_or_download(loadable_id);
 
     match result {
@@ -281,7 +323,10 @@ fn test_download_masakhaner_sample() {
             for sentence in &dataset.sentences {
                 for token in &sentence.tokens {
                     if token.ner_tag != "O" && !token.ner_tag.starts_with("O-") {
-                        let tag = token.ner_tag.trim_start_matches("B-").trim_start_matches("I-");
+                        let tag = token
+                            .ner_tag
+                            .trim_start_matches("B-")
+                            .trim_start_matches("I-");
                         *entity_counts.entry(tag).or_default() += 1;
                     }
                 }
@@ -301,8 +346,13 @@ fn test_download_afrisenti_sample() {
     let loader = DatasetLoader::new().unwrap();
 
     use anno::eval::LoadableDatasetId;
-    let loadable_id = LoadableDatasetId::try_from(DatasetId::AfriSenti)
-        .map_err(|_| "AfriSenti is not loadable")?;
+    let loadable_id = match LoadableDatasetId::try_from(DatasetId::AfriSenti) {
+        Ok(id) => id,
+        Err(_) => {
+            eprintln!("Skipping: AfriSenti is not loadable");
+            return;
+        }
+    };
     let result = loader.load_or_download(loadable_id);
 
     match result {
@@ -339,7 +389,10 @@ fn test_language_family_coverage() {
     // This test verifies coverage across major African language families
     // For now, we verify that African datasets exist
     let african_datasets = DatasetId::all_african_languages();
-    assert!(!african_datasets.is_empty(), "Should have African language datasets");
+    assert!(
+        !african_datasets.is_empty(),
+        "Should have African language datasets"
+    );
 
     // When african_language_codes() is implemented, uncomment:
     // let mut all_codes: std::collections::HashSet<&str> = std::collections::HashSet::new();
@@ -395,13 +448,3 @@ fn test_script_diversity() {
     // let has_arabic = afrisenti_langs.contains(&"arq") || afrisenti_langs.contains(&"ary");
     // assert!(has_arabic, "AfriSenti should include Arabic varieties");
 }
-
-
-
-
-
-
-
-
-
-

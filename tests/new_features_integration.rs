@@ -175,6 +175,7 @@ fn test_cdcr_with_custom_blocking() {
         lsh: LSHBlocker::new(3, 2), // More bands, fewer rows
         min_similarity: 0.4,
         require_type_match: true,
+        ..Default::default()
     };
 
     let resolver = CDCRResolver::with_config(config);

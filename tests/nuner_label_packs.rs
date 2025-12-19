@@ -1,19 +1,24 @@
+use anno::backends::nuner::NuNER;
 use anno::backends::span_utils::map_label_to_entity_type;
-use anno::backends::nuner::{LabelPack, NuNER};
+use anno::Model;
 use anno_core::EntityType;
 
 #[test]
 fn label_pack_coarse_defaults() {
     let ner = NuNER::new();
     assert_eq!(ner.threshold(), 0.5);
-    assert!(ner
-        .supported_types()
-        .contains(&EntityType::Person));
+    assert!(ner.supported_types().contains(&EntityType::Person));
 }
 
 #[test]
 fn label_pack_fine_contains_expected() {
-    let ner = NuNER::new().with_label_pack(LabelPack::Fine);
+    let ner = NuNER::new().with_labels(vec![
+        "animal".to_string(),
+        "vehicle".to_string(),
+        "person".to_string(),
+        "organization".to_string(),
+        "location".to_string(),
+    ]);
     let labels = ner
         .supported_types()
         .into_iter()
@@ -25,7 +30,13 @@ fn label_pack_fine_contains_expected() {
 
 #[test]
 fn label_pack_cner_contains_expected() {
-    let ner = NuNER::new().with_label_pack(LabelPack::Cner);
+    let ner = NuNER::new().with_labels(vec![
+        "artifact".to_string(),
+        "substance".to_string(),
+        "person".to_string(),
+        "organization".to_string(),
+        "location".to_string(),
+    ]);
     let labels = ner
         .supported_types()
         .into_iter()
@@ -38,7 +49,13 @@ fn label_pack_cner_contains_expected() {
 #[test]
 fn with_label_pack_overwrites_defaults() {
     let coarse = NuNER::new();
-    let fine = NuNER::new().with_label_pack(LabelPack::Fine);
+    let fine = NuNER::new().with_labels(vec![
+        "animal".to_string(),
+        "vehicle".to_string(),
+        "person".to_string(),
+        "organization".to_string(),
+        "location".to_string(),
+    ]);
     assert!(fine.supported_types().len() > coarse.supported_types().len());
 }
 
@@ -57,4 +74,3 @@ fn map_label_to_entity_type_handles_fine_labels() {
         EntityType::Cardinal
     ));
 }
-

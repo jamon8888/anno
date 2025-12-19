@@ -860,6 +860,18 @@ impl GLiNEROnnx {
                     e.text.remove(0);
                     e.start += 1;
                 }
+
+                // Post-process: GLiNER sometimes tags obvious companies as PRODUCT.
+                // If the surface form has strong company markers, remap PRODUCT → ORG.
+                //
+                // Keep this conservative: only remap when the mention itself looks like a company
+                // ("Inc", "Ltd", "LLC", "株式会社", etc.) to avoid collapsing real products.
+                if e.entity_type.as_label().eq_ignore_ascii_case("PRODUCT")
+                    && looks_like_company_name(&e.text)
+                {
+                    e.entity_type = EntityType::Organization;
+                }
+
                 e
             })
             .filter(|e| !e.text.is_empty() && e.start < e.end)
@@ -941,6 +953,69 @@ impl GLiNEROnnx {
             // Convert byte offsets to character offsets
             crate::offset::bytes_to_chars(text, start_byte, end_byte)
         }
+    }
+}
+
+fn looks_like_company_name(text: &str) -> bool {
+    // Keep the logic cheap and conservative (no regex): normalize and check suffix markers.
+    let t = text.trim();
+    if t.is_empty() {
+        return false;
+    }
+
+    let lower = t.to_lowercase();
+
+    // Western-ish suffixes
+    let suffixes = [
+        " inc",
+        " inc.",
+        " ltd",
+        " ltd.",
+        " llc",
+        " llp",
+        " plc",
+        " co",
+        " co.",
+        " company",
+        " corp",
+        " corp.",
+        " corporation",
+        " gmbh",
+        " s.a.",
+        " sa",
+    ];
+    if suffixes.iter().any(|s| lower.ends_with(s)) {
+        return true;
+    }
+
+    // CJK org markers
+    if t.contains("株式会社") || t.contains("有限会社") || t.contains("公司") || t.contains("集团")
+    {
+        return true;
+    }
+
+    // Arabic "company" marker
+    if t.contains("شركة") {
+        return true;
+    }
+
+    false
+}
+
+#[cfg(test)]
+mod postprocess_tests {
+    use super::looks_like_company_name;
+
+    #[test]
+    fn test_looks_like_company_name() {
+        assert!(looks_like_company_name("Apple Inc"));
+        assert!(looks_like_company_name("Acme Corp."));
+        assert!(looks_like_company_name("Example GmbH"));
+        assert!(looks_like_company_name("株式会社トヨタ自動車"));
+        assert!(looks_like_company_name("شركة أرامكو"));
+
+        assert!(!looks_like_company_name("Apple"));
+        assert!(!looks_like_company_name("New York"));
     }
 }
 

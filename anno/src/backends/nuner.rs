@@ -349,9 +349,9 @@ impl NuNER {
         let text_lengths_t = Tensor::from_array(text_lengths_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
 
-        // Always provide span tensors for NuNER models (they require them)
-        // The model will error if span_mask is missing, so we always generate it
-        let needs_span_tensors = true;
+        // Some NuNER ONNX exports require span tensors (span_idx/span_mask), others are token-only.
+        // We detect this at load time from the model's declared input names.
+        let needs_span_tensors = self.requires_span_tensors;
 
         // Use blocking lock for thread-safe parallel access
         let mut session_guard = crate::sync::lock(session);
@@ -392,7 +392,20 @@ impl NuNER {
                     "span_idx" => span_idx_t.into_dyn(),
                     "span_mask" => span_mask_t.into_dyn(),
                 ])
-                .map_err(|e| Error::Parse(format!("ONNX inference failed: {}", e)))?
+                .map_err(|e| {
+                    Error::Parse(format!(
+                        "ONNX inference failed: {}\n\n\
+                         NuNER model: {}\n\
+                         requires_span_tensors={}\n\
+                         input_ids=(1,{seq_len}) attention_mask=(1,{seq_len}) words_mask=(1,{seq_len}) text_lengths=(1,1)\n\
+                         span_idx=(1,{num_spans},2) span_mask=(1,{num_spans})\n\n\
+                         Hint: If this looks like a shape mismatch, the ONNX export may have fixed span dimensions.\n\
+                         Try a different NuNER export (e.g., deepanwa/NuNerZero_onnx) or re-export with dynamic axes.",
+                        e,
+                        self.model_id,
+                        self.requires_span_tensors
+                    ))
+                })?
         } else {
             // Token mode - only 4 inputs
             session_guard
@@ -402,7 +415,18 @@ impl NuNER {
                     "words_mask" => words_mask_t.into_dyn(),
                     "text_lengths" => text_lengths_t.into_dyn(),
                 ])
-                .map_err(|e| Error::Parse(format!("ONNX inference failed: {}", e)))?
+                .map_err(|e| {
+                    Error::Parse(format!(
+                        "ONNX inference failed: {}\n\n\
+                         NuNER model: {}\n\
+                         requires_span_tensors={}\n\
+                         input_ids=(1,{seq_len}) attention_mask=(1,{seq_len}) words_mask=(1,{seq_len}) text_lengths=(1,1)\n\n\
+                         Hint: If this looks like an input-name mismatch, your ONNX export may expect span tensors or different input names.",
+                        e,
+                        self.model_id,
+                        self.requires_span_tensors
+                    ))
+                })?
         };
 
         // Decode span-level output to entities

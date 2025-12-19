@@ -2272,6 +2272,61 @@ impl GroundedDocument {
         let ids = index.query_overlap(start, end);
         ids.iter().filter_map(|&id| self.get_signal(id)).collect()
     }
+
+    /// Convert this grounded document into a coreference document for evaluation.
+    ///
+    /// This is a lightweight bridge between the production pipeline types
+    /// (Signal/Track/Identity) and the evaluation-oriented coreference types
+    /// (`CorefDocument`, `CorefChain`, `Mention`).
+    ///
+    /// - Each [`Track`] becomes a [`crate::coref::CorefChain`]
+    /// - Each track mention is derived from the track's signal locations
+    /// - Non-text signals (iconic-only locations) are skipped
+    ///
+    /// Note: Mention typing (proper/nominal/pronominal) is left unset; callers
+    /// doing mention-type evaluation should compute that separately.
+    #[must_use]
+    pub fn to_coref_document(&self) -> crate::coref::CorefDocument {
+        use crate::coref::{CorefChain, CorefDocument, Mention};
+        use std::collections::HashMap;
+
+        // Build a fast index for signal lookup.
+        let signal_by_id: HashMap<SignalId, &Signal<Location>> =
+            self.signals.iter().map(|s| (s.id, s)).collect();
+
+        let mut chains: Vec<CorefChain> = Vec::new();
+
+        for track in self.tracks.values() {
+            let mut mentions: Vec<Mention> = Vec::new();
+
+            for sref in &track.signals {
+                let Some(signal) = signal_by_id.get(&sref.signal_id) else {
+                    continue;
+                };
+
+                let Some((start, end)) = signal.location.text_offsets() else {
+                    continue;
+                };
+
+                let mut m = Mention::new(signal.surface.clone(), start, end);
+                m.entity_type = Some(signal.label.clone());
+                mentions.push(m);
+            }
+
+            if mentions.is_empty() {
+                continue;
+            }
+
+            let mut chain = CorefChain::new(mentions);
+            chain.entity_type = track.entity_type.clone();
+            chains.push(chain);
+        }
+
+        // Deterministic ordering: sort by earliest mention.
+        chains.sort_by_key(|c| c.mentions.first().map(|m| m.start).unwrap_or(usize::MAX));
+
+        CorefDocument::with_id(&self.text, &self.id, chains)
+    }
 }
 
 // =============================================================================

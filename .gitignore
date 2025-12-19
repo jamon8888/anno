@@ -51,11 +51,21 @@ README_preview_analysis*.txt
 README_preview_screenshot*.png
 
 # Python
+.venv/
 __pycache__/
 *.pyc
 *.pyo
 *.py[cod]
 *$py.class
+
+# Local test output (scratch)
+test_output/
+
+# Local compiled binaries (scratch)
+debug_entities
+
+# Local real-data fixtures (may have redistribution restrictions; keep local-only)
+hack/real_data/
 
 # Temporary files
 *.tmp

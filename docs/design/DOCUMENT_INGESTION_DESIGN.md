@@ -1,5 +1,8 @@
 # Document Ingestion and Preparation Design
 
+> Note: This is a **design/proposal document**. Some CLI examples below are aspirational.
+> For current CLI flags, run `anno --help`.
+
 **Related**: See [guides/URL_REFERENCE_SUPPORT.md](../guides/URL_REFERENCE_SUPPORT.md) for current URL resolution implementation.
 
 ## Current State Analysis
@@ -129,16 +132,16 @@ URLs/Files → Resolve → Clean → Extract → Enhance → Cross-Doc
 
 ```bash
 # URL support
-anno extract https://example.com/article --model gliner
+anno extract --url https://example.com/article --model gliner
 
 # Multiple URLs
 anno pipeline --urls https://site1.com https://site2.com --coref
 
 # URL with cleaning
-anno extract https://example.com --clean --normalize
+anno extract --url https://example.com --clean --normalize
 
 # File with preprocessing
-anno extract file.txt --clean --detect-lang
+anno extract --file file.txt --clean --detect-lang
 ```
 
 ### New Flags

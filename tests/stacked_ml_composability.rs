@@ -113,6 +113,20 @@ mod onnx_tests {
 
             // Should combine results from all layers
             assert!(!entities.is_empty());
+
+            // Regression: GLiNER sometimes tags obvious companies as PRODUCT.
+            // We remap corporate-suffix mentions like "Apple Inc" to ORG.
+            if let Some(apple_inc) = entities
+                .iter()
+                .find(|e| e.text == "Apple Inc" || e.text == "Apple Inc.")
+            {
+                assert!(
+                    matches!(apple_inc.entity_type, anno::EntityType::Organization),
+                    "Expected ORG for {:?}, got {:?}",
+                    apple_inc.text,
+                    apple_inc.entity_type
+                );
+            }
         }
     }
 

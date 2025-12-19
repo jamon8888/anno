@@ -512,8 +512,8 @@ mod span_validity {
                 entity.text
             );
             // Verify extractable
-            let extracted = anno::offset::TextSpan::from_chars(text, entity.start, entity.end)
-                .extract(text);
+            let extracted =
+                anno::offset::TextSpan::from_chars(text, entity.start, entity.end).extract(text);
             assert!(
                 extracted.contains(&entity.text) || entity.text.contains(extracted),
                 "Extracted '{}' should relate to entity text '{}'",
