@@ -551,6 +551,15 @@ impl CrfNER {
         w
     }
 
+    /// Match Python `str.isdigit()` / `c.isdigit()` behavior used in
+    /// `scripts/train_crf_weights.py`.
+    ///
+    /// Note: This is *Unicode-aware* (unlike `is_ascii_digit`).
+    #[allow(clippy::is_digit_ascii_radix)]
+    fn is_digit_py(c: char) -> bool {
+        c.is_digit(10)
+    }
+
     /// Compute word shape (e.g., "John" -> "Xxxx", "USA" -> "XXX")
     fn word_shape(word: &str) -> String {
         word.chars()
@@ -559,7 +568,7 @@ impl CrfNER {
                     'X'
                 } else if c.is_lowercase() {
                     'x'
-                } else if c.is_digit(10) {
+                } else if Self::is_digit_py(c) {
                     '0'
                 } else {
                     c
@@ -615,7 +624,10 @@ impl CrfNER {
         features.push(format!("word.shape={}", Self::word_shape(word)));
         features.push(format!(
             "word.isdigit={}",
-            bool_py(word.chars().all(|c| c.is_digit(10)))
+            // Match Python `str.isdigit()` behavior used in `scripts/train_crf_weights.py`:
+            // - empty string -> False
+            // - Unicode-aware digits -> True
+            bool_py(!word.is_empty() && word.chars().all(Self::is_digit_py))
         ));
         features.push(format!(
             "word.istitle={}",
