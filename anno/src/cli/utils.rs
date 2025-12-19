@@ -391,7 +391,60 @@ pub fn normalize_entity_type_canonical(entity_type: &str) -> String {
 
 /// Normalize an entity name for grouping (lowercase, trim)
 pub fn normalize_entity_name(name: &str) -> String {
-    name.to_lowercase().trim().to_string()
+    let mut s = name.trim().to_string();
+    if s.is_empty() {
+        return s;
+    }
+
+    // Lowercase for case-insensitive grouping.
+    s = s.to_lowercase();
+
+    fn is_edge_punct(c: char) -> bool {
+        matches!(
+            c,
+            '.' | ','
+                | ';'
+                | ':'
+                | '!'
+                | '?'
+                | '"'
+                | '\''
+                | '’'
+                | '“'
+                | '”'
+                | '('
+                | ')'
+                | '['
+                | ']'
+                | '{'
+                | '}'
+        )
+    }
+
+    // Strip leading/trailing punctuation/quotes that often cling to spans.
+    while s.chars().next().is_some_and(is_edge_punct) {
+        s.remove(0);
+    }
+    while s.chars().last().is_some_and(is_edge_punct) {
+        s.pop();
+    }
+
+    // Strip English possessives for grouping ("openai's" -> "openai").
+    // Keep conservative: only strip at the very end.
+    if s.ends_with("'s") || s.ends_with("’s") {
+        s.pop(); // 's'
+        s.pop(); // apostrophe
+    } else if s.ends_with("s'") || s.ends_with("s’") {
+        s.pop(); // apostrophe
+    }
+
+    // Strip trailing punctuation again (e.g., "openai's," -> "openai")
+    while s.chars().last().is_some_and(is_edge_punct) {
+        s.pop();
+    }
+
+    // Collapse internal whitespace.
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// Simple heuristic for determining if a name is likely male.
@@ -1146,6 +1199,9 @@ mod tests {
     fn test_normalize_entity_name() {
         assert_eq!(normalize_entity_name("John Smith"), "john smith");
         assert_eq!(normalize_entity_name("  APPLE INC  "), "apple inc");
+        assert_eq!(normalize_entity_name("Cupertino,"), "cupertino");
+        assert_eq!(normalize_entity_name("OpenAI's"), "openai");
+        assert_eq!(normalize_entity_name("OpenAI’s"), "openai");
         assert_eq!(normalize_entity_name(""), "");
     }
 

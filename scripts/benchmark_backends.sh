@@ -14,7 +14,7 @@ QUICK="${1:-}"
 
 if [[ ! -x "$ANNO" ]]; then
     echo "Building anno in release mode..."
-    cargo build -p anno-cli --release --features onnx
+    cargo build -p anno --release --features onnx --bin anno
 fi
 
 echo "=============================================="

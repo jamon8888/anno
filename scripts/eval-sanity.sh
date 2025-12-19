@@ -10,15 +10,18 @@ RANDOM_SEED=${RANDOM_SEED:-42}
 
 echo "Running sanity check evaluations (max ${MAX_EXAMPLES} examples per dataset, seed ${RANDOM_SEED})"
 
+# Keep repo root clean: write reports under ./reports/
+mkdir -p reports
+
 # Run benchmark with small samples
 cargo run --release --bin anno --features "cli,eval-advanced" -- benchmark \
     --max-examples "${MAX_EXAMPLES}" \
-    --output eval-sanity-report.md \
+    --output reports/eval-sanity-report.md \
     --cached-only || {
     echo "Sanity check failed"
     exit 1
 }
 
 echo "Sanity check passed"
-cat eval-sanity-report.md
+cat reports/eval-sanity-report.md
 

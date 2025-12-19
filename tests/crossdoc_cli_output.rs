@@ -127,8 +127,7 @@ fn generate_tree_output(
                             let ent_end = entity.end.min(text_char_len).max(ent_start);
 
                             let context_char_start = ent_start.saturating_sub(context_window);
-                            let context_char_end =
-                                (ent_end + context_window).min(text_char_len);
+                            let context_char_end = (ent_end + context_window).min(text_char_len);
 
                             let context = TextSpan::from_chars(
                                 doc.text.as_str(),
@@ -145,14 +144,19 @@ fn generate_tree_output(
                                 TextSpan::from_chars(context, rel_start, rel_end).extract(context);
                             let before =
                                 TextSpan::from_chars(context, 0, rel_start).extract(context);
-                            let after =
-                                TextSpan::from_chars(context, rel_end, context_len_chars)
-                                    .extract(context);
+                            let after = TextSpan::from_chars(context, rel_end, context_len_chars)
+                                .extract(context);
 
-                            let before_marker =
-                                if context_char_start < ent_start { "..." } else { "" };
-                            let after_marker =
-                                if ent_end < context_char_end { "..." } else { "" };
+                            let before_marker = if context_char_start < ent_start {
+                                "..."
+                            } else {
+                                ""
+                            };
+                            let after_marker = if ent_end < context_char_end {
+                                "..."
+                            } else {
+                                ""
+                            };
 
                             output.push_str(&format!(
                                 "    • {}: {}{}[{}]{}{}\n",

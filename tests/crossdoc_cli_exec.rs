@@ -2,10 +2,8 @@
 //!
 //! Tests the actual CLI binary with real file I/O and output validation.
 
-use assert_cmd::Command;
-use predicates::prelude::*;
 use std::fs;
-use std::path::Path;
+use std::process::Command;
 
 fn setup_test_directory() -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("Failed to create temp directory");
@@ -25,24 +23,41 @@ fn setup_test_directory() -> tempfile::TempDir {
     dir
 }
 
+fn anno_cmd() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_anno"))
+}
+
 #[test]
 #[cfg(feature = "eval-advanced")]
 fn test_crossdoc_command_exists() {
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc").arg("--help");
-    cmd.assert().success().stdout(
-        predicate::str::contains("Cross-document coreference")
-            .or(predicate::str::contains("cluster entities")),
+    let output = anno_cmd()
+        .arg("cross-doc")
+        .arg("--help")
+        .output()
+        .expect("run anno cross-doc --help");
+
+    assert!(output.status.success(), "help should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Cross-document coreference") || stdout.contains("cluster entities"),
+        "help output should describe the command"
     );
 }
 
 #[test]
 #[cfg(feature = "eval-advanced")]
 fn test_crossdoc_with_nonexistent_directory() {
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc").arg("/nonexistent/directory/path");
-    cmd.assert().failure().stderr(
-        predicate::str::contains("does not exist").or(predicate::str::contains("Directory")),
+    let output = anno_cmd()
+        .arg("cross-doc")
+        .arg("/nonexistent/directory/path")
+        .output()
+        .expect("run anno cross-doc <missing>");
+
+    assert!(!output.status.success(), "missing directory should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("does not exist") || stderr.contains("Directory"),
+        "stderr should explain missing directory"
     );
 }
 
@@ -51,17 +66,18 @@ fn test_crossdoc_with_nonexistent_directory() {
 fn test_crossdoc_tree_format() {
     let dir = setup_test_directory();
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--format")
         .arg("tree")
         .arg("--threshold")
-        .arg("0.3");
+        .arg("0.3")
+        .output()
+        .expect("run anno cross-doc");
 
-    let assert = cmd.assert().success();
-    let output = String::from_utf8(assert.get_output().stdout.clone())
-        .expect("Output should be valid UTF-8");
+    assert!(output.status.success(), "tree format should succeed");
+    let output = String::from_utf8_lossy(&output.stdout);
 
     // Should contain summary section
     assert!(
@@ -75,17 +91,18 @@ fn test_crossdoc_tree_format() {
 fn test_crossdoc_json_format() {
     let dir = setup_test_directory();
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--format")
         .arg("json")
         .arg("--threshold")
-        .arg("0.3");
+        .arg("0.3")
+        .output()
+        .expect("run anno cross-doc");
 
-    let assert = cmd.assert().success();
-    let output = String::from_utf8(assert.get_output().stdout.clone())
-        .expect("Output should be valid UTF-8");
+    assert!(output.status.success(), "json format should succeed");
+    let output = String::from_utf8_lossy(&output.stdout);
 
     // Should be valid JSON
     let json: Result<serde_json::Value, _> = serde_json::from_str(&output);
@@ -105,17 +122,18 @@ fn test_crossdoc_json_format() {
 fn test_crossdoc_summary_format() {
     let dir = setup_test_directory();
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--format")
         .arg("summary")
         .arg("--threshold")
-        .arg("0.3");
+        .arg("0.3")
+        .output()
+        .expect("run anno cross-doc");
 
-    let assert = cmd.assert().success();
-    let output = String::from_utf8(assert.get_output().stdout.clone())
-        .expect("Output should be valid UTF-8");
+    assert!(output.status.success(), "summary format should succeed");
+    let output = String::from_utf8_lossy(&output.stdout);
 
     // Summary should contain statistics
     assert!(
@@ -129,19 +147,20 @@ fn test_crossdoc_summary_format() {
 fn test_crossdoc_max_clusters() {
     let dir = setup_test_directory();
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--format")
         .arg("tree")
         .arg("--max-clusters")
         .arg("2")
         .arg("--threshold")
-        .arg("0.3");
+        .arg("0.3")
+        .output()
+        .expect("run anno cross-doc");
 
-    let assert = cmd.assert().success();
-    let output = String::from_utf8(assert.get_output().stdout.clone())
-        .expect("Output should be valid UTF-8");
+    assert!(output.status.success(), "max-clusters should succeed");
+    let output = String::from_utf8_lossy(&output.stdout);
 
     // Should respect max_clusters limit
     // Count cluster markers (● or ○)
@@ -155,16 +174,17 @@ fn test_crossdoc_max_clusters() {
 fn test_crossdoc_cross_doc_only_filter() {
     let dir = setup_test_directory();
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--format")
         .arg("tree")
         .arg("--cross-doc-only")
         .arg("--threshold")
-        .arg("0.3");
-
-    cmd.assert().success();
+        .arg("0.3")
+        .output()
+        .expect("run anno cross-doc");
+    assert!(output.status.success(), "cross-doc-only should succeed");
     // Should only show cross-document clusters
 }
 
@@ -173,18 +193,19 @@ fn test_crossdoc_cross_doc_only_filter() {
 fn test_crossdoc_verbose_mode() {
     let dir = setup_test_directory();
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--format")
         .arg("tree")
         .arg("--verbose")
         .arg("--threshold")
-        .arg("0.3");
+        .arg("0.3")
+        .output()
+        .expect("run anno cross-doc");
 
-    let assert = cmd.assert().success();
-    let output = String::from_utf8(assert.get_output().stdout.clone())
-        .expect("Output should be valid UTF-8");
+    assert!(output.status.success(), "verbose should succeed");
+    let output = String::from_utf8_lossy(&output.stdout);
 
     // Verbose mode should show more detail (context, etc.)
     // Output should be longer or contain more information
@@ -197,17 +218,18 @@ fn test_crossdoc_output_to_file() {
     let dir = setup_test_directory();
     let output_file = dir.path().join("output.json");
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--format")
         .arg("json")
         .arg("--output")
         .arg(output_file.to_str().unwrap())
         .arg("--threshold")
-        .arg("0.3");
-
-    cmd.assert().success();
+        .arg("0.3")
+        .output()
+        .expect("run anno cross-doc");
+    assert!(output.status.success(), "output-to-file should succeed");
 
     // Output file should exist and contain valid JSON
     if output_file.exists() {
@@ -231,16 +253,17 @@ fn test_crossdoc_recursive_search() {
     )
     .expect("Failed to write subdirectory file");
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--recursive")
         .arg("--format")
         .arg("tree")
         .arg("--threshold")
-        .arg("0.3");
-
-    cmd.assert().success();
+        .arg("0.3")
+        .output()
+        .expect("run anno cross-doc");
+    assert!(output.status.success(), "recursive should succeed");
     // Should find files in subdirectory
 }
 
@@ -253,17 +276,18 @@ fn test_crossdoc_custom_extensions() {
     fs::write(dir.path().join("doc.md"), "Nvidia is a technology company.")
         .expect("Failed to write markdown file");
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--extensions")
         .arg("md")
         .arg("--format")
         .arg("tree")
         .arg("--threshold")
-        .arg("0.3");
-
-    cmd.assert().success();
+        .arg("0.3")
+        .output()
+        .expect("run anno cross-doc");
+    assert!(output.status.success(), "custom extensions should succeed");
     // Should process .md files
 }
 
@@ -272,17 +296,18 @@ fn test_crossdoc_custom_extensions() {
 fn test_crossdoc_min_cluster_size() {
     let dir = setup_test_directory();
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--format")
         .arg("tree")
         .arg("--min-cluster-size")
         .arg("2")
         .arg("--threshold")
-        .arg("0.3");
-
-    cmd.assert().success();
+        .arg("0.3")
+        .output()
+        .expect("run anno cross-doc");
+    assert!(output.status.success(), "min-cluster-size should succeed");
     // Should only show clusters with at least 2 mentions
 }
 
@@ -291,17 +316,18 @@ fn test_crossdoc_min_cluster_size() {
 fn test_crossdoc_entity_type_filter() {
     let dir = setup_test_directory();
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--format")
         .arg("tree")
         .arg("--type")
         .arg("ORG")
         .arg("--threshold")
-        .arg("0.3");
-
-    cmd.assert().success();
+        .arg("0.3")
+        .output()
+        .expect("run anno cross-doc");
+    assert!(output.status.success(), "type filter should succeed");
     // Should only show Organization clusters
 }
 
@@ -310,21 +336,21 @@ fn test_crossdoc_entity_type_filter() {
 fn test_crossdoc_empty_directory() {
     let dir = tempfile::tempdir().expect("Failed to create temp directory");
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let output = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--format")
-        .arg("tree");
+        .arg("tree")
+        .output()
+        .expect("run anno cross-doc");
 
-    // Should handle empty directory gracefully
-    let assert = cmd.assert();
-    // May succeed with empty output or fail with appropriate message
-    let output = String::from_utf8(assert.get_output().stdout.clone()).unwrap_or_default();
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap_or_default();
+    // May succeed with empty output or fail with appropriate message.
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
 
     // Should either succeed with empty results or fail with clear message
     assert!(
-        output.contains("0") || stderr.contains("No files") || stderr.contains("empty"),
+        stdout.contains("0") || stderr.contains("No files") || stderr.contains("empty"),
         "Should handle empty directory appropriately"
     );
 }
@@ -335,15 +361,14 @@ fn test_crossdoc_invalid_threshold() {
     let dir = setup_test_directory();
 
     // Test with threshold > 1.0 (should be clamped or error)
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let _ = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--threshold")
-        .arg("1.5");
-
-    // Should either accept (clamp) or reject with error
-    let _assert = cmd.assert();
-    // Command may succeed (if clamped) or fail (if validated)
+        .arg("1.5")
+        .output()
+        .expect("run anno cross-doc");
+    // Command may succeed (if clamped) or fail (if validated). Either is acceptable.
 }
 
 #[test]
@@ -351,13 +376,12 @@ fn test_crossdoc_invalid_threshold() {
 fn test_crossdoc_negative_threshold() {
     let dir = setup_test_directory();
 
-    let mut cmd = Command::cargo_bin("anno").unwrap();
-    cmd.arg("cross-doc")
+    let _ = anno_cmd()
+        .arg("cross-doc")
         .arg(dir.path().to_str().unwrap())
         .arg("--threshold")
-        .arg("-0.1");
-
-    // Should handle negative threshold (clamp to 0 or error)
-    let _assert = cmd.assert();
-    // May succeed (clamped) or fail (validation)
+        .arg("-0.1")
+        .output()
+        .expect("run anno cross-doc");
+    // Command may succeed (clamped) or fail (validation). Either is acceptable.
 }

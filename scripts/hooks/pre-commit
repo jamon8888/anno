@@ -51,7 +51,9 @@ fi
 # 3. Check for files with spaces in names
 # ============================================================================
 echo -n "  [2/3] filenames .... "
-BAD_FILES=$(git diff --cached --name-only | grep ' ' || true)
+# Only check *new/changed* paths, not deletions. This matters when we're deleting
+# legacy files whose names contain spaces.
+BAD_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep ' ' || true)
 if [ -n "$BAD_FILES" ]; then
     echo "FAILED"
     echo ""

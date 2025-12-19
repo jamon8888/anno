@@ -104,7 +104,7 @@ fn signal_basic_creation() {
     let signal: Signal<Location> =
         Signal::new(42, Location::text(0, 12), "Marie Curie", "Person", 0.95);
 
-    assert_eq!(signal.id, 42);
+    assert_eq!(signal.id, 42.into());
     assert_eq!(signal.surface, "Marie Curie");
     assert_eq!(signal.label, "Person");
     assert!((signal.confidence - 0.95).abs() < 0.001);
@@ -190,10 +190,10 @@ fn track_basic_operations() {
 fn track_with_identity_link() {
     let track = Track::new(0, "Albert Einstein")
         .with_type("Person")
-        .with_identity(42);
+        .with_identity(42.into());
 
     assert_eq!(track.entity_type, Some("Person".to_string()));
-    assert_eq!(track.identity_id, Some(42));
+    assert_eq!(track.identity_id, Some(42.into()));
 }
 
 // =============================================================================
@@ -701,7 +701,7 @@ fn invariant_signal_ids_unique() {
 
     // IDs should be sequential
     for (i, &id) in ids.iter().enumerate() {
-        assert_eq!(id, i as u64);
+        assert_eq!(id.get(), i as u64);
     }
 }
 
@@ -778,9 +778,9 @@ fn spatial_index_basic_operations() {
     let mut index = TextSpatialIndex::new();
     assert!(index.is_empty());
 
-    index.insert(0, 0, 10);
-    index.insert(1, 20, 30);
-    index.insert(2, 5, 15);
+    index.insert(0.into(), 0, 10);
+    index.insert(1.into(), 20, 30);
+    index.insert(2.into(), 5, 15);
 
     assert_eq!(index.len(), 3);
     assert!(!index.is_empty());
@@ -789,19 +789,19 @@ fn spatial_index_basic_operations() {
 #[test]
 fn spatial_index_query_overlap() {
     let mut index = TextSpatialIndex::new();
-    index.insert(0, 0, 10); // [0, 10)
-    index.insert(1, 20, 30); // [20, 30)
-    index.insert(2, 5, 15); // [5, 15)
+    index.insert(0.into(), 0, 10); // [0, 10)
+    index.insert(1.into(), 20, 30); // [20, 30)
+    index.insert(2.into(), 5, 15); // [5, 15)
 
     // Query [7, 12) should overlap with [0,10) and [5,15)
     let results = index.query_overlap(7, 12);
-    assert!(results.contains(&0));
-    assert!(results.contains(&2));
-    assert!(!results.contains(&1));
+    assert!(results.contains(&0.into()));
+    assert!(results.contains(&2.into()));
+    assert!(!results.contains(&1.into()));
 
     // Query [25, 35) should only overlap with [20,30)
     let results = index.query_overlap(25, 35);
-    assert_eq!(results, vec![1]);
+    assert_eq!(results, vec![1.into()]);
 
     // Query [100, 110) should have no overlaps
     let results = index.query_overlap(100, 110);
@@ -811,37 +811,37 @@ fn spatial_index_query_overlap() {
 #[test]
 fn spatial_index_query_containing() {
     let mut index = TextSpatialIndex::new();
-    index.insert(0, 0, 100); // Large span
-    index.insert(1, 20, 30); // Small span
-    index.insert(2, 5, 95); // Medium span
+    index.insert(0.into(), 0, 100); // Large span
+    index.insert(1.into(), 20, 30); // Small span
+    index.insert(2.into(), 5, 95); // Medium span
 
     // Query for spans containing [25, 28)
     let results = index.query_containing(25, 28);
-    assert!(results.contains(&0)); // [0, 100) contains [25, 28)
-    assert!(results.contains(&1)); // [20, 30) contains [25, 28)
-    assert!(results.contains(&2)); // [5, 95) contains [25, 28)
+    assert!(results.contains(&0.into())); // [0, 100) contains [25, 28)
+    assert!(results.contains(&1.into())); // [20, 30) contains [25, 28)
+    assert!(results.contains(&2.into())); // [5, 95) contains [25, 28)
 
     // Query for spans containing [0, 100)
     let results = index.query_containing(0, 100);
-    assert!(results.contains(&0)); // Only [0, 100) contains itself
-    assert!(!results.contains(&1));
-    assert!(!results.contains(&2));
+    assert!(results.contains(&0.into())); // Only [0, 100) contains itself
+    assert!(!results.contains(&1.into()));
+    assert!(!results.contains(&2.into()));
 }
 
 #[test]
 fn spatial_index_query_contained_in() {
     let mut index = TextSpatialIndex::new();
-    index.insert(0, 0, 10);
-    index.insert(1, 20, 30);
-    index.insert(2, 5, 15);
-    index.insert(3, 100, 110);
+    index.insert(0.into(), 0, 10);
+    index.insert(1.into(), 20, 30);
+    index.insert(2.into(), 5, 15);
+    index.insert(3.into(), 100, 110);
 
     // Query for spans contained in [0, 50)
     let results = index.query_contained_in(0, 50);
-    assert!(results.contains(&0)); // [0, 10) is in [0, 50)
-    assert!(results.contains(&1)); // [20, 30) is in [0, 50)
-    assert!(results.contains(&2)); // [5, 15) is in [0, 50)
-    assert!(!results.contains(&3)); // [100, 110) is not in [0, 50)
+    assert!(results.contains(&0.into())); // [0, 10) is in [0, 50)
+    assert!(results.contains(&1.into())); // [20, 30) is in [0, 50)
+    assert!(results.contains(&2.into())); // [5, 15) is in [0, 50)
+    assert!(!results.contains(&3.into())); // [100, 110) is not in [0, 50)
 }
 
 #[test]

@@ -366,6 +366,15 @@ impl TaskEvaluator {
         match self.try_evaluate_backend(task, dataset, backend_name, sampled_data, config) {
             Ok(metrics) => {
                 let duration = start.elapsed().as_secs_f64() * 1000.0;
+                let num_examples = if task.is_coref_family() {
+                    metrics
+                        .get("num_docs")
+                        .copied()
+                        .map(|n| n.max(0.0) as usize)
+                        .unwrap_or(sentences_to_use)
+                } else {
+                    sentences_to_use
+                };
 
                 // Compute familiarity for zero-shot backends
                 let label_shift = if config.compute_familiarity {
@@ -434,7 +443,7 @@ impl TaskEvaluator {
                     success: true,
                     error: None,
                     metrics,
-                    num_examples: sentences_to_use,
+                    num_examples,
                     duration_ms: Some(duration),
                     label_shift,
                     #[cfg(feature = "eval-advanced")]
@@ -1206,10 +1215,7 @@ impl TaskEvaluator {
     /// Also handles domain-specific mappings (e.g., MIT Movie "Actor" → "person").
     /// Also limits labels for backends with restrictions (e.g., NuNER only supports 3 labels).
     /// Public for testing purposes.
-    pub(crate) fn map_dataset_labels_to_model(
-        dataset_labels: &[&str],
-        backend_name: &str,
-    ) -> Vec<String> {
+    pub fn map_dataset_labels_to_model(dataset_labels: &[&str], backend_name: &str) -> Vec<String> {
         let backend_lower = backend_name.to_lowercase();
 
         // NuNER has a limitation - it fails with GatherElements errors when using more than
@@ -1718,6 +1724,40 @@ impl TaskEvaluator {
             return Ok(metrics);
         };
 
+        // IMPORTANT: `TaskEvalConfig.max_examples` is interpreted as *max documents* for
+        // coreference datasets (not "sentences"). Without this, `benchmark --max-examples N`
+        // still evaluates the full coref dataset, which can be extremely slow.
+        let gold_docs = if let Some(max) = config.max_examples.filter(|m| *m > 0) {
+            if max >= gold_docs.len() {
+                gold_docs
+            } else {
+                let seed = config.seed.unwrap_or(42);
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+
+                let mut indices: Vec<(usize, u64)> = (0..gold_docs.len())
+                    .map(|i| {
+                        let mut hasher = DefaultHasher::new();
+                        seed.hash(&mut hasher);
+                        i.hash(&mut hasher);
+                        (i, hasher.finish())
+                    })
+                    .collect();
+                indices.sort_by_key(|(_, hash)| *hash);
+
+                let selected: std::collections::HashSet<usize> =
+                    indices.into_iter().take(max).map(|(i, _)| i).collect();
+
+                gold_docs
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(i, doc)| selected.contains(&i).then_some(doc))
+                    .collect()
+            }
+        } else {
+            gold_docs
+        };
+
         // Create coreference resolver (not a Model backend)
         // Use custom resolver if provided, otherwise create from backend_name
         let resolver: std::sync::Arc<dyn crate::eval::coref_resolver::CoreferenceResolver> =
@@ -1820,10 +1860,11 @@ impl TaskEvaluator {
             } else {
                 // End-to-end mode: extract mentions via NER backend, then cluster.
                 // Use a NER backend to extract entities first (heuristic or stacked as default)
-                let ner_backend_name = if backend_name == "coref_resolver" {
-                    "stacked" // Default NER backend for coref evaluation
-                } else {
-                    backend_name // If a specific NER backend was requested
+                let ner_backend_name = match backend_name {
+                    // Coref resolvers are not NER backends. Pick a sensible default mention detector.
+                    "coref_resolver" | "mention_ranking" | "box" => "stacked",
+                    // If the user passed an actual NER backend name, allow it.
+                    other => other,
                 };
                 let ner_backend = BackendFactory::create(ner_backend_name)?;
 
@@ -1860,6 +1901,7 @@ impl TaskEvaluator {
         let eval = CorefEvaluation::compute(&all_predicted_chains, &all_gold_chains);
 
         let mut metrics = HashMap::new();
+        metrics.insert("num_docs".to_string(), gold_docs.len() as f64);
         metrics.insert("muc_precision".to_string(), eval.muc.precision);
         metrics.insert("muc_recall".to_string(), eval.muc.recall);
         metrics.insert("muc_f1".to_string(), eval.muc.f1);
@@ -3013,7 +3055,7 @@ impl TaskEvaluator {
     /// - Limited to `ROBUSTNESS_TEST_LIMIT` examples for performance
     /// - Creates a new backend instance (doesn't reuse from main evaluation)
     #[cfg(feature = "eval-advanced")]
-    pub(crate) fn compute_robustness(
+    pub fn compute_robustness(
         &self,
         backend_name: &str,
         dataset_data: &LoadedDataset,
@@ -3402,7 +3444,7 @@ impl TaskEvaluator {
     /// - External evaluation without per-example tracking
     /// - Legacy integrations that only provide aggregate metrics
     /// - Quick estimates when full stratification isn't needed
-    pub(crate) fn compute_stratified_metrics(
+    pub fn compute_stratified_metrics(
         &self,
         dataset_data: &LoadedDataset,
         metrics: &HashMap<String, f64>,

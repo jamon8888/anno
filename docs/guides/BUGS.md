@@ -64,7 +64,7 @@ let variance = if n > 1.0 {
 ### 4. Auto-Track Creation in Crossdoc Directory Mode ✅
 **Location**: `anno/src/cli/commands/crossdoc.rs` lines 581-600
 
-**Issue**: `anno crossdoc --directory` didn't automatically create tracks (Level 2)
+**Issue**: `anno cross-doc <DIR>` didn't automatically create tracks (Level 2)
 
 **Fix**: Added call to `resolve_coreference` after signal creation
 

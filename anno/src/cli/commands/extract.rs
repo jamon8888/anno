@@ -40,6 +40,22 @@ pub struct ExtractArgs {
     #[arg(short, long = "label", value_name = "TYPE")]
     pub labels: Vec<String>,
 
+    /// Filter to specific entity types (comma-separated, e.g., "PER,ORG,DATE")
+    #[arg(long, value_name = "CSV")]
+    pub types: Option<String>,
+
+    /// Minimum confidence threshold (0.0-1.0).
+    ///
+    /// Entities with confidence below this value are discarded before output.
+    #[arg(long, value_name = "FLOAT")]
+    pub threshold: Option<f64>,
+
+    /// Warn if expected entity types are not present in the output (comma-separated).
+    ///
+    /// Example: `--expected-types PER,ORG,DATE,MONEY`
+    #[arg(long, value_name = "CSV")]
+    pub expected_types: Option<String>,
+
     /// Output format
     #[arg(long, default_value = "human")]
     pub format: OutputFormat,
@@ -158,19 +174,70 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
         .map_err(|e| CliError::from(format!("Extraction failed: {}", e)))?;
     let elapsed = start.elapsed();
 
-    // Filter by labels if specified
-    let entities: Vec<_> = if args.labels.is_empty() {
-        entities
-    } else {
-        entities
-            .into_iter()
-            .filter(|e| {
-                args.labels
-                    .iter()
-                    .any(|label| label.eq_ignore_ascii_case(&e.entity_type.to_string()))
-            })
-            .collect()
-    };
+    let mut entities = entities;
+
+    // Apply confidence threshold if requested
+    if let Some(threshold) = args.threshold {
+        entities.retain(|e| e.confidence >= threshold);
+    }
+
+    // Filter by labels/types if specified
+    let mut type_filters: Vec<String> = Vec::new();
+    type_filters.extend(args.labels.iter().cloned());
+    if let Some(csv) = &args.types {
+        for part in csv.split(',') {
+            let t = part.trim();
+            if !t.is_empty() {
+                type_filters.push(t.to_string());
+            }
+        }
+    }
+
+    if !type_filters.is_empty() {
+        let normalized: std::collections::HashSet<String> = type_filters
+            .iter()
+            .map(|t| crate::EntityType::from_label(t).as_label().to_string())
+            .collect();
+
+        entities.retain(|e| normalized.contains(e.entity_type.as_label()));
+    }
+
+    // Warn about missing expected types (best-effort, non-fatal)
+    if let Some(csv) = &args.expected_types {
+        let mut expected: Vec<String> = Vec::new();
+        for part in csv.split(',') {
+            let t = part.trim();
+            if !t.is_empty() {
+                expected.push(t.to_string());
+            }
+        }
+
+        if !expected.is_empty() {
+            let present: std::collections::HashSet<String> = entities
+                .iter()
+                .map(|e| e.entity_type.as_label().to_string())
+                .collect();
+
+            let mut missing: Vec<String> = expected
+                .iter()
+                .filter_map(|t| {
+                    let normalized = crate::EntityType::from_label(t).as_label().to_string();
+                    (!present.contains(&normalized)).then_some(normalized)
+                })
+                .collect();
+
+            missing.sort();
+            missing.dedup();
+
+            if !missing.is_empty() && !args.quiet {
+                eprintln!(
+                    "{} Expected types not found: {}",
+                    color("33", "warning:"),
+                    missing.join(", ")
+                );
+            }
+        }
+    }
 
     // Build grounded document with validation using library method
     let mut doc = GroundedDocument::new("extract", &text);

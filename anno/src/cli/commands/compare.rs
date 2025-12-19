@@ -21,7 +21,7 @@ pub struct CompareArgs {
     #[arg(value_name = "FILE2")]
     pub file2: Option<String>,
 
-    /// Compare models on same text (use file1 as text)
+    /// Compare models on the same input text (reads FILE1 from disk)
     #[arg(long)]
     pub models: bool,
 

@@ -113,7 +113,7 @@ fn test_track_ref_validation() {
     assert_eq!(track_ref.unwrap().track_id, track_id);
 
     // track_ref should return None for non-existent track
-    let fake_track_id = 9999;
+    let fake_track_id = 9999.into();
     let fake_ref = doc.track_ref(fake_track_id);
     assert!(
         fake_ref.is_none(),
@@ -138,7 +138,7 @@ fn test_link_track_to_kb_identity_missing_from_corpus() {
 
     // Manually set an identity_id that doesn't exist in corpus
     // This simulates the inconsistency bug
-    let fake_identity_id = 42;
+    let fake_identity_id: anno::IdentityId = 42.into();
     doc.link_track_to_identity(track_id, fake_identity_id);
 
     // Add document to corpus
@@ -163,10 +163,16 @@ fn test_link_track_to_kb_identity_missing_from_corpus() {
     assert_eq!(track.identity_id, Some(new_identity_id));
 
     // Verify the new identity exists in corpus
-    assert!(corpus.identities().any(|i| i.id == new_identity_id));
+    assert!(corpus
+        .identities()
+        .values()
+        .any(|i| i.id == new_identity_id));
 
     // Verify the old fake identity_id is NOT in corpus
-    assert!(!corpus.identities().any(|i| i.id == fake_identity_id));
+    assert!(!corpus
+        .identities()
+        .values()
+        .any(|i| i.id == fake_identity_id));
 }
 
 #[test]
@@ -204,7 +210,7 @@ fn test_resolve_inter_doc_coref_singleton_clusters() {
 
     // Verify identities were created
     for id in &created_ids {
-        assert!(corpus.identities().any(|i| i.id == *id));
+        assert!(corpus.identities().values().any(|i| i.id == *id));
     }
 }
 
@@ -254,7 +260,7 @@ fn test_identity_from_cross_doc_cluster_source_none() {
     use anno::eval::cdcr::CrossDocCluster;
     use anno::EntityType;
 
-    let mut cluster = CrossDocCluster::new(1, "Test Entity");
+    let mut cluster = CrossDocCluster::new(1u64, "Test Entity");
     cluster.entity_type = Some(EntityType::Person);
 
     let identity: anno::grounded::Identity = (&cluster).into();
@@ -266,7 +272,7 @@ fn test_identity_from_cross_doc_cluster_source_none() {
     );
 
     // Other fields should be populated
-    assert_eq!(identity.id, 1);
+    assert_eq!(identity.id, 1.into());
     assert_eq!(identity.canonical_name, "Test Entity");
 }
 
@@ -390,7 +396,7 @@ fn test_link_track_to_kb_edge_cases() {
     // Test with non-existent track
     let track_ref = TrackRef {
         doc_id: "nonexistent".to_string(),
-        track_id: 999,
+        track_id: 999.into(),
     };
 
     let result = corpus.link_track_to_kb(&track_ref, "wikidata", "Q123", "Test");

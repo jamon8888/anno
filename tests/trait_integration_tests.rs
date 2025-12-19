@@ -3,11 +3,11 @@
 //! These tests verify that trait implementations work correctly
 //! in real-world scenarios and edge cases.
 
+use anno::offset::TextSpan;
 use anno::{
     backends::{HeuristicNER, RegexNER, StackedNER},
     BatchCapable, Entity, Model, StreamingCapable,
 };
-use anno::offset::TextSpan;
 
 // =============================================================================
 // BatchCapable Integration Tests

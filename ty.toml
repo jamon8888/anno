@@ -1,0 +1,13 @@
+# ty configuration
+#
+# This repo is primarily Rust; Python is used for helper scripts.
+# Keep type checking scoped to `scripts/` to avoid treating the repository
+# as a Python package.
+
+[src]
+include = ["scripts"]
+
+[environment]
+python-version = "3.10"
+
+

@@ -1,5 +1,8 @@
 # CLI Design
 
+> Note: This is a **design/critique document**. It describes proposed CLI changes and may not
+> match the current implementation. For current behavior, run `anno --help`.
+
 Analysis, improvements, and design decisions for the anno CLI.
 
 ## Current State
@@ -32,7 +35,7 @@ Analysis, improvements, and design decisions for the anno CLI.
 11. `query` - Filter entities from JSON file (no persistence)
 12. `cache` - Manage cache directory (why expose?)
 13. `dataset` - List/info about datasets (should be plural?)
-14. `crossdoc` - Cross-document clustering
+14. `cross-doc` - Cross-document clustering
 15. `strata` - Hierarchical clustering
 16. `validate` - Validate JSONL files
 17. `compare` - Compare documents/models/clusters
@@ -42,7 +45,11 @@ Analysis, improvements, and design decisions for the anno CLI.
 
 ### 1. Dense Output Format (Level 0) ✅
 - **Before**: Verbose, multi-line output with unnecessary spacing
-- **After**: Dense, single-line format: `PER:2 LOC:1 "Marie Curie" "Nobel Prize" "Paris"`
+- **After**: Dense, per-type output:
+  ```
+  PER:1 "Marie Curie"
+  LOC:1 "Paris"
+  ```
 - **Result**: Much more compact and expert-friendly, similar to `iw` command
 
 ### 2. Hierarchical Verbose Levels ✅
@@ -121,7 +128,7 @@ anno analyze <text>             # Multi-model comparison (unchanged, distinct us
 anno validate <file.jsonl>      # Validate JSONL files (unchanged)
 anno filter <file.json> [filters] # Filter entities from JSON (renamed from `query`)
 anno compare <file1> <file2>    # Compare documents/models/clusters (unchanged)
-anno crossdoc --dir ./docs      # Cross-doc clustering (keep as subcommand)
+anno cross-doc ./docs           # Cross-doc clustering (keep as subcommand)
 anno strata --input graph.json  # Hierarchical clustering (keep as subcommand)
 ```
 
@@ -136,11 +143,11 @@ anno strata --input graph.json  # Hierarchical clustering (keep as subcommand)
 ## Testing Results
 
 ### Small Documents (Single Text)
-**Command**: `anno extract "Marie Curie won the Nobel Prize in Paris."`
+**Command**: `anno extract "Marie Curie was born in Paris."`
 
 **Output (Level 0)**:
 ```
-PER:2 "Marie Curie" "Nobel Prize"
+PER:1 "Marie Curie"
 LOC:1 "Paris"
 ```
 
@@ -151,16 +158,14 @@ LOC:1 "Paris"
 
 **Output (Level 2 -vv)**:
 ```
-PER:2
+PER:1
   "Marie Curie" (0.75)
-    Marie Curie won the Nobel ...
-  "Nobel Prize" (0.60)
-    ...Curie won the Nobel Prize in Paris...
+    Marie Curie was born in Paris...
 LOC:1
   "Paris" (0.80)
-    ...Nobel Prize in Paris.
+    ...born in Paris.
 
-stats: 3 entities, 0 tracks, 0 identities, avg confidence 0.72
+stats: 2 entities, 0 tracks, 0 identities, avg confidence 0.78
 ```
 
 **Observations**:
@@ -169,34 +174,33 @@ stats: 3 entities, 0 tracks, 0 identities, avg confidence 0.72
 - ✅ Stats line is compact and informative
 
 ### Large Directories (Batch Processing)
-**Command**: `anno batch --dir hack/real_data/datasets/wnut-17 --format human`
+**Command**: `anno batch --dir testdata/fixtures/cross_doc --format human`
 
 **Output**:
 ```
-Document: wnut-17_018
-PER:3 URL:1 "Park(ing" "Day" "Photo" "http://bit.ly/aQun1b"
+Document: doc1
+PER:1 "Jensen Huang"
+LOC:1 "San Jose"
+DATE:1 "2024-01-15"
+ORG:1 "Nvidia"
 
-Document: wnut-17_019
-(no entities)
-
-Document: wnut-17_008
-ORG:1 URL:1 "Friday Night Eats" "http://twitpic.com/2pdvtr"
+Document: doc2
+PER:1 "Jensen Huang"
+LOC:1 "Paris"
+ORG:1 "Nvidia"
 ```
 
 **Observations**:
 - ✅ "Document: filename" prefix is clear and helpful
 - ✅ Dense format prevents output from being overwhelming
 - ✅ "(no entities)" is concise for empty results
-- ✅ Performance: ~0.09s for 20 files (very fast)
-- ✅ Stacked model extracts more types (URL, Mention, Hashtag, DATE) than heuristic
+- ✅ Easy to skim per-file extractions before running `cross-doc`
 
 **Performance**:
-- 20 files: ~0.09s
-- 113 files: ~0.5s (estimated)
-- Scales well for large directories
+- Scales linearly with number of files (I/O + model runtime)
 
 ### URLs (Web Content)
-**Command**: `anno extract --url https://www.example.com`
+**Command**: `anno extract --url https://example.com`
 
 **Observations**:
 - ✅ Works with URLs (requires eval-advanced feature)

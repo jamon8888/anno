@@ -10,7 +10,7 @@
 
 """
 Serve README with auto-reload when README.md changes.
-Single stable URL: http://localhost:8002
+Auto-finds a free port starting from 8000.
 """
 
 import http.server
@@ -53,19 +53,20 @@ class READMEHandler(FileSystemEventHandler):
     
     def on_modified(self, event):
         if event.src_path == str(self.readme_path):
-            print(f"🔄 README.md changed, re-rendering...")
+            print("README.md changed, re-rendering...")
             try:
                 render_readme_github_style(str(self.readme_path), str(self.output_path))
-                print(f"✅ Re-rendered to {self.output_path}")
+                print(f"Re-rendered: {self.output_path}")
             except Exception as e:
-                print(f"❌ Error re-rendering: {e}")
+                print(f"Error re-rendering: {e}")
 
 # find_free_port is now imported from port_utils
 
 def serve_readme(start_port=8000):
     """Serve README with auto-reload. Auto-finds free port."""
     readme_path = Path(__file__).parent.parent / "README.md"
-    output_path = Path(__file__).parent.parent / "README_github_style.html"
+    output_path = Path(__file__).parent.parent / ".anno_cache" / "README_github_style.html"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Find free port
     port = find_free_port(start_port)
@@ -79,7 +80,7 @@ def serve_readme(start_port=8000):
     observer = Observer()
     observer.schedule(event_handler, str(readme_path.parent), recursive=False)
     observer.start()
-    print(f"👀 Watching {readme_path} for changes...")
+    print(f"Watching {readme_path} for changes...")
     
     # Serve
     class Handler(http.server.SimpleHTTPRequestHandler):
@@ -137,9 +138,9 @@ def serve_readme(start_port=8000):
     
     with socketserver.TCPServer(("", port), Handler) as httpd:
         url = f"http://localhost:{port}/README_github_style.html"
-        print(f"🌐 Serving at {url}")
-        print(f"   Auto-reload enabled (watches README.md)")
-        print(f"   Press Ctrl+C to stop")
+        print(f"Serving: {url}")
+        print("Auto-reload enabled (watches README.md)")
+        print("Press Ctrl+C to stop")
         # Write port to file for justfile/test to read (more reliable than log parsing)
         port_file = Path('/tmp/serve_readme_port.txt')
         with open(port_file, 'w') as f:

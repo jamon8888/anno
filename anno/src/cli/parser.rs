@@ -29,15 +29,15 @@ SIGNAL → TRACK → IDENTITY HIERARCHY:
 BACKENDS:
   • pattern    - High-precision patterns (dates, money, emails)
   • heuristic (alias: statistical) - Capitalization + context heuristics
-  • gliner     - Zero-shot NER via ONNX (any entity type)
-  • w2ner      - Nested/discontinuous entities
+  • stacked    - Pattern + heuristic (default)
+  • (optional) extra backends via feature flags (e.g., ONNX/Candle); see `anno models list`
 
 EXAMPLES:
-  anno extract "Marie Curie won the Nobel Prize."
+  anno extract "Marie Curie was born in Paris."
   anno debug --coref --link-kb -t "Barack Obama met Angela Merkel. He discussed NATO."
   anno eval -t "..." -g "Marie Curie:PER:0:11"
-  anno crossdoc --directory ./docs --threshold 0.6
-  anno coalesce --directory ./docs --threshold 0.6  # alias for crossdoc
+  anno cross-doc ./docs --threshold 0.6
+  anno coalesce ./docs --threshold 0.6  # alias for cross-doc
   anno strata --input graph.json --method leiden --levels 3
   anno info
 "#
@@ -159,6 +159,7 @@ pub enum Commands {
 pub enum ModelBackend {
     // === Always Available (Zero Dependencies) ===
     /// Regex matching only (dates, emails, etc.)
+    #[value(alias = "regex")]
     Pattern,
     /// Heuristic NER (persons, orgs, locs via capitalization + context)
     #[value(alias = "statistical")]
@@ -452,9 +453,9 @@ pub enum OutputFormat {
     /// Human-readable colored output (default)
     #[default]
     Human,
-    /// JSON array of entities
+    /// JSON object with provenance and entities: `{ "provenance": ..., "entities": [...] }`
     Json,
-    /// JSON lines (one object per line)
+    /// JSON lines: first line is provenance, then one entity per line
     Jsonl,
     /// Tab-separated values
     Tsv,

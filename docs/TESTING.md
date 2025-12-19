@@ -127,11 +127,11 @@ Comprehensive testing strategy, findings, and recommendations.
 ## Testing Scenarios
 
 ### Small Documents (Single Text)
-**Command**: `anno extract "Marie Curie won the Nobel Prize in Paris."`
+**Command**: `anno extract "Marie Curie was born in Paris."`
 
 **Output (Level 0)**:
 ```
-PER:2 "Marie Curie" "Nobel Prize"
+PER:1 "Marie Curie"
 LOC:1 "Paris"
 ```
 
@@ -143,31 +143,33 @@ LOC:1 "Paris"
 **Performance**: <1ms per document
 
 ### Large Directories (Batch Processing)
-**Command**: `anno batch --dir hack/real_data/datasets/wnut-17 --format human`
+**Command**: `anno batch --dir testdata/fixtures/cross_doc --format human`
 
 **Output**:
 ```
-Document: wnut-17_018
-PER:3 URL:1 "Park(ing" "Day" "Photo" "http://bit.ly/aQun1b"
+Document: doc1
+PER:1 "Jensen Huang"
+LOC:1 "San Jose"
+DATE:1 "2024-01-15"
+ORG:1 "Nvidia"
 
-Document: wnut-17_019
-(no entities)
+Document: doc2
+PER:1 "Jensen Huang"
+LOC:1 "Paris"
+ORG:1 "Nvidia"
 ```
 
 **Observations**:
 - ✅ "Document: filename" prefix is clear and helpful
 - ✅ Dense format prevents output from being overwhelming
 - ✅ "(no entities)" is concise for empty results
-- ✅ Performance: ~0.09s for 20 files (very fast)
-- ✅ Stacked model extracts more types (URL, Mention, Hashtag, DATE) than heuristic
+- ✅ Easy to skim per-file extractions before running `cross-doc`
 
 **Performance**:
-- 20 files: ~0.09s
-- 113 files: ~0.5s (estimated)
-- Scales linearly
+- Scales linearly with number of files (I/O + model runtime)
 
 ### URLs (Web Content)
-**Command**: `anno extract --url https://www.example.com`
+**Command**: `anno extract --url https://example.com`
 
 **Observations**:
 - ✅ Works with URLs (requires eval-advanced feature)

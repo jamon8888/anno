@@ -132,6 +132,8 @@ criterion = { workspace = true }
 tempfile = "3"
 xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
 bstr = "1"
+assert_cmd = "2"
+predicates = "3"
 
 [[bench]]
 name = "offset_operations"
@@ -141,6 +143,486 @@ harness = false
 name = "anno"
 path = "src/bin/anno.rs"
 required-features = ["cli", "eval"]
+
+# NOTE: Workspace-root integration tests live in `../tests/*.rs`.
+# Because the workspace root is a *virtual manifest* (no `[package]`), those
+# tests are not test targets of any Cargo package unless we wire them in
+# explicitly. We keep them in the workspace root for organization, but attach
+# them here so they actually compile and run under `cargo test -p anno ...`.
+#
+# This preserves the existing workspace layout while preventing “tests that
+# never run”.
+[[test]]
+name = "active_learning_integration"
+path = "../tests/active_learning_integration.rs"
+
+[[test]]
+name = "advanced_trait_tests"
+path = "../tests/advanced_trait_tests.rs"
+
+[[test]]
+name = "african_language_datasets"
+path = "../tests/african_language_datasets.rs"
+
+[[test]]
+name = "auto_backend_tests"
+path = "../tests/auto_backend_tests.rs"
+
+[[test]]
+name = "backend_candle"
+path = "../tests/backend_candle.rs"
+
+[[test]]
+name = "backend_comparison"
+path = "../tests/backend_comparison.rs"
+
+[[test]]
+name = "backend_nuner_w2ner"
+path = "../tests/backend_nuner_w2ner.rs"
+
+[[test]]
+name = "bounds_validation"
+path = "../tests/bounds_validation.rs"
+
+[[test]]
+name = "box_embeddings_thread_safety"
+path = "../tests/box_embeddings_thread_safety.rs"
+
+[[test]]
+name = "bug_fixes"
+path = "../tests/bug_fixes.rs"
+
+[[test]]
+name = "cli_ingest_features"
+path = "../tests/cli_ingest_features.rs"
+
+[[test]]
+name = "cli_integration"
+path = "../tests/cli_integration.rs"
+
+[[test]]
+name = "cli_new_commands"
+path = "../tests/cli_new_commands.rs"
+
+[[test]]
+name = "cli_ux_fixes"
+path = "../tests/cli_ux_fixes.rs"
+
+[[test]]
+name = "comprehensive_ner_tests"
+path = "../tests/comprehensive_ner_tests.rs"
+
+[[test]]
+name = "concurrency_tests"
+path = "../tests/concurrency_tests.rs"
+
+[[test]]
+name = "conversion_e2e"
+path = "../tests/conversion_e2e.rs"
+
+[[test]]
+name = "coref_integration"
+path = "../tests/coref_integration.rs"
+
+[[test]]
+name = "corpus_performance"
+path = "../tests/corpus_performance.rs"
+
+[[test]]
+name = "corpus_proptest"
+path = "../tests/corpus_proptest.rs"
+
+[[test]]
+name = "corpus_tests"
+path = "../tests/corpus_tests.rs"
+
+[[test]]
+name = "crossdoc_cli"
+path = "../tests/crossdoc_cli.rs"
+
+[[test]]
+name = "crossdoc_cli_e2e"
+path = "../tests/crossdoc_cli_e2e.rs"
+
+[[test]]
+name = "crossdoc_cli_exec"
+path = "../tests/crossdoc_cli_exec.rs"
+
+[[test]]
+name = "crossdoc_cli_format"
+path = "../tests/crossdoc_cli_format.rs"
+
+[[test]]
+name = "crossdoc_cli_integration"
+path = "../tests/crossdoc_cli_integration.rs"
+
+[[test]]
+name = "crossdoc_cli_output"
+path = "../tests/crossdoc_cli_output.rs"
+
+[[test]]
+name = "crossdoc_cli_proptest"
+path = "../tests/crossdoc_cli_proptest.rs"
+
+[[test]]
+name = "die_hard"
+path = "../tests/die_hard.rs"
+
+[[test]]
+name = "discontinuous_span_tests"
+path = "../tests/discontinuous_span_tests.rs"
+
+[[test]]
+name = "discourse_comprehensive"
+path = "../tests/discourse_comprehensive.rs"
+
+[[test]]
+name = "domain_specific"
+path = "../tests/domain_specific.rs"
+
+[[test]]
+name = "e2e_quality_comprehensive"
+path = "../tests/e2e_quality_comprehensive.rs"
+
+[[test]]
+name = "edge_cases"
+path = "../tests/edge_cases.rs"
+
+[[test]]
+name = "edit_distance_integration"
+path = "../tests/edit_distance_integration.rs"
+
+[[test]]
+name = "entity_builder_fuzz_tests"
+path = "../tests/entity_builder_fuzz_tests.rs"
+
+[[test]]
+name = "entity_builder_fuzz_tests_minimal"
+path = "../tests/entity_builder_fuzz_tests_minimal.rs"
+
+[[test]]
+name = "entity_validation_fuzz_tests"
+path = "../tests/entity_validation_fuzz_tests.rs"
+
+[[test]]
+name = "eval_backend_caching"
+path = "../tests/eval_backend_caching.rs"
+
+[[test]]
+name = "eval_improvements_tests"
+path = "../tests/eval_improvements_tests.rs"
+
+[[test]]
+name = "eval_invariants"
+path = "../tests/eval_invariants.rs"
+
+[[test]]
+name = "eval_label_mapping"
+path = "../tests/eval_label_mapping.rs"
+
+[[test]]
+name = "eval_progress_reporting"
+path = "../tests/eval_progress_reporting.rs"
+
+[[test]]
+name = "eval_proptest"
+path = "../tests/eval_proptest.rs"
+
+[[test]]
+name = "eval_subtle_bugs"
+path = "../tests/eval_subtle_bugs.rs"
+
+[[test]]
+name = "evaluator_duplicate_fix_test"
+path = "../tests/evaluator_duplicate_fix_test.rs"
+
+[[test]]
+name = "evaluator_tests"
+path = "../tests/evaluator_tests.rs"
+
+[[test]]
+name = "fuzz_edge_cases"
+path = "../tests/fuzz_edge_cases.rs"
+
+[[test]]
+name = "fuzz_strategies"
+path = "../tests/fuzz_strategies.rs"
+
+[[test]]
+name = "gliner1_tests"
+path = "../tests/gliner1_tests.rs"
+
+[[test]]
+name = "gliner2_tests"
+path = "../tests/gliner2_tests.rs"
+
+[[test]]
+name = "gliner_candle_bug_tests"
+path = "../tests/gliner_candle_bug_tests.rs"
+
+[[test]]
+name = "gliner_optimization_invariants"
+path = "../tests/gliner_optimization_invariants.rs"
+
+[[test]]
+name = "graph_export_tests"
+path = "../tests/graph_export_tests.rs"
+
+[[test]]
+name = "graph_fuzz_tests"
+path = "../tests/graph_fuzz_tests.rs"
+
+[[test]]
+name = "graph_fuzz_tests_minimal"
+path = "../tests/graph_fuzz_tests_minimal.rs"
+
+[[test]]
+name = "grounded_fuzz_tests"
+path = "../tests/grounded_fuzz_tests.rs"
+
+[[test]]
+name = "grounded_fuzz_tests_minimal"
+path = "../tests/grounded_fuzz_tests_minimal.rs"
+
+[[test]]
+name = "grounded_multimodal"
+path = "../tests/grounded_multimodal.rs"
+
+[[test]]
+name = "heuristic_optimization_invariants"
+path = "../tests/heuristic_optimization_invariants.rs"
+
+[[test]]
+name = "historical_methods_comparison"
+path = "../tests/historical_methods_comparison.rs"
+
+[[test]]
+name = "inference_tests"
+path = "../tests/inference_tests.rs"
+
+[[test]]
+name = "integration"
+path = "../tests/integration.rs"
+
+[[test]]
+name = "integration_comprehensive"
+path = "../tests/integration_comprehensive.rs"
+
+[[test]]
+name = "integration_eval"
+path = "../tests/integration_eval.rs"
+
+[[test]]
+name = "integration_full_pipeline"
+path = "../tests/integration_full_pipeline.rs"
+
+[[test]]
+name = "integration_ml_stacked"
+path = "../tests/integration_ml_stacked.rs"
+
+[[test]]
+name = "invariant_tests"
+path = "../tests/invariant_tests.rs"
+
+[[test]]
+name = "lang_detection_fuzz_tests"
+path = "../tests/lang_detection_fuzz_tests.rs"
+
+[[test]]
+name = "lang_detection_tests"
+path = "../tests/lang_detection_tests.rs"
+
+[[test]]
+name = "layered_ner_comprehensive"
+path = "../tests/layered_ner_comprehensive.rs"
+
+[[test]]
+name = "mock_model_tests"
+path = "../tests/mock_model_tests.rs"
+
+[[test]]
+name = "multilingual_ner_tests"
+path = "../tests/multilingual_ner_tests.rs"
+
+[[test]]
+name = "ner_comprehensive"
+path = "../tests/ner_comprehensive.rs"
+
+[[test]]
+name = "ner_nuances"
+path = "../tests/ner_nuances.rs"
+
+[[test]]
+name = "ner_tests"
+path = "../tests/ner_tests.rs"
+
+[[test]]
+name = "new_features_integration"
+path = "../tests/new_features_integration.rs"
+
+[[test]]
+name = "nuner_label_packs"
+path = "../tests/nuner_label_packs.rs"
+
+[[test]]
+name = "nuner_onnx_smoke"
+path = "../tests/nuner_onnx_smoke.rs"
+
+[[test]]
+name = "nuner_span_decode"
+path = "../tests/nuner_span_decode.rs"
+
+[[test]]
+name = "offset_bug_tests"
+path = "../tests/offset_bug_tests.rs"
+
+[[test]]
+name = "optimization_correctness"
+path = "../tests/optimization_correctness.rs"
+
+[[test]]
+name = "optimization_invariants"
+path = "../tests/optimization_invariants.rs"
+
+[[test]]
+name = "pattern_statistical_detailed"
+path = "../tests/pattern_statistical_detailed.rs"
+
+[[test]]
+name = "performance_invariants"
+path = "../tests/performance_invariants.rs"
+
+[[test]]
+name = "real_datasets"
+path = "../tests/real_datasets.rs"
+
+[[test]]
+name = "regression_crossdoc_auto_tracks"
+path = "../tests/regression_crossdoc_auto_tracks.rs"
+
+[[test]]
+name = "regression_crossdoc_type_mismatch"
+path = "../tests/regression_crossdoc_type_mismatch.rs"
+
+[[test]]
+name = "regression_embedding_dimension_mismatch"
+path = "../tests/regression_embedding_dimension_mismatch.rs"
+
+[[test]]
+name = "regression_f1"
+path = "../tests/regression_f1.rs"
+
+[[test]]
+name = "regression_single_letter_false_positive"
+path = "../tests/regression_single_letter_false_positive.rs"
+
+[[test]]
+name = "relation_extraction_quality"
+path = "../tests/relation_extraction_quality.rs"
+
+[[test]]
+name = "schema_fuzz_tests"
+path = "../tests/schema_fuzz_tests.rs"
+
+[[test]]
+name = "schema_fuzz_tests_minimal"
+path = "../tests/schema_fuzz_tests_minimal.rs"
+
+[[test]]
+name = "schema_mapping_tests"
+path = "../tests/schema_mapping_tests.rs"
+
+[[test]]
+name = "seqeval_comparison"
+path = "../tests/seqeval_comparison.rs"
+
+[[test]]
+name = "serialization_fuzz_tests"
+path = "../tests/serialization_fuzz_tests.rs"
+
+[[test]]
+name = "serialization_fuzz_tests_minimal"
+path = "../tests/serialization_fuzz_tests_minimal.rs"
+
+[[test]]
+name = "serialization_tests"
+path = "../tests/serialization_tests.rs"
+
+[[test]]
+name = "similarity_fuzz_tests"
+path = "../tests/similarity_fuzz_tests.rs"
+
+[[test]]
+name = "slow_benchmarks"
+path = "../tests/slow_benchmarks.rs"
+
+[[test]]
+name = "stacked_ml_composability"
+path = "../tests/stacked_ml_composability.rs"
+
+[[test]]
+name = "stacked_ml_concurrency"
+path = "../tests/stacked_ml_concurrency.rs"
+
+[[test]]
+name = "stacked_ml_error_paths"
+path = "../tests/stacked_ml_error_paths.rs"
+
+[[test]]
+name = "stacked_ml_fuzz_tests"
+path = "../tests/stacked_ml_fuzz_tests.rs"
+
+[[test]]
+name = "stacked_ml_real_datasets"
+path = "../tests/stacked_ml_real_datasets.rs"
+
+[[test]]
+name = "stacked_ner_evaluation"
+path = "../tests/stacked_ner_evaluation.rs"
+
+[[test]]
+name = "subtle_bugs_tests"
+path = "../tests/subtle_bugs_tests.rs"
+
+[[test]]
+name = "sync_integration_tests"
+path = "../tests/sync_integration_tests.rs"
+
+[[test]]
+name = "sync_proptest"
+path = "../tests/sync_proptest.rs"
+
+[[test]]
+name = "synthetic_domain_minima"
+path = "../tests/synthetic_domain_minima.rs"
+
+[[test]]
+name = "task_evaluator_comprehensive"
+path = "../tests/task_evaluator_comprehensive.rs"
+
+[[test]]
+name = "thread_safety_tests"
+path = "../tests/thread_safety_tests.rs"
+
+[[test]]
+name = "trait_harmonization_tests"
+path = "../tests/trait_harmonization_tests.rs"
+
+[[test]]
+name = "trait_integration_tests"
+path = "../tests/trait_integration_tests.rs"
+
+[[test]]
+name = "type_mapper_tests"
+path = "../tests/type_mapper_tests.rs"
+
+[[test]]
+name = "w2ner_auth_tests"
+path = "../tests/w2ner_auth_tests.rs"
+
+[[test]]
+name = "zero_shot_eval_tests"
+path = "../tests/zero_shot_eval_tests.rs"
 
 [lints]
 workspace = true

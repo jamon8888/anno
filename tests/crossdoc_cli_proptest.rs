@@ -151,7 +151,7 @@ proptest! {
     fn test_mention_count_consistency(
         mentions_per_cluster in 1..10usize,
     ) {
-        let mut cluster = CrossDocCluster::new(0, "Test");
+        let mut cluster = CrossDocCluster::new(0u64, "Test");
         for i in 0..mentions_per_cluster {
             cluster.add_mention("doc1", i);
         }
@@ -169,7 +169,7 @@ proptest! {
         mentions in 1..10usize,
         unique_docs in 1..5usize,
     ) {
-        let mut cluster = CrossDocCluster::new(0, "Test");
+        let mut cluster = CrossDocCluster::new(0u64, "Test");
 
         // Add mentions from same docs multiple times
         for i in 0..mentions {

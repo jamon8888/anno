@@ -175,8 +175,8 @@ mod e2e_tests {
 
             while offset < long_text_char_len {
                 let end = (offset + chunk_size).min(long_text_char_len);
-                let chunk = anno::offset::TextSpan::from_chars(&long_text, offset, end)
-                    .extract(&long_text);
+                let chunk =
+                    anno::offset::TextSpan::from_chars(&long_text, offset, end).extract(&long_text);
 
                 let entities = ner.extract_entities(chunk, None).unwrap();
 

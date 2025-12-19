@@ -5,7 +5,6 @@
 use anno::grounded::{
     Corpus, GroundedDocument, Identity, IdentitySource, Location, Signal, Track, TrackRef,
 };
-use anno::{Entity, EntityType};
 use anno_coalesce::Resolver;
 
 // =============================================================================
@@ -16,7 +15,7 @@ use anno_coalesce::Resolver;
 fn test_corpus_new() {
     let corpus = Corpus::new();
     assert_eq!(corpus.documents().count(), 0);
-    assert_eq!(corpus.identities().count(), 0);
+    assert_eq!(corpus.identities().len(), 0);
 }
 
 #[test]
@@ -76,22 +75,22 @@ fn test_track_ref_creation() {
 fn test_track_ref_invalid_track() {
     let doc = GroundedDocument::new("doc1", "Test");
     // Track ID 999 doesn't exist
-    assert!(doc.track_ref(999).is_none());
+    assert!(doc.track_ref(999.into()).is_none());
 }
 
 #[test]
 fn test_track_ref_equality() {
     let ref1 = TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 0,
+        track_id: 0.into(),
     };
     let ref2 = TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 0,
+        track_id: 0.into(),
     };
     let ref3 = TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 1,
+        track_id: 1.into(),
     };
 
     assert_eq!(ref1, ref2);
@@ -104,15 +103,15 @@ fn test_track_ref_hash() {
 
     let ref1 = TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 0,
+        track_id: 0.into(),
     };
     let ref2 = TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 0,
+        track_id: 0.into(),
     };
     let ref3 = TrackRef {
         doc_id: "doc2".to_string(),
-        track_id: 0,
+        track_id: 0.into(),
     };
 
     let mut set = HashSet::new();
@@ -133,11 +132,11 @@ fn test_identity_source_cross_doc_coref() {
     let track_refs = vec![
         TrackRef {
             doc_id: "doc1".to_string(),
-            track_id: 0,
+            track_id: 0.into(),
         },
         TrackRef {
             doc_id: "doc2".to_string(),
-            track_id: 1,
+            track_id: 1.into(),
         },
     ];
 
@@ -175,7 +174,7 @@ fn test_identity_source_knowledge_base() {
 fn test_identity_source_hybrid() {
     let track_refs = vec![TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 0,
+        track_id: 0.into(),
     }];
 
     let source = IdentitySource::Hybrid {
@@ -475,7 +474,7 @@ fn test_link_track_to_kb_existing_identity() {
     // Now link to KB
     let track_ref = TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 0,
+        track_id: 0.into(),
     };
 
     let linked_id = corpus
@@ -509,7 +508,7 @@ fn test_link_track_to_kb_invalid_track_ref() {
 
     let invalid_ref = TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 999, // Doesn't exist
+        track_id: 999.into(), // Doesn't exist
     };
 
     assert!(corpus
@@ -523,7 +522,7 @@ fn test_link_track_to_kb_missing_document() {
 
     let invalid_ref = TrackRef {
         doc_id: "nonexistent".to_string(),
-        track_id: 0,
+        track_id: 0.into(),
     };
 
     assert!(corpus
@@ -650,7 +649,7 @@ fn test_full_pipeline_inter_doc_coref_then_linking() {
     // Step 2: Link to KB
     let track_ref = TrackRef {
         doc_id: "doc1".to_string(),
-        track_id: 0,
+        track_id: 0.into(),
     };
     let linked_id = corpus
         .link_track_to_kb(&track_ref, "wikidata", "Q12345", "Jensen Huang")
@@ -695,260 +694,260 @@ fn test_identity_source_preservation() {
             IdentitySource::CrossDocCoref { .. }
         ));
     }
+}
 
-    // =============================================================================
-    // GroundedDocument Advanced Method Tests
-    // =============================================================================
+// =============================================================================
+// GroundedDocument Advanced Method Tests
+// =============================================================================
 
-    #[test]
-    fn test_grounded_document_identity_for_track() {
-        let mut doc = GroundedDocument::new("doc1", "Marie Curie was a physicist.");
-        let s1 = doc.add_signal(Signal::new(
-            0,
-            Location::text(0, 12),
-            "Marie Curie",
-            "Person",
-            0.95,
-        ));
-        let mut track = Track::new(0, "Marie Curie");
-        track.add_signal(s1, 0);
-        let track_id = doc.add_track(track);
+#[test]
+fn test_grounded_document_identity_for_track() {
+    let mut doc = GroundedDocument::new("doc1", "Marie Curie was a physicist.");
+    let s1 = doc.add_signal(Signal::new(
+        0,
+        Location::text(0, 12),
+        "Marie Curie",
+        "Person",
+        0.95,
+    ));
+    let mut track = Track::new(0, "Marie Curie");
+    track.add_signal(s1, 0);
+    let track_id = doc.add_track(track);
 
-        let identity = Identity::from_kb(0, "Marie Curie", "wikidata", "Q7186");
-        let identity_id = doc.add_identity(identity);
-        doc.link_track_to_identity(track_id, identity_id);
+    let identity = Identity::from_kb(0, "Marie Curie", "wikidata", "Q7186");
+    let identity_id = doc.add_identity(identity);
+    doc.link_track_to_identity(track_id, identity_id);
 
-        // Should be able to get identity for track
-        let identity = doc.identity_for_track(track_id);
-        assert!(identity.is_some());
-        assert_eq!(identity.unwrap().kb_id, Some("Q7186".to_string()));
-    }
+    // Should be able to get identity for track
+    let identity = doc.identity_for_track(track_id);
+    assert!(identity.is_some());
+    assert_eq!(identity.unwrap().kb_id, Some("Q7186".to_string()));
+}
 
-    #[test]
-    fn test_grounded_document_identity_for_track_no_identity() {
-        let mut doc = GroundedDocument::new("doc1", "Test");
-        let s1 = doc.add_signal(Signal::new(0, Location::text(0, 4), "Test", "Type", 0.9));
-        let mut track = Track::new(0, "Test");
-        track.add_signal(s1, 0);
-        let track_id = doc.add_track(track);
+#[test]
+fn test_grounded_document_identity_for_track_no_identity() {
+    let mut doc = GroundedDocument::new("doc1", "Test");
+    let s1 = doc.add_signal(Signal::new(0, Location::text(0, 4), "Test", "Type", 0.9));
+    let mut track = Track::new(0, "Test");
+    track.add_signal(s1, 0);
+    let track_id = doc.add_track(track);
 
-        // Track has no identity linked
-        let identity = doc.identity_for_track(track_id);
-        assert!(identity.is_none());
-    }
+    // Track has no identity linked
+    let identity = doc.identity_for_track(track_id);
+    assert!(identity.is_none());
+}
 
-    #[test]
-    fn test_grounded_document_identity_for_signal() {
-        let mut doc = GroundedDocument::new("doc1", "Marie Curie");
-        let s1 = doc.add_signal(Signal::new(
-            0,
-            Location::text(0, 12),
-            "Marie Curie",
-            "Person",
-            0.95,
-        ));
-        let mut track = Track::new(0, "Marie Curie");
-        track.add_signal(s1, 0);
-        let track_id = doc.add_track(track);
+#[test]
+fn test_grounded_document_identity_for_signal() {
+    let mut doc = GroundedDocument::new("doc1", "Marie Curie");
+    let s1 = doc.add_signal(Signal::new(
+        0,
+        Location::text(0, 12),
+        "Marie Curie",
+        "Person",
+        0.95,
+    ));
+    let mut track = Track::new(0, "Marie Curie");
+    track.add_signal(s1, 0);
+    let track_id = doc.add_track(track);
 
-        let identity = Identity::from_kb(0, "Marie Curie", "wikidata", "Q7186");
-        let identity_id = doc.add_identity(identity);
-        doc.link_track_to_identity(track_id, identity_id);
+    let identity = Identity::from_kb(0, "Marie Curie", "wikidata", "Q7186");
+    let identity_id = doc.add_identity(identity);
+    doc.link_track_to_identity(track_id, identity_id);
 
-        // Should be able to get identity for signal (transitively through track)
-        let identity = doc.identity_for_signal(s1);
-        assert!(identity.is_some());
-        assert_eq!(identity.unwrap().kb_id, Some("Q7186".to_string()));
-    }
+    // Should be able to get identity for signal (transitively through track)
+    let identity = doc.identity_for_signal(s1);
+    assert!(identity.is_some());
+    assert_eq!(identity.unwrap().kb_id, Some("Q7186".to_string()));
+}
 
-    #[test]
-    fn test_grounded_document_identity_for_signal_no_track() {
-        let mut doc = GroundedDocument::new("doc1", "Test");
-        let s1 = doc.add_signal(Signal::new(0, Location::text(0, 4), "Test", "Type", 0.9));
-        // Signal not added to any track
+#[test]
+fn test_grounded_document_identity_for_signal_no_track() {
+    let mut doc = GroundedDocument::new("doc1", "Test");
+    let s1 = doc.add_signal(Signal::new(0, Location::text(0, 4), "Test", "Type", 0.9));
+    // Signal not added to any track
 
-        let identity = doc.identity_for_signal(s1);
-        assert!(identity.is_none());
-    }
+    let identity = doc.identity_for_signal(s1);
+    assert!(identity.is_none());
+}
 
-    #[test]
-    fn test_grounded_document_to_coref_document() {
-        let mut doc = GroundedDocument::new(
-            "doc1",
-            "Marie Curie won the Nobel Prize. She was a physicist.",
-        );
-        let s1 = doc.add_signal(Signal::new(
-            0,
-            Location::text(0, 12),
-            "Marie Curie",
-            "Person",
-            0.95,
-        ));
-        let s2 = doc.add_signal(Signal::new(
-            1,
-            Location::text(38, 41),
-            "She",
-            "Person",
-            0.88,
-        ));
+#[test]
+fn test_grounded_document_to_coref_document() {
+    let mut doc = GroundedDocument::new(
+        "doc1",
+        "Marie Curie won the Nobel Prize. She was a physicist.",
+    );
+    let s1 = doc.add_signal(Signal::new(
+        0,
+        Location::text(0, 12),
+        "Marie Curie",
+        "Person",
+        0.95,
+    ));
+    let s2 = doc.add_signal(Signal::new(
+        1,
+        Location::text(38, 41),
+        "She",
+        "Person",
+        0.88,
+    ));
 
-        let mut track = Track::new(0, "Marie Curie");
-        track.add_signal(s1, 0);
-        track.add_signal(s2, 1);
-        doc.add_track(track);
+    let mut track = Track::new(0, "Marie Curie");
+    track.add_signal(s1, 0);
+    track.add_signal(s2, 1);
+    doc.add_track(track);
 
-        let coref_doc = doc.to_coref_document();
-        assert_eq!(coref_doc.text, doc.text);
-        assert_eq!(coref_doc.chains.len(), 1);
-        assert_eq!(coref_doc.chains[0].len(), 2);
-        assert_eq!(coref_doc.chains[0].mentions[0].text, "Marie Curie");
-        assert_eq!(coref_doc.chains[0].mentions[1].text, "She");
-    }
+    let coref_doc = doc.to_coref_document();
+    assert_eq!(coref_doc.text, doc.text);
+    assert_eq!(coref_doc.chains.len(), 1);
+    assert_eq!(coref_doc.chains[0].len(), 2);
+    assert_eq!(coref_doc.chains[0].mentions[0].text, "Marie Curie");
+    assert_eq!(coref_doc.chains[0].mentions[1].text, "She");
+}
 
-    #[test]
-    fn test_grounded_document_to_coref_document_empty() {
-        let doc = GroundedDocument::new("doc1", "No entities here.");
-        let coref_doc = doc.to_coref_document();
-        assert_eq!(coref_doc.text, doc.text);
-        assert!(coref_doc.chains.is_empty());
-    }
+#[test]
+fn test_grounded_document_to_coref_document_empty() {
+    let doc = GroundedDocument::new("doc1", "No entities here.");
+    let coref_doc = doc.to_coref_document();
+    assert_eq!(coref_doc.text, doc.text);
+    assert!(coref_doc.chains.is_empty());
+}
 
-    #[test]
-    fn test_grounded_document_to_coref_document_multiple_tracks() {
-        let mut doc =
-            GroundedDocument::new("doc1", "Marie Curie won the Nobel Prize. Paris is nice.");
-        let s1 = doc.add_signal(Signal::new(
-            0,
-            Location::text(0, 12),
-            "Marie Curie",
-            "Person",
-            0.95,
-        ));
-        let s2 = doc.add_signal(Signal::new(
-            1,
-            Location::text(30, 35),
-            "Paris",
-            "Location",
-            0.9,
-        ));
+#[test]
+fn test_grounded_document_to_coref_document_multiple_tracks() {
+    let mut doc = GroundedDocument::new("doc1", "Marie Curie won the Nobel Prize. Paris is nice.");
+    let s1 = doc.add_signal(Signal::new(
+        0,
+        Location::text(0, 12),
+        "Marie Curie",
+        "Person",
+        0.95,
+    ));
+    let s2 = doc.add_signal(Signal::new(
+        1,
+        Location::text(30, 35),
+        "Paris",
+        "Location",
+        0.9,
+    ));
 
-        let mut track1 = Track::new(0, "Marie Curie");
-        track1.add_signal(s1, 0);
-        doc.add_track(track1);
+    let mut track1 = Track::new(0, "Marie Curie");
+    track1.add_signal(s1, 0);
+    doc.add_track(track1);
 
-        let mut track2 = Track::new(1, "Paris");
-        track2.add_signal(s2, 0);
-        doc.add_track(track2);
+    let mut track2 = Track::new(1, "Paris");
+    track2.add_signal(s2, 0);
+    doc.add_track(track2);
 
-        let coref_doc = doc.to_coref_document();
-        assert_eq!(coref_doc.chains.len(), 2);
-    }
+    let coref_doc = doc.to_coref_document();
+    assert_eq!(coref_doc.chains.len(), 2);
+}
 
-    #[test]
-    fn test_grounded_document_from_entities() {
-        use anno::Entity;
-        use anno::EntityType;
+#[test]
+fn test_grounded_document_from_entities() {
+    use anno::Entity;
+    use anno::EntityType;
 
-        let entities = vec![
-            Entity::new("Marie Curie", EntityType::Person, 0, 12, 0.95),
-            Entity::new("Paris", EntityType::Location, 20, 25, 0.9),
-        ];
+    let entities = vec![
+        Entity::new("Marie Curie", EntityType::Person, 0, 12, 0.95),
+        Entity::new("Paris", EntityType::Location, 20, 25, 0.9),
+    ];
 
-        let text = "Marie Curie visited Paris";
-        let doc = GroundedDocument::from_entities("doc1", text, &entities);
+    let text = "Marie Curie visited Paris";
+    let doc = GroundedDocument::from_entities("doc1", text, &entities);
 
-        assert_eq!(doc.text, text);
-        assert_eq!(doc.signals().len(), 2);
-        assert_eq!(doc.signals()[0].surface, "Marie Curie");
-        assert_eq!(doc.signals()[1].surface, "Paris");
-    }
+    assert_eq!(doc.text, text);
+    assert_eq!(doc.signals().len(), 2);
+    assert_eq!(doc.signals()[0].surface, "Marie Curie");
+    assert_eq!(doc.signals()[1].surface, "Paris");
+}
 
-    #[test]
-    fn test_grounded_document_from_entities_empty() {
-        use anno::Entity;
+#[test]
+fn test_grounded_document_from_entities_empty() {
+    use anno::Entity;
 
-        let entities: Vec<Entity> = vec![];
-        let text = "No entities";
-        let doc = GroundedDocument::from_entities("doc1", text, &entities);
+    let entities: Vec<Entity> = vec![];
+    let text = "No entities";
+    let doc = GroundedDocument::from_entities("doc1", text, &entities);
 
-        assert_eq!(doc.text, text);
-        assert!(doc.signals().is_empty());
-    }
+    assert_eq!(doc.text, text);
+    assert!(doc.signals().is_empty());
+}
 
-    #[test]
-    fn test_grounded_document_from_entities_with_kb_id() {
-        use anno::Entity;
-        use anno::EntityType;
+#[test]
+fn test_grounded_document_from_entities_with_kb_id() {
+    use anno::Entity;
+    use anno::EntityType;
 
-        let mut entity = Entity::new("Marie Curie", EntityType::Person, 0, 12, 0.95);
-        entity.kb_id = Some("Q7186".to_string());
-        let entities = vec![entity];
+    let mut entity = Entity::new("Marie Curie", EntityType::Person, 0, 12, 0.95);
+    entity.kb_id = Some("Q7186".to_string());
+    let entities = vec![entity];
 
-        let text = "Marie Curie";
-        let doc = GroundedDocument::from_entities("doc1", text, &entities);
+    let text = "Marie Curie";
+    let doc = GroundedDocument::from_entities("doc1", text, &entities);
 
-        // Should create identity with KB ID
-        assert_eq!(doc.identities().count(), 1);
-        let identity = doc.identities().next().unwrap();
-        assert_eq!(identity.kb_id, Some("Q7186".to_string()));
-    }
+    // Should create identity with KB ID
+    assert_eq!(doc.identities().count(), 1);
+    let identity = doc.identities().next().unwrap();
+    assert_eq!(identity.kb_id, Some("Q7186".to_string()));
+}
 
-    #[test]
-    fn test_grounded_document_to_entities() {
-        let mut doc = GroundedDocument::new("doc1", "Marie Curie won the Nobel Prize.");
-        let s1 = doc.add_signal(Signal::new(
-            0,
-            Location::text(0, 12),
-            "Marie Curie",
-            "Person",
-            0.95,
-        ));
-        let _s2 = doc.add_signal(Signal::new(
-            1,
-            Location::text(17, 29),
-            "Nobel Prize",
-            "Award",
-            0.92,
-        ));
+#[test]
+fn test_grounded_document_to_entities() {
+    let mut doc = GroundedDocument::new("doc1", "Marie Curie won the Nobel Prize.");
+    let s1 = doc.add_signal(Signal::new(
+        0,
+        Location::text(0, 12),
+        "Marie Curie",
+        "Person",
+        0.95,
+    ));
+    let _s2 = doc.add_signal(Signal::new(
+        1,
+        Location::text(17, 29),
+        "Nobel Prize",
+        "Award",
+        0.92,
+    ));
 
-        let mut track = Track::new(0, "Marie Curie");
-        track.add_signal(s1, 0);
-        let track_id = doc.add_track(track);
+    let mut track = Track::new(0, "Marie Curie");
+    track.add_signal(s1, 0);
+    let track_id = doc.add_track(track);
 
-        let identity = Identity {
-            id: 0,
-            canonical_name: "Marie Curie".to_string(),
-            entity_type: Some("Person".to_string()),
-            kb_id: Some("Q7186".to_string()),
-            kb_name: Some("wikidata".to_string()),
-            description: None,
-            embedding: None,
-            aliases: Vec::new(),
-            confidence: 0.95,
-            source: None,
-        };
-        let identity_id = doc.add_identity(identity);
-        doc.link_track_to_identity(track_id, identity_id);
+    let identity = Identity {
+        id: 0.into(),
+        canonical_name: "Marie Curie".to_string(),
+        entity_type: Some("Person".to_string()),
+        kb_id: Some("Q7186".to_string()),
+        kb_name: Some("wikidata".to_string()),
+        description: None,
+        embedding: None,
+        box_embedding: None,
+        aliases: Vec::new(),
+        confidence: 0.95,
+        source: None,
+    };
+    let identity_id = doc.add_identity(identity);
+    doc.link_track_to_identity(track_id, identity_id);
 
-        let entities = doc.to_entities();
-        assert_eq!(entities.len(), 2);
-        assert_eq!(entities[0].text, "Marie Curie");
-        assert_eq!(entities[0].kb_id, Some("Q7186".to_string()));
-        assert_eq!(entities[1].text, "Nobel Prize");
-    }
+    let entities = doc.to_entities();
+    assert_eq!(entities.len(), 2);
+    assert_eq!(entities[0].text, "Marie Curie");
+    assert_eq!(entities[0].kb_id, Some("Q7186".to_string()));
+    assert_eq!(entities[1].text, "Nobel Prize");
+}
 
-    #[test]
-    fn test_grounded_document_to_entities_preserves_offsets() {
-        let mut doc = GroundedDocument::new("doc1", "Price €50");
-        let s1 = doc.add_signal(Signal::new(0, Location::text(6, 9), "€50", "Money", 0.9));
-        // Signal is already added, no need to add again
-        // Just verify the signal exists
-        assert_eq!(doc.signals().len(), 1);
+#[test]
+fn test_grounded_document_to_entities_preserves_offsets() {
+    let mut doc = GroundedDocument::new("doc1", "Price €50");
+    let s1 = doc.add_signal(Signal::new(0, Location::text(6, 9), "€50", "Money", 0.9));
+    // Signal is already added, no need to add again
+    // Just verify the signal exists
+    assert_eq!(doc.signals().len(), 1);
 
-        let entities = doc.to_entities();
-        assert_eq!(entities.len(), 1);
-        // Should use character offsets (6, 9), not byte offsets
-        assert_eq!(entities[0].start, 6);
-        assert_eq!(entities[0].end, 9);
-    }
+    let entities = doc.to_entities();
+    assert_eq!(entities.len(), 1);
+    // Should use character offsets (6, 9), not byte offsets
+    assert_eq!(entities[0].start, 6);
+    assert_eq!(entities[0].end, 9);
 }

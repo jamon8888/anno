@@ -400,9 +400,9 @@ use crate::eval::dataset_registry::DatasetId;
 | `anno/src/eval/dataset_registry.rs` | Source of truth for dataset metadata |
 | `anno/src/eval/loader.rs` | Dataset loading implementations |
 | `datasets_generated.toml` | Generated TOML export |
-| `datasets_generated.json` | Generated JSON export |
+| `generated/datasets_generated.json` | Generated JSON export |
 | `docs/generated/DATASETS_GENERATED.md` | Generated markdown documentation |
-| `download_configs_generated.json` | Generated download configs |
+| `generated/download_configs_generated.json` | Generated download configs |
 | `scripts/download_extended_datasets.py` | Dataset downloader |
 | `scripts/generate_download_configs.py` | Config generator |
 

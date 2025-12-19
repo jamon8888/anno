@@ -2,27 +2,27 @@
 //!
 //! Tests the output format structure, edge cases, and display logic.
 
-use anno::eval::cdcr::{CDCRConfig, CDCRResolver, CrossDocCluster, Document};
-use anno::{Entity, EntityType};
+use anno::eval::cdcr::CrossDocCluster;
+use anno::EntityType;
 
 /// Test that output format handles various cluster configurations
 #[test]
 fn test_output_format_structure() {
     // Create clusters manually to test format
-    let mut cluster1 = CrossDocCluster::new(0, "Nvidia");
+    let mut cluster1 = CrossDocCluster::new(0u64, "Nvidia");
     cluster1.entity_type = Some(EntityType::Organization);
     cluster1.add_mention("doc1", 0);
     cluster1.add_mention("doc2", 1);
     cluster1.add_mention("doc3", 2);
     cluster1.confidence = 0.95;
 
-    let mut cluster2 = CrossDocCluster::new(1, "Jensen Huang");
+    let mut cluster2 = CrossDocCluster::new(1u64, "Jensen Huang");
     cluster2.entity_type = Some(EntityType::Person);
     cluster2.add_mention("doc1", 1);
     cluster2.add_mention("doc2", 0);
     cluster2.confidence = 0.92;
 
-    let mut cluster3 = CrossDocCluster::new(2, "AMD");
+    let mut cluster3 = CrossDocCluster::new(2u64, "AMD");
     cluster3.entity_type = Some(EntityType::Organization);
     cluster3.add_mention("doc5", 0);
     cluster3.confidence = 1.0; // Perfect confidence
@@ -67,7 +67,7 @@ fn test_output_format_structure() {
 
 #[test]
 fn test_cluster_metadata_formatting() {
-    let mut cluster = CrossDocCluster::new(0, "Test Entity");
+    let mut cluster = CrossDocCluster::new(0u64, "Test Entity");
     cluster.entity_type = Some(EntityType::Person);
     cluster.add_mention("doc1", 0);
     cluster.add_mention("doc2", 1);
@@ -101,11 +101,11 @@ fn test_cluster_metadata_formatting() {
 
 #[test]
 fn test_cross_doc_vs_singleton_markers() {
-    let mut cross_doc = CrossDocCluster::new(0, "Cross Doc Entity");
+    let mut cross_doc = CrossDocCluster::new(0u64, "Cross Doc Entity");
     cross_doc.add_mention("doc1", 0);
     cross_doc.add_mention("doc2", 1);
 
-    let mut singleton = CrossDocCluster::new(1, "Singleton Entity");
+    let mut singleton = CrossDocCluster::new(1u64, "Singleton Entity");
     singleton.add_mention("doc1", 1);
 
     assert!(
@@ -134,7 +134,7 @@ fn test_cross_doc_vs_singleton_markers() {
 fn test_display_limit_logic() {
     let clusters: Vec<CrossDocCluster> = (0..100)
         .map(|i| {
-            let mut c = CrossDocCluster::new(i, &format!("Entity {}", i));
+            let mut c = CrossDocCluster::new(i as u64, &format!("Entity {}", i));
             c.add_mention("doc1", i as usize);
             c
         })
@@ -186,13 +186,13 @@ fn test_display_limit_logic() {
 
 #[test]
 fn test_entity_type_display() {
-    let mut cluster_org = CrossDocCluster::new(0, "Apple");
+    let mut cluster_org = CrossDocCluster::new(0u64, "Apple");
     cluster_org.entity_type = Some(EntityType::Organization);
 
-    let mut cluster_per = CrossDocCluster::new(1, "John Smith");
+    let mut cluster_per = CrossDocCluster::new(1u64, "John Smith");
     cluster_per.entity_type = Some(EntityType::Person);
 
-    let mut cluster_loc = CrossDocCluster::new(2, "New York");
+    let mut cluster_loc = CrossDocCluster::new(2u64, "New York");
     cluster_loc.entity_type = Some(EntityType::Location);
 
     // Verify type labels (as_label returns short codes)
@@ -203,13 +203,13 @@ fn test_entity_type_display() {
 
 #[test]
 fn test_confidence_display_ranges() {
-    let mut cluster_high = CrossDocCluster::new(0, "High Conf");
+    let mut cluster_high = CrossDocCluster::new(0u64, "High Conf");
     cluster_high.confidence = 0.95;
 
-    let mut cluster_low = CrossDocCluster::new(1, "Low Conf");
+    let mut cluster_low = CrossDocCluster::new(1u64, "Low Conf");
     cluster_low.confidence = 0.65;
 
-    let mut cluster_perfect = CrossDocCluster::new(2, "Perfect");
+    let mut cluster_perfect = CrossDocCluster::new(2u64, "Perfect");
     cluster_perfect.confidence = 1.0;
 
     // Confidence < 1.0 should be shown
@@ -230,7 +230,7 @@ fn test_document_path_display() {
     doc_paths.insert("doc1".to_string(), "/path/to/doc1.txt".to_string());
     doc_paths.insert("doc2".to_string(), "/path/to/doc2.txt".to_string());
 
-    let mut cluster = CrossDocCluster::new(0, "Test");
+    let mut cluster = CrossDocCluster::new(0u64, "Test");
     cluster.add_mention("doc1", 0);
     cluster.add_mention("doc2", 1);
 
@@ -253,7 +253,7 @@ fn test_document_path_display() {
 
 #[test]
 fn test_mention_sample_size() {
-    let mut cluster = CrossDocCluster::new(0, "Test");
+    let mut cluster = CrossDocCluster::new(0u64, "Test");
     for i in 0..10 {
         cluster.add_mention("doc1", i);
     }
@@ -275,7 +275,7 @@ fn test_mention_sample_size() {
 
 #[test]
 fn test_empty_cluster_handling() {
-    let cluster = CrossDocCluster::new(0, "Empty");
+    let cluster = CrossDocCluster::new(0u64, "Empty");
 
     assert!(cluster.is_empty(), "Empty cluster should be empty");
     assert_eq!(cluster.len(), 0, "Empty cluster should have 0 mentions");
@@ -292,7 +292,7 @@ fn test_empty_cluster_handling() {
 #[test]
 fn test_cluster_id_uniqueness() {
     let clusters: Vec<CrossDocCluster> = (0..10)
-        .map(|i| CrossDocCluster::new(i, &format!("Entity {}", i)))
+        .map(|i| CrossDocCluster::new(i as u64, &format!("Entity {}", i)))
         .collect();
 
     let mut ids: std::collections::HashSet<u64> = std::collections::HashSet::new();
@@ -316,7 +316,7 @@ fn test_canonical_name_variations() {
     ];
 
     for name in names {
-        let cluster = CrossDocCluster::new(0, name);
+        let cluster = CrossDocCluster::new(0u64, name);
         assert_eq!(
             cluster.canonical_name, name,
             "Canonical name should be preserved"
@@ -330,7 +330,7 @@ fn test_canonical_name_variations() {
 
 #[test]
 fn test_kb_id_display() {
-    let mut cluster = CrossDocCluster::new(0, "Marie Curie");
+    let mut cluster = CrossDocCluster::new(0u64, "Marie Curie");
     cluster.kb_id = Some("wikidata:Q7186".to_string());
 
     assert!(cluster.kb_id.is_some(), "Should have KB ID");
@@ -348,7 +348,7 @@ fn test_kb_id_display() {
 
 #[test]
 fn test_multiple_mentions_same_doc() {
-    let mut cluster = CrossDocCluster::new(0, "Repeated Entity");
+    let mut cluster = CrossDocCluster::new(0u64, "Repeated Entity");
     cluster.add_mention("doc1", 0);
     cluster.add_mention("doc1", 1);
     cluster.add_mention("doc1", 2);
