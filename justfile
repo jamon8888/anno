@@ -142,13 +142,21 @@ docs-open:
 readme-preview:
     @uv run scripts/serve_readme.py > /tmp/serve_readme.log 2>&1 & \
     sleep 3 && \
-    PORT=$$(cat scripts/port_file.txt 2>/dev/null || echo "8000") && \
+    PORT=$$(cat /tmp/serve_readme_port.txt 2>/dev/null || echo "8000") && \
     open http://localhost:$$PORT/README_github_style.html && \
     echo "ok: Preview at http://localhost:$$PORT/README_github_style.html (auto-reloads)"
 
 # Run e2e test with Playwright + Gemini VLM
 readme-test:
     @uv run scripts/e2e_readme_test.py
+
+# Type-check Python scripts with ty (optional).
+# Notes:
+# - Uses `uvx` so you don't have to install ty into your repo venv.
+# - Runs on `scripts/` only (this repo is not a Python package).
+typecheck-python:
+    @which uvx > /dev/null || (echo "Install uv (provides uvx): https://docs.astral.sh/uv/" && exit 1)
+    uvx ty check scripts
 
 # === Benchmarks ===
 

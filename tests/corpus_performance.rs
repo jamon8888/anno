@@ -33,7 +33,9 @@ fn test_corpus_performance_large_corpus() {
 
     // Resolve inter-doc coref
     let start = Instant::now();
-    let resolver = Resolver::new().with_threshold(0.5).require_type_match(false);
+    let resolver = Resolver::new()
+        .with_threshold(0.5)
+        .require_type_match(false);
     let identity_ids = resolver.resolve_inter_doc_coref(&mut corpus, None, None);
     let coref_time = start.elapsed();
 
@@ -83,7 +85,10 @@ fn test_corpus_performance_high_similarity() {
     }
 
     let start = Instant::now();
-    let identity_ids = corpus.resolve_inter_doc_coref(0.5, false);
+    let resolver = Resolver::new()
+        .with_threshold(0.5)
+        .require_type_match(false);
+    let identity_ids = resolver.resolve_inter_doc_coref(&mut corpus, None, None);
     let elapsed = start.elapsed();
 
     // All should cluster into one identity
@@ -121,7 +126,10 @@ fn test_corpus_performance_low_similarity() {
     }
 
     let start = Instant::now();
-    let identity_ids = corpus.resolve_inter_doc_coref(0.5, false);
+    let resolver = Resolver::new()
+        .with_threshold(0.5)
+        .require_type_match(false);
+    let identity_ids = resolver.resolve_inter_doc_coref(&mut corpus, None, None);
     let elapsed = start.elapsed();
 
     // Each should be its own identity

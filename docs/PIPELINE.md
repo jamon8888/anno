@@ -6,14 +6,14 @@ clusters. It complements `ARCHITECTURE.md`.
 ## Fast Start (CLI)
 
 ```bash
-# 1) Extract entities
-anno extract "Marie Curie won the Nobel Prize" > entities.json
+# 1) Extract entities (quick, human-readable)
+anno extract "Marie Curie was born in Paris."
 
-# 2) Within-doc coref (rule-based)
-anno coref --input entities.json --resolver simple > coref.json
+# 2) Extract + within-doc coref (tracks)
+anno pipeline --coref "Marie Curie was born in Paris. She moved to Paris."
 
-# 3) Cross-doc coalescing (string/embedding similarity)
-anno crossdoc --directory ./docs --threshold 0.6 > identities.json
+# 3) Cross-doc coalescing across a directory (requires `eval-advanced`)
+anno cross-doc ./docs --threshold 0.6 --format tree
 ```
 
 ## Programmatic (within-doc → cross-doc)

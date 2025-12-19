@@ -4,7 +4,7 @@
 # dependencies = []
 # ///
 """
-Generate download configurations from datasets_generated.json.
+Generate download configurations from generated/datasets_generated.json.
 
 This script reads the dataset registry (JSON format) and generates
 download configurations for the download_extended_datasets.py script.
@@ -132,7 +132,11 @@ def generate_configs(json_path: Path) -> tuple[dict, dict]:
 
 def main():
     parser = argparse.ArgumentParser(description="Generate download configs from registry")
-    parser.add_argument("--input", default="datasets_generated.json", help="Input JSON file")
+    parser.add_argument(
+        "--input",
+        default="generated/datasets_generated.json",
+        help="Input JSON file",
+    )
     parser.add_argument("--output", help="Output JSON file (default: stdout)")
     parser.add_argument("--dry-run", action="store_true", help="Show summary only")
     parser.add_argument("--stats", action="store_true", help="Show statistics")

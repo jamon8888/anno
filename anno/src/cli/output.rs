@@ -131,18 +131,63 @@ pub fn print_signals(doc: &GroundedDocument, text: &str, verbose_level: u8) {
         return;
     }
 
+    // Deterministic ordering:
+    // - Groups are ordered by their first occurrence in the text (min start offset).
+    // - Within each group, entities are ordered by (start, end, surface).
+    //
+    // This avoids HashMap iteration non-determinism and makes docs/tests reproducible.
+    #[derive(Debug)]
+    struct TypeGroup<'a> {
+        label: String,
+        signals: Vec<&'a Signal<Location>>,
+        min_start: usize,
+    }
+
+    let mut groups: Vec<TypeGroup<'_>> = by_type
+        .into_iter()
+        .map(|(label, mut signals)| {
+            signals.sort_by(|a, b| {
+                let (a_start, a_end) = a.text_offsets().unwrap_or((usize::MAX, usize::MAX));
+                let (b_start, b_end) = b.text_offsets().unwrap_or((usize::MAX, usize::MAX));
+                a_start
+                    .cmp(&b_start)
+                    .then_with(|| a_end.cmp(&b_end))
+                    .then_with(|| a.surface().cmp(b.surface()))
+            });
+
+            let min_start = signals
+                .iter()
+                .filter_map(|s| s.text_offsets().map(|(start, _)| start))
+                .min()
+                .unwrap_or(usize::MAX);
+
+            TypeGroup {
+                label,
+                signals,
+                min_start,
+            }
+        })
+        .collect();
+
+    groups.sort_by(|a, b| {
+        a.min_start
+            .cmp(&b.min_start)
+            .then_with(|| a.label.cmp(&b.label))
+    });
+
     // Level 0: Entity-focused (no spans - they're implementation details)
     if verbose_level == 0 {
-        for (typ, signals) in &by_type {
-            let col = type_color(typ);
-            let entities: Vec<String> = signals
+        for g in &groups {
+            let col = type_color(&g.label);
+            let entities: Vec<String> = g
+                .signals
                 .iter()
                 .map(|s| format!("\"{}\"", s.surface()))
                 .collect();
             println!(
                 "{}:{} {}",
-                color(col, typ),
-                signals.len(),
+                color(col, &g.label),
+                g.signals.len(),
                 entities.join(" ")
             );
         }
@@ -150,10 +195,10 @@ pub fn print_signals(doc: &GroundedDocument, text: &str, verbose_level: u8) {
     }
 
     // Level 1+: More detailed output
-    for (typ, signals) in &by_type {
-        let col = type_color(typ);
-        println!("{}:{}", color(col, typ), signals.len());
-        for s in signals {
+    for g in &groups {
+        let col = type_color(&g.label);
+        println!("{}:{}", color(col, &g.label), g.signals.len());
+        for s in &g.signals {
             let (start, end) = s.text_offsets().unwrap_or((0, 0));
 
             // Level 1: Entity text with confidence (no spans)

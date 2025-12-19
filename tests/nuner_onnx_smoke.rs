@@ -57,4 +57,3 @@ fn coarse_smoke_eval() {
 fn coarse_smoke_eval_skipped_without_onnx() {
     eprintln!("Skipping ONNX smoke; enable `onnx` feature to run.");
 }
-

@@ -8,7 +8,7 @@
 //!
 //! Focus areas:
 //! - BatchCapable trait implementations
-//! - StreamingCapable trait implementations  
+//! - StreamingCapable trait implementations
 //! - RelationExtractor (GLiNER2)
 //! - Full NER → Coref → Relation pipeline
 
@@ -30,19 +30,19 @@ mod e2e_pipeline {
     #[test]
     fn test_complete_pipeline_news_article() {
         let text = r#"
-            SAN FRANCISCO, Jan 15, 2024 - Apple Inc. (NASDAQ: AAPL) announced today that 
-            CEO Tim Cook will unveil the company's new AI strategy at its annual shareholder 
-            meeting. The tech giant, headquartered in Cupertino, California, has invested 
+            SAN FRANCISCO, Jan 15, 2024 - Apple Inc. (NASDAQ: AAPL) announced today that
+            CEO Tim Cook will unveil the company's new AI strategy at its annual shareholder
+            meeting. The tech giant, headquartered in Cupertino, California, has invested
             over $10 billion in artificial intelligence research.
-            
-            "We believe AI will transform every aspect of our products," Cook said during 
-            a press briefing. The announcement sent Apple's stock up 3.5% in after-hours 
+
+            "We believe AI will transform every aspect of our products," Cook said during
+            a press briefing. The announcement sent Apple's stock up 3.5% in after-hours
             trading, reaching $185.50 per share.
-            
-            Analysts at Goldman Sachs and Morgan Stanley maintain their "buy" ratings, 
-            with price targets of $200 and $210 respectively. Dr. Sarah Chen, lead AI 
+
+            Analysts at Goldman Sachs and Morgan Stanley maintain their "buy" ratings,
+            with price targets of $200 and $210 respectively. Dr. Sarah Chen, lead AI
             researcher at MIT, praised Apple's approach.
-            
+
             Contact: press@apple.com or call (408) 996-1010 for more information.
         "#;
 
@@ -353,7 +353,7 @@ mod streaming_property_tests {
                 // Entity text should match the referenced span in the full text
                 prop_assert_eq!(
                     TextSpan::from_chars(&full_text, e.start, e.end).extract(&full_text),
-                    e.text
+                    e.text.clone()
                 );
             }
         }

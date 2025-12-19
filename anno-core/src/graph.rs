@@ -289,7 +289,8 @@ impl GraphDocument {
             doc.nodes.push(node);
         }
 
-        // 2. Create edges from relations
+        // 2. Create edges from relations (deduplicate by (source,target,relation))
+        let mut seen_edges: HashMap<(String, String, String), usize> = HashMap::new();
         for relation in relations {
             // Get node IDs directly from relation entities
             let source_node_id = get_node_id(&relation.head);
@@ -300,11 +301,22 @@ impl GraphDocument {
             let target_exists = seen_nodes.contains_key(&target_node_id);
 
             if source_exists && target_exists {
-                let edge =
-                    GraphEdge::new(&source_node_id, &target_node_id, &relation.relation_type)
-                        .with_confidence(relation.confidence);
-
-                doc.edges.push(edge);
+                let key = (
+                    source_node_id.clone(),
+                    target_node_id.clone(),
+                    relation.relation_type.clone(),
+                );
+                if let Some(&idx) = seen_edges.get(&key) {
+                    if let Some(existing) = doc.edges.get_mut(idx) {
+                        existing.confidence = existing.confidence.max(relation.confidence);
+                    }
+                } else {
+                    let edge =
+                        GraphEdge::new(&source_node_id, &target_node_id, &relation.relation_type)
+                            .with_confidence(relation.confidence);
+                    doc.edges.push(edge);
+                    seen_edges.insert(key, doc.edges.len().saturating_sub(1));
+                }
             }
         }
 
@@ -682,11 +694,64 @@ fn get_node_id(entity: &Entity) -> String {
     if let Some(canonical_id) = entity.canonical_id {
         return format!("coref_{}", canonical_id);
     }
-    // Fall back to a content-based ID
+    // Fall back to a content-based ID. We normalize the surface string to reduce "fractured graph"
+    // nodes from punctuation/possessives: "OpenAI" vs "OpenAI's", "Cupertino," etc.
+    fn normalize_for_id(text: &str) -> String {
+        let mut s = text.trim().to_lowercase();
+        if s.is_empty() {
+            return s;
+        }
+
+        fn is_edge_punct(c: char) -> bool {
+            matches!(
+                c,
+                '.' | ','
+                    | ';'
+                    | ':'
+                    | '!'
+                    | '?'
+                    | '"'
+                    | '\''
+                    | '’'
+                    | '“'
+                    | '”'
+                    | '('
+                    | ')'
+                    | '['
+                    | ']'
+                    | '{'
+                    | '}'
+            )
+        }
+
+        while s.chars().next().is_some_and(is_edge_punct) {
+            s.remove(0);
+        }
+        while s.chars().last().is_some_and(is_edge_punct) {
+            s.pop();
+        }
+
+        if s.ends_with("'s") || s.ends_with("’s") {
+            s.pop();
+            s.pop();
+        } else if s.ends_with("s'") || s.ends_with("s’") {
+            s.pop();
+        }
+
+        while s.chars().last().is_some_and(is_edge_punct) {
+            s.pop();
+        }
+
+        s.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .replace(' ', "_")
+    }
+
     format!(
         "{}:{}",
         entity.entity_type.as_label().to_lowercase(),
-        entity.text.to_lowercase().replace(' ', "_")
+        normalize_for_id(&entity.text)
     )
 }
 
@@ -763,6 +828,37 @@ mod tests {
         assert_eq!(graph.node_count(), 2);
         assert_eq!(graph.edge_count(), 1);
         assert_eq!(graph.edges[0].relation, "FOUNDED");
+    }
+
+    #[test]
+    fn test_graph_edge_deduplication_keeps_max_confidence() {
+        let a = make_entity("A", EntityType::Person, 0);
+        let b = make_entity("B", EntityType::Organization, 10);
+        let entities = vec![a.clone(), b.clone()];
+
+        let relations = vec![
+            Relation::new(a.clone(), b.clone(), "WORKS_AT", 0.2),
+            Relation::new(a, b, "WORKS_AT", 0.9),
+        ];
+
+        let graph = GraphDocument::from_extraction(&entities, &relations, None);
+        assert_eq!(graph.edge_count(), 1);
+        assert!((graph.edges[0].confidence - 0.9).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_graph_node_id_normalization_possessive_and_punct() {
+        let entities = vec![
+            make_entity("OpenAI", EntityType::Organization, 0),
+            make_entity("OpenAI's", EntityType::Organization, 10),
+            make_entity("Cupertino,", EntityType::Location, 20),
+            make_entity("Cupertino", EntityType::Location, 30),
+        ];
+
+        let graph = GraphDocument::from_extraction(&entities, &[], None);
+
+        // OpenAI + OpenAI's should collapse to one node; Cupertino + Cupertino, should collapse too.
+        assert_eq!(graph.node_count(), 2);
     }
 
     #[test]

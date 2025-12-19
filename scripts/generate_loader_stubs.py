@@ -6,7 +6,7 @@
 """
 Generate loader.rs stubs from dataset_registry metadata.
 
-This script reads datasets_generated.json and generates Rust code snippets
+This script reads generated/datasets_generated.json and generates Rust code snippets
 that can be added to loader.rs to bring it in sync with the registry.
 
 Usage:
@@ -161,7 +161,11 @@ def load_existing_variants(loader_path: Path) -> set:
 
 def main():
     parser = argparse.ArgumentParser(description="Generate loader.rs stubs from registry")
-    parser.add_argument("--input", default="datasets_generated.json", help="Input JSON file")
+    parser.add_argument(
+        "--input",
+        default="generated/datasets_generated.json",
+        help="Input JSON file",
+    )
     parser.add_argument("--loader", default="anno/src/eval/loader.rs", help="Existing loader.rs")
     parser.add_argument("--output", help="Output file (default: stdout)")
     parser.add_argument("--missing-only", action="store_true", help="Only show missing datasets")

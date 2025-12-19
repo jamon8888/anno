@@ -45,7 +45,7 @@ These files are used for:
 cargo run --features eval-advanced -- extract --file testdata/real_world/eu_climate_law.html --model stacked
 
 # Test crossdoc on directory
-cargo run --features eval-advanced -- crossdoc --directory testdata/real_world --extensions html --threshold 0.6
+cargo run --features eval-advanced -- cross-doc testdata/real_world --extensions html --threshold 0.6
 ```
 
 ## Notes

@@ -59,21 +59,21 @@ See: https://arxiv.org/abs/1706.03762
 
 ## Relationship to Existing Features
 
-### Cross-Document Coreference (`anno crossdoc`)
+### Cross-Document Coreference (`anno cross-doc`)
 
 **Connection**: Document reference following would naturally feed into cross-doc coref:
 
 1. Extract URLs from document → `URL` entities
 2. Optionally resolve URLs → fetch referenced documents
 3. Extract entities from referenced documents
-4. Run `anno crossdoc` to link entities across original + referenced docs
+4. Run `anno cross-doc` to link entities across original + referenced docs
 
 **Current gap**: Step 2 (automatic resolution) is missing. Users must manually:
 ```bash
 # Manual workflow
-anno extract --url https://arxiv.org/abs/1706.03762 > ref1.json
-anno extract --text "According to Smith..." > doc1.json
-anno crossdoc --import ref1.json doc1.json
+anno extract --url https://arxiv.org/abs/1706.03762 --export ref1.grounded.json
+anno extract --text "According to Smith..." --export doc1.grounded.json
+anno cross-doc --import ref1.grounded.json --import doc1.grounded.json
 ```
 
 ### Corpus Structure
@@ -103,7 +103,7 @@ anno extract --text "See https://example.com" --follow-urls --model stacked
 ```bash
 anno extract --text "See https://example.com" --extract-urls > urls.jsonl
 anno resolve-urls --input urls.jsonl --output resolved.jsonl
-anno crossdoc --import resolved.jsonl
+anno cross-doc --import resolved.jsonl
 ```
 
 ### Option 3: Pipeline Integration (Most Powerful)

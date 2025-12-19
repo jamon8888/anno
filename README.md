@@ -2,7 +2,7 @@
 
 # anno
 
-Information extraction: NER and coref.
+Information extraction: named entities and coreference.
 
 [![CI](https://github.com/arclabs561/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/anno/actions)
 [![Crates.io](https://img.shields.io/crates/v/anno.svg)](https://crates.io/crates/anno)
@@ -10,7 +10,8 @@ Information extraction: NER and coref.
 
 </div>
 
-Library and CLI for named entity recognition and coref, with a built-in evaluation framework. Multiple backends: regex (~400ns), transformers (~50-150ms), zero-shot NER.
+Rust library and CLI for named entity recognition (NER) and coreference resolution (coref), with a built-in evaluation harness.
+Multiple backends are available (see [`docs/BACKENDS.md`](docs/BACKENDS.md)); for custom entity types, label-conditioned (“zero-shot”) NER lets you pass the type names at runtime (e.g., “disease”, “medication”).
 
 ## Installation
 
@@ -27,21 +28,34 @@ cargo build --release -p anno --bin anno
 ### Extract entities
 
 ```bash
-$ anno extract "Marie Curie won the Nobel Prize in Paris"
+$ anno extract "Marie Curie was born in Paris."
 
-PER:2 "Marie Curie" "Nobel Prize"
+PER:1 "Marie Curie"
 LOC:1 "Paris"
 ```
 
+Structured entities (pattern backend):
+
+```bash
+$ anno extract --model pattern 'Email bob@acme.com on 2024-01-15 for $100.'
+
+EMAIL:1 "bob@acme.com"
+DATE:1 "2024-01-15"
+MONEY:1 "$100"
+```
+
 Verbose output levels:
-- `-v`: Add confidence, negation, quantifiers, context snippets
+- `-v`: Add confidence + context snippets (and negation/quantifiers if enabled)
 - `-vv`: Add tracks (coreference chains), statistics
 - `-vvv`: Add identities (KB links), full metadata, annotated text
 
-JSON output:
+Machine-readable output (TSV):
 ```bash
-$ anno extract --format json "Marie Curie won the Nobel Prize in Paris"
-[{"text":"Marie Curie","type":"PER","start":0,"end":11,"confidence":0.75},...]
+$ anno extract --model pattern --format tsv 'Email bob@acme.com on 2024-01-15 for $100.'
+start	end	type	confidence	negated	text
+6	18	EMAIL	0.98	false	bob@acme.com
+22	32	DATE	0.95	false	2024-01-15
+37	41	MONEY	0.95	false	$100
 ```
 
 **Offsets**: `start`/`end` are character offsets (Unicode-safe). See [`docs/guides/UNICODE_OFFSETS.md`](docs/guides/UNICODE_OFFSETS.md).
@@ -50,12 +64,12 @@ $ anno extract --format json "Marie Curie won the Nobel Prize in Paris"
 
 ```bash
 # Process directory of text files
-$ anno crossdoc --directory ./docs --threshold 0.6 --format tree
+$ anno cross-doc ./docs --threshold 0.6 --format tree
 
 # Or import pre-processed JSON files
 $ anno extract --file doc1.txt --export doc1.json
 $ anno extract --file doc2.txt --export doc2.json
-$ anno crossdoc --import doc1.json --import doc2.json --threshold 0.6 --format tree
+$ anno cross-doc --import doc1.json --import doc2.json --threshold 0.6 --format tree
 ```
 
 ## Common Use Cases
@@ -63,7 +77,7 @@ $ anno crossdoc --import doc1.json --import doc2.json --threshold 0.6 --format t
 ### Ingest directory and coalesce → see entity clusters
 
 ```bash
-$ anno crossdoc --directory ./docs --threshold 0.7 --format tree
+$ anno cross-doc ./docs --threshold 0.7 --format tree
 ```
 
 Example output:
@@ -90,20 +104,18 @@ $ anno extract --url https://example.com/article -v
 
 Example output (verbose mode):
 ```
-PER:2
+PER:1
   "Marie Curie" (0.85)
-    ...Marie Curie won the Nobel Prize...
-  "Nobel Prize" (0.75)
-    ...won the Nobel Prize in Paris...
-LOC:1
-  "Paris" (0.90)
-    ...Nobel Prize in Paris. She was...
+    ...Marie Curie joined Acme Corp in Paris...
 ORG:1
   "Acme Corp" (0.88)
-    ...founded by Acme Corp in 2024...
+    ...joined Acme Corp in Paris on 2024-01-15...
+LOC:1
+  "Paris" (0.90)
+    ...in Paris on 2024-01-15...
 DATE:1
   "2024-01-15" (0.95)
-    ...Acme Corp in 2024-01-15...
+    ...in Paris on 2024-01-15...
 ```
 
 ### Ingest URL and debug (HTML visualization)
@@ -122,7 +134,7 @@ $ anno debug --url https://example.com/article --coref
 
 Shows entities with intra-document coreference resolution (pronouns linked to antecedents).
 
-**Note**: `crossdoc` requires `eval-advanced` feature. Use `--model gliner` for better entity detection. Import pre-processed JSON files with `--import` for best results.
+**Note**: `cross-doc` requires `eval-advanced` feature. Use `--model gliner` for better entity detection. Import pre-processed JSON files with `--import` for best results.
 
 **More examples**: See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for advanced workflows.
 
@@ -179,7 +191,7 @@ Coref: merge mentions across documents into canonical entities.
 
 - **Input**: entities from multiple documents
 - **Output**: identity clusters linking mentions across documents
-- **CLI**: `anno crossdoc --directory ./docs --model gliner --threshold 0.6 --format tree`
+- **CLI**: `anno cross-doc ./docs --model gliner --threshold 0.6 --format tree`
 - **When to use**: Processing multiple documents, need to know "Barack Obama" in doc1 and doc2 refer to the same person
 - **Note**: Requires `eval-advanced` feature. Use `--import` for pre-processed GroundedDocument JSON files.
 

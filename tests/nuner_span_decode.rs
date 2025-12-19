@@ -22,16 +22,25 @@ fn decode_supports_fine_grained_labels() {
         threshold: 0.5,
     };
 
-    let entities =
-        decode_span_output(&output_data, &shape, text, &text_words, &entity_types, &config)
-            .expect("decode should succeed");
+    let entities = decode_span_output(
+        &output_data,
+        &shape,
+        text,
+        &text_words,
+        &entity_types,
+        &config,
+    )
+    .expect("decode should succeed");
     assert_eq!(entities.len(), 1);
     let e = &entities[0];
     assert_eq!(e.text, "Dalmatian");
     if let anno_core::EntityType::Other(tag) = &e.entity_type {
         assert_eq!(tag, "ANIMAL");
     } else {
-        panic!("Expected EntityType::Other(ANIMAL), got {:?}", e.entity_type);
+        panic!(
+            "Expected EntityType::Other(ANIMAL), got {:?}",
+            e.entity_type
+        );
     }
 }
 
@@ -76,9 +85,15 @@ fn overlapping_spans_keep_highest_confidence() {
         threshold: 0.5,
     };
 
-    let entities =
-        decode_span_output(&output_data, &shape, text, &text_words, &entity_types, &config)
-            .expect("decode should succeed");
+    let entities = decode_span_output(
+        &output_data,
+        &shape,
+        text,
+        &text_words,
+        &entity_types,
+        &config,
+    )
+    .expect("decode should succeed");
     assert_eq!(entities.len(), 1);
     let e = &entities[0];
     assert_eq!(e.text, "Steve Jobs");
@@ -123,9 +138,15 @@ fn decode_span_output_uses_character_offsets_for_unicode() {
             threshold: 0.5,
         };
 
-        let entities =
-            decode_span_output(&output_data, &shape, &text, &text_words, &entity_types, &config)
-                .expect("decode should succeed");
+        let entities = decode_span_output(
+            &output_data,
+            &shape,
+            &text,
+            &text_words,
+            &entity_types,
+            &config,
+        )
+        .expect("decode should succeed");
 
         assert_eq!(entities.len(), 1);
         let e = &entities[0];
@@ -142,4 +163,3 @@ fn decode_span_output_uses_character_offsets_for_unicode() {
         );
     }
 }
-

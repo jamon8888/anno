@@ -3,6 +3,8 @@
 //! Ensures that optimizations (cached text length, pre-allocated vectors, etc.)
 //! produce identical results to unoptimized versions.
 
+#![cfg(feature = "onnx")]
+
 use anno::backends::gliner_onnx::GLiNEROnnx;
 use proptest::prelude::*;
 
@@ -14,7 +16,7 @@ proptest! {
     fn gliner_valid_offsets(text in "[A-Za-z0-9\\s.,!?]{10,200}") {
         // Skip if GLiNER is not available (requires onnx feature and model)
         // This test focuses on optimization correctness, not model availability
-        if let Ok(gliner) = GLiNEROnnx::from_pretrained("onnx-community/gliner_small-v2.1") {
+        if let Ok(gliner) = GLiNEROnnx::new("onnx-community/gliner_small-v2.1") {
             let entity_types = &["person", "organization", "location"];
             let entities = gliner.extract(&text, entity_types, 0.5);
 
@@ -50,8 +52,8 @@ proptest! {
     /// Property: GLiNER is deterministic (optimizations don't break determinism)
     #[test]
     fn gliner_deterministic(text in "[A-Za-z0-9\\s.,!?]{10,200}") {
-        if let Ok(gliner1) = GLiNEROnnx::from_pretrained("onnx-community/gliner_small-v2.1") {
-            if let Ok(gliner2) = GLiNEROnnx::from_pretrained("onnx-community/gliner_small-v2.1") {
+        if let Ok(gliner1) = GLiNEROnnx::new("onnx-community/gliner_small-v2.1") {
+            if let Ok(gliner2) = GLiNEROnnx::new("onnx-community/gliner_small-v2.1") {
                 let entity_types = &["person", "organization", "location"];
 
                 let entities1 = gliner1.extract(&text, entity_types, 0.5);

@@ -1,59 +1,32 @@
-# Hack Folder - Real Data Testing
+# Hack Folder - Local Data Testing
 
-This folder contains real-world data for testing the cross-document coreference CLI.
+This folder is for **local experiments** (scratch scripts, one-off runs, and optional local data).
+The repo includes a small, tracked fixture set under `testdata/fixtures/` for reproducible examples.
 
-## Structure
+## Fixtures (tracked)
 
-```
-hack/real_data/
-├── news/          # Scraped news articles from various sources
-├── datasets/      # Extracted text from HuggingFace datasets
-└── commoncrawl/   # Common Crawl data (if available)
-```
+Use these for docs/tests without licensing ambiguity:
 
-## News Sources
-
-- **Firecrawl scrapes**: Latest AI/tech news from BBC, Reuters, VentureBeat
-- **Wikipedia**: Nvidia, Jensen Huang, CUDA articles
-- **Tech news**: AWS re:Invent, DeepSeek, OpenAI, Nvidia partnerships
-
-## Datasets
-
-Extracted from HuggingFace datasets:
-- **WikiGold**: Wikipedia-based NER (PER, LOC, ORG, MISC)
-- **CoNLL-2003**: News articles (classic NER benchmark)
-- **WNUT-17**: Social media NER (emerging entities)
+- `testdata/fixtures/cross_doc/` (3 small `.txt` files)
 
 ## Usage
 
 ```bash
-# Test with news articles
-./target/debug/anno cross-doc hack/real_data/news --format tree --threshold 0.3
+# Batch extraction over a small directory
+./target/debug/anno batch --dir testdata/fixtures/cross_doc --format human
 
-# Test with dataset extracts
-./target/debug/anno cross-doc hack/real_data/datasets/wikigold --format tree
-
-# Test with combined data
-./target/debug/anno cross-doc hack/real_data/combined --format summary
+# Cross-document clustering (requires `eval-advanced`)
+./target/debug/anno cross-doc testdata/fixtures/cross_doc --format tree --threshold 0.3
 ```
 
 ## Extraction Script
 
-To extract more dataset texts:
+To extract dataset texts into a local directory (not tracked):
 
 ```bash
 cargo run --example extract_dataset_texts --features eval-advanced
 ```
 
-This extracts the first 20 examples from WikiGold, CoNLL-2003, and WNUT-17.
-
-## Test Results Summary
-
-- **113 test files** from diverse sources (news, datasets, combined)
-- **324 entities** extracted across all documents
-- **158 clusters** found (24 cross-doc, 15.2%)
-- **Performance**: ~0.1s for 113 documents
-- **Entity types**: PER (49.4%), LOC (22.2%), ORG (16.5%)
-
-See `TESTING_NOTES.md` for detailed findings and recommendations.
+Note: some popular datasets/news sources have redistribution restrictions. Keep any “real data”
+you download/scrape under `hack/real_data/` as **local-only** unless you’ve verified licensing.
 

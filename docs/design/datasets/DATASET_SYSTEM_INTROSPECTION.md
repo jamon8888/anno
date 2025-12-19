@@ -19,9 +19,9 @@
 ### Generated Artifacts
 | File | Format | Size | Purpose |
 |------|--------|------|---------|
-| `datasets_generated.json` | JSON | ~353KB | Full structure + rich meta + expected F1 |
-| `datasets_generated.jsonl` | JSONL | ~253KB | Grep-friendly, streamable |
-| `download_configs_generated.json` | JSON | ~135KB | 351 download configs |
+| `generated/datasets_generated.json` | JSON | ~353KB | Full structure + rich meta + expected F1 |
+| `generated/datasets_generated.jsonl` | JSONL | ~253KB | Grep-friendly, streamable |
+| `generated/download_configs_generated.json` | JSON | ~135KB | 351 download configs |
 | `docs/generated/dataset_catalog.html` | HTML | ~211KB | Searchable web catalog |
 
 ### S3 Cache (`s3://arc-anno-data/`)

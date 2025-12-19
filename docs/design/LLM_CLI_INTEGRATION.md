@@ -2,6 +2,9 @@
 
 How to enable LLMs to use the `anno` CLI tool for entity extraction, verification, and analysis.
 
+> Note: This is a design document. Some examples below are schematic and may not exactly match
+> the current CLI flags/output. For current behavior, run `anno --help`.
+
 ## Overview
 
 LLMs can interact with `anno` CLI in several ways:
@@ -55,7 +58,8 @@ async def extract_entities(text: str, types: list[str] = None) -> dict:
     """Extract named entities from text using anno CLI."""
     cmd = ["anno", "extract", "--format", "json"]
     if types:
-        cmd.extend(["--types", ",".join(types)])
+        for t in types:
+            cmd.extend(["--label", t])
     cmd.append(text)
     
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -74,7 +78,7 @@ async def explain_entity(text: str, span: str = None) -> str:
 @server.tool()
 async def cross_doc_entities(directory: str, threshold: float = 0.6) -> dict:
     """Cluster entities across multiple documents."""
-    cmd = ["anno", "cross-doc", directory, 
+    cmd = ["anno", "cross-doc", directory,
            "--threshold", str(threshold), 
            "--format", "json"]
     

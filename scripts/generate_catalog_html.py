@@ -4,7 +4,7 @@
 # dependencies = []
 # ///
 """
-Generate a searchable HTML catalog from datasets_generated.jsonl.
+Generate a searchable HTML catalog from generated/datasets_generated.jsonl.
 
 Usage:
     uv run scripts/generate_catalog_html.py
@@ -19,7 +19,7 @@ import html
 
 def main():
     project_root = Path(__file__).parent.parent
-    jsonl_path = project_root / "datasets_generated.jsonl"
+    jsonl_path = project_root / "generated" / "datasets_generated.jsonl"
     output_path = project_root / "docs" / "generated" / "dataset_catalog.html"
     
     # Ensure output directory exists

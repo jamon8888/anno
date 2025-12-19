@@ -2,7 +2,7 @@
 //!
 //! This file contains extensive tests for all NER backends:
 //! - RegexNER: Format-based structured entity extraction
-//! - HeuristicNER: Heuristic-based named entity extraction  
+//! - HeuristicNER: Heuristic-based named entity extraction
 //! - StackedNER: Combined Pattern + Statistical
 //! - StackedNER: Arbitrary backend composition with conflict strategies
 
@@ -906,12 +906,12 @@ mod tiered_ner {
         fn press_release() {
             let text = r#"
                 PRESS RELEASE - January 15, 2024
-                
+
                 Mr. John Smith, CEO of Acme Corporation, announced today that the company
                 will invest $50 million in their San Francisco headquarters.
-                
+
                 Contact: press@acme.com or call (555) 123-4567
-                
+
                 The expansion is expected to increase revenue by 25%.
             "#;
 
@@ -931,12 +931,12 @@ mod tiered_ner {
                 From: john.smith@company.com
                 To: jane.doe@partner.org
                 Date: March 5, 2024 at 2:30 PM
-                
+
                 Dear Ms. Doe,
-                
+
                 Please find attached the invoice for $5,000.
                 Payment is due by April 1, 2024.
-                
+
                 Best regards,
                 Dr. John Smith
                 Phone: (555) 987-6543
@@ -1106,8 +1106,8 @@ mod layered_ner {
                 .build();
 
             let names = ner.layer_names();
-            assert!(names.contains(&"pattern"));
-            assert!(names.contains(&"heuristic"));
+            assert!(names.iter().any(|n| n == "pattern"));
+            assert!(names.iter().any(|n| n == "heuristic"));
         }
 
         #[test]

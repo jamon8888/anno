@@ -77,7 +77,11 @@ async def validate_all(datasets: list, quick: bool = False) -> list:
 
 def main():
     parser = argparse.ArgumentParser(description="Validate dataset URLs")
-    parser.add_argument("--input", default="datasets_generated.json", help="Input JSON file")
+    parser.add_argument(
+        "--input",
+        default="generated/datasets_generated.json",
+        help="Input JSON file",
+    )
     parser.add_argument("--quick", action="store_true", help="Only check first 20 URLs")
     parser.add_argument("--output", help="Output results to file")
     args = parser.parse_args()

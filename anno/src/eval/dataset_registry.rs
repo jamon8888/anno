@@ -1669,6 +1669,7 @@ define_datasets! {
         size_hint: "8,908 pronoun-name pairs",
         example: "ID\tText\tPronoun\tA\tB\tA-coref\ntest-1\tZoe met Alice and she waved.\tshe\tZoe\tAlice\tFALSE",
         notes: "Designed to expose gender bias; Kaggle shared task; balanced male/female",
+        tasks: ["coref"],
         hf_id: "google-gap-coreference/gap",
         categories: [coref, bias_evaluation],
     },
@@ -10293,7 +10294,10 @@ mod tests {
     #[ignore] // Run manually: cargo test generate_datasets_jsonl -- --ignored
     fn generate_datasets_jsonl() {
         let jsonl = generate_jsonl();
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../datasets_generated.jsonl");
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../generated/datasets_generated.jsonl"
+        );
         let line_count = jsonl.lines().count();
         std::fs::write(path, jsonl).expect("write jsonl");
         println!("Generated: {} ({} lines)", path, line_count);
@@ -10315,7 +10319,10 @@ mod tests {
     #[ignore] // Run manually: cargo test generate_datasets_json -- --ignored
     fn generate_datasets_json() {
         let json = generate_json();
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../datasets_generated.json");
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../generated/datasets_generated.json"
+        );
         std::fs::write(path, json).expect("write json");
         println!("Generated: {}", path);
     }

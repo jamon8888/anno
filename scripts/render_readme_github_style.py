@@ -168,11 +168,12 @@ def render_readme_github_style(readme_path: str, output_path: str):
     with open(output_path, 'w') as f:
         f.write(full_html)
     
-    print(f"✅ Rendered README to {output_path}")
+    print(f"Rendered README: {output_path}")
 
 if __name__ == "__main__":
     readme_path = Path(__file__).parent.parent / "README.md"
-    output_path = Path(__file__).parent.parent / "README_github_style.html"
+    output_path = Path(__file__).parent.parent / ".anno_cache" / "README_github_style.html"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     
     render_readme_github_style(str(readme_path), str(output_path))
 

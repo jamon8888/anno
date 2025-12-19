@@ -60,7 +60,7 @@ def main():
     parser = argparse.ArgumentParser(description="Check DatasetId enum sync")
     parser.add_argument(
         "--json", 
-        default="datasets_generated.json",
+        default="generated/datasets_generated.json",
         help="Path to datasets_generated.json"
     )
     parser.add_argument(

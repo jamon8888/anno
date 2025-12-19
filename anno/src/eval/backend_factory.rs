@@ -279,6 +279,10 @@ impl BackendFactory {
                         as Box<dyn Model>,
                 )
             }
+            #[cfg(not(feature = "onnx"))]
+            "gliner_poly" | "gliner-poly" | "poly_gliner" => Err(crate::Error::FeatureNotAvailable(
+                "GLiNERPoly requires 'onnx' feature".to_string(),
+            )),
 
             // DeBERTa-v3 NER (requires onnx)
             #[cfg(feature = "onnx")]
@@ -300,6 +304,10 @@ impl BackendFactory {
                         ))
                     })
             }
+            #[cfg(not(feature = "onnx"))]
+            "deberta_v3" | "deberta-v3" | "deberta" => Err(crate::Error::FeatureNotAvailable(
+                "DeBERTa-v3 NER requires 'onnx' feature".to_string(),
+            )),
 
             // ALBERT NER (requires onnx)
             #[cfg(feature = "onnx")]
@@ -321,6 +329,10 @@ impl BackendFactory {
                         ))
                     })
             }
+            #[cfg(not(feature = "onnx"))]
+            "albert" | "albert_ner" => Err(crate::Error::FeatureNotAvailable(
+                "ALBERT NER requires 'onnx' feature".to_string(),
+            )),
 
             // UniversalNER (placeholder - LLM integration pending)
             "universal_ner" | "universal-ner" | "universalner" => {
@@ -408,13 +420,17 @@ pub fn create_coref_resolver(
             use crate::eval::coref_resolver::{CorefConfig, SimpleCorefResolver};
             Ok(Box::new(SimpleCorefResolver::new(CorefConfig::default())))
         }
+        "mention_ranking" | "mention-ranking" | "mentionranking" => {
+            use crate::backends::mention_ranking::MentionRankingCoref;
+            Ok(Box::new(MentionRankingCoref::new()))
+        }
         "box" | "box_coref" | "boxcorefresolver" => {
             use crate::backends::box_embeddings::BoxCorefConfig;
             use crate::eval::coref_resolver::BoxCorefResolver;
             Ok(Box::new(BoxCorefResolver::new(BoxCorefConfig::default())))
         }
         _ => Err(crate::Error::InvalidInput(format!(
-            "Unknown coreference resolver: '{}'. Available: coref_resolver, box",
+            "Unknown coreference resolver: '{}'. Available: coref_resolver, mention_ranking, box",
             name
         ))),
     }

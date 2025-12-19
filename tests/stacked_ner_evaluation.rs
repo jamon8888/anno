@@ -20,14 +20,11 @@ mod eval_tests {
             datasets: vec![], // Use all suitable datasets
             backends: vec!["StackedNER".to_string()],
             max_examples: Some(50), // Limit for quick testing
-            require_cached: false,
-            relation_threshold: 0.5,
-            robustness: false,
             compute_familiarity: false,
             temporal_stratification: false,
             confidence_intervals: false,
-            custom_coref_resolver: None,
-            seed: Some(42),
+            robustness: false,
+            ..Default::default()
         };
 
         let results = evaluator.evaluate_all(config).unwrap();
