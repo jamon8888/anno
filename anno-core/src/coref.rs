@@ -551,6 +551,20 @@ pub fn entities_to_chains(entities: &[Entity]) -> Vec<CorefChain> {
 /// 2. Multiple crates need to implement it (backends, eval)
 /// 3. Keeping it here prevents circular dependencies
 ///
+/// # Relationship to the Grounded Pipeline
+///
+/// `CoreferenceResolver` operates on the **evaluation/convenience layer** (`Entity`),
+/// not the canonical **grounded pipeline** (`Signal` → `Track` → `Identity`).
+///
+/// | Layer | Type | `CoreferenceResolver` role |
+/// |-------|------|----------------------------|
+/// | Detection (L1) | `Entity` | Input: mentions to cluster |
+/// | Coref (L2) | `Entity.canonical_id` | Output: cluster assignment |
+/// | Linking (L3) | `Identity` | (not covered by this trait) |
+///
+/// For integration with `GroundedDocument`, use backends that produce
+/// `Signal` + `Track` directly (e.g., `anno::backends::MentionRankingCoref`).
+///
 /// # Example Implementation
 ///
 /// ```rust,ignore

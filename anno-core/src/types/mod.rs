@@ -78,7 +78,9 @@ pub use framing::{
     FrecoCorpus, FrecoCorpusMetadata, FrecoPair,
 };
 pub use gender::Gender;
-pub use ids::{CanonicalId, IdentityId, SignalId, TrackId};
+pub use ids::{
+    ByteOffset, ByteSpan, CanonicalId, CharOffset, CharSpan, IdentityId, SignalId, TrackId,
+};
 pub use mention_type::MentionType;
 pub use metric::MetricStats;
 pub use phi_features::{Number, Person, PhiFeatures};

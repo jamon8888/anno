@@ -922,7 +922,6 @@ fn test_grounded_document_to_entities() {
         kb_name: Some("wikidata".to_string()),
         description: None,
         embedding: None,
-        box_embedding: None,
         aliases: Vec::new(),
         confidence: 0.95,
         source: None,
@@ -940,7 +939,7 @@ fn test_grounded_document_to_entities() {
 #[test]
 fn test_grounded_document_to_entities_preserves_offsets() {
     let mut doc = GroundedDocument::new("doc1", "Price €50");
-    let s1 = doc.add_signal(Signal::new(0, Location::text(6, 9), "€50", "Money", 0.9));
+    let _s1 = doc.add_signal(Signal::new(0, Location::text(6, 9), "€50", "Money", 0.9));
     // Signal is already added, no need to add again
     // Just verify the signal exists
     assert_eq!(doc.signals().len(), 1);
