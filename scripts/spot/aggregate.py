@@ -281,7 +281,26 @@ def generate_html_dashboard(jsonl_path: Path, html_path: Path):
             color: #8b949e;
         }}
         .raw-link a {{ color: var(--accent); }}
+        .charts {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }}
+        .chart-container {{
+            background: #161b22;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }}
+        .chart-container h3 {{
+            font-size: 1rem;
+            color: var(--fg);
+            margin-bottom: 1rem;
+        }}
+        canvas {{ max-width: 100%; }}
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <h1>📊 Anno Evaluation Dashboard</h1>
@@ -303,6 +322,17 @@ def generate_html_dashboard(jsonl_path: Path, html_path: Path):
         <div class="stat">
             <div class="stat-value">{max((r.get('metrics', {}).get('f1', 0) for r in results), default=0):.1f}%</div>
             <div class="stat-label">Best F1</div>
+        </div>
+    </div>
+    
+    <div class="charts">
+        <div class="chart-container">
+            <h3>Backend Comparison (Best F1 per Dataset)</h3>
+            <canvas id="backendChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3>Dataset Coverage</h3>
+            <canvas id="datasetChart"></canvas>
         </div>
     </div>
     
@@ -401,6 +431,125 @@ def generate_html_dashboard(jsonl_path: Path, html_path: Path):
     <p class="raw-link">
         Raw data: <a href="eval-results.jsonl">eval-results.jsonl</a>
     </p>
+'''
+    
+    # Prepare chart data
+    backend_avgs = {}
+    for backend in all_backends:
+        f1_values = [pivot.get(backend, {}).get(d, {}).get('f1', 0) for d in all_datasets]
+        non_zero = [v for v in f1_values if v > 0]
+        backend_avgs[backend] = sum(non_zero) / len(non_zero) if non_zero else 0
+    
+    # Sort backends by average F1
+    sorted_backends = sorted(backend_avgs.keys(), key=lambda b: backend_avgs[b], reverse=True)
+    
+    # Dataset coverage (how many backends have results)
+    dataset_coverage = {}
+    for dataset in all_datasets:
+        count = sum(1 for b in all_backends if pivot.get(b, {}).get(dataset, {}).get('f1', 0) > 0)
+        best_f1 = max((pivot.get(b, {}).get(dataset, {}).get('f1', 0) for b in all_backends), default=0)
+        dataset_coverage[dataset] = {'count': count, 'best_f1': best_f1}
+    
+    # Color palette
+    colors = [
+        'rgba(88, 166, 255, 0.8)',   # blue
+        'rgba(63, 185, 80, 0.8)',    # green  
+        'rgba(210, 153, 34, 0.8)',   # yellow
+        'rgba(248, 81, 73, 0.8)',    # red
+        'rgba(163, 113, 247, 0.8)',  # purple
+        'rgba(56, 139, 253, 0.8)',   # light blue
+        'rgba(219, 97, 162, 0.8)',   # pink
+        'rgba(121, 192, 255, 0.8)',  # cyan
+    ]
+    
+    # Generate grouped bar chart data for backend comparison
+    chart_datasets = []
+    for i, dataset in enumerate(all_datasets):
+        data = [pivot.get(b, {}).get(dataset, {}).get('f1', 0) for b in sorted_backends]
+        chart_datasets.append({
+            'label': dataset,
+            'data': data,
+            'backgroundColor': colors[i % len(colors)],
+        })
+    
+    html += f'''
+    <script>
+        // Backend comparison chart (grouped bars)
+        const backendCtx = document.getElementById('backendChart').getContext('2d');
+        new Chart(backendCtx, {{
+            type: 'bar',
+            data: {{
+                labels: {json.dumps(sorted_backends)},
+                datasets: {json.dumps(chart_datasets)}
+            }},
+            options: {{
+                responsive: true,
+                plugins: {{
+                    legend: {{
+                        position: 'bottom',
+                        labels: {{ color: '#c9d1d9' }}
+                    }}
+                }},
+                scales: {{
+                    x: {{
+                        ticks: {{ color: '#8b949e' }},
+                        grid: {{ color: '#30363d' }}
+                    }},
+                    y: {{
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {{ color: '#8b949e' }},
+                        grid: {{ color: '#30363d' }},
+                        title: {{
+                            display: true,
+                            text: 'F1 Score (%)',
+                            color: '#8b949e'
+                        }}
+                    }}
+                }}
+            }}
+        }});
+        
+        // Dataset coverage chart (horizontal bars)
+        const datasetCtx = document.getElementById('datasetChart').getContext('2d');
+        new Chart(datasetCtx, {{
+            type: 'bar',
+            data: {{
+                labels: {json.dumps(list(all_datasets))},
+                datasets: [{{
+                    label: 'Best F1',
+                    data: {json.dumps([dataset_coverage[d]['best_f1'] for d in all_datasets])},
+                    backgroundColor: 'rgba(63, 185, 80, 0.8)',
+                }}, {{
+                    label: 'Backends with Results',
+                    data: {json.dumps([dataset_coverage[d]['count'] * 10 for d in all_datasets])},
+                    backgroundColor: 'rgba(88, 166, 255, 0.4)',
+                }}]
+            }},
+            options: {{
+                indexAxis: 'y',
+                responsive: true,
+                plugins: {{
+                    legend: {{
+                        position: 'bottom',
+                        labels: {{ color: '#c9d1d9' }}
+                    }}
+                }},
+                scales: {{
+                    x: {{
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {{ color: '#8b949e' }},
+                        grid: {{ color: '#30363d' }}
+                    }},
+                    y: {{
+                        ticks: {{ color: '#8b949e' }},
+                        grid: {{ color: '#30363d' }}
+                    }}
+                }}
+            }}
+        }});
+    </script>
 </body>
 </html>
 '''
