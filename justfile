@@ -33,13 +33,42 @@ fmt:
 fmt-check:
     cargo fmt --all -- --check
 
-# Run all unit tests
+# Run all unit tests (prefers nextest)
 test:
-    cargo test --lib --features "eval-advanced discourse"
+    #!/usr/bin/env bash
+    if command -v cargo-nextest >/dev/null 2>&1; then
+        cargo nextest run --profile quick --lib --features "eval-advanced discourse"
+    else
+        cargo test --lib --features "eval-advanced discourse"
+    fi
 
-# Run all tests including integration
+# Run all tests including integration (prefers nextest)
 test-all:
-    cargo test --features "eval-advanced discourse"
+    #!/usr/bin/env bash
+    if command -v cargo-nextest >/dev/null 2>&1; then
+        cargo nextest run --profile quick --workspace --features "eval-advanced discourse"
+    else
+        cargo test --features "eval-advanced discourse"
+    fi
+
+# Quick single-test run with filter (e.g., just t test_name)
+# Uses nextest with minimal features to avoid full workspace scan
+t FILTER:
+    #!/usr/bin/env bash
+    if command -v cargo-nextest >/dev/null 2>&1; then
+        cargo nextest run --profile quick -p anno -E 'test(/{{FILTER}}/)' --no-default-features --features "cli eval"
+    else
+        cargo test -p anno --no-default-features --features "cli eval" -- '{{FILTER}}'
+    fi
+
+# Quick single-test run with full features
+tf FILTER:
+    #!/usr/bin/env bash
+    if command -v cargo-nextest >/dev/null 2>&1; then
+        cargo nextest run --profile quick -p anno -E 'test(/{{FILTER}}/)' --features "eval-advanced discourse"
+    else
+        cargo test -p anno --features "eval-advanced discourse" -- '{{FILTER}}'
+    fi
 
 # === Test Profiling (Nextest + Rust Tooling) ===
 

@@ -256,8 +256,11 @@ source "$CARGO_HOME/env"
 export PATH="$CARGO_HOME/bin:$PATH"
 cargo --version
 
-# Get region
-REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+# Get region using IMDSv2 (token required)
+IMDS_TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+REGION=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
+# Fallback to default region if IMDS fails
+REGION=${REGION:-us-east-1}
 
 # Download source from S3 (repo is private, can't git clone)
 cd $HOME
