@@ -277,9 +277,17 @@ export ANNO_CACHE_DIR="$ANNO_CACHE_MOUNT"
 export ANNO_SOURCE_DIR="$HOME/anno"
 mkdir -p "$CARGO_TARGET_DIR" "$SCCACHE_DIR"
 
-# Build anno (~2-3 min on c7i.xlarge)
-echo "Building anno..."
-cargo build --release --bin anno --features "cli,eval-advanced" 2>&1 | tail -20
+# Build anno with ONNX support (~4-5 min on c7i.xlarge)
+# ONNX enables ML backends: gliner, gliner2, nuner, w2ner
+echo "Building anno with ONNX support..."
+cargo build --release --bin anno --features "cli,eval-advanced,onnx" 2>&1 | tail -20
+
+# Sync NER models from S3 (GLiNER ~1.2GB, needed for ML backends)
+echo "Syncing NER models from S3..."
+mkdir -p "$ANNO_CACHE_MOUNT/models"
+export HF_HOME="$ANNO_CACHE_MOUNT/models"
+aws s3 sync s3://arc-anno-data/models/ner/ "$ANNO_CACHE_MOUNT/models/ner/" --region $REGION --quiet || true
+echo "Models synced: $(du -sh $ANNO_CACHE_MOUNT/models 2>/dev/null | cut -f1)"
 
 # Enable S3 fallback for any missing datasets
 export ANNO_S3_CACHE=1
