@@ -246,8 +246,9 @@ echo "=== Anno Worker Init $(date) ==="
 echo "HOME=$HOME"
 
 # Install dependencies (AL2023)
+# Note: gcc-c++ is required for ONNX runtime compilation
 if command -v dnf &>/dev/null; then
-    dnf install -y git gcc openssl-devel pkg-config jq
+    dnf install -y git gcc gcc-c++ openssl-devel pkg-config jq cmake
 fi
 
 # Install Rust
