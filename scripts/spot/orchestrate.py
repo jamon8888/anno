@@ -90,10 +90,8 @@ BACKENDS = [
     "gliner_candle",
 ]
 
-# Datasets with good coverage
+# Datasets with good coverage (must be valid DatasetId names, not "synthetic")
 DATASETS = [
-    # Quick/synthetic
-    "synthetic",
     # Real NER
     "WikiGold",
     "Wnut17",
