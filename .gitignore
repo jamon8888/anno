@@ -117,11 +117,12 @@ REVIEW_ISSUES.md
 !CHANGELOG.md
 !docs/**/*.md
 
-# Reports directory - mostly generated, but JSONL is source of truth
+# Reports directory - track source of truth, ignore generated
 reports/
 !reports/eval-results.jsonl
-# Generated dashboard (regenerate with `just spot-dashboard`)
-reports/eval-dashboard.html
+!reports/eval-summary.json
+!reports/RESULTS.md
+# Raw spot results (temporary)
 reports/spot/
 
 .env
