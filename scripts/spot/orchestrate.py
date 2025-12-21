@@ -71,23 +71,29 @@ class Config:
 # Task Generation
 # ============================================================================
 
-# Backends to evaluate for NER tasks
-# Note: "pattern" only handles structured entities (dates/URLs), not NER types (PER/ORG/LOC)
-BACKENDS = [
-    # Always available - NER entity types
-    "heuristic",   # PER/ORG/LOC (rule-based)
+# Backend groups for different evaluation profiles
+BACKENDS_ZERO_DEP = [
+    # Always available (pure Rust, no ML models)
+    "heuristic",   # PER/ORG/LOC via heuristics
     "stacked",     # pattern + heuristic combined
-    # Uncomment when testing ML backends (require models + features):
-    # "crf",       # Requires training
-    # "hmm",       # Requires training  
-    # "ensemble",  # Meta-backend
-    # "gliner",    # ONNX
-    # "nuner",     # ONNX
-    # "w2ner",     # ONNX
-    # "gliner2",   # ONNX
-    # "bert_onnx", # ONNX
-    # "gliner_candle",  # Candle
 ]
+
+BACKENDS_ONNX = [
+    # Require ONNX runtime + models (feature: onnx)
+    "gliner",      # GLiNER multi-v2.1
+    "gliner2",     # GLiNER v2 variant
+    "nuner",       # NuNER model
+    # "w2ner",     # W2NER (if model available)
+    # "bert_onnx", # BERT-based NER (if model available)
+]
+
+BACKENDS_CANDLE = [
+    # Require Candle runtime (feature: candle)
+    # "gliner_candle",  # GLiNER via Candle (Metal on Mac)
+]
+
+# Default: all available backends
+BACKENDS = BACKENDS_ZERO_DEP + BACKENDS_ONNX + BACKENDS_CANDLE
 
 # Datasets with good coverage (must be valid DatasetId names, not "synthetic")
 DATASETS = [
@@ -165,10 +171,24 @@ def enqueue_tasks(config: Config, tasks: list[dict]) -> int:
     return sent
 
 
+def get_backends_for_profile(profile: str, explicit_backends: str | None) -> list[str] | None:
+    """Get backend list based on profile or explicit override."""
+    if explicit_backends:
+        return explicit_backends.split(",")
+    if profile == "quick":
+        return BACKENDS_ZERO_DEP
+    elif profile == "onnx":
+        return BACKENDS_ONNX
+    else:  # full
+        return BACKENDS  # All backends
+
+
 def cmd_generate(args, config: Config):
     """Generate and enqueue evaluation tasks."""
+    backends = get_backends_for_profile(args.profile, args.backends)
+    
     tasks = list(generate_tasks(
-        backends=args.backends.split(",") if args.backends else None,
+        backends=backends,
         datasets=args.datasets.split(",") if args.datasets else None,
         seeds=[int(s) for s in args.seeds.split(",")] if args.seeds else None,
         max_examples=args.max_examples,
@@ -462,8 +482,10 @@ def cmd_full(args, config: Config):
     """Run full evaluation: generate + launch + wait + results."""
     # Generate tasks
     console.print("\n[bold blue]Step 1: Generating tasks...[/bold blue]")
+    backends = get_backends_for_profile(args.profile, args.backends)
+    
     tasks = list(generate_tasks(
-        backends=args.backends.split(",") if args.backends else None,
+        backends=backends,
         datasets=args.datasets.split(",") if args.datasets else None,
         seeds=[int(s) for s in args.seeds.split(",")] if args.seeds else None,
         max_examples=args.max_examples,
@@ -529,7 +551,9 @@ def main():
     
     # generate
     gen = subparsers.add_parser("generate", help="Generate and enqueue tasks")
-    gen.add_argument("--backends", help="Comma-separated backends")
+    gen.add_argument("--profile", choices=["quick", "full", "onnx"], default="full",
+                     help="Backend profile: quick (zero-dep), onnx (ML only), full (all)")
+    gen.add_argument("--backends", help="Comma-separated backends (overrides --profile)")
     gen.add_argument("--datasets", help="Comma-separated datasets")
     gen.add_argument("--seeds", help="Comma-separated seeds")
     gen.add_argument("--max-examples", type=int, default=500)
@@ -552,7 +576,9 @@ def main():
     
     # full
     full = subparsers.add_parser("full", help="Full evaluation pipeline")
-    full.add_argument("--backends", help="Comma-separated backends")
+    full.add_argument("--profile", choices=["quick", "full", "onnx"], default="full",
+                      help="Backend profile: quick (zero-dep), onnx (ML only), full (all)")
+    full.add_argument("--backends", help="Comma-separated backends (overrides --profile)")
     full.add_argument("--datasets", help="Comma-separated datasets")
     full.add_argument("--seeds", help="Comma-separated seeds")
     full.add_argument("--max-examples", type=int, default=500)
