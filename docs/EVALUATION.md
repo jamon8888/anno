@@ -2,6 +2,8 @@
 
 Tools for measuring NER and coreference system performance. NER evaluation requires defining what counts as a "match": exact span boundaries? Type matching? This library implements SemEval-2013 evaluation modes that answer these questions explicitly.
 
+> **Live Results:** [`reports/RESULTS.md`](../reports/RESULTS.md) | **Raw Data:** [`reports/eval-results.jsonl`](../reports/eval-results.jsonl)
+
 ## Tools
 
 | Task | Tool |

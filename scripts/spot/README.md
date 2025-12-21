@@ -108,16 +108,43 @@ Spot instances may be reclaimed with 2-minute notice:
 
 ## Caching Strategy
 
+### Build Caching (EBS)
+
 1. **EBS volume** mounted at `/mnt/cache`:
    - `CARGO_HOME=/mnt/cache/cargo` - toolchains, registry
    - `SCCACHE_DIR=/mnt/cache/sccache` - compiled artifacts
    - `CARGO_TARGET_DIR=/mnt/cache/target/anno` - build output
 
-2. **S3 sync** on instance start:
-   - Datasets: `s3://arc-anno-data/datasets/` → `/mnt/cache/datasets/`
-   - Models: `s3://arc-anno-data/models/` → `/mnt/cache/models/`
+2. First instance builds; subsequent instances reuse via shared EBS.
 
-3. First instance builds; subsequent instances reuse via shared EBS.
+### Data Caching (S3)
+
+On-demand fetch with local caching:
+- Datasets: `ANNO_S3_CACHE=1` enables S3 fallback
+- Models: `HF_HOME=/mnt/cache/models` for ONNX models
+
+### Prediction Caching (Incremental Eval)
+
+For frequent/cheap re-evaluation, cache predictions:
+
+| Layer | What's Cached | Key | Storage |
+|-------|---------------|-----|---------|
+| **Dataset** | Parsed gold annotations | DatasetId | S3 + local |
+| **Predictions** | NER output per text | (text_hash, backend, version) | JSONL |
+| **Metrics** | Final scores | (backend, dataset, seed) | `reports/eval-results.jsonl` |
+
+**Why this matters:**
+- Re-scoring against new gold data: No re-inference needed
+- Adding new metrics: Just re-compute from cached predictions
+- Cross-node sharing: S3 as shared prediction cache
+
+```bash
+# Check prediction cache stats
+anno cache stats
+
+# Invalidate predictions for updated model
+anno cache invalidate --model gliner
+```
 
 ## Manual Commands
 
