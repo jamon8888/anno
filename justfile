@@ -799,14 +799,14 @@ spot-exec INSTANCE CMD:
 spot-results OUTPUT="reports/spot-eval-results.json":
     @uv run scripts/spot/orchestrate.py results --output "{{OUTPUT}}"
 
-# Download results from S3 and aggregate to JSONL + HTML dashboard
+# Download results from S3 and aggregate
 spot-aggregate:
     @uv run scripts/spot/aggregate.py --download
 
-# Regenerate HTML dashboard from existing JSONL (no download)
-spot-dashboard:
-    @uv run scripts/spot/aggregate.py --output reports/eval-results.jsonl --html reports/eval-dashboard.html
-    @echo "Dashboard: reports/eval-dashboard.html"
+# Regenerate summary from existing JSONL (no download)
+spot-summary:
+    @uv run scripts/spot/aggregate.py
+    @echo "Summary: reports/RESULTS.md"
 
 # Cancel fleet and clean up
 spot-teardown:
