@@ -57,8 +57,49 @@ def parse_markdown_table(content: str) -> list[dict]:
     return results
 
 
+def parse_eval_text(content: str) -> dict | None:
+    """Parse plain text output from `anno dataset eval`.
+    
+    Example input:
+        Evaluating heuristic on WikiGold dataset (NER)...
+          Sentences: 1696
+        Results:
+          Gold: 3558  Predicted: 4086  Correct: 1284
+          P: 31.4%  R: 36.1%  F1: 33.6%
+        ...
+          Time: 0.0s (0.0ms/sent)
+    """
+    result = {}
+    
+    # Parse P/R/F1 line: "P: 31.4%  R: 36.1%  F1: 33.6%"
+    prf_match = re.search(r'P:\s*([\d.]+)%\s*R:\s*([\d.]+)%\s*F1:\s*([\d.]+)%', content)
+    if prf_match:
+        result['precision'] = float(prf_match.group(1))
+        result['recall'] = float(prf_match.group(2))
+        result['f1'] = float(prf_match.group(3))
+    
+    # Parse sentence count: "Sentences: 1696"
+    n_match = re.search(r'Sentences:\s*(\d+)', content)
+    if n_match:
+        result['n'] = int(n_match.group(1))
+    
+    # Parse timing: "Time: 0.0s (0.0ms/sent)"
+    time_match = re.search(r'Time:\s*([\d.]+)s', content)
+    if time_match:
+        result['duration_ms'] = int(float(time_match.group(1)) * 1000)
+    
+    # Parse gold/predicted counts: "Gold: 3558  Predicted: 4086  Correct: 1284"
+    counts_match = re.search(r'Gold:\s*(\d+)\s*Predicted:\s*(\d+)\s*Correct:\s*(\d+)', content)
+    if counts_match:
+        result['gold'] = int(counts_match.group(1))
+        result['predicted'] = int(counts_match.group(2))
+        result['correct'] = int(counts_match.group(3))
+    
+    return result if result.get('f1') is not None else None
+
+
 def parse_result_file(path: Path) -> dict | None:
-    """Parse a single result markdown file."""
+    """Parse a single result file (markdown table or plain text eval output)."""
     content = path.read_text()
     meta = parse_meta_comment(content)
     if not meta:
@@ -71,8 +112,8 @@ def parse_result_file(path: Path) -> dict | None:
         timestamp = datetime.strptime(f'{date_str}{time_str}', '%Y%m%d%H%M%S')
         meta['timestamp'] = timestamp.isoformat() + 'Z'
     
+    # Try markdown table format first
     table_results = parse_markdown_table(content)
-    
     if table_results:
         r = table_results[0]
         return {
@@ -86,15 +127,31 @@ def parse_result_file(path: Path) -> dict | None:
             'n': r['n'],
             'duration_ms': r['duration_ms'],
         }
-    else:
+    
+    # Try plain text eval output format
+    eval_result = parse_eval_text(content)
+    if eval_result:
         return {
             'timestamp': meta.get('timestamp', datetime.now(timezone.utc).isoformat()),
             'backend': meta.get('backend', 'unknown'),
             'dataset': meta.get('dataset', 'unknown'),
             'seed': int(meta.get('seed', 42)),
-            'f1': 0, 'precision': 0, 'recall': 0, 'n': 0, 'duration_ms': 0,
-            'error': 'no_results',
+            'f1': eval_result.get('f1', 0),
+            'precision': eval_result.get('precision', 0),
+            'recall': eval_result.get('recall', 0),
+            'n': eval_result.get('n', 0),
+            'duration_ms': eval_result.get('duration_ms', 0),
         }
+    
+    # Fallback: no parseable results
+    return {
+        'timestamp': meta.get('timestamp', datetime.now(timezone.utc).isoformat()),
+        'backend': meta.get('backend', 'unknown'),
+        'dataset': meta.get('dataset', 'unknown'),
+        'seed': int(meta.get('seed', 42)),
+        'f1': 0, 'precision': 0, 'recall': 0, 'n': 0, 'duration_ms': 0,
+        'error': 'no_results',
+    }
 
 
 # ============================================================================

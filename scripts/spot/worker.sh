@@ -171,15 +171,14 @@ process_task() {
     # Set HF_HOME for ONNX model loading
     export HF_HOME="${CACHE_MOUNT}/models"
     
-    # Run evaluation (note: plural flags --backends/--datasets)
+    # Run evaluation using anno dataset eval
     local exit_code=0
     local anno_bin="$CARGO_TARGET_DIR/release/anno"
-    "$anno_bin" benchmark \
-        --backends "$backend" \
-        --datasets "$dataset" \
-        --seed "$seed" \
-        --max-examples "$max_examples" \
-        --output "$output_file" 2>&1 || exit_code=$?
+    "$anno_bin" dataset eval \
+        --dataset "$dataset" \
+        --model "$backend" \
+        --task ner \
+        2>&1 | tee "$output_file" || exit_code=$?
     
     local end_time
     end_time=$(date +%s)
