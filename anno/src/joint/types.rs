@@ -1182,7 +1182,7 @@ impl anno_core::CoreferenceResolver for JointModel {
                 let mut next_id = anno_core::types::CanonicalId::new(result.chains.len() as u64);
                 for entity in &mut resolved {
                     if entity.canonical_id.is_none() {
-                        entity.canonical_id = Some(next_id.into());
+                        entity.canonical_id = Some(next_id);
                         next_id += 1;
                     }
                 }

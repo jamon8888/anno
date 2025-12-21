@@ -269,18 +269,17 @@ mkdir -p anno
 tar xzf anno-src.tar.gz -C anno
 cd anno
 
-# Set up build directories
-export ANNO_CACHE_DIR=/tmp/anno-cache
-export CARGO_TARGET_DIR=/tmp/target
-mkdir -p $ANNO_CACHE_DIR $CARGO_TARGET_DIR
+# Set up persistent cache directories (shared with worker.sh)
+export ANNO_CACHE_MOUNT=/opt/cache
+export CARGO_TARGET_DIR="$ANNO_CACHE_MOUNT/target"
+export SCCACHE_DIR="$ANNO_CACHE_MOUNT/sccache"
+export ANNO_CACHE_DIR="$ANNO_CACHE_MOUNT"
+export ANNO_SOURCE_DIR="$HOME/anno"
+mkdir -p "$CARGO_TARGET_DIR" "$SCCACHE_DIR"
 
 # Build anno (~2-3 min on c7i.xlarge)
 echo "Building anno..."
 cargo build --release --bin anno --features "cli,eval-advanced" 2>&1 | tail -20
-
-# Skip pre-sync - let ANNO_S3_CACHE=1 fetch on-demand
-# This saves ~60 GiB of upfront transfer
-echo "S3 cache enabled - datasets will be fetched on-demand"
 
 # Enable S3 fallback for any missing datasets
 export ANNO_S3_CACHE=1
@@ -290,7 +289,7 @@ export ANNO_S3_BUCKET=arc-anno-data
 touch /tmp/anno-worker-ready
 echo "=== Worker Ready $(date) ==="
 
-# Start worker
+# Start worker with env vars
 export ANNO_SPOT_REGION="$REGION"
 export ANNO_SPOT_BUCKET="arc-anno-data"
 export ANNO_SPOT_QUEUE="anno-eval-tasks"
