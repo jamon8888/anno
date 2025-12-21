@@ -238,8 +238,12 @@ def build_summary(results: list[dict]) -> dict:
 # Markdown Output
 # ============================================================================
 
-def generate_markdown(summary: dict) -> str:
+def generate_markdown(summary: dict, results: list[dict]) -> str:
     """Generate clean markdown summary."""
+    # Calculate timing stats
+    total_ms = sum(r.get('duration_ms', 0) for r in results)
+    avg_ms = total_ms / len(results) if results else 0
+    
     lines = [
         "# Evaluation Results",
         "",
@@ -254,15 +258,28 @@ def generate_markdown(summary: dict) -> str:
         f"| Best F1 | {summary['best_f1']}% |",
         f"| Best | {summary['best']} |",
         f"| Avg F1 | {summary['avg_f1']}% |",
+        f"| Total time | {total_ms/1000:.1f}s |",
+        f"| Avg time | {avg_ms/1000:.1f}s |",
         "",
         "## By Backend",
         "",
-        "| Backend | Avg F1 | Best F1 | Best Dataset | Runs |",
-        "|---------|--------|---------|--------------|------|",
+        "| Backend | Avg F1 | Best F1 | Best Dataset | Runs | Avg Time |",
+        "|---------|--------|---------|--------------|------|----------|",
     ]
     
+    # Calculate avg time per backend
+    backend_times = {}
+    for r in results:
+        b = r.get('backend', 'unknown')
+        if b not in backend_times:
+            backend_times[b] = []
+        if r.get('duration_ms', 0) > 0:
+            backend_times[b].append(r['duration_ms'])
+    
     for backend, data in sorted(summary['backends'].items(), key=lambda x: -x[1]['avg_f1']):
-        lines.append(f"| {backend} | {data['avg_f1']}% | {data['best_f1']}% | {data['best_dataset'] or '-'} | {data['runs']} |")
+        times = backend_times.get(backend, [])
+        avg_time = sum(times) / len(times) / 1000 if times else 0
+        lines.append(f"| {backend} | {data['avg_f1']}% | {data['best_f1']}% | {data['best_dataset'] or '-'} | {data['runs']} | {avg_time:.1f}s |")
     
     lines.extend([
         "",
@@ -306,6 +323,88 @@ def generate_markdown(summary: dict) -> str:
     return "\n".join(lines)
 
 
+def generate_html(markdown: str) -> str:
+    """Generate simple HTML from markdown for browser viewing."""
+    # Convert markdown tables to HTML
+    html_content = markdown
+    
+    return f'''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Evaluation Results</title>
+    <style>
+        body {{ font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #0d1117; color: #c9d1d9; }}
+        h1, h2 {{ color: #58a6ff; }}
+        table {{ border-collapse: collapse; width: 100%; margin: 1rem 0; }}
+        th, td {{ border: 1px solid #30363d; padding: 0.5rem; text-align: left; }}
+        th {{ background: #161b22; }}
+        tr:hover {{ background: #161b22; }}
+        hr {{ border: 1px solid #30363d; margin: 2rem 0; }}
+        a {{ color: #58a6ff; }}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div id="content"></div>
+    <script>
+        const md = {json.dumps(markdown)};
+        document.getElementById('content').innerHTML = marked.parse(md);
+    </script>
+</body>
+</html>'''
+
+
+def generate_llm_prompt(summary: dict, results: list[dict]) -> str:
+    """Generate a prompt for LLM to summarize results."""
+    # Get timing data
+    backend_stats = []
+    for backend, data in sorted(summary['backends'].items(), key=lambda x: -x[1]['avg_f1']):
+        times = [r.get('duration_ms', 0) for r in results if r.get('backend') == backend and r.get('duration_ms', 0) > 0]
+        avg_time = sum(times) / len(times) / 1000 if times else 0
+        backend_stats.append(f"- {backend}: {data['avg_f1']}% F1, {avg_time:.1f}s avg")
+    
+    return f'''Summarize these NER evaluation results in 2-3 sentences:
+
+Total: {summary['total_runs']} runs, {summary['successful_runs']} successful
+Best: {summary['best']} at {summary['best_f1']}% F1
+Average F1: {summary['avg_f1']}%
+
+Backend performance (sorted by F1):
+{chr(10).join(backend_stats)}
+
+Datasets tested: {', '.join(summary['datasets'].keys())}
+
+Focus on: which backends work best, speed vs quality tradeoffs, and any notable patterns.'''
+
+
+def call_llm(prompt: str) -> str | None:
+    """Try to call an LLM for summarization."""
+    # Try ollama first
+    try:
+        result = subprocess.run(
+            ['ollama', 'run', 'llama3.2', prompt],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    
+    # Try anthropic CLI if available
+    try:
+        result = subprocess.run(
+            ['anthropic', 'messages', 'create', '-m', 'claude-3-haiku-20240307', '--max-tokens', '200', prompt],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    
+    return None
+
+
 # ============================================================================
 # S3 Download
 # ============================================================================
@@ -343,18 +442,22 @@ def download_from_s3(bucket: str, prefix: str, local_dir: Path) -> list[Path]:
 def main():
     parser = argparse.ArgumentParser(description='Aggregate evaluation results')
     parser.add_argument('--download', action='store_true', help='Download from S3')
+    parser.add_argument('--open', action='store_true', help='Open HTML in browser')
+    parser.add_argument('--llm', action='store_true', help='Generate LLM summary')
     parser.add_argument('--bucket', default='arc-anno-data')
     parser.add_argument('--prefix', default='results/')
     parser.add_argument('--local-dir', default='reports/spot/')
     parser.add_argument('--output', default='reports/eval-results.jsonl')
     parser.add_argument('--summary', default='reports/eval-summary.json')
     parser.add_argument('--markdown', default='reports/RESULTS.md')
+    parser.add_argument('--html', default='reports/RESULTS.html')
     
     args = parser.parse_args()
     
     output_path = Path(args.output)
     summary_path = Path(args.summary)
     markdown_path = Path(args.markdown)
+    html_path = Path(args.html)
     local_dir = Path(args.local_dir)
     
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -388,12 +491,34 @@ def main():
     print(f"Summary: {summary_path}")
     
     # Write markdown
-    markdown = generate_markdown(summary)
+    markdown = generate_markdown(summary, all_results)
     markdown_path.write_text(markdown)
     print(f"Markdown: {markdown_path}")
     
+    # Write HTML
+    html = generate_html(markdown)
+    html_path.write_text(html)
+    print(f"HTML: {html_path}")
+    
     # Print quick summary
     print(f"\n{summary['total_runs']} runs | Best: {summary['best']} @ {summary['best_f1']}% F1")
+    
+    # LLM summary
+    if args.llm:
+        print("\nGenerating LLM summary...")
+        prompt = generate_llm_prompt(summary, all_results)
+        llm_summary = call_llm(prompt)
+        if llm_summary:
+            print(f"\n{llm_summary}")
+        else:
+            print("\nLLM not available. Prompt for manual use:")
+            print("-" * 40)
+            print(prompt)
+    
+    # Open in browser
+    if args.open:
+        import webbrowser
+        webbrowser.open(f'file://{html_path.absolute()}')
 
 
 if __name__ == '__main__':

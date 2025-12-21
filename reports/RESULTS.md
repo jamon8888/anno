@@ -1,6 +1,6 @@
 # Evaluation Results
 
-Generated: 2025-12-21 03:09:35 UTC
+Generated: 2025-12-21 03:13:50 UTC
 
 ## Summary
 
@@ -11,16 +11,18 @@ Generated: 2025-12-21 03:09:35 UTC
 | Best F1 | 59.7% |
 | Best | nuner/WikiGold |
 | Avg F1 | 36.7% |
+| Total time | 132.8s |
+| Avg time | 5.3s |
 
 ## By Backend
 
-| Backend | Avg F1 | Best F1 | Best Dataset | Runs |
-|---------|--------|---------|--------------|------|
-| nuner | 59.7% | 59.7% | WikiGold | 4 |
-| gliner2 | 46.1% | 46.1% | WikiGold | 4 |
-| stacked | 36.0% | 46.3% | WikiGold | 6 |
-| heuristic | 26.4% | 26.4% | WikiGold | 7 |
-| gliner | 0% | 0% | - | 4 |
+| Backend | Avg F1 | Best F1 | Best Dataset | Runs | Avg Time |
+|---------|--------|---------|--------------|------|----------|
+| nuner | 59.7% | 59.7% | WikiGold | 4 | 36.5s |
+| gliner2 | 46.1% | 46.1% | WikiGold | 4 | 27.7s |
+| stacked | 36.0% | 46.3% | WikiGold | 6 | 2.2s |
+| heuristic | 26.4% | 26.4% | WikiGold | 7 | 0.0s |
+| gliner | 0% | 0% | - | 4 | 0.0s |
 
 ## By Dataset
 
