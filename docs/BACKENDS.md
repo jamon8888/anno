@@ -16,7 +16,12 @@ When to choose each NER backend based on your requirements.
 | **Relations + NER** | `GLiNER2Onnx` | `onnx` | Working |
 | **CoNLL-2003 types** | `BertNEROnnx` | `onnx` | Working |
 
-## Backend Status Summary (as of 2024-12, updated 2025-12-16)
+## Backend Status Summary
+
+> **Live Results:** See [`reports/RESULTS.md`](../reports/RESULTS.md) for current benchmark scores.
+> 
+> The metrics below are reference baselines from published papers. For actual performance
+> on our test sets, run `just spot-summary` or check the live results file.
 
 | Backend | CLI Flag | Status | Notes |
 |---------|----------|--------|-------|
