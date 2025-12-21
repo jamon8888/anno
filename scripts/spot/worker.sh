@@ -11,6 +11,9 @@
 
 set -euo pipefail
 
+# Ensure HOME is set (SSM/cloud-init may not set it)
+export HOME="${HOME:-/root}"
+
 # Load config
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "$SCRIPT_DIR/config.env" ]]; then
@@ -27,7 +30,13 @@ ANNO_DIR="${ANNO_SOURCE_DIR:-/root/anno}"
 
 # Logging
 LOG_GROUP="/aws/anno-eval/workers"
-INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id || echo "local")
+# Use IMDSv2 (token required)
+IMDS_TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" 2>/dev/null || true)
+if [[ -n "$IMDS_TOKEN" ]]; then
+    INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null || echo "local")
+else
+    INSTANCE_ID="local"
+fi
 
 log() {
     local level="$1"
