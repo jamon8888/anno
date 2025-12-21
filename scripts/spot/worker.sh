@@ -20,8 +20,10 @@ fi
 REGION="${ANNO_SPOT_REGION:-us-east-1}"
 BUCKET="${ANNO_SPOT_BUCKET:-arc-anno-data}"
 QUEUE_URL="${ANNO_SPOT_QUEUE_URL:-}"
-CACHE_MOUNT="/mnt/cache"
-ANNO_DIR="$CACHE_MOUNT/anno"
+# Use /opt/cache on root volume (100 GiB) instead of separate EBS
+CACHE_MOUNT="${ANNO_CACHE_MOUNT:-/opt/cache}"
+# Source is extracted by userdata to /root/anno
+ANNO_DIR="${ANNO_SOURCE_DIR:-/root/anno}"
 
 # Logging
 LOG_GROUP="/aws/anno-eval/workers"
@@ -42,107 +44,67 @@ log_error() { log "ERROR" "$@"; }
 # ============================================================================
 
 setup_cache_volume() {
-    log_info "Setting up cache volume..."
+    log_info "Setting up cache directory at $CACHE_MOUNT..."
     
-    # Check if already mounted
-    if mountpoint -q "$CACHE_MOUNT"; then
-        log_info "Cache already mounted at $CACHE_MOUNT"
-        return 0
-    fi
-    
-    mkdir -p "$CACHE_MOUNT"
-    
-    # Find the attached EBS volume (expects /dev/xvdf or /dev/nvme1n1)
-    local device=""
-    for dev in /dev/xvdf /dev/nvme1n1 /dev/sdf; do
-        if [[ -b "$dev" ]]; then
-            device="$dev"
-            break
-        fi
-    done
-    
-    if [[ -z "$device" ]]; then
-        log_warn "No cache volume attached, using local storage"
-        return 0
-    fi
-    
-    # Check if formatted
-    if ! blkid "$device" &>/dev/null; then
-        log_info "Formatting $device with xfs..."
-        mkfs.xfs "$device"
-    fi
-    
-    mount "$device" "$CACHE_MOUNT"
-    log_info "Mounted $device at $CACHE_MOUNT"
-    
-    # Create directory structure
+    # Create directory structure on root volume (100 GiB, no separate EBS)
     mkdir -p "$CACHE_MOUNT"/{cargo,rustup,sccache,target,datasets,models}
-    chown -R "$(whoami):$(whoami)" "$CACHE_MOUNT"
+    chown -R "$(whoami):$(whoami)" "$CACHE_MOUNT" 2>/dev/null || true
+    
+    log_info "Cache directory ready"
 }
 
 setup_rust_env() {
     log_info "Setting up Rust environment..."
     
-    # Point to persistent cache
-    export CARGO_HOME="$CACHE_MOUNT/cargo"
-    export RUSTUP_HOME="$CACHE_MOUNT/rustup"
-    export SCCACHE_DIR="$CACHE_MOUNT/sccache"
-    export CARGO_TARGET_DIR="$CACHE_MOUNT/target"
-    export ANNO_CACHE_DIR="$CACHE_MOUNT"
+    # Use env vars from userdata if set, otherwise use defaults
+    export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+    export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+    export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$CACHE_MOUNT/target}"
+    export ANNO_CACHE_DIR="${ANNO_CACHE_DIR:-$CACHE_MOUNT}"
     
-    # Install Rust if not present
-    if [[ ! -f "$CARGO_HOME/bin/cargo" ]]; then
-        log_info "Installing Rust toolchain..."
+    # Add cargo to PATH if not already
+    export PATH="$CARGO_HOME/bin:$PATH"
+    
+    # Verify cargo is available (should be installed by userdata)
+    if ! command -v cargo &>/dev/null; then
+        log_warn "Cargo not found, installing..."
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
             sh -s -- -y --default-toolchain stable --no-modify-path
     fi
     
-    export PATH="$CARGO_HOME/bin:$PATH"
-    
-    # Install sccache if not present
-    if [[ ! -f "$CARGO_HOME/bin/sccache" ]]; then
-        log_info "Installing sccache..."
-        cargo install sccache
-    fi
-    
-    export RUSTC_WRAPPER="$CARGO_HOME/bin/sccache"
-    
-    log_info "Rust $(rustc --version), sccache available"
+    log_info "Rust $(rustc --version 2>/dev/null || echo 'unknown')"
 }
 
 sync_from_s3() {
-    log_info "Syncing datasets and models from S3..."
-    
-    # Prefer s5cmd for speed
-    if command -v s5cmd &>/dev/null; then
-        s5cmd sync "s3://$BUCKET/datasets/*" "$CACHE_MOUNT/datasets/" 2>/dev/null || true
-        s5cmd sync "s3://$BUCKET/models/*" "$CACHE_MOUNT/models/" 2>/dev/null || true
-    else
-        aws s3 sync "s3://$BUCKET/datasets/" "$CACHE_MOUNT/datasets/" --region "$REGION" || true
-        aws s3 sync "s3://$BUCKET/models/" "$CACHE_MOUNT/models/" --region "$REGION" || true
-    fi
-    
-    log_info "S3 sync complete"
+    # Skip full sync - ANNO_S3_CACHE=1 fetches datasets on-demand
+    # This saves ~10 minutes of upfront data transfer
+    log_info "S3 cache enabled - datasets/models fetched on-demand"
+    export ANNO_S3_CACHE=1
+    export ANNO_S3_BUCKET="$BUCKET"
 }
 
 clone_and_build() {
-    log_info "Setting up anno repository..."
+    log_info "Setting up anno build..."
     
-    if [[ ! -d "$ANNO_DIR/.git" ]]; then
-        git clone --depth 1 https://github.com/your-org/anno.git "$ANNO_DIR"
-    else
-        cd "$ANNO_DIR"
-        git fetch origin main --depth 1
-        git reset --hard origin/main
+    # Source is already extracted by userdata to ANNO_DIR
+    if [[ ! -d "$ANNO_DIR" ]]; then
+        log_error "Anno source not found at $ANNO_DIR - userdata must extract it"
+        exit 1
     fi
     
     cd "$ANNO_DIR"
     
-    # Build release with all eval features
-    log_info "Building anno (this may take a few minutes on first run)..."
-    cargo build --release --bin anno --features "cli,eval-advanced,onnx,candle" 2>&1 | tail -5
+    # Check if already built
+    if [[ -x "$CARGO_TARGET_DIR/release/anno" ]]; then
+        log_info "Using cached build at $CARGO_TARGET_DIR/release/anno"
+        return 0
+    fi
     
-    log_info "Build complete: $(./target/release/anno --version 2>/dev/null || echo 'built')"
+    # Build release with eval features (skip onnx/candle for faster builds)
+    log_info "Building anno (this may take 2-3 minutes)..."
+    cargo build --release --bin anno --features "cli,eval-advanced" 2>&1 | tail -5
+    
+    log_info "Build complete: $($CARGO_TARGET_DIR/release/anno --version 2>/dev/null || echo 'built')"
 }
 
 # ============================================================================
@@ -196,7 +158,8 @@ process_task() {
     
     # Run evaluation (note: plural flags --backends/--datasets)
     local exit_code=0
-    ./target/release/anno benchmark \
+    local anno_bin="$CARGO_TARGET_DIR/release/anno"
+    "$anno_bin" benchmark \
         --backends "$backend" \
         --datasets "$dataset" \
         --seed "$seed" \
