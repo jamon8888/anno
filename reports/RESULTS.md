@@ -1,27 +1,27 @@
 # Evaluation Results
 
-Generated: 2025-12-21 03:35:18 UTC
+Generated: 2025-12-21 03:37:11 UTC
 
 ## Summary
 
 | Metric | Value |
 |--------|-------|
-| Total runs | 40 |
-| Successful | 15 |
+| Total runs | 27 |
+| Successful | 10 |
 | Best F1 | 59.7% |
 | Best | nuner/WikiGold |
-| Avg F1 | 29.1% |
+| Avg F1 | 29.8% |
 | Total time | 132.8s |
-| Avg time | 3.3s |
+| Avg time | 4.9s |
 
 ## By Backend
 
 | Backend | Avg F1 | Best F1 | Best Dataset | Runs | Avg Time |
 |---------|--------|---------|--------------|------|----------|
-| nuner | 59.7% | 59.7% | WikiGold | 4 | 36.5s |
-| gliner2 | 46.1% | 46.1% | WikiGold | 4 | 27.7s |
-| heuristic | 28.5% | 37.8% | CoNLL2003Sample | 12 | 0.0s |
-| stacked | 26.5% | 46.3% | WikiGold | 11 | 2.2s |
+| nuner | 59.7% | 59.7% | WikiGold | 4 | 73.0s |
+| gliner2 | 46.1% | 46.1% | WikiGold | 4 | 55.4s |
+| heuristic | 30.6% | 37.8% | CoNLL2003Sample | 5 | 0.0s |
+| stacked | 25.0% | 46.3% | WikiGold | 5 | 4.4s |
 | pattern | 0.4% | 0.4% | MitRestaurant | 5 | 0.0s |
 | gliner | 0% | 0% | - | 4 | 0.0s |
 

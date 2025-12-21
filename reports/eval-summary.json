@@ -1,10 +1,10 @@
 {
-  "generated": "2025-12-21T03:35:18.422756+00:00",
-  "total_runs": 40,
-  "successful_runs": 15,
+  "generated": "2025-12-21T03:37:11.994666+00:00",
+  "total_runs": 27,
+  "successful_runs": 10,
   "best_f1": 59.7,
   "best": "nuner/WikiGold",
-  "avg_f1": 29.1,
+  "avg_f1": 29.8,
   "backends": {
     "gliner": {
       "runs": 4,
@@ -40,11 +40,6 @@
       "best_f1": 46.1,
       "best_dataset": "WikiGold",
       "datasets": {
-        "WikiGold": {
-          "f1": 46.1,
-          "p": 44.0,
-          "r": 48.3
-        },
         "MitMovie": {
           "f1": 0,
           "p": 0,
@@ -55,6 +50,11 @@
           "p": 0,
           "r": 0
         },
+        "WikiGold": {
+          "f1": 46.1,
+          "p": 44.0,
+          "r": 48.3
+        },
         "Wnut17": {
           "f1": 0,
           "p": 0,
@@ -63,8 +63,8 @@
       }
     },
     "heuristic": {
-      "runs": 12,
-      "avg_f1": 28.5,
+      "runs": 5,
+      "avg_f1": 30.6,
       "best_f1": 37.8,
       "best_dataset": "CoNLL2003Sample",
       "datasets": {
@@ -157,8 +157,8 @@
       }
     },
     "stacked": {
-      "runs": 11,
-      "avg_f1": 26.5,
+      "runs": 5,
+      "avg_f1": 25.0,
       "best_f1": 46.3,
       "best_dataset": "WikiGold",
       "datasets": {
@@ -192,13 +192,13 @@
   },
   "datasets": {
     "CoNLL2003Sample": {
-      "runs": 8,
+      "runs": 6,
       "best_f1": 37.8,
       "best_backend": "heuristic",
       "backends_tested": 6
     },
     "MitMovie": {
-      "runs": 8,
+      "runs": 6,
       "best_f1": 0,
       "best_backend": null,
       "backends_tested": 6
@@ -210,13 +210,13 @@
       "backends_tested": 3
     },
     "WikiGold": {
-      "runs": 11,
+      "runs": 6,
       "best_f1": 59.7,
       "best_backend": "nuner",
       "backends_tested": 6
     },
     "Wnut17": {
-      "runs": 10,
+      "runs": 6,
       "best_f1": 20.5,
       "best_backend": "heuristic",
       "backends_tested": 6
