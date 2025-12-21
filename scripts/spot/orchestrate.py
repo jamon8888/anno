@@ -71,23 +71,22 @@ class Config:
 # Task Generation
 # ============================================================================
 
-# All backends to evaluate
+# Backends to evaluate for NER tasks
+# Note: "pattern" only handles structured entities (dates/URLs), not NER types (PER/ORG/LOC)
 BACKENDS = [
-    # Always available
-    "pattern",
-    "heuristic", 
-    "stacked",
-    "crf",
-    "hmm",
-    "ensemble",
-    # ONNX (most important)
-    "gliner",
-    "nuner",
-    "w2ner",
-    "gliner2",
-    "bert_onnx",
-    # Candle
-    "gliner_candle",
+    # Always available - NER entity types
+    "heuristic",   # PER/ORG/LOC (rule-based)
+    "stacked",     # pattern + heuristic combined
+    # Uncomment when testing ML backends (require models + features):
+    # "crf",       # Requires training
+    # "hmm",       # Requires training  
+    # "ensemble",  # Meta-backend
+    # "gliner",    # ONNX
+    # "nuner",     # ONNX
+    # "w2ner",     # ONNX
+    # "gliner2",   # ONNX
+    # "bert_onnx", # ONNX
+    # "gliner_candle",  # Candle
 ]
 
 # Datasets with good coverage (must be valid DatasetId names, not "synthetic")
