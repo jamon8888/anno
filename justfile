@@ -803,10 +803,13 @@ spot-results OUTPUT="reports/spot-eval-results.json":
 spot-aggregate:
     @uv run scripts/spot/aggregate.py --download
 
-# Regenerate summary from existing JSONL (no download)
+# Regenerate summary and open in browser
 spot-summary:
-    @uv run scripts/spot/aggregate.py
-    @echo "Summary: reports/RESULTS.md"
+    @uv run scripts/spot/aggregate.py --open
+
+# Show LLM-generated summary of results
+spot-summarize:
+    @uv run scripts/spot/aggregate.py --llm
 
 # Cancel fleet and clean up
 spot-teardown:
