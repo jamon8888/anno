@@ -31,6 +31,26 @@ To extract dataset texts into a local directory (not tracked):
 cargo run --example extract_dataset_texts --features eval-advanced
 ```
 
-Note: some popular datasets/news sources have redistribution restrictions. Keep any “real data”
-you download/scrape under `hack/real_data/` as **local-only** unless you’ve verified licensing.
+Note: some popular datasets/news sources have redistribution restrictions. Keep any "real data"
+you download/scrape under `hack/real_data/` as **local-only** unless you've verified licensing.
+
+## Quick Test Commands
+
+For fast iteration during development:
+
+```bash
+# Run a single test by name (minimal features, fastest)
+just t test_name
+
+# Run a single test with full features
+just tf test_name
+
+# Run all lib tests
+just test
+
+# Full check (format + clippy + tests)
+just check
+```
+
+These use `cargo nextest` when available (faster, better output) and fall back to `cargo test`.
 

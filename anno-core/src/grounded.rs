@@ -152,12 +152,30 @@ impl Modality {
 /// between vision detection and NER. Both tasks answer "where is it?"
 /// just in different coordinate systems.
 ///
+/// # Relationship to `Span`
+///
+/// [`entity::Span`] is a simplified subset of `Location` for the detection layer:
+///
+/// | `Location` variant | `Span` equivalent |
+/// |--------------------|-------------------|
+/// | `Text` | `Span::Text` |
+/// | `BoundingBox` | `Span::BoundingBox` |
+/// | `TextWithBbox` | `Span::Hybrid` |
+/// | `Temporal` | *none* |
+/// | `Cuboid` | *none* |
+/// | `Genomic` | *none* |
+/// | `Discontinuous` | *none* (use `DiscontinuousSpan`) |
+///
+/// Use [`to_span()`](Self::to_span) to convert where possible.
+///
 /// # Design Note
 ///
 /// We use an enum rather than a trait to enable:
 /// - Efficient storage in contiguous arrays
 /// - Easy serialization
 /// - Exhaustive matching for safety
+///
+/// [`entity::Span`]: crate::entity::Span
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Location {
     /// Text span: 1D interval [start, end) in character offsets.
@@ -400,6 +418,62 @@ impl From<&Span> for Location {
     }
 }
 
+impl From<Span> for Location {
+    fn from(span: Span) -> Self {
+        Self::from(&span)
+    }
+}
+
+/// Convert `Location` to `Span` where possible.
+///
+/// Not all `Location` variants have a corresponding `Span`:
+/// - `Location::Text` → `Span::Text`
+/// - `Location::BoundingBox` → `Span::BoundingBox`
+/// - `Location::TextWithBbox` → `Span::Hybrid`
+/// - `Location::Discontinuous` → `None` (use `DiscontinuousSpan` instead)
+/// - `Location::Temporal`, `Location::Cuboid`, `Location::Genomic` → `None`
+impl Location {
+    /// Try to convert this Location to a Span.
+    ///
+    /// Returns `None` for `Location` variants that don't map to `Span`
+    /// (Temporal, Cuboid, Genomic, Discontinuous).
+    #[must_use]
+    pub fn to_span(&self) -> Option<Span> {
+        match self {
+            Self::Text { start, end } => Some(Span::Text {
+                start: *start,
+                end: *end,
+            }),
+            Self::BoundingBox {
+                x,
+                y,
+                width,
+                height,
+                page,
+            } => Some(Span::BoundingBox {
+                x: *x,
+                y: *y,
+                width: *width,
+                height: *height,
+                page: *page,
+            }),
+            Self::TextWithBbox { start, end, bbox } => {
+                let inner_span = bbox.to_span()?;
+                Some(Span::Hybrid {
+                    start: *start,
+                    end: *end,
+                    bbox: Box::new(inner_span),
+                })
+            }
+            // These Location variants don't have Span equivalents
+            Self::Temporal { .. }
+            | Self::Cuboid { .. }
+            | Self::Genomic { .. }
+            | Self::Discontinuous { .. } => None,
+        }
+    }
+}
+
 // =============================================================================
 // Signal (Level 1): Raw Detection
 // =============================================================================
@@ -444,7 +518,14 @@ pub struct Signal<L = Location> {
     pub location: L,
     /// Surface form (the actual text or image patch)
     pub surface: String,
-    /// Classification label (e.g., "Person", "Organization")
+    /// Classification label (e.g., "Person", "Organization", "PER").
+    ///
+    /// This is a string to allow domain-specific labels beyond the canonical
+    /// [`EntityType`] taxonomy. Use [`TypeLabel::from`] to convert to/from
+    /// the canonical type representation.
+    ///
+    /// [`EntityType`]: crate::EntityType
+    /// [`TypeLabel::from`]: crate::types::TypeLabel
     pub label: String,
     /// Detection confidence in [0, 1]
     pub confidence: f32,
@@ -821,7 +902,14 @@ pub struct Track {
     pub id: TrackId,
     /// Signal references in this track (document order)
     pub signals: Vec<SignalRef>,
-    /// Entity type (consensus from signals)
+    /// Entity type (consensus from signals).
+    ///
+    /// This is a string label (e.g., "Person", "ORG") rather than [`EntityType`]
+    /// to allow domain-specific types. Use [`TypeLabel::from`] to convert to/from
+    /// the canonical type representation.
+    ///
+    /// [`EntityType`]: crate::EntityType
+    /// [`TypeLabel::from`]: crate::types::TypeLabel
     pub entity_type: Option<String>,
     /// Canonical surface form (the "best" name for this entity)
     pub canonical_surface: String,
@@ -1188,7 +1276,13 @@ pub struct Identity {
     pub id: IdentityId,
     /// Canonical name (the "official" name)
     pub canonical_name: String,
-    /// Entity type/category
+    /// Entity type/category.
+    ///
+    /// This is a string label to allow domain-specific types beyond the
+    /// canonical [`EntityType`] taxonomy. Use [`TypeLabel::from`] for conversion.
+    ///
+    /// [`EntityType`]: crate::EntityType
+    /// [`TypeLabel::from`]: crate::types::TypeLabel
     pub entity_type: Option<String>,
     /// Knowledge base reference (e.g., "Q7186" for Wikidata)
     pub kb_id: Option<String>,
@@ -1394,6 +1488,26 @@ impl Identity {
 /// doc.add_identity(identity);
 /// doc.link_track_to_identity(0, 0);
 /// ```
+///
+/// # Invariants
+///
+/// `GroundedDocument` maintains internal indices (`signal_to_track`, `track_to_identity`)
+/// that must be consistent with the public collections. The following invariants hold:
+///
+/// 1. **Signal ID uniqueness**: All signals in `signals` have distinct `id` values.
+/// 2. **Track signal references**: Every `SignalRef` in a `Track.signals` points to
+///    a valid signal ID in `signals`.
+/// 3. **Signal-to-track consistency**: If `signal_to_track[s] == t`, then the track `t`
+///    contains a `SignalRef` pointing to `s`.
+/// 4. **Track-to-identity consistency**: If `track_to_identity[t] == i`, then
+///    `tracks[t].identity_id == Some(i)` and `identities` contains `i`.
+/// 5. **Signal offsets validity**: Signal text locations should match `self.text`.
+///
+/// **Prefer mutation via provided methods** (`add_signal`, `add_track`, `add_signal_to_track`,
+/// `link_track_to_identity`) rather than direct field manipulation to preserve invariants.
+///
+/// Use [`validate_invariants()`](Self::validate_invariants) to check structural consistency
+/// after external modifications.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GroundedDocument {
     /// Document identifier
@@ -1892,6 +2006,122 @@ impl GroundedDocument {
             .iter()
             .filter_map(|s| s.validate_against(&self.text))
             .collect()
+    }
+
+    /// Validate structural invariants of the document.
+    ///
+    /// Returns a list of invariant violations. An empty list means the document
+    /// is structurally consistent.
+    ///
+    /// This checks:
+    /// 1. Signal ID uniqueness
+    /// 2. Track signal references point to existing signals
+    /// 3. `signal_to_track` index consistency
+    /// 4. `track_to_identity` index consistency
+    /// 5. Track identity references point to existing identities
+    ///
+    /// Use this after any direct field manipulation to ensure consistency.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use anno_core::grounded::{GroundedDocument, Signal, Location};
+    ///
+    /// let mut doc = GroundedDocument::new("test", "Marie Curie was a physicist.");
+    /// doc.add_signal(Signal::new(0, Location::text(0, 11), "Marie Curie", "PER", 0.9));
+    /// assert!(doc.validate_invariants().is_empty());
+    /// ```
+    #[must_use]
+    pub fn validate_invariants(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        // 1. Signal ID uniqueness
+        let mut seen_ids = std::collections::HashSet::new();
+        for signal in &self.signals {
+            if !seen_ids.insert(signal.id) {
+                errors.push(format!("Duplicate signal ID: {}", signal.id));
+            }
+        }
+
+        // Build signal ID set for reference checks
+        let signal_ids: std::collections::HashSet<_> = self.signals.iter().map(|s| s.id).collect();
+
+        // 2. Track signal references point to existing signals
+        for (track_id, track) in &self.tracks {
+            for signal_ref in &track.signals {
+                if !signal_ids.contains(&signal_ref.signal_id) {
+                    errors.push(format!(
+                        "Track {} references non-existent signal {}",
+                        track_id, signal_ref.signal_id
+                    ));
+                }
+            }
+        }
+
+        // 3. signal_to_track consistency
+        for (signal_id, track_id) in &self.signal_to_track {
+            // Check track exists
+            if let Some(track) = self.tracks.get(track_id) {
+                // Check track contains the signal reference
+                if !track.signals.iter().any(|r| r.signal_id == *signal_id) {
+                    errors.push(format!(
+                        "signal_to_track[{}] = {} but track doesn't contain signal",
+                        signal_id, track_id
+                    ));
+                }
+            } else {
+                errors.push(format!(
+                    "signal_to_track[{}] = {} but track doesn't exist",
+                    signal_id, track_id
+                ));
+            }
+        }
+
+        // 4. track_to_identity consistency
+        for (track_id, identity_id) in &self.track_to_identity {
+            // Check track exists and has matching identity_id
+            if let Some(track) = self.tracks.get(track_id) {
+                if track.identity_id != Some(*identity_id) {
+                    errors.push(format!(
+                        "track_to_identity[{}] = {} but track.identity_id = {:?}",
+                        track_id, identity_id, track.identity_id
+                    ));
+                }
+            } else {
+                errors.push(format!(
+                    "track_to_identity[{}] = {} but track doesn't exist",
+                    track_id, identity_id
+                ));
+            }
+
+            // Check identity exists
+            if !self.identities.contains_key(identity_id) {
+                errors.push(format!(
+                    "track_to_identity[{}] = {} but identity doesn't exist",
+                    track_id, identity_id
+                ));
+            }
+        }
+
+        // 5. Track identity references point to existing identities
+        for (track_id, track) in &self.tracks {
+            if let Some(identity_id) = track.identity_id {
+                if !self.identities.contains_key(&identity_id) {
+                    errors.push(format!(
+                        "Track {} references non-existent identity {}",
+                        track_id, identity_id
+                    ));
+                }
+            }
+        }
+
+        errors
+    }
+
+    /// Check if all structural invariants hold.
+    #[must_use]
+    pub fn invariants_hold(&self) -> bool {
+        self.validate_invariants().is_empty()
     }
 
     /// Check if all signals are valid against document text.

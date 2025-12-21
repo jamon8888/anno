@@ -238,6 +238,14 @@ pub use types::*;
 // =============================================================================
 // Sealed Trait Pattern
 // =============================================================================
+//
+// The `Model` trait is sealed to:
+// 1. Maintain invariants (entities have valid offsets, confidence in [0,1])
+// 2. Allow adding methods without breaking external implementations
+// 3. Ensure all backends share consistent behavior
+//
+// For external/plugin backends, use the `AnyModel` wrapper (see below).
+// =============================================================================
 
 mod sealed {
     pub trait Sealed {}
@@ -295,6 +303,47 @@ mod sealed {
 }
 
 /// Trait for NER model backends.
+///
+/// # Sealed Trait
+///
+/// `Model` is intentionally sealed (cannot be implemented outside this crate) to:
+///
+/// 1. **Maintain invariants**: All backends must produce entities with valid character
+///    offsets, confidence in `[0, 1]`, and non-empty text.
+/// 2. **Allow evolution**: New methods can be added with default implementations
+///    without breaking external code.
+/// 3. **Ensure consistency**: All backends share standardized behavior for
+///    `is_available()`, `supported_types()`, etc.
+///
+/// # For External Backends
+///
+/// If you need to integrate an external NER backend (e.g., a REST API, Python model
+/// via PyO3, or custom implementation), use the [`AnyModel`] wrapper:
+///
+/// ```rust,ignore
+/// use anno::{AnyModel, Entity, EntityType, Result};
+///
+/// struct MyExternalNER { /* ... */ }
+///
+/// impl MyExternalNER {
+///     fn extract(&self, text: &str) -> Vec<Entity> {
+///         // Your implementation
+///         vec![]
+///     }
+/// }
+///
+/// // Wrap in AnyModel to use with anno's infrastructure
+/// let model = AnyModel::new(
+///     "my-ner",
+///     vec![EntityType::Person, EntityType::Organization],
+///     move |text, _lang| Ok(my_ner.extract(text)),
+/// );
+///
+/// // Now usable wherever Box<dyn Model> is expected
+/// let entities = model.extract_entities("Hello world", None)?;
+/// ```
+///
+/// [`AnyModel`]: crate::AnyModel
 pub trait Model: sealed::Sealed + Send + Sync {
     /// Extract entities from text.
     fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>>;
@@ -313,6 +362,122 @@ pub trait Model: sealed::Sealed + Send + Sync {
     /// Get a description of the model.
     fn description(&self) -> &'static str {
         "Unknown NER model"
+    }
+
+    /// Get capability summary for this model.
+    ///
+    /// Override this in implementations that support additional capabilities
+    /// (batch, GPU, streaming, etc.) to enable runtime discovery.
+    ///
+    /// # Default
+    ///
+    /// Returns a [`ModelCapabilities`] with all fields set to `false`/`None`.
+    fn capabilities(&self) -> ModelCapabilities {
+        ModelCapabilities::default()
+    }
+}
+
+// =============================================================================
+// AnyModel: Adapter for External Backends
+// =============================================================================
+
+/// A wrapper that allows external code to implement NER backends without
+/// directly implementing the sealed `Model` trait.
+///
+/// `AnyModel` acts as an adapter: you provide a closure that does the actual
+/// entity extraction, and `AnyModel` implements `Model` on your behalf.
+///
+/// # Example
+///
+/// ```rust
+/// use anno::{AnyModel, Entity, EntityType, Result};
+///
+/// // Define extraction logic as a closure or function
+/// let my_extractor = |text: &str, _lang: Option<&str>| -> Result<Vec<Entity>> {
+///     // Your custom NER logic here
+///     Ok(vec![])
+/// };
+///
+/// // Wrap in AnyModel
+/// let model = AnyModel::new(
+///     "my-custom-ner",
+///     "Custom NER backend using external API",
+///     vec![EntityType::Person, EntityType::Organization],
+///     my_extractor,
+/// );
+///
+/// // Use like any other Model
+/// assert!(model.is_available());
+/// let entities = model.extract_entities("Hello world", None).unwrap();
+/// ```
+///
+/// # Thread Safety
+///
+/// The extractor closure must be `Send + Sync`. For interior mutability
+/// (e.g., caching, connection pooling), use `Arc<Mutex<...>>` or similar.
+pub struct AnyModel {
+    name: &'static str,
+    description: &'static str,
+    supported_types: Vec<EntityType>,
+    extractor: Box<dyn Fn(&str, Option<&str>) -> Result<Vec<Entity>> + Send + Sync>,
+}
+
+impl AnyModel {
+    /// Create a new `AnyModel` wrapper.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Model identifier (e.g., "my-ner")
+    /// * `description` - Human-readable description
+    /// * `supported_types` - Entity types this model can extract
+    /// * `extractor` - Closure that performs the actual extraction
+    pub fn new(
+        name: &'static str,
+        description: &'static str,
+        supported_types: Vec<EntityType>,
+        extractor: impl Fn(&str, Option<&str>) -> Result<Vec<Entity>> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            name,
+            description,
+            supported_types,
+            extractor: Box::new(extractor),
+        }
+    }
+}
+
+impl std::fmt::Debug for AnyModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AnyModel")
+            .field("name", &self.name)
+            .field("description", &self.description)
+            .field("supported_types", &self.supported_types)
+            .finish()
+    }
+}
+
+// AnyModel gets the Sealed impl so it can implement Model
+impl sealed::Sealed for AnyModel {}
+
+impl Model for AnyModel {
+    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+        (self.extractor)(text, language)
+    }
+
+    fn supported_types(&self) -> Vec<EntityType> {
+        self.supported_types.clone()
+    }
+
+    fn is_available(&self) -> bool {
+        true
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn description(&self) -> &'static str {
+        self.description
     }
 }
 
@@ -416,6 +581,52 @@ pub trait NamedEntityCapable: Model {}
 /// This is a marker trait used for type-level distinctions between different
 /// model capabilities. Models that extract structured data (like `RegexNER`) should implement this.
 pub trait StructuredEntityCapable: Model {}
+
+// =============================================================================
+// Capability Discovery for Trait Objects
+// =============================================================================
+
+/// Summary of a model's capabilities, useful when working with `Box<dyn Model>`.
+///
+/// Since capability traits (`BatchCapable`, `GpuCapable`, etc.) can't be queried
+/// through a `Box<dyn Model>` without downcasting, this struct provides a static
+/// summary of what the model supports.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use anno::{Model, ModelCapabilities};
+///
+/// fn process_with_model(model: &dyn Model) {
+///     let caps = model.capabilities();
+///     
+///     if caps.batch_capable {
+///         println!("Model supports batch processing");
+///     }
+///     if caps.gpu_capable {
+///         println!("Model can use GPU: {:?}", caps.device);
+///     }
+/// }
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct ModelCapabilities {
+    /// True if the model implements `BatchCapable`.
+    pub batch_capable: bool,
+    /// Optimal batch size, if batch capable.
+    pub optimal_batch_size: Option<usize>,
+    /// True if the model implements `GpuCapable`.
+    pub gpu_capable: bool,
+    /// True if GPU is currently active.
+    pub gpu_active: bool,
+    /// Device identifier (e.g., "cuda:0", "cpu"), if GPU capable.
+    pub device: Option<String>,
+    /// True if the model implements `StreamingCapable`.
+    pub streaming_capable: bool,
+    /// Recommended chunk size for streaming, if streaming capable.
+    pub recommended_chunk_size: Option<usize>,
+    /// True if the model implements `RelationCapable`.
+    pub relation_capable: bool,
+}
 
 /// Trait for models that can extract relations between entities.
 ///
