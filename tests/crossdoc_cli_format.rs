@@ -171,10 +171,8 @@ fn test_display_limit_logic() {
     // When verbose=true and max_clusters=0, should show all
     let verbose_limit_no_max = if 0 > 0 {
         0
-    } else if !true {
-        // verbose = true
-        50
     } else {
+        // verbose = true, so no hardcoded limit unless max_clusters > 0
         clusters.len()
     };
     assert_eq!(

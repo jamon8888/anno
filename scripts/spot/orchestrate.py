@@ -542,6 +542,138 @@ def cmd_full(args, config: Config):
 
 
 # ============================================================================
+# Local Evaluation (no AWS)
+# ============================================================================
+
+def cmd_local(args, config: Config):
+    """Run evaluation locally (no AWS required).
+    
+    Useful for:
+    - Development and testing
+    - CI environments without AWS credentials
+    - Quick single-backend/dataset runs
+    """
+    import subprocess
+    from datetime import datetime
+    
+    backends = get_backends_for_profile(args.profile, args.backends)
+    datasets = args.datasets.split(",") if args.datasets else ["WikiGold"]
+    seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else [42]
+    max_cases = args.max_examples
+    
+    tasks = list(generate_tasks(
+        backends=backends,
+        datasets=datasets,
+        seeds=seeds,
+        max_examples=max_cases,
+    ))
+    
+    console.print(f"[bold]Running {len(tasks)} evaluations locally...[/bold]")
+    
+    results = []
+    output_dir = Path(args.output).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Find anno binary
+    anno_bin = Path("target/release/anno")
+    if not anno_bin.exists():
+        anno_bin = Path("target/debug/anno")
+    if not anno_bin.exists():
+        console.print("[red]Error: anno binary not found. Run 'cargo build --release -p anno --features cli,eval-advanced' first.[/red]")
+        return
+    
+    for i, task in enumerate(tasks, 1):
+        backend = task["backend"]
+        dataset = task["dataset"]
+        seed = task["seed"]
+        
+        console.print(f"\n[{i}/{len(tasks)}] [bold]{backend}[/bold] × [cyan]{dataset}[/cyan] (seed={seed})")
+        
+        start = datetime.now()
+        try:
+            result = subprocess.run(
+                [
+                    str(anno_bin), "dataset", "eval",
+                    "--dataset", dataset,
+                    "--model", backend,
+                    "--task", "ner",
+                    "--max-cases", str(max_cases),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=600,  # 10 minute timeout per task
+            )
+            
+            duration_ms = int((datetime.now() - start).total_seconds() * 1000)
+            
+            # Parse output for P/R/F1
+            import re
+            prf = re.search(r'P:\s*([\d.]+)%\s*R:\s*([\d.]+)%\s*F1:\s*([\d.]+)%', result.stdout)
+            n_match = re.search(r'Sentences:\s*(\d+)', result.stdout)
+            
+            if prf:
+                r = {
+                    "timestamp": datetime.now().isoformat(),
+                    "backend": backend,
+                    "dataset": dataset,
+                    "seed": seed,
+                    "f1": float(prf.group(3)),
+                    "precision": float(prf.group(1)),
+                    "recall": float(prf.group(2)),
+                    "n": int(n_match.group(1)) if n_match else 0,
+                    "duration_ms": duration_ms,
+                }
+                console.print(f"  [green]F1={r['f1']:.1f}% P={r['precision']:.1f}% R={r['recall']:.1f}% ({duration_ms}ms)[/green]")
+            else:
+                r = {
+                    "timestamp": datetime.now().isoformat(),
+                    "backend": backend,
+                    "dataset": dataset,
+                    "seed": seed,
+                    "f1": 0, "precision": 0, "recall": 0, "n": 0,
+                    "duration_ms": duration_ms,
+                    "error": "parse_failed",
+                    "stderr": result.stderr[:500] if result.stderr else None,
+                }
+                console.print(f"  [yellow]No results parsed (exit={result.returncode})[/yellow]")
+                if result.stderr:
+                    console.print(f"  [dim]{result.stderr[:200]}[/dim]")
+            
+            results.append(r)
+            
+        except subprocess.TimeoutExpired:
+            console.print(f"  [red]Timeout after 600s[/red]")
+            results.append({
+                "timestamp": datetime.now().isoformat(),
+                "backend": backend, "dataset": dataset, "seed": seed,
+                "f1": 0, "precision": 0, "recall": 0, "n": 0,
+                "duration_ms": 600000, "error": "timeout",
+            })
+        except Exception as e:
+            console.print(f"  [red]Error: {e}[/red]")
+            results.append({
+                "timestamp": datetime.now().isoformat(),
+                "backend": backend, "dataset": dataset, "seed": seed,
+                "f1": 0, "precision": 0, "recall": 0, "n": 0,
+                "duration_ms": 0, "error": str(e),
+            })
+    
+    # Write results
+    output_path = Path(args.output)
+    with output_path.open("w") as f:
+        for r in results:
+            f.write(json.dumps(r) + "\n")
+    
+    console.print(f"\n[bold green]Results written to {output_path}[/bold green]")
+    
+    # Summary
+    successful = [r for r in results if r.get("f1", 0) > 0]
+    if successful:
+        best = max(successful, key=lambda r: r["f1"])
+        console.print(f"[bold]Best: {best['backend']}/{best['dataset']} F1={best['f1']:.1f}%[/bold]")
+
+
+# ============================================================================
 # Main
 # ============================================================================
 
@@ -585,6 +717,17 @@ def main():
     full.add_argument("--fleet-size", type=int)
     full.add_argument("--output", default="reports/spot-eval-results.json")
     
+    # local (no AWS)
+    local = subparsers.add_parser("local", help="Run evaluation locally (no AWS)")
+    local.add_argument("--profile", choices=["quick", "full", "onnx"], default="quick",
+                       help="Backend profile: quick (zero-dep), onnx (ML only), full (all)")
+    local.add_argument("--backends", help="Comma-separated backends (overrides --profile)")
+    local.add_argument("--datasets", help="Comma-separated datasets", default="WikiGold")
+    local.add_argument("--seeds", help="Comma-separated seeds", default="42")
+    local.add_argument("--max-examples", type=int, default=50,
+                       help="Max examples per dataset (lower for faster local runs)")
+    local.add_argument("--output", default="reports/local-eval-results.jsonl")
+    
     args = parser.parse_args()
     config = Config()
     
@@ -595,6 +738,7 @@ def main():
         "results": cmd_results,
         "teardown": cmd_teardown,
         "full": cmd_full,
+        "local": cmd_local,
     }
     
     commands[args.command](args, config)

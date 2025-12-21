@@ -125,8 +125,15 @@ mod tests {
     #[test]
     fn test_progress_edge_cases() {
         // Test edge cases for progress reporting
-        // Empty dataset
-        let percent = (0 * 100) / 1.max(1);
+        // Empty dataset - logic should handle division by zero or empty counts gracefully
+        // Simulate empty dataset logic without hardcoding 0/1 division which triggers clippy
+        let total = 0;
+        let processed = 0;
+        let percent = if total > 0 {
+            (processed * 100) / total
+        } else {
+            0
+        };
         assert_eq!(percent, 0);
 
         // Single sentence

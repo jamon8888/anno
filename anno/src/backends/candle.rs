@@ -496,6 +496,11 @@ impl Model for CandleNER {
     fn description(&self) -> &'static str {
         "BERT token classification NER using Candle (pure Rust, GPU support)"
     }
+
+    fn version(&self) -> String {
+        // Version depends on model name and device
+        format!("candle-ner-{}-{}", self.model_name, self.device())
+    }
 }
 
 // =============================================================================

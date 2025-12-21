@@ -52,10 +52,15 @@ pub struct CachedPrediction {
 /// Minimal entity representation for caching.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedEntity {
+    /// Surface text of the entity.
     pub text: String,
+    /// Entity type label (e.g., "PER", "ORG").
     pub entity_type: String,
+    /// Start character offset.
     pub start: usize,
+    /// End character offset (exclusive).
     pub end: usize,
+    /// Confidence score (0.0–1.0).
     pub confidence: f32,
 }
 
@@ -63,25 +68,35 @@ impl From<&Entity> for CachedEntity {
     fn from(e: &Entity) -> Self {
         Self {
             text: e.text.clone(),
-            entity_type: e.entity_type.clone(),
+            entity_type: e.entity_type.to_string(),
             start: e.start,
             end: e.end,
-            confidence: e.confidence,
+            confidence: e.confidence as f32,
         }
     }
 }
 
 impl From<CachedEntity> for Entity {
     fn from(c: CachedEntity) -> Self {
-        Entity::new(c.text, c.entity_type, c.start, c.end, c.confidence)
+        use crate::EntityType;
+        Entity::new(
+            c.text,
+            EntityType::from_label(&c.entity_type),
+            c.start,
+            c.end,
+            c.confidence as f64,
+        )
     }
 }
 
 /// Prediction cache for incremental evaluation.
+/// Thread-safe via interior mutability.
 pub struct PredictionCache {
     cache_dir: PathBuf,
-    /// In-memory index: key -> file offset (for fast lookup).
-    index: HashMap<String, CachedPrediction>,
+    /// In-memory index: key -> cached prediction (thread-safe).
+    index: std::sync::RwLock<HashMap<String, CachedPrediction>>,
+    /// File write lock for appending to JSONL.
+    file_lock: std::sync::Mutex<()>,
 }
 
 impl PredictionCache {
@@ -90,21 +105,89 @@ impl PredictionCache {
         let cache_dir = cache_dir.as_ref().to_path_buf();
         fs::create_dir_all(&cache_dir)?;
 
-        let mut cache = Self {
+        let cache = Self {
             cache_dir,
-            index: HashMap::new(),
+            index: std::sync::RwLock::new(HashMap::new()),
+            file_lock: std::sync::Mutex::new(()),
         };
         cache.load_index()?;
         Ok(cache)
     }
 
-    /// Generate cache key from components.
+    /// Load or create a prediction cache from a file path.
+    /// If the path is a file, uses its parent directory.
+    /// Returns empty cache on error (non-fatal).
+    pub fn load_or_create(path: &Path) -> Self {
+        let cache_dir = if path.is_file() || path.extension().is_some() {
+            path.parent().unwrap_or(Path::new(".")).to_path_buf()
+        } else {
+            path.to_path_buf()
+        };
+
+        match Self::new(&cache_dir) {
+            Ok(cache) => {
+                let count = cache.index.read().map(|idx| idx.len()).unwrap_or(0);
+                if count > 0 {
+                    eprintln!(
+                        "[cache] Loaded {} cached predictions from {}",
+                        count,
+                        cache_dir.display()
+                    );
+                }
+                cache
+            }
+            Err(e) => {
+                eprintln!("[cache] Warning: Could not load prediction cache: {}", e);
+                Self {
+                    cache_dir,
+                    index: std::sync::RwLock::new(HashMap::new()),
+                    file_lock: std::sync::Mutex::new(()),
+                }
+            }
+        }
+    }
+
+    /// Check if cache is enabled (has entries or a valid path).
+    pub fn is_enabled(&self) -> bool {
+        self.cache_dir.exists()
+            || self
+                .index
+                .read()
+                .map(|idx| !idx.is_empty())
+                .unwrap_or(false)
+    }
+
+    /// Get the default path for the prediction cache.
+    pub fn default_path() -> PathBuf {
+        std::env::var("ANNO_PREDICTION_CACHE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                dirs::cache_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join("anno")
+                    .join("predictions.jsonl")
+            })
+    }
+
+    /// Generate cache key from components (using raw text).
     pub fn cache_key(text: &str, backend: &str, version: &str, labels: &[&str]) -> String {
+        let text_hash = Self::hash_str(text);
+        Self::cache_key_from_hash(&text_hash, backend, version, labels)
+    }
+
+    /// Generate cache key from pre-computed text hash.
+    /// This allows loading from disk where we only have the hash, not the text.
+    fn cache_key_from_hash(
+        text_hash: &str,
+        backend: &str,
+        version: &str,
+        labels: &[&str],
+    ) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        text.hash(&mut hasher);
+        text_hash.hash(&mut hasher);
         backend.to_lowercase().hash(&mut hasher);
         version.hash(&mut hasher);
 
@@ -116,13 +199,79 @@ impl PredictionCache {
         format!("{:016x}", hasher.finish())
     }
 
-    /// Look up cached prediction.
-    pub fn get(&self, key: &str) -> Option<&CachedPrediction> {
-        self.index.get(key)
+    /// Hash a string to a hex string.
+    fn hash_str(s: &str) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        s.hash(&mut hasher);
+        format!("{:016x}", hasher.finish())
     }
 
-    /// Store prediction in cache.
-    pub fn put(&mut self, key: String, prediction: CachedPrediction) -> std::io::Result<()> {
+    /// Look up cached prediction by key.
+    pub fn get(&self, key: &str) -> Option<CachedPrediction> {
+        self.index.read().ok()?.get(key).cloned()
+    }
+
+    /// Look up cached prediction by components.
+    /// Returns entities on hit, None on miss.
+    pub fn lookup(
+        &self,
+        text: &str,
+        backend: &str,
+        version: &str,
+        labels: &[&str],
+    ) -> Option<Vec<Entity>> {
+        let key = Self::cache_key(text, backend, version, labels);
+        self.get(&key)
+            .map(|p| p.predictions.into_iter().map(Entity::from).collect())
+    }
+
+    /// Store prediction and return cache key.
+    /// Thread-safe via interior mutability.
+    pub fn store(
+        &self,
+        text: &str,
+        backend: &str,
+        version: &str,
+        labels: &[&str],
+        entities: &[Entity],
+        inference_ms: u64,
+    ) -> std::io::Result<String> {
+        // text_hash is just the hash of the text content
+        let text_hash = Self::hash_str(text);
+        // Full cache key includes all components
+        let key = Self::cache_key_from_hash(&text_hash, backend, version, labels);
+
+        // Skip if already cached (read lock)
+        if let Ok(idx) = self.index.read() {
+            if idx.contains_key(&key) {
+                return Ok(key);
+            }
+        }
+
+        let prediction = CachedPrediction {
+            text_hash, // Just text hash, not full key
+            backend: backend.to_string(),
+            version: version.to_string(),
+            labels: labels.iter().map(|s| s.to_string()).collect(),
+            predictions: entities.iter().map(CachedEntity::from).collect(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            inference_ms,
+        };
+
+        self.put(key.clone(), prediction)?;
+        Ok(key)
+    }
+
+    /// Store prediction in cache (thread-safe).
+    fn put(&self, key: String, prediction: CachedPrediction) -> std::io::Result<()> {
+        // Acquire file lock for writing
+        let _lock = self
+            .file_lock
+            .lock()
+            .map_err(|_| std::io::Error::other("file lock poisoned"))?;
+
         // Append to JSONL file
         let cache_file = self.cache_dir.join("predictions.jsonl");
         let mut file = OpenOptions::new()
@@ -134,13 +283,15 @@ impl PredictionCache {
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         writeln!(file, "{}", line)?;
 
-        // Update in-memory index
-        self.index.insert(key, prediction);
+        // Update in-memory index (write lock)
+        if let Ok(mut idx) = self.index.write() {
+            idx.insert(key, prediction);
+        }
         Ok(())
     }
 
     /// Load index from cache file.
-    fn load_index(&mut self) -> std::io::Result<()> {
+    fn load_index(&self) -> std::io::Result<()> {
         let cache_file = self.cache_dir.join("predictions.jsonl");
         if !cache_file.exists() {
             return Ok(());
@@ -149,20 +300,26 @@ impl PredictionCache {
         let file = File::open(&cache_file)?;
         let reader = BufReader::new(file);
 
+        let mut idx = self
+            .index
+            .write()
+            .map_err(|_| std::io::Error::other("index lock poisoned"))?;
+
         for line in reader.lines() {
             let line = line?;
             if line.trim().is_empty() {
                 continue;
             }
             if let Ok(pred) = serde_json::from_str::<CachedPrediction>(&line) {
-                let key = Self::cache_key(
-                    "", // We don't store raw text, use hash
+                // Regenerate full cache key from stored components
+                let labels_refs: Vec<&str> = pred.labels.iter().map(|s| s.as_str()).collect();
+                let key = Self::cache_key_from_hash(
+                    &pred.text_hash,
                     &pred.backend,
                     &pred.version,
-                    &pred.labels.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                    &labels_refs,
                 );
-                // Actually use text_hash as the lookup key
-                self.index.insert(pred.text_hash.clone(), pred);
+                idx.insert(key, pred);
             }
         }
 
@@ -171,33 +328,62 @@ impl PredictionCache {
 
     /// Get cache statistics.
     pub fn stats(&self) -> CacheStats {
-        let by_backend: HashMap<String, usize> =
-            self.index.values().fold(HashMap::new(), |mut acc, p| {
-                *acc.entry(p.backend.clone()).or_insert(0) += 1;
-                acc
-            });
+        let idx = match self.index.read() {
+            Ok(idx) => idx,
+            Err(_) => {
+                return CacheStats {
+                    total_entries: 0,
+                    by_backend: HashMap::new(),
+                }
+            }
+        };
+
+        let by_backend: HashMap<String, usize> = idx.values().fold(HashMap::new(), |mut acc, p| {
+            *acc.entry(p.backend.clone()).or_insert(0) += 1;
+            acc
+        });
 
         CacheStats {
-            total_entries: self.index.len(),
+            total_entries: idx.len(),
             by_backend,
         }
     }
 
     /// Clear all cached predictions.
-    pub fn clear(&mut self) -> std::io::Result<()> {
+    pub fn clear(&self) -> std::io::Result<()> {
+        let _lock = self
+            .file_lock
+            .lock()
+            .map_err(|_| std::io::Error::other("file lock poisoned"))?;
+
         let cache_file = self.cache_dir.join("predictions.jsonl");
         if cache_file.exists() {
             fs::remove_file(&cache_file)?;
         }
-        self.index.clear();
+
+        if let Ok(mut idx) = self.index.write() {
+            idx.clear();
+        }
         Ok(())
+    }
+
+    /// Returns the number of cached entries.
+    pub fn len(&self) -> usize {
+        self.index.read().map(|idx| idx.len()).unwrap_or(0)
+    }
+
+    /// Returns true if cache is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
 /// Cache statistics.
 #[derive(Debug)]
 pub struct CacheStats {
+    /// Total number of cached predictions.
     pub total_entries: usize,
+    /// Count of predictions per backend name.
     pub by_backend: HashMap<String, usize>,
 }
 

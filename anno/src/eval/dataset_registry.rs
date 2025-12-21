@@ -1180,6 +1180,7 @@ define_datasets! {
         annotation_scheme: "BIO",
         size_hint: "~65k tokens, 1,000 tweets",
         notes: "89% unseen entities in test set - excellent for OOD evaluation; shared task at W-NUT workshop",
+        tasks: ["ner"],
         hf_id: "leondz/wnut_17",
         categories: [ner, social_media],
     },
@@ -1198,6 +1199,7 @@ define_datasets! {
         annotation_scheme: "BIO",
         size_hint: "~12k utterances",
         example: "show O\nme O\naction B-Genre\nmovies O\ndirected O\nby O\nsteven B-Director\nspielberg I-Director",
+        tasks: ["ner", "slot_filling"],
         categories: [ner],
     },
     MitRestaurant {
@@ -1215,6 +1217,7 @@ define_datasets! {
         annotation_scheme: "BIO",
         size_hint: "~8k utterances",
         example: "find O\nitalian B-Cuisine\nrestaurants O\nin O\nboston B-Location\nwith O\noutdoor B-Amenity\nseating I-Amenity",
+        tasks: ["ner", "slot_filling"],
         categories: [ner],
     },
     CoNLL2003Sample {
@@ -1233,6 +1236,7 @@ define_datasets! {
         size_hint: "~300k tokens, ~35k entities",
         example: "EU B-ORG\nrejects O\nGerman B-MISC\ncall O\nto O\nboycott O\nBritish B-MISC\nlamb O\n. O",
         notes: "Original has ~7% annotation errors (CleanCoNLL 2023); still the most-cited NER benchmark",
+        tasks: ["ner"],
         categories: [ner],
     },
     OntoNotesSample {
@@ -1268,6 +1272,7 @@ define_datasets! {
         annotation_scheme: "BIO",
         size_hint: "~1M sentences across 10 languages",
         example: "Marie Curie (PER) discovered radium at the University of Paris (ORG) in France (LOC).",
+        tasks: ["ner"],
         hf_id: "Babelscape/multinerd",
         categories: [ner, multilingual],
     },
@@ -1287,6 +1292,7 @@ define_datasets! {
         size_hint: "188k sentences, 66 fine-grained types",
         example: "Elon Musk (person-entrepreneur) founded SpaceX (organization-company) in Hawthorne (location-city), California.",
         notes: "Hierarchical type system; benchmark for few-shot and fine-grained NER",
+        tasks: ["ner"],
         hf_id: "DFKI-SLT/few-nerd",
         categories: [ner],
     },

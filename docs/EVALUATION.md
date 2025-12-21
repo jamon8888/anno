@@ -371,6 +371,33 @@ Confidence [0.8, 0.9): Accuracy=75.2% (expected=85.0%)
 - **Uncertainty quantification**: Calibrated scores can be used as probabilities for downstream tasks
 - **Error analysis**: Identify confidence ranges where model is miscalibrated
 
+### Caching & Incremental Evaluation
+
+The evaluation system caches model predictions to speed up iteration. This allows you to:
+1. Re-run metrics on the same predictions (e.g., when adding new metrics)
+2. Compare multiple datasets without re-running shared backends
+3. Share predictions across CI runs (using S3 or persistent storage)
+
+**Prediction Cache behavior:**
+- **Key**: `sha256(text + backend_name + backend_version + sorted_labels)`
+- **Storage**: `~/.cache/anno/predictions.jsonl` (or `ANNO_PREDICTION_CACHE`)
+- **Format**: Append-only JSONL (safe for concurrent writes, git-friendly)
+
+**Environment Variables:**
+- `ANNO_PREDICTION_CACHE`: Path to the prediction cache file (default: `~/.cache/anno/predictions.jsonl`)
+- `ANNO_CACHE_DIR`: Base directory for all caches (datasets, models, predictions)
+
+**Backend Versioning:**
+To ensure cache validity, backends report a `version()` string.
+- Simple backends (`RegexNER`): return `"1"`
+- ML backends (`GLiNER`): return model name/hash (e.g., `"gliner_small-v2.1"`)
+
+If you modify a backend's logic or model weights, update its `version()` implementation to invalidate old cache entries.
+
+**CLI Management:**
+- `anno cache stats`: Show statistics for file and prediction caches.
+- `anno cache clear`: Clear all caches (files and predictions).
+
 ### Feature flags
 
 | Feature | Modules |

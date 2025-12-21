@@ -1070,6 +1070,10 @@ impl Model for NuNER {
     fn description(&self) -> &'static str {
         "NuNER Zero: Token-based zero-shot NER from NuMind (MIT licensed)"
     }
+
+    fn version(&self) -> String {
+        format!("nuner-zero-{}", self.model_id)
+    }
 }
 
 // =============================================================================
