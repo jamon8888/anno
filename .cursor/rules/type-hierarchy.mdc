@@ -141,5 +141,8 @@ let identities = linker.link(tracks)?;         // Level 3
 - `anno-core/src/entity.rs` - General `Entity` type
 - `anno/src/backends/mention_ranking.rs` - Mention ranking with Track integration
 - `anno/src/eval/coref.rs` - Evaluation types (`CorefChain`, `Mention`)
-- `docs/CRATE_BOUNDARY_ANALYSIS.md` - Detailed analysis of type boundaries
-- `docs/INTER_INTRA_DOC_ABSTRACTIONS.md` - Operation mapping documentation
+- `docs/ARCHITECTURE.md` - Crate layout overview (short)
+- `docs/PIPELINE.md` - End-to-end pipeline examples (Signal → Track → Identity)
+- `docs/QUICKSTART.md` - Minimal “start here” for CLI + library
+- `docs/notes/design/architecture/CRATE_BOUNDARY_ANALYSIS.md` - Detailed analysis of type boundaries
+- `docs/notes/design/pipeline/INTER_INTRA_DOC_ABSTRACTIONS.md` - Operation mapping documentation

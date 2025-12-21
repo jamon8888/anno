@@ -1031,7 +1031,6 @@ impl EntityCluster {
             kb_name: None,
             description: None,
             embedding: self.centroid.clone(),
-            box_embedding: None,
             aliases: self
                 .mentions
                 .iter()

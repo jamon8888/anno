@@ -55,9 +55,10 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use anno::backends::coref_t5::T5Coref;
+//! use anno::backends::coref_t5::{T5Coref, T5CorefConfig};
 //!
-//! let coref = T5Coref::new("path/to/t5_coref_onnx")?;
+//! let coref = T5Coref::from_path("path/to/t5_coref_onnx", T5CorefConfig::default())?
+//!     .with_heuristic_fallback();
 //!
 //! let text = "Marie Curie was a physicist. She won two Nobel prizes.";
 //! let clusters = coref.resolve(text)?;
@@ -604,7 +605,7 @@ impl T5Coref {
 
                 let mut chain = anno_core::coref::CorefChain::new(mentions);
                 // Set cluster ID based on canonical name hash
-                chain.cluster_id = Some(c.id as u64);
+                chain.cluster_id = Some((c.id as u64).into());
                 chain
             })
             .collect()

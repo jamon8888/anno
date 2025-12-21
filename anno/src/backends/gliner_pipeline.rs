@@ -251,17 +251,28 @@ impl PipelineBuilder {
         let encoder = CandleEncoder::from_pretrained(&encoder_id)?;
         let hidden_dim = encoder.hidden_dim();
 
-        // Build registry from entity types
-        let mut registry_builder = SemanticRegistry::builder();
-        for (type_name, desc) in self
+        // Build registry from entity types using the SAME encoder (bi-encoder baseline).
+        //
+        // This replaces the previous placeholder (all-zero) label embeddings, which produced
+        // meaningless similarity scores.
+        let entity_types: Vec<&str> = self
             .config
             .entity_types
             .iter()
-            .zip(self.config.entity_descriptions.iter())
-        {
-            registry_builder = registry_builder.add_entity(type_name, desc);
-        }
-        let registry = registry_builder.build_placeholder(hidden_dim);
+            .map(|s| s.as_str())
+            .collect();
+        let entity_descs: Vec<&str> = self
+            .config
+            .entity_descriptions
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        let registry = build_registry_from_encoder(
+            &encoder,
+            &entity_types,
+            &entity_descs,
+            self.config.threshold,
+        )?;
 
         // Create span representation layer
         let span_config = SpanRepConfig {
@@ -320,7 +331,28 @@ pub struct GLiNERPipeline<E> {
 }
 
 #[cfg(feature = "candle")]
-impl<E: TextEncoder> GLiNERPipeline<E> {
+/// `TextEncoder` that can also return token byte offsets.
+///
+/// This is used by `GLiNERPipeline` to decode token spans into character offsets safely.
+pub trait TextEncoderWithOffsets: TextEncoder {
+    /// Encode text into token embeddings and return byte offsets for each token.
+    ///
+    /// # Returns
+    /// - Token embeddings: `[seq_len, hidden_dim]` (flattened)
+    /// - Sequence length
+    /// - Token byte offsets: `(byte_start, byte_end)` for each token
+    fn encode_with_offsets(&self, text: &str) -> Result<(Vec<f32>, usize, Vec<(usize, usize)>)>;
+}
+
+#[cfg(feature = "candle")]
+impl TextEncoderWithOffsets for CandleEncoder {
+    fn encode_with_offsets(&self, text: &str) -> Result<(Vec<f32>, usize, Vec<(usize, usize)>)> {
+        CandleEncoder::encode_with_offsets(self, text)
+    }
+}
+
+#[cfg(feature = "candle")]
+impl<E: TextEncoderWithOffsets> GLiNERPipeline<E> {
     /// Create a builder.
     pub fn builder() -> PipelineBuilder {
         PipelineBuilder::new()
@@ -328,50 +360,7 @@ impl<E: TextEncoder> GLiNERPipeline<E> {
 
     /// Extract entities from text.
     pub fn extract(&self, text: &str) -> Result<Vec<Entity>> {
-        if text.trim().is_empty() {
-            return Ok(vec![]);
-        }
-
-        // Step 1: Encode text
-        let (token_embeddings, seq_len) = self.encoder.encode(text)?;
-        let hidden_dim = self.config.hidden_dim;
-
-        // Step 2: Create ragged batch (single document)
-        // Generate dummy token IDs for the batch structure
-        let dummy_tokens: Vec<u32> = (0..seq_len as u32).collect();
-        let batch = RaggedBatch::from_sequences(&[dummy_tokens]);
-
-        // Step 3: Generate span candidates
-        let candidates = generate_span_candidates(&batch, self.config.max_span_width);
-
-        if candidates.is_empty() {
-            return Err(crate::Error::Inference(
-                "GLiNERPipeline produced no span candidates for non-empty text. This suggests an encoder/tokenization failure (seq_len=0) or an invalid max_span_width configuration.".to_string(),
-            ));
-        }
-
-        // Step 4: Compute span embeddings
-        let span_embeddings = self
-            .span_layer
-            .forward(&token_embeddings, &candidates, &batch);
-
-        // Step 5: Compute similarity scores via late interaction
-        let scores = self.interaction.compute_similarity(
-            &span_embeddings,
-            candidates.len(),
-            &self.registry.embeddings,
-            self.registry.len(),
-            hidden_dim,
-        );
-
-        // Step 6: Apply sigmoid
-        let mut scores = scores;
-        self.interaction.apply_sigmoid(&mut scores);
-
-        // Step 7: Decode entities
-        let entities = self.decode_entities(text, &candidates, &scores, seq_len);
-
-        Ok(entities)
+        self.extract_with_registry(text, &self.registry, self.config.threshold)
     }
 
     /// Extract entities with custom types (zero-shot).
@@ -381,29 +370,10 @@ impl<E: TextEncoder> GLiNERPipeline<E> {
         entity_types: &[&str],
         threshold: Option<f32>,
     ) -> Result<Vec<Entity>> {
-        // For true zero-shot, we'd need to encode the new labels
-        // For now, filter to configured types
         let threshold = threshold.unwrap_or(self.config.threshold);
-        let entities = self.extract(text)?;
-
-        Ok(entities
-            .into_iter()
-            .filter(|e| {
-                let type_name = match &e.entity_type {
-                    EntityType::Person => "person",
-                    EntityType::Organization => "organization",
-                    EntityType::Location => "location",
-                    EntityType::Date => "date",
-                    EntityType::Money => "money",
-                    EntityType::Other(s) => s.as_str(),
-                    _ => return false,
-                };
-                entity_types
-                    .iter()
-                    .any(|&t| t.eq_ignore_ascii_case(type_name))
-            })
-            .filter(|e| e.confidence >= threshold as f64)
-            .collect())
+        let registry =
+            build_registry_from_encoder(self.encoder.as_ref(), entity_types, &[], threshold)?;
+        self.extract_with_registry(text, &registry, threshold)
     }
 
     /// Get the encoder architecture name.
@@ -421,67 +391,141 @@ impl<E: TextEncoder> GLiNERPipeline<E> {
         &self.config.entity_types
     }
 
+    fn extract_with_registry(
+        &self,
+        text: &str,
+        registry: &SemanticRegistry,
+        threshold: f32,
+    ) -> Result<Vec<Entity>> {
+        if text.trim().is_empty() {
+            return Ok(vec![]);
+        }
+
+        if registry.is_empty() {
+            return Err(crate::Error::InvalidInput(
+                "GLiNERPipeline requires at least one entity type label".to_string(),
+            ));
+        }
+
+        // Step 1: Encode text (token embeddings + byte offsets)
+        let (token_embeddings, seq_len, token_offsets) = self.encoder.encode_with_offsets(text)?;
+        let hidden_dim = self.config.hidden_dim;
+
+        if seq_len == 0 || token_offsets.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Step 2: Create ragged batch (single document)
+        // Generate dummy token IDs for the batch structure (only lengths matter).
+        let dummy_tokens: Vec<u32> = (0..seq_len as u32).collect();
+        let batch = RaggedBatch::from_sequences(&[dummy_tokens]);
+
+        // Step 3: Generate span candidates (token-level, end-exclusive)
+        let candidates = generate_span_candidates(&batch, self.config.max_span_width);
+
+        if candidates.is_empty() {
+            return Err(crate::Error::Inference(
+                "GLiNERPipeline produced no span candidates for non-empty text. This suggests an encoder/tokenization failure (seq_len=0) or an invalid max_span_width configuration.".to_string(),
+            ));
+        }
+
+        // Step 4: Compute span embeddings
+        let span_embeddings = self
+            .span_layer
+            .forward(&token_embeddings, &candidates, &batch);
+
+        if span_embeddings.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Step 5: Compute similarity scores via late interaction
+        let scores = self.interaction.compute_similarity(
+            &span_embeddings,
+            candidates.len(),
+            &registry.embeddings,
+            registry.len(),
+            hidden_dim,
+        );
+
+        // Step 6: Apply sigmoid
+        let mut scores = scores;
+        self.interaction.apply_sigmoid(&mut scores);
+
+        // Step 7: Decode entities (token offsets -> character offsets)
+        let entities = self.decode_entities(
+            text,
+            &candidates,
+            &scores,
+            &token_offsets,
+            registry,
+            threshold,
+        );
+
+        Ok(entities)
+    }
+
     /// Decode entities from scores.
     fn decode_entities(
         &self,
         text: &str,
         candidates: &[SpanCandidate],
         scores: &[f32],
-        seq_len: usize,
+        token_offsets: &[(usize, usize)],
+        registry: &SemanticRegistry,
+        threshold: f32,
     ) -> Vec<Entity> {
-        let num_labels = self.registry.len();
+        let num_labels = registry.len();
         let mut entities = Vec::new();
 
-        // Split text into words for offset calculation
-        let words: Vec<&str> = text.split_whitespace().collect();
-
-        // Performance optimization: Cache text length for repeated extractions
-        // ROI: High - called once, used for all entity text extractions
-        let text_char_count = text.chars().count();
+        // Convert byte offsets to character offsets safely.
+        let converter = crate::offset::SpanConverter::new(text);
 
         for (span_idx, candidate) in candidates.iter().enumerate() {
             for label_idx in 0..num_labels {
                 let score = scores[span_idx * num_labels + label_idx];
 
-                if score >= self.config.threshold {
+                // Get label info
+                let label = &registry.labels[label_idx];
+                let min_threshold = threshold.max(label.threshold);
+
+                if score >= min_threshold {
                     // Get label info
-                    let label = &self.registry.labels[label_idx];
-
-                    // Calculate character offsets from word indices
-                    let start_word = candidate.start as usize;
-                    let end_word = (candidate.end as usize).min(words.len());
-
-                    if start_word >= words.len() || end_word > words.len() {
+                    let start_tok = candidate.start as usize;
+                    let end_tok = candidate.end as usize;
+                    if end_tok <= start_tok {
                         continue;
                     }
 
-                    let (char_start, char_end) = word_indices_to_char_offsets(
-                        text,
-                        &words,
-                        start_word,
-                        end_word.saturating_sub(1),
-                    );
+                    if start_tok >= token_offsets.len() || end_tok > token_offsets.len() {
+                        continue;
+                    }
 
-                    // Extract text using character offsets (not byte offsets)
-                    // Performance: Use cached text_char_count for bounds checking
-                    let entity_text: String =
-                        if char_start < text_char_count && char_end <= text_char_count {
-                            text.chars()
-                                .skip(char_start)
-                                .take(char_end.saturating_sub(char_start))
-                                .collect()
-                        } else {
-                            String::new()
-                        };
+                    // Map token span -> byte span.
+                    let (byte_start, _) = token_offsets[start_tok];
+                    let (_, byte_end) = token_offsets[end_tok - 1];
 
-                    if entity_text.trim().is_empty() {
+                    // Skip special tokens / empty offsets.
+                    if byte_end <= byte_start {
+                        continue;
+                    }
+
+                    let char_start = converter.byte_to_char(byte_start);
+                    let char_end = converter.byte_to_char(byte_end);
+
+                    // Extract surface text (byte slice is safe here; offsets come from tokenizers).
+                    let entity_text = match text.get(byte_start..byte_end) {
+                        Some(s) => s.trim(),
+                        None => continue,
+                    };
+
+                    if entity_text.is_empty() {
                         continue;
                     }
 
                     let entity_type = slug_to_entity_type(&label.slug);
 
                     entities.push(Entity::new(
-                        entity_text.trim(),
+                        entity_text,
                         entity_type,
                         char_start,
                         char_end,
@@ -524,41 +568,6 @@ impl<E: TextEncoder> GLiNERPipeline<E> {
 // Helpers
 // =============================================================================
 
-/// Convert word indices to character offsets.
-///
-/// This function correctly handles Unicode text by converting byte offsets
-/// to character offsets using the offset module's bytes_to_chars function.
-fn word_indices_to_char_offsets(
-    text: &str,
-    words: &[&str],
-    start_word: usize,
-    end_word: usize,
-) -> (usize, usize) {
-    let mut byte_pos = 0;
-    let mut start_byte = 0;
-    let mut end_byte = text.len();
-
-    for (idx, word) in words.iter().enumerate() {
-        // Search for the word in the remaining text (by bytes)
-        if let Some(pos) = text[byte_pos..].find(word) {
-            let word_start_byte = byte_pos + pos;
-            let word_end_byte = word_start_byte + word.len();
-
-            if idx == start_word {
-                start_byte = word_start_byte;
-            }
-            if idx == end_word {
-                end_byte = word_end_byte;
-                break;
-            }
-            byte_pos = word_end_byte;
-        }
-    }
-
-    // Convert byte offsets to character offsets
-    crate::offset::bytes_to_chars(text, start_byte, end_byte)
-}
-
 /// Convert label slug to EntityType.
 fn slug_to_entity_type(slug: &str) -> EntityType {
     match slug.to_lowercase().as_str() {
@@ -572,12 +581,90 @@ fn slug_to_entity_type(slug: &str) -> EntityType {
     }
 }
 
+#[cfg(feature = "candle")]
+fn build_registry_from_encoder<E: TextEncoder>(
+    encoder: &E,
+    entity_types: &[&str],
+    entity_descriptions: &[&str],
+    threshold: f32,
+) -> Result<SemanticRegistry> {
+    let hidden_dim = encoder.hidden_dim();
+    if entity_types.is_empty() {
+        return Ok(SemanticRegistry {
+            embeddings: Vec::new(),
+            hidden_dim,
+            labels: Vec::new(),
+            label_index: std::collections::HashMap::new(),
+        });
+    }
+
+    let mut labels: Vec<crate::backends::inference::LabelDefinition> =
+        Vec::with_capacity(entity_types.len());
+    for (i, slug) in entity_types.iter().enumerate() {
+        let desc = entity_descriptions.get(i).copied().unwrap_or(*slug);
+        labels.push(crate::backends::inference::LabelDefinition {
+            slug: (*slug).to_string(),
+            description: desc.to_string(),
+            category: crate::backends::inference::LabelCategory::Entity,
+            modality: crate::backends::inference::ModalityHint::TextOnly,
+            threshold,
+        });
+    }
+
+    let label_index: std::collections::HashMap<String, usize> = labels
+        .iter()
+        .enumerate()
+        .map(|(i, l)| (l.slug.clone(), i))
+        .collect();
+
+    // Encode each label description and mean-pool token embeddings.
+    let mut embeddings = Vec::with_capacity(labels.len() * hidden_dim);
+    for label in &labels {
+        let (emb, seq_len) = encoder.encode(&label.description)?;
+        embeddings.extend(mean_pool_embeddings(&emb, seq_len, hidden_dim));
+    }
+
+    Ok(SemanticRegistry {
+        embeddings,
+        hidden_dim,
+        labels,
+        label_index,
+    })
+}
+
+fn mean_pool_embeddings(embeddings: &[f32], seq_len: usize, hidden_dim: usize) -> Vec<f32> {
+    // Defensive: handle unexpected shapes.
+    if seq_len == 0 || embeddings.len() < seq_len.saturating_mul(hidden_dim) {
+        return vec![0.0f32; hidden_dim];
+    }
+
+    // Heuristic: tokenizers typically include [CLS] ... [SEP] when `encode(..., true)` is used.
+    // Exclude those when present.
+    let start = if seq_len > 2 { 1 } else { 0 };
+    let end = if seq_len > 2 { seq_len - 1 } else { seq_len };
+    let count = (end - start).max(1);
+
+    let mut pooled = vec![0.0f32; hidden_dim];
+    for t in start..end {
+        let base = t * hidden_dim;
+        for h in 0..hidden_dim {
+            pooled[h] += embeddings[base + h];
+        }
+    }
+
+    let denom = count as f32;
+    for h in 0..hidden_dim {
+        pooled[h] /= denom;
+    }
+    pooled
+}
+
 // =============================================================================
 // Model Trait Implementation
 // =============================================================================
 
 #[cfg(feature = "candle")]
-impl<E: TextEncoder + 'static> crate::Model for GLiNERPipeline<E> {
+impl<E: TextEncoderWithOffsets + 'static> crate::Model for GLiNERPipeline<E> {
     fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
         self.extract(text)
     }
@@ -621,15 +708,33 @@ mod tests {
     }
 
     #[test]
-    fn test_word_to_char_offsets() {
-        let text = "Hello world test";
-        let words: Vec<&str> = text.split_whitespace().collect();
+    fn test_mean_pool_embeddings_excludes_special_tokens_when_present() {
+        // 4 tokens, hidden_dim=2:
+        // tok0=[CLS], tok1=a, tok2=b, tok3=[SEP]
+        let hidden_dim = 2;
+        let seq_len = 4;
+        let embeddings = vec![
+            // tok0
+            100.0, 100.0, // tok1
+            1.0, 2.0, // tok2
+            3.0, 4.0, // tok3
+            200.0, 200.0,
+        ];
+        let pooled = mean_pool_embeddings(&embeddings, seq_len, hidden_dim);
+        assert_eq!(pooled, vec![2.0, 3.0]); // mean of tok1 and tok2
+    }
 
-        let (start, end) = word_indices_to_char_offsets(text, &words, 1, 1);
-        assert_eq!(&text[start..end], "world");
-
-        let (start, end) = word_indices_to_char_offsets(text, &words, 0, 2);
-        assert_eq!(&text[start..end], "Hello world test");
+    #[test]
+    fn test_mean_pool_embeddings_short_sequences_include_all_tokens() {
+        let hidden_dim = 2;
+        let seq_len = 2;
+        let embeddings = vec![
+            // tok0
+            1.0, 3.0, // tok1
+            5.0, 7.0,
+        ];
+        let pooled = mean_pool_embeddings(&embeddings, seq_len, hidden_dim);
+        assert_eq!(pooled, vec![3.0, 5.0]);
     }
 
     #[test]

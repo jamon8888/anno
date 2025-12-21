@@ -1634,25 +1634,32 @@ impl SpanRepresentationLayer {
             let start_emb = &token_embeddings[start_byte..start_end_byte];
             let end_emb = &token_embeddings[end_byte..end_end_byte];
 
-            // Get width embedding
-            let width = (candidate.width() as usize).min(max_width - 1);
-            let width_start = width * width_emb_dim;
-            let width_end = (width + 1) * width_emb_dim;
-            // Bounds check: ensure width embedding slice is valid
-            if width_end > self.width_embeddings.len() {
-                continue;
-            }
-            let width_emb = &self.width_embeddings[width_start..width_end];
+            // Optional width embedding (index = span_len - 1).
+            let width_emb = if self.config.use_width_embeddings && width_emb_dim > 0 {
+                let max_width_idx = max_width.saturating_sub(1);
+                let span_len = candidate.width() as usize;
+                let width_idx = span_len.saturating_sub(1).min(max_width_idx);
 
-            // Concatenate and project (simplified - no actual matmul)
-            // In a real implementation, this would be a linear layer
+                let width_start = width_idx.saturating_mul(width_emb_dim);
+                let width_end = width_start.saturating_add(width_emb_dim);
+                if width_end > self.width_embeddings.len() {
+                    None
+                } else {
+                    Some(&self.width_embeddings[width_start..width_end])
+                }
+            } else {
+                None
+            };
+
+            // Baseline span representation: average of boundary embeddings (+ optional width signal).
+            // This is deterministic and works without learned projection weights.
             let output_start = span_idx * hidden_dim;
             for h in 0..hidden_dim {
-                // Placeholder: just average start and end
-                span_embeddings[output_start + h] = (start_emb[h] + end_emb[h]) / 2.0;
-                // Add width signal
-                if h < width_emb_dim {
-                    span_embeddings[output_start + h] += width_emb[h] * 0.1;
+                span_embeddings[output_start + h] = (start_emb[h] + end_emb[h]) * 0.5;
+                if let Some(width_emb) = width_emb {
+                    if h < width_emb_dim {
+                        span_embeddings[output_start + h] += width_emb[h] * 0.1;
+                    }
                 }
             }
         }
@@ -2015,7 +2022,7 @@ pub fn extract_relations(
     entities: &[Entity],
     text: &str,
     registry: &SemanticRegistry,
-    _config: &RelationExtractionConfig,
+    config: &RelationExtractionConfig,
 ) -> Vec<Relation> {
     let mut relations = Vec::new();
     // `Entity` spans in anno are character offsets, but slicing a Rust `&str` requires byte
@@ -2042,7 +2049,7 @@ pub fn extract_relations(
                 head.start.saturating_sub(tail.end)
             };
 
-            if distance > _config.max_span_distance {
+            if distance > config.max_span_distance {
                 continue;
             }
 
@@ -2062,15 +2069,23 @@ pub fn extract_relations(
             let relation_type = detect_relation_type(head, tail, between_text, &relation_labels);
 
             if let Some((rel_type, confidence, trigger)) = relation_type {
+                if confidence < config.threshold as f64 {
+                    continue;
+                }
+
                 // `detect_relation_type` returns byte offsets into `between_text`.
-                let trigger_span = trigger.map(|(s, e)| {
-                    let trigger_start_byte = between_span.byte_start.saturating_add(s);
-                    let trigger_end_byte = between_span.byte_start.saturating_add(e);
-                    (
-                        span_converter.byte_to_char(trigger_start_byte),
-                        span_converter.byte_to_char(trigger_end_byte),
-                    )
-                });
+                let trigger_span = if config.extract_triggers {
+                    trigger.map(|(s, e)| {
+                        let trigger_start_byte = between_span.byte_start.saturating_add(s);
+                        let trigger_end_byte = between_span.byte_start.saturating_add(e);
+                        (
+                            span_converter.byte_to_char(trigger_start_byte),
+                            span_converter.byte_to_char(trigger_end_byte),
+                        )
+                    })
+                } else {
+                    None
+                };
 
                 relations.push(Relation {
                     head: head.clone(),
@@ -2084,6 +2099,86 @@ pub fn extract_relations(
     }
 
     relations
+}
+
+/// Extract relations as index-based triples (for joint extraction backends).
+///
+/// This is the same heuristic logic as [`extract_relations`], but returns
+/// [`RelationTriple`] with indices into the provided `entities` slice.
+///
+/// Notes:
+/// - Entity spans are **character offsets**.
+/// - Trigger spans are not currently exposed in `RelationTriple`.
+#[must_use]
+pub fn extract_relation_triples(
+    entities: &[Entity],
+    text: &str,
+    registry: &SemanticRegistry,
+    config: &RelationExtractionConfig,
+) -> Vec<RelationTriple> {
+    let mut triples = Vec::new();
+    if entities.len() < 2 {
+        return triples;
+    }
+
+    // `Entity` spans are character offsets; slicing needs byte offsets.
+    let span_converter = crate::offset::SpanConverter::new(text);
+
+    let relation_labels: Vec<_> = registry.relation_labels().collect();
+    if relation_labels.is_empty() {
+        return triples;
+    }
+
+    for (i, head) in entities.iter().enumerate() {
+        for (j, tail) in entities.iter().enumerate() {
+            if i == j {
+                continue;
+            }
+
+            // Skip overlapping spans (avoids self-nesting artifacts like "New York" vs "York").
+            if head.start < tail.end && tail.start < head.end {
+                continue;
+            }
+
+            // Check distance (character offsets)
+            let distance = if head.end <= tail.start {
+                tail.start - head.end
+            } else {
+                head.start.saturating_sub(tail.end)
+            };
+            if distance > config.max_span_distance {
+                continue;
+            }
+
+            let (span_start, span_end) = if head.end <= tail.start {
+                (head.end, tail.start)
+            } else {
+                (tail.end, head.start)
+            };
+
+            let between_span = span_converter.from_chars(span_start, span_end);
+            let between_text = text
+                .get(between_span.byte_start..between_span.byte_end)
+                .unwrap_or("");
+
+            if let Some((rel_type, confidence, _trigger)) =
+                detect_relation_type(head, tail, between_text, &relation_labels)
+            {
+                if confidence < config.threshold as f64 {
+                    continue;
+                }
+
+                triples.push(RelationTriple {
+                    head_idx: i,
+                    tail_idx: j,
+                    relation_type: rel_type.to_string(),
+                    confidence: confidence as f32,
+                });
+            }
+        }
+    }
+
+    triples
 }
 
 /// Result of relation detection: (label, confidence, optional span).
@@ -2143,11 +2238,15 @@ fn detect_relation_type<'a>(
     ];
 
     for pattern in patterns {
-        // Check if relation type is in registry
-        let in_registry = relation_labels.iter().any(|l| l.slug == pattern.slug);
-        if !in_registry {
-            continue;
-        }
+        // Find the canonical label in the registry (case-insensitive).
+        // We return the label's *original* slug so callers preserve user-provided casing.
+        let label = match relation_labels
+            .iter()
+            .find(|l| l.slug.eq_ignore_ascii_case(pattern.slug))
+        {
+            Some(l) => *l,
+            None => continue,
+        };
 
         for trigger in pattern.triggers {
             if let Some(pos) = between_lower.find(trigger) {
@@ -2165,7 +2264,7 @@ fn detect_relation_type<'a>(
 
                 if valid {
                     return Some((
-                        pattern.slug,
+                        label.slug.as_str(),
                         pattern.confidence,
                         Some((pos, pos + trigger.len())),
                     ));

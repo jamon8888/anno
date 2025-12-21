@@ -14,24 +14,30 @@ echo "" >> "$SUMMARY_FILE"
 
 FAILURES=0
 
+# Helper: prefer CI artifact paths when present
+OPENGREP_JSON="opengrep-results.json"
+if [ ! -f "$OPENGREP_JSON" ] && [ -f "artifacts/opengrep-results/opengrep-results.json" ]; then
+    OPENGREP_JSON="artifacts/opengrep-results/opengrep-results.json"
+fi
+
 # Check for cargo-deny failures
 if [ -f "cargo-deny-output.txt" ]; then
     if grep -q "error\|denied" cargo-deny-output.txt 2>/dev/null; then
         echo "## ERROR: cargo-deny: Issues Found" >> "$SUMMARY_FILE"
         echo "" >> "$SUMMARY_FILE"
-        grep -i "error\|denied" cargo-deny-output.txt | head -10 >> "$SUMMARY_FILE"
+        grep -i "error\|denied" cargo-deny-output.txt | sed -n '1,10p' >> "$SUMMARY_FILE"
         echo "" >> "$SUMMARY_FILE"
         ((FAILURES++))
     fi
 fi
 
 # Check for OpenGrep findings
-if [ -f "opengrep-results.json" ]; then
-    FINDINGS=$(jq '.results | length' opengrep-results.json 2>/dev/null || echo "0")
+if [ -f "$OPENGREP_JSON" ]; then
+    FINDINGS=$(jq '.results | length' "$OPENGREP_JSON" 2>/dev/null || echo "0")
     if [ "$FINDINGS" -gt 0 ]; then
         echo "## WARNING: OpenGrep: $FINDINGS Findings" >> "$SUMMARY_FILE"
         echo "" >> "$SUMMARY_FILE"
-        jq -r '.results[] | "\(.check_id): \(.path):\(.start.line) - \(.message)"' opengrep-results.json | head -10 >> "$SUMMARY_FILE"
+        jq -r '.results[0:10][] | "\(.check_id): \(.path):\(.start.line) - \(.message)"' "$OPENGREP_JSON" >> "$SUMMARY_FILE"
         echo "" >> "$SUMMARY_FILE"
         ((FAILURES++))
     fi
@@ -42,7 +48,7 @@ if [ -f "machete-output.txt" ]; then
     if grep -q "unused" machete-output.txt 2>/dev/null; then
         echo "## WARNING: cargo-machete: Unused Dependencies" >> "$SUMMARY_FILE"
         echo "" >> "$SUMMARY_FILE"
-        grep "unused" machete-output.txt | head -10 >> "$SUMMARY_FILE"
+        grep "unused" machete-output.txt | sed -n '1,10p' >> "$SUMMARY_FILE"
         echo "" >> "$SUMMARY_FILE"
         ((FAILURES++))
     fi
@@ -53,7 +59,7 @@ if [ -f "repo-specific-analysis.md" ]; then
     if grep -q "WARNING:\|ERROR:" repo-specific-analysis.md 2>/dev/null; then
         echo "## WARNING: Repo-Specific: Issues Found" >> "$SUMMARY_FILE"
         echo "" >> "$SUMMARY_FILE"
-        grep "WARNING:\|ERROR:" repo-specific-analysis.md | head -10 >> "$SUMMARY_FILE"
+        grep "WARNING:\|ERROR:" repo-specific-analysis.md | sed -n '1,10p' >> "$SUMMARY_FILE"
         echo "" >> "$SUMMARY_FILE"
         ((FAILURES++))
     fi

@@ -39,7 +39,9 @@ fn test_joint_model_coreference_chain() {
     for chain in &result.chains {
         println!(
             "  Chain {}: {:?}",
-            chain.cluster_id.unwrap_or(0),
+            chain
+                .cluster_id
+                .unwrap_or(anno_core::types::CanonicalId::ZERO),
             chain.mentions
         );
     }

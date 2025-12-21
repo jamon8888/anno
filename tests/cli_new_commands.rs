@@ -222,6 +222,11 @@ fn test_config_command_list() {
 #[test]
 #[cfg(all(feature = "cli", feature = "eval"))]
 fn test_config_command_save_and_show() {
+    // Keep this test hermetic: do not write to the user's real config dir.
+    // This also prevents cross-test interference when tests run in parallel.
+    let dir = tempfile::tempdir().expect("Failed to create temp directory");
+    let config_dir = dir.path().join("anno-config");
+
     let mut cmd = Command::cargo_bin("anno").unwrap();
     cmd.args(&[
         "config",
@@ -231,11 +236,13 @@ fn test_config_command_save_and_show() {
         "stacked",
         "--coref",
     ])
+    .env("ANNO_CONFIG_DIR", config_dir.to_str().unwrap())
     .assert()
     .success();
 
     let mut cmd = Command::cargo_bin("anno").unwrap();
     cmd.args(&["config", "show", "test-workflow"])
+        .env("ANNO_CONFIG_DIR", config_dir.to_str().unwrap())
         .assert()
         .success()
         .stdout(predicate::str::contains("model").or(predicate::str::contains("coref")));
@@ -243,6 +250,7 @@ fn test_config_command_save_and_show() {
     // Cleanup
     let mut cmd = Command::cargo_bin("anno").unwrap();
     cmd.args(&["config", "delete", "test-workflow"])
+        .env("ANNO_CONFIG_DIR", config_dir.to_str().unwrap())
         .assert()
         .success();
 }

@@ -517,7 +517,7 @@ impl EntityMemory {
                     .collect();
 
                 let mut chain = CorefChain::new(mentions);
-                chain.cluster_id = Some(cluster.id);
+                chain.cluster_id = Some(cluster.id.into());
                 chain.entity_type = cluster.entity_type.as_ref().map(|t| format!("{:?}", t));
                 chain
             })
@@ -616,7 +616,7 @@ impl IncrementalCorefResolver {
             };
 
             let cluster_id = self.process_mention(&mut memory, &mention);
-            resolved[i].canonical_id = Some(cluster_id);
+            resolved[i].canonical_id = Some(cluster_id.into());
         }
 
         resolved

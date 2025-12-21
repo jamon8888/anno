@@ -91,7 +91,7 @@
 //!
 //! # See Also
 //!
-//! - [`docs/research/HISTORICAL_SYSTEMS.md`]: Historical NER survey mapping
+//! - [`docs/notes/research/systems/HISTORICAL_SYSTEMS.md`]: Historical NER survey mapping
 //! - [`tests/historical_methods_comparison.rs`]: Comparison tests vs CRF, BiLSTM-CRF
 //! - [`tests/property_backends.rs`]: Property-based tests for HMM invariants
 

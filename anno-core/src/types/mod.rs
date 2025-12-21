@@ -71,6 +71,7 @@ mod mention_type;
 mod metric;
 mod phi_features;
 mod temporal;
+mod type_label;
 
 pub use framing::{
     EventArgument, EventCorefRelation, EventMention, FramingAttitude, FramingDivergenceType,
@@ -82,3 +83,4 @@ pub use mention_type::MentionType;
 pub use metric::MetricStats;
 pub use phi_features::{Number, Person, PhiFeatures};
 pub use temporal::{DatePrecision, HistoricalDate, TemporalValidity};
+pub use type_label::TypeLabel;

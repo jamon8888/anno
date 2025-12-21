@@ -14,6 +14,21 @@ use anno::{Model, NuNER, W2NERConfig, W2NERRelation, W2NER};
 mod nuner {
     use super::*;
 
+    fn diverse_texts() -> Vec<&'static str> {
+        vec![
+            // Latin
+            "Marie Curie discovered radium in Paris.",
+            // CJK
+            "習近平在北京會見了普京。",
+            // Arabic (RTL)
+            "التقى محمد بن سلمان بالرئيس في الرياض",
+            // Cyrillic
+            "Путин встретился с Си Цзиньпином в Москве.",
+            // Devanagari
+            "प्रधान मंत्री शर्मा दिल्ली में मिले।",
+        ]
+    }
+
     #[test]
     fn test_nuner_creation() {
         let ner = NuNER::new();
@@ -69,6 +84,34 @@ mod nuner {
     }
 
     #[test]
+    #[cfg(not(feature = "onnx"))]
+    fn test_nuner_nonempty_requires_onnx_feature() {
+        let ner = NuNER::new();
+        for text in diverse_texts() {
+            let err = ner.extract_entities(text, None).unwrap_err();
+            assert!(
+                matches!(err, anno::Error::FeatureNotAvailable(_)),
+                "expected FeatureNotAvailable, got: {:?}",
+                err
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "onnx")]
+    fn test_nuner_nonempty_requires_model_loaded() {
+        let ner = NuNER::new();
+        for text in diverse_texts() {
+            let err = ner.extract_entities(text, None).unwrap_err();
+            assert!(
+                matches!(err, anno::Error::ModelInit(_)),
+                "expected ModelInit, got: {:?}",
+                err
+            );
+        }
+    }
+
+    #[test]
     fn test_nuner_is_not_available() {
         // NuNER requires ONNX model files to be downloaded
         let ner = NuNER::new();
@@ -105,6 +148,21 @@ mod nuner {
 mod w2ner {
     use super::*;
     use anno::backends::inference::HandshakingCell;
+
+    fn diverse_texts() -> Vec<&'static str> {
+        vec![
+            // Latin
+            "John Smith visited New York City.",
+            // CJK
+            "東京で会議がありました。",
+            // Arabic (RTL)
+            "زار الرئيس القاهرة",
+            // Cyrillic
+            "Москва приняла делегацию.",
+            // Devanagari
+            "राम ने सीता को अयोध्या में देखा।",
+        ]
+    }
 
     #[test]
     fn test_w2ner_creation() {
@@ -348,6 +406,70 @@ mod w2ner {
         let ner = W2NER::new();
         let entities = ner.extract_entities("", None).unwrap();
         assert!(entities.is_empty());
+    }
+
+    #[test]
+    #[cfg(not(feature = "onnx"))]
+    fn test_w2ner_nonempty_requires_onnx_feature() {
+        let ner = W2NER::new();
+        for text in diverse_texts() {
+            let err = ner.extract_entities(text, None).unwrap_err();
+            assert!(
+                matches!(err, anno::Error::FeatureNotAvailable(_)),
+                "expected FeatureNotAvailable, got: {:?}",
+                err
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "onnx"))]
+    fn test_w2ner_discontinuous_nonempty_requires_onnx_feature() {
+        use anno::DiscontinuousNER;
+
+        let ner = W2NER::new();
+        for text in diverse_texts() {
+            let err = ner
+                .extract_discontinuous(text, &["PER", "ORG", "LOC"], 0.5)
+                .unwrap_err();
+            assert!(
+                matches!(err, anno::Error::FeatureNotAvailable(_)),
+                "expected FeatureNotAvailable, got: {:?}",
+                err
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "onnx")]
+    fn test_w2ner_nonempty_requires_model_loaded() {
+        let ner = W2NER::new();
+        for text in diverse_texts() {
+            let err = ner.extract_entities(text, None).unwrap_err();
+            assert!(
+                matches!(err, anno::Error::ModelInit(_)),
+                "expected ModelInit, got: {:?}",
+                err
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "onnx")]
+    fn test_w2ner_discontinuous_nonempty_requires_model_loaded() {
+        use anno::DiscontinuousNER;
+
+        let ner = W2NER::new();
+        for text in diverse_texts() {
+            let err = ner
+                .extract_discontinuous(text, &["PER", "ORG", "LOC"], 0.5)
+                .unwrap_err();
+            assert!(
+                matches!(err, anno::Error::ModelInit(_)),
+                "expected ModelInit, got: {:?}",
+                err
+            );
+        }
     }
 
     #[test]
@@ -611,17 +733,25 @@ mod proptests {
         }
 
         #[test]
-        fn w2ner_empty_text_never_panics(text in ".*") {
+        fn w2ner_extract_entities_never_panics_and_has_sane_error_contract(text in ".*") {
             let ner = W2NER::new();
             let result = ner.extract_entities(&text, None);
-            prop_assert!(result.is_ok());
+            if text.trim().is_empty() {
+                prop_assert!(result.is_ok());
+            } else {
+                prop_assert!(result.is_err());
+            }
         }
 
         #[test]
-        fn nuner_empty_text_never_panics(text in ".*") {
+        fn nuner_extract_entities_never_panics_and_has_sane_error_contract(text in ".*") {
             let ner = NuNER::new();
             let result = ner.extract_entities(&text, None);
-            prop_assert!(result.is_ok());
+            if text.trim().is_empty() {
+                prop_assert!(result.is_ok());
+            } else {
+                prop_assert!(result.is_err());
+            }
         }
     }
 }

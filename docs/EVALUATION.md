@@ -143,10 +143,10 @@ println!("Partial F1: {:.1}%", results.partial.f1 * 100.0);
 // Gold: "Steve Jobs" [0, 10] as PERSON
 // Predicted: "Steve" [0, 5] as PERSON
 
-// Strict: ❌ No match (boundaries don't match exactly)
-// Exact: ❌ No match (boundaries don't match)
-// Partial: ✅ Match (overlapping span, same type)
-// Type: ✅ Match (same type, boundaries ignored)
+// Strict: no match (boundaries don't match exactly)
+// Exact: no match (boundaries don't match)
+// Partial: match (overlapping span, same type)
+// Type: match (same type, boundaries ignored)
 ```
 
 **When to use each mode:**

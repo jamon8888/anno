@@ -115,21 +115,20 @@ fn test_cdcr_huang_cluster_spans_multiple_docs() {
     let resolver = CDCRResolver::with_config(config);
     let clusters = resolver.resolve(&docs);
 
-    // Find Huang person cluster (should cluster "Jensen Huang", "CEO of Nvidia", "Huang")
-    let huang_cluster = clusters.iter().find(|c| {
-        c.entity_type == Some(EntityType::Person)
-            && (c.canonical_name.to_lowercase().contains("huang")
-                || c.canonical_name.to_lowercase().contains("ceo"))
-    });
+    // Find the *best* Huang person cluster (avoid order-dependence across HashMap iteration).
+    // We only require that "Huang" clusters across docs via string similarity (substring match).
+    let huang_cluster = clusters
+        .iter()
+        .filter(|c| c.entity_type == Some(EntityType::Person))
+        .filter(|c| c.canonical_name.to_lowercase().contains("huang"))
+        .max_by_key(|c| c.doc_count());
 
-    if let Some(hc) = huang_cluster {
-        // Should span multiple documents
-        assert!(
-            hc.doc_count() >= 2,
-            "Huang mentions should appear in at least 2 documents, found {}",
-            hc.doc_count()
-        );
-    }
+    let hc = huang_cluster.expect("Expected a Huang person cluster");
+    assert!(
+        hc.doc_count() >= 2,
+        "Huang mentions should appear in at least 2 documents, found {}",
+        hc.doc_count()
+    );
 }
 
 #[test]

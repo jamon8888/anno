@@ -128,6 +128,32 @@ fn test_identity_serialization() {
 }
 
 #[test]
+fn test_identity_deserialize_ignores_legacy_box_embedding_field() {
+    // Older serialized identities may contain a `box_embedding` field.
+    // The stable `Identity` type intentionally does not carry box embeddings;
+    // those live in `provisional::ProvisionalIdentity`.
+    let json = serde_json::json!({
+        "id": 7186,
+        "canonical_name": "Marie Curie",
+        "entity_type": "Person",
+        "kb_id": "Q7186",
+        "kb_name": "wikidata",
+        "description": null,
+        "embedding": null,
+        "box_embedding": { "min": [0.0, 0.0], "max": [1.0, 1.0] },
+        "aliases": [],
+        "confidence": 1.0,
+        "source": null
+    });
+
+    let identity: Identity = serde_json::from_value(json).expect("legacy JSON should deserialize");
+    assert_eq!(identity.id, IdentityId::new(7186));
+    assert_eq!(identity.canonical_name, "Marie Curie");
+    assert_eq!(identity.kb_id.as_deref(), Some("Q7186"));
+    assert_eq!(identity.entity_type.as_deref(), Some("Person"));
+}
+
+#[test]
 fn test_identity_with_description() {
     let id = IdentityId::new(700);
     let mut identity = Identity::new(id, "Albert Einstein");

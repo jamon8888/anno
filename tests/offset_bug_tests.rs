@@ -118,15 +118,15 @@ fn test_bytes_to_chars_byte_end_at_char_boundary() {
 
 #[test]
 fn test_discontinuous_span_total_len_byte_length() {
-    // Verify that DiscontinuousSpan::total_len() returns byte length, not character length
+    // DiscontinuousSpan uses character offsets; total_len() returns character length.
     let text = "café"; // 4 chars, 5 bytes
-    let span = DiscontinuousSpan::new(vec![0..2, 3..5]); // "ca" (2 bytes) + "é" (2 bytes) = 4 bytes total
+    let span = DiscontinuousSpan::new(vec![0..2, 3..4]); // "ca" + "é" (char offsets)
 
-    // total_len should be 4 bytes, not 3 characters
+    // total_len should be 3 characters ("c","a","é")
     assert_eq!(
         span.total_len(),
-        4,
-        "total_len should return byte length, not character length"
+        3,
+        "total_len should return character length"
     );
 
     // Verify extraction works correctly
@@ -136,14 +136,13 @@ fn test_discontinuous_span_total_len_byte_length() {
 
 #[test]
 fn test_discontinuous_span_unicode_byte_vs_char() {
-    // Test that DiscontinuousSpan correctly handles Unicode byte offsets
-    let text = "Hello 世界"; // "Hello " = 6 bytes, "世界" = 6 bytes (3 bytes each)
-                             // Total: 12 bytes, 8 chars
+    // DiscontinuousSpan uses character offsets.
+    let text = "Hello 世界"; // 8 chars ("Hello", space, "世", "界")
 
-    // Create span with byte offsets
-    let span = DiscontinuousSpan::new(vec![0..5, 6..12]); // "Hello" (5 bytes) + "世界" (6 bytes) = 11 bytes
+    // Create span with character offsets: "Hello" + "世界"
+    let span = DiscontinuousSpan::new(vec![0..5, 6..8]);
 
-    assert_eq!(span.total_len(), 11, "Should sum byte lengths: 5 + 6 = 11");
+    assert_eq!(span.total_len(), 7, "Should sum char lengths: 5 + 2 = 7");
 
     let extracted = span.extract_text(text, " ");
     assert_eq!(extracted, "Hello 世界");
@@ -151,7 +150,7 @@ fn test_discontinuous_span_unicode_byte_vs_char() {
 
 #[test]
 fn test_entity_total_len_discontinuous_byte_length() {
-    // Verify Entity::total_len() with discontinuous span returns byte length
+    // Entity::total_len() should be consistent: character length for both contiguous and discontinuous.
     let mut entity = Entity::new(
         "severe pain",
         EntityType::Other("MISC".to_string()),
@@ -160,18 +159,16 @@ fn test_entity_total_len_discontinuous_byte_length() {
         0.9,
     );
 
-    // Create discontinuous span with byte offsets
-    let disc_span = DiscontinuousSpan::new(vec![0..6, 12..16]); // "severe" (6 bytes) + "pain" (4 bytes) = 10 bytes
+    // Create discontinuous span with character offsets
+    let disc_span = DiscontinuousSpan::new(vec![0..6, 12..16]); // ASCII: 6 + 4 = 10 chars
 
     entity.set_discontinuous_span(disc_span);
 
-    // total_len should return byte length (10), not character length
-    // Note: This is documented behavior - Entity uses char offsets but
-    // discontinuous spans use byte offsets
+    // total_len should return character length (10)
     assert_eq!(
         entity.total_len(),
         10,
-        "Should return byte length for discontinuous spans"
+        "Should return char length for discontinuous spans"
     );
 }
 
@@ -187,23 +184,23 @@ fn test_entity_total_len_contiguous_char_length() {
 }
 
 #[test]
-fn test_discontinuous_span_contains_byte_offset() {
-    // Verify contains() uses byte offsets
+fn test_discontinuous_span_contains_char_offset() {
+    // Verify contains() uses character offsets
     let span = DiscontinuousSpan::new(vec![0..5, 10..15]);
 
-    // Should return true for byte offsets within segments
-    assert!(span.contains(2), "Byte offset 2 should be in first segment");
+    // Should return true for char offsets within segments
+    assert!(span.contains(2), "Char offset 2 should be in first segment");
     assert!(
         span.contains(12),
-        "Byte offset 12 should be in second segment"
+        "Char offset 12 should be in second segment"
     );
     assert!(
         !span.contains(7),
-        "Byte offset 7 should not be in any segment"
+        "Char offset 7 should not be in any segment"
     );
     assert!(
         !span.contains(20),
-        "Byte offset 20 should not be in any segment"
+        "Char offset 20 should not be in any segment"
     );
 }
 

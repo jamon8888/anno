@@ -110,6 +110,29 @@ let span_text: String = text.chars()
 let test_cases = ["日本語", "Müller", "🎉 emoji", "Москва"];
 ```
 
+### Static Analysis Helpers (for Unicode + Metal gotchas)
+
+Prefer using the repo’s baked-in commands (correct scan roots + artifacts):
+
+```bash
+# Unicode slicing / offset mistakes (ast-grep rules)
+just ast-grep-unicode
+
+# Metal/Candle contiguity before matmul (ast-grep rules)
+just ast-grep-metal
+
+# OpenGrep custom patterns (Semgrep/OpenGrep rules)
+just opengrep-custom
+```
+
+### Docs hygiene (keep docs from drifting)
+
+When touching docs (or code samples referenced by docs), run:
+
+```bash
+just docs-audit
+```
+
 ## Testing Patterns
 
 ### Property Tests

@@ -3,7 +3,7 @@
 //! This command provides introspection into entity extraction decisions,
 //! useful for debugging, auditing, and building user trust.
 //!
-//! # Explanation Hierarchy (see docs/design/CLI_DENSE_OUTPUT.md - Wisdom 40)
+//! # Explanation Hierarchy (see docs/notes/design/cli/OUTPUT_DESIGN.md - dense output sketch)
 //!
 //! "Why did you extract this?" has multiple valid answers at different levels:
 //!

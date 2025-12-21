@@ -28,7 +28,7 @@ cargo build --release -p anno --bin anno
 ### Extract entities
 
 ```bash
-$ anno extract "Marie Curie was born in Paris."
+$ anno extract --text "Marie Curie was born in Paris."
 
 PER:1 "Marie Curie"
 LOC:1 "Paris"
@@ -37,7 +37,7 @@ LOC:1 "Paris"
 Structured entities (pattern backend):
 
 ```bash
-$ anno extract --model pattern 'Email bob@acme.com on 2024-01-15 for $100.'
+$ anno extract --model pattern --text "Email bob@acme.com on 2024-01-15 for $100."
 
 EMAIL:1 "bob@acme.com"
 DATE:1 "2024-01-15"
@@ -51,7 +51,7 @@ Verbose output levels:
 
 Machine-readable output (TSV):
 ```bash
-$ anno extract --model pattern --format tsv 'Email bob@acme.com on 2024-01-15 for $100.'
+$ anno extract --model pattern --format tsv --text "Email bob@acme.com on 2024-01-15 for $100."
 start	end	type	confidence	negated	text
 6	18	EMAIL	0.98	false	bob@acme.com
 22	32	DATE	0.95	false	2024-01-15
@@ -124,7 +124,10 @@ DATE:1
 $ anno debug --url https://example.com/article --html --output debug.html
 ```
 
-Opens interactive HTML with entity highlighting, coreference chains, and metadata.
+Generates an HTML report with entity highlighting and dense tables.
+
+- **Note**: `--url` requires building with the `eval-advanced` feature.
+- **Tip**: add `--coref` (and optionally `--link-kb`) if you want tracks / identities in the report.
 
 ### Ingest URL and see entities in terminal (with coreference)
 
@@ -239,7 +242,7 @@ let entities = ner.extract_with_types(
 
 ¹ Pattern accuracy on structured entities only. ² F1 on Person/Org/Location. ³ Zero-shot F1 varies by entity types. ⁴ F1 on CoNLL-2003.
 
-**See [`docs/reference/TASK_DATASET_MAPPING.md`](docs/reference/TASK_DATASET_MAPPING.md) for complete backend list and task support.**
+**See [`docs/notes/reference/TASK_DATASET_MAPPING.md`](docs/notes/reference/TASK_DATASET_MAPPING.md) for complete backend list and task support.**
 
 ## Features
 
@@ -251,6 +254,8 @@ let entities = ner.extract_with_types(
 
 ## Documentation
 
+- **Quickstart**: [docs/QUICKSTART.md](docs/QUICKSTART.md)
+- **Docs index**: [docs/README.md](docs/README.md)
 - **API docs**: https://docs.rs/anno
 - **Architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Evaluation**: [docs/EVALUATION.md](docs/EVALUATION.md)

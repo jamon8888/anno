@@ -9,6 +9,10 @@ use clap::{Parser, Subcommand};
 #[cfg(feature = "eval-advanced")]
 use itertools::Itertools;
 #[cfg(feature = "eval")]
+use std::fs;
+#[cfg(feature = "eval")]
+use std::path::{Path, PathBuf};
+#[cfg(feature = "eval")]
 use std::time::Instant;
 
 use super::super::output::color;
@@ -21,9 +25,28 @@ use super::super::utils::create_entity_pair_relations;
 use super::super::utils::types_match_flexible;
 
 #[cfg(feature = "eval")]
+use crate::grounded::{
+    render_eval_html_with_title, EvalComparison, EvalMatch, Location, Signal, SignalId,
+};
+
+#[cfg(all(feature = "eval", feature = "eval-advanced"))]
+use crate::grounded::{render_document_html, GroundedDocument};
+
+#[cfg(feature = "eval")]
 use crate::eval::loader::DatasetId;
 #[cfg(feature = "eval-advanced")]
 use crate::eval::loader::LoadableDatasetId;
+
+#[cfg(feature = "eval-advanced")]
+use anno_core::CoreferenceResolver;
+
+#[cfg(feature = "eval")]
+#[derive(Debug)]
+struct HtmlWorstCase {
+    case_idx: usize,
+    errors: usize,
+    cmp: EvalComparison,
+}
 
 /// Work with NER datasets
 #[derive(Parser, Debug)]
@@ -78,6 +101,63 @@ pub enum DatasetAction {
         /// Task type: ner, coref, or relation
         #[arg(short, long, default_value = "ner")]
         task: EvalTask,
+
+        /// Write an HTML error explorer (index + per-example eval pages).
+        ///
+        /// This is most useful for debugging datasets and evaluation assumptions:
+        /// you can click into the worst examples and see gold vs predicted spans.
+        #[arg(long)]
+        html: bool,
+
+        /// Output HTML path (required with `--html`).
+        ///
+        /// Per-example pages are written to `<output_stem>_files/`.
+        #[arg(long, value_name = "PATH")]
+        output: Option<String>,
+
+        /// Max examples to include in the HTML explorer (worst by error count).
+        #[arg(long, default_value_t = 50)]
+        max_cases: usize,
+
+        /// Minimum errors for an example to be included in the HTML explorer.
+        ///
+        /// Notes:
+        /// - NER (`--task ner`): minimum number of errors (mismatches / FP / FN) in the example.
+        /// - Coref (`--task coref`): minimum number of GOLD mentions in the document.
+        /// - Relation (`--task relation`): minimum number of GOLD relations in the document.
+        ///
+        /// Prefer the task-specific flags (`--min-case-errors`, `--min-gold-mentions`,
+        /// `--min-gold-relations`) to avoid ambiguity. If a task-specific flag is set, it
+        /// takes precedence over this value for that task.
+        #[arg(long, default_value_t = 1)]
+        min_errors: usize,
+
+        /// Minimum NER errors for an example to be included in the HTML explorer.
+        ///
+        /// Overrides `--min-errors` for `--task ner` if set.
+        #[arg(long)]
+        min_case_errors: Option<usize>,
+
+        /// Minimum GOLD mentions for a doc to be included in the coref HTML explorer.
+        ///
+        /// Overrides `--min-errors` for `--task coref` if set.
+        #[arg(long)]
+        min_gold_mentions: Option<usize>,
+
+        /// Minimum GOLD relations for a doc to be included in the relation HTML explorer.
+        ///
+        /// Overrides `--min-errors` for `--task relation` if set.
+        #[arg(long)]
+        min_gold_relations: Option<usize>,
+
+        /// Coref only: use GOLD mentions as input to the resolver (oracle mention detection).
+        ///
+        /// This isolates clustering quality from mention detection quality.
+        /// When set:
+        /// - Coref evaluation clusters gold mentions instead of NER-extracted mentions.
+        /// - Coref HTML explorer predicted view uses the same gold mention set.
+        #[arg(long)]
+        coref_oracle_mentions: bool,
     },
 
     /// Export annotations to brat/CoNLL/JSONL formats
@@ -161,67 +241,30 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
             dataset,
             model,
             task,
+            html,
+            output,
+            max_cases,
+            min_errors,
+            min_case_errors,
+            min_gold_mentions,
+            min_gold_relations,
+            coref_oracle_mentions,
         } => {
             #[cfg(feature = "eval")]
             {
                 let m = model.create_model()?;
+                let ner_min_errors = min_case_errors.unwrap_or(min_errors);
+                #[cfg(feature = "eval-advanced")]
+                let coref_min_mentions = min_gold_mentions.unwrap_or(min_errors);
+                #[cfg(feature = "eval-advanced")]
+                let rel_min_gold = min_gold_relations.unwrap_or(min_errors);
+
+                // Avoid unused warnings in non-`eval-advanced` builds.
+                #[cfg(not(feature = "eval-advanced"))]
+                let _ = (min_gold_mentions, min_gold_relations, coref_oracle_mentions);
 
                 let (name, test_cases) = if dataset == "synthetic" {
-                    (
-                        "synthetic".to_string(),
-                        vec![
-                            (
-                                "Marie Curie won the Nobel Prize.".to_string(),
-                                vec![
-                                    crate::eval::GoldEntity {
-                                        text: "Marie Curie".to_string(),
-                                        original_label: "PER".to_string(),
-                                        entity_type: anno_core::EntityType::Person,
-                                        start: 0,
-                                        end: 11,
-                                    },
-                                    crate::eval::GoldEntity {
-                                        text: "Nobel Prize".to_string(),
-                                        original_label: "MISC".to_string(),
-                                        entity_type: anno_core::EntityType::Other(
-                                            "MISC".to_string(),
-                                        ),
-                                        start: 20,
-                                        end: 31,
-                                    },
-                                ],
-                            ),
-                            (
-                                "Apple Inc. is based in California.".to_string(),
-                                vec![
-                                    crate::eval::GoldEntity {
-                                        text: "Apple Inc.".to_string(),
-                                        original_label: "ORG".to_string(),
-                                        entity_type: anno_core::EntityType::Organization,
-                                        start: 0,
-                                        end: 10,
-                                    },
-                                    crate::eval::GoldEntity {
-                                        text: "California".to_string(),
-                                        original_label: "LOC".to_string(),
-                                        entity_type: anno_core::EntityType::Location,
-                                        start: 24,
-                                        end: 34,
-                                    },
-                                ],
-                            ),
-                            (
-                                "Contact john@example.com for help.".to_string(),
-                                vec![crate::eval::GoldEntity {
-                                    text: "john@example.com".to_string(),
-                                    original_label: "EMAIL".to_string(),
-                                    entity_type: anno_core::EntityType::Other("EMAIL".to_string()),
-                                    start: 8,
-                                    end: 24,
-                                }],
-                            ),
-                        ],
-                    )
+                    ("synthetic".to_string(), synthetic_ner_test_cases())
                 } else {
                     // Parse dataset ID
                     let dataset_id: DatasetId = dataset
@@ -292,6 +335,19 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                         let mut total_pred = 0;
                         let mut total_correct = 0;
 
+                        let html_output_path: Option<PathBuf> = if html {
+                            Some(PathBuf::from(output.as_deref().ok_or_else(|| {
+                                "--html requires --output PATH".to_string()
+                            })?))
+                        } else {
+                            None
+                        };
+                        if html_output_path.is_some() && max_cases == 0 {
+                            return Err("--max-cases must be > 0 when --html is set".to_string());
+                        }
+
+                        let mut worst_cases: Vec<HtmlWorstCase> = Vec::new();
+
                         let start_time = Instant::now();
 
                         // Validate gold annotations before evaluation (warn but continue)
@@ -319,11 +375,60 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             }
                         }
 
-                        for (text, gold) in &test_cases {
+                        for (case_idx, (text, gold)) in test_cases.iter().enumerate() {
                             let entities = m.extract_entities(text, None).unwrap_or_default();
 
                             total_gold += gold.len();
                             total_pred += entities.len();
+
+                            if html_output_path.is_some() {
+                                let gold_signals: Vec<Signal<Location>> = gold
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, g)| {
+                                        Signal::new(
+                                            SignalId::new(i as u64),
+                                            Location::text(g.start, g.end),
+                                            g.text.as_str(),
+                                            g.original_label.as_str(),
+                                            1.0,
+                                        )
+                                    })
+                                    .collect();
+
+                                let pred_signals: Vec<Signal<Location>> = entities
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, e)| {
+                                        Signal::new(
+                                            SignalId::new(i as u64),
+                                            Location::text(e.start, e.end),
+                                            e.text.as_str(),
+                                            e.entity_type.as_label(),
+                                            e.confidence as f32,
+                                        )
+                                    })
+                                    .collect();
+
+                                let cmp = EvalComparison::compare(text, gold_signals, pred_signals);
+                                let errors = cmp.error_count();
+                                if errors >= ner_min_errors {
+                                    worst_cases.push(HtmlWorstCase {
+                                        case_idx,
+                                        errors,
+                                        cmp,
+                                    });
+                                    // Keep memory bounded on large datasets (retain only the worst cases).
+                                    if worst_cases.len() > max_cases.saturating_mul(5) {
+                                        worst_cases.sort_by(|a, b| {
+                                            b.errors
+                                                .cmp(&a.errors)
+                                                .then_with(|| a.case_idx.cmp(&b.case_idx))
+                                        });
+                                        worst_cases.truncate(max_cases);
+                                    }
+                                }
+                            }
 
                             // Track which predictions have been matched to prevent double-counting
                             let mut matched_pred = vec![false; entities.len()];
@@ -478,6 +583,32 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             elapsed.as_secs_f64(),
                             ms_per_sent
                         );
+
+                        if let Some(output_path) = html_output_path {
+                            // Final selection + stable ordering: worst errors first.
+                            worst_cases.sort_by(|a, b| {
+                                b.errors
+                                    .cmp(&a.errors)
+                                    .then_with(|| a.case_idx.cmp(&b.case_idx))
+                            });
+                            worst_cases.truncate(max_cases);
+
+                            write_ner_error_explorer_html(
+                                output_path.as_path(),
+                                &name,
+                                model.name(),
+                                test_cases.len(),
+                                total_gold,
+                                total_pred,
+                                total_correct,
+                                &worst_cases,
+                            )?;
+                            println!(
+                                "{} HTML written to: {}",
+                                color("32", "ok:"),
+                                output_path.display()
+                            );
+                        }
                         println!();
                     }
                     EvalTask::Coref => {
@@ -490,6 +621,19 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                         {
                             use crate::eval::coref_resolver::SimpleCorefResolver;
                             use crate::eval::loader::DatasetLoader;
+
+                            let html_output_path: Option<PathBuf> = if html {
+                                Some(PathBuf::from(output.as_deref().ok_or_else(|| {
+                                    "--html requires --output PATH".to_string()
+                                })?))
+                            } else {
+                                None
+                            };
+                            if html_output_path.is_some() && max_cases == 0 {
+                                return Err(
+                                    "--max-cases must be > 0 when --html is set".to_string()
+                                );
+                            }
 
                             if dataset == "synthetic" {
                                 return Err("Coreference evaluation requires a real dataset (e.g., gap, preco, litbank)".to_string());
@@ -531,8 +675,12 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                 let text = doc.text.as_str();
                                 all_gold_chains.push(&doc.chains);
 
-                                // Extract entities using NER
-                                let entities = m.extract_entities(text, None).unwrap_or_default();
+                                // Mentions source: model NER (default) or oracle gold mentions.
+                                let entities = if coref_oracle_mentions {
+                                    coref_doc_to_oracle_mentions(doc)
+                                } else {
+                                    m.extract_entities(text, None).unwrap_or_default()
+                                };
 
                                 // Resolve coreference
                                 let pred_chains = resolver.resolve_to_chains(&entities);
@@ -589,6 +737,45 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             println!("  Documents: {}", results.num_documents);
                             println!("  Time: {:.1}s", elapsed.as_secs_f64());
                             println!();
+
+                            if let Some(output_path) = html_output_path {
+                                // Select worst docs (lowest CoNLL F1) with a minimum gold mention count.
+                                let mut scored: Vec<(usize, f64)> = results
+                                    .per_document
+                                    .iter()
+                                    .enumerate()
+                                    .filter_map(|(i, ev)| {
+                                        let doc = gold_docs.get(i)?;
+                                        if doc.mention_count() < coref_min_mentions {
+                                            return None;
+                                        }
+                                        Some((i, ev.conll_f1))
+                                    })
+                                    .collect();
+                                scored.sort_by(|a, b| {
+                                    a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+                                });
+                                let selected: Vec<usize> =
+                                    scored.into_iter().take(max_cases).map(|(i, _)| i).collect();
+
+                                write_coref_error_explorer_html(
+                                    output_path.as_path(),
+                                    &name,
+                                    model.name(),
+                                    resolver.name(),
+                                    &gold_docs,
+                                    &results.per_document,
+                                    &selected,
+                                    m.as_ref(),
+                                    &resolver,
+                                    coref_oracle_mentions,
+                                )?;
+                                println!(
+                                    "{} HTML written to: {}",
+                                    color("32", "ok:"),
+                                    output_path.display()
+                                );
+                            }
                         }
                     }
                     EvalTask::Relation => {
@@ -606,6 +793,19 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             use crate::eval::relation::{
                                 evaluate_relations, RelationEvalConfig, RelationPrediction,
                             };
+
+                            let html_output_path: Option<PathBuf> = if html {
+                                Some(PathBuf::from(output.as_deref().ok_or_else(|| {
+                                    "--html requires --output PATH".to_string()
+                                })?))
+                            } else {
+                                None
+                            };
+                            if html_output_path.is_some() && max_cases == 0 {
+                                return Err(
+                                    "--max-cases must be > 0 when --html is set".to_string()
+                                );
+                            }
 
                             if dataset == "synthetic" {
                                 return Err("Relation extraction evaluation requires a real dataset (e.g., docred, retacred)".to_string());
@@ -685,6 +885,8 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
 
                             let mut all_gold = Vec::new();
                             let mut all_pred = Vec::new();
+                            let mut pred_by_doc: Vec<Vec<RelationPrediction>> =
+                                Vec::with_capacity(gold_docs.len());
                             let start_time = Instant::now();
 
                             if let Some(ref rel_extractor) = use_relation_extractor {
@@ -695,6 +897,7 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                 for doc in &gold_docs {
                                     let text = doc.text.as_str();
                                     all_gold.extend(doc.relations.clone());
+                                    let mut pred_this: Vec<RelationPrediction> = Vec::new();
 
                                     // Use RelationExtractor
                                     match rel_extractor.extract_with_relations(
@@ -712,7 +915,8 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                                         &result.entities,
                                                     )
                                                 {
-                                                    all_pred.push(pred);
+                                                    all_pred.push(pred.clone());
+                                                    pred_this.push(pred);
                                                 }
                                             }
                                         }
@@ -725,13 +929,16 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                             // Fall back to entity-pair heuristic for this document
                                             let entities =
                                                 m.extract_entities(text, None).unwrap_or_default();
-                                            all_pred.extend(create_entity_pair_relations(
+                                            let fallback = create_entity_pair_relations(
                                                 &entities,
                                                 text,
                                                 &relation_types_vec,
-                                            ));
+                                            );
+                                            all_pred.extend(fallback.iter().cloned());
+                                            pred_this.extend(fallback);
                                         }
                                     }
+                                    pred_by_doc.push(pred_this);
                                 }
                             } else {
                                 println!("{} Using entity-pair heuristic (GLiNER2 multitask not available)", color("33", "!"));
@@ -746,11 +953,13 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                         m.extract_entities(text, None).unwrap_or_default();
 
                                     // Create relation predictions from entity pairs
-                                    all_pred.extend(create_entity_pair_relations(
+                                    let pred_this = create_entity_pair_relations(
                                         &entities,
                                         text,
                                         &relation_types_vec,
-                                    ));
+                                    );
+                                    all_pred.extend(pred_this.iter().cloned());
+                                    pred_by_doc.push(pred_this);
                                 }
                             }
 
@@ -779,13 +988,82 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                             println!();
                             println!("{}", metrics.to_string_human(false)); // verbose=false for now
                             println!();
+
+                            if let Some(output_path) = html_output_path {
+                                // Per-doc metrics + worst-doc selection
+                                let mut per_doc_metrics: Vec<
+                                    crate::eval::relation::RelationMetrics,
+                                > = Vec::with_capacity(gold_docs.len());
+                                for (i, doc) in gold_docs.iter().enumerate() {
+                                    let pred = pred_by_doc.get(i).cloned().unwrap_or_default();
+                                    per_doc_metrics.push(evaluate_relations(
+                                        &doc.relations,
+                                        &pred,
+                                        &config,
+                                    ));
+                                }
+
+                                // Filter tiny docs (few gold relations). Task-specific flag:
+                                // `--min-gold-relations` (or legacy `--min-errors`).
+                                let mut scored: Vec<(usize, f64, usize)> = per_doc_metrics
+                                    .iter()
+                                    .enumerate()
+                                    .filter_map(|(i, m)| {
+                                        let gold_n = gold_docs.get(i)?.relations.len();
+                                        if gold_n < rel_min_gold {
+                                            return None;
+                                        }
+                                        // Score by strict f1 ascending; tie-break by "strict errors" descending.
+                                        let strict_errors = (m.num_gold - m.strict_matches)
+                                            + (m.num_predicted - m.strict_matches);
+                                        Some((i, m.strict_f1, strict_errors))
+                                    })
+                                    .collect();
+                                scored.sort_by(|a, b| {
+                                    a.1.partial_cmp(&b.1)
+                                        .unwrap_or(std::cmp::Ordering::Equal)
+                                        .then_with(|| b.2.cmp(&a.2))
+                                });
+                                let selected: Vec<usize> = scored
+                                    .into_iter()
+                                    .take(max_cases)
+                                    .map(|(i, _, _)| i)
+                                    .collect();
+
+                                write_relation_error_explorer_html(
+                                    output_path.as_path(),
+                                    &name,
+                                    model.name(),
+                                    &gold_docs,
+                                    &pred_by_doc,
+                                    &per_doc_metrics,
+                                    &selected,
+                                )?;
+                                println!(
+                                    "{} HTML written to: {}",
+                                    color("32", "ok:"),
+                                    output_path.display()
+                                );
+                            }
                         }
                     }
                 }
             }
             #[cfg(not(feature = "eval"))]
             {
-                let _ = (dataset, model, task);
+                let _ = (
+                    dataset,
+                    model,
+                    task,
+                    html,
+                    output,
+                    max_cases,
+                    min_errors,
+                    min_case_errors,
+                    min_gold_mentions,
+                    min_gold_relations,
+                    coref_oracle_mentions,
+                );
                 return Err("Dataset evaluation requires --features eval".to_string());
             }
         }
@@ -817,6 +1095,1408 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
         }
     }
 
+    Ok(())
+}
+
+#[cfg(feature = "eval")]
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+#[cfg(feature = "eval")]
+fn preview_text(s: &str, max_chars: usize) -> String {
+    let mut out: String = s.chars().take(max_chars).collect();
+    out = out.replace('\n', " ").replace('\r', " ").replace('\t', " ");
+    // Keep it simple: collapse repeated spaces in a tiny loop.
+    while out.contains("  ") {
+        out = out.replace("  ", " ");
+    }
+    out.trim().to_string()
+}
+
+#[cfg(feature = "eval")]
+fn synthetic_ner_test_cases() -> Vec<(String, Vec<crate::eval::GoldEntity>)> {
+    use anno_core::EntityType;
+
+    fn find_char_span(text: &str, needle: &str) -> (usize, usize) {
+        let start_byte = text.find(needle).unwrap_or_else(|| {
+            panic!("synthetic_ner_test_cases bug: needle not found: {needle:?}")
+        });
+        let end_byte = start_byte + needle.len();
+        let start = text[..start_byte].chars().count();
+        let end = text[..end_byte].chars().count();
+        (start, end)
+    }
+
+    fn entity_type_for_label(label: &str) -> EntityType {
+        match label {
+            "PER" | "PERSON" => EntityType::Person,
+            "ORG" | "ORGANIZATION" => EntityType::Organization,
+            "LOC" | "LOCATION" | "GPE" => EntityType::Location,
+            other => EntityType::Other(other.to_string()),
+        }
+    }
+
+    fn ge(text: &str, needle: &str, label: &str) -> crate::eval::GoldEntity {
+        let (start, end) = find_char_span(text, needle);
+        crate::eval::GoldEntity {
+            text: needle.to_string(),
+            original_label: label.to_string(),
+            entity_type: entity_type_for_label(label),
+            start,
+            end,
+        }
+    }
+
+    let mut cases: Vec<(String, Vec<crate::eval::GoldEntity>)> = Vec::new();
+
+    // Latin
+    let t = "Marie Curie won the Nobel Prize.";
+    cases.push((
+        t.to_string(),
+        vec![ge(t, "Marie Curie", "PER"), ge(t, "Nobel Prize", "MISC")],
+    ));
+
+    // CJK (no spaces)
+    let t = "習近平在北京會見了普京。";
+    cases.push((
+        t.to_string(),
+        vec![
+            ge(t, "習近平", "PER"),
+            ge(t, "北京", "LOC"),
+            ge(t, "普京", "PER"),
+        ],
+    ));
+
+    // Arabic (RTL)
+    let t = "التقى محمد بن سلمان بالرئيس في الرياض";
+    cases.push((
+        t.to_string(),
+        vec![ge(t, "محمد بن سلمان", "PER"), ge(t, "الرياض", "LOC")],
+    ));
+
+    // Cyrillic
+    let t = "Путин встретился с Си Цзиньпином в Москве.";
+    cases.push((
+        t.to_string(),
+        vec![
+            ge(t, "Путин", "PER"),
+            ge(t, "Си Цзиньпином", "PER"),
+            ge(t, "Москве", "LOC"),
+        ],
+    ));
+
+    // Devanagari
+    let t = "डॉ. शर्मा ने दिल्ली में सम्मेलन में भाषण दिया।";
+    cases.push((
+        t.to_string(),
+        vec![ge(t, "शर्मा", "PER"), ge(t, "दिल्ली", "LOC")],
+    ));
+
+    // Mixed / code-switching
+    let t = "Dr. 田中 presented at MIT in 東京.";
+    cases.push((
+        t.to_string(),
+        vec![
+            ge(t, "田中", "PER"),
+            ge(t, "MIT", "ORG"),
+            ge(t, "東京", "LOC"),
+        ],
+    ));
+
+    // Diacritics
+    let t = "François Müller and José García met in São Paulo.";
+    cases.push((
+        t.to_string(),
+        vec![
+            ge(t, "François Müller", "PER"),
+            ge(t, "José García", "PER"),
+            ge(t, "São Paulo", "LOC"),
+        ],
+    ));
+
+    // Special characters
+    let t = "Contact john@example.com for help.";
+    cases.push((t.to_string(), vec![ge(t, "john@example.com", "EMAIL")]));
+
+    cases
+}
+
+#[cfg(feature = "eval")]
+fn write_ner_error_explorer_html(
+    output_path: &Path,
+    dataset_name: &str,
+    model_name: &str,
+    total_sentences: usize,
+    total_gold: usize,
+    total_pred: usize,
+    total_correct: usize,
+    worst_cases: &[HtmlWorstCase],
+) -> Result<(), String> {
+    let parent = output_path.parent().unwrap_or_else(|| Path::new("."));
+    let stem = output_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("dataset_eval");
+    let files_dir = parent.join(format!("{stem}_files"));
+    fs::create_dir_all(&files_dir)
+        .map_err(|e| format!("Failed to create {:?}: {}", files_dir, e))?;
+
+    for case in worst_cases {
+        let case_filename = format!("case_{:06}.html", case.case_idx);
+        let case_path = files_dir.join(&case_filename);
+        let title = format!("{model_name} — {dataset_name} — case {}", case.case_idx);
+        let case_html = render_eval_html_with_title(&case.cmp, &title);
+        fs::write(&case_path, case_html)
+            .map_err(|e| format!("Failed to write {:?}: {}", case_path, e))?;
+    }
+
+    let mut index = String::new();
+    index.push_str("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"color-scheme\" content=\"dark light\">");
+    index.push_str(&format!(
+        "<title>{}</title>",
+        html_escape(&format!(
+            "dataset eval explorer — {model_name} — {dataset_name}"
+        ))
+    ));
+    index.push_str(
+        r#"<style>
+:root{color-scheme:light dark;--bg:#0a0a0a;--text:#b0b0b0;--text-strong:#fff;--muted:#777;--border:#222;--border-strong:#333;--hover:#111;--input-bg:#080808;--link:#9ad;--code:#bbb}
+@media (prefers-color-scheme: light){:root{--bg:#fff;--text:#222;--text-strong:#000;--muted:#555;--border:#d6d6d6;--border-strong:#c6c6c6;--hover:#f0f0f0;--input-bg:#fff;--link:#06c;--code:#333}}
+html[data-theme='dark']{--bg:#0a0a0a;--text:#b0b0b0;--text-strong:#fff;--muted:#777;--border:#222;--border-strong:#333;--hover:#111;--input-bg:#080808;--link:#9ad;--code:#bbb}
+html[data-theme='light']{--bg:#fff;--text:#222;--text-strong:#000;--muted:#555;--border:#d6d6d6;--border-strong:#c6c6c6;--hover:#f0f0f0;--input-bg:#fff;--link:#06c;--code:#333}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:12px/1.4 monospace;background:var(--bg);color:var(--text);padding:12px}
+h1{font-size:14px;color:var(--text-strong);font-weight:normal;border-bottom:1px solid var(--border-strong);padding:4px 0;margin:0 0 12px}
+.meta{color:var(--muted);margin:0 0 12px}
+.meta b{color:var(--text);font-weight:normal}
+.row{display:flex;gap:12px;align-items:center;margin:0 0 10px}
+input{flex:1;background:var(--input-bg);border:1px solid var(--border);color:var(--text);padding:6px 8px}
+.count{color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th,td{padding:4px 8px;text-align:left;border:1px solid var(--border);vertical-align:top}
+th{background:var(--hover);color:var(--muted);font-weight:normal;text-transform:uppercase;font-size:10px}
+tr:hover{background:var(--hover)}
+a{color:var(--link);text-decoration:none}
+a:hover{text-decoration:underline}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+code{color:var(--code)}
+.toggle{cursor:pointer;user-select:none;color:var(--muted);border:1px solid var(--border);background:var(--bg);padding:2px 6px;font-size:10px}
+</style></head><body>"#,
+    );
+    index.push_str(&format!(
+        "<div class=\"row\" style=\"justify-content:space-between\"><h1>dataset eval explorer</h1><span class=\"toggle\" id=\"theme-toggle\" title=\"toggle theme (auto → dark → light)\">theme: auto</span></div><div class=\"meta\"><b>model</b> {} &nbsp; <b>dataset</b> {} &nbsp; <b>sentences</b> {} &nbsp; <b>gold</b> {} &nbsp; <b>pred</b> {} &nbsp; <b>correct</b> {}</div>",
+        html_escape(model_name),
+        html_escape(dataset_name),
+        total_sentences,
+        total_gold,
+        total_pred,
+        total_correct
+    ));
+    index.push_str(
+        r#"<div class="row">
+  <input id="case-filter" placeholder="filter (case id, label, text…)" />
+  <div id="case-count" class="count"></div>
+</div>
+<table id="case-table"><thead><tr>
+  <th>case</th><th class="num">errors</th><th class="num">f1</th><th class="num">gold</th><th class="num">pred</th><th class="num">✓</th><th>text</th>
+</tr></thead><tbody>"#,
+    );
+
+    for case in worst_cases {
+        let first_error_mid = case
+            .cmp
+            .matches
+            .iter()
+            .position(|m| !matches!(m, EvalMatch::Correct { .. }))
+            .unwrap_or(0);
+        let rel = format!(
+            "{stem}_files/case_{:06}.html#M{}",
+            case.case_idx, first_error_mid
+        );
+        let preview = preview_text(&case.cmp.text, 180);
+        index.push_str(&format!(
+            "<tr data-hay=\"{hay}\"><td><a target=\"_blank\" rel=\"noopener\" href=\"{href}\">case {case_id}</a></td><td class=\"num\">{errors}</td><td class=\"num\">{f1:.1}%</td><td class=\"num\">{gold}</td><td class=\"num\">{pred}</td><td class=\"num\">{ok}</td><td><code>{text}</code></td></tr>",
+            hay = html_escape(&format!(
+                "case {} errors {} {} {}",
+                case.case_idx, case.errors, preview, dataset_name
+            ))
+            .to_lowercase(),
+            href = html_escape(&rel),
+            case_id = case.case_idx,
+            errors = case.errors,
+            f1 = case.cmp.f1() * 100.0,
+            gold = case.cmp.gold.len(),
+            pred = case.cmp.predicted.len(),
+            ok = case.cmp.correct_count(),
+            text = html_escape(&preview),
+        ));
+    }
+
+    index.push_str(
+        r##"</tbody></table>
+<script>
+(() => {
+  // Theme toggle: auto → dark → light (persisted).
+  const themeBtn = document.getElementById("theme-toggle");
+  const themeKey = "anno-theme";
+  const applyTheme = (theme) => {
+    const t = theme || "auto";
+    if (t === "auto") {
+      delete document.documentElement.dataset.theme;
+    } else {
+      document.documentElement.dataset.theme = t;
+    }
+    if (themeBtn) themeBtn.textContent = `theme: ${t}`;
+  };
+  const readTheme = () => {
+    try { return localStorage.getItem(themeKey) || "auto"; } catch (_) { return "auto"; }
+  };
+  const writeTheme = (t) => {
+    try { localStorage.setItem(themeKey, t); } catch (_) { /* ignore */ }
+  };
+  applyTheme(readTheme());
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const cur = readTheme();
+      const next = cur === "auto" ? "dark" : (cur === "dark" ? "light" : "auto");
+      writeTheme(next);
+      applyTheme(next);
+    });
+  }
+
+  const input = document.getElementById("case-filter");
+  const rows = Array.from(document.querySelectorAll("#case-table tbody tr"));
+  const count = document.getElementById("case-count");
+  function update() {
+    const q = (input.value || "").toLowerCase().trim();
+    let shown = 0;
+    for (const tr of rows) {
+      const hay = (tr.dataset.hay || "");
+      const show = !q || hay.includes(q);
+      tr.style.display = show ? "" : "none";
+      if (show) shown++;
+    }
+    count.textContent = `${shown} shown / ${rows.length} total`;
+  }
+  input.addEventListener("input", update);
+  update();
+})();
+</script>
+</body></html>"##,
+    );
+
+    fs::write(output_path, index)
+        .map_err(|e| format!("Failed to write {:?}: {}", output_path, e))?;
+    Ok(())
+}
+
+#[cfg(feature = "eval-advanced")]
+fn coref_doc_to_gold_entities(doc: &crate::eval::coref::CorefDocument) -> Vec<anno_core::Entity> {
+    use anno_core::{Entity, EntityType};
+
+    let mut entities: Vec<Entity> = Vec::new();
+    let mut next_cluster = anno_core::types::CanonicalId::ZERO;
+
+    for chain in &doc.chains {
+        let cid = chain.cluster_id.unwrap_or_else(|| {
+            let id = next_cluster;
+            next_cluster += 1;
+            id
+        });
+        let label = chain
+            .entity_type
+            .as_deref()
+            .or_else(|| {
+                chain
+                    .mentions
+                    .first()
+                    .and_then(|m| m.entity_type.as_deref())
+            })
+            .unwrap_or("COREF");
+
+        for m in &chain.mentions {
+            let mut e = Entity::new(
+                m.text.clone(),
+                EntityType::Other(label.to_string()),
+                m.start,
+                m.end,
+                1.0,
+            );
+            e.canonical_id = Some(cid);
+            entities.push(e);
+        }
+    }
+
+    entities
+}
+
+#[cfg(feature = "eval-advanced")]
+fn coref_doc_to_oracle_mentions(doc: &crate::eval::coref::CorefDocument) -> Vec<anno_core::Entity> {
+    use anno_core::{Entity, EntityType};
+
+    let mut entities: Vec<Entity> = Vec::new();
+
+    for chain in &doc.chains {
+        let label = chain
+            .entity_type
+            .as_deref()
+            .or_else(|| {
+                chain
+                    .mentions
+                    .first()
+                    .and_then(|m| m.entity_type.as_deref())
+            })
+            .unwrap_or("COREF");
+
+        for m in &chain.mentions {
+            let e = Entity::new(
+                m.text.clone(),
+                EntityType::Other(label.to_string()),
+                m.start,
+                m.end,
+                1.0,
+            );
+            entities.push(e);
+        }
+    }
+
+    entities
+}
+
+#[cfg(feature = "eval-advanced")]
+fn write_coref_error_explorer_html(
+    output_path: &Path,
+    dataset_name: &str,
+    model_name: &str,
+    resolver_name: &str,
+    gold_docs: &[crate::eval::coref::CorefDocument],
+    per_doc: &[crate::eval::coref_metrics::CorefEvaluation],
+    selected_doc_indices: &[usize],
+    model: &dyn crate::Model,
+    resolver: &crate::eval::coref_resolver::SimpleCorefResolver,
+    coref_oracle_mentions: bool,
+) -> Result<(), String> {
+    let parent = output_path.parent().unwrap_or_else(|| Path::new("."));
+    let stem = output_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("coref_eval");
+    let files_dir = parent.join(format!("{stem}_files"));
+    fs::create_dir_all(&files_dir)
+        .map_err(|e| format!("Failed to create {:?}: {}", files_dir, e))?;
+
+    // Per-doc pages: gold inspector + predicted inspector + a small container page
+    for &idx in selected_doc_indices {
+        let doc = gold_docs
+            .get(idx)
+            .ok_or_else(|| format!("Invalid doc index {}", idx))?;
+        let scores = per_doc
+            .get(idx)
+            .ok_or_else(|| format!("Missing per-doc eval for doc {}", idx))?;
+
+        let doc_id = doc
+            .doc_id
+            .clone()
+            .unwrap_or_else(|| format!("doc_{:06}", idx));
+
+        // Gold inspector
+        let gold_entities = coref_doc_to_gold_entities(doc);
+        let gold_gdoc = GroundedDocument::from_entities(
+            format!("{dataset_name}:{doc_id}:gold"),
+            doc.text.clone(),
+            &gold_entities,
+        );
+        let gold_html = render_document_html(&gold_gdoc);
+        let gold_filename = format!("coref_{:06}_gold.html", idx);
+        let gold_path = files_dir.join(&gold_filename);
+        fs::write(&gold_path, gold_html)
+            .map_err(|e| format!("Failed to write {:?}: {}", gold_path, e))?;
+
+        // Predicted inspector (re-run NER + coref for selected docs only)
+        let entities = if coref_oracle_mentions {
+            coref_doc_to_oracle_mentions(doc)
+        } else {
+            model
+                .extract_entities(doc.text.as_str(), None)
+                .unwrap_or_default()
+        };
+        let resolved = resolver.resolve(&entities);
+        let pred_gdoc = GroundedDocument::from_entities(
+            format!("{dataset_name}:{doc_id}:pred"),
+            doc.text.clone(),
+            &resolved,
+        );
+        let pred_html = render_document_html(&pred_gdoc);
+        let pred_filename = format!("coref_{:06}_pred.html", idx);
+        let pred_path = files_dir.join(&pred_filename);
+        fs::write(&pred_path, pred_html)
+            .map_err(|e| format!("Failed to write {:?}: {}", pred_path, e))?;
+
+        // Container page (side-by-side)
+        let container_filename = format!("coref_{:06}.html", idx);
+        let container_path = files_dir.join(&container_filename);
+        let mut page = String::new();
+        page.push_str("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"color-scheme\" content=\"dark light\">");
+        page.push_str(&format!(
+            "<title>{}</title>",
+            html_escape(&format!(
+                "coref explorer — {dataset_name} — {doc_id} — F1={:.3}",
+                scores.conll_f1
+            ))
+        ));
+        page.push_str(
+            r#"<style>
+:root{color-scheme:light dark;--bg:#0a0a0a;--text:#b0b0b0;--text-strong:#fff;--muted:#777;--border:#222;--border-strong:#333;--hover:#111;--panel-bg:#0d0d0d;--link:#9ad}
+@media (prefers-color-scheme: light){:root{--bg:#fff;--text:#222;--text-strong:#000;--muted:#555;--border:#d6d6d6;--border-strong:#c6c6c6;--hover:#f0f0f0;--panel-bg:#f7f7f7;--link:#06c}}
+html[data-theme='dark']{--bg:#0a0a0a;--text:#b0b0b0;--text-strong:#fff;--muted:#777;--border:#222;--border-strong:#333;--hover:#111;--panel-bg:#0d0d0d;--link:#9ad}
+html[data-theme='light']{--bg:#fff;--text:#222;--text-strong:#000;--muted:#555;--border:#d6d6d6;--border-strong:#c6c6c6;--hover:#f0f0f0;--panel-bg:#f7f7f7;--link:#06c}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:12px/1.4 monospace;background:var(--bg);color:var(--text);padding:10px}
+h1{font-size:14px;color:var(--text-strong);font-weight:normal;border-bottom:1px solid var(--border-strong);padding:4px 0;margin:0 0 10px}
+.meta{color:var(--muted);margin:0 0 10px}
+.meta b{color:var(--text);font-weight:normal}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.panel{border:1px solid var(--border);background:var(--panel-bg)}
+.hdr{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border)}
+.hdr a{color:var(--link);text-decoration:none}
+.hdr a:hover{text-decoration:underline}
+iframe{width:100%;height:82vh;border:0;background:var(--bg)}
+.toggle{cursor:pointer;user-select:none;color:var(--muted);border:1px solid var(--border);background:var(--bg);padding:2px 6px;font-size:10px}
+</style></head><body>"#,
+        );
+        page.push_str(&format!(
+            "<div style=\"display:flex;justify-content:space-between;align-items:center\"><h1>coref doc {idx:06} — {}</h1><span class=\"toggle\" id=\"theme-toggle\" title=\"toggle theme (auto → dark → light)\">theme: auto</span></div>",
+            html_escape(&doc_id)
+        ));
+        page.push_str(&format!(
+            "<div class=\"meta\"><b>dataset</b> {} &nbsp; <b>model</b> {} &nbsp; <b>resolver</b> {} &nbsp; <b>CoNLL F1</b> {:.3} &nbsp; <b>MUC</b> {:.3} &nbsp; <b>B³</b> {:.3} &nbsp; <b>CEAF-e</b> {:.3}</div>",
+            html_escape(dataset_name),
+            html_escape(model_name),
+            html_escape(resolver_name),
+            scores.conll_f1,
+            scores.muc.f1,
+            scores.b_cubed.f1,
+            scores.ceaf_e.f1,
+        ));
+        page.push_str("<div class=\"grid\">");
+        page.push_str(&format!(
+            "<div class=\"panel\"><div class=\"hdr\"><div>gold</div><div><a target=\"_blank\" rel=\"noopener\" href=\"{}\">open</a></div></div><iframe id=\"gold-frame\" src=\"{}\"></iframe></div>",
+            html_escape(&gold_filename),
+            html_escape(&gold_filename),
+        ));
+        page.push_str(&format!(
+            "<div class=\"panel\"><div class=\"hdr\"><div>predicted</div><div><a target=\"_blank\" rel=\"noopener\" href=\"{}\">open</a></div></div><iframe id=\"pred-frame\" src=\"{}\"></iframe></div>",
+            html_escape(&pred_filename),
+            html_escape(&pred_filename),
+        ));
+        page.push_str("</div>");
+        page.push_str(
+            r#"<script>
+(() => {
+  // Theme toggle: auto → dark → light (persisted).
+  const themeBtn = document.getElementById('theme-toggle');
+  const themeKey = 'anno-theme';
+  const applyTheme = (theme) => {
+    const t = theme || 'auto';
+    if (t === 'auto') {
+      delete document.documentElement.dataset.theme;
+    } else {
+      document.documentElement.dataset.theme = t;
+    }
+    if (themeBtn) themeBtn.textContent = `theme: ${t}`;
+  };
+  const readTheme = () => {
+    try { return localStorage.getItem(themeKey) || 'auto'; } catch (_) { return 'auto'; }
+  };
+  const writeTheme = (t) => {
+    try { localStorage.setItem(themeKey, t); } catch (_) { /* ignore */ }
+  };
+  applyTheme(readTheme());
+  if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+      const cur = readTheme();
+      const next = cur === 'auto' ? 'dark' : (cur === 'dark' ? 'light' : 'auto');
+      writeTheme(next);
+      applyTheme(next);
+    });
+  }
+
+  const gold = document.getElementById('gold-frame');
+  const pred = document.getElementById('pred-frame');
+  if (!gold || !pred) return;
+  window.addEventListener('message', (ev) => {
+    const data = ev && ev.data ? ev.data : null;
+    if (!data || data.type !== 'anno:activate-span') return;
+    if (ev.source === gold.contentWindow) {
+      pred.contentWindow && pred.contentWindow.postMessage(data, '*');
+    } else if (ev.source === pred.contentWindow) {
+      gold.contentWindow && gold.contentWindow.postMessage(data, '*');
+    }
+  });
+})();
+</script>"#,
+        );
+        page.push_str("</body></html>");
+        fs::write(&container_path, page)
+            .map_err(|e| format!("Failed to write {:?}: {}", container_path, e))?;
+    }
+
+    // Index page
+    let mut index = String::new();
+    index.push_str("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"color-scheme\" content=\"dark light\">");
+    index.push_str(&format!(
+        "<title>{}</title>",
+        html_escape(&format!(
+            "coref eval explorer — {model_name} — {dataset_name}"
+        ))
+    ));
+    index.push_str(
+        r##"<style>
+:root{color-scheme:light dark;--bg:#0a0a0a;--text:#b0b0b0;--text-strong:#fff;--muted:#777;--border:#222;--border-strong:#333;--hover:#111;--input-bg:#080808;--link:#9ad;--code:#bbb}
+@media (prefers-color-scheme: light){:root{--bg:#fff;--text:#222;--text-strong:#000;--muted:#555;--border:#d6d6d6;--border-strong:#c6c6c6;--hover:#f0f0f0;--input-bg:#fff;--link:#06c;--code:#333}}
+html[data-theme='dark']{--bg:#0a0a0a;--text:#b0b0b0;--text-strong:#fff;--muted:#777;--border:#222;--border-strong:#333;--hover:#111;--input-bg:#080808;--link:#9ad;--code:#bbb}
+html[data-theme='light']{--bg:#fff;--text:#222;--text-strong:#000;--muted:#555;--border:#d6d6d6;--border-strong:#c6c6c6;--hover:#f0f0f0;--input-bg:#fff;--link:#06c;--code:#333}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:12px/1.4 monospace;background:var(--bg);color:var(--text);padding:12px}
+h1{font-size:14px;color:var(--text-strong);font-weight:normal;border-bottom:1px solid var(--border-strong);padding:4px 0;margin:0 0 12px}
+.meta{color:var(--muted);margin:0 0 12px}
+.meta b{color:var(--text);font-weight:normal}
+.row{display:flex;gap:12px;align-items:center;margin:0 0 10px}
+input{flex:1;background:var(--input-bg);border:1px solid var(--border);color:var(--text);padding:6px 8px}
+.count{color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th,td{padding:4px 8px;text-align:left;border:1px solid var(--border);vertical-align:top}
+th{background:var(--hover);color:var(--muted);font-weight:normal;text-transform:uppercase;font-size:10px}
+tr:hover{background:var(--hover)}
+a{color:var(--link);text-decoration:none}
+a:hover{text-decoration:underline}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+code{color:var(--code)}
+.toggle{cursor:pointer;user-select:none;color:var(--muted);border:1px solid var(--border);background:var(--bg);padding:2px 6px;font-size:10px}
+</style></head><body>"##,
+    );
+    index.push_str("<div class=\"row\" style=\"justify-content:space-between\"><h1>coref eval explorer</h1><span class=\"toggle\" id=\"theme-toggle\" title=\"toggle theme (auto → dark → light)\">theme: auto</span></div>");
+    index.push_str(&format!(
+        "<div class=\"meta\"><b>model</b> {} &nbsp; <b>resolver</b> {} &nbsp; <b>dataset</b> {} &nbsp; <b>docs</b> {}</div>",
+        html_escape(model_name),
+        html_escape(resolver_name),
+        html_escape(dataset_name),
+        gold_docs.len()
+    ));
+    index.push_str(
+        r##"<div class="row">
+  <input id="doc-filter" placeholder="filter (doc id, script, text…)" />
+  <div id="doc-count" class="count"></div>
+</div>
+<table id="doc-table"><thead><tr>
+  <th>doc</th><th class="num">conll</th><th class="num">muc</th><th class="num">b3</th><th class="num">ceaf</th><th class="num">mentions</th><th class="num">chains</th><th>text</th>
+</tr></thead><tbody>"##,
+    );
+
+    for &idx in selected_doc_indices {
+        let doc = &gold_docs[idx];
+        let scores = &per_doc[idx];
+        let doc_id = doc
+            .doc_id
+            .clone()
+            .unwrap_or_else(|| format!("doc_{:06}", idx));
+        let mention_count = doc.mention_count();
+        let chain_count = doc.chain_count();
+        let preview = preview_text(&doc.text, 180);
+        let href = format!("coref_{:06}.html", idx);
+        index.push_str(&format!(
+            "<tr data-hay=\"{hay}\"><td><a target=\"_blank\" rel=\"noopener\" href=\"{href}\">{doc_id}</a></td><td class=\"num\">{conll:.3}</td><td class=\"num\">{muc:.3}</td><td class=\"num\">{b3:.3}</td><td class=\"num\">{ceaf:.3}</td><td class=\"num\">{mentions}</td><td class=\"num\">{chains}</td><td><code>{text}</code></td></tr>",
+            hay = html_escape(&format!("{} {}", doc_id, preview)).to_lowercase(),
+            href = html_escape(&href),
+            doc_id = html_escape(&doc_id),
+            conll = scores.conll_f1,
+            muc = scores.muc.f1,
+            b3 = scores.b_cubed.f1,
+            ceaf = scores.ceaf_e.f1,
+            mentions = mention_count,
+            chains = chain_count,
+            text = html_escape(&preview),
+        ));
+    }
+
+    index.push_str(
+        r##"</tbody></table>
+<script>
+(() => {
+  // Theme toggle: auto → dark → light (persisted).
+  const themeBtn = document.getElementById("theme-toggle");
+  const themeKey = "anno-theme";
+  const applyTheme = (theme) => {
+    const t = theme || "auto";
+    if (t === "auto") {
+      delete document.documentElement.dataset.theme;
+    } else {
+      document.documentElement.dataset.theme = t;
+    }
+    if (themeBtn) themeBtn.textContent = `theme: ${t}`;
+  };
+  const readTheme = () => {
+    try { return localStorage.getItem(themeKey) || "auto"; } catch (_) { return "auto"; }
+  };
+  const writeTheme = (t) => {
+    try { localStorage.setItem(themeKey, t); } catch (_) { /* ignore */ }
+  };
+  applyTheme(readTheme());
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const cur = readTheme();
+      const next = cur === "auto" ? "dark" : (cur === "dark" ? "light" : "auto");
+      writeTheme(next);
+      applyTheme(next);
+    });
+  }
+
+  const input = document.getElementById("doc-filter");
+  const rows = Array.from(document.querySelectorAll("#doc-table tbody tr"));
+  const count = document.getElementById("doc-count");
+  function update() {
+    const q = (input.value || "").toLowerCase().trim();
+    let shown = 0;
+    for (const tr of rows) {
+      const hay = (tr.dataset.hay || "");
+      const show = !q || hay.includes(q);
+      tr.style.display = show ? "" : "none";
+      if (show) shown++;
+    }
+    count.textContent = `${shown} shown / ${rows.length} total`;
+  }
+  input.addEventListener("input", update);
+  update();
+})();
+</script>
+</body></html>"##,
+    );
+
+    fs::write(output_path, index)
+        .map_err(|e| format!("Failed to write {:?}: {}", output_path, e))?;
+    Ok(())
+}
+
+#[cfg(feature = "eval-advanced")]
+#[derive(Debug, Clone)]
+struct RelHtmlSpan {
+    start: usize,
+    end: usize,
+    label: String,
+    id: String,
+    class: &'static str,
+}
+
+#[cfg(feature = "eval-advanced")]
+fn extract_span_text(text: &str, start: usize, end: usize) -> String {
+    let char_count = text.chars().count();
+    if start >= char_count || end > char_count || start >= end {
+        return String::new();
+    }
+    text.chars().skip(start).take(end - start).collect()
+}
+
+#[cfg(feature = "eval-advanced")]
+fn annotate_text_with_rel_spans(text: &str, spans: &[RelHtmlSpan]) -> String {
+    let mut sorted = spans.to_vec();
+    sorted.sort_by_key(|s| (s.start, s.end));
+
+    let char_count = text.chars().count();
+    let mut out = String::new();
+    let mut last_end = 0usize;
+
+    for s in sorted {
+        let start = s.start;
+        let end = s.end.min(char_count);
+        if start < last_end || start >= char_count || start >= end {
+            continue;
+        }
+
+        if start > last_end {
+            let before: String = text.chars().skip(last_end).take(start - last_end).collect();
+            out.push_str(&html_escape(&before));
+        }
+
+        let span_text: String = text.chars().skip(start).take(end - start).collect();
+        let title = format!("[{}] {}..{}", s.label, start, end);
+        out.push_str(&format!(
+            "<span id=\"{id}\" class=\"e {class}\" data-label=\"{label}\" data-start=\"{start}\" data-end=\"{end}\" title=\"{title}\">{txt}</span>",
+            id = html_escape(&s.id),
+            class = s.class,
+            label = html_escape(&s.label),
+            start = start,
+            end = end,
+            title = html_escape(&title),
+            txt = html_escape(&span_text),
+        ));
+        last_end = end;
+    }
+
+    if last_end < char_count {
+        let after: String = text.chars().skip(last_end).collect();
+        out.push_str(&html_escape(&after));
+    }
+
+    out
+}
+
+#[cfg(feature = "eval-advanced")]
+fn build_rel_spans_from_gold(
+    text: &str,
+    gold: &[crate::eval::relation::RelationGold],
+    prefix: &str,
+    class: &'static str,
+) -> (
+    Vec<RelHtmlSpan>,
+    std::collections::HashMap<(usize, usize), String>,
+) {
+    use std::collections::{HashMap, HashSet};
+    let mut uniq: HashSet<(usize, usize)> = HashSet::new();
+    for r in gold {
+        uniq.insert(r.head_span);
+        uniq.insert(r.tail_span);
+    }
+    let mut spans: Vec<(usize, usize)> = uniq.into_iter().collect();
+    spans.sort_by_key(|(s, e)| (*s, *e));
+
+    let mut out = Vec::new();
+    let mut map: HashMap<(usize, usize), String> = HashMap::new();
+    for (i, (s, e)) in spans.into_iter().enumerate() {
+        let id = format!("{prefix}{i}");
+        // Prefer exact mention text if we can find it in any gold relation; otherwise slice.
+        let mut label = String::new();
+        for r in gold {
+            if r.head_span == (s, e) {
+                label = r.head_type.clone();
+                break;
+            }
+            if r.tail_span == (s, e) {
+                label = r.tail_type.clone();
+                break;
+            }
+        }
+        if label.is_empty() {
+            label = "ENT".to_string();
+        }
+        let _surface = extract_span_text(text, s, e);
+        out.push(RelHtmlSpan {
+            start: s,
+            end: e,
+            label,
+            id: id.clone(),
+            class,
+        });
+        map.insert((s, e), id);
+    }
+    (out, map)
+}
+
+#[cfg(feature = "eval-advanced")]
+fn build_rel_spans_from_pred(
+    _text: &str,
+    pred: &[crate::eval::relation::RelationPrediction],
+    prefix: &str,
+    class: &'static str,
+) -> (
+    Vec<RelHtmlSpan>,
+    std::collections::HashMap<(usize, usize), String>,
+) {
+    use std::collections::{HashMap, HashSet};
+    let mut uniq: HashSet<(usize, usize)> = HashSet::new();
+    for r in pred {
+        uniq.insert(r.head_span);
+        uniq.insert(r.tail_span);
+    }
+    let mut spans: Vec<(usize, usize)> = uniq.into_iter().collect();
+    spans.sort_by_key(|(s, e)| (*s, *e));
+
+    let mut out = Vec::new();
+    let mut map: HashMap<(usize, usize), String> = HashMap::new();
+    for (i, (s, e)) in spans.into_iter().enumerate() {
+        let id = format!("{prefix}{i}");
+        let mut label = String::new();
+        for r in pred {
+            if r.head_span == (s, e) {
+                label = r.head_type.clone();
+                break;
+            }
+            if r.tail_span == (s, e) {
+                label = r.tail_type.clone();
+                break;
+            }
+        }
+        if label.is_empty() {
+            label = "ENT".to_string();
+        }
+        out.push(RelHtmlSpan {
+            start: s,
+            end: e,
+            label,
+            id: id.clone(),
+            class,
+        });
+        map.insert((s, e), id);
+    }
+    (out, map)
+}
+
+#[cfg(feature = "eval-advanced")]
+fn render_relation_doc_html(
+    dataset_name: &str,
+    model_name: &str,
+    doc_id: &str,
+    text: &str,
+    gold: &[crate::eval::relation::RelationGold],
+    pred: &[crate::eval::relation::RelationPrediction],
+    metrics: &crate::eval::relation::RelationMetrics,
+) -> String {
+    // Strict matching alignment (doc-local) to mark rows:
+    // - matched: gold[i] ↔ pred[j]
+    // - fn: gold[i] unmatched
+    // - fp: pred[j] unmatched
+    //
+    // This mirrors the strict matching logic in `evaluate_relations` with:
+    // - case-insensitive relation type
+    // - directed relations
+    // - entity type match NOT required (consistent with dataset eval config)
+    let mut gold_taken = vec![false; gold.len()];
+    let mut pred_taken = vec![false; pred.len()];
+    let mut gold_to_pred: Vec<Option<usize>> = vec![None; gold.len()];
+    let mut pred_to_gold: Vec<Option<usize>> = vec![None; pred.len()];
+
+    for (pi, p) in pred.iter().enumerate() {
+        if pred_taken[pi] {
+            continue;
+        }
+        for (gi, g) in gold.iter().enumerate() {
+            if gold_taken[gi] {
+                continue;
+            }
+            if p.relation_type.to_lowercase() != g.relation_type.to_lowercase() {
+                continue;
+            }
+            let forward = p.head_span == g.head_span && p.tail_span == g.tail_span;
+            if forward {
+                gold_taken[gi] = true;
+                pred_taken[pi] = true;
+                gold_to_pred[gi] = Some(pi);
+                pred_to_gold[pi] = Some(gi);
+                break;
+            }
+        }
+    }
+
+    let (gold_spans, gold_id) = build_rel_spans_from_gold(text, gold, "G", "e-gold");
+    let (pred_spans, pred_id) = build_rel_spans_from_pred(text, pred, "P", "e-pred");
+
+    let mut html = String::new();
+    html.push_str("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"color-scheme\" content=\"dark light\">");
+    html.push_str(&format!(
+        "<title>{}</title>",
+        html_escape(&format!("relation explorer — {dataset_name} — {doc_id}"))
+    ));
+    html.push_str(
+        r##"<style>
+:root{
+  color-scheme: light dark;
+  --bg:#0a0a0a;
+  --panel-bg:#0d0d0d;
+  --text:#b0b0b0;
+  --text-strong:#fff;
+  --muted:#777;
+  --border:#222;
+  --border-strong:#333;
+  --hover:#111;
+  --input-bg:#080808;
+  --active:#ddd;
+  --gold-bg:#1a2e1a; --gold-br:#4a8a4a; --gold-tx:#88cc88;
+  --pred-bg:#1a1a2e; --pred-br:#4a4a8a; --pred-tx:#8888cc;
+  --fn-bg:#2a1010;
+  --fp-bg:#2a1c10;
+  --head:#ffcc66;
+  --tail:#66ccff;
+}
+@media (prefers-color-scheme: light){
+  :root{
+    --bg:#ffffff;
+    --panel-bg:#f7f7f7;
+    --text:#222;
+    --text-strong:#000;
+    --muted:#555;
+    --border:#d6d6d6;
+    --border-strong:#c6c6c6;
+    --hover:#f0f0f0;
+    --input-bg:#ffffff;
+    --active:#000;
+    --gold-bg:#e9f7e9; --gold-br:#2f8a2f; --gold-tx:#1f5a1f;
+    --pred-bg:#e9e9ff; --pred-br:#6c6cff; --pred-tx:#2b2b7a;
+    --fn-bg:#ffe9e9;
+    --fp-bg:#fff2df;
+    --head:#a05a00;
+    --tail:#0a5a8a;
+  }
+}
+html[data-theme='dark']{
+  --bg:#0a0a0a; --panel-bg:#0d0d0d; --text:#b0b0b0; --text-strong:#fff;
+  --muted:#777; --border:#222; --border-strong:#333; --hover:#111; --input-bg:#080808; --active:#ddd;
+  --gold-bg:#1a2e1a; --gold-br:#4a8a4a; --gold-tx:#88cc88;
+  --pred-bg:#1a1a2e; --pred-br:#4a4a8a; --pred-tx:#8888cc;
+  --fn-bg:#2a1010; --fp-bg:#2a1c10; --head:#ffcc66; --tail:#66ccff;
+}
+html[data-theme='light']{
+  --bg:#ffffff; --panel-bg:#f7f7f7; --text:#222; --text-strong:#000;
+  --muted:#555; --border:#d6d6d6; --border-strong:#c6c6c6; --hover:#f0f0f0; --input-bg:#ffffff; --active:#000;
+  --gold-bg:#e9f7e9; --gold-br:#2f8a2f; --gold-tx:#1f5a1f;
+  --pred-bg:#e9e9ff; --pred-br:#6c6cff; --pred-tx:#2b2b7a;
+  --fn-bg:#ffe9e9; --fp-bg:#fff2df; --head:#a05a00; --tail:#0a5a8a;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:12px/1.4 monospace;background:var(--bg);color:var(--text);padding:10px}
+h1,h2{color:var(--text-strong);font-weight:normal;border-bottom:1px solid var(--border-strong);padding:4px 0;margin:12px 0 8px}
+h1{font-size:14px}h2{font-size:12px}
+.meta{color:var(--muted);margin:0 0 10px}
+.meta b{color:var(--text);font-weight:normal}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.panel{border:1px solid var(--border);background:var(--panel-bg);padding:8px}
+.text{background:var(--input-bg);border:1px solid var(--border);padding:8px;white-space:pre-wrap;word-break:break-word;line-height:1.6;min-height:110px}
+table{width:100%;border-collapse:collapse;font-size:11px;margin:6px 0 0}
+th,td{padding:4px 8px;text-align:left;border:1px solid var(--border);vertical-align:top}
+th{background:var(--hover);color:var(--muted);font-weight:normal;text-transform:uppercase;font-size:10px}
+tr:hover{background:var(--hover)}
+.match-ok{opacity:0.55}
+.match-fn{background:var(--fn-bg)}
+.match-fp{background:var(--fp-bg)}
+.e{padding:1px 2px;border-bottom:2px solid}
+.seg{cursor:pointer}
+.e-gold{background:var(--gold-bg);border-color:var(--gold-br);color:var(--gold-tx)}
+.e-pred{background:var(--pred-bg);border-color:var(--pred-br);color:var(--pred-tx)}
+.e-head{outline:2px solid var(--head);outline-offset:1px}
+.e-tail{outline:2px solid var(--tail);outline-offset:1px}
+.row-active{outline:1px solid var(--muted)}
+.sel{color:var(--muted);margin:6px 0 12px}
+.toggle{cursor:pointer;user-select:none;color:var(--muted);border:1px solid var(--border);background:var(--bg);padding:2px 6px;font-size:10px}
+</style></head><body>"##,
+    );
+
+    html.push_str(&format!(
+        "<div style=\"display:flex;justify-content:space-between;align-items:center\"><h1>relation doc {}</h1><span class=\"toggle\" id=\"theme-toggle\" title=\"toggle theme (auto → dark → light)\">theme: auto</span></div>",
+        html_escape(doc_id)
+    ));
+    html.push_str(&format!(
+        "<div class=\"meta\"><b>dataset</b> {} &nbsp; <b>model</b> {} &nbsp; <b>gold</b> {} &nbsp; <b>pred</b> {} &nbsp; <b>strict F1</b> {:.3} &nbsp; <b>boundary F1</b> {:.3}</div>",
+        html_escape(dataset_name),
+        html_escape(model_name),
+        gold.len(),
+        pred.len(),
+        metrics.strict_f1,
+        metrics.boundary_f1
+    ));
+    html.push_str("<div id=\"selection\" class=\"sel\">click a relation row to highlight head/tail spans</div>");
+    html.push_str("<div class=\"sel\"><label><input type=\"checkbox\" id=\"only-errors\" /> only errors</label></div>");
+
+    html.push_str("<div class=\"grid\">");
+
+    // Gold side
+    html.push_str("<div class=\"panel\"><h2>gold</h2>");
+    html.push_str("<div class=\"text\">");
+    html.push_str(&annotate_text_with_rel_spans(text, &gold_spans));
+    html.push_str("</div>");
+    html.push_str("<table><tr><th>rel</th><th>head</th><th>tail</th></tr>");
+    for (i, r) in gold.iter().enumerate() {
+        let hid = gold_id.get(&r.head_span).cloned().unwrap_or_default();
+        let tid = gold_id.get(&r.tail_span).cloned().unwrap_or_default();
+        let (row_class, peer_attr) = if let Some(pi) = gold_to_pred.get(i).and_then(|x| *x) {
+            ("match-ok", format!(" data-peer=\"RP{}\"", pi))
+        } else {
+            ("match-fn", String::new())
+        };
+        html.push_str(&format!(
+            "<tr id=\"RG{i}\" class=\"rel-row {row_class}\" data-side=\"gold\" data-hid=\"{hid}\" data-tid=\"{tid}\" data-rel=\"{rel}\"{peer}><td><a class=\"rel-link\" href=\"#RG{i}\">{rel}</a></td><td>[{ht}] {hx}</td><td>[{tt}] {tx}</td></tr>",
+            i = i,
+            hid = html_escape(&hid),
+            tid = html_escape(&tid),
+            rel = html_escape(&r.relation_type),
+            ht = html_escape(&r.head_type),
+            hx = html_escape(&r.head_text),
+            tt = html_escape(&r.tail_type),
+            tx = html_escape(&r.tail_text),
+            row_class = row_class,
+            peer = peer_attr,
+        ));
+    }
+    html.push_str("</table></div>");
+
+    // Pred side
+    html.push_str("<div class=\"panel\"><h2>predicted</h2>");
+    html.push_str("<div class=\"text\">");
+    html.push_str(&annotate_text_with_rel_spans(text, &pred_spans));
+    html.push_str("</div>");
+    html.push_str("<table><tr><th>rel</th><th>head</th><th>tail</th><th>conf</th></tr>");
+    for (i, r) in pred.iter().enumerate() {
+        let hid = pred_id.get(&r.head_span).cloned().unwrap_or_default();
+        let tid = pred_id.get(&r.tail_span).cloned().unwrap_or_default();
+        let head_txt = extract_span_text(text, r.head_span.0, r.head_span.1);
+        let tail_txt = extract_span_text(text, r.tail_span.0, r.tail_span.1);
+        let (row_class, peer_attr) = if let Some(gi) = pred_to_gold.get(i).and_then(|x| *x) {
+            ("match-ok", format!(" data-peer=\"RG{}\"", gi))
+        } else {
+            ("match-fp", String::new())
+        };
+        html.push_str(&format!(
+            "<tr id=\"RP{i}\" class=\"rel-row {row_class}\" data-side=\"pred\" data-hid=\"{hid}\" data-tid=\"{tid}\" data-rel=\"{rel}\"{peer}><td><a class=\"rel-link\" href=\"#RP{i}\">{rel}</a></td><td>[{ht}] {hx}</td><td>[{tt}] {tx}</td><td>{conf:.2}</td></tr>",
+            i = i,
+            hid = html_escape(&hid),
+            tid = html_escape(&tid),
+            rel = html_escape(&r.relation_type),
+            ht = html_escape(&r.head_type),
+            hx = html_escape(&head_txt),
+            tt = html_escape(&r.tail_type),
+            tx = html_escape(&tail_txt),
+            conf = r.confidence as f64,
+            row_class = row_class,
+            peer = peer_attr,
+        ));
+    }
+    html.push_str("</table></div>");
+
+    html.push_str("</div>"); // grid
+
+    html.push_str(
+        r##"<script>
+(() => {
+  // Theme toggle: auto → dark → light (persisted).
+  const themeBtn = document.getElementById('theme-toggle');
+  const themeKey = 'anno-theme';
+  const applyTheme = (theme) => {
+    const t = theme || 'auto';
+    if (t === 'auto') {
+      delete document.documentElement.dataset.theme;
+    } else {
+      document.documentElement.dataset.theme = t;
+    }
+    if (themeBtn) themeBtn.textContent = `theme: ${t}`;
+  };
+  const readTheme = () => {
+    try { return localStorage.getItem(themeKey) || 'auto'; } catch (_) { return 'auto'; }
+  };
+  const writeTheme = (t) => {
+    try { localStorage.setItem(themeKey, t); } catch (_) { /* ignore */ }
+  };
+  applyTheme(readTheme());
+  if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+      const cur = readTheme();
+      const next = cur === 'auto' ? 'dark' : (cur === 'dark' ? 'light' : 'auto');
+      writeTheme(next);
+      applyTheme(next);
+    });
+  }
+
+  function clearActive() {
+    document.querySelectorAll(".e-head").forEach((el) => el.classList.remove("e-head"));
+    document.querySelectorAll(".e-tail").forEach((el) => el.classList.remove("e-tail"));
+    document.querySelectorAll("tr.rel-row.row-active").forEach((el) => el.classList.remove("row-active"));
+  }
+
+  function activate(row) {
+    clearActive();
+    if (!row) return;
+    row.classList.add("row-active");
+    const hid = row.dataset.hid;
+    const tid = row.dataset.tid;
+    const rel = row.dataset.rel || "";
+    const sel = document.getElementById("selection");
+
+    const head = hid ? document.getElementById(hid) : null;
+    const tail = tid ? document.getElementById(tid) : null;
+    if (head) head.classList.add("e-head");
+    if (tail) tail.classList.add("e-tail");
+
+    // Also highlight matching spans (same start/end) in the opposite panel.
+    const peerClass = (row.dataset.side === 'gold') ? 'e-pred' : 'e-gold';
+    const highlightPeer = (el, cls) => {
+      if (!el) return;
+      const s = el.getAttribute('data-start');
+      const e = el.getAttribute('data-end');
+      if (s === null || e === null) return;
+      document.querySelectorAll(`span.${peerClass}[data-start='${s}'][data-end='${e}']`).forEach((p) => p.classList.add(cls));
+    };
+    highlightPeer(head, "e-head");
+    highlightPeer(tail, "e-tail");
+
+    // Also highlight the matched peer row (if any).
+    const peerId = row.dataset.peer;
+    if (peerId) {
+      const peerRow = document.getElementById(peerId);
+      if (peerRow) peerRow.classList.add("row-active");
+    }
+
+    if (sel) {
+      const parts = [];
+      parts.push(`${row.dataset.side} ${row.id}`);
+      if (rel) parts.push(`rel=${rel}`);
+      if (head) parts.push(`head=${hid}${head.dataset.label ? ' [' + head.dataset.label + ']' : ''}`);
+      if (tail) parts.push(`tail=${tid}${tail.dataset.label ? ' [' + tail.dataset.label + ']' : ''}`);
+      sel.textContent = parts.join("  |  ");
+    }
+
+    if (row.id) history.replaceState(null, "", '#' + row.id);
+    const target = head || tail || row;
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  document.querySelectorAll("tr.rel-row").forEach((tr) => {
+    tr.addEventListener("click", () => activate(tr));
+  });
+  document.querySelectorAll("a.rel-link").forEach((a) => {
+    a.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      const tr = a.closest("tr.rel-row");
+      if (tr) activate(tr);
+    });
+  });
+
+  const hash = (location.hash || '').slice(1);
+  if (hash && (hash.startsWith('RG') || hash.startsWith('RP'))) {
+    const tr = document.getElementById(hash);
+    if (tr && tr.classList && tr.classList.contains('rel-row')) activate(tr);
+  }
+
+  // Toggle: show only errors (hide matched rows).
+  const only = document.getElementById('only-errors');
+  if (only) {
+    const update = () => {
+      const hideMatched = !!only.checked;
+      document.querySelectorAll('tr.rel-row.match-ok').forEach((tr) => {
+        tr.style.display = hideMatched ? 'none' : '';
+      });
+    };
+    only.addEventListener('change', update);
+    update();
+  }
+})();
+</script>"##,
+    );
+
+    html.push_str("</body></html>");
+    html
+}
+
+#[cfg(feature = "eval-advanced")]
+fn write_relation_error_explorer_html(
+    output_path: &Path,
+    dataset_name: &str,
+    model_name: &str,
+    docs: &[crate::eval::loader::RelationDocument],
+    pred_by_doc: &[Vec<crate::eval::relation::RelationPrediction>],
+    per_doc: &[crate::eval::relation::RelationMetrics],
+    selected_doc_indices: &[usize],
+) -> Result<(), String> {
+    let parent = output_path.parent().unwrap_or_else(|| Path::new("."));
+    let stem = output_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("relation_eval");
+    let files_dir = parent.join(format!("{stem}_files"));
+    fs::create_dir_all(&files_dir)
+        .map_err(|e| format!("Failed to create {:?}: {}", files_dir, e))?;
+
+    for &idx in selected_doc_indices {
+        let doc = docs
+            .get(idx)
+            .ok_or_else(|| format!("Invalid doc index {}", idx))?;
+        let pred = pred_by_doc
+            .get(idx)
+            .ok_or_else(|| format!("Missing pred for doc {}", idx))?;
+        let m = per_doc
+            .get(idx)
+            .ok_or_else(|| format!("Missing metrics for doc {}", idx))?;
+        let doc_id = format!("doc_{:06}", idx);
+
+        let page = render_relation_doc_html(
+            dataset_name,
+            model_name,
+            &doc_id,
+            &doc.text,
+            &doc.relations,
+            pred,
+            m,
+        );
+        let filename = format!("rel_{:06}.html", idx);
+        let path = files_dir.join(&filename);
+        fs::write(&path, page).map_err(|e| format!("Failed to write {:?}: {}", path, e))?;
+    }
+
+    let mut index = String::new();
+    index.push_str("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"color-scheme\" content=\"dark light\">");
+    index.push_str(&format!(
+        "<title>{}</title>",
+        html_escape(&format!(
+            "relation eval explorer — {model_name} — {dataset_name}"
+        ))
+    ));
+    index.push_str(
+        r##"<style>
+:root{color-scheme:light dark;--bg:#0a0a0a;--text:#b0b0b0;--text-strong:#fff;--muted:#777;--border:#222;--border-strong:#333;--hover:#111;--input-bg:#080808;--link:#9ad;--code:#bbb}
+@media (prefers-color-scheme: light){:root{--bg:#fff;--text:#222;--text-strong:#000;--muted:#555;--border:#d6d6d6;--border-strong:#c6c6c6;--hover:#f0f0f0;--input-bg:#fff;--link:#06c;--code:#333}}
+html[data-theme='dark']{--bg:#0a0a0a;--text:#b0b0b0;--text-strong:#fff;--muted:#777;--border:#222;--border-strong:#333;--hover:#111;--input-bg:#080808;--link:#9ad;--code:#bbb}
+html[data-theme='light']{--bg:#fff;--text:#222;--text-strong:#000;--muted:#555;--border:#d6d6d6;--border-strong:#c6c6c6;--hover:#f0f0f0;--input-bg:#fff;--link:#06c;--code:#333}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:12px/1.4 monospace;background:var(--bg);color:var(--text);padding:12px}
+h1{font-size:14px;color:var(--text-strong);font-weight:normal;border-bottom:1px solid var(--border-strong);padding:4px 0;margin:0 0 12px}
+.meta{color:var(--muted);margin:0 0 12px}
+.meta b{color:var(--text);font-weight:normal}
+.row{display:flex;gap:12px;align-items:center;margin:0 0 10px}
+input{flex:1;background:var(--input-bg);border:1px solid var(--border);color:var(--text);padding:6px 8px}
+.count{color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th,td{padding:4px 8px;text-align:left;border:1px solid var(--border);vertical-align:top}
+th{background:var(--hover);color:var(--muted);font-weight:normal;text-transform:uppercase;font-size:10px}
+tr:hover{background:var(--hover)}
+a{color:var(--link);text-decoration:none}
+a:hover{text-decoration:underline}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+code{color:var(--code)}
+.toggle{cursor:pointer;user-select:none;color:var(--muted);border:1px solid var(--border);background:var(--bg);padding:2px 6px;font-size:10px}
+</style></head><body>"##,
+    );
+    index.push_str("<div class=\"row\" style=\"justify-content:space-between\"><h1>relation eval explorer</h1><span class=\"toggle\" id=\"theme-toggle\" title=\"toggle theme (auto → dark → light)\">theme: auto</span></div>");
+    index.push_str(&format!(
+        "<div class=\"meta\"><b>model</b> {} &nbsp; <b>dataset</b> {} &nbsp; <b>docs</b> {}</div>",
+        html_escape(model_name),
+        html_escape(dataset_name),
+        docs.len()
+    ));
+    index.push_str(
+        r##"<div class="row">
+  <input id="doc-filter" placeholder="filter (doc id, relation type, text…)" />
+  <div id="doc-count" class="count"></div>
+</div>
+<table id="doc-table"><thead><tr>
+  <th>doc</th><th class="num">strict f1</th><th class="num">bound f1</th><th class="num">gold</th><th class="num">pred</th><th class="num">strict ✓</th><th>text</th>
+</tr></thead><tbody>"##,
+    );
+
+    for &idx in selected_doc_indices {
+        let doc_id = format!("doc_{:06}", idx);
+        // Deep link to the first strict error row if possible.
+        let mut href = format!("{stem}_files/rel_{:06}.html", idx);
+        {
+            let doc = &docs[idx];
+            let pred = &pred_by_doc[idx];
+            let mut gold_taken = vec![false; doc.relations.len()];
+            let mut pred_taken = vec![false; pred.len()];
+            let mut gold_to_pred: Vec<Option<usize>> = vec![None; doc.relations.len()];
+            let mut pred_to_gold: Vec<Option<usize>> = vec![None; pred.len()];
+            for (pi, p) in pred.iter().enumerate() {
+                if pred_taken[pi] {
+                    continue;
+                }
+                for (gi, g) in doc.relations.iter().enumerate() {
+                    if gold_taken[gi] {
+                        continue;
+                    }
+                    if p.relation_type.to_lowercase() != g.relation_type.to_lowercase() {
+                        continue;
+                    }
+                    let forward = p.head_span == g.head_span && p.tail_span == g.tail_span;
+                    if forward {
+                        gold_taken[gi] = true;
+                        pred_taken[pi] = true;
+                        gold_to_pred[gi] = Some(pi);
+                        pred_to_gold[pi] = Some(gi);
+                        break;
+                    }
+                }
+            }
+            if let Some((gi, _)) = gold_to_pred.iter().enumerate().find(|(_, m)| m.is_none()) {
+                href.push_str(&format!("#RG{}", gi));
+            } else if let Some((pi, _)) = pred_to_gold.iter().enumerate().find(|(_, m)| m.is_none())
+            {
+                href.push_str(&format!("#RP{}", pi));
+            }
+        }
+        let doc = &docs[idx];
+        let m = &per_doc[idx];
+        let preview = preview_text(&doc.text, 180);
+        index.push_str(&format!(
+            "<tr data-hay=\"{hay}\"><td><a target=\"_blank\" rel=\"noopener\" href=\"{href}\">{doc_id}</a></td><td class=\"num\">{sf1:.3}</td><td class=\"num\">{bf1:.3}</td><td class=\"num\">{g}</td><td class=\"num\">{p}</td><td class=\"num\">{ok}</td><td><code>{txt}</code></td></tr>",
+            hay = html_escape(&format!("{} {} {}", doc_id, preview, dataset_name)).to_lowercase(),
+            href = html_escape(&href),
+            doc_id = html_escape(&doc_id),
+            sf1 = m.strict_f1,
+            bf1 = m.boundary_f1,
+            g = doc.relations.len(),
+            p = pred_by_doc[idx].len(),
+            ok = m.strict_matches,
+            txt = html_escape(&preview),
+        ));
+    }
+
+    index.push_str(
+        r##"</tbody></table>
+<script>
+(() => {
+  // Theme toggle: auto → dark → light (persisted).
+  const themeBtn = document.getElementById("theme-toggle");
+  const themeKey = "anno-theme";
+  const applyTheme = (theme) => {
+    const t = theme || "auto";
+    if (t === "auto") {
+      delete document.documentElement.dataset.theme;
+    } else {
+      document.documentElement.dataset.theme = t;
+    }
+    if (themeBtn) themeBtn.textContent = `theme: ${t}`;
+  };
+  const readTheme = () => {
+    try { return localStorage.getItem(themeKey) || "auto"; } catch (_) { return "auto"; }
+  };
+  const writeTheme = (t) => {
+    try { localStorage.setItem(themeKey, t); } catch (_) { /* ignore */ }
+  };
+  applyTheme(readTheme());
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const cur = readTheme();
+      const next = cur === "auto" ? "dark" : (cur === "dark" ? "light" : "auto");
+      writeTheme(next);
+      applyTheme(next);
+    });
+  }
+
+  const input = document.getElementById("doc-filter");
+  const rows = Array.from(document.querySelectorAll("#doc-table tbody tr"));
+  const count = document.getElementById("doc-count");
+  function update() {
+    const q = (input.value || "").toLowerCase().trim();
+    let shown = 0;
+    for (const tr of rows) {
+      const hay = (tr.dataset.hay || "");
+      const show = !q || hay.includes(q);
+      tr.style.display = show ? "" : "none";
+      if (show) shown++;
+    }
+    count.textContent = `${shown} shown / ${rows.length} total`;
+  }
+  input.addEventListener("input", update);
+  update();
+})();
+</script>
+</body></html>"##,
+    );
+
+    fs::write(output_path, index)
+        .map_err(|e| format!("Failed to write {:?}: {}", output_path, e))?;
     Ok(())
 }
 

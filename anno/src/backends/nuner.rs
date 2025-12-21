@@ -72,7 +72,6 @@
 
 use crate::{Entity, EntityType, Model, Result};
 
-#[cfg(feature = "onnx")]
 use crate::Error;
 
 /// Encoded prompt result: (input_ids, attention_mask, word_mask, num_entity_types)
@@ -1021,8 +1020,8 @@ impl Default for NuNER {
 
 impl Model for NuNER {
     fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
-        if text.is_empty() {
-            return Ok(Vec::new());
+        if text.trim().is_empty() {
+            return Ok(vec![]);
         }
 
         #[cfg(feature = "onnx")]
@@ -1031,10 +1030,19 @@ impl Model for NuNER {
                 let labels: Vec<&str> = self.default_labels.iter().map(|s| s.as_str()).collect();
                 return self.extract(text, &labels, self.threshold as f32);
             }
+
+            return Err(Error::ModelInit(
+                "NuNER model not loaded. Call `NuNER::from_pretrained(...)` (requires `onnx` feature) before calling `extract_entities`.".to_string(),
+            ));
         }
 
-        // Without ONNX or without loaded model, return empty
-        Ok(Vec::new())
+        #[cfg(not(feature = "onnx"))]
+        {
+            Err(Error::FeatureNotAvailable(
+                "NuNER requires the 'onnx' feature. Build with: cargo build --features onnx"
+                    .to_string(),
+            ))
+        }
     }
 
     fn supported_types(&self) -> Vec<EntityType> {

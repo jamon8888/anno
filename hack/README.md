@@ -3,6 +3,10 @@
 This folder is for **local experiments** (scratch scripts, one-off runs, and optional local data).
 The repo includes a small, tracked fixture set under `testdata/fixtures/` for reproducible examples.
 
+## Notes
+
+Design/UX/testing notes that used to live in `hack/` have been moved to `docs/notes/hack/`.
+
 ## Fixtures (tracked)
 
 Use these for docs/tests without licensing ambiguity:

@@ -2,78 +2,10 @@
 
 Known bugs, fixes applied, and issues requiring attention.
 
-## Fixed Bugs
+## Current issues (unfixed)
 
-### 1. Deadlock Bug (CRITICAL) ✅
-**Location**: `src/eval/task_evaluator.rs:553-558`
-
-**Issue**: Potential deadlock when handling mutex poisoning. The code tried to lock the mutex again in the else branch.
-
-**Fix**: Simplified to use `unwrap_or_else` directly without nested if/else:
-```rust
-// Before (buggy):
-if let Ok(mut cache) = self.per_example_scores_cache.lock() {
-    *cache = None;
-} else {
-    drop(self.per_example_scores_cache.lock().unwrap_or_else(|e| e.into_inner()));
-}
-
-// After (fixed):
-let mut cache = self.per_example_scores_cache.lock().unwrap_or_else(|e| e.into_inner());
-*cache = None;
-```
-
-### 2. Variance Calculation Bug (STATISTICAL ERROR) ✅
-**Location**: Multiple locations in `src/eval/task_evaluator.rs`
-
-**Issue**: Using population variance (dividing by n) instead of sample variance (dividing by n-1, Bessel's correction). This causes biased standard deviation estimates.
-
-**Fixed Locations**:
-1. `compute_confidence_intervals` (line ~2312)
-2. `compute_confidence_intervals_from_scores` (line ~2591)
-3. `compute_temporal_stratification` - pre_cutoff (line ~2539)
-4. `compute_temporal_stratification` - post_cutoff (line ~2555)
-5. `compute_stratified_metrics_from_scores` - per entity type (line ~2456)
-
-**Fix**: Changed from:
-```rust
-let variance = scores.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / scores.len() as f64;
-```
-
-To:
-```rust
-let n = scores.len() as f64;
-let variance = if n > 1.0 {
-    scores.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0)
-} else {
-    0.0
-};
-```
-
-**Impact**: Confidence intervals are now correctly computed using unbiased sample variance.
-
-### 3. Heuristic NER False Positives ✅
-**Location**: `anno/src/backends/heuristic.rs` line 747-750
-
-**Issue**: Single letters (A, B, C) detected as Person entities
-
-**Fix**: Added filter in `classify_minimal` to skip single-letter words
-
-**Impact**: Reduces false positives in heuristic NER output
-
-### 4. Auto-Track Creation in Crossdoc Directory Mode ✅
-**Location**: `anno/src/cli/commands/crossdoc.rs` lines 581-600
-
-**Issue**: `anno cross-doc <DIR>` didn't automatically create tracks (Level 2)
-
-**Fix**: Added call to `resolve_coreference` after signal creation
-
-**Impact**: Improves crossdoc clustering quality by using tracks instead of raw signals
-
-## Critical Issues (Unfixed)
-
-### 1. Command Line Pollution in Output 🚨
-**Severity:** HIGH - Breaks output completely
+### 1. Command line pollution in output
+**Severity:** High (breaks output)
 
 **Problem:** When using `-vv` with quoted text, shell command fragments leak into extraction:
 ```
@@ -86,8 +18,8 @@ PER:10 "Pro Max" "Users/arc/Documents/dev/anno" "Apple's" "Pro Max" "Both" ...
 
 **Fix Needed:** Sanitize input or fix argument parsing to not include command fragments.
 
-### 2. False Positive Person Entities
-**Severity:** MEDIUM - Reduces trust
+### 2. False positive person entities (low confidence)
+**Severity:** Medium (reduces trust)
 
 **Problem:** Common words extracted as PER with low confidence:
 - "Just" (0.45)
@@ -150,7 +82,7 @@ DATE:2 "2024-12-25" "2024-12-25"
 ## Medium Priority Issues
 
 ### 1. Crossdoc Directory Mode Doesn't Create Tracks
-**Status:** ✅ Fixed (see Fixed Bugs #4)
+Status: fixed. Cross-document directory mode now creates tracks automatically.
 
 ### 2. Graph Export Format Documentation
 **Issue:** `GraphDocument` expects string IDs, but users might use integers
@@ -223,15 +155,5 @@ However, tests still fail because `get_track()` returns `None` after resolution.
 **Status:** In progress - need to investigate corpus structure after resolution.
 
 ## Verification
-
-All fixes verified:
-- ✅ Deadlock warning eliminated (clippy clean)
-- ✅ All variance calculations use sample variance (n-1)
-- ✅ Edge case handling (n=0, n=1) added
-- ✅ Tests pass
-- ✅ Examples run successfully
-
-## Remaining Warnings
-
-Some `unwrap()` calls remain but are intentional (e.g., in test code, or where we've already checked for None/Err). These are acceptable for now but could be improved with better error handling in the future.
+For fixed issues and implementation details, use `git blame` / `git log` and the relevant tests.
 

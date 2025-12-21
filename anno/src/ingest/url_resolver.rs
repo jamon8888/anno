@@ -177,12 +177,30 @@ impl HttpResolver {
             }
         }
 
-        // Clean up whitespace
-        text.lines()
-            .map(|line| line.trim())
-            .filter(|line| !line.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n")
+        // Clean up whitespace.
+        //
+        // HTML whitespace semantics are "collapsed": runs of whitespace render as a single space
+        // (outside of <pre>, which we don't handle here). If we preserve raw newlines/indentation
+        // from the HTML source, we end up with spans whose (start,end) point into `doc.text`,
+        // but whose extracted `surface` has spaces (many NER backends reconstruct surfaces by
+        // joining tokens with spaces). That mismatch creates a lot of validation noise on real
+        // pages and makes debug output harder to trust.
+        //
+        // So: collapse ALL whitespace to single spaces and trim.
+        let mut cleaned = String::with_capacity(text.len());
+        let mut last_was_space = true; // avoid leading spaces
+        for ch in text.chars() {
+            if ch.is_whitespace() {
+                if !last_was_space {
+                    cleaned.push(' ');
+                    last_was_space = true;
+                }
+            } else {
+                cleaned.push(ch);
+                last_was_space = false;
+            }
+        }
+        cleaned.trim().to_string()
     }
 }
 
@@ -405,6 +423,43 @@ mod tests {
         let resolver = HttpResolver::new();
         let debug = format!("{:?}", resolver);
         assert!(debug.contains("HttpResolver"));
+    }
+
+    #[test]
+    fn test_extract_text_from_html_collapses_whitespace() {
+        let resolver = HttpResolver::new();
+        let html = r#"
+            <html>
+              <head><title>t</title></head>
+              <body>
+                <h1>Hello
+                    world</h1>
+                <p>Line1<br>Line2</p>
+                <div>Tabbed	text</div>
+                <p>習近平在北京會見了普京。</p>
+                <p>التقى محمد بن سلمان بالرئيس في الرياض</p>
+                <p>Путин встретился с Си Цзиньпином в Москве.</p>
+                <p>प्रधान मंत्री शर्मा आज आए।</p>
+              </body>
+            </html>
+        "#;
+
+        let text = resolver.extract_text_from_html(html);
+        assert!(text.contains("Hello world"));
+        assert!(text.contains("Line1 Line2"));
+        assert!(text.contains("Tabbed text"));
+        // Multilingual smoke: make sure we don't drop/garble non-Latin scripts.
+        assert!(text.contains("習近平在北京會見了普京。"));
+        assert!(text.contains("التقى محمد بن سلمان بالرئيس في الرياض"));
+        assert!(text.contains("Путин встретился с Си Цзиньпином в Москве."));
+        assert!(text.contains("प्रधान मंत्री शर्मा आज आए।"));
+
+        // No raw newlines/tabs from HTML formatting should survive.
+        assert!(!text.contains('\n'));
+        assert!(!text.contains('\t'));
+
+        // No double spaces (collapsed).
+        assert!(!text.contains("  "));
     }
 
     #[test]

@@ -112,7 +112,7 @@ impl Document {
                 entity_idx: idx,
                 text: entity.text.clone(),
                 entity_type: entity.entity_type.clone(),
-                within_doc_cluster: entity.canonical_id,
+                within_doc_cluster: entity.canonical_id.map(|c| c.get()),
             });
         }
 
@@ -250,7 +250,6 @@ impl From<&CrossDocCluster> for anno_core::Identity {
             kb_name: None,
             description: None,
             embedding: None,
-            box_embedding: None,
             aliases: Vec::new(),
             confidence: cluster.confidence as f32,
             source: None, // Cannot determine source from CDCR format (no track_ids)

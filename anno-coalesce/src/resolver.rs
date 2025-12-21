@@ -266,7 +266,6 @@ impl Resolver {
                 kb_name: None,
                 description: None,
                 embedding: first_track.embedding.clone(),
-                box_embedding: None,
                 aliases: Vec::new(),
                 confidence: first_track.cluster_confidence,
                 source: Some(IdentitySource::CrossDocCoref {

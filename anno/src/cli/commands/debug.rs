@@ -7,6 +7,7 @@ use super::super::output::{color, print_signals};
 use super::super::parser::ModelBackend;
 use super::super::utils::{get_input_text, link_tracks_to_kb, resolve_coreference};
 
+use crate::graph::{GraphDocument, GraphExportFormat}; // Re-exported from anno-core
 use crate::grounded::{render_document_html, GroundedDocument, Location, Signal, SignalId}; // Re-exported from anno-core
 #[cfg(feature = "eval-advanced")]
 use crate::ingest::url_resolver::{CompositeResolver, UrlResolver};
@@ -90,6 +91,16 @@ pub fn run(args: DebugArgs) -> Result<(), String> {
     // With --link-kb: Level 1 + 2 + 3 (Signal → Track → Identity): Adds KB linking
     // This builds the full hierarchy that could be used by coalescing for better clustering
 
+    // Pick a stable document id so the HTML report is self-describing.
+    // (Otherwise every report is doc_id="debug", which is annoying when comparing runs.)
+    let doc_id = if let Some(url) = &args.url {
+        url.clone()
+    } else if let Some(path) = &args.file {
+        path.clone()
+    } else {
+        "debug".to_string()
+    };
+
     // Resolve input: URL, file, text, or stdin
     let mut raw_text = if let Some(url) = &args.url {
         #[cfg(feature = "eval-advanced")]
@@ -134,7 +145,7 @@ pub fn run(args: DebugArgs) -> Result<(), String> {
 
     // Build grounded document with validated signals
     // Always use actual offsets from model - don't re-find text (which would always find first occurrence)
-    let mut doc = GroundedDocument::new("debug", &text);
+    let mut doc = GroundedDocument::new(doc_id, &text);
     let mut signal_ids: Vec<SignalId> = Vec::new();
 
     for e in &entities {
@@ -275,6 +286,35 @@ pub fn run(args: DebugArgs) -> Result<(), String> {
             };
             print_signals(&doc, &text, effective_verbose);
         }
+    }
+
+    // Export to graph format if requested (always prints to stdout).
+    if let Some(graph_format_str) = args.export_graph.as_deref() {
+        let graph_format = match graph_format_str.to_lowercase().as_str() {
+            "neo4j" | "cypher" => GraphExportFormat::Cypher,
+            "networkx" | "nx" => GraphExportFormat::NetworkXJson,
+            "jsonld" | "json-ld" => GraphExportFormat::JsonLd,
+            _ => {
+                return Err(format!(
+                    "Invalid graph format '{}'. Use: neo4j, networkx, or jsonld",
+                    graph_format_str
+                ));
+            }
+        };
+
+        let graph = GraphDocument::from_grounded_document(&doc);
+        let graph_output = graph.export(graph_format);
+
+        if !args.quiet {
+            eprintln!(
+                "{} Exported graph ({} nodes, {} edges) in {} format",
+                color("32", "✓"),
+                graph.node_count(),
+                graph.edge_count(),
+                graph_format_str
+            );
+        }
+        println!("{}", graph_output);
     }
 
     Ok(())
