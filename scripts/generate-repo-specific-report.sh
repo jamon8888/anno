@@ -44,13 +44,25 @@ if command -v opengrep &> /dev/null; then
     
     for rule_file in .opengrep/rules/*.yaml; do
         if [ -f "$rule_file" ]; then
+            case "$(basename "$rule_file")" in
+                rust-unicode-offsets.yaml|rust-candle-metal.yaml)
+                    # These are ast-grep rules (not OpenGrep/Semgrep rules).
+                    continue
+                    ;;
+            esac
             rule_name=$(basename "$rule_file" .yaml)
             echo "### $(basename "$rule_file")" >> "$REPORT_FILE"
             echo "" >> "$REPORT_FILE"
-            opengrep scan -f "$rule_file" --json src/ 2>/dev/null | \
-                jq -r '.results | length' | \
-                xargs -I {} echo "Found {} issues" >> "$REPORT_FILE" 2>/dev/null || \
-                echo "No issues found or jq not installed" >> "$REPORT_FILE"
+            if command -v jq &> /dev/null; then
+                count=$(
+                    opengrep scan -f "$rule_file" --quiet --json anno/ anno-core/ anno-coalesce/ anno-strata/ 2>/dev/null \
+                        | jq -r '.results | length' \
+                        || echo "0"
+                )
+                echo "Found $count issues" >> "$REPORT_FILE"
+            else
+                echo "Install jq to summarize findings for $(basename "$rule_file")" >> "$REPORT_FILE"
+            fi
             echo "" >> "$REPORT_FILE"
         fi
     done

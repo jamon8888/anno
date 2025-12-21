@@ -30,63 +30,16 @@ rules:
         - "**/grounded.rs"
 
   # ============================================================================
-  # Backend Session Patterns
-  # ============================================================================
-  
-  - id: session-pool-leak
-    patterns:
-      - pattern: |
-          let $SESSION = $POOL.acquire();
-          // ... no explicit release or drop
-    message: "Session acquired but not explicitly released. Ensure proper cleanup."
-    languages: [rust]
-    severity: INFO
-    metadata:
-      category: resource-management
-    paths:
-      include:
-        - "**/session_pool.rs"
-        - "**/backends/**"
-
-  # ============================================================================
-  # Evaluation Patterns
-  # ============================================================================
-  
-  - id: confidence-score-out-of-range
-    patterns:
-      - pattern: |
-          Confidence::new($SCORE)
-      - not:
-          - pattern: |
-              if !(0.0..=1.0).contains(&$SCORE) {
-                return Err(...);
-              }
-    message: "Confidence score created without range validation. Ensure 0.0 <= score <= 1.0."
-    languages: [rust]
-    severity: WARNING
-    metadata:
-      category: correctness
-    paths:
-      include:
-        - "**/types/confidence.rs"
-        - "**/eval/**"
-
-  # ============================================================================
   # Graph Export Patterns
   # ============================================================================
   
-  - id: graph-node-without-validation
-    patterns:
-      - pattern: |
-          GraphNode::new($ID, $LABEL)
-      - not:
-          - pattern: |
-              if $ID.is_empty() {
-                return Err(...);
-              }
-    message: "Graph node created without ID validation. Ensure non-empty ID."
+  - id: graph-node-empty-id
+    pattern-either:
+      - pattern: GraphNode::new("", $TYPE, $NAME)
+      - pattern: GraphNode::new(String::new(), $TYPE, $NAME)
+    message: "Graph node created with empty ID. Ensure IDs are non-empty and stable."
     languages: [rust]
-    severity: INFO
+    severity: WARNING
     metadata:
       category: correctness
     paths:

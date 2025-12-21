@@ -244,7 +244,8 @@ fn arc_dyn_model_concurrent() {
     // At minimum, pattern should find something
     let pattern_found = results
         .iter()
-        .any(|(name, e)| *name == "pattern" && !e.is_empty());
+        // Regex backend is referred to as "pattern" in some CLI contexts, but the model name is "regex".
+        .any(|(name, e)| (*name == "regex" || *name == "pattern") && !e.is_empty());
     assert!(pattern_found, "RegexNER should find entities");
 
     // Stacked should find something (includes pattern)

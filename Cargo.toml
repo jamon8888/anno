@@ -31,7 +31,7 @@ members = [
     "anno-coalesce",
     "anno-strata",
     # "anno-eval",  # Archived: thin re-export of anno with eval feature
-    # "anno-cli",  # Merged: binary now in anno/src/bin/anno.rs
+    # (no separate CLI crate; binary now in anno/src/bin/anno.rs)
     # "anno-derive",  # Archived: Dataset derive macro not used by any crate
 ]
 resolver = "2"

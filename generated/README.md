@@ -57,7 +57,7 @@ just regenerate-datasets
 ## Architecture Note
 
 The Rust codebase has two `DatasetId` enums (in `loader.rs` and `dataset_registry.rs`)
-that are now largely synchronized. See `docs/design/datasets/DATASET_INTEGRATION_STATUS.md` for details.
+that are now largely synchronized. See `docs/notes/design/datasets/DATASET_INTEGRATION_STATUS.md` for details.
 
 ## Why This Structure?
 

@@ -113,6 +113,22 @@
 //! - [`CharOffset`]: Newtype wrapper for character offsets (type safety)
 //! - [`ByteOffset`]: Newtype wrapper for byte offsets (type safety)
 //!
+//! # API Boundary Conventions
+//!
+//! Anno uses **character offsets** as the canonical representation at API boundaries:
+//!
+//! | Type | Offset Convention | Notes |
+//! |------|-------------------|-------|
+//! | `Entity.start/end` | Character | Public API, evaluation, serialization |
+//! | `Signal` with `Location::Text` | Character | Grounded document model |
+//! | `Span::Text` | Character | Entity span representation |
+//! | Backend internals | Often byte | Regex, JSON parsing, byte slicing |
+//! | Token indices | Token | BERT/transformer models |
+//!
+//! **Rule of thumb**: Convert to character offsets as early as possible (at the
+//! backend boundary), and use the newtype wrappers (`CharOffset`, `ByteOffset`)
+//! when you need to be explicit about which you're working with.
+//!
 //! # Type Safety with Newtypes
 //!
 //! The most common source of Unicode bugs is accidentally mixing byte and character

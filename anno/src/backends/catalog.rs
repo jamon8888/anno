@@ -41,9 +41,9 @@
 //! | `NuNER` | `onnx` | **Yes** | No | ~100ms | ✅ Complete |
 //! | `W2NER` | `onnx` | No | **Yes** | ~150ms | ✅ Complete |
 //! | `CandleNER` | `candle` | No | No | varies | ✅ Complete |
-//! | `GLiNERCandle` | `candle` | **Yes** | No | varies | Complete |
+//! | `GLiNERCandle` | `candle` | **Yes** | No | varies | Experimental (Candle port; prefer ONNX for production until further validation) |
 //! | `GLiNERPoly` | `onnx` | **Yes** | No | ~120ms | Placeholder |
-//! | `TPLinker` | - | No | No | varies | Placeholder (not implemented) |
+//! | `TPLinker` | - | No | No | varies | Placeholder (heuristic baseline today; no neural handshaking inference yet) |
 //! | `DeBERTaV3NER` | `onnx` | No | No | ~50ms | Beta (wrapper around BERT ONNX; requires exported ONNX artifacts) |
 //! | `ALBERTNER` | `onnx` | No | No | ~40ms | Beta (wrapper around BERT ONNX; requires exported ONNX artifacts) |
 //! | `UniversalNER` | - | **Yes** | No | varies | Beta (requires LLM API key; errors when unavailable) |
@@ -92,7 +92,8 @@
 //! ### TPLinker (HandshakingMatrix)
 //!
 //! Handshaking tagging scheme for joint entity-relation extraction.
-//! Already implemented via `HandshakingMatrix` in `inference.rs`.
+//! `HandshakingMatrix` utilities are implemented in `inference.rs`, but the `TPLinker` backend
+//! is currently a **heuristic placeholder** (it does not run a neural handshaking model yet).
 //!
 //! - **Paper**: [TPLinker: Single-stage Joint Extraction](https://aclanthology.org/2020.coling-main.138/)
 //! - **Best for**: Knowledge graph construction
@@ -120,7 +121,7 @@
 //! | Custom entity types | `NuNER` or `GLiNEROnnx` |
 //! | Nested entities | `W2NER` |
 //! | Production (fixed types) | `BertNEROnnx` |
-//! | Knowledge graphs | `HandshakingMatrix` (TPLinker) |
+//! | Knowledge graphs | `HandshakingMatrix` utilities (TPLinker-style); `TPLinker` backend is heuristic today |
 //! | Structured data | `RegexNER` |
 //!
 //! # Why Multiple GLiNER Implementations?

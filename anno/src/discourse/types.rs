@@ -387,7 +387,7 @@ pub struct DiscourseReferent {
     /// If this is an event, the event mention details
     pub event: Option<EventMention>,
     /// Coreference cluster ID (shared with entities that refer to this)
-    pub canonical_id: Option<u64>,
+    pub canonical_id: Option<anno_core::types::CanonicalId>,
     /// Confidence that this is a valid discourse referent
     pub confidence: f64,
     /// Discourse depth (how nested this referent is)
@@ -451,8 +451,8 @@ impl DiscourseReferent {
 
     /// Set the canonical ID.
     #[must_use]
-    pub fn with_canonical_id(mut self, id: u64) -> Self {
-        self.canonical_id = Some(id);
+    pub fn with_canonical_id(mut self, id: impl Into<anno_core::types::CanonicalId>) -> Self {
+        self.canonical_id = Some(id.into());
         self
     }
 

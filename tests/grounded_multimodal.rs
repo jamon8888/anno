@@ -413,9 +413,7 @@ fn roundtrip_preserves_kb_id() {
     let text = "Marie Curie won the Nobel Prize.";
     let doc = GroundedDocument::from_entities("kb_test", text, &[entity.clone()]);
 
-    // Add an identity with the KB info
-    // Note: from_entities doesn't automatically create identities, so we check
-    // that the track exists and could be linked
+    // from_entities will create an Identity when a KB id is present and link the track.
     let recovered = doc.to_entities();
     assert_eq!(recovered.len(), 1);
     // KB info is preserved through identity linking if set up

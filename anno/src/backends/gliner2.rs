@@ -894,8 +894,122 @@ impl GLiNER2Onnx {
 
         let mut results = Vec::with_capacity(texts.len());
 
-        // Shape: [batch, num_words, max_width, num_classes]
-        if shape.len() == 4 {
+        // Token-level BIO output: [bio=3, batch, num_words, num_classes]
+        if shape.len() == 4 && shape[0] == 3 {
+            let batch_size = shape[1] as usize;
+            let out_num_words = shape[2] as usize;
+            let num_classes = shape[3] as usize;
+
+            let per_bio = batch_size * out_num_words * num_classes;
+            let per_batch = out_num_words * num_classes;
+
+            for batch_idx in 0..batch_size.min(texts.len()) {
+                let text = texts[batch_idx];
+                let text_words = &text_words_batch[batch_idx];
+                let num_words = text_words.len();
+                let mut entities = Vec::new();
+
+                // BIO decoding: find B-type starts, extend with I-type
+                #[allow(clippy::needless_range_loop)] // class_idx used for index math
+                for class_idx in 0..num_classes.min(entity_types.len()) {
+                    let mut current_start: Option<(usize, f32)> = None; // (word_idx, score)
+
+                    for word_idx in 0..out_num_words.min(num_words) {
+                        // B logit at BIO dimension 0
+                        let b_idx = (0 * per_bio)
+                            + (batch_idx * per_batch)
+                            + (word_idx * num_classes)
+                            + class_idx;
+                        // I logit at BIO dimension 1
+                        let i_idx = (1 * per_bio)
+                            + (batch_idx * per_batch)
+                            + (word_idx * num_classes)
+                            + class_idx;
+
+                        let b_logit = output_data.get(b_idx).copied().unwrap_or(-100.0);
+                        let i_logit = output_data.get(i_idx).copied().unwrap_or(-100.0);
+
+                        let b_score = 1.0 / (1.0 + (-b_logit).exp());
+                        let i_score = 1.0 / (1.0 + (-i_logit).exp());
+
+                        if b_score >= threshold {
+                            // End any existing entity
+                            if let Some((start_word, avg_score)) = current_start.take() {
+                                let end_word = word_idx.saturating_sub(1);
+                                if start_word <= end_word && end_word < num_words {
+                                    let span_text = text_words[start_word..=end_word].join(" ");
+                                    let (start, end) = word_span_to_char_offsets(
+                                        text, text_words, start_word, end_word,
+                                    );
+                                    let entity_type = map_entity_type(entity_types[class_idx]);
+                                    entities.push(Entity::new(
+                                        span_text,
+                                        entity_type,
+                                        start,
+                                        end,
+                                        avg_score as f64,
+                                    ));
+                                }
+                            }
+                            // Start new entity
+                            current_start = Some((word_idx, b_score));
+                        } else if i_score >= threshold && current_start.is_some() {
+                            // Continue entity - update score
+                            if let Some((start_word, score)) = current_start {
+                                current_start = Some((start_word, (score + i_score) / 2.0));
+                            }
+                        } else if current_start.is_some() {
+                            // End entity
+                            if let Some((start_word, avg_score)) = current_start.take() {
+                                let end_word = word_idx.saturating_sub(1);
+                                if start_word <= end_word && end_word < num_words {
+                                    let span_text = text_words[start_word..=end_word].join(" ");
+                                    let (start, end) = word_span_to_char_offsets(
+                                        text, text_words, start_word, end_word,
+                                    );
+                                    let entity_type = map_entity_type(entity_types[class_idx]);
+                                    entities.push(Entity::new(
+                                        span_text,
+                                        entity_type,
+                                        start,
+                                        end,
+                                        avg_score as f64,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+
+                    // Handle entity at end of text
+                    if let Some((start_word, avg_score)) = current_start.take() {
+                        if !text_words.is_empty() {
+                            let end_word = out_num_words.min(num_words).saturating_sub(1);
+                            if start_word <= end_word && end_word < num_words {
+                                let span_text = text_words[start_word..=end_word].join(" ");
+                                let (start, end) = word_span_to_char_offsets(
+                                    text, text_words, start_word, end_word,
+                                );
+                                let entity_type = map_entity_type(entity_types[class_idx]);
+                                entities.push(Entity::new(
+                                    span_text,
+                                    entity_type,
+                                    start,
+                                    end,
+                                    avg_score as f64,
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                entities
+                    .sort_unstable_by(|a, b| a.start.cmp(&b.start).then_with(|| b.end.cmp(&a.end)));
+                entities.dedup_by(|a, b| a.start == b.start && a.end == b.end);
+                results.push(entities);
+            }
+        }
+        // Span-level output: [batch, num_words, max_width, num_classes]
+        else if shape.len() == 4 {
             let batch_size = shape[0] as usize;
             let out_num_words = shape[1] as usize;
             let out_max_width = shape[2] as usize;
@@ -948,16 +1062,21 @@ impl GLiNER2Onnx {
                     }
                 }
 
-                // Performance: Use unstable sort (we don't need stable sort here)
-                // Deduplicate per batch item
                 entities
                     .sort_unstable_by(|a, b| a.start.cmp(&b.start).then_with(|| b.end.cmp(&a.end)));
                 entities.dedup_by(|a, b| a.start == b.start && a.end == b.end);
                 results.push(entities);
             }
         } else {
-            // Fallback: return empty results
-            results = texts.iter().map(|_| Vec::new()).collect();
+            return Err(Error::Inference(format!(
+                "Unsupported GLiNER2 batch output shape: {:?}. Expected [3,batch,words,classes] (BIO) or [batch,words,width,classes] (span-level).",
+                shape
+            )));
+        }
+
+        // Ensure output length matches input texts length (BatchCapable contract).
+        while results.len() < texts.len() {
+            results.push(Vec::new());
         }
 
         Ok(results)

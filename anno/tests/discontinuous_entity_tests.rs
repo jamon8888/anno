@@ -112,13 +112,21 @@ fn test_discontinuous_span_extract_text() {
     ]);
 
     // Extract text from discontinuous spans
-    let texts: Vec<&str> = span
+    let texts: Vec<String> = span
         .segments()
         .iter()
-        .filter_map(|seg| text.get(seg.start..seg.end))
+        .map(|seg| {
+            text.chars()
+                .skip(seg.start)
+                .take(seg.end.saturating_sub(seg.start))
+                .collect::<String>()
+        })
         .collect();
 
-    assert_eq!(texts, vec!["New York", "Los Angeles"]);
+    assert_eq!(
+        texts,
+        vec!["New York".to_string(), "Los Angeles".to_string()]
+    );
 }
 
 #[test]

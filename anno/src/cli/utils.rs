@@ -881,6 +881,17 @@ pub fn get_cache_dir() -> Result<std::path::PathBuf, String> {
 
 /// Get config directory
 pub fn get_config_dir() -> Result<std::path::PathBuf, String> {
+    // Allow tests and power-users to override config location.
+    //
+    // This keeps CLI tests hermetic (no writes to the user's real config dir)
+    // and makes config storage predictable in constrained environments.
+    if let Ok(dir) = std::env::var("ANNO_CONFIG_DIR") {
+        let path = std::path::PathBuf::from(dir);
+        fs::create_dir_all(&path)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+        return Ok(path);
+    }
+
     #[cfg(feature = "eval")]
     {
         use dirs::config_dir;

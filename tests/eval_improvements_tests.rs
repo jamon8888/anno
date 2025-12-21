@@ -2,8 +2,7 @@
 
 use anno::eval::coref::{CorefChain, Mention};
 use anno::eval::coref_metrics::{compute_chain_length_stratified, CorefEvaluation};
-use anno::eval::types::{CorefChainStats, LabelShift};
-use std::collections::HashSet;
+use anno::eval::types::LabelShift;
 
 #[test]
 fn test_chain_length_stratification() {

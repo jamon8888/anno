@@ -10,6 +10,7 @@ default:
 check:
     #!/usr/bin/env bash
     set -e
+    just docs-audit
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets --features "eval-advanced discourse" -- -D warnings
     if command -v cargo-nextest >/dev/null 2>&1; then
@@ -40,10 +41,82 @@ test:
 test-all:
     cargo test --features "eval-advanced discourse"
 
+# === Test Profiling (Nextest + Rust Tooling) ===
+
+# Profile tests with nextest timing (recommended)
+profile-tests PROFILE="quick" FILTER="":
+    @./scripts/profile-tests.sh {{PROFILE}} {{FILTER}}
+
+# Profile with Rust native tools (debug symbols, perf/sample)
+profile-tests-rust PROFILE="quick":
+    @./scripts/profile-tests-rust.sh {{PROFILE}}
+
+# Profile quick tests only
+profile-quick:
+    @just profile-tests quick
+
+# Profile CI tests
+profile-ci:
+    @just profile-tests ci
+
+# Profile ML tests (slow, model loading)
+profile-ml:
+    @just profile-tests ml
+
+# Profile specific test filter
+profile-filter FILTER:
+    @just profile-tests quick "{{FILTER}}"
+
+# Quick timing report (no full run, just analyze existing)
+profile-timing:
+    @NEXTEST_EXPERIMENTAL_LIBTEST_JSON=1 cargo nextest run --profile quick --workspace --features "eval-advanced discourse" --message-format libtest-json-plus --status-level all
+
+# Show slowest tests from last profile run
+profile-slowest:
+    @if [ -z "$$(ls -A target/test-profiles/timing_*.json 2>/dev/null)" ]; then \
+        echo "No timing files found. Run 'just profile-tests' first."; \
+        exit 1; \
+    fi
+    @LATEST=$$(ls -t target/test-profiles/timing_*.json | head -1) && \
+        echo "Analyzing: $$LATEST" && \
+        if command -v jq >/dev/null 2>&1; then \
+            echo "" && \
+            echo "=== Slowest Tests (top 30) ===" && \
+            jq -r '.test_executions[] | select(.duration_secs > 0.1) | "\(.duration_secs | tostring | .[0:6])s  \(.test_name)"' \
+                "$$LATEST" | sort -rn | head -30; \
+        else \
+            echo "Install jq for analysis: brew install jq"; \
+        fi
+
+# Analyze test profile with detailed breakdown
+profile-analyze FILE="":
+    @if [ -n "{{FILE}}" ]; then \
+        uv run -- python scripts/analyze_test_profile.py "{{FILE}}"; \
+    else \
+        uv run -- python scripts/analyze_test_profile.py; \
+    fi
+
+# Install profiling tools
+profile-install:
+    @echo "Installing profiling tools..."
+    @echo ""
+    @echo "1. cargo-flamegraph (cross-platform flamegraphs):"
+    @echo "   cargo install flamegraph"
+    @echo ""
+    @echo "2. cargo-instruments (macOS only, requires Xcode):"
+    @echo "   cargo install cargo-instruments"
+    @echo ""
+    @echo "3. hyperfine (benchmarking):"
+    @echo "   brew install hyperfine"
+    @echo ""
+    @echo "4. jq (JSON analysis):"
+    @echo "   brew install jq"
+
 # === CI Simulation ===
 
 # Simulate full CI pipeline locally (fast checks only)
 ci: fmt
+    just docs-audit
     cargo check --all-targets
     cargo clippy --all-targets
     cargo test --lib
@@ -136,6 +209,22 @@ docs:
 # Open docs in browser
 docs-open:
     cargo doc --no-deps --features "eval-full discourse" --open
+
+# Check internal docs markdown links (fast, no network).
+docs-links:
+    @if command -v uv > /dev/null; then \
+        uv run -- python scripts/check_docs_links.py; \
+    else \
+        python3 scripts/check_docs_links.py; \
+    fi
+
+# Docs hygiene (links + stale path checks). Fast, offline.
+docs-audit:
+    @if command -v uv > /dev/null; then \
+        uv run -- python scripts/docs_audit.py; \
+    else \
+        python3 scripts/docs_audit.py; \
+    fi
 
 # Preview README in browser with GitHub-style rendering (auto-reloads)
 # Auto-finds free port starting from 8000
@@ -281,6 +370,23 @@ geiger:
     @which cargo-geiger > /dev/null || (echo "Install: cargo install cargo-geiger" && exit 1)
     cargo geiger
 
+# Run ast-grep checks (optional, local)
+ast-grep-unicode:
+    @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
+    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --report-style short anno/src/ anno-core/src/ anno-coalesce/src/ anno-strata/src/
+
+ast-grep-unicode-all:
+    @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
+    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --report-style short anno/ anno-core/ anno-coalesce/ anno-strata/ tests/ examples/
+
+ast-grep-metal:
+    @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
+    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --report-style short anno/src/ anno-core/src/ anno-coalesce/src/ anno-strata/src/
+
+ast-grep-metal-all:
+    @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
+    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --report-style short anno/ anno-core/ anno-coalesce/ anno-strata/ tests/ examples/
+
 # Generate unsafe code safety report (creative use of cargo-geiger)
 safety-report:
     @which cargo-geiger > /dev/null || (echo "Install: cargo install cargo-geiger" && exit 1)
@@ -294,21 +400,39 @@ safety-report:
 # Run OpenGrep static analysis
 opengrep:
     @which opengrep > /dev/null || (echo "Install: curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash" && exit 1)
-    opengrep scan --config auto --json --output .opengrep-results.json src/ tests/ examples/
-    @echo "Results saved to .opengrep-results.json"
-    @cat .opengrep-results.json | jq -r '.results | length' | xargs -I {} echo "Found {} issues" 2>/dev/null || echo "Run: opengrep scan --config auto"
+    opengrep scan --config auto --json --output opengrep-results.json anno/ anno-core/ anno-coalesce/ anno-strata/ tests/ examples/
+    @echo "Results saved to opengrep-results.json"
+    @if command -v jq > /dev/null; then \
+        echo "Found $$(jq -r '.results | length' opengrep-results.json) issues"; \
+    else \
+        echo "Install jq to summarize: opengrep-results.json"; \
+    fi
 
 # Run OpenGrep with custom rules
 opengrep-custom:
     @which opengrep > /dev/null || (echo "Install: curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash" && exit 1)
-    opengrep scan -f .opengrep/rules --json --output .opengrep-custom-results.json src/
-    @echo "Custom rules results saved to .opengrep-custom-results.json"
+    opengrep scan -f .opengrep/rules/rust-security.yaml --json --output opengrep-security-results.json anno/ anno-core/ anno-coalesce/ anno-strata/
+    opengrep scan -f .opengrep/rules/rust-nlp-ml-patterns.yaml --json --output opengrep-nlp-results.json anno/ anno-core/ anno-coalesce/ anno-strata/
+    opengrep scan -f .opengrep/rules/rust-evaluation-framework.yaml --json --output opengrep-eval-results.json anno/src/eval/
+    opengrep scan -f .opengrep/rules/rust-anno-specific.yaml --json --output opengrep-anno-results.json anno/ anno-core/ anno-coalesce/ anno-strata/
+    opengrep scan -f .opengrep/rules/rust-error-handling.yaml --json --output opengrep-error-results.json anno/ anno-core/ anno-coalesce/ anno-strata/
+    opengrep scan -f .opengrep/rules/rust-memory-patterns.yaml --json --output opengrep-memory-results.json anno/ anno-core/ anno-coalesce/ anno-strata/
+    @echo "Custom rules results saved to opengrep-*-results.json"
+    @if command -v jq > /dev/null; then \
+        echo "Counts:"; \
+        echo "  security: $$(jq -r '.results | length' opengrep-security-results.json)"; \
+        echo "  nlp:      $$(jq -r '.results | length' opengrep-nlp-results.json)"; \
+        echo "  eval:     $$(jq -r '.results | length' opengrep-eval-results.json)"; \
+        echo "  anno:     $$(jq -r '.results | length' opengrep-anno-results.json)"; \
+        echo "  error:    $$(jq -r '.results | length' opengrep-error-results.json)"; \
+        echo "  memory:   $$(jq -r '.results | length' opengrep-memory-results.json)"; \
+    fi
 
 # Run Miri on unsafe code files (selective)
 miri-unsafe:
     @rustup component list | grep -q "miri.*installed" || (echo "Install: rustup component add miri" && exit 1)
     @echo "Running Miri on unsafe code files..."
-    @cargo miri test --lib --features onnx -- --test-threads=1 2>&1 | head -50 || true
+    @cargo miri test --lib --features onnx -- --test-threads=1 --nocapture || true
     @echo "Miri check complete (see output above)"
 
 # Run all static analysis tools (comprehensive check)
@@ -581,3 +705,188 @@ check-historical-bugs:
 # Validate publish readiness for all crates
 validate-publish:
     @./scripts/validate-publish.sh
+
+# === AWS Spot Instance Evaluation ===
+
+# One-time spot infrastructure setup (IAM, SQS, EBS, launch template)
+spot-setup:
+    @chmod +x scripts/spot/setup.sh
+    @./scripts/spot/setup.sh
+
+# Run comprehensive evaluation on spot instances (full pipeline)
+# Generates tasks, launches fleet, waits for completion, aggregates results
+# Cost: ~$1-2 for full evaluation (20 datasets x 12 backends x 5 seeds)
+spot-eval:
+    @uv run scripts/spot/orchestrate.py full
+
+# Run spot eval with custom parameters
+# Example: just spot-eval-custom "gliner,nuner" "WikiGold,Wnut17" 2
+spot-eval-custom BACKENDS DATASETS FLEET_SIZE="4":
+    @uv run scripts/spot/orchestrate.py full \
+        --backends "{{BACKENDS}}" \
+        --datasets "{{DATASETS}}" \
+        --fleet-size "{{FLEET_SIZE}}"
+
+# Generate evaluation tasks and enqueue (without launching fleet)
+spot-generate:
+    @uv run scripts/spot/orchestrate.py generate
+
+# Generate tasks for specific backends/datasets
+spot-generate-custom BACKENDS="" DATASETS="" SEEDS="42,123,456":
+    @uv run scripts/spot/orchestrate.py generate \
+        --backends "{{BACKENDS}}" \
+        --datasets "{{DATASETS}}" \
+        --seeds "{{SEEDS}}"
+
+# Preview tasks without enqueueing
+spot-generate-dry:
+    @uv run scripts/spot/orchestrate.py generate --dry-run
+
+# Launch spot fleet (requires tasks in queue)
+spot-launch FLEET_SIZE="4":
+    @uv run scripts/spot/orchestrate.py launch --fleet-size "{{FLEET_SIZE}}"
+
+# Check evaluation progress (queue depth, fleet status, results count)
+spot-status:
+    @uv run scripts/spot/orchestrate.py status
+
+# Monitor workers via SSM (no SSH required)
+spot-monitor:
+    @uv run scripts/spot/monitor.py
+
+# Monitor workers with live updates
+spot-monitor-watch:
+    @uv run scripts/spot/monitor.py --watch
+
+# Tail logs from a specific worker
+spot-logs INSTANCE:
+    @uv run scripts/spot/monitor.py --logs "{{INSTANCE}}" --follow
+
+# Execute command on a worker via SSM
+spot-exec INSTANCE CMD:
+    @uv run scripts/spot/monitor.py --exec "{{INSTANCE}}" "{{CMD}}"
+
+# Aggregate and display results from S3
+spot-results OUTPUT="reports/spot-eval-results.json":
+    @uv run scripts/spot/orchestrate.py results --output "{{OUTPUT}}"
+
+# Aggregate results and export badness history for CI
+spot-aggregate:
+    @uv run scripts/spot/aggregate.py
+
+# Cancel fleet and clean up
+spot-teardown:
+    @uv run scripts/spot/orchestrate.py teardown
+
+# Cancel fleet and purge task queue
+spot-teardown-full:
+    @uv run scripts/spot/orchestrate.py teardown --purge-queue
+
+# Quick spot eval (3 fast backends, 2 datasets, 1 seed) - good for testing
+spot-eval-quick:
+    @uv run scripts/spot/orchestrate.py full \
+        --backends "pattern,heuristic,stacked" \
+        --datasets "WikiGold,Wnut17" \
+        --seeds "42" \
+        --fleet-size 1
+
+# ML-focused spot eval (ONNX/Candle backends only)
+spot-eval-ml:
+    @uv run scripts/spot/orchestrate.py full \
+        --backends "gliner,nuner,w2ner,gliner2,bert_onnx,gliner_candle" \
+        --fleet-size 4
+
+# Sync local dataset/model cache to S3 (for spot instances)
+spot-cache-upload:
+    @./scripts/sync_datasets_s3.sh upload
+
+# Download cached datasets/models from S3
+spot-cache-download:
+    @./scripts/sync_datasets_s3.sh download
+
+# Show S3 cache status
+spot-cache-status:
+    @./scripts/sync_datasets_s3.sh status
+
+# Upload current source code to S3 (required before launching spot instances)
+spot-upload-src:
+    @git archive --format=tar.gz HEAD -o /tmp/anno-src.tar.gz
+    @aws s3 cp /tmp/anno-src.tar.gz s3://arc-anno-data/src/anno-src.tar.gz
+    @echo "Source uploaded to s3://arc-anno-data/src/anno-src.tar.gz"
+
+# Run CI-style randomized matrix test locally (uses spot badness history)
+ci-matrix-local SEED="42":
+    ANNO_CI_SEED="{{SEED}}" \
+    ANNO_SAMPLE_STRATEGY=worst-first \
+    ANNO_HISTORY_FILE=reports/badness-history.csv \
+    cargo test --test randomized_matrix_ci --features "eval-advanced" -- --nocapture
+
+# Export badness history from spot results for CI consumption
+spot-export-badness:
+    @mkdir -p reports
+    @uv run scripts/spot/orchestrate.py results --badness-export reports/badness-history.csv 2>/dev/null || \
+        echo "No spot results yet. Run just spot-eval first."
+
+# Compare spot results against a baseline
+spot-compare BASELINE:
+    @uv run scripts/spot/orchestrate.py results --compare "{{BASELINE}}"
+
+# =============================================================================
+# Spot + trainctl Integration (Enhanced Features)
+# =============================================================================
+
+# Launch trainctl interactive dashboard for spot monitoring
+spot-dash:
+    @scripts/spot/trainctl-bridge.sh dashboard
+
+# Sync datasets from S3 using trainctl (faster parallel downloads)
+spot-sync-datasets:
+    @scripts/spot/trainctl-bridge.sh sync-datasets
+
+# Download spot results using trainctl
+spot-sync-results DIR="reports/spot-results":
+    @scripts/spot/trainctl-bridge.sh sync-results "{{DIR}}"
+
+# Upload source using trainctl (faster upload)
+spot-upload-src-fast:
+    @scripts/spot/trainctl-bridge.sh upload-src
+
+# Show processes on spot worker (trainctl)
+spot-ps INSTANCE="":
+    @scripts/spot/trainctl-bridge.sh processes "{{INSTANCE}}"
+
+# Interactive top for spot worker (trainctl)
+spot-top INSTANCE="":
+    @scripts/spot/trainctl-bridge.sh top "{{INSTANCE}}"
+
+# Show fleet costs (trainctl)
+spot-cost:
+    @scripts/spot/trainctl-bridge.sh cost
+
+# === trainctl Integration (Alternative) ===
+
+# Launch workers via trainctl (better SSM, monitoring, dashboard)
+# Requires: cd ../trainctl && cargo build --release
+spot-trainctl WORKERS="1" PROFILE="full":
+    @./scripts/spot/launch-trainctl.sh "{{WORKERS}}" "{{PROFILE}}"
+
+# Quick trainctl launch (1 worker, quick profile)
+spot-trainctl-quick:
+    @./scripts/spot/launch-trainctl.sh 1 quick
+
+# ML trainctl launch (4 workers, ML backends)
+spot-trainctl-ml:
+    @./scripts/spot/launch-trainctl.sh 4 ml
+
+# Check if trainctl is available
+spot-trainctl-check:
+    @if command -v trainctl &>/dev/null; then \
+        echo "trainctl: $(which trainctl)"; \
+        trainctl --version; \
+    elif [ -f ../trainctl/target/release/trainctl ]; then \
+        echo "trainctl: ../trainctl/target/release/trainctl (local build)"; \
+        ../trainctl/target/release/trainctl --version; \
+    else \
+        echo "trainctl not found. Build it:"; \
+        echo "  cd ../trainctl && cargo build --release"; \
+    fi

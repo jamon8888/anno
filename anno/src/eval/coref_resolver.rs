@@ -85,6 +85,7 @@
 use super::coref::CorefChain;
 use crate::backends::box_embeddings::{BoxCorefConfig, BoxEmbedding};
 use crate::{Entity, EntityType};
+use anno_core::types::CanonicalId;
 use std::collections::HashMap;
 
 // =============================================================================
@@ -156,10 +157,10 @@ impl SimpleCorefResolver {
         }
 
         let mut resolved = entities.to_vec();
-        let mut next_cluster_id: u64 = 0;
+        let mut next_cluster_id = CanonicalId::ZERO;
 
         // Map from canonical form to cluster ID
-        let mut canonical_to_cluster: HashMap<String, u64> = HashMap::new();
+        let mut canonical_to_cluster: HashMap<String, CanonicalId> = HashMap::new();
 
         // Process entities in order
         for i in 0..resolved.len() {
@@ -206,8 +207,8 @@ impl SimpleCorefResolver {
         &self,
         entity: &Entity,
         previous: &[Entity],
-        canonical_map: &HashMap<String, u64>,
-    ) -> Option<u64> {
+        canonical_map: &HashMap<String, CanonicalId>,
+    ) -> Option<CanonicalId> {
         // Strategy 1: Pronoun resolution
         if self.is_pronoun(&entity.text) {
             return self.resolve_pronoun(entity, previous);
@@ -241,7 +242,7 @@ impl SimpleCorefResolver {
     ///
     /// This means "they" can refer to anyone, and we don't assume
     /// "Mary" is female or "John" is male.
-    fn resolve_pronoun(&self, pronoun: &Entity, previous: &[Entity]) -> Option<u64> {
+    fn resolve_pronoun(&self, pronoun: &Entity, previous: &[Entity]) -> Option<CanonicalId> {
         let pronoun_gender = self.infer_gender(&pronoun.text);
 
         // Look backwards for a compatible antecedent
@@ -804,7 +805,7 @@ impl DiscourseAwareResolver {
                     // Assign a new cluster ID linking to the discourse referent
                     // For now, we just mark it as resolved (actual linking would need
                     // discourse referents to be first-class citizens)
-                    let cluster_id = 10000 + i as u64; // High ID to distinguish
+                    let cluster_id = CanonicalId::new(10000 + i as u64); // High ID to distinguish
                     entity.canonical_id = Some(cluster_id);
 
                     // Store the antecedent info in normalized field as a temporary solution.
@@ -1136,7 +1137,7 @@ impl BoxCorefResolver {
         }
 
         let mut resolved = entities.to_vec();
-        let mut next_cluster_id: u64 = 0;
+        let mut next_cluster_id = CanonicalId::ZERO;
 
         // Union-find for clustering
         let mut parent: Vec<usize> = (0..entities.len()).collect();
@@ -1177,7 +1178,7 @@ impl BoxCorefResolver {
         }
 
         // Assign cluster IDs
-        let mut cluster_map: HashMap<usize, u64> = HashMap::new();
+        let mut cluster_map: HashMap<usize, CanonicalId> = HashMap::new();
         for (i, resolved_entity) in resolved.iter_mut().enumerate().take(entities.len()) {
             let root = find(&mut parent, i);
             let cluster_id = *cluster_map.entry(root).or_insert_with(|| {

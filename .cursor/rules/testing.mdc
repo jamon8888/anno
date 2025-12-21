@@ -275,3 +275,7 @@ Rationale:
 - Errors may appear in the middle of output, not just at the end
 - More context is always better for debugging
 - Your AI assistant's context window can handle the full output
+
+This also applies to **static analysis** and **docs hygiene** scripts:
+- Prefer saving full output to an artifact file and printing a short summary (via `jq`/`rg -c`)
+- Avoid `2>/dev/null` unless you’re intentionally capturing the full output elsewhere

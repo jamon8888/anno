@@ -86,7 +86,7 @@ For ASCII text, the converter detects this and skips table-building entirely.
 
 All backends that return byte offsets must convert them:
 
-### ✅ Correct (RegexNER, CrfNER, HeuristicNER)
+### Correct (RegexNER, CrfNER, HeuristicNER)
 
 ```rust
 use crate::offset::SpanConverter;
@@ -109,7 +109,7 @@ fn extract_entities(&self, text: &str, ...) -> Result<Vec<Entity>> {
 }
 ```
 
-### ❌ Incorrect (Common Bug)
+### Incorrect (Common Bug)
 
 ```rust
 // BUG: Uses byte offsets directly!

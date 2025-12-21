@@ -2955,7 +2955,7 @@ define_datasets! {
         example: "Olúṣẹ́gun B-PER\nObásanjọ́ I-PER\nní O\nìlú O\nAbẹ́òkúta B-LOC\n. O",
         notes: "Critically underrepresented languages; community-driven; tonal diacritics preserved",
         hf_id: "masakhane/masakhaner",
-        categories: [ner, multilingual, low_resource],
+        categories: [ner, multilingual, low_resource, african_language],
     },
     MasakhaNER2 {
         name: "MasakhaNER 2.0",
@@ -2974,7 +2974,7 @@ define_datasets! {
         splits: ["train", "dev", "test"],
         tasks: ["ner"],
         hf_id: "masakhane/masakhaner2",
-        categories: [ner, multilingual, low_resource],
+        categories: [ner, multilingual, low_resource, african_language],
     },
     AfriSenti {
         name: "AfriSenti",
@@ -2994,7 +2994,7 @@ define_datasets! {
         splits: ["train", "validation", "test"],
         tasks: ["sentiment"],
         hf_id: "shmuhammad/AfriSenti-twitter-sentiment",
-        categories: [multilingual, low_resource, social_media],
+        categories: [multilingual, low_resource, social_media, african_language],
     },
     AfriQA {
         name: "AfriQA",
@@ -3012,7 +3012,7 @@ define_datasets! {
         splits: ["train", "dev", "test"],
         tasks: ["qa"],
         hf_id: "masakhane/afriqa",
-        categories: [multilingual, low_resource],
+        categories: [multilingual, low_resource, african_language],
     },
     MasakhaNEWS {
         name: "MasakhaNEWS",
@@ -3030,7 +3030,7 @@ define_datasets! {
         splits: ["train", "dev", "test"],
         tasks: ["text_classification"],
         hf_id: "masakhane/masakhanews",
-        categories: [multilingual, low_resource, news],
+        categories: [multilingual, low_resource, news, african_language],
     },
     // =========================================================================
     // Text Classification (for GLiNER2 classification capability)
@@ -3159,7 +3159,7 @@ define_datasets! {
         splits: ["train", "dev", "test"],
         tasks: ["pos"],
         hf_id: "masakhane/masakhane-pos",
-        categories: [multilingual, low_resource],
+        categories: [multilingual, low_resource, african_language],
     },
     WikiANN {
         name: "WikiANN",

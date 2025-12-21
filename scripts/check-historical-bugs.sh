@@ -10,15 +10,17 @@ echo "Checking for patterns that match bugs that were previously fixed..."
 echo ""
 
 ISSUES=0
+WORKSPACE_DIRS=(anno/ anno-core/ anno-coalesce/ anno-strata/ tests/ examples/)
+EVAL_DIR="anno/src/eval/"
 
 # 1. Check for mutex double-lock pattern (deadlock bug)
 echo "## Mutex Double-Lock Pattern (Deadlock Bug)"
 echo ""
-if rg -q "if let Ok.*lock.*else.*lock" --type rust src/ 2>/dev/null; then
+if rg -q "if let Ok.*lock.*else.*lock" --type rust "${WORKSPACE_DIRS[@]}" 2>/dev/null; then
     echo "WARNING:  Found potential mutex double-lock pattern"
     echo "   This matches the deadlock bug pattern from BUGS_FIXED.md"
     echo "   Fix: Use single lock with unwrap_or_else"
-    rg -A 5 "if let Ok.*lock.*else.*lock" --type rust src/ 2>/dev/null | head -20
+    rg -A 5 "if let Ok.*lock.*else.*lock" --type rust "${WORKSPACE_DIRS[@]}" 2>/dev/null | sed -n '1,20p'
     ((ISSUES++))
 else
     echo "OK: No mutex double-lock patterns found"
@@ -28,8 +30,8 @@ fi
 echo ""
 echo "## Variance Calculation (Bessel's Correction)"
 echo ""
-POPULATION_VAR=$(rg -c "variance.*sum.*/.*len\(\)\s*as\s*f64" --type rust src/eval/ 2>/dev/null || echo "0")
-SAMPLE_VAR=$(rg -c "variance.*sum.*/.*\(.*len\(\)\s*-\s*1" --type rust src/eval/ 2>/dev/null || echo "0")
+POPULATION_VAR=$(rg -c "variance.*sum.*/.*len\(\)\s*as\s*f64" --type rust "$EVAL_DIR" 2>/dev/null || echo "0")
+SAMPLE_VAR=$(rg -c "variance.*sum.*/.*\(.*len\(\)\s*-\s*1" --type rust "$EVAL_DIR" 2>/dev/null || echo "0")
 if [ "$POPULATION_VAR" -gt 0 ]; then
     echo "WARNING:  Found potential population variance (n) instead of sample variance (n-1)"
     echo "   This matches the variance bug pattern from BUGS_FIXED.md"
@@ -43,8 +45,8 @@ fi
 echo ""
 echo "## Mutex Poison Handling"
 echo ""
-LOCKS_WITHOUT_HANDLING=$(rg -c "\.lock\(\)\.unwrap\(\)" --type rust src/ 2>/dev/null || echo "0")
-LOCKS_WITH_HANDLING=$(rg -c "\.lock\(\)\.unwrap_or_else" --type rust src/ 2>/dev/null || echo "0")
+LOCKS_WITHOUT_HANDLING=$(rg -c "\.lock\(\)\.unwrap\(\)" --type rust "${WORKSPACE_DIRS[@]}" 2>/dev/null || echo "0")
+LOCKS_WITH_HANDLING=$(rg -c "\.lock\(\)\.unwrap_or_else" --type rust "${WORKSPACE_DIRS[@]}" 2>/dev/null || echo "0")
 if [ "$LOCKS_WITHOUT_HANDLING" -gt 0 ]; then
     echo "WARNING:  Found mutex locks without poison handling"
     echo "   $LOCKS_WITHOUT_HANDLING locks without handling, $LOCKS_WITH_HANDLING with handling"
@@ -58,7 +60,7 @@ fi
 echo ""
 echo "## Backend Recreation in Loops"
 echo ""
-BACKEND_RECREATION=$(rg -c "for.*in.*\{.*BackendFactory::create" --type rust src/eval/ 2>/dev/null || echo "0")
+BACKEND_RECREATION=$(rg -c "for.*in.*\{.*BackendFactory::create" --type rust "$EVAL_DIR" 2>/dev/null || echo "0")
 if [ "$BACKEND_RECREATION" -gt 0 ]; then
     echo "WARNING:  Found backend recreation in loops"
     echo "   This is a performance issue - backends should be created outside loops"

@@ -175,10 +175,10 @@ fn test_graph_document_deduplication_by_canonical_id() {
 fn test_graph_document_deduplication_by_kb_id() {
     let mut entity1 = Entity::new("Apple", EntityType::Organization, 0, 5, 0.9);
     entity1.kb_id = Some("Q312".to_string());
-    entity1.canonical_id = Some(1);
+    entity1.canonical_id = Some(anno_core::types::CanonicalId::new(1));
     let mut entity2 = Entity::new("Apple Inc", EntityType::Organization, 20, 29, 0.95);
     entity2.kb_id = Some("Q312".to_string());
-    entity2.canonical_id = Some(2); // Same KB ID
+    entity2.canonical_id = Some(anno_core::types::CanonicalId::new(2)); // Same KB ID
     let entities = vec![entity1, entity2];
 
     let graph = GraphDocument::from_extraction(&entities, &[], None);
@@ -195,7 +195,7 @@ fn test_graph_document_with_coref_chains() {
     ];
 
     let _chains = vec![CorefChain {
-        cluster_id: Some(1),
+        cluster_id: Some(anno_core::types::CanonicalId::new(1)),
         entity_type: Some("Person".to_string()),
         mentions: vec![
             Mention::new("Elon Musk", 0, 9),

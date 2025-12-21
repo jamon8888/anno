@@ -627,7 +627,7 @@ impl GLiNERCandle {
     /// * `labels` - Entity types to detect (e.g., ["person", "organization"])
     /// * `threshold` - Confidence threshold (0.0-1.0)
     pub fn extract(&self, text: &str, labels: &[&str], threshold: f32) -> Result<Vec<Entity>> {
-        if text.is_empty() || labels.is_empty() {
+        if text.trim().is_empty() || labels.is_empty() {
             return Ok(vec![]);
         }
 
@@ -638,7 +638,7 @@ impl GLiNERCandle {
         }
 
         // Build prompt: [START] <<ENT>> label1 <<ENT>> label2 <<SEP>> word1 word2 ... [END]
-        let (text_embeddings, word_positions) = self.encode_text(&words)?;
+        let (text_embeddings, word_positions) = self.encode_text(text, &words)?;
         let label_embeddings = self.encode_labels(labels)?;
 
         // Generate span candidates
@@ -675,62 +675,100 @@ impl GLiNERCandle {
         Ok(entities)
     }
 
-    fn encode_text(&self, words: &[&str]) -> Result<(Tensor, Vec<(usize, usize)>)> {
-        // For now, encode each word and average. Full implementation would:
-        // 1. Build GLiNER prompt format
-        // 2. Get per-word embeddings from words_mask
+    fn encode_text(&self, text: &str, words: &[&str]) -> Result<(Tensor, Vec<(usize, usize)>)> {
+        // GLiNER span extraction operates over *word* indices. The encoder produces *token*
+        // embeddings (wordpieces), so we must aggregate token embeddings into per-word embeddings.
+        //
+        // This fixes a major correctness issue where span indices (word-based) were being applied
+        // to token embeddings (token-based), producing incorrect spans.
 
-        let text = words.join(" ");
-        let (embeddings, seq_len) = self.encoder.encode(&text)?;
+        let (token_embeddings, seq_len, token_offsets) = self.encoder.encode_with_offsets(text)?;
+        if seq_len == 0 {
+            return Ok((
+                Tensor::zeros((1, 0, self.hidden_size), DType::F32, &self.device)
+                    .map_err(|e| Error::Parse(format!("empty text tensor: {}", e)))?,
+                vec![],
+            ));
+        }
 
-        // Reshape to [1, seq_len, hidden]
-        let tensor = Tensor::from_vec(embeddings, (1, seq_len, self.hidden_size), &self.device)
-            .map_err(|e| Error::Parse(format!("text tensor: {}", e)))?;
-
-        // Build word positions
-        let full_text = words.join(" ");
+        // Build word byte positions in the ORIGINAL text (not a re-joined version).
+        // This preserves correct offsets even when the input contains multiple spaces/newlines.
         let word_positions: Vec<(usize, usize)> = {
-            // Performance: Pre-allocate positions vec with known size
             let mut positions = Vec::with_capacity(words.len());
-            let mut pos = 0;
+            let mut byte_pos = 0usize;
             for (idx, word) in words.iter().enumerate() {
-                if let Some(start) = full_text[pos..].find(word) {
-                    let abs_start = pos + start;
-                    let abs_end = abs_start + word.len();
-                    // Validate position is after previous word (words should be in order)
-                    if !positions.is_empty() {
-                        let (_prev_start, prev_end) = positions[positions.len() - 1];
-                        if abs_start < prev_end {
-                            log::warn!(
-                                "Word '{}' (index {}) at position {} overlaps with previous word ending at {}",
-                                word,
-                                idx,
-                                abs_start,
-                                prev_end
-                            );
-                        }
-                    }
-                    positions.push((abs_start, abs_end));
-                    pos = abs_end;
+                if let Some(rel_pos) = text[byte_pos..].find(word) {
+                    let start = byte_pos + rel_pos;
+                    let end = start + word.len();
+                    positions.push((start, end));
+                    byte_pos = end;
                 } else {
-                    // Word not found - return error to prevent silent entity skipping
                     return Err(Error::Parse(format!(
-                        "Word '{}' (index {}) not found in text starting at position {}",
-                        word, idx, pos
+                        "Word '{}' (index {}) not found in text starting at byte {}",
+                        word, idx, byte_pos
                     )));
                 }
             }
             positions
         };
 
-        // Validate that we found positions for all words
-        if word_positions.len() != words.len() {
-            return Err(Error::Parse(format!(
-                "Word position mismatch: found {} positions for {} words",
-                word_positions.len(),
-                words.len()
-            )));
+        // Aggregate token embeddings into per-word embeddings by offset overlap.
+        // token_embeddings: flattened [seq_len, hidden]
+        let mut word_embeddings = Vec::with_capacity(words.len().saturating_mul(self.hidden_size));
+
+        // Token offsets are in bytes (tokenizers crate). Special tokens often have (0, 0).
+        let mut tok = 0usize;
+        for &(w_start, w_end) in &word_positions {
+            // Advance to first token that could overlap this word.
+            while tok < seq_len && token_offsets[tok].1 <= w_start {
+                tok += 1;
+            }
+
+            let mut acc = vec![0.0f32; self.hidden_size];
+            let mut count = 0usize;
+
+            let mut t = tok;
+            while t < seq_len && token_offsets[t].0 < w_end {
+                let (t_start, t_end) = token_offsets[t];
+                // Skip special tokens / empty offsets.
+                if t_end > t_start && t_start >= w_start && t_end <= w_end {
+                    let base = t * self.hidden_size;
+                    for h in 0..self.hidden_size {
+                        acc[h] += token_embeddings[base + h];
+                    }
+                    count += 1;
+                }
+                t += 1;
+            }
+
+            // Keep tok monotonic for the next word to avoid quadratic behavior.
+            tok = t;
+
+            if count == 0 {
+                // If we couldn't align any token to this word (can happen with truncation),
+                // emit a zero vector rather than failing hard.
+                log::debug!(
+                    "[GLiNER-Candle] No tokens aligned to word span {}..{}, emitting zeros",
+                    w_start,
+                    w_end
+                );
+                word_embeddings.extend(std::iter::repeat_n(0.0f32, self.hidden_size));
+            } else {
+                let denom = count as f32;
+                for h in 0..self.hidden_size {
+                    acc[h] /= denom;
+                }
+                word_embeddings.extend(acc);
+            }
         }
+
+        // Reshape to [1, num_words, hidden]
+        let tensor = Tensor::from_vec(
+            word_embeddings,
+            (1, words.len(), self.hidden_size),
+            &self.device,
+        )
+        .map_err(|e| Error::Parse(format!("word text tensor: {}", e)))?;
 
         Ok((tensor, word_positions))
     }

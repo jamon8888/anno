@@ -31,7 +31,7 @@ mod entity_serde {
                 timestamp: None,
             }),
             kb_id: Some("Q312".to_string()),
-            canonical_id: Some(42),
+            canonical_id: Some(anno_core::types::CanonicalId::new(42)),
             hierarchical_confidence: Some(HierarchicalConfidence::new(0.9, 0.95, 0.92)),
             visual_span: None,
             discontinuous_span: None,

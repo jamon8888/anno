@@ -3,7 +3,7 @@
 //! Tests complete CLI command sequences with various flags, inputs, and outputs.
 //!
 //! These tests use a pre-built CLI binary for speed.
-//! Build with: `cargo build --release -p anno-cli`
+//! Build with: `cargo build --release -p anno --bin anno --features eval-advanced`
 
 // Used by both gated and ungated tests (ungated tests import inline where needed)
 use std::fs;

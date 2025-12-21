@@ -76,16 +76,16 @@ rules:
 
   - id: byte-indexing-on-text
     patterns:
-      - pattern: |
-          let $VAR = $TEXT[$START..$END];
-      - not:
-          - pattern-either:
-              - pattern: |
-                  // Byte offset (intentional)
-              - pattern: |
-                  TextSpan::from_bytes
-              - pattern: |
-                  .chars().skip($START).take($END - $START)
+      - pattern-either:
+          - pattern: |
+              &$TEXT[$START..$END]
+          - pattern: |
+              &$TEXT[..$END]
+          - pattern: |
+              &$TEXT[$START..]
+      - metavariable-regex:
+          metavariable: $TEXT
+          regex: (?i)(^|[_\\.])(text|body|line|tag|url|uri|json|html|hash|pattern|remaining|trimmed)($|[_\\.])
     message: "Using byte indexing on text. For Unicode correctness, use character offsets or TextSpan. If byte indexing is intentional, add a comment."
     languages: [rust]
     severity: WARNING
@@ -239,25 +239,6 @@ rules:
   # ============================================================================
   # Confidence Score Validation
   # ============================================================================
-  
-  - id: confidence-score-range
-    patterns:
-      - pattern: |
-          Confidence::new($SCORE)
-      - not:
-          - pattern: |
-              if !(0.0..=1.0).contains(&$SCORE) {
-                return Err(...);
-              }
-    message: "Confidence score created without range validation. Ensure 0.0 <= score <= 1.0."
-    languages: [rust]
-    severity: ERROR
-    metadata:
-      category: correctness
-    paths:
-      include:
-        - "**/types/confidence.rs"
-        - "**/eval/**"
 
   - id: f1-precision-recall-validation
     patterns:

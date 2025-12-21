@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Changed
-- Workspace refactor: 5 crates (`anno-core`, `anno`, `anno-coalesce`, `anno-strata`, `anno-cli`)
+- Workspace refactor: 4 crates (`anno-core`, `anno`, `anno-coalesce`, `anno-strata`)
 - `PatternNER` → `RegexNER`
 
 ### Added

@@ -45,9 +45,13 @@
 //! }
 //! ```
 
-use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, RelationTriple};
+use crate::backends::inference::{
+    extract_relation_triples, ExtractionWithRelations, RelationExtractionConfig, RelationExtractor,
+    SemanticRegistry,
+};
 use crate::{Entity, EntityType, Model, Result};
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 /// TPLinker backend for joint entity-relation extraction.
 ///
@@ -89,79 +93,70 @@ impl TPLinker {
     fn extract_with_handshaking(
         &self,
         text: &str,
-        _entity_types: &[&str],
+        entity_types: &[&str],
         relation_types: &[&str],
+        threshold: f32,
     ) -> Result<ExtractionWithRelations> {
+        let threshold = if threshold > 0.0 {
+            threshold
+        } else {
+            // Preserve historical defaults if callers pass 0.0.
+            self.entity_threshold.max(self.relation_threshold)
+        };
+
         // Placeholder: Use HeuristicNER for entity extraction
         // This properly handles multi-word entity names
         let heuristic = crate::HeuristicNER::new();
         let mut entities = heuristic.extract_entities(text, None)?;
 
-        // Add provenance to indicate placeholder
+        // Respect the requested entity schema when possible.
+        // Note: HeuristicNER only produces a small fixed set of entity types; filtering is still
+        // useful to avoid surprising outputs when callers request a narrower schema.
+        if !entity_types.is_empty() {
+            let allowed: HashSet<EntityType> = entity_types
+                .iter()
+                .map(|s| EntityType::from_label(s))
+                .collect();
+            entities.retain(|e| allowed.contains(&e.entity_type));
+        }
+
+        // Apply threshold to entity confidences.
+        entities.retain(|e| e.confidence >= f64::from(threshold));
+
+        // Add provenance to indicate heuristic baseline (not a neural TPLinker).
         for entity in &mut entities {
             entity.provenance = Some(crate::Provenance {
                 source: Cow::Borrowed("tplinker"),
                 method: crate::ExtractionMethod::Heuristic,
                 pattern: None,
                 raw_confidence: Some(entity.confidence),
-                model_version: Some(Cow::Borrowed("placeholder")),
+                model_version: Some(Cow::Borrowed("heuristic")),
                 timestamp: None,
             });
         }
 
-        // Extract relations (placeholder: simple proximity-based)
-        // Performance: Pre-allocate relations vec with estimated capacity
-        let mut relations = Vec::with_capacity(entities.len().min(8));
-        for i in 0..entities.len() {
-            for j in (i + 1)..entities.len().min(i + 3) {
-                // Check for relation triggers between entities
-                let head = &entities[i];
-                let tail = &entities[j];
-
-                // Find text between entities (handle both orderings)
-                let (between_start, between_end) = if head.end <= tail.start {
-                    (head.end, tail.start)
-                } else if tail.end <= head.start {
-                    (tail.end, head.start)
-                } else {
-                    // Overlapping entities - skip
-                    continue;
-                };
-
-                // `Entity` offsets in anno are **character offsets**.
-                // Convert char offsets to byte offsets safely before slicing.
-                let char_len = text.chars().count();
-                let between_start = between_start.min(char_len);
-                let between_end = between_end.min(char_len);
-                let between_text = if between_start < between_end {
-                    crate::offset::TextSpan::from_chars(text, between_start, between_end)
-                        .extract(text)
-                } else {
-                    ""
-                };
-
-                // Simple relation detection (placeholder)
-                let between_lower = between_text.to_lowercase();
-                let relation_type = if between_lower.contains("founded") {
-                    "founded".to_string()
-                } else if between_lower.contains("works") || between_lower.contains("employee") {
-                    "works_for".to_string()
-                } else if relation_types.contains(&"related") {
-                    "related".to_string()
-                } else if !relation_types.is_empty() {
-                    relation_types[0].to_string()
-                } else {
-                    continue; // No relation detected
-                };
-
-                relations.push(RelationTriple {
-                    head_idx: i,
-                    tail_idx: j,
-                    relation_type,
-                    confidence: self.relation_threshold + 0.1, // Above threshold for placeholder
-                });
+        // Extract relations: heuristic trigger-based extraction implemented in `inference.rs`.
+        //
+        // This is deliberately conservative: we only emit relations when we match a known trigger
+        // pattern *and* the relation type is present in `relation_types`. We do not "guess" a
+        // relation type just because two entities are nearby.
+        let registry = {
+            let mut builder = SemanticRegistry::builder();
+            for rel in relation_types {
+                // Description is a best-effort placeholder; only the slug is used by the
+                // heuristic matcher today.
+                builder = builder.add_relation(rel, rel);
             }
-        }
+            builder.build_placeholder(1)
+        };
+
+        let rel_config = RelationExtractionConfig {
+            threshold,
+            max_span_distance: 120,
+            extract_triggers: false,
+        };
+
+        let relations = extract_relation_triples(&entities, text, &registry, &rel_config);
 
         Ok(ExtractionWithRelations {
             entities,
@@ -173,8 +168,12 @@ impl TPLinker {
 impl Model for TPLinker {
     fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
         // Extract entities only (no relations)
-        let result =
-            self.extract_with_handshaking(text, &["person", "organization", "location"], &[])?;
+        let result = self.extract_with_handshaking(
+            text,
+            &["person", "organization", "location"],
+            &[],
+            self.entity_threshold,
+        )?;
         Ok(result.entities)
     }
 
@@ -205,9 +204,9 @@ impl RelationExtractor for TPLinker {
         text: &str,
         entity_types: &[&str],
         relation_types: &[&str],
-        _threshold: f32,
+        threshold: f32,
     ) -> Result<ExtractionWithRelations> {
-        self.extract_with_handshaking(text, entity_types, relation_types)
+        self.extract_with_handshaking(text, entity_types, relation_types, threshold)
     }
 }
 
@@ -268,5 +267,35 @@ mod tests {
             )
             .unwrap();
         assert!(!result.entities.is_empty());
+        assert!(
+            result
+                .relations
+                .iter()
+                .any(|r| r.relation_type == "founded"),
+            "Expected a founded relation; got: {:?}",
+            result.relations
+        );
+    }
+
+    #[test]
+    fn test_tplinker_unicode_offsets_invariants() {
+        // Diverse scripts + emoji (multi-byte). Offsets must be character-based and valid.
+        let tplinker = TPLinker::new().unwrap();
+        let text = "Dr. 田中 met François Müller in 東京. 🎉";
+        let result = tplinker
+            .extract_with_relations(
+                text,
+                &["person", "location", "organization"],
+                &["works_for", "located_in", "founded"],
+                0.0,
+            )
+            .unwrap();
+
+        let char_len = text.chars().count();
+        for e in &result.entities {
+            assert!(e.start <= e.end, "invalid span ordering: {:?}", e);
+            assert!(e.end <= char_len, "span exceeds text length: {:?}", e);
+            assert!(!e.text.is_empty(), "entity text must not be empty: {:?}", e);
+        }
     }
 }

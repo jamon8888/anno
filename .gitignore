@@ -9,8 +9,14 @@ unified-static-analysis-report.md
 static-analysis-failures-summary.md
 repo-specific-analysis.md
 evaluation-pattern-analysis.md
-.opengrep-results.json
-.opengrep-custom-results.json
+opengrep-results.json
+opengrep-results.sarif
+opengrep-security-results.json
+opengrep-nlp-results.json
+opengrep-eval-results.json
+opengrep-anno-results.json
+opengrep-error-results.json
+opengrep-memory-results.json
 safety-report.json
 safety-report.md
 .geiger-tmp.json
@@ -72,6 +78,15 @@ hack/real_data/
 *.bak
 .cargo/
 mutants.out*/
+
+# Spot evaluation ephemeral state
+scripts/spot/config.env
+scripts/spot/fleet_id.txt
+scripts/spot/instance_ids.txt
+
+# Spot evaluation artifacts (raw results ignored, aggregated kept for baselines)
+reports/spot/result-*.txt
+reports/spot/result-*.json
 
 # Test binaries and artifacts
 test_*

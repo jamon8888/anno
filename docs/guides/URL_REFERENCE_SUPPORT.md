@@ -1,6 +1,6 @@
 # URL and Document Reference Support
 
-**Related**: See [design/DOCUMENT_INGESTION_DESIGN.md](design/DOCUMENT_INGESTION_DESIGN.md) for future design plans.
+**Related**: See [`docs/notes/design/pipeline/DOCUMENT_INGESTION_DESIGN.md`](../notes/design/pipeline/DOCUMENT_INGESTION_DESIGN.md) for design notes.
 
 ## Current State
 

@@ -9,11 +9,19 @@ echo ""
 
 ISSUES=0
 
+ENTITY_RS="anno-core/src/entity.rs"
+GROUNDED_RS="anno-core/src/grounded.rs"
+CONFIDENCE_RS="anno/src/types/confidence.rs"
+EVAL_TASK_RS="anno/src/eval/task_evaluator.rs"
+EVAL_DIR="anno/src/eval/"
+BACKENDS_DIR="anno/src/backends/"
+METRICS_RS="anno/src/eval/metrics.rs"
+
 # 1. Check for text offset validation
 echo "## Text Offset Validation"
 echo ""
-if rg -q "start.*end|Entity.*\{.*start" --type rust src/entity.rs src/grounded.rs 2>/dev/null; then
-    if ! rg -q "if.*start.*>.*end|assert.*start.*<=.*end" --type rust src/entity.rs src/grounded.rs 2>/dev/null; then
+if rg -q "start.*end|Entity.*\\{.*start" --type rust "$ENTITY_RS" "$GROUNDED_RS" 2>/dev/null; then
+    if ! rg -q "if.*start.*>.*end|assert.*start.*<=.*end" --type rust "$ENTITY_RS" "$GROUNDED_RS" 2>/dev/null; then
         echo "WARNING:  Potential missing offset validation in entity creation"
         ((ISSUES++))
     else
@@ -28,7 +36,7 @@ echo ""
 echo "## Confidence Score Validation"
 echo ""
 if rg -q "Confidence::new" --type rust 2>/dev/null; then
-    if ! rg -q "0\.0.*<=.*score.*<=.*1\.0|contains.*score" --type rust src/types/confidence.rs 2>/dev/null; then
+    if ! rg -q "0\\.0\\..*=1\\.0|\\(0\\.0\\.\\.=1\\.0\\)|\\.contains\\(&value\\)" --type rust "$CONFIDENCE_RS" 2>/dev/null; then
         echo "WARNING:  Potential missing confidence score range validation"
         ((ISSUES++))
     else
@@ -42,8 +50,8 @@ fi
 echo ""
 echo "## Variance Calculation (Bessel's Correction)"
 echo ""
-if rg -q "variance.*sum.*/.*len\(\)" --type rust src/eval/task_evaluator.rs 2>/dev/null; then
-    if rg -q "variance.*sum.*/.*\(.*len\(\)\s*-\s*1" --type rust src/eval/task_evaluator.rs 2>/dev/null; then
+if rg -q "variance.*sum.*/.*len\\(\\)" --type rust "$EVAL_TASK_RS" 2>/dev/null; then
+    if rg -q "variance.*sum.*/.*\\(.*len\\(\\)\\s*-\\s*1" --type rust "$EVAL_TASK_RS" 2>/dev/null; then
         echo "OK: Bessel's correction (n-1) found"
     else
         echo "WARNING:  Potential population variance (n) instead of sample variance (n-1)"
@@ -57,8 +65,8 @@ fi
 echo ""
 echo "## Model Download Error Handling"
 echo ""
-if rg -q "\.get\(.*\)\.map_err" --type rust src/backends/ 2>/dev/null; then
-    AUTH_HANDLING=$(rg -c "401|Unauthorized|authentication" --type rust src/backends/ 2>/dev/null || echo "0")
+if rg -q "\\.get\\(.*\\)\\.map_err" --type rust "$BACKENDS_DIR" 2>/dev/null; then
+    AUTH_HANDLING=$(rg -c "401|Unauthorized|authentication" --type rust "$BACKENDS_DIR" 2>/dev/null || echo "0")
     if [ "$AUTH_HANDLING" -lt 2 ]; then
         echo "WARNING:  Limited authentication error handling in model downloads"
         echo "   Consider adding 401/Unauthorized checks with helpful hints"
@@ -74,7 +82,7 @@ fi
 echo ""
 echo "## Backend Recreation in Loops"
 echo ""
-if rg -q "for.*in.*\{.*BackendFactory::create" --type rust src/eval/ 2>/dev/null; then
+if rg -q "for.*in.*\\{.*BackendFactory::create" --type rust "$EVAL_DIR" 2>/dev/null; then
     echo "WARNING:  Potential backend recreation in loops (performance issue)"
     ((ISSUES++))
 else
@@ -85,8 +93,8 @@ fi
 echo ""
 echo "## Division by Zero in Metrics"
 echo ""
-if rg -q "precision.*recall.*/|f1.*=.*2.*\*" --type rust src/eval/metrics.rs 2>/dev/null; then
-    if rg -q "if.*==.*0|if.*\+.*==.*0" --type rust src/eval/metrics.rs 2>/dev/null; then
+if rg -q "precision.*recall.*/|f1.*=.*2.*\\*" --type rust "$METRICS_RS" 2>/dev/null; then
+    if rg -q "if.*==.*0|if.*\\+.*==.*0" --type rust "$METRICS_RS" 2>/dev/null; then
         echo "OK: Division by zero checks found"
     else
         echo "WARNING:  Potential division by zero in metric calculations"
@@ -100,14 +108,7 @@ fi
 echo ""
 echo "## Unicode/Character Offset Handling"
 echo ""
-BYTE_INDEXING=$(rg -c "\[.*\.\.\..*\]" --type rust src/entity.rs src/eval/ 2>/dev/null | head -1 || echo "0")
-CHAR_OFFSETS=$(rg -c "\.chars\(\)|char_indices" --type rust src/entity.rs src/eval/ 2>/dev/null | head -1 || echo "0")
-if [ "$BYTE_INDEXING" -gt 10 ] && [ "$CHAR_OFFSETS" -lt 5 ]; then
-    echo "WARNING:  Potential byte indexing instead of character offsets for Unicode"
-    ((ISSUES++))
-else
-    echo "OK: Character offset handling appears correct"
-fi
+echo "INFO:  Run 'just ast-grep-unicode' to scan for Unicode-unsafe string slicing patterns."
 
 echo ""
 echo "=== Summary ==="

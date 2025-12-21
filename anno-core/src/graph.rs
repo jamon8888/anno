@@ -235,7 +235,7 @@ impl GraphDocument {
 
         // Build canonical mention map from entities with canonical_id
         // (CorefChain support will be added in anno crate)
-        let canonical_mentions: HashMap<u64, (&str, usize)> = HashMap::new();
+        let canonical_mentions: HashMap<crate::types::CanonicalId, (&str, usize)> = HashMap::new();
 
         // Track seen canonical IDs to avoid duplicate nodes
         let mut seen_nodes: HashMap<String, usize> = HashMap::new();

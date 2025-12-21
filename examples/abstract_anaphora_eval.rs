@@ -152,5 +152,5 @@ fn main() {
     println!("To further improve abstract anaphora resolution:");
     println!("  1. Enable GLiNER for neural event extraction:");
     println!("     EventExtractor::with_gliner(\"urchade/gliner_small-v2.1\")");
-    println!("  2. See docs/research/ABSTRACT_ANAPHORA_RESEARCH.md for research directions.");
+    println!("  2. See docs/notes/research/systems/ABSTRACT_ANAPHORA_RESEARCH.md for research directions.");
 }

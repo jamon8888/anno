@@ -2751,10 +2751,12 @@ impl CoreferenceResolver for MentionRankingCoref {
             .map(|e| {
                 let mut entity = e.clone();
                 if let Some(&cluster_id) = canonical_map.get(&(e.start, e.end)) {
-                    entity.canonical_id = Some(cluster_id as u64);
+                    entity.canonical_id =
+                        Some(anno_core::types::CanonicalId::new(cluster_id as u64));
                 } else {
                     // Assign unique ID to singleton
-                    entity.canonical_id = Some(next_singleton_id as u64);
+                    entity.canonical_id =
+                        Some(anno_core::types::CanonicalId::new(next_singleton_id as u64));
                     next_singleton_id += 1;
                 }
                 entity

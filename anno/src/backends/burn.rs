@@ -63,7 +63,6 @@
 //! the conversion automatically.
 
 use crate::{Entity, EntityType, Model, Result};
-use std::borrow::Cow;
 
 // =============================================================================
 // Backend Configuration
@@ -183,8 +182,11 @@ const CONLL_LABELS: &[&str] = &[
 /// Burn-powered NER model.
 ///
 /// This provides token classification NER using the Burn ML framework.
-/// When the `burn` feature is enabled, it uses real ML inference.
-/// Otherwise, it falls back to heuristic extraction.
+///
+/// Current status:
+/// - The **Burn integration is scaffolding only** (model import + inference are not wired up yet).
+/// - Calls to [`Model::extract_entities`] return a clear error instead of silently falling back to
+///   heuristics.
 ///
 /// # Backends
 ///
@@ -232,8 +234,10 @@ impl BurnNER {
     /// * `model_id` - HuggingFace model ID (e.g., "dslim/bert-base-NER")
     ///
     /// # Note
-    /// Currently falls back to heuristic NER. Full Burn model loading
-    /// requires converting HuggingFace models to Burn format.
+    /// This only records the model id in the config today.
+    ///
+    /// Burn model import + inference is not wired up yet; attempting to run inference will return
+    /// an explicit error (no silent heuristic fallback).
     pub fn from_pretrained(model_id: &str) -> Result<Self> {
         #[cfg(feature = "burn")]
         {
@@ -251,7 +255,7 @@ impl BurnNER {
             // - burn-import: https://github.com/tracel-ai/burn/tree/main/crates/burn-import
             // - Burn examples: https://github.com/tracel-ai/burn/tree/main/examples
             //
-            // Currently falls back to heuristic NER.
+            // NOTE: We do not silently fall back to heuristics here anymore.
         }
 
         Ok(Self {
@@ -282,54 +286,13 @@ impl BurnNER {
     /// Extract entities using Burn inference.
     #[cfg(feature = "burn")]
     fn extract_with_burn(&self, text: &str) -> Result<Vec<Entity>> {
-        use burn::tensor::Tensor;
-        use burn_ndarray::{NdArray, NdArrayDevice};
-
-        // For now, demonstrate Burn tensor operations
-        // Full implementation requires:
-        // 1. Tokenization
-        // 2. Encoder forward pass
-        // 3. Classification head
-        // 4. BIO decoding
-
-        let _device = NdArrayDevice::default();
-
-        // Placeholder: Create a simple tensor to prove Burn is working
-        let _dummy: Tensor<NdArray<f32>, 2> = Tensor::zeros([1, 768], &NdArrayDevice::default());
-
-        // FUTURE WORK: Implement full BERT forward pass with Burn
-        //
-        // Implementation steps:
-        // 1. Tokenize input text using HF tokenizer (get input_ids, attention_mask)
-        // 2. Create input tensors from token IDs
-        // 3. Run BERT encoder forward pass:
-        //    - Embedding layer (word + position + token_type)
-        //    - Transformer encoder stack (12 layers for base, 24 for large)
-        //    - Each layer: self-attention -> add&norm -> FFN -> add&norm
-        // 4. Apply classification head to each token's hidden state
-        // 5. Decode BIO tags to entity spans
-        //
-        // For now, fall back to heuristic NER (zero-dependency baseline)
-        self.extract_heuristic(text)
-    }
-
-    /// Heuristic entity extraction fallback.
-    fn extract_heuristic(&self, text: &str) -> Result<Vec<Entity>> {
-        let heuristic = crate::HeuristicNER::new();
-        let mut entities = heuristic.extract_entities(text, None)?;
-        // Make it explicit that these results are attributed to BurnNER's current
-        // (placeholder) behavior rather than the raw heuristic backend.
-        for e in &mut entities {
-            e.provenance = Some(crate::Provenance {
-                source: Cow::Borrowed("burn_ner"),
-                method: crate::ExtractionMethod::Heuristic,
-                pattern: None,
-                raw_confidence: Some(e.confidence),
-                model_version: Some(Cow::Borrowed("placeholder")),
-                timestamp: None,
-            });
-        }
-        Ok(entities)
+        let _ = text;
+        Err(crate::Error::FeatureNotAvailable(
+            "BurnNER inference is not implemented yet. \
+Use `BertNEROnnx` (`--features onnx`) or `GLiNERCandle` (`--features candle`) for ML inference. \
+If you want a zero-dependency baseline, use `HeuristicNER`/`StackedNER`."
+                .to_string(),
+        ))
     }
 
     /// Map label string to EntityType.
@@ -354,22 +317,20 @@ impl BurnNER {
 
 impl Model for BurnNER {
     fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
-        if text.is_empty() {
+        if text.trim().is_empty() {
             return Ok(vec![]);
         }
 
-        // NOTE: This remains a minimal implementation:
-        // - under `burn`, we still route through a tiny Burn tensor op and then use heuristic extraction.
-        // - this is explicit in provenance and description, but it is runnable.
-        #[cfg(feature = "burn")]
-        {
-            self.extract_with_burn(text)
+        if self.config.model_id.is_none() {
+            return Err(crate::Error::ModelInit(
+                "BurnNER has no model configured. Call `BurnNER::from_pretrained(...)` or \
+`BurnNER::with_config(BurnConfig::new().with_model(...))`. Note: model import/inference is \
+not implemented yet; see the error from `extract_entities` once a model is configured."
+                    .to_string(),
+            ));
         }
 
-        #[cfg(not(feature = "burn"))]
-        {
-            self.extract_heuristic(text)
-        }
+        self.extract_with_burn(text)
     }
 
     fn supported_types(&self) -> Vec<EntityType> {
@@ -381,7 +342,7 @@ impl Model for BurnNER {
     }
 
     fn is_available(&self) -> bool {
-        true
+        false
     }
 
     fn name(&self) -> &'static str {
@@ -389,7 +350,7 @@ impl Model for BurnNER {
     }
 
     fn description(&self) -> &'static str {
-        "BurnNER (minimal): Burn scaffolding + heuristic extraction (full Burn model import pending)"
+        "BurnNER (planned): Burn scaffolding; model import + inference not implemented yet"
     }
 }
 
@@ -473,7 +434,7 @@ mod tests {
     fn test_burn_ner_creation() {
         let ner = BurnNER::new().unwrap();
         assert_eq!(ner.name(), "burn_ner");
-        assert!(ner.is_available());
+        assert!(!ner.is_available());
         assert_eq!(ner.backend(), BurnBackendType::NdArray);
     }
 
@@ -485,12 +446,39 @@ mod tests {
     }
 
     #[test]
-    fn test_burn_ner_heuristic_fallback() {
+    fn test_burn_ner_requires_model_configuration() {
         let ner = BurnNER::new().unwrap();
-        // Should not panic and should return *some* entities via heuristic fallback.
-        let _entities = ner
+        let err = ner
             .extract_entities("Dr. John Smith works at Google in California", None)
-            .unwrap();
+            .unwrap_err();
+        assert!(
+            matches!(err, crate::Error::ModelInit(_)),
+            "expected ModelInit error, got: {:?}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_burn_ner_multilingual_error_is_unicode_safe() {
+        // Ensure we don't panic on multi-byte text even when returning an error.
+        let ner = BurnNER::new().unwrap();
+        let err = ner
+            .extract_entities("習近平在北京會見了普京。", None)
+            .unwrap_err();
+        assert!(matches!(err, crate::Error::ModelInit(_)));
+    }
+
+    #[test]
+    fn test_burn_ner_configured_model_still_errors_clearly() {
+        let ner = BurnNER::from_pretrained("dslim/bert-base-NER").unwrap();
+        let err = ner
+            .extract_entities("Marie Curie won the Nobel Prize in Paris.", None)
+            .unwrap_err();
+        assert!(
+            matches!(err, crate::Error::FeatureNotAvailable(_)),
+            "expected FeatureNotAvailable error, got: {:?}",
+            err
+        );
     }
 
     #[test]
