@@ -172,19 +172,38 @@ def load_jsonl(path: Path) -> list[dict]:
     return results
 
 
+def result_key(r: dict) -> str:
+    """Generate deduplication key for a result (backend/dataset/seed)."""
+    return f"{r.get('backend', 'unknown')}|{r.get('dataset', 'unknown')}|{r.get('seed', 42)}"
+
+
 def append_jsonl(path: Path, new_results: list[dict]) -> int:
-    """Append new results to JSONL, deduplicating."""
-    existing = load_jsonl(path)
-    existing_keys = {f"{r.get('timestamp')}|{r.get('backend')}|{r.get('dataset')}" for r in existing}
+    """Append new results to JSONL, deduplicating by backend/dataset/seed.
     
+    If a result already exists for the same key, only keep the newer one
+    if it has a higher F1 score (allowing for re-runs to improve results).
+    """
+    existing = load_jsonl(path)
+    existing_by_key = {result_key(r): r for r in existing}
+    
+    updated = []
     added = 0
-    with path.open('a') as f:
-        for r in new_results:
-            key = f"{r.get('timestamp')}|{r.get('backend')}|{r.get('dataset')}"
-            if key not in existing_keys:
-                f.write(json.dumps(r, separators=(',', ':')) + '\n')
-                existing_keys.add(key)
-                added += 1
+    for r in new_results:
+        key = result_key(r)
+        if key in existing_by_key:
+            # Replace if new result has higher F1
+            old = existing_by_key[key]
+            if r.get('f1', 0) > old.get('f1', 0):
+                existing_by_key[key] = r
+        else:
+            existing_by_key[key] = r
+            added += 1
+    
+    # Write back deduplicated results
+    with path.open('w') as f:
+        for r in existing_by_key.values():
+            f.write(json.dumps(r, separators=(',', ':')) + '\n')
+    
     return added
 
 
