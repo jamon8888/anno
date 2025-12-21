@@ -103,15 +103,18 @@ clone_and_build() {
     
     cd "$ANNO_DIR"
     
+    # Set HF_HOME for model loading (synced by userdata)
+    export HF_HOME="${CACHE_MOUNT}/models"
+    
     # Check if already built
     if [[ -x "$CARGO_TARGET_DIR/release/anno" ]]; then
         log_info "Using cached build at $CARGO_TARGET_DIR/release/anno"
         return 0
     fi
     
-    # Build release with eval features (skip onnx/candle for faster builds)
-    log_info "Building anno (this may take 2-3 minutes)..."
-    cargo build --release --bin anno --features "cli,eval-advanced" 2>&1 | tail -5
+    # Build release with ONNX support for ML backends
+    log_info "Building anno with ONNX (this may take 4-5 minutes)..."
+    cargo build --release --bin anno --features "cli,eval-advanced,onnx" 2>&1 | tail -5
     
     log_info "Build complete: $($CARGO_TARGET_DIR/release/anno --version 2>/dev/null || echo 'built')"
 }
@@ -164,6 +167,9 @@ process_task() {
     # Enable S3 fallback for dataset loading
     export ANNO_S3_CACHE=1
     export ANNO_S3_BUCKET="$BUCKET"
+    
+    # Set HF_HOME for ONNX model loading
+    export HF_HOME="${CACHE_MOUNT}/models"
     
     # Run evaluation (note: plural flags --backends/--datasets)
     local exit_code=0
