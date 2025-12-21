@@ -799,9 +799,14 @@ spot-exec INSTANCE CMD:
 spot-results OUTPUT="reports/spot-eval-results.json":
     @uv run scripts/spot/orchestrate.py results --output "{{OUTPUT}}"
 
-# Aggregate results and export badness history for CI
+# Download results from S3 and aggregate to JSONL + HTML dashboard
 spot-aggregate:
-    @uv run scripts/spot/aggregate.py
+    @uv run scripts/spot/aggregate.py --download
+
+# Regenerate HTML dashboard from existing JSONL (no download)
+spot-dashboard:
+    @uv run scripts/spot/aggregate.py --output reports/eval-results.jsonl --html reports/eval-dashboard.html
+    @echo "Dashboard: reports/eval-dashboard.html"
 
 # Cancel fleet and clean up
 spot-teardown:
