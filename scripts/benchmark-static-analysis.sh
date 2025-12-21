@@ -37,13 +37,13 @@ echo "-----|--------|---------" >> "$RESULTS_FILE"
 benchmark_tool "cargo-deny" "cargo deny check"
 benchmark_tool "cargo-machete" "cargo machete"
 benchmark_tool "cargo-geiger" "cargo geiger --quiet"
-benchmark_tool "opengrep" "opengrep scan --config auto --quiet anno/ anno-core/ anno-coalesce/ anno-strata/ anno-cli/"
+benchmark_tool "opengrep" "opengrep scan --config auto --quiet anno/ anno-core/ anno-coalesce/ anno-strata/"
 
 # Clippy benchmark (baseline)
 echo -n "Benchmarking clippy (baseline)... "
 if command -v cargo &> /dev/null; then
     start_time=$(date +%s.%N)
-    cargo clippy --all-targets --quiet 2>&1 | head -5 > /dev/null || true
+    cargo clippy --all-targets --quiet > /dev/null 2>&1 || true
     end_time=$(date +%s.%N)
     duration=$(echo "$end_time - $start_time" | bc)
     printf "OK: %.2fs\n" "$duration" | tee -a "$RESULTS_FILE"

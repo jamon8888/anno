@@ -315,10 +315,10 @@ fn test_organization_pronoun() {
 fn test_already_resolved_entities() {
     // Entities that already have canonical_id should keep it
     let mut entity1 = Entity::new("John", EntityType::Person, 0, 4, 0.9);
-    entity1.canonical_id = Some(999);
+    entity1.canonical_id = Some(anno_core::types::CanonicalId::new(999));
 
     let mut entity2 = Entity::new("John", EntityType::Person, 20, 24, 0.9);
-    entity2.canonical_id = Some(999);
+    entity2.canonical_id = Some(anno_core::types::CanonicalId::new(999));
 
     let entity3 = Entity::new("John", EntityType::Person, 40, 44, 0.9);
 
@@ -328,8 +328,14 @@ fn test_already_resolved_entities() {
     let resolved = resolver.resolve(&entities);
 
     // First two should keep their IDs, third gets a new one (but matches the first two by name)
-    assert_eq!(resolved[0].canonical_id, Some(999));
-    assert_eq!(resolved[1].canonical_id, Some(999));
+    assert_eq!(
+        resolved[0].canonical_id,
+        Some(anno_core::types::CanonicalId::new(999))
+    );
+    assert_eq!(
+        resolved[1].canonical_id,
+        Some(anno_core::types::CanonicalId::new(999))
+    );
     // Third entity should match because of exact name match
     // But it won't get 999 because we don't look at existing IDs in canonical_to_cluster
 }

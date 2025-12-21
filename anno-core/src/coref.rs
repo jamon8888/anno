@@ -209,7 +209,7 @@ pub struct CorefChain {
     /// Mentions in document order (sorted by start position).
     pub mentions: Vec<Mention>,
     /// Cluster ID from the source data, if any.
-    pub cluster_id: Option<u64>,
+    pub cluster_id: Option<crate::types::CanonicalId>,
     /// Entity type shared by all mentions (e.g., "PERSON").
     pub entity_type: Option<String>,
 }
@@ -237,11 +237,14 @@ impl CorefChain {
 
     /// Build a chain with an explicit cluster ID.
     #[must_use]
-    pub fn with_id(mut mentions: Vec<Mention>, cluster_id: u64) -> Self {
+    pub fn with_id(
+        mut mentions: Vec<Mention>,
+        cluster_id: impl Into<crate::types::CanonicalId>,
+    ) -> Self {
         mentions.sort_by_key(|m| (m.start, m.end));
         Self {
             mentions,
-            cluster_id: Some(cluster_id),
+            cluster_id: Some(cluster_id.into()),
             entity_type: None,
         }
     }
@@ -358,7 +361,7 @@ impl CorefChain {
 
     /// Get the canonical ID for this chain (cluster_id if set).
     #[must_use]
-    pub fn canonical_id(&self) -> Option<u64> {
+    pub fn canonical_id(&self) -> Option<crate::types::CanonicalId> {
         self.cluster_id
     }
 }
@@ -510,7 +513,10 @@ pub fn entities_to_chains(entities: &[Entity]) -> Vec<CorefChain> {
     for entity in entities {
         let mention = Mention::from(entity);
         if let Some(canonical_id) = entity.canonical_id {
-            clusters.entry(canonical_id).or_default().push(mention);
+            clusters
+                .entry(canonical_id.get())
+                .or_default()
+                .push(mention);
         } else {
             singletons.push(mention);
         }

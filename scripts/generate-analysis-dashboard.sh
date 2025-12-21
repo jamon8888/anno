@@ -86,7 +86,7 @@ cat > "$DASHBOARD_FILE" <<'EOF'
 </head>
 <body>
     <div class="header">
-        <h1>🔍 Static Analysis Dashboard</h1>
+        <h1>Static Analysis Dashboard</h1>
         <p>Generated: TIMESTAMP_PLACEHOLDER</p>
     </div>
 EOF
@@ -96,6 +96,10 @@ UNSAFE_COUNT=0
 FINDINGS_COUNT=0
 UNUSED_DEPS=0
 TOOLS_INSTALLED=0
+UNICODE_FINDINGS=0
+METAL_FINDINGS=0
+DOCS_AUDIT_STATUS="INFO: Not Run"
+DOCS_AUDIT_CLASS="status-warn"
 
 if command -v cargo-geiger &> /dev/null; then
     cargo geiger --output-format json > .geiger-tmp.json 2>/dev/null || echo "{}" > .geiger-tmp.json
@@ -107,23 +111,50 @@ if command -v cargo-geiger &> /dev/null; then
 fi
 
 if command -v opengrep &> /dev/null; then
-    opengrep scan --config auto --json anno/ anno-core/ anno-coalesce/ anno-strata/ anno-cli/ 2>/dev/null | jq -r '.results | length' > .opengrep-tmp.txt 2>/dev/null || echo "0" > .opengrep-tmp.txt
+    opengrep scan --config auto --json anno/ anno-core/ anno-coalesce/ anno-strata/ 2>/dev/null | jq -r '.results | length' > .opengrep-tmp.txt 2>/dev/null || echo "0" > .opengrep-tmp.txt
     FINDINGS_COUNT=$(cat .opengrep-tmp.txt)
     ((TOOLS_INSTALLED++))
     rm -f .opengrep-tmp.txt
 fi
 
+if command -v ast-grep &> /dev/null && command -v jq &> /dev/null; then
+    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --json=compact anno/src/ anno-core/src/ anno-coalesce/src/ anno-strata/src/ > .ast-grep-unicode-tmp.json 2>/dev/null || echo "[]" > .ast-grep-unicode-tmp.json
+    UNICODE_FINDINGS=$(jq -r 'length' .ast-grep-unicode-tmp.json 2>/dev/null || echo "0")
+    rm -f .ast-grep-unicode-tmp.json
+
+    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --json=compact anno/src/ > .ast-grep-metal-tmp.json 2>/dev/null || echo "[]" > .ast-grep-metal-tmp.json
+    METAL_FINDINGS=$(jq -r 'length' .ast-grep-metal-tmp.json 2>/dev/null || echo "0")
+    rm -f .ast-grep-metal-tmp.json
+fi
+
 if command -v cargo-machete &> /dev/null; then
-    cargo machete 2>&1 | grep -c "unused" > .machete-tmp.txt 2>/dev/null || echo "0" > .machete-tmp.txt
-    UNUSED_DEPS=$(cat .machete-tmp.txt)
+    cargo machete > .machete-output.txt 2>&1 || true
+    if command -v rg &> /dev/null; then
+        UNUSED_DEPS=$(rg -c "unused" .machete-output.txt 2>/dev/null || echo "0")
+    else
+        UNUSED_DEPS=$(grep -c "unused" .machete-output.txt 2>/dev/null || echo "0")
+    fi
     ((TOOLS_INSTALLED++))
-    rm -f .machete-tmp.txt
+    rm -f .machete-output.txt
+fi
+
+# Docs hygiene
+if command -v python3 &> /dev/null && [ -f "scripts/docs_audit.py" ]; then
+    if python3 scripts/docs_audit.py > .docs-audit-output.txt 2>&1; then
+        DOCS_AUDIT_STATUS="OK"
+        DOCS_AUDIT_CLASS="status-ok"
+    else
+        rc=$?
+        DOCS_AUDIT_STATUS="FAIL (exit ${rc})"
+        DOCS_AUDIT_CLASS="status-error"
+    fi
+    rm -f .docs-audit-output.txt
 fi
 
 # Generate dashboard content
 cat >> "$DASHBOARD_FILE" <<EOF
     <div class="card">
-        <h2>📊 Overview</h2>
+        <h2>Overview</h2>
         <div class="metric">
             <div class="metric-value">$TOOLS_INSTALLED</div>
             <div class="metric-label">Tools Installed</div>
@@ -140,6 +171,23 @@ cat >> "$DASHBOARD_FILE" <<EOF
             <div class="metric-value">$UNUSED_DEPS</div>
             <div class="metric-label">Unused Dependencies</div>
         </div>
+        <div class="metric">
+            <div class="metric-value">$UNICODE_FINDINGS</div>
+            <div class="metric-label">Unicode Slice Findings (ast-grep)</div>
+        </div>
+        <div class="metric">
+            <div class="metric-value">$METAL_FINDINGS</div>
+            <div class="metric-label">Metal Contiguity Hints (ast-grep)</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Docs Hygiene</h2>
+        <p class="$DOCS_AUDIT_CLASS">$DOCS_AUDIT_STATUS</p>
+        <pre>
+# Audit docs (links, anchors, stale paths)
+just docs-audit
+        </pre>
     </div>
 
     <div class="card">
@@ -173,13 +221,16 @@ cat >> "$DASHBOARD_FILE" <<EOF
     </div>
 
     <div class="card">
-        <h2>📝 Quick Actions</h2>
+        <h2>Quick Actions</h2>
         <pre>
 # Run all static analysis
 just static-analysis
 
 # Generate safety report
 just safety-report-full
+
+# Docs hygiene
+just docs-audit
 
 # Validate setup
 just validate-setup

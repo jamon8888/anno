@@ -874,31 +874,39 @@ fn test_discontinuous_spans() {
     let text = "severe pain in the abdomen";
 
     // Create entity with discontinuous span: "severe" (0-6) + "pain" (12-16)
-    // Note: DiscontinuousSpan uses byte offsets, not character offsets
-    let severe_byte_start = 0;
-    let severe_byte_end = "severe".len();
+    // Note: DiscontinuousSpan uses CHARACTER offsets (Unicode scalar values).
+    let severe_start = 0;
+    let severe_end = "severe".chars().count();
+
+    // `find()` returns a byte offset; convert to char offsets.
+    let converter = anno::offset::SpanConverter::new(text);
     let pain_byte_start = text.find("pain").unwrap();
     let pain_byte_end = pain_byte_start + "pain".len();
+    let pain_start = converter.byte_to_char(pain_byte_start);
+    let pain_end = converter.byte_to_char(pain_byte_end);
 
     // Extract the actual text from discontinuous spans
-    let extracted_text = format!(
-        "{} {}",
-        &text[severe_byte_start..severe_byte_end],
-        &text[pain_byte_start..pain_byte_end]
-    );
+    let severe_text: String = text
+        .chars()
+        .skip(severe_start)
+        .take(severe_end - severe_start)
+        .collect();
+    let pain_text: String = text
+        .chars()
+        .skip(pain_start)
+        .take(pain_end - pain_start)
+        .collect();
+    let extracted_text = format!("{} {}", severe_text, pain_text);
 
     let mut entity = Entity::new(
         &extracted_text,
         EntityType::Other("MISC".to_string()),
         0,
-        text.len(),
+        text.chars().count(),
         0.9,
     );
 
-    let disc_span = DiscontinuousSpan::new(vec![
-        severe_byte_start..severe_byte_end,
-        pain_byte_start..pain_byte_end,
-    ]);
+    let disc_span = DiscontinuousSpan::new(vec![severe_start..severe_end, pain_start..pain_end]);
     entity.set_discontinuous_span(disc_span);
 
     // Extract using the discontinuous span's extract_text method
@@ -1292,13 +1300,26 @@ fn test_entity_other_type() {
 // =============================================================================
 
 #[test]
+fn test_stacked_builder_requires_at_least_one_layer() {
+    let result = std::panic::catch_unwind(|| {
+        let _ = StackedNER::builder().build();
+    });
+    assert!(
+        result.is_err(),
+        "Empty StackedNER builder should panic (empty stack is invalid)"
+    );
+}
+
+#[test]
 fn test_stacked_priority_strategy() {
     // Create two models that will produce overlapping entities
-    let text = "New York City";
+    let text = "Apple Inc. announced on 2024-01-15.";
 
-    // RegexNER might find "New York" (if it has a pattern)
-    // HeuristicNER might find "New York City"
+    // RegexNER finds structured entities (date)
+    // HeuristicNER finds named entities (org)
     let stacked = StackedNER::builder()
+        .layer(RegexNER::new())
+        .layer(HeuristicNER::new())
         .strategy(ConflictStrategy::Priority)
         .build();
 
@@ -1315,8 +1336,10 @@ fn test_stacked_priority_strategy() {
 
 #[test]
 fn test_stacked_longest_span_strategy() {
-    let text = "New York City is large";
+    let text = "Apple Inc. announced on Jan 15, 2024.";
     let stacked = StackedNER::builder()
+        .layer(RegexNER::new())
+        .layer(HeuristicNER::new())
         .strategy(ConflictStrategy::LongestSpan)
         .build();
 
@@ -1328,23 +1351,26 @@ fn test_stacked_longest_span_strategy() {
             let e1 = &entities[i];
             let e2 = &entities[j];
             let overlap = !(e1.end <= e2.start || e2.end <= e1.start);
-            if overlap {
-                // If overlapping, longer should have won
-                let len1 = e1.end - e1.start;
-                let len2 = e2.end - e2.start;
-                assert_eq!(
-                    len1, len2,
-                    "Overlapping entities should have same length (longest won)"
-                );
-            }
+            assert!(
+                !overlap,
+                "LongestSpan should resolve overlaps; found overlap between '{}' ({}, {}) and '{}' ({}, {})",
+                e1.text,
+                e1.start,
+                e1.end,
+                e2.text,
+                e2.start,
+                e2.end
+            );
         }
     }
 }
 
 #[test]
 fn test_stacked_union_strategy() {
-    let text = "John works at Apple";
+    let text = "John works at Apple on 2024-01-15.";
     let stacked = StackedNER::builder()
+        .layer(RegexNER::new())
+        .layer(HeuristicNER::new())
         .strategy(ConflictStrategy::Union)
         .build();
 
@@ -1379,7 +1405,7 @@ fn test_entity_kb_linking() {
     let text = "Apple";
     let mut entity = Entity::new("Apple", EntityType::Organization, 0, 5, 0.9);
     entity.kb_id = Some("Q312".to_string());
-    entity.canonical_id = Some(42);
+    entity.canonical_id = Some(anno_core::types::CanonicalId::new(42));
 
     assert!(entity.kb_id.is_some());
     assert!(entity.canonical_id.is_some());
@@ -2048,7 +2074,10 @@ fn test_entity_builder_chaining() {
     assert_eq!(entity.start, 0);
     assert_eq!(entity.end, 10);
     assert_eq!(entity.confidence, 0.95);
-    assert_eq!(entity.canonical_id, Some(42));
+    assert_eq!(
+        entity.canonical_id,
+        Some(anno_core::types::CanonicalId::new(42))
+    );
     assert_eq!(entity.viewport, Some(EntityViewport::Academic));
 
     let issues = entity.validate(text);

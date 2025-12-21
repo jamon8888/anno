@@ -4,10 +4,18 @@
 id: byte-slice-on-string
 language: rust
 rule:
-  pattern: "&$TEXT[$START..$END]"
+  pattern: "&$TEXT[$RANGE]"
+constraints:
+  TEXT:
+    # Heuristic: avoid flagging slices on generic arrays/slices; focus on likely text strings.
+    # Note: this matches substrings, so `text_lower`, `base_text`, `plain_text` all count.
+    regex: (?i)(^|[_\\.])(text|body|line|tag|url|uri|json|html|hash|pattern|remaining|trimmed)($|[_\\.])
+  RANGE:
+    # Ensure this is a range slice, not an index expression (i.e. requires `..`).
+    regex: "\\.\\."
 message: |
-  Byte slicing on text string may panic on multi-byte characters.
-  Use chars().skip().take() or validate boundaries.
+  Byte slicing on a UTF-8 string may panic on multi-byte characters.
+  Use char-safe extraction (chars().skip().take()) or convert byte offsets to char offsets first.
   
   Safe alternative:
     let span: String = text.chars().skip(start).take(end - start).collect();
@@ -16,7 +24,10 @@ severity: warning
 id: len-for-character-count
 language: rust
 rule:
-  pattern: $TEXT.len()
+  pattern: let $VAR = $TEXT.len()
+constraints:
+  VAR:
+    regex: (?i)(^|_)char(s)?(_|$)
 message: |
   .len() returns byte count, not character count.
   For character count, use .chars().count().
@@ -27,7 +38,12 @@ severity: hint
 id: unsafe-string-index
 language: rust
 rule:
-  pattern: $TEXT.get($START..$END)
+  pattern: $TEXT.get($RANGE)
+constraints:
+  TEXT:
+    regex: (?i)(^|[_\\.])(text|body|line|tag|url|uri|json|html|hash|pattern|remaining|trimmed)($|[_\\.])
+  RANGE:
+    regex: "\\.\\."
 message: |
   String indexing with get() uses byte offsets.
   For Unicode-safe extraction, use chars().skip().take().

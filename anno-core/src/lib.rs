@@ -67,7 +67,8 @@
 //! | [`calibration`] | Confidence score calibration |
 //! | [`historical`] | Ancient language provenance (BCE dates, epigraphy) |
 //! | [`provenance`] | Document origin tracking |
-//! | [`types`] | `Gender`, `MentionType`, `PhiFeatures`, etc. |
+//! | [`types`] | `Gender`, `MentionType`, `PhiFeatures`, `TypeLabel` |
+//! | [`provisional`] | Experimental types (`BoxEmbedding`) |
 //!
 //! ## Design Philosophy
 //!
@@ -86,6 +87,7 @@ pub mod grounded;
 pub mod historical;
 pub mod ontology;
 pub mod provenance;
+pub mod provisional;
 pub mod types;
 
 // Re-exports for convenience
@@ -115,5 +117,5 @@ pub use coref::{entities_to_chains, CorefChain, CorefDocument, CoreferenceResolv
 // Other modules accessible via anno_core::module_name
 pub use types::{
     DatePrecision, Gender, HistoricalDate, MentionType, MetricStats, Number, Person, PhiFeatures,
-    TemporalValidity,
+    TemporalValidity, TypeLabel,
 };

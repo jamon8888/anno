@@ -764,7 +764,7 @@ fn test_cluster_to_entity_canonical_id() {
     if canonical_ids.len() >= 2 {
         // IDs should be reasonable cluster indices
         assert!(
-            canonical_ids.iter().all(|&id| id < 1000),
+            canonical_ids.iter().all(|&id| id.get() < 1000),
             "IDs should be reasonable"
         );
     }

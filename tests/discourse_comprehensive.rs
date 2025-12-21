@@ -170,7 +170,7 @@ fn test_discourse_segment_reference() {
     // Note: Current implementation may return Event type because it finds
     // an event trigger in the antecedent span. True Situation inference
     // would require recognizing the combination of multiple events.
-    // This is a known limitation - see docs/research/ABSTRACT_ANAPHORA_RESEARCH.md
+    // This is a known limitation - see docs/notes/research/systems/ABSTRACT_ANAPHORA_RESEARCH.md
 }
 
 #[test]

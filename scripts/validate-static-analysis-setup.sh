@@ -63,6 +63,7 @@ check_tool "cargo-geiger" "cargo install cargo-geiger" false
 check_tool "cargo-nextest" "cargo install cargo-nextest" false
 check_tool "cargo-llvm-cov" "cargo install cargo-llvm-cov" false
 check_tool "opengrep" "curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash" false
+check_tool "ast-grep" "brew install ast-grep (macOS) or see https://ast-grep.github.io/" false
 
 echo ""
 echo "## Advanced Tools"
@@ -73,7 +74,13 @@ echo ""
 echo "## Configuration Files"
 check_file "deny.toml" false
 check_file ".opengrep/rules/rust-security.yaml" false
+check_file ".opengrep/rules/rust-error-handling.yaml" false
+check_file ".opengrep/rules/rust-evaluation-framework.yaml" false
+check_file ".opengrep/rules/rust-memory-patterns.yaml" false
+check_file ".opengrep/rules/rust-nlp-ml-patterns.yaml" false
 check_file ".opengrep/rules/rust-anno-specific.yaml" false
+check_file ".opengrep/rules/rust-unicode-offsets.yaml" false
+check_file ".opengrep/rules/rust-candle-metal.yaml" false
 check_file ".pre-commit-config.yaml" false
 
 echo ""

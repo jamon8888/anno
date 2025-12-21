@@ -15,6 +15,14 @@ jobs:
   # ==========================================================================
   # Quick checks (fast feedback) - runs in parallel
   # ==========================================================================
+  docs-audit:
+    name: Docs audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docs hygiene checks (fast, offline)
+        run: python3 scripts/docs_audit.py
+
   check:
     name: Check
     runs-on: ubuntu-latest

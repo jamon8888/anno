@@ -11,23 +11,23 @@ fn main() {
     let mut nadella = Entity::new("Satya Nadella", EntityType::Person, 0, 13, 0.95);
     nadella.valid_from = Some(Utc.with_ymd_and_hms(2014, 2, 4, 0, 0, 0).unwrap());
     nadella.viewport = Some(EntityViewport::Business);
-    nadella.canonical_id = Some(1);
+    nadella.canonical_id = Some(anno_core::types::CanonicalId::new(1));
 
     let mut ballmer = Entity::new("Steve Ballmer", EntityType::Person, 50, 63, 0.92);
     ballmer.valid_from = Some(Utc.with_ymd_and_hms(2000, 1, 13, 0, 0, 0).unwrap());
     ballmer.valid_until = Some(Utc.with_ymd_and_hms(2014, 2, 4, 0, 0, 0).unwrap());
     ballmer.viewport = Some(EntityViewport::Historical);
-    ballmer.canonical_id = Some(2);
+    ballmer.canonical_id = Some(anno_core::types::CanonicalId::new(2));
 
     let mut gates = Entity::new("Bill Gates", EntityType::Person, 100, 110, 0.98);
     gates.valid_from = Some(Utc.with_ymd_and_hms(1975, 4, 4, 0, 0, 0).unwrap());
     gates.valid_until = Some(Utc.with_ymd_and_hms(2000, 1, 13, 0, 0, 0).unwrap());
     gates.viewport = Some(EntityViewport::Historical);
-    gates.canonical_id = Some(3);
+    gates.canonical_id = Some(anno_core::types::CanonicalId::new(3));
 
     let mut microsoft = Entity::new("Microsoft", EntityType::Organization, 150, 159, 0.99);
     microsoft.viewport = Some(EntityViewport::Business);
-    microsoft.canonical_id = Some(4);
+    microsoft.canonical_id = Some(anno_core::types::CanonicalId::new(4));
 
     // Create relations
     let relations = vec![

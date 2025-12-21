@@ -695,7 +695,7 @@ impl TypeMapper {
 /// | SoftLexicon | Medium | High | Good for rare types | Low-resource NER |
 /// | GatedEnsemble | Highest | Highest | Contextual | Short texts, domain shift |
 ///
-/// See `docs/design/LEXICON_DESIGN.md` for detailed research context.
+/// See `docs/notes/design/types/LEXICON_DESIGN.md` for detailed research context.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[non_exhaustive]
 pub enum ExtractionMethod {
@@ -1073,11 +1073,14 @@ impl Provenance {
 /// - Bounding boxes (visual document understanding)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Span {
-    /// Text span with byte offsets (start, end)
+    /// Text span with **character offsets** (start, end).
+    ///
+    /// Offsets are Unicode scalar value indices (what `text.chars()` counts),
+    /// consistent with `Entity.start/end` and `grounded::Location::Text`.
     Text {
-        /// Start byte offset (inclusive)
+        /// Start character offset (inclusive)
         start: usize,
-        /// End byte offset (exclusive)
+        /// End character offset (exclusive)
         end: usize,
     },
     /// Visual bounding box (normalized 0.0-1.0 coordinates)
@@ -1096,9 +1099,9 @@ pub enum Span {
     },
     /// Hybrid: both text and visual location (for OCR-verified extraction)
     Hybrid {
-        /// Start byte offset (inclusive)
+        /// Start character offset (inclusive)
         start: usize,
-        /// End byte offset (exclusive)
+        /// End character offset (exclusive)
         end: usize,
         /// Bounding box for visual location
         bbox: Box<Span>,
@@ -1190,6 +1193,16 @@ impl Span {
 /// - **Legal NER**: Parties referenced across clauses
 /// - **W2NER**: Word-word relation grids that detect discontinuous entities
 ///
+/// # Offset Unit (CRITICAL)
+///
+/// `DiscontinuousSpan` uses **character offsets** (Unicode scalar value indices),
+/// consistent with [`Entity::start`](crate::entity::Entity::start) /
+/// [`Entity::end`](crate::entity::Entity::end) and `anno_core::grounded::Location`.
+///
+/// This is intentionally *not* byte offsets. If you have byte offsets (from regex,
+/// `str::find`, tokenizers, etc.), convert them to character offsets first (see
+/// `anno::offset::SpanConverter` in the `anno` crate).
+///
 /// # Example
 ///
 /// ```rust,ignore
@@ -1208,7 +1221,7 @@ impl Span {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiscontinuousSpan {
     /// Non-overlapping segments, sorted by start position.
-    /// Each `Range<usize>` represents (start_byte, end_byte).
+    /// Each `Range<usize>` represents (start_char, end_char).
     segments: Vec<std::ops::Range<usize>>,
 }
 
@@ -1267,16 +1280,8 @@ impl DiscontinuousSpan {
         Some(start..end)
     }
 
-    /// Total byte length (sum of all segments).
+    /// Total character length (sum of all segments).
     ///
-    /// # Note
-    ///
-    /// This returns the sum of byte lengths, not character lengths.
-    /// Since `DiscontinuousSpan` uses byte offsets, this method calculates
-    /// the total number of bytes covered by all segments.
-    ///
-    /// For character length, you would need to convert each segment's byte
-    /// offsets to character offsets using the source text.
     #[must_use]
     pub fn total_len(&self) -> usize {
         self.segments.iter().map(|r| r.end - r.start).sum()
@@ -1287,20 +1292,24 @@ impl DiscontinuousSpan {
     pub fn extract_text(&self, text: &str, separator: &str) -> String {
         self.segments
             .iter()
-            .filter_map(|r| text.get(r.clone()))
+            .map(|r| {
+                let start = r.start;
+                let len = r.end.saturating_sub(r.start);
+                text.chars().skip(start).take(len).collect::<String>()
+            })
             .collect::<Vec<_>>()
             .join(separator)
     }
 
-    /// Check if a byte position falls within any segment.
+    /// Check if a character position falls within any segment.
     ///
     /// # Arguments
     ///
-    /// * `pos` - Byte offset to check (must be a byte offset, not character offset)
+    /// * `pos` - Character offset to check (Unicode scalar value index)
     ///
     /// # Returns
     ///
-    /// `true` if the byte position falls within any segment of this span.
+    /// `true` if the character position falls within any segment of this span.
     #[must_use]
     pub fn contains(&self, pos: usize) -> bool {
         self.segments.iter().any(|r| r.contains(&pos))
@@ -1681,9 +1690,9 @@ pub struct Entity {
     pub kb_id: Option<String>,
     /// Local coreference cluster ID.
     /// Multiple mentions with the same `canonical_id` refer to the same entity.
-    /// Example: "Marie Curie" and "she" might share `canonical_id = 42`.
+    /// Example: "Marie Curie" and "she" might share `canonical_id = CanonicalId(42)`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub canonical_id: Option<u64>,
+    pub canonical_id: Option<crate::types::CanonicalId>,
     /// Hierarchical confidence (coarse-to-fine).
     /// Provides linkage, type, and boundary scores separately.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1889,8 +1898,8 @@ impl Entity {
     /// Assign this entity to a coreference cluster.
     ///
     /// Entities with the same `canonical_id` refer to the same real-world entity.
-    pub fn set_canonical(&mut self, canonical_id: u64) {
-        self.canonical_id = Some(canonical_id);
+    pub fn set_canonical(&mut self, canonical_id: impl Into<crate::types::CanonicalId>) {
+        self.canonical_id = Some(canonical_id.into());
     }
 
     /// Builder-style method to set canonical ID.
@@ -1900,11 +1909,11 @@ impl Entity {
     /// use anno_core::{Entity, EntityType};
     /// let entity = Entity::new("John", EntityType::Person, 0, 4, 0.9)
     ///     .with_canonical_id(42);
-    /// assert_eq!(entity.canonical_id, Some(42));
+    /// assert_eq!(entity.canonical_id, Some(anno_core::types::CanonicalId::new(42)));
     /// ```
     #[must_use]
-    pub fn with_canonical_id(mut self, canonical_id: u64) -> Self {
-        self.canonical_id = Some(canonical_id);
+    pub fn with_canonical_id(mut self, canonical_id: impl Into<crate::types::CanonicalId>) -> Self {
+        self.canonical_id = Some(canonical_id.into());
         self
     }
 
@@ -1956,36 +1965,13 @@ impl Entity {
         self.discontinuous_span = Some(span);
     }
 
-    /// Get the total length covered by this entity.
+    /// Get the total length covered by this entity, in **characters**.
     ///
-    /// # Note on Offset Systems
+    /// - **Contiguous**: `end - start`
+    /// - **Discontinuous**: sum of segment lengths
     ///
-    /// - For **contiguous entities** (no discontinuous span): Returns character length (`end - start`)
-    /// - For **discontinuous entities**: Returns byte length (sum of segment byte lengths)
-    ///
-    /// This inconsistency exists because:
-    /// - `Entity` uses character offsets for the main span (`start`, `end`)
-    /// - `DiscontinuousSpan` uses byte offsets for segments
-    ///
-    /// When using discontinuous spans, be aware that `total_len()` returns bytes,
-    /// not characters. For accurate character length with discontinuous spans,
-    /// you would need to convert each segment's byte offsets to character offsets
-    /// using the source text.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use anno_core::{Entity, EntityType, DiscontinuousSpan};
-    ///
-    /// // Contiguous entity - returns character length
-    /// let entity = Entity::new("Hello", EntityType::Person, 0, 5, 0.9);
-    /// assert_eq!(entity.total_len(), 5); // 5 characters
-    ///
-    /// // Discontinuous entity - returns byte length
-    /// let mut entity = Entity::new("test", EntityType::Person, 0, 4, 0.9);
-    /// entity.set_discontinuous_span(DiscontinuousSpan::new(vec![0..4, 10..14]));
-    /// assert_eq!(entity.total_len(), 8); // 4 + 4 = 8 bytes
-    /// ```
+    /// This is intentionally consistent: all offsets in `anno-core` entity spans
+    /// are **character offsets** (Unicode scalar values), not byte offsets.
     #[must_use]
     pub fn total_len(&self) -> usize {
         if let Some(ref span) = self.discontinuous_span {
@@ -2444,8 +2430,12 @@ impl Entity {
                         reason: format!("discontinuous segment {} is invalid", i),
                     });
                 }
-                // Note: discontinuous spans use byte offsets, so we'd need byte length here
-                // For now, skip this check for discontinuous spans
+                if seg.end > text_char_count {
+                    issues.push(ValidationIssue::SpanOutOfBounds {
+                        end: seg.end,
+                        text_len: text_char_count,
+                    });
+                }
             }
         }
 
@@ -2596,7 +2586,7 @@ pub struct EntityBuilder {
     normalized: Option<String>,
     provenance: Option<Provenance>,
     kb_id: Option<String>,
-    canonical_id: Option<u64>,
+    canonical_id: Option<crate::types::CanonicalId>,
     hierarchical_confidence: Option<HierarchicalConfidence>,
     visual_span: Option<Span>,
     discontinuous_span: Option<DiscontinuousSpan>,
@@ -2675,7 +2665,7 @@ impl EntityBuilder {
     /// Set canonical (coreference) ID.
     #[must_use]
     pub const fn canonical_id(mut self, canonical_id: u64) -> Self {
-        self.canonical_id = Some(canonical_id);
+        self.canonical_id = Some(crate::types::CanonicalId::new(canonical_id));
         self
     }
 
@@ -3019,7 +3009,10 @@ mod tests {
 
         entity.set_canonical(42);
         assert!(entity.has_coreference());
-        assert_eq!(entity.canonical_id, Some(42));
+        assert_eq!(
+            entity.canonical_id,
+            Some(crate::types::CanonicalId::new(42))
+        );
     }
 
     #[test]
@@ -3278,7 +3271,10 @@ mod tests {
 
         assert_eq!(entity.text, "Marie Curie");
         assert_eq!(entity.kb_id.as_deref(), Some("Q7186"));
-        assert_eq!(entity.canonical_id, Some(42));
+        assert_eq!(
+            entity.canonical_id,
+            Some(crate::types::CanonicalId::new(42))
+        );
         assert_eq!(
             entity.normalized.as_deref(),
             Some("Marie Salomea Skłodowska Curie")

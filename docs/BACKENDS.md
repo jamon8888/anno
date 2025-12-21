@@ -11,7 +11,7 @@ When to choose each NER backend based on your requirements.
 | **Fastest** (patterns only) | `RegexNER` | none | Working |
 | **Zero-shot custom types** | `GLiNEROnnx` | `onnx` | Working |
 | **Pure Rust** (no C++) | `CandleNER` | `candle` | Working |
-| **Pure Rust trainable** | `BurnNER` | `burn` | Working (placeholder) |
+| **Pure Rust trainable** | `BurnNER` | `burn` | Planned (errors clearly; inference not wired yet) |
 | **LLM-powered** | `UniversalNER` | `eval-advanced` + API key | Working |
 | **Relations + NER** | `GLiNER2Onnx` | `onnx` | Working |
 | **CoNLL-2003 types** | `BertNEROnnx` | `onnx` | Working |
@@ -23,7 +23,7 @@ When to choose each NER backend based on your requirements.
 | Pattern | `pattern` | Working | Patterns only (emails, dates, etc.) |
 | Heuristic | `heuristic` | Working | Capitalization-based |
 | HMM | `hmm` | Working | Classical HMM |
-| CRF | `crf` | Working | (untrained - returns empty) |
+| CRF | `crf` | Working | Default uses heuristic weights (non-empty baseline) |
 | BiLSTM-CRF | `bi-lstm-crf` | Working | Heuristic emissions |
 | BERT ONNX | `bert-onnx` | Working | Uses `dslim/bert-base-NER` |
 | GLiNER ONNX | `gliner` | Working | Zero-shot NER |
@@ -31,11 +31,11 @@ When to choose each NER backend based on your requirements.
 | NuNER | `nuner` | Working | Zero-shot NER |
 | **CandleNER** | `candle-ner` | **Working** | Pure Rust, uses `dslim/bert-base-NER` |
 | TPLinker | `tplinker` | Working | Placeholder uses HeuristicNER |
-| **BurnNER** | `burn` | **Working** | Pure Rust, placeholder uses HeuristicNER |
+| **BurnNER** | `burn` | **Planned** | Burn scaffolding; returns a clear error (no silent fallback) |
 | Stacked | `stacked` | Working | Multi-backend priority |
 | Ensemble | `ensemble` | Working | Multi-backend voting |
 | **UniversalNER** | `universal-ner` | **Working** | LLM-based (requires API key + eval-advanced) |
-| **GLiNER Candle** | `gliner-candle` | **Experimental** | Loads but outputs incorrect spans - use `gliner` instead |
+| **GLiNER Candle** | `gliner-candle` | **Experimental** | Experimental Candle port; word/token span alignment fixed recently. Prefer `gliner` (ONNX) for production until further validation. |
 | W2NER | `w2ner` | Usable | Self-export via `scripts/export_w2ner_to_onnx.py` |
 | DeBERTa-v3 | `deberta-v3` | Requires Export | Run `scripts/export_deberta_ner_to_onnx.py` |
 | ALBERT | `albert` | Requires Export | Custom ONNX export needed |
@@ -203,6 +203,7 @@ let ner = NuNER::from_pretrained("numind/NuNER_Zero")?;
 - Different architecture than GLiNER
 - Sometimes better on biomedical text
 - **Zero-shot:** Custom types supported
+- **Note:** `NuNER::new()` is configuration-only; calling `extract_entities` on an unloaded model returns a clear error. Use `from_pretrained(...)` for inference.
 
 #### `W2NER`
 **Best for:** Nested and discontinuous entities
@@ -216,6 +217,7 @@ let ner = W2NER::from_pretrained("ljynlp/w2ner-bert-base")?;
 - Handles discontinuous: "breast and ovarian cancer"
 - **Types:** PER, ORG, LOC, MISC (can be fine-tuned)
 - **Note:** Model requires HuggingFace authentication. Set `HF_TOKEN` and request access at the model page.
+- **Note:** `W2NER::new()` is configuration-only; calling `extract_entities` on an unloaded model returns a clear error. Use `from_pretrained(...)` for inference.
 
 #### `GLiNER2Onnx`
 **Best for:** NER + Relation Extraction together
@@ -311,26 +313,26 @@ let ner = LlmNER::new(config, &[EntityType::Person, EntityType::Organization])?;
 - **Types:** Any types you specify
 
 **Note:** This backend is experimental and requires configuring an external LLM endpoint.
-See `design/LLM_CLI_INTEGRATION.md` for setup details.
+See `docs/notes/design/llm/LLM_CLI_INTEGRATION.md` for setup details.
 
 ## Feature Comparison
 
 | Backend | Speed | Zero-Shot | Nested | Relations | Pure Rust | Training |
 |---------|-------|-----------|--------|-----------|-----------|----------|
-| `RegexNER` | ~400ns | ❌ | ❌ | ❌ | ✅ | ❌ |
-| `HeuristicNER` | ~50μs | ❌ | ❌ | ❌ | ✅ | ❌ |
-| `StackedNER` | ~50μs-100ms | ✅* | ❌ | ❌ | ❌* | ❌ |
-| `BertNEROnnx` | ~50ms | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `GLiNEROnnx` | ~100ms | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `NuNER` | ~80ms | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `W2NER` | ~150ms | ❌ | ✅ | ❌ | ❌ | ❌ |
-| `GLiNER2Onnx` | ~120ms | ✅ | ❌ | ✅ | ❌ | ❌ |
-| `CandleNER` | ~60ms | ❌ | ❌ | ❌ | ✅ | ❌ |
-| `GLiNERCandle` | ~120ms | ✅ | ❌ | ❌ | ✅ | ❌ |
-| `BurnNER` | N/A† | ❌ | ❌ | ❌ | ✅ | ✅ |
+| `RegexNER` | ~400ns | no | no | no | yes | no |
+| `HeuristicNER` | ~50μs | no | no | no | yes | no |
+| `StackedNER` | ~50μs-100ms | yes* | no | no | no* | no |
+| `BertNEROnnx` | ~50ms | no | no | no | no | no |
+| `GLiNEROnnx` | ~100ms | yes | no | no | no | no |
+| `NuNER` | ~80ms | yes | no | no | no | no |
+| `W2NER` | ~150ms | no | yes | no | no | no |
+| `GLiNER2Onnx` | ~120ms | yes | no | yes | no | no |
+| `CandleNER` | ~60ms | no | no | no | yes | no |
+| `GLiNERCandle` | ~120ms | yes | no | no | yes | no |
+| `BurnNER` | N/A† | no | no | no | yes | yes |
 
 *StackedNER is pure Rust without ML features; with `onnx` it uses GLiNER  
-†BurnNER is a placeholder; use CandleNER for production inference
+†BurnNER is scaffolding-only today (no inference); it returns a clear error. Use CandleNER/GLiNEROnnx for inference.
 
 ## Domain-Specific Recommendations
 
@@ -449,21 +451,19 @@ W2NER_MODEL_PATH=/path/to/w2ner-model anno extract --model w2ner "Your text"
 **Note:** The exported model produces reasonable entity boundaries but may need fine-tuning for best accuracy. Use `--model gliner2` for a ready-to-use alternative with nested entity support.
 
 ### GLiNERCandle
-**Status:** Experimental - Incorrect entity extraction  
-**Error:** Produces fragmented/incorrect entity spans  
-**Example:** For "Marie Curie won the Nobel Prize", outputs "Marie", "Curie won", "the" instead of "Marie Curie"  
-**Root Cause:** GLiNER's bi-encoder architecture and span representation layer are complex to port correctly from Python to Candle. The model loads and runs but span scoring produces incorrect boundaries.  
-**Fix:** Use `--model gliner` (ONNX version) instead - it works correctly with all GLiNER models
+**Status:** Experimental  
+**Notes:** This backend previously produced incorrect spans due to a **word/token index mismatch** (word-based spans applied to token-based embeddings). This has been addressed by aggregating token embeddings into **per-word embeddings** before span scoring.  
+**Recommendation:** If you need production-grade zero-shot NER today, prefer `--model gliner` (ONNX) until `GLiNERCandle` has broader real-model validation and tuned defaults.
 
 ### CandleNER
-**Status:** ✅ Working  
+**Status:** Working  
 Pure Rust BERT-based NER using Candle. Works with `dslim/bert-base-NER` and similar cased models.
 Uses `vocab.txt` tokenization with case preservation (critical for NER accuracy).
 
 ### UniversalNER
-**Status:** Placeholder (LLM integration required)  
-Returns empty results. Requires actual LLM API integration.
-**Fix:** Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` in `.env` for future LLM integration.
+**Status:** Requires LLM integration + API key  
+When unavailable, returns a clear runtime error (no silent empty fallback).
+**Fix:** Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` in `.env` (and enable the appropriate features for your build).
 
 ### CrfNER
 **Status:** Fixed in v0.2.x  
@@ -490,13 +490,13 @@ non-ASCII text. Now uses `SpanConverter` for correct byte-to-char conversion.
 
 #### Requires Setup / Limited
 - `W2NER` - Requires HF authentication + model access (clear error message)
-- `GLiNERCandle` - Experimental: loads but outputs incorrect spans (use `--model gliner` instead)
+- `GLiNERCandle` - Experimental Candle port; prefer `--model gliner` (ONNX) for production until further validation
 - `UniversalNER` - Requires LLM API key (set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` in `.env`)
 
 ### Note on Burn Framework
 Burn is a **deep learning framework** (like PyTorch), not a model itself.
 Models like BiLSTM-CRF could use Burn for tensor operations.
-For now, `BurnPoweredNER` falls back to heuristics. For neural inference, use:
+For now, `BurnNER` is scaffolding and returns a clear error when used. For neural inference, use:
 - `CandleNER` with `--features candle`
 - `GLiNEROnnx` with `--features onnx`
 
@@ -530,16 +530,19 @@ let clusters = coref.resolve("John entered. He smiled.")?;
 - Can integrate with NER for mention detection
 
 ### `T5Coref` (requires `onnx` feature)
-**Best for:** Text-to-text coreference with T5 models
+**Status:** Scaffolding / experimental (no seq2seq decoding yet)
 
 ```rust
 #[cfg(feature = "onnx")]
-let coref = anno::backends::T5Coref::new()?;
+let coref = anno::backends::coref_t5::T5Coref::from_pretrained("your-org/your-t5-coref-onnx")?
+    .with_heuristic_fallback();
 ```
 
 - Seq2Seq formulation of coreference
 - Generates marked-up text with cluster IDs
 - Works with T5/Flan-T5 models
+- **Note:** Real T5 seq2seq decoding is not implemented yet. By default, `resolve*` returns a clear error.
+  You can opt into a simple heuristic fallback via `.with_heuristic_fallback()`.
 
 ## CI Benchmark Results
 
@@ -576,5 +579,5 @@ Accuracy ↑
 
 - [Architecture](ARCHITECTURE.md) - System design
 - [Evaluation](EVALUATION.md) - Metrics and benchmarks
-- [Task Matrix](reference/TASKS_MODELS_DATASETS_EVALS_TESTS_MATRIX.md) - Full coverage
+- [Task Matrix](notes/reference/TASKS_MODELS_DATASETS_EVALS_TESTS_MATRIX.md) - Full coverage
 

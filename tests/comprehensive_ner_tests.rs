@@ -1075,9 +1075,16 @@ mod layered_ner {
 
         #[test]
         fn empty_layers() {
-            let ner = StackedNER::builder().build();
-            let e = ner.extract_entities("$100 for John", None).unwrap();
-            assert!(e.is_empty()); // No layers = no entities
+            // Empty stacks are invalid; use `try_build` for a non-panicking error path.
+            let err = match StackedNER::builder().try_build() {
+                Ok(_) => panic!("Expected InvalidInput error for empty StackedNER builder"),
+                Err(e) => e,
+            };
+            assert!(
+                matches!(err, anno::Error::InvalidInput(_)),
+                "expected InvalidInput error, got: {:?}",
+                err
+            );
         }
 
         #[test]
@@ -1106,7 +1113,8 @@ mod layered_ner {
                 .build();
 
             let names = ner.layer_names();
-            assert!(names.iter().any(|n| n == "pattern"));
+            // Regex backend is referred to as "pattern" in the CLI, but the model name is "regex".
+            assert!(names.iter().any(|n| n == "regex" || n == "pattern"));
             assert!(names.iter().any(|n| n == "heuristic"));
         }
 

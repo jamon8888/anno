@@ -12,7 +12,7 @@
 //!
 //! ```bash
 //! # Build release binary first for faster tests
-//! cargo build --release -p anno-cli
+//! cargo build --release -p anno --bin anno --features eval
 //!
 //! # Run dataset CLI tests
 //! cargo test --test dataset_command_cli --features eval
@@ -51,7 +51,16 @@ fn anno_cli_cmd() -> Command {
 
     // Last resort: cargo run (slow)
     let mut cmd = Command::new("cargo");
-    cmd.args(["run", "-p", "anno-cli", "--"]);
+    cmd.args([
+        "run",
+        "-p",
+        "anno",
+        "--bin",
+        "anno",
+        "--features",
+        "eval",
+        "--",
+    ]);
     cmd
 }
 

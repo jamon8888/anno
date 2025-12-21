@@ -129,7 +129,6 @@ fn test_resolver_creates_identities() {
         kb_name: None,
         description: None,
         embedding: None,
-        box_embedding: None,
         aliases: vec!["Test".to_string()],
         confidence: 0.9,
         source: Some(IdentitySource::CrossDocCoref {

@@ -240,7 +240,9 @@ pub fn run(args: JointArgs) -> Result<(), String> {
                 .collect();
             println!(
                 "  Chain {}: {}",
-                chain.cluster_id.unwrap_or(0),
+                chain
+                    .cluster_id
+                    .unwrap_or(anno_core::types::CanonicalId::ZERO),
                 mentions.join(" ↔ ")
             );
         }

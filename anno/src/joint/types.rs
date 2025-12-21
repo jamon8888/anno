@@ -1084,7 +1084,7 @@ impl JointModel {
                     })
                     .collect();
                 CorefChain {
-                    cluster_id: Some(chain_id as u64),
+                    cluster_id: Some(anno_core::types::CanonicalId::new(chain_id as u64)),
                     mentions: coref_mentions,
                     entity_type: None,
                 }
@@ -1165,7 +1165,9 @@ impl anno_core::CoreferenceResolver for JointModel {
                 let mut resolved = entities.to_vec();
 
                 for chain in &result.chains {
-                    let cluster_id = chain.cluster_id.unwrap_or(0);
+                    let cluster_id = chain
+                        .cluster_id
+                        .unwrap_or(anno_core::types::CanonicalId::ZERO);
                     for mention in &chain.mentions {
                         // Find matching entity by position
                         for entity in &mut resolved {
@@ -1177,10 +1179,10 @@ impl anno_core::CoreferenceResolver for JointModel {
                 }
 
                 // Assign unique IDs to singletons
-                let mut next_id = result.chains.len() as u64;
+                let mut next_id = anno_core::types::CanonicalId::new(result.chains.len() as u64);
                 for entity in &mut resolved {
                     if entity.canonical_id.is_none() {
-                        entity.canonical_id = Some(next_id);
+                        entity.canonical_id = Some(next_id.into());
                         next_id += 1;
                     }
                 }

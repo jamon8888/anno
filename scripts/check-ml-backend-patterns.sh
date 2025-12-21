@@ -9,10 +9,12 @@ echo ""
 
 ISSUES=0
 
+BACKENDS_DIR="anno/src/backends/"
+
 # 1. Check for HuggingFace authentication handling
 echo "## HuggingFace Authentication"
 echo ""
-AUTH_CHECKS=$(rg -c "401|Unauthorized|HF_TOKEN|huggingface.*token" --type rust src/backends/ 2>/dev/null || echo "0")
+AUTH_CHECKS=$(rg -c "401|Unauthorized|HF_TOKEN|huggingface.*token" --type rust "$BACKENDS_DIR" 2>/dev/null || echo "0")
 if [ "$AUTH_CHECKS" -lt 2 ]; then
     echo "WARNING:  Limited HuggingFace authentication error handling"
     echo "   Found $AUTH_CHECKS authentication-related checks"
@@ -26,7 +28,7 @@ fi
 echo ""
 echo "## Model Download Error Messages"
 echo ""
-DETAILED_ERRORS=$(rg -c "Failed to download.*Hint|model.*download.*error.*context" --type rust src/backends/ 2>/dev/null || echo "0")
+DETAILED_ERRORS=$(rg -c "Failed to download.*Hint|model.*download.*error.*context" --type rust "$BACKENDS_DIR" 2>/dev/null || echo "0")
 if [ "$DETAILED_ERRORS" -lt 3 ]; then
     echo "WARNING:  Some model downloads may lack detailed error context"
     ((ISSUES++))
@@ -38,8 +40,8 @@ fi
 echo ""
 echo "## ONNX Session Management"
 echo ""
-SESSION_POOL=$(rg -c "SessionPool|session.*pool" --type rust src/backends/ 2>/dev/null || echo "0")
-SESSION_CREATION=$(rg -c "Session::builder\(\)|commit_from_file" --type rust src/backends/ 2>/dev/null || echo "0")
+SESSION_POOL=$(rg -c "SessionPool|session.*pool" --type rust "$BACKENDS_DIR" 2>/dev/null || echo "0")
+SESSION_CREATION=$(rg -c "Session::builder\(\)|commit_from_file" --type rust "$BACKENDS_DIR" 2>/dev/null || echo "0")
 if [ "$SESSION_POOL" -eq 0 ] && [ "$SESSION_CREATION" -gt 5 ]; then
     echo "WARNING:  Multiple ONNX session creations without pooling"
     echo "   Consider using SessionPool for better performance"
@@ -52,7 +54,7 @@ fi
 echo ""
 echo "## Tokenizer Error Handling"
 echo ""
-TOKENIZER_ERRORS=$(rg -c "tokenizer.*error|Failed to load tokenizer" --type rust src/backends/ 2>/dev/null || echo "0")
+TOKENIZER_ERRORS=$(rg -c "tokenizer.*error|Failed to load tokenizer" --type rust "$BACKENDS_DIR" 2>/dev/null || echo "0")
 if [ "$TOKENIZER_ERRORS" -lt 2 ]; then
     echo "WARNING:  Limited tokenizer error handling"
     ((ISSUES++))
@@ -64,7 +66,7 @@ fi
 echo ""
 echo "## Sequence Length Validation"
 echo ""
-MAX_LEN_CHECKS=$(rg -c "max.*length|sequence.*length.*check|ids\.len\(\)\s*>" --type rust src/backends/ 2>/dev/null || echo "0")
+MAX_LEN_CHECKS=$(rg -c "max.*length|sequence.*length.*check|ids\.len\(\)\s*>" --type rust "$BACKENDS_DIR" 2>/dev/null || echo "0")
 if [ "$MAX_LEN_CHECKS" -lt 2 ]; then
     echo "WARNING:  Limited sequence length validation"
     echo "   Long texts may exceed model max sequence length"
@@ -77,8 +79,8 @@ fi
 echo ""
 echo "## Unsafe Code in ML Backends"
 echo ""
-UNSAFE_BLOCKS=$(rg -c "unsafe\s+\{" --type rust src/backends/ 2>/dev/null || echo "0")
-SAFETY_COMMENTS=$(rg -c "// SAFETY:|///.*SAFETY" --type rust src/backends/ 2>/dev/null || echo "0")
+UNSAFE_BLOCKS=$(rg -c "unsafe\s+\{" --type rust "$BACKENDS_DIR" 2>/dev/null || echo "0")
+SAFETY_COMMENTS=$(rg -c "// SAFETY:|///.*SAFETY" --type rust "$BACKENDS_DIR" 2>/dev/null || echo "0")
 if [ "$UNSAFE_BLOCKS" -gt 0 ]; then
     if [ "$SAFETY_COMMENTS" -lt "$UNSAFE_BLOCKS" ]; then
         echo "WARNING:  Some unsafe blocks may lack safety documentation"

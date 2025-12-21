@@ -602,8 +602,8 @@ impl Default for W2NER {
 
 impl Model for W2NER {
     fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
-        if text.is_empty() {
-            return Ok(Vec::new());
+        if text.trim().is_empty() {
+            return Ok(vec![]);
         }
 
         #[cfg(feature = "onnx")]
@@ -611,10 +611,19 @@ impl Model for W2NER {
             if self.session.is_some() {
                 return self.extract_with_grid(text, self.config.threshold as f32);
             }
+
+            return Err(crate::Error::ModelInit(
+                "W2NER model not loaded. Call `W2NER::from_pretrained(...)` (requires `onnx` feature) before calling `extract_entities`.".to_string(),
+            ));
         }
 
-        // Without model, return empty (model not loaded)
-        Ok(Vec::new())
+        #[cfg(not(feature = "onnx"))]
+        {
+            Err(crate::Error::FeatureNotAvailable(
+                "W2NER requires the 'onnx' feature. Build with: cargo build --features onnx"
+                    .to_string(),
+            ))
+        }
     }
 
     fn supported_types(&self) -> Vec<EntityType> {
@@ -676,8 +685,8 @@ impl DiscontinuousNER for W2NER {
         entity_types: &[&str],
         threshold: f32,
     ) -> Result<Vec<DiscontinuousEntity>> {
-        if text.is_empty() {
-            return Ok(Vec::new());
+        if text.trim().is_empty() {
+            return Ok(vec![]);
         }
 
         #[cfg(feature = "onnx")]
@@ -700,7 +709,21 @@ impl DiscontinuousNER for W2NER {
         }
 
         let _ = (entity_types, threshold);
-        Ok(Vec::new())
+
+        #[cfg(feature = "onnx")]
+        {
+            Err(crate::Error::ModelInit(
+                "W2NER model not loaded. Call `W2NER::from_pretrained(...)` (requires `onnx` feature) before calling `extract_discontinuous`.".to_string(),
+            ))
+        }
+
+        #[cfg(not(feature = "onnx"))]
+        {
+            Err(crate::Error::FeatureNotAvailable(
+                "W2NER requires the 'onnx' feature. Build with: cargo build --features onnx"
+                    .to_string(),
+            ))
+        }
     }
 }
 
@@ -844,11 +867,19 @@ mod tests {
     }
 
     #[test]
-    fn test_returns_empty_without_model() {
+    fn test_errors_without_model() {
         let w2ner = W2NER::new();
-        // Without model, should return empty (not error)
-        let result = w2ner.extract_entities("Steve Jobs founded Apple", None);
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
+        // Without model, should return an explicit error (no silent empty fallback).
+        let err = w2ner
+            .extract_entities("Steve Jobs founded Apple", None)
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::Error::ModelInit(_) | crate::Error::FeatureNotAvailable(_)
+            ),
+            "unexpected error: {:?}",
+            err
+        );
     }
 }

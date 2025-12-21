@@ -162,7 +162,7 @@ pub mod types;
 /// - [`geometric::sheaf`]: Sheaf neural networks for gradient-level transitivity
 /// - [`geometric::tda`]: Topological data analysis for structural diagnostics
 ///
-/// These are research stubs - see `docs/design/embeddings/GEOMETRIC_FOUNDATIONS.md` for implementation status.
+/// These are research stubs - see `docs/notes/design/embeddings/GEOMETRIC_FOUNDATIONS.md` for implementation status.
 ///
 /// # When to Use What
 ///

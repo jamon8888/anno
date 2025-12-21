@@ -6,6 +6,15 @@ alwaysApply: false
 
 # Repository Hygiene
 
+## Docs Hygiene (fast, offline)
+
+When touching docs (or moving lots of files), keep hygiene automated:
+
+- Run: `just docs-audit`
+- Expect: internal links + anchors remain valid (excluding `docs/archive/`), and stale path references don’t creep back in.
+
+If you edit `justfile`/CI, keep `docs-audit` in the “fast checks” path so docs drift is caught early.
+
 ## Common Remnant Patterns
 
 ### Build Directory Duplicates
@@ -65,6 +74,9 @@ ls -la | grep -E "target.*[0-9]"
 
 # Find root-level artifacts
 ls *.{html,png,jpg,txt} 2>/dev/null
+
+# Docs hygiene (fast, offline)
+just docs-audit
 ```
 
 ## .gitignore Maintenance
@@ -89,6 +101,17 @@ test_*
 reports/
 *_report.md
 *-report.md
+
+# Static analysis artifacts (regenerated on demand)
+opengrep-results*.json
+opengrep-*-results.json
+opengrep-results.sarif
+unified-static-analysis-report.md
+static-analysis-failures-summary.md
+repo-specific-analysis.md
+safety-report.*
+lcov.info
+coverage-html/
 
 # Python cache (from scripts/)
 __pycache__/
