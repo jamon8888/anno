@@ -2,6 +2,11 @@
 //!
 //! Evaluates Pattern and Statistical backends against synthetic and benchmark datasets.
 //!
+//! # Deprecation Notice
+//!
+//! `BackendEvaluator` is deprecated in favor of `TaskEvaluator` and `EvalSystem`.
+//! Please migrate usage to `anno::eval::unified_evaluator::EvalSystem`.
+//!
 //! # Usage
 //!
 //! ```rust,no_run
@@ -10,6 +15,21 @@
 //! let evaluator = BackendEvaluator::new();
 //! let report = evaluator.run_comprehensive();
 //! println!("{}", report.to_markdown());
+//! ```
+//!
+//! # Usage (New API)
+//!
+//! ```rust,ignore
+//! use anno::eval::unified_evaluator::EvalSystem;
+//! use anno::eval::task_mapping::Task;
+//!
+//! // Equivalent to run_comprehensive()
+//! let results = EvalSystem::new()
+//!     .with_tasks(vec![Task::NER])
+//!     .add_backend("Pattern".to_string())
+//!     .add_backend("Heuristic".to_string())
+//!     // ... configure datasets ...
+//!     .run()?;
 //! ```
 
 use crate::backends::{HeuristicNER, RegexNER, StackedNER};

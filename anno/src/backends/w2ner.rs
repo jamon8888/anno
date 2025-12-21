@@ -736,6 +736,10 @@ impl Model for W2NER {
     fn description(&self) -> &'static str {
         "W2NER: Unified NER via Word-Word Relation Classification (nested/discontinuous support)"
     }
+
+    fn version(&self) -> String {
+        format!("w2ner-{}", self.config.model_id)
+    }
 }
 
 // =============================================================================

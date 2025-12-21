@@ -10,7 +10,7 @@
 //!
 //! Uses `protectai/bert-base-NER-onnx` which recognizes:
 //! - PER (Person)
-//! - ORG (Organization)  
+//! - ORG (Organization)
 //! - LOC (Location)
 //! - MISC (Miscellaneous)
 //!
@@ -586,6 +586,15 @@ impl crate::Model for BertNEROnnx {
 
     fn is_available(&self) -> bool {
         true
+    }
+
+    fn version(&self) -> String {
+        // Version depends on the model weights and quantization status
+        format!(
+            "bert-onnx-{}-{}",
+            self.model_name,
+            if self.is_quantized { "q" } else { "fp32" }
+        )
     }
 }
 

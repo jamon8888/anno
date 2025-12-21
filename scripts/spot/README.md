@@ -12,6 +12,18 @@ This infrastructure uses:
 
 ## Quick Start
 
+### Local (no AWS, free)
+
+```bash
+# Run evaluation locally (no AWS credentials needed)
+just eval-local-quick
+
+# Custom backends/datasets
+just eval-local BACKENDS="heuristic,stacked" DATASETS="WikiGold,Wnut17" MAX=100
+```
+
+### AWS Spot (distributed, ~$1-2)
+
 ```bash
 # 1. Initial setup (one-time)
 ./scripts/spot/setup.sh
@@ -215,6 +227,15 @@ Both use the same evaluation harness:
 The spot worker script calls the same `anno benchmark` CLI that the CI tests use internally.
 
 ## Just Commands Reference
+
+### Local (no AWS)
+
+| Command | Description | Cost |
+|---------|-------------|------|
+| `just eval-local-quick` | Quick local eval (zero-dep backends) | Free |
+| `just eval-local BACKENDS DATASETS MAX` | Custom local eval | Free |
+
+### AWS Spot
 
 | Command | Description | Cost |
 |---------|-------------|------|

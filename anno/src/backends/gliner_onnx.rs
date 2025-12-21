@@ -1105,6 +1105,15 @@ impl crate::Model for GLiNEROnnx {
     fn description(&self) -> &'static str {
         "Zero-shot NER using GLiNER with ONNX Runtime backend"
     }
+
+    fn version(&self) -> String {
+        // Version depends on the model weights and quantization status
+        format!(
+            "gliner-onnx-{}-{}",
+            self.model_name,
+            if self.is_quantized { "q" } else { "fp32" }
+        )
+    }
 }
 
 #[cfg(feature = "onnx")]
