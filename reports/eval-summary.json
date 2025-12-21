@@ -1,225 +1,85 @@
 {
-  "generated": "2025-12-21T03:37:30.669447+00:00",
-  "total_runs": 27,
-  "successful_runs": 10,
-  "best_f1": 59.7,
-  "best": "nuner/WikiGold",
-  "avg_f1": 29.8,
-  "backends": {
-    "gliner": {
-      "runs": 4,
-      "avg_f1": 0,
-      "best_f1": 0,
-      "best_dataset": null,
-      "datasets": {
-        "CoNLL2003Sample": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        },
-        "WikiGold": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        },
-        "Wnut17": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        },
-        "MitMovie": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        }
-      }
+  "generated": "2025-12-21T23:53:17.337406+00:00",
+  "total_runs": 49,
+  "successful": 44,
+  "skipped": 5,
+  "errors": 0,
+  "timeouts": 0,
+  "avg_f1": 21.4,
+  "best_f1": 74.5,
+  "best": "bert_onnx/WikiGold",
+  "by_backend": {
+    "stacked": {
+      "avg_f1": 20.0,
+      "best_f1": 45.7,
+      "runs": 7
     },
     "gliner2": {
-      "runs": 4,
-      "avg_f1": 46.1,
-      "best_f1": 46.1,
-      "best_dataset": "WikiGold",
-      "datasets": {
-        "MitMovie": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        },
-        "CoNLL2003Sample": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        },
-        "WikiGold": {
-          "f1": 46.1,
-          "p": 44.0,
-          "r": 48.3
-        },
-        "Wnut17": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        }
-      }
+      "avg_f1": 26.0,
+      "best_f1": 50.3,
+      "runs": 7
+    },
+    "crf": {
+      "avg_f1": 0.4,
+      "best_f1": 3.1,
+      "runs": 7
+    },
+    "gliner_onnx": {
+      "avg_f1": 22.3,
+      "best_f1": 50.9,
+      "runs": 7
+    },
+    "bert_onnx": {
+      "avg_f1": 31.1,
+      "best_f1": 74.5,
+      "runs": 7
     },
     "heuristic": {
-      "runs": 5,
-      "avg_f1": 30.6,
-      "best_f1": 37.8,
-      "best_dataset": "CoNLL2003Sample",
-      "datasets": {
-        "WikiGold": {
-          "f1": 33.6,
-          "p": 31.4,
-          "r": 36.1
-        },
-        "Wnut17": {
-          "f1": 20.5,
-          "p": 16.5,
-          "r": 27.2
-        },
-        "MitMovie": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        },
-        "CoNLL2003Sample": {
-          "f1": 37.8,
-          "p": 38.5,
-          "r": 37.1
-        },
-        "MitRestaurant": {
-          "f1": 0.0,
-          "p": 0.0,
-          "r": 0.0
-        }
-      }
+      "avg_f1": 26.4,
+      "best_f1": 27.6,
+      "runs": 2
     },
     "nuner": {
-      "runs": 4,
-      "avg_f1": 59.7,
-      "best_f1": 59.7,
-      "best_dataset": "WikiGold",
-      "datasets": {
-        "WikiGold": {
-          "f1": 59.7,
-          "p": 55.6,
-          "r": 64.3
-        },
-        "MitMovie": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        },
-        "Wnut17": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        },
-        "CoNLL2003Sample": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        }
-      }
-    },
-    "pattern": {
-      "runs": 5,
-      "avg_f1": 0.4,
-      "best_f1": 0.4,
-      "best_dataset": "MitRestaurant",
-      "datasets": {
-        "MitRestaurant": {
-          "f1": 0.4,
-          "p": 13.0,
-          "r": 0.2
-        },
-        "MitMovie": {
-          "f1": 0.0,
-          "p": 0.0,
-          "r": 0.0
-        },
-        "Wnut17": {
-          "f1": 0.0,
-          "p": 0.0,
-          "r": 0.0
-        },
-        "WikiGold": {
-          "f1": 0.0,
-          "p": 0.0,
-          "r": 0.0
-        },
-        "CoNLL2003Sample": {
-          "f1": 0.0,
-          "p": 0.0,
-          "r": 0.0
-        }
-      }
-    },
-    "stacked": {
-      "runs": 5,
-      "avg_f1": 25.0,
-      "best_f1": 46.3,
-      "best_dataset": "WikiGold",
-      "datasets": {
-        "CoNLL2003Sample": {
-          "f1": 36.1,
-          "p": 35.1,
-          "r": 37.1
-        },
-        "WikiGold": {
-          "f1": 46.3,
-          "p": 39.3,
-          "r": 56.5
-        },
-        "MitMovie": {
-          "f1": 0,
-          "p": 0,
-          "r": 0
-        },
-        "Wnut17": {
-          "f1": 17.2,
-          "p": 12.6,
-          "r": 27.2
-        },
-        "MitRestaurant": {
-          "f1": 0.4,
-          "p": 13.0,
-          "r": 0.2
-        }
-      }
+      "avg_f1": 27.0,
+      "best_f1": 68.1,
+      "runs": 7
     }
   },
-  "datasets": {
-    "CoNLL2003Sample": {
-      "runs": 6,
-      "best_f1": 37.8,
-      "best_backend": "heuristic",
-      "backends_tested": 6
-    },
-    "MitMovie": {
-      "runs": 6,
-      "best_f1": 0,
-      "best_backend": null,
-      "backends_tested": 6
+  "by_dataset": {
+    "MultiNERD": {
+      "avg_f1": 37.2,
+      "best_f1": 57.8,
+      "runs": 6
     },
     "MitRestaurant": {
-      "runs": 3,
-      "best_f1": 0.4,
-      "best_backend": "pattern",
-      "backends_tested": 3
+      "avg_f1": 1.1,
+      "best_f1": 6.4,
+      "runs": 6
     },
-    "WikiGold": {
-      "runs": 6,
-      "best_f1": 59.7,
-      "best_backend": "nuner",
-      "backends_tested": 6
+    "FewNERD": {
+      "avg_f1": 0.0,
+      "best_f1": 0.0,
+      "runs": 6
     },
     "Wnut17": {
-      "runs": 6,
-      "best_f1": 20.5,
-      "best_backend": "heuristic",
-      "backends_tested": 6
+      "avg_f1": 16.6,
+      "best_f1": 27.9,
+      "runs": 6
+    },
+    "CoNLL2003Sample": {
+      "avg_f1": 40.3,
+      "best_f1": 66.7,
+      "runs": 7
+    },
+    "WikiGold": {
+      "avg_f1": 44.4,
+      "best_f1": 74.5,
+      "runs": 7
+    },
+    "MitMovie": {
+      "avg_f1": 3.0,
+      "best_f1": 15.9,
+      "runs": 6
     }
   }
 }

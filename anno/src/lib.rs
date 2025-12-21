@@ -375,6 +375,13 @@ pub trait Model: sealed::Sealed + Send + Sync {
     fn capabilities(&self) -> ModelCapabilities {
         ModelCapabilities::default()
     }
+
+    /// Get a version identifier for the model configuration/weights.
+    ///
+    /// Used for cache invalidation. Default implementation returns "1".
+    fn version(&self) -> String {
+        "1".to_string()
+    }
 }
 
 // =============================================================================
@@ -420,6 +427,7 @@ pub struct AnyModel {
     description: &'static str,
     supported_types: Vec<EntityType>,
     extractor: Box<dyn Fn(&str, Option<&str>) -> Result<Vec<Entity>> + Send + Sync>,
+    version: String,
 }
 
 impl AnyModel {
@@ -442,7 +450,14 @@ impl AnyModel {
             description,
             supported_types,
             extractor: Box::new(extractor),
+            version: "1".to_string(),
         }
+    }
+
+    /// Set the version string for cache invalidation.
+    pub fn with_version(mut self, version: impl Into<String>) -> Self {
+        self.version = version.into();
+        self
     }
 }
 
@@ -478,6 +493,10 @@ impl Model for AnyModel {
 
     fn description(&self) -> &'static str {
         self.description
+    }
+
+    fn version(&self) -> String {
+        self.version.clone()
     }
 }
 
@@ -599,7 +618,7 @@ pub trait StructuredEntityCapable: Model {}
 ///
 /// fn process_with_model(model: &dyn Model) {
 ///     let caps = model.capabilities();
-///     
+///
 ///     if caps.batch_capable {
 ///         println!("Model supports batch processing");
 ///     }

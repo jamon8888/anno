@@ -213,6 +213,19 @@ eval-seed SEED MAX_EXAMPLES="20":
 eval-anaphora:
     cargo run --example abstract_anaphora_eval --features discourse
 
+# Run comprehensive local evaluation (resumable)
+# Example: just eval-comprehensive 50
+eval-comprehensive MAX_EXAMPLES="30":
+    python3 scripts/eval_comprehensive.py --max-examples {{MAX_EXAMPLES}}
+
+# Resume incomplete comprehensive evaluation
+eval-resume:
+    python3 scripts/eval_comprehensive.py --resume
+
+# Show evaluation results
+eval-results:
+    @cat reports/RESULTS.md
+
 # === Backend Tests ===
 
 # Test ONNX backend (build only, no models)
@@ -811,6 +824,10 @@ spot-summary:
 spot-summarize:
     @uv run scripts/spot/aggregate.py --llm
 
+# Merge prediction cache shards from all workers
+spot-merge-cache:
+    @uv run scripts/spot/merge_cache.py
+
 # Cancel fleet and clean up
 spot-teardown:
     @uv run scripts/spot/orchestrate.py teardown
@@ -826,6 +843,21 @@ spot-eval-quick:
         --datasets "WikiGold,Wnut17" \
         --seeds "42" \
         --fleet-size 1
+
+# Local evaluation (no AWS, runs on this machine)
+# Cost: FREE, Time: ~2-5 min depending on backends
+eval-local BACKENDS="heuristic,stacked" DATASETS="WikiGold" MAX="50":
+    @uv run scripts/spot/orchestrate.py local \
+        --backends "{{BACKENDS}}" \
+        --datasets "{{DATASETS}}" \
+        --max-examples "{{MAX}}"
+
+# Local quick eval (zero-dep backends only, fast)
+eval-local-quick:
+    @uv run scripts/spot/orchestrate.py local \
+        --profile quick \
+        --datasets "WikiGold,CoNLL2003Sample" \
+        --max-examples 30
 
 # ML-focused spot eval (ONNX/Candle backends only)
 spot-eval-ml:

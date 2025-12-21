@@ -2410,14 +2410,14 @@ impl AbstractAnaphoraEvaluator {
                 e.start == case.antecedent.start
                     || self.text_matches(&e.text, &case.antecedent.text)
             })
-            .and_then(|e| e.canonical_id);
+            .and_then(|e| e.canonical_id.map(|id| id.get()));
 
         let anaphor_id = resolved
             .iter()
             .find(|e| {
                 e.start == case.anaphor.start || self.text_matches(&e.text, &case.anaphor.text)
             })
-            .and_then(|e| e.canonical_id);
+            .and_then(|e| e.canonical_id.map(|id| id.get()));
 
         let resolved_correctly = match (antecedent_id, anaphor_id) {
             (Some(a), Some(b)) => a == b,
@@ -3229,7 +3229,7 @@ impl EvaluationResults {
         );
         html.push_str(&format!("{:.0}%", self.nominal_accuracy * 100.0));
         html.push_str(
-            r#"</strong> accuracy on nominal coreference but 
+            r#"</strong> accuracy on nominal coreference but
         <strong class="failure">"#,
         );
         html.push_str(&format!("{:.0}%", self.abstract_accuracy * 100.0));

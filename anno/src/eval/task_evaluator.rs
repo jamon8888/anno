@@ -294,16 +294,63 @@ pub struct TaskEvaluator {
     // Cloned when needed to avoid borrow checker issues
     #[allow(dead_code)] // Used internally
     per_example_scores_cache: Mutex<Option<PerExampleScores>>,
+    /// Prediction cache for avoiding redundant inference.
+    /// Key: (text_hash, backend, labels_hash, version)
+    /// Value: Vec<Entity> predictions
+    prediction_cache: super::prediction_cache::PredictionCache,
 }
 
 impl TaskEvaluator {
     /// Create a new task evaluator.
     pub fn new() -> Result<Self> {
+        // Load prediction cache from disk if available
+        let cache_path = std::env::var("ANNO_PREDICTION_CACHE")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                dirs::cache_dir()
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+                    .join("anno")
+                    .join("predictions.jsonl")
+            });
+        let prediction_cache =
+            super::prediction_cache::PredictionCache::load_or_create(&cache_path);
+
         Ok(Self {
             loader: DatasetLoader::new()?,
             mapping: TaskMapping::build(),
             per_example_scores_cache: Mutex::new(None),
+            prediction_cache,
         })
+    }
+
+    /// Create a new task evaluator with a custom cache directory.
+    ///
+    /// Useful for testing with isolated caches.
+    pub fn with_cache_dir(cache_dir: impl AsRef<std::path::Path>) -> Result<Self> {
+        let prediction_cache =
+            super::prediction_cache::PredictionCache::load_or_create(cache_dir.as_ref());
+
+        Ok(Self {
+            loader: DatasetLoader::new()?,
+            mapping: TaskMapping::build(),
+            per_example_scores_cache: Mutex::new(None),
+            prediction_cache,
+        })
+    }
+
+    /// Get cache statistics for monitoring.
+    pub fn cache_stats(&self) -> super::prediction_cache::CacheStats {
+        self.prediction_cache.stats()
+    }
+
+    /// Get the number of cached predictions.
+    pub fn cache_len(&self) -> usize {
+        self.prediction_cache.len()
+    }
+
+    /// Clear the prediction cache.
+    pub fn clear_cache(&self) -> std::io::Result<()> {
+        self.prediction_cache.clear()
     }
 
     fn sample_dataset(
@@ -875,6 +922,7 @@ impl TaskEvaluator {
             let backend_name_normalized = backend_name.to_lowercase();
             let backend_name_arc = Arc::new(backend_name_normalized);
             let mapped_labels_arc = Arc::new(mapped_labels.clone());
+            let backend_version_arc = Arc::new(backend.version());
             let is_zero_shot_flag = is_zero_shot;
 
             let progress_counter = AtomicUsize::new(0);
@@ -902,39 +950,65 @@ impl TaskEvaluator {
                     }).collect();
 
                     // Run inference - use thread-local cached backend for zero-shot models
-                    let entities_result = if is_zero_shot_flag && !mapped_labels_arc.is_empty() {
-                        THREAD_CACHED_BACKEND.with(|cache| {
-                            let mut cached = cache.borrow_mut();
-                            // Check if we have a cached backend for this backend_name (case-insensitive)
-                            let backend_name_lower = backend_name_arc.as_str().to_lowercase();
-                            if let Some((ref cached_name, ref _creation_name, ref backend)) = *cached {
-                                if cached_name.to_lowercase() == backend_name_lower {
-                                    // Use cached backend - no downcast needed, enum is type-safe
-                                    return Self::extract_with_cached_backend(
-                                        backend,
-                                        &text,
-                                        &mapped_labels_arc
-                                    );
-                                }
-                            }
-                            // Create and cache new backend for this thread
-                            let creation_name = backend_name_arc.as_str().to_string();
-                            match Self::create_zero_shot_backend(backend_name_arc.as_str()) {
-                                Ok(new_backend) => {
-                                    let result = Self::extract_with_cached_backend(
-                                        &new_backend,
-                                        &text,
-                                        &mapped_labels_arc
-                                    );
-                                    // Store normalized (lowercase) name for matching, and creation name for reference
-                                    *cached = Some((backend_name_lower, creation_name, new_backend));
-                                    result
-                                }
-                                Err(e) => Err(e),
-                            }
-                        })
+                    // Check prediction cache first
+                    let cache_labels: Vec<&str> = mapped_labels_arc.iter().map(|s| s.as_str()).collect();
+                    let entities_result = if let Some(cached) = self.prediction_cache.lookup(
+                        &text,
+                        &backend_name_arc,
+                        &backend_version_arc,
+                        &cache_labels,
+                    ) {
+                        Ok(cached)
                     } else {
-                        backend.extract_entities(&text, None)
+                        let t0 = Instant::now();
+                        let result = if is_zero_shot_flag && !mapped_labels_arc.is_empty() {
+                            THREAD_CACHED_BACKEND.with(|cache| {
+                                let mut cached = cache.borrow_mut();
+                                // Check if we have a cached backend for this backend_name (case-insensitive)
+                                let backend_name_lower = backend_name_arc.as_str().to_lowercase();
+                                if let Some((ref cached_name, ref _creation_name, ref backend)) = *cached {
+                                    if cached_name.to_lowercase() == backend_name_lower {
+                                        // Use cached backend - no downcast needed, enum is type-safe
+                                        return Self::extract_with_cached_backend(
+                                            backend,
+                                            &text,
+                                            &mapped_labels_arc
+                                        );
+                                    }
+                                }
+                                // Create and cache new backend for this thread
+                                let creation_name = backend_name_arc.as_str().to_string();
+                                match Self::create_zero_shot_backend(backend_name_arc.as_str()) {
+                                    Ok(new_backend) => {
+                                        let result = Self::extract_with_cached_backend(
+                                            &new_backend,
+                                            &text,
+                                            &mapped_labels_arc
+                                        );
+                                        // Store normalized (lowercase) name for matching, and creation name for reference
+                                        *cached = Some((backend_name_lower, creation_name, new_backend));
+                                        result
+                                    }
+                                    Err(e) => Err(e),
+                                }
+                            })
+                        } else {
+                            backend.extract_entities(&text, None)
+                        };
+
+                        // Store in cache on success
+                        if let Ok(ref entities) = result {
+                            let inference_ms = t0.elapsed().as_millis() as u64;
+                            let _ = self.prediction_cache.store(
+                                &text,
+                                &backend_name_arc,
+                                &backend_version_arc,
+                                &cache_labels,
+                                entities,
+                                inference_ms,
+                            );
+                        }
+                        result
                     };
 
                     // Update progress with time estimates
@@ -1067,18 +1141,51 @@ impl TaskEvaluator {
 
                 #[cfg(feature = "eval-profiling")]
                 profiling::start("backend_inference");
-                // Run inference - use extract() for zero-shot models, extract_entities() for others
-                let entities = if let Some(ref cached) = zero_shot_backend {
-                    // Dereference Box to get &dyn Any (not &Box<dyn Any>)
-                    Self::extract_with_cached_backend_any(
-                        backend_name,
-                        cached.as_ref(),
-                        &text,
-                        &mapped_labels,
-                    )
+
+                // Prepare cache key components
+                let cache_labels: Vec<&str> = mapped_labels.iter().map(|s| s.as_str()).collect();
+                let backend_version = backend.version();
+
+                // Try cache first
+                let entities = if let Some(cached_entities) = self.prediction_cache.lookup(
+                    &text,
+                    backend_name,
+                    &backend_version,
+                    &cache_labels,
+                ) {
+                    // Cache hit - use cached predictions
+                    Ok(cached_entities)
                 } else {
-                    backend.extract_entities(&text, None)
+                    // Cache miss - run inference
+                    let inference_start = Instant::now();
+                    let result = if let Some(ref cached) = zero_shot_backend {
+                        // Dereference Box to get &dyn Any (not &Box<dyn Any>)
+                        Self::extract_with_cached_backend_any(
+                            backend_name,
+                            cached.as_ref(),
+                            &text,
+                            &mapped_labels,
+                        )
+                    } else {
+                        backend.extract_entities(&text, None)
+                    };
+                    let inference_ms = inference_start.elapsed().as_millis() as u64;
+
+                    // Store in cache on success (ignore cache write errors)
+                    if let Ok(ref entities) = result {
+                        let _ = self.prediction_cache.store(
+                            &text,
+                            backend_name,
+                            &backend_version,
+                            &cache_labels,
+                            entities,
+                            inference_ms,
+                        );
+                    }
+
+                    result
                 };
+
                 #[cfg(feature = "eval-profiling")]
                 profiling::stop("backend_inference");
 
