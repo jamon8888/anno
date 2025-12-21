@@ -7,6 +7,28 @@
 //! - **Discontinuous entities**: "severe \[pain\] ... in \[abdomen\]"
 //! - **Overlapping entities**: Same span, different types
 //!
+//! # Language Support (Important Limitation)
+//!
+//! **This implementation uses whitespace tokenization** (`split_whitespace()`),
+//! which works correctly for:
+//!
+//! - **Latin-script languages**: English, German, French, Spanish, etc.
+//! - **Cyrillic**: Russian, Ukrainian, etc.
+//! - **Languages with explicit word boundaries**
+//!
+//! It does **NOT** work correctly for:
+//!
+//! - **CJK languages** (Chinese, Japanese, Korean): No whitespace between words
+//! - **Thai, Khmer, Lao**: Scriptio continua (no word boundaries)
+//! - **Languages requiring morphological analysis**
+//!
+//! If you need CJK/Thai support, consider:
+//! 1. Pre-tokenizing with a proper segmenter (e.g., jieba, mecab, pythainlp)
+//! 2. Using a different backend (e.g., GLiNER with subword tokenization)
+//!
+//! The `language` parameter to [`Model::extract_entities`] is currently ignored,
+//! but a warning is logged if a non-whitespace language is detected.
+//!
 //! # Architecture
 //!
 //! ```text
@@ -109,6 +131,12 @@ impl W2NERRelation {
 }
 
 /// Configuration for W2NER decoding.
+///
+/// # Tokenization
+///
+/// W2NER uses **whitespace tokenization** (`split_whitespace()`), which works
+/// for Latin-script languages but fails for CJK/Thai/Lao. See module-level
+/// docs for details and workarounds.
 #[derive(Debug, Clone)]
 pub struct W2NERConfig {
     /// Confidence threshold for grid predictions
@@ -117,7 +145,11 @@ pub struct W2NERConfig {
     pub entity_labels: Vec<String>,
     /// Whether to extract nested entities
     pub allow_nested: bool,
-    /// Whether to extract discontinuous entities
+    /// Whether to extract discontinuous entities.
+    ///
+    /// **Note**: Currently, discontinuous decoding is not fully implemented.
+    /// This flag exists for forward-compatibility; setting it to `true` does
+    /// not yet produce true discontinuous spans. See `backend-02` in docs.
     pub allow_discontinuous: bool,
     /// Model identifier for loading
     pub model_id: String,
