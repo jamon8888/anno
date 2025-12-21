@@ -116,7 +116,14 @@ REVIEW_ISSUES.md
 !README.md
 !CHANGELOG.md
 !docs/**/*.md
+
+# Reports directory - mostly generated, but JSONL is source of truth
 reports/
+!reports/eval-results.jsonl
+# Generated dashboard (regenerate with `just spot-dashboard`)
+reports/eval-dashboard.html
+reports/spot/
+
 .env
 
 # Deprecated generated artifacts (see generated/README.md)
