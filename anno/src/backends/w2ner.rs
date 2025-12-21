@@ -4,8 +4,19 @@
 //! every pair of words in a sentence. This elegantly handles:
 //!
 //! - **Nested entities**: "The \[University of \[California\]\]"
-//! - **Discontinuous entities**: "severe \[pain\] ... in \[abdomen\]"
+//! - **Discontinuous entities**: "severe \[pain\] ... in \[abdomen\]" *(see limitation below)*
 //! - **Overlapping entities**: Same span, different types
+//!
+//! # Discontinuous Entities (Important Limitation)
+//!
+//! **True discontinuous entity decoding is not yet implemented.** The W2NER
+//! paper describes a grid-based algorithm for linking non-adjacent spans, but
+//! this implementation currently returns only contiguous spans.
+//!
+//! The [`DiscontinuousNER`] trait is implemented for API compatibility, but
+//! `extract_discontinuous()` wraps each contiguous entity into a single-segment
+//! result. The `W2NERConfig.allow_discontinuous` flag exists for forward-compatibility
+//! but does not change behavior today.
 //!
 //! # Language Support (Important Limitation)
 //!
@@ -489,7 +500,11 @@ impl W2NER {
             .as_ref()
             .ok_or_else(|| Error::Retrieval("Tokenizer not loaded.".to_string()))?;
 
-        // Tokenize
+        // Tokenize via whitespace splitting.
+        //
+        // LIMITATION: This only works for languages with explicit word boundaries
+        // (Latin, Cyrillic, etc.). CJK/Thai/Khmer/Lao will produce single "words"
+        // for entire sentences, breaking entity extraction. See module docs.
         let words: Vec<&str> = text.split_whitespace().collect();
         if words.is_empty() {
             return Ok(vec![]);
@@ -633,9 +648,46 @@ impl Default for W2NER {
 }
 
 impl Model for W2NER {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
         if text.trim().is_empty() {
             return Ok(vec![]);
+        }
+
+        // Warn if the language hint suggests a non-whitespace-tokenized language.
+        // W2NER uses `split_whitespace()`, which doesn't work for CJK/Thai/etc.
+        if let Some(lang) = language {
+            let lang_lower = lang.to_lowercase();
+            let is_non_whitespace_lang = matches!(
+                lang_lower.as_str(),
+                "zh" | "zh-cn"
+                    | "zh-tw"
+                    | "chinese"
+                    | "mandarin"
+                    | "cantonese"
+                    | "ja"
+                    | "jp"
+                    | "japanese"
+                    | "ko"
+                    | "kr"
+                    | "korean"
+                    | "th"
+                    | "thai"
+                    | "km"
+                    | "khmer"
+                    | "lo"
+                    | "lao"
+                    | "my"
+                    | "burmese"
+                    | "myanmar"
+            );
+            if is_non_whitespace_lang {
+                log::warn!(
+                    "[W2NER] Language '{}' detected, but W2NER uses whitespace tokenization \
+                     which does not work correctly for CJK/Thai/Khmer/Lao. \
+                     Consider pre-tokenizing or using a different backend (e.g., GLiNER).",
+                    lang
+                );
+            }
         }
 
         #[cfg(feature = "onnx")]
@@ -711,6 +763,22 @@ impl crate::StreamingCapable for W2NER {
 // =============================================================================
 
 impl DiscontinuousNER for W2NER {
+    /// Extract entities with discontinuous span support.
+    ///
+    /// # Current Limitation
+    ///
+    /// **True discontinuous decoding is not yet implemented.** This method
+    /// currently wraps each contiguous entity into a single-segment
+    /// `DiscontinuousEntity`. The W2NER paper describes a grid-based decoding
+    /// algorithm for discontinuous entities, but this implementation does not
+    /// yet decode those relations.
+    ///
+    /// If you need true discontinuous entity support, consider:
+    /// 1. Post-processing with heuristics (e.g., linking "severe" to "pain")
+    /// 2. Using a specialized discontinuous NER model
+    ///
+    /// This trait implementation exists for API compatibility and will be
+    /// upgraded when true discontinuous decoding is implemented.
     fn extract_discontinuous(
         &self,
         text: &str,
@@ -724,8 +792,14 @@ impl DiscontinuousNER for W2NER {
         #[cfg(feature = "onnx")]
         {
             if self.session.is_some() {
-                // W2NER naturally handles discontinuous entities
-                // For now, convert regular entities to discontinuous format
+                // TODO(discontinuous): Implement true discontinuous decoding.
+                //
+                // The W2NER grid contains relation information that could be
+                // used to link non-adjacent spans into discontinuous entities.
+                // For now, we wrap each contiguous entity into a single-segment
+                // DiscontinuousEntity for API compatibility.
+                //
+                // See: https://arxiv.org/abs/2112.10070 (Section 3.3)
                 let entities = self.extract_with_grid(text, threshold)?;
 
                 return Ok(entities
