@@ -179,19 +179,17 @@ process_task() {
     end_time=$(date +%s)
     local duration=$((end_time - start_time))
     
-    # Wrap result with metadata
-    local result_key="results/${backend}/${dataset}/seed_${seed}_$(date +%Y%m%d_%H%M%S).json"
+    # Upload result with metadata in filename
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local result_key="results/${backend}/${dataset}/seed_${seed}_${timestamp}.md"
     
-    if [[ -f "$output_file" ]]; then
-        # Add metadata wrapper
-        jq --arg backend "$backend" \
-           --arg dataset "$dataset" \
-           --arg seed "$seed" \
-           --arg instance "$INSTANCE_ID" \
-           --arg duration "$duration" \
-           --arg exit_code "$exit_code" \
-           '. + {_meta: {backend: $backend, dataset: $dataset, seed: ($seed|tonumber), instance: $instance, duration_secs: ($duration|tonumber), exit_code: ($exit_code|tonumber), timestamp: now | todate}}' \
-           "$output_file" > "${output_file}.wrapped"
+    if [[ -f "$output_file" && -s "$output_file" ]]; then
+        # Output is markdown, upload directly with metadata header
+        {
+            echo "<!-- _meta: backend=$backend dataset=$dataset seed=$seed instance=$INSTANCE_ID duration=${duration}s exit_code=$exit_code -->"
+            cat "$output_file"
+        } > "${output_file}.wrapped"
         
         # Upload to S3
         aws s3 cp "${output_file}.wrapped" "s3://$BUCKET/$result_key" --region "$REGION"
