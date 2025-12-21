@@ -278,9 +278,9 @@ mkdir -p $ANNO_CACHE_DIR $CARGO_TARGET_DIR
 echo "Building anno..."
 cargo build --release --bin anno --features "cli,eval-advanced" 2>&1 | tail -20
 
-# Sync datasets from S3 (pre-cache for offline use)
-echo "Syncing datasets from S3..."
-aws s3 sync s3://arc-anno-data/datasets/ "$ANNO_CACHE_DIR/datasets/" --region $REGION 2>&1 | tail -5 || true
+# Skip pre-sync - let ANNO_S3_CACHE=1 fetch on-demand
+# This saves ~60 GiB of upfront transfer
+echo "S3 cache enabled - datasets will be fetched on-demand"
 
 # Enable S3 fallback for any missing datasets
 export ANNO_S3_CACHE=1
@@ -315,7 +315,7 @@ USERDATA
             {
                 "DeviceName": "/dev/xvda",
                 "Ebs": {
-                    "VolumeSize": 30,
+                    "VolumeSize": 100,
                     "VolumeType": "gp3",
                     "DeleteOnTermination": true
                 }

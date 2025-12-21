@@ -191,6 +191,338 @@ define_id! {
     CanonicalId
 }
 
+// =============================================================================
+// Offset Types: Type-Safe Text Positions
+// =============================================================================
+
+/// A character (Unicode scalar value) offset in text.
+///
+/// Character offsets count `char` values, which is what `text.chars().count()`
+/// returns and what `String::char_indices()` uses.
+///
+/// # Why This Exists
+///
+/// In Unicode text, byte offsets differ from character offsets:
+/// - "日本語" has 9 bytes but 3 characters
+/// - Indexing by bytes (`text[0..3]`) risks splitting multi-byte characters
+///
+/// Using `CharOffset` instead of `usize` makes the offset unit explicit and
+/// prevents accidental mixing of byte and character offsets at compile time.
+///
+/// # Example
+///
+/// ```rust
+/// use anno_core::types::CharOffset;
+///
+/// let text = "日本語";
+/// let start = CharOffset::new(0);
+/// let end = CharOffset::new(3);
+///
+/// // Convert to range and extract
+/// let chars: String = text.chars()
+///     .skip(start.get())
+///     .take(end.get() - start.get())
+///     .collect();
+/// assert_eq!(chars, "日本語");
+/// ```
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Debug)]
+#[repr(transparent)]
+pub struct CharOffset(usize);
+
+impl CharOffset {
+    /// Zero offset constant.
+    pub const ZERO: Self = Self(0);
+
+    /// Create a new character offset.
+    #[inline]
+    #[must_use]
+    pub const fn new(offset: usize) -> Self {
+        Self(offset)
+    }
+
+    /// Get the raw usize value.
+    #[inline]
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl std::fmt::Display for CharOffset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<usize> for CharOffset {
+    #[inline]
+    fn from(offset: usize) -> Self {
+        Self(offset)
+    }
+}
+
+impl From<CharOffset> for usize {
+    #[inline]
+    fn from(offset: CharOffset) -> Self {
+        offset.0
+    }
+}
+
+impl Serialize for CharOffset {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for CharOffset {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        usize::deserialize(deserializer).map(Self)
+    }
+}
+
+/// A byte offset in text.
+///
+/// Byte offsets are what `str` methods like `get(start..end)` use, but they
+/// must align with UTF-8 code unit boundaries.
+///
+/// # When to Use
+///
+/// - When interfacing with regex crate (returns byte offsets)
+/// - When calling `str::get(start..end)` or `str[start..end]`
+/// - When parsing byte-oriented formats
+///
+/// Use [`bytes_to_chars`] to convert to `CharOffset` for entity storage.
+///
+/// [`bytes_to_chars`]: crate::offset::bytes_to_chars
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Debug)]
+#[repr(transparent)]
+pub struct ByteOffset(usize);
+
+impl ByteOffset {
+    /// Zero offset constant.
+    pub const ZERO: Self = Self(0);
+
+    /// Create a new byte offset.
+    #[inline]
+    #[must_use]
+    pub const fn new(offset: usize) -> Self {
+        Self(offset)
+    }
+
+    /// Get the raw usize value.
+    #[inline]
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl std::fmt::Display for ByteOffset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<usize> for ByteOffset {
+    #[inline]
+    fn from(offset: usize) -> Self {
+        Self(offset)
+    }
+}
+
+impl From<ByteOffset> for usize {
+    #[inline]
+    fn from(offset: ByteOffset) -> Self {
+        offset.0
+    }
+}
+
+impl Serialize for ByteOffset {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ByteOffset {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        usize::deserialize(deserializer).map(Self)
+    }
+}
+
+/// A character span: (start, end) in character offsets.
+///
+/// This is a typed wrapper around `(CharOffset, CharOffset)` for convenience.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
+pub struct CharSpan {
+    /// Start character offset (inclusive).
+    pub start: CharOffset,
+    /// End character offset (exclusive).
+    pub end: CharOffset,
+}
+
+impl CharSpan {
+    /// Create a new character span.
+    #[inline]
+    #[must_use]
+    pub const fn new(start: usize, end: usize) -> Self {
+        Self {
+            start: CharOffset::new(start),
+            end: CharOffset::new(end),
+        }
+    }
+
+    /// Create from raw offsets.
+    #[inline]
+    #[must_use]
+    pub const fn from_offsets(start: CharOffset, end: CharOffset) -> Self {
+        Self { start, end }
+    }
+
+    /// Length in characters.
+    #[inline]
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.end.0 - self.start.0
+    }
+
+    /// Check if the span is empty.
+    #[inline]
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.start.0 >= self.end.0
+    }
+
+    /// Convert to a `Range<usize>`.
+    #[inline]
+    #[must_use]
+    pub const fn to_range(&self) -> std::ops::Range<usize> {
+        self.start.0..self.end.0
+    }
+}
+
+impl From<(usize, usize)> for CharSpan {
+    #[inline]
+    fn from((start, end): (usize, usize)) -> Self {
+        Self::new(start, end)
+    }
+}
+
+impl From<std::ops::Range<usize>> for CharSpan {
+    #[inline]
+    fn from(range: std::ops::Range<usize>) -> Self {
+        Self::new(range.start, range.end)
+    }
+}
+
+impl Serialize for CharSpan {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        (self.start.0, self.end.0).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for CharSpan {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let (start, end) = <(usize, usize)>::deserialize(deserializer)?;
+        Ok(Self::new(start, end))
+    }
+}
+
+/// A byte span: (start, end) in byte offsets.
+///
+/// Use when working with regex or byte-oriented parsers.
+/// Convert to `CharSpan` before storing in entities.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
+pub struct ByteSpan {
+    /// Start byte offset (inclusive).
+    pub start: ByteOffset,
+    /// End byte offset (exclusive).
+    pub end: ByteOffset,
+}
+
+impl ByteSpan {
+    /// Create a new byte span.
+    #[inline]
+    #[must_use]
+    pub const fn new(start: usize, end: usize) -> Self {
+        Self {
+            start: ByteOffset::new(start),
+            end: ByteOffset::new(end),
+        }
+    }
+
+    /// Length in bytes.
+    #[inline]
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.end.0 - self.start.0
+    }
+
+    /// Check if the span is empty.
+    #[inline]
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.start.0 >= self.end.0
+    }
+
+    /// Convert to a `Range<usize>`.
+    #[inline]
+    #[must_use]
+    pub const fn to_range(&self) -> std::ops::Range<usize> {
+        self.start.0..self.end.0
+    }
+}
+
+impl From<(usize, usize)> for ByteSpan {
+    #[inline]
+    fn from((start, end): (usize, usize)) -> Self {
+        Self::new(start, end)
+    }
+}
+
+impl From<std::ops::Range<usize>> for ByteSpan {
+    #[inline]
+    fn from(range: std::ops::Range<usize>) -> Self {
+        Self::new(range.start, range.end)
+    }
+}
+
+impl Serialize for ByteSpan {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        (self.start.0, self.end.0).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ByteSpan {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let (start, end) = <(usize, usize)>::deserialize(deserializer)?;
+        Ok(Self::new(start, end))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

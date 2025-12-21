@@ -18,12 +18,22 @@ alwaysApply: true
 | CI | `--profile ci` | 60s | Full CI pipeline |
 
 ### Running Tests
+
+**Prefer `cargo nextest` over `cargo test`** for faster execution and better output.
+The justfile targets auto-detect nextest and fall back to cargo test if unavailable.
+
 ```bash
+# Quick single-test run (fastest, minimal features)
+just t test_name
+
+# Quick single-test run with full features
+just tf test_name
+
 # Fast development cycle
-cargo nextest run --profile quick --lib --features "eval"
+just test                    # or: cargo nextest run --profile quick --lib
 
 # Full suite before commit
-cargo nextest run --profile ci --workspace --features "eval-advanced discourse"
+just check                   # format + clippy + quick tests
 
 # ML backend tests only
 cargo nextest run --profile ml --features "onnx candle" -E 'test(/gliner/) or test(/candle/)'
@@ -31,6 +41,15 @@ cargo nextest run --profile ml --features "onnx candle" -E 'test(/gliner/) or te
 # Property tests with more cases
 PROPTEST_CASES=1000 cargo nextest run --profile property -E 'test(/property/)'
 ```
+
+### Quick Target Reference
+
+| Target | Purpose | Speed |
+|--------|---------|-------|
+| `just t <filter>` | Single test, minimal features | ~5-10s |
+| `just tf <filter>` | Single test, full features | ~15-30s |
+| `just test` | All lib tests | ~30-60s |
+| `just check` | Format + clippy + tests | ~60-90s |
 
 ## Test Patterns
 

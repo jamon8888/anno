@@ -1066,11 +1066,32 @@ impl Provenance {
 // Span Types (Multi-Modal Support)
 // ============================================================================
 
-/// A span locator that supports both text and visual modalities.
+/// A span locator for text and visual modalities.
 ///
-/// For ColPali/multi-modal systems, entities can be located by:
+/// `Span` is a **simplified subset** of [`grounded::Location`] designed for
+/// the detection layer (`Entity`). It covers the most common cases:
+///
 /// - Text offsets (traditional NER)
 /// - Bounding boxes (visual document understanding)
+/// - Hybrid (OCR with both text and visual location)
+///
+/// # Relationship to `Location`
+///
+/// | `Span` variant | `Location` equivalent |
+/// |----------------|-----------------------|
+/// | `Text` | `Location::Text` |
+/// | `BoundingBox` | `Location::BoundingBox` |
+/// | `Hybrid` | `Location::TextWithBbox` |
+///
+/// For modalities not covered by `Span` (temporal, cuboid, genomic, discontinuous),
+/// use `Location` directly via the canonical `Signal` → `Track` → `Identity` pipeline.
+///
+/// # Conversion
+///
+/// - `Span → Location`: Always succeeds via `Location::from(&span)`
+/// - `Location → Span`: Use `location.to_span()`, returns `None` for unsupported variants
+///
+/// [`grounded::Location`]: crate::grounded::Location
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Span {
     /// Text span with **character offsets** (start, end).
@@ -1647,6 +1668,27 @@ pub fn generate_filtered_candidates(
 ///          Named   Contact             Temporal
 ///          (ML)    (Pattern)           (Pattern)
 /// ```
+///
+/// # Core Fields (Stable API)
+///
+/// - `text`, `entity_type`, `start`, `end`, `confidence` — always present
+/// - `normalized`, `provenance` — commonly used optional fields
+/// - `kb_id`, `canonical_id` — knowledge graph and coreference support
+///
+/// # Extended Fields (Research/Experimental)
+///
+/// The following fields support advanced research applications but may evolve:
+///
+/// | Field | Purpose | Status |
+/// |-------|---------|--------|
+/// | `visual_span` | Multi-modal (ColPali) extraction | Experimental |
+/// | `discontinuous_span` | W2NER non-contiguous entities | Experimental |
+/// | `valid_from`, `valid_until` | Temporal knowledge graphs | Research |
+/// | `viewport` | Multi-faceted entity representation | Research |
+/// | `hierarchical_confidence` | Coarse-to-fine NER | Experimental |
+///
+/// These fields are `#[serde(skip_serializing_if = "Option::is_none")]` so they
+/// have no overhead when unused.
 ///
 /// # Knowledge Graph Support
 ///
