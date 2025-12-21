@@ -117,13 +117,12 @@ REVIEW_ISSUES.md
 !CHANGELOG.md
 !docs/**/*.md
 
-# Reports directory - track source of truth, ignore generated
+# Reports directory - track summaries, ignore raw/generated
 reports/
 !reports/eval-results.jsonl
 !reports/eval-summary.json
 !reports/RESULTS.md
-# Raw spot results (temporary)
-reports/spot/
+!reports/RESULTS.html
 
 .env
 
