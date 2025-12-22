@@ -1,37 +1,77 @@
 {
-  "generated": "2025-12-22T01:38:54.217923+00:00",
-  "total_runs": 4,
-  "successful": 3,
-  "skipped": 1,
-  "incompatible": 0,
+  "generated": "2025-12-22T01:41:39.346008+00:00",
+  "total_runs": 35,
+  "successful": 28,
+  "skipped": 3,
+  "incompatible": 4,
   "dataset_errors": 0,
   "errors": 0,
   "timeouts": 0,
-  "avg_f1": 38.6,
-  "best_f1": 70.3,
-  "best": "nuner/WikiGold",
+  "avg_f1": 37.5,
+  "best_f1": 74.5,
+  "best": "bert_onnx/WikiGold",
   "by_backend": {
+    "crf": {
+      "avg_f1": 3.1,
+      "best_f1": 3.1,
+      "runs": 1
+    },
+    "bert_onnx": {
+      "avg_f1": 48.1,
+      "best_f1": 74.5,
+      "runs": 5
+    },
     "nuner": {
-      "avg_f1": 43.3,
-      "best_f1": 70.3,
-      "runs": 2
+      "avg_f1": 40.8,
+      "best_f1": 68.1,
+      "runs": 5
+    },
+    "stacked": {
+      "avg_f1": 35.1,
+      "best_f1": 45.7,
+      "runs": 5
+    },
+    "gliner_onnx": {
+      "avg_f1": 36.0,
+      "best_f1": 50.9,
+      "runs": 5
+    },
+    "gliner2": {
+      "avg_f1": 39.0,
+      "best_f1": 50.3,
+      "runs": 5
     },
     "heuristic": {
-      "avg_f1": 29.3,
-      "best_f1": 29.3,
-      "runs": 1
+      "avg_f1": 26.4,
+      "best_f1": 27.6,
+      "runs": 2
     }
   },
   "by_dataset": {
     "FewNERD": {
-      "avg_f1": 16.3,
-      "best_f1": 16.3,
-      "runs": 1
+      "avg_f1": 25.8,
+      "best_f1": 35.6,
+      "runs": 5
+    },
+    "MultiNERD": {
+      "avg_f1": 45.7,
+      "best_f1": 57.8,
+      "runs": 5
+    },
+    "CoNLL2003Sample": {
+      "avg_f1": 40.3,
+      "best_f1": 66.7,
+      "runs": 7
     },
     "WikiGold": {
-      "avg_f1": 49.8,
-      "best_f1": 70.3,
-      "runs": 2
+      "avg_f1": 51.8,
+      "best_f1": 74.5,
+      "runs": 6
+    },
+    "Wnut17": {
+      "avg_f1": 19.9,
+      "best_f1": 27.9,
+      "runs": 5
     }
   }
 }

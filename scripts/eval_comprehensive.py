@@ -306,7 +306,7 @@ def main():
     args = parser.parse_args()
     
     backends = args.backends.split(",") if args.backends else BACKENDS
-    datasets = args.datasets.split(",") if args.datasets else list(NER_DATASETS)
+    datasets = args.datasets.split(",") if args.datasets else list(DATASETS)
     
     # If including slots, add slot datasets for zero-shot backends only
     slot_combos = set()
