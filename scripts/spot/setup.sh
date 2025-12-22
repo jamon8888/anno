@@ -206,7 +206,7 @@ create_ebs_volume() {
             --size "$EBS_CACHE_SIZE_GB" \
             --iops 3000 \
             --throughput 125 \
-            --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=anno-eval-cache},{Key=Project,Value=anno}]" \
+            --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=anno-eval-cache},{Key=Project,Value=anno},{Key=Component,Value=eval-cache},{Key=Environment,Value=eval},{Key=ManagedBy,Value=anno-spot-scripts},{Key=CostCenter,Value=ml-eval}]" \
             --query VolumeId --output text)
         log_info "Created volume: $VOLUME_ID"
     fi
@@ -335,7 +335,20 @@ USERDATA
                 "ResourceType": "instance",
                 "Tags": [
                     {"Key": "Name", "Value": "anno-eval-worker"},
-                    {"Key": "Project", "Value": "anno"}
+                    {"Key": "Project", "Value": "anno"},
+                    {"Key": "Component", "Value": "eval-worker"},
+                    {"Key": "Environment", "Value": "eval"},
+                    {"Key": "ManagedBy", "Value": "anno-spot-scripts"},
+                    {"Key": "CostCenter", "Value": "ml-eval"}
+                ]
+            },
+            {
+                "ResourceType": "volume",
+                "Tags": [
+                    {"Key": "Name", "Value": "anno-eval-worker-volume"},
+                    {"Key": "Project", "Value": "anno"},
+                    {"Key": "Component", "Value": "eval-worker"},
+                    {"Key": "CostCenter", "Value": "ml-eval"}
                 ]
             }
         ],
