@@ -1,42 +1,37 @@
 {
-  "generated": "2025-12-22T01:01:12.444064+00:00",
-  "total_runs": 6,
-  "successful": 5,
+  "generated": "2025-12-22T01:38:54.217923+00:00",
+  "total_runs": 4,
+  "successful": 3,
   "skipped": 1,
   "incompatible": 0,
   "dataset_errors": 0,
   "errors": 0,
   "timeouts": 0,
-  "avg_f1": 34.2,
-  "best_f1": 79.1,
+  "avg_f1": 38.6,
+  "best_f1": 70.3,
   "best": "nuner/WikiGold",
   "by_backend": {
-    "stacked": {
-      "avg_f1": 31.4,
-      "best_f1": 56.0,
+    "nuner": {
+      "avg_f1": 43.3,
+      "best_f1": 70.3,
       "runs": 2
     },
     "heuristic": {
-      "avg_f1": 20.0,
-      "best_f1": 20.0,
+      "avg_f1": 29.3,
+      "best_f1": 29.3,
       "runs": 1
-    },
-    "nuner": {
-      "avg_f1": 44.1,
-      "best_f1": 79.1,
-      "runs": 2
     }
   },
   "by_dataset": {
-    "Wnut17": {
-      "avg_f1": 7.9,
-      "best_f1": 9.1,
-      "runs": 2
+    "FewNERD": {
+      "avg_f1": 16.3,
+      "best_f1": 16.3,
+      "runs": 1
     },
     "WikiGold": {
-      "avg_f1": 51.7,
-      "best_f1": 79.1,
-      "runs": 3
+      "avg_f1": 49.8,
+      "best_f1": 70.3,
+      "runs": 2
     }
   }
 }

@@ -49,13 +49,8 @@ SLOT_DATASETS = [
     "MitRestaurant", # CUISINE, DISH, PRICE, etc.
 ]
 
-# Problematic datasets (download issues, config problems)
-SKIP_DATASETS = [
-    "FewNERD",  # HuggingFace API returns 422
-]
-
-# Default: NER datasets only (more meaningful results)
-DATASETS = NER_DATASETS
+# Default: NER datasets (now includes FewNERD after fixing API pagination)
+DATASETS = NER_DATASETS + ["FewNERD"]
 
 # Backends that can handle arbitrary labels (zero-shot)
 ZERO_SHOT_BACKENDS = ["nuner", "gliner_onnx", "gliner2"]
