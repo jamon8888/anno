@@ -42,6 +42,24 @@ NER_DATASETS = [
     "MultiNERD",
 ]
 
+# Biomedical NER datasets (Disease/Chemical)
+BIO_DATASETS = [
+    "BC5CDR",       # Disease + Chemical
+    "NCBIDisease",  # Disease only
+]
+
+# Coreference datasets
+COREF_DATASETS = [
+    "GAP",          # Gender Ambiguous Pronouns
+    # "PreCo",      # Large-scale coref (may be slow)
+    # "LitBank",    # Literary coref (requires HF token)
+]
+
+# Coref backends
+COREF_BACKENDS = [
+    "mention_ranking",  # Default coref resolver
+]
+
 # Slot-filling datasets (domain-specific entity types)
 # Only zero-shot models (nuner, gliner*) can attempt these
 SLOT_DATASETS = [
@@ -50,7 +68,10 @@ SLOT_DATASETS = [
 ]
 
 # Default: NER datasets (now includes FewNERD after fixing API pagination)
-DATASETS = NER_DATASETS + ["FewNERD"]
+DEFAULT_DATASETS = NER_DATASETS + ["FewNERD"]
+
+# All datasets (including biomedical)
+ALL_DATASETS = DEFAULT_DATASETS + BIO_DATASETS
 
 # Backends that can handle arbitrary labels (zero-shot)
 ZERO_SHOT_BACKENDS = ["nuner", "gliner_onnx", "gliner2"]
@@ -60,8 +81,8 @@ SUMMARY_FILE = Path("reports/eval-summary.json")
 MARKDOWN_FILE = Path("reports/RESULTS.md")
 
 
-def get_completed_combinations(results_file: Path) -> set[tuple[str, str]]:
-    """Load already-completed (backend, dataset) pairs."""
+def get_completed_combinations(results_file: Path) -> set[tuple[str, str, str]]:
+    """Load already-completed (backend, dataset, task) tuples."""
     completed = set()
     if results_file.exists():
         with open(results_file, "r") as f:
@@ -69,18 +90,20 @@ def get_completed_combinations(results_file: Path) -> set[tuple[str, str]]:
                 try:
                     r = json.loads(line.strip())
                     if r.get("status") in ("success", "skipped"):
-                        completed.add((r["backend"], r["dataset"]))
+                        task = r.get("task", "ner")  # Default to "ner" for old entries
+                        completed.add((r["backend"], r["dataset"], task))
                 except json.JSONDecodeError:
                     continue
     return completed
 
 
-def run_single_eval(backend: str, dataset: str, max_examples: int, seed: int) -> dict:
+def run_single_eval(backend: str, dataset: str, max_examples: int, seed: int, task: str = "ner") -> dict:
     """Run evaluation for a single backend/dataset combination."""
     start = time.time()
     result = {
         "backend": backend,
         "dataset": dataset,
+        "task": task,
         "seed": seed,
         "max_examples": max_examples,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -91,6 +114,7 @@ def run_single_eval(backend: str, dataset: str, max_examples: int, seed: int) ->
     cmd = [
         "./target/release/anno",
         "benchmark",
+        "--tasks", task,
         "--backends", backend,
         "--datasets", dataset,
         "--max-examples", str(max_examples),
@@ -303,10 +327,36 @@ def main():
     parser.add_argument("--datasets", type=str, help="Comma-separated datasets (default: NER only)")
     parser.add_argument("--include-slots", action="store_true", 
                         help="Include slot-filling datasets (MitMovie, MitRestaurant) with zero-shot backends")
+    parser.add_argument("--include-bio", action="store_true",
+                        help="Include biomedical datasets (BC5CDR, NCBIDisease)")
+    parser.add_argument("--include-coref", action="store_true",
+                        help="Include coreference datasets (GAP) with coref backends")
+    parser.add_argument("--all", action="store_true",
+                        help="Run all datasets (NER + FewNERD + biomedical + coref)")
     args = parser.parse_args()
     
     backends = args.backends.split(",") if args.backends else BACKENDS
-    datasets = args.datasets.split(",") if args.datasets else list(DATASETS)
+    
+    # Determine dataset list
+    if args.datasets:
+        datasets = args.datasets.split(",")
+    elif args.all:
+        datasets = list(ALL_DATASETS)
+    else:
+        datasets = list(DEFAULT_DATASETS)
+    
+    # Add biomedical if requested
+    if args.include_bio and not args.all:
+        for ds in BIO_DATASETS:
+            if ds not in datasets:
+                datasets.append(ds)
+    
+    # Add coref datasets and backends if requested
+    coref_combos = []
+    if args.include_coref or args.all:
+        for backend in COREF_BACKENDS:
+            for ds in COREF_DATASETS:
+                coref_combos.append((backend, ds, "coref"))
     
     # If including slots, add slot datasets for zero-shot backends only
     slot_combos = set()
@@ -326,58 +376,62 @@ def main():
         # Start fresh
         RESULTS_FILE.unlink()
     
-    total = len(backends) * len(datasets)
+    # Build all combinations: NER + coref
+    ner_combos = [(b, d, "ner") for b in backends for d in datasets]
+    all_combos = ner_combos + coref_combos
+    
+    total = len(all_combos)
     done = len(completed)
     
     print(f"=== Comprehensive Evaluation ===")
-    print(f"Backends: {len(backends)}")
-    print(f"Datasets: {len(datasets)}")
+    print(f"NER: {len(backends)} backends × {len(datasets)} datasets = {len(ner_combos)}")
+    if coref_combos:
+        print(f"Coref: {len(COREF_BACKENDS)} backends × {len(COREF_DATASETS)} datasets = {len(coref_combos)}")
     print(f"Total combinations: {total}")
     print(f"Already completed: {done}")
     print(f"Remaining: {total - done}")
     print()
     
-    for i, backend in enumerate(backends):
-        for j, dataset in enumerate(datasets):
-            combo = (backend, dataset)
-            idx = i * len(datasets) + j + 1
-            
-            if combo in completed:
-                print(f"[{idx}/{total}] SKIP {backend}/{dataset} (already done)")
-                continue
-            
-            # Skip non-zero-shot backends on slot-filling datasets
-            if combo in slot_combos:
-                print(f"[{idx}/{total}] SKIP {backend}/{dataset} (slot dataset needs zero-shot)")
-                result = {
-                    "backend": backend,
-                    "dataset": dataset,
-                    "status": "skipped",
-                    "reason": "Slot-filling dataset requires zero-shot backend",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-                append_result(result, RESULTS_FILE)
-                continue
-            
-            print(f"[{idx}/{total}] Running {backend}/{dataset}...", end=" ", flush=True)
-            
-            result = run_single_eval(backend, dataset, args.max_examples, args.seed)
+    for idx, (backend, dataset, task) in enumerate(all_combos, 1):
+        combo = (backend, dataset, task)
+        
+        if combo in completed:
+            print(f"[{idx}/{total}] SKIP {backend}/{dataset}/{task} (already done)")
+            continue
+        
+        # Skip non-zero-shot backends on slot-filling datasets
+        if (backend, dataset) in slot_combos:
+            print(f"[{idx}/{total}] SKIP {backend}/{dataset} (slot dataset needs zero-shot)")
+            result = {
+                "backend": backend,
+                "dataset": dataset,
+                "task": task,
+                "status": "skipped",
+                "reason": "Slot-filling dataset requires zero-shot backend",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
             append_result(result, RESULTS_FILE)
-            
-            status = result["status"]
-            if status == "success":
-                f1_str = f"{result.get('f1', 0):.1f}" if result.get('f1') is not None else "?"
-                print(f"OK F1={f1_str}% ({result.get('duration_s', '?')}s)")
-            elif status == "skipped":
-                print(f"-- skipped")
-            elif status == "incompatible":
-                print(f"-- incompatible types")
-            elif status == "dataset_error":
-                print(f"!! dataset load failed")
-            elif status == "timeout":
-                print(f"!! timeout")
-            else:
-                print(f"!! {result.get('error', 'error')[:50]}")
+            continue
+        
+        print(f"[{idx}/{total}] Running {backend}/{dataset}/{task}...", end=" ", flush=True)
+        
+        result = run_single_eval(backend, dataset, args.max_examples, args.seed, task)
+        append_result(result, RESULTS_FILE)
+        
+        status = result["status"]
+        if status == "success":
+            f1_str = f"{result.get('f1', 0):.1f}" if result.get('f1') is not None else "?"
+            print(f"OK F1={f1_str}% ({result.get('duration_s', '?')}s)")
+        elif status == "skipped":
+            print(f"-- skipped")
+        elif status == "incompatible":
+            print(f"-- incompatible types")
+        elif status == "dataset_error":
+            print(f"!! dataset load failed")
+        elif status == "timeout":
+            print(f"!! timeout")
+        else:
+            print(f"!! {result.get('error', 'error')[:50]}")
     
     # Generate summary and markdown
     print("\n=== Generating reports ===")
