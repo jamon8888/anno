@@ -430,6 +430,10 @@ impl EntityType {
             "PHONE" | "TELEPHONE" => EntityType::Phone,
             // MISC variations
             "MISC" | "MISCELLANEOUS" | "OTHER" => EntityType::Other("MISC".to_string()),
+            // Biomedical types
+            "DISEASE" | "DISORDER" => EntityType::custom("DISEASE", EntityCategory::Misc),
+            "CHEMICAL" | "DRUG" => EntityType::custom("CHEMICAL", EntityCategory::Misc),
+            "GENE" | "PROTEIN" => EntityType::custom("GENE", EntityCategory::Misc),
             // Unknown -> Other
             other => EntityType::Other(other.to_string()),
         }
