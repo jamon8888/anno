@@ -716,9 +716,42 @@ pub fn entity_type_to_string(et: &EntityType) -> String {
 
 /// Entity type matching for evaluation.
 ///
-/// Handles exact matches. Uses PartialEq implementation.
+/// Handles fuzzy matching for evaluation:
+/// 1. Exact match (Person == Person)
+/// 2. Normalized match (normalize both to canonical form)
+/// 3. Semantic equivalents (corporation → organization)
 pub fn entity_type_matches(a: &EntityType, b: &EntityType) -> bool {
-    a == b
+    // Fast path: exact match
+    if a == b {
+        return true;
+    }
+
+    // Normalize both to canonical form and compare
+    let a_label = a.as_label().to_uppercase();
+    let b_label = b.as_label().to_uppercase();
+
+    if a_label == b_label {
+        return true;
+    }
+
+    // Semantic equivalents (both directions)
+    matches!(
+        (a_label.as_str(), b_label.as_str()),
+        // Person variations
+        ("PERSON", "PER") | ("PER", "PERSON")
+        // Organization variations (including WNUT corporation)
+        | ("ORGANIZATION", "ORG") | ("ORG", "ORGANIZATION")
+        | ("ORGANIZATION", "CORPORATION") | ("CORPORATION", "ORGANIZATION")
+        | ("ORG", "CORPORATION") | ("CORPORATION", "ORG")
+        | ("ORGANIZATION", "COMPANY") | ("COMPANY", "ORGANIZATION")
+        // Location variations
+        | ("LOCATION", "LOC") | ("LOC", "LOCATION")
+        | ("LOCATION", "GPE") | ("GPE", "LOCATION")
+        | ("LOC", "GPE") | ("GPE", "LOC")
+        // MISC variations
+        | ("MISC", "MISCELLANEOUS") | ("MISCELLANEOUS", "MISC")
+        | ("MISC", "OTHER") | ("OTHER", "MISC")
+    )
 }
 
 /// Load CoNLL-2003 format dataset.

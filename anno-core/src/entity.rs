@@ -401,13 +401,20 @@ impl EntityType {
             .unwrap_or(label);
 
         match label.to_uppercase().as_str() {
-            // Named entities
+            // Named entities (multiple variations)
             "PER" | "PERSON" => EntityType::Person,
-            "ORG" | "ORGANIZATION" | "COMPANY" => EntityType::Organization,
+            "ORG" | "ORGANIZATION" | "COMPANY" | "CORPORATION" => EntityType::Organization,
             "LOC" | "LOCATION" | "GPE" | "GEO-LOC" => EntityType::Location,
-            // WNUT-specific types
-            "FACILITY" | "FAC" => EntityType::custom("FACILITY", EntityCategory::Place),
+            // WNUT / FewNERD specific types (common in social media / Wikipedia)
+            "FACILITY" | "FAC" | "BUILDING" => {
+                EntityType::custom("BUILDING", EntityCategory::Place)
+            }
             "PRODUCT" | "PROD" => EntityType::custom("PRODUCT", EntityCategory::Misc),
+            "EVENT" => EntityType::custom("EVENT", EntityCategory::Creative),
+            "CREATIVE-WORK" | "WORK_OF_ART" | "ART" => {
+                EntityType::custom("CREATIVE_WORK", EntityCategory::Creative)
+            }
+            "GROUP" | "NORP" => EntityType::custom("GROUP", EntityCategory::Agent),
             // Temporal
             "DATE" => EntityType::Date,
             "TIME" => EntityType::Time,
@@ -421,6 +428,8 @@ impl EntityType {
             "EMAIL" => EntityType::Email,
             "URL" | "URI" => EntityType::Url,
             "PHONE" | "TELEPHONE" => EntityType::Phone,
+            // MISC variations
+            "MISC" | "MISCELLANEOUS" | "OTHER" => EntityType::Other("MISC".to_string()),
             // Unknown -> Other
             other => EntityType::Other(other.to_string()),
         }
