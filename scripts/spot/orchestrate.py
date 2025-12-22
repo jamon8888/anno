@@ -23,6 +23,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -250,6 +251,11 @@ def launch_fleet(config: Config, target_capacity: int) -> str:
                     "Tags": [
                         {"Key": "Name", "Value": "anno-eval-fleet"},
                         {"Key": "Project", "Value": "anno"},
+                        {"Key": "Component", "Value": "eval-fleet"},
+                        {"Key": "Environment", "Value": "eval"},
+                        {"Key": "ManagedBy", "Value": "anno-spot-scripts"},
+                        {"Key": "CostCenter", "Value": "ml-eval"},
+                        {"Key": "RunId", "Value": datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")},
                     ],
                 }
             ],
