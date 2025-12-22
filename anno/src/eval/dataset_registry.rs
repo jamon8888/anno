@@ -1291,7 +1291,7 @@ define_datasets! {
         format: "TSV",
         size_hint: "188k sentences, 66 fine-grained types",
         example: "Elon Musk (person-entrepreneur) founded SpaceX (organization-company) in Hawthorne (location-city), California.",
-        notes: "Hierarchical type system; benchmark for few-shot and fine-grained NER",
+        notes: "Hierarchical type system; benchmark for few-shot and fine-grained NER. Note: HuggingFace API may return 422 errors; consider downloading locally.",
         tasks: ["ner"],
         hf_id: "DFKI-SLT/few-nerd",
         categories: [ner],

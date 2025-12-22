@@ -215,8 +215,16 @@ eval-anaphora:
 
 # Run comprehensive local evaluation (resumable)
 # Example: just eval-comprehensive 50
-eval-comprehensive MAX_EXAMPLES="30":
-    python3 scripts/eval_comprehensive.py --max-examples {{MAX_EXAMPLES}}
+eval-comprehensive MAX_EXAMPLES="50":
+    uv run scripts/eval_comprehensive.py --max-examples {{MAX_EXAMPLES}}
+
+# Resume comprehensive evaluation from where it left off
+eval-resume MAX_EXAMPLES="50":
+    uv run scripts/eval_comprehensive.py --resume --max-examples {{MAX_EXAMPLES}}
+
+# View current evaluation results
+eval-results:
+    @cat reports/RESULTS.md 2>/dev/null || echo "No results yet. Run 'just eval-comprehensive' first."
 
 # Resume incomplete comprehensive evaluation
 eval-resume:

@@ -1,85 +1,42 @@
 {
-  "generated": "2025-12-21T23:53:17.337406+00:00",
-  "total_runs": 49,
-  "successful": 44,
-  "skipped": 5,
+  "generated": "2025-12-22T01:01:12.444064+00:00",
+  "total_runs": 6,
+  "successful": 5,
+  "skipped": 1,
+  "incompatible": 0,
+  "dataset_errors": 0,
   "errors": 0,
   "timeouts": 0,
-  "avg_f1": 21.4,
-  "best_f1": 74.5,
-  "best": "bert_onnx/WikiGold",
+  "avg_f1": 34.2,
+  "best_f1": 79.1,
+  "best": "nuner/WikiGold",
   "by_backend": {
     "stacked": {
-      "avg_f1": 20.0,
-      "best_f1": 45.7,
-      "runs": 7
-    },
-    "gliner2": {
-      "avg_f1": 26.0,
-      "best_f1": 50.3,
-      "runs": 7
-    },
-    "crf": {
-      "avg_f1": 0.4,
-      "best_f1": 3.1,
-      "runs": 7
-    },
-    "gliner_onnx": {
-      "avg_f1": 22.3,
-      "best_f1": 50.9,
-      "runs": 7
-    },
-    "bert_onnx": {
-      "avg_f1": 31.1,
-      "best_f1": 74.5,
-      "runs": 7
-    },
-    "heuristic": {
-      "avg_f1": 26.4,
-      "best_f1": 27.6,
+      "avg_f1": 31.4,
+      "best_f1": 56.0,
       "runs": 2
     },
+    "heuristic": {
+      "avg_f1": 20.0,
+      "best_f1": 20.0,
+      "runs": 1
+    },
     "nuner": {
-      "avg_f1": 27.0,
-      "best_f1": 68.1,
-      "runs": 7
+      "avg_f1": 44.1,
+      "best_f1": 79.1,
+      "runs": 2
     }
   },
   "by_dataset": {
-    "MultiNERD": {
-      "avg_f1": 37.2,
-      "best_f1": 57.8,
-      "runs": 6
-    },
-    "MitRestaurant": {
-      "avg_f1": 1.1,
-      "best_f1": 6.4,
-      "runs": 6
-    },
-    "FewNERD": {
-      "avg_f1": 0.0,
-      "best_f1": 0.0,
-      "runs": 6
-    },
     "Wnut17": {
-      "avg_f1": 16.6,
-      "best_f1": 27.9,
-      "runs": 6
-    },
-    "CoNLL2003Sample": {
-      "avg_f1": 40.3,
-      "best_f1": 66.7,
-      "runs": 7
+      "avg_f1": 7.9,
+      "best_f1": 9.1,
+      "runs": 2
     },
     "WikiGold": {
-      "avg_f1": 44.4,
-      "best_f1": 74.5,
-      "runs": 7
-    },
-    "MitMovie": {
-      "avg_f1": 3.0,
-      "best_f1": 15.9,
-      "runs": 6
+      "avg_f1": 51.7,
+      "best_f1": 79.1,
+      "runs": 3
     }
   }
 }
