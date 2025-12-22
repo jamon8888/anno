@@ -27,30 +27,38 @@ BACKENDS = [
     "heuristic",
     "stacked",
     "crf",
-    # ONNX backends
+    # ONNX backends (require models)
     "nuner",
     "gliner_onnx",
     "gliner2",
     "bert_onnx",
-    # Pattern (structured entities only)
-    # "pattern",  # Skip - only handles dates/URLs, not NER
 ]
 
-# All NER datasets with tasks: ["ner"]
-DATASETS = [
+# Standard NER datasets (PER/ORG/LOC/MISC)
+NER_DATASETS = [
     "WikiGold",
-    "Wnut17",
-    "MitMovie",
-    "MitRestaurant",
     "CoNLL2003Sample",
+    "Wnut17",
     "MultiNERD",
-    "FewNERD",
-    # These may need downloads or have issues:
-    # "OntoNotesSample",
-    # "CrossNER",
-    # "FabNER",
-    # "BroadTwitterCorpus",
 ]
+
+# Slot-filling datasets (domain-specific entity types)
+# Only zero-shot models (nuner, gliner*) can attempt these
+SLOT_DATASETS = [
+    "MitMovie",      # ACTOR, DIRECTOR, GENRE, etc.
+    "MitRestaurant", # CUISINE, DISH, PRICE, etc.
+]
+
+# Problematic datasets (download issues, config problems)
+SKIP_DATASETS = [
+    "FewNERD",  # HuggingFace API returns 422
+]
+
+# Default: NER datasets only (more meaningful results)
+DATASETS = NER_DATASETS
+
+# Backends that can handle arbitrary labels (zero-shot)
+ZERO_SHOT_BACKENDS = ["nuner", "gliner_onnx", "gliner2"]
 
 RESULTS_FILE = Path("reports/eval-comprehensive.jsonl")
 SUMMARY_FILE = Path("reports/eval-summary.json")
@@ -107,9 +115,13 @@ def run_single_eval(backend: str, dataset: str, max_examples: int, seed: int) ->
         result["duration_s"] = round(duration, 2)
         result["exit_code"] = proc.returncode
         
-        if proc.returncode == 0:
-            # Parse output for F1 score
-            output = proc.stdout + proc.stderr
+        output = proc.stdout + proc.stderr
+        
+        # Check for dataset loading errors (e.g., HuggingFace 422)
+        if "Failed to load dataset" in output or "status code 422" in output:
+            result["status"] = "dataset_error"
+            result["reason"] = "Dataset loading failed (API error or unavailable)"
+        elif proc.returncode == 0:
             result["status"] = "success"
             
             # Extract F1 from markdown table: | Dataset | Backend | F1 | P | R | N | ms |
@@ -130,6 +142,11 @@ def run_single_eval(backend: str, dataset: str, max_examples: int, seed: int) ->
                                 break
                         except (ValueError, IndexError):
                             pass
+            
+            # Check for 0% F1 with incompatible entity types
+            if result.get("f1") == 0.0 and "doesn't support dataset entity types" in output:
+                result["status"] = "incompatible"
+                result["reason"] = "Backend entity types don't match dataset"
             
             # Check if backend was skipped (0 runs)
             if "Total: 0" in output:
@@ -174,6 +191,8 @@ def generate_summary(results_file: Path) -> dict:
         "total_runs": len(results),
         "successful": len(successful),
         "skipped": len([r for r in results if r.get("status") == "skipped"]),
+        "incompatible": len([r for r in results if r.get("status") == "incompatible"]),
+        "dataset_errors": len([r for r in results if r.get("status") == "dataset_error"]),
         "errors": len([r for r in results if r.get("status") == "error"]),
         "timeouts": len([r for r in results if r.get("status") == "timeout"]),
     }
@@ -231,6 +250,8 @@ def generate_markdown(results_file: Path, summary: dict) -> str:
     md.append(f"| Total runs | {summary['total_runs']} |")
     md.append(f"| Successful | {summary['successful']} |")
     md.append(f"| Skipped | {summary.get('skipped', 0)} |")
+    md.append(f"| Incompatible | {summary.get('incompatible', 0)} |")
+    md.append(f"| Dataset errors | {summary.get('dataset_errors', 0)} |")
     md.append(f"| Errors | {summary.get('errors', 0)} |")
     if summary.get('avg_f1'):
         md.append(f"| Avg F1 | {summary['avg_f1']}% |")
@@ -284,11 +305,25 @@ def main():
     parser.add_argument("--max-examples", type=int, default=50, help="Max examples per dataset")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--backends", type=str, help="Comma-separated backends (default: all)")
-    parser.add_argument("--datasets", type=str, help="Comma-separated datasets (default: all)")
+    parser.add_argument("--datasets", type=str, help="Comma-separated datasets (default: NER only)")
+    parser.add_argument("--include-slots", action="store_true", 
+                        help="Include slot-filling datasets (MitMovie, MitRestaurant) with zero-shot backends")
     args = parser.parse_args()
     
     backends = args.backends.split(",") if args.backends else BACKENDS
-    datasets = args.datasets.split(",") if args.datasets else DATASETS
+    datasets = args.datasets.split(",") if args.datasets else list(NER_DATASETS)
+    
+    # If including slots, add slot datasets for zero-shot backends only
+    slot_combos = set()
+    if args.include_slots:
+        for ds in SLOT_DATASETS:
+            if ds not in datasets:
+                datasets.append(ds)
+        # Track which combos are slot-filling for skip logic
+        for b in backends:
+            for ds in SLOT_DATASETS:
+                if b not in ZERO_SHOT_BACKENDS:
+                    slot_combos.add((b, ds))
     
     # Get completed combinations if resuming
     completed = get_completed_combinations(RESULTS_FILE) if args.resume else set()
@@ -316,6 +351,19 @@ def main():
                 print(f"[{idx}/{total}] SKIP {backend}/{dataset} (already done)")
                 continue
             
+            # Skip non-zero-shot backends on slot-filling datasets
+            if combo in slot_combos:
+                print(f"[{idx}/{total}] SKIP {backend}/{dataset} (slot dataset needs zero-shot)")
+                result = {
+                    "backend": backend,
+                    "dataset": dataset,
+                    "status": "skipped",
+                    "reason": "Slot-filling dataset requires zero-shot backend",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                append_result(result, RESULTS_FILE)
+                continue
+            
             print(f"[{idx}/{total}] Running {backend}/{dataset}...", end=" ", flush=True)
             
             result = run_single_eval(backend, dataset, args.max_examples, args.seed)
@@ -323,13 +371,18 @@ def main():
             
             status = result["status"]
             if status == "success":
-                print(f"✓ F1={result.get('f1', '?')}% ({result.get('duration_s', '?')}s)")
+                f1_str = f"{result.get('f1', 0):.1f}" if result.get('f1') is not None else "?"
+                print(f"OK F1={f1_str}% ({result.get('duration_s', '?')}s)")
             elif status == "skipped":
-                print(f"⊘ skipped")
+                print(f"-- skipped")
+            elif status == "incompatible":
+                print(f"-- incompatible types")
+            elif status == "dataset_error":
+                print(f"!! dataset load failed")
             elif status == "timeout":
-                print(f"⏱ timeout")
+                print(f"!! timeout")
             else:
-                print(f"✗ {result.get('error', 'error')[:50]}")
+                print(f"!! {result.get('error', 'error')[:50]}")
     
     # Generate summary and markdown
     print("\n=== Generating reports ===")
