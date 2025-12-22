@@ -45,6 +45,28 @@ When to choose each NER backend based on your requirements.
 | DeBERTa-v3 | `deberta-v3` | Requires Export | Run `scripts/export_deberta_ner_to_onnx.py` |
 | ALBERT | `albert` | Requires Export | Custom ONNX export needed |
 
+## Performance Comparison (Empirical)
+
+Based on comprehensive evaluation across WikiGold, CoNLL2003, Wnut17, MultiNERD, and FewNERD:
+
+| Backend | Best F1 | Speed | Labels | Best For |
+|---------|---------|-------|--------|----------|
+| `bert_onnx` | **80%** | ~0.5s | Fixed (trained on CoNLL) | Highest accuracy on standard NER |
+| `nuner` | **70%** | ~5s | 3 only (PER/ORG/LOC) | Good accuracy, but slow and inflexible |
+| `gliner_onnx` | **53%** | ~1s | Any (zero-shot) | Arbitrary entity types |
+| `gliner2` | **46%** | ~4.5s | Any (multi-task) | NER + relations + classification |
+| `stacked` | **50%** | ~0.5s | PER/ORG/LOC + patterns | No ML dependencies |
+| `heuristic` | **29%** | ~0.02s | PER/ORG/LOC | Fastest, no deps |
+| `crf` | **5%** | ~0.02s | Trained types | Classical ML baseline |
+
+**Key findings:**
+- For **best accuracy**: Use `bert_onnx` (80% F1 on MultiNERD)
+- For **zero-shot with custom types**: Use `gliner_onnx` over NuNER (faster, more flexible)
+- For **no ML dependencies**: Use `stacked` (50% F1)
+- For **biomedical NER**: Need specialized models (BioBERT, PubMedBERT) - current models don't detect Chemical/Disease
+
+> See [`reports/RESULTS.md`](../reports/RESULTS.md) for detailed per-dataset results.
+
 ## Backend Details
 
 ### No Feature Required (Zero Dependencies)
