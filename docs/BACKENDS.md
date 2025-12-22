@@ -63,7 +63,21 @@ Based on comprehensive evaluation across WikiGold, CoNLL2003, Wnut17, MultiNERD,
 - For **best accuracy**: Use `bert_onnx` (80% F1 on MultiNERD)
 - For **zero-shot with custom types**: Use `gliner_onnx` over NuNER (faster, more flexible)
 - For **no ML dependencies**: Use `stacked` (50% F1)
-- For **biomedical NER**: Need specialized models (BioBERT, PubMedBERT) - current models don't detect Chemical/Disease
+- For **biomedical NER**: Export `d4data/biomedical-ner-all` via `scripts/export_biomedical_ner_to_onnx.py`
+
+### Biomedical NER
+
+General-purpose models (GLiNER, NuNER, BERT-NER) don't detect biomedical entities.
+For Chemical/Disease/Drug/Gene extraction, export a biomedical model:
+
+```bash
+uv run scripts/export_biomedical_ner_to_onnx.py --output ~/.cache/anno/models/biomedical-ner/
+```
+
+This exports `d4data/biomedical-ner-all` which detects:
+- Medication/Drug, MedicalCondition, AnatomicalStructure
+- BiologicalProcess, ClinicalAttribute, BodySubstance
+- Gene, Disease, Chemical
 
 > See [`reports/RESULTS.md`](../reports/RESULTS.md) for detailed per-dataset results.
 
