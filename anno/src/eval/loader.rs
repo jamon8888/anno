@@ -922,14 +922,50 @@ impl AnnotatedSentence {
         let mut entities = Vec::new();
         let mut i = 0;
         while i < self.tokens.len() {
-            if self.tokens[i].ner_tag.starts_with("B-") {
-                let entity_type = self.tokens[i].ner_tag.trim_start_matches("B-");
+            let tag = &self.tokens[i].ner_tag;
+
+            // Check for BIO format (B-TYPE, I-TYPE)
+            if tag.starts_with("B-") {
+                let entity_type = tag.trim_start_matches("B-");
                 let mut end = i + 1;
                 // Only continue with I-tags that match the same entity type
                 while end < self.tokens.len()
                     && self.tokens[end].ner_tag.starts_with("I-")
                     && self.tokens[end].ner_tag.trim_start_matches("I-") == entity_type
                 {
+                    end += 1;
+                }
+                let entity_text: String = self.tokens[i..end]
+                    .iter()
+                    .map(|t| t.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+
+                let start = token_starts.get(i).copied().unwrap_or(0);
+                let end_char = if end <= i {
+                    start
+                } else {
+                    let last = end - 1;
+                    token_starts.get(last).copied().unwrap_or(start)
+                        + self.tokens[last].text.chars().count()
+                };
+
+                entities.push(super::datasets::GoldEntity {
+                    text: entity_text,
+                    original_label: entity_type.to_string(),
+                    entity_type: anno_core::EntityType::from_label(entity_type),
+                    start,
+                    end: end_char,
+                });
+                i = end;
+            }
+            // Fallback: non-BIO format (simple type names like "person", "organization")
+            // Used by datasets like FewNERD that use ClassLabels
+            else if tag != "O" && !tag.starts_with("I-") && !tag.starts_with("TAG_") {
+                let entity_type = tag.as_str();
+                let mut end = i + 1;
+                // Continue while same entity type (treating consecutive same labels as one entity)
+                while end < self.tokens.len() && self.tokens[end].ner_tag == *tag {
                     end += 1;
                 }
                 let entity_text: String = self.tokens[i..end]
@@ -2184,7 +2220,8 @@ impl DatasetLoader {
         }
 
         // Fall back to paginated API download
-        const PAGE_SIZE: usize = 1000; // Increased from 100 to 1000 for better performance
+        // HuggingFace datasets-server API limits to 100 rows per request
+        const PAGE_SIZE: usize = 100;
         let mut all_rows = Vec::new();
         let mut features = None;
         let mut offset: usize = 0;
