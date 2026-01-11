@@ -2068,7 +2068,18 @@ pub fn extract_relations(
             // Simple heuristic: check for common relation indicators
             let relation_type = detect_relation_type(head, tail, between_text, &relation_labels);
 
-            if let Some((rel_type, confidence, trigger)) = relation_type {
+            if let Some((rel_type, mut confidence, trigger)) = relation_type {
+                // Apply distance penalty: closer entities are more likely to be related
+                // Confidence decays linearly from 1.0 at distance 0 to 0.5 at max_span_distance
+                let distance_penalty = if distance < config.max_span_distance {
+                    let penalty_factor =
+                        1.0 - (distance as f64 / config.max_span_distance as f64) * 0.5;
+                    penalty_factor.max(0.5) // Minimum 0.5 confidence even at max distance
+                } else {
+                    0.5 // At or beyond max distance, apply minimum confidence
+                };
+                confidence *= distance_penalty;
+
                 if confidence < config.threshold as f64 {
                     continue;
                 }
@@ -2092,7 +2103,7 @@ pub fn extract_relations(
                     tail: tail.clone(),
                     relation_type: rel_type.to_string(),
                     trigger_span,
-                    confidence,
+                    confidence: confidence.min(1.0).max(0.0), // Clamp to [0, 1]
                 });
             }
         }
@@ -2161,9 +2172,19 @@ pub fn extract_relation_triples(
                 .get(between_span.byte_start..between_span.byte_end)
                 .unwrap_or("");
 
-            if let Some((rel_type, confidence, _trigger)) =
+            if let Some((rel_type, mut confidence, _trigger)) =
                 detect_relation_type(head, tail, between_text, &relation_labels)
             {
+                // Apply distance penalty (same logic as extract_relations)
+                let distance_penalty = if distance < config.max_span_distance {
+                    let penalty_factor =
+                        1.0 - (distance as f64 / config.max_span_distance as f64) * 0.5;
+                    penalty_factor.max(0.5)
+                } else {
+                    0.5
+                };
+                confidence *= distance_penalty;
+
                 if confidence < config.threshold as f64 {
                     continue;
                 }
@@ -2191,8 +2212,9 @@ fn detect_relation_type<'a>(
     between_text: &str,
     relation_labels: &[&'a LabelDefinition],
 ) -> Option<RelationMatch<'a>> {
-    // Triggers are ASCII; keep indexing stable by only lowercasing ASCII.
-    let between_lower = between_text.to_ascii_lowercase();
+    // Use Unicode-aware lowercasing for multilingual support
+    // Note: For CJK languages, case doesn't apply, but this is safe
+    let between_lower = between_text.to_lowercase();
 
     // Common patterns: (relation_slug, triggers, confidence)
     struct RelPattern {
@@ -2205,35 +2227,458 @@ fn detect_relation_type<'a>(
         // Employment relations
         RelPattern {
             slug: "CEO_OF",
-            triggers: &["ceo of", "chief executive", "leads", "founded"],
+            triggers: &[
+                "ceo of",
+                "chief executive",
+                "chief executive officer",
+                "leads",
+                "founded",
+                "founder of",
+            ],
             confidence: 0.8,
         },
         RelPattern {
             slug: "WORKS_FOR",
-            triggers: &["works for", "works at", "employed by", "employee of"],
+            triggers: &[
+                "works for",
+                "works at",
+                "employed by",
+                "employee of",
+                "works with",
+                "staff at",
+                "member of",
+            ],
             confidence: 0.7,
         },
         RelPattern {
             slug: "FOUNDED",
-            triggers: &["founded", "co-founded", "started", "established"],
+            triggers: &[
+                "founded",
+                "co-founded",
+                "cofounder",
+                "started",
+                "established",
+                "created",
+                "launched",
+            ],
             confidence: 0.8,
+        },
+        RelPattern {
+            slug: "MANAGES",
+            triggers: &[
+                "manages",
+                "managing",
+                "oversees",
+                "directs",
+                "supervises",
+                "runs",
+            ],
+            confidence: 0.75,
+        },
+        RelPattern {
+            slug: "REPORTS_TO",
+            triggers: &["reports to", "reported to", "under", "reports directly to"],
+            confidence: 0.7,
         },
         // Location relations
         RelPattern {
             slug: "LOCATED_IN",
-            triggers: &["in", "at", "based in", "located in", "headquartered in"],
+            triggers: &[
+                "in",
+                "at",
+                "based in",
+                "located in",
+                "headquartered in",
+                "situated in",
+                "found in",
+            ],
             confidence: 0.6,
         },
         RelPattern {
             slug: "BORN_IN",
-            triggers: &["born in", "native of", "from"],
+            triggers: &[
+                "born in",
+                "native of",
+                "from",
+                "hails from",
+                "originated in",
+            ],
             confidence: 0.7,
         },
-        // Other
+        RelPattern {
+            slug: "LIVES_IN",
+            triggers: &["lives in", "resides in", "living in", "based in"],
+            confidence: 0.65,
+        },
+        RelPattern {
+            slug: "DIED_IN",
+            triggers: &["died in", "passed away in", "deceased in"],
+            confidence: 0.8,
+        },
+        // Temporal relations
+        RelPattern {
+            slug: "OCCURRED_ON",
+            triggers: &["on", "occurred on", "happened on", "took place on", "dated"],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "STARTED_ON",
+            triggers: &["started on", "began on", "commenced on", "initiated on"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "ENDED_ON",
+            triggers: &["ended on", "concluded on", "finished on", "completed on"],
+            confidence: 0.7,
+        },
+        // Organizational relations
         RelPattern {
             slug: "PART_OF",
-            triggers: &["part of", "member of", "belongs to", "subsidiary of"],
+            triggers: &[
+                "part of",
+                "member of",
+                "belongs to",
+                "subsidiary of",
+                "division of",
+                "branch of",
+            ],
             confidence: 0.7,
+        },
+        RelPattern {
+            slug: "ACQUIRED",
+            triggers: &[
+                "acquired",
+                "bought",
+                "purchased",
+                "took over",
+                "merged with",
+            ],
+            confidence: 0.75,
+        },
+        RelPattern {
+            slug: "MERGED_WITH",
+            triggers: &["merged with", "merged into", "combined with", "joined with"],
+            confidence: 0.8,
+        },
+        RelPattern {
+            slug: "PARENT_OF",
+            triggers: &["parent of", "parent company of", "owns", "owner of"],
+            confidence: 0.75,
+        },
+        // Social relations
+        RelPattern {
+            slug: "MARRIED_TO",
+            triggers: &["married to", "wed to", "spouse of", "husband of", "wife of"],
+            confidence: 0.85,
+        },
+        RelPattern {
+            slug: "CHILD_OF",
+            triggers: &["son of", "daughter of", "child of", "offspring of"],
+            confidence: 0.8,
+        },
+        RelPattern {
+            slug: "SIBLING_OF",
+            triggers: &["brother of", "sister of", "sibling of"],
+            confidence: 0.8,
+        },
+        // Academic/Professional
+        RelPattern {
+            slug: "STUDIED_AT",
+            triggers: &[
+                "studied at",
+                "attended",
+                "graduated from",
+                "alumni of",
+                "educated at",
+            ],
+            confidence: 0.75,
+        },
+        RelPattern {
+            slug: "TEACHES_AT",
+            triggers: &["teaches at", "professor at", "instructor at", "faculty at"],
+            confidence: 0.8,
+        },
+        // Product/Service relations
+        RelPattern {
+            slug: "DEVELOPS",
+            triggers: &[
+                "develops",
+                "created",
+                "built",
+                "designed",
+                "produces",
+                "manufactures",
+            ],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "USES",
+            triggers: &["uses", "utilizes", "employs", "adopts", "implements"],
+            confidence: 0.6,
+        },
+        // Communication/Interaction
+        RelPattern {
+            slug: "MET_WITH",
+            triggers: &["met with", "met", "met up with", "encountered", "saw"],
+            confidence: 0.65,
+        },
+        RelPattern {
+            slug: "SPOKE_WITH",
+            triggers: &[
+                "spoke with",
+                "talked with",
+                "discussed with",
+                "conversed with",
+            ],
+            confidence: 0.7,
+        },
+        // Ownership
+        RelPattern {
+            slug: "OWNS",
+            triggers: &["owns", "owner of", "possesses", "holds"],
+            confidence: 0.75,
+        },
+        // =========================================================================
+        // Multilingual relation triggers
+        // =========================================================================
+        // Spanish (es)
+        RelPattern {
+            slug: "WORKS_FOR",
+            triggers: &["trabaja en", "trabaja para", "empleado de", "trabaja con"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "FOUNDED",
+            triggers: &["fundó", "fundada", "creó", "creada", "estableció", "inició"],
+            confidence: 0.8,
+        },
+        RelPattern {
+            slug: "LOCATED_IN",
+            triggers: &[
+                "en",
+                "ubicado en",
+                "situado en",
+                "basado en",
+                "localizado en",
+            ],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "BORN_IN",
+            triggers: &["nació en", "nacido en", "originario de", "de"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "LIVES_IN",
+            triggers: &["vive en", "reside en", "viviendo en"],
+            confidence: 0.65,
+        },
+        RelPattern {
+            slug: "MARRIED_TO",
+            triggers: &["casado con", "casada con", "esposo de", "esposa de"],
+            confidence: 0.85,
+        },
+        // French (fr)
+        RelPattern {
+            slug: "WORKS_FOR",
+            triggers: &[
+                "travaille pour",
+                "travaille à",
+                "employé de",
+                "travaille avec",
+            ],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "FOUNDED",
+            triggers: &["fondé", "fondée", "créé", "créée", "établi", "établie"],
+            confidence: 0.8,
+        },
+        RelPattern {
+            slug: "LOCATED_IN",
+            triggers: &["dans", "à", "situé en", "basé en", "localisé en"],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "BORN_IN",
+            triggers: &["né en", "née en", "originaire de", "de"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "LIVES_IN",
+            triggers: &["vit en", "réside en", "vivant en"],
+            confidence: 0.65,
+        },
+        RelPattern {
+            slug: "MARRIED_TO",
+            triggers: &["marié avec", "mariée avec", "époux de", "épouse de"],
+            confidence: 0.85,
+        },
+        // German (de)
+        RelPattern {
+            slug: "WORKS_FOR",
+            triggers: &[
+                "arbeitet für",
+                "arbeitet bei",
+                "angestellt bei",
+                "arbeitet mit",
+            ],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "FOUNDED",
+            triggers: &[
+                "gegründet",
+                "gründete",
+                "erstellt",
+                "errichtet",
+                "etabliert",
+            ],
+            confidence: 0.8,
+        },
+        RelPattern {
+            slug: "LOCATED_IN",
+            triggers: &["in", "bei", "situiert in", "basiert in", "befindet sich in"],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "BORN_IN",
+            triggers: &["geboren in", "geboren am", "stammt aus", "aus"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "LIVES_IN",
+            triggers: &["lebt in", "wohnt in", "lebend in"],
+            confidence: 0.65,
+        },
+        RelPattern {
+            slug: "MARRIED_TO",
+            triggers: &["verheiratet mit", "ehemann von", "ehefrau von"],
+            confidence: 0.85,
+        },
+        // Chinese (zh) - Simplified
+        RelPattern {
+            slug: "WORKS_FOR",
+            triggers: &["为", "在", "工作于", "就职于", "任职于"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "FOUNDED",
+            triggers: &["创立", "创建", "建立", "成立", "创办"],
+            confidence: 0.8,
+        },
+        RelPattern {
+            slug: "LOCATED_IN",
+            triggers: &["在", "位于", "坐落于", "地处"],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "BORN_IN",
+            triggers: &["出生于", "生于", "来自", "出生于"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "LIVES_IN",
+            triggers: &["居住于", "住在", "生活在"],
+            confidence: 0.65,
+        },
+        RelPattern {
+            slug: "MARRIED_TO",
+            triggers: &["与...结婚", "嫁给", "娶了"],
+            confidence: 0.85,
+        },
+        // Japanese (ja)
+        RelPattern {
+            slug: "WORKS_FOR",
+            triggers: &["で働く", "に勤務", "に所属", "で就職"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "FOUNDED",
+            triggers: &["設立", "創立", "設立した", "創設"],
+            confidence: 0.8,
+        },
+        RelPattern {
+            slug: "LOCATED_IN",
+            triggers: &["に", "で", "に位置", "に所在"],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "BORN_IN",
+            triggers: &["に生まれた", "の出身", "で生まれた"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "LIVES_IN",
+            triggers: &["に住む", "に居住", "に在住"],
+            confidence: 0.65,
+        },
+        RelPattern {
+            slug: "MARRIED_TO",
+            triggers: &["と結婚", "と結婚した", "の配偶者"],
+            confidence: 0.85,
+        },
+        // Arabic (ar) - RTL
+        RelPattern {
+            slug: "WORKS_FOR",
+            triggers: &["يعمل في", "يعمل لصالح", "موظف في", "يعمل مع"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "FOUNDED",
+            triggers: &["أسس", "أنشأ", "تأسست", "أنشأت"],
+            confidence: 0.8,
+        },
+        RelPattern {
+            slug: "LOCATED_IN",
+            triggers: &["في", "ب", "يقع في", "موجود في"],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "BORN_IN",
+            triggers: &["ولد في", "من مواليد", "من"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "LIVES_IN",
+            triggers: &["يعيش في", "يسكن في", "مقيم في"],
+            confidence: 0.65,
+        },
+        RelPattern {
+            slug: "MARRIED_TO",
+            triggers: &["متزوج من", "زوج", "زوجة"],
+            confidence: 0.85,
+        },
+        // Russian (ru)
+        RelPattern {
+            slug: "WORKS_FOR",
+            triggers: &["работает в", "работает на", "работает для", "сотрудник"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "FOUNDED",
+            triggers: &["основал", "основала", "создал", "создала", "учредил"],
+            confidence: 0.8,
+        },
+        RelPattern {
+            slug: "LOCATED_IN",
+            triggers: &["в", "на", "расположен в", "находится в"],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "BORN_IN",
+            triggers: &["родился в", "родилась в", "родом из", "из"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "LIVES_IN",
+            triggers: &["живет в", "проживает в", "живущий в"],
+            confidence: 0.65,
+        },
+        RelPattern {
+            slug: "MARRIED_TO",
+            triggers: &["женат на", "замужем за", "супруг", "супруга"],
+            confidence: 0.85,
         },
     ];
 
@@ -2250,16 +2695,62 @@ fn detect_relation_type<'a>(
 
         for trigger in pattern.triggers {
             if let Some(pos) = between_lower.find(trigger) {
-                // Validate entity types make sense
+                // Validate entity types make sense for the relation
                 let valid = match pattern.slug {
-                    "CEO_OF" | "WORKS_FOR" | "FOUNDED" => {
+                    // Person-Organization relations
+                    "CEO_OF" | "WORKS_FOR" | "FOUNDED" | "MANAGES" | "REPORTS_TO" => {
                         matches!(head.entity_type, EntityType::Person)
                             && matches!(tail.entity_type, EntityType::Organization)
                     }
-                    "LOCATED_IN" | "BORN_IN" => {
+                    // Location relations (any entity can be located in/born in a location)
+                    "LOCATED_IN" | "BORN_IN" | "LIVES_IN" | "DIED_IN" => {
                         matches!(tail.entity_type, EntityType::Location)
                     }
-                    _ => true,
+                    // Temporal relations (any entity can have temporal attributes)
+                    "OCCURRED_ON" | "STARTED_ON" | "ENDED_ON" => {
+                        matches!(tail.entity_type, EntityType::Date | EntityType::Time)
+                    }
+                    // Organizational relations
+                    "PART_OF" | "ACQUIRED" | "MERGED_WITH" | "PARENT_OF" => {
+                        matches!(head.entity_type, EntityType::Organization)
+                            && matches!(tail.entity_type, EntityType::Organization)
+                    }
+                    // Social relations
+                    "MARRIED_TO" | "CHILD_OF" | "SIBLING_OF" => {
+                        matches!(head.entity_type, EntityType::Person)
+                            && matches!(tail.entity_type, EntityType::Person)
+                    }
+                    // Academic relations
+                    "STUDIED_AT" | "TEACHES_AT" => {
+                        matches!(head.entity_type, EntityType::Person)
+                            && matches!(
+                                tail.entity_type,
+                                EntityType::Organization | EntityType::Location
+                            )
+                    }
+                    // Product relations
+                    "DEVELOPS" | "USES" => {
+                        matches!(
+                            head.entity_type,
+                            EntityType::Organization | EntityType::Person
+                        )
+                    }
+                    // Interaction relations
+                    "MET_WITH" | "SPOKE_WITH" => {
+                        matches!(head.entity_type, EntityType::Person)
+                            && matches!(
+                                tail.entity_type,
+                                EntityType::Person | EntityType::Organization
+                            )
+                    }
+                    // Ownership
+                    "OWNS" => {
+                        matches!(
+                            head.entity_type,
+                            EntityType::Person | EntityType::Organization
+                        )
+                    }
+                    _ => true, // Default: allow any combination
                 };
 
                 if valid {

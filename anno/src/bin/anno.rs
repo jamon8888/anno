@@ -91,6 +91,8 @@ fn main() -> ExitCode {
         Some(Commands::Query(args)) => query::run(args).map_err(CliError::from),
         Some(Commands::Compare(args)) => compare::run(args).map_err(CliError::from),
         Some(Commands::Cache(args)) => cache::run(args).map_err(CliError::from),
+        #[cfg(feature = "eval")]
+        Some(Commands::History(args)) => history::run(args).map_err(CliError::from),
         Some(Commands::Config(args)) => config::run(args).map_err(CliError::from),
         Some(Commands::Batch(args)) => batch::run(args).map_err(CliError::from),
         Some(Commands::Joint(args)) => joint::run(args).map_err(CliError::from),

@@ -184,19 +184,44 @@ process_task() {
     export HF_HOME="${CACHE_MOUNT}/models"
     
     # Run evaluation using anno benchmark (uses TaskEvaluator + PredictionCache)
+    # Monitor memory usage and detect OOM (exit code 137 = SIGKILL)
     local exit_code=0
     local anno_bin="$CARGO_TARGET_DIR/release/anno"
-    "$anno_bin" benchmark \
+    
+    # Check available memory before starting
+    local mem_available
+    mem_available=$(free -m | awk '/^Mem:/{print $7}')
+    log_info "Available memory: ${mem_available}MB before evaluation"
+    
+    # Run with timeout and memory monitoring
+    if ! timeout 1800 "$anno_bin" benchmark \
         --datasets "$dataset" \
         --backends "$backend" \
         --tasks "$task_type" \
         --max-examples "$max_examples" \
         --seed "$seed" \
-        --output "$output_file" || exit_code=$?
+        --output "$output_file" 2>&1 | tee /tmp/eval_output.log; then
+        exit_code=${PIPESTATUS[0]}
+    fi
+    
+    # Check if OOM occurred (exit code 137 = 128 + 9 SIGKILL)
+    if [[ $exit_code -eq 137 ]]; then
+        log_error "OOM detected (exit 137) for $backend/$dataset"
+        # Reduce max_examples for retry if too high
+        if [[ $max_examples -gt 50 ]]; then
+            log_warn "Reducing max_examples from $max_examples to 30 for OOM-prone dataset"
+            max_examples=30
+        fi
+    fi
     
     local end_time
     end_time=$(date +%s)
     local duration=$((end_time - start_time))
+    
+    # Log memory after evaluation
+    local mem_after
+    mem_after=$(free -m | awk '/^Mem:/{print $7}')
+    log_info "Available memory: ${mem_after}MB after evaluation (used: $((mem_available - mem_after))MB)"
     
     # Upload result with metadata in filename
     local timestamp

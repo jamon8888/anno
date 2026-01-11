@@ -27,10 +27,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(feature = "eval-advanced")]
     {
-        // =========================================================================
-        // 1. Quick evaluation on a subset of data
-        // =========================================================================
-        println!("1. Quick evaluation (50 examples)...\n");
+    // =========================================================================
+    // 1. Quick evaluation on a subset of data
+    // =========================================================================
+    println!("1. Quick evaluation (50 examples)...\n");
 
         let results = EvalSystem::new()
             .with_tasks(vec![Task::NER])
@@ -46,27 +46,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .run()?;
 
         if let Some(std_results) = results.standard {
-            // Print overall results
-            println!("┌─────────────────┬───────────┬────────┬────────┐");
-            println!("│ Backend         │ Precision │ Recall │ F1     │");
-            println!("├─────────────────┼───────────┼────────┼────────┤");
+    // Print overall results
+    println!("┌─────────────────┬───────────┬────────┬────────┐");
+    println!("│ Backend         │ Precision │ Recall │ F1     │");
+    println!("├─────────────────┼───────────┼────────┼────────┤");
             for (name, metrics) in &std_results.per_backend {
-                println!(
-                    "│ {:15} │ {:7.1}%  │ {:6.1}% │ {:6.1}% │",
+        println!(
+            "│ {:15} │ {:7.1}%  │ {:6.1}% │ {:6.1}% │",
                     name,
                     metrics.precision * 100.0,
                     metrics.recall * 100.0,
                     metrics.f1 * 100.0,
-                );
-            }
-            println!("└─────────────────┴───────────┴────────┴────────┘\n");
+        );
+    }
+    println!("└─────────────────┴───────────┴────────┴────────┘\n");
         } else {
             println!("No standard results produced.");
-        }
+    }
 
-        println!("\n═══════════════════════════════════════════════════════════════════");
-        println!("                        Evaluation Complete");
-        println!("═══════════════════════════════════════════════════════════════════\n");
+    println!("\n═══════════════════════════════════════════════════════════════════");
+    println!("                        Evaluation Complete");
+    println!("═══════════════════════════════════════════════════════════════════\n");
     }
 
     Ok(())

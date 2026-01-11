@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["boto3>=1.34"]
+# ///
 """
 Merge prediction cache shards from S3.
 
 Usage:
-    python3 merge_cache.py [--bucket BUCKET] [--prefix cache/]
+    uv run scripts/spot/merge_cache.py [--bucket BUCKET] [--prefix cache/]
 
 1. Downloads all predictions-*.jsonl from S3.
 2. Merges them into a single file, deduplicating by cache key.

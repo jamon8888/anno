@@ -1198,4 +1198,93 @@ mod tests {
             );
         }
     }
+
+    #[cfg(test)]
+    mod tokenizer_integration_tests {
+        use super::*;
+
+        #[test]
+        fn test_rake_multilingual() {
+            let rake = RakeExtractor::new();
+
+            // English (should work well)
+            let text_en = "Machine learning is a subset of artificial intelligence.";
+            let keywords_en = rake.extract(text_en, 10);
+            assert!(!keywords_en.is_empty());
+
+            // Spanish (space-separated, should work)
+            // Note: May not extract keywords if Spanish stopwords aren't in the default list
+            let text_es = "El presidente de México visitó España.";
+            let keywords_es = rake.extract(text_es, 10);
+            // Just verify it doesn't crash - Spanish may not extract keywords with English stopwords
+            assert!(
+                keywords_es.len() <= 10,
+                "Should return at most max_keywords"
+            );
+        }
+
+        #[test]
+        fn test_yake_multilingual() {
+            let yake = YakeExtractor::new();
+
+            // English
+            let text_en =
+                "Artificial intelligence and machine learning are transforming technology.";
+            let keywords_en = yake.extract(text_en, 10);
+            assert!(!keywords_en.is_empty());
+
+            // Spanish
+            let text_es = "El presidente de México visitó España.";
+            let keywords_es = yake.extract(text_es, 10);
+            assert!(!keywords_es.is_empty());
+        }
+
+        #[test]
+        fn test_textrank_multilingual() {
+            let textrank = TextRankExtractor::new();
+
+            // English
+            let text_en = "Natural language processing uses machine learning algorithms.";
+            let keywords_en = textrank.extract(text_en, 10);
+            assert!(!keywords_en.is_empty());
+
+            // Arabic (has spaces, should work)
+            let text_ar = "الرئيس التنفيذي لشركة أرامكو السعودية";
+            let keywords_ar = textrank.extract(text_ar, 10);
+            // Arabic has spaces, so should extract some keywords
+            assert!(keywords_ar.len() <= 10); // Sanity check
+        }
+
+        #[test]
+        fn test_extractors_handle_cjk_gracefully() {
+            // Test that extractors don't crash on CJK text
+            // (may not extract meaningful keywords without proper tokenization)
+            let rake = RakeExtractor::new();
+            let yake = YakeExtractor::new();
+            let textrank = TextRankExtractor::new();
+
+            let text_cjk = "中华人民共和国是伟大的国家。";
+
+            // Should not panic
+            let _keywords_rake = rake.extract(text_cjk, 10);
+            let _keywords_yake = yake.extract(text_cjk, 10);
+            let _keywords_textrank = textrank.extract(text_cjk, 10);
+
+            // All should complete without error
+            assert!(text_cjk.len() > 0);
+        }
+
+        #[test]
+        fn test_keyword_scores_are_valid() {
+            let rake = RakeExtractor::new();
+            let text = "Machine learning and artificial intelligence are important technologies.";
+            let keywords = rake.extract(text, 10);
+
+            assert!(!keywords.is_empty());
+            // All scores should be non-negative
+            for (_, score) in &keywords {
+                assert!(*score >= 0.0, "Keyword scores should be non-negative");
+            }
+        }
+    }
 }

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["boto3>=1.34"]
+# ///
 """
 Aggregate spot evaluation results into hierarchical summary.
 
 Usage:
-    python aggregate.py [--download]
+    uv run scripts/spot/aggregate.py [--download]
     
 Outputs:
     reports/eval-results.jsonl  - Raw append-only log (source of truth)
@@ -144,13 +148,28 @@ def parse_result_file(path: Path) -> dict | None:
         }
     
     # Fallback: no parseable results
+    # Try to extract any error message from content
+    error_msg = 'no_results'
+    error_patterns = [
+        (r'Error:\s*(.+)', 'error'),
+        (r'Failed to (.+)', 'failed'),
+        (r'not available', 'not_available'),
+        (r'timeout', 'timeout'),
+        (r'Failed to load', 'load_failed'),
+    ]
+    for pattern, error_type in error_patterns:
+        match = re.search(pattern, content, re.IGNORECASE)
+        if match:
+            error_msg = error_type
+            break
+    
     return {
         'timestamp': meta.get('timestamp', datetime.now(timezone.utc).isoformat()),
         'backend': meta.get('backend', 'unknown'),
         'dataset': meta.get('dataset', 'unknown'),
         'seed': int(meta.get('seed', 42)),
         'f1': 0, 'precision': 0, 'recall': 0, 'n': 0, 'duration_ms': 0,
-        'error': 'no_results',
+        'error': error_msg,
     }
 
 
