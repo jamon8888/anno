@@ -259,6 +259,7 @@ let entities = ner.extract_with_types(
 - **API docs**: https://docs.rs/anno
 - **Architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Evaluation**: [docs/EVALUATION.md](docs/EVALUATION.md)
+- **Distributed Evaluation**: [scripts/spot/README.md](scripts/spot/README.md) (AWS spot instances via `runctl`)
 
 ## License
 

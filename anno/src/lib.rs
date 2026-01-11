@@ -152,6 +152,8 @@ pub mod summarize;
 pub mod sync;
 /// Temporal entity tracking, parsing, and diachronic NER.
 pub mod temporal;
+/// Language-specific tokenization for multilingual NLP.
+pub mod tokenizer;
 pub mod types;
 
 /// Geometric and topological foundations for entity resolution.
@@ -294,6 +296,7 @@ mod sealed {
 
     impl Sealed for super::backends::tplinker::TPLinker {}
     impl Sealed for super::backends::universal_ner::UniversalNER {}
+    impl Sealed for super::backends::lexicon::LexiconNER {}
 
     #[allow(deprecated)]
     impl Sealed for super::backends::rule::RuleBasedNER {}
@@ -697,8 +700,8 @@ pub trait DynamicLabels: Model {
 // Re-export backends
 pub use backends::label_prompt::{LabelNormalizer, StandardNormalizer};
 pub use backends::{
-    AutoNER, BackendType, ConflictStrategy, CrfNER, EnsembleNER, HeuristicNER, NERExtractor, NuNER,
-    RegexNER, StackedNER, TPLinker, W2NERConfig, W2NERRelation, W2NER,
+    AutoNER, BackendType, ConflictStrategy, CrfNER, EnsembleNER, HeuristicNER, LexiconNER,
+    NERExtractor, NuNER, RegexNER, StackedNER, TPLinker, W2NERConfig, W2NERRelation, W2NER,
 };
 
 // Mention-ranking coreference (Bourgois & Poibeau 2025)

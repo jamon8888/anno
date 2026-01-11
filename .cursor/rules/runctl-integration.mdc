@@ -1,0 +1,170 @@
+---
+description: runctl integration for AWS spot evaluation (instance management, IAM, worker setup)
+globs: ["scripts/spot/**/*", "runctl.toml", "**/orchestrate_runctl.py"]
+alwaysApply: true
+---
+
+# runctl Integration
+
+## Quick Reference
+
+**Location**: `../runctl` (sibling directory)
+
+**Use for**: Instance lifecycle, spot management, SSM code sync, resource tracking
+
+**Don't use for**: Task distribution (use SQS), custom infrastructure (use boto3/terraform)
+
+## Critical Requirements
+
+### IAM Permissions (MUST HAVE)
+
+Instance profile **must** include SQS permissions or workers fail with `NonExistentQueue`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["sqs:GetQueueUrl", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:SendMessage", "sqs:GetQueueAttributes"],
+    "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:anno-eval-tasks"
+  }]
+}
+```
+
+**Add to role:**
+```bash
+ROLE_NAME=$(aws iam get-instance-profile --instance-profile-name anno-eval-spot-profile --query 'InstanceProfile.Roles[0].RoleName' --output text)
+aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "anno-eval-sqs-policy" --policy-document file://sqs-policy.json
+```
+
+**Verify:**
+```bash
+aws ssm send-command --instance-ids <id> --document-name AWS-RunShellScript \
+  --parameters 'commands=["aws sqs get-queue-url --queue-name anno-eval-tasks --region us-east-1"]'
+```
+
+### Configuration
+
+**File**: `runctl.toml` (non-dot, not `.runctl.toml`)
+
+```toml
+[aws]
+region = "us-east-1"
+default_instance_type = "c7i.xlarge"
+use_spot = true
+s3_bucket = "arc-anno-data"
+iam_instance_profile = "anno-eval-spot-profile"  # Must have SSM + SQS + S3
+```
+
+## Worker Setup Pattern
+
+**Git clone fails in SSM context** - use one of:
+
+1. **Git config** (public repos):
+   ```bash
+   export GIT_TERMINAL_PROMPT=0
+   git config --global credential.helper ""
+   git clone --depth 1 https://github.com/arclabs561/anno.git /root/anno
+   ```
+
+2. **runctl code sync** (preferred):
+   ```bash
+   runctl aws sync-code <instance-id> --source . --target /root/anno
+   ```
+
+3. **S3 tarball** (private repos):
+   ```bash
+   aws s3 cp s3://bucket/src/anno-src.tar.gz /tmp/ && tar xzf /tmp/anno-src.tar.gz -C /root/anno
+   ```
+
+**Complete worker setup:**
+```bash
+#!/bin/bash
+set -e
+export HOME=/root
+
+# Dependencies
+dnf install -y git gcc gcc-c++ openssl-devel pkg-config jq cmake || true
+
+# Rust
+if ! command -v cargo &>/dev/null; then
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    source $HOME/.cargo/env
+fi
+
+# Queue URL (with error handling)
+QUEUE_URL=$(aws sqs get-queue-url --queue-name anno-eval-tasks --region us-east-1 --query QueueUrl --output text 2>&1) || QUEUE_URL=""
+export ANNO_SPOT_QUEUE_URL=$QUEUE_URL
+
+# Clone (handle git auth)
+if [[ ! -d /root/anno ]]; then
+    export GIT_TERMINAL_PROMPT=0
+    git clone --depth 1 https://github.com/arclabs561/anno.git /root/anno
+fi
+
+# Build
+cd /root/anno
+if [[ ! -f /opt/cache/target/release/anno ]]; then
+    cargo build --release --bin anno --features "cli,eval-advanced,onnx" 2>&1 | tail -20
+fi
+
+# Start worker
+nohup bash scripts/spot/worker.sh > /tmp/worker.log 2>&1 &
+```
+
+## Monitoring
+
+**Queue status:**
+```bash
+QUEUE_URL=$(aws sqs get-queue-url --queue-name anno-eval-tasks --region us-east-1 --query QueueUrl --output text)
+PENDING=$(aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names ApproximateNumberOfMessages --query 'Attributes.ApproximateNumberOfMessages' --output text)
+IN_FLIGHT=$(aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names ApproximateNumberOfMessagesNotVisible --query 'Attributes.ApproximateNumberOfMessagesNotVisible' --output text)
+```
+
+**Worker status:**
+```bash
+aws ssm send-command --instance-ids <id> --document-name AWS-RunShellScript \
+  --parameters 'commands=["pgrep -af worker.sh && echo Running || echo Not running; tail -50 /tmp/worker.log"]'
+```
+
+**Instance status:**
+```bash
+runctl aws status <instance-id>
+```
+
+## Common Issues
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `NonExistentQueue` | Missing SQS permissions | Add inline policy to IAM role (see above) |
+| `could not read Username` | Git auth prompt in SSM | Use `GIT_TERMINAL_PROMPT=0` or runctl code sync |
+| SSM not ready | Spot instance boot time | Wait up to 3 minutes with retries |
+| Worker not starting | Binary not built | Check `/opt/cache/target/release/anno` exists |
+| Queue access fails | IAM propagation delay | Wait 30-60 seconds after adding permissions |
+
+## Key Learnings
+
+- **`runctl.toml`** (non-dot) prioritized over `.runctl.toml`
+- **SQS permissions** are critical - most common failure point
+- **SSM wait time**: Up to 3 minutes for spot instances
+- **IAM propagation**: 30-60 seconds after policy changes
+- **Git clone**: Fails in SSM without proper config
+- **Spot availability**: Use `c7i.xlarge` or larger (smaller types have poor availability)
+
+## Commands
+
+```bash
+# Setup
+just spot-runctl-setup
+
+# Full eval
+just spot-runctl-eval 1 c7i.xlarge
+
+# Monitor
+just spot-runctl-status
+
+# Teardown
+just spot-runctl-teardown
+```
+
+**Note**: All Python scripts use `uv run` to ensure dependencies (boto3, rich) are available. Scripts have PEP 723 inline metadata for automatic dependency management.

@@ -6,8 +6,10 @@ Comprehensive reference for all synthetic and real datasets available in `anno`.
 
 | Category | Count | Use Case |
 |----------|-------|----------|
-| Synthetic (built-in) | 28 | Unit testing, pattern validation, fast iteration |
-| Real (downloadable) | 20 | Benchmarking, model comparison, production eval |
+| Synthetic (built-in) | 28+ | Unit testing, pattern validation, fast iteration |
+| Real (registry) | 451 | Benchmarking, model comparison, production eval |
+| Loadable (have parser) | 228 | Actually downloadable and parseable |
+| With working URLs | 251 | Currently accessible for download |
 
 ## Important: Benchmark Quality Warning
 
@@ -92,47 +94,102 @@ Built-in datasets for testing. No network required.
 
 ## Real Datasets
 
-Downloadable benchmarks. Requires `eval-advanced` feature.
+The registry contains **451 datasets** covering NER, coreference, relation extraction, and more.
 
-### NER Datasets
+**Status**: 228 datasets (51%) have loader implementations and can be downloaded/parsed.
 
-| Dataset | ID | Source | Size | Entity Types | Format |
-|---------|------|--------|------|--------------|--------|
-| WikiGold | `WikiGold` | Wikipedia | ~2k sent | PER, ORG, LOC, MISC | CoNLL |
-| WNUT-17 | `Wnut17` | Twitter | ~5k tweets | PER, ORG, LOC, etc. | CoNLL |
-| MIT Movie | `MitMovie` | Movie queries | ~10k | Actor, Director, etc. | BIO |
-| MIT Restaurant | `MitRestaurant` | Restaurant queries | ~10k | Cuisine, Location, etc. | BIO |
-| CoNLL-2003 Sample | `CoNLL2003Sample` | News | ~1k sent | PER, ORG, LOC, MISC | CoNLL |
-| OntoNotes Sample | `OntoNotesSample` | Mixed | ~1k sent | 18 types | CoNLL |
-| MultiNERD | `MultiNERD` | Wikipedia | ~50k | 15 types | JSONL |
-| BC5CDR | `BC5CDR` | PubMed | ~1.5k docs | Chemical, Disease | XML |
-| NCBI Disease | `NCBIDisease` | PubMed | ~800 docs | Disease | TXT |
-| FewNERD | `FewNERD` | Wikipedia | ~5k | 66 fine-grained | TXT |
-| CrossNER | `CrossNER` | Multi-domain | ~5k | Domain-specific | TXT |
-| UniversalNER | `UniversalNERBench` | Mixed | ~10k | Universal schema | JSON |
+### Dataset Statistics
 
-### Multilingual NER
+| Metric | Count | Notes |
+|--------|-------|-------|
+| Total in registry | 451 | All datasets with metadata |
+| Loadable (have parser) | 228 | Can be downloaded and parsed |
+| With working URLs | 251 | Currently accessible |
+| With broken URLs | 118 | Need URL updates |
+| Paper-only URLs | 34 | DOI/arXiv links, not direct downloads |
+| No URL | 47 | May require licenses or contact authors |
+| HuggingFace datasets | 32 | Available via HF API |
+| S3 cached | 165 | Fast offline access |
 
-| Dataset | ID | Languages | Entity Types |
-|---------|------|-----------|--------------|
-| WikiANN | `WikiANN` | 282 languages | PER, LOC, ORG |
-| MultiCoNER | `MultiCoNER` | 12 languages | 6 coarse + 33 fine |
-| MultiCoNER v2 | `MultiCoNERv2` | 12 languages | 36 types |
+### Key Datasets by Task
 
-### Relation Extraction
+#### NER Datasets (Sample - 300+ total)
 
-| Dataset | ID | Focus | Relations |
-|---------|------|-------|-----------|
-| DocRED | `DocRED` | Document-level | 96 types |
-| ReTACRED | `ReTACRED` | Sentence-level | 40 types |
+| Dataset | ID | Source | Size | Entity Types | Format | Status |
+|---------|------|--------|------|--------------|--------|--------|
+| WikiGold | `WikiGold` | Wikipedia | ~2k sent | PER, ORG, LOC, MISC | CoNLL | ✅ Loadable |
+| WNUT-17 | `Wnut17` | Twitter | ~5k tweets | PER, ORG, LOC, etc. | CoNLL | ✅ Loadable |
+| MIT Movie | `MitMovie` | Movie queries | ~10k | Actor, Director, etc. | BIO | ✅ Loadable |
+| MIT Restaurant | `MitRestaurant` | Restaurant queries | ~10k | Cuisine, Location, etc. | BIO | ✅ Loadable |
+| CoNLL-2003 | `CoNLL2003Sample` | News | ~1k sent | PER, ORG, LOC, MISC | CoNLL | ✅ Loadable |
+| OntoNotes | `OntoNotesSample` | Mixed | ~1k sent | 18 types | CoNLL | ✅ Loadable |
+| MultiNERD | `MultiNERD` | Wikipedia | ~50k | 15 types | JSONL | ✅ Loadable |
+| BC5CDR | `BC5CDR` | PubMed | ~1.5k docs | Chemical, Disease | XML | ✅ Loadable |
+| NCBI Disease | `NCBIDisease` | PubMed | ~800 docs | Disease | TXT | ✅ Loadable |
+| FewNERD | `FewNERD` | Wikipedia | ~5k | 66 fine-grained | TXT | ✅ Loadable |
+| CrossNER | `CrossNER` | Multi-domain | ~5k | Domain-specific | TXT | ✅ Loadable |
+| UniversalNER | `UniversalNERBench` | Mixed | ~10k | Universal schema | JSON | ✅ Loadable |
 
-### Coreference
+**See full catalog**: Run `cargo run --example eval_basic --features eval` or check `generated/datasets_generated.json`
 
-| Dataset | ID | Size | Focus |
-|---------|------|------|-------|
-| GAP | `GAP` | 4.5k | Gender-balanced pronouns |
-| PreCo | `PreCo` | 12k docs | Reading comprehension |
-| LitBank | `LitBank` | 100 docs | Literary text |
+#### Multilingual NER (49+ datasets)
+
+| Dataset | ID | Languages | Entity Types | Status |
+|---------|------|-----------|--------------|--------|
+| WikiANN | `WikiANN` | 282 languages | PER, LOC, ORG | ✅ Loadable |
+| MultiCoNER | `MultiCoNER` | 12 languages | 6 coarse + 33 fine | ✅ Loadable |
+| MultiCoNER v2 | `MultiCoNERv2` | 12 languages | 36 types | ✅ Loadable |
+| MasakhaNER | `MasakhaNER` | 10 African languages | PER, ORG, LOC, DATE | ✅ Loadable |
+
+#### Coreference (50+ datasets)
+
+| Dataset | ID | Size | Focus | Status |
+|---------|------|------|-------|--------|
+| GAP | `GAP` | 4.5k | Gender-balanced pronouns | ✅ Loadable |
+| PreCo | `PreCo` | 12k docs | Reading comprehension | ✅ Loadable |
+| LitBank | `LitBank` | 100 docs | Literary text | ✅ Loadable |
+
+#### Relation Extraction (30+ datasets)
+
+| Dataset | ID | Focus | Relations | Status |
+|---------|------|-------|-----------|--------|
+| DocRED | `DocRED` | Document-level | 96 types | ✅ Loadable |
+| ReTACRED | `ReTACRED` | Sentence-level | 40 types | ✅ Loadable |
+
+### Discovering Datasets
+
+```rust
+use anno::eval::loader::DatasetId;
+
+// Get all NER datasets
+let ner_datasets: Vec<DatasetId> = DatasetId::all()
+    .iter()
+    .filter(|id| id.is_ner())
+    .copied()
+    .collect();
+
+// Get all biomedical datasets
+let bio_datasets: Vec<DatasetId> = DatasetId::all()
+    .iter()
+    .filter(|id| id.is_biomedical())
+    .copied()
+    .collect();
+
+// Get all multilingual datasets
+let multilingual: Vec<DatasetId> = DatasetId::all()
+    .iter()
+    .filter(|id| id.is_multilingual())
+    .copied()
+    .collect();
+```
+
+### Dataset Categories
+
+The registry supports 23+ categories for filtering:
+- **Domain**: `biomedical`, `legal`, `scientific`, `social_media`, `literary`, `news`, `dialogue`, `gaming`, `arcane_domain`
+- **Language**: `multilingual`, `low_resource`, `code_switching`, `indigenous`, `historical`
+- **Annotation**: `nested`, `discontinuous`, `long_document`
+- **Evaluation**: `adversarial`, `bias_evaluation`, `few_shot`
 
 ---
 

@@ -1,9 +1,11 @@
-//! Export command - Export annotations to brat/CoNLL/JSONL for annotation workflows
+//! Export command - Export annotations to various formats
 //!
 //! Supports exporting to:
 //! - brat standoff format (.ann files)
 //! - CoNLL format (IOB/BIO tagging)
 //! - JSONL (one entity per line)
+//! - N-Triples (RDF triples for knowledge graphs)
+//! - JSON-LD (linked data for knowledge graphs)
 
 use clap::{Parser, ValueEnum};
 use std::fs;
@@ -54,6 +56,12 @@ pub enum ExportFormat {
     Conll,
     /// JSONL (one entity per line)
     Jsonl,
+    /// N-Triples (RDF format for knowledge graphs)
+    #[value(name = "ntriples")]
+    NTriples,
+    /// JSON-LD (linked data format for knowledge graphs)
+    #[value(name = "jsonld")]
+    JsonLd,
 }
 
 /// Run the export command.
@@ -175,6 +183,8 @@ fn export_file(
         ExportFormat::Brat => output_dir.join(format!("{}.ann", stem)),
         ExportFormat::Conll => output_dir.join(format!("{}.conll", stem)),
         ExportFormat::Jsonl => output_dir.join(format!("{}.jsonl", stem)),
+        ExportFormat::NTriples => output_dir.join(format!("{}.nt", stem)),
+        ExportFormat::JsonLd => output_dir.join(format!("{}.jsonld", stem)),
     };
 
     // Check if output exists
@@ -190,6 +200,8 @@ fn export_file(
         ExportFormat::Brat => export_brat(&entities, include_confidence),
         ExportFormat::Conll => export_conll(&content, &entities),
         ExportFormat::Jsonl => export_jsonl(&entities, input, include_confidence),
+        ExportFormat::NTriples => export_ntriples(&entities, &content, input),
+        ExportFormat::JsonLd => export_jsonld(&entities, &content, input, include_confidence),
     };
 
     // Write output
@@ -298,4 +310,150 @@ fn export_jsonl(entities: &[anno_core::Entity], source: &Path, include_confidenc
     }
 
     lines.join("\n")
+}
+
+// =============================================================================
+// Knowledge Graph Export Formats
+// =============================================================================
+
+/// Escape a string for N-Triples format (RDF).
+fn escape_ntriples(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
+
+/// Generate a URI-safe identifier from text.
+fn uri_safe(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Export to N-Triples format (RDF triples for knowledge graphs).
+///
+/// Generates triples:
+/// - Entity type assertions: <entity> <rdf:type> <EntityType>
+/// - Entity text: <entity> <rdfs:label> "text"
+/// - Entity position: <entity> <anno:startOffset> "N"
+/// - Entity provenance: <entity> <prov:hadPrimarySource> <document>
+///
+/// For relations (when available), also generates:
+/// - <head_entity> <relation_type> <tail_entity>
+fn export_ntriples(entities: &[anno_core::Entity], _text: &str, source: &Path) -> String {
+    let mut lines = Vec::new();
+    let doc_uri = format!(
+        "<http://example.org/doc/{}>",
+        uri_safe(&source.to_string_lossy())
+    );
+
+    // Standard prefixes (expanded inline for N-Triples)
+    let rdf_type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+    let rdfs_label = "<http://www.w3.org/2000/01/rdf-schema#label>";
+    let anno_ns = "http://example.org/anno#";
+    let entity_ns = "http://example.org/entity/";
+
+    for (idx, entity) in entities.iter().enumerate() {
+        let entity_id = format!("e{}_{}", idx, uri_safe(&entity.text));
+        let entity_uri = format!("<{}{}>", entity_ns, entity_id);
+        let type_uri = format!("<{}{}Type>", anno_ns, entity.entity_type.as_label());
+
+        // Type assertion
+        lines.push(format!("{} {} {} .", entity_uri, rdf_type, type_uri));
+
+        // Label (the actual text)
+        lines.push(format!(
+            "{} {} \"{}\" .",
+            entity_uri,
+            rdfs_label,
+            escape_ntriples(&entity.text)
+        ));
+
+        // Position in document
+        lines.push(format!(
+            "{} <{}startOffset> \"{}\"^^<http://www.w3.org/2001/XMLSchema#integer> .",
+            entity_uri, anno_ns, entity.start
+        ));
+        lines.push(format!(
+            "{} <{}endOffset> \"{}\"^^<http://www.w3.org/2001/XMLSchema#integer> .",
+            entity_uri, anno_ns, entity.end
+        ));
+
+        // Confidence score
+        lines.push(format!(
+            "{} <{}confidence> \"{}\"^^<http://www.w3.org/2001/XMLSchema#float> .",
+            entity_uri, anno_ns, entity.confidence
+        ));
+
+        // Provenance
+        lines.push(format!(
+            "{} <http://www.w3.org/ns/prov#hadPrimarySource> {} .",
+            entity_uri, doc_uri
+        ));
+    }
+
+    // TODO: When relation extraction is integrated into Model trait,
+    // add relation triples here:
+    // <head_entity> <relation_type> <tail_entity> .
+
+    lines.join("\n")
+}
+
+/// Export to JSON-LD format (linked data for knowledge graphs).
+///
+/// Produces a JSON-LD document with:
+/// - @context with standard prefixes
+/// - @graph array of entity nodes
+/// - Each entity has @id, @type, label, offsets, and provenance
+fn export_jsonld(
+    entities: &[anno_core::Entity],
+    _text: &str,
+    source: &Path,
+    include_confidence: bool,
+) -> String {
+    let entity_ns = "http://example.org/entity/";
+    let anno_ns = "http://example.org/anno#";
+
+    let mut graph = Vec::new();
+
+    for (idx, entity) in entities.iter().enumerate() {
+        let entity_id = format!("e{}_{}", idx, uri_safe(&entity.text));
+
+        let mut node = serde_json::json!({
+            "@id": format!("{}{}", entity_ns, entity_id),
+            "@type": format!("{}{}Type", anno_ns, entity.entity_type.as_label()),
+            "rdfs:label": entity.text,
+            "anno:startOffset": entity.start,
+            "anno:endOffset": entity.end,
+            "prov:hadPrimarySource": {
+                "@id": format!("http://example.org/doc/{}", uri_safe(&source.to_string_lossy()))
+            }
+        });
+
+        if include_confidence {
+            node["anno:confidence"] = serde_json::json!(entity.confidence);
+        }
+
+        graph.push(node);
+    }
+
+    let doc = serde_json::json!({
+        "@context": {
+            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+            "prov": "http://www.w3.org/ns/prov#",
+            "anno": anno_ns,
+            "xsd": "http://www.w3.org/2001/XMLSchema#"
+        },
+        "@graph": graph
+    });
+
+    serde_json::to_string_pretty(&doc).unwrap_or_else(|_| "{}".to_string())
 }

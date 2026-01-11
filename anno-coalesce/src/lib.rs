@@ -302,6 +302,7 @@ pub mod evidence;
 pub mod hierarchical;
 pub mod lsh;
 pub mod resolver;
+pub mod script;
 pub mod similarity;
 pub mod streaming;
 
@@ -344,9 +345,9 @@ pub use hierarchical::{
 pub use lsh::{LSHConfig, LSHItem, MinHashLSH, SimHashLSH};
 pub use resolver::{embedding_similarity, string_similarity, Resolver};
 pub use similarity::{
-    is_acronym_match, jaro_similarity, jaro_winkler_similarity, levenshtein_distance,
-    levenshtein_similarity, multilingual_similarity, normalize, ChainedSynonyms, NoSynonyms,
-    Script, Similarity, SimilarityConfig, SynonymMatch, SynonymSource,
+    cross_lingual_similarity, is_acronym_match, jaro_similarity, jaro_winkler_similarity,
+    levenshtein_distance, levenshtein_similarity, multilingual_similarity, normalize,
+    ChainedSynonyms, NoSynonyms, Script, Similarity, SimilarityConfig, SynonymMatch, SynonymSource,
 };
 pub use streaming::{
     trigram_similarity, EntityCluster, EntityMention, StreamingConfig, StreamingResolver,

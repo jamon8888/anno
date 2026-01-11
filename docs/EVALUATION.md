@@ -4,6 +4,26 @@ Tools for measuring NER and coreference system performance. NER evaluation requi
 
 > **Live Results:** [`reports/RESULTS.md`](../reports/RESULTS.md) | **Raw Data:** [`reports/eval-results.jsonl`](../reports/eval-results.jsonl)
 
+## Distributed Evaluation (AWS Spot)
+
+For comprehensive evaluation across all backends and datasets, use AWS spot instances:
+
+```bash
+# Quick test (1 instance, ~$0.02)
+just spot-runctl-eval FLEET_SIZE="1"
+
+# Full evaluation (4 instances, ~$1-2)
+just spot-runctl-eval FLEET_SIZE="4"
+
+# Monitor progress
+just spot-runctl-status
+
+# View results
+just spot-aggregate
+```
+
+**Setup:** See [`scripts/spot/README.md`](../scripts/spot/README.md) for infrastructure setup and `runctl` integration details.
+
 ## Tools
 
 | Task | Tool |
@@ -385,6 +405,7 @@ The evaluation system caches model predictions to speed up iteration. This allow
 
 **Environment Variables:**
 - `ANNO_PREDICTION_CACHE`: Path to the prediction cache file (default: `~/.cache/anno/predictions.jsonl`)
+- `ANNO_EVAL_HISTORY`: Path to evaluation results history file (default: `~/.cache/anno/eval-results.jsonl`)
 - `ANNO_CACHE_DIR`: Base directory for all caches (datasets, models, predictions)
 
 **Backend Versioning:**
@@ -397,6 +418,83 @@ If you modify a backend's logic or model weights, update its `version()` impleme
 **CLI Management:**
 - `anno cache stats`: Show statistics for file and prediction caches.
 - `anno cache clear`: Clear all caches (files and predictions).
+
+### Evaluation History
+
+The evaluation framework automatically tracks evaluation results in a persistent history, enabling time-series analysis, trend detection, and performance comparisons across runs.
+
+**Storage:**
+- **JSONL** (source of truth): Human-readable, git-friendly, append-only
+- **SQLite** (queryable index): Fast queries, ACID guarantees, indexed lookups
+
+Both are maintained automatically when the `eval` feature is enabled. JSONL is always written first; SQLite is updated for fast queries.
+
+**Usage:**
+
+```rust
+use anno::eval::history::EvalHistory;
+
+// History is automatically initialized by TaskEvaluator
+let evaluator = TaskEvaluator::new()?;
+let results = evaluator.evaluate_all(config)?;
+// Results are automatically stored in history
+
+// Query history directly
+let history = EvalHistory::new("reports/eval-results.jsonl")?;
+
+// Get recent results for a backend
+let recent = history.query_recent("gliner", 10)?;
+
+// Get best results (by F1 score)
+let best = history.query_best("gliner", Some("WikiGold"), 5)?;
+
+// Get statistics
+let stats = history.stats()?;
+println!("Total entries: {}", stats.total_entries);
+println!("Average F1: {:.2}%", stats.avg_f1.unwrap_or(0.0) * 100.0);
+
+// Rebuild SQLite index if corrupted
+history.rebuild_index()?;
+```
+
+**Benefits:**
+- **Time-series analysis**: Track performance changes over time
+- **Trend detection**: Identify regressions or improvements
+- **Comparison**: Compare backends across multiple runs
+- **Reproducibility**: Complete audit trail of all evaluations
+- **Query performance**: SQLite enables fast queries on large history
+
+**Location:**
+- Default: `~/.cache/anno/eval-results.jsonl` (JSONL) and `~/.cache/anno/eval-history.db` (SQLite)
+- Override with `ANNO_EVAL_HISTORY` environment variable
+
+**CLI Usage:**
+
+```bash
+# Show statistics
+anno history stats
+
+# List all backends
+anno history backends
+
+# List all datasets
+anno history datasets
+
+# Query recent results
+anno history recent stacked --limit 10
+
+# Query best results
+anno history best stacked --dataset WikiGold --limit 5
+
+# Query by date range
+anno history range 2024-01-01T00:00:00Z 2024-12-31T23:59:59Z --backend stacked
+
+# Compare backends
+anno history compare stacked pattern --dataset WikiGold
+
+# Rebuild SQLite index
+anno history rebuild
+```
 
 ### Feature flags
 

@@ -1,87 +1,452 @@
 {
-  "generated": "2025-12-22T02:47:35.175728+00:00",
-  "total_runs": 36,
-  "successful": 29,
-  "skipped": 3,
-  "incompatible": 4,
-  "dataset_errors": 0,
-  "errors": 0,
-  "timeouts": 0,
-  "avg_f1": 39.1,
-  "best_f1": 80.0,
-  "best": "bert_onnx/MultiNERD",
-  "by_backend": {
-    "stacked": {
-      "avg_f1": 36.7,
-      "best_f1": 49.6,
-      "runs": 5
+  "generated": "2026-01-06T18:11:17.489595+00:00",
+  "total_runs": 300,
+  "successful_runs": 36,
+  "best_f1": 64.8,
+  "best": "nuner/WikiGold",
+  "avg_f1": 31.2,
+  "backends": {
+    "gliner": {
+      "runs": 60,
+      "avg_f1": 0,
+      "best_f1": 0,
+      "best_dataset": null,
+      "datasets": {
+        "CoNLL2003Sample": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "FewNERD": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MitRestaurant": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "LitBank": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MitMovie": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "GAP": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "WikiGold": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MultiNERD": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "PreCo": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "Wnut17": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "BC5CDR": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "NCBIDisease": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        }
+      }
     },
     "gliner2": {
-      "avg_f1": 39.1,
-      "best_f1": 46.3,
-      "runs": 5
-    },
-    "crf": {
-      "avg_f1": 4.9,
-      "best_f1": 4.9,
-      "runs": 1
-    },
-    "bert_onnx": {
-      "avg_f1": 54.9,
-      "best_f1": 80.0,
-      "runs": 5
+      "runs": 60,
+      "avg_f1": 22.8,
+      "best_f1": 50.2,
+      "best_dataset": "WikiGold",
+      "datasets": {
+        "MitMovie": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "Wnut17": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MultiNERD": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "NCBIDisease": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "GAP": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "LitBank": {
+          "f1": 2.9,
+          "p": 23.5,
+          "r": 1.6
+        },
+        "PreCo": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "CoNLL2003Sample": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "FewNERD": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "WikiGold": {
+          "f1": 50.2,
+          "p": 47.6,
+          "r": 53.1
+        },
+        "MitRestaurant": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "BC5CDR": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        }
+      }
     },
     "heuristic": {
-      "avg_f1": 28.1,
-      "best_f1": 29.3,
-      "runs": 2
-    },
-    "gliner_onnx": {
-      "avg_f1": 35.9,
-      "best_f1": 53.1,
-      "runs": 5
-    },
-    "mention_ranking": {
-      "avg_f1": 34.6,
-      "best_f1": 34.6,
-      "runs": 1
+      "runs": 60,
+      "avg_f1": 29.4,
+      "best_f1": 37.8,
+      "best_dataset": "CoNLL2003Sample",
+      "datasets": {
+        "PreCo": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MitMovie": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "CoNLL2003Sample": {
+          "f1": 37.8,
+          "p": 38.5,
+          "r": 37.1
+        },
+        "Wnut17": {
+          "f1": 20.5,
+          "p": 16.5,
+          "r": 27.2
+        },
+        "GAP": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "NCBIDisease": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "LitBank": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "FewNERD": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "WikiGold": {
+          "f1": 33.6,
+          "p": 31.4,
+          "r": 36.1
+        },
+        "BC5CDR": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MultiNERD": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MitRestaurant": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        }
+      }
     },
     "nuner": {
-      "avg_f1": 41.4,
-      "best_f1": 70.3,
-      "runs": 5
+      "runs": 55,
+      "avg_f1": 58.8,
+      "best_f1": 64.8,
+      "best_dataset": "WikiGold",
+      "datasets": {
+        "BC5CDR": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MitRestaurant": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "WikiGold": {
+          "f1": 64.8,
+          "p": 62.0,
+          "r": 67.8
+        },
+        "Wnut17": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "CoNLL2003Sample": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "GAP": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MultiNERD": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "FewNERD": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "NCBIDisease": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MitMovie": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "PreCo": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        }
+      }
+    },
+    "pattern": {
+      "runs": 5,
+      "avg_f1": 0.4,
+      "best_f1": 0.4,
+      "best_dataset": "MitRestaurant",
+      "datasets": {
+        "MitRestaurant": {
+          "f1": 0.4,
+          "p": 13.0,
+          "r": 0.2
+        },
+        "MitMovie": {
+          "f1": 0.0,
+          "p": 0.0,
+          "r": 0.0
+        },
+        "Wnut17": {
+          "f1": 0.0,
+          "p": 0.0,
+          "r": 0.0
+        },
+        "WikiGold": {
+          "f1": 0.0,
+          "p": 0.0,
+          "r": 0.0
+        },
+        "CoNLL2003Sample": {
+          "f1": 0.0,
+          "p": 0.0,
+          "r": 0.0
+        }
+      }
+    },
+    "stacked": {
+      "runs": 60,
+      "avg_f1": 30.4,
+      "best_f1": 53.1,
+      "best_dataset": "WikiGold",
+      "datasets": {
+        "NCBIDisease": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "CoNLL2003Sample": {
+          "f1": 36.1,
+          "p": 35.1,
+          "r": 37.1
+        },
+        "FewNERD": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "GAP": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "LitBank": {
+          "f1": 20.8,
+          "p": 43.8,
+          "r": 13.7
+        },
+        "PreCo": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MitMovie": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "MultiNERD": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "Wnut17": {
+          "f1": 17.2,
+          "p": 12.6,
+          "r": 27.2
+        },
+        "MitRestaurant": {
+          "f1": 0.4,
+          "p": 13.0,
+          "r": 0.2
+        },
+        "BC5CDR": {
+          "f1": 0,
+          "p": 0,
+          "r": 0
+        },
+        "WikiGold": {
+          "f1": 53.1,
+          "p": 44.8,
+          "r": 65.0
+        }
+      }
     }
   },
-  "by_dataset": {
-    "Wnut17": {
-      "avg_f1": 15.5,
-      "best_f1": 26.4,
-      "runs": 5
-    },
-    "FewNERD": {
-      "avg_f1": 28.1,
-      "best_f1": 37.3,
-      "runs": 5
+  "datasets": {
+    "BC5CDR": {
+      "runs": 25,
+      "best_f1": 0,
+      "best_backend": null,
+      "backends_tested": 5
     },
     "CoNLL2003Sample": {
-      "avg_f1": 41.6,
-      "best_f1": 70.1,
-      "runs": 7
+      "runs": 26,
+      "best_f1": 37.8,
+      "best_backend": "heuristic",
+      "backends_tested": 6
     },
-    "MultiNERD": {
-      "avg_f1": 54.7,
-      "best_f1": 80.0,
-      "runs": 5
+    "FewNERD": {
+      "runs": 25,
+      "best_f1": 0,
+      "best_backend": null,
+      "backends_tested": 5
     },
     "GAP": {
-      "avg_f1": 34.6,
-      "best_f1": 34.6,
-      "runs": 1
+      "runs": 25,
+      "best_f1": 0,
+      "best_backend": null,
+      "backends_tested": 5
+    },
+    "LitBank": {
+      "runs": 20,
+      "best_f1": 20.8,
+      "best_backend": "stacked",
+      "backends_tested": 4
+    },
+    "MitMovie": {
+      "runs": 26,
+      "best_f1": 0,
+      "best_backend": null,
+      "backends_tested": 6
+    },
+    "MitRestaurant": {
+      "runs": 26,
+      "best_f1": 0.4,
+      "best_backend": "pattern",
+      "backends_tested": 6
+    },
+    "MultiNERD": {
+      "runs": 25,
+      "best_f1": 0,
+      "best_backend": null,
+      "backends_tested": 5
+    },
+    "NCBIDisease": {
+      "runs": 25,
+      "best_f1": 0,
+      "best_backend": null,
+      "backends_tested": 5
+    },
+    "PreCo": {
+      "runs": 25,
+      "best_f1": 0,
+      "best_backend": null,
+      "backends_tested": 5
     },
     "WikiGold": {
-      "avg_f1": 52.9,
-      "best_f1": 75.2,
-      "runs": 6
+      "runs": 26,
+      "best_f1": 64.8,
+      "best_backend": "nuner",
+      "backends_tested": 6
+    },
+    "Wnut17": {
+      "runs": 26,
+      "best_f1": 20.5,
+      "best_backend": "heuristic",
+      "backends_tested": 6
     }
   }
 }

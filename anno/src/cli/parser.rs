@@ -118,6 +118,10 @@ pub enum Commands {
     /// Manage cache for extraction results
     Cache(commands::CacheArgs),
 
+    /// Query evaluation history
+    #[cfg(feature = "eval")]
+    History(commands::HistoryArgs),
+
     /// Manage configuration files for workflows
     Config(commands::ConfigArgs),
 

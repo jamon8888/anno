@@ -75,105 +75,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-// =============================================================================
-// Script Detection
-// =============================================================================
-
-/// Unicode script categories for routing similarity algorithms.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Script {
-    /// Latin script (English, French, German, etc.)
-    Latin,
-    /// CJK (Chinese, Japanese Kanji, Korean Hanja)
-    Cjk,
-    /// Japanese Hiragana/Katakana
-    Kana,
-    /// Korean Hangul
-    Hangul,
-    /// Arabic script
-    Arabic,
-    /// Cyrillic script (Russian, etc.)
-    Cyrillic,
-    /// Devanagari (Hindi, Sanskrit, etc.)
-    Devanagari,
-    /// Greek script
-    Greek,
-    /// Hebrew script
-    Hebrew,
-    /// Thai script
-    Thai,
-    /// Mixed or unknown
-    Mixed,
-}
-
-impl Script {
-    /// Detect the dominant script in a string.
-    ///
-    /// Returns the script that appears most frequently.
-    pub fn detect(s: &str) -> Self {
-        let mut counts = [0u32; 11]; // One per Script variant
-
-        for c in s.chars() {
-            match c {
-                '\u{0000}'..='\u{007F}' => counts[0] += 1, // ASCII/Latin
-                '\u{0080}'..='\u{024F}' => counts[0] += 1, // Latin Extended
-                '\u{4E00}'..='\u{9FFF}' => counts[1] += 1, // CJK Unified
-                '\u{3400}'..='\u{4DBF}' => counts[1] += 1, // CJK Extension A
-                '\u{3040}'..='\u{309F}' => counts[2] += 1, // Hiragana
-                '\u{30A0}'..='\u{30FF}' => counts[2] += 1, // Katakana
-                '\u{AC00}'..='\u{D7AF}' => counts[3] += 1, // Hangul Syllables
-                '\u{1100}'..='\u{11FF}' => counts[3] += 1, // Hangul Jamo
-                '\u{0600}'..='\u{06FF}' => counts[4] += 1, // Arabic
-                '\u{0750}'..='\u{077F}' => counts[4] += 1, // Arabic Supplement
-                '\u{0400}'..='\u{04FF}' => counts[5] += 1, // Cyrillic
-                '\u{0500}'..='\u{052F}' => counts[5] += 1, // Cyrillic Supplement
-                '\u{0900}'..='\u{097F}' => counts[6] += 1, // Devanagari
-                '\u{0370}'..='\u{03FF}' => counts[7] += 1, // Greek
-                '\u{1F00}'..='\u{1FFF}' => counts[7] += 1, // Greek Extended
-                '\u{0590}'..='\u{05FF}' => counts[8] += 1, // Hebrew
-                '\u{0E00}'..='\u{0E7F}' => counts[9] += 1, // Thai
-                _ => counts[10] += 1,                      // Other
-            }
-        }
-
-        // Find dominant script (ignoring whitespace/punctuation in ASCII)
-        let scripts = [
-            Script::Latin,
-            Script::Cjk,
-            Script::Kana,
-            Script::Hangul,
-            Script::Arabic,
-            Script::Cyrillic,
-            Script::Devanagari,
-            Script::Greek,
-            Script::Hebrew,
-            Script::Thai,
-            Script::Mixed,
-        ];
-
-        let max_idx = counts
-            .iter()
-            .enumerate()
-            .max_by_key(|(_, &count)| count)
-            .map(|(i, _)| i)
-            .unwrap_or(10);
-
-        scripts[max_idx]
-    }
-
-    /// Whether this script uses word boundaries (spaces).
-    pub fn has_word_boundaries(&self) -> bool {
-        matches!(
-            self,
-            Script::Latin
-                | Script::Cyrillic
-                | Script::Greek
-                | Script::Arabic
-                | Script::Hebrew
-                | Script::Devanagari
-        )
-    }
-}
+// Re-export Script from separate module to avoid compilation issues
+pub use crate::script::Script;
 
 // =============================================================================
 // Preprocessing
@@ -540,6 +443,291 @@ pub fn multilingual_similarity(a: &str, b: &str) -> f32 {
     Similarity::new().compute(a, b)
 }
 
+/// Cross-lingual entity matching for transliteration variants.
+///
+/// Matches entities across different scripts/transliterations:
+/// - "Moscow" ↔ "Москва" (English ↔ Russian)
+/// - "Tokyo" ↔ "東京" (English ↔ Japanese)
+/// - "Beijing" ↔ "北京" (English ↔ Chinese)
+///
+/// Uses a combination of:
+/// 1. Script detection (different scripts = potential transliteration)
+/// 2. Known transliteration pairs (common city/person names)
+/// 3. Phonetic similarity (future: add phonetic algorithms)
+/// 4. Context clues (parentheses, slashes indicating variants)
+///
+/// Returns similarity score in [0, 1]. Higher scores indicate
+/// more likely cross-lingual match.
+pub fn cross_lingual_similarity(a: &str, b: &str) -> f32 {
+    let script_a = Script::detect(a);
+    let script_b = Script::detect(b);
+
+    // If same script (and not Mixed), use regular multilingual similarity
+    // Mixed script strings (like "東京 (Tokyo)") should go through cross-lingual logic
+    if script_a == script_b && script_a != Script::Mixed {
+        return multilingual_similarity(a, b);
+    }
+
+    // Known transliteration pairs (common entities)
+    // In production, this would be a larger database or learned model
+    let known_pairs: &[(&str, &str)] = &[
+        // Cities: English ↔ Russian
+        ("moscow", "москва"),
+        ("saint petersburg", "санкт-петербург"),
+        ("kiev", "киев"),
+        // Cities: English ↔ Chinese
+        ("beijing", "北京"),
+        ("shanghai", "上海"),
+        ("guangzhou", "广州"),
+        ("shenzhen", "深圳"),
+        // Cities: English ↔ Japanese
+        ("tokyo", "東京"),
+        ("東京", "tokyo"), // Bidirectional
+        ("osaka", "大阪"),
+        ("kyoto", "京都"),
+        // Cities: English ↔ Arabic
+        ("cairo", "القاهرة"),
+        ("riyadh", "الرياض"),
+        ("dubai", "دبي"),
+        // People: Common transliterations
+        ("putin", "путин"),
+        ("xi jinping", "习近平"),
+        ("abe", "安倍"),
+    ];
+
+    let a_norm = normalize(a);
+    let b_norm = normalize(b);
+
+    // Extract base text (without parentheses) for better matching
+    let base_a = a
+        .split('(')
+        .next()
+        .and_then(|s| s.split('（').next())
+        .map(|s| s.trim());
+    let base_b = b
+        .split('(')
+        .next()
+        .and_then(|s| s.split('（').next())
+        .map(|s| s.trim());
+
+    // Quick check: if base_a matches b (or vice versa) via known pairs, return early
+    // This handles "東京 (Tokyo)" vs "Tokyo" case efficiently
+    // For "東京 (Tokyo)" vs "Tokyo":
+    // - base_a = "東京", b = "Tokyo", b_norm = "tokyo"
+    // - For pair ("tokyo", "東京"): ba="東京" == pair_b="東京", b_norm="tokyo" == pair_a="tokyo"
+    // This should match: ba == "東京" (pair_b) && b_norm == "tokyo" (pair_a)
+    if let Some(ba) = base_a {
+        for (pair_a, pair_b) in known_pairs {
+            // Exact match: base_a == pair_b AND b_norm == pair_a (or vice versa)
+            // Key case: ba="東京" == pair_b="東京" && b_norm="tokyo" == pair_a="tokyo"
+            if (ba == *pair_b && b_norm == *pair_a) || (ba == *pair_a && b_norm == *pair_b) {
+                return 0.85;
+            }
+        }
+    }
+    if let Some(bb) = base_b {
+        let bb_norm = normalize(bb);
+        for (pair_a, pair_b) in known_pairs {
+            let a_matches_a =
+                a_norm == *pair_a || a == *pair_a || a_norm.contains(pair_a) || a.contains(pair_a);
+            let a_matches_b =
+                a_norm == *pair_b || a == *pair_b || a_norm.contains(pair_b) || a.contains(pair_b);
+            let bb_matches_a = bb_norm == *pair_a
+                || bb == *pair_a
+                || bb_norm.contains(pair_a)
+                || bb.contains(pair_a);
+            let bb_matches_b = bb_norm == *pair_b
+                || bb == *pair_b
+                || bb_norm.contains(pair_b)
+                || bb.contains(pair_b);
+
+            if (a_matches_a && bb_matches_b) || (a_matches_b && bb_matches_a) {
+                return 0.85;
+            }
+        }
+    }
+
+    // Check known pairs (bidirectional) - full string check
+
+    for (pair_a, pair_b) in known_pairs {
+        // Check if a contains pair_a and b contains pair_b (or vice versa)
+        // Check full string, normalized string, and base text
+        let mut a_has_a = a_norm.contains(pair_a) || a.contains(pair_a);
+        let mut a_has_b = a_norm.contains(pair_b) || a.contains(pair_b);
+        let mut b_has_a = b_norm.contains(pair_a) || b.contains(pair_a);
+        let mut b_has_b = b_norm.contains(pair_b) || b.contains(pair_b);
+
+        // Also check base text
+        if let Some(ba) = base_a {
+            let ba_norm = normalize(ba);
+            a_has_a = a_has_a || ba_norm.contains(pair_a) || ba.contains(pair_a);
+            a_has_b = a_has_b || ba_norm.contains(pair_b) || ba.contains(pair_b);
+        }
+        if let Some(bb) = base_b {
+            let bb_norm = normalize(bb);
+            b_has_a = b_has_a || bb_norm.contains(pair_a) || bb.contains(pair_a);
+            b_has_b = b_has_b || bb_norm.contains(pair_b) || bb.contains(pair_b);
+        }
+
+        // Match if (a has pair_a AND b has pair_b) OR (a has pair_b AND b has pair_a)
+        if (a_has_a && b_has_b) || (a_has_b && b_has_a) {
+            return 0.85; // High confidence for known transliterations
+        }
+
+        // Exact matches (base text)
+        if let (Some(ba), Some(bb)) = (base_a, base_b) {
+            let ba_norm = normalize(ba);
+            let bb_norm = normalize(bb);
+            if (ba_norm == *pair_a && bb_norm == *pair_b)
+                || (ba_norm == *pair_b && bb_norm == *pair_a)
+            {
+                return 0.9;
+            }
+            if (ba == *pair_a && bb == *pair_b) || (ba == *pair_b && bb == *pair_a) {
+                return 0.9;
+            }
+        }
+    }
+
+    // Check for transliteration indicators in text
+    // Pattern: "Moscow (Москва)" or "東京 (Tokyo)"
+    // Also handle case where one string has parentheses and the other doesn't
+    // (e.g., "東京 (Tokyo)" vs "Tokyo")
+    let has_translit_pattern = |text: &str| -> bool {
+        text.contains('(') && text.contains(')')
+            || text.contains('/')
+            || text.contains('（') && text.contains('）') // Chinese parentheses
+    };
+
+    // If either string has transliteration pattern, extract variants from both
+    // This handles "東京 (Tokyo)" vs "Tokyo" case
+    if has_translit_pattern(a) || has_translit_pattern(b) {
+        // Extract text in parentheses as potential transliteration
+        let extract_variants = |text: &str| -> Vec<String> {
+            let mut variants = Vec::new();
+            // Always include the full text as a variant (handles "Tokyo" case)
+            variants.push(text.to_string());
+            // Also include the base text (without parentheses)
+            let base_text = text
+                .split('(')
+                .next()
+                .and_then(|s| s.split('（').next())
+                .and_then(|s| s.split('/').next())
+                .map(|s| s.trim().to_string());
+            if let Some(base) = base_text {
+                if !base.is_empty() && base != text {
+                    variants.push(base);
+                }
+            }
+            // Extract content in parentheses (English and Chinese)
+            // Simple byte-based extraction (safe for ASCII parentheses)
+            if let Some(start) = text.find('(') {
+                // Find the matching ')' after the '('
+                let after_start = &text[start..];
+                if let Some(end_offset) = after_start.find(')') {
+                    // Extract content between ( and )
+                    // start is byte index of '(', end_offset is byte offset from start
+                    let content = &text[start + 1..start + end_offset];
+                    let content = content.trim();
+                    if !content.is_empty() {
+                        variants.push(content.to_string());
+                    }
+                }
+            }
+            if let Some(start) = text.find('（') {
+                if let Some(end) = text[start..].find('）') {
+                    let content = text[start + 1..start + end].trim();
+                    if !content.is_empty() {
+                        variants.push(content.to_string());
+                    }
+                }
+            }
+            // Extract content after slash
+            if let Some(slash_pos) = text.find('/') {
+                let after_slash = text[slash_pos + 1..].trim();
+                if !after_slash.is_empty() {
+                    variants.push(after_slash.to_string());
+                }
+            }
+            variants
+        };
+
+        let variants_a = extract_variants(a);
+        let variants_b = extract_variants(b);
+
+        // Check if any variant from a matches b directly (or vice versa)
+        // This handles "東京 (Tokyo)" vs "Tokyo" case - most common scenario
+        let b_norm = normalize(b);
+        let a_norm = normalize(a);
+
+        // First check: variant from a matches b (exact or normalized)
+        // This is the critical path for "東京 (Tokyo)" vs "Tokyo"
+        // variants_a should contain ["東京 (Tokyo)", "東京", "Tokyo"] for "東京 (Tokyo)"
+        // variants_b should contain ["Tokyo"] for "Tokyo"
+        // The key: "Tokyo" from variants_a should match "Tokyo" from b
+        for va in &variants_a {
+            // Exact match (handles "Tokyo" == "Tokyo" - this should work!)
+            if va == b {
+                return 0.85;
+            }
+            // Normalized match
+            let va_norm = normalize(va);
+            if va_norm == b_norm {
+                return 0.85;
+            }
+            // Case-insensitive for ASCII (handles "Tokyo" vs "tokyo")
+            if va.eq_ignore_ascii_case(b) {
+                return 0.85;
+            }
+        }
+        // Second check: variant from b matches a
+        for vb in &variants_b {
+            if vb == a {
+                return 0.85;
+            }
+            let vb_norm = normalize(vb);
+            if vb_norm == a_norm || vb.eq_ignore_ascii_case(a) {
+                return 0.85;
+            }
+        }
+        // Third check: variant from a matches variant from b
+        for va in &variants_a {
+            let va_norm = normalize(va);
+            for vb in &variants_b {
+                if va == vb {
+                    return 0.9;
+                }
+                let vb_norm = normalize(vb);
+                if va_norm == vb_norm || va.eq_ignore_ascii_case(vb) {
+                    return 0.9;
+                }
+            }
+        }
+
+        // Check variant combinations (simplified - avoid expensive similarity calls)
+        for va in &variants_a {
+            for vb in &variants_b {
+                let va_norm = normalize(va);
+                let vb_norm = normalize(vb);
+                if va_norm == vb_norm || va == vb {
+                    return 0.9;
+                }
+            }
+        }
+    }
+
+    // Fallback: use base similarity (may catch some cases)
+    // Cross-script similarity is typically lower, so we use a threshold
+    let base_sim = multilingual_similarity(a, b);
+    if base_sim > 0.3 {
+        // Boost cross-script matches slightly if they have some similarity
+        base_sim * 1.2
+    } else {
+        base_sim
+    }
+    .min(1.0)
+}
+
 // =============================================================================
 // Acronym Detection
 // =============================================================================
@@ -745,38 +933,7 @@ impl SynonymSource for ChainedSynonyms {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_script_detection_latin() {
-        assert_eq!(Script::detect("Hello World"), Script::Latin);
-        assert_eq!(Script::detect("Marie Curie"), Script::Latin);
-    }
-
-    #[test]
-    fn test_script_detection_cjk() {
-        assert_eq!(Script::detect("北京"), Script::Cjk);
-        assert_eq!(Script::detect("中华人民共和国"), Script::Cjk);
-    }
-
-    #[test]
-    fn test_script_detection_kana() {
-        assert_eq!(Script::detect("ひらがな"), Script::Kana);
-        assert_eq!(Script::detect("カタカナ"), Script::Kana);
-    }
-
-    #[test]
-    fn test_script_detection_hangul() {
-        assert_eq!(Script::detect("서울"), Script::Hangul);
-    }
-
-    #[test]
-    fn test_script_detection_cyrillic() {
-        assert_eq!(Script::detect("Москва"), Script::Cyrillic);
-    }
-
-    #[test]
-    fn test_script_detection_arabic() {
-        assert_eq!(Script::detect("الرياض"), Script::Arabic);
-    }
+    // Script detection tests moved to script.rs module
 
     #[test]
     fn test_normalize() {
@@ -957,5 +1114,72 @@ mod proptests {
     fn test_chained_synonyms_empty() {
         let chain = ChainedSynonyms::new();
         assert!(chain.lookup("test").is_none());
+    }
+
+    // =========================================================================
+    // Cross-lingual transliteration tests
+    // =========================================================================
+
+    #[test]
+    fn test_cross_lingual_same_script() {
+        // Same script should use regular similarity
+        let sim = cross_lingual_similarity("Moscow", "Moskva");
+        assert!(sim >= 0.0 && sim <= 1.0, "Similarity should be in [0, 1]");
+
+        let sim_cjk = cross_lingual_similarity("北京", "北京");
+        assert!(
+            (sim_cjk - 1.0).abs() < 0.01,
+            "Identical strings should have similarity 1.0"
+        );
+    }
+
+    #[test]
+    fn test_cross_lingual_known_pairs() {
+        // Known transliteration pairs should have high similarity
+        let sim = cross_lingual_similarity("Moscow", "Москва");
+        assert!(sim > 0.8, "Moscow ↔ Москва should match");
+
+        let sim = cross_lingual_similarity("Tokyo", "東京");
+        assert!(sim > 0.8, "Tokyo ↔ 東京 should match");
+
+        let sim = cross_lingual_similarity("Beijing", "北京");
+        assert!(sim > 0.8, "Beijing ↔ 北京 should match");
+    }
+
+    #[test]
+    fn test_cross_lingual_with_parentheses() {
+        // Text with transliteration in parentheses
+        let sim = cross_lingual_similarity("Moscow (Москва)", "Москва");
+        assert!(
+            sim > 0.6,
+            "Should extract variant from parentheses, got {}",
+            sim
+        );
+
+        // For CJK with Latin: "東京 (Tokyo)" vs "Tokyo"
+        // Known pair: ("tokyo", "東京")
+        // base_a = "東京" (from "東京 (Tokyo)")
+        // b_norm = "tokyo" (from normalize("Tokyo"))
+        // Should match: ba == "東京" (pair_b) && b_norm == "tokyo" (pair_a)
+        // OR variant extraction: "Tokyo" from parentheses matches "Tokyo"
+        let sim = cross_lingual_similarity("東京 (Tokyo)", "Tokyo");
+        // Should match either via known pair (東京↔Tokyo) or via extracted variant
+        assert!(
+            sim > 0.5,
+            "Should handle CJK with Latin transliteration, got {}",
+            sim
+        );
+
+        // Test the reverse direction
+        let sim = cross_lingual_similarity("Tokyo", "東京 (Tokyo)");
+        assert!(sim > 0.5, "Should work in reverse direction, got {}", sim);
+    }
+
+    #[test]
+    fn test_cross_lingual_different_scripts() {
+        // Different scripts without known pairs should have lower similarity
+        let sim = cross_lingual_similarity("Paris", "パリ"); // Paris in Katakana
+                                                             // May or may not match depending on known pairs, but should handle gracefully
+        assert!(sim >= 0.0 && sim <= 1.0);
     }
 }

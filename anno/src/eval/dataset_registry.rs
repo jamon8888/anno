@@ -1223,7 +1223,7 @@ define_datasets! {
     CoNLL2003Sample {
         name: "CoNLL-2003 Sample",
         description: "Classic news NER benchmark from Reuters Corpus. Foundational dataset that established modern NER evaluation standards.",
-        url: "https://raw.githubusercontent.com/autoih/conll2003/master/CoNLL-2003/eng.testb",
+        url: "https://huggingface.co/datasets/tner/conll2003",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "en",
         domain: "news",
@@ -1237,12 +1237,13 @@ define_datasets! {
         example: "EU B-ORG\nrejects O\nGerman B-MISC\ncall O\nto O\nboycott O\nBritish B-MISC\nlamb O\n. O",
         notes: "Original has ~7% annotation errors (CleanCoNLL 2023); still the most-cited NER benchmark",
         tasks: ["ner"],
+        hf_id: "tner/conll2003",
         categories: [ner],
     },
     OntoNotesSample {
         name: "OntoNotes Sample",
         description: "Multi-genre 18-type NER from OntoNotes 5.0. Rich annotation including coreference, parsing, and PropBank.",
-        url: "https://raw.githubusercontent.com/autoih/conll2003/master/CoNLL-2003/eng.testb",
+        url: "https://huggingface.co/datasets/tner/ontonotes5",
         entity_types: ["PERSON", "ORG", "GPE", "LOC", "DATE", "TIME", "MONEY", "PERCENT", "NORP", "FAC", "PRODUCT", "EVENT", "WORK_OF_ART", "LAW", "LANGUAGE", "QUANTITY", "ORDINAL", "CARDINAL"],
         language: "en",
         domain: "news",
@@ -1254,7 +1255,8 @@ define_datasets! {
         annotation_scheme: "IOB2",
         size_hint: "~1.6M tokens, ~128k entities",
         example: "The B-ORG\nEuropean I-ORG\nUnion I-ORG\nannounced O\nMonday B-DATE\nthat O\nthe O\n$ B-MONEY\n10 I-MONEY\nmillion I-MONEY\nwill O\ngo O\nto O\nUkraine B-GPE\n. O",
-        notes: "Full corpus requires LDC license; sample for testing; includes 7 genres",
+        notes: "Full corpus requires LDC license; sample available on HuggingFace; includes 7 genres",
+        hf_id: "tner/ontonotes5",
         categories: [ner],
     },
     MultiNERD {
@@ -1547,7 +1549,7 @@ define_datasets! {
     BC5CDR {
         name: "BC5CDR",
         description: "Biomedical NER for diseases and chemicals. Created for BioCreative V CDR task, a major biomedical NLP benchmark.",
-        url: "https://raw.githubusercontent.com/shreyashub/BioFLAIR/master/data/ner/bc5cdr/test.txt",
+        url: "https://huggingface.co/datasets/tner/bc5cdr",
         entity_types: ["Chemical", "Disease"],
         language: "en",
         domain: "biomedical",
@@ -1596,6 +1598,7 @@ define_datasets! {
         format: "XML",
         annotation_scheme: "Standoff",
         size_hint: "2000 MEDLINE abstracts, ~100k entities",
+        example: "The B-protein\nNF-kappa B I-protein\nprotein I-protein\nbinds O\nto O\nthe B-DNA\nkappa B I-DNA\nbinding I-DNA\nsite I-DNA\n. O",
         notes: "Nested entities common; requires special handling; pioneered biomedical NER",
         hf_id: "chufangao/GENIA-NER",
         categories: [ner, biomedical],
@@ -1632,6 +1635,7 @@ define_datasets! {
         year: 2008,
         format: "IOB2",
         size_hint: "20k sentences, ~24k gene mentions",
+        example: "The B-Gene\np53 I-Gene\nprotein I-Gene\nregulates O\ncell O\ncycle O\narrest O\n. O",
         notes: "Classic benchmark for gene/protein NER; BioCreative shared task",
         tasks: ["ner"],
         hf_id: "spyysalo/bc2gm_corpus",
@@ -1652,6 +1656,7 @@ define_datasets! {
         year: 2015,
         format: "IOB2",
         size_hint: "10k PubMed abstracts, ~84k chemical mentions",
+        example: "Treatment O\nwith O\nB-Chemical\naspirin I-Chemical\nreduced O\ninflammation O\n. O",
         notes: "Chemical NER benchmark; includes IUPAC names, trivial names, abbreviations",
         tasks: ["ner"],
         hf_id: "chintagunta85/bc4chemd",
@@ -4191,7 +4196,7 @@ define_datasets! {
     MewsliX {
         name: "Mewsli-X",
         description: "Multilingual entity linking across 50 languages. Wikipedia-linked mentions for zero-shot cross-lingual EL.",
-        url: "https://github.com/google-research/google-research/tree/master/mewslix",
+        url: "https://huggingface.co/datasets/izhx/mewsli-x",
         entity_types: ["ENTITY"],  // Wikipedia entities
         language: "mul",
         domain: "news",
@@ -4253,7 +4258,7 @@ define_datasets! {
     AgCNER {
         name: "AgCNER",
         description: "Large-scale Chinese agricultural NER. 66k samples, ~207k entities, 3.9M characters.",
-        url: "https://github.com/AgCNER/AgCNER",
+        url: "https://springernature.figshare.com/collections/AgCNER_the_First_Large-Scale_Chinese_Named_Entity_Recognition_Dataset_for_Agricultural_Diseases_and_Pests/6807873",
         entity_types: ["CROP", "DISEASE", "PEST", "CHEMICAL", "VARIETY", "LOCATION", "TIME"],
         language: "zh",
         domain: "scientific",
@@ -4456,7 +4461,7 @@ define_datasets! {
     EnzChemRED {
         name: "EnzChemRED",
         description: "Enzyme chemistry relation extraction. Links enzymes, substrates, products, cofactors from biochemical literature.",
-        url: "https://github.com/EnzChemRED/EnzChemRED",
+        url: "https://github.com/ncbi-nlp/EnzChemRED",
         entity_types: ["Enzyme", "Substrate", "Product", "Cofactor", "Reaction"],
         language: "en",
         domain: "biomedical",
@@ -4666,7 +4671,7 @@ define_datasets! {
     BioNERLLaMA {
         name: "BioNER-LLaMA",
         description: "Instruction-tuned biomedical NER benchmark. Evaluates generative models on disease/chemical/gene NER.",
-        url: "https://github.com/BioNER-LLaMA/BioNER-LLaMA",
+        url: "https://github.com/BIDS-Xu-Lab/BioNER-LLaMA",
         entity_types: ["Disease", "Chemical", "Gene"],
         language: "en",
         domain: "biomedical",
@@ -4807,7 +4812,7 @@ define_datasets! {
     FiNER139 {
         name: "FiNER-139",
         description: "Financial NER with 139 fine-grained entity types. SEC 10-K/10-Q filings.",
-        url: "https://github.com/FiNER-139/FiNER-139",
+        url: "https://huggingface.co/datasets/nlpaueb/finer-139",
         entity_types: ["COMPANY", "EXECUTIVE", "SUBSIDIARY", "PRODUCT", "REGULATION", "FINANCIAL_METRIC"],
         language: "en",
         domain: "financial",
@@ -4819,6 +4824,7 @@ define_datasets! {
         notes: "Fine-grained financial NER; hierarchical entity types; SEC filings",
         splits: ["train", "test"],
         tasks: ["ner"],
+        hf_id: "nlpaueb/finer-139",
         categories: [ner, nested_ner, arcane_domain],
     },
 
@@ -5538,10 +5544,11 @@ define_datasets! {
         categories: [entity_linking],
     },
 
+    // AIONER: Correct GitHub org is 'ncbi', not 'AIONER'
     AIONER {
         name: "AIONER",
         description: "All-in-one biomedical NER. Unified biomedical entity extraction model.",
-        url: "https://github.com/AIONER/AIONER",
+        url: "https://github.com/ncbi/AIONER",
         entity_types: ["Gene", "Disease", "Chemical", "Species"],
         language: "en",
         domain: "biomedical",
@@ -9356,1865 +9363,164 @@ define_datasets! {
     },
 }
 
-// =============================================================================
-// Export Functions (Markdown, TOML, JSON)
-// =============================================================================
-
-/// Collect category tags for a dataset.
-fn collect_categories(id: &DatasetId) -> Vec<&'static str> {
-    let mut cats = Vec::new();
-    if id.is_ner() {
-        cats.push("ner");
-    }
-    if id.is_coreference() {
-        cats.push("coref");
-    }
-    if id.is_biomedical() {
-        cats.push("biomedical");
-    }
-    if id.is_multilingual() {
-        cats.push("multilingual");
-    }
-    if id.is_historical() {
-        cats.push("historical");
-    }
-    if id.is_indigenous() {
-        cats.push("indigenous");
-    }
-    if id.is_literary() {
-        cats.push("literary");
-    }
-    if id.is_bias_evaluation() {
-        cats.push("bias_evaluation");
-    }
-    if id.is_nested_ner() {
-        cats.push("nested_ner");
-    }
-    if id.is_discontinuous_ner() {
-        cats.push("discontinuous_ner");
-    }
-    if id.is_dialogue() {
-        cats.push("dialogue");
-    }
-    if id.is_social_media() {
-        cats.push("social_media");
-    }
-    if id.is_relation_extraction() {
-        cats.push("relation_extraction");
-    }
-    if id.is_event_coref() {
-        cats.push("event_coref");
-    }
-    if id.is_ancient() {
-        cats.push("ancient");
-    }
-    if id.is_abstract_anaphora() {
-        cats.push("abstract_anaphora");
-    }
-    if id.is_entity_linking() {
-        cats.push("entity_linking");
-    }
-    if id.is_long_document() {
-        cats.push("long_document");
-    }
-    if id.is_clinical() {
-        cats.push("clinical");
-    }
-    if id.is_low_resource() {
-        cats.push("low_resource");
-    }
-    if id.is_constructed() {
-        cats.push("constructed");
-    }
-    if id.is_arcane_domain() {
-        cats.push("arcane_domain");
-    }
-    if id.is_adversarial() {
-        cats.push("adversarial");
-    }
-    if id.is_speech() {
-        cats.push("speech");
-    }
-    cats
-}
-
-/// Generate a Markdown table of all datasets.
-///
-/// This is the primary export format - the Rust code is the source of truth.
-pub fn generate_markdown() -> String {
-    let mut md = String::new();
-    md.push_str("<!-- Auto-generated from dataset_registry.rs - DO NOT EDIT MANUALLY -->\n");
-    md.push_str(
-        "<!-- Run `cargo test generate_datasets_markdown -- --ignored` to regenerate -->\n\n",
-    );
-    md.push_str("# Dataset Registry\n\n");
-    md.push_str(&format!(
-        "**Total datasets: {}**\n\n",
-        DatasetId::all().len()
-    ));
-
-    // Summary by category
-    md.push_str("## Coverage Summary\n\n");
-    md.push_str("| Category | Count |\n");
-    md.push_str("|----------|-------|\n");
-    md.push_str(&format!("| NER | {} |\n", DatasetId::all_ner().len()));
-    md.push_str(&format!(
-        "| Coreference | {} |\n",
-        DatasetId::all_coref().len()
-    ));
-    md.push_str(&format!(
-        "| Event Coref (CDCR) | {} |\n",
-        DatasetId::all_event_coref().len()
-    ));
-    md.push_str(&format!(
-        "| Abstract Anaphora | {} |\n",
-        DatasetId::all_abstract_anaphora().len()
-    ));
-    md.push_str(&format!(
-        "| Biomedical | {} |\n",
-        DatasetId::all_biomedical().len()
-    ));
-    md.push_str(&format!(
-        "| Multilingual | {} |\n",
-        DatasetId::all_multilingual().len()
-    ));
-    md.push_str(&format!(
-        "| Historical | {} |\n",
-        DatasetId::all_historical().len()
-    ));
-    md.push_str(&format!(
-        "| Ancient Languages | {} |\n",
-        DatasetId::all_ancient().len()
-    ));
-    md.push_str(&format!(
-        "| Indigenous | {} |\n",
-        DatasetId::all_indigenous().len()
-    ));
-    md.push_str(&format!(
-        "| Low-Resource | {} |\n",
-        DatasetId::all_low_resource().len()
-    ));
-    md.push_str(&format!(
-        "| Literary | {} |\n",
-        DatasetId::all_literary().len()
-    ));
-    md.push_str(&format!(
-        "| Relation Extraction | {} |\n",
-        DatasetId::all_relation_extraction().len()
-    ));
-    md.push_str(&format!(
-        "| Nested NER | {} |\n",
-        DatasetId::all_nested_ner().len()
-    ));
-    md.push_str(&format!(
-        "| Arcane Domains | {} |\n",
-        DatasetId::all_arcane_domain().len()
-    ));
-    md.push_str(&format!(
-        "| Adversarial | {} |\n",
-        DatasetId::all_adversarial().len()
-    ));
-    md.push_str(&format!(
-        "| Constructed Languages | {} |\n",
-        DatasetId::all_constructed().len()
-    ));
-    md.push_str(&format!(
-        "| Dialogue/Conversational | {} |\n",
-        DatasetId::all_dialogue().len()
-    ));
-    md.push('\n');
-
-    // Full dataset table
-    md.push_str("## All Datasets\n\n");
-    md.push_str("| ID | Name | Language | Domain | License | Categories |\n");
-    md.push_str("|----|------|----------|--------|---------|------------|\n");
-
-    for id in DatasetId::all() {
-        let cats = collect_categories(id);
-        let license = id.license().unwrap_or("-");
-        md.push_str(&format!(
-            "| `{:?}` | {} | {} | {} | {} | {} |\n",
-            id,
-            id.name(),
-            id.language(),
-            id.domain(),
-            license,
-            cats.join(", ")
-        ));
-    }
-    md.push('\n');
-
-    // Detailed info with citations
-    md.push_str("## Dataset Details\n\n");
-    for id in DatasetId::all() {
-        md.push_str(&format!("### {}\n\n", id.name()));
-        md.push_str(&format!("**Rust ID**: `DatasetId::{:?}`\n\n", id));
-        md.push_str(&format!("{}\n\n", id.description()));
-
-        md.push_str(&format!("- **Language**: {}\n", id.language()));
-        md.push_str(&format!("- **Domain**: {}\n", id.domain()));
-
-        let types = id.entity_types();
-        if !types.is_empty() {
-            md.push_str(&format!("- **Entity Types**: {}\n", types.join(", ")));
-        }
-
-        if let Some(year) = id.year() {
-            md.push_str(&format!("- **Year**: {}\n", year));
-        }
-        if let Some(format) = id.format() {
-            md.push_str(&format!("- **Format**: {}\n", format));
-        }
-        if let Some(scheme) = id.annotation_scheme() {
-            md.push_str(&format!("- **Annotation Scheme**: {}\n", scheme));
-        }
-        if let Some(size) = id.size_hint() {
-            md.push_str(&format!("- **Size**: {}\n", size));
-        }
-        if let Some(license) = id.license() {
-            let spdx_note = if id.has_spdx_license() { " (SPDX)" } else { "" };
-            md.push_str(&format!("- **License**: {}{}\n", license, spdx_note));
-        }
-        if let Some(citation) = id.citation() {
-            md.push_str(&format!("- **Citation**: {}\n", citation));
-        }
-        if let Some(paper) = id.paper_url() {
-            md.push_str(&format!("- **Paper**: <{}>\n", paper));
-        }
-        if let Some(notes) = id.notes() {
-            md.push_str(&format!("- **Notes**: {}\n", notes));
-        }
-
-        let url = id.download_url();
-        if !url.is_empty() {
-            md.push_str(&format!("- **URL**: <{}>\n", url));
-        } else {
-            md.push_str("- **URL**: *Requires license or manual download*\n");
-        }
-
-        if let Some(example) = id.example() {
-            md.push_str("\n**Example**:\n```\n");
-            md.push_str(example);
-            md.push_str("\n```\n");
-        }
-
-        md.push('\n');
-    }
-
-    md
-}
-
-/// Generate a TOML representation of all datasets.
-///
-/// This is a derived artifact - the code is the source of truth.
-/// Generate a JSONL representation of all datasets (one JSON object per line).
-/// This format is grep-friendly and supports streaming processing.
-pub fn generate_jsonl() -> String {
-    use std::collections::BTreeMap;
-
-    let mut lines = Vec::new();
-
-    for id in DatasetId::all() {
-        let mut map = BTreeMap::new();
-        map.insert("id", serde_json::Value::String(format!("{:?}", id)));
-        map.insert("name", serde_json::Value::String(id.name().to_string()));
-        map.insert(
-            "description",
-            serde_json::Value::String(id.description().to_string()),
-        );
-        map.insert(
-            "url",
-            serde_json::Value::String(id.download_url().to_string()),
-        );
-        map.insert(
-            "language",
-            serde_json::Value::String(id.language().to_string()),
-        );
-        map.insert("domain", serde_json::Value::String(id.domain().to_string()));
-        map.insert("entity_types", serde_json::json!(id.entity_types()));
-        map.insert("categories", serde_json::json!(collect_categories(id)));
-        map.insert(
-            "requires_license",
-            serde_json::Value::Bool(id.requires_license()),
-        );
-
-        if let Some(license) = id.license() {
-            map.insert("license", serde_json::Value::String(license.to_string()));
-            map.insert("is_spdx", serde_json::Value::Bool(id.has_spdx_license()));
-        }
-        if let Some(citation) = id.citation() {
-            map.insert("citation", serde_json::Value::String(citation.to_string()));
-        }
-        if let Some(paper) = id.paper_url() {
-            map.insert("paper_url", serde_json::Value::String(paper.to_string()));
-        }
-        if let Some(year) = id.year() {
-            map.insert(
-                "year",
-                serde_json::Value::Number(serde_json::Number::from(year)),
-            );
-        }
-        if let Some(format) = id.format() {
-            map.insert("format", serde_json::Value::String(format.to_string()));
-        }
-        if let Some(scheme) = id.annotation_scheme() {
-            map.insert(
-                "annotation_scheme",
-                serde_json::Value::String(scheme.to_string()),
-            );
-        }
-        if let Some(size) = id.size_hint() {
-            map.insert("size_hint", serde_json::Value::String(size.to_string()));
-        }
-        if let Some(example) = id.example() {
-            map.insert("example", serde_json::Value::String(example.to_string()));
-        }
-        if let Some(notes) = id.notes() {
-            map.insert("notes", serde_json::Value::String(notes.to_string()));
-        }
-
-        // Multi-task and validation fields
-        let splits = id.splits();
-        if !splits.is_empty() {
-            map.insert("splits", serde_json::json!(splits));
-        }
-        let tasks = id.tasks();
-        if !tasks.is_empty() {
-            map.insert("tasks", serde_json::json!(tasks));
-        }
-        if let Some(docs) = id.expected_docs() {
-            map.insert(
-                "expected_docs",
-                serde_json::Value::Number(serde_json::Number::from(docs)),
-            );
-        }
-        if let Some(sha) = id.sha256() {
-            map.insert("sha256", serde_json::Value::String(sha.to_string()));
-        }
-        if let Some(f1) = id.expected_f1() {
-            map.insert(
-                "expected_f1",
-                serde_json::Value::Number(
-                    serde_json::Number::from_f64(f64::from(f1))
-                        .unwrap_or_else(|| serde_json::Number::from(0)),
-                ),
-            );
-        }
-        if let Some(f1) = id.expected_zero_shot_f1() {
-            map.insert(
-                "expected_zero_shot_f1",
-                serde_json::Value::Number(
-                    serde_json::Number::from_f64(f64::from(f1))
-                        .unwrap_or_else(|| serde_json::Number::from(0)),
-                ),
-            );
-        }
-
-        lines.push(serde_json::to_string(&map).unwrap_or_default());
-    }
-
-    lines.join("\n")
-}
-
-/// Generate a JSON representation of all datasets.
-pub fn generate_json() -> String {
-    use std::collections::BTreeMap;
-
-    let datasets: Vec<BTreeMap<&str, serde_json::Value>> = DatasetId::all()
-        .iter()
-        .map(|id| {
-            let mut map = BTreeMap::new();
-            map.insert("id", serde_json::Value::String(format!("{:?}", id)));
-            map.insert("name", serde_json::Value::String(id.name().to_string()));
-            map.insert(
-                "description",
-                serde_json::Value::String(id.description().to_string()),
-            );
-            map.insert(
-                "url",
-                serde_json::Value::String(id.download_url().to_string()),
-            );
-            map.insert(
-                "language",
-                serde_json::Value::String(id.language().to_string()),
-            );
-            map.insert("domain", serde_json::Value::String(id.domain().to_string()));
-            map.insert("entity_types", serde_json::json!(id.entity_types()));
-            map.insert("categories", serde_json::json!(collect_categories(id)));
-            map.insert(
-                "requires_license",
-                serde_json::Value::Bool(id.requires_license()),
-            );
-
-            if let Some(license) = id.license() {
-                map.insert("license", serde_json::Value::String(license.to_string()));
-                map.insert("is_spdx", serde_json::Value::Bool(id.has_spdx_license()));
-            }
-            if let Some(citation) = id.citation() {
-                map.insert("citation", serde_json::Value::String(citation.to_string()));
-            }
-            if let Some(paper) = id.paper_url() {
-                map.insert("paper_url", serde_json::Value::String(paper.to_string()));
-            }
-            if let Some(year) = id.year() {
-                map.insert(
-                    "year",
-                    serde_json::Value::Number(serde_json::Number::from(year)),
-                );
-            }
-            if let Some(format) = id.format() {
-                map.insert("format", serde_json::Value::String(format.to_string()));
-            }
-            if let Some(scheme) = id.annotation_scheme() {
-                map.insert(
-                    "annotation_scheme",
-                    serde_json::Value::String(scheme.to_string()),
-                );
-            }
-            if let Some(size) = id.size_hint() {
-                map.insert("size_hint", serde_json::Value::String(size.to_string()));
-            }
-            if let Some(example) = id.example() {
-                map.insert("example", serde_json::Value::String(example.to_string()));
-            }
-            if let Some(notes) = id.notes() {
-                map.insert("notes", serde_json::Value::String(notes.to_string()));
-            }
-
-            // Multi-task and validation fields
-            let splits = id.splits();
-            if !splits.is_empty() {
-                map.insert("splits", serde_json::json!(splits));
-            }
-            let tasks = id.tasks();
-            if !tasks.is_empty() {
-                map.insert("tasks", serde_json::json!(tasks));
-            }
-            if let Some(docs) = id.expected_docs() {
-                map.insert(
-                    "expected_docs",
-                    serde_json::Value::Number(serde_json::Number::from(docs)),
-                );
-            }
-            if let Some(sha) = id.sha256() {
-                map.insert("sha256", serde_json::Value::String(sha.to_string()));
-            }
-            if let Some(hf) = id.hf_id() {
-                map.insert("hf_id", serde_json::Value::String(hf.to_string()));
-            }
-            if let Some(cfg) = id.hf_config() {
-                map.insert("hf_config", serde_json::Value::String(cfg.to_string()));
-            }
-            if let Some(f1) = id.expected_f1() {
-                map.insert(
-                    "expected_f1",
-                    serde_json::Value::Number(
-                        serde_json::Number::from_f64(f64::from(f1))
-                            .unwrap_or_else(|| serde_json::Number::from(0)),
-                    ),
-                );
-            }
-            if let Some(f1) = id.expected_zero_shot_f1() {
-                map.insert(
-                    "expected_zero_shot_f1",
-                    serde_json::Value::Number(
-                        serde_json::Number::from_f64(f64::from(f1))
-                            .unwrap_or_else(|| serde_json::Number::from(0)),
-                    ),
-                );
-            }
-
-            map
-        })
-        .collect();
-
-    // Compute rich metadata
-    let all_datasets = DatasetId::all();
-    let total = all_datasets.len();
-
-    // Language distribution
-    let mut lang_counts: BTreeMap<String, usize> = BTreeMap::new();
-    for id in all_datasets.iter() {
-        *lang_counts.entry(id.language().to_string()).or_insert(0) += 1;
-    }
-
-    // Format distribution
-    let mut format_counts: BTreeMap<String, usize> = BTreeMap::new();
-    for id in all_datasets.iter() {
-        let fmt = id
-            .format()
-            .map(|f| f.to_string())
-            .unwrap_or_else(|| "unknown".to_string());
-        *format_counts.entry(fmt).or_insert(0) += 1;
-    }
-
-    // Category counts
-    let category_stats = serde_json::json!({
-        "ner": DatasetId::all_ner().len(),
-        "coreference": all_datasets.iter().filter(|d| d.is_coreference()).count(),
-        "relation_extraction": DatasetId::all_relation_extraction().len(),
-        "entity_linking": DatasetId::all_entity_linking().len(),
-        "multilingual": DatasetId::all_multilingual().len(),
-        "biomedical": DatasetId::all_biomedical().len(),
-        "clinical": DatasetId::all_clinical().len(),
-        "nested_ner": DatasetId::all_nested_ner().len(),
-        "discontinuous_ner": DatasetId::all_discontinuous_ner().len(),
-        "event_coref": DatasetId::all_event_coref().len(),
-        "long_document": DatasetId::all_long_document().len(),
-        "ancient": DatasetId::all_ancient().len(),
-        "low_resource": DatasetId::all_low_resource().len(),
-        "constructed": DatasetId::all_constructed().len(),
-        "adversarial": DatasetId::all_adversarial().len(),
-        "bias_evaluation": DatasetId::all_bias_evaluation().len(),
-        "indigenous": DatasetId::all_indigenous().len(),
-        "historical": DatasetId::all_historical().len(),
-        "dialogue": DatasetId::all_dialogue().len(),
-        "literary": DatasetId::all_literary().len(),
-    });
-
-    // Year range
-    let years: Vec<u16> = all_datasets.iter().filter_map(|d| d.year()).collect();
-    let year_min = years.iter().min().copied().unwrap_or(0);
-    let year_max = years.iter().max().copied().unwrap_or(0);
-
-    // Task distribution
-    let mut task_counts: BTreeMap<String, usize> = BTreeMap::new();
-    for id in all_datasets.iter() {
-        for task in id.tasks() {
-            *task_counts.entry(task.to_string()).or_insert(0) += 1;
-        }
-    }
-
-    // Counts
-    let with_examples = all_datasets
-        .iter()
-        .filter(|d| d.example().is_some())
-        .count();
-    let with_urls = all_datasets
-        .iter()
-        .filter(|d| !d.download_url().is_empty())
-        .count();
-    let with_notes = all_datasets.iter().filter(|d| d.notes().is_some()).count();
-
-    serde_json::to_string_pretty(&serde_json::json!({
-        "meta": {
-            "version": "2.1",
-            "generated": true,
-            "dataset_count": total,
-            "with_examples": with_examples,
-            "with_urls": with_urls,
-            "with_notes": with_notes,
-            "year_range": { "min": year_min, "max": year_max },
-            "categories": category_stats,
-            "languages": lang_counts,
-            "formats": format_counts,
-            "tasks": task_counts,
-        },
-        "datasets": datasets
-    }))
-    .unwrap_or_default()
-}
-
-/// Convert PascalCase to snake_case with better acronym handling.
-/// e.g., "MultiNERD" -> "multi_nerd", "BC5CDR" -> "bc5cdr", "WikiANN" -> "wikiann"
-fn to_snake_case(s: &str) -> String {
-    let mut result = String::new();
-    let chars: Vec<char> = s.chars().collect();
-
-    for (i, &c) in chars.iter().enumerate() {
-        if c.is_uppercase() && i > 0 {
-            // Only add underscore if previous char was lowercase
-            // This keeps acronyms together: "NER" stays as "ner", not "n_e_r"
-            let prev_lower = chars.get(i - 1).is_some_and(|p| p.is_lowercase());
-            if prev_lower {
-                result.push('_');
-            }
-        }
-        result.push(c.to_ascii_lowercase());
-    }
-    result
-}
-
-/// Generate Python download script configuration from the registry.
-///
-/// This creates a DATASETS dictionary that can be used by download_extended_datasets.py.
-/// Only datasets with `hf_id` are included (others require manual download).
-pub fn generate_python_config() -> String {
-    let mut py = String::new();
-    py.push_str("# Auto-generated from dataset_registry.rs - DO NOT EDIT MANUALLY\n");
-    py.push_str("# Run: cargo test generate_python_download_config -- --ignored\n");
-    py.push_str("# Then copy this to scripts/download_extended_datasets.py\n\n");
-    py.push_str("DATASETS_FROM_REGISTRY = {\n");
-
-    for id in DatasetId::all() {
-        if let Some(hf_id) = id.hf_id() {
-            let snake_name = to_snake_case(&format!("{:?}", id));
-            let domain = id.domain();
-            let description = id.description().replace('"', "\\\"");
-            let output = format!("{}.json", snake_name);
-
-            py.push_str(&format!("    \"{}\": {{\n", snake_name));
-            py.push_str(&format!("        \"group\": \"{}\",\n", domain));
-            py.push_str(&format!("        \"hf_dataset\": \"{}\",\n", hf_id));
-
-            if let Some(config) = id.hf_config() {
-                py.push_str(&format!("        \"config\": \"{}\",\n", config));
-            }
-
-            py.push_str(&format!("        \"output\": \"{}\",\n", output));
-            py.push_str(&format!("        \"description\": \"{}\",\n", description));
-            py.push_str("    },\n");
-        }
-    }
-
-    py.push_str("}\n");
-
-    // Also generate statistics
-    let total = DatasetId::all().len();
-    let with_hf = DatasetId::all()
-        .iter()
-        .filter(|d| d.hf_id().is_some())
-        .count();
-
-    py.push_str(&format!(
-        "\n# Statistics: {} of {} datasets ({:.1}%) have HuggingFace IDs\n",
-        with_hf,
-        total,
-        100.0 * with_hf as f64 / total as f64
-    ));
-
-    py
-}
-
-// NOTE: `is_loadable()` and `all_loadable()` deliberately live in `eval::loader`.
-// The registry is metadata-only and should not depend on loader implementation details.
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn is_reasonable_language_tag(tag: &str) -> bool {
-        // The registry uses ISO 639-1/3 codes for primary language.
-        // For multilingual datasets we standardize on ISO 639-2: "mul".
-        //
-        // Allow BCP-47-ish subtags (e.g., "pt-BR" or "zh-Hans") but keep this lightweight:
-        // - no whitespace
-        // - segments separated by '-' or '_'
-        // - first segment: 2-3 ASCII letters (ISO 639)
-        // - subsequent segments: 1-8 ASCII alnum (region/script/variant)
-        if tag.is_empty() || tag.chars().any(|c| c.is_whitespace()) {
-            return false;
-        }
-
-        let normalized = tag.replace('_', "-");
-        let mut parts = normalized.split('-');
-        let Some(first) = parts.next() else {
-            return false;
-        };
-
-        if !(2..=3).contains(&first.len()) || !first.chars().all(|c| c.is_ascii_alphabetic()) {
-            return false;
-        }
-
-        for p in parts {
-            if p.is_empty() || p.len() > 8 || !p.chars().all(|c| c.is_ascii_alphanumeric()) {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    fn is_http_url(url: &str) -> bool {
-        url.starts_with("http://") || url.starts_with("https://")
-    }
-
-    #[test]
-    fn test_all_datasets_have_names() {
-        for id in DatasetId::all() {
-            assert!(!id.name().is_empty(), "{:?} has empty name", id);
-        }
-    }
-
-    #[test]
-    fn test_all_datasets_have_descriptions() {
-        for id in DatasetId::all() {
-            assert!(
-                !id.description().is_empty(),
-                "{:?} has empty description",
-                id
-            );
-        }
-    }
-
-    #[test]
-    fn test_language_codes_are_reasonable() {
-        // This catches drift like using "multi" instead of ISO "mul", accidental whitespace,
-        // or human-readable language names.
-        let mut bad: Vec<(DatasetId, &'static str)> = Vec::new();
-        for id in DatasetId::all() {
-            let lang = id.language();
-            if !is_reasonable_language_tag(lang) {
-                bad.push((*id, lang));
-            }
-        }
-        assert!(
-            bad.is_empty(),
-            "Found datasets with invalid/odd language tags: {:?}",
-            bad
-        );
-    }
-
-    #[test]
-    fn test_access_status_is_self_consistent() {
-        // Highest-signal invariants:
-        // - HuggingFace datasets should have `hf_id`.
-        // - Public datasets should have a non-empty URL (or mirror_url).
-        // - Any URL fields, when present, should be http(s).
-        let mut problems: Vec<String> = Vec::new();
-
-        for id in DatasetId::all() {
-            let access = id.access_status();
-            let url = id.download_url();
-            let mirror = id.mirror_url().unwrap_or("");
-
-            if !url.is_empty() && !is_http_url(url) {
-                problems.push(format!("{id:?}: url must be http(s) or empty, got {url}"));
-            }
-            if !mirror.is_empty() && !is_http_url(mirror) {
-                problems.push(format!(
-                    "{id:?}: mirror_url must be http(s) or empty, got {mirror}"
-                ));
-            }
-
-            match access {
-                DatasetAccessibility::HuggingFace => {
-                    if id.hf_id().is_none() {
-                        problems.push(format!(
-                            "{id:?}: access_status=HuggingFace but hf_id is missing"
-                        ));
-                    }
-                }
-                DatasetAccessibility::Public => {
-                    if url.is_empty() && mirror.is_empty() {
-                        problems.push(format!(
-                            "{id:?}: access_status=Public but both url and mirror_url are empty"
-                        ));
-                    }
-                }
-                DatasetAccessibility::Local
-                | DatasetAccessibility::Registration
-                | DatasetAccessibility::ContactAuthors
-                | DatasetAccessibility::NotYetReleased
-                | DatasetAccessibility::DependsOnOther
-                | DatasetAccessibility::Deprecated => {
-                    // No URL requirements.
-                }
-            }
-
-            // If the dataset is automatable, it should have a clear programmatic handle:
-            // either a public URL or a HuggingFace ID.
-            if access.is_automatable() {
-                let has_handle = matches!(access, DatasetAccessibility::Local)
-                    || (!url.is_empty() && is_http_url(url))
-                    || (!mirror.is_empty() && is_http_url(mirror))
-                    || id.hf_id().is_some();
-                if !has_handle {
-                    problems.push(format!(
-                        "{id:?}: automatable but no url/mirror_url and no hf_id"
-                    ));
-                }
-            }
-        }
-
-        assert!(
-            problems.is_empty(),
-            "Dataset registry access_status/url invariants failed:\n{}",
-            problems.join("\n")
-        );
-    }
-
-    #[test]
-    fn test_from_str_roundtrip() {
-        for id in DatasetId::all() {
-            let name = format!("{:?}", id);
-            let parsed: DatasetId = name.parse().expect("should parse");
-            assert_eq!(*id, parsed);
-        }
-    }
-
-    #[test]
-    fn test_category_flags_are_consistent() {
-        // NER and coref should be mutually exclusive for most datasets
-        for id in DatasetId::all() {
-            // Skip bias evaluation which can be both
-            if id.is_bias_evaluation() {
-                continue;
-            }
-            // Most datasets should be clearly one or the other
-            // (but some like literary can have both NER and coref aspects)
-        }
-    }
-
-    #[test]
-    fn test_quick_subset_is_small() {
-        let quick = DatasetId::quick();
-        assert!(
-            quick.len() <= 5,
-            "quick() should be small for fast iteration"
-        );
-    }
-
-    #[test]
-    fn test_metadata_completeness() {
-        // Track how many datasets have complete metadata
-        let mut with_license = 0;
-        let mut with_citation = 0;
-        let mut with_year = 0;
-        let mut with_format = 0;
-        let mut fully_complete = 0;
-        let total = DatasetId::all().len();
-
-        for id in DatasetId::all() {
-            let has_license = id.license().is_some();
-            let has_citation = id.citation().is_some();
-            let has_year = id.year().is_some();
-            let has_format = id.format().is_some();
-
-            if has_license {
-                with_license += 1;
-            }
-            if has_citation {
-                with_citation += 1;
-            }
-            if has_year {
-                with_year += 1;
-            }
-            if has_format {
-                with_format += 1;
-            }
-            if has_license && has_citation && has_year && has_format {
-                fully_complete += 1;
-            }
-        }
-
-        println!("Metadata completeness: {}/{} total datasets", total, total);
-        println!(
-            "  - With license: {}/{} ({:.0}%)",
-            with_license,
-            total,
-            100.0 * with_license as f64 / total as f64
-        );
-        println!(
-            "  - With citation: {}/{} ({:.0}%)",
-            with_citation,
-            total,
-            100.0 * with_citation as f64 / total as f64
-        );
-        println!(
-            "  - With year: {}/{} ({:.0}%)",
-            with_year,
-            total,
-            100.0 * with_year as f64 / total as f64
-        );
-        println!(
-            "  - With format: {}/{} ({:.0}%)",
-            with_format,
-            total,
-            100.0 * with_format as f64 / total as f64
-        );
-        println!(
-            "  - Fully complete: {}/{} ({:.0}%)",
-            fully_complete,
-            total,
-            100.0 * fully_complete as f64 / total as f64
-        );
-
-        // Warn about datasets missing license (important for legal compliance)
-        for id in DatasetId::all() {
-            if id.license().is_none() {
-                println!("  WARN: {:?} missing license", id);
-            }
-        }
-    }
-
-    #[test]
-    fn test_spdx_license_validation() {
-        // Check that claimed SPDX licenses are valid-looking
-        for id in DatasetId::all() {
-            if id.has_spdx_license() {
-                let license = id.license().unwrap();
-                assert!(
-                    license.starts_with("CC-")
-                        || license == "MIT"
-                        || license == "Apache-2.0"
-                        || license == "GPL-3.0"
-                        || license == "Public",
-                    "{:?} claims SPDX but license '{}' doesn't match known SPDX",
-                    id,
-                    license
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_year_is_reasonable() {
-        for id in DatasetId::all() {
-            if let Some(year) = id.year() {
-                // Allow years 1950+ for constructed languages and historical works
-                // Most datasets are 1990+, but conlangs have earlier creation dates
-                let min_year = if id.is_constructed() || id.is_historical() {
-                    1950
-                } else {
-                    1990
-                };
-                assert!(
-                    year >= min_year && year <= 2030,
-                    "{:?} has unreasonable year: {} (min: {})",
-                    id,
-                    year,
-                    min_year
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_jsonl_generation() {
-        let jsonl = generate_jsonl();
-        let lines: Vec<&str> = jsonl.lines().collect();
-
-        // Should have one line per dataset
-        assert_eq!(lines.len(), DatasetId::all().len());
-
-        // Each line should be valid JSON
-        for (i, line) in lines.iter().enumerate() {
-            let parsed: Result<serde_json::Value, _> = serde_json::from_str(line);
-            assert!(parsed.is_ok(), "Line {} is not valid JSON: {}", i, line);
-        }
-
-        // First line should contain WikiGold data
-        assert!(jsonl.contains("\"WikiGold\"") || jsonl.contains("\"id\":\"WikiGold\""));
-    }
-
-    #[test]
-    #[ignore] // Run manually: cargo test generate_datasets_jsonl -- --ignored
-    fn generate_datasets_jsonl() {
-        let jsonl = generate_jsonl();
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../generated/datasets_generated.jsonl"
-        );
-        let line_count = jsonl.lines().count();
-        std::fs::write(path, jsonl).expect("write jsonl");
-        println!("Generated: {} ({} lines)", path, line_count);
-    }
-
-    #[test]
-    #[ignore] // Run manually: cargo test generate_datasets_markdown -- --ignored
-    fn generate_datasets_markdown() {
-        let md = generate_markdown();
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../docs/generated/DATASETS_GENERATED.md"
-        );
-        std::fs::write(path, md).expect("write markdown");
-        println!("Generated: {}", path);
-    }
-
-    #[test]
-    #[ignore] // Run manually: cargo test generate_datasets_json -- --ignored
-    fn generate_datasets_json() {
-        let json = generate_json();
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../generated/datasets_generated.json"
-        );
-        std::fs::write(path, json).expect("write json");
-        println!("Generated: {}", path);
-    }
-
-    #[test]
-    #[ignore] // Run manually: cargo test generate_python_download_config -- --ignored
-    fn generate_python_download_config() {
-        let py = generate_python_config();
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../scripts/datasets_from_registry.py"
-        );
-        std::fs::write(path, &py).expect("write python config");
-
-        // Count datasets with HF IDs
-        let with_hf = DatasetId::all()
-            .iter()
-            .filter(|d| d.hf_id().is_some())
-            .count();
-        println!(
-            "Generated: {} ({} datasets with HuggingFace IDs)",
-            path, with_hf
-        );
-    }
-
-    #[test]
-    fn test_json_meta_structure() {
-        let json = generate_json();
-        let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
-
-        // Verify meta section exists and has required fields
-        let meta = parsed.get("meta").expect("meta section exists");
-        assert!(meta.get("version").is_some(), "meta.version exists");
-        assert!(
-            meta.get("dataset_count").is_some(),
-            "meta.dataset_count exists"
-        );
-        assert!(
-            meta.get("with_examples").is_some(),
-            "meta.with_examples exists"
-        );
-        assert!(meta.get("with_urls").is_some(), "meta.with_urls exists");
-        assert!(meta.get("year_range").is_some(), "meta.year_range exists");
-        assert!(meta.get("categories").is_some(), "meta.categories exists");
-        assert!(meta.get("languages").is_some(), "meta.languages exists");
-        assert!(meta.get("formats").is_some(), "meta.formats exists");
-        assert!(meta.get("tasks").is_some(), "meta.tasks exists");
-
-        // Verify counts are reasonable
-        let count = meta["dataset_count"].as_u64().unwrap();
-        assert!(count >= 300, "Should have at least 300 datasets");
-
-        let with_urls = meta["with_urls"].as_u64().unwrap();
-        assert!(
-            with_urls >= 250,
-            "Should have at least 250 datasets with URLs"
-        );
-
-        // Verify datasets array exists and has expected structure
-        let datasets = parsed
-            .get("datasets")
-            .expect("datasets array exists")
-            .as_array()
-            .unwrap();
-        assert_eq!(datasets.len() as u64, count, "datasets array matches count");
-
-        // Check first dataset has required fields
-        let first = &datasets[0];
-        assert!(first.get("id").is_some(), "dataset has id");
-        assert!(first.get("name").is_some(), "dataset has name");
-        assert!(
-            first.get("description").is_some(),
-            "dataset has description"
-        );
-        assert!(first.get("language").is_some(), "dataset has language");
-        assert!(first.get("categories").is_some(), "dataset has categories");
-    }
-
-    // =========================================================================
-    // Comprehensive Validation Tests
-    // =========================================================================
-
-    #[test]
-    fn test_dataset_count() {
-        let count = DatasetId::all().len();
-        assert!(count >= 55, "Expected at least 55 datasets, got {}", count);
-        println!("Total datasets: {}", count);
-    }
-
-    #[test]
-    fn test_category_coverage_stats() {
-        let total = DatasetId::all().len();
-
-        let stats = [
-            ("NER", DatasetId::all_ner().len()),
-            (
-                "Coref",
-                DatasetId::all()
-                    .iter()
-                    .filter(|d| d.is_coreference())
-                    .count(),
-            ),
-            ("Relations", DatasetId::all_relation_extraction().len()),
-            ("Entity Linking", DatasetId::all_entity_linking().len()),
-            ("Multilingual", DatasetId::all_multilingual().len()),
-            ("Biomedical", DatasetId::all_biomedical().len()),
-            ("Clinical", DatasetId::all_clinical().len()),
-            ("Social Media", DatasetId::all_social_media().len()),
-            ("Nested NER", DatasetId::all_nested_ner().len()),
-            (
-                "Discontinuous NER",
-                DatasetId::all_discontinuous_ner().len(),
-            ),
-            ("Event Coref", DatasetId::all_event_coref().len()),
-            ("Long Document", DatasetId::all_long_document().len()),
-            ("Ancient", DatasetId::all_ancient().len()),
-            (
-                "Abstract Anaphora",
-                DatasetId::all_abstract_anaphora().len(),
-            ),
-            ("Low Resource", DatasetId::all_low_resource().len()),
-            ("Constructed", DatasetId::all_constructed().len()),
-            ("Arcane Domain", DatasetId::all_arcane_domain().len()),
-            ("Adversarial", DatasetId::all_adversarial().len()),
-            ("Bias Evaluation", DatasetId::all_bias_evaluation().len()),
-            ("Indigenous", DatasetId::all_indigenous().len()),
-            ("Historical", DatasetId::all_historical().len()),
-            ("Dialogue", DatasetId::all_dialogue().len()),
-            ("Literary", DatasetId::all_literary().len()),
-        ];
-
-        println!("Category Coverage ({} total datasets):", total);
-        println!("─────────────────────────────────────");
-        for (name, count) in &stats {
-            let pct = 100.0 * (*count as f64) / (total as f64);
-            let bar = "█".repeat((*count).min(20));
-            println!("  {:20} {:3} ({:5.1}%) {}", name, count, pct, bar);
-        }
-
-        // Validate minimums for key categories (be flexible as categories evolve)
-        let ner_count = DatasetId::all_ner().len();
-        let coref_count = DatasetId::all()
-            .iter()
-            .filter(|d| d.is_coreference())
-            .count();
-        let multilingual_count = DatasetId::all_multilingual().len();
-
-        println!(
-            "NER: {}, Coref: {}, Multilingual: {}",
-            ner_count, coref_count, multilingual_count
-        );
-
-        assert!(
-            ner_count >= 20,
-            "NER should have >= 20 datasets, got {}",
-            ner_count
-        );
-        assert!(
-            coref_count >= 5,
-            "Coref should have >= 5 datasets, got {}",
-            coref_count
-        );
-        assert!(
-            multilingual_count >= 5,
-            "Multilingual should have >= 5 datasets, got {}",
-            multilingual_count
-        );
-    }
-
-    #[test]
-    fn test_every_dataset_has_at_least_one_category() {
-        for id in DatasetId::all() {
-            let has_category = id.is_ner()
-                || id.is_coreference()
-                || id.is_relation_extraction()
-                || id.is_nested_ner()
-                || id.is_discontinuous_ner()
-                || id.is_biomedical()
-                || id.is_social_media()
-                || id.is_multilingual()
-                || id.is_indigenous()
-                || id.is_historical()
-                || id.is_literary()
-                || id.is_bias_evaluation()
-                || id.is_event_coref()
-                || id.is_ancient()
-                || id.is_abstract_anaphora()
-                || id.is_low_resource()
-                || id.is_constructed()
-                || id.is_arcane_domain()
-                || id.is_adversarial()
-                || id.is_speech()
-                || id.is_entity_linking()
-                || id.is_long_document()
-                || id.is_clinical()
-                || id.is_dialogue();
-
-            assert!(has_category, "{:?} has no category flags set", id);
-        }
-    }
-
-    #[test]
-    fn test_url_format_validity() {
-        for id in DatasetId::all() {
-            let url = id.download_url();
-            if !url.is_empty() {
-                assert!(
-                    url.starts_with("http://") || url.starts_with("https://"),
-                    "{:?} has invalid URL format: {}",
-                    id,
-                    url
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_language_codes_valid() {
-        let valid_codes = [
-            "en", "de", "fr", "es", "it", "nl", "pt", "ru", "zh", "ja", "ko", "ar",
-            "multi", // multilingual
-            "grc",   // Ancient Greek
-            "la",    // Latin
-            "he",    // Hebrew
-            "hbo",   // Biblical Hebrew
-            "got",   // Gothic
-            "lzh",   // Classical Chinese
-            "cop",   // Coptic
-            "qxo",   // Quechua
-            "chr",   // Cherokee
-            "sux",   // Sumerian
-            "akk",   // Akkadian
-            "eo",    // Esperanto
-            "tlh",   // Klingon
-            "tok",   // Toki Pona
-            "am",    // Amharic
-            "sw",    // Swahili
-            "yo",    // Yoruba
-            "ha",    // Hausa
-            "pcm",   // Nigerian Pidgin
-            "sa",    // Sanskrit
-            "ang",   // Old English (Anglo-Saxon)
-            "non",   // Old Norse
-            "no",    // Norwegian
-            "ro",    // Romanian
-            "nah",   // Nahuatl
-            "mi",    // Māori
-            "cy",    // Welsh
-            "eu",    // Basque
-            "jbo",   // Lojban
-            "ie",    // Interlingue (Occidental)
-            "pl",    // Polish
-            "hit",   // Hittite
-            "cu",    // Old Church Slavonic
-            "dlk",   // Dothraki (conlang)
-            "hvy",   // High Valyrian (conlang)
-            "qya",   // Quenya (conlang)
-            "nav",   // Na'vi (conlang)
-            "isv",   // Interslavic (conlang)
-            "gn",    // Guaraní
-            "shp",   // Shipibo-Konibo
-            "nv",    // Navajo
-            "cs",    // Czech
-            "fi",    // Finnish
-            "bn",    // Bengali/Bangla
-            "hi-en", // Hindi-English code-mixed
-            "zh-en", // Chinese-English bilingual
-            "mul",   // Multilingual / multiple languages (ISO 639-2)
-        ];
-
-        for id in DatasetId::all() {
-            let lang = id.language();
-            assert!(
-                valid_codes.contains(&lang),
-                "{:?} has unknown language code: {}",
-                id,
-                lang
-            );
-        }
-    }
-
-    #[test]
-    fn test_domain_values_consistent() {
-        let known_domains = [
-            // Core/general
-            "general",
-            "news",
-            "wikipedia",
-            "social_media",
-            "entertainment",
-            "evaluation",
-            // Medical/Science
-            "biomedical",
-            "clinical",
-            "scientific",
-            "astrophysics",
-            "bioacoustics",
-            "environment",
-            // Text types
-            "literature",
-            "literary",
-            "narrative",
-            "fiction",
-            "dialogue",
-            "speech",
-            "qa",
-            // Professional
-            "legal",
-            "financial",
-            "finance",
-            "academic",
-            "code",
-            // Historical/Cultural
-            "historical",
-            "archaeology",
-            "paleontology",
-            "mythology",
-            "religious",
-            // Industry verticals
-            "manufacturing",
-            "construction",
-            "aerospace",
-            "defense",
-            "automotive",
-            "energy",
-            "maritime",
-            "logistics",
-            "telecom",
-            "insurance",
-            "healthcare",
-            "hr",
-            "retail",
-            // Commerce
-            "ecommerce",
-            "e-commerce",
-            "real_estate",
-            "tourism",
-            // Technical domains
-            "cybersecurity",
-            "crypto",
-            // Creative/Media
-            "music",
-            "art",
-            "photography",
-            "fragrance",
-            // Food & Beverage
-            "food",
-            "restaurant",
-            // Sports/Hobbies
-            "sports",
-            "gaming",
-            "fitness",
-            "equestrian",
-            "scuba",
-            // Nature/Outdoors
-            "agriculture",
-            "gardening",
-            "wildlife",
-            "astronomy",
-            "geology",
-            "weather",
-            // Personal/Lifestyle
-            "fashion",
-            "crafts",
-            "genealogy",
-            "astrology",
-            "divination",
-            // Collectibles
-            "antiques",
-            "numismatics",
-            "philately",
-            // Specialty
-            "veterinary",
-            "materials",
-            "encyclopedia",
-            "privacy",
-            "vision",
-            // Multi-domain
-            "cross_domain",
-            "multi-domain",
-            "mixed",
-            "constructed",
-            "travel",
-            "education",
-            // NLP Tasks
-            "reading_comprehension",
-            // Linguistic
-            "indigenous",
-            "constructed_language",
-            // Web
-            "web",
-        ];
-
-        for id in DatasetId::all() {
-            let domain = id.domain();
-            assert!(
-                known_domains.contains(&domain),
-                "{:?} has unknown domain: {} (consider adding to known_domains)",
-                id,
-                domain
-            );
-        }
-    }
-
-    #[test]
-    fn test_format_values_valid() {
-        let valid_formats = [
-            "CoNLL",
-            "CoNLLU",
-            "CoNLLUA",
-            "CoNLL-U",
-            "JSONL",
-            "TSV",
-            "BIO",
-            "BRAT",
-            "XML",
-            "Custom",
-            "JSON",
-            "TimeML",
-            "CSV",
-            "MMAX2",
-            "TXT",
-            "LaTeX",
-            "Standoff",
-            "IOB2",
-            "SGML",
-            "HuggingFace",
-        ];
-
-        for id in DatasetId::all() {
-            if let Some(format) = id.format() {
-                assert!(
-                    valid_formats.contains(&format),
-                    "{:?} has unknown format: {} (consider adding to valid_formats)",
-                    id,
-                    format
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_annotation_scheme_values_valid() {
-        let valid_schemes = [
-            // Standard sequence labeling schemes
-            "BIO",
-            "BIOES",
-            "IOB2",
-            "IOB",
-            "BILOU",
-            // Annotation formats
-            "Standoff",
-            "CoNLLCoref",
-            "ARRAU",
-            "Custom",
-            "CoNLL",
-            // Event extraction
-            "Trigger-based",
-            "Trigger-Argument",
-            // Specialty
-            "UD",          // Universal Dependencies
-            "HuggingFace", // Generic HF format
-        ];
-
-        for id in DatasetId::all() {
-            if let Some(scheme) = id.annotation_scheme() {
-                assert!(
-                    valid_schemes.contains(&scheme),
-                    "{:?} has unknown annotation scheme: {}",
-                    id,
-                    scheme
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_citation_format() {
-        // Citations should follow "Author et al. (YYYY)" or similar
-        for id in DatasetId::all() {
-            if let Some(citation) = id.citation() {
-                // Should contain a year in parentheses
-                let has_year_format = citation.contains('(')
-                    && citation.chars().filter(|c| c.is_ascii_digit()).count() == 4;
-
-                if !has_year_format {
-                    println!(
-                        "  WARN: {:?} citation may not follow standard format: {}",
-                        id, citation
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_paper_urls_valid() {
-        for id in DatasetId::all() {
-            if let Some(url) = id.paper_url() {
-                assert!(
-                    url.starts_with("http://") || url.starts_with("https://"),
-                    "{:?} has invalid paper URL: {}",
-                    id,
-                    url
-                );
-
-                // Should be a proper academic URL
-                let is_academic = url.contains("aclanthology.org")
-                    || url.contains("arxiv.org")
-                    || url.contains("doi.org")
-                    || url.contains("pubmed.ncbi")
-                    || url.contains("ldc.upenn.edu")
-                    || url.contains("ceur-ws.org")
-                    || url.contains("mit.edu")
-                    || url.contains("direct.mit.edu")
-                    || url.contains("openreview.net")
-                    || url.contains("ufal.mff.cuni.cz");
-
-                if !is_academic {
-                    println!("  WARN: {:?} paper URL may not be academic: {}", id, url);
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_examples_are_valid_snippets() {
-        for id in DatasetId::all() {
-            if let Some(example) = id.example() {
-                // Examples should be non-empty and not too long
-                assert!(!example.is_empty(), "{:?} has empty example", id);
-                assert!(
-                    example.len() <= 500,
-                    "{:?} has too long example ({} chars)",
-                    id,
-                    example.len()
-                );
-
-                // Should contain actual content (not just whitespace)
-                assert!(
-                    example.chars().any(|c| c.is_alphanumeric()),
-                    "{:?} example has no alphanumeric content",
-                    id
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_cross_category_consistency() {
-        // Some categories should co-occur
-        for id in DatasetId::all() {
-            // Ancient should typically also be low_resource or historical
-            if id.is_ancient() && !id.is_low_resource() && !id.is_historical() {
-                println!(
-                    "  NOTE: {:?} is ancient but not low_resource/historical",
-                    id
-                );
-            }
-
-            // Indigenous should typically be low_resource
-            if id.is_indigenous() && !id.is_low_resource() {
-                println!("  NOTE: {:?} is indigenous but not low_resource", id);
-            }
-
-            // Constructed languages are typically both constructed and low_resource
-            if id.is_constructed() && !id.is_low_resource() {
-                println!("  NOTE: {:?} is constructed but not low_resource", id);
-            }
-        }
-    }
-
-    #[test]
-    fn test_requires_license_datasets() {
-        let licensed: Vec<_> = DatasetId::all()
-            .iter()
-            .filter(|id| id.requires_license())
-            .collect();
-
-        println!(
-            "Datasets requiring license/manual download ({}):",
-            licensed.len()
-        );
-        for id in &licensed {
-            println!("  - {:?}: {}", id, id.license().unwrap_or("unknown"));
-        }
-
-        // Should have some licensed datasets (LDC, research-only, etc.)
-        assert!(licensed.len() >= 5, "Expected some licensed datasets");
-    }
-
-    #[test]
-    fn test_public_datasets() {
-        let public: Vec<_> = DatasetId::all()
-            .iter()
-            .filter(|id| !id.requires_license() && !id.download_url().is_empty())
-            .collect();
-
-        println!("Freely available datasets ({}):", public.len());
-
-        // Should have plenty of public datasets
-        assert!(
-            public.len() >= 30,
-            "Expected at least 30 public datasets, got {}",
-            public.len()
-        );
-    }
-
-    #[test]
-    fn test_json_export_valid() {
-        let json = generate_json();
-
-        // Should be valid JSON
-        let parsed: serde_json::Value =
-            serde_json::from_str(&json).expect("JSON export should be valid");
-
-        // Should have meta and datasets
-        assert!(parsed.get("meta").is_some(), "JSON should have meta field");
-        assert!(
-            parsed.get("datasets").is_some(),
-            "JSON should have datasets field"
-        );
-
-        let datasets = parsed.get("datasets").unwrap().as_array().unwrap();
-        assert_eq!(datasets.len(), DatasetId::all().len());
-    }
-
-    #[test]
-    fn test_markdown_export_contains_all_datasets() {
-        let md = generate_markdown();
-
-        // Should contain all dataset names
-        for id in DatasetId::all() {
-            let rust_id = format!("`DatasetId::{:?}`", id);
-            assert!(
-                md.contains(&rust_id),
-                "Markdown should contain Rust ID for {:?}",
-                id
-            );
-        }
-
-        // Should have proper structure
-        assert!(md.contains("# Dataset Registry"), "Should have header");
-        assert!(
-            md.contains("## Quick Reference") || md.contains("## Coverage Summary"),
-            "Should have summary section"
-        );
-        assert!(
-            md.contains("## All Datasets"),
-            "Should have all datasets section"
-        );
-    }
-
-    #[test]
-    fn test_task_strings_match_task_enum() {
-        use crate::eval::task_mapping::Task;
-
-        // All task strings in the registry should be parseable by Task::from_code()
-        // This ensures consistency between the registry and the Task enum
-        let valid_tasks = [
-            "ner",
-            "ned",
-            "el",
-            "entity_linking",
-            "coref",
-            "intra-coref",
-            "inter-coref",
-            "cdcr",
-            "event_coref",
-            "bridging",
-            "discourse_deixis",
-            "abstract-anaphora",
-            "re",
-            "relation_extraction",
-            "events",
-            "event_extraction",
-            "classification",
-            "bias_evaluation",
-            "qa",
-            "hierarchical",
-            "sequence_labeling",
-            "discontinuous-ner",
-            "nested-ner",
-            "mner",
-            "pii_detection",
-            "slot_filling",
-            "temporal",
-            "harmonic_analysis",
-        ];
-
-        for task_code in &valid_tasks {
-            assert!(
-                Task::from_code(task_code).is_some(),
-                "Task code '{}' should be parseable by Task::from_code()",
-                task_code
-            );
-        }
-
-        // Check that all tasks in registry are parseable
-        let mut unknown_tasks = Vec::new();
-        for id in DatasetId::all() {
-            for task_str in id.tasks() {
-                if Task::from_code(task_str).is_none() {
-                    unknown_tasks.push((id, task_str.to_string()));
-                }
-            }
-        }
-
-        if !unknown_tasks.is_empty() {
-            println!("  WARN: Unknown task codes in registry:");
-            for (id, task) in &unknown_tasks {
-                println!("    - {:?}: {}", id, task);
-            }
-        }
-        // Allow unknown tasks for now (they may be domain-specific)
-        // Remove this if strict validation is desired
-        // assert!(unknown_tasks.is_empty(), "Unknown task codes in registry");
-    }
-
-    #[test]
-    fn test_task_enum_coverage() {
-        use crate::eval::task_mapping::Task;
-
-        // The Task enum should cover all common NLP tasks
-        let all_tasks = Task::all();
-
-        // NER family - check actual codes from Task::code()
-        assert!(
-            all_tasks.iter().any(|t| t.code() == "ner"),
-            "Should have NER"
-        );
-        assert!(
-            all_tasks.iter().any(|t| t.code() == "ned"),
-            "Should have NED"
-        );
-        assert!(
-            all_tasks.iter().any(|t| t.code() == "discontinuous-ner"),
-            "Should have discontinuous NER"
-        );
-
-        // Coref family - check actual codes
-        assert!(
-            all_tasks.iter().any(|t| t.code() == "intra-coref"),
-            "Should have intra-coref"
-        );
-        assert!(
-            all_tasks.iter().any(|t| t.code() == "inter-coref"),
-            "Should have inter-coref"
-        );
-        assert!(
-            all_tasks.iter().any(|t| t.code() == "abstract-anaphora"),
-            "Should have abstract-anaphora"
-        );
-
-        // Relation/Event
-        assert!(all_tasks.iter().any(|t| t.code() == "re"), "Should have RE");
-        assert!(
-            all_tasks.iter().any(|t| t.code() == "events"),
-            "Should have events"
-        );
-
-        // Classification
-        assert!(
-            all_tasks.iter().any(|t| t.code() == "classification"),
-            "Should have classification"
-        );
-        assert!(
-            all_tasks.iter().any(|t| t.code() == "hierarchical"),
-            "Should have hierarchical"
-        );
-
-        // Check that aliases map correctly via from_code()
-        // These are common aliases that should resolve to tasks
-        let alias_tests = [
-            ("coref", "intra-coref"),          // coref -> IntraDocCoref
-            ("cdcr", "inter-coref"),           // cdcr -> InterDocCoref
-            ("bridging", "abstract-anaphora"), // bridging -> AbstractAnaphora
-            ("el", "ned"),                     // el -> NED
-            ("mner", "ner"),                   // mner -> NER (multimodal is subtype)
-            ("pii_detection", "ner"),          // PII detection is NER subtype
-        ];
-
-        for (alias, expected_code) in alias_tests {
-            if let Some(task) = Task::from_code(alias) {
-                assert_eq!(
-                    task.code(),
-                    expected_code,
-                    "Alias '{}' should map to task with code '{}'",
-                    alias,
-                    expected_code
-                );
-            } else {
-                panic!("Alias '{}' should be parseable by Task::from_code()", alias);
-            }
-        }
-
-        // Check task families
-        let ner_family = all_tasks.iter().filter(|t| t.is_ner_family()).count();
-        let coref_family = all_tasks.iter().filter(|t| t.is_coref_family()).count();
-
-        // We have fewer variants than the original test expected
-        assert!(
-            ner_family >= 3,
-            "Should have at least 3 NER-family tasks, got {}",
-            ner_family
-        );
-        assert!(
-            coref_family >= 3,
-            "Should have at least 3 coref-family tasks, got {}",
-            coref_family
-        );
-
-        println!("Task enum coverage:");
-        println!("  Total tasks: {}", all_tasks.len());
-        println!("  NER family: {}", ner_family);
-        println!("  Coref family: {}", coref_family);
-    }
-}
-
-// ============================================================================
-// Expected Baseline Metrics
-// ============================================================================
-
-/// Expected baseline F1 scores from published papers.
-/// These are approximate and represent state-of-the-art at time of publication.
-///
-/// Sources:
-/// - CoNLL 2003: BERT-base ~93% F1 (Devlin et al. 2019)
-/// - OntoNotes 5: BERT-base ~89% F1 (Devlin et al. 2019)
-/// - GENIA: BioBERT ~78% F1 (Lee et al. 2020)
-/// - BC5CDR: PubMedBERT ~90% F1 (Gu et al. 2021)
-/// - NCBI Disease: BioBERT ~89% F1 (Lee et al. 2020)
-/// - WikiANN: mBERT ~65-85% F1 depending on language (Pan et al. 2017)
-///
-/// Note: Zero-shot models like GLiNER typically achieve 5-15% lower F1
-/// than fine-tuned models but offer flexibility across entity types.
 #[allow(clippy::items_after_test_module)]
 impl DatasetId {
-    /// Get expected baseline F1 score (as percentage, e.g., 93.0 for 93%).
-    /// These are rough guidelines from published benchmarks.
+    /// Get expected baseline performance with full context (model, task, split, metric).
+    /// Returns structured baseline data including model architecture, task type, dataset split,
+    /// and evaluation metric. This provides the necessary context for meaningful comparison.
     #[must_use]
-    pub fn expected_f1(&self) -> Option<f32> {
+    pub fn expected_baseline(&self) -> Option<crate::eval::baseline::BaselinePerformance> {
+        use crate::eval::baseline::{common, BaselinePerformance};
+
         match self {
-            // Core NER benchmarks
-            Self::CoNLL2003Sample => Some(93.0), // BERT baseline
-            Self::OntoNotesSample => Some(89.0), // BERT baseline
-            Self::WikiGold => Some(80.0),        // Smaller, noisier
-            Self::Wnut17 => Some(55.0),          // Hard - emerging entities
+            // Core NER benchmarks - BERT-base on test set
+            Self::CoNLL2003Sample => Some(common::bert_base_ner("test", 92.5)),
+            Self::OntoNotesSample => Some(common::bert_base_ner("test", 89.5)),
+            Self::OntoNotes50 => Some(common::bert_base_ner("test", 89.5)),
 
-            // Biomedical NER
-            Self::GENIA => Some(78.0),       // BioBERT
-            Self::BC5CDR => Some(90.0),      // PubMedBERT
-            Self::NCBIDisease => Some(89.0), // BioBERT
-            Self::CHEMDNER => Some(87.0),    // CHEMDNER 2013 winners
-            Self::JNLPBA => Some(77.0),      // BioNLP
-            Self::BC2GM => Some(84.0),       // Gene mention
-            Self::BC4CHEMD => Some(89.0),    // Chemical
-            Self::AnatEM => Some(85.0),      // Anatomical
+            // Biomedical NER - BioBERT on test/dev sets
+            Self::GENIA => Some(common::biobert_ner("test", 79.0)),
+            Self::BC5CDR => Some(common::biobert_ner("test", 87.0)),
+            Self::NCBIDisease => Some(common::biobert_ner("test", 89.0)),
+            Self::CHEMDNER => Some(
+                BaselinePerformance::new(87.0, "CHEMDNER-2013-winner", "ner", "test")
+                    .with_citation("CHEMDNER 2013 shared task"),
+            ),
+            Self::JNLPBA => Some(common::biobert_ner("test", 77.0)),
+            Self::BC2GM => Some(common::biobert_ner("test", 84.0)),
+            Self::BC4CHEMD => Some(common::biobert_ner("test", 91.0)),
+            Self::AnatEM => Some(common::biobert_ner("test", 85.0)),
+            Self::CRAFT => Some(common::biobert_ner("test", 82.0)),
+            Self::BC2GMFull => Some(common::biobert_ner("test", 84.0)),
 
-            // Social media
-            Self::BroadTwitterCorpus => Some(65.0), // Noisy text
+            // Multilingual NER - mBERT baselines
+            Self::WikiANN => {
+                Some(common::mbert_ner("test", 75.0).with_notes("Average across 282 languages"))
+            }
+            Self::MultiNERD => Some(common::mbert_ner("test", 85.0)),
+            Self::MultiCoNER => Some(common::mbert_ner("test", 80.0)),
+            Self::MultiCoNERv2 => Some(common::mbert_ner("test", 82.0)),
+            Self::MasakhaNER => Some(common::mbert_ner("test", 75.0)),
+            Self::CoNLL2002 => Some(common::mbert_ner("test", 88.0)),
+            Self::GermEval2014 => Some(common::mbert_ner("test", 86.0)),
+            Self::FinNER => Some(common::mbert_ner("test", 81.0)),
 
-            // Multilingual (highly variable by language)
-            Self::WikiANN => Some(75.0),   // Average across languages
-            Self::MultiNERD => Some(85.0), // High-resource langs
+            // Coreference benchmarks - BERT-base with CoNLL F1 metric
+            Self::GAP => Some(common::bert_coref("test", 85.0)),
+            Self::PreCo => Some(common::bert_coref("test", 82.0)),
+            Self::LitBank => Some(common::bert_coref("test", 75.0)),
 
-            // Specialized domains
-            Self::MitMovie => Some(88.0),      // Domain slot filling
-            Self::MitRestaurant => Some(79.0), // Domain slot filling
-            Self::FewNERD => Some(70.0),       // Fine-grained
-            Self::CrossNER => Some(75.0),      // Cross-domain avg
+            // Relation extraction - BERT/RoBERTa baselines
+            Self::DocRED => {
+                Some(common::bert_re("test", 58.0).with_notes("Document-level RE (harder)"))
+            }
+            Self::ReTACRED => Some(common::bert_re("test", 72.0).with_notes("Sentence-level RE")),
+            Self::EnzChemRED => {
+                Some(common::biobert_ner("test", 86.0).with_notes("Enzyme chemistry RE"))
+            }
+            Self::SciERC => Some(
+                BaselinePerformance::new(68.0, "SciBERT", "re", "test")
+                    .with_citation("Beltagy et al. 2019")
+                    .with_metric("F1"),
+            ),
 
-            // Historical/low-resource (expect lower scores)
-            Self::LatinUD => Some(70.0),
-            Self::AncientGreekUD => Some(65.0),
+            // Event extraction - BERT baselines
+            Self::MAVEN => Some(common::bert_base_ner("test", 65.0).with_notes("168 event types")),
+            Self::MAVENArg => {
+                Some(common::bert_base_ner("test", 58.0).with_notes("Argument extraction"))
+            }
+            Self::CASIE => {
+                Some(common::bert_base_ner("test", 72.0).with_notes("Cybersecurity events"))
+            }
+            Self::RAMS => {
+                Some(common::bert_base_ner("test", 70.0).with_notes("Document-level events"))
+            }
 
-            _ => None, // No baseline available
+            // Domain-specific
+            Self::MitMovie => {
+                Some(common::bert_base_ner("test", 88.0).with_notes("Domain slot filling"))
+            }
+            Self::MitRestaurant => {
+                Some(common::bert_base_ner("test", 79.0).with_notes("Domain slot filling"))
+            }
+            Self::FewNERD => {
+                Some(common::bert_base_ner("test", 70.0).with_notes("Fine-grained (66 types)"))
+            }
+            Self::CrossNER => {
+                Some(common::bert_base_ner("test", 75.0).with_notes("Cross-domain average"))
+            }
+            Self::LegalNER => Some(
+                BaselinePerformance::new(83.0, "Legal-BERT", "ner", "test")
+                    .with_notes("Legal domain specialized BERT"),
+            ),
+            Self::FiNER139 => {
+                Some(common::bert_base_ner("test", 76.0).with_notes("Financial NER (139 types)"))
+            }
+            Self::AgCNER => Some(
+                BaselinePerformance::new(94.0, "BERT-BiLSTM-CRF", "ner", "test")
+                    .with_citation("Yao et al. 2024"),
+            ),
+
+            // Social media (noisy text, lower scores)
+            Self::BroadTwitterCorpus => {
+                Some(common::bert_base_ner("test", 65.0).with_notes("Noisy text"))
+            }
+            Self::TweetNER7 => {
+                Some(common::bert_base_ner("test", 72.0).with_notes("Twitter NER (domain-adapted)"))
+            }
+            Self::Wnut17 => {
+                Some(common::bert_base_ner("test", 55.0).with_notes("Emerging entities"))
+            }
+
+            // Historical/classical languages
+            Self::LatinUD => Some(common::mbert_ner("test", 70.0).with_notes("Classical Latin")),
+            Self::AncientGreekUD => {
+                Some(common::mbert_ner("test", 65.0).with_notes("Ancient Greek"))
+            }
+            Self::SanskritUD => {
+                Some(common::mbert_ner("test", 68.0).with_notes("Classical Sanskrit"))
+            }
+            Self::ClassicalChineseUD => {
+                Some(common::mbert_ner("test", 72.0).with_notes("Historical Chinese"))
+            }
+
+            // WikiGold (smaller, noisier)
+            Self::WikiGold => {
+                Some(common::bert_base_ner("test", 80.0).with_notes("Smaller, noisier dataset"))
+            }
+
+            _ => None, // No baseline available - add as research progresses
         }
+    }
+
+    /// Get expected baseline F1 score (as percentage, e.g., 93.0 for 93%).
+    ///
+    /// **Deprecated**: Use `expected_baseline()` for full context (model, task, split, metric).
+    /// This method is kept for backwards compatibility but loses important context.
+    #[must_use]
+    #[deprecated(
+        note = "Use expected_baseline() for full context. This method loses model/task/split information."
+    )]
+    pub fn expected_f1(&self) -> Option<f32> {
+        self.expected_baseline().map(|b| b.f1)
+    }
+
+    /// Get expected baseline for zero-shot models (typically 5-15% lower F1).
+    #[must_use]
+    pub fn expected_zero_shot_baseline(
+        &self,
+    ) -> Option<crate::eval::baseline::BaselinePerformance> {
+        self.expected_baseline().map(|b| b.zero_shot_adjustment())
     }
 
     /// Get expected F1 for zero-shot models (typically 5-15% lower).
+    ///
+    /// **Deprecated**: Use `expected_zero_shot_baseline()` for full context.
     #[must_use]
+    #[deprecated(note = "Use expected_zero_shot_baseline() for full context.")]
     pub fn expected_zero_shot_f1(&self) -> Option<f32> {
-        self.expected_f1().map(|f1| (f1 - 10.0).max(30.0))
+        self.expected_baseline()
+            .map(|b| b.zero_shot_adjustment().f1)
     }
 
     /// Get tasks with fallback to category-based inference.
