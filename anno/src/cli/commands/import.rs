@@ -68,6 +68,8 @@ pub fn run(args: ImportArgs) -> Result<(), String> {
             ExportFormat::Brat => "ann",
             ExportFormat::Conll => "conll",
             ExportFormat::Jsonl => "jsonl",
+            ExportFormat::NTriples => "nt",
+            ExportFormat::JsonLd => "jsonld",
         };
         fs::read_dir(&args.input)
             .map_err(|e| format!("Failed to read directory: {}", e))?
@@ -170,6 +172,14 @@ fn import_file(
         ExportFormat::Brat => import_brat(input, include_text),
         ExportFormat::Conll => import_conll(input),
         ExportFormat::Jsonl => import_jsonl(input),
+        ExportFormat::NTriples => {
+            // TODO: Parse N-Triples and extract entity annotations
+            Err("Import from N-Triples format not yet supported. Use jsonl or brat.".into())
+        }
+        ExportFormat::JsonLd => {
+            // TODO: Parse JSON-LD and extract entity annotations
+            Err("Import from JSON-LD format not yet supported. Use jsonl or brat.".into())
+        }
     }
 }
 

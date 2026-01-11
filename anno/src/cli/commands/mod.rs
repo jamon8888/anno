@@ -19,6 +19,7 @@ pub mod eval;
 pub mod explain;
 pub mod export;
 pub mod extract;
+pub mod history;
 pub mod import;
 pub mod info; // Deprecated: use backends
 pub mod joint;
@@ -49,6 +50,7 @@ pub use eval::EvalArgs;
 pub use explain::ExplainArgs;
 pub use export::{ExportArgs, ExportFormat};
 pub use extract::ExtractArgs;
+pub use history::HistoryArgs;
 pub use import::ImportArgs;
 pub use joint::JointArgs;
 pub use models::ModelsArgs; // Deprecated: use BackendsArgs

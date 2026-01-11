@@ -203,7 +203,19 @@ impl LoadableDatasetId {
         }
 
         Some(match id {
+            // ===================================================================
             // CoNLL/BIO format datasets
+            // ===================================================================
+            // These datasets use standard CoNLL-2003 or BIO tagging format.
+            // The CoNLL parser handles: space/tab-separated columns, IOB2/BIO schemes,
+            // and standard entity type mappings (PER, ORG, LOC, etc.).
+            //
+            // Note: Some datasets listed here are also handled by registry_hint_plan()
+            // but are kept for explicit control or historical reasons.
+            //
+            // To add more: If a dataset has format="CoNLL" or format="BIO" in the registry
+            // and is NER-only, it should be auto-detected. Add here only if auto-detection
+            // fails (e.g., multi-task datasets, ambiguous metadata).
             DatasetId::WikiGold
             | DatasetId::Wnut17
             | DatasetId::MitMovie
@@ -298,7 +310,15 @@ impl LoadableDatasetId {
             | DatasetId::ZELDA
             | DatasetId::GENIANested => DatasetParsePlan::Conll,
 
+            // ===================================================================
             // JSONL format (HuggingFace style)
+            // ===================================================================
+            // These datasets use JSON Lines format with standard fields:
+            // - `tokens`: Array of token strings
+            // - `ner_tags`: Array of BIO/IOB2 tags
+            // - Optional: `text` (original sentence), `entities` (structured)
+            //
+            // The JsonlNer parser is flexible and handles variations in field names.
             DatasetId::MultiNERD
             | DatasetId::ACORD
             | DatasetId::ARFFiction
@@ -358,7 +378,18 @@ impl LoadableDatasetId {
             // TweetNER7 uses JSON format with integer tags
             DatasetId::TweetNER7 => DatasetParsePlan::TweetNer7,
 
+            // ===================================================================
             // JSON format (Relation extraction datasets)
+            // ===================================================================
+            // Relation extraction datasets use JSON format with entity pairs and relations.
+            // Common structure: {entities: [...], relations: [...], text: "..."}
+            //
+            // The DocredJson parser handles DocRED, ReTACRED, and similar formats.
+            // Some datasets (SciERC, PolyIE, EnzChemRED) are auto-detected via
+            // registry_hint_plan() but listed here for explicit control.
+            //
+            // To add more: RE datasets with format="JSON" or format="JSONL" and is_re=true
+            // should be auto-detected. Add here only for special cases.
             DatasetId::DocRED
             | DatasetId::ReTACRED
             | DatasetId::NYTFB
@@ -370,7 +401,10 @@ impl LoadableDatasetId {
             | DatasetId::CovEReD
             | DatasetId::ACE2005
             | DatasetId::MuDoCo
-            | DatasetId::SciERCNER => DatasetParsePlan::DocredJson,
+            | DatasetId::SciERCNER
+            // Added 2025-01-27: RE datasets with public URLs but missing hints
+            // Note: SciERC, PolyIE, EnzChemRED are now handled by registry_hint_plan() auto-detection
+            => DatasetParsePlan::DocredJson,
 
             // CHisIEC: Ancient Chinese historical NER+RE (custom JSON format)
             DatasetId::CHisIEC => DatasetParsePlan::ChisiecJson,
@@ -385,7 +419,8 @@ impl LoadableDatasetId {
             DatasetId::NCBIDisease => DatasetParsePlan::NcbiDisease,
 
             // Coreference formats (placeholders)
-            DatasetId::GAP | DatasetId::WikiCoref | DatasetId::GUM | DatasetId::WinoBias => {
+            // Note: GUM uses CoNLL format and is handled by registry_hint_plan()
+            DatasetId::GAP | DatasetId::WikiCoref | DatasetId::WinoBias => {
                 DatasetParsePlan::GapTsv
             }
             DatasetId::PreCo | DatasetId::SciCo => DatasetParsePlan::PrecoJsonl,
@@ -430,13 +465,30 @@ impl LoadableDatasetId {
         })
     }
 
-    /// Best-effort “hint” derived from registry metadata.
+    /// Best-effort "hint" derived from registry metadata.
     ///
     /// This is intentionally conservative: it returns `None` if the registry
     /// doesn't provide enough signal to choose the same plan as `parse_plan`.
     ///
     /// The long-term goal is to have this cover most datasets so `parse_plan`
     /// shrinks to a small exception table.
+    ///
+    /// # Architecture Notes
+    ///
+    /// This function enables automatic format detection for datasets with:
+    /// - Clear format metadata (`format:` field in registry)
+    /// - Single primary task (NER, RE, coref, etc.)
+    /// - Standard annotation schemes (BIO, IOB2, CoNLL, JSONL)
+    ///
+    /// Datasets with multiple tasks (e.g., NER+RE) or ambiguous formats
+    /// should be added to explicit matches in `parse_plan()` instead.
+    ///
+    /// # Adding New Datasets
+    ///
+    /// 1. **Common formats (CoNLL, JSONL, TSV)**: Add format metadata to registry,
+    ///    ensure single primary task, and this function will auto-detect.
+    /// 2. **Special formats**: Add explicit match in `parse_plan()` match statement.
+    /// 3. **Multi-task datasets**: Add explicit match (auto-detection is conservative).
     #[must_use]
     fn registry_hint_plan(id: DatasetId) -> Option<DatasetParsePlan> {
         // Hybrids / special cases first.
@@ -497,6 +549,11 @@ impl LoadableDatasetId {
                 | DatasetId::ShipiboKoniboNER
                 | DatasetId::BASHI
                 | DatasetId::ENER
+                // Added 2025-01-27: CoNLL NER datasets with public URLs but missing hints
+                | DatasetId::OntoNotes50
+                | DatasetId::GUM
+                // CoNLL04RE is CoNLL format (works with CoNLL parser even though it's for RE)
+                | DatasetId::CoNLL04RE
         ) {
             return Some(DatasetParsePlan::Conll);
         }
@@ -535,6 +592,11 @@ impl LoadableDatasetId {
                 | DatasetId::CEREC
                 | DatasetId::DELICATE
                 | DatasetId::CSN
+                // Added 2025-01-27: JSONL NER datasets with public URLs but missing hints
+                | DatasetId::SCINERNested
+                | DatasetId::AgriNER
+                | DatasetId::MOFDataset
+                | DatasetId::SolidStateDoping
         ) {
             return Some(DatasetParsePlan::JsonlNer);
         }
@@ -644,7 +706,8 @@ impl LoadableDatasetId {
             }
 
             // Relation extraction: unambiguous only when the dataset is *only* RE.
-            "JSON" | "JSONL" if is_re && !is_ner && !is_coref && !is_event => {
+            // Also handle RE datasets that might have NER as secondary task (e.g., SciERCNER).
+            "JSON" | "JSONL" if is_re && !is_coref && !is_event => {
                 Some(DatasetParsePlan::DocredJson)
             }
 
@@ -2414,71 +2477,156 @@ impl DatasetLoader {
         Err(Error::InvalidInput("hf-hub not available".to_string()))
     }
 
-    /// Single download attempt.
+    /// Single download attempt with retry logic.
+    ///
+    /// Retries up to 3 times with exponential backoff for transient failures (timeouts, 5xx errors).
     #[cfg(feature = "eval-advanced")]
     fn download_attempt(&self, url: &str) -> Result<String> {
-        let response = ureq::get(url)
-            .timeout(std::time::Duration::from_secs(60))
-            .call()
-            .map_err(|e| {
-                let error_msg = format!("{}", e);
-                Error::InvalidInput(format!(
-                    "Network error downloading {}: {}. \
-                     Check your internet connection and try again.",
-                    url, error_msg
-                ))
-            })?;
+        const MAX_RETRIES: usize = 3;
+        const INITIAL_TIMEOUT_SECS: u64 = 30;
+        const MAX_TIMEOUT_SECS: u64 = 120;
 
-        if response.status() != 200 {
-            // Best-effort: include the response body (often JSON with useful error details).
-            let status = response.status();
-            let body = response.into_string().unwrap_or_default();
-            let body = body.trim();
-            let body_preview = if body.len() > 800 {
-                format!("{}…", &body[..800])
-            } else {
-                body.to_string()
-            };
+        let mut last_error = None;
 
-            return Err(Error::InvalidInput(format!(
-                "HTTP {} downloading {}. \
-                 Server returned error status. \
-                 Dataset may be temporarily unavailable or URL changed. {}{}",
-                status,
-                url,
-                if body_preview.is_empty() {
-                    ""
-                } else {
-                    "Response body: "
-                },
-                body_preview
-            )));
+        for attempt in 0..=MAX_RETRIES {
+            let timeout_secs = (INITIAL_TIMEOUT_SECS * (1 << attempt.min(2))).min(MAX_TIMEOUT_SECS);
+
+            match ureq::get(url)
+                .timeout(std::time::Duration::from_secs(timeout_secs))
+                .call()
+            {
+                Ok(response) => {
+                    if response.status() == 200 {
+                        // Success - read content
+                        let content = response.into_string().map_err(|e| {
+                            Error::InvalidInput(format!(
+                                "Failed to read response from {}: {}. \
+                                 Response may be too large or corrupted.",
+                                url, e
+                            ))
+                        })?;
+
+                        // Heuristic guardrail: many registry URLs are dataset homepages. If we fetch HTML,
+                        // treat it as a download failure so we don't silently cache garbage and then parse
+                        // "0 sentences".
+                        let lower = content
+                            .chars()
+                            .take(2048)
+                            .collect::<String>()
+                            .to_lowercase();
+                        if lower.contains("<html") || lower.contains("<!doctype html") {
+                            return Err(Error::InvalidInput(format!(
+                                "Downloaded HTML from {}. This URL looks like a webpage, not a raw dataset file.",
+                                url
+                            )));
+                        }
+
+                        return Ok(content);
+                    }
+
+                    let status = response.status();
+                    let body = response.into_string().unwrap_or_default();
+                    let body = body.trim();
+                    let body_preview = if body.len() > 800 {
+                        format!("{}…", &body[..800])
+                    } else {
+                        body.to_string()
+                    };
+
+                    // Retry on 5xx server errors (transient)
+                    if status >= 500 && status < 600 && attempt < MAX_RETRIES {
+                        let wait_ms = 1000 * (1 << attempt); // Exponential backoff: 1s, 2s, 4s
+                        log::debug!(
+                            "Server error {} downloading {} (attempt {}/{}), retrying in {}ms...",
+                            status,
+                            url,
+                            attempt + 1,
+                            MAX_RETRIES + 1,
+                            wait_ms
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(wait_ms));
+                        last_error = Some(format!(
+                            "HTTP {} downloading {}. Server returned error status. {}{}",
+                            status,
+                            url,
+                            if body_preview.is_empty() {
+                                ""
+                            } else {
+                                "Response body: "
+                            },
+                            body_preview
+                        ));
+                        continue;
+                    }
+
+                    // Non-retryable error (4xx client errors)
+                    return Err(Error::InvalidInput(format!(
+                        "HTTP {} downloading {}. \
+                         Server returned error status. \
+                         Dataset may be temporarily unavailable or URL changed. {}{}",
+                        status,
+                        url,
+                        if body_preview.is_empty() {
+                            ""
+                        } else {
+                            "Response body: "
+                        },
+                        body_preview
+                    )));
+                }
+                Err(ureq::Error::Transport(e)) => {
+                    // Network errors (timeouts, connection failures) - retry
+                    let error_msg = format!("{}", e);
+                    let is_timeout =
+                        error_msg.contains("timeout") || error_msg.contains("timed out");
+
+                    if is_timeout && attempt < MAX_RETRIES {
+                        let wait_ms = 1000 * (1 << attempt); // Exponential backoff
+                        log::debug!(
+                            "Timeout downloading {} (attempt {}/{}), retrying in {}ms...",
+                            url,
+                            attempt + 1,
+                            MAX_RETRIES + 1,
+                            wait_ms
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(wait_ms));
+                        last_error = Some(error_msg);
+                        continue;
+                    }
+
+                    // Final attempt failed or non-timeout error
+                    return Err(Error::InvalidInput(format!(
+                        "Network error downloading {}: {}. \
+                         Check your internet connection and try again. \
+                         {}",
+                        url,
+                        error_msg,
+                        if attempt > 0 {
+                            format!("(Failed after {} retries)", attempt)
+                        } else {
+                            String::new()
+                        }
+                    )));
+                }
+                Err(e) => {
+                    // Other errors (non-retryable)
+                    let error_msg = format!("{}", e);
+                    return Err(Error::InvalidInput(format!(
+                        "Error downloading {}: {}. \
+                         Check your internet connection and try again.",
+                        url, error_msg
+                    )));
+                }
+            }
         }
 
-        let content = response.into_string().map_err(|e| {
-            Error::InvalidInput(format!(
-                "Failed to read response from {}: {}. \
-                 Response may be too large or corrupted.",
-                url, e
-            ))
-        })?;
-
-        // Heuristic guardrail: many registry URLs are dataset homepages. If we fetch HTML,
-        // treat it as a download failure so we don't silently cache garbage and then parse
-        // "0 sentences".
-        let lower = content
-            .chars()
-            .take(2048)
-            .collect::<String>()
-            .to_lowercase();
-        if lower.contains("<html") || lower.contains("<!doctype html") {
-            return Err(Error::InvalidInput(format!(
-                "Downloaded HTML from {}. This URL looks like a webpage, not a raw dataset file.",
-                url
-            )));
-        }
-
-        Ok(content)
+        // All retries exhausted
+        Err(Error::InvalidInput(format!(
+            "Failed to download {} after {} attempts. Last error: {}",
+            url,
+            MAX_RETRIES + 1,
+            last_error.unwrap_or_else(|| "unknown error".to_string())
+        )))
     }
 
     /// Compute SHA256 checksum of content.

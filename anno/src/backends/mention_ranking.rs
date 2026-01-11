@@ -1433,6 +1433,253 @@ impl MentionRankingCoref {
         Ok(clusters)
     }
 
+    /// Get language-specific pronoun patterns.
+    ///
+    /// Returns (pronoun_text, gender, number) tuples for the specified language.
+    /// Falls back to English if language is not supported.
+    fn get_pronoun_patterns(&self) -> Vec<(&'static str, Gender, Number)> {
+        let lang_code = self
+            .config
+            .language
+            .split('-')
+            .next()
+            .unwrap_or(&self.config.language)
+            .to_lowercase();
+
+        match lang_code.as_str() {
+            "es" => vec![
+                // Spanish pronouns
+                ("él", Gender::Masculine, Number::Singular),
+                ("ella", Gender::Feminine, Number::Singular),
+                ("ellos", Gender::Masculine, Number::Plural),
+                ("ellas", Gender::Feminine, Number::Plural),
+                ("lo", Gender::Masculine, Number::Singular),
+                ("la", Gender::Feminine, Number::Singular),
+                ("los", Gender::Masculine, Number::Plural),
+                ("las", Gender::Feminine, Number::Plural),
+                ("le", Gender::Unknown, Number::Singular), // Leísmo - can be gender-neutral
+                ("les", Gender::Unknown, Number::Plural),
+                ("su", Gender::Unknown, Number::Unknown),
+                ("sus", Gender::Unknown, Number::Plural),
+                ("suyo", Gender::Masculine, Number::Singular),
+                ("suya", Gender::Feminine, Number::Singular),
+                ("suyos", Gender::Masculine, Number::Plural),
+                ("suyas", Gender::Feminine, Number::Plural),
+                ("se", Gender::Unknown, Number::Unknown), // Reflexive
+                ("nosotros", Gender::Masculine, Number::Plural),
+                ("nosotras", Gender::Feminine, Number::Plural),
+                ("vosotros", Gender::Masculine, Number::Plural),
+                ("vosotras", Gender::Feminine, Number::Plural),
+                ("usted", Gender::Unknown, Number::Singular),
+                ("ustedes", Gender::Unknown, Number::Plural),
+                // Non-binary options (emerging usage)
+                // Note: "elle" (singular) and "elles" (plural) are being used by some non-binary Spanish speakers
+                // though not yet standardized. Some also use "le" (leísmo) as gender-neutral.
+                ("elle", Gender::Unknown, Number::Singular), // Non-binary third-person (emerging)
+                ("elles", Gender::Unknown, Number::Plural), // Non-binary third-person plural (emerging)
+            ],
+            "fr" => vec![
+                // French pronouns
+                ("il", Gender::Masculine, Number::Singular),
+                ("elle", Gender::Feminine, Number::Singular),
+                ("ils", Gender::Masculine, Number::Plural),
+                ("elles", Gender::Feminine, Number::Plural),
+                ("le", Gender::Masculine, Number::Singular),
+                ("la", Gender::Feminine, Number::Singular),
+                ("les", Gender::Unknown, Number::Plural),
+                ("lui", Gender::Unknown, Number::Singular),
+                ("leur", Gender::Unknown, Number::Plural),
+                ("son", Gender::Masculine, Number::Singular),
+                ("sa", Gender::Feminine, Number::Singular),
+                ("ses", Gender::Unknown, Number::Plural),
+                ("se", Gender::Unknown, Number::Unknown), // Reflexive
+                ("nous", Gender::Unknown, Number::Plural),
+                ("vous", Gender::Unknown, Number::Unknown),
+                // Non-binary options (emerging usage)
+                // Note: "iel" (singular) and "iels" (plural) are being used by some non-binary French speakers
+                // though not yet standardized in formal French
+                ("iel", Gender::Unknown, Number::Singular), // Non-binary third-person (emerging)
+                ("iels", Gender::Unknown, Number::Plural), // Non-binary third-person plural (emerging)
+            ],
+            "de" => vec![
+                // German pronouns
+                ("er", Gender::Masculine, Number::Singular),
+                ("sie", Gender::Feminine, Number::Singular),
+                ("es", Gender::Neutral, Number::Singular),
+                ("sie", Gender::Unknown, Number::Plural), // Same form as feminine singular
+                ("ihn", Gender::Masculine, Number::Singular),
+                ("ihr", Gender::Feminine, Number::Singular),
+                ("ihm", Gender::Masculine, Number::Singular),
+                ("ihnen", Gender::Unknown, Number::Plural),
+                ("sein", Gender::Masculine, Number::Singular),
+                ("seine", Gender::Feminine, Number::Singular),
+                ("sein", Gender::Neutral, Number::Singular),
+                ("ihre", Gender::Feminine, Number::Singular),
+                ("ihr", Gender::Unknown, Number::Plural),
+                ("sich", Gender::Unknown, Number::Unknown), // Reflexive
+                ("wir", Gender::Unknown, Number::Plural),
+                ("ihr", Gender::Unknown, Number::Plural), // 2nd person plural
+                ("sie", Gender::Unknown, Number::Plural), // 3rd person plural (formal)
+                // Non-binary options (emerging usage)
+                // Note: "sier" and "xier" are being used by some non-binary German speakers
+                // though not yet standardized. "es" (it) is grammatically neutral but dehumanizing.
+                ("sier", Gender::Unknown, Number::Singular), // Non-binary third-person (emerging)
+                ("xier", Gender::Unknown, Number::Singular), // Non-binary third-person (emerging, alternative)
+                ("dier", Gender::Unknown, Number::Singular), // Non-binary third-person (emerging, alternative)
+            ],
+            "ar" => vec![
+                // Arabic pronouns (RTL)
+                ("هو", Gender::Masculine, Number::Singular), // huwa
+                ("هي", Gender::Feminine, Number::Singular),  // hiya
+                ("هم", Gender::Masculine, Number::Plural),   // hum
+                ("هن", Gender::Feminine, Number::Plural),    // hunna
+                ("هما", Gender::Unknown, Number::Plural),    // huma (dual)
+            ],
+            "ru" => vec![
+                // Russian pronouns
+                ("он", Gender::Masculine, Number::Singular),
+                ("она", Gender::Feminine, Number::Singular),
+                ("оно", Gender::Neutral, Number::Singular),
+                ("они", Gender::Unknown, Number::Plural),
+                ("его", Gender::Masculine, Number::Singular),
+                ("её", Gender::Feminine, Number::Singular),
+                ("их", Gender::Unknown, Number::Plural),
+                ("себя", Gender::Unknown, Number::Unknown), // Reflexive
+                ("мы", Gender::Unknown, Number::Plural),
+                ("вы", Gender::Unknown, Number::Unknown),
+            ],
+            "zh" => vec![
+                // Chinese pronouns
+                // Traditional gendered forms (introduced in 20th century)
+                ("他", Gender::Masculine, Number::Singular), // tā - he (also used as gender-neutral historically)
+                ("她", Gender::Feminine, Number::Singular),  // tā - she
+                ("它", Gender::Neutral, Number::Singular),   // tā - it (objects)
+                ("牠", Gender::Neutral, Number::Singular),   // tā - it (animals, traditional)
+                ("祂", Gender::Neutral, Number::Singular),   // tā - it (deities)
+                // Gender-neutral options for non-binary individuals
+                ("怹", Gender::Unknown, Number::Singular), // tān - honorific gender-neutral "they" (archaic but exists)
+                ("其", Gender::Unknown, Number::Singular), // qí - formal gender-neutral pronoun (very formal)
+                // Modern non-binary options (pinyin, used in informal/online contexts)
+                // Note: "TA" and "X也" are typically written in pinyin/latin, but we include them
+                // for completeness. In practice, these may appear as "TA" or "X也" in text.
+                ("他们", Gender::Masculine, Number::Plural), // tāmen - they (masculine/mixed)
+                ("她们", Gender::Feminine, Number::Plural),  // tāmen - they (feminine)
+                ("它们", Gender::Neutral, Number::Plural),   // tāmen - they (objects)
+                                                             // Note: In spoken Chinese, all third-person pronouns are pronounced "tā" (gender-neutral)
+                                                             // The gender distinction exists only in written form
+            ],
+            "ja" => vec![
+                // Japanese pronouns
+                // Third-person (historically gender-neutral, now gendered in modern usage)
+                ("彼", Gender::Masculine, Number::Singular), // kare - he (originally gender-neutral)
+                ("彼女", Gender::Feminine, Number::Singular), // kanojo - she
+                ("彼ら", Gender::Unknown, Number::Plural),   // karera - they
+                // Gender-neutral alternatives (modern usage)
+                // Note: Japanese often avoids pronouns entirely, using names/titles instead
+                // For non-binary individuals, その人 (sono hito - that person) or name/title is common
+                ("その人", Gender::Unknown, Number::Singular), // sono hito - that person (gender-neutral)
+                ("あの人", Gender::Unknown, Number::Singular), // ano hito - that person (gender-neutral)
+            ],
+            "ko" => vec![
+                // Korean pronouns
+                // Korean often avoids third-person pronouns, using names/titles
+                ("그", Gender::Masculine, Number::Singular), // geu - he (also means "that")
+                ("그녀", Gender::Feminine, Number::Singular), // geunyeo - she (literally "that woman")
+                ("그들", Gender::Unknown, Number::Plural),    // geudeul - they
+                // Gender-neutral alternatives
+                ("그 사람", Gender::Unknown, Number::Singular), // geu saram - that person (gender-neutral)
+                ("그분", Gender::Unknown, Number::Singular), // geubun - that person (honorific, gender-neutral)
+            ],
+            _ => {
+                // English (default) - comprehensive pronoun patterns including neopronouns
+                vec![
+                    // Traditional pronouns
+                    ("he", Gender::Masculine, Number::Singular),
+                    ("she", Gender::Feminine, Number::Singular),
+                    ("it", Gender::Neutral, Number::Singular),
+                    ("they", Gender::Unknown, Number::Unknown), // Singular or plural
+                    ("him", Gender::Masculine, Number::Singular),
+                    ("her", Gender::Feminine, Number::Singular),
+                    ("them", Gender::Unknown, Number::Unknown), // Singular or plural
+                    ("his", Gender::Masculine, Number::Singular),
+                    ("hers", Gender::Feminine, Number::Singular),
+                    ("its", Gender::Neutral, Number::Singular),
+                    ("their", Gender::Unknown, Number::Unknown), // Singular or plural
+                    ("theirs", Gender::Unknown, Number::Unknown),
+                    ("themself", Gender::Unknown, Number::Singular), // Explicitly singular
+                    ("themselves", Gender::Unknown, Number::Plural), // Explicitly plural
+                    // Third-person reflexives
+                    ("himself", Gender::Masculine, Number::Singular),
+                    ("herself", Gender::Feminine, Number::Singular),
+                    ("itself", Gender::Neutral, Number::Singular),
+                    // First-person pronouns
+                    ("i", Gender::Unknown, Number::Singular),
+                    ("me", Gender::Unknown, Number::Singular),
+                    ("my", Gender::Unknown, Number::Singular),
+                    ("mine", Gender::Unknown, Number::Singular),
+                    ("myself", Gender::Unknown, Number::Singular),
+                    ("we", Gender::Unknown, Number::Plural),
+                    ("us", Gender::Unknown, Number::Plural),
+                    ("our", Gender::Unknown, Number::Plural),
+                    ("ours", Gender::Unknown, Number::Plural),
+                    ("ourselves", Gender::Unknown, Number::Plural),
+                    ("you", Gender::Unknown, Number::Unknown), // Singular or plural
+                    ("your", Gender::Unknown, Number::Unknown),
+                    ("yours", Gender::Unknown, Number::Unknown),
+                    ("yourself", Gender::Unknown, Number::Singular),
+                    ("yourselves", Gender::Unknown, Number::Plural),
+                    // Neopronouns: ze/hir set
+                    ("ze", Gender::Unknown, Number::Singular),
+                    ("hir", Gender::Unknown, Number::Singular),
+                    ("hirs", Gender::Unknown, Number::Singular),
+                    ("hirself", Gender::Unknown, Number::Singular),
+                    // Neopronouns: xe/xem set
+                    ("xe", Gender::Unknown, Number::Singular),
+                    ("xem", Gender::Unknown, Number::Singular),
+                    ("xyr", Gender::Unknown, Number::Singular),
+                    ("xyrs", Gender::Unknown, Number::Singular),
+                    ("xemself", Gender::Unknown, Number::Singular),
+                    // Neopronouns: e/em (Spivak) set
+                    ("ey", Gender::Unknown, Number::Singular), // Also spelled "e"
+                    ("em", Gender::Unknown, Number::Singular),
+                    ("eir", Gender::Unknown, Number::Singular),
+                    ("eirs", Gender::Unknown, Number::Singular),
+                    ("emself", Gender::Unknown, Number::Singular),
+                    // Neopronouns: fae/faer set
+                    ("fae", Gender::Unknown, Number::Singular),
+                    ("faer", Gender::Unknown, Number::Singular),
+                    ("faers", Gender::Unknown, Number::Singular),
+                    ("faerself", Gender::Unknown, Number::Singular),
+                    // Demonstrative pronouns
+                    ("this", Gender::Unknown, Number::Singular),
+                    ("that", Gender::Unknown, Number::Singular),
+                    ("these", Gender::Unknown, Number::Plural),
+                    ("those", Gender::Unknown, Number::Plural),
+                    // Indefinite pronouns
+                    ("someone", Gender::Unknown, Number::Singular),
+                    ("somebody", Gender::Unknown, Number::Singular),
+                    ("anyone", Gender::Unknown, Number::Singular),
+                    ("anybody", Gender::Unknown, Number::Singular),
+                    ("everyone", Gender::Unknown, Number::Singular), // Grammatically singular
+                    ("everybody", Gender::Unknown, Number::Singular),
+                    ("no one", Gender::Unknown, Number::Singular),
+                    ("nobody", Gender::Unknown, Number::Singular),
+                    // Impersonal "one"
+                    ("one", Gender::Unknown, Number::Singular),
+                    ("oneself", Gender::Unknown, Number::Singular),
+                    // Interrogative/relative pronouns
+                    ("who", Gender::Unknown, Number::Unknown),
+                    ("whom", Gender::Unknown, Number::Unknown),
+                    ("whose", Gender::Unknown, Number::Unknown),
+                    ("which", Gender::Unknown, Number::Unknown),
+                    // Reciprocal pronouns
+                    ("each other", Gender::Unknown, Number::Plural),
+                    ("one another", Gender::Unknown, Number::Plural),
+                ]
+            }
+        }
+    }
+
     /// Detect mentions using NER or heuristics.
     fn detect_mentions(&self, text: &str) -> Result<Vec<RankedMention>> {
         let mut mentions = Vec::new();
@@ -1467,99 +1714,9 @@ impl MentionRankingCoref {
         // Neopronouns (ze/hir, xe/xem, e/em Spivak, etc.) are third-person singular
         // pronouns used for gender-neutral or nonbinary reference. They behave
         // grammatically as singular and use Gender::Unknown since they explicitly
-        // do not encode binary gender.
-        let pronoun_patterns = [
-            // Traditional pronouns
-            ("he", Gender::Masculine, Number::Singular),
-            ("she", Gender::Feminine, Number::Singular),
-            ("it", Gender::Neutral, Number::Singular),
-            ("they", Gender::Unknown, Number::Unknown), // Singular or plural
-            ("him", Gender::Masculine, Number::Singular),
-            ("her", Gender::Feminine, Number::Singular),
-            ("them", Gender::Unknown, Number::Unknown), // Singular or plural
-            ("his", Gender::Masculine, Number::Singular),
-            ("hers", Gender::Feminine, Number::Singular),
-            ("its", Gender::Neutral, Number::Singular),
-            ("their", Gender::Unknown, Number::Unknown), // Singular or plural
-            ("theirs", Gender::Unknown, Number::Unknown),
-            ("themself", Gender::Unknown, Number::Singular), // Explicitly singular
-            ("themselves", Gender::Unknown, Number::Plural), // Explicitly plural
-            // Third-person reflexives (Binding Theory Principle A: must be locally bound)
-            ("himself", Gender::Masculine, Number::Singular),
-            ("herself", Gender::Feminine, Number::Singular),
-            ("itself", Gender::Neutral, Number::Singular),
-            // First-person pronouns
-            ("i", Gender::Unknown, Number::Singular),
-            ("me", Gender::Unknown, Number::Singular),
-            ("my", Gender::Unknown, Number::Singular),
-            ("mine", Gender::Unknown, Number::Singular),
-            ("myself", Gender::Unknown, Number::Singular),
-            ("we", Gender::Unknown, Number::Plural),
-            ("us", Gender::Unknown, Number::Plural),
-            ("our", Gender::Unknown, Number::Plural),
-            ("ours", Gender::Unknown, Number::Plural),
-            ("ourselves", Gender::Unknown, Number::Plural),
-            ("you", Gender::Unknown, Number::Unknown), // Singular or plural
-            ("your", Gender::Unknown, Number::Unknown),
-            ("yours", Gender::Unknown, Number::Unknown),
-            ("yourself", Gender::Unknown, Number::Singular),
-            ("yourselves", Gender::Unknown, Number::Plural),
-            // Neopronouns: ze/hir set (common)
-            ("ze", Gender::Unknown, Number::Singular),
-            ("hir", Gender::Unknown, Number::Singular),
-            ("hirs", Gender::Unknown, Number::Singular),
-            ("hirself", Gender::Unknown, Number::Singular),
-            // Neopronouns: xe/xem set
-            ("xe", Gender::Unknown, Number::Singular),
-            ("xem", Gender::Unknown, Number::Singular),
-            ("xyr", Gender::Unknown, Number::Singular),
-            ("xyrs", Gender::Unknown, Number::Singular),
-            ("xemself", Gender::Unknown, Number::Singular),
-            // Neopronouns: e/em (Spivak) set
-            ("ey", Gender::Unknown, Number::Singular), // Also spelled "e"
-            ("em", Gender::Unknown, Number::Singular),
-            ("eir", Gender::Unknown, Number::Singular),
-            ("eirs", Gender::Unknown, Number::Singular),
-            ("emself", Gender::Unknown, Number::Singular),
-            // Neopronouns: fae/faer set (noun-derived)
-            ("fae", Gender::Unknown, Number::Singular),
-            ("faer", Gender::Unknown, Number::Singular),
-            ("faers", Gender::Unknown, Number::Singular),
-            ("faerself", Gender::Unknown, Number::Singular),
-            // Demonstrative pronouns (can refer to entities or discourse)
-            // Note: "this"/"that" often create discourse deixis (referring to
-            // entire clauses/events), not just entity coreference. We include
-            // them as candidates but the scorer should handle compatibility.
-            ("this", Gender::Unknown, Number::Singular),
-            ("that", Gender::Unknown, Number::Singular),
-            ("these", Gender::Unknown, Number::Plural),
-            ("those", Gender::Unknown, Number::Plural),
-            // Indefinite pronouns (introduce new entities or refer back)
-            // These are tricky: "someone" usually introduces a new entity,
-            // but can corefer in specific contexts. Number::Singular for
-            // grammatical agreement; gender is unknown.
-            ("someone", Gender::Unknown, Number::Singular),
-            ("somebody", Gender::Unknown, Number::Singular),
-            ("anyone", Gender::Unknown, Number::Singular),
-            ("anybody", Gender::Unknown, Number::Singular),
-            ("everyone", Gender::Unknown, Number::Singular), // Grammatically singular
-            ("everybody", Gender::Unknown, Number::Singular),
-            ("no one", Gender::Unknown, Number::Singular),
-            ("nobody", Gender::Unknown, Number::Singular),
-            // Impersonal "one" (generic reference, not specific entity)
-            // Similar to generic "you" - refers to people in general
-            ("one", Gender::Unknown, Number::Singular),
-            ("oneself", Gender::Unknown, Number::Singular),
-            // Interrogative/relative pronouns (when used anaphorically)
-            ("who", Gender::Unknown, Number::Unknown),
-            ("whom", Gender::Unknown, Number::Unknown),
-            ("whose", Gender::Unknown, Number::Unknown),
-            ("which", Gender::Unknown, Number::Unknown),
-            // Reciprocal pronouns (Binding Theory: like reflexives, locally bound)
-            // "John and Mary saw each other" - must have plural antecedent
-            ("each other", Gender::Unknown, Number::Plural),
-            ("one another", Gender::Unknown, Number::Plural),
-        ];
+        // Get language-specific pronoun patterns
+        // Use language from config, fallback to English
+        let pronoun_patterns = self.get_pronoun_patterns();
 
         // =========================================================================
         // KNOWN GAPS / FUTURE WORK (documented for linguistic completeness):

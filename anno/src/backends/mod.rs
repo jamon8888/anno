@@ -137,11 +137,13 @@ pub mod box_embeddings_training;
 pub mod catalog;
 pub mod crf;
 pub mod encoder;
+pub mod event_extractor;
 pub mod extractor;
 pub mod heuristic;
 pub mod inference;
 /// Label prompt normalization for zero-shot NER systems.
 pub mod label_prompt;
+pub mod lexicon;
 pub mod nuner;
 pub mod pattern_config;
 pub mod regex;
@@ -178,6 +180,14 @@ pub mod middleware;
 /// Iterator-based API for processing large documents in chunks,
 /// with backpressure support and boundary handling.
 pub mod streaming;
+
+/// Semantic chunking for text segmentation.
+///
+/// Splits text into semantically coherent chunks based on embedding similarity,
+/// preserving topic boundaries and entity context. Useful for long documents,
+/// coreference resolution, and entity linking.
+#[cfg(feature = "semantic-chunking")]
+pub mod semantic_chunking;
 
 // Burn ML framework (training + inference)
 #[cfg(feature = "burn")]
@@ -248,8 +258,10 @@ pub mod mention_ranking;
 pub use bilstm_crf::BiLstmCrfNER;
 pub use crf::CrfNER;
 pub use ensemble::EnsembleNER;
+pub use event_extractor::{Event, EventExtractor, RuleBasedEventExtractor};
 pub use extractor::{BackendType, NERExtractor};
 pub use heuristic::HeuristicNER;
+pub use lexicon::LexiconNER;
 pub use nuner::NuNER;
 pub use regex::RegexNER;
 pub use router::AutoNER;

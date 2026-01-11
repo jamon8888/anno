@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
 """
 Comprehensive, resumable evaluation across all backends × datasets.
 
 Usage:
-    python3 scripts/eval_comprehensive.py [--resume] [--max-examples 50]
+    uv run scripts/eval_comprehensive.py [--resume] [--max-examples 50]
     
 Features:
 - Incremental JSONL output (resumable)

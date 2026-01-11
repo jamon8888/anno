@@ -263,6 +263,7 @@ pub mod advanced_harness;
 pub mod analysis;
 pub mod backend_eval;
 pub mod backend_factory;
+pub mod baseline;
 pub mod benchmark;
 pub mod bio_adapter;
 pub mod book_scale;
@@ -281,6 +282,7 @@ pub mod discontinuous;
 pub mod discourse_deixis;
 pub mod evaluator;
 pub mod harness;
+pub mod history;
 pub mod incremental_coref;
 pub mod inter_doc_coref;
 pub mod loader;
@@ -381,6 +383,7 @@ pub use datasets::{GoldEntity, GroundTruthEntity};
 //
 // Use `LoadableDatasetId` + `DatasetLoader` when you want to actually load data.
 // Use `RegistryDatasetId` when browsing/filtering the full catalog by metadata.
+pub use baseline::BaselinePerformance;
 pub use dataset_registry::{AnnotationScheme, DataFormat, DatasetId as RegistryDatasetId};
 pub use datasets::DatasetMetadata;
 pub use loader::{DatasetLoader, LoadableDatasetId, LoadedDataset};

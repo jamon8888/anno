@@ -484,3 +484,164 @@ fn test_task_evaluator_cache_stats_by_backend() {
     assert_eq!(stats.by_backend.get("nuner"), Some(&3));
     assert_eq!(stats.by_backend.get("gliner"), Some(&2));
 }
+
+// =============================================================================
+// Error Handling & Robustness
+// =============================================================================
+
+#[test]
+fn test_corrupted_cache_file_handling() {
+    let temp = TempDir::new().expect("failed to create temp dir");
+    let cache_file = temp.path().join("predictions.jsonl");
+
+    // Create a cache file with some valid and invalid entries
+    use std::fs::File;
+    use std::io::Write;
+    let mut file = File::create(&cache_file).expect("failed to create cache file");
+
+    // Valid entry
+    writeln!(
+        file,
+        r#"{{"text_hash":"abc123","backend":"test","version":"1.0","labels":["PER"],"predictions":[],"timestamp":"2024-01-01T00:00:00Z","inference_ms":50}}"#
+    )
+    .expect("write failed");
+
+    // Invalid JSON (malformed)
+    writeln!(file, r#"{{"invalid": json}}"#).expect("write failed");
+
+    // Valid entry
+    writeln!(
+        file,
+        r#"{{"text_hash":"def456","backend":"test","version":"1.0","labels":["ORG"],"predictions":[],"timestamp":"2024-01-01T00:00:01Z","inference_ms":60}}"#
+    )
+    .expect("write failed");
+
+    // Empty line (should be skipped)
+    writeln!(file).expect("write failed");
+
+    // Invalid entry (missing required fields)
+    writeln!(file, r#"{{"text_hash":"ghi789"}}"#).expect("write failed");
+
+    drop(file);
+
+    // Load cache - should skip invalid entries but load valid ones
+    let cache = PredictionCache::new(temp.path()).expect("failed to load cache");
+    // Should have loaded 2 valid entries
+    assert_eq!(
+        cache.len(),
+        2,
+        "should load valid entries and skip invalid ones"
+    );
+}
+
+#[test]
+fn test_cache_handles_missing_directory_gracefully() {
+    let temp = TempDir::new().expect("failed to create temp dir");
+    let nonexistent = temp.path().join("nonexistent").join("subdir");
+
+    // Should create directory structure and return empty cache
+    let cache = PredictionCache::load_or_create(&nonexistent);
+    assert!(cache.is_empty());
+    assert!(
+        nonexistent.exists(),
+        "should create the directory structure"
+    );
+}
+
+#[test]
+fn test_cache_key_consistency_across_instances() {
+    let temp = TempDir::new().expect("failed to create temp dir");
+
+    let text = "Consistent key test";
+    let backend = "test-backend";
+    let version = "1.0";
+    let labels = &["PER", "ORG"];
+
+    // Generate key in first instance
+    let key1 = PredictionCache::cache_key(text, backend, version, labels);
+
+    // Generate key in second instance (should be identical)
+    let key2 = PredictionCache::cache_key(text, backend, version, labels);
+
+    assert_eq!(key1, key2, "cache keys should be deterministic");
+
+    // Test that label order doesn't matter
+    let key3 = PredictionCache::cache_key(text, backend, version, &["ORG", "PER"]);
+    assert_eq!(
+        key1, key3,
+        "cache keys should be order-independent for labels"
+    );
+}
+
+#[test]
+fn test_cache_key_case_insensitive_backend() {
+    let text = "Test text";
+    let labels = &["PER"];
+
+    let key1 = PredictionCache::cache_key(text, "GLiNER", "1.0", labels);
+    let key2 = PredictionCache::cache_key(text, "gliner", "1.0", labels);
+    let key3 = PredictionCache::cache_key(text, "Gliner", "1.0", labels);
+
+    assert_eq!(key1, key2, "backend names should be case-insensitive");
+    assert_eq!(key2, key3, "backend names should be case-insensitive");
+}
+
+#[test]
+fn test_cache_store_idempotent() {
+    let temp = TempDir::new().expect("failed to create temp dir");
+    let cache = PredictionCache::new(temp.path()).expect("failed to create cache");
+
+    let text = "Idempotent test";
+    let entities = vec![make_entity("Test", "PER", 0, 4)];
+
+    // Store same prediction multiple times
+    let key1 = cache
+        .store(text, "backend", "1.0", &["PER"], &entities, 50)
+        .expect("store failed");
+    let key2 = cache
+        .store(text, "backend", "1.0", &["PER"], &entities, 50)
+        .expect("store failed");
+    let key3 = cache
+        .store(text, "backend", "1.0", &["PER"], &entities, 50)
+        .expect("store failed");
+
+    // Keys should be identical
+    assert_eq!(key1, key2);
+    assert_eq!(key2, key3);
+
+    // Cache should only have one entry
+    assert_eq!(
+        cache.len(),
+        1,
+        "duplicate stores should not create duplicate entries"
+    );
+}
+
+#[test]
+fn test_cache_clear_preserves_directory() {
+    let temp = TempDir::new().expect("failed to create temp dir");
+    let cache = PredictionCache::new(temp.path()).expect("failed to create cache");
+
+    // Store some entries
+    for i in 0..5 {
+        let text = format!("Text {}", i);
+        let entities = vec![make_entity(&format!("E{}", i), "PER", 0, 1)];
+        cache
+            .store(&text, "backend", "1.0", &["PER"], &entities, 50)
+            .expect("store failed");
+    }
+
+    assert_eq!(cache.len(), 5);
+    assert!(temp.path().join("predictions.jsonl").exists());
+
+    // Clear cache
+    cache.clear().expect("clear failed");
+
+    // Directory should still exist, but file should be gone
+    assert!(temp.path().exists(), "cache directory should be preserved");
+    assert!(
+        !temp.path().join("predictions.jsonl").exists(),
+        "cache file should be removed"
+    );
+    assert_eq!(cache.len(), 0, "cache should be empty after clear");
+}

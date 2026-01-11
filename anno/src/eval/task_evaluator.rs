@@ -298,6 +298,8 @@ pub struct TaskEvaluator {
     /// Key: (text_hash, backend, labels_hash, version)
     /// Value: Vec<Entity> predictions
     prediction_cache: super::prediction_cache::PredictionCache,
+    /// Evaluation history tracker (optional, for persistent result storage)
+    history: Option<super::history::EvalHistory>,
 }
 
 impl TaskEvaluator {
@@ -315,11 +317,28 @@ impl TaskEvaluator {
         let prediction_cache =
             super::prediction_cache::PredictionCache::load_or_create(&cache_path);
 
+        // Initialize evaluation history if path is specified
+        let history = std::env::var("ANNO_EVAL_HISTORY")
+            .map(std::path::PathBuf::from)
+            .or_else(|_| {
+                dirs::cache_dir()
+                    .ok_or_else(|| std::io::Error::other("no cache dir"))
+                    .map(|d| d.join("anno").join("eval-results.jsonl"))
+            })
+            .and_then(|path| {
+                super::history::EvalHistory::new(path).map_err(|e| {
+                    log::warn!("Failed to initialize eval history: {}", e);
+                    e
+                })
+            })
+            .ok();
+
         Ok(Self {
             loader: DatasetLoader::new()?,
             mapping: TaskMapping::build(),
             per_example_scores_cache: Mutex::new(None),
             prediction_cache,
+            history,
         })
     }
 
@@ -327,14 +346,32 @@ impl TaskEvaluator {
     ///
     /// Useful for testing with isolated caches.
     pub fn with_cache_dir(cache_dir: impl AsRef<std::path::Path>) -> Result<Self> {
-        let prediction_cache =
-            super::prediction_cache::PredictionCache::load_or_create(cache_dir.as_ref());
+        let cache_path = cache_dir.as_ref();
+        let prediction_cache = super::prediction_cache::PredictionCache::load_or_create(cache_path);
+
+        // Use same directory for history if cache_dir is provided
+        // If cache_dir is a file, use its parent; if it's a dir, use it directly
+        let history_path = if cache_path.is_file() {
+            cache_path
+                .parent()
+                .map(|p| p.join("eval-results.jsonl"))
+                .unwrap_or_else(|| cache_path.with_file_name("eval-results.jsonl"))
+        } else {
+            cache_path.join("eval-results.jsonl")
+        };
+        let history = super::history::EvalHistory::new(&history_path)
+            .map_err(|e| {
+                log::warn!("Failed to initialize eval history: {}", e);
+                e
+            })
+            .ok();
 
         Ok(Self {
             loader: DatasetLoader::new()?,
             mapping: TaskMapping::build(),
             per_example_scores_cache: Mutex::new(None),
             prediction_cache,
+            history,
         })
     }
 
@@ -594,16 +631,46 @@ impl TaskEvaluator {
                 };
 
                 // Further filter by dataset-level compatibility (entity types, etc.).
-                // This avoids attempting combinations that are guaranteed to fail, and it
-                // prevents pointless downloads when `require_cached=false`.
-                let backends: Vec<String> = backends
-                    .into_iter()
-                    .filter(|b| Self::is_backend_compatible(b, *dataset))
-                    .collect();
+                // Track incompatible backends for better error reporting.
+                let (compatible_backends, incompatible_backends): (Vec<String>, Vec<String>) =
+                    backends
+                        .into_iter()
+                        .partition(|b| Self::is_backend_compatible(b, *dataset));
 
-                if backends.is_empty() {
+                // Add incompatible backends as results with clear error message
+                for backend_name in &incompatible_backends {
+                    if !backends_tested.contains(backend_name) {
+                        backends_tested.push(backend_name.clone());
+                    }
+                    let dataset_entity_types = dataset.entity_types();
+                    results.push(TaskEvalResult {
+                        task: *task,
+                        dataset: *dataset,
+                        backend: backend_name.to_string(),
+                        success: false,
+                        error: Some(format!(
+                            "incompatible: backend '{}' doesn't support dataset entity types: {:?}",
+                            backend_name, dataset_entity_types
+                        )),
+                        metrics: HashMap::new(),
+                        num_examples: 0,
+                        duration_ms: None,
+                        label_shift: None,
+                        #[cfg(feature = "eval-advanced")]
+                        robustness: None,
+                        #[cfg(not(feature = "eval-advanced"))]
+                        robustness: None,
+                        stratified: None,
+                        confidence_intervals: None,
+                        kb_version: None,
+                    });
+                }
+
+                if compatible_backends.is_empty() {
                     continue;
                 }
+
+                let backends = compatible_backends;
 
                 // Load dataset once per dataset id and reuse across backends.
                 if !dataset_cache.contains_key(dataset) {
@@ -726,6 +793,20 @@ impl TaskEvaluator {
 
         #[cfg(feature = "eval-profiling")]
         profiling::print_summary();
+
+        // Store results in history if available
+        // Extract seed from config to include in history entries
+        let seed = config.seed.unwrap_or(42);
+        if let Some(ref history) = self.history {
+            for result in &results {
+                // Create entry with seed from config
+                let mut entry = super::history::EvalHistoryEntry::from(result);
+                entry.seed = seed;
+                if let Err(e) = history.append_entry(&entry) {
+                    log::warn!("Failed to store result in history: {}", e);
+                }
+            }
+        }
 
         Ok(ComprehensiveEvalResults { results, summary })
     }
@@ -962,38 +1043,38 @@ impl TaskEvaluator {
                     } else {
                         let t0 = Instant::now();
                         let result = if is_zero_shot_flag && !mapped_labels_arc.is_empty() {
-                            THREAD_CACHED_BACKEND.with(|cache| {
-                                let mut cached = cache.borrow_mut();
-                                // Check if we have a cached backend for this backend_name (case-insensitive)
-                                let backend_name_lower = backend_name_arc.as_str().to_lowercase();
-                                if let Some((ref cached_name, ref _creation_name, ref backend)) = *cached {
-                                    if cached_name.to_lowercase() == backend_name_lower {
-                                        // Use cached backend - no downcast needed, enum is type-safe
-                                        return Self::extract_with_cached_backend(
-                                            backend,
-                                            &text,
-                                            &mapped_labels_arc
-                                        );
-                                    }
+                        THREAD_CACHED_BACKEND.with(|cache| {
+                            let mut cached = cache.borrow_mut();
+                            // Check if we have a cached backend for this backend_name (case-insensitive)
+                            let backend_name_lower = backend_name_arc.as_str().to_lowercase();
+                            if let Some((ref cached_name, ref _creation_name, ref backend)) = *cached {
+                                if cached_name.to_lowercase() == backend_name_lower {
+                                    // Use cached backend - no downcast needed, enum is type-safe
+                                    return Self::extract_with_cached_backend(
+                                        backend,
+                                        &text,
+                                        &mapped_labels_arc
+                                    );
                                 }
-                                // Create and cache new backend for this thread
-                                let creation_name = backend_name_arc.as_str().to_string();
-                                match Self::create_zero_shot_backend(backend_name_arc.as_str()) {
-                                    Ok(new_backend) => {
-                                        let result = Self::extract_with_cached_backend(
-                                            &new_backend,
-                                            &text,
-                                            &mapped_labels_arc
-                                        );
-                                        // Store normalized (lowercase) name for matching, and creation name for reference
-                                        *cached = Some((backend_name_lower, creation_name, new_backend));
-                                        result
-                                    }
-                                    Err(e) => Err(e),
+                            }
+                            // Create and cache new backend for this thread
+                            let creation_name = backend_name_arc.as_str().to_string();
+                            match Self::create_zero_shot_backend(backend_name_arc.as_str()) {
+                                Ok(new_backend) => {
+                                    let result = Self::extract_with_cached_backend(
+                                        &new_backend,
+                                        &text,
+                                        &mapped_labels_arc
+                                    );
+                                    // Store normalized (lowercase) name for matching, and creation name for reference
+                                    *cached = Some((backend_name_lower, creation_name, new_backend));
+                                    result
                                 }
-                            })
-                        } else {
-                            backend.extract_entities(&text, None)
+                                Err(e) => Err(e),
+                            }
+                        })
+                    } else {
+                        backend.extract_entities(&text, None)
                         };
 
                         // Store in cache on success
@@ -2457,6 +2538,9 @@ impl ComprehensiveEvalResults {
         md.push_str("- `stacked`: Combines pattern+heuristic, supports structured entities (date/time/money/etc) and named entities (PER/ORG/LOC), but not biomedical types\n");
         md.push_str("- `pattern`: Only structured entities (date, time, money, percent, email, URL, phone)\n");
         md.push_str("- `heuristic`: Only named entities (Person, Organization, Location)\n");
+        md.push_str("- `incompatible`: Backend doesn't support dataset entity types (expected for non-zero-shot backends on fine-grained datasets)\n");
+        md.push_str("- `load-failed`: Dataset failed to download/load (HuggingFace API errors, network issues, etc.)\n");
+        md.push_str("- `empty-dataset`: Dataset loaded but contains no sentences\n");
         md.push_str("- `0.0 F1` with N>0: Backend doesn't support dataset entity types\n");
         md.push_str("- `N=0` or `N=1`: Dataset parsing issue or insufficient data\n\n");
 
@@ -2783,11 +2867,33 @@ impl ComprehensiveEvalResults {
                             .error
                             .as_ref()
                             .map(|e| {
-                                // Extract key error info
-                                if e.contains("Unknown backend") {
+                                // Categorize errors for better debugging
+                                if e.starts_with("incompatible:") {
+                                    "incompatible".to_string()
+                                } else if e.contains("Unknown backend")
+                                    || e.contains("unknown backend")
+                                {
                                     "unknown-backend".to_string()
-                                } else if e.contains("Failed to load") {
+                                } else if e.contains("Failed to load")
+                                    || e.contains("422")
+                                    || e.contains("HuggingFace")
+                                    || e.contains("API")
+                                {
                                     "load-failed".to_string()
+                                } else if e.contains("empty") || e.contains("no sentences") {
+                                    "empty-dataset".to_string()
+                                } else if e.contains("ONNX") || e.contains("onnx") {
+                                    "onnx-error".to_string()
+                                } else if e.contains("model")
+                                    && (e.contains("not found") || e.contains("download"))
+                                {
+                                    "model-load-failed".to_string()
+                                } else if e.contains("timeout") || e.contains("timed out") {
+                                    "timeout".to_string()
+                                } else if e.contains("not available")
+                                    || e.contains("FeatureNotAvailable")
+                                {
+                                    "not-available".to_string()
                                 } else if e.len() > 30 {
                                     e.chars().take(30).collect::<String>() + "..."
                                 } else {
