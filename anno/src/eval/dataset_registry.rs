@@ -345,6 +345,7 @@ macro_rules! define_datasets {
             )*
         }
 
+        #[allow(clippy::too_many_lines, clippy::type_complexity, clippy::cognitive_complexity)]
         impl DatasetId {
             /// Get the download URL for this dataset.
             #[must_use]
@@ -1141,6 +1142,12 @@ pub use optional_field_num;
 // - speech: Audio/speech NER
 // - long_document: Long-document (>10k tokens) processing
 
+// Generated code section - allow clippy lints that are expensive on large files
+#[allow(
+    clippy::too_many_lines,
+    clippy::type_complexity,
+    clippy::cognitive_complexity
+)]
 define_datasets! {
     // =========================================================================
     // Core NER Datasets
