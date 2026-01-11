@@ -48,8 +48,16 @@ elif command -v timeout >/dev/null 2>&1; then
     # Use timeout if available (Linux/macOS with coreutils)
     # Reduced timeout to 60s - if it takes longer, it's likely stuck
     # Use --no-deps to skip dependency checking (faster) and limit to lib code
-    CLIPPY_OUTPUT=$(timeout 60 cargo clippy --workspace --lib --features "eval-advanced discourse" --no-deps -- -D warnings 2>&1) || {
+    # Capture output to temp file for better error handling
+    CLIPPY_TMP=$(mktemp /tmp/clippy_output.XXXXXX)
+    if timeout 60 cargo clippy --workspace --lib --features "eval-advanced discourse" --no-deps -- -D warnings > "$CLIPPY_TMP" 2>&1; then
+        echo "ok"
+        rm -f "$CLIPPY_TMP"
+    else
         EXIT_CODE=$?
+        CLIPPY_OUTPUT=$(cat "$CLIPPY_TMP" 2>/dev/null || echo "")
+        rm -f "$CLIPPY_TMP"
+        
         if [ $EXIT_CODE -eq 124 ]; then
             echo "TIMEOUT"
             echo ""
@@ -61,13 +69,16 @@ elif command -v timeout >/dev/null 2>&1; then
             echo "FAILED"
             echo ""
             echo "error: clippy found issues:"
-            echo "$CLIPPY_OUTPUT"
+            echo "$CLIPPY_OUTPUT" | head -50
+            if [ $(echo "$CLIPPY_OUTPUT" | wc -l) -gt 50 ]; then
+                echo ""
+                echo "... (showing first 50 lines, run clippy manually for full output)"
+            fi
             echo ""
             echo "  run: cargo clippy --workspace --lib --features 'eval-advanced discourse' -- -D warnings"
             exit 1
         fi
-    }
-    echo "ok"
+    fi
 else
     # Fallback: no timeout (macOS without coreutils)
     # Skip clippy if no timeout available to avoid hanging
@@ -118,7 +129,12 @@ fi
 echo ""
 if [ $WARNINGS -gt 0 ]; then
     echo "pre-push: passed with $WARNINGS warning(s)"
+    echo ""
+    echo "Note: Some checks were skipped or had warnings. Review above for details."
+    if [ "${ANNO_SKIP_CLIPPY:-}" != "1" ] && command -v timeout >/dev/null 2>&1; then
+        echo "To skip clippy next time: ANNO_SKIP_CLIPPY=1 git push"
+    fi
 else
-    echo "pre-push: passed"
+    echo "pre-push: all checks passed ✓"
 fi
 exit 0
