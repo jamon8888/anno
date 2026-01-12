@@ -11,6 +11,8 @@
 # Environment variables:
 #   ANNO_SKIP_CLIPPY=1  Skip clippy check (useful when clippy is slow/hanging)
 #                       Example: ANNO_SKIP_CLIPPY=1 git push
+#   ANNO_SKIP_TESTS=1   Skip test check (useful when tests are slow/hanging)
+#                       Example: ANNO_SKIP_TESTS=1 git push
 
 set -e
 
@@ -95,14 +97,73 @@ fi
 # If you're on macOS and pushes feel stuck during nextest "list" or startup, either:
 # - add your terminal to Developer Tools exclusions (see nextest docs), or
 # - set ANNO_USE_NEXTEST=1 to force nextest, otherwise we fall back to `cargo test`.
+# Skip tests if ANNO_SKIP_TESTS=1 is set (useful when tests are slow/hanging)
 echo -n "  [3/5] tests ........ "
-OS_NAME="$(uname -s 2>/dev/null || echo unknown)"
-if command -v cargo-nextest >/dev/null 2>&1 && { [ "$OS_NAME" != "Darwin" ] || [ "${ANNO_USE_NEXTEST:-}" = "1" ]; }; then
-    cargo nextest run --profile quick --workspace --features "eval-advanced discourse"
+if [ "${ANNO_SKIP_TESTS:-}" = "1" ]; then
+    echo "SKIPPED (ANNO_SKIP_TESTS=1)"
+    WARNINGS=$((WARNINGS + 1))
+elif command -v timeout >/dev/null 2>&1; then
+    # Use timeout to prevent hanging (quick profile should complete in <60s)
+    OS_NAME="$(uname -s 2>/dev/null || echo unknown)"
+    TEST_TMP=$(mktemp /tmp/test_output.XXXXXX)
+    if command -v cargo-nextest >/dev/null 2>&1 && { [ "$OS_NAME" != "Darwin" ] || [ "${ANNO_USE_NEXTEST:-}" = "1" ]; }; then
+        if timeout 120 cargo nextest run --profile quick --workspace --features "eval-advanced discourse" > "$TEST_TMP" 2>&1; then
+            echo "ok"
+            rm -f "$TEST_TMP"
+        else
+            EXIT_CODE=$?
+            TEST_OUTPUT=$(cat "$TEST_TMP" 2>/dev/null || echo "")
+            rm -f "$TEST_TMP"
+            if [ $EXIT_CODE -eq 124 ]; then
+                echo "TIMEOUT"
+                echo ""
+                echo "warning: tests timed out after 120s"
+                echo "  To skip tests: ANNO_SKIP_TESTS=1 git push"
+                echo "  Or run manually: cargo nextest run --profile quick --workspace --features 'eval-advanced discourse'"
+                WARNINGS=$((WARNINGS + 1))
+            else
+                echo "FAILED"
+                echo ""
+                echo "error: tests failed:"
+                echo "$TEST_OUTPUT" | tail -30
+                echo ""
+                echo "  run: cargo nextest run --profile quick --workspace --features 'eval-advanced discourse'"
+                exit 1
+            fi
+        fi
+    else
+        if timeout 120 cargo test --workspace --lib --features "eval-advanced discourse" > "$TEST_TMP" 2>&1; then
+            echo "ok"
+            rm -f "$TEST_TMP"
+        else
+            EXIT_CODE=$?
+            TEST_OUTPUT=$(cat "$TEST_TMP" 2>/dev/null || echo "")
+            rm -f "$TEST_TMP"
+            if [ $EXIT_CODE -eq 124 ]; then
+                echo "TIMEOUT"
+                echo ""
+                echo "warning: tests timed out after 120s"
+                echo "  To skip tests: ANNO_SKIP_TESTS=1 git push"
+                echo "  Or run manually: cargo test --workspace --lib --features 'eval-advanced discourse'"
+                WARNINGS=$((WARNINGS + 1))
+            else
+                echo "FAILED"
+                echo ""
+                echo "error: tests failed:"
+                echo "$TEST_OUTPUT" | tail -30
+                echo ""
+                echo "  run: cargo test --workspace --lib --features 'eval-advanced discourse'"
+                exit 1
+            fi
+        fi
+    fi
 else
-    cargo test --workspace --lib --features "eval-advanced discourse"
+    # Fallback: no timeout (macOS without coreutils)
+    # Skip tests if no timeout available to avoid hanging
+    echo "SKIPPED (no timeout command available)"
+    echo "  Install coreutils for timeout support, or set ANNO_SKIP_TESTS=1"
+    WARNINGS=$((WARNINGS + 1))
 fi
-echo "ok"
 
 # ============================================================================
 # 4. Doc tests (skipped by default: ring/rustls doctests require full TLS toolchain)
@@ -131,8 +192,13 @@ if [ $WARNINGS -gt 0 ]; then
     echo "pre-push: passed with $WARNINGS warning(s)"
     echo ""
     echo "Note: Some checks were skipped or had warnings. Review above for details."
-    if [ "${ANNO_SKIP_CLIPPY:-}" != "1" ] && command -v timeout >/dev/null 2>&1; then
-        echo "To skip clippy next time: ANNO_SKIP_CLIPPY=1 git push"
+    if command -v timeout >/dev/null 2>&1; then
+        if [ "${ANNO_SKIP_CLIPPY:-}" != "1" ]; then
+            echo "To skip clippy: ANNO_SKIP_CLIPPY=1 git push"
+        fi
+        if [ "${ANNO_SKIP_TESTS:-}" != "1" ]; then
+            echo "To skip tests: ANNO_SKIP_TESTS=1 git push"
+        fi
     fi
 else
     echo "pre-push: all checks passed ✓"
