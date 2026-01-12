@@ -19,10 +19,16 @@ ANNO_SKIP_CLIPPY=1 git push
 ### 2. Reduced Timeout
 - Changed from 180s to 60s
 - If clippy takes longer than 60s, it's likely stuck and will timeout gracefully
+- Timeout is non-fatal (warning only) to avoid blocking pushes
 
 ### 3. Skip if No Timeout Available
 - If `timeout` command is not available, skip clippy to avoid hanging
 - Warns user to install coreutils or use skip flag
+
+### 4. Better Error Handling
+- Truncates clippy output to first 50 lines (prevents spam)
+- Uses `mktemp` for safer temporary file handling
+- Improved summary messages with helpful hints
 
 ## Usage
 
