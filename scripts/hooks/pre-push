@@ -16,11 +16,21 @@
 
 set -e
 
+# Track timing for performance monitoring
+START_TIME=$(date +%s 2>/dev/null || echo 0)
+
 echo "pre-push: running checks..."
 echo ""
 
 # Track warnings
 WARNINGS=0
+
+# Check for required tools
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "error: cargo not found in PATH"
+    echo "  Install Rust from: https://rustup.rs/"
+    exit 1
+fi
 
 # ============================================================================
 # 1. Format check (should be clean from pre-commit)
@@ -188,8 +198,26 @@ fi
 # Summary
 # ============================================================================
 echo ""
+END_TIME=$(date +%s 2>/dev/null || echo 0)
+if [ $END_TIME -gt $START_TIME ]; then
+    DURATION=$((END_TIME - START_TIME))
+    if [ $DURATION -gt 60 ]; then
+        MIN=$((DURATION / 60))
+        SEC=$((DURATION % 60))
+        TIME_STR="${MIN}m ${SEC}s"
+    else
+        TIME_STR="${DURATION}s"
+    fi
+else
+    TIME_STR=""
+fi
+
 if [ $WARNINGS -gt 0 ]; then
-    echo "pre-push: passed with $WARNINGS warning(s)"
+    if [ -n "$TIME_STR" ]; then
+        echo "pre-push: passed with $WARNINGS warning(s) (${TIME_STR})"
+    else
+        echo "pre-push: passed with $WARNINGS warning(s)"
+    fi
     echo ""
     echo "Note: Some checks were skipped or had warnings. Review above for details."
     if command -v timeout >/dev/null 2>&1; then
@@ -201,6 +229,10 @@ if [ $WARNINGS -gt 0 ]; then
         fi
     fi
 else
-    echo "pre-push: all checks passed ✓"
+    if [ -n "$TIME_STR" ]; then
+        echo "pre-push: all checks passed ✓ (${TIME_STR})"
+    else
+        echo "pre-push: all checks passed ✓"
+    fi
 fi
 exit 0
