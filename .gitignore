@@ -76,6 +76,9 @@ hack/real_data/
 # Temporary files
 *.tmp
 *.bak
+*.backup
+debug_*
+url_validation_report.json
 .cargo/
 mutants.out*/
 
