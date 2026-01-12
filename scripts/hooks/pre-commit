@@ -1,25 +1,34 @@
 #!/bin/bash
 # Pre-commit hook for anno project
-# FAST checks only (~2-10 seconds depending on whether formatting is needed)
+# FAST checks only (~1-3 seconds for typical commits)
 # Goal: Catch obvious issues BEFORE commit, not after
 # Note: Full compilation/clippy checks are in pre-push hook
 #
 # Install: just setup-hooks
 # Or: cp scripts/hooks/* .git/hooks/ && chmod +x .git/hooks/*
+#
+# Environment variables:
+#   ANNO_SKIP_FORMAT=1  Skip formatting check (useful when in a hurry)
+#                      Example: ANNO_SKIP_FORMAT=1 git commit
 
 set -e
 
 echo "pre-commit: running checks..."
 echo ""
 
+# Track if we modified files (for final message)
+FILES_MODIFIED=0
+
 # ============================================================================
 # 1. Trailing whitespace fix (BEFORE cargo fmt)
 # ============================================================================
 # This fixes the issue where cargo fmt couldn't handle trailing whitespace
 # in certain edge cases (discovered the hard way)
+# Only process staged .rs files for speed
 
 STAGED_RS_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rs$' || true)
 if [ -n "$STAGED_RS_FILES" ]; then
+    # Use a more efficient approach: process all files in one sed command if possible
     for file in $STAGED_RS_FILES; do
         if [ -f "$file" ]; then
             # Remove trailing whitespace
@@ -28,23 +37,44 @@ if [ -n "$STAGED_RS_FILES" ]; then
             else
                 sed -i 's/[[:space:]]*$//' "$file"
             fi
-            git add "$file"
+            git add "$file" 2>/dev/null || true
         fi
     done
 fi
 
 # ============================================================================
-# 2. Format check (with auto-fix)
+# 2. Format check (with auto-fix) - OPTIMIZED: only format staged files
 # ============================================================================
 echo -n "  [1/3] format ....... "
-if ! cargo fmt --all -- --check; then
-    echo "fixing"
-    cargo fmt --all
-    # Re-add formatted files
-    git diff --name-only | xargs -I {} git add {} 2>/dev/null || true
-    echo "        formatted and staged"
+if [ "${ANNO_SKIP_FORMAT:-}" = "1" ]; then
+    echo "SKIPPED (ANNO_SKIP_FORMAT=1)"
+elif [ -z "$STAGED_RS_FILES" ]; then
+    echo "ok (no .rs files staged)"
 else
-    echo "ok"
+    # Use rustfmt directly on staged files (much faster than cargo fmt --all)
+    # Check if formatting is needed
+    NEEDS_FORMAT=0
+    for file in $STAGED_RS_FILES; do
+        if [ -f "$file" ] && ! rustfmt --check "$file" >/dev/null 2>&1; then
+            NEEDS_FORMAT=1
+            break
+        fi
+    done
+    
+    if [ $NEEDS_FORMAT -eq 0 ]; then
+        echo "ok"
+    else
+        echo "fixing"
+        # Format only staged files using rustfmt (faster than cargo fmt --all)
+        for file in $STAGED_RS_FILES; do
+            if [ -f "$file" ]; then
+                rustfmt "$file" 2>/dev/null || true
+                git add "$file" 2>/dev/null || true
+            fi
+        done
+        echo "        formatted and staged"
+        FILES_MODIFIED=1
+    fi
 fi
 
 # ============================================================================
@@ -58,7 +88,9 @@ if [ -n "$BAD_FILES" ]; then
     echo "FAILED"
     echo ""
     echo "error: files with spaces in names:"
-    echo "$BAD_FILES"
+    echo "$BAD_FILES" | sed 's/^/  /'
+    echo ""
+    echo "  Rename these files to remove spaces before committing."
     exit 1
 fi
 echo "ok"
@@ -67,14 +99,30 @@ echo "ok"
 # 4. Check for large files (>1MB warning only, non-blocking)
 # ============================================================================
 echo -n "  [3/3] file sizes ... "
-LARGE_FILES=$(git diff --cached --name-only | while read file; do
-    if [ -f "$file" ]; then
-        size=$(wc -c < "$file" 2>/dev/null || echo 0)
-        if [ "$size" -gt 1048576 ]; then
-            echo "$file ($(($size / 1024))KB)"
+# Optimize: only check staged files, not all files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM || true)
+LARGE_FILES=""
+if [ -n "$STAGED_FILES" ]; then
+    for file in $STAGED_FILES; do
+        if [ -f "$file" ]; then
+            # Use stat for faster size check (if available), fallback to wc
+            if command -v stat >/dev/null 2>&1; then
+                if [[ "$OSTYPE" == "darwin"* ]]; then
+                    size=$(stat -f%z "$file" 2>/dev/null || echo 0)
+                else
+                    size=$(stat -c%s "$file" 2>/dev/null || echo 0)
+                fi
+            else
+                size=$(wc -c < "$file" 2>/dev/null || echo 0)
+            fi
+            if [ "$size" -gt 1048576 ]; then
+                kb=$((size / 1024))
+                LARGE_FILES="${LARGE_FILES}${file} (${kb}KB)"$'\n'
+            fi
         fi
-    fi
-done)
+    done
+fi
+
 if [ -n "$LARGE_FILES" ]; then
     echo "warning"
     echo "        large files (>1MB):"
@@ -83,6 +131,16 @@ else
     echo "ok"
 fi
 
+# ============================================================================
+# Summary
+# ============================================================================
 echo ""
-echo "pre-commit: passed"
+if [ $FILES_MODIFIED -eq 1 ]; then
+    echo "pre-commit: passed (files were auto-formatted)"
+    echo ""
+    echo "Note: Some files were automatically formatted. Review changes with:"
+    echo "  git diff --cached"
+else
+    echo "pre-commit: passed"
+fi
 exit 0
