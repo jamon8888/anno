@@ -10,14 +10,26 @@
 # Environment variables:
 #   ANNO_SKIP_FORMAT=1  Skip formatting check (useful when in a hurry)
 #                      Example: ANNO_SKIP_FORMAT=1 git commit
+#   ANNO_QUICK_CHECK=1  Run quick compilation check (catches syntax errors)
+#                      Example: ANNO_QUICK_CHECK=1 git commit
 
 set -e
+
+# Track timing for performance monitoring
+START_TIME=$(date +%s 2>/dev/null || echo 0)
 
 echo "pre-commit: running checks..."
 echo ""
 
 # Track if we modified files (for final message)
 FILES_MODIFIED=0
+
+# Check for required tools
+if ! command -v rustfmt >/dev/null 2>&1; then
+    echo "error: rustfmt not found in PATH"
+    echo "  Install with: rustup component add rustfmt"
+    exit 1
+fi
 
 # ============================================================================
 # 1. Trailing whitespace fix (BEFORE cargo fmt)
@@ -26,16 +38,24 @@ FILES_MODIFIED=0
 # in certain edge cases (discovered the hard way)
 # Only process staged .rs files for speed
 
-STAGED_RS_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rs$' || true)
+# Get staged .rs files (handle empty case gracefully)
+STAGED_RS_FILES=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep '\.rs$' || true)
+
+# Handle case where git command fails (e.g., not in a git repo)
+if [ $? -ne 0 ] && [ -z "$STAGED_RS_FILES" ]; then
+    echo "warning: not in a git repository or no staged files"
+    exit 0
+fi
+
 if [ -n "$STAGED_RS_FILES" ]; then
-    # Use a more efficient approach: process all files in one sed command if possible
+    # Remove trailing whitespace from staged .rs files
     for file in $STAGED_RS_FILES; do
         if [ -f "$file" ]; then
             # Remove trailing whitespace
             if [[ "$OSTYPE" == "darwin"* ]]; then
-                sed -i '' 's/[[:space:]]*$//' "$file"
+                sed -i '' 's/[[:space:]]*$//' "$file" 2>/dev/null || true
             else
-                sed -i 's/[[:space:]]*$//' "$file"
+                sed -i 's/[[:space:]]*$//' "$file" 2>/dev/null || true
             fi
             git add "$file" 2>/dev/null || true
         fi
@@ -54,10 +74,13 @@ else
     # Use rustfmt directly on staged files (much faster than cargo fmt --all)
     # Check if formatting is needed
     NEEDS_FORMAT=0
+    FORMAT_ERRORS=""
     for file in $STAGED_RS_FILES; do
-        if [ -f "$file" ] && ! rustfmt --check "$file" >/dev/null 2>&1; then
-            NEEDS_FORMAT=1
-            break
+        if [ -f "$file" ]; then
+            if ! rustfmt --check "$file" >/dev/null 2>&1; then
+                NEEDS_FORMAT=1
+                # Don't break - check all files to see full scope
+            fi
         fi
     done
     
@@ -66,14 +89,25 @@ else
     else
         echo "fixing"
         # Format only staged files using rustfmt (faster than cargo fmt --all)
+        FORMATTED_COUNT=0
         for file in $STAGED_RS_FILES; do
             if [ -f "$file" ]; then
-                rustfmt "$file" 2>/dev/null || true
-                git add "$file" 2>/dev/null || true
+                if rustfmt "$file" 2>/dev/null; then
+                    git add "$file" 2>/dev/null || true
+                    FORMATTED_COUNT=$((FORMATTED_COUNT + 1))
+                else
+                    FORMAT_ERRORS="${FORMAT_ERRORS}${file}"$'\n'
+                fi
             fi
         done
-        echo "        formatted and staged"
-        FILES_MODIFIED=1
+        if [ $FORMATTED_COUNT -gt 0 ]; then
+            echo "        formatted and staged $FORMATTED_COUNT file(s)"
+            FILES_MODIFIED=1
+        fi
+        if [ -n "$FORMAT_ERRORS" ]; then
+            echo "        warning: some files could not be formatted:"
+            echo "$FORMAT_ERRORS" | sed 's/^/          /'
+        fi
     fi
 fi
 
@@ -132,15 +166,53 @@ else
 fi
 
 # ============================================================================
+# 5. Optional: Quick compilation check (catches syntax errors)
+# ============================================================================
+# Only run if ANNO_QUICK_CHECK=1 is set (can be slow, so opt-in)
+if [ "${ANNO_QUICK_CHECK:-}" = "1" ]; then
+    echo -n "  [4/4] compile ....... "
+    if command -v timeout >/dev/null 2>&1; then
+        # Quick check with timeout (should be fast)
+        if timeout 30 cargo check --workspace --message-format=short --quiet >/dev/null 2>&1; then
+            echo "ok"
+        else
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 124 ]; then
+                echo "TIMEOUT"
+                echo "        warning: compilation check timed out (code may have syntax errors)"
+            else
+                echo "FAILED"
+                echo ""
+                echo "error: code does not compile"
+                echo "  run: cargo check --workspace"
+                exit 1
+            fi
+        fi
+    else
+        # No timeout available - skip to avoid hanging
+        echo "SKIPPED (no timeout command available)"
+    fi
+fi
+
+# ============================================================================
 # Summary
 # ============================================================================
 echo ""
+END_TIME=$(date +%s 2>/dev/null || echo 0)
+if [ $END_TIME -gt $START_TIME ]; then
+    DURATION=$((END_TIME - START_TIME))
+    if [ $DURATION -gt 1 ]; then
+        echo "pre-commit: passed (${DURATION}s)"
+    else
+        echo "pre-commit: passed"
+    fi
+else
+    echo "pre-commit: passed"
+fi
+
 if [ $FILES_MODIFIED -eq 1 ]; then
-    echo "pre-commit: passed (files were auto-formatted)"
     echo ""
     echo "Note: Some files were automatically formatted. Review changes with:"
     echo "  git diff --cached"
-else
-    echo "pre-commit: passed"
 fi
 exit 0
