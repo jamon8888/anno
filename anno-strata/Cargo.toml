@@ -19,7 +19,8 @@ petgraph = "0.6"
 rayon = { workspace = true, optional = true }
 
 # Hierarchical abstraction algorithms
-stratify = { path = "../../stratify", optional = true }
+# Uses git URL for standalone builds; local path override via [patch] in workspace Cargo.toml
+stratify = { git = "https://github.com/arclabs561/stratify.git", optional = true }
 
 [features]
 default = []
