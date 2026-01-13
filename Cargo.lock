@@ -5355,6 +5355,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "stratify"
 version = "0.1.0"
+source = "git+https://github.com/arclabs561/stratify.git#d639e43b1f433321b17a9ace2c5e71ef98dc9b2f"
 dependencies = [
  "kodama",
  "ndarray 0.16.1",
