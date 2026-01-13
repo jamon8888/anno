@@ -298,7 +298,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
-      - run: cargo check --workspace
+      - name: Check MSRV
+        run: |
+          rm -f Cargo.lock  # v4 lock file requires Cargo 1.83+
+          cargo check --workspace
 
   # ==========================================================================
   # Documentation
