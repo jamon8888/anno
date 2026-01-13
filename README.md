@@ -14,8 +14,10 @@ Dual-licensed under MIT or Apache-2.0.
 ```sh
 # CLI
 anno extract --text "Marie Curie was born in Warsaw."
+```
 
-# Library
+```rust
+// Library
 use anno::{Document, extract_entities};
 
 let doc = Document::new("Marie Curie was born in Warsaw.");
