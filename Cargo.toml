@@ -112,10 +112,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 proptest = "1"
 criterion = { version = "0.5", features = ["html_reports"] }
 
-# Local development overrides - use sibling repos when available
-# Comment out for CI or when testing standalone builds
-[patch."https://github.com/arclabs561/stratify.git"]
-stratify = { path = "../stratify" }
+# Local development: see .cargo/config.toml.example for path overrides
 
 [workspace.lints.rust]
 missing_docs = "warn"
