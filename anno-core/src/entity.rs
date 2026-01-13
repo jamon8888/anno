@@ -433,7 +433,8 @@ impl EntityType {
             // Biomedical types
             "DISEASE" | "DISORDER" => EntityType::custom("DISEASE", EntityCategory::Misc),
             "CHEMICAL" | "DRUG" => EntityType::custom("CHEMICAL", EntityCategory::Misc),
-            "GENE" | "PROTEIN" => EntityType::custom("GENE", EntityCategory::Misc),
+            "GENE" => EntityType::custom("GENE", EntityCategory::Misc),
+            "PROTEIN" => EntityType::custom("PROTEIN", EntityCategory::Misc),
             // Unknown -> Other
             other => EntityType::Other(other.to_string()),
         }
