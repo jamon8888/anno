@@ -1,0 +1,21 @@
+# runctl configuration for anno spot evaluation
+# Copy this to runctl.toml and customize as needed
+
+[aws]
+region = "us-east-1"
+default_instance_type = "c7i.xlarge"
+use_spot = true
+s3_bucket = "arc-anno-data"
+# Optional: IAM instance profile for SSM access
+# iam_instance_profile = "anno-eval-worker-profile"
+
+[checkpoint]
+dir = "checkpoints"
+save_interval = 5
+keep_last_n = 10
+
+[monitoring]
+log_dir = "logs"
+update_interval_secs = 10
+enable_warnings = true
+

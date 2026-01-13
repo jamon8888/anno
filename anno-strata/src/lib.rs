@@ -217,6 +217,9 @@ pub mod leiden;
 pub mod louvain;
 pub mod pagerank;
 
+#[cfg(feature = "raptor")]
+pub mod raptor;
+
 // Re-export main types
 pub use centrality::{Betweenness, Closeness, Eigenvector, Hits};
 pub use graph_utils::{
@@ -226,6 +229,9 @@ pub use graph_utils::{
 pub use label_propagation::LabelPropagation;
 pub use louvain::Louvain;
 pub use pagerank::PageRank;
+
+#[cfg(feature = "raptor")]
+pub use raptor::{build_raptor_tree, RaptorConfig, RaptorTree, TreeStats};
 
 use anno_core::GraphDocument;
 
