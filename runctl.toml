@@ -1,0 +1,19 @@
+# runctl configuration for anno spot evaluation
+
+[aws]
+region = "us-east-1"
+default_instance_type = "c7i.xlarge"
+default_ami = "ami-08fa3ed5577079e64"
+use_spot = true
+s3_bucket = "arc-anno-data"
+iam_instance_profile = "anno-eval-spot-profile"
+
+[checkpoint]
+dir = "checkpoints"
+save_interval = 5
+keep_last_n = 10
+
+[monitoring]
+log_dir = "logs"
+update_interval_secs = 10
+enable_warnings = true

@@ -18,9 +18,13 @@ serde_json = { workspace = true }
 petgraph = "0.6"
 rayon = { workspace = true, optional = true }
 
+# Hierarchical abstraction algorithms
+stratify = { path = "../../stratify", optional = true }
+
 [features]
 default = []
 parallel = ["rayon"]
+raptor = ["stratify"]
 
 [dev-dependencies]
 proptest = "1.0"
