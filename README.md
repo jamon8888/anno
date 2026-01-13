@@ -18,10 +18,14 @@ anno extract --text "Marie Curie was born in Warsaw."
 
 ```rust
 // Library
-use anno::{Document, extract_entities};
+use anno::{Model, StackedNER};
 
-let doc = Document::new("Marie Curie was born in Warsaw.");
-let entities = extract_entities(&doc);
+let model = StackedNER::default();
+let entities = model.extract_entities("Marie Curie was born in Warsaw.", None)?;
+
+for e in entities {
+    println!("{} [{}]", e.text, e.entity_type.as_label());
+}
 ```
 
 ## Crates
@@ -29,7 +33,7 @@ let entities = extract_entities(&doc);
 | Crate | Purpose |
 |-------|---------|
 | `anno` | Main library + CLI |
-| `anno-core` | Core types (Entity, Document) |
+| `anno-core` | Core types (Entity, Span) |
 | `anno-strata` | Graph algorithms (Leiden, Louvain) |
 
 ## Features
