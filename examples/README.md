@@ -1,5 +1,17 @@
 # Examples
 
+## Learning Path
+
+**Start here:**
+1. `quickstart` - Basic extraction, no downloads
+2. `eval_basic` - Compare backends on metrics
+3. `bert` - Transformer-based NER
+
+**Then explore:**
+4. `models` - All backends including zero-shot
+5. `coref` - Coreference resolution
+6. `grounded` - Entity tracking across documents
+
 > **Note**: These examples are currently in the workspace root. To run them, they should be
 > moved to `anno/examples/`. Some examples have already been migrated there.
 > For working examples, use: `cargo run -p anno --example <name>`.
