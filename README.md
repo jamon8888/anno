@@ -1,15 +1,14 @@
-<p align="center"><b>anno</b></p>
+# anno
 
-```mermaid
-flowchart LR
-    T["Marie Curie was born in Warsaw."] --> NER
-    NER --> E1["[Marie Curie] PERSON"]
-    NER --> E2["[Warsaw] LOCATION"]
-```
-
-Information extraction for Rust: named entities, coreference, discourse.
+Information extraction: named entities, coreference, discourse.
 
 Dual-licensed under MIT or Apache-2.0.
+
+```text
+"Marie Curie was born in Warsaw."
+    → [Marie Curie] PERSON
+    → [Warsaw] LOCATION
+```
 
 ```sh
 # CLI
