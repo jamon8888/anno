@@ -1,73 +1,130 @@
 //! Basic evaluation example - evaluating Pattern and Statistical NER backends.
 //!
-//! Run with: cargo run --example eval_basic --features "eval-advanced"
+//! Run with: cargo run --example eval_basic --features eval
 //!
 //! This example shows:
-//! - How to use the EvalSystem to test NER backends
-//! - How to access evaluation results
+//! - How to use the BackendEvaluator to test NER backends
+//! - How to generate markdown/HTML reports
+//! - How to access per-domain and per-entity-type metrics
 
-#[cfg(feature = "eval-advanced")]
-use anno::eval::unified_evaluator::EvalSystem;
-#[cfg(feature = "eval-advanced")]
-use anno::eval::task_mapping::Task;
-#[cfg(feature = "eval-advanced")]
-use anno::eval::backend_name::BackendName;
+use anno::eval::backend_eval::{BackendEvaluator, EvalConfig};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     println!("═══════════════════════════════════════════════════════════════════");
     println!("                     NER Backend Evaluation");
     println!("═══════════════════════════════════════════════════════════════════\n");
 
-    #[cfg(not(feature = "eval-advanced"))]
-    {
-        println!("This example requires the 'eval-advanced' feature.");
-        println!("Run with: cargo run --example eval_basic --features \"eval-advanced\"");
-        return Ok(());
-    }
-
-    #[cfg(feature = "eval-advanced")]
-    {
     // =========================================================================
     // 1. Quick evaluation on a subset of data
     // =========================================================================
     println!("1. Quick evaluation (50 examples)...\n");
 
-        let results = EvalSystem::new()
-            .with_tasks(vec![Task::NER])
-            // Uses all suitable datasets by default if none specified
-            // For synthetic data, we might need a specific dataset ID or task configuration
-            // Currently EvalSystem runs on downloaded datasets by default
-            // To maintain parity with old example, we'd need synthetic data support in TaskEvaluator
-            // For now, let's run on a small sample of whatever is available
-            .with_max_examples(Some(50))
-            .add_backend_name(BackendName::RegexNER)
-            .add_backend_name(BackendName::HeuristicNER)
-            .add_backend_name(BackendName::StackedNER)
-            .run()?;
+    let config = EvalConfig {
+        include_pattern: true,
+        include_heuristic: true,
+        include_stacked: true,
+        include_gliner: true, // Requires --features onnx
+        max_examples: 50,
+        ..Default::default()
+    };
 
-        if let Some(std_results) = results.standard {
+    let evaluator = BackendEvaluator::with_config(config);
+    let report = evaluator.run_comprehensive();
+
+    println!("Evaluated {} examples\n", report.total_examples);
+
     // Print overall results
     println!("┌─────────────────┬───────────┬────────┬────────┐");
     println!("│ Backend         │ Precision │ Recall │ F1     │");
     println!("├─────────────────┼───────────┼────────┼────────┤");
-            for (name, metrics) in &std_results.per_backend {
+    for backend in &report.backends {
         println!(
             "│ {:15} │ {:7.1}%  │ {:6.1}% │ {:6.1}% │",
-                    name,
-                    metrics.precision * 100.0,
-                    metrics.recall * 100.0,
-                    metrics.f1 * 100.0,
+            backend.name,
+            backend.overall.precision * 100.0,
+            backend.overall.recall * 100.0,
+            backend.overall.f1 * 100.0,
         );
     }
     println!("└─────────────────┴───────────┴────────┴────────┘\n");
-        } else {
-            println!("No standard results produced.");
+
+    // =========================================================================
+    // 2. Domain-specific evaluation
+    // =========================================================================
+    println!("2. Technology domain evaluation...\n");
+
+    let tech_evaluator = BackendEvaluator::with_config(EvalConfig {
+        include_pattern: true,
+        include_heuristic: false,
+        include_stacked: false,
+        ..Default::default()
+    });
+
+    let tech_report = tech_evaluator.run_technology();
+
+    if let Some(backend) = tech_report.backends.first() {
+        println!(
+            "Technology dataset ({} examples):",
+            tech_report.total_examples
+        );
+        println!("  Pattern NER F1: {:.1}%\n", backend.overall.f1 * 100.0);
+    }
+
+    // =========================================================================
+    // 3. Healthcare domain evaluation
+    // =========================================================================
+    println!("3. Healthcare domain evaluation...\n");
+
+    let health_report = tech_evaluator.run_healthcare();
+
+    if let Some(backend) = health_report.backends.first() {
+        println!(
+            "Healthcare dataset ({} examples):",
+            health_report.total_examples
+        );
+        println!("  Pattern NER F1: {:.1}%\n", backend.overall.f1 * 100.0);
+    }
+
+    // =========================================================================
+    // 4. Per-entity-type breakdown
+    // =========================================================================
+    println!("4. Per-entity-type breakdown...\n");
+
+    if let Some(backend) = report.backends.first() {
+        println!("Entity type performance for {}:", backend.name);
+
+        let mut types: Vec<_> = backend.by_entity_type.iter().collect();
+        types.sort_by(|a, b| {
+            b.1.f1
+                .partial_cmp(&a.1.f1)
+                .expect("F1 scores should be comparable")
+        });
+
+        for (entity_type, metrics) in types.iter().take(8) {
+            let bar = "█".repeat((metrics.f1 * 20.0) as usize);
+            println!("  {:12} {:5.1}% {}", entity_type, metrics.f1 * 100.0, bar);
+        }
     }
 
     println!("\n═══════════════════════════════════════════════════════════════════");
     println!("                        Evaluation Complete");
     println!("═══════════════════════════════════════════════════════════════════\n");
-    }
 
-    Ok(())
+    // =========================================================================
+    // 5. Generate reports
+    // =========================================================================
+    println!("Generating reports...\n");
+
+    // Markdown report
+    let md = report.to_markdown();
+    println!("Markdown report preview (first 500 chars):");
+    println!("─────────────────────────────────────────────");
+    println!("{}", &md[..md.len().min(500)]);
+    println!("─────────────────────────────────────────────\n");
+
+    // You can save reports to files:
+    // std::fs::write("eval_report.md", &md).unwrap();
+    // std::fs::write("eval_report.html", report.to_html()).unwrap();
+
+    println!("Done! To save full reports, uncomment the file writes in the example.");
 }

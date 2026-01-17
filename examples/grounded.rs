@@ -55,7 +55,9 @@ fn main() {
     // IoU (Intersection over Union) works for compatible types
     let loc1 = Location::text(0, 10);
     let loc2 = Location::text(5, 15);
-    let iou = loc1.iou(&loc2).unwrap();
+    let iou = loc1
+        .iou(&loc2)
+        .expect("IoU should be computable for compatible locations");
     println!("\nIoU([0,10), [5,15)) = {:.3}", iou);
     // Intersection: [5,10) = 5 chars
     // Union: [0,15) = 15 chars

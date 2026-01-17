@@ -912,6 +912,152 @@ impl GumbelBox {
     }
 }
 
+// =============================================================================
+// Subsume Trait Implementations for GumbelBox
+// =============================================================================
+
+#[cfg(feature = "subsume")]
+impl subsume_core::Box for GumbelBox {
+    type Scalar = f32;
+    type Vector = Vec<f32>;
+
+    fn min(&self) -> &Self::Vector {
+        &self.mean_min
+    }
+
+    fn max(&self) -> &Self::Vector {
+        &self.mean_max
+    }
+
+    fn dim(&self) -> usize {
+        self.mean_min.len()
+    }
+
+    fn volume(&self, temperature: Self::Scalar) -> Result<Self::Scalar, subsume_core::BoxError> {
+        // Use log-space volume approximation for Gumbel boxes
+        let mut log_vol = 0.0;
+        for i in 0..self.dim() {
+            let diff = self.mean_max[i] - self.mean_min[i];
+            // Softplus approximation: temp * log(1 + exp(x/temp))
+            log_vol += (diff / temperature).exp().ln_1p() * temperature;
+        }
+        Ok(log_vol.exp())
+    }
+
+    fn intersection(&self, other: &Self) -> Result<Self, subsume_core::BoxError> {
+        if self.dim() != other.dim() {
+            return Err(subsume_core::BoxError::DimensionMismatch {
+                expected: self.dim(),
+                actual: other.dim(),
+            });
+        }
+
+        // Gumbel intersection uses LSE for max-stability
+        let mut new_min = Vec::with_capacity(self.dim());
+        let mut new_max = Vec::with_capacity(self.dim());
+
+        for i in 0..self.dim() {
+            let m1 = self.mean_min[i];
+            let m2 = other.mean_min[i];
+            let lse_min = m1.max(m2) + self.temperature * (-(m1 - m2).abs() / self.temperature).exp().ln_1p();
+            new_min.push(lse_min);
+
+            let x1 = self.mean_max[i];
+            let x2 = other.mean_max[i];
+            let lse_max = x1.min(x2) - self.temperature * (-(x1 - x2).abs() / self.temperature).exp().ln_1p();
+            new_max.push(lse_max);
+        }
+
+        Ok(GumbelBox {
+            mean_min: new_min,
+            mean_max: new_max,
+            temperature: self.temperature,
+        })
+    }
+
+    fn containment_prob(
+        &self,
+        other: &Self,
+        temperature: Self::Scalar,
+    ) -> Result<Self::Scalar, subsume_core::BoxError> {
+        let intersection = self.intersection(other)?;
+        let vol_int = intersection.volume(temperature)?;
+        let vol_other = other.volume(temperature)?;
+        if vol_other == 0.0 {
+            return Ok(0.0);
+        }
+        Ok(vol_int / vol_other)
+    }
+
+    fn overlap_prob(
+        &self,
+        other: &Self,
+        temperature: Self::Scalar,
+    ) -> Result<Self::Scalar, subsume_core::BoxError> {
+        let intersection = self.intersection(other)?;
+        let vol_int = intersection.volume(temperature)?;
+        let vol_self = self.volume(temperature)?;
+        let vol_other = other.volume(temperature)?;
+        let vol_union = vol_self + vol_other - vol_int;
+        if vol_union <= 0.0 {
+            return Ok(0.0);
+        }
+        Ok(vol_int / vol_union)
+    }
+
+    fn union(&self, other: &Self) -> Result<Self, subsume_core::BoxError> {
+        let mut new_min = Vec::with_capacity(self.dim());
+        let mut new_max = Vec::with_capacity(self.dim());
+        for i in 0..self.dim() {
+            new_min.push(self.mean_min[i].min(other.mean_min[i]));
+            new_max.push(self.mean_max[i].max(other.mean_max[i]));
+        }
+        Ok(GumbelBox {
+            mean_min: new_min,
+            mean_max: new_max,
+            temperature: self.temperature,
+        })
+    }
+
+    fn center(&self) -> Result<Self::Vector, subsume_core::BoxError> {
+        let mut center = Vec::with_capacity(self.dim());
+        for i in 0..self.dim() {
+            center.push((self.mean_min[i] + self.mean_max[i]) / 2.0);
+        }
+        Ok(center)
+    }
+
+    fn distance(&self, other: &Self) -> Result<Self::Scalar, subsume_core::BoxError> {
+        let mut dist_sq = 0.0;
+        for i in 0..self.dim() {
+            let gap = if self.mean_max[i] < other.mean_min[i] {
+                other.mean_min[i] - self.mean_max[i]
+            } else if other.mean_max[i] < self.mean_min[i] {
+                self.mean_min[i] - other.mean_max[i]
+            } else {
+                0.0
+            };
+            dist_sq += gap * gap;
+        }
+        Ok(dist_sq.sqrt())
+    }
+}
+
+#[cfg(feature = "subsume")]
+impl subsume_core::GumbelBox for GumbelBox {
+    fn temperature(&self) -> Self::Scalar {
+        self.temperature
+    }
+
+    fn membership_probability(&self, point: &Self::Vector) -> Result<Self::Scalar, subsume_core::BoxError> {
+        Ok(self.membership_probability(point))
+    }
+
+    fn sample(&self) -> Self::Vector {
+        self.center().unwrap_or_default()
+    }
+}
+
 // Note: BoxCorefResolver is implemented in src/eval/coref_resolver.rs
 // to be alongside other coreference resolvers.
 

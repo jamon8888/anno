@@ -11,7 +11,7 @@
 
 use anno_coalesce::{
     entity_type_nameability, AdaptiveResolutionConfig, AlignmentScore, GeneralizationGradient,
-    Nameability, Resolver,
+    Resolver,
 };
 
 fn main() {
@@ -92,7 +92,10 @@ fn main() {
         ("Exponential(2.0)", GeneralizationGradient::exponential(2.0)),
     ];
 
-    println!("   {:20} {:>10} {:>10} {:>10}", "Gradient", "sim=0.5", "sim=0.7", "sim=0.9");
+    println!(
+        "   {:20} {:>10} {:>10} {:>10}",
+        "Gradient", "sim=0.5", "sim=0.7", "sim=0.9"
+    );
     for (name, gradient) in &gradients {
         let adj_05 = gradient.threshold_adjustment(0.5, 0.8, 0.2);
         let adj_07 = gradient.threshold_adjustment(0.7, 0.8, 0.2);
