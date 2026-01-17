@@ -102,20 +102,22 @@ profile-timing:
 
 # Show slowest tests from last profile run
 profile-slowest:
-    @if [ -z "$$(ls -A target/test-profiles/timing_*.json 2>/dev/null)" ]; then \
-        echo "No timing files found. Run 'just profile-tests' first."; \
-        exit 1; \
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "$(ls -A target/test-profiles/timing_*.json 2>/dev/null || true)" ]; then
+        echo "No timing files found. Run 'just profile-tests' first."
+        exit 1
     fi
-    @LATEST=$$(ls -t target/test-profiles/timing_*.json | head -1) && \
-        echo "Analyzing: $$LATEST" && \
-        if command -v jq >/dev/null 2>&1; then \
-            echo "" && \
-            echo "=== Slowest Tests (top 30) ===" && \
-            jq -r '.test_executions[] | select(.duration_secs > 0.1) | "\(.duration_secs | tostring | .[0:6])s  \(.test_name)"' \
-                "$$LATEST" | sort -rn | head -30; \
-        else \
-            echo "Install jq for analysis: brew install jq"; \
-        fi
+    LATEST="$(ls -t target/test-profiles/timing_*.json | sed -n '1p')"
+    echo "Analyzing: $LATEST"
+    if command -v jq >/dev/null 2>&1; then
+        echo ""
+        echo "=== Slowest Tests ==="
+        jq -r '.test_executions[] | select(.duration_secs > 0.1) | "\(.duration_secs | tostring | .[0:6])s  \(.test_name)"' \
+            "$LATEST" | sort -rn
+    else
+        echo "Install jq for analysis: brew install jq"
+    fi
 
 # Analyze test profile with detailed breakdown
 profile-analyze FILE="":
@@ -341,7 +343,7 @@ loc:
 
 # Check for TODO/FIXME comments
 todos:
-    @rg -i "(TODO|FIXME|HACK|XXX)" --type rust -c | sort -t: -k2 -rn | head -15
+    @rg -i "(TODO|FIXME|HACK|XXX)" --type rust -c | sort -t: -k2 -rn
 
 # Show test coverage summary
 test-count:
@@ -472,7 +474,7 @@ opengrep-custom:
 
 # Run Miri on unsafe code files (selective)
 miri-unsafe:
-    @rustup component list | grep -q "miri.*installed" || (echo "Install: rustup component add miri" && exit 1)
+    @rustup component list | rg -q "miri.*installed" || (echo "Install: rustup component add miri" && exit 1)
     @echo "Running Miri on unsafe code files..."
     @cargo miri test --lib --features onnx -- --test-threads=1 --nocapture || true
     @echo "Miri check complete (see output above)"
@@ -550,13 +552,15 @@ analysis-full:
 # Check for invalid filenames (spaces, duplicates)
 check-filenames:
     @echo "Checking for files with spaces in names..."
-    @if find . -type f \( -name "*.rs" -o -name "*.toml" \) -name "* *" ! -path "./.git/*" ! -path "./target/*" ! -path "./.cargo/*" 2>/dev/null | grep -q .; then \
+    @first=$$(find . -type f \( -name "*.rs" -o -name "*.toml" \) -name "* *" ! -path "./.git/*" ! -path "./target/*" ! -path "./.cargo/*" -print -quit 2>/dev/null) && \
+    if [ -n "$$first" ]; then \
         echo "error: Error: Found files with spaces in names (invalid for Rust):"; \
         find . -type f \( -name "*.rs" -o -name "*.toml" \) -name "* *" ! -path "./.git/*" ! -path "./target/*" ! -path "./.cargo/*"; \
         exit 1; \
     fi
     @echo "Checking for duplicate test files..."
-    @if find . -type f -name "* 2.rs" ! -path "./.git/*" ! -path "./target/*" 2>/dev/null | grep -q .; then \
+    @dup=$$(find . -type f -name "* 2.rs" ! -path "./.git/*" ! -path "./target/*" -print -quit 2>/dev/null) && \
+    if [ -n "$$dup" ]; then \
         echo "error: Error: Found duplicate test files (likely backups):"; \
         find . -type f -name "* 2.rs" ! -path "./.git/*" ! -path "./target/*"; \
         echo "Please remove these files before committing."; \
@@ -577,12 +581,14 @@ check-tests-compile:
 check-secrets:
     @echo "Checking for potential secrets..."
     @if command -v rg &> /dev/null; then \
-        if rg -i "api[_-]?key\s*=|password\s*=|secret\s*=|token\s*=|credential\s*=" \
+        files=$$(rg -i --files-with-matches "api[_-]?key\\s*=|password\\s*=|secret\\s*=|token\\s*=|credential\\s*=" \
            --glob '!*.md' --glob '!*.txt' --glob '!target/**' \
            --glob '!.git/**' --glob '!*.lock' --glob '!justfile' \
-           --glob '!*.sh' --glob '!docs/**' 2>/dev/null | head -5; then \
+           --glob '!*.sh' --glob '!docs/**' 2>/dev/null || true); \
+        if [ -n "$$files" ]; then \
             echo "warning:  Warning: Potential secrets found. Review before committing."; \
-            echo "   (This is a warning, not blocking)"; \
+            echo "warning:  (Listing files only; not printing match contents.)"; \
+            echo "$$files"; \
         fi; \
     else \
         echo "warning:  ripgrep not found, skipping secrets check"; \
@@ -591,16 +597,17 @@ check-secrets:
 # Check for large files (warn only, non-blocking)
 check-large-files:
     @echo "Checking for large files..."
-    @if find . -type f -size +1M ! -path "./target/*" ! -path "./.git/*" ! -path "./.cargo/*" ! -path "./*.lock" ! -path "./assets/*" ! -path "./.mypy_cache/*" ! -path "./.pytest_cache/*" ! -path "./__pycache__/*" 2>/dev/null | head -1 | grep -q .; then \
+    @first=$$(find . -type f -size +1M ! -path "./target/*" ! -path "./.git/*" ! -path "./.cargo/*" ! -path "./*.lock" ! -path "./assets/*" ! -path "./.mypy_cache/*" ! -path "./.pytest_cache/*" ! -path "./__pycache__/*" -print -quit 2>/dev/null) && \
+    if [ -n "$$first" ]; then \
         echo "warning:  Warning: Large files detected (>1MB):"; \
-        find . -type f -size +1M ! -path "./target/*" ! -path "./.git/*" ! -path "./.cargo/*" ! -path "./*.lock" ! -path "./assets/*" ! -path "./.mypy_cache/*" ! -path "./.pytest_cache/*" ! -path "./__pycache__/*" 2>/dev/null | head -5; \
+        find . -type f -size +1M ! -path "./target/*" ! -path "./.git/*" ! -path "./.cargo/*" ! -path "./*.lock" ! -path "./assets/*" ! -path "./.mypy_cache/*" ! -path "./.pytest_cache/*" ! -path "./__pycache__/*" 2>/dev/null; \
         echo "   (This is a warning, not blocking)"; \
     fi
 
 # Run clippy with warnings only (non-blocking)
 check-clippy-warn:
     @echo "Running clippy (warnings only)..."
-    @cargo clippy --workspace --all-targets --quiet 2>&1 | head -20 || echo "warning:  Clippy found warnings (not blocking)"
+    @cargo clippy --workspace --all-targets --quiet 2>&1 || echo "warning:  Clippy found warnings (not blocking)"
 
 # Full pre-commit checks (all blocking checks)
 pre-commit-full:
@@ -618,15 +625,16 @@ pre-commit-all: pre-commit-full
 
 # Validate commit message format
 validate-commit-msg COMMIT_MSG:
-    @if [ -z "$$(echo '{{COMMIT_MSG}}' | head -c 10)" ]; then \
+    @len=$$(printf "%s" "{{COMMIT_MSG}}" | wc -c | tr -d ' ') && \
+    if [ "$$len" -lt 10 ]; then \
         echo "error: Error: Commit message too short (minimum 10 characters)"; \
         echo "   Current message: '{{COMMIT_MSG}}'"; \
         exit 1; \
     fi
-    @if echo "{{COMMIT_MSG}}" | grep -qE "^[a-z]+(\(.+\))?: .{10,}"; then \
+    @if printf "%s" "{{COMMIT_MSG}}" | rg -q "^[a-z]+(\\(.+\\))?: .{10,}"; then \
         exit 0; \
     fi
-    @if echo "{{COMMIT_MSG}}" | grep -qE "^(Merge|Revert|Release|chore\(release\))"; then \
+    @if printf "%s" "{{COMMIT_MSG}}" | rg -q "^(Merge|Revert|Release|chore\\(release\\))"; then \
         exit 0; \
     fi
     @echo "warning:  Warning: Commit message doesn't follow conventional format"

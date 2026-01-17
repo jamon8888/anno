@@ -40,10 +40,11 @@ struct BoxCorefPair {
 fn export_document(doc: &CorefDocument) -> Vec<BoxCorefPair> {
     let mut pairs = Vec::new();
     let mut entity_types: HashSet<String> = HashSet::new();
+    let doc_id_str = doc.doc_id.clone().unwrap_or_else(|| "unknown".to_string());
 
     // For each cluster, create mention-to-cluster containment pairs
     for (cluster_idx, chain) in doc.chains.iter().enumerate() {
-        let cluster_id = format!("CLUSTER_{}_{}", cluster_idx, doc.doc_id);
+        let cluster_id = format!("CLUSTER_{}_{}", cluster_idx, doc_id_str);
 
         for mention in &chain.mentions {
             // Mention contained in cluster
@@ -53,7 +54,7 @@ fn export_document(doc: &CorefDocument) -> Vec<BoxCorefPair> {
                 relation: "contained_in".to_string(),
                 child_type: "MENTION".to_string(),
                 parent_type: "COREFERENCE_CLUSTER".to_string(),
-                doc_id: Some(doc.doc_id.clone()),
+                doc_id: Some(doc_id_str.clone()),
             });
 
             // If mention has entity type, record type membership
@@ -64,7 +65,7 @@ fn export_document(doc: &CorefDocument) -> Vec<BoxCorefPair> {
                     relation: "is_a".to_string(),
                     child_type: "MENTION".to_string(),
                     parent_type: "ENTITY_TYPE".to_string(),
-                    doc_id: Some(doc.doc_id.clone()),
+                    doc_id: Some(doc_id_str.clone()),
                 });
                 entity_types.insert(etype.clone());
             }
@@ -88,7 +89,7 @@ fn export_document(doc: &CorefDocument) -> Vec<BoxCorefPair> {
                         relation: "disjoint_from".to_string(),
                         child_type: "MENTION".to_string(),
                         parent_type: "MENTION".to_string(),
-                        doc_id: Some(doc.doc_id.clone()),
+                        doc_id: Some(doc_id_str.clone()),
                     });
                 }
             }
@@ -114,7 +115,7 @@ fn export_document(doc: &CorefDocument) -> Vec<BoxCorefPair> {
 fn create_demo_documents() -> Vec<CorefDocument> {
     vec![
         CorefDocument {
-            doc_id: "doc1".to_string(),
+            doc_id: Some("doc1".to_string()),
             text: "Barack Obama was born in Hawaii. He later became president.".to_string(),
             chains: vec![
                 CorefChain::new(vec![
@@ -123,9 +124,10 @@ fn create_demo_documents() -> Vec<CorefDocument> {
                 ]),
                 CorefChain::new(vec![Mention::new("Hawaii", 25, 31)]),
             ],
+            includes_singletons: false,
         },
         CorefDocument {
-            doc_id: "doc2".to_string(),
+            doc_id: Some("doc2".to_string()),
             text: "Google acquired DeepMind. The company is investing in AI.".to_string(),
             chains: vec![
                 CorefChain::new(vec![
@@ -134,6 +136,7 @@ fn create_demo_documents() -> Vec<CorefDocument> {
                 ]),
                 CorefChain::new(vec![Mention::new("DeepMind", 16, 24)]),
             ],
+            includes_singletons: false,
         },
     ]
 }
@@ -163,18 +166,61 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create output directory
     std::fs::create_dir_all(&output_dir)?;
 
-    // Get documents (demo for now, would load real dataset)
+    // Get documents
     let documents = match dataset.as_str() {
         "demo" => {
             eprintln!("Using demo documents (use --dataset preco|gap for real data)");
             create_demo_documents()
         }
-        "preco" | "gap" | "litbank" => {
-            // TODO: Load real dataset
-            eprintln!(
-                "Dataset {} not yet implemented, using demo",
-                dataset
-            );
+        "preco" => {
+            // PreCo requires manual download or HuggingFace datasets library
+            // Direct URL returns just a webpage, not data
+            eprintln!("PreCo dataset not directly available via URL.");
+            eprintln!("Options:");
+            eprintln!("  1. Download manually from: https://preschool-lab.github.io/PreCo/");
+            eprintln!("  2. Use HuggingFace datasets: huggingface-cli download coref-data/preco");
+            eprintln!("  3. Use GAP dataset instead (--dataset gap)");
+            eprintln!();
+            eprintln!("Using demo data for now...");
+            create_demo_documents()
+        }
+        "gap" => {
+            #[cfg(feature = "eval-advanced")]
+            {
+                use anno::eval::coref_loader::CorefLoader;
+                use anno::eval::loader::DatasetId;
+                use anno::eval::loader::DatasetLoader;
+                use anno::eval::LoadableDatasetId;
+
+                eprintln!("Loading GAP dataset...");
+                let loader =
+                    DatasetLoader::new().map_err(|e| format!("Failed to create loader: {}", e))?;
+
+                // Download if not cached
+                let gap = LoadableDatasetId::try_from(DatasetId::GAP)
+                    .map_err(|e| format!("GAP is not loadable: {}", e))?;
+
+                if !loader.is_cached(gap) {
+                    eprintln!("Downloading GAP dataset...");
+                    let _ = loader
+                        .load_or_download(gap)
+                        .map_err(|e| format!("Failed to download GAP: {}", e))?;
+                }
+
+                let coref_loader = CorefLoader::new()
+                    .map_err(|e| format!("Failed to create coref loader: {}", e))?;
+                coref_loader
+                    .load_gap()
+                    .map_err(|e| format!("Failed to load GAP: {}", e))?
+            }
+            #[cfg(not(feature = "eval-advanced"))]
+            {
+                eprintln!("GAP requires --features eval-advanced, using demo");
+                create_demo_documents()
+            }
+        }
+        "litbank" => {
+            eprintln!("LitBank not yet implemented, using demo");
             create_demo_documents()
         }
         _ => {
@@ -216,4 +262,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
