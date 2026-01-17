@@ -843,10 +843,10 @@ jobs:
           echo "Checking anno-core publish readiness..."
           if cargo publish --dry-run -p anno-core 2>&1 | grep -q "aborting upload due to dry run"; then
             echo "status=ready" >> $GITHUB_OUTPUT
-            echo "✅ anno-core: Ready to publish" >> $GITHUB_STEP_SUMMARY
+            echo "[ok] anno-core: Ready to publish" >> $GITHUB_STEP_SUMMARY
           else
             echo "status=error" >> $GITHUB_OUTPUT
-            echo "❌ anno-core: Publish validation failed" >> $GITHUB_STEP_SUMMARY
+            echo "[error] anno-core: Publish validation failed" >> $GITHUB_STEP_SUMMARY
             cargo publish --dry-run -p anno-core 2>&1 | grep -E "(error|warning)" | head -10 >> $GITHUB_STEP_SUMMARY || true
           fi
       
@@ -856,10 +856,10 @@ jobs:
           echo "Checking anno-coalesce publish readiness..."
           if cargo publish --dry-run -p anno-coalesce 2>&1 | grep -q "aborting upload due to dry run"; then
             echo "status=ready" >> $GITHUB_OUTPUT
-            echo "✅ anno-coalesce: Ready to publish" >> $GITHUB_STEP_SUMMARY
+            echo "[ok] anno-coalesce: Ready to publish" >> $GITHUB_STEP_SUMMARY
           else
             echo "status=error" >> $GITHUB_OUTPUT
-            echo "❌ anno-coalesce: Publish validation failed" >> $GITHUB_STEP_SUMMARY
+            echo "[error] anno-coalesce: Publish validation failed" >> $GITHUB_STEP_SUMMARY
             cargo publish --dry-run -p anno-coalesce 2>&1 | grep -E "(error|warning)" | head -10 >> $GITHUB_STEP_SUMMARY || true
           fi
       
@@ -869,10 +869,10 @@ jobs:
           echo "Checking anno-strata publish readiness..."
           if cargo publish --dry-run -p anno-strata 2>&1 | grep -q "aborting upload due to dry run"; then
             echo "status=ready" >> $GITHUB_OUTPUT
-            echo "✅ anno-strata: Ready to publish" >> $GITHUB_STEP_SUMMARY
+            echo "[ok] anno-strata: Ready to publish" >> $GITHUB_STEP_SUMMARY
           else
             echo "status=error" >> $GITHUB_OUTPUT
-            echo "❌ anno-strata: Publish validation failed" >> $GITHUB_STEP_SUMMARY
+            echo "[error] anno-strata: Publish validation failed" >> $GITHUB_STEP_SUMMARY
             cargo publish --dry-run -p anno-strata 2>&1 | grep -E "(error|warning)" | head -10 >> $GITHUB_STEP_SUMMARY || true
           fi
       
@@ -882,10 +882,10 @@ jobs:
           echo "Checking anno publish readiness..."
           if cargo publish --dry-run -p anno 2>&1 | grep -q "aborting upload due to dry run"; then
             echo "status=ready" >> $GITHUB_OUTPUT
-            echo "✅ anno: Ready to publish" >> $GITHUB_STEP_SUMMARY
+            echo "[ok] anno: Ready to publish" >> $GITHUB_STEP_SUMMARY
           else
             echo "status=error" >> $GITHUB_OUTPUT
-            echo "❌ anno: Publish validation failed" >> $GITHUB_STEP_SUMMARY
+            echo "[error] anno: Publish validation failed" >> $GITHUB_STEP_SUMMARY
             cargo publish --dry-run -p anno 2>&1 | grep -E "(error|warning)" | head -10 >> $GITHUB_STEP_SUMMARY || true
           fi
       
@@ -910,39 +910,39 @@ jobs:
           MISSING_VERSIONS=0
           
           if ! grep -q 'version.*=.*"0.2.0"' coalesce/Cargo.toml 2>/dev/null || ! grep -q 'anno-core.*version' coalesce/Cargo.toml 2>/dev/null; then
-            echo "❌ coalesce/Cargo.toml: Missing version requirement for anno-core" >> $GITHUB_STEP_SUMMARY
+            echo "[error] coalesce/Cargo.toml: Missing version requirement for anno-core" >> $GITHUB_STEP_SUMMARY
             MISSING_VERSIONS=$((MISSING_VERSIONS + 1))
           else
-            echo "✅ coalesce/Cargo.toml: Version requirement present" >> $GITHUB_STEP_SUMMARY
+            echo "[ok] coalesce/Cargo.toml: Version requirement present" >> $GITHUB_STEP_SUMMARY
           fi
           
           if ! grep -q 'version.*=.*"0.2.0"' strata/Cargo.toml 2>/dev/null || ! grep -q 'anno-core.*version' strata/Cargo.toml 2>/dev/null; then
-            echo "❌ strata/Cargo.toml: Missing version requirement for anno-core" >> $GITHUB_STEP_SUMMARY
+            echo "[error] strata/Cargo.toml: Missing version requirement for anno-core" >> $GITHUB_STEP_SUMMARY
             MISSING_VERSIONS=$((MISSING_VERSIONS + 1))
           else
-            echo "✅ strata/Cargo.toml: Version requirement present" >> $GITHUB_STEP_SUMMARY
+            echo "[ok] strata/Cargo.toml: Version requirement present" >> $GITHUB_STEP_SUMMARY
           fi
           
           if ! grep -q 'anno-coalesce.*version' anno/Cargo.toml 2>/dev/null; then
-            echo "❌ anno/Cargo.toml: Missing version requirement for anno-coalesce" >> $GITHUB_STEP_SUMMARY
+            echo "[error] anno/Cargo.toml: Missing version requirement for anno-coalesce" >> $GITHUB_STEP_SUMMARY
             MISSING_VERSIONS=$((MISSING_VERSIONS + 1))
           else
-            echo "✅ anno/Cargo.toml: Version requirement for anno-coalesce present" >> $GITHUB_STEP_SUMMARY
+            echo "[ok] anno/Cargo.toml: Version requirement for anno-coalesce present" >> $GITHUB_STEP_SUMMARY
           fi
           
           if ! grep -q 'anno-strata.*version' anno/Cargo.toml 2>/dev/null; then
-            echo "❌ anno/Cargo.toml: Missing version requirement for anno-strata" >> $GITHUB_STEP_SUMMARY
+            echo "[error] anno/Cargo.toml: Missing version requirement for anno-strata" >> $GITHUB_STEP_SUMMARY
             MISSING_VERSIONS=$((MISSING_VERSIONS + 1))
           else
-            echo "✅ anno/Cargo.toml: Version requirement for anno-strata present" >> $GITHUB_STEP_SUMMARY
+            echo "[ok] anno/Cargo.toml: Version requirement for anno-strata present" >> $GITHUB_STEP_SUMMARY
           fi
           
           if [ $MISSING_VERSIONS -gt 0 ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "⚠️  $MISSING_VERSIONS crate(s) need version requirement fixes before publishing" >> $GITHUB_STEP_SUMMARY
+            echo "[warn]  $MISSING_VERSIONS crate(s) need version requirement fixes before publishing" >> $GITHUB_STEP_SUMMARY
           else
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "✅ All version requirements present" >> $GITHUB_STEP_SUMMARY
+            echo "[ok] All version requirements present" >> $GITHUB_STEP_SUMMARY
           fi
       
       - name: Generate publish status report
@@ -955,16 +955,16 @@ jobs:
           ## Publish Readiness Status
           
           ### anno-core
-          $([ "${{ steps.anno-core.outputs.status }}" == "ready" ] && echo "✅ **Ready to publish**" || echo "❌ **Publish validation failed**")
+          $([ "${{ steps.anno-core.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")
           
           ### anno-coalesce
-          $([ "${{ steps.anno-coalesce.outputs.status }}" == "ready" ] && echo "✅ **Ready to publish**" || echo "❌ **Publish validation failed**")
+          $([ "${{ steps.anno-coalesce.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")
           
           ### anno-strata
-          $([ "${{ steps.anno-strata.outputs.status }}" == "ready" ] && echo "✅ **Ready to publish**" || echo "❌ **Publish validation failed**")
+          $([ "${{ steps.anno-strata.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")
           
           ### anno
-          $([ "${{ steps.anno.outputs.status }}" == "ready" ] && echo "✅ **Ready to publish**" || echo "❌ **Publish validation failed**")
+          $([ "${{ steps.anno.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")
           
           ## Next Steps
           
