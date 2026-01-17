@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc a1c078e8086ebd20ffe9d807e31acd9ab56b6f58b735d152e45ef20b8a2d7f17 # shrinks to entity = Entity { text: "   ", entity_type: Person, start: 0, end: 3, confidence: 0.5, normalized: None, provenance: None, kb_id: None, canonical_id: None, hierarchical_confidence: None, visual_span: None, discontinuous_span: None, valid_from: None, valid_until: None, viewport: None }

@@ -5,6 +5,8 @@
 //!
 //! Run with: cargo run --example joint_training_experiment --features joint
 
+#![allow(missing_docs)]
+
 use std::collections::HashMap;
 
 /// Minimal reproduction of types needed for training experiment.
@@ -43,7 +45,13 @@ pub struct Entity {
 }
 
 impl Entity {
-    pub fn new(text: &str, entity_type: EntityType, start: usize, end: usize, confidence: f64) -> Self {
+    pub fn new(
+        text: &str,
+        entity_type: EntityType,
+        start: usize,
+        end: usize,
+        confidence: f64,
+    ) -> Self {
         Self {
             text: text.to_string(),
             entity_type,
@@ -75,10 +83,12 @@ pub struct JointMention {
 impl JointMention {
     pub fn new(idx: usize, text: &str, start: usize, end: usize, entity_type: EntityType) -> Self {
         let head = text.split_whitespace().last().unwrap_or(text).to_string();
-        let mention_kind = if text.chars().next().map_or(false, |c| c.is_uppercase()) {
+        let mention_kind = if text.chars().next().is_some_and(|c| c.is_uppercase()) {
             MentionKind::Proper
-        } else if ["he", "she", "it", "they", "him", "her", "them", "his", "hers", "its", "their"]
-            .contains(&text.to_lowercase().as_str())
+        } else if [
+            "he", "she", "it", "they", "him", "her", "them", "his", "hers", "its", "their",
+        ]
+        .contains(&text.to_lowercase().as_str())
         {
             MentionKind::Pronominal
         } else {
@@ -161,7 +171,11 @@ impl TrainingExample {
             }
         }
 
-        if n > 0.0 { loss / n } else { 0.0 }
+        if n > 0.0 {
+            loss / n
+        } else {
+            0.0
+        }
     }
 }
 
@@ -206,7 +220,9 @@ struct Gradients {
 impl Gradients {
     fn clip(&mut self, threshold: f64) {
         let clip = |x: &mut f64| *x = x.clamp(-threshold, threshold);
-        for v in self.type_bias.values_mut() { clip(v); }
+        for v in self.type_bias.values_mut() {
+            clip(v);
+        }
         clip(&mut self.context_weight);
         clip(&mut self.new_cluster_bias);
         clip(&mut self.distance_decay);
@@ -222,6 +238,7 @@ pub struct Trainer {
     examples: Vec<TrainingExample>,
     // AdaGrad states
     type_bias_states: HashMap<String, AdaGradState>,
+    #[allow(dead_code)]
     context_weight_state: AdaGradState,
     new_cluster_bias_state: AdaGradState,
     distance_decay_state: AdaGradState,
@@ -292,7 +309,13 @@ impl Trainer {
         if loss > 0.0 {
             // Gradient: features(pred) - features(gold)
             self.accumulate_features(&mut grads, example, &pred_ner, &pred_coref, 1.0);
-            self.accumulate_features(&mut grads, example, &example.gold_ner, &example.gold_coref, -1.0);
+            self.accumulate_features(
+                &mut grads,
+                example,
+                &example.gold_ner,
+                &example.gold_coref,
+                -1.0,
+            );
         }
 
         (loss, grads)
@@ -307,7 +330,7 @@ impl Trainer {
         let mut score = 0.0;
 
         // Unary NER
-        for (_, entity_type) in ner {
+        for entity_type in ner.values() {
             if let Some(&bias) = self.weights.type_bias.get(entity_type.as_label()) {
                 score += bias;
             }
@@ -347,10 +370,10 @@ impl Trainer {
         score
     }
 
-    fn decode_with_cost(&self, example: &TrainingExample) -> (
-        HashMap<usize, EntityType>,
-        HashMap<usize, Option<usize>>,
-    ) {
+    fn decode_with_cost(
+        &self,
+        example: &TrainingExample,
+    ) -> (HashMap<usize, EntityType>, HashMap<usize, Option<usize>>) {
         let mut pred_ner = HashMap::new();
         let mut pred_coref = HashMap::new();
 
@@ -374,7 +397,8 @@ impl Trainer {
                     ante_score += self.weights.string_match;
                 }
 
-                if let (Some(type_i), Some(type_j)) = (pred_ner.get(&idx), pred_ner.get(&ante_idx)) {
+                if let (Some(type_i), Some(type_j)) = (pred_ner.get(&idx), pred_ner.get(&ante_idx))
+                {
                     if type_i == type_j {
                         ante_score += self.weights.type_match;
                     } else {
@@ -409,8 +433,11 @@ impl Trainer {
         scale: f64,
     ) {
         // Unary NER
-        for (_, entity_type) in ner {
-            *grads.type_bias.entry(entity_type.as_label().to_string()).or_insert(0.0) += scale;
+        for entity_type in ner.values() {
+            *grads
+                .type_bias
+                .entry(entity_type.as_label().to_string())
+                .or_insert(0.0) += scale;
         }
 
         // Unary coref
@@ -455,22 +482,36 @@ impl Trainer {
         for (type_name, &grad) in &clipped_grads.type_bias {
             let state = self.type_bias_states.entry(type_name.clone()).or_default();
             let delta = state.update(grad, lr, eps);
-            *self.weights.type_bias.entry(type_name.clone()).or_insert(0.0) += delta;
+            *self
+                .weights
+                .type_bias
+                .entry(type_name.clone())
+                .or_insert(0.0) += delta;
         }
 
-        let delta = self.new_cluster_bias_state.update(clipped_grads.new_cluster_bias, lr, eps);
+        let delta = self
+            .new_cluster_bias_state
+            .update(clipped_grads.new_cluster_bias, lr, eps);
         self.weights.new_cluster_bias += delta;
 
-        let delta = self.distance_decay_state.update(clipped_grads.distance_decay, lr, eps);
+        let delta = self
+            .distance_decay_state
+            .update(clipped_grads.distance_decay, lr, eps);
         self.weights.distance_decay += delta;
 
-        let delta = self.string_match_state.update(clipped_grads.string_match, lr, eps);
+        let delta = self
+            .string_match_state
+            .update(clipped_grads.string_match, lr, eps);
         self.weights.string_match += delta;
 
-        let delta = self.type_match_state.update(clipped_grads.type_match, lr, eps);
+        let delta = self
+            .type_match_state
+            .update(clipped_grads.type_match, lr, eps);
         self.weights.type_match += delta;
 
-        let delta = self.type_mismatch_state.update(clipped_grads.type_mismatch, lr, eps);
+        let delta = self
+            .type_mismatch_state
+            .update(clipped_grads.type_mismatch, lr, eps);
         self.weights.type_mismatch += delta;
     }
 
@@ -689,12 +730,17 @@ fn main() {
     let type_match_ok = weights.type_match > weights.type_mismatch;
 
     println!("\nValidation:");
-    println!("  string_match > 0: {} (actual: {:.4})", 
-             if string_match_ok { "PASS" } else { "FAIL" }, 
-             weights.string_match);
-    println!("  type_match > type_mismatch: {} (actual: {:.4} vs {:.4})", 
-             if type_match_ok { "PASS" } else { "FAIL" },
-             weights.type_match, weights.type_mismatch);
+    println!(
+        "  string_match > 0: {} (actual: {:.4})",
+        if string_match_ok { "PASS" } else { "FAIL" },
+        weights.string_match
+    );
+    println!(
+        "  type_match > type_mismatch: {} (actual: {:.4} vs {:.4})",
+        if type_match_ok { "PASS" } else { "FAIL" },
+        weights.type_match,
+        weights.type_mismatch
+    );
 
     // Plot loss curve (text-based)
     println!("\nLoss curve:");
@@ -702,8 +748,7 @@ fn main() {
     let scale = if max_loss > 0.0 { 50.0 / max_loss } else { 1.0 };
     for (i, &loss) in losses.iter().enumerate() {
         let bar_len = (loss * scale) as usize;
-        let bar: String = std::iter::repeat('#').take(bar_len).collect();
+        let bar: String = "#".repeat(bar_len);
         println!("  {:2}: {:>6.4} |{}", i, loss, bar);
     }
 }
-

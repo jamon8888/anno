@@ -170,6 +170,7 @@ fn evaluate_synthetic(backends: &[Backend]) -> HashMap<String, Vec<f64>> {
 
 #[cfg(feature = "eval-advanced")]
 fn evaluate_real_datasets(backends: &[Backend]) -> HashMap<String, Vec<f64>> {
+    use anno::eval::LoadableDatasetId;
     println!("\n=== Real Dataset Evaluation ===\n");
 
     let loader = match DatasetLoader::new() {
@@ -186,7 +187,7 @@ fn evaluate_real_datasets(backends: &[Backend]) -> HashMap<String, Vec<f64>> {
     for &id in dataset_ids {
         print!("Loading {:20} ... ", id.name());
 
-        let loadable = match anno::eval::LoadableDatasetId::try_from(id) {
+        let loadable = match LoadableDatasetId::try_from(id) {
             Ok(d) => d,
             Err(e) => {
                 println!("SKIP ({})", e);
@@ -301,7 +302,7 @@ fn significance_analysis(f1_scores: &HashMap<String, Vec<f64>>) {
 fn error_analysis_demo(backends: &[Backend]) {
     println!("\n=== Error Analysis Sample ===\n");
 
-    let sample_texts = vec![
+    let sample_texts = [
         "Dr. Sarah Johnson, CEO of Microsoft, announced the $5 billion deal in New York.",
         "The meeting is scheduled for January 15, 2025 at 3:00 PM.",
         "Contact john.doe@example.com or call +1-555-123-4567 for details.",
