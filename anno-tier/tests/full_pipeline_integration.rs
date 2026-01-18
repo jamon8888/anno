@@ -1,10 +1,10 @@
 //! Integration tests demonstrating the full pipeline:
-//! anno (NER) -> coalesce (entity resolution) -> strata (community detection)
+//! anno (NER) -> coalesce (entity resolution) -> tier (community detection)
 //!
 //! These tests verify that the three crates work together seamlessly.
 
 use anno_core::{Entity, EntityCategory, EntityType, GraphDocument, Relation};
-use anno_strata::{
+use anno_tier::{
     leiden::Leiden, Betweenness, Eigenvector, HierarchicalLeiden, LabelPropagation, Louvain,
     PageRank,
 };

@@ -615,50 +615,8 @@ impl CandidateGenerator for DictionaryCandidateGenerator {
 
 /// Compute simple string similarity (Jaccard on words + char trigrams).
 pub fn string_similarity(a: &str, b: &str) -> f64 {
-    let a_lower = a.to_lowercase();
-    let b_lower = b.to_lowercase();
-
-    // Word-level Jaccard
-    let words_a: std::collections::HashSet<&str> = a_lower.split_whitespace().collect();
-    let words_b: std::collections::HashSet<&str> = b_lower.split_whitespace().collect();
-
-    let word_sim = if words_a.is_empty() && words_b.is_empty() {
-        1.0
-    } else if words_a.is_empty() || words_b.is_empty() {
-        0.0
-    } else {
-        let intersection = words_a.intersection(&words_b).count();
-        let union = words_a.union(&words_b).count();
-        intersection as f64 / union as f64
-    };
-
-    // Character trigram overlap
-    fn trigrams(s: &str) -> std::collections::HashSet<String> {
-        let chars: Vec<char> = s.chars().collect();
-        if chars.len() < 3 {
-            return std::collections::HashSet::new();
-        }
-        chars
-            .windows(3)
-            .map(|w| w.iter().collect::<String>())
-            .collect()
-    }
-
-    let tris_a = trigrams(&a_lower);
-    let tris_b = trigrams(&b_lower);
-
-    let tri_sim = if tris_a.is_empty() && tris_b.is_empty() {
-        1.0
-    } else if tris_a.is_empty() || tris_b.is_empty() {
-        0.0
-    } else {
-        let intersection = tris_a.intersection(&tris_b).count();
-        let union = tris_a.union(&tris_b).count();
-        intersection as f64 / union as f64
-    };
-
-    // Weighted combination
-    0.6 * word_sim + 0.4 * tri_sim
+    // Keep this module's policy (weights) local, but reuse shared primitives.
+    textprep::similarity::weighted_word_char_ngram_jaccard(a, b, 3, 0.6, 0.4)
 }
 
 /// Parse year from an ISO 8601 date string.

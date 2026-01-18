@@ -116,7 +116,7 @@ This design provides rich context for encoding but sparse targets for prediction
 
 **Connection to anno**: The "reduced document" strategy validates anno's Extract → Coalesce
 two-stage pipeline. First detect mentions (NER), then resolve on the condensed entity set.
-Iterative refinement pattern already exists in anno-strata (Leiden's local moving phase).
+Iterative refinement pattern already exists in anno-tier (Leiden's local moving phase).
 
 ---
 

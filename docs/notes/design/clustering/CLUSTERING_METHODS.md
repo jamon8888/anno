@@ -1,4 +1,4 @@
-# Clustering Methods in Anno: coalesce vs strata
+# Clustering Methods in Anno: coalesce vs tier
 
 *Understanding when to use which clustering approach*
 
@@ -11,7 +11,7 @@ Anno provides two clustering crates for different purposes:
 | Crate | Purpose | Input | Output | Algorithms |
 |-------|---------|-------|--------|------------|
 | **coalesce** | Entity resolution | Mentions from NER | Entity clusters | Union-Find, HAC, Correlation, Streaming |
-| **strata** | Community detection | Knowledge graphs | Community hierarchy | Leiden, (Louvain) |
+| **tier** | Community detection | Knowledge graphs | Community hierarchy | Leiden, (Louvain) |
 
 ---
 
@@ -119,7 +119,7 @@ let identities = resolver.to_identities();
 
 ---
 
-## strata: Community Detection
+## tier: Community Detection
 
 **Problem:** Given a knowledge graph with entities and relations, discover communities—groups of densely connected nodes.
 
@@ -153,7 +153,7 @@ let annotated = clusterer.cluster(&graph)?;
 - Your input is text-based (strings, embeddings)
 - You're doing entity resolution / deduplication
 
-### Use strata when:
+### Use tier when:
 - You have a constructed knowledge graph
 - You want to find communities of related entities
 - Your input is graph-structured (nodes + edges)
@@ -164,13 +164,13 @@ let annotated = clusterer.cluster(&graph)?;
 ## The Pipeline
 
 ```
-Text → [anno NER] → Entities → [coalesce] → Identities → [Relations] → Graph → [strata] → Communities
+Text → [anno NER] → Entities → [coalesce] → Identities → [Relations] → Graph → [tier] → Communities
 ```
 
 1. **Extract:** NER produces entity mentions (anno)
 2. **Coalesce:** Cluster mentions into entities (coalesce)
 3. **Relate:** Extract relations between entities (anno)
-4. **Stratify:** Find community structure (strata)
+4. **Stratify:** Find community structure (tier)
 
 ---
 
@@ -181,7 +181,7 @@ START
   │
   ├─ Do you have a graph?
   │    │
-  │    YES → Use strata (Leiden)
+  │    YES → Use tier (Leiden)
   │    │
   │    NO ↓
   │
@@ -214,7 +214,7 @@ START
 
 ## Mathematical Comparison
 
-| Aspect | coalesce HAC | strata Leiden |
+| Aspect | coalesce HAC | tier Leiden |
 |--------|--------------|---------------|
 | **Objective** | Minimize linkage distance | Maximize modularity |
 | **Input** | Similarity matrix | Adjacency matrix |

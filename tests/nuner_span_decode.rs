@@ -99,7 +99,7 @@ fn overlapping_spans_keep_highest_confidence() {
     assert_eq!(e.text, "Steve Jobs");
     assert!(
         e.confidence > 0.8,
-        "expected higher-confidence overlapping span to survive"
+        "expected higher-confidence overlapping span to surcerno"
     );
 }
 

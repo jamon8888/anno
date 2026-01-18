@@ -226,9 +226,9 @@ impl EpigraphicMedium {
     /// Get typical preservation characteristics.
     pub fn preservation_notes(&self) -> &'static str {
         match self {
-            EpigraphicMedium::ClayTablet => "Survives fire; damaged by water",
+            EpigraphicMedium::ClayTablet => "Surcernos fire; damaged by water",
             EpigraphicMedium::Stone => "Durable; may have erosion/damage",
-            EpigraphicMedium::Papyrus => "Fragile; survives in dry climates only",
+            EpigraphicMedium::Papyrus => "Fragile; surcernos in dry climates only",
             EpigraphicMedium::Parchment => "Durable; may have damage/palimpsest",
             EpigraphicMedium::Metal => "Durable; may have corrosion",
             EpigraphicMedium::Pottery => "Durable; often fragmentary",

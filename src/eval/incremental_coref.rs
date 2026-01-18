@@ -997,33 +997,10 @@ fn trigram_similarity(a: &str, b: &str) -> f64 {
     if a.is_empty() || b.is_empty() {
         return 0.0;
     }
-
-    let trigrams_a: std::collections::HashSet<_> = a
-        .chars()
-        .collect::<Vec<_>>()
-        .windows(3)
-        .map(|w| (w[0], w[1], w[2]))
-        .collect();
-
-    let trigrams_b: std::collections::HashSet<_> = b
-        .chars()
-        .collect::<Vec<_>>()
-        .windows(3)
-        .map(|w| (w[0], w[1], w[2]))
-        .collect();
-
-    if trigrams_a.is_empty() || trigrams_b.is_empty() {
+    if a.chars().count() < 3 || b.chars().count() < 3 {
         return 0.0;
     }
-
-    let intersection = trigrams_a.intersection(&trigrams_b).count();
-    let union = trigrams_a.len() + trigrams_b.len() - intersection;
-
-    if union == 0 {
-        0.0
-    } else {
-        intersection as f64 / union as f64
-    }
+    textprep::similarity::trigram_jaccard(a, b)
 }
 
 // =============================================================================

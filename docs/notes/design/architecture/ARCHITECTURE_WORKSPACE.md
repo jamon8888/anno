@@ -10,7 +10,7 @@
 | `anno-core` | Active | Canonical types: Entity, Track, Identity, Signal |
 | `anno` | Active | NER backends, coref, eval, discourse, salience |
 | `anno-coalesce` | Active | Cross-document entity resolution |
-| `anno-strata` | Active | Graph algorithms (PageRank, Leiden, Louvain) |
+| `anno-tier` | Active | Graph algorithms (PageRank, Leiden, Louvain) |
 | (CLI) | Active | CLI lives in the `anno` crate (`anno/src/bin/anno.rs`, `anno/src/cli/`) |
 
 ### Archived crates
@@ -42,7 +42,7 @@ The anno ecosystem extracts structured knowledge from text through a principled 
 
 ```
 Text → Extract → Coalesce → Stratify → Knowledge Graph
-       (anno)   (coalesce)  (strata)
+       (anno)   (coalesce)  (tier)
 ```
 
 With geometric foundations provided by `subsume` for:
@@ -65,7 +65,7 @@ With geometric foundations provided by `subsume` for:
               ┌─────────────────────┼─────────────────────┐
               ▼                     ▼                     ▼
 ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐
-│  anno-coalesce    │  │   anno-strata     │  │      anno         │
+│  anno-coalesce    │  │   anno-tier     │  │      anno         │
 │                   │  │                   │  │                   │
 │ Cross-doc entity  │  │ Graph algorithms  │  │ NER backends:     │
 │ resolution        │  │                   │  │  GLiNER (ONNX)    │
@@ -113,7 +113,7 @@ Types:
 
 ### anno
 **Purpose**: Main library with NER backends, coreference, and evaluation  
-**Dependencies**: anno-core, anno-coalesce, anno-strata (optional)  
+**Dependencies**: anno-core, anno-coalesce, anno-tier (optional)  
 **Size**: ~120k lines
 
 Modules:
@@ -143,7 +143,7 @@ Already well-designed. Algorithms:
 - Hierarchical agglomerative
 - Streaming resolution
 
-### anno-strata
+### anno-tier
 **Purpose**: Graph algorithms for knowledge graphs  
 **Dependencies**: anno-core, petgraph  
 **Size**: ~3k lines
@@ -172,7 +172,7 @@ When integrated, provides:
 default = ["cli"]
 cli = ["clap", "clap_complete", "is-terminal", "indicatif", "toml"]
 eval = ["dirs", "glob"]
-eval-advanced = ["eval", "rand", "ureq", "sha2", "anno-strata"]
+eval-advanced = ["eval", "rand", "ureq", "sha2", "anno-tier"]
 eval-full = ["eval", "eval-bias", "eval-advanced"]
 discourse = ["eval"]
 onnx = ["ort", "tokenizers", "hf-hub", "ndarray", "lru"]
@@ -189,7 +189,7 @@ burn = ["dep:burn", "burn-ndarray", "burn-autodiff", "tokenizers", "hf-hub", "sa
 anno-core (18k - types)
     │
     ├── anno-coalesce (9k - cross-doc resolution)
-    ├── anno-strata (3k - graph algorithms)
+    ├── anno-tier (3k - graph algorithms)
     │
     └── anno (120k - backends, coref, eval)
             │

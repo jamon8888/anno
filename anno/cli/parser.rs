@@ -38,7 +38,7 @@ EXAMPLES:
   anno eval -t "..." -g "Marie Curie:PER:0:11"
   anno cross-doc ./docs --threshold 0.6
   anno coalesce ./docs --threshold 0.6  # alias for cross-doc
-  anno strata --input graph.json --method leiden --levels 3
+  anno tier --input graph.json --method leiden --levels 3
   anno info
 "#
 )]
@@ -97,9 +97,9 @@ pub enum Commands {
     #[cfg(feature = "eval-advanced")]
     CrossDoc(commands::CrossDocArgs),
 
-    /// Hierarchical clustering: reveal strata of abstraction
+    /// Hierarchical clustering: reveal tier of abstraction
     #[cfg(feature = "eval-advanced")]
-    Strata(commands::StrataArgs),
+    Tier(commands::TierArgs),
 
     /// Enhance entities with additional metadata
     Enhance(commands::EnhanceArgs),

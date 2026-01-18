@@ -83,7 +83,7 @@
 //! |---------|--------------|---------|
 //! | `eval` | `dirs`, `glob` | Dataset loading, basic metrics, harness |
 //! | `eval-bias` | `eval` | Demographic/gender bias evaluation |
-//! | `eval-advanced` | `eval`, `rand`, `ureq`, `sha2`, `anno-strata` | Network downloads, advanced metrics, graph clustering |
+//! | `eval-advanced` | `eval`, `rand`, `ureq`, `sha2`, `anno-tier` | Network downloads, advanced metrics, graph clustering |
 //! | `eval-full` | All above | Everything for comprehensive evaluation |
 //! | `eval-parallel` | `eval`, `rayon` | Parallel evaluation (multi-threaded) |
 //!

@@ -888,39 +888,8 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 /// assert!((trigram_similarity("test", "test") - 1.0).abs() < 0.001);
 /// ```
 pub fn trigram_similarity(a: &str, b: &str) -> f32 {
-    let a_lower = a.to_lowercase();
-    let b_lower = b.to_lowercase();
-
-    if a_lower == b_lower {
-        return 1.0;
-    }
-
-    let trigrams_a: std::collections::HashSet<_> = a_lower
-        .chars()
-        .collect::<Vec<_>>()
-        .windows(3)
-        .map(|w| (w[0], w[1], w[2]))
-        .collect();
-
-    let trigrams_b: std::collections::HashSet<_> = b_lower
-        .chars()
-        .collect::<Vec<_>>()
-        .windows(3)
-        .map(|w| (w[0], w[1], w[2]))
-        .collect();
-
-    if trigrams_a.is_empty() && trigrams_b.is_empty() {
-        return if a_lower == b_lower { 1.0 } else { 0.0 };
-    }
-
-    let intersection = trigrams_a.intersection(&trigrams_b).count();
-    let union = trigrams_a.union(&trigrams_b).count();
-
-    if union == 0 {
-        0.0
-    } else {
-        intersection as f32 / union as f32
-    }
+    // Delegate to shared primitive (Unicode-safe, case-insensitive).
+    textprep::similarity::trigram_jaccard(a, b) as f32
 }
 
 /// Alias for backward compatibility.

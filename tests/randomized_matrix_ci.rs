@@ -1393,7 +1393,7 @@ fn test_randomized_matrix_sample() {
                 }
             }
 
-            // Flag concerning patterns
+            // Flag concernoing patterns
             if f1 == 0.0 && num_gold > 0 && num_pred == 0 {
                 eprintln!("      WARN  No predictions made (all false negatives)");
                 eprintln!("         Possible causes: backend not compatible, type mismatch, or backend failure");

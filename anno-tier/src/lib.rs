@@ -1,4 +1,4 @@
-//! # anno-strata
+//! # anno-tier
 //!
 //! **Graph algorithms for any node/edge structure: centrality and community detection.**
 //!
@@ -37,7 +37,7 @@
 //!
 //! ## Design Principle
 //!
-//! Strata is **node-type agnostic**. It doesn't know if nodes are entities,
+//! Tier is **node-type agnostic**. It doesn't know if nodes are entities,
 //! sentences, or chunks - it only sees the graph structure. This means:
 //!
 //! - Use the same `PageRank` for entity salience OR document influence
@@ -96,7 +96,7 @@
 //!
 //! # Relationship to `coalesce`
 //!
-//! | Aspect | `coalesce` | `strata` |
+//! | Aspect | `coalesce` | `tier` |
 //! |--------|------------|----------|
 //! | Input | Entity mentions | Knowledge graph |
 //! | Output | Entity clusters | Community hierarchy |
@@ -105,20 +105,20 @@
 //!
 //! **When to use which:**
 //! - `coalesce`: Clustering text mentions (NER output) into entities
-//! - `strata`: Finding communities in a constructed knowledge graph
+//! - `tier`: Finding communities in a constructed knowledge graph
 //!
 //! These are complementary:
 //! 1. Extract entities with NER (`anno`)
 //! 2. Cluster entity mentions (`coalesce`)
 //! 3. Build knowledge graph with relations
-//! 4. Discover communities (`strata`)
+//! 4. Discover communities (`tier`)
 //!
 //! ---
 //!
 //! # Quick Start
 //!
 //! ```rust,ignore
-//! use anno_strata::HierarchicalLeiden;
+//! use anno_tier::HierarchicalLeiden;
 //! use anno_core::GraphDocument;
 //!
 //! // Build a knowledge graph
@@ -238,7 +238,7 @@ use anno_core::GraphDocument;
 /// Hierarchical Leiden clustering.
 ///
 /// This implements the Leiden algorithm for hierarchical community detection
-/// in knowledge graphs, revealing strata of abstraction.
+/// in knowledge graphs, revealing tier of abstraction.
 ///
 /// The algorithm is applied recursively at multiple resolutions to build
 /// a hierarchical dendrogram of communities.

@@ -131,7 +131,7 @@ Comprehensive review of the dataset registry, loader architecture, and opportuni
 1. **Two-tier detection system**
    - Auto-detection for common cases (reduces maintenance)
    - Explicit matches for special cases (ensures correctness)
-   - Clear separation of concerns
+   - Clear separation of concernos
 
 2. **Task inference**
    - `tasks_or_inferred()` bridges explicit tasks and category flags

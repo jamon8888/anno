@@ -6,10 +6,10 @@ comprehensive versions but weren't cleaned up. Both pairs had the same
 
 ## What Was Archived
 
-### `strata/` -> replaced by `anno-strata/`
+### `tier/` -> replaced by `anno-tier/`
 
-- **strata/**: ~395 lines, simple Leiden + HierarchicalLeiden only
-- **anno-strata/**: ~3169 lines, full suite:
+- **tier/**: ~395 lines, simple Leiden + HierarchicalLeiden only
+- **anno-tier/**: ~3169 lines, full suite:
   - centrality (PageRank, Betweenness, Closeness, Eigenvector, HITS)
   - graph_utils (connectivity, shortest paths, diameter)
   - label_propagation

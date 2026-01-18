@@ -1,5 +1,5 @@
 [package]
-name = "anno-strata"
+name = "anno-tier"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-description = "Hierarchical clustering - reveal strata of abstraction (Leiden, RAPTOR, etc.). Extract. Coalesce. Stratify."
+description = "Hierarchical clustering - reveal tiers of abstraction (Leiden, RAPTOR, etc.). Extract. Coalesce. Tierify."
 publish = false  # Publishing disabled
 
 [dependencies]
@@ -19,13 +19,15 @@ petgraph = "0.6"
 rayon = { workspace = true, optional = true }
 
 # Hierarchical abstraction algorithms
-# Uses git URL for standalone builds; local path override via [patch] in workspace Cargo.toml
-stratify = { git = "https://github.com/arclabs561/stratify.git", optional = true }
+# `tier` is defined at the workspace level:
+# - in the standalone `anno` workspace: via git (see `anno/Cargo.toml`)
+# - in the super-workspace: via `workspace.dependencies` + local path
+tier = { workspace = true, optional = true, features = ["cluster", "community", "parallel"] }
 
 [features]
 default = []
 parallel = ["rayon"]
-raptor = ["stratify"]
+raptor = ["tier"]
 
 [dev-dependencies]
 proptest = "1.0"

@@ -2470,7 +2470,7 @@ fn detect_relation_type<'a>(
         },
         RelPattern {
             slug: "LIVES_IN",
-            triggers: &["vive en", "reside en", "viviendo en"],
+            triggers: &["cerno en", "reside en", "viviendo en"],
             confidence: 0.65,
         },
         RelPattern {

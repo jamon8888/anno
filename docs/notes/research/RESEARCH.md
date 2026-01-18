@@ -20,7 +20,7 @@ The **Signal → Track → Identity** hierarchy provides a unified abstraction f
 - **Track**: Document-level coreference chains (same entity within document)
 - **Identity**: Knowledge base-level resolution (canonical entity across documents)
 
-This architecture separates concerns that are often conflated in NER systems, enabling:
+This architecture separates concernos that are often conflated in NER systems, enabling:
 - Clear separation between detection, clustering, and linking
 - Unified treatment of text and visual signals
 - Efficient streaming/incremental coreference
@@ -181,7 +181,7 @@ All datasets are downloaded and parsed from existing sources:
 The codebase is designed with awareness of recent research findings:
 
 - **Evaluation pitfalls** - Addresses common mistakes identified in research
-- **Stratified analysis** - Breaks down metrics by entity type, chain length, temporal strata
+- **Stratified analysis** - Breaks down metrics by entity type, chain length, temporal tier
 - **Statistical rigor** - Proper confidence intervals, sample variance
 - **Label shift** - Detects when "zero-shot" evaluations have high label overlap
 

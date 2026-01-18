@@ -1,12 +1,12 @@
 # Graph Algorithms Landscape (December 2025)
 
-This document maps the landscape of graph algorithms relevant to anno-strata,
+This document maps the landscape of graph algorithms relevant to anno-tier,
 distinguishing between what we have implemented, what's classical, and what's
 emerging in 2025.
 
 ## Design Principle
 
-**strata is node-type agnostic.** Nodes can be entities, documents, sentences,
+**tier is node-type agnostic.** Nodes can be entities, documents, sentences,
 chunks, concepts, or events. The algorithms only see graph structure.
 
 ```
@@ -14,7 +14,7 @@ chunks, concepts, or events. The algorithms only see graph structure.
 │                          NODE TYPES × ALGORITHMS                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│   Signal Extraction (anno)        Graph Analysis (strata)                   │
+│   Signal Extraction (anno)        Graph Analysis (tier)                   │
 │   ════════════════════════        ═══════════════════════                   │
 │                                                                              │
 │   NER → entities ──────────┐                                                │
@@ -35,7 +35,7 @@ chunks, concepts, or events. The algorithms only see graph structure.
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Implemented in strata (December 2025)
+## Implemented in tier (December 2025)
 
 ### Centrality
 

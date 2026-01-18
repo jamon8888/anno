@@ -302,11 +302,11 @@ Graph documents can be exported and re-imported:
 # Export to JSON
 anno extract "text" --export-graph networkx > graph.json
 
-# Import and cluster with strata
-anno strata --input graph.json --method leiden --levels 3
+# Import and cluster with tier
+anno tier --input graph.json --method leiden --levels 3
 ```
 
-The `strata` command reads `GraphDocument` JSON and performs hierarchical clustering, adding community assignments to node properties.
+The `tier` command reads `GraphDocument` JSON and performs hierarchical clustering, adding community assignments to node properties.
 
 ## Examples
 
@@ -319,7 +319,7 @@ anno extract "Apple was founded by Steve Jobs in 1976." \
   --export-graph networkx > graph.json
 
 # 2. Cluster hierarchically
-anno strata --input graph.json --method leiden --levels 3 > clustered.json
+anno tier --input graph.json --method leiden --levels 3 > clustered.json
 
 # 3. Import into Neo4j
 cat clustered.json | jq -r '.nodes[] | "CREATE (n\(.id):\(.type) {id: \"\(.id)\", name: \"\(.name)\"});"' | cypher-shell
@@ -356,5 +356,5 @@ done
 
 - [`GraphDocument` API](https://docs.rs/anno-core/latest/anno_core/graph/struct.GraphDocument.html)
 - [`GroundedDocument`](https://docs.rs/anno-core/latest/anno_core/grounded/struct.GroundedDocument.html)
-- [Strata Clustering](../../../ARCHITECTURE.md#hierarchical-clustering)
+- [Tier Clustering](../../../ARCHITECTURE.md#hierarchical-clustering)
 

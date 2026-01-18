@@ -3,8 +3,6 @@
 //! Provides unified similarity computation functions used across
 //! cross-document coreference, entity linking, and clustering operations.
 
-use std::collections::HashSet;
-
 /// Compute string similarity using multiple strategies.
 ///
 /// Returns a value in [0.0, 1.0] where:
@@ -78,17 +76,7 @@ pub fn string_similarity(a: &str, b: &str) -> f64 {
 /// ```
 #[must_use]
 pub fn jaccard_word_similarity(a: &str, b: &str) -> f64 {
-    let words_a: HashSet<&str> = a.split_whitespace().collect();
-    let words_b: HashSet<&str> = b.split_whitespace().collect();
-
-    let intersection = words_a.intersection(&words_b).count();
-    let union = words_a.union(&words_b).count();
-
-    if union == 0 {
-        0.0
-    } else {
-        intersection as f64 / union as f64
-    }
+    textprep::similarity::word_jaccard(a, b)
 }
 
 /// Compute Jaccard similarity on word sets (f32 version).

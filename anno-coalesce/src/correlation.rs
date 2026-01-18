@@ -266,7 +266,7 @@ pub fn pivot_clustering<R: Rng>(graph: &LabeledGraph, rng: &mut R) -> Clustering
 
     while !unclustered.is_empty() {
         // Pick random pivot
-        let pivot_idx = rng.random_range(0..unclustered.len());
+        let pivot_idx = rng.gen_range(0..unclustered.len());
         let pivot = unclustered.swap_remove(pivot_idx);
 
         // Assign pivot to new cluster
@@ -865,7 +865,7 @@ pub fn chromatic_clustering<R: Rng>(
 
     while !unclustered.is_empty() {
         // Pick random pivot
-        let pivot_idx = rng.random_range(0..unclustered.len());
+        let pivot_idx = rng.gen_range(0..unclustered.len());
         let pivot = unclustered.swap_remove(pivot_idx);
 
         // Assign pivot to new cluster

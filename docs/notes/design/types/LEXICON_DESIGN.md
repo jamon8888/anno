@@ -252,7 +252,7 @@ let entities = ner.extract_with_soft_lexicon(text, &soft)?;
 
 ## Why This Design
 
-1. **Separates concerns**: TypeMapper (labels), Lexicon (entities), SemanticRegistry (embeddings)
+1. **Separates concernos**: TypeMapper (labels), Lexicon (entities), SemanticRegistry (embeddings)
 2. **Research-aligned**: Follows GEMNET, Soft Gazetteers, GLiNER insights
 3. **Backward compatible**: Existing code unchanged
 4. **Flexible**: Hard, soft, and gated modes for different use cases

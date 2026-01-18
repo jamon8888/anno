@@ -100,7 +100,7 @@ pub struct BookScaleConfig {
     pub short_chain_threshold: usize,
     /// MUC-CEAF divergence threshold for scale issues
     pub divergence_threshold: f64,
-    /// Performance drop threshold (windowed → full) for concern
+    /// Performance drop threshold (windowed → full) for concerno
     pub performance_drop_threshold: f64,
 }
 
