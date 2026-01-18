@@ -215,9 +215,9 @@ cargo test --features "eval-advanced,onnx,candle,burn"
    - `compare_algorithms_extended()` includes min-max with metrics
    - Reports per-algorithm max_disagreements where applicable
 
-## Graph Algorithms (strata) - ARCHITECTURE
+## Graph Algorithms (tier) - ARCHITECTURE
 
-Graph importance and clustering are computed using **graph algorithms** in `strata`.
+Graph importance and clustering are computed using **graph algorithms** in `tier`.
 The key insight: **nodes can be anything** - entities, documents, sentences, chunks.
 The algorithms only see graph structure.
 
@@ -230,7 +230,7 @@ The algorithms only see graph structure.
 | `Hits` | "Is this a hub or authority?" | O(V × iterations) |
 | `Leiden` | "How do nodes cluster?" | O(V log V) |
 
-### Node Types strata Can Handle
+### Node Types tier Can Handle
 
 | Node Type | Edge Type | Use Case |
 |-----------|-----------|----------|
@@ -250,7 +250,7 @@ The algorithms only see graph structure.
 │                                                                              │
 │   PREFERRED: Use actual relations (requires relation extraction)            │
 │   ════════════════════════════════════════════════════════════              │
-│   NER + RelationExtraction → GraphDocument → strata::PageRank               │
+│   NER + RelationExtraction → GraphDocument → tier::PageRank               │
 │                                                                              │
 │   "Obama" ─[PRESIDENT_OF]→ "USA"     ← semantic edge                        │
 │   "Obama" ─[BORN_IN]→ "Hawaii"       ← semantic edge                        │
@@ -270,8 +270,8 @@ The algorithms only see graph structure.
 
 | Module | Algorithm | Input | Use When |
 |--------|-----------|-------|----------|
-| `anno_strata::PageRank` | PageRank | `GraphDocument` (with relations) | You have relation extraction |
-| `anno_strata::Leiden` | Community detection | `GraphDocument` | You need clustering |
+| `anno_tier::PageRank` | PageRank | `GraphDocument` (with relations) | You have relation extraction |
+| `anno_tier::Leiden` | Community detection | `GraphDocument` | You need clustering |
 | `anno::salience::TextRankSalience` | PageRank on co-occurrence | Entities only | No relations available |
 | `anno_coalesce::canonical` | Heuristic scoring | Mentions | Selecting canonical mention |
 
@@ -279,7 +279,7 @@ The algorithms only see graph structure.
 
 ```rust
 // IF you have relations (from GLiNER2, TPLinker, etc.):
-use anno_strata::PageRank;
+use anno_tier::PageRank;
 let graph = GraphDocument::from_extraction(&entities, &relations, None);
 let scores = PageRank::default().compute(&graph);  // Uses actual semantic edges
 
@@ -297,11 +297,11 @@ prefer:**
 
 1. **GLiNER/Candle NER** - Transformer-based, works on any language
 2. **Relation extraction** - Get actual edges, not proximity
-3. **`strata::PageRank`** - Run on semantic graph, not co-occurrence
+3. **`tier::PageRank`** - Run on semantic graph, not co-occurrence
 
 ### Tests
 
-- `strata/src/pagerank.rs` - 5 unit tests
+- `tier/src/pagerank.rs` - 5 unit tests
 - `anno/tests/salience_integration.rs` - 10 tests
 - `coalesce/tests/canonical_integration.rs` - 19 tests
 

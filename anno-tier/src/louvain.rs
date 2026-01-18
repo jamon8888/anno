@@ -19,7 +19,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use anno_strata::{Louvain, leiden::Leiden};
+//! use anno_tier::{Louvain, leiden::Leiden};
 //! use anno_core::GraphDocument;
 //!
 //! // Compare Louvain vs Leiden on same graph

@@ -311,7 +311,7 @@ fn test_entities_glued_to_punctuation() {
     let model = heuristic();
     let entities = model.extract_entities(text, None).unwrap();
 
-    // HeuristicNER relies on whitespace mostly, but let's see if it survives
+    // HeuristicNER relies on whitespace mostly, but let's see if it surcernos
     // "Hello.Google.Inc." might be treated as one token.
     // If it is, does capitalization check fail?
     // H is caps.

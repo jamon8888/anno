@@ -161,7 +161,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("\nStratified Metrics:");
             println!("  Entity types: {}", stratified.by_entity_type.len());
             if let Some(ref temporal) = stratified.by_temporal_stratum {
-                println!("  Temporal strata: {}", temporal.len());
+                println!("  Temporal tier: {}", temporal.len());
             }
         }
 

@@ -140,9 +140,18 @@ proptest! {
     ) {
         let lower = text.to_lowercase();
         let upper = text.to_uppercase();
-        let mixed: String = text.chars().enumerate()
-            .map(|(i, c)| if i % 2 == 0 { c.to_uppercase().next().unwrap() } else { c.to_lowercase().next().unwrap() })
-            .collect();
+        let mixed = text
+            .chars()
+            .enumerate()
+            .fold(String::with_capacity(text.len()), |mut out, (i, c)| {
+                // Unicode-aware: case conversion can expand into multiple chars.
+                if i % 2 == 0 {
+                    out.extend(c.to_uppercase());
+                } else {
+                    out.extend(c.to_lowercase());
+                }
+                out
+            });
 
         // All case variants should have similarity 1.0 with each other
         let sim_lower_upper = string_similarity(&lower, &upper);

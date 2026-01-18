@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Your existing `Signal → Track → Identity` hierarchy is **architecturally sound**, but there's a **semantic gap** between the evaluation layer (`CrossDocCluster` in `cdcr.rs`) and the core representation (`Identity` in `grounded.rs`). The abstraction hierarchy correctly separates concerns, but the **operations** that bridge these levels need clearer type-level distinctions.
+Your existing `Signal → Track → Identity` hierarchy is **architecturally sound**, but there's a **semantic gap** between the evaluation layer (`CrossDocCluster` in `cdcr.rs`) and the core representation (`Identity` in `grounded.rs`). The abstraction hierarchy correctly separates concernos, but the **operations** that bridge these levels need clearer type-level distinctions.
 
 ## The Operation Taxonomy
 
@@ -88,7 +88,7 @@ fn link_to_kb(
 1. **Signal is stateless**: Correctly represents raw detection without identity assumptions.
 2. **Track is document-scoped**: Correctly captures intra-doc coreference.
 3. **Identity is global**: Correctly represents cross-doc and KB-linked entities.
-4. **Separation of concerns**: Each level has distinct responsibilities.
+4. **Separation of concernos**: Each level has distinct responsibilities.
 
 ### What Needs Clarification
 

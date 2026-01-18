@@ -1,14 +1,14 @@
-//! End-to-end pipeline integration test: NER → Coalesce → Strata
+//! End-to-end pipeline integration test: NER → Coalesce → Tier
 //!
 //! This test demonstrates the full anno pipeline:
 //! 1. Extract entities from text (NER)
 //! 2. Resolve entity mentions across documents (coalesce)
-//! 3. Build a knowledge graph and analyze structure (strata)
+//! 3. Build a knowledge graph and analyze structure (tier)
 //!
 //! This validates that all three crates work together seamlessly.
 
 use anno_core::{Entity, EntityCategory, EntityType, GraphDocument, Relation};
-use anno_strata::{
+use anno_tier::{
     graph_utils::GraphStats, Betweenness, Closeness, Eigenvector, HierarchicalLeiden, Hits,
     LabelPropagation, Louvain, PageRank,
 };
@@ -174,9 +174,9 @@ fn build_knowledge_graph(
     GraphDocument::from_extraction(&entities_vec, &relations, None)
 }
 
-/// Full pipeline test: NER → Coalesce → Strata
+/// Full pipeline test: NER → Coalesce → Tier
 #[test]
-fn test_full_pipeline_ner_coalesce_strata() {
+fn test_full_pipeline_ner_coalesce_tier() {
     // Step 1: Simulate NER extraction
     let doc_entities = simulate_ner_extraction();
     assert_eq!(doc_entities.len(), 4);
@@ -256,7 +256,7 @@ fn test_full_pipeline_ner_coalesce_strata() {
     println!("\nPipeline test completed successfully!");
 }
 
-/// Test that strata algorithms handle multilingual entity graphs correctly.
+/// Test that tier algorithms handle multilingual entity graphs correctly.
 #[test]
 fn test_multilingual_entity_graph_pipeline() {
     // Simulate NER output with multilingual entities

@@ -22,14 +22,14 @@
 //! - Citations can link entities mentioned in different contexts
 //! - Resolved content may contain canonical names or aliases
 //!
-//! # Integration with Strata
+//! # Integration with Tier
 //!
 //! References create hierarchical relationships:
 //! - Level 0: Entities in source document
 //! - Level 1: Entities in directly referenced documents
 //! - Level 2+: Entities in transitively referenced documents
 //!
-//! This creates a "citation graph" that strata can cluster.
+//! This creates a "citation graph" that tier can cluster.
 //!
 //! # Example
 //!
@@ -455,7 +455,7 @@ pub struct ExtractedEntity {
 
 /// Reference graph for tracking relationships between documents.
 ///
-/// Used by strata for hierarchical clustering of entity relationships.
+/// Used by tier for hierarchical clustering of entity relationships.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReferenceGraph {
     /// Nodes: document IDs
@@ -554,7 +554,7 @@ impl ReferenceGraph {
         usize::MAX // Not reachable
     }
 
-    /// Convert to a format suitable for strata clustering.
+    /// Convert to a format suitable for tier clustering.
     pub fn to_graph_edges(&self) -> Vec<(usize, usize, f64)> {
         let node_index: HashMap<&str, usize> = self
             .nodes

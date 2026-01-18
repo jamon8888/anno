@@ -1,6 +1,6 @@
 //! RAPTOR-style hierarchical tree building for GraphDocument.
 //!
-//! This module provides integration with the `stratify` crate for building
+//! This module provides integration with the Tekne `tier` crate for building
 //! hierarchical summaries of graphs, supporting RAPTOR-style retrieval.
 //!
 //! ## RAPTOR Pipeline
@@ -12,7 +12,7 @@
 //! ## Usage
 //!
 //! ```rust,ignore
-//! use anno_strata::raptor::{RaptorConfig, build_raptor_tree};
+//! use anno_tier::raptor::{RaptorConfig, build_raptor_tree};
 //! use anno_core::GraphDocument;
 //!
 //! let graph = GraphDocument::new();
@@ -286,7 +286,7 @@ fn extract_embeddings(
     Ok(embeddings)
 }
 
-/// Simple k-means clustering (fallback when stratify not available).
+/// Simple k-means clustering (fallback when `tier` is not enabled/available).
 fn simple_kmeans_cluster(
     embeddings: &HashMap<String, Vec<f32>>,
     node_ids: &[String],

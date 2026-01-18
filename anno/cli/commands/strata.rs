@@ -1,17 +1,17 @@
-//! Strata command - Hierarchical clustering: reveal strata of abstraction
+//! Tier command - Hierarchical clustering: reveal tier of abstraction
 
 #[cfg(feature = "eval-advanced")]
 use anno_core::GraphDocument;
 #[cfg(feature = "eval-advanced")]
-use anno_strata::HierarchicalLeiden;
+use anno_tier::HierarchicalLeiden;
 
 #[cfg(feature = "eval-advanced")]
 use super::super::output::color;
 use super::super::parser::OutputFormat;
 
-/// Hierarchical clustering: reveal strata of abstraction
+/// Hierarchical clustering: reveal tier of abstraction
 #[derive(clap::Parser, Debug)]
-pub struct StrataArgs {
+pub struct TierArgs {
     /// Input file containing GraphDocument (JSON format)
     #[arg(short, long, value_name = "FILE")]
     pub input: Option<String>,
@@ -46,8 +46,8 @@ pub struct StrataArgs {
 }
 
 #[cfg(feature = "eval-advanced")]
-/// Execute the strata command.
-pub fn run(args: StrataArgs) -> Result<(), String> {
+/// Execute the tier command.
+pub fn run(args: TierArgs) -> Result<(), String> {
     // Validate input source
     if args.input.is_none() && !args.stdin {
         return Err("Either --input <FILE> or --stdin must be specified".to_string());
@@ -124,7 +124,7 @@ pub fn run(args: StrataArgs) -> Result<(), String> {
         OutputFormat::Human => format_human_output(&clustered, args.levels),
         _ => {
             return Err(format!(
-                "Format '{:?}' not supported for strata command. Use: json, jsonl, or human.",
+                "Format '{:?}' not supported for tier command. Use: json, jsonl, or human.",
                 args.format
             ));
         }
@@ -144,9 +144,9 @@ pub fn run(args: StrataArgs) -> Result<(), String> {
     Ok(())
 }
 
-/// Execute the strata command (stub when eval-advanced is disabled).
+/// Execute the tier command (stub when eval-advanced is disabled).
 #[cfg(not(feature = "eval-advanced"))]
-pub fn run(_args: StrataArgs) -> Result<(), String> {
+pub fn run(_args: TierArgs) -> Result<(), String> {
     Err("Hierarchical clustering requires 'eval-advanced' feature. Build with: cargo build --features eval-advanced".to_string())
 }
 

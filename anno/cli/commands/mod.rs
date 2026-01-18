@@ -28,7 +28,7 @@ pub mod pipeline;
 pub mod privacy;
 pub mod query;
 pub mod singleton;
-pub mod strata;
+pub mod tier;
 pub mod validate;
 pub mod watch;
 
@@ -58,6 +58,6 @@ pub use pipeline::PipelineArgs;
 pub use privacy::PrivacyArgs;
 pub use query::QueryArgs;
 pub use singleton::SingletonArgs;
-pub use strata::StrataArgs;
+pub use tier::TierArgs;
 pub use validate::ValidateArgs;
 pub use watch::WatchArgs;

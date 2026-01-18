@@ -388,7 +388,7 @@ pub struct LabelShift {
 impl LabelShift {
     /// Check if F1 scores are likely inflated due to high label overlap.
     ///
-    /// Threshold from Familiarity paper: >0.8 overlap is concerning.
+    /// Threshold from Familiarity paper: >0.8 overlap is concernoing.
     #[must_use]
     pub fn is_inflated(&self) -> bool {
         self.overlap_ratio > 0.8 || self.familiarity > 0.85

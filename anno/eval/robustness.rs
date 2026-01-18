@@ -285,14 +285,15 @@ impl RobustnessEvaluator {
             Perturbation::CaseMixed => text
                 .chars()
                 .enumerate()
-                .map(|(i, c)| {
+                .fold(String::with_capacity(text.len()), |mut out, (i, c)| {
+                    // Unicode-aware: case conversion can expand into multiple chars.
                     if i % 2 == 0 {
-                        c.to_uppercase().next().unwrap_or(c)
+                        out.extend(c.to_uppercase());
                     } else {
-                        c.to_lowercase().next().unwrap_or(c)
+                        out.extend(c.to_lowercase());
                     }
-                })
-                .collect(),
+                    out
+                }),
 
             Perturbation::WhitespaceExtra => {
                 let intensity = self.intensity;
@@ -516,13 +517,14 @@ fn keyboard_neighbor(c: char, rng: &mut SimpleRng) -> char {
         (&['g'], &['f', 'h', 't', 'b']),
     ];
 
-    let lower = c.to_lowercase().next().unwrap_or(c);
+    // This helper is intentionally ASCII/QWERTY-only.
+    let lower = c.to_ascii_lowercase();
     for (keys, neighbors) in keyboard {
         if keys.contains(&lower) && !neighbors.is_empty() {
             let idx = rng.gen_range(neighbors.len());
             let neighbor = neighbors[idx];
             return if c.is_uppercase() {
-                neighbor.to_uppercase().next().unwrap_or(neighbor)
+                neighbor.to_ascii_uppercase()
             } else {
                 neighbor
             };
@@ -556,13 +558,19 @@ fn homoglyph(c: char) -> char {
 
 /// Add a diacritic to a character.
 fn add_diacritic(c: char) -> char {
-    match c.to_lowercase().next().unwrap_or(c) {
+    match c {
         'a' => 'á',
         'e' => 'é',
         'i' => 'í',
         'o' => 'ó',
         'u' => 'ú',
         'n' => 'ñ',
+        'A' => 'Á',
+        'E' => 'É',
+        'I' => 'Í',
+        'O' => 'Ó',
+        'U' => 'Ú',
+        'N' => 'Ñ',
         _ => c,
     }
 }

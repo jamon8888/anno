@@ -104,7 +104,7 @@ fn main() -> ExitCode {
         #[cfg(feature = "eval-advanced")]
         Some(Commands::CrossDoc(args)) => crossdoc::run(args),
         #[cfg(feature = "eval-advanced")]
-        Some(Commands::Strata(args)) => strata::run(args),
+        Some(Commands::Tier(args)) => tier::run(args),
         Some(Commands::Enhance(args)) => enhance::run(args),
         Some(Commands::Pipeline(args)) => pipeline::run(args),
         Some(Commands::Query(args)) => query::run(args),

@@ -6,7 +6,7 @@
 //! 3. Algorithm behavior on canonical graph structures
 
 use anno_core::{Entity, EntityType, GraphDocument, Relation};
-use anno_strata::{
+use anno_tier::{
     leiden::Leiden, Betweenness, Closeness, Eigenvector, Hits, LabelPropagation, Louvain, PageRank,
 };
 use std::collections::{HashMap, HashSet};

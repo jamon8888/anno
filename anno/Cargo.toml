@@ -2,12 +2,17 @@
 name = "anno"
 version = "0.2.0"
 edition = "2021"
-description = "Named Entity Recognition (NER) and Information Extraction library"
+description = "Information extraction for Rust: Named Entity Recognition (NER), coreference resolution, and relationship extraction"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/arclabs561/anno"
+homepage = "https://github.com/arclabs561/anno"
+documentation = "https://docs.rs/anno"
+keywords = ["ner", "nlp", "information-extraction", "coreference", "rust"]
 
 [dependencies]
 anno-core = { path = "../anno-core" }
+anno-coalesce = { path = "../anno-coalesce" }
+textprep = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -48,7 +53,7 @@ itertools = { workspace = true }
 smallvec = { workspace = true }
 dashmap = { workspace = true }
 unicode-normalization = { workspace = true }
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { workspace = true }
 
 # Observability
 tracing = { workspace = true }
@@ -57,3 +62,17 @@ tracing-subscriber = { workspace = true }
 [features]
 default = []
 discourse = []
+cli = []
+eval = []
+eval-advanced = ["eval"]
+onnx = []
+candle = []
+burn = []
+semantic-chunking = []
+async-inference = []
+session-pool = []
+subsume = []
+instrument = []
+llm = []
+fast-lock = []
+jiff-time = []

@@ -40,7 +40,7 @@ pub use crate::pagerank::PageRank;
 /// # Example
 ///
 /// ```rust,ignore
-/// use anno_strata::centrality::Betweenness;
+/// use anno_tier::centrality::Betweenness;
 /// let bc = Betweenness::default();
 /// let scores = bc.compute(&graph);
 /// // High-scoring nodes are structural bridges
@@ -195,7 +195,7 @@ impl Betweenness {
 /// # Example
 ///
 /// ```rust,ignore
-/// use anno_strata::centrality::Hits;
+/// use anno_tier::centrality::Hits;
 /// let hits = Hits::default();
 /// let (hubs, authorities) = hits.compute(&graph);
 /// ```
@@ -378,7 +378,7 @@ impl Hits {
 /// # Example
 ///
 /// ```rust,ignore
-/// use anno_strata::centrality::Eigenvector;
+/// use anno_tier::centrality::Eigenvector;
 /// let ev = Eigenvector::default();
 /// let scores = ev.compute(&graph);
 /// ```
@@ -526,7 +526,7 @@ impl Eigenvector {
 /// # Example
 ///
 /// ```rust,ignore
-/// use anno_strata::centrality::Closeness;
+/// use anno_tier::centrality::Closeness;
 /// let cl = Closeness::default();
 /// let scores = cl.compute(&graph);
 /// ```

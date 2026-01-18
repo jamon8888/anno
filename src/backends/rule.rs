@@ -697,7 +697,7 @@ fn is_common_capitalized_word(word: &str) -> bool {
             "Based",
             "According",
             "Regarding",
-            "Concerning",
+            "Concernoing",
             "Given",
             "Assuming",
             "Suppose",

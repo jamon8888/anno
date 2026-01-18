@@ -1,7 +1,7 @@
-//! Tests for hierarchical clustering (strata).
+//! Tests for hierarchical clustering (tier).
 
 use anno_core::{GraphDocument, GraphEdge, GraphNode};
-use anno_strata::HierarchicalLeiden;
+use anno_tier::HierarchicalLeiden;
 
 #[test]
 fn test_hierarchical_leiden_default() {

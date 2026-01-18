@@ -438,7 +438,7 @@ mod tests {
     fn test_detector_multiple_patterns() {
         let detector = ShellNounDetector::new();
 
-        let text = "This problem is serious. The issue that concerns us is timing.";
+        let text = "This problem is serious. The issue that concernos us is timing.";
         let instances = detector.detect(text);
 
         assert_eq!(instances.len(), 2);

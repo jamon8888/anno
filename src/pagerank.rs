@@ -6,7 +6,7 @@
 //! - `keywords.rs` (TextRankExtractor)
 //! - `summarize.rs` (LexRankSummarizer)
 //!
-//! For PageRank on `GraphDocument` with actual relations, use `anno_strata::PageRank`.
+//! For PageRank on `GraphDocument` with actual relations, use `anno_tier::PageRank`.
 //!
 //! # Algorithm
 //!

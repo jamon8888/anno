@@ -83,7 +83,7 @@
 //! |---------|--------------|---------|
 //! | `eval` | `dirs`, `glob` | Dataset loading, basic metrics, harness |
 //! | `eval-bias` | `eval` | Demographic/gender bias evaluation |
-//! | `eval-advanced` | `eval`, `rand`, `ureq`, `sha2`, `anno-strata` | Network downloads, advanced metrics, graph clustering |
+//! | `eval-advanced` | `eval`, `rand`, `ureq`, `sha2`, `anno-tier` | Network downloads, advanced metrics, graph clustering |
 //! | `eval-full` | All above | Everything for comprehensive evaluation |
 //! | `eval-parallel` | `eval`, `rayon` | Parallel evaluation (multi-threaded) |
 //!
@@ -121,39 +121,61 @@
 #![warn(missing_docs)]
 
 // Module declarations (core types are in anno-core, not declared here)
+#[path = "../backends/mod.rs"]
 pub mod backends;
 /// Edit distance algorithms.
+#[path = "../edit_distance.rs"]
 pub mod edit_distance;
+#[path = "../env.rs"]
 pub mod env;
+#[path = "../error.rs"]
 pub mod error;
 #[cfg(feature = "eval")]
+#[path = "../eval/mod.rs"]
 pub mod eval;
 /// Entity feature extraction for downstream ML and analysis.
+#[path = "../features.rs"]
 pub mod features;
+#[path = "../ingest/mod.rs"]
 pub mod ingest;
 /// Joint inference for coreference resolution and entity linking.
+#[path = "../joint/mod.rs"]
 pub mod joint;
 /// Keyword and keyphrase extraction (TF-IDF, YAKE, TextRank).
+#[path = "../keywords.rs"]
 pub mod keywords;
+#[path = "../lang.rs"]
 pub mod lang;
 /// Entity linking to knowledge bases.
+#[path = "../linking/mod.rs"]
 pub mod linking;
+#[path = "../offset.rs"]
 pub mod offset;
 /// Shared PageRank algorithm for graph-based ranking.
+#[path = "../pagerank.rs"]
 pub mod pagerank;
 /// Preprocessing for mention detection.
+#[path = "../preprocess/mod.rs"]
 pub mod preprocess;
 /// Entity salience and importance ranking.
+#[path = "../salience.rs"]
 pub mod salience;
+#[path = "../schema.rs"]
 pub mod schema;
+#[path = "../similarity.rs"]
 pub mod similarity;
 /// Extractive summarization.
+#[path = "../summarize.rs"]
 pub mod summarize;
+#[path = "../sync.rs"]
 pub mod sync;
 /// Temporal entity tracking, parsing, and diachronic NER.
+#[path = "../temporal.rs"]
 pub mod temporal;
 /// Language-specific tokenization for multilingual NLP.
+#[path = "../tokenizer.rs"]
 pub mod tokenizer;
+#[path = "../types/mod.rs"]
 pub mod types;
 
 /// Geometric and topological foundations for entity resolution.
@@ -179,6 +201,7 @@ pub mod types;
 // Reason: Only used in doc comments, contains unimplemented!() calls
 // Restore when sheaf diffusion / hyperbolic embeddings are actually needed
 #[cfg(feature = "cli")]
+#[path = "../cli/mod.rs"]
 pub mod cli;
 
 /// Discourse-level analysis for coreference resolution.
@@ -195,6 +218,7 @@ pub mod cli;
 /// See [`discourse::centering`] for salience-based pronoun resolution and
 /// [`discourse::uncertain_reference`] for handling ambiguous references.
 #[cfg(feature = "discourse")]
+#[path = "../discourse/mod.rs"]
 pub mod discourse;
 
 // Re-export error types

@@ -562,7 +562,7 @@ impl AbstractAnaphoraDataset {
         dataset.add(
             AnaphoraTestCase::new(
                 "prop_03",
-                "Interest rates may rise again. This possibility concerns economists.",
+                "Interest rates may rise again. This possibility concernos economists.",
                 AntecedentSpan {
                     text: "Interest rates may rise again".to_string(),
                     start: 0,
@@ -785,7 +785,7 @@ impl AbstractAnaphoraDataset {
         dataset.add(
             AnaphoraTestCase::new(
                 "shell_modal_01",
-                "The system could crash under load. This possibility concerned engineers.",
+                "The system could crash under load. This possibility concernoed engineers.",
                 AntecedentSpan {
                     text: "The system could crash under load".to_string(),
                     start: 0,
@@ -1238,7 +1238,7 @@ impl AbstractAnaphoraDataset {
         dataset.add(
             AnaphoraTestCase::new(
                 "med_07",
-                "The patient's fever spiked overnight. This development concerned the medical team.",
+                "The patient's fever spiked overnight. This development concernoed the medical team.",
                 AntecedentSpan {
                     text: "The patient's fever spiked overnight".to_string(),
                     start: 0,
@@ -2055,9 +2055,9 @@ impl AbstractAnaphoraDataset {
         dataset.add(
             AnaphoraTestCase::new(
                 "chal_09",
-                "Will the company survive? This question haunts investors.",
+                "Will the company surcerno? This question haunts investors.",
                 AntecedentSpan {
-                    text: "Will the company survive".to_string(),
+                    text: "Will the company surcerno".to_string(),
                     start: 0,
                     end: 24,
                     trigger: None,

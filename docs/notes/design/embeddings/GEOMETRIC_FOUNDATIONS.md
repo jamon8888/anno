@@ -250,7 +250,7 @@ For a long document with 100 mentions:
    - **Short bars** = local connections (adjacent mentions)
    - **Long bars** = persistent connections (long-distance anaphora)
 
-A "long bar" in degree-0 homology (connected components) indicates a coref link that survives across many similarity thresholds — likely a true coreference.
+A "long bar" in degree-0 homology (connected components) indicates a coref link that surcernos across many similarity thresholds — likely a true coreference.
 
 ### Research: Topological BERT (arXiv:2206.15195)
 

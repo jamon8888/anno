@@ -10,7 +10,7 @@ echo "Checking for patterns that match bugs that were previously fixed..."
 echo ""
 
 ISSUES=0
-WORKSPACE_DIRS=(anno/ anno-core/ anno-coalesce/ anno-strata/ tests/ examples/)
+WORKSPACE_DIRS=(anno/ anno-core/ anno-coalesce/ anno-tier/ tests/ examples/)
 EVAL_DIR="anno/src/eval/"
 
 # 1. Check for mutex double-lock pattern (deadlock bug)

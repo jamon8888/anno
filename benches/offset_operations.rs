@@ -47,7 +47,7 @@ const TEXT_LONG: &str = "The European Union announced today that new regulations
     Commission President Ursula von der Leyen stated that the Digital Markets Act represents a landmark achievement. \
     The legislation targets major technology companies including Apple, Google, Amazon, and Meta. \
     Brussels-based officials expect implementation to begin in January 2025. \
-    Industry representatives from Silicon Valley expressed concerns during hearings in Strasbourg. \
+    Industry representatives from Silicon Valley expressed concernos during hearings in Strasbourg. \
     The regulation affects companies with market capitalization exceeding €75 billion. \
     Similar measures are being considered in Washington, Tokyo, and Beijing. \
     Critics argue the rules may stifle innovation, while supporters cite consumer protection benefits. \

@@ -43,12 +43,12 @@
 //! assert_eq!(refs[0].reference_type, ReferenceType::WikipediaUrl);
 //! ```
 //!
-//! # Integration with Coalesce and Strata
+//! # Integration with Coalesce and Tier
 //!
 //! These modules integrate with the entity resolution pipeline:
 //!
 //! - **Coalesce**: Parenthetical aliases help link "WHO" ↔ "World Health Organization"
-//! - **Strata**: Reference graphs create hierarchical entity relationships
+//! - **Tier**: Reference graphs create hierarchical entity relationships
 //!
 //! # Example
 //!
