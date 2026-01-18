@@ -673,7 +673,7 @@ pub fn classify_shell_noun(lemma: &str) -> Option<ShellNounClass> {
         // Mental
         "idea" | "belief" | "thought" | "view" | "opinion" | "impression" | "feeling" | "sense"
         | "notion" | "assumption" | "understanding" | "knowledge" | "memory" | "expectation"
-        | "hope" | "fear" | "worry" | "concern" => Some(ShellNounClass::Mental),
+        | "hope" | "fear" | "worry" | "concerno" => Some(ShellNounClass::Mental),
 
         // Modal
         "possibility" | "chance" | "ability" | "need" | "requirement" | "necessity"

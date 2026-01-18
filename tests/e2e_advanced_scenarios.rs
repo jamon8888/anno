@@ -125,12 +125,12 @@ fn e2e_crossdoc_type_mismatch() {
 
 /// E2E: Hierarchical clustering with nested communities
 ///
-/// Tests that strata clustering correctly identifies nested community structures.
+/// Tests that tier clustering correctly identifies nested community structures.
 #[test]
 #[cfg(feature = "eval-advanced")]
-fn e2e_strata_nested_communities() {
+fn e2e_tier_nested_communities() {
     use anno_core::{GraphDocument, GraphEdge, GraphNode};
-    use anno_strata::HierarchicalLeiden;
+    use anno_tier::HierarchicalLeiden;
 
     // Create a graph with nested community structure:
     // Community A: nodes 0,1,2 (tightly connected)

@@ -454,7 +454,7 @@ mod tests {
         assert!(text.contains("Путин встретился с Си Цзиньпином в Москве."));
         assert!(text.contains("प्रधान मंत्री शर्मा आज आए।"));
 
-        // No raw newlines/tabs from HTML formatting should survive.
+        // No raw newlines/tabs from HTML formatting should surcerno.
         assert!(!text.contains('\n'));
         assert!(!text.contains('\t'));
 

@@ -601,7 +601,7 @@ jobs:
       - name: Run Miri on unsafe code
         run: |
           # Run Miri on files with unsafe code (selective approach)
-          cargo miri test --lib --features onnx -- --test-threads=1 --nocapture 2>&1 | head -100 || true
+          cargo miri test --lib --features onnx -- --test-threads=1 --nocapture || true
         timeout-minutes: 10
 
   # OpenGrep: Custom security pattern detection
@@ -621,19 +621,19 @@ jobs:
             --config auto \
             --json --output opengrep-results.json \
             --sarif-output opengrep-results.sarif \
-            anno/ anno-core/ anno-coalesce/ anno-strata/ anno-cli/ tests/ examples/ || true
+            anno/ anno-core/ anno-coalesce/ anno-tier/ tests/ examples/ || true
       - name: Run OpenGrep (custom rules - general)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-security.yaml \
             --json --output opengrep-security-results.json \
-            anno/ anno-core/ anno-coalesce/ anno-strata/ anno-cli/ || true
+            anno/ anno-core/ anno-coalesce/ anno-tier/ || true
       - name: Run OpenGrep (custom rules - NLP/ML patterns)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-nlp-ml-patterns.yaml \
             --json --output opengrep-nlp-results.json \
-            anno/ anno-core/ anno-coalesce/ anno-strata/ anno-cli/ || true
+            anno/ anno-core/ anno-coalesce/ anno-tier/ || true
       - name: Run OpenGrep (custom rules - evaluation framework)
         run: |
           opengrep scan \
@@ -645,19 +645,19 @@ jobs:
           opengrep scan \
             -f .opengrep/rules/rust-anno-specific.yaml \
             --json --output opengrep-anno-results.json \
-            anno/ anno-core/ anno-coalesce/ anno-strata/ anno-cli/ || true
+            anno/ anno-core/ anno-coalesce/ anno-tier/ || true
       - name: Run OpenGrep (custom rules - error handling)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-error-handling.yaml \
             --json --output opengrep-error-results.json \
-            anno/ anno-core/ anno-coalesce/ anno-strata/ anno-cli/ || true
+            anno/ anno-core/ anno-coalesce/ anno-tier/ || true
       - name: Run OpenGrep (custom rules - memory patterns)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-memory-patterns.yaml \
             --json --output opengrep-memory-results.json \
-            anno/ anno-core/ anno-coalesce/ anno-strata/ anno-cli/ || true
+            anno/ anno-core/ anno-coalesce/ anno-tier/ || true
       - name: Validate rules
         run: |
           chmod +x scripts/*.sh
@@ -841,59 +841,55 @@ jobs:
         id: anno-core
         run: |
           echo "Checking anno-core publish readiness..."
-          if cargo publish --dry-run -p anno-core 2>&1 | grep -q "aborting upload due to dry run"; then
+          if cargo publish --dry-run -p anno-core; then
             echo "status=ready" >> $GITHUB_OUTPUT
             echo "[ok] anno-core: Ready to publish" >> $GITHUB_STEP_SUMMARY
           else
             echo "status=error" >> $GITHUB_OUTPUT
             echo "[error] anno-core: Publish validation failed" >> $GITHUB_STEP_SUMMARY
-            cargo publish --dry-run -p anno-core 2>&1 | grep -E "(error|warning)" | head -10 >> $GITHUB_STEP_SUMMARY || true
           fi
       
       - name: Check publish readiness (anno-coalesce)
         id: anno-coalesce
         run: |
           echo "Checking anno-coalesce publish readiness..."
-          if cargo publish --dry-run -p anno-coalesce 2>&1 | grep -q "aborting upload due to dry run"; then
+          if cargo publish --dry-run -p anno-coalesce; then
             echo "status=ready" >> $GITHUB_OUTPUT
             echo "[ok] anno-coalesce: Ready to publish" >> $GITHUB_STEP_SUMMARY
           else
             echo "status=error" >> $GITHUB_OUTPUT
             echo "[error] anno-coalesce: Publish validation failed" >> $GITHUB_STEP_SUMMARY
-            cargo publish --dry-run -p anno-coalesce 2>&1 | grep -E "(error|warning)" | head -10 >> $GITHUB_STEP_SUMMARY || true
           fi
       
-      - name: Check publish readiness (anno-strata)
-        id: anno-strata
+      - name: Check publish readiness (anno-tier)
+        id: anno-tier
         run: |
-          echo "Checking anno-strata publish readiness..."
-          if cargo publish --dry-run -p anno-strata 2>&1 | grep -q "aborting upload due to dry run"; then
+          echo "Checking anno-tier publish readiness..."
+          if cargo publish --dry-run -p anno-tier; then
             echo "status=ready" >> $GITHUB_OUTPUT
-            echo "[ok] anno-strata: Ready to publish" >> $GITHUB_STEP_SUMMARY
+            echo "[ok] anno-tier: Ready to publish" >> $GITHUB_STEP_SUMMARY
           else
             echo "status=error" >> $GITHUB_OUTPUT
-            echo "[error] anno-strata: Publish validation failed" >> $GITHUB_STEP_SUMMARY
-            cargo publish --dry-run -p anno-strata 2>&1 | grep -E "(error|warning)" | head -10 >> $GITHUB_STEP_SUMMARY || true
+            echo "[error] anno-tier: Publish validation failed" >> $GITHUB_STEP_SUMMARY
           fi
       
       - name: Check publish readiness (anno)
         id: anno
         run: |
           echo "Checking anno publish readiness..."
-          if cargo publish --dry-run -p anno 2>&1 | grep -q "aborting upload due to dry run"; then
+          if cargo publish --dry-run -p anno; then
             echo "status=ready" >> $GITHUB_OUTPUT
             echo "[ok] anno: Ready to publish" >> $GITHUB_STEP_SUMMARY
           else
             echo "status=error" >> $GITHUB_OUTPUT
             echo "[error] anno: Publish validation failed" >> $GITHUB_STEP_SUMMARY
-            cargo publish --dry-run -p anno 2>&1 | grep -E "(error|warning)" | head -10 >> $GITHUB_STEP_SUMMARY || true
           fi
       
       - name: Check crates.io status
         run: |
           echo "## Crates.io Status" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          for crate in anno anno-core anno-coalesce anno-strata; do
+          for crate in anno anno-core anno-coalesce anno-tier; do
             if curl -s "https://crates.io/api/v1/crates/$crate" 2>/dev/null | jq -r '.crate | "\(.name): v\(.max_version // "not published")"' 2>/dev/null; then
               echo "- **$crate**: Published" >> $GITHUB_STEP_SUMMARY
             else
@@ -901,49 +897,39 @@ jobs:
             fi
           done
       
-      - name: Validate version requirements
+      - name: Validate version requirements (no grep)
         run: |
-          echo "## Version Requirement Validation" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Check for missing version requirements in workspace dependencies
-          MISSING_VERSIONS=0
-          
-          if ! grep -q 'version.*=.*"0.2.0"' coalesce/Cargo.toml 2>/dev/null || ! grep -q 'anno-core.*version' coalesce/Cargo.toml 2>/dev/null; then
-            echo "[error] coalesce/Cargo.toml: Missing version requirement for anno-core" >> $GITHUB_STEP_SUMMARY
-            MISSING_VERSIONS=$((MISSING_VERSIONS + 1))
-          else
-            echo "[ok] coalesce/Cargo.toml: Version requirement present" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if ! grep -q 'version.*=.*"0.2.0"' strata/Cargo.toml 2>/dev/null || ! grep -q 'anno-core.*version' strata/Cargo.toml 2>/dev/null; then
-            echo "[error] strata/Cargo.toml: Missing version requirement for anno-core" >> $GITHUB_STEP_SUMMARY
-            MISSING_VERSIONS=$((MISSING_VERSIONS + 1))
-          else
-            echo "[ok] strata/Cargo.toml: Version requirement present" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if ! grep -q 'anno-coalesce.*version' anno/Cargo.toml 2>/dev/null; then
-            echo "[error] anno/Cargo.toml: Missing version requirement for anno-coalesce" >> $GITHUB_STEP_SUMMARY
-            MISSING_VERSIONS=$((MISSING_VERSIONS + 1))
-          else
-            echo "[ok] anno/Cargo.toml: Version requirement for anno-coalesce present" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if ! grep -q 'anno-strata.*version' anno/Cargo.toml 2>/dev/null; then
-            echo "[error] anno/Cargo.toml: Missing version requirement for anno-strata" >> $GITHUB_STEP_SUMMARY
-            MISSING_VERSIONS=$((MISSING_VERSIONS + 1))
-          else
-            echo "[ok] anno/Cargo.toml: Version requirement for anno-strata present" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ $MISSING_VERSIONS -gt 0 ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "[warn]  $MISSING_VERSIONS crate(s) need version requirement fixes before publishing" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "[ok] All version requirements present" >> $GITHUB_STEP_SUMMARY
-          fi
+          python3 - <<'PY'
+          import sys, tomllib
+          from pathlib import Path
+          def load(p: str):
+              return tomllib.loads(Path(p).read_bytes())
+          def dep_has_version(spec):
+              if isinstance(spec, str):
+                  return True
+              if isinstance(spec, dict) and "version" in spec:
+                  return True
+              return False
+          checks = [
+              ("anno-coalesce/Cargo.toml", ["anno-core"]),
+              ("anno-tier/Cargo.toml", ["anno-core"]),
+              ("anno/Cargo.toml", ["anno-core", "anno-coalesce", "anno-tier"]),
+          ]
+          issues = 0
+          for path, deps in checks:
+              d = load(path)
+              table = d.get("dependencies", {})
+              for name in deps:
+                  spec = table.get(name)
+                  if spec is None:
+                      continue
+                  if not dep_has_version(spec):
+                      issues += 1
+                      print(f"[error] {path}: dependency '{name}' missing explicit version")
+          if issues:
+              sys.exit(1)
+          print("[ok] version requirements look present")
+          PY
       
       - name: Generate publish status report
         run: |
@@ -960,8 +946,8 @@ jobs:
           ### anno-coalesce
           $([ "${{ steps.anno-coalesce.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")
           
-          ### anno-strata
-          $([ "${{ steps.anno-strata.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")
+          ### anno-tier
+          $([ "${{ steps.anno-tier.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")
           
           ### anno
           $([ "${{ steps.anno.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")

@@ -205,7 +205,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("    ✓ Stratified metrics: {} types", s.by_entity_type.len());
                 if s.by_temporal_stratum.is_some() {
                     println!(
-                        "    ✓ Temporal stratification: {} strata",
+                        "    ✓ Temporal stratification: {} tier",
                         s.by_temporal_stratum.as_ref().unwrap().len()
                     );
                 }

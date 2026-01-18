@@ -17,7 +17,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use anno_strata::pagerank::PageRank;
+//! use anno_tier::pagerank::PageRank;
 //! use anno_core::GraphDocument;
 //!
 //! let graph = GraphDocument::from_extraction(&entities, &relations, None);

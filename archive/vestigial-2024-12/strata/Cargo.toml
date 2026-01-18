@@ -1,5 +1,5 @@
 [package]
-name = "anno-strata"
+name = "anno-tier"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-description = "Hierarchical clustering - reveal strata of abstraction (Leiden, RAPTOR, etc.). Extract. Coalesce. Stratify."
+description = "Hierarchical clustering - reveal tier of abstraction (Leiden, RAPTOR, etc.). Extract. Coalesce. Stratify."
 
 [dependencies]
 anno-core = { path = "../anno-core" }

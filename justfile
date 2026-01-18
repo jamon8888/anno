@@ -417,19 +417,19 @@ geiger:
 # Run ast-grep checks (optional, local)
 ast-grep-unicode:
     @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
-    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --report-style short anno/src/ anno-core/src/ anno-coalesce/src/ anno-strata/src/
+    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --report-style short anno/src/ anno-core/src/ anno-coalesce/src/ anno-tier/src/
 
 ast-grep-unicode-all:
     @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
-    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --report-style short anno/ anno-core/ anno-coalesce/ anno-strata/ tests/ examples/
+    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --report-style short anno/ anno-core/ anno-coalesce/ anno-tier/ tests/ examples/
 
 ast-grep-metal:
     @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
-    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --report-style short anno/src/ anno-core/src/ anno-coalesce/src/ anno-strata/src/
+    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --report-style short anno/src/ anno-core/src/ anno-coalesce/src/ anno-tier/src/
 
 ast-grep-metal-all:
     @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
-    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --report-style short anno/ anno-core/ anno-coalesce/ anno-strata/ tests/ examples/
+    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --report-style short anno/ anno-core/ anno-coalesce/ anno-tier/ tests/ examples/
 
 # Generate unsafe code safety report (creative use of cargo-geiger)
 safety-report:
@@ -444,7 +444,7 @@ safety-report:
 # Run OpenGrep static analysis
 opengrep:
     @which opengrep > /dev/null || (echo "Install: curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash" && exit 1)
-    opengrep scan --config auto --json --output opengrep-results.json anno/ anno-core/ anno-coalesce/ anno-strata/ tests/ examples/
+    opengrep scan --config auto --json --output opengrep-results.json anno/ anno-core/ anno-coalesce/ anno-tier/ tests/ examples/
     @echo "Results saved to opengrep-results.json"
     @if command -v jq > /dev/null; then \
         echo "Found $$(jq -r '.results | length' opengrep-results.json) issues"; \
@@ -455,12 +455,12 @@ opengrep:
 # Run OpenGrep with custom rules
 opengrep-custom:
     @which opengrep > /dev/null || (echo "Install: curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash" && exit 1)
-    opengrep scan -f .opengrep/rules/rust-security.yaml --json --output opengrep-security-results.json anno/ anno-core/ anno-coalesce/ anno-strata/
-    opengrep scan -f .opengrep/rules/rust-nlp-ml-patterns.yaml --json --output opengrep-nlp-results.json anno/ anno-core/ anno-coalesce/ anno-strata/
+    opengrep scan -f .opengrep/rules/rust-security.yaml --json --output opengrep-security-results.json anno/ anno-core/ anno-coalesce/ anno-tier/
+    opengrep scan -f .opengrep/rules/rust-nlp-ml-patterns.yaml --json --output opengrep-nlp-results.json anno/ anno-core/ anno-coalesce/ anno-tier/
     opengrep scan -f .opengrep/rules/rust-evaluation-framework.yaml --json --output opengrep-eval-results.json anno/src/eval/
-    opengrep scan -f .opengrep/rules/rust-anno-specific.yaml --json --output opengrep-anno-results.json anno/ anno-core/ anno-coalesce/ anno-strata/
-    opengrep scan -f .opengrep/rules/rust-error-handling.yaml --json --output opengrep-error-results.json anno/ anno-core/ anno-coalesce/ anno-strata/
-    opengrep scan -f .opengrep/rules/rust-memory-patterns.yaml --json --output opengrep-memory-results.json anno/ anno-core/ anno-coalesce/ anno-strata/
+    opengrep scan -f .opengrep/rules/rust-anno-specific.yaml --json --output opengrep-anno-results.json anno/ anno-core/ anno-coalesce/ anno-tier/
+    opengrep scan -f .opengrep/rules/rust-error-handling.yaml --json --output opengrep-error-results.json anno/ anno-core/ anno-coalesce/ anno-tier/
+    opengrep scan -f .opengrep/rules/rust-memory-patterns.yaml --json --output opengrep-memory-results.json anno/ anno-core/ anno-coalesce/ anno-tier/
     @echo "Custom rules results saved to opengrep-*-results.json"
     @if command -v jq > /dev/null; then \
         echo "Counts:"; \

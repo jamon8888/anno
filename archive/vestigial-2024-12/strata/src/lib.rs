@@ -1,4 +1,4 @@
-//! # anno-strata
+//! # anno-tier
 //!
 //! Hierarchical clustering for graph construction.
 //!
@@ -10,7 +10,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use anno_strata::HierarchicalLeiden;
+//! use anno_tier::HierarchicalLeiden;
 //! use anno_core::GraphDocument;
 //!
 //! let clusterer = HierarchicalLeiden::new()
@@ -30,7 +30,7 @@ use anno_core::GraphDocument;
 /// Hierarchical Leiden clustering.
 ///
 /// This implements the Leiden algorithm for hierarchical community detection
-/// in knowledge graphs, revealing strata of abstraction.
+/// in knowledge graphs, revealing tier of abstraction.
 ///
 /// The algorithm is applied recursively at multiple resolutions to build
 /// a hierarchical dendrogram of communities.

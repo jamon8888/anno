@@ -456,17 +456,12 @@ impl CounterfactualGenerator {
         // Counterfactual 2: Lowercase entity
         let lowercase_entity = entity_text.to_lowercase();
         if lowercase_entity != entity_text {
-            let modified: String = chars
-                .iter()
-                .enumerate()
-                .map(|(i, c)| {
-                    if i >= entity_start && i < entity_end {
-                        c.to_lowercase().next().unwrap_or(*c)
-                    } else {
-                        *c
-                    }
-                })
-                .collect();
+            // Important: lowercasing a single Unicode scalar can expand to multiple chars.
+            // So we construct the modified string by splicing the char-range and inserting the
+            // fully-lowercased substring.
+            let prefix: String = text.chars().take(entity_start).collect();
+            let suffix: String = text.chars().skip(entity_end).collect();
+            let modified = format!("{prefix}{lowercase_entity}{suffix}");
 
             counterfactuals.push(Counterfactual {
                 original: text.to_string(),

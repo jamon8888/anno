@@ -4,7 +4,7 @@
 //! to verify they produce expected results.
 
 use anno_core::{Entity, EntityType, GraphDocument, Relation};
-use anno_strata::{Betweenness, Hits, PageRank};
+use anno_tier::{Betweenness, Hits, PageRank};
 
 /// Helper to create a simple entity
 fn entity(name: &str, start: usize) -> Entity {

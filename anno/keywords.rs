@@ -62,7 +62,7 @@
 //! │                    Graph-Based Structure Discovery                    │
 //! ├──────────────────────────────────────────────────────────────────────┤
 //! │                                                                      │
-//! │  anno::keywords (this)   anno::salience      anno-strata             │
+//! │  anno::keywords (this)   anno::salience      anno-tier             │
 //! │  ─────────────────────   ─────────────       ───────────             │
 //! │  Terms/phrases           Named entities      Knowledge graph         │
 //! │  Co-occurrence graph     Co-occurrence       Entity-relation graph   │

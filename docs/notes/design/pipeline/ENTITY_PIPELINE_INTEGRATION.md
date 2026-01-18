@@ -8,7 +8,7 @@ The anno entity extraction pipeline consists of three main phases:
 Extract → Coalesce → Stratify
 ```
 
-This document explains how **parentheticals**, **reference resolution**, **coalesce**, and **strata** work together.
+This document explains how **parentheticals**, **reference resolution**, **coalesce**, and **tier** work together.
 
 ## The Pipeline
 
@@ -76,10 +76,10 @@ The coalesce module uses these aliases to link:
 
 ### 3. Stratify (Hierarchical Clustering)
 
-The `anno-strata` crate creates hierarchical community structures:
+The `anno-tier` crate creates hierarchical community structures:
 
 ```rust
-use anno_strata::HierarchicalLeiden;
+use anno_tier::HierarchicalLeiden;
 use anno::preprocess::reference::ReferenceGraph;
 
 // Reference graph creates hierarchy
@@ -115,10 +115,10 @@ Role (CEO)             Provides entity context
 Temporal (1769-1821)   Adds entity temporal bounds
 ```
 
-### References → Strata
+### References → Tier
 
 ```
-Reference Type         Strata Effect
+Reference Type         Tier Effect
 ─────────────────────────────────────────────────────
 WikipediaUrl           Creates KB-grounded node
 WikidataUrl            Adds canonical entity ID (Q-number)
@@ -127,7 +127,7 @@ Citation               Links to academic sources
 WebUrl                 Adds external evidence
 ```
 
-### Reference Depth in Strata
+### Reference Depth in Tier
 
 The `ReferenceGraph` tracks document depth:
 
@@ -143,7 +143,7 @@ Level 0 (Root): Source document
           └── Level 2: DOI references from paper
 ```
 
-Strata uses this depth for:
+Tier uses this depth for:
 - Confidence weighting (closer = more confident)
 - Community detection (co-cited entities cluster together)
 - Transitive entity linking
@@ -153,7 +153,7 @@ Strata uses this depth for:
 ```rust
 use anno::preprocess::{extract_aliases, ReferenceExtractor, ReferenceGraph};
 use anno_coalesce::Resolver;
-use anno_strata::HierarchicalLeiden;
+use anno_tier::HierarchicalLeiden;
 
 // 1. Extract from multiple documents
 let docs = vec![
@@ -228,7 +228,7 @@ let stratified = clusterer.cluster(&graph_doc)?;
              │
              ▼
     ┌─────────────────┐
-    │    Strata       │
+    │    Tier       │
     │ (Hierarchical)  │
     └────────┬────────┘
              │
@@ -246,7 +246,7 @@ let stratified = clusterer.cluster(&graph_doc)?;
 | **Parentheticals** | Raw text | Aliases, temporal bounds | Surface-form linking |
 | **References** | Raw text | URLs, KB IDs, citations | External grounding |
 | **Coalesce** | Entities + Aliases | Identities | Cross-doc clustering |
-| **Strata** | Ref graph + Identities | Hierarchical communities | Abstraction levels |
+| **Tier** | Ref graph + Identities | Hierarchical communities | Abstraction levels |
 
 The pipeline transforms raw text into a hierarchically structured knowledge graph with:
 - Entity mentions linked to canonical identities

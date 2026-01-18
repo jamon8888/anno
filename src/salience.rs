@@ -33,14 +33,14 @@
 //! `GraphDocument`. If you only have entities, `TextRankSalience` falls
 //! back to co-occurrence.**
 //!
-//! # Relationship to strata
+//! # Relationship to tier
 //!
-//! Both this module and `anno-strata` operate on the same `GraphDocument`:
+//! Both this module and `anno-tier` operate on the same `GraphDocument`:
 //!
 //! | Module | Algorithm | Output | Question Answered |
 //! |--------|-----------|--------|-------------------|
 //! | `salience` | PageRank | Node scores | "Which entities are important?" |
-//! | `strata` | Leiden | Communities | "How do entities cluster?" |
+//! | `tier` | Leiden | Communities | "How do entities cluster?" |
 //!
 //! # Multilingual Support
 //!
@@ -85,7 +85,7 @@
 //!       ↓
 //! anno-coalesce       → entity resolution (same entity?)
 //!       ↓
-//! anno-strata         → community structure
+//! anno-tier         → community structure
 //! ```
 //!
 //! # References

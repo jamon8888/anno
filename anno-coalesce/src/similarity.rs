@@ -73,7 +73,6 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 // Re-export Script from separate module to avoid compilation issues
 pub use crate::script::Script;
@@ -94,18 +93,21 @@ pub use crate::script::Script;
 /// For production use with proper NFKC normalization, consider
 /// adding the `unicode-normalization` crate.
 pub fn normalize(s: &str) -> String {
-    s.chars()
-        .map(|c| {
-            if c.is_whitespace() {
-                ' '
-            } else {
-                c.to_lowercase().next().unwrap_or(c)
-            }
-        })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    // Keep this policy explicit and reusable.
+    //
+    // Notes:
+    // - We do NOT lowercase here; downstream similarity functions are already
+    //   case-insensitive. This avoids doing redundant work and keeps "case policy"
+    //   contained in one place.
+    // - We do collapse all whitespace runs to single ASCII spaces (matching prior behavior).
+    let cfg = textprep::ScrubConfig {
+        collapse_whitespace: true,
+        normalization: textprep::ScrubNormalization::Nfc,
+        case: textprep::ScrubCase::None,
+        strip_diacritics: false,
+        ..textprep::ScrubConfig::default()
+    };
+    textprep::scrub_with(s, &cfg)
 }
 
 // =============================================================================
@@ -194,66 +196,12 @@ impl Similarity {
 
     /// Word-based Jaccard similarity.
     fn word_jaccard(&self, a: &str, b: &str) -> f32 {
-        let words_a: HashSet<&str> = a.split_whitespace().collect();
-        let words_b: HashSet<&str> = b.split_whitespace().collect();
-
-        if words_a.is_empty() && words_b.is_empty() {
-            return 1.0;
-        }
-        if words_a.is_empty() || words_b.is_empty() {
-            return 0.0;
-        }
-
-        let intersection = words_a.intersection(&words_b).count();
-        let union = words_a.union(&words_b).count();
-
-        if union == 0 {
-            0.0
-        } else {
-            intersection as f32 / union as f32
-        }
+        textprep::similarity::word_jaccard(a, b) as f32
     }
 
     /// Character n-gram Jaccard similarity.
     fn ngram_jaccard(&self, a: &str, b: &str) -> f32 {
-        let ngrams_a = self.char_ngrams(a);
-        let ngrams_b = self.char_ngrams(b);
-
-        if ngrams_a.is_empty() && ngrams_b.is_empty() {
-            return 1.0;
-        }
-        if ngrams_a.is_empty() || ngrams_b.is_empty() {
-            return 0.0;
-        }
-
-        let intersection = ngrams_a.intersection(&ngrams_b).count();
-        let union = ngrams_a.union(&ngrams_b).count();
-
-        if union == 0 {
-            0.0
-        } else {
-            intersection as f32 / union as f32
-        }
-    }
-
-    /// Extract character n-grams.
-    fn char_ngrams(&self, s: &str) -> HashSet<String> {
-        let chars: Vec<char> = s.chars().collect();
-        let n = self.config.ngram_size;
-
-        if chars.len() < n {
-            // For very short strings, use the whole string
-            let mut set = HashSet::new();
-            if !chars.is_empty() {
-                set.insert(s.to_string());
-            }
-            return set;
-        }
-
-        chars
-            .windows(n)
-            .map(|w| w.iter().collect::<String>())
-            .collect()
+        textprep::similarity::char_ngram_jaccard(a, b, self.config.ngram_size) as f32
     }
 }
 

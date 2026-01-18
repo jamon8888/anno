@@ -169,7 +169,7 @@ With URL following, could build a document graph:
 - Edges: References/citations
 - Enables graph-based analysis (PageRank, community detection)
 
-This connects to `anno strata` (hierarchical clustering).
+This connects to `anno tier` (hierarchical clustering).
 
 ## Implementation Priority
 

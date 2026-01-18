@@ -16,7 +16,7 @@ Local Relationships → Graph Construction → Iterative Algorithm → Hierarchi
 | `anno::salience` | Text + Entities | Entity co-occurrence | PageRank | Important entities |
 | `anno::graph_coref` | Mentions | Coreference links | Iterative refinement | Coref chains |
 | `anno-coalesce` | Entity mentions | Similarity matrix | HAC/Union-Find | Entity clusters |
-| `anno-strata` | Knowledge graph | Entity-relation | Leiden/Louvain | Community hierarchy |
+| `anno-tier` | Knowledge graph | Entity-relation | Leiden/Louvain | Community hierarchy |
 
 ## Visual Representation
 
@@ -41,7 +41,7 @@ Local Relationships → Graph Construction → Iterative Algorithm → Hierarchi
 │    ▼                                                                        │
 │   Knowledge Graph                                                           │
 │    │                                                                        │
-│    └──► strata ──► Entity-Relation Graph ──► Leiden ──► Communities         │
+│    └──► tier ──► Entity-Relation Graph ──► Leiden ──► Communities         │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -72,7 +72,7 @@ Where:
 
 The intuition: a node is important if it's connected to other important nodes.
 
-### Modularity Optimization (Strata)
+### Modularity Optimization (Tier)
 
 The Leiden algorithm maximizes modularity:
 
@@ -155,7 +155,7 @@ The key insight: **all are ways of discovering hierarchical structure from local
 | "What entities matter?" | `anno::salience` | Entity-level ranking |
 | "Which mentions refer to the same entity?" | `anno::graph_coref` | Within-document coreference |
 | "Which mentions are the same entity (across docs)?" | `anno-coalesce` | Cross-document identity resolution |
-| "What communities exist?" | `anno-strata` | Graph structure |
+| "What communities exist?" | `anno-tier` | Graph structure |
 | "What are the key points?" | Summarization* | Sentence-level selection |
 
 *Summarization not yet implemented but would follow the same pattern.
@@ -172,7 +172,7 @@ Both resolve "which things are the same," but at different scopes:
 | Output | Coref chains | Entity clusters |
 | Transitivity | Built into refinement | Post-hoc via clustering |
 
-**Pipeline integration**: NER → `graph_coref` → `coalesce` → `strata`
+**Pipeline integration**: NER → `graph_coref` → `coalesce` → `tier`
 
 ```rust
 // Full pipeline
@@ -180,7 +180,7 @@ let mentions = ner.extract_mentions(doc)?;
 let chains = graph_coref.resolve(&mentions);           // Within-doc
 let entities = chains_to_entities(chains);
 let clusters = coalesce.cluster(&all_entities);        // Cross-doc
-let communities = strata.leiden(&knowledge_graph);     // Graph structure
+let communities = tier.leiden(&knowledge_graph);     // Graph structure
 ```
 
 ### Chaining Modules
@@ -192,7 +192,7 @@ These modules compose naturally:
 let entities = model.extract_entities(text, None)?;
 let salient = salience::TextRankSalience::default().rank(text, &entities);
 let clusters = coalesce::cluster_entities(&salient_entities, similarity_fn);
-let communities = strata::leiden(&knowledge_graph);
+let communities = tier::leiden(&knowledge_graph);
 ```
 
 ## Future Directions

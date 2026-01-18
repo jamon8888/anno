@@ -477,7 +477,7 @@ just regenerate-datasets
 
 ## 10. Conclusion
 
-The anno dataset system is **well-architected** with a unified registry (451 datasets) and good separation of concerns. The architecture uses a smart two-tier system:
+The anno dataset system is **well-architected** with a unified registry (451 datasets) and good separation of concernos. The architecture uses a smart two-tier system:
 1. **Registry hints** - Auto-detects format from metadata when possible
 2. **Explicit matches** - Fallback for special cases
 

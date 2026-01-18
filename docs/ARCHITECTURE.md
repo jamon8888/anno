@@ -7,7 +7,7 @@ anno/
 ├── anno-core/      # Foundation: Entity, GroundedDocument, GraphDocument
 ├── anno/           # NER backends, coref, eval, CLI (src/bin/anno.rs)
 ├── anno-coalesce/  # Cross-document entity coalescing
-└── anno-strata/    # Hierarchical clustering (Leiden, Louvain)
+└── anno-tier/    # Hierarchical clustering (Leiden, Louvain)
 ```
 
 ## Dependencies
@@ -16,15 +16,15 @@ anno/
 anno-core (no workspace deps)
     ↑
     ├── anno-coalesce
-    ├── anno-strata
-    └── anno  (depends on anno-coalesce; optionally anno-strata)
+    ├── anno-tier
+    └── anno  (depends on anno-coalesce; optionally anno-tier)
 ```
 
 Each crate is independent. Use what you need:
 
 - `anno`: NER only
 - `anno-coalesce`: Entity resolution without NER
-- `anno-strata`: Clustering without NER
+- `anno-tier`: Clustering without NER
 
 Or use together via the `anno` CLI binary (see `anno/src/bin/anno.rs`).
 
@@ -51,7 +51,7 @@ let identities = resolver.resolve_inter_doc_coref(&mut corpus, Some(0.7), Some(t
 ### Hierarchical Clustering
 
 ```rust
-use anno_strata::HierarchicalLeiden;
+use anno_tier::HierarchicalLeiden;
 
 let hierarchy = HierarchicalLeiden::cluster(&graph)?;
 ```
@@ -67,7 +67,7 @@ anno cross-doc ./docs --threshold 0.6
 # or: anno coalesce ./docs --threshold 0.6
 
 # Stratify (hierarchical clustering)
-anno strata --input graph.json --method leiden --levels 3
+anno tier --input graph.json --method leiden --levels 3
 ```
 
 ## Pipeline
@@ -90,8 +90,8 @@ anno strata --input graph.json --method leiden --levels 3
    - Output: hierarchical layers of communities at multiple resolutions
    - Purpose: Reveal abstraction levels (specific → themes → domains)
    - Algorithm: Leiden algorithm at multiple resolutions (modularity optimization)
-   - Example: `anno strata --input graph.json --method leiden --levels 3`
+   - Example: `anno tier --input graph.json --method leiden --levels 3`
 
 **Key Difference**: 
 - **Coalesce** = identity resolution (same entity, different documents)
-- **Strata** = hierarchical organization (communities, themes, abstraction layers)
+- **Tier** = hierarchical organization (communities, themes, abstraction layers)

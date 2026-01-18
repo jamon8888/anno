@@ -19,7 +19,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use anno_strata::LabelPropagation;
+//! use anno_tier::LabelPropagation;
 //! use anno_core::GraphDocument;
 //!
 //! let lp = LabelPropagation::new().with_seed(42);

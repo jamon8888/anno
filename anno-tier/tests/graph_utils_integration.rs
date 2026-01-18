@@ -4,7 +4,7 @@
 //! and expose useful graph analysis capabilities.
 
 use anno_core::{Entity, EntityType, GraphDocument, Relation};
-use anno_strata::{
+use anno_tier::{
     average_path_length, count_connected_components, find_connected_components, graph_diameter,
     node_eccentricities, shortest_distances, strongly_connected_components, GraphStats,
 };

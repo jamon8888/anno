@@ -25,7 +25,7 @@ Follow Stanford documentation style:
 ## Current State Assessment
 
 ### What We Have
-- ✅ Modularity formula in `strata/src/leiden.rs` (concise, appropriate)
+- ✅ Modularity formula in `tier/src/leiden.rs` (concise, appropriate)
 - ✅ Box embedding formulas in `anno/src/backends/box_embeddings_training.rs` (research-focused)
 - ✅ Late interaction scoring in `anno/src/backends/inference.rs` (brief, technical)
 - ✅ Similarity functions (basic, sufficient)
@@ -95,7 +95,7 @@ Follow Stanford documentation style:
 
 **Rationale:** Core evaluation metrics, users need to understand what they mean.
 
-### 2. Clustering Algorithms (`strata/src/leiden.rs`)
+### 2. Clustering Algorithms (`tier/src/leiden.rs`)
 
 **Current:** Has modularity formula, good as-is
 **Enhancement:** Add reference to Leiden algorithm paper if missing

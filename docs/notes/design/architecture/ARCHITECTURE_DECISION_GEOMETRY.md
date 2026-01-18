@@ -153,7 +153,7 @@ impl GeometricBox for HyperbolicEmbedding { ... }  // If mapped to bounding box
 
 ## Rationale
 
-1. **Separation of concerns**: Training (box-coref) vs inference (anno) have different needs
+1. **Separation of concernos**: Training (box-coref) vs inference (anno) have different needs
 2. **Simplicity**: anno's BoxEmbedding is 100 lines; subsume's Box trait is richer but heavier
 3. **Independence**: Each project can evolve at its own pace
 4. **Future flexibility**: If subsume becomes THE box library, anno can adopt later

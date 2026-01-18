@@ -36,7 +36,7 @@ Analysis, improvements, and design decisions for the anno CLI.
 12. `cache` - Manage cache directory (why expose?)
 13. `dataset` - List/info about datasets (should be plural?)
 14. `cross-doc` - Cross-document clustering
-15. `strata` - Hierarchical clustering
+15. `tier` - Hierarchical clustering
 16. `validate` - Validate JSONL files
 17. `compare` - Compare documents/models/clusters
 18. `batch` - Batch process multiple documents
@@ -129,7 +129,7 @@ anno validate <file.jsonl>      # Validate JSONL files (unchanged)
 anno filter <file.json> [filters] # Filter entities from JSON (renamed from `query`)
 anno compare <file1> <file2>    # Compare documents/models/clusters (unchanged)
 anno cross-doc ./docs           # Cross-doc clustering (keep as subcommand)
-anno strata --input graph.json  # Hierarchical clustering (keep as subcommand)
+anno tier --input graph.json  # Hierarchical clustering (keep as subcommand)
 ```
 
 ### Removed Commands
