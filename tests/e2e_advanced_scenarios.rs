@@ -123,15 +123,6 @@ fn e2e_crossdoc_type_mismatch() {
     );
 }
 
-// NOTE: `anno-tier` has been de-scoped from the workspace to reduce maintenance surface.
-// If tier/clustering is resurrected, restore an integration test under `crates/anno-tier/tests/`
-// (or in a dedicated repo).
-    assert!(
-        !nodes_with_communities.is_empty() || !clustered.nodes.is_empty(),
-        "Should have nodes with community assignments or at least nodes"
-    );
-}
-
 /// E2E: Large-scale cross-document coreference
 ///
 /// Tests crossdoc performance and correctness with many documents and tracks.

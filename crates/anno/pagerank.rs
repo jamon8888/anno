@@ -6,7 +6,8 @@
 //! - `keywords.rs` (TextRankExtractor)
 //! - `summarize.rs` (LexRankSummarizer)
 //!
-//! For PageRank on `GraphDocument` with actual relations, use `anno_tier::PageRank`.
+//! For PageRank on `GraphDocument` with actual relations, use the archived clustering crate
+//! under `archive/anno-tier/` (or the standalone clustering repo, if you use it).
 //!
 //! # Algorithm
 //!

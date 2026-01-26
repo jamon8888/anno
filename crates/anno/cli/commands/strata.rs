@@ -44,7 +44,7 @@ pub fn run(args: TierArgs) -> Result<(), String> {
     let _ = args;
     Err(
         "The `tier` command is not available in the publishable `anno` crate.\n\
-         Use the `anno-tier` crate directly for hierarchical clustering."
+         Hierarchical clustering has been archived out of the main workspace."
             .to_string(),
     )
 }

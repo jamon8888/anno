@@ -1307,7 +1307,7 @@ pub fn normalize_time(text: &str) -> Option<String> {
 ///
 /// Temporal expressions exist at different levels of specificity,
 /// analogous to how entities exist at different levels of abstraction
-/// in `anno-tier`.
+/// in a hierarchical clustering layer (currently archived out of the main workspace).
 ///
 /// ```text
 /// ┌─────────────────────────────────────────────────────────────────────┐
@@ -1485,7 +1485,7 @@ pub struct PartialTimeComponents {
 
 /// An abstract temporal expression with full metadata.
 ///
-/// This is the temporal analog to abstract entities in `anno-tier` -
+/// This is the temporal analog to abstract entities in a hierarchical clustering layer -
 /// it captures not just when something happened, but how precisely
 /// we know when, and what kind of temporal reference it is.
 #[derive(Debug, Clone, Serialize, Deserialize)]
