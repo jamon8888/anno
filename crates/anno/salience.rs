@@ -35,7 +35,7 @@
 //!
 //! # Relationship to tier
 //!
-//! Both this module and `anno-tier` operate on the same `GraphDocument`:
+//! Both this module and the archived clustering layer operate on the same `GraphDocument`:
 //!
 //! | Module | Algorithm | Output | Question Answered |
 //! |--------|-----------|--------|-------------------|

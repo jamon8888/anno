@@ -3,15 +3,14 @@
 # ======================
 #
 # Pipeline:
-#   Text → Extract → Coalesce → Stratify → Knowledge Graph
-#          (anno)   (coalesce)  (tier)
+#   Text → Extract → Coalesce → Knowledge Graph
+#          (anno)   (coalesce)
 #
 # Dependency graph:
 #
 #   anno-core (18k - Entity, Track, Identity, Signal)
 #       ↑
 #       ├── anno-coalesce (9k - cross-doc entity resolution)
-#       ├── anno-tier (3k - graph algorithms: PageRank, Leiden)
 #       │
 #       └── anno (120k - NER backends, coref, eval, CLI)
 #               ↑
@@ -48,11 +47,9 @@ bitflags = "2"
 # use `.cargo/config.toml` to patch it to a path dependency.
 textprep = "0.1"
 
-## `tier`
+## Clustering / stratification
 #
-# The `anno-tier` crate is publish=false and can evolve independently. We avoid
-# wiring it to private or workspace-local dependencies in the default workspace
-# so `cargo metadata` works for external clones.
+# Hierarchical clustering has been archived out of this workspace (see `archive/anno-tier/`).
 
 # CLI dependencies
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
