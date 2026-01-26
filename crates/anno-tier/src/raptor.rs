@@ -1,6 +1,6 @@
 //! RAPTOR-style hierarchical tree building for GraphDocument.
 //!
-//! This module provides integration with the Tekne `tier` crate for building
+//! This module provides integration with the `tier` crate for building
 //! hierarchical summaries of graphs, supporting RAPTOR-style retrieval.
 //!
 //! ## RAPTOR Pipeline
