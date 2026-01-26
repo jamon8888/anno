@@ -28,6 +28,9 @@ pub mod pipeline;
 pub mod privacy;
 pub mod query;
 pub mod singleton;
+// The `tier` command implementation currently lives in `strata.rs`.
+// Keep the module name stable (`tier`) because it's part of the CLI surface.
+#[path = "strata.rs"]
 pub mod tier;
 pub mod validate;
 pub mod watch;
