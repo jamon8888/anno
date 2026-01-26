@@ -296,7 +296,7 @@ pub struct TaskEvaluator {
     per_example_scores_cache: Mutex<Option<PerExampleScores>>,
     /// Prediction cache for avoiding redundant inference.
     /// Key: (text_hash, backend, labels_hash, version)
-    /// Value: Vec<Entity> predictions
+    /// Value: `Vec<Entity>` predictions
     prediction_cache: super::prediction_cache::PredictionCache,
     /// Evaluation history tracker (optional, for persistent result storage)
     history: Option<super::history::EvalHistory>,
@@ -3647,7 +3647,7 @@ impl TaskEvaluator {
     ///
     /// # Preferred Path
     ///
-    /// For proper per-type stratification, use [`Self::compute_stratified_metrics_from_scores`]
+    /// For proper per-type stratification, use `Self::compute_stratified_metrics_from_scores`
     /// which computes actual per-type F1/precision/recall from per-example predictions.
     /// That method is automatically used when per-example scores are available via
     /// the evaluation pipeline (see `evaluate_ner_internal`).

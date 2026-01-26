@@ -1141,10 +1141,7 @@ impl GLiNER2Onnx {
 
         // For classification models, we typically need just input_ids and attention_mask
         // The model should output classification logits
-        let mut session = self
-            .session
-            .lock()
-            .map_err(|_| Error::Inference("Lock failed".into()))?;
+        let mut session = lock(&self.session);
 
         // Try running with standard classification inputs
         let outputs = session
@@ -1187,14 +1184,14 @@ impl GLiNER2Onnx {
         };
 
         let mut scores = HashMap::new();
-        let mut selected_labels = Vec::new();
+        let mut selected_labels: Vec<String> = Vec::new();
 
         for (i, label) in labels.iter().enumerate() {
             let prob = probs.get(i).copied().unwrap_or(0.0);
-            scores.insert(label.to_string(), prob);
+            scores.insert((*label).to_string(), prob);
 
             if multi_label && prob > 0.5 {
-                selected_labels.push(label.to_string());
+                selected_labels.push((*label).to_string());
             }
         }
 
@@ -1205,7 +1202,7 @@ impl GLiNER2Onnx {
                 .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             {
                 if let Some(label) = labels.get(idx) {
-                    selected_labels.push(label.to_string());
+                    selected_labels.push((*label).to_string());
                 }
             }
         }

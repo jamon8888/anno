@@ -48,20 +48,20 @@
 //!
 //! # Submodules
 //!
-//! - [`centering`] — Centering theory implementation (Grosz, Joshi, Weinstein 1995)
-//! - [`uncertain_reference`] — Epsilon-term semantics for deferred resolution
-//! - [`dialogue`] — Dialogue turn types, speech acts, response token classification
+//! - `centering` — Centering theory implementation (Grosz, Joshi, Weinstein 1995)
+//! - `uncertain_reference` — Epsilon-term semantics for deferred resolution
+//! - `dialogue` — Dialogue turn types, speech acts, response token classification
 //!
 //! # Core Types
 //!
-//! - [`EventExtractor`] — Rule-based event trigger extraction
-//! - [`EventMention`] — Extracted event with trigger, type, and arguments
-//! - [`DiscourseReferent`] — Any entity that can be referred to (nominal or abstract)
-//! - [`ShellNoun`] — Abstract nouns with semantic classification
-//! - [`DiscourseScope`] — Sentence/clause boundary detection
-//! - [`DialogueTurn`] — A single turn in dialogue with speaker and speech act
-//! - [`SpeechActType`] — Classification of pragmatic function (continuer, acknowledgment, etc.)
-//! - [`DialogueContext`] — Multi-turn dialogue state tracking
+//! - `EventExtractor` — Rule-based event trigger extraction
+//! - `EventMention` — Extracted event with trigger, type, and arguments
+//! - `DiscourseReferent` — Any entity that can be referred to (nominal or abstract)
+//! - `ShellNoun` — Abstract nouns with semantic classification
+//! - `DiscourseScope` — Sentence/clause boundary detection
+//! - `DialogueTurn` — A single turn in dialogue with speaker and speech act
+//! - `SpeechActType` — Classification of pragmatic function (continuer, acknowledgment, etc.)
+//! - `DialogueContext` — Multi-turn dialogue state tracking
 //!
 //! # Centering Theory Example
 //!

@@ -59,6 +59,7 @@ dependencies = [
  "chrono",
  "clap",
  "clap_complete",
+ "crossbeam-channel",
  "dashmap",
  "dirs 5.0.1",
  "futures",
@@ -71,6 +72,7 @@ dependencies = [
  "ndarray",
  "once_cell",
  "ort",
+ "parking_lot",
  "proptest",
  "rand",
  "rayon",
@@ -523,6 +525,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.5.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -2173,6 +2184,16 @@ dependencies = [
  "sha2",
  "tar",
  "ureq 3.1.4",
+]
+
+[[package]]
+name = "parking_lot"
+version = "0.12.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a"
+dependencies = [
+ "lock_api",
+ "parking_lot_core",
 ]
 
 [[package]]

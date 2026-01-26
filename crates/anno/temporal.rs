@@ -129,7 +129,7 @@
 //!
 //! ## Extending for Non-Western Time
 //!
-//! Implement the [`TemporalOntology`] trait to add support for different
+//! Implement the `TemporalOntology` trait to add support for different
 //! temporal systems. The trait design intentionally avoids assuming:
 //! - Linear time
 //! - Fixed reference points
@@ -1144,7 +1144,7 @@ pub fn normalize_date(text: &str) -> Option<String> {
     None
 }
 
-/// Parse a date string into a DateTime<Utc>.
+/// Parse a date string into a `DateTime<Utc>`.
 /// Returns None if the date cannot be parsed.
 #[must_use]
 pub fn parse_date(text: &str) -> Option<DateTime<Utc>> {
