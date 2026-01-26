@@ -38,7 +38,8 @@ glob = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
 
 # ML
-ort = { workspace = true }
+# `ort`'s ndarray interop is feature-gated in newer releases.
+ort = { workspace = true, features = ["ndarray"] }
 tokenizers = { workspace = true }
 hf-hub = { workspace = true }
 ndarray = { workspace = true }

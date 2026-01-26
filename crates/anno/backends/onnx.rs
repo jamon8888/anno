@@ -32,7 +32,7 @@ use {
     crate::sync::lock,
     hf_hub::api::sync::Api,
     ndarray::Array2,
-    ort::{session::builder::GraphOptimizationLevel, session::Session, value::Tensor},
+    ort::{session::builder::GraphOptimizationLevel, session::Session},
     std::collections::HashMap,
     tokenizers::Tokenizer,
 };
@@ -307,13 +307,13 @@ impl BertNEROnnx {
                 Error::Parse(format!("Failed to create token_type_ids array: {}", e))
             })?;
 
-        let input_ids_tensor = Tensor::from_array(input_ids_array)
+        let input_ids_tensor = super::ort_compat::tensor_from_ndarray(input_ids_array)
             .map_err(|e| Error::Parse(format!("Failed to create input_ids tensor: {}", e)))?;
 
-        let attention_mask_tensor = Tensor::from_array(attention_mask_array)
+        let attention_mask_tensor = super::ort_compat::tensor_from_ndarray(attention_mask_array)
             .map_err(|e| Error::Parse(format!("Failed to create attention_mask tensor: {}", e)))?;
 
-        let token_type_ids_tensor = Tensor::from_array(token_type_ids_array)
+        let token_type_ids_tensor = super::ort_compat::tensor_from_ndarray(token_type_ids_array)
             .map_err(|e| Error::Parse(format!("Failed to create token_type_ids tensor: {}", e)))?;
 
         // Run inference with blocking lock for thread-safe parallel access

@@ -215,17 +215,10 @@ impl NuNER {
         let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| Error::Retrieval(format!("Failed to load tokenizer: {}", e)))?;
 
-        let input_names: Vec<String> = session.inputs.iter().map(|i| i.name.clone()).collect();
-        log::debug!(
-            "[NuNER] Loaded model: {} with inputs: {:?}",
-            model_id,
-            input_names
-        );
-
-        // Check if model requires span tensors (some NuNER models use span-based inference)
-        let requires_span_tensors = input_names
-            .iter()
-            .any(|name| name == "span_mask" || name == "span_idx");
+        // Some NuNER ONNX exports require span tensors (span_idx/span_mask), others are token-only.
+        // We don't rely on session metadata here because `ort` versions differ across workspaces.
+        // Instead we default to token-only and fall back to span tensors at runtime on demand.
+        let requires_span_tensors = false;
 
         Ok(Self {
             model_id: model_id.to_string(),
@@ -325,7 +318,6 @@ impl NuNER {
 
         // Build ONNX tensors
         use ndarray::Array2;
-        use ort::value::Tensor;
 
         let batch_size = 1;
         let seq_len = input_ids.len();
@@ -339,13 +331,13 @@ impl NuNER {
         let text_lengths_array = Array2::from_shape_vec((batch_size, 1), vec![text_lengths])
             .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
 
-        let input_ids_t = Tensor::from_array(input_ids_array)
+        let input_ids_t = super::ort_compat::tensor_from_ndarray(input_ids_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let attention_mask_t = Tensor::from_array(attention_mask_array)
+        let attention_mask_t = super::ort_compat::tensor_from_ndarray(attention_mask_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let words_mask_t = Tensor::from_array(words_mask_array)
+        let words_mask_t = super::ort_compat::tensor_from_ndarray(words_mask_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let text_lengths_t = Tensor::from_array(text_lengths_array)
+        let text_lengths_t = super::ort_compat::tensor_from_ndarray(text_lengths_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
 
         // Some NuNER ONNX exports require span tensors (span_idx/span_mask), others are token-only.
@@ -377,9 +369,9 @@ impl NuNER {
             let span_mask_array = Array2::from_shape_vec((1, num_spans), span_mask)
                 .map_err(|e| Error::Parse(format!("Span mask array error: {}", e)))?;
 
-            let span_idx_t = ort::value::Tensor::from_array(span_idx_array)
+            let span_idx_t = super::ort_compat::tensor_from_ndarray(span_idx_array)
                 .map_err(|e| Error::Parse(format!("Span idx tensor error: {}", e)))?;
-            let span_mask_t = ort::value::Tensor::from_array(span_mask_array)
+            let span_mask_t = super::ort_compat::tensor_from_ndarray(span_mask_array)
                 .map_err(|e| Error::Parse(format!("Span mask tensor error: {}", e)))?;
 
             session_guard

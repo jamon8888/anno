@@ -430,14 +430,7 @@ impl GLiNER2Onnx {
             model_id,
             hidden_size
         );
-        log::debug!(
-            "[GLiNER2-ONNX] Inputs: {:?}",
-            session.inputs.iter().map(|i| &i.name).collect::<Vec<_>>()
-        );
-        log::debug!(
-            "[GLiNER2-ONNX] Outputs: {:?}",
-            session.outputs.iter().map(|o| &o.name).collect::<Vec<_>>()
-        );
+        log::debug!("[GLiNER2-ONNX] Model loaded");
 
         Ok(Self {
             session: Mutex::new(session),
@@ -501,7 +494,6 @@ impl GLiNER2Onnx {
         // input_ids, attention_mask, words_mask, text_lengths
         // (NOT span_idx/span_mask - those were for older model variants)
         use ndarray::Array2;
-        use ort::value::Tensor;
 
         let batch_size = 1;
         let seq_len = input_ids.len();
@@ -516,13 +508,13 @@ impl GLiNER2Onnx {
             Array2::from_shape_vec((batch_size, 1), vec![text_words.len() as i64])
                 .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
 
-        let input_ids_t = Tensor::from_array(input_ids_arr)
+        let input_ids_t = super::ort_compat::tensor_from_ndarray(input_ids_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let attention_mask_t = Tensor::from_array(attention_mask_arr)
+        let attention_mask_t = super::ort_compat::tensor_from_ndarray(attention_mask_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let words_mask_t = Tensor::from_array(words_mask_arr)
+        let words_mask_t = super::ort_compat::tensor_from_ndarray(words_mask_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let text_lengths_t = Tensor::from_array(text_lengths_arr)
+        let text_lengths_t = super::ort_compat::tensor_from_ndarray(text_lengths_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
 
         // Run inference with blocking lock for thread-safe parallel access
@@ -1127,17 +1119,16 @@ impl GLiNER2Onnx {
         let attention_mask: Vec<i64> = vec![1; seq_len];
 
         use ndarray::Array2;
-        use ort::value::Tensor;
 
         let input_arr = Array2::from_shape_vec((1, seq_len), input_ids)
             .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
         let attn_arr = Array2::from_shape_vec((1, seq_len), attention_mask)
             .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
 
-        let input_t =
-            Tensor::from_array(input_arr).map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let attn_t =
-            Tensor::from_array(attn_arr).map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+        let input_t = super::ort_compat::tensor_from_ndarray(input_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+        let attn_t = super::ort_compat::tensor_from_ndarray(attn_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
 
         // For classification models, we typically need just input_ids and attention_mask
         // The model should output classification logits
@@ -2670,7 +2661,6 @@ impl crate::BatchCapable for GLiNER2Onnx {
 
         // Build batched tensors - only 4 inputs (no span tensors)
         use ndarray::Array2;
-        use ort::value::Tensor;
 
         let batch_size = all_input_ids.len();
 
@@ -2698,13 +2688,13 @@ impl crate::BatchCapable for GLiNER2Onnx {
         let text_lengths_arr = Array2::from_shape_vec((batch_size, 1), all_text_lengths)
             .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
 
-        let input_ids_t = Tensor::from_array(input_ids_arr)
+        let input_ids_t = super::ort_compat::tensor_from_ndarray(input_ids_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let attention_mask_t = Tensor::from_array(attention_mask_arr)
+        let attention_mask_t = super::ort_compat::tensor_from_ndarray(attention_mask_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let words_mask_t = Tensor::from_array(words_mask_arr)
+        let words_mask_t = super::ort_compat::tensor_from_ndarray(words_mask_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let text_lengths_t = Tensor::from_array(text_lengths_arr)
+        let text_lengths_t = super::ort_compat::tensor_from_ndarray(text_lengths_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
 
         // Run batched inference with blocking lock for thread-safe parallel access
