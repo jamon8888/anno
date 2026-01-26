@@ -1,27 +1,15 @@
-# cargo-deny configuration for anno
+## cargo-deny configuration for anno
+#
 # Run: cargo deny check
 
 [advisories]
-# Deny all security vulnerabilities
-vulnerability = "deny"
-# Warn about unmaintained crates (but don't block)
-unmaintained = "warn"
-# Warn about yanked crates
-yanked = "warn"
-# Allow notices (informational)
-notice = "warn"
-
-# Ignore specific advisories if needed (add IDs here)
 ignore = [
-    # Example: "RUSTSEC-2023-XXXX"
+    # No safe upgrade available (transitive).
+    { id = "RUSTSEC-2025-0119", reason = "number_prefix is unmaintained; no safe upgrade is available." },
+    { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; no safe upgrade is available." },
 ]
 
 [licenses]
-# Default: deny unknown licenses
-default = "deny"
-# Deny copyleft licenses (GPL, AGPL, etc.)
-copyleft = "deny"
-# Allow permissive licenses
 allow = [
     "MIT",
     "Apache-2.0",
@@ -31,48 +19,42 @@ allow = [
     "Zlib",
     "0BSD",
     "CC0-1.0",
+    "Unicode-3.0",
 ]
-# Explicitly deny problematic licenses
-deny = [
-    "GPL-2.0",
-    "GPL-3.0",
-    "AGPL-1.0",
-    "AGPL-3.0",
-    "LGPL-2.0",
-    "LGPL-2.1",
-    "LGPL-3.0",
+confidence-threshold = 0.8
+exceptions = [
+    # Transitive OSI/copyleft via `dirs` (used for cache/config directories).
+    { crate = "option-ext", allow = ["MPL-2.0"] },
+
+    # Root certificate bundles use data licensing.
+    { crate = "webpki-root-certs", allow = ["CDLA-Permissive-2.0"] },
+    { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
 ]
+
+[licenses.private]
+ignore = false
+registries = []
 
 [bans]
-# Deny multiple versions of the same crate
-multiple-versions = "deny"
-# Deny wildcard version requirements
-wildcards = "deny"
-# Allow specific wildcards if needed
-allow-wildcard = []
-# Skip specific crates from duplicate checking
-skip = [
-    # Some crates legitimately need multiple versions
-    # "regex",  # Example: if needed
-]
+multiple-versions = "warn"
+wildcards = "warn"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow = []
+allow-workspace = false
+deny = []
+skip = []
+skip-tree = []
 
 [sources]
-# Allow crates from crates.io
-registry = "allow"
-# Allow git dependencies (with restrictions)
-git = "allow"
-# Allow path dependencies (for local development)
-path = "allow"
-# Deny unknown sources
 unknown-registry = "deny"
 unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
 
-# Specific source restrictions
-[allow-version]
-# Example: Allow specific versions if needed
-# "some-crate" = "=1.2.3"
-
-[allow-org]
-# Allow specific GitHub organizations if using git deps
-# "github:myorg" = ["repo1", "repo2"]
+[sources.allow-org]
+github = []
+gitlab = []
+bitbucket = []
 

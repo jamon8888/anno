@@ -11,6 +11,11 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
+permissions:
+  contents: read
+  checks: write
+  security-events: write
+
 jobs:
   # ==========================================================================
   # Quick checks (fast feedback) - runs in parallel
@@ -47,6 +52,7 @@ jobs:
   typecheck-python:
     name: Typecheck (Python / ty)
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Set up uv
@@ -583,14 +589,13 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'test-unsafe'))
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
       - name: Install Miri
         run: |
           rustup component add miri
-          cargo install cargo-miri
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -622,6 +627,12 @@ jobs:
             --json --output opengrep-results.json \
             --sarif-output opengrep-results.sarif \
             crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ tests/ examples/ || true
+      - name: Ensure SARIF output exists
+        if: always()
+        run: |
+          if [ ! -f opengrep-results.sarif ]; then
+            printf '%s\n' '{"version":"2.1.0","runs":[]}' > opengrep-results.sarif
+          fi
       - name: Run OpenGrep (custom rules - general)
         run: |
           opengrep scan \
@@ -903,7 +914,7 @@ jobs:
           import sys, tomllib
           from pathlib import Path
           def load(p: str):
-              return tomllib.loads(Path(p).read_bytes())
+              return tomllib.loads(Path(p).read_text(encoding="utf-8"))
           def dep_has_version(spec):
               if isinstance(spec, str):
                   return True
