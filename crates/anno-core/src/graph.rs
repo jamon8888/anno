@@ -6,8 +6,7 @@
 //! ## Canonical “graph substrate”
 //!
 //! This module’s `GraphDocument` is an **interop/export** shape (Neo4j, NetworkX, JSON-LD).
-//! For algorithmic graph work (PageRank, walks, clustering), prefer `lattix_core::KnowledgeGraph`
-//! and convert via `to_knowledge_graph(...)`.
+//! For algorithmic graph work (PageRank, walks, clustering), prefer `lattix::KnowledgeGraph`.
 //!
 //! # The "Fractured Graph" Problem
 //!
@@ -83,9 +82,6 @@
 use crate::entity::{Entity, Relation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-/// Lattix’s canonical KG substrate.
-pub use lattix::{KnowledgeGraph, Triple};
 
 // =============================================================================
 // Core Data Structures
@@ -214,44 +210,6 @@ pub struct GraphDocument {
     /// Document metadata
     #[serde(default)]
     pub metadata: HashMap<String, serde_json::Value>,
-}
-
-/// Convert an interchange `GraphDocument` into a `lattix_core::KnowledgeGraph`.
-///
-/// - Nodes become `lattix_core::Entity` records (id/label/type/properties).
-/// - Edges become `lattix_core::Triple` records (subject/predicate/object) with confidence.
-#[must_use]
-pub fn to_knowledge_graph(doc: &GraphDocument) -> KnowledgeGraph {
-    use lattix::{Entity as KgEntity, EntityId, RelationType};
-
-    let mut kg = KnowledgeGraph::new();
-
-    // 1) Nodes
-    for node in &doc.nodes {
-        let id = EntityId::new(node.id.clone());
-        let mut ent = KgEntity::new(id.clone())
-            .with_label(node.name.clone())
-            .with_type(node.node_type.clone());
-        for (k, v) in &node.properties {
-            ent.properties.insert(k.clone(), v.clone());
-        }
-        kg.update_entity(&id, ent);
-    }
-
-    // 2) Edges
-    for edge in &doc.edges {
-        let mut t = Triple::new(
-            EntityId::new(edge.source.clone()),
-            RelationType::new(edge.relation.clone()),
-            EntityId::new(edge.target.clone()),
-        );
-        if (edge.confidence - 1.0).abs() > f64::EPSILON {
-            t = t.with_confidence(edge.confidence as f32);
-        }
-        kg.add_triple(t);
-    }
-
-    kg
 }
 
 impl GraphDocument {
