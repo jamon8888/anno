@@ -847,8 +847,7 @@ impl DiscourseScope {
                     None => true,
                     Some(&ac) => ac.is_uppercase() || ac == '"',
                 };
-                if boundary_ok && after_ok
-                {
+                if boundary_ok && after_ok {
                     // Return character offset (i+1 is after the punctuation)
                     boundaries.push(i + 1);
                 }
