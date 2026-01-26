@@ -45,16 +45,15 @@ log = "0.4"
 once_cell = "1"
 bitflags = "2"
 
-# Local workspace crate (dev super-workspace).
-# If you want standalone usage, replace with a git dependency and use
-# `.cargo/config.toml` for local path overrides.
-textprep = { path = "../textprep" }
+# `textprep` is published on crates.io. For local super-workspace development,
+# use `.cargo/config.toml` to patch it to a path dependency.
+textprep = "0.1"
 
-# Hierarchical algorithms (optional use via `anno-tier` feature flags)
+## `tier`
 #
-# Local workspace crate (dev super-workspace). If you want standalone usage,
-# replace with a git dependency and use `.cargo/config.toml` for local overrides.
-tier = { path = "../tier", default-features = false }
+# The `anno-tier` crate is publish=false and can evolve independently. We avoid
+# wiring it to private or workspace-local dependencies in the default workspace
+# so `cargo metadata` works for external clones.
 
 # CLI dependencies
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }

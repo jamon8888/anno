@@ -18,16 +18,10 @@ serde_json = { workspace = true }
 petgraph = "0.6"
 rayon = { workspace = true, optional = true }
 
-# Hierarchical abstraction algorithms
-# `tier` is defined at the workspace level:
-# - in the standalone `anno` workspace: via git (see `anno/Cargo.toml`)
-# - in the super-workspace: via `workspace.dependencies` + local path
-tier = { workspace = true, optional = true, features = ["cluster", "community", "parallel"] }
-
 [features]
 default = []
 parallel = ["rayon"]
-raptor = ["tier"]
+raptor = []
 
 [dev-dependencies]
 proptest = "1.0"
