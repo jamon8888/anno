@@ -65,7 +65,7 @@ def main():
     )
     parser.add_argument(
         "--loader",
-        default="anno/src/eval/loader.rs",
+        default="crates/anno/eval/loader.rs",
         help="Path to loader.rs"
     )
     parser.add_argument(

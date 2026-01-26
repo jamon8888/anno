@@ -9,13 +9,13 @@ echo ""
 
 ISSUES=0
 
-ENTITY_RS="anno-core/src/entity.rs"
-GROUNDED_RS="anno-core/src/grounded.rs"
-CONFIDENCE_RS="anno/src/types/confidence.rs"
-EVAL_TASK_RS="anno/src/eval/task_evaluator.rs"
-EVAL_DIR="anno/src/eval/"
-BACKENDS_DIR="anno/src/backends/"
-METRICS_RS="anno/src/eval/metrics.rs"
+ENTITY_RS="crates/anno-core/src/entity.rs"
+GROUNDED_RS="crates/anno-core/src/grounded.rs"
+CONFIDENCE_RS="crates/anno/types/confidence.rs"
+EVAL_TASK_RS="crates/anno/eval/task_evaluator.rs"
+EVAL_DIR="crates/anno/eval/"
+BACKENDS_DIR="crates/anno/backends/"
+METRICS_RS="crates/anno/eval/metrics.rs"
 
 # 1. Check for text offset validation
 echo "## Text Offset Validation"

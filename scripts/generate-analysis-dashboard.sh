@@ -111,18 +111,18 @@ if command -v cargo-geiger &> /dev/null; then
 fi
 
 if command -v opengrep &> /dev/null; then
-    opengrep scan --config auto --json anno/ anno-core/ anno-coalesce/ anno-tier/ 2>/dev/null | jq -r '.results | length' > .opengrep-tmp.txt 2>/dev/null || echo "0" > .opengrep-tmp.txt
+    opengrep scan --config auto --json crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ 2>/dev/null | jq -r '.results | length' > .opengrep-tmp.txt 2>/dev/null || echo "0" > .opengrep-tmp.txt
     FINDINGS_COUNT=$(cat .opengrep-tmp.txt)
     ((TOOLS_INSTALLED++))
     rm -f .opengrep-tmp.txt
 fi
 
 if command -v ast-grep &> /dev/null && command -v jq &> /dev/null; then
-    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --json=compact anno/src/ anno-core/src/ anno-coalesce/src/ anno-tier/src/ > .ast-grep-unicode-tmp.json 2>/dev/null || echo "[]" > .ast-grep-unicode-tmp.json
+    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --json=compact crates/anno/ crates/anno-core/src/ crates/anno-coalesce/src/ crates/anno-tier/src/ > .ast-grep-unicode-tmp.json 2>/dev/null || echo "[]" > .ast-grep-unicode-tmp.json
     UNICODE_FINDINGS=$(jq -r 'length' .ast-grep-unicode-tmp.json 2>/dev/null || echo "0")
     rm -f .ast-grep-unicode-tmp.json
 
-    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --json=compact anno/src/ > .ast-grep-metal-tmp.json 2>/dev/null || echo "[]" > .ast-grep-metal-tmp.json
+    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --json=compact crates/anno/ > .ast-grep-metal-tmp.json 2>/dev/null || echo "[]" > .ast-grep-metal-tmp.json
     METAL_FINDINGS=$(jq -r 'length' .ast-grep-metal-tmp.json 2>/dev/null || echo "0")
     rm -f .ast-grep-metal-tmp.json
 fi
