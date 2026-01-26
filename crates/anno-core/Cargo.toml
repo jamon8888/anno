@@ -17,6 +17,7 @@ thiserror = { workspace = true }
 log = { workspace = true }
 chrono = { workspace = true }
 once_cell = { workspace = true }
+lattix = { workspace = true }
 
 [features]
 default = []
