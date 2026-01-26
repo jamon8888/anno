@@ -911,9 +911,9 @@ jobs:
                   return True
               return False
           checks = [
-              ("anno-coalesce/Cargo.toml", ["anno-core"]),
-              ("anno-tier/Cargo.toml", ["anno-core"]),
-              ("anno/Cargo.toml", ["anno-core", "anno-coalesce", "anno-tier"]),
+              ("crates/anno-coalesce/Cargo.toml", ["anno-core"]),
+              ("crates/anno-tier/Cargo.toml", ["anno-core"]),
+              ("crates/anno/Cargo.toml", ["anno-core", "anno-coalesce", "anno-tier"]),
           ]
           issues = 0
           for path, deps in checks:

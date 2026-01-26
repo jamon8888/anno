@@ -15,13 +15,13 @@
 #       │
 #       └── anno (120k - NER backends, coref, eval, CLI)
 #               ↑
-#               └── anno binary (via [[bin]] in anno/Cargo.toml)
+#               └── anno binary (via [[bin]] in crates/anno/Cargo.toml)
 #
 members = [
-    "anno-core",
-    "anno",
-    "anno-coalesce",
-    "anno-tier",
+    "crates/anno-core",
+    "crates/anno",
+    "crates/anno-coalesce",
+    "crates/anno-tier",
 ]
 resolver = "2"
 
@@ -45,8 +45,16 @@ log = "0.4"
 once_cell = "1"
 bitflags = "2"
 
+# Local workspace crate (dev super-workspace).
+# If you want standalone usage, replace with a git dependency and use
+# `.cargo/config.toml` for local path overrides.
+textprep = { path = "../textprep" }
+
 # Hierarchical algorithms (optional use via `anno-tier` feature flags)
-tier = { git = "https://github.com/arclabs561/tier.git", default-features = false }
+#
+# Local workspace crate (dev super-workspace). If you want standalone usage,
+# replace with a git dependency and use `.cargo/config.toml` for local overrides.
+tier = { path = "../tier", default-features = false }
 
 # CLI dependencies
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
@@ -74,11 +82,11 @@ candle-transformers = "0.9"
 safetensors = "0.4"
 
 # Burn ML framework (training + inference, WebGPU support)
-burn = "0.16"
-burn-ndarray = "0.16"
-burn-tch = "0.16"
-burn-wgpu = "0.16"
-burn-autodiff = "0.16"
+burn = "0.20.0"
+burn-ndarray = "0.20.0"
+burn-tch = "0.20.0"
+burn-wgpu = "0.20.0"
+burn-autodiff = "0.20.0"
 
 # Async
 tokio = { version = "1", features = ["rt", "sync"] }
