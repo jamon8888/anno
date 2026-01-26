@@ -37,7 +37,7 @@
 //!
 //! - **NER**: Multiple backends (Regex, BERT, GLiNER, NuNER, W2NER)
 //! - **Coreference**: Resolution (mention-ranking, rule-based) and metrics (MUC, B³, CEAF, LEA, BLANC)
-//! - **Salience**: Entity importance ranking (TextRank, YAKE, TF-IDF, Position)
+//! - **Salience**: Optional graph-based ranking (feature = `graph`)
 //! - **Evaluation**: Comprehensive benchmarking framework with bias analysis
 //!
 //! ## Discourse Analysis (feature = "discourse")
@@ -115,7 +115,7 @@
 //!
 //! | Feature | What it includes |
 //! |---------|------------------|
-//! | `full` | `eval-full` + `onnx` + `candle` + `discourse` |
+//! | `full` | `eval-full` + `onnx` + `candle` + `discourse` + `graph` |
 //! | `default` | `cli` + `onnx` (CLI + ONNX backends enabled by default) |
 
 #![warn(missing_docs)]
@@ -146,6 +146,7 @@ pub mod ingest;
 #[path = "../joint/mod.rs"]
 pub mod joint;
 /// Keyword and keyphrase extraction (TF-IDF, YAKE, TextRank).
+#[cfg(feature = "graph")]
 #[path = "../keywords.rs"]
 pub mod keywords;
 #[path = "../lang.rs"]
@@ -156,12 +157,14 @@ pub mod linking;
 #[path = "../offset.rs"]
 pub mod offset;
 /// Shared PageRank algorithm for graph-based ranking.
+#[cfg(feature = "graph")]
 #[path = "../pagerank.rs"]
 pub mod pagerank;
 /// Preprocessing for mention detection.
 #[path = "../preprocess/mod.rs"]
 pub mod preprocess;
 /// Entity salience and importance ranking.
+#[cfg(feature = "graph")]
 #[path = "../salience.rs"]
 pub mod salience;
 #[path = "../schema.rs"]
@@ -169,6 +172,7 @@ pub mod schema;
 #[path = "../similarity.rs"]
 pub mod similarity;
 /// Extractive summarization.
+#[cfg(feature = "graph")]
 #[path = "../summarize.rs"]
 pub mod summarize;
 #[path = "../sync.rs"]

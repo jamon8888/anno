@@ -75,6 +75,7 @@ tempfile = "3"
 default = ["cli", "onnx"]
 discourse = []
 cli = ["dep:clap", "dep:clap_complete", "dep:indicatif", "dep:xxhash-rust"]
+graph = []
 eval = ["dep:toml"]
 eval-bias = ["eval"]
 eval-advanced = ["eval", "dep:glob"]
@@ -97,7 +98,7 @@ jiff-time = []
 production = ["async-inference", "session-pool", "fast-lock", "instrument"]
 
 # Convenience umbrella.
-full = ["eval-full", "onnx", "candle", "discourse"]
+full = ["eval-full", "onnx", "candle", "discourse", "graph"]
 
 # Stub features referenced behind cfg gates.
 rank-eval = ["eval"]
