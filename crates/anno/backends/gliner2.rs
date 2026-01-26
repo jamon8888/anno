@@ -697,7 +697,7 @@ impl GLiNER2Onnx {
             _ => return Err(Error::Parse("Not a tensor".into())),
         };
 
-        if output_data.is_empty() || shape.iter().any(|&d| d == 0) {
+        if output_data.is_empty() || shape.contains(&0) {
             return Err(Error::Inference(
                 "GLiNER2 ONNX returned empty/degenerate output tensor. This usually indicates an incompatible ONNX export (shape mismatch or missing dynamic axes).".to_string(),
             ));
@@ -886,7 +886,7 @@ impl GLiNER2Onnx {
             _ => return Err(Error::Parse("Not a tensor".into())),
         };
 
-        if output_data.is_empty() || shape.iter().any(|&d| d == 0) {
+        if output_data.is_empty() || shape.contains(&0) {
             return Err(Error::Inference(
                 "GLiNER2 ONNX returned empty/degenerate output tensor. This usually indicates an incompatible ONNX export (shape mismatch or missing dynamic axes).".to_string(),
             ));
@@ -916,12 +916,11 @@ impl GLiNER2Onnx {
 
                     for word_idx in 0..out_num_words.min(num_words) {
                         // B logit at BIO dimension 0
-                        let b_idx = (0 * per_bio)
-                            + (batch_idx * per_batch)
+                        let b_idx = (batch_idx * per_batch)
                             + (word_idx * num_classes)
                             + class_idx;
                         // I logit at BIO dimension 1
-                        let i_idx = (1 * per_bio)
+                        let i_idx = per_bio
                             + (batch_idx * per_batch)
                             + (word_idx * num_classes)
                             + class_idx;
@@ -2669,9 +2668,9 @@ impl crate::BatchCapable for GLiNER2Onnx {
 
         for i in 0..all_input_ids.len() {
             let pad_len = max_seq_len - all_input_ids[i].len();
-            all_input_ids[i].extend(std::iter::repeat(0i64).take(pad_len));
-            all_attention_masks[i].extend(std::iter::repeat(0i64).take(pad_len));
-            all_words_masks[i].extend(std::iter::repeat(0i64).take(pad_len));
+            all_input_ids[i].extend(std::iter::repeat_n(0i64, pad_len));
+            all_attention_masks[i].extend(std::iter::repeat_n(0i64, pad_len));
+            all_words_masks[i].extend(std::iter::repeat_n(0i64, pad_len));
         }
 
         // Build batched tensors - only 4 inputs (no span tensors)

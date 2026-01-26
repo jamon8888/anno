@@ -1,9 +1,8 @@
 //! Utility functions for CLI commands
 
-use is_terminal::IsTerminal;
 use std::collections::HashMap;
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, IsTerminal, Read};
 
 #[cfg(feature = "eval-advanced")]
 use anno_core::Entity;
@@ -720,7 +719,11 @@ pub fn resolve_coreference(doc: &mut GroundedDocument, text: &str, signal_ids: &
                 if let Location::Text { end, .. } = &sig.location {
                     if *end < pronoun_start {
                         let distance = pronoun_start - end;
-                        if nearest.map_or(true, |(_, prev_dist)| distance < prev_dist) {
+                        let should_update = match nearest {
+                            None => true,
+                            Some((_, prev_dist)) => distance < prev_dist,
+                        };
+                        if should_update {
                             nearest = Some((*sig_id, distance));
                         }
                     }

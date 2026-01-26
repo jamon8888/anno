@@ -1110,7 +1110,7 @@ fn html_escape(s: &str) -> String {
 #[cfg(feature = "eval")]
 fn preview_text(s: &str, max_chars: usize) -> String {
     let mut out: String = s.chars().take(max_chars).collect();
-    out = out.replace('\n', " ").replace('\r', " ").replace('\t', " ");
+    out = out.replace(['\n', '\r', '\t'], " ");
     // Keep it simple: collapse repeated spaces in a tiny loop.
     while out.contains("  ") {
         out = out.replace("  ", " ");
@@ -1227,6 +1227,7 @@ fn synthetic_ner_test_cases() -> Vec<(String, Vec<crate::eval::GoldEntity>)> {
 }
 
 #[cfg(feature = "eval")]
+#[allow(clippy::too_many_arguments)]
 fn write_ner_error_explorer_html(
     output_path: &Path,
     dataset_name: &str,
@@ -1470,6 +1471,7 @@ fn coref_doc_to_oracle_mentions(doc: &crate::eval::coref::CorefDocument) -> Vec<
 }
 
 #[cfg(feature = "eval-advanced")]
+#[allow(clippy::too_many_arguments)]
 fn write_coref_error_explorer_html(
     output_path: &Path,
     dataset_name: &str,

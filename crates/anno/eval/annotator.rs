@@ -508,10 +508,14 @@ impl SoftEvaluator {
             let mut best_match: Option<(usize, f64)> = None;
 
             for (i, (g, conf)) in gold.iter().enumerate() {
+                let should_update = match best_match {
+                    None => true,
+                    Some((_, best_conf)) => *conf > best_conf,
+                };
                 if pred.same_span(g)
                     && pred.entity_type == g.entity_type
                     && !matched_gold.contains(&i)
-                    && best_match.map_or(true, |(_, best_conf)| *conf > best_conf)
+                    && should_update
                 {
                     best_match = Some((i, *conf));
                 }

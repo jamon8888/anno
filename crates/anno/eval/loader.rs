@@ -2534,7 +2534,7 @@ impl DatasetLoader {
                     };
 
                     // Retry on 5xx server errors (transient)
-                    if status >= 500 && status < 600 && attempt < MAX_RETRIES {
+                    if (500..600).contains(&status) && attempt < MAX_RETRIES {
                         let wait_ms = 1000 * (1 << attempt); // Exponential backoff: 1s, 2s, 4s
                         log::debug!(
                             "Server error {} downloading {} (attempt {}/{}), retrying in {}ms...",

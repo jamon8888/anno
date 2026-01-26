@@ -696,9 +696,9 @@ impl Model for W2NER {
                 return self.extract_with_grid(text, self.config.threshold as f32);
             }
 
-            return Err(crate::Error::ModelInit(
+            Err(crate::Error::ModelInit(
                 "W2NER model not loaded. Call `W2NER::from_pretrained(...)` (requires `onnx` feature) before calling `extract_entities`.".to_string(),
-            ));
+            ))
         }
 
         #[cfg(not(feature = "onnx"))]

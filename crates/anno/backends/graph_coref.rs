@@ -402,7 +402,10 @@ impl CorefGraph {
                 let distance = pos_i.abs_diff(pos_j);
 
                 if distance <= window_size {
-                    let should_add = scorer.as_ref().map_or(true, |f| f(i, j));
+                    let should_add = match scorer.as_ref() {
+                        None => true,
+                        Some(f) => f(i, j),
+                    };
                     if should_add {
                         self.add_edge(i, j);
                     }

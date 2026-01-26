@@ -1840,13 +1840,15 @@ impl MentionRankingCoref {
 
                 // Check word boundaries using character positions
                 let is_word_start = char_pos == 0
-                    || text_chars
-                        .get(char_pos.saturating_sub(1))
-                        .map_or(true, |c| !c.is_alphanumeric());
+                    || match text_chars.get(char_pos.saturating_sub(1)) {
+                        None => true,
+                        Some(c) => !c.is_alphanumeric(),
+                    };
                 let is_word_end = end_char_pos >= text_chars.len()
-                    || text_chars
-                        .get(end_char_pos)
-                        .map_or(true, |c| !c.is_alphanumeric());
+                    || match text_chars.get(end_char_pos) {
+                        None => true,
+                        Some(c) => !c.is_alphanumeric(),
+                    };
 
                 if is_word_start && is_word_end {
                     // Skip pleonastic "it" (non-referential uses)
@@ -1882,10 +1884,10 @@ impl MentionRankingCoref {
         for (i, word) in words.iter().enumerate() {
             // Skip if at sentence start
             let at_sentence_start = i == 0
-                || text[..text.find(word).unwrap_or(0)]
-                    .chars()
-                    .last()
-                    .map_or(true, |c| c == '.' || c == '!' || c == '?');
+                || match text[..text.find(word).unwrap_or(0)].chars().last() {
+                    None => true,
+                    Some(c) => c == '.' || c == '!' || c == '?',
+                };
 
             if !at_sentence_start
                 && word.chars().next().is_some_and(|c| c.is_uppercase())

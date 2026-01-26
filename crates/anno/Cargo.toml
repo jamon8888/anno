@@ -10,8 +10,8 @@ documentation = "https://docs.rs/anno"
 keywords = ["ner", "nlp", "information-extraction", "coreference", "rust"]
 
 [dependencies]
-anno-core = { path = "../anno-core" }
-anno-coalesce = { path = "../anno-coalesce" }
+anno-core = { path = "../anno-core", version = "0.2.0" }
+anno-coalesce = { path = "../anno-coalesce", version = "0.2.0" }
 textprep = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -23,15 +23,19 @@ once_cell = { workspace = true }
 bitflags = { workspace = true }
 
 # CLI
-clap = { workspace = true }
-clap_complete = { workspace = true }
-indicatif = { workspace = true }
+clap = { workspace = true, optional = true }
+clap_complete = { workspace = true, optional = true }
+indicatif = { workspace = true, optional = true }
+xxhash-rust = { version = "0.8.15", features = ["xxh3"], optional = true }
+toml = { workspace = true, optional = true }
 
 # Evaluation
 rand = { workspace = true }
 ureq = { workspace = true }
 sha2 = { workspace = true }
 dirs = { workspace = true }
+glob = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
 
 # ML
 ort = { workspace = true }
@@ -63,11 +67,14 @@ tracing-subscriber = { workspace = true }
 proptest = { workspace = true }
 
 [features]
-default = []
+default = ["cli", "onnx"]
 discourse = []
-cli = []
-eval = []
-eval-advanced = ["eval"]
+cli = ["dep:clap", "dep:clap_complete", "dep:indicatif", "dep:xxhash-rust"]
+eval = ["dep:toml"]
+eval-bias = ["eval"]
+eval-advanced = ["eval", "dep:glob"]
+eval-parallel = ["eval", "dep:rayon"]
+eval-profiling = ["eval"]
 onnx = []
 candle = []
 burn = []
@@ -79,3 +86,12 @@ instrument = []
 llm = []
 fast-lock = []
 jiff-time = []
+
+# Stub features referenced behind cfg gates.
+rank-eval = ["eval"]
+unicode-normalization = []
+
+[[bin]]
+name = "anno"
+path = "bin/anno.rs"
+required-features = ["cli"]

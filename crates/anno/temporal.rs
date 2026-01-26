@@ -541,10 +541,14 @@ impl TemporalScope {
             Self::Range { start, end } => {
                 // Entity overlaps with range if:
                 // entity_start <= end AND (entity_end is None OR entity_end >= start)
-                let entity_starts_before_end =
-                    entity.valid_from.as_ref().map_or(true, |ef| ef <= end);
-                let entity_ends_after_start =
-                    entity.valid_until.as_ref().map_or(true, |eu| eu >= start);
+                let entity_starts_before_end = match entity.valid_from.as_ref() {
+                    None => true,
+                    Some(ef) => ef <= end,
+                };
+                let entity_ends_after_start = match entity.valid_until.as_ref() {
+                    None => true,
+                    Some(eu) => eu >= start,
+                };
                 entity_starts_before_end && entity_ends_after_start
             }
             Self::AnyTime => true,

@@ -116,7 +116,7 @@
 //! | Feature | What it includes |
 //! |---------|------------------|
 //! | `full` | `eval-full` + `onnx` + `candle` + `discourse` |
-//! | `default` | `cli` + `eval` (CLI + dataset loading) |
+//! | `default` | `cli` + `onnx` (CLI + ONNX backends enabled by default) |
 
 #![warn(missing_docs)]
 
@@ -449,11 +449,16 @@ pub trait Model: sealed::Sealed + Send + Sync {
 ///
 /// The extractor closure must be `Send + Sync`. For interior mutability
 /// (e.g., caching, connection pooling), use `Arc<Mutex<...>>` or similar.
+/// Type alias for the `AnyModel` extractor closure.
+type AnyModelExtractor =
+    dyn Fn(&str, Option<&str>) -> Result<Vec<Entity>> + Send + Sync;
+
+/// A wrapper that turns an extractor closure into a `Model`.
 pub struct AnyModel {
     name: &'static str,
     description: &'static str,
     supported_types: Vec<EntityType>,
-    extractor: Box<dyn Fn(&str, Option<&str>) -> Result<Vec<Entity>> + Send + Sync>,
+    extractor: Box<AnyModelExtractor>,
     version: String,
 }
 
