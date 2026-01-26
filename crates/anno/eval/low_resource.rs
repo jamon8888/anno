@@ -482,18 +482,8 @@ impl LowResourceEvaluator {
 
         // Unicode normalization (NFC)
         if config.unicode_normalize {
-            #[cfg(feature = "unicode-normalization")]
-            {
-                use unicode_normalization::UnicodeNormalization;
-                result = result.nfc().collect();
-            }
-            #[cfg(not(feature = "unicode-normalization"))]
-            {
-                // Best-effort fallback: keep text as-is.
-                //
-                // Without `unicode-normalization`, we can't reliably normalize composed vs
-                // decomposed forms (e.g., "é" vs "e\u{0301}").
-            }
+            use unicode_normalization::UnicodeNormalization;
+            result = result.nfc().collect();
         }
 
         // Case normalization
@@ -522,20 +512,11 @@ impl Default for LowResourceEvaluator {
 }
 
 /// Remove diacritics from text.
-#[cfg(feature = "unicode-normalization")]
 fn remove_diacritics(text: &str) -> String {
     use unicode_normalization::UnicodeNormalization;
     text.nfd()
         .filter(|c| !unicode_normalization::char::is_combining_mark(*c))
         .collect()
-}
-
-/// Remove diacritics from text (fallback).
-///
-/// Without `unicode-normalization`, we don't have Unicode decomposition, so this is a no-op.
-#[cfg(not(feature = "unicode-normalization"))]
-fn remove_diacritics(text: &str) -> String {
-    text.to_string()
 }
 
 /// Create metadata for common Indigenous American languages.
