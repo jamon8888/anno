@@ -62,8 +62,8 @@
 //! │                    Graph-Based Structure Discovery                    │
 //! ├──────────────────────────────────────────────────────────────────────┤
 //! │                                                                      │
-//! │  anno::keywords (this)   anno::salience      anno-tier             │
-//! │  ─────────────────────   ─────────────       ───────────             │
+//! │  anno::keywords (this)   anno::salience      clustering (archived)   │
+//! │  ─────────────────────   ─────────────       ────────────────────   │
 //! │  Terms/phrases           Named entities      Knowledge graph         │
 //! │  Co-occurrence graph     Co-occurrence       Entity-relation graph   │
 //! │  PageRank/RAKE/YAKE      PageRank            Leiden/Louvain          │
