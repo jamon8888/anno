@@ -968,14 +968,15 @@ impl Model for MockModel {
     }
 }
 
-// Workspace-level CI tests live under `anno/tests/`. We compile them as unit-test modules
-// so they run under `cargo test -p anno --lib ...` without needing a separate “root package”.
+// Workspace-level CI tests were historically kept at the repo root under `tests/`.
+// Since this repo has no root Cargo package, we archive them under `archive/legacy-tests/` and
+// compile the ones CI still relies on as unit-test modules for `anno`.
 #[cfg(test)]
-#[path = "../../../tests/regression_f1.rs"]
+#[path = "../../../archive/legacy-tests/regression_f1.rs"]
 #[cfg(feature = "eval")]
 mod regression_f1;
 
 #[cfg(test)]
-#[path = "../../../tests/randomized_matrix_ci.rs"]
+#[path = "../../../archive/legacy-tests/randomized_matrix_ci.rs"]
 #[cfg(feature = "eval-advanced")]
 mod randomized_matrix_ci;
