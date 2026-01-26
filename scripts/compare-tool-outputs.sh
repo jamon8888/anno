@@ -42,7 +42,7 @@ fi
 if command -v opengrep &> /dev/null; then
     echo "### OpenGrep Findings" >> "$COMPARISON_FILE"
     echo "" >> "$COMPARISON_FILE"
-    opengrep scan --config auto --quiet --json anno/ anno-core/ anno-coalesce/ anno-tier/ tests/ examples/ | \
+    opengrep scan --config auto --quiet --json crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ tests/ examples/ | \
         jq -r '.results[] | select(.check_id | contains("unwrap")) | "\(.path):\(.start.line)"' \
         > .opengrep-unwraps.txt 2>/dev/null || echo "" > .opengrep-unwraps.txt
     OPENGREP_COUNT=$(wc -l < .opengrep-unwraps.txt | tr -d ' ')

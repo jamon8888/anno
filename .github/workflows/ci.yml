@@ -621,43 +621,43 @@ jobs:
             --config auto \
             --json --output opengrep-results.json \
             --sarif-output opengrep-results.sarif \
-            anno/ anno-core/ anno-coalesce/ anno-tier/ tests/ examples/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ tests/ examples/ || true
       - name: Run OpenGrep (custom rules - general)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-security.yaml \
             --json --output opengrep-security-results.json \
-            anno/ anno-core/ anno-coalesce/ anno-tier/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ || true
       - name: Run OpenGrep (custom rules - NLP/ML patterns)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-nlp-ml-patterns.yaml \
             --json --output opengrep-nlp-results.json \
-            anno/ anno-core/ anno-coalesce/ anno-tier/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ || true
       - name: Run OpenGrep (custom rules - evaluation framework)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-evaluation-framework.yaml \
             --json --output opengrep-eval-results.json \
-            anno/src/eval/ || true
+            crates/anno/eval/ || true
       - name: Run OpenGrep (custom rules - anno-specific)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-anno-specific.yaml \
             --json --output opengrep-anno-results.json \
-            anno/ anno-core/ anno-coalesce/ anno-tier/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ || true
       - name: Run OpenGrep (custom rules - error handling)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-error-handling.yaml \
             --json --output opengrep-error-results.json \
-            anno/ anno-core/ anno-coalesce/ anno-tier/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ || true
       - name: Run OpenGrep (custom rules - memory patterns)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-memory-patterns.yaml \
             --json --output opengrep-memory-results.json \
-            anno/ anno-core/ anno-coalesce/ anno-tier/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ || true
       - name: Validate rules
         run: |
           chmod +x scripts/*.sh
