@@ -2963,9 +2963,9 @@ tr:hover{background:var(--hover)}
             r#"<span class="badge badge-n">n</span>"#
         };
         html.push_str(&format!(
-            r#"<tr data-tid="{tid}"><td class="id">T{tid}</td><td>{canon}</td><td>{etype}</td><td>{n}</td><td class="id">{sigs}</td><td class="id">{ident} {badge}</td></tr>"#,
+            r#"<tr data-tid="{tid}"><td class="id">T{tid}</td><td>{canonical_surface}</td><td>{etype}</td><td>{n}</td><td class="id">{sigs}</td><td class="id">{ident} {badge}</td></tr>"#,
             tid = track.id,
-            canon = html_escape(&track.canonical_surface),
+            canonical_surface = html_escape(&track.canonical_surface),
             etype = html_escape(entity_type),
             n = track.len(),
             sigs = html_escape(&signals.join(" ")),
