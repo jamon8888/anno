@@ -145,6 +145,7 @@ pub mod inference;
 pub mod label_prompt;
 pub mod lexicon;
 pub mod nuner;
+pub mod ort_compat;
 pub mod pattern_config;
 pub mod regex;
 /// Language-aware routing for automatic backend selection.
