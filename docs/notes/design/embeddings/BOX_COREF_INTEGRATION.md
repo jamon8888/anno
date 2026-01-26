@@ -167,7 +167,7 @@ let (p, r, f1) = muc_score(&predicted_chains, &gold_chains);
 
 ## Ultimate Training & Evaluation Setup
 
-See `box-coref/docs/ULTIMATE_TRAINING_EVAL_DESIGN.md` for the complete design.
+See `ULTIMATE_TRAINING_EVAL_DESIGN.md` in the `box-coref` repo for the complete design.
 
 ### Key Scripts
 
