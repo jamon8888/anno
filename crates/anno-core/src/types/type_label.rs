@@ -72,9 +72,17 @@ pub enum TypeLabel {
 
 impl TypeLabel {
     /// Create a custom type label.
+    ///
+    /// Note: if `label` matches a known [`EntityType`] label, this returns
+    /// `TypeLabel::Core(...)` instead. Use this to keep “custom means unknown”
+    /// consistent across parsing/serde roundtrips.
     #[must_use]
     pub fn custom(label: impl Into<String>) -> Self {
-        Self::Custom(label.into())
+        let s = label.into();
+        match EntityType::from_label(&s) {
+            EntityType::Other(_) => Self::Custom(s),
+            et => Self::Core(et),
+        }
     }
 
     /// Get the string representation of this label.
@@ -219,10 +227,10 @@ mod tests {
 
     #[test]
     fn test_custom_type() {
-        let label = TypeLabel::custom("PROTEIN");
+        let label = TypeLabel::custom("UNKNOWN_TYPE_XYZ");
         assert!(!label.is_core());
         assert!(label.is_custom());
-        assert_eq!(label.as_str(), "PROTEIN");
+        assert_eq!(label.as_str(), "UNKNOWN_TYPE_XYZ");
     }
 
     #[test]
@@ -247,8 +255,9 @@ mod tests {
         let labels = vec![
             TypeLabel::Core(EntityType::Person),
             TypeLabel::Core(EntityType::Organization),
+            TypeLabel::custom("UNKNOWN_TYPE_XYZ"),
+            // If a label is known to the ontology, it is canonicalized to Core.
             TypeLabel::custom("PROTEIN"),
-            TypeLabel::custom("DISEASE"),
         ];
 
         for label in labels {
@@ -268,8 +277,8 @@ mod tests {
         assert_eq!(core.to_entity_type(), EntityType::Location);
 
         // Custom types become Other(String), not EntityType::Custom
-        let custom = TypeLabel::custom("PROTEIN");
+        let custom = TypeLabel::custom("UNKNOWN_TYPE_XYZ");
         let et = custom.to_entity_type();
-        assert!(matches!(et, EntityType::Other(ref s) if s == "PROTEIN"));
+        assert!(matches!(et, EntityType::Other(ref s) if s == "UNKNOWN_TYPE_XYZ"));
     }
 }
