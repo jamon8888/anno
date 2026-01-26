@@ -916,9 +916,7 @@ impl GLiNER2Onnx {
 
                     for word_idx in 0..out_num_words.min(num_words) {
                         // B logit at BIO dimension 0
-                        let b_idx = (batch_idx * per_batch)
-                            + (word_idx * num_classes)
-                            + class_idx;
+                        let b_idx = (batch_idx * per_batch) + (word_idx * num_classes) + class_idx;
                         // I logit at BIO dimension 1
                         let i_idx = per_bio
                             + (batch_idx * per_batch)

@@ -60,7 +60,10 @@ impl SimpleRng {
     }
 
     fn gen_bool(&mut self) -> bool {
-        self.next().is_multiple_of(2)
+        #[allow(clippy::manual_is_multiple_of)]
+        {
+            self.next() % 2 == 0
+        }
     }
 
     fn gen_range(&mut self, max: usize) -> usize {
