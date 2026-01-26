@@ -59,7 +59,7 @@ echo "## Security Pattern Detection (OpenGrep)" >> "$REPORT_FILE"
 echo "" >> "$REPORT_FILE"
 if command -v opengrep &> /dev/null; then
     echo "### Default Security Rules" >> "$REPORT_FILE"
-    opengrep scan --config auto --quiet --json --output opengrep-results.json crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ tests/ examples/ 2>/dev/null || echo '{"results":[]}' > opengrep-results.json
+    opengrep scan --config auto --quiet --json --output opengrep-results.json crates/anno/ crates/anno-core/ crates/anno-coalesce/ tests/ examples/ 2>/dev/null || echo '{"results":[]}' > opengrep-results.json
     if command -v jq &> /dev/null; then
         jq -r '.results[0:20][] | "\(.check_id): \(.path):\(.start.line)"' opengrep-results.json >> "$REPORT_FILE" 2>/dev/null || true
     else
@@ -77,7 +77,7 @@ if command -v opengrep &> /dev/null; then
                     ;;
             esac
             rule_name=$(basename "$rule_file" .yaml)
-            count=$(opengrep scan -f "$rule_file" --quiet --json crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ 2>/dev/null | jq '.results | length' || echo "0")
+            count=$(opengrep scan -f "$rule_file" --quiet --json crates/anno/ crates/anno-core/ crates/anno-coalesce/ 2>/dev/null | jq '.results | length' || echo "0")
             echo "- $rule_name: $count findings" >> "$REPORT_FILE"
         fi
     done
@@ -106,7 +106,7 @@ echo "" >> "$REPORT_FILE"
 if command -v ast-grep &> /dev/null; then
     echo "### Unicode/Offset Safety (ast-grep)" >> "$REPORT_FILE"
     echo "" >> "$REPORT_FILE"
-    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --json=compact crates/anno/ crates/anno-core/src/ crates/anno-coalesce/src/ crates/anno-tier/src/ > .ast-grep-unicode-tmp.json 2>/dev/null || echo "[]" > .ast-grep-unicode-tmp.json
+    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --json=compact crates/anno/ crates/anno-core/src/ crates/anno-coalesce/src/ > .ast-grep-unicode-tmp.json 2>/dev/null || echo "[]" > .ast-grep-unicode-tmp.json
     if command -v jq &> /dev/null; then
         UNICODE_COUNT=$(jq -r 'length' .ast-grep-unicode-tmp.json 2>/dev/null || echo 0)
         echo "- **Findings**: ${UNICODE_COUNT}" >> "$REPORT_FILE"

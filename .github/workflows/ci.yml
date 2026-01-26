@@ -624,7 +624,7 @@ jobs:
             --config auto \
             --json --output opengrep-results.json \
             --sarif-output opengrep-results.sarif \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ tests/ examples/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ tests/ examples/ || true
       - name: Ensure SARIF output exists
         if: always()
         run: |
@@ -636,13 +636,13 @@ jobs:
           opengrep scan \
             -f .opengrep/rules/rust-security.yaml \
             --json --output opengrep-security-results.json \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ || true
       - name: Run OpenGrep (custom rules - NLP/ML patterns)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-nlp-ml-patterns.yaml \
             --json --output opengrep-nlp-results.json \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ || true
       - name: Run OpenGrep (custom rules - evaluation framework)
         run: |
           opengrep scan \
@@ -654,19 +654,19 @@ jobs:
           opengrep scan \
             -f .opengrep/rules/rust-anno-specific.yaml \
             --json --output opengrep-anno-results.json \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ || true
       - name: Run OpenGrep (custom rules - error handling)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-error-handling.yaml \
             --json --output opengrep-error-results.json \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ || true
       - name: Run OpenGrep (custom rules - memory patterns)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-memory-patterns.yaml \
             --json --output opengrep-memory-results.json \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ || true
+            crates/anno/ crates/anno-core/ crates/anno-coalesce/ || true
       - name: Validate rules
         run: |
           chmod +x scripts/*.sh
@@ -870,18 +870,6 @@ jobs:
             echo "[error] anno-coalesce: Publish validation failed" >> $GITHUB_STEP_SUMMARY
           fi
       
-      - name: Check publish readiness (anno-tier)
-        id: anno-tier
-        run: |
-          echo "Checking anno-tier publish readiness..."
-          if cargo publish --dry-run -p anno-tier; then
-            echo "status=ready" >> $GITHUB_OUTPUT
-            echo "[ok] anno-tier: Ready to publish" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "status=error" >> $GITHUB_OUTPUT
-            echo "[error] anno-tier: Publish validation failed" >> $GITHUB_STEP_SUMMARY
-          fi
-      
       - name: Check publish readiness (anno)
         id: anno
         run: |
@@ -898,7 +886,7 @@ jobs:
         run: |
           echo "## Crates.io Status" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          for crate in anno anno-core anno-coalesce anno-tier; do
+          for crate in anno anno-core anno-coalesce; do
             if curl -s "https://crates.io/api/v1/crates/$crate" 2>/dev/null | jq -r '.crate | "\(.name): v\(.max_version // "not published")"' 2>/dev/null; then
               echo "- **$crate**: Published" >> $GITHUB_STEP_SUMMARY
             else
@@ -921,8 +909,7 @@ jobs:
               return False
           checks = [
               ("crates/anno-coalesce/Cargo.toml", ["anno-core"]),
-              ("crates/anno-tier/Cargo.toml", ["anno-core"]),
-              ("crates/anno/Cargo.toml", ["anno-core", "anno-coalesce", "anno-tier"]),
+              ("crates/anno/Cargo.toml", ["anno-core", "anno-coalesce"]),
           ]
           issues = 0
           for path, deps in checks:
@@ -954,9 +941,6 @@ jobs:
           
           ### anno-coalesce
           $([ "${{ steps.anno-coalesce.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")
-          
-          ### anno-tier
-          $([ "${{ steps.anno-tier.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")
           
           ### anno
           $([ "${{ steps.anno.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")

@@ -10,7 +10,7 @@ echo "Checking for patterns that match bugs that were previously fixed..."
 echo ""
 
 ISSUES=0
-WORKSPACE_DIRS=(crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ tests/ examples/)
+WORKSPACE_DIRS=(crates/anno/ crates/anno-core/ crates/anno-coalesce/ tests/ examples/)
 EVAL_DIR="crates/anno/eval/"
 
 # 1. Check for mutex double-lock pattern (deadlock bug)
