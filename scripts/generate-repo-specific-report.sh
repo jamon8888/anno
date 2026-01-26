@@ -55,7 +55,7 @@ if command -v opengrep &> /dev/null; then
             echo "" >> "$REPORT_FILE"
             if command -v jq &> /dev/null; then
                 count=$(
-                    opengrep scan -f "$rule_file" --quiet --json anno/ anno-core/ anno-coalesce/ anno-tier/ 2>/dev/null \
+                    opengrep scan -f "$rule_file" --quiet --json crates/anno/ crates/anno-core/ crates/anno-coalesce/ crates/anno-tier/ 2>/dev/null \
                         | jq -r '.results | length' \
                         || echo "0"
                 )

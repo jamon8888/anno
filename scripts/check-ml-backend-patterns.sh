@@ -9,7 +9,7 @@ echo ""
 
 ISSUES=0
 
-BACKENDS_DIR="anno/src/backends/"
+BACKENDS_DIR="crates/anno/backends/"
 
 # 1. Check for HuggingFace authentication handling
 echo "## HuggingFace Authentication"
