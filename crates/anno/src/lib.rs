@@ -182,9 +182,9 @@ pub mod types;
 ///
 /// Provides advanced geometric representations that complement box embeddings:
 ///
-/// - [`geometric::hyperbolic`]: Poincaré ball embeddings for hierarchical entity types
-/// - [`geometric::sheaf`]: Sheaf neural networks for gradient-level transitivity
-/// - [`geometric::tda`]: Topological data analysis for structural diagnostics
+/// - `geometric::hyperbolic`: Poincaré ball embeddings for hierarchical entity types
+/// - `geometric::sheaf`: Sheaf neural networks for gradient-level transitivity
+/// - `geometric::tda`: Topological data analysis for structural diagnostics
 ///
 /// These are research stubs - see `docs/notes/design/embeddings/GEOMETRIC_FOUNDATIONS.md` for implementation status.
 ///
@@ -215,8 +215,8 @@ pub mod cli;
 ///
 /// Enable with the `discourse` feature.
 ///
-/// See [`discourse::centering`] for salience-based pronoun resolution and
-/// [`discourse::uncertain_reference`] for handling ambiguous references.
+/// See `discourse::centering` for salience-based pronoun resolution and
+/// `discourse::uncertain_reference` for handling ambiguous references.
 #[cfg(feature = "discourse")]
 #[path = "../discourse/mod.rs"]
 pub mod discourse;
