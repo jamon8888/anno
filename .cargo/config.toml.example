@@ -1,0 +1,13 @@
+# Local developer overrides for the `anno` workspace.
+#
+# Usage:
+# - Copy this file to `.cargo/config.toml`
+# - Adjust paths if you keep repos elsewhere
+#
+# Notes:
+# - This keeps the repo buildable standalone (default deps are crates.io + git),
+#   while still allowing fast iteration in a super-workspace checkout.
+
+[patch.crates-io]
+textprep = { path = "../textprep" }
+
