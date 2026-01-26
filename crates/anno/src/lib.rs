@@ -450,8 +450,7 @@ pub trait Model: sealed::Sealed + Send + Sync {
 /// The extractor closure must be `Send + Sync`. For interior mutability
 /// (e.g., caching, connection pooling), use `Arc<Mutex<...>>` or similar.
 /// Type alias for the `AnyModel` extractor closure.
-type AnyModelExtractor =
-    dyn Fn(&str, Option<&str>) -> Result<Vec<Entity>> + Send + Sync;
+type AnyModelExtractor = dyn Fn(&str, Option<&str>) -> Result<Vec<Entity>> + Send + Sync;
 
 /// A wrapper that turns an extractor closure into a `Model`.
 pub struct AnyModel {
