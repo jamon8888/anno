@@ -1031,9 +1031,9 @@ impl Model for NuNER {
                 return self.extract(text, &labels, self.threshold as f32);
             }
 
-            return Err(Error::ModelInit(
+            Err(Error::ModelInit(
                 "NuNER model not loaded. Call `NuNER::from_pretrained(...)` (requires `onnx` feature) before calling `extract_entities`.".to_string(),
-            ));
+            ))
         }
 
         #[cfg(not(feature = "onnx"))]

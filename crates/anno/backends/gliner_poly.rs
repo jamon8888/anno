@@ -40,6 +40,7 @@ use crate::{Entity, EntityType, Error, Model, Result};
 ///
 /// Poly-encoder fusion requires a different ONNX export than the bi-encoder GLiNER models.
 /// We keep the type for forward compatibility, but it returns a clear error if used.
+#[derive(Debug)]
 pub struct GLiNERPoly {
     _private: (),
 }

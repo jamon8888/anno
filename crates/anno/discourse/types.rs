@@ -839,8 +839,15 @@ impl DiscourseScope {
                 let after_space = chars.get(i + 2);
 
                 // If followed by space and uppercase (or end of text), it's a sentence boundary
-                if next_char.map_or(true, |&nc| nc.is_whitespace() || nc == '"' || nc == '\'')
-                    && after_space.map_or(true, |&ac| ac.is_uppercase() || ac == '"')
+                let boundary_ok = match next_char {
+                    None => true,
+                    Some(&nc) => nc.is_whitespace() || nc == '"' || nc == '\'',
+                };
+                let after_ok = match after_space {
+                    None => true,
+                    Some(&ac) => ac.is_uppercase() || ac == '"',
+                };
+                if boundary_ok && after_ok
                 {
                     // Return character offset (i+1 is after the punctuation)
                     boundaries.push(i + 1);

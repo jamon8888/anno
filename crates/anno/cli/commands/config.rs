@@ -102,6 +102,7 @@ pub fn run(args: ConfigArgs) -> Result<(), String> {
 
             #[cfg(not(all(feature = "cli", feature = "eval")))]
             {
+                let _ = (name, model, coref, link_kb, threshold);
                 return Err("Config management requires 'cli' and 'eval' features".to_string());
             }
         }

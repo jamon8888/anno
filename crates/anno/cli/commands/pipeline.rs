@@ -131,7 +131,7 @@ pub fn run(args: PipelineArgs) -> Result<(), String> {
     };
 
     #[cfg(not(all(feature = "cli", feature = "eval")))]
-    let pb: Option<()> = None;
+    let _pb: Option<()> = None;
 
     for (doc_id, text) in &texts {
         #[cfg(all(feature = "cli", feature = "eval"))]

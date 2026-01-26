@@ -60,7 +60,7 @@ pub struct LexiconNER {
 
 impl LexiconNER {
     /// Create a new LexiconNER with the given lexicon.
-    pub fn new(lexicon: impl Lexicon + Send + Sync + 'static) -> Self {
+    pub fn new(lexicon: impl Lexicon + 'static) -> Self {
         Self {
             lexicon: Arc::new(lexicon),
             case_sensitive: false,
@@ -104,7 +104,7 @@ impl Model for LexiconNER {
         let lang_code = language.map(|l| l.split('-').next().unwrap_or(l).to_lowercase());
         let is_cjk = lang_code
             .as_deref()
-            .map_or(false, |l| matches!(l, "zh" | "ja" | "ko"));
+            .is_some_and(|l| matches!(l, "zh" | "ja" | "ko"));
 
         // Helper to check if character is a word boundary marker
         // For CJK: punctuation and whitespace are boundaries

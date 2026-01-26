@@ -308,7 +308,7 @@ impl EventExtractor for RuleBasedEventExtractor {
             // For CJK and other languages without case, search in original text too
             let search_text = if lang_code
                 .as_deref()
-                .map_or(false, |l| matches!(l, "zh" | "ja" | "ko" | "ar" | "ru"))
+                .is_some_and(|l| matches!(l, "zh" | "ja" | "ko" | "ar" | "ru"))
             {
                 text // No lowercasing for languages where case doesn't apply
             } else {
