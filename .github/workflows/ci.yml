@@ -116,14 +116,10 @@ jobs:
         run: cargo build --workspace --features "eval-advanced discourse"
       - name: Run library tests
         run: cargo test --workspace --lib --features "eval-advanced discourse"
-      - name: Run eval integration tests
-        run: cargo test --package anno --test eval_integration --features "eval-advanced"
-      - name: Run coref integration tests
-        run: cargo test --workspace --test coref_integration --features "eval-advanced"
-      - name: Run discourse tests
-        run: cargo test --workspace --test discourse_comprehensive --features "discourse"
-      - name: Run new features integration
-        run: cargo test --workspace --test new_features_integration --features "eval-advanced"
+      - name: Run coalesce integration tests
+        run: cargo test --package anno-coalesce --tests
+      - name: Run anno-core integration tests
+        run: cargo test --package anno-core --tests
 
   # ==========================================================================
   # Cross-platform tests (core features only)
