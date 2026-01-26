@@ -84,10 +84,10 @@ echo ""
 echo "## Version Requirements"
 echo ""
 
-check_version_requirement "anno-coalesce/Cargo.toml" "anno-core" "0.2.0"
-check_version_requirement "anno-tier/Cargo.toml" "anno-core" "0.2.0"
-check_version_requirement "anno/Cargo.toml" "anno-coalesce" "0.2.0"
-check_version_requirement "anno/Cargo.toml" "anno-tier" "0.2.0"
+check_version_requirement "crates/anno-coalesce/Cargo.toml" "anno-core" "0.2.0"
+check_version_requirement "crates/anno-tier/Cargo.toml" "anno-core" "0.2.0"
+check_version_requirement "crates/anno/Cargo.toml" "anno-coalesce" "0.2.0"
+check_version_requirement "crates/anno/Cargo.toml" "anno-tier" "0.2.0"
 
 echo ""
 

@@ -118,9 +118,9 @@ anno = { path = ".", features = ["semantic-chunking"] }
 
 ## Files Created/Modified
 
-1. `anno/src/backends/semantic_chunking.rs` (NEW) - Full implementation
-2. `anno/src/backends/mod.rs` - Added module (feature-gated)
-3. `anno/Cargo.toml` - Added `semantic-chunking` feature flag
+1. `crates/anno/backends/semantic_chunking.rs` (NEW) - Full implementation
+2. `crates/anno/backends/mod.rs` - Added module (feature-gated)
+3. `crates/anno/Cargo.toml` - Added `semantic-chunking` feature flag
 4. `docs/notes/design/SEMANTIC_CHUNKING_ANALYSIS.md` (NEW) - Research analysis
 5. `docs/notes/SEMANTIC_CHUNKING_IMPLEMENTATION.md` (THIS FILE) - Implementation summary
 
