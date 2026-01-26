@@ -296,18 +296,16 @@ jobs:
   # MSRV (Minimum Supported Rust Version)
   # ==========================================================================
   msrv:
-    name: MSRV (1.82)
+    name: MSRV (1.85)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.82.0
+      - uses: dtolnay/rust-toolchain@1.85.0
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
       - name: Check MSRV
-        run: |
-          rm -f Cargo.lock  # lockfile v4 requires Cargo 1.83+
-          cargo check --workspace
+        run: cargo check --workspace --locked
 
   # ==========================================================================
   # Documentation
@@ -366,14 +364,14 @@ jobs:
       
       - name: Run randomized matrix test
         run: |
-          cargo test --test randomized_matrix_ci --features "eval-advanced" -- --nocapture
+          cargo test -p anno --lib --features "eval-advanced" test_randomized_matrix_sample -- --nocapture
         env:
           ANNO_SAMPLE_STRATEGY: random
           ANNO_CI_SEED: ${{ github.run_id }}
       
       - name: Run worst-first matrix test
         run: |
-          cargo test --test randomized_matrix_ci --features "eval-advanced" -- --nocapture
+          cargo test -p anno --lib --features "eval-advanced" test_randomized_matrix_sample -- --nocapture
         env:
           ANNO_SAMPLE_STRATEGY: worst-first
           ANNO_CI_SEED: ${{ github.run_id }}
@@ -391,7 +389,7 @@ jobs:
         with:
           cache-all-crates: true
       - name: Run regression tests
-        run: cargo test --workspace --test regression_f1 --features eval -- --nocapture
+        run: cargo test -p anno --lib --features eval regression_ -- --nocapture
 
   # ==========================================================================
   # Examples (compile check)
