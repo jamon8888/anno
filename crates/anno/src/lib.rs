@@ -120,6 +120,10 @@
 
 #![warn(missing_docs)]
 
+// Allow unit tests (and included CI test modules) to refer to this crate as `anno::...`,
+// matching integration-test style imports.
+extern crate self as anno;
+
 // Module declarations (core types are in anno-core, not declared here)
 #[path = "../backends/mod.rs"]
 pub mod backends;
@@ -959,3 +963,15 @@ impl Model for MockModel {
         "Mock NER model for testing"
     }
 }
+
+// Workspace-level CI tests live under `anno/tests/`. We compile them as unit-test modules
+// so they run under `cargo test -p anno --lib ...` without needing a separate “root package”.
+#[cfg(test)]
+#[path = "../../../tests/regression_f1.rs"]
+#[cfg(feature = "eval")]
+mod regression_f1;
+
+#[cfg(test)]
+#[path = "../../../tests/randomized_matrix_ci.rs"]
+#[cfg(feature = "eval-advanced")]
+mod randomized_matrix_ci;
