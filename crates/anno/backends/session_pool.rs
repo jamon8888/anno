@@ -384,17 +384,17 @@ impl GLiNERPool {
         let span_mask_array = Array2::from_shape_vec((batch_size, num_spans), span_mask)
             .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
 
-        let input_ids_t = Tensor::from_array(input_ids_array)
+        let input_ids_t = super::ort_compat::tensor_from_ndarray(input_ids_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let attention_mask_t = Tensor::from_array(attention_mask_array)
+        let attention_mask_t = super::ort_compat::tensor_from_ndarray(attention_mask_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let words_mask_t = Tensor::from_array(words_mask_array)
+        let words_mask_t = super::ort_compat::tensor_from_ndarray(words_mask_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let text_lengths_t = Tensor::from_array(text_lengths_array)
+        let text_lengths_t = super::ort_compat::tensor_from_ndarray(text_lengths_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let span_idx_t = Tensor::from_array(span_idx_array)
+        let span_idx_t = super::ort_compat::tensor_from_ndarray(span_idx_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let span_mask_t = Tensor::from_array(span_mask_array)
+        let span_mask_t = super::ort_compat::tensor_from_ndarray(span_mask_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
 
         // Run inference

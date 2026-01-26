@@ -324,10 +324,7 @@ impl W2NER {
         let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_file)
             .map_err(|e| Error::Retrieval(format!("Failed to load tokenizer: {}", e)))?;
 
-        log::debug!(
-            "[W2NER] Loaded model with inputs: {:?}",
-            session.inputs.iter().map(|i| &i.name).collect::<Vec<_>>()
-        );
+        log::debug!("[W2NER] Loaded model");
 
         Ok(Self {
             config: W2NERConfig {
@@ -524,16 +521,15 @@ impl W2NER {
 
         // Build tensors
         use ndarray::Array2;
-        use ort::value::Tensor;
 
         let input_ids_arr = Array2::from_shape_vec((1, seq_len), input_ids)
             .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
         let attention_arr = Array2::from_shape_vec((1, seq_len), attention_mask)
             .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
 
-        let input_ids_t = Tensor::from_array(input_ids_arr)
+        let input_ids_t = super::ort_compat::tensor_from_ndarray(input_ids_arr)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let attention_t = Tensor::from_array(attention_arr)
+        let attention_t = super::ort_compat::tensor_from_ndarray(attention_arr)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
 
         // Run inference with blocking lock for thread-safe parallel access
