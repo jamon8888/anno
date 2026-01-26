@@ -38,7 +38,7 @@
 //! # Epsilon-Term Semantics
 //!
 //! Israel (1994) discusses Hilbert's epsilon-terms as an alternative to standard
-//! quantifiers. For a predicate A[x], the term ε_x(A[x]) denotes "some A" without
+//! quantifiers. For a predicate `A[x]`, the term `ε_x(A[x])` denotes "some A" without
 //! specifying which particular A. This is exactly what we need:
 //!
 //! - **Not unbound**: We know *something* is referred to
@@ -129,7 +129,7 @@ pub struct ReferenceCandidate {
     pub entity_id: u64,
     /// Surface form or description (e.g., "John", "the CEO").
     pub description: String,
-    /// Weight in log-odds space. Higher = more likely. Use [`update_evidence`]
+    /// Weight in log-odds space. Higher = more likely. Use `update_evidence`
     /// to adjust, and [`probabilities`](UncertainReference::probabilities) to
     /// convert to probabilities via softmax.
     pub weight: f64,
@@ -281,7 +281,7 @@ impl ReferenceCandidate {
 /// - [`probabilities`](Self::probabilities): Softmax distribution over candidates
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UncertainReference {
-    /// Descriptive content — the anaphor text or the "A" in ε_x A[x].
+    /// Descriptive content — the anaphor text or the "A" in `ε_x A[x]`.
     pub description: String,
 
     /// Candidate referents with weights (in log-odds space).

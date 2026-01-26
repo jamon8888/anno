@@ -48,10 +48,10 @@
 //!
 //! | Algorithm | Candidates | Scoring | Best For |
 //! |-----------|------------|---------|----------|
-//! | [`RakeExtractor`] | Phrases between stopwords | Frequency × degree | Technical docs |
-//! | [`YakeExtractor`] | N-grams after preprocessing | Statistical features | Multilingual* |
-//! | [`TextRankExtractor`] | Content words (POS filtered) | PageRank on co-occurrence | Reviews, short text |
-//! | [`TfIdfExtractor`] | All terms | TF-IDF | Simple baseline |
+//! | `RakeExtractor` | Phrases between stopwords | Frequency × degree | Technical docs |
+//! | `YakeExtractor` | N-grams after preprocessing | Statistical features | Multilingual* |
+//! | `TextRankExtractor` | Content words (POS filtered) | PageRank on co-occurrence | Reviews, short text |
+//! | `TfIdfExtractor` | All terms | TF-IDF | Simple baseline |
 //!
 //! *YAKE is designed to be language-independent but still needs appropriate tokenization.
 //!

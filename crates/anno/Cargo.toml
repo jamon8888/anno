@@ -10,8 +10,8 @@ documentation = "https://docs.rs/anno"
 keywords = ["ner", "nlp", "information-extraction", "coreference", "rust"]
 
 [dependencies]
-anno-core = { path = "../anno-core", version = "0.2.0" }
-anno-coalesce = { path = "../anno-coalesce", version = "0.2.0" }
+anno-core = { path = "../anno-core" }
+anno-coalesce = { path = "../anno-coalesce" }
 textprep = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -52,6 +52,10 @@ safetensors = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 
+# Performance
+crossbeam-channel = { workspace = true, optional = true }
+parking_lot = { workspace = true, optional = true }
+
 # Utilities
 itertools = { workspace = true }
 smallvec = { workspace = true }
@@ -75,17 +79,24 @@ eval-bias = ["eval"]
 eval-advanced = ["eval", "dep:glob"]
 eval-parallel = ["eval", "dep:rayon"]
 eval-profiling = ["eval"]
+eval-full = ["eval-advanced", "eval-bias", "eval-parallel", "eval-profiling"]
 onnx = []
 candle = []
+metal = ["candle"]
 burn = []
 semantic-chunking = []
 async-inference = []
-session-pool = []
+session-pool = ["dep:crossbeam-channel"]
 subsume = []
 instrument = []
 llm = []
-fast-lock = []
+fast-lock = ["dep:parking_lot"]
 jiff-time = []
+
+production = ["async-inference", "session-pool", "fast-lock", "instrument"]
+
+# Convenience umbrella.
+full = ["eval-full", "onnx", "candle", "discourse"]
 
 # Stub features referenced behind cfg gates.
 rank-eval = ["eval"]

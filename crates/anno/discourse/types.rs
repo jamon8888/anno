@@ -764,7 +764,7 @@ pub fn is_shell_noun(word: &str) -> bool {
 /// assert!(scope.sentence_count() >= 1);
 /// ```
 ///
-/// Use [`extract_span`] to safely extract text from character offsets.
+/// Use `extract_span` to safely extract text from character offsets.
 #[derive(Debug, Clone)]
 pub struct DiscourseScope {
     /// Sentence boundaries (character offsets, NOT byte offsets)
