@@ -32,7 +32,7 @@ Should anno:
 ### Option A: Anno depends on subsume-core
 
 ```toml
-# anno/Cargo.toml
+# crates/anno/Cargo.toml
 [dependencies]
 subsume-core = { path = "../subsume/subsume-core" }
 ```
@@ -204,7 +204,7 @@ After deeper analysis, the cleanest path is:
 Try adding `subsume-core` as an optional dependency:
 
 ```toml
-# anno/Cargo.toml
+# crates/anno/Cargo.toml
 [dependencies]
 subsume-core = { path = "../subsume/subsume-core", optional = true }
 
@@ -260,7 +260,7 @@ box-coref should remain separate because:
 ## What Was Implemented
 
 ```toml
-# anno/Cargo.toml
+# crates/anno/Cargo.toml
 [dependencies]
 subsume-core = { path = "../../subsume/subsume-core", optional = true }
 
