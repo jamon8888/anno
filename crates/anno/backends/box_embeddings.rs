@@ -959,12 +959,14 @@ impl subsume_core::Box for GumbelBox {
         for i in 0..self.dim() {
             let m1 = self.mean_min[i];
             let m2 = other.mean_min[i];
-            let lse_min = m1.max(m2) + self.temperature * (-(m1 - m2).abs() / self.temperature).exp().ln_1p();
+            let lse_min =
+                m1.max(m2) + self.temperature * (-(m1 - m2).abs() / self.temperature).exp().ln_1p();
             new_min.push(lse_min);
 
             let x1 = self.mean_max[i];
             let x2 = other.mean_max[i];
-            let lse_max = x1.min(x2) - self.temperature * (-(x1 - x2).abs() / self.temperature).exp().ln_1p();
+            let lse_max =
+                x1.min(x2) - self.temperature * (-(x1 - x2).abs() / self.temperature).exp().ln_1p();
             new_max.push(lse_max);
         }
 
@@ -1049,7 +1051,10 @@ impl subsume_core::GumbelBox for GumbelBox {
         self.temperature
     }
 
-    fn membership_probability(&self, point: &Self::Vector) -> Result<Self::Scalar, subsume_core::BoxError> {
+    fn membership_probability(
+        &self,
+        point: &Self::Vector,
+    ) -> Result<Self::Scalar, subsume_core::BoxError> {
         Ok(self.membership_probability(point))
     }
 

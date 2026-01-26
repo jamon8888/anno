@@ -282,10 +282,9 @@ impl RobustnessEvaluator {
                 .collect::<Vec<_>>()
                 .join(" "),
 
-            Perturbation::CaseMixed => text
-                .chars()
-                .enumerate()
-                .fold(String::with_capacity(text.len()), |mut out, (i, c)| {
+            Perturbation::CaseMixed => text.chars().enumerate().fold(
+                String::with_capacity(text.len()),
+                |mut out, (i, c)| {
                     // Unicode-aware: case conversion can expand into multiple chars.
                     if i % 2 == 0 {
                         out.extend(c.to_uppercase());
@@ -293,7 +292,8 @@ impl RobustnessEvaluator {
                         out.extend(c.to_lowercase());
                     }
                     out
-                }),
+                },
+            ),
 
             Perturbation::WhitespaceExtra => {
                 let intensity = self.intensity;
