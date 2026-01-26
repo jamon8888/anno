@@ -1315,10 +1315,8 @@ fn test_randomized_matrix_sample() {
 
             // F1 formula consistency (F1 = 2PR/(P+R))
             if precision > 0.0 && recall > 0.0 && f1 > 0.0 {
-                let expected_f1: f64 = 2.0_f64
-                    * (precision as f64)
-                    * (recall as f64)
-                    / ((precision + recall) as f64);
+                let expected_f1: f64 =
+                    2.0_f64 * (precision as f64) * (recall as f64) / ((precision + recall) as f64);
                 let f1_diff: f64 = (expected_f1 - (f1 as f64)).abs();
                 if f1_diff > 0.001 {
                     eprintln!(
