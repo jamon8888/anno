@@ -5,12 +5,10 @@
 pub mod analyze;
 pub mod backends;
 pub mod batch;
-pub mod benchmark;
 pub mod cache;
 pub mod compare;
 pub mod config;
 pub mod context;
-pub mod crossdoc;
 pub mod dataset;
 pub mod debug;
 pub mod domain;
@@ -28,23 +26,26 @@ pub mod pipeline;
 pub mod privacy;
 pub mod query;
 pub mod singleton;
-// The `tier` command implementation currently lives in `strata.rs`.
-// Keep the module name stable (`tier`) because it's part of the CLI surface.
-#[path = "strata.rs"]
-pub mod tier;
 pub mod validate;
 pub mod watch;
+
+// Heavy/optional commands.
+#[cfg(feature = "eval-advanced")]
+pub mod benchmark;
+#[cfg(feature = "eval-advanced")]
+pub mod crossdoc;
+#[cfg(feature = "eval-advanced")]
+#[path = "strata.rs"]
+pub mod tier;
 
 // Re-export argument types for parser
 pub use analyze::AnalyzeArgs;
 pub use backends::BackendsArgs;
 pub use batch::BatchArgs;
-pub use benchmark::BenchmarkArgs;
 pub use cache::{CacheAction, CacheArgs};
 pub use compare::CompareArgs;
 pub use config::{ConfigAction, ConfigArgs};
 pub use context::ContextArgs;
-pub use crossdoc::CrossDocArgs;
 pub use dataset::DatasetArgs;
 pub use debug::DebugArgs;
 pub use domain::DomainArgs;
@@ -61,6 +62,12 @@ pub use pipeline::PipelineArgs;
 pub use privacy::PrivacyArgs;
 pub use query::QueryArgs;
 pub use singleton::SingletonArgs;
-pub use tier::TierArgs;
 pub use validate::ValidateArgs;
 pub use watch::WatchArgs;
+
+#[cfg(feature = "eval-advanced")]
+pub use benchmark::BenchmarkArgs;
+#[cfg(feature = "eval-advanced")]
+pub use crossdoc::CrossDocArgs;
+#[cfg(feature = "eval-advanced")]
+pub use tier::TierArgs;

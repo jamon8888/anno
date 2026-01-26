@@ -589,7 +589,11 @@ impl StreamingResolver {
                         }
 
                         let sim = self.mention_cluster_similarity(mention, cluster);
-                        if best.map_or(true, |(_, s)| sim > s) {
+                        let should_update = match best {
+                            None => true,
+                            Some((_, s)) => sim > s,
+                        };
+                        if should_update {
                             best = Some((cluster_id, sim));
                         }
                     }
@@ -610,7 +614,11 @@ impl StreamingResolver {
                 }
 
                 let sim = self.mention_cluster_similarity(mention, cluster);
-                if best.map_or(true, |(_, s)| sim > s) {
+                let should_update = match best {
+                    None => true,
+                    Some((_, s)) => sim > s,
+                };
+                if should_update {
                     best = Some((cluster_id, sim));
                 }
             }

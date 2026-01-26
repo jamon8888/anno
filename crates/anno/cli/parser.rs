@@ -29,8 +29,8 @@ SIGNAL → TRACK → IDENTITY HIERARCHY:
 BACKENDS:
   • pattern    - High-precision patterns (dates, money, emails)
   • heuristic (alias: statistical) - Capitalization + context heuristics
-  • stacked    - Pattern + heuristic (default)
-  • (optional) extra backends via feature flags (e.g., ONNX/Candle); see `anno models list`
+  • stacked    - Best available stack (defaults to ONNX when enabled)
+  • extra backends via feature flags (e.g., Candle); see `anno models list`
 
 EXAMPLES:
   anno extract "Marie Curie was born in Paris."
@@ -192,30 +192,30 @@ pub enum ModelBackend {
     UniversalNer,
 
     // === ONNX Feature Required ===
-    /// GLiNER via ONNX (requires --features onnx)
+    /// GLiNER via ONNX (enabled by default; disable with --no-default-features)
     #[cfg(feature = "onnx")]
     Gliner,
-    /// GLiNER2 multi-task (NER + classification + structure, requires --features onnx)
+    /// GLiNER2 multi-task (NER + classification + structure)
     #[cfg(feature = "onnx")]
     Gliner2,
-    /// NuNER (requires --features onnx)
+    /// NuNER
     #[cfg(feature = "onnx")]
     Nuner,
-    /// W2NER for nested entities (requires --features onnx)
+    /// W2NER for nested entities
     #[cfg(feature = "onnx")]
     W2ner,
-    /// BERT ONNX for CoNLL-style NER (requires --features onnx)
+    /// BERT ONNX for CoNLL-style NER
     #[cfg(feature = "onnx")]
     #[value(alias = "bert")]
     BertOnnx,
-    /// DeBERTa-v3 NER (requires --features onnx)
+    /// DeBERTa-v3 NER
     #[cfg(feature = "onnx")]
     #[value(alias = "deberta")]
     DebertaV3,
-    /// ALBERT NER (requires --features onnx)
+    /// ALBERT NER
     #[cfg(feature = "onnx")]
     Albert,
-    /// GLiNER Poly-Encoder (requires --features onnx)
+    /// GLiNER Poly-Encoder
     #[cfg(feature = "onnx")]
     #[value(alias = "gliner-poly")]
     GlinerPoly,

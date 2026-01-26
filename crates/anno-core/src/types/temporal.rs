@@ -406,6 +406,7 @@ impl TemporalValidity {
     /// Returns true if the date falls within the validity range.
     /// Unknown bounds (None) are treated as unbounded.
     #[must_use]
+    #[allow(clippy::unnecessary_map_or)]
     pub fn is_valid_at(&self, date: &HistoricalDate) -> bool {
         let after_start = self.from.as_ref().map_or(true, |from| date >= from);
         let before_end = self.until.as_ref().map_or(true, |until| date <= until);

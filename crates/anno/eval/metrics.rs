@@ -93,7 +93,11 @@ pub fn calculate_partial_match_metrics(
             // Calculate overlap
             let overlap = calculate_overlap(pred.start, pred.end, gt.start, gt.end);
 
-            if overlap >= overlap_threshold && best_match.as_ref().map_or(true, |m| m.1 < overlap) {
+            let should_update = match best_match {
+                None => true,
+                Some((_, best_overlap)) => best_overlap < overlap,
+            };
+            if overlap >= overlap_threshold && should_update {
                 best_match = Some((gt_idx, overlap));
             }
         }

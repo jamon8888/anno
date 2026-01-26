@@ -60,7 +60,7 @@ impl SimpleRng {
     }
 
     fn gen_bool(&mut self) -> bool {
-        self.next() % 2 == 0
+        self.next().is_multiple_of(2)
     }
 
     fn gen_range(&mut self, max: usize) -> usize {

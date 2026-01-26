@@ -393,7 +393,13 @@ impl EvalHistory {
 
         // Fallback to JSONL scan
         let mut entries = self.load_all()?;
-        entries.retain(|e| e.backend == backend && dataset.map_or(true, |d| e.dataset == d));
+        entries.retain(|e| {
+            e.backend == backend
+                && match dataset {
+                    None => true,
+                    Some(d) => e.dataset == d,
+                }
+        });
         entries.sort_by(|a, b| {
             let a_f1 = a.f1.unwrap_or(0.0);
             let b_f1 = b.f1.unwrap_or(0.0);
@@ -504,9 +510,12 @@ impl EvalHistory {
         // Fallback to JSONL scan
         let mut entries = self.load_all()?;
         entries.retain(|e| {
-            e.timestamp >= start_date.to_string()
-                && e.timestamp <= end_date.to_string()
-                && backend.map_or(true, |b| e.backend == b)
+            e.timestamp.as_str() >= start_date
+                && e.timestamp.as_str() <= end_date
+                && match backend {
+                    None => true,
+                    Some(b) => e.backend == b,
+                }
         });
         entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         Ok(entries)
@@ -611,7 +620,10 @@ impl EvalHistory {
         let mut entries = self.load_all()?;
         entries.retain(|e| {
             (e.backend == backend1 || e.backend == backend2)
-                && dataset.map_or(true, |d| e.dataset == d)
+                && match dataset {
+                    None => true,
+                    Some(d) => e.dataset == d,
+                }
         });
         entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         Ok(entries)

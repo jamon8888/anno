@@ -2103,7 +2103,7 @@ pub fn extract_relations(
                     tail: tail.clone(),
                     relation_type: rel_type.to_string(),
                     trigger_span,
-                    confidence: confidence.min(1.0).max(0.0), // Clamp to [0, 1]
+                    confidence: confidence.clamp(0.0, 1.0), // Clamp to [0, 1]
                 });
             }
         }

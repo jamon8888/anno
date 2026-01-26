@@ -1,8 +1,7 @@
 //! Output formatting utilities for CLI commands
 
-use is_terminal::IsTerminal;
 use std::collections::HashMap;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 
 use anno_core::Entity;
 use anno_core::{GroundedDocument, Location, Signal};
