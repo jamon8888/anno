@@ -96,14 +96,13 @@ pub fn normalize(s: &str) -> String {
     // Keep this policy explicit and reusable.
     //
     // Notes:
-    // - We do NOT lowercase here; downstream similarity functions are already
-    //   case-insensitive. This avoids doing redundant work and keeps "case policy"
-    //   contained in one place.
+    // - We lowercase here because several downstream routines (including cross-lingual
+    //   known-pair matching) assume a canonical case.
     // - We do collapse all whitespace runs to single ASCII spaces (matching prior behavior).
     let cfg = textprep::ScrubConfig {
         collapse_whitespace: true,
         normalization: textprep::ScrubNormalization::Nfc,
-        case: textprep::ScrubCase::None,
+        case: textprep::ScrubCase::Lower,
         strip_diacritics: false,
         ..textprep::ScrubConfig::default()
     };
