@@ -21,7 +21,6 @@ members = [
     "crates/anno-core",
     "crates/anno",
     "crates/anno-coalesce",
-    "crates/anno-tier",
 ]
 resolver = "2"
 

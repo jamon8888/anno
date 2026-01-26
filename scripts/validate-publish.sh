@@ -73,10 +73,9 @@ echo ""
 echo "## Publish Readiness"
 echo ""
 
-check_publish "anno-core" "anno-core"
-check_publish "anno-coalesce" "coalesce"
-check_publish "anno-tier" "strata"
-check_publish "anno" "anno"
+check_publish "anno-core" "crates/anno-core"
+check_publish "anno-coalesce" "crates/anno-coalesce"
+check_publish "anno" "crates/anno"
 
 echo ""
 
@@ -85,9 +84,7 @@ echo "## Version Requirements"
 echo ""
 
 check_version_requirement "crates/anno-coalesce/Cargo.toml" "anno-core" "0.2.0"
-check_version_requirement "crates/anno-tier/Cargo.toml" "anno-core" "0.2.0"
 check_version_requirement "crates/anno/Cargo.toml" "anno-coalesce" "0.2.0"
-check_version_requirement "crates/anno/Cargo.toml" "anno-tier" "0.2.0"
 
 echo ""
 
@@ -95,7 +92,7 @@ echo ""
 echo "## Crates.io Status"
 echo ""
 
-for crate in anno anno-core anno-coalesce anno-tier; do
+for crate in anno anno-core anno-coalesce; do
     if curl -s "https://crates.io/api/v1/crates/$crate" 2>/dev/null | jq -r '.crate | "\(.name): v\(.max_version // "not published")"' 2>/dev/null | grep -q "not published"; then
         echo -e "${YELLOW}⚠️  $crate: Not published${NC}"
     else
