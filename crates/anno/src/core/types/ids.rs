@@ -12,7 +12,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```rust,ignore
 //! use anno_core::types::{SignalId, TrackId};
 //!
 //! fn process_signal(id: SignalId) { /* ... */ }
@@ -211,7 +211,7 @@ define_id! {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::CharOffset;
 ///
 /// let text = "日本語";

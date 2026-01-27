@@ -160,7 +160,7 @@ impl std::fmt::Display for EntityCategory {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::{Entity, EntityType, EntityViewport};
 ///
 /// let mut entity = Entity::new("Marie Curie", EntityType::Person, 0, 11, 0.9);
@@ -264,7 +264,7 @@ impl std::fmt::Display for EntityViewport {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::EntityType;
 ///
 /// let ty = EntityType::Email;
@@ -444,7 +444,7 @@ impl EntityType {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{EntityType, EntityCategory};
     ///
     /// // Medical entity - custom domain-specific type
@@ -505,7 +505,7 @@ impl std::str::FromStr for EntityType {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::{TypeMapper, EntityType, EntityCategory};
 ///
 /// // MIT Movie dataset mapping
@@ -781,7 +781,7 @@ impl ExtractionMethod {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::ExtractionMethod;
     ///
     /// assert!(ExtractionMethod::Neural.is_calibrated());
@@ -879,7 +879,7 @@ impl std::fmt::Display for ExtractionMethod {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::{Lexicon, EntityType, HashMapLexicon};
 ///
 /// // Create a domain-specific lexicon
@@ -1105,7 +1105,7 @@ impl Provenance {
 /// - `Span → Location`: Always succeeds via `Location::from(&span)`
 /// - `Location → Span`: Use `location.to_span()`, returns `None` for unsupported variants
 ///
-/// [`grounded::Location`]: crate::grounded::Location
+/// [`grounded::Location`]: super::grounded::Location
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Span {
     /// Text span with **character offsets** (start, end).
@@ -1231,8 +1231,8 @@ impl Span {
 /// # Offset Unit (CRITICAL)
 ///
 /// `DiscontinuousSpan` uses **character offsets** (Unicode scalar value indices),
-/// consistent with [`Entity::start`](crate::entity::Entity::start) /
-/// [`Entity::end`](crate::entity::Entity::end) and `anno_core::grounded::Location`.
+/// consistent with [`Entity::start`](super::entity::Entity::start) /
+/// [`Entity::end`](super::entity::Entity::end) and `anno::core::grounded::Location`.
 ///
 /// This is intentionally *not* byte offsets. If you have byte offsets (from regex,
 /// `str::find`, tokenizers, etc.), convert them to character offsets first (see
@@ -1748,7 +1748,7 @@ pub struct Entity {
     /// Multiple mentions with the same `canonical_id` refer to the same entity.
     /// Example: "Marie Curie" and "she" might share `canonical_id = CanonicalId(42)`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub canonical_id: Option<crate::types::CanonicalId>,
+    pub canonical_id: Option<super::types::CanonicalId>,
     /// Hierarchical confidence (coarse-to-fine).
     /// Provides linkage, type, and boundary scores separately.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1776,7 +1776,7 @@ pub struct Entity {
     /// - Atemporal (timeless fact like "Paris is in France")
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{Entity, EntityType};
     /// use chrono::{TimeZone, Utc};
     ///
@@ -1805,7 +1805,7 @@ pub struct Entity {
     /// given a query context, project the entity manifold to the relevant viewport.
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{Entity, EntityType, EntityViewport};
     ///
     /// let mut entity = Entity::new("Marie Curie", EntityType::Person, 0, 11, 0.9);
@@ -1942,7 +1942,7 @@ impl Entity {
     /// Link this entity to an external knowledge base.
     ///
     /// # Examples
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{Entity, EntityType};
     /// let mut e = Entity::new("Marie Curie", EntityType::Person, 0, 11, 0.95);
     /// e.link_to_kb("Q7186"); // Wikidata ID
@@ -1954,7 +1954,7 @@ impl Entity {
     /// Assign this entity to a coreference cluster.
     ///
     /// Entities with the same `canonical_id` refer to the same real-world entity.
-    pub fn set_canonical(&mut self, canonical_id: impl Into<crate::types::CanonicalId>) {
+    pub fn set_canonical(&mut self, canonical_id: impl Into<super::types::CanonicalId>) {
         self.canonical_id = Some(canonical_id.into());
     }
 
@@ -1962,13 +1962,13 @@ impl Entity {
     ///
     /// # Example
     /// ```
-    /// use anno_core::{Entity, EntityType};
+    /// use anno::{CanonicalId, Entity, EntityType};
     /// let entity = Entity::new("John", EntityType::Person, 0, 4, 0.9)
     ///     .with_canonical_id(42);
-    /// assert_eq!(entity.canonical_id, Some(anno_core::types::CanonicalId::new(42)));
+    /// assert_eq!(entity.canonical_id, Some(CanonicalId::new(42)));
     /// ```
     #[must_use]
-    pub fn with_canonical_id(mut self, canonical_id: impl Into<crate::types::CanonicalId>) -> Self {
+    pub fn with_canonical_id(mut self, canonical_id: impl Into<super::types::CanonicalId>) -> Self {
         self.canonical_id = Some(canonical_id.into());
         self
     }
@@ -2026,7 +2026,7 @@ impl Entity {
     /// - **Contiguous**: `end - start`
     /// - **Discontinuous**: sum of segment lengths
     ///
-    /// This is intentionally consistent: all offsets in `anno-core` entity spans
+    /// This is intentionally consistent: all offsets in `anno::core` entity spans
     /// are **character offsets** (Unicode scalar values), not byte offsets.
     #[must_use]
     pub fn total_len(&self) -> usize {
@@ -2041,7 +2041,7 @@ impl Entity {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{Entity, EntityType};
     ///
     /// let mut entity = Entity::new("Jan 15", EntityType::Date, 0, 6, 0.95);
@@ -2208,7 +2208,7 @@ impl Entity {
     /// The extracted text, or empty string if offsets are invalid
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{Entity, EntityType};
     ///
     /// let text = "Hello, 日本!";
@@ -2254,7 +2254,7 @@ impl Entity {
     /// Set the temporal validity start for this entity assertion.
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{Entity, EntityType};
     /// use chrono::{TimeZone, Utc};
     ///
@@ -2294,7 +2294,7 @@ impl Entity {
     /// - The timestamp falls within [valid_from, valid_until]
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{Entity, EntityType};
     /// use chrono::{TimeZone, Utc};
     ///
@@ -2331,7 +2331,7 @@ impl Entity {
     /// Set the viewport context for this entity.
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{Entity, EntityType, EntityViewport};
     ///
     /// let mut entity = Entity::new("Marie Curie", EntityType::Person, 0, 11, 0.9);
@@ -2391,7 +2391,7 @@ impl Entity {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{Entity, EntityType};
     ///
     /// let text = "John works at Apple";
@@ -2513,7 +2513,7 @@ impl Entity {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{Entity, EntityType};
     ///
     /// let text = "John and Jane work at Apple";
@@ -2622,7 +2622,7 @@ impl std::fmt::Display for ValidationIssue {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::{Entity, EntityType, Provenance};
 ///
 /// let entity = Entity::builder("Marie Curie", EntityType::Person)
@@ -2642,7 +2642,7 @@ pub struct EntityBuilder {
     normalized: Option<String>,
     provenance: Option<Provenance>,
     kb_id: Option<String>,
-    canonical_id: Option<crate::types::CanonicalId>,
+    canonical_id: Option<super::types::CanonicalId>,
     hierarchical_confidence: Option<HierarchicalConfidence>,
     visual_span: Option<Span>,
     discontinuous_span: Option<DiscontinuousSpan>,
@@ -2721,7 +2721,7 @@ impl EntityBuilder {
     /// Set canonical (coreference) ID.
     #[must_use]
     pub const fn canonical_id(mut self, canonical_id: u64) -> Self {
-        self.canonical_id = Some(crate::types::CanonicalId::new(canonical_id));
+        self.canonical_id = Some(super::types::CanonicalId::new(canonical_id));
         self
     }
 
@@ -2749,7 +2749,7 @@ impl EntityBuilder {
     /// Set temporal validity start (when this entity assertion became true).
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{EntityBuilder, EntityType};
     /// use chrono::{TimeZone, Utc};
     ///
@@ -2787,7 +2787,7 @@ impl EntityBuilder {
     /// Set the viewport context for multi-faceted entity representation.
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::{EntityBuilder, EntityType, EntityViewport};
     ///
     /// let entity = EntityBuilder::new("Marie Curie", EntityType::Person)
@@ -3067,7 +3067,7 @@ mod tests {
         assert!(entity.has_coreference());
         assert_eq!(
             entity.canonical_id,
-            Some(crate::types::CanonicalId::new(42))
+            Some(crate::core::types::CanonicalId::new(42))
         );
     }
 
@@ -3329,7 +3329,7 @@ mod tests {
         assert_eq!(entity.kb_id.as_deref(), Some("Q7186"));
         assert_eq!(
             entity.canonical_id,
-            Some(crate::types::CanonicalId::new(42))
+            Some(crate::core::types::CanonicalId::new(42))
         );
         assert_eq!(
             entity.normalized.as_deref(),

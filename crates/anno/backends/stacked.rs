@@ -566,29 +566,68 @@ impl Default for StackedNER {
     /// Tries to include ML backends (GLiNER, BERT) when available, falling back to
     /// Pattern + Heuristic for zero-dependency operation.
     ///
+    /// Downloads are allowed by default; opt out by setting `ANNO_NO_DOWNLOADS=1`
+    /// (or `HF_HUB_OFFLINE=1` to force HuggingFace offline mode).
+    ///
     /// Priority:
-    /// 1. GLiNER (if `onnx` feature and model available) - best accuracy
-    /// 2. BERT ONNX (if `onnx` feature and model available) - reliable
+    /// 1. BERT ONNX (if `onnx` feature and model available) - strong default for standard NER
+    /// 2. GLiNER (if `onnx` feature and model available) - zero-shot, broader label set
     /// 3. Pattern + Heuristic (always available) - zero dependencies
     fn default() -> Self {
-        // Try GLiNER first (best accuracy, zero-shot)
+        fn no_downloads() -> bool {
+            match std::env::var("ANNO_NO_DOWNLOADS") {
+                Ok(v) => matches!(
+                    v.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "y" | "on"
+                ),
+                Err(_) => false,
+            }
+        }
+
+        struct EnvVarGuard {
+            key: &'static str,
+            prev: Option<String>,
+        }
+
+        impl EnvVarGuard {
+            fn set(key: &'static str, value: &str) -> Self {
+                let prev = std::env::var(key).ok();
+                std::env::set_var(key, value);
+                Self { key, prev }
+            }
+        }
+
+        impl Drop for EnvVarGuard {
+            fn drop(&mut self) {
+                match &self.prev {
+                    Some(v) => std::env::set_var(self.key, v),
+                    None => std::env::remove_var(self.key),
+                }
+            }
+        }
+
+        // Try BERT first for standard NER (usually best on PER/ORG/LOC/MISC).
         #[cfg(feature = "onnx")]
         {
-            use crate::{GLiNEROnnx, DEFAULT_GLINER_MODEL};
-            if let Ok(gliner) = GLiNEROnnx::new(DEFAULT_GLINER_MODEL) {
-                return Self::builder()
-                    .layer_boxed(Box::new(gliner))
-                    .layer(RegexNER::new())
-                    .layer(HeuristicNER::new())
-                    .build();
-            }
+            // Opt-out policy: allow downloads unless explicitly disabled.
+            // GLiNER/BERT loaders use `hf_hub`, which honors `HF_HUB_OFFLINE=1`.
+            let _offline = no_downloads().then(|| EnvVarGuard::set("HF_HUB_OFFLINE", "1"));
 
-            // Fallback to BERT ONNX (reliable)
             use crate::backends::onnx::BertNEROnnx;
             use crate::DEFAULT_BERT_ONNX_MODEL;
             if let Ok(bert) = BertNEROnnx::new(DEFAULT_BERT_ONNX_MODEL) {
                 return Self::builder()
                     .layer_boxed(Box::new(bert))
+                    .layer(RegexNER::new())
+                    .layer(HeuristicNER::new())
+                    .build();
+            }
+
+            // Fallback to GLiNER (zero-shot, broader label set).
+            use crate::{GLiNEROnnx, DEFAULT_GLINER_MODEL};
+            if let Ok(gliner) = GLiNEROnnx::new(DEFAULT_GLINER_MODEL) {
+                return Self::builder()
+                    .layer_boxed(Box::new(gliner))
                     .layer(RegexNER::new())
                     .layer(HeuristicNER::new())
                     .build();

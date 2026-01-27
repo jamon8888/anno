@@ -61,8 +61,8 @@
 //!
 //! ## Example
 //!
-//! ```
-//! use anno_coalesce::hierarchical::{hierarchical_from_similarity, Linkage};
+//! ```rust
+//! use anno::coalesce::hierarchical::{hierarchical_from_similarity, Linkage};
 //!
 //! let sims = vec![
 //!     vec![1.0, 0.9, 0.8, 0.1, 0.15],

@@ -46,7 +46,7 @@
 //! # Custom Dataset
 //!
 //! ```rust
-//! use anno_core::dataset::{DatasetSpec, Task, ParserHint, License, Domain, DatasetStats};
+//! use anno::core::dataset::{DatasetSpec, Task, ParserHint, License, Domain, DatasetStats};
 //!
 //! struct MyCompanyNER;
 //!
@@ -92,7 +92,7 @@
 //! # Domain Coverage
 //!
 //! ```rust
-//! use anno_core::dataset::Domain;
+//! use anno::core::dataset::Domain;
 //!
 //! // Built-in domains
 //! let domains = [
@@ -114,7 +114,7 @@
 //! and appropriate ISO 639-3 codes:
 //!
 //! ```rust
-//! use anno_core::dataset::{CustomDataset, Task, ParserHint, License, Domain, DatasetStats, SplitSizes};
+//! use anno::core::dataset::{CustomDataset, Task, ParserHint, License, Domain, DatasetStats, SplitSizes};
 //!
 //! // Mahānāma: Sanskrit EDL from Mahābhārata (arXiv:2509.19844)
 //! // Extreme challenges: 124 avg name forms/entity, 47% ambiguity
@@ -248,7 +248,7 @@ impl std::str::FromStr for Task {
     /// # Examples
     ///
     /// ```rust
-    /// use anno_core::dataset::Task;
+    /// use anno::core::dataset::Task;
     ///
     /// assert_eq!("ner".parse::<Task>().unwrap(), Task::NER);
     /// assert_eq!("coref".parse::<Task>().unwrap(), Task::IntraDocCoref);
@@ -582,7 +582,7 @@ pub struct SplitSizes {
 /// # Implementing Custom Datasets
 ///
 /// ```rust,ignore
-/// use anno_core::dataset::*;
+/// use anno::core::dataset::*;
 ///
 /// struct MyDataset {
 ///     path: PathBuf,
@@ -769,7 +769,7 @@ pub trait DatasetSpec: Send + Sync {
 /// # Example
 ///
 /// ```rust
-/// use anno_core::dataset::{CustomDataset, Task, ParserHint, License, Domain};
+/// use anno::core::dataset::{CustomDataset, Task, ParserHint, License, Domain};
 /// use std::path::PathBuf;
 ///
 /// let dataset = CustomDataset::new("my_ner_data", Task::NER)

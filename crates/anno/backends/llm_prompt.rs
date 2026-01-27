@@ -85,7 +85,6 @@ impl BIOSchema {
                 EntityType::Ordinal => "Ordinal numbers (1st, 2nd, etc.)",
                 EntityType::Other(_) => "Miscellaneous named entities",
                 EntityType::Custom { name, .. } => name.as_str(),
-                _ => "Unknown entity type",
             };
             descriptions.insert(et.clone(), desc.to_string());
         }

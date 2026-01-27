@@ -33,14 +33,14 @@
 //! `GraphDocument`. If you only have entities, `TextRankSalience` falls
 //! back to co-occurrence.**
 //!
-//! # Relationship to tier
+//! # Relationship to community detection
 //!
-//! Both this module and the archived clustering layer operate on the same `GraphDocument`:
+//! Both this module and any community-detection layer operate on the same `GraphDocument`:
 //!
 //! | Module | Algorithm | Output | Question Answered |
 //! |--------|-----------|--------|-------------------|
 //! | `salience` | PageRank | Node scores | "Which entities are important?" |
-//! | `tier` | Leiden | Communities | "How do entities cluster?" |
+//! | community detection | Leiden/Louvain | Communities | "How do entities cluster?" |
 //!
 //! # Multilingual Support
 //!
@@ -83,9 +83,9 @@
 //!       ↓
 //! anno::salience      → entities ranked by importance  ← THIS MODULE
 //!       ↓
-//! anno-coalesce       → entity resolution (same entity?)
+//! anno::coalesce      → entity resolution (same entity?)
 //!       ↓
-//! anno-tier         → community structure
+//! community detection → community structure
 //! ```
 //!
 //! # References

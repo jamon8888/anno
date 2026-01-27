@@ -66,8 +66,8 @@
 //!
 //! ## Example
 //!
-//! ```
-//! use anno_coalesce::correlation::{LabeledGraph, EdgeLabel, pivot_clustering};
+//! ```rust
+//! use anno::coalesce::correlation::{EdgeLabel, LabeledGraph, pivot_clustering};
 //! use rand::SeedableRng;
 //!
 //! let mut graph = LabeledGraph::new(4);
@@ -625,7 +625,7 @@ impl MinMaxClusteringResult {
 /// # Example
 ///
 /// ```
-/// use anno_coalesce::correlation::{LabeledGraph, EdgeLabel, min_max_clustering};
+/// use anno::coalesce::correlation::{EdgeLabel, LabeledGraph, min_max_clustering};
 /// use rand::SeedableRng;
 ///
 /// let mut graph = LabeledGraph::new(4);

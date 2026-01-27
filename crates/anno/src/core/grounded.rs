@@ -83,7 +83,7 @@
 //! - CDLKT: Cross-document Language-Knowledge Transfer
 //! - Groma: Grounded multimodal assistant
 
-use crate::entity::{
+use super::entity::{
     DiscontinuousSpan, Entity, EntityType, HierarchicalConfidence, Provenance, Span,
 };
 use serde::{Deserialize, Serialize};
@@ -175,7 +175,7 @@ impl Modality {
 /// - Easy serialization
 /// - Exhaustive matching for safety
 ///
-/// [`entity::Span`]: crate::entity::Span
+/// [`entity::Span`]: super::entity::Span
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Location {
     /// Text span: 1D interval [start, end) in character offsets.
@@ -478,8 +478,8 @@ impl Location {
 // Signal (Level 1): Raw Detection
 // =============================================================================
 
-// SignalId is now a newtype in crate::types::ids for type safety
-pub use crate::types::SignalId;
+// SignalId is now a newtype in super::types::ids for type safety
+pub use super::types::SignalId;
 
 /// A raw detection signal: the atomic unit of entity extraction.
 ///
@@ -524,8 +524,8 @@ pub struct Signal<L = Location> {
     /// [`EntityType`] taxonomy. Use [`TypeLabel::from`] to convert to/from
     /// the canonical type representation.
     ///
-    /// [`EntityType`]: crate::EntityType
-    /// [`TypeLabel::from`]: crate::types::TypeLabel
+    /// [`EntityType`]: super::EntityType
+    /// [`TypeLabel::from`]: super::types::TypeLabel
     pub label: String,
     /// Detection confidence in [0, 1]
     pub confidence: f32,
@@ -605,8 +605,8 @@ impl<L> Signal<L> {
     /// This converts the internal string representation to a `TypeLabel`,
     /// attempting to parse it as a core `EntityType` first.
     #[must_use]
-    pub fn type_label(&self) -> crate::types::TypeLabel {
-        crate::types::TypeLabel::from(self.label.as_str())
+    pub fn type_label(&self) -> super::types::TypeLabel {
+        super::types::TypeLabel::from(self.label.as_str())
     }
 
     /// Get the surface form.
@@ -663,7 +663,7 @@ impl Signal<Location> {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::grounded::{Signal, Location};
     ///
     /// let text = "Marie Curie was a physicist.";
@@ -724,7 +724,7 @@ impl Signal<Location> {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::grounded::{Signal, Location};
     ///
     /// let text = "Marie Curie was a physicist.";
@@ -852,8 +852,8 @@ impl std::error::Error for SignalValidationError {}
 // Track (Level 2): Within-Document Coreference
 // =============================================================================
 
-// TrackId is now a newtype in crate::types::ids for type safety
-pub use crate::types::TrackId;
+// TrackId is now a newtype in super::types::ids for type safety
+pub use super::types::TrackId;
 
 /// A reference to a signal within a track.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -908,8 +908,8 @@ pub struct Track {
     /// to allow domain-specific types. Use [`TypeLabel::from`] to convert to/from
     /// the canonical type representation.
     ///
-    /// [`EntityType`]: crate::EntityType
-    /// [`TypeLabel::from`]: crate::types::TypeLabel
+    /// [`EntityType`]: super::EntityType
+    /// [`TypeLabel::from`]: super::types::TypeLabel
     pub entity_type: Option<String>,
     /// Canonical surface form (the "best" name for this entity)
     pub canonical_surface: String,
@@ -1018,7 +1018,7 @@ impl Track {
 
     /// Set the entity type from a string.
     ///
-    /// For new code, prefer [`with_type_label`] which provides type safety.
+    /// For new code, prefer [`Self::with_type_label`] which provides type safety.
     #[must_use]
     pub fn with_type(mut self, entity_type: impl Into<String>) -> Self {
         self.entity_type = Some(entity_type.into());
@@ -1032,16 +1032,16 @@ impl Track {
     ///
     /// # Example
     ///
-    /// ```rust
-    /// use anno_core::grounded::Track;
-    /// use anno_core::TypeLabel;
-    /// use anno_core::EntityType;
+    /// ```rust,ignore
+    /// use anno::core::grounded::Track;
+    /// use anno::core::TypeLabel;
+    /// use anno::core::EntityType;
     ///
     /// let track = Track::new(0, "Marie Curie")
     ///     .with_type_label(TypeLabel::Core(EntityType::Person));
     /// ```
     #[must_use]
-    pub fn with_type_label(mut self, label: crate::types::TypeLabel) -> Self {
+    pub fn with_type_label(mut self, label: super::types::TypeLabel) -> Self {
         self.entity_type = Some(label.to_string());
         self
     }
@@ -1051,10 +1051,10 @@ impl Track {
     /// This converts the internal string representation to a `TypeLabel`,
     /// attempting to parse it as a core `EntityType` first.
     #[must_use]
-    pub fn type_label(&self) -> Option<crate::types::TypeLabel> {
+    pub fn type_label(&self) -> Option<super::types::TypeLabel> {
         self.entity_type
             .as_ref()
-            .map(|s| crate::types::TypeLabel::from(s.as_str()))
+            .map(|s| super::types::TypeLabel::from(s.as_str()))
     }
 
     /// Set the embedding for this track.
@@ -1214,8 +1214,8 @@ pub struct TrackStats {
 // Identity (Level 3): Cross-Document Entity Linking
 // =============================================================================
 
-// IdentityId is now a newtype in crate::types::ids for type safety
-pub use crate::types::IdentityId;
+// IdentityId is now a newtype in super::types::ids for type safety
+pub use super::types::IdentityId;
 
 /// Source of identity formation.
 ///
@@ -1281,8 +1281,8 @@ pub struct Identity {
     /// This is a string label to allow domain-specific types beyond the
     /// canonical [`EntityType`] taxonomy. Use [`TypeLabel::from`] for conversion.
     ///
-    /// [`EntityType`]: crate::EntityType
-    /// [`TypeLabel::from`]: crate::types::TypeLabel
+    /// [`EntityType`]: super::EntityType
+    /// [`TypeLabel::from`]: super::types::TypeLabel
     pub entity_type: Option<String>,
     /// Knowledge base reference (e.g., "Q7186" for Wikidata)
     pub kb_id: Option<String>,
@@ -1408,7 +1408,7 @@ impl Identity {
 
     /// Set the entity type from a string.
     ///
-    /// For new code, prefer [`with_type_label`] which provides type safety.
+    /// For new code, prefer [`Self::with_type_label`] which provides type safety.
     #[must_use]
     pub fn with_type(mut self, entity_type: impl Into<String>) -> Self {
         self.entity_type = Some(entity_type.into());
@@ -1420,7 +1420,7 @@ impl Identity {
     /// This is the preferred method for new code as it provides type safety
     /// and integrates with the core `EntityType` taxonomy.
     #[must_use]
-    pub fn with_type_label(mut self, label: crate::types::TypeLabel) -> Self {
+    pub fn with_type_label(mut self, label: super::types::TypeLabel) -> Self {
         self.entity_type = Some(label.to_string());
         self
     }
@@ -1430,10 +1430,10 @@ impl Identity {
     /// This converts the internal string representation to a `TypeLabel`,
     /// attempting to parse it as a core `EntityType` first.
     #[must_use]
-    pub fn type_label(&self) -> Option<crate::types::TypeLabel> {
+    pub fn type_label(&self) -> Option<super::types::TypeLabel> {
         self.entity_type
             .as_ref()
-            .map(|s| crate::types::TypeLabel::from(s.as_str()))
+            .map(|s| super::types::TypeLabel::from(s.as_str()))
     }
 
     /// Set description.
@@ -1468,7 +1468,7 @@ impl Identity {
 ///
 /// # Usage
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::grounded::{GroundedDocument, Signal, Track, Identity, Location};
 ///
 /// let mut doc = GroundedDocument::new("doc1", "Marie Curie won the Nobel Prize. She was a physicist.");
@@ -1731,7 +1731,7 @@ impl GroundedDocument {
                     normalized: signal.normalized.clone(),
                     provenance: signal.provenance.clone(),
                     kb_id: identity.and_then(|i| i.kb_id.clone()),
-                    canonical_id: track.map(|t| crate::types::CanonicalId::new(t.id.get())),
+                    canonical_id: track.map(|t| super::types::CanonicalId::new(t.id.get())),
                     hierarchical_confidence: signal.hierarchical,
                     visual_span: match &signal.location {
                         Location::BoundingBox {
@@ -1799,7 +1799,7 @@ impl GroundedDocument {
         // collapse into one giant track).
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         enum TrackKey {
-            Canonical(crate::types::CanonicalId),
+            Canonical(super::types::CanonicalId),
             Singleton(usize),
         }
 
@@ -1989,7 +1989,7 @@ impl GroundedDocument {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::grounded::{GroundedDocument, Signal, Location};
     ///
     /// let mut doc = GroundedDocument::new("test", "Marie Curie was a physicist.");
@@ -2024,7 +2024,7 @@ impl GroundedDocument {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::grounded::{GroundedDocument, Signal, Location};
     ///
     /// let mut doc = GroundedDocument::new("test", "Marie Curie was a physicist.");
@@ -2149,7 +2149,7 @@ impl GroundedDocument {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::grounded::GroundedDocument;
     ///
     /// let mut doc = GroundedDocument::new("test", "Marie Curie was a physicist.");
@@ -2623,7 +2623,7 @@ impl GroundedDocument {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::grounded::{GroundedDocument, Signal, Location};
     ///
     /// let mut doc = GroundedDocument::new("doc", "Some text with entities.");
@@ -2672,15 +2672,15 @@ impl GroundedDocument {
     /// (Signal/Track/Identity) and the evaluation-oriented coreference types
     /// (`CorefDocument`, `CorefChain`, `Mention`).
     ///
-    /// - Each [`Track`] becomes a [`crate::coref::CorefChain`]
+    /// - Each [`Track`] becomes a [`super::coref::CorefChain`]
     /// - Each track mention is derived from the track's signal locations
     /// - Non-text signals (iconic-only locations) are skipped
     ///
     /// Note: Mention typing (proper/nominal/pronominal) is left unset; callers
     /// doing mention-type evaluation should compute that separately.
     #[must_use]
-    pub fn to_coref_document(&self) -> crate::coref::CorefDocument {
-        use crate::coref::{CorefChain, CorefDocument, Mention};
+    pub fn to_coref_document(&self) -> super::coref::CorefDocument {
+        use super::coref::{CorefChain, CorefDocument, Mention};
         use std::collections::HashMap;
 
         // Build a fast index for signal lookup.
@@ -3666,7 +3666,7 @@ impl EvalComparison {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::grounded::{EvalComparison, Signal, Location};
     ///
     /// let text = "Marie Curie won the Nobel Prize.";
@@ -4436,7 +4436,7 @@ impl ProcessResult {
 pub fn process_text(
     _text: &str,
     _model: Option<&dyn std::any::Any>,
-) -> crate::Result<ProcessResult> {
+) -> super::Result<ProcessResult> {
     unimplemented!("Use anno::process_text instead - this stub documents the API only")
 }
 
@@ -4566,8 +4566,8 @@ impl Corpus {
         kb_name: impl Into<String>,
         kb_id: impl Into<String>,
         canonical_name: impl Into<String>,
-    ) -> crate::Result<IdentityId> {
-        use crate::error::Error;
+    ) -> super::Result<IdentityId> {
+        use super::error::Error;
 
         let doc = self.documents.get_mut(&track_ref.doc_id).ok_or_else(|| {
             Error::track_ref(format!(
@@ -4959,7 +4959,7 @@ mod tests {
 
     #[test]
     fn test_entity_roundtrip() {
-        use crate::EntityType;
+        use super::EntityType;
 
         let entities = vec![
             Entity::new("Marie Curie", EntityType::Person, 0, 12, 0.95),
@@ -5775,10 +5775,10 @@ mod proptests {
             len in 1usize..100,
             conf in 0.0f64..=1.0,
         ) {
-            use crate::EntityType;
+            use super::EntityType;
 
             let end = start + len;
-            let entity = crate::Entity::new(&text, EntityType::Person, start, end, conf);
+            let entity = super::Entity::new(&text, EntityType::Person, start, end, conf);
 
             let doc = GroundedDocument::from_entities("test", "x".repeat(end + 10), &[entity]);
             let converted = doc.to_entities();

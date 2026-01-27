@@ -13,7 +13,7 @@
 //! # Example
 //!
 //! ```rust
-//! use anno_core::coref::{Mention, CorefChain, CorefDocument};
+//! use anno::core::coref::{Mention, CorefChain, CorefDocument};
 //!
 //! // "John went to the store. He bought milk."
 //! let john = Mention::new("John", 0, 4);
@@ -24,12 +24,12 @@
 //! assert!(!chain.is_singleton());
 //! ```
 
-use crate::Entity;
+use super::Entity;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 // Re-export MentionType for convenience
-pub use crate::types::MentionType;
+pub use super::types::MentionType;
 
 // =============================================================================
 // Mention
@@ -96,7 +96,7 @@ impl Mention {
     /// The head is the syntactic nucleus: in "the former president", head is "president".
     ///
     /// ```
-    /// # use anno_core::coref::Mention;
+    /// # use anno::core::coref::Mention;
     /// let m = Mention::with_head("the former president", 0, 20, 11, 20);
     /// assert_eq!(m.head_start, Some(11)); // "president" starts at 11
     /// ```
@@ -122,8 +122,8 @@ impl Mention {
     /// Mention with type annotation for type-aware evaluation.
     ///
     /// ```
-    /// # use anno_core::coref::Mention;
-    /// # use anno_core::types::MentionType;
+    /// # use anno::core::coref::Mention;
+    /// # use anno::core::types::MentionType;
     /// let pronoun = Mention::with_type("he", 25, 27, MentionType::Pronominal);
     /// let proper = Mention::with_type("John Smith", 0, 10, MentionType::Proper);
     /// ```
@@ -189,7 +189,7 @@ impl std::fmt::Display for Mention {
 /// A coreference chain: mentions that all refer to the same entity.
 ///
 /// ```
-/// # use anno_core::coref::{CorefChain, Mention};
+/// # use anno::core::coref::{CorefChain, Mention};
 /// // "John went to the store. He bought milk."
 /// //  ^^^^                    ^^
 /// let john = Mention::new("John", 0, 4);
@@ -203,13 +203,13 @@ impl std::fmt::Display for Mention {
 /// # Note
 ///
 /// This type is for **evaluation and intermediate processing**. For production pipelines,
-/// use [`Track`](crate::grounded::Track) which integrates with the Signal/Track/Identity hierarchy.
+/// use [`Track`](super::grounded::Track) which integrates with the Signal/Track/Identity hierarchy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CorefChain {
     /// Mentions in document order (sorted by start position).
     pub mentions: Vec<Mention>,
     /// Cluster ID from the source data, if any.
-    pub cluster_id: Option<crate::types::CanonicalId>,
+    pub cluster_id: Option<super::types::CanonicalId>,
     /// Entity type shared by all mentions (e.g., "PERSON").
     pub entity_type: Option<String>,
 }
@@ -218,7 +218,7 @@ impl CorefChain {
     /// Build a chain from mentions. Sorts by position automatically.
     ///
     /// ```
-    /// # use anno_core::coref::{CorefChain, Mention};
+    /// # use anno::core::coref::{CorefChain, Mention};
     /// let chain = CorefChain::new(vec![
     ///     Mention::new("she", 50, 53),
     ///     Mention::new("Dr. Smith", 0, 9),  // out of order
@@ -239,7 +239,7 @@ impl CorefChain {
     #[must_use]
     pub fn with_id(
         mut mentions: Vec<Mention>,
-        cluster_id: impl Into<crate::types::CanonicalId>,
+        cluster_id: impl Into<super::types::CanonicalId>,
     ) -> Self {
         mentions.sort_by_key(|m| (m.start, m.end));
         Self {
@@ -280,7 +280,7 @@ impl CorefChain {
     /// All pairwise links. For MUC: `n` mentions = `n*(n-1)/2` links.
     ///
     /// ```
-    /// # use anno_core::coref::{CorefChain, Mention};
+    /// # use anno::core::coref::{CorefChain, Mention};
     /// let chain = CorefChain::new(vec![
     ///     Mention::new("A", 0, 1),
     ///     Mention::new("B", 2, 3),
@@ -361,7 +361,7 @@ impl CorefChain {
 
     /// Get the canonical ID for this chain (cluster_id if set).
     #[must_use]
-    pub fn canonical_id(&self) -> Option<crate::types::CanonicalId> {
+    pub fn canonical_id(&self) -> Option<super::types::CanonicalId> {
         self.cluster_id
     }
 }
@@ -546,7 +546,7 @@ pub fn entities_to_chains(entities: &[Entity]) -> Vec<CorefChain> {
 ///
 /// # Design Philosophy
 ///
-/// This trait lives in `anno-core` because:
+/// This trait lives in `anno::core` because:
 /// 1. It depends only on core types (`Entity`, `CorefChain`)
 /// 2. Multiple crates need to implement it (backends, eval)
 /// 3. Keeping it here prevents circular dependencies

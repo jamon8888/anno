@@ -16,7 +16,9 @@
 //! use anno::backends::event_extractor::{EventExtractor, RuleBasedEventExtractor};
 //!
 //! let extractor = RuleBasedEventExtractor::new();
-//! let events = extractor.extract_events("Russia invaded Ukraine in 2022.", None)?;
+//! let events = extractor
+//!     .extract_events("Russia invaded Ukraine in 2022.", None)
+//!     .unwrap();
 //!
 //! for event in &events {
 //!     println!("Event: {} ({})", event.trigger, event.event_type);

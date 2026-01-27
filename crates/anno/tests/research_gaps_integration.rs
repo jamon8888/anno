@@ -12,6 +12,8 @@
 //! - SPARSE-PIVOT: Behnezhad et al. (2025) - 20+ε approximation for dynamic CC
 //! - Chromatic CC: Color-constrained clustering variants
 
+use anno::coalesce as anno_coalesce;
+
 use anno_coalesce::{
     correlation::{
         chromatic_clustering, compare_algorithms_extended, min_max_clustering,

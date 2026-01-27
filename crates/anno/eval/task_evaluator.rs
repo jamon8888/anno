@@ -239,7 +239,8 @@ impl TaskEvalResult {
             return false;
         }
         if let Some(ref err) = self.error {
-            err.contains("Feature not available")
+            err.starts_with("incompatible:")
+                || err.contains("Feature not available")
                 || err.contains("requires '")
                 || err.contains("Incompatible entity types")
         } else {
@@ -1555,6 +1556,7 @@ impl TaskEvaluator {
     }
 
     /// Internal implementation that creates backend as Box<dyn Any> (for non-parallel path).
+    #[cfg(not(feature = "eval-parallel"))]
     fn create_zero_shot_backend_impl(backend_name: &str) -> Result<Box<dyn std::any::Any>> {
         match backend_name.to_lowercase().as_str() {
             "nuner" => {
@@ -2439,6 +2441,65 @@ impl ComprehensiveEvalResults {
     pub fn to_markdown(&self) -> String {
         let mut md = String::new();
         md.push_str("# Eval Report\n\n");
+
+        // Backend macro-averages by task (successful-only).
+        //
+        // This is intentionally “objective backing”: within a single run/config, report
+        // mean primary metric per backend per task. (Do not mix tasks.)
+        {
+            use std::collections::HashMap;
+            let mut by_task_backend: HashMap<(Task, String), Vec<f64>> = HashMap::new();
+            for r in &self.results {
+                if !r.success {
+                    continue;
+                }
+                if let Some(v) = r.primary_f1() {
+                    by_task_backend
+                        .entry((r.task, r.backend.clone()))
+                        .or_default()
+                        .push(v * 100.0);
+                }
+            }
+
+            if !by_task_backend.is_empty() {
+                md.push_str("## Backend macro averages (successful only)\n\n");
+                md.push_str("| Task | Backend | Avg primary metric | n |\n");
+                md.push_str("|------|---------|--------------------|---|\n");
+
+                let mut entries: Vec<(Task, String, f64, usize)> = by_task_backend
+                    .into_iter()
+                    .map(|((task, backend), vals)| {
+                        let n = vals.len();
+                        let avg = if n == 0 {
+                            0.0
+                        } else {
+                            vals.iter().sum::<f64>() / (n as f64)
+                        };
+                        (task, backend, avg, n)
+                    })
+                    .collect();
+
+                // Sort by task name, then avg descending.
+                entries.sort_by(|a, b| match a.0.name().cmp(b.0.name()) {
+                    std::cmp::Ordering::Equal => b
+                        .2
+                        .partial_cmp(&a.2)
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                    other => other,
+                });
+
+                for (task, backend, avg, n) in entries {
+                    md.push_str(&format!(
+                        "| {} | {} | {:.1} | {} |\n",
+                        task.name(),
+                        backend,
+                        avg,
+                        n
+                    ));
+                }
+                md.push('\n');
+            }
+        }
 
         // Dense summary line
         let avg_examples: f64 = self

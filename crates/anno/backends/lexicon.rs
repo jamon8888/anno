@@ -14,7 +14,7 @@
 //!
 //! ```rust
 //! use anno::{Model, LexiconNER};
-//! use anno_core::{HashMapLexicon, EntityType};
+//! use anno::{HashMapLexicon, EntityType};
 //!
 //! // Create a domain-specific lexicon
 //! let mut lexicon = HashMapLexicon::new("stock_tickers");
@@ -23,7 +23,9 @@
 //!
 //! // Use as a backend
 //! let ner = LexiconNER::new(lexicon);
-//! let entities = ner.extract_entities("AAPL stock rose today.", None)?;
+//! let entities = ner
+//!     .extract_entities("AAPL stock rose today.", None)
+//!     .unwrap();
 //! ```
 //!
 //! # Integration with StackedNER
@@ -32,10 +34,10 @@
 //!
 //! ```rust
 //! use anno::{Model, StackedNER, RegexNER, LexiconNER};
-//! use anno_core::{HashMapLexicon, EntityType};
+//! use anno::{HashMapLexicon, EntityType};
 //!
 //! let mut lexicon = HashMapLexicon::new("medical_codes");
-//! lexicon.insert("ICD-10", EntityType::Other, 0.95);
+//! lexicon.insert("ICD-10", EntityType::Other("CODE".to_string()), 0.95);
 //!
 //! let ner = StackedNER::builder()
 //!     .layer(RegexNER::new())           // Structured entities

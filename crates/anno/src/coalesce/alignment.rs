@@ -35,7 +35,7 @@
 //! # Example
 //!
 //! ```rust
-//! use anno_coalesce::alignment::{Nameability, AlignmentScore, GeneralizationGradient};
+//! use anno::coalesce::alignment::{AlignmentScore, GeneralizationGradient, Nameability};
 //!
 //! // High-nameability type (strong prior consensus)
 //! let person_nameability = Nameability::high(0.9);
@@ -509,7 +509,7 @@ impl AdaptiveResolutionConfig {
 /// # Example
 ///
 /// ```rust
-/// use anno_coalesce::alignment::entity_type_nameability;
+/// use anno::coalesce::alignment::entity_type_nameability;
 ///
 /// let person_name = entity_type_nameability("PERSON");
 /// assert!(person_name.is_high());

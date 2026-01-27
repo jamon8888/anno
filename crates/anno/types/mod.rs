@@ -72,6 +72,10 @@ pub use confidence::{Confidence, ConfidenceError, Probability, UnitInterval};
 pub use ext::EntitySliceExt;
 pub use score::Score;
 
+// Back-compat: allow references like `anno_core::types::Number` and
+// `anno_core::types::CanonicalId` from code that used to depend on `anno-core`.
+pub use crate::core::types::{CanonicalId, MentionType, Number};
+
 /// Static assertions for struct layouts and invariants.
 ///
 /// These are compile-time checks that ensure critical assumptions hold.

@@ -128,6 +128,8 @@ impl BackendName {
             #[cfg(feature = "onnx")]
             "bert_onnx" | "bertneronnx" => Some(BackendName::BertOnnx),
             #[cfg(feature = "onnx")]
+            "gliner" => Some(BackendName::GLiNEROnnx),
+            #[cfg(feature = "onnx")]
             "gliner_onnx" | "glineronnx" => Some(BackendName::GLiNEROnnx),
             #[cfg(feature = "onnx")]
             "nuner" | "nunerzero" => Some(BackendName::NuNER),

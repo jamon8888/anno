@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Validate publish readiness for all crates in the workspace
-# Checks cargo publish --dry-run and version requirements
+# Validate publish readiness for the `anno` crate.
+# Checks cargo publish --dry-run and version requirements.
 
 set -euo pipefail
 
@@ -73,18 +73,7 @@ echo ""
 echo "## Publish Readiness"
 echo ""
 
-check_publish "anno-core" "crates/anno-core"
-check_publish "anno-coalesce" "crates/anno-coalesce"
 check_publish "anno" "crates/anno"
-
-echo ""
-
-# Check version requirements
-echo "## Version Requirements"
-echo ""
-
-check_version_requirement "crates/anno-coalesce/Cargo.toml" "anno-core" "0.2.0"
-check_version_requirement "crates/anno/Cargo.toml" "anno-coalesce" "0.2.0"
 
 echo ""
 
@@ -92,7 +81,7 @@ echo ""
 echo "## Crates.io Status"
 echo ""
 
-for crate in anno anno-core anno-coalesce; do
+for crate in anno; do
     if curl -s "https://crates.io/api/v1/crates/$crate" 2>/dev/null | jq -r '.crate | "\(.name): v\(.max_version // "not published")"' 2>/dev/null | grep -q "not published"; then
         echo -e "${YELLOW}⚠️  $crate: Not published${NC}"
     else

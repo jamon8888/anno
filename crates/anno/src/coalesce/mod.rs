@@ -1,9 +1,9 @@
-//! # anno-coalesce
+//! # anno::coalesce
 //!
 //! **Cross-document entity resolution: determining when records from different
 //! documents refer to the same real-world entity.**
 //!
-//! This crate provides a suite of algorithms for *entity resolution* (also known as
+//! This module provides a suite of algorithms for *entity resolution* (also known as
 //! record linkage, deduplication, or entity matching). Given entities extracted from
 //! multiple documents, these algorithms cluster mentions that refer to the same
 //! underlying entity.
@@ -56,7 +56,7 @@
 //!
 //! # Modules and Their Mathematical Foundations
 //!
-//! ## [`resolver`] — Union-Find Batch Resolution
+//! ## [`resolver`](crate::coalesce::resolver) — Union-Find Batch Resolution
 //!
 //! **Complexity:** \( O(n^2) \) pairwise comparisons, \( O(m \cdot \alpha(n)) \) clustering
 //!
@@ -67,7 +67,7 @@
 //! **Historical note:** Galler & Fischer (1964) introduced disjoint-set forests;
 //! Tarjan (1975) proved the \( O(m \cdot \alpha(n)) \) bound is tight.
 //!
-//! ## [`lsh`] — Locality-Sensitive Hashing
+//! ## [`lsh`](crate::coalesce::lsh) — Locality-Sensitive Hashing
 //!
 //! **Complexity:** \( O(n \log n) \) expected for candidate generation
 //!
@@ -80,14 +80,14 @@
 //! - **Banding:** With \( b \) bands of \( r \) rows each, the probability of
 //!   becoming candidates is \( P = 1 - (1 - s^r)^b \) where \( s \) is similarity.
 //!
-//! ## [`streaming`] — Incremental Resolution (Doubling Algorithm)
+//! ## [`streaming`](crate::coalesce::streaming) — Incremental Resolution (Doubling Algorithm)
 //!
 //! **Complexity:** \( O(1) \) amortized per document, 8-approximation guarantee
 //!
 //! For streaming scenarios where documents arrive continuously. Based on
 //! Charikar et al. (1997), maintains active clusters and periodically merges.
 //!
-//! ## [`correlation`] — Correlation Clustering
+//! ## [`correlation`](crate::coalesce::correlation) — Correlation Clustering
 //!
 //! **Complexity:** \( O(n + m) \) for Pivot algorithm
 //!
@@ -106,7 +106,7 @@
 //! - **Chromatic**: Color-constrained clustering (no same-color nodes in cluster)
 //! - **Greedy Agglomerative**: Heuristic, often competitive
 //!
-//! ## [`configuration`] — Probabilistic Configuration Distributions
+//! ## [`configuration`](crate::coalesce::configuration) — Probabilistic Configuration Distributions
 //!
 //! **Complexity:** Exponential in mentions (Bell numbers), but prunable
 //!
@@ -119,7 +119,7 @@
 //! - **Evidential (Dempster-Shafer)**: Combine pairwise beliefs, normalize conflicts
 //! - **Merging Decision**: Model probability of greedy merge sequence
 //!
-//! ## [`evidence`] — Multi-Source Evidence Aggregation
+//! ## [`evidence`](crate::coalesce::evidence) — Multi-Source Evidence Aggregation
 //!
 //! **Complexity:** \( O(k) \) where k is number of evidence sources
 //!
@@ -127,7 +127,7 @@
 //! provide conflicting evidence, this module mediates them into a single decision.
 //! Strategies range from simple averaging to Bayesian combination.
 //!
-//! ## [`hierarchical`] — Agglomerative Clustering
+//! ## [`hierarchical`](crate::coalesce::hierarchical) — Agglomerative Clustering
 //!
 //! **Complexity:** \( O(n^2 \log n) \) with efficient data structures
 //!
@@ -150,11 +150,11 @@
 //!
 //! | Scenario | Module | Time | Space | Guarantee |
 //! |----------|--------|------|-------|-----------|
-//! | Small corpus (<10K) | [`resolver`] | \( O(n^2) \) | \( O(n) \) | Exact |
-//! | Large corpus (10K-1M) | [`lsh`] + [`resolver`] | \( O(n \log n) \) | \( O(n) \) | ~95% recall |
-//! | Streaming documents | [`streaming`] | \( O(1) \) amort. | \( O(k) \) | 8-approx |
-//! | Explicit +/- labels | [`correlation`] | \( O(n+m) \) | \( O(n+m) \) | 3-approx |
-//! | Need dendrogram | [`hierarchical`] | \( O(n^2 \log n) \) | \( O(n^2) \) | Exact |
+//! | Small corpus (<10K) | [`resolver`](crate::coalesce::resolver) | \( O(n^2) \) | \( O(n) \) | Exact |
+//! | Large corpus (10K-1M) | [`lsh`](crate::coalesce::lsh) + [`resolver`](crate::coalesce::resolver) | \( O(n \log n) \) | \( O(n) \) | ~95% recall |
+//! | Streaming documents | [`streaming`](crate::coalesce::streaming) | \( O(1) \) amort. | \( O(k) \) | 8-approx |
+//! | Explicit +/- labels | [`correlation`](crate::coalesce::correlation) | \( O(n+m) \) | \( O(n+m) \) | 3-approx |
+//! | Need dendrogram | [`hierarchical`](crate::coalesce::hierarchical) | \( O(n^2 \log n) \) | \( O(n^2) \) | Exact |
 //!
 //! ```text
 //! Decision tree:
@@ -176,9 +176,9 @@
 //!
 //! ## Batch Resolution (Small Corpus)
 //!
-//! ```
-//! use anno_coalesce::Resolver;
-//! use anno_core::Corpus;
+//! ```rust
+//! use anno::coalesce::Resolver;
+//! use anno::core::Corpus;
 //!
 //! let resolver = Resolver::new().with_threshold(0.7);
 //! let mut corpus = Corpus::new();
@@ -190,8 +190,8 @@
 //!
 //! ## LSH Blocking (Large Corpus)
 //!
-//! ```
-//! use anno_coalesce::lsh::{MinHashLSH, LSHConfig};
+//! ```rust
+//! use anno::coalesce::lsh::{MinHashLSH, LSHConfig};
 //!
 //! let mut lsh = MinHashLSH::new(LSHConfig::default());
 //! lsh.insert_text("1", "Barack Obama");
@@ -211,7 +211,7 @@
 //! ## Streaming Resolution
 //!
 //! ```rust,ignore
-//! use anno_coalesce::streaming::{StreamingResolver, StreamingConfig};
+//! use anno::coalesce::streaming::{StreamingConfig, StreamingResolver};
 //!
 //! let mut resolver = StreamingResolver::new(StreamingConfig::default());
 //!
@@ -225,8 +225,8 @@
 //!
 //! ## Correlation Clustering
 //!
-//! ```
-//! use anno_coalesce::correlation::{LabeledGraph, EdgeLabel, pivot_clustering};
+//! ```rust
+//! use anno::coalesce::correlation::{EdgeLabel, LabeledGraph, pivot_clustering};
 //! use rand::SeedableRng;
 //!
 //! // Graph with explicit +/- edges
@@ -242,8 +242,8 @@
 //!
 //! ## Hierarchical Clustering
 //!
-//! ```
-//! use anno_coalesce::hierarchical::{hierarchical_from_similarity, Linkage};
+//! ```rust
+//! use anno::coalesce::hierarchical::{hierarchical_from_similarity, Linkage};
 //!
 //! let sims = vec![
 //!     vec![1.0, 0.9, 0.1],

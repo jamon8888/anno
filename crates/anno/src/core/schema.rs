@@ -5,17 +5,17 @@
 //!
 //! # Usage
 //!
-//! Add `schema` feature to your dependency:
+//! Add the `schema` feature to your dependency:
 //!
 //! ```toml
 //! [dependencies]
-//! anno-core = { version = "0.2", features = ["schema"] }
+//! anno = { version = "0.2", features = ["schema"] }
 //! ```
 //!
 //! Then generate schemas:
 //!
 //! ```rust,ignore
-//! use anno_core::schema::generate_entity_schema;
+//! use anno::core::schema::generate_entity_schema;
 //!
 //! let schema = generate_entity_schema();
 //! println!("{}", serde_json::to_string_pretty(&schema).unwrap());

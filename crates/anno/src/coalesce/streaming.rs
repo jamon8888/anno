@@ -62,7 +62,7 @@
 //! ## Example
 //!
 //! ```rust,ignore
-//! use anno_coalesce::streaming::{StreamingResolver, StreamingConfig};
+//! use anno::coalesce::streaming::{StreamingConfig, StreamingResolver};
 //!
 //! let mut resolver = StreamingResolver::new(StreamingConfig::default());
 //!
@@ -99,8 +99,9 @@
 //! - Rao Delip, McNamee, Dredze (2010). "Streaming cross document entity
 //!   coreference resolution". COLING 2010.
 
-use crate::evidence::{EvidenceSource, MediationStrategy, PairEvidence};
-use crate::lsh::{LSHConfig, MinHashLSH};
+use super::evidence::{EvidenceSource, MediationStrategy, PairEvidence};
+use super::lsh::{LSHConfig, MinHashLSH};
+use crate::core as anno_core;
 use std::collections::HashMap;
 
 /// Configuration for streaming entity resolution.
@@ -879,7 +880,7 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 /// - "Barack Obama" vs "obama" → high similarity
 /// - "NVIDIA" vs "Nvidia Corp" → medium similarity
 ///
-/// For word-level similarity (phrase matching), use [`crate::string_similarity`].
+/// For word-level similarity (phrase matching), use [`super::string_similarity`].
 ///
 /// # Algorithm
 ///
@@ -889,8 +890,8 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 ///
 /// # Examples
 ///
-/// ```
-/// use anno_coalesce::streaming::trigram_similarity;
+/// ```rust
+/// use anno::coalesce::streaming::trigram_similarity;
 ///
 /// assert!((trigram_similarity("Barack Obama", "obama") - 0.375).abs() < 0.1);
 /// assert!((trigram_similarity("test", "test") - 1.0).abs() < 0.001);
@@ -939,7 +940,7 @@ fn normalize_type(s: &str) -> Option<&'static str> {
 }
 
 // =============================================================================
-// Conversion to/from anno-core types
+// Conversion to/from `anno::core` types
 // =============================================================================
 
 impl EntityMention {
@@ -949,7 +950,7 @@ impl EntityMention {
     /// This enables using streaming resolution on entities extracted via anno's
     /// standard NER pipeline.
     #[must_use]
-    pub fn from_track(doc_id: impl Into<String>, track: &anno_core::Track) -> Self {
+    pub fn from_track(doc_id: impl Into<String>, track: &crate::Track) -> Self {
         Self {
             doc_id: doc_id.into(),
             canonical_surface: track.canonical_surface.clone(),
@@ -1026,7 +1027,7 @@ impl StreamingResolver {
     /// Convert all clusters to anno_core::Identity objects.
     ///
     /// Returns a vector of Identities representing the current clustering state.
-    /// Useful for exporting streaming resolution results into the anno-core format.
+    /// Useful for exporting streaming resolution results into the `anno::core` format.
     #[must_use]
     pub fn to_identities(&self) -> Vec<anno_core::Identity> {
         self.clusters()

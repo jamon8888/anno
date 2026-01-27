@@ -1,5 +1,9 @@
 //! # Locality-Sensitive Hashing for Entity Resolution Blocking
 //!
+//! Note: the long-term home for this functionality is the `sketchir` repo (see
+//! `sketchir::blocking::MinHashTextLSH`). `anno::coalesce::lsh` will eventually
+//! become a thin wrapper/re-export once `sketchir` is published and versioned.
+//!
 //! This module provides **LSH-based blocking** to reduce the quadratic comparison
 //! cost in entity resolution to near-linear time.
 //!
@@ -94,7 +98,7 @@
 //! ## Example
 //!
 //! ```
-//! use anno_coalesce::lsh::{MinHashLSH, LSHConfig};
+//! use anno::coalesce::lsh::{LSHConfig, MinHashLSH};
 //!
 //! let mut lsh = MinHashLSH::new(LSHConfig::default());
 //! lsh.insert_text("1", "Barack Obama");
@@ -125,8 +129,8 @@
 //! - Indyk, P. & Motwani, R. (1998). "Approximate nearest neighbors: towards
 //!   removing the curse of dimensionality". STOC '98.
 
-use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
+use sketchir::blocking::{BlockingConfig, MinHashTextLSH};
+use std::collections::HashSet;
 
 /// Configuration for LSH blocking.
 #[derive(Debug, Clone)]
@@ -196,8 +200,6 @@ pub struct LSHItem {
     pub doc_id: Option<String>,
     /// The text content to hash
     pub text: String,
-    /// Pre-computed MinHash signature (lazy-initialized)
-    signature: Option<Vec<u64>>,
 }
 
 impl LSHItem {
@@ -207,7 +209,6 @@ impl LSHItem {
             id: id.into(),
             doc_id: None,
             text: text.into(),
-            signature: None,
         }
     }
 
@@ -225,12 +226,7 @@ impl LSHItem {
 #[derive(Debug)]
 pub struct MinHashLSH {
     config: LSHConfig,
-    /// Hash coefficients for MinHash: (a, b) pairs for h(x) = (ax + b) mod p
-    hash_coefficients: Vec<(u64, u64)>,
-    /// Prime for modular arithmetic (Mersenne prime 2^61 - 1)
-    prime: u64,
-    /// Buckets: band_idx -> bucket_hash -> item_indices
-    buckets: Vec<HashMap<u64, Vec<usize>>>,
+    inner: MinHashTextLSH,
     /// All items indexed
     items: Vec<LSHItem>,
 }
@@ -238,53 +234,27 @@ pub struct MinHashLSH {
 impl MinHashLSH {
     /// Create a new MinHash LSH index.
     pub fn new(config: LSHConfig) -> Self {
-        let total_hashes = config.num_hashes_per_band * config.num_bands;
-        let prime = (1u64 << 61) - 1; // Mersenne prime
-
-        // Generate random hash coefficients deterministically
-        // Using a simple LCG seeded with band/hash indices for reproducibility
-        let mut coefficients = Vec::with_capacity(total_hashes);
-        let mut rng_state = 0x5DEECE66Du64;
-        for _ in 0..total_hashes {
-            rng_state = rng_state.wrapping_mul(0x5DEECE66D).wrapping_add(0xB);
-            let a = (rng_state >> 16) % prime;
-            rng_state = rng_state.wrapping_mul(0x5DEECE66D).wrapping_add(0xB);
-            let b = (rng_state >> 16) % prime;
-            coefficients.push((a.max(1), b)); // a must be non-zero
-        }
-
-        let buckets = (0..config.num_bands).map(|_| HashMap::new()).collect();
-
+        let inner_config = BlockingConfig {
+            num_hashes_per_band: config.num_hashes_per_band,
+            num_bands: config.num_bands,
+            ngram_size: config.ngram_size,
+            char_ngrams: config.char_ngrams,
+            similarity_threshold: config.similarity_threshold as f64,
+        };
+        let inner = MinHashTextLSH::new(inner_config)
+            .expect("LSHConfig has invalid (band, row) parameters");
         Self {
             config,
-            hash_coefficients: coefficients,
-            prime,
-            buckets,
+            inner,
             items: Vec::new(),
         }
     }
 
     /// Insert an item into the index.
     pub fn insert(&mut self, item: LSHItem) {
-        let idx = self.items.len();
-        let shingles = self.shingle(&item.text);
-        let signature = self.minhash_signature(&shingles);
+        self.inner.insert_text(item.id.clone(), item.text.clone());
 
-        // Insert into buckets
-        for (band_idx, band_sig) in signature
-            .chunks(self.config.num_hashes_per_band)
-            .enumerate()
-        {
-            let bucket_hash = self.hash_band(band_sig);
-            self.buckets[band_idx]
-                .entry(bucket_hash)
-                .or_default()
-                .push(idx);
-        }
-
-        // Store item with signature
-        let mut item = item;
-        item.signature = Some(signature);
+        // Store item (signature is no longer cached here; sketchir owns it).
         self.items.push(item);
     }
 
@@ -298,22 +268,7 @@ impl MinHashLSH {
     /// Returns pairs of item indices that share at least one bucket.
     /// These are the pairs that should be compared with the actual similarity function.
     pub fn candidate_pairs(&self) -> Vec<(usize, usize)> {
-        let mut candidates: HashSet<(usize, usize)> = HashSet::new();
-
-        for bucket_map in &self.buckets {
-            for indices in bucket_map.values() {
-                // All pairs within this bucket are candidates
-                for i in 0..indices.len() {
-                    for j in (i + 1)..indices.len() {
-                        let (a, b) = (indices[i], indices[j]);
-                        let pair = if a < b { (a, b) } else { (b, a) };
-                        candidates.insert(pair);
-                    }
-                }
-            }
-        }
-
-        candidates.into_iter().collect()
+        self.inner.candidate_pairs()
     }
 
     /// Get candidate pairs with their estimated Jaccard similarity.
@@ -340,51 +295,18 @@ impl MinHashLSH {
             return Vec::new();
         }
 
+        // Use the stored text to query the underlying index.
         let item = &self.items[item_idx];
-        let signature = match &item.signature {
-            Some(sig) => sig,
-            None => return Vec::new(),
-        };
-
-        let mut candidates: HashSet<usize> = HashSet::new();
-
-        for (band_idx, band_sig) in signature
-            .chunks(self.config.num_hashes_per_band)
-            .enumerate()
-        {
-            let bucket_hash = self.hash_band(band_sig);
-            if let Some(bucket_items) = self.buckets[band_idx].get(&bucket_hash) {
-                for &idx in bucket_items {
-                    if idx != item_idx {
-                        candidates.insert(idx);
-                    }
-                }
-            }
-        }
-
-        candidates.into_iter().collect()
+        self.inner
+            .query(&item.text)
+            .into_iter()
+            .filter(|&idx| idx != item_idx)
+            .collect()
     }
 
     /// Query for candidates matching new text (without inserting).
     pub fn query(&self, text: &str) -> Vec<usize> {
-        let shingles = self.shingle(text);
-        let signature = self.minhash_signature(&shingles);
-
-        let mut candidates: HashSet<usize> = HashSet::new();
-
-        for (band_idx, band_sig) in signature
-            .chunks(self.config.num_hashes_per_band)
-            .enumerate()
-        {
-            let bucket_hash = self.hash_band(band_sig);
-            if let Some(bucket_items) = self.buckets[band_idx].get(&bucket_hash) {
-                for &idx in bucket_items {
-                    candidates.insert(idx);
-                }
-            }
-        }
-
-        candidates.into_iter().collect()
+        self.inner.query(text)
     }
 
     /// Get the item at a given index.
@@ -404,103 +326,12 @@ impl MinHashLSH {
 
     /// Estimate Jaccard similarity between two items using MinHash.
     pub fn estimated_similarity(&self, i: usize, j: usize) -> Option<f32> {
-        let sig_i = self.items.get(i)?.signature.as_ref()?;
-        let sig_j = self.items.get(j)?.signature.as_ref()?;
-
-        let matches = sig_i
-            .iter()
-            .zip(sig_j.iter())
-            .filter(|(a, b)| a == b)
-            .count();
-
-        Some(matches as f32 / sig_i.len() as f32)
+        self.inner.estimated_similarity(i, j).map(|v| v as f32)
     }
 
     /// Compute exact Jaccard similarity between two items.
     pub fn exact_similarity(&self, i: usize, j: usize) -> Option<f32> {
-        let text_i = &self.items.get(i)?.text;
-        let text_j = &self.items.get(j)?.text;
-        Some(jaccard_similarity(
-            &self.shingle(text_i),
-            &self.shingle(text_j),
-        ))
-    }
-
-    // =========================================================================
-    // Internal methods
-    // =========================================================================
-
-    /// Create shingles (n-grams) from text.
-    fn shingle(&self, text: &str) -> HashSet<u64> {
-        let normalized = text.to_lowercase();
-        let n = self.config.ngram_size;
-
-        if self.config.char_ngrams {
-            // Character n-grams
-            let chars: Vec<char> = normalized.chars().collect();
-            if chars.len() < n {
-                let mut set = HashSet::new();
-                set.insert(self.hash_string(&normalized));
-                return set;
-            }
-
-            chars
-                .windows(n)
-                .map(|window| {
-                    let s: String = window.iter().collect();
-                    self.hash_string(&s)
-                })
-                .collect()
-        } else {
-            // Word n-grams
-            let words: Vec<&str> = normalized.split_whitespace().collect();
-            if words.len() < n {
-                let mut set = HashSet::new();
-                set.insert(self.hash_string(&normalized));
-                return set;
-            }
-
-            words
-                .windows(n)
-                .map(|window| {
-                    let s = window.join(" ");
-                    self.hash_string(&s)
-                })
-                .collect()
-        }
-    }
-
-    /// Compute MinHash signature for a set of shingles.
-    fn minhash_signature(&self, shingles: &HashSet<u64>) -> Vec<u64> {
-        self.hash_coefficients
-            .iter()
-            .map(|(a, b)| {
-                shingles
-                    .iter()
-                    .map(|&x| {
-                        // h(x) = (ax + b) mod p
-                        (a.wrapping_mul(x).wrapping_add(*b)) % self.prime
-                    })
-                    .min()
-                    .unwrap_or(u64::MAX)
-            })
-            .collect()
-    }
-
-    /// Hash a band of the signature to get a bucket key.
-    fn hash_band(&self, band: &[u64]) -> u64 {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        for &h in band {
-            h.hash(&mut hasher);
-        }
-        hasher.finish()
-    }
-
-    /// Hash a string to u64.
-    fn hash_string(&self, s: &str) -> u64 {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        s.hash(&mut hasher);
-        hasher.finish()
+        self.inner.exact_similarity(i, j).map(|v| v as f32)
     }
 }
 
@@ -529,14 +360,7 @@ pub fn jaccard_similarity(set_a: &HashSet<u64>, set_b: &HashSet<u64>) -> f32 {
 /// This is useful when tracks have pre-computed embeddings.
 #[derive(Debug)]
 pub struct SimHashLSH {
-    /// Number of hyperplanes (bits in the hash)
-    num_bits: usize,
-    /// Random hyperplane vectors (num_bits x embedding_dim)
-    hyperplanes: Vec<Vec<f32>>,
-    /// Buckets: hash -> item_indices
-    buckets: HashMap<u64, Vec<usize>>,
-    /// Stored embeddings and metadata
-    items: Vec<(String, Vec<f32>)>,
+    inner: sketchir::DenseSimHashLSH,
 }
 
 impl SimHashLSH {
@@ -546,83 +370,27 @@ impl SimHashLSH {
     /// * `embedding_dim` - Dimension of the embedding vectors
     /// * `num_bits` - Number of bits in the hash (more = finer granularity)
     pub fn new(embedding_dim: usize, num_bits: usize) -> Self {
-        // Generate random hyperplanes deterministically
-        let mut hyperplanes = Vec::with_capacity(num_bits);
-        let mut rng_state = 0x12345678u64;
-
-        for _ in 0..num_bits {
-            let mut plane = Vec::with_capacity(embedding_dim);
-            for _ in 0..embedding_dim {
-                // Generate random float in [-1, 1]
-                rng_state = rng_state.wrapping_mul(0x5DEECE66D).wrapping_add(0xB);
-                let val = ((rng_state >> 16) as f32 / u32::MAX as f32) * 2.0 - 1.0;
-                plane.push(val);
-            }
-            hyperplanes.push(plane);
-        }
-
-        Self {
-            num_bits,
-            hyperplanes,
-            buckets: HashMap::new(),
-            items: Vec::new(),
-        }
+        let inner = sketchir::DenseSimHashLSH::new(embedding_dim, num_bits)
+            .expect("DenseSimHashLSH parameters must be valid");
+        Self { inner }
     }
 
     /// Insert an embedding vector.
     pub fn insert(&mut self, id: impl Into<String>, embedding: Vec<f32>) {
-        let idx = self.items.len();
-        let hash = self.simhash(&embedding);
-
-        self.buckets.entry(hash).or_default().push(idx);
-        self.items.push((id.into(), embedding));
+        let _ = self
+            .inner
+            .insert(id, embedding)
+            .expect("embedding dimension mismatch");
     }
 
     /// Query for candidates similar to an embedding.
     pub fn query(&self, embedding: &[f32]) -> Vec<usize> {
-        let hash = self.simhash(embedding);
-
-        // Return exact bucket match and neighbors (Hamming distance 1)
-        let mut candidates: HashSet<usize> = HashSet::new();
-
-        // Exact match
-        if let Some(indices) = self.buckets.get(&hash) {
-            candidates.extend(indices);
-        }
-
-        // Hamming distance 1 neighbors (flip each bit)
-        for bit in 0..self.num_bits.min(64) {
-            let neighbor_hash = hash ^ (1u64 << bit);
-            if let Some(indices) = self.buckets.get(&neighbor_hash) {
-                candidates.extend(indices);
-            }
-        }
-
-        candidates.into_iter().collect()
+        self.inner.query(embedding).unwrap_or_default()
     }
 
     /// Get item by index.
     pub fn get(&self, idx: usize) -> Option<(&str, &[f32])> {
-        self.items
-            .get(idx)
-            .map(|(id, emb)| (id.as_str(), emb.as_slice()))
-    }
-
-    /// Compute SimHash for an embedding vector.
-    fn simhash(&self, embedding: &[f32]) -> u64 {
-        let mut hash = 0u64;
-
-        for (i, plane) in self.hyperplanes.iter().enumerate() {
-            // Dot product with hyperplane
-            let dot: f32 = plane.iter().zip(embedding.iter()).map(|(a, b)| a * b).sum();
-
-            // Set bit if dot product is positive
-            if dot > 0.0 {
-                hash |= 1u64 << (i % 64);
-            }
-        }
-
-        hash
+        self.inner.get(idx)
     }
 }
 
