@@ -119,3 +119,40 @@ unicode-normalization = []
 name = "anno"
 path = "bin/anno.rs"
 required-features = ["cli"]
+
+[package.metadata.cargo-machete]
+# `cargo-machete` currently does not follow our `#[path = "../..."]` module layout
+# (most of the crate lives outside `src/`), so it produces false positives.
+# Keep this list in sync with CI’s `cargo machete` output.
+ignored = [
+    "bitflags",
+    "candle-core",
+    "candle-nn",
+    "candle-transformers",
+    "crossbeam-channel",
+    "dashmap",
+    "dirs",
+    "futures",
+    "glob",
+    "hf-hub",
+    "indicatif",
+    "itertools",
+    "lru",
+    "ndarray",
+    "ort",
+    "parking_lot",
+    "rayon",
+    "regex",
+    "rusqlite",
+    "safetensors",
+    "sha2",
+    "smallvec",
+    "tempfile",
+    "tokenizers",
+    "tokio",
+    "toml",
+    "tracing",
+    "unicode-normalization",
+    "ureq",
+    "xxhash-rust",
+]

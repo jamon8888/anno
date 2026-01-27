@@ -400,9 +400,7 @@ jobs:
       - name: Build examples (eval)
         run: cargo build --workspace --examples --features eval
       - name: Build examples (discourse)
-        run: cargo build --example discourse_pipeline --features discourse
-      - name: Build examples (abstract anaphora)
-        run: cargo build --example abstract_anaphora_eval --features discourse
+        run: cargo build --workspace --examples --features discourse
 
   # ==========================================================================
   # Sanity Check Evaluations (small random samples on push)
@@ -668,6 +666,7 @@ jobs:
       - name: Upload SARIF results
         uses: github/codeql-action/upload-sarif@v3
         if: always()
+        continue-on-error: true
         with:
           sarif_file: opengrep-results.sarif
       - name: Upload JSON results
