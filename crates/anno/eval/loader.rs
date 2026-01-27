@@ -1964,7 +1964,8 @@ impl DatasetLoader {
                     Err(_e) => {
                         // If the datasets-server endpoint is unavailable (rate limits, transient issues),
                         // prefer falling back to the hub-file path rather than downloading HTML.
-                        if let Ok((content, resolved)) = self.download_hf_dataset_file_from_hub(&hf_ds)
+                        if let Ok((content, resolved)) =
+                            self.download_hf_dataset_file_from_hub(&hf_ds)
                         {
                             return Ok((content, resolved));
                         }
@@ -2226,7 +2227,11 @@ impl DatasetLoader {
                 let n = name.to_lowercase();
                 if n.ends_with(".jsonl") {
                     0
-                } else if n.ends_with(".conll") || n.ends_with(".bio") || n.ends_with(".iob") || n.ends_with(".iob2") {
+                } else if n.ends_with(".conll")
+                    || n.ends_with(".bio")
+                    || n.ends_with(".iob")
+                    || n.ends_with(".iob2")
+                {
                     1
                 } else if n.ends_with(".tsv") {
                     2
@@ -2239,7 +2244,11 @@ impl DatasetLoader {
 
             let mut candidates: Vec<String> = siblings
                 .iter()
-                .filter_map(|s| s.get("rfilename").and_then(|v| v.as_str()).map(|f| f.to_string()))
+                .filter_map(|s| {
+                    s.get("rfilename")
+                        .and_then(|v| v.as_str())
+                        .map(|f| f.to_string())
+                })
                 .filter(|f| ext_rank(f) < 9)
                 .collect();
 
