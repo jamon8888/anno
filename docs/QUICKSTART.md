@@ -7,7 +7,11 @@ This is a short, practical starting point for using `anno` via the CLI and as a 
 From crates.io:
 
 ```bash
-cargo install anno
+# The `anno` CLI binary is behind the `cli` feature.
+cargo install anno --features cli
+#
+# If you want a minimal, no-ML-deps build of the CLI:
+# cargo install anno --no-default-features --features cli
 ```
 
 From source (recommended if you want optional backends like ONNX/Candle, and required for some subcommands like `cross-doc`):
@@ -20,7 +24,7 @@ cargo build --release -p anno --bin anno --features "cli eval-advanced"
 
 ## CLI: extract entities
 
-Prefer `--text` / `--file` over positional text for now (it avoids known arg-order/input-parsing pitfalls; see `docs/guides/BUGS.md`).
+Prefer `--text` / `--file` over positional text for now (it avoids known arg-order/input-parsing pitfalls).
 
 ```bash
 anno extract --text "Marie Curie was born in Paris."
@@ -54,12 +58,10 @@ anno cross-doc ./docs --threshold 0.6 --format tree
 
 ## Offsets (Unicode)
 
-Offsets are **character offsets**, not byte offsets. See `docs/guides/UNICODE_OFFSETS.md`.
+Offsets are **character offsets**, not byte offsets. See `docs/CONTRACT.md`.
 
 ## Next docs
 
-- `docs/SCOPE.md` — what’s in/out of scope
+- `docs/CONTRACT.md` — scope + guarantees
 - `docs/BACKENDS.md` — backend selection and feature flags
-- `docs/PIPELINE.md` — end-to-end workflows
-- `docs/EVALUATION.md` — how to measure quality
 
