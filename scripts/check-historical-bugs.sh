@@ -10,7 +10,7 @@ echo "Checking for patterns that match bugs that were previously fixed..."
 echo ""
 
 ISSUES=0
-WORKSPACE_DIRS=(crates/anno/ crates/anno-core/ crates/anno-coalesce/ tests/ examples/)
+WORKSPACE_DIRS=(crates/anno/ tests/ examples/)
 EVAL_DIR="crates/anno/eval/"
 
 # 1. Check for mutex double-lock pattern (deadlock bug)
@@ -30,8 +30,12 @@ fi
 echo ""
 echo "## Variance Calculation (Bessel's Correction)"
 echo ""
-POPULATION_VAR=$(rg -c "variance.*sum.*/.*len\(\)\s*as\s*f64" --type rust "$EVAL_DIR" 2>/dev/null || echo "0")
-SAMPLE_VAR=$(rg -c "variance.*sum.*/.*\(.*len\(\)\s*-\s*1" --type rust "$EVAL_DIR" 2>/dev/null || echo "0")
+POPULATION_VAR=$(
+    (rg -n "variance.*sum.*/.*len\\(\\)\\s*as\\s*f64" --type rust "$EVAL_DIR" 2>/dev/null || true) | wc -l | tr -d ' '
+)
+SAMPLE_VAR=$(
+    (rg -n "variance.*sum.*/.*\\(.*len\\(\\)\\s*-\\s*1" --type rust "$EVAL_DIR" 2>/dev/null || true) | wc -l | tr -d ' '
+)
 if [ "$POPULATION_VAR" -gt 0 ]; then
     echo "WARNING:  Found potential population variance (n) instead of sample variance (n-1)"
     echo "   This matches the variance bug pattern from BUGS_FIXED.md"
@@ -45,8 +49,12 @@ fi
 echo ""
 echo "## Mutex Poison Handling"
 echo ""
-LOCKS_WITHOUT_HANDLING=$(rg -c "\.lock\(\)\.unwrap\(\)" --type rust "${WORKSPACE_DIRS[@]}" 2>/dev/null || echo "0")
-LOCKS_WITH_HANDLING=$(rg -c "\.lock\(\)\.unwrap_or_else" --type rust "${WORKSPACE_DIRS[@]}" 2>/dev/null || echo "0")
+LOCKS_WITHOUT_HANDLING=$(
+    (rg -n "\\.lock\\(\\)\\.unwrap\\(\\)" --type rust "${WORKSPACE_DIRS[@]}" 2>/dev/null || true) | wc -l | tr -d ' '
+)
+LOCKS_WITH_HANDLING=$(
+    (rg -n "\\.lock\\(\\)\\.unwrap_or_else" --type rust "${WORKSPACE_DIRS[@]}" 2>/dev/null || true) | wc -l | tr -d ' '
+)
 if [ "$LOCKS_WITHOUT_HANDLING" -gt 0 ]; then
     echo "WARNING:  Found mutex locks without poison handling"
     echo "   $LOCKS_WITHOUT_HANDLING locks without handling, $LOCKS_WITH_HANDLING with handling"
@@ -60,7 +68,9 @@ fi
 echo ""
 echo "## Backend Recreation in Loops"
 echo ""
-BACKEND_RECREATION=$(rg -c "for.*in.*\{.*BackendFactory::create" --type rust "$EVAL_DIR" 2>/dev/null || echo "0")
+BACKEND_RECREATION=$(
+    (rg -n "for.*in.*\\{.*BackendFactory::create" --type rust "$EVAL_DIR" 2>/dev/null || true) | wc -l | tr -d ' '
+)
 if [ "$BACKEND_RECREATION" -gt 0 ]; then
     echo "WARNING:  Found backend recreation in loops"
     echo "   This is a performance issue - backends should be created outside loops"

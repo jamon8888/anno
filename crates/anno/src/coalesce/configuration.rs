@@ -831,4 +831,55 @@ mod tests {
             assert_eq!(partitions.len(), bell_number(n), "Bell({}) mismatch", n);
         }
     }
+
+    #[test]
+    fn test_distribution_entropy_non_negative() {
+        let mut builder = ConfigurationBuilder::new(3);
+        builder.set_pairwise(0, 1, 0.7).set_pairwise(1, 2, 0.2);
+        let dist = builder.build_evidential();
+        assert!(dist.entropy() >= 0.0);
+    }
+}
+
+// =============================================================================
+// Property Tests (probability sanity)
+// =============================================================================
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(80))]
+
+        /// Normalization should keep probabilities in [0, 1] and preserve total mass ~ 1.
+        #[test]
+        fn dist_normalize_is_probability_distribution(
+            p_same in 0.0f64..=1.0,
+            smoothing in 0.0f64..=1.0,
+        ) {
+            // Use n=2 because the configuration space is fully enumerable and auditable.
+            let mut dist = ConfigurationDistribution::new(2);
+            dist.set_prob(CorefConfiguration::all_same(2), p_same);
+            dist.set_prob(CorefConfiguration::all_singletons(2), 1.0 - p_same);
+            dist.set_smoothing(smoothing);
+            dist.normalize();
+
+            let all_same = CorefConfiguration::all_same(2);
+            let all_sep = CorefConfiguration::all_singletons(2);
+
+            let ps = dist.prob(&all_same);
+            let pd = dist.prob(&all_sep);
+
+            prop_assert!((0.0..=1.0).contains(&ps));
+            prop_assert!((0.0..=1.0).contains(&pd));
+
+            // In this n=2 case we only query represented configs, so the represented mass should be <= 1.
+            // If smoothing is nonzero, total mass includes unrepresented configs too.
+            prop_assert!(ps + pd <= 1.0 + 1e-9);
+            prop_assert!(dist.entropy().is_finite());
+            prop_assert!(dist.entropy() >= 0.0);
+        }
+    }
 }

@@ -442,66 +442,46 @@ pub fn cluster_embeddings(
     let k = num_clusters.min(index.len());
     let dim = index.embeddings[0].dim();
 
-    // Initialize centroids (first k embeddings)
-    let mut centroids: Vec<Vec<f32>> = index.embeddings[..k]
-        .iter()
-        .map(|e| e.embedding.clone())
-        .collect();
-
-    let mut assignments = vec![0usize; index.len()];
-
-    for _ in 0..max_iterations {
-        // Assign each embedding to nearest centroid
-        for (i, emb) in index.embeddings.iter().enumerate() {
-            let mut best_cluster = 0;
-            let mut best_sim = f32::NEG_INFINITY;
-
-            for (c, centroid) in centroids.iter().enumerate() {
-                let sim = cosine_similarity(&emb.embedding, centroid);
-                if sim > best_sim {
-                    best_sim = sim;
-                    best_cluster = c;
-                }
-            }
-            assignments[i] = best_cluster;
+    // Use `clump` as the single k-means implementation (k-means++ init + Lloyd).
+    let points: Vec<&[f32]> = index.embeddings.iter().map(|e| e.embedding.as_slice()).collect();
+    let cfg = clump::KMeansConfig {
+        k,
+        max_iters: max_iterations.max(1),
+        tol: 1e-4,
+        seed: 42,
+    };
+    let res = match clump::kmeans(&points, &cfg) {
+        Ok(r) => r,
+        Err(_) => {
+            // Conservative fallback: one cluster containing everything.
+            let centroid = average_embeddings(
+                &index.embeddings.iter().map(|e| e.embedding.clone()).collect::<Vec<_>>(),
+            );
+            return vec![EntityCluster {
+                id: 0,
+                entity_ids: index.embeddings.iter().map(|e| e.id.clone()).collect(),
+                centroid,
+                cohesion: 0.0,
+            }];
         }
-
-        // Update centroids
-        let mut new_centroids = vec![vec![0.0f32; dim]; k];
-        let mut counts = vec![0usize; k];
-
-        for (i, &cluster) in assignments.iter().enumerate() {
-            counts[cluster] += 1;
-            for (j, v) in index.embeddings[i].embedding.iter().enumerate() {
-                new_centroids[cluster][j] += v;
-            }
-        }
-
-        for c in 0..k {
-            if counts[c] > 0 {
-                for v in &mut new_centroids[c] {
-                    *v /= counts[c] as f32;
-                }
-            }
-        }
-
-        centroids = new_centroids;
-    }
+    };
+    let centroids = res.centroids;
+    let assignments = res.assignments;
 
     // Build cluster objects
     let mut clusters: Vec<EntityCluster> = (0..k)
         .map(|c| EntityCluster {
             id: c,
             entity_ids: Vec::new(),
-            centroid: centroids[c].clone(),
+            centroid: centroids.get(c).cloned().unwrap_or_else(|| vec![0.0; dim]),
             cohesion: 0.0,
         })
         .collect();
 
     for (i, &cluster) in assignments.iter().enumerate() {
-        clusters[cluster]
-            .entity_ids
-            .push(index.embeddings[i].id.clone());
+        if let Some(c) = clusters.get_mut(cluster) {
+            c.entity_ids.push(index.embeddings[i].id.clone());
+        }
     }
 
     // Compute cohesion

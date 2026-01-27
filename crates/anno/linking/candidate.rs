@@ -616,7 +616,38 @@ impl CandidateGenerator for DictionaryCandidateGenerator {
 /// Compute simple string similarity (Jaccard on words + char trigrams).
 pub fn string_similarity(a: &str, b: &str) -> f64 {
     // Keep this module's policy (weights) local, but reuse shared primitives.
+    //
+    // Default: delegate to `textprep` (self-contained within the `anno` repo).
+    // Opt-in: `--features gramdex` uses `gramdex::trigram_jaccard` for the trigram
+    // component so we can compare performance and semantics in benches.
+    #[cfg(feature = "gramdex")]
+    {
+        return string_similarity_gramdex(a, b);
+    }
+    #[cfg(not(feature = "gramdex"))]
+    {
+        return string_similarity_textprep(a, b);
+    }
+}
+
+/// `textprep`-backed implementation of [`string_similarity`].
+#[must_use]
+pub fn string_similarity_textprep(a: &str, b: &str) -> f64 {
     textprep::similarity::weighted_word_char_ngram_jaccard(a, b, 3, 0.6, 0.4)
+}
+
+/// `gramdex`-backed implementation of [`string_similarity`].
+#[cfg(feature = "gramdex")]
+#[must_use]
+pub fn string_similarity_gramdex(a: &str, b: &str) -> f64 {
+    // Mirror the `textprep` weighted policy (word Jaccard + char trigram Jaccard).
+    //
+    // Note: `gramdex::trigram_jaccard`'s convention is 1.0 when both inputs have
+    // zero trigrams (length < 3). We keep this behind a feature until we decide
+    // whether we want to match `textprep` semantics exactly for short strings.
+    let word = textprep::similarity::word_jaccard(a, b);
+    let tri = gramdex::trigram_jaccard(a, b) as f64;
+    0.6 * word + 0.4 * tri
 }
 
 /// Parse year from an ISO 8601 date string.
@@ -711,9 +742,17 @@ mod tests {
 
     #[test]
     fn test_string_similarity() {
-        assert!(string_similarity("Albert Einstein", "Einstein") > 0.3);
-        assert!(string_similarity("Albert Einstein", "Albert Einstein") > 0.99);
-        assert!(string_similarity("New York", "New York City") > 0.5);
+        // Keep the baseline behavior stable even if `--features gramdex` is enabled.
+        assert!(string_similarity_textprep("Albert Einstein", "Einstein") > 0.3);
+        assert!(string_similarity_textprep("Albert Einstein", "Albert Einstein") > 0.99);
+        assert!(string_similarity_textprep("New York", "New York City") > 0.5);
+    }
+
+    #[cfg(feature = "gramdex")]
+    #[test]
+    fn test_string_similarity_gramdex_bounds() {
+        let sim = string_similarity_gramdex("Albert Einstein", "Einstein");
+        assert!((0.0..=1.0).contains(&sim));
     }
 
     #[test]

@@ -35,9 +35,9 @@ echo "Tool | Status | Duration" >> "$RESULTS_FILE"
 echo "-----|--------|---------" >> "$RESULTS_FILE"
 
 benchmark_tool "cargo-deny" "cargo deny check"
-benchmark_tool "cargo-machete" "cargo machete"
+benchmark_tool "cargo-machete" "./scripts/static-analysis-common.sh machete"
 benchmark_tool "cargo-geiger" "cargo geiger --quiet"
-benchmark_tool "opengrep" "opengrep scan --config auto --quiet crates/anno/ crates/anno-core/ crates/anno-coalesce/"
+benchmark_tool "opengrep" "opengrep scan --config auto --quiet crates/anno/"
 
 # Clippy benchmark (baseline)
 echo -n "Benchmarking clippy (baseline)... "

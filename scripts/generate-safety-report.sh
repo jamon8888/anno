@@ -49,7 +49,7 @@ if command -v opengrep &> /dev/null; then
     echo "## Security Pattern Detection (OpenGrep)" >> "$REPORT_FILE"
     echo "" >> "$REPORT_FILE"
     
-    opengrep scan --config auto --json --output .opengrep-tmp.json crates/anno/ crates/anno-core/ crates/anno-coalesce/ 2>/dev/null || echo '{"results":[]}' > .opengrep-tmp.json
+    opengrep scan --config auto --json --output .opengrep-tmp.json crates/anno/ 2>/dev/null || echo '{"results":[]}' > .opengrep-tmp.json
     
     if command -v jq &> /dev/null; then
         FINDING_COUNT=$(jq -r '.results | length' .opengrep-tmp.json 2>/dev/null || echo "0")
@@ -78,7 +78,7 @@ fi
 if command -v cargo-machete &> /dev/null; then
     echo "## Unused Dependencies (cargo-machete)" >> "$REPORT_FILE"
     echo "" >> "$REPORT_FILE"
-    cargo machete > .machete-tmp.txt 2>&1 || true
+    ./scripts/static-analysis-common.sh machete > .machete-tmp.txt 2>&1 || true
     if [ -s .machete-tmp.txt ]; then
         echo '```' >> "$REPORT_FILE"
         cat .machete-tmp.txt >> "$REPORT_FILE"

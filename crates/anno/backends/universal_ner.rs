@@ -376,7 +376,10 @@ mod tests {
     fn test_universal_ner_availability_reflects_api_key() {
         // Env vars are global; serialize to avoid interference with other tests.
         static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        let _guard = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let _guard = ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
 
         // Override any `.env` values (dotenv only sets if unset).
         for k in [
