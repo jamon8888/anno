@@ -92,14 +92,20 @@ fn is_heavy_backend(name: &str) -> bool {
     matches!(name, "gliner_onnx" | "gliner2" | "gliner_poly")
 }
 
-fn profile_defaults(
-    profile: BenchmarkProfile,
-) -> (Vec<String>, Vec<String>, Vec<String>) {
+fn profile_defaults(profile: BenchmarkProfile) -> (Vec<String>, Vec<String>, Vec<String>) {
     match profile {
         BenchmarkProfile::NerStandard => (
             vec!["ner".to_string()],
-            vec!["WikiGold".to_string(), "Wnut17".to_string(), "CoNLL2003Sample".to_string()],
-            vec!["bert_onnx".to_string(), "stacked".to_string(), "heuristic".to_string()],
+            vec![
+                "WikiGold".to_string(),
+                "Wnut17".to_string(),
+                "CoNLL2003Sample".to_string(),
+            ],
+            vec![
+                "bert_onnx".to_string(),
+                "stacked".to_string(),
+                "heuristic".to_string(),
+            ],
         ),
         BenchmarkProfile::NerZeroshotMultilingual => (
             vec!["ner".to_string()],
@@ -230,14 +236,20 @@ pub fn run(args: BenchmarkArgs) -> Result<(), String> {
                 let mut cmd = std::process::Command::new(exe);
                 cmd.arg("benchmark");
                 if let Some(profile) = args.profile {
-                    cmd.arg("--profile").arg(profile.to_possible_value().unwrap().get_name());
+                    cmd.arg("--profile")
+                        .arg(profile.to_possible_value().unwrap().get_name());
                 }
                 // Use canonical short codes for tasks (ensures we don't leak debug formatting).
                 cmd.arg("--tasks")
                     .arg(tasks.iter().map(|t| t.code()).collect::<Vec<_>>().join(","));
                 if !datasets.is_empty() {
-                    cmd.arg("--datasets")
-                        .arg(datasets.iter().map(|d| d.to_string()).collect::<Vec<_>>().join(","));
+                    cmd.arg("--datasets").arg(
+                        datasets
+                            .iter()
+                            .map(|d| d.to_string())
+                            .collect::<Vec<_>>()
+                            .join(","),
+                    );
                 }
                 cmd.arg("--backends").arg(hb);
                 if let Some(max) = args.max_examples {
@@ -250,8 +262,7 @@ pub fn run(args: BenchmarkArgs) -> Result<(), String> {
                     cmd.arg("--cached-only");
                 }
                 if let Some(out) = &args.output {
-                    cmd.arg("--output")
-                        .arg(suffix_path(out, &format!("-{hb}")));
+                    cmd.arg("--output").arg(suffix_path(out, &format!("-{hb}")));
                 }
                 if let Some(outj) = &args.output_json {
                     cmd.arg("--output-json")
@@ -299,7 +310,9 @@ pub fn run(args: BenchmarkArgs) -> Result<(), String> {
             // Otherwise: run light backends here, then merge heavy JSON artifacts into a single
             // combined report/JSON at the original `--output`/`--output-json` paths.
             use crate::eval::config_builder::TaskEvalConfigBuilder;
-            use crate::eval::task_evaluator::{ComprehensiveEvalResults, EvalSummary, TaskEvalResult};
+            use crate::eval::task_evaluator::{
+                ComprehensiveEvalResults, EvalSummary, TaskEvalResult,
+            };
             use std::collections::HashSet;
 
             fn summarize(results: &[TaskEvalResult]) -> EvalSummary {
@@ -413,7 +426,10 @@ pub fn run(args: BenchmarkArgs) -> Result<(), String> {
 
             // Print summary for the combined run.
             println!("=== Evaluation Summary ===");
-            println!("Total combinations: {}", combined.summary.total_combinations);
+            println!(
+                "Total combinations: {}",
+                combined.summary.total_combinations
+            );
             println!("Successful: {}", combined.summary.successful);
             println!(
                 "Skipped (feature not available): {}",
