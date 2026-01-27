@@ -2481,10 +2481,9 @@ impl ComprehensiveEvalResults {
 
                 // Sort by task name, then avg descending.
                 entries.sort_by(|a, b| match a.0.name().cmp(b.0.name()) {
-                    std::cmp::Ordering::Equal => b
-                        .2
-                        .partial_cmp(&a.2)
-                        .unwrap_or(std::cmp::Ordering::Equal),
+                    std::cmp::Ordering::Equal => {
+                        b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal)
+                    }
                     other => other,
                 });
 
