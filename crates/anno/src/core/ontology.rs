@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```rust
-//! use anno_core::ontology::{normalize, is_known, CoreType};
+//! use anno::core::ontology::{normalize, is_known, CoreType};
 //!
 //! assert_eq!(normalize("B-PER"), Some(CoreType::Person));
 //! assert_eq!(normalize("PERSON"), Some(CoreType::Person));
@@ -14,7 +14,7 @@
 //! assert!(is_known("ORG"));
 //! ```
 //!
-//! For domain-specific types, use [`TypeMapper`](crate::TypeMapper) instead of extending
+//! For domain-specific types, use [`TypeMapper`](super::TypeMapper) instead of extending
 //! the ontology.
 //! - **OWL/RDF complexity**: Wrong abstraction level for runtime performance
 //!
@@ -158,7 +158,7 @@ impl std::fmt::Display for CoreType {
 /// # Example
 ///
 /// ```rust
-/// use anno_core::ontology::{LabelNormalizer, CoreType};
+/// use anno::core::ontology::{LabelNormalizer, CoreType};
 ///
 /// let norm = LabelNormalizer::default();
 ///

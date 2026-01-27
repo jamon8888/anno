@@ -88,8 +88,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
-      - run: cargo test --workspace --lib
       - run: cargo test --package anno --no-default-features --lib
+      - run: cargo test --package anno --lib
 
   # ==========================================================================
   # Evaluation framework tests
@@ -116,10 +116,8 @@ jobs:
         run: cargo build --workspace --features "eval-advanced discourse"
       - name: Run library tests
         run: cargo test --workspace --lib --features "eval-advanced discourse"
-      - name: Run coalesce integration tests
-        run: cargo test --package anno-coalesce --tests
-      - name: Run anno-core integration tests
-        run: cargo test --package anno-core --tests
+      - name: Run integration tests
+        run: cargo test --package anno --tests --features "eval-advanced discourse"
 
   # ==========================================================================
   # Cross-platform tests (core features only)
@@ -139,9 +137,9 @@ jobs:
           cache-all-crates: true
           key: ${{ matrix.os }}
       - name: Build
-        run: cargo build --workspace --features eval
+        run: cargo build --workspace --no-default-features --features eval
       - name: Test
-        run: cargo test --workspace --lib --features eval
+        run: cargo test --workspace --no-default-features --lib --features eval
 
   # ==========================================================================
   # ONNX backend tests (Linux only)
@@ -620,7 +618,7 @@ jobs:
             --config auto \
             --json --output opengrep-results.json \
             --sarif-output opengrep-results.sarif \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ tests/ examples/ || true
+            crates/anno/ || true
       - name: Ensure SARIF output exists
         if: always()
         run: |
@@ -632,13 +630,13 @@ jobs:
           opengrep scan \
             -f .opengrep/rules/rust-security.yaml \
             --json --output opengrep-security-results.json \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ || true
+            crates/anno/ || true
       - name: Run OpenGrep (custom rules - NLP/ML patterns)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-nlp-ml-patterns.yaml \
             --json --output opengrep-nlp-results.json \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ || true
+            crates/anno/ || true
       - name: Run OpenGrep (custom rules - evaluation framework)
         run: |
           opengrep scan \
@@ -650,19 +648,19 @@ jobs:
           opengrep scan \
             -f .opengrep/rules/rust-anno-specific.yaml \
             --json --output opengrep-anno-results.json \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ || true
+            crates/anno/ || true
       - name: Run OpenGrep (custom rules - error handling)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-error-handling.yaml \
             --json --output opengrep-error-results.json \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ || true
+            crates/anno/ || true
       - name: Run OpenGrep (custom rules - memory patterns)
         run: |
           opengrep scan \
             -f .opengrep/rules/rust-memory-patterns.yaml \
             --json --output opengrep-memory-results.json \
-            crates/anno/ crates/anno-core/ crates/anno-coalesce/ || true
+            crates/anno/ || true
       - name: Validate rules
         run: |
           chmod +x scripts/*.sh
@@ -842,30 +840,6 @@ jobs:
           cargo metadata --format-version 1 | jq -r '.workspace_members[]' | sort >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
       
-      - name: Check publish readiness (anno-core)
-        id: anno-core
-        run: |
-          echo "Checking anno-core publish readiness..."
-          if cargo publish --dry-run -p anno-core; then
-            echo "status=ready" >> $GITHUB_OUTPUT
-            echo "[ok] anno-core: Ready to publish" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "status=error" >> $GITHUB_OUTPUT
-            echo "[error] anno-core: Publish validation failed" >> $GITHUB_STEP_SUMMARY
-          fi
-      
-      - name: Check publish readiness (anno-coalesce)
-        id: anno-coalesce
-        run: |
-          echo "Checking anno-coalesce publish readiness..."
-          if cargo publish --dry-run -p anno-coalesce; then
-            echo "status=ready" >> $GITHUB_OUTPUT
-            echo "[ok] anno-coalesce: Ready to publish" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "status=error" >> $GITHUB_OUTPUT
-            echo "[error] anno-coalesce: Publish validation failed" >> $GITHUB_STEP_SUMMARY
-          fi
-      
       - name: Check publish readiness (anno)
         id: anno
         run: |
@@ -882,46 +856,13 @@ jobs:
         run: |
           echo "## Crates.io Status" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          for crate in anno anno-core anno-coalesce; do
+          for crate in anno; do
             if curl -s "https://crates.io/api/v1/crates/$crate" 2>/dev/null | jq -r '.crate | "\(.name): v\(.max_version // "not published")"' 2>/dev/null; then
               echo "- **$crate**: Published" >> $GITHUB_STEP_SUMMARY
             else
               echo "- **$crate**: Not published" >> $GITHUB_STEP_SUMMARY
             fi
           done
-      
-      - name: Validate version requirements (no grep)
-        run: |
-          python3 - <<'PY'
-          import sys, tomllib
-          from pathlib import Path
-          def load(p: str):
-              return tomllib.loads(Path(p).read_text(encoding="utf-8"))
-          def dep_has_version(spec):
-              if isinstance(spec, str):
-                  return True
-              if isinstance(spec, dict) and "version" in spec:
-                  return True
-              return False
-          checks = [
-              ("crates/anno-coalesce/Cargo.toml", ["anno-core"]),
-              ("crates/anno/Cargo.toml", ["anno-core", "anno-coalesce"]),
-          ]
-          issues = 0
-          for path, deps in checks:
-              d = load(path)
-              table = d.get("dependencies", {})
-              for name in deps:
-                  spec = table.get(name)
-                  if spec is None:
-                      continue
-                  if not dep_has_version(spec):
-                      issues += 1
-                      print(f"[error] {path}: dependency '{name}' missing explicit version")
-          if issues:
-              sys.exit(1)
-          print("[ok] version requirements look present")
-          PY
       
       - name: Generate publish status report
         run: |
@@ -931,12 +872,6 @@ jobs:
           Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           
           ## Publish Readiness Status
-          
-          ### anno-core
-          $([ "${{ steps.anno-core.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")
-          
-          ### anno-coalesce
-          $([ "${{ steps.anno-coalesce.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")
           
           ### anno
           $([ "${{ steps.anno.outputs.status }}" == "ready" ] && echo "[ok] **Ready to publish**" || echo "[error] **Publish validation failed**")

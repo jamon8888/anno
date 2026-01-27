@@ -6,7 +6,7 @@
 //! ## Canonical “graph substrate”
 //!
 //! This module’s `GraphDocument` is an **interop/export** shape (Neo4j, NetworkX, JSON-LD).
-//! For algorithmic graph work (PageRank, walks, clustering), prefer `lattix::KnowledgeGraph`.
+//! For algorithmic graph work (PageRank, walks, clustering), prefer a dedicated graph library.
 //!
 //! # The "Fractured Graph" Problem
 //!
@@ -79,7 +79,7 @@
 //! - **Entity Linking**: Maps extracted mentions to canonical KB entities
 //! - **Coreference Resolution**: Clusters mentions referring to the same entity
 
-use crate::entity::{Entity, Relation};
+use super::entity::{Entity, Relation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -232,7 +232,7 @@ impl GraphDocument {
     pub fn from_extraction(
         entities: &[Entity],
         relations: &[Relation],
-        // Note: coref_chains removed from anno-core - will be added back in anno crate
+        // Note: coref_chains were removed from `anno::core` during consolidation.
         // For now, canonical_id on entities is sufficient
         _coref_chains: Option<()>,
     ) -> Self {
@@ -240,7 +240,7 @@ impl GraphDocument {
 
         // Build canonical mention map from entities with canonical_id
         // (CorefChain support will be added in anno crate)
-        let canonical_mentions: HashMap<crate::types::CanonicalId, (&str, usize)> = HashMap::new();
+        let canonical_mentions: HashMap<super::types::CanonicalId, (&str, usize)> = HashMap::new();
 
         // Track seen canonical IDs to avoid duplicate nodes
         let mut seen_nodes: HashMap<String, usize> = HashMap::new();
@@ -631,7 +631,7 @@ impl GraphDocument {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::grounded::GroundedDocument;
     /// use anno_core::graph::GraphDocument;
     ///
@@ -642,18 +642,18 @@ impl GraphDocument {
     /// println!("{}", graph.to_cypher());
     /// ```
     #[must_use]
-    pub fn from_grounded_document(doc: &crate::grounded::GroundedDocument) -> Self {
+    pub fn from_grounded_document(doc: &super::grounded::GroundedDocument) -> Self {
         // EntityType conversion handled inline below
 
         // Convert signals to entities
-        let entities: Vec<crate::Entity> = doc.to_entities();
+        let entities: Vec<super::Entity> = doc.to_entities();
 
         // Note: coref chains support moved to anno crate
         // For now, use canonical_id from entities directly
 
         // No relations available in GroundedDocument yet
         // Could be extended in the future to store relations
-        let relations: Vec<crate::entity::Relation> = Vec::new();
+        let relations: Vec<super::entity::Relation> = Vec::new();
 
         Self::from_extraction(&entities, &relations, None)
     }

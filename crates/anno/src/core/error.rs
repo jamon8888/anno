@@ -1,11 +1,11 @@
-//! Error types for anno-core.
+//! Error types for `anno::core`.
 
 use thiserror::Error;
 
-/// Result type for anno-core operations.
+/// Result type for `anno::core` operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Error type for anno-core operations.
+/// Error type for `anno::core` operations.
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {

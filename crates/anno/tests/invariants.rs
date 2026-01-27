@@ -6,6 +6,9 @@
 //! - Bounded: 0.0 <= sim(a, b) <= 1.0
 //! - Triangle inequality (for distance functions)
 
+use anno::coalesce as anno_coalesce;
+use anno::core as anno_core;
+
 use anno_coalesce::resolver::{embedding_similarity, string_similarity, Resolver};
 use anno_coalesce::similarity::{levenshtein_distance, Similarity};
 use anno_core::{Corpus, GroundedDocument, Track};

@@ -230,7 +230,7 @@ mod tests {
         corpus.add_document(doc3);
 
         // Resolve inter-doc coref
-        use anno_coalesce::Resolver;
+        use crate::coalesce::Resolver;
         let resolver = Resolver::new().with_threshold(0.3).require_type_match(true);
         let _identity_ids = resolver.resolve_inter_doc_coref(&mut corpus, None, None);
 

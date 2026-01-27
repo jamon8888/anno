@@ -652,6 +652,7 @@ impl LoadableDatasetId {
                 | DatasetId::FabNER
                 | DatasetId::WikiNeural
                 | DatasetId::WikiANN
+                | DatasetId::CoNLL2002
                 | DatasetId::MultiCoNER
                 | DatasetId::MultiCoNERv2
                 | DatasetId::PolyglotNER
@@ -1293,8 +1294,10 @@ pub struct DatasetLoader {
     cache_dir: PathBuf,
     /// S3 bucket name for fallback caching (if enabled)
     s3_bucket: Option<String>,
-    /// Cache manifest for tracking downloads (loaded lazily)
-    manifest: std::cell::RefCell<Option<CacheManifest>>,
+    /// Cache manifest for tracking downloads.
+    ///
+    /// This is shared across evaluation threads, so it must be thread-safe.
+    manifest: std::sync::RwLock<CacheManifest>,
 }
 
 impl DatasetLoader {
@@ -1390,57 +1393,24 @@ impl DatasetLoader {
             Error::InvalidInput(format!("Failed to create cache dir {:?}: {}", cache_dir, e))
         })?;
 
+        let manifest = CacheManifest::load(&cache_dir)?;
+
         Ok(Self {
             cache_dir,
             s3_bucket,
-            manifest: std::cell::RefCell::new(None),
+            manifest: std::sync::RwLock::new(manifest),
         })
-    }
-
-    /// Get or load the cache manifest.
-    fn manifest(&self) -> Result<std::cell::Ref<'_, CacheManifest>> {
-        {
-            let manifest = self.manifest.borrow();
-            if manifest.is_some() {
-                // Return existing manifest
-                drop(manifest);
-                return Ok(std::cell::Ref::map(self.manifest.borrow(), |opt| {
-                    opt.as_ref()
-                        .expect("manifest should be Some after check above")
-                }));
-            }
-        }
-
-        // Load manifest from disk
-        let loaded = CacheManifest::load(&self.cache_dir)?;
-        *self.manifest.borrow_mut() = Some(loaded);
-
-        Ok(std::cell::Ref::map(self.manifest.borrow(), |opt| {
-            opt.as_ref()
-                .expect("manifest should be Some after assignment above")
-        }))
     }
 
     /// Update the cache manifest with a new entry and save it.
     #[allow(dead_code)]
     fn update_manifest(&self, entry: CacheManifestEntry) -> Result<()> {
-        // Ensure manifest is loaded
-        let _ = self.manifest()?;
-
-        // Update the manifest
-        {
-            let mut manifest_opt = self.manifest.borrow_mut();
-            if let Some(ref mut manifest) = *manifest_opt {
-                manifest.update_entry(entry);
-            }
-        }
-
-        // Save to disk
-        let manifest = self.manifest.borrow();
-        if let Some(ref m) = *manifest {
-            m.save(&self.cache_dir)?;
-        }
-
+        let mut manifest = self
+            .manifest
+            .write()
+            .map_err(|_| Error::InvalidInput("cache manifest lock poisoned".to_string()))?;
+        manifest.update_entry(entry);
+        manifest.save(&self.cache_dir)?;
         Ok(())
     }
 
@@ -1457,10 +1427,12 @@ impl DatasetLoader {
             Error::InvalidInput(format!("Failed to create cache dir {:?}: {}", cache_dir, e))
         })?;
 
+        let manifest = CacheManifest::load(&cache_dir)?;
+
         Ok(Self {
             cache_dir,
             s3_bucket,
-            manifest: std::cell::RefCell::new(None),
+            manifest: std::sync::RwLock::new(manifest),
         })
     }
 
@@ -1498,7 +1470,7 @@ impl DatasetLoader {
         // using stale/incorrect data.
         //
         // This is intentionally lightweight (no checksum re-hash here).
-        if let Ok(manifest) = self.manifest() {
+        if let Ok(manifest) = self.manifest.read() {
             if let Some(entry) = manifest.get(id.cache_filename()) {
                 if entry.source_url != id.download_url() {
                     return false;
@@ -1965,20 +1937,36 @@ impl DatasetLoader {
         // - page:  https://huggingface.co/datasets/KevinSpaghetti/cadec
         // - API:   https://datasets-server.huggingface.co/rows?dataset=KevinSpaghetti%2Fcadec&...
         if url.contains("huggingface.co/datasets/") {
-            if let Some(hf_ds) = Self::extract_hf_dataset_name(&url) {
-                if let Ok((config, split)) = self.resolve_hf_config_split(&hf_ds) {
-                    let base = Self::hf_rows_url(&hf_ds, &config, &split);
-                    match self.download_hf_dataset_paginated(id, &base) {
-                        Ok(content) => return Ok((content, base)),
-                        Err(e) => {
-                            // Some HF datasets don't support datasets-server row export.
-                            // Fall back to downloading a raw file from the dataset repo.
-                            if let Ok((content, resolved)) =
-                                self.download_hf_dataset_file_from_hub(&hf_ds)
-                            {
-                                return Ok((content, resolved));
+            // Prefer the registry's `hf_id` when available (more reliable than parsing the URL).
+            let hf_ds = id
+                .hf_id()
+                .map(|s| s.to_string())
+                .or_else(|| Self::extract_hf_dataset_name(&url));
+
+            if let Some(hf_ds) = hf_ds {
+                match self.resolve_hf_config_split(&hf_ds) {
+                    Ok((config, split)) => {
+                        let base = Self::hf_rows_url(&hf_ds, &config, &split);
+                        match self.download_hf_dataset_paginated(id, &base) {
+                            Ok(content) => return Ok((content, base)),
+                            Err(e) => {
+                                // Some HF datasets don't support datasets-server row export.
+                                // Fall back to downloading a raw file from the dataset repo.
+                                if let Ok((content, resolved)) =
+                                    self.download_hf_dataset_file_from_hub(&hf_ds)
+                                {
+                                    return Ok((content, resolved));
+                                }
+                                return Err(e);
                             }
-                            return Err(e);
+                        }
+                    }
+                    Err(_e) => {
+                        // If the datasets-server endpoint is unavailable (rate limits, transient issues),
+                        // prefer falling back to the hub-file path rather than downloading HTML.
+                        if let Ok((content, resolved)) = self.download_hf_dataset_file_from_hub(&hf_ds)
+                        {
+                            return Ok((content, resolved));
                         }
                     }
                 }
@@ -2191,7 +2179,16 @@ impl DatasetLoader {
             })?;
 
         // Prefer smaller / eval-friendly splits, but fall back to whatever exists.
-        let preferred = ["dev.jsonl", "validation.jsonl", "test.jsonl", "train.jsonl"];
+        //
+        // Many HF dataset repos store raw source files (CoNLL/TSV/etc.) instead of JSONL,
+        // often under subdirectories. We handle both.
+        let preferred = [
+            // JSONL (common)
+            "dev.jsonl",
+            "validation.jsonl",
+            "test.jsonl",
+            "train.jsonl",
+        ];
         let mut chosen: Option<String> = None;
 
         for want in preferred {
@@ -2206,15 +2203,51 @@ impl DatasetLoader {
         }
 
         if chosen.is_none() {
-            // Otherwise, pick the first root-level .jsonl file.
-            chosen = siblings.iter().find_map(|s| {
-                let f = s.get("rfilename").and_then(|v| v.as_str())?;
-                if f.ends_with(".jsonl") && !f.contains('/') {
-                    Some(f.to_string())
+            // Otherwise, pick a file we can plausibly parse (allow subdirectories).
+            //
+            // Priority:
+            // - contains split hint: test > dev/valid > train
+            // - extension: jsonl > conll/bio/iob/tsv/txt
+            //
+            // This is still best-effort; the parser selection is handled elsewhere via the dataset id.
+            fn split_rank(name: &str) -> u8 {
+                let n = name.to_lowercase();
+                if n.contains("test") {
+                    0
+                } else if n.contains("dev") || n.contains("valid") || n.contains("validation") {
+                    1
+                } else if n.contains("train") {
+                    2
                 } else {
-                    None
+                    3
                 }
+            }
+            fn ext_rank(name: &str) -> u8 {
+                let n = name.to_lowercase();
+                if n.ends_with(".jsonl") {
+                    0
+                } else if n.ends_with(".conll") || n.ends_with(".bio") || n.ends_with(".iob") || n.ends_with(".iob2") {
+                    1
+                } else if n.ends_with(".tsv") {
+                    2
+                } else if n.ends_with(".txt") {
+                    3
+                } else {
+                    9
+                }
+            }
+
+            let mut candidates: Vec<String> = siblings
+                .iter()
+                .filter_map(|s| s.get("rfilename").and_then(|v| v.as_str()).map(|f| f.to_string()))
+                .filter(|f| ext_rank(f) < 9)
+                .collect();
+
+            candidates.sort_by(|a, b| {
+                (split_rank(a), ext_rank(a), a.len()).cmp(&(split_rank(b), ext_rank(b), b.len()))
             });
+
+            chosen = candidates.first().cloned();
         }
 
         let Some(filename) = chosen else {

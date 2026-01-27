@@ -5,6 +5,8 @@
 //! - Similarity function properties (symmetry, reflexivity)
 //! - Conversion correctness
 
+use anno::coalesce as anno_coalesce;
+
 use anno_coalesce::{
     correlation::{greedy_agglomerative, pivot_clustering, EdgeLabel, LabeledGraph},
     hierarchical::{hierarchical_from_similarity, Linkage},

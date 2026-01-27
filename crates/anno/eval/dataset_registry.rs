@@ -493,7 +493,7 @@ macro_rules! define_datasets {
             #[must_use]
             pub fn tasks_typed(&self) -> Vec<$crate::eval::task_mapping::Task> {
                 let mut out = Vec::new();
-                for &task_str in self.tasks() {
+                for task_str in self.tasks_or_inferred() {
                     let Some(task) = $crate::eval::task_mapping::Task::from_code(task_str) else {
                         continue;
                     };
@@ -1415,7 +1415,15 @@ define_datasets! {
     CoNLL2002 {
         name: "CoNLL-2002",
         description: "Spanish and Dutch NER from CoNLL 2002 shared task. Multi-language NER benchmark.",
-        url: "https://huggingface.co/datasets/eriktks/conll2002",
+        // NOTE: Do not point this at a HuggingFace dataset *page* unless the repo exposes
+        // raw data files or datasets-server rows. `eriktks/conll2002` is a dataset-script
+        // repo (e.g. `conll2002.py`) and does not expose raw data via the Hub API, so our
+        // loader cannot fetch it as a plain CoNLL file.
+        //
+        // Use the language-specific, directly-downloadable splits instead:
+        // - `CoNLL2002Spanish`
+        // - `CoNLL2002Dutch`
+        url: "",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "mul",
         domain: "news",
@@ -1426,10 +1434,8 @@ define_datasets! {
         format: "CoNLL",
         annotation_scheme: "BIO",
         size_hint: "Spanish + Dutch news articles",
-        notes: "First multilingual NER shared task; established CoNLL NER format",
-        tasks: ["ner"],
-        hf_id: "eriktks/conll2002",
-        access_status: Public,
+        notes: "Meta entry only; use `CoNLL2002Spanish` / `CoNLL2002Dutch` for loadable data.",
+        tasks: ["blocked"],
         categories: [ner, multilingual],
     },
 
@@ -6817,7 +6823,9 @@ define_datasets! {
     CoNLL2002Dutch {
         name: "CoNLL-2002 Dutch",
         description: "Dutch portion of CoNLL-2002 NER shared task. Newspaper text.",
-        url: "https://www.clips.uantwerpen.be/conll2002/ner/data/ned.testa",
+        // NOTE: The upstream host returns HTTP 403 in this environment (even with a browser UA),
+        // so this is currently not auto-downloadable for our evaluator.
+        url: "",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "nl",
         domain: "news",
@@ -6827,14 +6835,17 @@ define_datasets! {
         year: 2002,
         format: "CoNLL",
         annotation_scheme: "BIO",
-        notes: "Dutch newspaper NER; includes gazetteers",
+        notes: "Dutch newspaper NER; upstream download is currently blocked (HTTP 403).",
+        tasks: ["blocked"],
         categories: [ner, multilingual],
     },
 
     CoNLL2002Spanish {
         name: "CoNLL-2002 Spanish",
         description: "Spanish portion of CoNLL-2002 NER shared task. News articles.",
-        url: "https://www.clips.uantwerpen.be/conll2002/ner/data/esp.testa",
+        // NOTE: The upstream host returns HTTP 403 in this environment (even with a browser UA),
+        // so this is currently not auto-downloadable for our evaluator.
+        url: "",
         entity_types: ["PER", "LOC", "ORG", "MISC"],
         language: "es",
         domain: "news",
@@ -6844,7 +6855,8 @@ define_datasets! {
         year: 2002,
         format: "CoNLL",
         annotation_scheme: "BIO",
-        notes: "Spanish EFE news agency articles",
+        notes: "Spanish EFE news agency articles; upstream download is currently blocked (HTTP 403).",
+        tasks: ["blocked"],
         categories: [ner, multilingual],
     },
 

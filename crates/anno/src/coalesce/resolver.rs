@@ -43,8 +43,8 @@
 //! ## Example
 //!
 //! ```
-//! use anno_coalesce::Resolver;
-//! use anno_core::Corpus;
+//! use anno::coalesce::Resolver;
+//! use anno::core::Corpus;
 //!
 //! let resolver = Resolver::new()
 //!     .with_threshold(0.7)
@@ -56,10 +56,10 @@
 //! let identities = resolver.resolve_inter_doc_coref(&mut corpus, None, None);
 //! ```
 
-use anno_core::{Corpus, Identity, IdentityId, IdentitySource, TrackId, TrackRef};
+use crate::core::{Corpus, Identity, IdentityId, IdentitySource, TrackId, TrackRef};
 use std::collections::HashMap;
 
-use crate::alignment::AdaptiveResolutionConfig;
+use super::alignment::AdaptiveResolutionConfig;
 
 /// Coalescer for inter-document entity resolution.
 #[derive(Debug, Clone)]
@@ -102,7 +102,7 @@ impl Resolver {
     /// # Example
     ///
     /// ```rust
-    /// use anno_coalesce::{Resolver, AdaptiveResolutionConfig};
+    /// use anno::coalesce::{AdaptiveResolutionConfig, Resolver};
     ///
     /// let resolver = Resolver::new()
     ///     .with_threshold(0.7)
@@ -318,8 +318,8 @@ impl Default for Resolver {
 ///
 /// # Example
 ///
-/// ```
-/// use anno_coalesce::string_similarity;
+/// ```rust
+/// use anno::coalesce::string_similarity;
 ///
 /// let sim = string_similarity("Marie Curie", "Marie Curie");
 /// assert_eq!(sim, 1.0);
@@ -370,8 +370,8 @@ pub fn string_similarity(a: &str, b: &str) -> f32 {
 ///
 /// # Example
 ///
-/// ```
-/// use anno_coalesce::embedding_similarity;
+/// ```rust
+/// use anno::coalesce::embedding_similarity;
 ///
 /// let emb1 = vec![1.0, 0.0, 0.0];
 /// let emb2 = vec![1.0, 0.0, 0.0];

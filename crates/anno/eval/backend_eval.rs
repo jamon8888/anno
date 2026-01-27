@@ -704,7 +704,6 @@ fn entity_type_string(entity_type: &EntityType) -> String {
         EntityType::Ordinal => "Ordinal".to_string(),
         EntityType::Custom { name, .. } => format!("Custom({})", name),
         EntityType::Other(s) => format!("Other({})", s),
-        _ => "Unknown".to_string(),
     }
 }
 

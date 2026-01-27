@@ -71,7 +71,7 @@
 //! // signals: individual mentions, tracks: coreference chains
 //! ```
 //!
-//! Core types (Entity, GroundedDocument, Signal, Track, etc.) are in `anno-core` and re-exported here.
+//! Core types (Entity, GroundedDocument, Signal, Track, etc.) live in `anno::core` and are re-exported here.
 //!
 //! ## Feature Flags
 //!
@@ -81,9 +81,9 @@
 //!
 //! | Feature | Dependencies | Enables |
 //! |---------|--------------|---------|
-//! | `eval` | `dirs`, `glob` | Dataset loading, basic metrics, harness |
+//! | `eval` | `dirs`, `rusqlite`, `ureq`, `toml` | Dataset loading, basic metrics, harness |
 //! | `eval-bias` | `eval` | Demographic/gender bias evaluation |
-//! | `eval-advanced` | `eval`, `rand`, `ureq`, `sha2` | Network downloads, advanced metrics |
+//! | `eval-advanced` | `eval`, `glob`, `sha2` | Network downloads, advanced metrics |
 //! | `eval-full` | All above | Everything for comprehensive evaluation |
 //! | `eval-parallel` | `eval`, `rayon` | Parallel evaluation (multi-threaded) |
 //!
@@ -116,7 +116,7 @@
 //! | Feature | What it includes |
 //! |---------|------------------|
 //! | `full` | `eval-full` + `onnx` + `candle` + `discourse` + `graph` |
-//! | `default` | `cli` + `onnx` (CLI + ONNX backends enabled by default) |
+//! | `default` | `onnx` (ONNX backends enabled by default) |
 
 #![warn(missing_docs)]
 
@@ -124,7 +124,7 @@
 // matching integration-test style imports.
 extern crate self as anno;
 
-// Module declarations (core types are in anno-core, not declared here)
+// Module declarations (many core types live under `core/`)
 #[path = "../backends/mod.rs"]
 pub mod backends;
 /// Edit distance algorithms.
@@ -232,31 +232,64 @@ pub mod discourse;
 // Re-export error types
 pub use error::{Error, Result};
 
-// Re-export anno-core types for backward compatibility
-pub use anno_core::{
-    Corpus, DiscontinuousSpan, Entity, EntityBuilder, EntityCategory, EntityType, EntityViewport,
-    ExtractionMethod, GraphDocument, GraphEdge, GraphExportFormat, GraphNode, GroundedDocument,
-    HashMapLexicon, HierarchicalConfidence, Identity, IdentityId, IdentitySource, Lexicon,
-    Location, Modality, Provenance, Quantifier, RaggedBatch, Relation, Signal, SignalId, SignalRef,
-    Span, SpanCandidate, Track, TrackId, TrackRef, TrackStats, TypeMapper, ValidationIssue,
+// Internal-only crate aliases.
+//
+// Many internal modules historically referred to `anno-core` / `anno-coalesce` as if they were
+// separate crates (`use anno_core::...`). In a single-package layout, the simplest way to keep
+// those paths working without touching every file is to alias this crate to those names.
+//
+// Note: this does *not* make `anno_core` / `anno_coalesce` available as separate crates to
+// downstream users; it only affects resolution inside this crate.
+extern crate self as anno_core;
+
+// =============================================================================
+// Single-package layout: internal modules
+// =============================================================================
+
+/// Core shared types (formerly a separate crate in this repo).
+pub mod core;
+
+/// Cross-document entity resolution.
+pub mod coalesce;
+
+// Re-export core types at the crate root (the public API surface).
+pub use crate::core::{
+    generate_span_candidates, CorefChain, CorefDocument, CoreferenceResolver, Corpus,
+    DiscontinuousSpan, Entity, EntityBuilder, EntityCategory, EntityType, EntityViewport,
+    ExtractionMethod, Gender, GraphDocument, GraphEdge, GraphExportFormat, GraphNode,
+    GroundedDocument, HashMapLexicon, HierarchicalConfidence, Identity, IdentityId, IdentitySource,
+    Lexicon, Location, Mention, MentionType, Modality, Number, Person, PhiFeatures, Provenance,
+    Quantifier, RaggedBatch, Relation, Signal, SignalId, SignalRef, Span, SpanCandidate, Track,
+    TrackId, TrackRef, TrackStats, TypeLabel, TypeMapper, ValidationIssue,
 };
 
-/// Re-export graph module for backward compatibility (anno::graph::*)
-///
-/// This module re-exports all graph-related types from `anno-core`:
-/// - `GraphNode`, `GraphEdge`, `GraphDocument`
-/// - Graph export formats and utilities
+/// Back-compat module path for code that expects `anno_core::coref::*` (internal use).
+pub mod coref {
+    pub use crate::core::coref::*;
+}
+
+/// Back-compat module path for code that expects `anno_core::entity::*` (internal use).
+pub mod entity {
+    pub use crate::core::entity::*;
+}
+
+/// Back-compat module path for code that expects `anno_core::dataset::*` (internal use).
+pub mod dataset {
+    pub use crate::core::dataset::*;
+}
+
+/// Re-export graph module for backward compatibility (`anno::graph::*`).
 pub mod graph {
-    pub use anno_core::graph::*;
+    pub use crate::core::graph::*;
 }
 
 /// Re-export grounded module for backward compatibility (anno::grounded::*)
 ///
-/// This module re-exports all grounded document types from `anno-core`:
+/// This module re-exports all grounded document types from `anno::core`:
 /// - `GroundedDocument`, `Signal`, `Track`, `Identity`
 /// - Coreference resolution types and utilities
 pub mod grounded {
-    pub use anno_core::grounded::*;
+    pub use crate::core::grounded::*;
 }
 
 // Re-export commonly used types
@@ -432,7 +465,7 @@ pub trait Model: sealed::Sealed + Send + Sync {
 /// # Example
 ///
 /// ```rust
-/// use anno::{AnyModel, Entity, EntityType, Result};
+/// use anno::{AnyModel, Entity, EntityType, Model, Result};
 ///
 /// // Define extraction logic as a closure or function
 /// let my_extractor = |text: &str, _lang: Option<&str>| -> Result<Vec<Entity>> {
@@ -742,8 +775,7 @@ pub use backends::{
 
 // Mention-ranking coreference (Bourgois & Poibeau 2025)
 pub use backends::mention_ranking::{
-    ClusteringStrategy, MentionCluster, MentionRankingConfig, MentionRankingCoref, Number,
-    RankedMention,
+    ClusteringStrategy, MentionCluster, MentionRankingConfig, MentionRankingCoref, RankedMention,
 };
 
 // Re-export MockModel for testing
@@ -978,5 +1010,5 @@ mod regression_f1;
 
 #[cfg(test)]
 #[path = "../../../archive/legacy-tests/randomized_matrix_ci.rs"]
-#[cfg(feature = "eval-advanced")]
+#[cfg(all(feature = "eval-advanced", feature = "cli"))]
 mod randomized_matrix_ci;

@@ -6,6 +6,9 @@
 //! - Edge cases (empty, single element, all identical)
 //! - Unicode and adversarial inputs
 
+use anno::coalesce as anno_coalesce;
+use anno::core as anno_core;
+
 use anno_coalesce::correlation::{EdgeLabel, LabeledGraph};
 use anno_coalesce::hierarchical::{hierarchical_from_similarity, Linkage};
 use anno_coalesce::resolver::{string_similarity, Resolver};

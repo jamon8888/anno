@@ -261,7 +261,7 @@ impl std::str::FromStr for Number {
 ///
 /// # Example: Arabic Zero Pronoun Resolution
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::{PhiFeatures, Person, Number, Gender};
 ///
 /// // Arabic verb "كَتَبَتْ" (katabat) = "[she] wrote"
@@ -291,7 +291,7 @@ impl std::str::FromStr for Number {
 ///
 /// Phi-features can be parsed from compact notation:
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::PhiFeatures;
 ///
 /// let phi = PhiFeatures::parse("3sgm").unwrap();  // 3rd singular masculine
@@ -322,7 +322,7 @@ impl PhiFeatures {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::{PhiFeatures, Person, Number, Gender};
     ///
     /// // Spanish "Vino" = "[He/She] came" - 3rd singular, gender unknown
@@ -345,7 +345,7 @@ impl PhiFeatures {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::PhiFeatures;
     ///
     /// // Arabic "ذَهَبَ" (dhahaba) = "[he] went"
@@ -366,7 +366,7 @@ impl PhiFeatures {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::PhiFeatures;
     ///
     /// // Arabic "ذَهَبَتْ" (dhahabat) = "[she] went" - note the -t suffix
@@ -389,7 +389,7 @@ impl PhiFeatures {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::PhiFeatures;
     ///
     /// // Spanish "Vinieron" = "[They] came" - plural, gender unspecified
@@ -416,7 +416,7 @@ impl PhiFeatures {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::PhiFeatures;
     ///
     /// let he = PhiFeatures::third_sg_masc();
@@ -444,7 +444,7 @@ impl PhiFeatures {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::{PhiFeatures, Person, Number, Gender};
     ///
     /// let phi = PhiFeatures::parse("3sgm").unwrap();

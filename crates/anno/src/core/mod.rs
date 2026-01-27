@@ -1,16 +1,16 @@
-//! # anno-core
+//! # anno::core
 //!
 //! Core types for the Anno NLP toolkit: Named Entity Recognition, Coreference
 //! Resolution, and Relation Extraction.
 //!
-//! ## Why This Crate Exists
+//! ## Why This Module Exists
 //!
 //! NLP pipelines involve many components (tokenizers, NER models, coreference
 //! resolvers, entity linkers) that need to share data. Without a common type
 //! system, each component defines its own `Entity`, `Span`, `Document` types,
 //! requiring tedious conversion code and risking subtle bugs.
 //!
-//! `anno-core` solves this by providing:
+//! `anno::core` solves this by providing:
 //!
 //! 1. **Canonical types** that all components agree on
 //! 2. **Rich metadata** beyond basic spans (confidence, provenance, relations)
@@ -22,7 +22,7 @@
 //! ### Entities and Spans
 //!
 //! ```rust,ignore
-//! use anno_core::{Entity, EntityType, Span};
+//! use anno::core::{Entity, EntityType, Span};
 //!
 //! let entity = Entity::new("Barack Obama", EntityType::Person)
 //!     .with_span(Span::new(0, 12))
@@ -64,11 +64,11 @@
 //! | [`coref`] | `Mention`, `CorefChain`, `CorefDocument` |
 //! | [`graph`] | Export to Neo4j, GraphML, JSON-LD |
 //! | [`dataset`] | `DatasetSpec`, `CustomDataset`, `DatasetRegistry` |
-//! | [`calibration`] | Confidence score calibration |
-//! | [`historical`] | Ancient language provenance (BCE dates, epigraphy) |
-//! | [`provenance`] | Document origin tracking |
+//! | [`calibration`](crate::core::calibration) | Confidence score calibration |
+//! | [`historical`](crate::core::historical) | Ancient language provenance (BCE dates, epigraphy) |
+//! | [`provenance`](crate::core::provenance) | Document origin tracking |
 //! | [`types`] | `Gender`, `MentionType`, `PhiFeatures`, `TypeLabel` |
-//! | [`provisional`] | Experimental types (`BoxEmbedding`) |
+//! | [`provisional`](crate::core::provisional) | Experimental types (`BoxEmbedding`) |
 //!
 //! ## Design Philosophy
 //!

@@ -52,7 +52,7 @@
 //! # Example
 //!
 //! ```rust
-//! use anno_coalesce::similarity::{Similarity, Script, multilingual_similarity};
+//! use anno::coalesce::similarity::{multilingual_similarity, Script, Similarity};
 //!
 //! let sim = Similarity::new();
 //!
@@ -75,7 +75,7 @@
 use serde::{Deserialize, Serialize};
 
 // Re-export Script from separate module to avoid compilation issues
-pub use crate::script::Script;
+pub use super::script::Script;
 
 // =============================================================================
 // Preprocessing
@@ -376,7 +376,7 @@ pub fn jaro_winkler_similarity(a: &str, b: &str) -> f32 {
 /// # Example
 ///
 /// ```rust
-/// use anno_coalesce::similarity::multilingual_similarity;
+/// use anno::coalesce::similarity::multilingual_similarity;
 ///
 /// // English
 /// let sim = multilingual_similarity("Marie Curie", "Curie");
@@ -694,7 +694,7 @@ pub fn cross_lingual_similarity(a: &str, b: &str) -> f32 {
 /// # Examples
 ///
 /// ```rust
-/// use anno_coalesce::similarity::is_acronym_match;
+/// use anno::coalesce::similarity::is_acronym_match;
 ///
 /// assert!(is_acronym_match("WHO", "World Health Organization"));
 /// assert!(is_acronym_match("MRSA", "Methicillin-resistant Staphylococcus aureus"));
@@ -769,7 +769,7 @@ pub fn is_acronym_match(a: &str, b: &str) -> bool {
 /// # Example
 ///
 /// ```rust,ignore
-/// use anno_coalesce::similarity::{SynonymSource, SynonymMatch};
+/// use anno::coalesce::similarity::{SynonymMatch, SynonymSource};
 ///
 /// struct UmlsSynonyms { /* UMLS connection */ }
 ///

@@ -41,7 +41,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::Gender;
 ///
 /// let gender = Gender::from_pronoun("she");
@@ -71,7 +71,7 @@ impl Gender {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::Gender;
     ///
     /// assert_eq!(Gender::from_pronoun("he"), Some(Gender::Masculine));

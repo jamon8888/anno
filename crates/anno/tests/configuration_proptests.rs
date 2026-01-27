@@ -8,6 +8,8 @@
 //!
 //! Based on Kehler (1997) and Curry-Howard analysis in docs/notes/research/theory/TYPE_THEORY_AND_NER.md.
 
+use anno::coalesce as anno_coalesce;
+
 use anno_coalesce::configuration::{bell_number, ConfigurationBuilder, CorefConfiguration};
 use proptest::prelude::*;
 

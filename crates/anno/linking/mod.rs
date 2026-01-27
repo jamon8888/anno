@@ -38,7 +38,7 @@
 //!
 //! ```rust
 //! use anno::linking::{EntityLinker, Mention};
-//! use anno_core::EntityType;
+//! use anno::EntityType;
 //!
 //! // Create linker with default dictionary
 //! let linker = EntityLinker::builder()
@@ -73,7 +73,7 @@
 //!
 //! # Integration with Coalesce
 //!
-//! Entity linking feeds into cross-document coreference via `anno-coalesce`:
+//! Entity linking feeds into cross-document coreference via `anno::coalesce`:
 //!
 //! ```text
 //! Linked Entities ──► Coalesce ──► Identities (with KB IDs)

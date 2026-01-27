@@ -3,6 +3,8 @@
 //! These tests verify fundamental invariants of the Signal → Track → Identity hierarchy
 //! and the Location type's geometric operations.
 
+use anno::core as anno_core;
+
 use anno_core::grounded::{
     Identity, IdentitySource, Location, Modality, Signal, SignalRef, Track, TrackRef,
 };

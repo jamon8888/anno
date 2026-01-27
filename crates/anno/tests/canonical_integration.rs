@@ -3,6 +3,8 @@
 //! Tests the CanonicalSelector trait implementations with realistic
 //! coreference scenarios.
 
+use anno::coalesce as anno_coalesce;
+
 use anno_coalesce::canonical::{
     detect_mention_type, CanonicalSelector, FirstMentionSelector, LongestMentionSelector,
     MentionFeatures, MentionType, NamedFirstSelector, SalienceBasedSelector,

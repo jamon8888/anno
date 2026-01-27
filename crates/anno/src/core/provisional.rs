@@ -153,7 +153,7 @@ impl BoxEmbedding {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProvisionalIdentity {
     /// The base identity.
-    pub base: crate::grounded::Identity,
+    pub base: super::grounded::Identity,
     /// Optional box embedding for geometric coreference.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub box_embedding: Option<BoxEmbedding>,
@@ -162,7 +162,7 @@ pub struct ProvisionalIdentity {
 impl ProvisionalIdentity {
     /// Create a provisional identity from a base identity.
     #[must_use]
-    pub fn from_identity(base: crate::grounded::Identity) -> Self {
+    pub fn from_identity(base: super::grounded::Identity) -> Self {
         Self {
             base,
             box_embedding: None,

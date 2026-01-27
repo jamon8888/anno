@@ -20,10 +20,11 @@
 //! # Usage
 //!
 //! ```rust
-//! use anno::tokenizer::{Tokenizer, WhitespaceTokenizer, Language};
+//! use anno::lang::Language;
+//! use anno::tokenizer::{Tokenizer, WhitespaceTokenizer};
 //!
 //! let tokenizer = WhitespaceTokenizer::new();
-//! let tokens = tokenizer.tokenize("Hello world", Some(Language::English));
+//! let tokens = tokenizer.tokenize("Hello world", Some(&Language::English));
 //! assert_eq!(tokens.len(), 2);
 //! ```
 //!

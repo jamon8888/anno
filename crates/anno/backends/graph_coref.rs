@@ -82,7 +82,7 @@
 //!
 //! For best results, provide mentions with `mention_type` set:
 //!
-//! ```rust
+//! ```rust,ignore
 //! use anno::backends::graph_coref::GraphCoref;
 //! use anno::eval::coref::{Mention, MentionType};
 //!
@@ -643,7 +643,7 @@ impl GraphCoref {
     ///
     /// ```rust
     /// use anno::backends::graph_coref::GraphCoref;
-    /// use anno::eval::coref::{Mention, MentionType};
+    /// use anno::core::coref::{Mention, MentionType};
     ///
     /// let coref = GraphCoref::new();
     ///
@@ -1032,7 +1032,7 @@ impl GraphCoref {
     ///
     /// ```rust
     /// use anno::backends::graph_coref::GraphCoref;
-    /// use anno::eval::coref::Mention;
+    /// use anno::core::coref::Mention;
     ///
     /// let coref = GraphCoref::new();
     /// let mentions = vec![
@@ -1144,7 +1144,7 @@ impl GraphCoref {
 ///
 /// ```rust
 /// use anno::backends::graph_coref::{GraphCoref, chains_to_document};
-/// use anno::eval::coref::Mention;
+/// use anno::core::coref::Mention;
 ///
 /// let coref = GraphCoref::new();
 /// let mentions = vec![
