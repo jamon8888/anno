@@ -9,8 +9,8 @@ echo ""
 
 ISSUES=0
 
-ENTITY_RS="crates/anno-core/src/entity.rs"
-GROUNDED_RS="crates/anno-core/src/grounded.rs"
+ENTITY_RS="crates/anno/src/core/entity.rs"
+GROUNDED_RS="crates/anno/src/core/grounded.rs"
 CONFIDENCE_RS="crates/anno/types/confidence.rs"
 EVAL_TASK_RS="crates/anno/eval/task_evaluator.rs"
 EVAL_DIR="crates/anno/eval/"
@@ -35,7 +35,7 @@ fi
 echo ""
 echo "## Confidence Score Validation"
 echo ""
-if rg -q "Confidence::new" --type rust 2>/dev/null; then
+if rg -q "Confidence::new" --type rust crates/anno/ 2>/dev/null; then
     if ! rg -q "0\\.0\\..*=1\\.0|\\(0\\.0\\.\\.=1\\.0\\)|\\.contains\\(&value\\)" --type rust "$CONFIDENCE_RS" 2>/dev/null; then
         echo "WARNING:  Potential missing confidence score range validation"
         ((ISSUES++))
@@ -66,7 +66,9 @@ echo ""
 echo "## Model Download Error Handling"
 echo ""
 if rg -q "\\.get\\(.*\\)\\.map_err" --type rust "$BACKENDS_DIR" 2>/dev/null; then
-    AUTH_HANDLING=$(rg -c "401|Unauthorized|authentication" --type rust "$BACKENDS_DIR" 2>/dev/null || echo "0")
+    AUTH_HANDLING=$(
+        (rg -n "401|Unauthorized|authentication" --type rust "$BACKENDS_DIR" 2>/dev/null || true) | wc -l | tr -d ' '
+    )
     if [ "$AUTH_HANDLING" -lt 2 ]; then
         echo "WARNING:  Limited authentication error handling in model downloads"
         echo "   Consider adding 401/Unauthorized checks with helpful hints"

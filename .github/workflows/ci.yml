@@ -541,7 +541,7 @@ jobs:
       - name: Install cargo-machete
         run: cargo install cargo-machete
       - name: Check unused dependencies
-        run: cargo machete
+        run: ./scripts/static-analysis-common.sh machete
 
   # Unsafe code statistics (creative: generate report)
   safety-report:

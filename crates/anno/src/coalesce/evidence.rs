@@ -857,3 +857,81 @@ mod tests {
         assert_eq!(violations[0].c, 2);
     }
 }
+
+// =============================================================================
+// Property Tests (probability sanity)
+// =============================================================================
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn arb_evidence_source() -> impl Strategy<Value = EvidenceSource> {
+        prop_oneof![
+            // Scores are expected in [0,1] for these sources.
+            (0.0f32..=1.0f32).prop_map(|score| EvidenceSource::StringSimilarity {
+                method: "trigram".to_string(),
+                score,
+            }),
+            (0.0f32..=1.0f32).prop_map(|score| EvidenceSource::ContextualCoref {
+                model: "coref".to_string(),
+                score,
+            }),
+            (0.0f32..=1.0f32).prop_map(|score| EvidenceSource::Embedding {
+                model: "embed".to_string(),
+                score,
+            }),
+            any::<bool>().prop_map(|matched| EvidenceSource::TypeMatch {
+                matched,
+                type_a: "PER".to_string(),
+                type_b: "PERSON".to_string(),
+            }),
+            any::<bool>().prop_map(|linked| EvidenceSource::KnowledgeBase {
+                kb_id: if linked {
+                    Some("Q42".to_string())
+                } else {
+                    None
+                },
+                linked,
+            }),
+            (0.0f32..=1.0f32).prop_map(|confidence| EvidenceSource::Synonym {
+                source: "custom".to_string(),
+                confidence,
+                canonical_id: None,
+            }),
+        ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(120))]
+
+        /// Mediation outputs should stay in [0, 1] for all strategies (and be finite).
+        #[test]
+        fn mediate_is_probability_like(
+            sources in prop::collection::vec(arb_evidence_source(), 0..12),
+            prior in 1e-6f32..=(1.0 - 1e-6f32),
+        ) {
+            let mut ev = PairEvidence::new();
+            for s in sources {
+                ev.add_source(s);
+            }
+
+            let strategies = [
+                MediationStrategy::Average,
+                MediationStrategy::Voting,
+                MediationStrategy::default(),
+                MediationStrategy::Bayesian { prior },
+                MediationStrategy::Max,
+                MediationStrategy::Min,
+                MediationStrategy::Product,
+            ];
+
+            for strat in &strategies {
+                let out = ev.mediate(strat);
+                prop_assert!(out.is_finite());
+                prop_assert!((0.0..=1.0).contains(&out), "out of bounds: {}", out);
+            }
+        }
+    }
+}

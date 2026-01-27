@@ -437,7 +437,7 @@ deny:
 # Run cargo-machete (fast unused dependencies)
 machete:
     @which cargo-machete > /dev/null || (echo "Install: cargo install cargo-machete" && exit 1)
-    cargo machete
+    ./scripts/static-analysis-common.sh machete
 
 # Run cargo-geiger (unsafe code statistics)
 geiger:
@@ -447,19 +447,19 @@ geiger:
 # Run ast-grep checks (optional, local)
 ast-grep-unicode:
     @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
-    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --report-style short crates/anno/ crates/anno-core/src/ crates/anno-coalesce/src/
+    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --report-style short crates/anno/
 
 ast-grep-unicode-all:
     @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
-    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --report-style short crates/anno/ crates/anno-core/ crates/anno-coalesce/ tests/ examples/
+    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --report-style short crates/anno/ tests/ examples/
 
 ast-grep-metal:
     @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
-    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --report-style short crates/anno/ crates/anno-core/src/ crates/anno-coalesce/src/
+    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --report-style short crates/anno/
 
 ast-grep-metal-all:
     @which ast-grep > /dev/null || (echo "Install: https://ast-grep.github.io/ (or: brew install ast-grep)" && exit 1)
-    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --report-style short crates/anno/ crates/anno-core/ crates/anno-coalesce/ tests/ examples/
+    ast-grep scan --rule .opengrep/rules/rust-candle-metal.yaml --report-style short crates/anno/ tests/ examples/
 
 # Generate unsafe code safety report (creative use of cargo-geiger)
 safety-report:
@@ -474,7 +474,7 @@ safety-report:
 # Run OpenGrep static analysis
 opengrep:
     @which opengrep > /dev/null || (echo "Install: curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash" && exit 1)
-    opengrep scan --config auto --json --output opengrep-results.json crates/anno/ crates/anno-core/ crates/anno-coalesce/ tests/ examples/
+    opengrep scan --config auto --json --output opengrep-results.json crates/anno/ tests/ examples/
     @echo "Results saved to opengrep-results.json"
     @if command -v jq > /dev/null; then \
         echo "Found $$(jq -r '.results | length' opengrep-results.json) issues"; \
@@ -485,12 +485,12 @@ opengrep:
 # Run OpenGrep with custom rules
 opengrep-custom:
     @which opengrep > /dev/null || (echo "Install: curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash" && exit 1)
-    opengrep scan -f .opengrep/rules/rust-security.yaml --json --output opengrep-security-results.json crates/anno/ crates/anno-core/ crates/anno-coalesce/
-    opengrep scan -f .opengrep/rules/rust-nlp-ml-patterns.yaml --json --output opengrep-nlp-results.json crates/anno/ crates/anno-core/ crates/anno-coalesce/
+    opengrep scan -f .opengrep/rules/rust-security.yaml --json --output opengrep-security-results.json crates/anno/
+    opengrep scan -f .opengrep/rules/rust-nlp-ml-patterns.yaml --json --output opengrep-nlp-results.json crates/anno/
     opengrep scan -f .opengrep/rules/rust-evaluation-framework.yaml --json --output opengrep-eval-results.json crates/anno/eval/
-    opengrep scan -f .opengrep/rules/rust-anno-specific.yaml --json --output opengrep-anno-results.json crates/anno/ crates/anno-core/ crates/anno-coalesce/
-    opengrep scan -f .opengrep/rules/rust-error-handling.yaml --json --output opengrep-error-results.json crates/anno/ crates/anno-core/ crates/anno-coalesce/
-    opengrep scan -f .opengrep/rules/rust-memory-patterns.yaml --json --output opengrep-memory-results.json crates/anno/ crates/anno-core/ crates/anno-coalesce/
+    opengrep scan -f .opengrep/rules/rust-anno-specific.yaml --json --output opengrep-anno-results.json crates/anno/
+    opengrep scan -f .opengrep/rules/rust-error-handling.yaml --json --output opengrep-error-results.json crates/anno/
+    opengrep scan -f .opengrep/rules/rust-memory-patterns.yaml --json --output opengrep-memory-results.json crates/anno/
     @echo "Custom rules results saved to opengrep-*-results.json"
     @if command -v jq > /dev/null; then \
         echo "Counts:"; \

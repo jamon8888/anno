@@ -35,6 +35,7 @@ bitflags = "2"
 # use `.cargo/config.toml` to patch it to a path dependency.
 textprep = "0.1"
 sketchir = "0.1.2"
+clump = "0.1.0"
 
 ## Clustering / stratification
 #

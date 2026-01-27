@@ -111,14 +111,14 @@ if command -v cargo-geiger &> /dev/null; then
 fi
 
 if command -v opengrep &> /dev/null; then
-    opengrep scan --config auto --json crates/anno/ crates/anno-core/ crates/anno-coalesce/ 2>/dev/null | jq -r '.results | length' > .opengrep-tmp.txt 2>/dev/null || echo "0" > .opengrep-tmp.txt
+    opengrep scan --config auto --json crates/anno/ 2>/dev/null | jq -r '.results | length' > .opengrep-tmp.txt 2>/dev/null || echo "0" > .opengrep-tmp.txt
     FINDINGS_COUNT=$(cat .opengrep-tmp.txt)
     ((TOOLS_INSTALLED++))
     rm -f .opengrep-tmp.txt
 fi
 
 if command -v ast-grep &> /dev/null && command -v jq &> /dev/null; then
-    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --json=compact crates/anno/ crates/anno-core/src/ crates/anno-coalesce/src/ > .ast-grep-unicode-tmp.json 2>/dev/null || echo "[]" > .ast-grep-unicode-tmp.json
+    ast-grep scan --rule .opengrep/rules/rust-unicode-offsets.yaml --json=compact crates/anno/ > .ast-grep-unicode-tmp.json 2>/dev/null || echo "[]" > .ast-grep-unicode-tmp.json
     UNICODE_FINDINGS=$(jq -r 'length' .ast-grep-unicode-tmp.json 2>/dev/null || echo "0")
     rm -f .ast-grep-unicode-tmp.json
 
@@ -128,7 +128,7 @@ if command -v ast-grep &> /dev/null && command -v jq &> /dev/null; then
 fi
 
 if command -v cargo-machete &> /dev/null; then
-    cargo machete > .machete-output.txt 2>&1 || true
+    ./scripts/static-analysis-common.sh machete > .machete-output.txt 2>&1 || true
     if command -v rg &> /dev/null; then
         UNUSED_DEPS=$(rg -c "unused" .machete-output.txt 2>/dev/null || echo "0")
     else
@@ -196,7 +196,7 @@ just docs-audit
 EOF
 
 # Check each tool
-for tool in "cargo-deny:cargo deny check" "cargo-machete:cargo machete" "cargo-geiger:cargo geiger" "opengrep:opengrep scan" "cargo-nextest:cargo nextest" "cargo-llvm-cov:cargo llvm-cov"; do
+for tool in "cargo-deny:cargo deny check" "cargo-machete:./scripts/static-analysis-common.sh machete" "cargo-geiger:cargo geiger" "opengrep:opengrep scan" "cargo-nextest:cargo nextest" "cargo-llvm-cov:cargo llvm-cov"; do
     tool_name=$(echo $tool | cut -d: -f1)
     tool_cmd=$(echo $tool | cut -d: -f2)
     

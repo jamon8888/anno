@@ -12,6 +12,7 @@ keywords = ["ner", "nlp", "information-extraction", "coreference", "rust"]
 [dependencies]
 textprep = { workspace = true }
 sketchir = { workspace = true }
+clump = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -21,6 +22,7 @@ log = { workspace = true }
 once_cell = { workspace = true }
 bitflags = { workspace = true }
 schemars = { version = "0.8", features = ["derive"], optional = true }
+gramdex = { path = "../../../gramdex", optional = true }
 
 # CLI
 clap = { workspace = true, optional = true }
@@ -85,8 +87,9 @@ cli = [
     "dep:tracing-subscriber",
 ]
 graph = []
+gramdex = ["dep:gramdex"]
 schema = ["dep:schemars"]
-eval = ["dep:toml", "dep:ureq", "dep:rusqlite"]
+eval = ["dep:toml", "dep:ureq", "dep:rusqlite", "dep:sha2"]
 eval-bias = ["eval"]
 eval-advanced = ["eval", "dep:glob", "dep:sha2"]
 eval-parallel = ["eval", "dep:rayon"]
@@ -111,6 +114,11 @@ production = ["async-inference", "session-pool", "fast-lock", "instrument"]
 # Convenience umbrella.
 full = ["eval-full", "onnx", "candle", "discourse", "graph"]
 
+# Workspace-local convenience: enable local `gramdex` integration alongside `full`.
+# This is intentionally separate from `full` so external clones aren't forced to have
+# `../gramdex` available.
+full-workspace = ["full", "gramdex"]
+
 # Stub features referenced behind cfg gates.
 rank-eval = ["eval"]
 unicode-normalization = []
@@ -119,40 +127,3 @@ unicode-normalization = []
 name = "anno"
 path = "bin/anno.rs"
 required-features = ["cli"]
-
-[package.metadata.cargo-machete]
-# `cargo-machete` currently does not follow our `#[path = "../..."]` module layout
-# (most of the crate lives outside `src/`), so it produces false positives.
-# Keep this list in sync with CI’s `cargo machete` output.
-ignored = [
-    "bitflags",
-    "candle-core",
-    "candle-nn",
-    "candle-transformers",
-    "crossbeam-channel",
-    "dashmap",
-    "dirs",
-    "futures",
-    "glob",
-    "hf-hub",
-    "indicatif",
-    "itertools",
-    "lru",
-    "ndarray",
-    "ort",
-    "parking_lot",
-    "rayon",
-    "regex",
-    "rusqlite",
-    "safetensors",
-    "sha2",
-    "smallvec",
-    "tempfile",
-    "tokenizers",
-    "tokio",
-    "toml",
-    "tracing",
-    "unicode-normalization",
-    "ureq",
-    "xxhash-rust",
-]
