@@ -184,10 +184,14 @@ impl LSHConfig {
     /// P(candidate) = 1 - (1 - s^r)^b
     /// where s = similarity, r = num_hashes_per_band, b = num_bands
     pub fn candidate_probability(&self, jaccard_similarity: f32) -> f32 {
-        let s = jaccard_similarity;
+        if self.num_hashes_per_band == 0 || self.num_bands == 0 {
+            return 0.0;
+        }
+
+        let s = jaccard_similarity.clamp(0.0, 1.0);
         let r = self.num_hashes_per_band as f32;
         let b = self.num_bands as f32;
-        1.0 - (1.0 - s.powf(r)).powf(b)
+        (1.0 - (1.0 - s.powf(r)).powf(b)).clamp(0.0, 1.0)
     }
 }
 
@@ -452,6 +456,13 @@ mod tests {
     }
 
     #[test]
+    fn test_candidate_probability_endpoints() {
+        let config = LSHConfig::default();
+        assert_eq!(config.candidate_probability(0.0), 0.0);
+        assert_eq!(config.candidate_probability(1.0), 1.0);
+    }
+
+    #[test]
     fn test_simhash_basic() {
         let mut lsh = SimHashLSH::new(384, 64);
 
@@ -563,6 +574,23 @@ mod proptests {
             let max_pairs = n * (n - 1) / 2;
             prop_assert!(candidates.len() <= max_pairs,
                 "Too many candidates: {} > max {}", candidates.len(), max_pairs);
+        }
+
+        /// Property: candidate_probability is bounded in [0, 1] and monotone in similarity.
+        #[test]
+        fn candidate_probability_bounded_and_monotone(
+            s1 in 0.0f32..=1.0,
+            s2 in 0.0f32..=1.0
+        ) {
+            let cfg = LSHConfig::default();
+            let p1 = cfg.candidate_probability(s1);
+            let p2 = cfg.candidate_probability(s2);
+            prop_assert!((0.0..=1.0).contains(&p1));
+            prop_assert!((0.0..=1.0).contains(&p2));
+
+            if s1 < s2 {
+                prop_assert!(p1 <= p2 + 1e-6, "monotone: s1={} p1={} > s2={} p2={}", s1, p1, s2, p2);
+            }
         }
     }
 }

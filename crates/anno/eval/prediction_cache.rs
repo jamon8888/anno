@@ -183,6 +183,62 @@ impl PredictionCache {
         version: &str,
         labels: &[&str],
     ) -> String {
+        // Back-compat: older cache files stored a 64-bit `DefaultHasher` text hash.
+        // Detect by length and regenerate the legacy key so existing caches still hit.
+        if text_hash.len() == 16 {
+            return Self::cache_key_from_hash_legacy(text_hash, backend, version, labels);
+        }
+        Self::cache_key_from_hash_sha256(text_hash, backend, version, labels)
+    }
+
+    /// Hash a string to a hex string.
+    fn hash_str(s: &str) -> String {
+        // Stable, content-addressed hash (matches module doc).
+        Self::sha256_hex(s.as_bytes())
+    }
+
+    fn cache_key_from_hash_sha256(
+        text_hash: &str,
+        backend: &str,
+        version: &str,
+        labels: &[&str],
+    ) -> String {
+        // Make concatenation unambiguous by inserting a delimiter byte.
+        const SEP: u8 = 0x1f;
+
+        // Sort labels for consistent hashing.
+        let mut sorted_labels: Vec<&str> = labels.to_vec();
+        sorted_labels.sort();
+
+        let mut bytes = Vec::with_capacity(
+            text_hash.len()
+                + backend.len()
+                + version.len()
+                + sorted_labels.iter().map(|s| s.len()).sum::<usize>()
+                + 8,
+        );
+        bytes.extend_from_slice(text_hash.as_bytes());
+        bytes.push(SEP);
+        bytes.extend_from_slice(backend.to_lowercase().as_bytes());
+        bytes.push(SEP);
+        bytes.extend_from_slice(version.as_bytes());
+        bytes.push(SEP);
+        for (i, l) in sorted_labels.iter().enumerate() {
+            if i > 0 {
+                bytes.push(b',');
+            }
+            bytes.extend_from_slice(l.as_bytes());
+        }
+
+        Self::sha256_hex(&bytes)
+    }
+
+    fn cache_key_from_hash_legacy(
+        text_hash: &str,
+        backend: &str,
+        version: &str,
+        labels: &[&str],
+    ) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -191,7 +247,6 @@ impl PredictionCache {
         backend.to_lowercase().hash(&mut hasher);
         version.hash(&mut hasher);
 
-        // Sort labels for consistent hashing
         let mut sorted_labels: Vec<&str> = labels.to_vec();
         sorted_labels.sort();
         sorted_labels.hash(&mut hasher);
@@ -199,13 +254,11 @@ impl PredictionCache {
         format!("{:016x}", hasher.finish())
     }
 
-    /// Hash a string to a hex string.
-    fn hash_str(s: &str) -> String {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let mut hasher = DefaultHasher::new();
-        s.hash(&mut hasher);
-        format!("{:016x}", hasher.finish())
+    fn sha256_hex(bytes: &[u8]) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(bytes);
+        format!("{:x}", hasher.finalize())
     }
 
     /// Look up cached prediction by key.
@@ -223,7 +276,15 @@ impl PredictionCache {
         labels: &[&str],
     ) -> Option<Vec<Entity>> {
         let key = Self::cache_key(text, backend, version, labels);
-        self.get(&key)
+        if let Some(p) = self.get(&key) {
+            return Some(p.predictions.into_iter().map(Entity::from).collect());
+        }
+
+        // Back-compat: try legacy key derivation for older caches.
+        let text_hash_legacy = Self::hash_str_legacy(text);
+        let key_legacy =
+            Self::cache_key_from_hash_legacy(&text_hash_legacy, backend, version, labels);
+        self.get(&key_legacy)
             .map(|p| p.predictions.into_iter().map(Entity::from).collect())
     }
 
@@ -375,6 +436,14 @@ impl PredictionCache {
     /// Returns true if cache is empty.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    fn hash_str_legacy(s: &str) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        s.hash(&mut hasher);
+        format!("{:016x}", hasher.finish())
     }
 }
 

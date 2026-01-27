@@ -63,12 +63,14 @@ dependencies = [
  "chrono",
  "clap",
  "clap_complete",
+ "clump",
  "criterion",
  "crossbeam-channel",
  "dashmap",
  "dirs 5.0.1",
  "futures",
  "glob",
+ "gramdex",
  "hf-hub",
  "indicatif",
  "itertools 0.14.0",
@@ -458,6 +460,17 @@ name = "clap_lex"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1d728cc89cf3aee9ff92b05e62b19ee65a02b5702cff7d5a377e32c6ae29d8d"
+
+[[package]]
+name = "clump"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "100df6a8b04b3763ff88edf0192182a0b4a7f4a8ab6261320ec4071f8df0571b"
+dependencies = [
+ "rand",
+ "rand_chacha",
+ "thiserror 2.0.17",
+]
 
 [[package]]
 name = "colorchoice"
@@ -1333,6 +1346,13 @@ name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
+
+[[package]]
+name = "gramdex"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.17",
+]
 
 [[package]]
 name = "h2"

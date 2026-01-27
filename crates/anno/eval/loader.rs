@@ -507,6 +507,18 @@ impl LoadableDatasetId {
             return Some(DatasetParsePlan::TweetNer7);
         }
 
+        // HuggingFace datasets: if the registry provides an HF id/config and marks the
+        // dataset as HuggingFace-accessible, we can treat it as an HfApiResponse plan.
+        //
+        // This keeps the "catalog vs loadable" distinction: many datasets are catalogued
+        // with `hf_id` but are not marked HuggingFace-accessible (or are missing metadata),
+        // in which case we stay conservative and return None.
+        if id.hf_id().is_some()
+            && id.access_status() == crate::eval::dataset_registry::DatasetAccessibility::HuggingFace
+        {
+            return Some(DatasetParsePlan::HfApiResponse);
+        }
+
         // Coref datasets in CoNLL format (not GAP TSV): parse as regular CoNLL.
         // These have NER annotations alongside coref, so the CoNLL parser works.
         if matches!(
@@ -6892,6 +6904,43 @@ mod tests {
                 continue;
             };
             assert_eq!(hint, plan, "Registry hint mismatch for {:?}", ds);
+        }
+    }
+
+    #[test]
+    fn test_huggingface_access_status_requires_hf_id() {
+        // `access_status: HuggingFace` is our strongest signal that a dataset is automatable
+        // via the Hub. Keep the registry self-consistent so hinting can stay metadata-driven.
+        for &ds in DatasetId::all() {
+            if ds.access_status()
+                != crate::eval::dataset_registry::DatasetAccessibility::HuggingFace
+            {
+                continue;
+            }
+            assert!(
+                ds.hf_id().is_some(),
+                "Dataset {:?} is marked HuggingFace-accessible but has no hf_id",
+                ds
+            );
+        }
+    }
+
+    #[test]
+    fn test_huggingface_access_status_is_hintable() {
+        // If the registry says “HuggingFace”, the loader should be able to produce *some*
+        // parse-plan hint (not necessarily `HfApiResponse`, since a few datasets are hybrids
+        // with bespoke parse plans).
+        for &ds in DatasetId::all() {
+            if ds.access_status()
+                != crate::eval::dataset_registry::DatasetAccessibility::HuggingFace
+            {
+                continue;
+            }
+            assert!(
+                LoadableDatasetId::registry_hint_plan(ds).is_some(),
+                "Dataset {:?} is marked HuggingFace-accessible but has no registry hint plan",
+                ds
+            );
         }
     }
 
