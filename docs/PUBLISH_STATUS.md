@@ -1,15 +1,13 @@
 # Publish status
 
-This repo is a Rust workspace with multiple crates. Some are intended to be published to crates.io, and some are intended to remain internal to this repo.
+This repo publishes a single crate: `anno`.
 
 ## What is publishable?
 
 - **Published / intended to be published**:
-  - `anno`
-  - `anno-core`
-  - `anno-coalesce`
+  - `anno` (the public facade crate)
 - **Not intended to be published**:
-  - `anno-tier` (the crate has `publish = false` in its `Cargo.toml`)
+  - legacy internal crates kept for history under `crates/` (they are not workspace members)
 
 ## CI checks
 
