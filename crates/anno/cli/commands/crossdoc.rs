@@ -10,6 +10,8 @@ use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "eval-advanced")]
+use crate::coalesce::Resolver;
+#[cfg(feature = "eval-advanced")]
 use crate::eval::cdcr::{CDCRConfig, CDCRResolver, CrossDocCluster, Document};
 #[cfg(feature = "eval-advanced")]
 use crate::offset::TextSpan;
@@ -18,8 +20,6 @@ use crate::{
     Corpus, Entity, EntityType, GroundedDocument, Identity, IdentitySource, Location, Signal,
     SignalId,
 };
-#[cfg(feature = "eval-advanced")]
-use anno_coalesce::Resolver;
 
 #[cfg(feature = "eval-advanced")]
 use super::super::output::color;

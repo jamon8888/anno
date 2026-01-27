@@ -37,7 +37,7 @@
 //! assert!(matches!(custom_str, TypeLabel::Custom(_)));
 //! ```
 
-use crate::entity::{EntityCategory, EntityType};
+use super::super::entity::{EntityCategory, EntityType};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -118,7 +118,7 @@ impl TypeLabel {
     /// Convert to a core entity type, mapping customs to `EntityType::Other`.
     ///
     /// Note: Custom types become `EntityType::Other` since we don't have category info.
-    /// Use [`to_entity_type_with_category`] if you have category information.
+    /// Use [`Self::to_entity_type_with_category`] if you have category information.
     #[must_use]
     pub fn to_entity_type(&self) -> EntityType {
         match self {

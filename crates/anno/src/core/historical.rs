@@ -18,7 +18,7 @@
 //! # Example
 //!
 //! ```rust
-//! use anno_core::historical::{HistoricalProvenance, EpigraphicMedium, HistoricalDate, Era};
+//! use anno::core::historical::{HistoricalProvenance, EpigraphicMedium, HistoricalDate, Era};
 //!
 //! let provenance = HistoricalProvenance::new()
 //!     .with_date(HistoricalDate::range_bce(1500, 1150))

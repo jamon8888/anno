@@ -22,8 +22,8 @@ check:
 # Run fast checks without features (minimal, for quick iteration)
 check-minimal:
     cargo fmt --all -- --check
-    cargo clippy --workspace --all-targets
-    cargo test --workspace --lib
+    cargo clippy -p anno --all-targets --no-default-features
+    cargo test -p anno --no-default-features --lib
 
 # Format all code
 fmt:
@@ -187,12 +187,42 @@ matrix-backends:
 
 # Run evaluation on synthetic data (fast, no downloads)
 eval-quick:
-    ANNO_MAX_EXAMPLES=20 cargo run --example eval_basic --features eval
+    # Fast, bounded benchmark run that writes an artifact under ./reports/.
+    # Note: this may still download datasets/models unless caches are already warm.
+    mkdir -p reports
+    cargo run --release --bin anno --features "cli,eval-advanced" -- benchmark \
+        --tasks ner \
+        --datasets CoNLL2003Sample,WikiGold,Wnut17,WikiANN,MasakhaNER \
+        --backends heuristic,stacked,bert_onnx,gliner_onnx \
+        --max-examples 20 \
+        --output reports/eval-quick-report.md
+
+# Wider local eval (still bounded, but broader than eval-quick)
+eval-wide MAX_EXAMPLES="50":
+    mkdir -p reports
+    cargo run --release --bin anno --features "cli,eval-advanced" -- benchmark \
+        --tasks ner \
+        --datasets CoNLL2003Sample,WikiGold,Wnut17,WikiANN,MasakhaNER,MultiCoNERv2,MultiNERD \
+        --backends heuristic,stacked,bert_onnx,gliner_onnx,nuner \
+        --max-examples {{MAX_EXAMPLES}} \
+        --output reports/eval-wide-report.md
 
 # Run sanity check evaluations (small random samples, ~5-10 min)
 # Used in CI on push
 eval-sanity:
     ./scripts/eval-sanity.sh
+
+# Curated benchmark profiles (official; avoids parsing markdown and avoids “sweep everything”).
+# Examples:
+# - just eval-profile ner-standard 20
+# - just eval-profile ner-zeroshot-multilingual 20
+eval-profile PROFILE MAX_EXAMPLES="20":
+    mkdir -p reports
+    cargo run --release --bin anno --features "cli,eval-advanced" -- benchmark \
+        --profile {{PROFILE}} \
+        --max-examples {{MAX_EXAMPLES}} \
+        --output reports/eval-{{PROFILE}}.md \
+        --output-json reports/eval-{{PROFILE}}.json
 
 # Run full evaluations (all task-dataset-backend combinations)
 # Heavy operation - only run on eval-* branches or manual trigger
@@ -904,6 +934,7 @@ spot-eval-quick:
 # Local evaluation (no AWS, runs on this machine)
 # Cost: FREE, Time: ~2-5 min depending on backends
 eval-local BACKENDS="heuristic,stacked" DATASETS="WikiGold" MAX="50":
+    @cargo build --release -p anno --features "cli,eval-advanced" > /dev/null
     @uv run scripts/spot/orchestrate.py local \
         --backends "{{BACKENDS}}" \
         --datasets "{{DATASETS}}" \
@@ -911,6 +942,7 @@ eval-local BACKENDS="heuristic,stacked" DATASETS="WikiGold" MAX="50":
 
 # Local quick eval (zero-dep backends only, fast)
 eval-local-quick:
+    @cargo build --release -p anno --features "cli,eval-advanced" > /dev/null
     @uv run scripts/spot/orchestrate.py local \
         --profile quick \
         --datasets "WikiGold,CoNLL2003Sample" \

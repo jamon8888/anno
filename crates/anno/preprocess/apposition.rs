@@ -29,7 +29,7 @@
 //!
 //! # Integration with Coalesce
 //!
-//! Extracted aliases integrate with `anno-coalesce` for cross-document entity linking:
+//! Extracted aliases integrate with `anno::coalesce` for cross-document entity linking:
 //!
 //! ```text
 //! Appositions ──► AliasPairs ──► Coalesce ──► Unified Identities

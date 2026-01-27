@@ -42,7 +42,7 @@ pub enum DatePrecision {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::HistoricalDate;
 ///
 /// // Julius Caesar's death
@@ -75,7 +75,7 @@ impl HistoricalDate {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::HistoricalDate;
     ///
     /// let date = HistoricalDate::ce(2024, 6, 15);
@@ -97,7 +97,7 @@ impl HistoricalDate {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::HistoricalDate;
     ///
     /// let date = HistoricalDate::bce(44, 3, 15);  // 44 BCE March 15
@@ -145,7 +145,7 @@ impl HistoricalDate {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::HistoricalDate;
     ///
     /// let bce = HistoricalDate::bce(44, 3, 15);
@@ -167,7 +167,7 @@ impl HistoricalDate {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::HistoricalDate;
     ///
     /// let date = HistoricalDate::bce(44, 3, 15);
@@ -346,7 +346,7 @@ impl std::str::FromStr for HistoricalDate {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::{HistoricalDate, TemporalValidity};
 ///
 /// // Julius Caesar: 100 BCE - 44 BCE

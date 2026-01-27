@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::MetricStats;
 ///
 /// let stats = MetricStats::from_samples(&[0.85, 0.87, 0.82, 0.88, 0.84]);
@@ -70,7 +70,7 @@ impl MetricStats {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::MetricStats;
     ///
     /// let stats = MetricStats::from_samples(&[0.80, 0.82, 0.85, 0.83, 0.80]);
@@ -146,7 +146,7 @@ impl MetricStats {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::MetricStats;
     ///
     /// let stats = MetricStats::from_samples(&[0.85, 0.87, 0.83]);

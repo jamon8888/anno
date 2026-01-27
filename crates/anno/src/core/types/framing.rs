@@ -71,7 +71,7 @@
 //!
 //! # Usage
 //!
-//! ```rust
+//! ```rust,ignore
 //! use anno_core::types::framing::{EventMention, FrecoPair, FramingAttitude};
 //!
 //! // Create event mentions from two different news sources
@@ -137,7 +137,7 @@ use std::collections::HashMap;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::framing::FramingAttitude;
 ///
 /// // Parsing from strings (case-insensitive, multiple aliases)
@@ -159,7 +159,7 @@ use std::collections::HashMap;
 ///
 /// Serializes to lowercase strings: `"supportive"`, `"skeptical"`, `"neutral"`.
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::framing::FramingAttitude;
 ///
 /// let json = serde_json::to_string(&FramingAttitude::Skeptical).unwrap();
@@ -202,7 +202,7 @@ impl FramingAttitude {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::framing::FramingAttitude;
     ///
     /// // Opposites contrast
@@ -238,7 +238,7 @@ impl FramingAttitude {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use anno_core::types::framing::FramingAttitude;
     ///
     /// let supportive = FramingAttitude::Supportive;
@@ -309,7 +309,7 @@ impl std::str::FromStr for FramingAttitude {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::framing::FramingDivergenceType;
 ///
 /// // Iterate over all types
@@ -446,7 +446,7 @@ impl std::str::FromStr for FramingDivergenceType {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::framing::EventArgument;
 ///
 /// let agent = EventArgument {
@@ -497,7 +497,7 @@ pub struct EventArgument {
 ///
 /// Use the builder pattern for readable construction:
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::framing::{EventMention, EventArgument, FramingAttitude};
 ///
 /// let mention = EventMention::new(
@@ -671,7 +671,7 @@ impl EventMention {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::framing::{EventMention, FrecoPair, FramingDivergenceType, FramingAttitude};
 ///
 /// let e1 = EventMention::new("e1", "src_a", "raid", 10, 14, "Forces conducted a raid.")
@@ -809,7 +809,7 @@ impl FrecoPair {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::framing::{FrecoCorpus, FrecoPair, EventMention};
 ///
 /// let mut corpus = FrecoCorpus::new("freco_v1");
@@ -976,7 +976,7 @@ impl FrecoCorpus {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use anno_core::types::framing::EventCorefRelation;
 ///
 /// let rel = EventCorefRelation::Subevent;

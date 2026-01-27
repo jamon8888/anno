@@ -3,6 +3,8 @@
 //! Tests ensure that similarity calculations, alignment scores, and
 //! other numerical operations handle edge cases correctly.
 
+use anno::coalesce as anno_coalesce;
+
 use anno_coalesce::alignment::{
     AdaptiveResolutionConfig, AlignmentScore, GeneralizationGradient, Nameability,
 };

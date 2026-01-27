@@ -396,11 +396,11 @@ pub struct MentionRankingConfig {
 
     /// Enable synonym matching for related terms.
     ///
-    /// When enabled, uses string similarity (from `anno_coalesce`) as a proxy
+    /// When enabled, uses string similarity (from `anno::coalesce`) as a proxy
     /// for synonym relationships. High similarity (>0.8) indicates likely synonyms.
     ///
     /// For domain-specific synonyms (medical, legal, etc.), implement a custom
-    /// `anno_coalesce::SynonymSource` and integrate it with the resolver.
+    /// `anno::coalesce::SynonymSource` and integrate it with the resolver.
     pub enable_synonym_matching: bool,
 
     /// Weight for synonym match signal.
@@ -1070,7 +1070,7 @@ impl MentionRankingCoref {
 
     /// Check if one mention is an acronym of the other.
     ///
-    /// Delegates to the language-agnostic `anno_coalesce::is_acronym_match` function.
+    /// Delegates to the language-agnostic `anno::coalesce::is_acronym_match` function.
     ///
     /// From Chen et al. (2011): "The first letters of each word in concepts
     /// that have two or more words are taken and compared to whole words
@@ -1082,7 +1082,7 @@ impl MentionRankingCoref {
     /// - "WHO" ↔ "World Health Organization" → true
     /// - "IBM" ↔ "Apple" → false
     fn is_acronym_match(&self, m1: &RankedMention, m2: &RankedMention) -> bool {
-        anno_coalesce::is_acronym_match(&m1.text, &m2.text)
+        crate::coalesce::is_acronym_match(&m1.text, &m2.text)
     }
 
     /// Check if "it" at the given position is pleonastic (non-referential).
@@ -1370,12 +1370,12 @@ impl MentionRankingCoref {
     /// By default, it uses high string similarity as a proxy for synonymy.
     ///
     /// For domain-specific synonym matching (medical, legal, etc.), integrate
-    /// a custom `anno_coalesce::SynonymSource` implementation. Available sources:
+    /// a custom `anno::coalesce::SynonymSource` implementation. Available sources:
     /// - UMLS MRCONSO for medical terminology
     /// - WordNet for general English
     /// - Wikidata aliases for multilingual entities
     ///
-    /// The pluggable synonym infrastructure is defined in `anno_coalesce::similarity`:
+    /// The pluggable synonym infrastructure is defined in `anno::coalesce::similarity`:
     /// - `SynonymSource` trait: implement to provide custom lookups
     /// - `ChainedSynonyms`: combine multiple sources
     /// - `SynonymMatch`: result type with canonical ID and confidence
@@ -1402,7 +1402,7 @@ impl MentionRankingCoref {
         // Use multilingual string similarity from coalesce as a proxy.
         // High similarity (>0.8) suggests related terms.
         // This works across languages without hardcoded tables.
-        let similarity = anno_coalesce::multilingual_similarity(&t1, &t2);
+        let similarity = crate::coalesce::multilingual_similarity(&t1, &t2);
         similarity > 0.8
     }
 
@@ -4025,7 +4025,7 @@ mod tests {
 
         // Without a domain-specific SynonymSource, these won't match
         // because "heart" and "cardiac" have low string similarity.
-        // This is the expected behavior - use anno_coalesce::SynonymSource
+        // This is the expected behavior - use anno::coalesce::SynonymSource
         // for domain-specific synonym matching.
         assert!(
             !coref.are_synonyms(&heart, &cardiac),

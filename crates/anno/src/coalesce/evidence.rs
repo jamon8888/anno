@@ -98,7 +98,7 @@
 //! ## Example
 //!
 //! ```
-//! use anno_coalesce::evidence::{PairEvidence, EvidenceSource, MediationStrategy};
+//! use anno::coalesce::evidence::{EvidenceSource, MediationStrategy, PairEvidence};
 //!
 //! let mut evidence = PairEvidence::new();
 //! evidence.add_source(EvidenceSource::StringSimilarity {

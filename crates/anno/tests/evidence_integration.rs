@@ -3,6 +3,8 @@
 //! These tests verify the `PairEvidence`, `EvidenceSource`, `MediationStrategy`,
 //! and `TransitivityAnalyzer` components work correctly in realistic scenarios.
 
+use anno::coalesce as anno_coalesce;
+
 use anno_coalesce::evidence::{
     EvidenceSource, MediationStrategy, PairEvidence, TransitivityAnalyzer,
 };

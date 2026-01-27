@@ -1,6 +1,6 @@
 //! ONNX Runtime (ort) compatibility helpers.
 //!
-//! In the super-workspace, `ort` and `ndarray` versions can drift across crates.
+//! In multi-crate checkouts, `ort` and `ndarray` versions can drift across crates.
 //! To keep backends resilient, we avoid relying on `ort`'s `ndarray`-typed
 //! `Tensor::from_array(Array)` impls and instead route through the “(shape, data)”
 //! constructor, which is stable and does not depend on matching `ndarray` crate versions.
@@ -10,7 +10,9 @@ use ort::value::Tensor;
 
 #[cfg(feature = "onnx")]
 /// Create an `ort::value::Tensor` from an owned ndarray array by extracting `(shape, data)`.
-pub fn tensor_from_ndarray<T, D>(arr: ndarray::ArrayBase<ndarray::OwnedRepr<T>, D>) -> ort::Result<Tensor<T>>
+pub fn tensor_from_ndarray<T, D>(
+    arr: ndarray::ArrayBase<ndarray::OwnedRepr<T>, D>,
+) -> ort::Result<Tensor<T>>
 where
     T: ort::tensor::PrimitiveTensorElementType + Clone + std::fmt::Debug + 'static,
     D: ndarray::Dimension,
@@ -21,4 +23,3 @@ where
     let data = data.into_boxed_slice();
     Tensor::from_array((shape, data))
 }
-

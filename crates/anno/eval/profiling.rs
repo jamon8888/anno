@@ -127,7 +127,7 @@ pub struct TimingStats {
     pub max: Duration,
 }
 
-/// Global profiler instance (thread-local for thread safety).
+// Global profiler instance (thread-local for thread safety).
 #[cfg(feature = "eval-profiling")]
 thread_local! {
     static PROFILER: std::cell::RefCell<Profiler> = std::cell::RefCell::new(Profiler::new());

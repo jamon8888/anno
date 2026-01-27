@@ -6,8 +6,7 @@
 //! - `keywords.rs` (TextRankExtractor)
 //! - `summarize.rs` (LexRankSummarizer)
 //!
-//! For PageRank on `GraphDocument` with actual relations, use the archived clustering crate
-//! under `archive/anno-tier/` (or the standalone clustering repo, if you use it).
+//! For PageRank on a typed entity/relation graph, use a dedicated graph library.
 //!
 //! # Algorithm
 //!

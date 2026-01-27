@@ -62,7 +62,7 @@
 //! │                    Graph-Based Structure Discovery                    │
 //! ├──────────────────────────────────────────────────────────────────────┤
 //! │                                                                      │
-//! │  anno::keywords (this)   anno::salience      clustering (archived)   │
+//! │  anno::keywords (this)   anno::salience      community detection     │
 //! │  ─────────────────────   ─────────────       ────────────────────   │
 //! │  Terms/phrases           Named entities      Knowledge graph         │
 //! │  Co-occurrence graph     Co-occurrence       Entity-relation graph   │

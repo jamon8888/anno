@@ -7,6 +7,9 @@
 //! 4. Convert to evaluation format
 //! 5. Compute metrics
 
+use anno::coalesce as anno_coalesce;
+use anno::core as anno_core;
+
 use anno_coalesce::{
     hierarchical::{hierarchical_from_similarity, Linkage},
     streaming::{StreamingConfig, StreamingResolver},

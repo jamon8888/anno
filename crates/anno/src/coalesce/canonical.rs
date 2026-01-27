@@ -22,7 +22,7 @@
 //! # Example
 //!
 //! ```rust
-//! use anno_coalesce::canonical::{CanonicalSelector, SalienceBasedSelector, MentionFeatures};
+//! use anno::coalesce::canonical::{CanonicalSelector, MentionFeatures, SalienceBasedSelector};
 //!
 //! let mentions = vec![
 //!     MentionFeatures::new("he").with_position(0).pronominal(),

@@ -6,7 +6,7 @@
 #
 # Notes:
 # - This keeps the repo buildable standalone (default deps are crates.io + git),
-#   while still allowing fast iteration in a super-workspace checkout.
+#   while still allowing fast iteration with local sibling checkouts.
 
 [patch.crates-io]
 textprep = { path = "../textprep" }

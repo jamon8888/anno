@@ -14,3 +14,11 @@ anno extract --text "Marie Curie was born in Warsaw."
 ```
 
 More: `docs/QUICKSTART.md`.
+Docs index: `docs/README.md`.
+Contract: `docs/CONTRACT.md`.
+
+Install the CLI:
+
+```sh
+cargo install anno --features cli
+```
