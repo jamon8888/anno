@@ -36,7 +36,7 @@ This document is the **interface contract** for `anno`: what it does, what it gu
 
 Treat feature flags as **capability toggles**: depend on the narrowest set you need.
 
-## Integration posture (how it connects to Tekne)
+## Integration posture
 
 - **Upstream**: `textprep` / `sketchir` handle text cleaning + lightweight structure; `anno` consumes the resulting text.
 - **Downstream**: other code can safely:
