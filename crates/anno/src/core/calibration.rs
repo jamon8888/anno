@@ -570,7 +570,7 @@ mod tests {
 
     #[test]
     fn test_calibration_metrics_perfect() {
-        // Perfectly calibrated: 50% confidence, 50% accuracy
+        // Perfectly calibrated: confidence equals empirical accuracy
         let perfect = vec![(0.5, true), (0.5, false), (0.5, true), (0.5, false)];
         let metrics = CalibrationMetrics::compute(&perfect, 10);
 
