@@ -2653,8 +2653,46 @@ fn run_list(
     {
         use crate::eval::dataset_registry::DatasetId as RegistryDatasetId;
         use crate::eval::loader::LoadableDatasetId;
+        use crate::eval::task_mapping::Task;
+
+        fn task_predicate(task_raw: &str) -> Result<Box<dyn Fn(&[Task]) -> bool>, String> {
+            let t = task_raw.trim().to_lowercase();
+            match t.as_str() {
+                // NER family
+                "ner" | "sequence_labeling" | "nested-ner" | "mner" | "pii_detection"
+                | "slot_filling" => Ok(Box::new(|tasks| tasks.contains(&Task::NER))),
+
+                // Coref family (both intra + inter + abstract anaphora)
+                "coref" => Ok(Box::new(|tasks| tasks.iter().any(|x| x.is_coref_family()))),
+                "intra-coref" | "intra_coref" | "intracoref" => {
+                    Ok(Box::new(|tasks| tasks.contains(&Task::IntraDocCoref)))
+                }
+                "inter-coref" | "inter_coref" | "intercoref" | "cdcr" | "coalesce"
+                | "event_coref" => Ok(Box::new(|tasks| tasks.contains(&Task::InterDocCoref))),
+
+                // Relation extraction
+                "re" | "rel" | "relation" | "relation_extraction" | "relation-extraction" => Ok(
+                    Box::new(|tasks| tasks.contains(&Task::RelationExtraction)),
+                ),
+
+                // Entity linking / disambiguation
+                "el" | "ned" | "entity_linking" | "entity-linking" => {
+                    Ok(Box::new(|tasks| tasks.contains(&Task::NED)))
+                }
+
+                _ => Err(format!(
+                    "Unknown --task '{}'. Expected one of: ner, coref, intra-coref, inter-coref, re, el",
+                    task_raw
+                )),
+            }
+        }
 
         if loadable_only {
+            let task_pred = match task_filter.as_deref() {
+                Some(t) => Some(task_predicate(t)?),
+                None => None,
+            };
+
             // Show only loadable datasets
             let loadable_datasets: Vec<RegistryDatasetId> = RegistryDatasetId::all()
                 .iter()
@@ -2669,15 +2707,10 @@ fn run_list(
 
             for id in loadable_datasets {
                 let name = id.name();
-                if let Some(ref task) = task_filter {
+                if let Some(ref task_pred) = task_pred {
                     let tasks = id.tasks_typed();
-                    let is_coref = tasks.iter().any(|t| t.is_coref_family());
-                    let is_ner = tasks.contains(&crate::eval::task_mapping::Task::NER);
-
-                    match task.as_str() {
-                        "coref" if !is_coref => continue,
-                        "ner" if !is_ner => continue,
-                        _ => {}
+                    if !task_pred(&tasks) {
+                        continue;
                     }
                 }
 
@@ -2726,17 +2759,21 @@ fn run_list(
                 println!("    Automatable downloads:  {}", automatable_count);
                 println!();
                 println!("  Use --loadable to see only datasets with loader implementations");
-                println!("  Use --task ner/coref to filter by task");
+                println!("  Use --task ner/coref/re/el to filter by task");
                 println!("  Use --verbose for more details");
             } else {
+                let task_pred = match task_filter.as_deref() {
+                    Some(t) => Some(task_predicate(t)?),
+                    None => None,
+                };
+
                 // Filter and display
                 for dataset in &all_datasets {
                     // Apply task filter
-                    if let Some(ref task) = task_filter {
-                        match task.as_str() {
-                            "ner" if !dataset.is_ner() => continue,
-                            "coref" if !dataset.is_coreference() => continue,
-                            _ => {}
+                    if let Some(ref task_pred) = task_pred {
+                        let tasks = dataset.tasks_typed();
+                        if !task_pred(&tasks) {
+                            continue;
                         }
                     }
 
