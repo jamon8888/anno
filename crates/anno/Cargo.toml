@@ -74,6 +74,7 @@ tracing-subscriber = { workspace = true, optional = true }
 proptest = { workspace = true }
 tempfile = "3"
 criterion = { workspace = true }
+muxer = { path = "../../../muxer", features = ["serde"] }
 
 [features]
 default = ["onnx"]
