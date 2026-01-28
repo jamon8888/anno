@@ -17,18 +17,12 @@
 //!
 //! # Benchmark Datasets
 //!
-//! | Dataset | Domain | Text F1 | E2E F1 |
-//! |---------|--------|---------|--------|
-//! | FUNSD | Forms | ~85% | ~78% |
-//! | SROIE | Receipts | ~94% | ~90% |
-//! | CORD | Receipts | ~96% | ~92% |
-//! | DocVQA | Documents | ~78% | N/A |
+//! Common benchmarks include FUNSD, SROIE, CORD, and DocVQA.
 //!
 //! # Research Alignment
 //!
-//! From LayoutLMv3 paper (arXiv:2204.08387):
-//! > "Pre-training strategies that align text, layout, and image modalities
-//! > significantly improve document understanding."
+//! LayoutLMv3 (arXiv:2204.08387) is a representative reference for multimodal
+//! document understanding (text + layout + pixels).
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

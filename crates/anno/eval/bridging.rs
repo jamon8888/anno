@@ -27,14 +27,15 @@
 //!
 //! # Corpora
 //!
-//! - **ISNotes** (~660 pairs): OntoNotes layer; unrestricted bridging
-//! - **BASHI** (~400 pairs): Definite, indefinite, comparative subtypes
-//! - **ARRAU RST** (~1,200 pairs): Highest density per 1k tokens
+//! - **ISNotes**: OntoNotes-layer bridging annotations
+//! - **BASHI**: bridging subtypes (definite/indefinite/comparative)
+//! - **ARRAU RST**: bridging in discourse structure contexts
 //!
 //! # Annotation Challenges
 //!
-//! Inter-annotator agreement for bridging is low (~59%) compared to
-//! identity coreference (~80%+). This reflects genuine ambiguity.
+//! Inter-annotator agreement for bridging can be substantially lower than for
+//! identity coreference. This reflects genuine ambiguity in what counts as a
+//! “bridge” vs discourse coherence.
 //!
 //! # References
 //!

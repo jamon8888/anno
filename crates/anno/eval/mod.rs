@@ -2,14 +2,14 @@
 //!
 //! # Feature Gating
 //!
-//! This module is behind the `eval` feature flag. Without it, anno is ~85k lines.
-//! With it, anno gains ~92k lines of evaluation infrastructure.
+//! This module is behind the `eval` feature flag. Enabling it pulls in a large
+//! amount of evaluation infrastructure; keep it off in minimal builds.
 //!
 //! ```toml
-//! # Minimal (no eval): ~85k lines
+//! # Minimal (no eval)
 //! anno = { version = "0.2", default-features = false }
 //!
-//! # With eval: ~177k lines
+//! # With eval
 //! anno = { version = "0.2", features = ["eval"] }
 //! ```
 //!
