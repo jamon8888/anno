@@ -13,8 +13,8 @@
 //!
 //! # Research
 //!
-//! ALBERT achieves SOTA on biomedical method NER with only 11MB model size,
-//! demonstrating that smaller models can excel in specialized domains.
+//! Treat ALBERT as a size/latency trade-off option; any quality claims should be
+//! established via the `anno` eval harness for the specific dataset/task mix.
 //!
 //! # Usage
 //!

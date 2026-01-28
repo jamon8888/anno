@@ -17,34 +17,31 @@
 //! │                                                     │
 //! │  Traditional (fixed types):                         │
 //! │   - BertNEROnnx: Sequence labeling                  │
-//! │                                                     │
-//! │  ~85-92% F1, requires features                      │
 //! ├─────────────────────────────────────────────────────┤
 //! │ Layer 2: HeuristicNER (zero deps)                   │
 //! │   Person/Org/Location via heuristics                │
-//! │   ~60-70% F1, always available                      │
 //! ├─────────────────────────────────────────────────────┤
 //! │ Layer 1: RegexNER (zero deps)                     │
 //! │   Date/Time/Money/Email/URL/Phone                   │
-//! │   ~95%+ precision, always available                 │
 //! └─────────────────────────────────────────────────────┘
 //! ```
 //!
 //! # Backend Comparison
 //!
-//! | Backend | Feature | Zero-Shot | Nested | Speed | Notes |
-//! |---------|---------|-----------|--------|-------|-------|
-//! | `StackedNER` | - | No | No | Fast | **Composable with any backend** |
-//! | `RegexNER` | - | No | No | ~400ns | Structured only |
-//! | `HeuristicNER` | - | No | No | ~50μs | Capitalization + context |
-//! | `GLiNER` | `onnx` | Yes | No | ~100ms | Span-based |
-//! | `NuNER` | `onnx` | Yes | No | ~100ms | Token-based |
-//! | `W2NER` | `onnx` | No | **Yes** | ~150ms | Grid-based |
-//! | `BertNEROnnx` | `onnx` | No | No | ~50ms | Traditional |
+//! | Backend | Feature | Zero-Shot | Nested | Notes |
+//! |---------|---------|-----------|--------|-------|
+//! | `StackedNER` | - | No | No | Composable with any backend |
+//! | `RegexNER` | - | No | No | Structured entities only |
+//! | `HeuristicNER` | - | No | No | Simple heuristic baseline |
+//! | `GLiNER` | `onnx` | Yes | No | Span-based |
+//! | `NuNER` | `onnx` | Yes | No | Token-based |
+//! | `W2NER` | `onnx` | No | Yes | Grid-based |
+//! | `BertNEROnnx` | `onnx` | No | No | Traditional fixed-label NER |
 //!
 //! # When to Use What
 //!
-//! - **Best accuracy**: `NERExtractor::best_available()` - uses GLiNER (~90% F1)
+//! - **Default choice**: `NERExtractor::best_available()` (picks the best available backend at
+//!   runtime, based on enabled features)
 //! - **Zero deps**: `StackedNER::default()` - no ML, good baseline
 //! - **Hybrid approach**: `StackedNER` with ML backends - combine ML accuracy with pattern speed
 //! - **Custom types**: `GLiNER` or `NuNER` - zero-shot, any entity type
