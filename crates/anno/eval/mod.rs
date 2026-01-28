@@ -263,7 +263,6 @@ pub mod advanced_harness;
 pub mod analysis;
 pub mod backend_eval;
 pub mod backend_factory;
-pub mod baseline;
 pub mod benchmark;
 pub mod bio_adapter;
 pub mod book_scale;
@@ -383,10 +382,12 @@ pub use datasets::{GoldEntity, GroundTruthEntity};
 //
 // Use `LoadableDatasetId` + `DatasetLoader` when you want to actually load data.
 // Use `RegistryDatasetId` when browsing/filtering the full catalog by metadata.
-pub use baseline::BaselinePerformance;
 pub use dataset_registry::{AnnotationScheme, DataFormat, DatasetId as RegistryDatasetId};
 pub use datasets::DatasetMetadata;
 pub use loader::{DatasetLoader, LoadableDatasetId, LoadedDataset};
+
+#[cfg(test)]
+mod registry_exports;
 
 // Dataset API re-exports (new structured dataset interface)
 pub use dataset::{AnnotatedExample, DatasetStats, Difficulty, Domain, NERDataset};
