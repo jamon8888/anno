@@ -472,14 +472,6 @@ impl FrecoMiningMetrics {
 /// - **Cohen's Kappa**: Agreement beyond chance (κ = 0: chance, κ = 1: perfect)
 /// - **Per-class**: Precision/Recall/F1 for each attitude class
 ///
-/// # Typical Performance
-///
-/// | Model | Accuracy | Macro-F1 | Kappa |
-/// |-------|----------|----------|-------|
-/// | Baseline (majority) | ~50% | ~33% | 0.0 |
-/// | Fine-tuned BERT | ~75% | ~70% | 0.6 |
-/// | GPT-4 (zero-shot) | ~70% | ~65% | 0.5 |
-///
 /// # Example
 ///
 /// ```rust

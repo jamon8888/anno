@@ -1480,9 +1480,8 @@ fn std_dev(values: &[f64]) -> f64 {
 /// # Research Context
 ///
 /// Thalken et al. (2024) show that single CoNLL F1 hides performance differences:
-/// - Long chains: Models excel (92% F1)
-/// - Short chains: Models struggle (71% F1)
-/// - Singletons: Often ignored (45% F1)
+/// - long chains can behave differently than short chains,
+/// - and singletons can dominate counts while contributing little to narrative coherence.
 ///
 /// # Returns
 ///

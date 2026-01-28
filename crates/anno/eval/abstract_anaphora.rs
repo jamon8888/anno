@@ -1633,9 +1633,9 @@ impl AbstractAnaphoraDataset {
         dataset.add(
             AnaphoraTestCase::new(
                 "sci_08",
-                "The algorithm achieved 98% accuracy. This result represents state-of-the-art performance.",
+                "The algorithm achieved high accuracy. This result was widely discussed.",
                 AntecedentSpan {
-                    text: "The algorithm achieved 98% accuracy".to_string(),
+                    text: "The algorithm achieved high accuracy".to_string(),
                     start: 0,
                     end: 35,
                     trigger: Some("achieved".to_string()),

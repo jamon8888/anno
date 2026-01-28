@@ -47,7 +47,7 @@
 //! - **Hirschman et al. (1998)**: "Automating Coreference" [cmp-lg/9803001]
 //!   - Found only 16% of interannotator disagreements were genuine coreference disagreement
 //!   - 84% were systematic errors (missed pronouns, overlooked chains, zone issues)
-//!   - Two-stage annotation (markables first, linking second) improved agreement ~83% → ~91%
+//!   - Two-stage annotation (markables first, linking second) can improve agreement
 //! - Plank et al. (2014): "Learning part-of-speech taggers with inter-annotator agreement loss"
 //! - Pavlick & Kwiatkowski (2019): "Inherent Disagreements in Human Textual Inferences"
 //! - Uma et al. (2021): "Learning from Disagreement: A Survey"

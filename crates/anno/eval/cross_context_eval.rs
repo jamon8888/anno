@@ -224,11 +224,6 @@ pub struct CrossContextEvalResults {
 }
 
 impl CrossContextEvalResults {
-    /// Compare to xCoRe SOTA.
-    pub fn vs_xcore_sota(&self, benchmark: CrossContextBenchmark) -> f64 {
-        self.conll_f1 * 100.0 - benchmark.xcore_sota_f1()
-    }
-
     /// Format as summary string.
     pub fn summary(&self) -> String {
         format!(
