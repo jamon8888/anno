@@ -1071,7 +1071,7 @@ mod proptests {
     fn test_cross_lingual_same_script() {
         // Same script should use regular similarity
         let sim = cross_lingual_similarity("Moscow", "Moskva");
-        assert!(sim >= 0.0 && sim <= 1.0, "Similarity should be in [0, 1]");
+        assert!((0.0..=1.0).contains(&sim), "Similarity should be in [0, 1]");
 
         let sim_cjk = cross_lingual_similarity("北京", "北京");
         assert!(
@@ -1127,6 +1127,6 @@ mod proptests {
         // Different scripts without known pairs should have lower similarity
         let sim = cross_lingual_similarity("Paris", "パリ"); // Paris in Katakana
                                                              // May or may not match depending on known pairs, but should handle gracefully
-        assert!(sim >= 0.0 && sim <= 1.0);
+        assert!((0.0..=1.0).contains(&sim));
     }
 }

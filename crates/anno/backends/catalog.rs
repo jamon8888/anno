@@ -13,13 +13,12 @@
 //! - UniversalNER: arXiv:2308.03279
 //! - W2NER: arXiv:2112.10070
 //! - TPLinker: `https://aclanthology.org/2020.coling-main.138/`
-//! |-----------|---------|--------|
-//! | `threshold` | 0.5 | GLiNER paper |
-//! | `max_width` | 12 | Standard span width |
-//! | `max_length` | 512 | BERT context limit |
-//! | `flat_ner` | true | No overlapping entities |
 //!
-//! These match common defaults used in GLiNER implementations.
+//! Common configuration knobs you will see across GLiNER-like implementations:
+//! - `threshold`: score cutoff for accepting a span
+//! - `max_width`: maximum span width considered
+//! - `max_length`: maximum input length per window/chunk
+//! - `flat_ner`: whether to enforce non-overlapping entities
 
 /// Backend implementation status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

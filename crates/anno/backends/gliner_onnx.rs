@@ -28,6 +28,7 @@
 #![allow(clippy::type_complexity)] // Complex return tuples
 #![allow(clippy::manual_contains)] // Shape check style
 #![allow(unused_variables)] // Feature-gated code
+#![allow(clippy::items_after_test_module)] // Large file; keep local tests near helpers
 #![allow(unused_imports)] // EntityType used conditionally
 
 #[cfg(feature = "onnx")]

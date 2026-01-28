@@ -622,11 +622,11 @@ pub fn string_similarity(a: &str, b: &str) -> f64 {
     // component so we can compare performance and semantics in benches.
     #[cfg(feature = "gramdex")]
     {
-        return string_similarity_gramdex(a, b);
+        string_similarity_gramdex(a, b)
     }
     #[cfg(not(feature = "gramdex"))]
     {
-        return string_similarity_textprep(a, b);
+        string_similarity_textprep(a, b)
     }
 }
 
