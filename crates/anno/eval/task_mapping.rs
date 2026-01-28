@@ -422,10 +422,16 @@ pub fn backend_tasks(backend_name: &str) -> &'static [Task] {
         "tplinker" | "TPLinker" => &[Task::NER, Task::RelationExtraction],
 
         // Coreference backends (implement CoreferenceResolver trait)
-        "coref_resolver" | "CorefResolver" | "SimpleCorefResolver" | "DiscourseAwareResolver" => {
-            &[Task::IntraDocCoref, Task::AbstractAnaphora]
-        }
-        "mention_ranking" | "MentionRankingCoref" => &[Task::IntraDocCoref],
+        //
+        // Note: the same resolver interface is used for both intra-doc and inter-doc eval in
+        // `TaskEvaluator` (it is invoked per document, and spans are offset to avoid collisions).
+        "coref_resolver" | "CorefResolver" | "SimpleCorefResolver" | "DiscourseAwareResolver" => &[
+            Task::IntraDocCoref,
+            Task::InterDocCoref,
+            Task::AbstractAnaphora,
+        ],
+        "mention_ranking" | "MentionRankingCoref" => &[Task::IntraDocCoref, Task::InterDocCoref],
+        "box" | "box_coref" | "BoxCorefResolver" => &[Task::IntraDocCoref, Task::InterDocCoref],
 
         _ => &[],
     }
@@ -502,6 +508,7 @@ pub fn get_task_backends(task: Task) -> Vec<&'static str> {
         // Special backends
         "coref_resolver",
         "mention_ranking",
+        "box",
     ] {
         if backend_tasks(backend).contains(&task) {
             backends.push(backend);
