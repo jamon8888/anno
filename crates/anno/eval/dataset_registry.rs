@@ -1183,6 +1183,7 @@ define_datasets! {
         notes: "89% unseen entities in test set - excellent for OOD evaluation; shared task at W-NUT workshop",
         tasks: ["ner"],
         hf_id: "leondz/wnut_17",
+        access_status: HuggingFace,
         categories: [ner, social_media],
     },
     MitMovie {
@@ -1239,6 +1240,7 @@ define_datasets! {
         notes: "Original has ~7% annotation errors (CleanCoNLL 2023); still the most-cited NER benchmark",
         tasks: ["ner"],
         hf_id: "tner/conll2003",
+        access_status: HuggingFace,
         categories: [ner],
     },
     OntoNotesSample {
@@ -1258,6 +1260,7 @@ define_datasets! {
         example: "The B-ORG\nEuropean I-ORG\nUnion I-ORG\nannounced O\nMonday B-DATE\nthat O\nthe O\n$ B-MONEY\n10 I-MONEY\nmillion I-MONEY\nwill O\ngo O\nto O\nUkraine B-GPE\n. O",
         notes: "Full corpus requires LDC license; sample available on HuggingFace; includes 7 genres",
         hf_id: "tner/ontonotes5",
+        access_status: HuggingFace,
         categories: [ner],
     },
     MultiNERD {
@@ -1277,6 +1280,7 @@ define_datasets! {
         example: "Marie Curie (PER) discovered radium at the University of Paris (ORG) in France (LOC).",
         tasks: ["ner"],
         hf_id: "Babelscape/multinerd",
+        access_status: HuggingFace,
         categories: [ner, multilingual],
     },
 
@@ -1459,6 +1463,7 @@ define_datasets! {
         notes: "Temporal distribution shift; tests robustness to evolving language",
         hf_id: "tner/tweetner7",
         hf_config: "tweetner7",
+        access_status: HuggingFace,
         categories: [ner, social_media],
     },
 
@@ -1574,6 +1579,7 @@ define_datasets! {
         example: "Aspirin B-Chemical\ninduced O\nhepatotoxicity B-Disease\nwas O\nobserved O\n. O",
         tasks: ["ner"],
         hf_id: "tner/bc5cdr",
+        access_status: HuggingFace,
         categories: [ner, biomedical],
     },
     NCBIDisease {
@@ -1593,6 +1599,7 @@ define_datasets! {
         example: "The O\npatient O\nwas O\ndiagnosed O\nwith O\ntype B-Disease\n2 I-Disease\ndiabetes I-Disease\n. O",
         tasks: ["ner"],
         hf_id: "ncbi_disease",
+        access_status: HuggingFace,
         categories: [ner, biomedical],
     },
     GENIA {
@@ -1697,6 +1704,7 @@ define_datasets! {
         notes: "Designed to expose gender bias; Kaggle shared task; balanced male/female",
         tasks: ["coref"],
         hf_id: "google-gap-coreference/gap",
+        access_status: HuggingFace,
         categories: [coref, bias_evaluation],
     },
     PreCo {
@@ -1717,6 +1725,7 @@ define_datasets! {
         splits: ["train", "dev", "test"],
         tasks: ["coref"],
         hf_id: "coref-data/preco_raw",
+        access_status: HuggingFace,
         categories: [coref],
     },
     LitBank {
@@ -2111,6 +2120,7 @@ define_datasets! {
         tasks: ["re"],
         expected_docs: 5053,
         hf_id: "docred",
+        access_status: HuggingFace,
         categories: [relation_extraction],
     },
     ReTACRED {
@@ -2175,6 +2185,7 @@ define_datasets! {
         splits: ["train", "dev", "test"],
         tasks: ["ner", "discontinuous_ner"],
         hf_id: "KevinSpaghetti/cadec",
+        access_status: HuggingFace,
         categories: [ner, biomedical, discontinuous_ner],
     },
 
@@ -2859,7 +2870,7 @@ define_datasets! {
         splits: ["train", "dev", "test"],
         tasks: ["discourse_relations", "speech_act_classification"],
         hf_id: "pragmeval",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [abstract_anaphora, dialogue],
     },
     // DISRPT 2025: Unified cross-framework discourse benchmark
@@ -2981,6 +2992,7 @@ define_datasets! {
         example: "Olúṣẹ́gun B-PER\nObásanjọ́ I-PER\nní O\nìlú O\nAbẹ́òkúta B-LOC\n. O",
         notes: "Critically underrepresented languages; community-driven; tonal diacritics preserved",
         hf_id: "masakhane/masakhaner",
+        access_status: HuggingFace,
         categories: [ner, multilingual, low_resource, african_language],
     },
     MasakhaNER2 {
@@ -3000,6 +3012,7 @@ define_datasets! {
         splits: ["train", "dev", "test"],
         tasks: ["ner"],
         hf_id: "masakhane/masakhaner2",
+        access_status: HuggingFace,
         categories: [ner, multilingual, low_resource, african_language],
     },
     AfriSenti {
@@ -3020,6 +3033,7 @@ define_datasets! {
         splits: ["train", "validation", "test"],
         tasks: ["sentiment"],
         hf_id: "shmuhammad/AfriSenti-twitter-sentiment",
+        access_status: HuggingFace,
         categories: [multilingual, low_resource, social_media, african_language],
     },
     AfriQA {
@@ -3038,6 +3052,7 @@ define_datasets! {
         splits: ["train", "dev", "test"],
         tasks: ["qa"],
         hf_id: "masakhane/afriqa",
+        access_status: HuggingFace,
         categories: [multilingual, low_resource, african_language],
     },
     MasakhaNEWS {
@@ -3056,6 +3071,7 @@ define_datasets! {
         splits: ["train", "dev", "test"],
         tasks: ["text_classification"],
         hf_id: "masakhane/masakhanews",
+        access_status: HuggingFace,
         categories: [multilingual, low_resource, news, african_language],
     },
     // =========================================================================
@@ -3080,7 +3096,7 @@ define_datasets! {
         splits: ["train", "test"],
         tasks: ["text_classification"],
         hf_id: "ag_news",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [ner],  // News articles contain named entities; can be used for transfer
     },
 
@@ -3101,7 +3117,7 @@ define_datasets! {
         splits: ["train", "test"],
         tasks: ["text_classification"],
         hf_id: "dbpedia_14",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [ner, entity_linking],  // Wikipedia entities; relates to entity linking
     },
 
@@ -3122,7 +3138,7 @@ define_datasets! {
         splits: ["train", "test"],
         tasks: ["text_classification"],
         hf_id: "community-datasets/yahoo_answers_topics",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [dialogue],
     },
 
@@ -3143,7 +3159,7 @@ define_datasets! {
         splits: ["train", "test"],
         tasks: ["text_classification"],
         hf_id: "trec",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [dialogue],
     },
 
@@ -3164,7 +3180,7 @@ define_datasets! {
         splits: ["train", "validation", "test"],
         tasks: ["text_classification"],
         hf_id: "cardiffnlp/tweet_topic_multi",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [social_media],
     },
 
@@ -3185,6 +3201,7 @@ define_datasets! {
         splits: ["train", "dev", "test"],
         tasks: ["pos"],
         hf_id: "masakhane/masakhane-pos",
+        access_status: HuggingFace,
         categories: [multilingual, low_resource, african_language],
     },
     WikiANN {
@@ -3237,6 +3254,7 @@ define_datasets! {
         size_hint: "~3000 annotated abstracts",
         notes: "AACL-IJCNLP 2022 WIESP shared task; NASA ADS astrophysics literature",
         hf_id: "adsabs/WIESP2022-NER",
+        access_status: HuggingFace,
         categories: [ner, arcane_domain],
     },
     DutchArchaeology {
@@ -3835,6 +3853,7 @@ define_datasets! {
         size_hint: "70k instances, 100 relations",
         notes: "N-way K-shot evaluation; Wikidata relations; FewRel 2.0 adds domain adaptation",
         hf_id: "few_rel",
+        access_status: HuggingFace,
         categories: [relation_extraction],
     },
     NYT10 {
@@ -4052,6 +4071,7 @@ define_datasets! {
         splits: ["train"],
         tasks: ["ner", "pii_detection"],
         hf_id: "ai4privacy/pii-masking-200k",
+        access_status: HuggingFace,
         categories: [ner],
     },
 
@@ -4838,6 +4858,7 @@ define_datasets! {
         splits: ["train", "test"],
         tasks: ["ner"],
         hf_id: "nlpaueb/finer-139",
+        access_status: HuggingFace,
         categories: [ner, nested_ner, arcane_domain],
     },
 
@@ -5662,7 +5683,7 @@ define_datasets! {
         notes: "Community mirror; open-domain NER benchmark",
         tasks: ["ner"],
         hf_id: "yongsun-yoon/open-ner-english",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [ner],
     },
 
@@ -5725,7 +5746,7 @@ define_datasets! {
         notes: "Large-scale fiction NER; public on HuggingFace",
         tasks: ["ner"],
         hf_id: "SaladTechnologies/fiction-ner-750m",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [ner, literary],
     },
 
