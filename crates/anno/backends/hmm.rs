@@ -14,7 +14,7 @@
 //! ```text
 //! 1987  MUC-1: First IE conference (no formal NER task)
 //! 1996  MUC-6: NER formally defined (PER, ORG, LOC)
-//! 1997  Nymble (Bikel et al.): First HMM NER system (~85% F1)
+//! 1997  Nymble (Bikel et al.): early HMM NER system
 //! 1998  BBN IdentiFinder: HMM-based, MUC-7 benchmark
 //! 2001  CRFs introduced (Lafferty et al.) — HMMs superseded
 //! ```
@@ -75,7 +75,7 @@
 //! | Features | Word identity only | Arbitrary features |
 //! | Context | First-order Markov | Arbitrary windows |
 //! | Label Bias | Inherent | Solved |
-//! | Performance | ~85% F1 | ~91% F1 |
+//! | Performance | task-dependent | task-dependent |
 //!
 //! HMMs can only condition on word identity. CRFs can use arbitrary
 //! features: capitalization, prefixes, suffixes, POS tags, gazetteers.
@@ -91,9 +91,7 @@
 //!
 //! # See Also
 //!
-//! - `docs/notes/research/systems/HISTORICAL_SYSTEMS.md`: Historical NER survey mapping
-//! - `tests/historical_methods_comparison.rs`: Comparison tests vs CRF, BiLSTM-CRF
-//! - `tests/property_backends.rs`: Property-based tests for HMM invariants
+//! - CRF-style sequence models (`backends/crf.rs`)
 
 use crate::{Entity, EntityType, Model, Result};
 use std::collections::HashMap;
