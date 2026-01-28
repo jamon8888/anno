@@ -22,7 +22,7 @@
 use crate::eval::backend_factory::BackendFactory;
 use crate::eval::loader::{DatasetId, DatasetLoader};
 use crate::eval::task_evaluator::{TaskEvalConfig, TaskEvaluator};
-use crate::eval::task_mapping::Task;
+use crate::eval::task_mapping::{backend_tasks, dataset_tasks, Task};
 use muxer::{MabConfig, Outcome, Summary, Window};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -70,6 +70,57 @@ fn max_examples_per_dataset() -> usize {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(default)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum MatrixPerspective {
+    Ner,
+    Coref,
+    Coalesce,
+}
+
+impl MatrixPerspective {
+    fn from_env() -> Self {
+        match std::env::var("ANNO_MATRIX_PERSPECTIVE")
+            .ok()
+            .unwrap_or_else(|| "ner".to_string())
+            .to_lowercase()
+            .as_str()
+        {
+            "coref" | "intra-coref" | "intracoref" => Self::Coref,
+            "coalesce" | "inter-coref" | "intercoref" | "cdcr" => Self::Coalesce,
+            _ => Self::Ner,
+        }
+    }
+
+    fn tasks(&self) -> Vec<Task> {
+        match self {
+            Self::Ner => vec![Task::NER],
+            Self::Coref => vec![Task::IntraDocCoref],
+            Self::Coalesce => vec![Task::InterDocCoref],
+        }
+    }
+
+    fn preferred_datasets(&self) -> &'static [DatasetId] {
+        match self {
+            Self::Ner => &[
+                DatasetId::WikiGold,
+                DatasetId::Wnut17,
+                DatasetId::MitRestaurant,
+                DatasetId::MitMovie,
+                DatasetId::CoNLL2003Sample,
+            ],
+            // Prefer smaller/common coref datasets that are likely to be cached.
+            Self::Coref => &[
+                DatasetId::GAP,
+                DatasetId::PreCo,
+                DatasetId::OntoNotesCoref,
+                DatasetId::LitBank,
+            ],
+            // Cross-doc / CDCR style.
+            Self::Coalesce => &[DatasetId::ECBPlus, DatasetId::WikiCoref],
+        }
+    }
 }
 
 fn history_path() -> PathBuf {
@@ -294,6 +345,7 @@ fn test_randomized_matrix_sample() {
 
     let seed = ci_seed();
     let strategy = SampleStrategy::from_env();
+    let perspective = MatrixPerspective::from_env();
     let hist_path = history_path();
     let window_cap = 50;
 
@@ -312,10 +364,25 @@ fn test_randomized_matrix_sample() {
 
     let mut history = BackendHistory::load(&hist_path, window_cap);
 
+    let tasks = perspective.tasks();
+
     // Backends: choose a *tiny* subset per run (keep this test fast).
-    let candidates = backend_candidates(strategy);
+    let mut candidates = backend_candidates(strategy);
     if candidates.is_empty() {
         eprintln!("matrix-muxer: no backend candidates available for this feature set");
+        return;
+    }
+
+    // Filter backend candidates down to those that can actually serve the chosen tasks.
+    candidates.retain(|b| {
+        let ts = backend_tasks(b);
+        tasks.iter().any(|t| ts.contains(t))
+    });
+    if candidates.is_empty() {
+        eprintln!(
+            "matrix-muxer: no backend candidates support tasks={:?} for this feature set",
+            tasks
+        );
         return;
     }
 
@@ -323,24 +390,37 @@ fn test_randomized_matrix_sample() {
 
     // Datasets: choose 2 cached datasets, biased toward small/common ones.
     // Keep this deterministic and stable across runs.
-    let preferred = [
-        DatasetId::WikiGold,
-        DatasetId::Wnut17,
-        DatasetId::MitRestaurant,
-        DatasetId::MitMovie,
-        DatasetId::CoNLL2003Sample,
-    ];
-    let mut chosen_datasets: Vec<DatasetId> = preferred
+    let eligible_cached: Vec<DatasetId> = cached_datasets
+        .iter()
+        .copied()
+        .filter(|d| {
+            let ts = dataset_tasks(*d);
+            tasks.iter().any(|t| ts.contains(t))
+        })
+        .collect();
+    if eligible_cached.is_empty() {
+        eprintln!(
+            "matrix-muxer: no cached datasets support tasks={:?} (cache_dir={:?})",
+            tasks,
+            loader.cache_dir()
+        );
+        return;
+    }
+
+    let mut chosen_datasets: Vec<DatasetId> = perspective
+        .preferred_datasets()
+        .iter()
+        .copied()
         .into_iter()
-        .filter(|d| cached_datasets.contains(d))
+        .filter(|d| eligible_cached.contains(d))
         .take(2)
         .collect();
     if chosen_datasets.len() < 2 {
         // Fallback: deterministic sample of whatever is cached.
-        let ds_strings: Vec<String> = cached_datasets.iter().map(|d| format!("{:?}", d)).collect();
+        let ds_strings: Vec<String> = eligible_cached.iter().map(|d| format!("{:?}", d)).collect();
         let chosen_ds_strings = pick_random_subset(seed ^ 0xDADA_BEEF, &ds_strings, 2);
         chosen_datasets.extend(
-            cached_datasets
+            eligible_cached
                 .into_iter()
                 .filter(|d| chosen_ds_strings.contains(&format!("{:?}", d))),
         );
@@ -348,10 +428,6 @@ fn test_randomized_matrix_sample() {
         chosen_datasets.dedup();
         chosen_datasets.truncate(2);
     }
-
-    // Tasks: keep it to NER only (fast + ubiquitous). Other tasks are covered by
-    // dedicated eval workflows (`eval-full`, etc.).
-    let tasks = vec![Task::NER];
 
     let eval = TaskEvaluator::new().expect("TaskEvaluator::new");
 
@@ -368,7 +444,9 @@ fn test_randomized_matrix_sample() {
         temporal_stratification: false,
         confidence_intervals: false,
         custom_coref_resolver: None,
-        coref_use_gold_mentions: false,
+        coref_use_gold_mentions: std::env::var("ANNO_COREF_GOLD")
+            .ok()
+            .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
     };
 
     let results = match eval.evaluate_all(config) {
