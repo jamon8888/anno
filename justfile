@@ -934,18 +934,18 @@ spot-upload-src:
     @aws s3 cp /tmp/anno-src.tar.gz s3://arc-anno-data/src/anno-src.tar.gz
     @echo "Source uploaded to s3://arc-anno-data/src/anno-src.tar.gz"
 
-# Run CI-style randomized matrix test locally (uses spot badness history)
-ci-matrix-local SEED="42":
+# Run CI-style muxer-backed sampler locally.
+# This runs a small cached-only slice and persists muxer state to `ANNO_HISTORY_FILE` (JSON)
+# or to the default `muxer_history.json` location when unset.
+ci-matrix-local SEED="42" PERSPECTIVE="ner":
     ANNO_CI_SEED="{{SEED}}" \
+    ANNO_MATRIX_PERSPECTIVE="{{PERSPECTIVE}}" \
     ANNO_SAMPLE_STRATEGY=worst-first \
-    ANNO_HISTORY_FILE=reports/badness-history.csv \
-    cargo test --test randomized_matrix_ci --features "eval-advanced" -- --nocapture
+    cargo test -p anno --lib --features "eval-advanced" matrix_muxer_ci::test_randomized_matrix_sample -- --nocapture
 
-# Export badness history from spot results for CI consumption
+# Legacy: spot “badness history” export is not wired into the muxer JSON format by default.
 spot-export-badness:
-    @mkdir -p reports
-    @uv run scripts/spot/orchestrate.py results --badness-export reports/badness-history.csv 2>/dev/null || \
-        echo "No spot results yet. Run just spot-eval first."
+    @echo "Not implemented: spot -> muxer history export. Run ci-matrix-local to generate muxer_history.json from local runs."
 
 # Compare spot results against a baseline
 spot-compare BASELINE:
