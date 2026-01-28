@@ -503,8 +503,6 @@ impl MentionRankingConfig {
     /// - Context-based link filtering
     /// - Synonym matching for medical terms
     ///
-    /// Achieved 89.6% F1 on clinical data.
-    ///
     /// # Example
     ///
     /// ```rust

@@ -7,7 +7,7 @@
 //!
 //! Gazetteers are most valuable when:
 //! 1. **Domain is closed**: Fixed, known entity lists
-//! 2. **Text is short**: <50 tokens where context is insufficient (GEMNET +49% F1)
+//! 2. **Text is short**: where context is insufficient (see the “gazetteer + neural” literature)
 //! 3. **Used as features**: Input to neural model, not final output
 //!
 //! # Usage

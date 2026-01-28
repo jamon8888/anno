@@ -375,7 +375,7 @@ pub enum License {
     LDC,
     /// Research-only license
     ResearchOnly,
-    /// Proprietary / internal use only
+    /// Proprietary (restricted use; typically not redistributable)
     Proprietary,
     /// Unknown license
     #[default]

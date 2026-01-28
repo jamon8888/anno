@@ -855,10 +855,10 @@ impl std::fmt::Display for ExtractionMethod {
 /// # Research Context
 ///
 /// Gazetteers (lists of known entities) are a classic NER technique. Modern research
-/// shows they're most valuable when:
+/// suggests they are most valuable when:
 ///
 /// 1. **Domain is closed**: Stock tickers, medical codes, known product catalogs
-/// 2. **Text is short**: <50 tokens where context is insufficient (GEMNET +49% F1)
+/// 2. **Text is short**: where context is insufficient
 /// 3. **Used as features**: Input to neural model, not final output (Song et al. 2020)
 ///
 /// They're harmful when:
