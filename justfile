@@ -213,6 +213,19 @@ eval-wide MAX_EXAMPLES="50":
 eval-sanity:
     ./scripts/eval-sanity.sh
 
+# Regenerate dataset registry exports and derived tooling files.
+regenerate-datasets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo test -p anno --features eval generate_datasets_json -- --ignored
+    cargo test -p anno --features eval generate_datasets_jsonl -- --ignored
+    cargo test -p anno --features eval generate_datasets_markdown -- --ignored
+    python3 scripts/generate_download_configs.py \
+        --input generated/datasets_generated.json \
+        --output generated/download_configs_generated.json \
+        --stats
+    python3 scripts/generate_catalog_html.py
+
 # Curated benchmark profiles (official; avoids parsing markdown and avoids “sweep everything”).
 # Examples:
 # - just eval-profile ner-standard 20
