@@ -1297,6 +1297,7 @@ define_datasets! {
         notes: "Hierarchical type system; benchmark for few-shot and fine-grained NER. Note: HuggingFace API may return 422 errors; consider downloading locally.",
         tasks: ["ner"],
         hf_id: "DFKI-SLT/few-nerd",
+        access_status: HuggingFace,
         categories: [ner],
     },
 
@@ -1316,6 +1317,7 @@ define_datasets! {
         notes: "Tests cross-domain transfer; domain-specific entity types. Use HuggingFace datasets library to load.",
         hf_id: "DFKI-SLT/cross_ner",
         hf_config: "politics",
+        access_status: HuggingFace,
         categories: [ner],
     },
 
@@ -1334,6 +1336,7 @@ define_datasets! {
         size_hint: "~14k sentences, 12 entity types",
         notes: "Specialized manufacturing/engineering domain; Industry 4.0",
         hf_id: "DFKI-SLT/fabner",
+        access_status: HuggingFace,
         categories: [ner],
     },
 
@@ -1372,6 +1375,7 @@ define_datasets! {
         notes: "Automatically generated silver annotations; useful for pre-training",
         hf_id: "Babelscape/wikineural",
         hf_config: "en",
+        access_status: HuggingFace,
         categories: [ner, multilingual],
     },
 
@@ -1391,7 +1395,7 @@ define_datasets! {
         notes: "Largest language coverage; silver annotations via Wikipedia links",
         tasks: ["ner"],
         hf_id: "rmyeid/polyglot_ner",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [ner, multilingual],
     },
 
@@ -1526,7 +1530,7 @@ define_datasets! {
         size_hint: "11 languages, ~1.1M tokens",
         notes: "SemEval-2022 shared task; complex entities from diverse sources. Community mirror of original.",
         hf_id: "samanjoy2/multiconer_v1",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [ner, multilingual],
     },
 
@@ -1546,7 +1550,7 @@ define_datasets! {
         notes: "SemEval-2023 shared task; expanded from v1 with more types.",
         tasks: ["ner"],
         hf_id: "MultiCoNER/multiconer_v2",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [ner, multilingual],
     },
 
@@ -1608,6 +1612,7 @@ define_datasets! {
         example: "The B-protein\nNF-kappa B I-protein\nprotein I-protein\nbinds O\nto O\nthe B-DNA\nkappa B I-DNA\nbinding I-DNA\nsite I-DNA\n. O",
         notes: "Nested entities common; requires special handling; pioneered biomedical NER",
         hf_id: "chufangao/GENIA-NER",
+        access_status: HuggingFace,
         categories: [ner, biomedical],
     },
 
@@ -1626,6 +1631,7 @@ define_datasets! {
         size_hint: "1,212 abstracts, ~7k entity mentions",
         notes: "Fine-grained anatomical mentions; standalone or nested within other entities",
         hf_id: "disi-unibo-nlp/AnatEM",
+        access_status: HuggingFace,
         categories: [ner, biomedical],
     },
 
@@ -1646,7 +1652,7 @@ define_datasets! {
         notes: "Classic benchmark for gene/protein NER; BioCreative shared task",
         tasks: ["ner"],
         hf_id: "spyysalo/bc2gm_corpus",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [ner, biomedical],
     },
 
@@ -1667,7 +1673,7 @@ define_datasets! {
         notes: "Chemical NER benchmark; includes IUPAC names, trivial names, abbreviations",
         tasks: ["ner"],
         hf_id: "chintagunta85/bc4chemd",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [ner, biomedical],
     },
 
@@ -6982,7 +6988,7 @@ define_datasets! {
         notes: "ChatGPT-distilled NER model benchmark",
         tasks: ["ner"],
         hf_id: "universalner/universal_ner",
-        access_status: Public,
+        access_status: HuggingFace,
         categories: [ner, multilingual],
     },
 
