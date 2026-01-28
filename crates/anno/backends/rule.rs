@@ -6,15 +6,7 @@
 //! ## Why Deprecated
 //!
 //! This module contains hardcoded gazetteers (100+ org names, 60+ locations)
-//! that give inflated F1 scores on curated test sets but fail on novel entities.
-//!
-//! | Backend | CoNLL-03 F1 | HOP Test F1 | Problem |
-//! |---------|-------------|-------------|---------|
-//! | BERT ONNX | ~86% | ~74% | None - generalizes |
-//! | Rule-based | **~50%** | **~84%** | Only finds known entities |
-//!
-//! The 84% F1 on HOP tests is because test entities match gazetteers.
-//! On novel entities (Anthropic, DeepMind, etc.), rule-based fails.
+//! that can score well on curated test sets but fail on novel entities.
 //!
 //! ## Migration
 //!
@@ -31,7 +23,7 @@
 //!
 //! - For legacy compatibility only
 //! - For deterministic/reproducible results on known entity sets
-//! - For extremely low-latency requirements (~0.3ms)
+//! - For extremely low-latency requirements
 //!
 //! But understand: it cannot generalize to unseen entities.
 
