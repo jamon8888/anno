@@ -18,7 +18,7 @@
 //! - Preserving entity context (better disambiguation)
 //! - Respecting topic boundaries (reduced boundary artifacts)
 //!
-//! See `docs/notes/design/SEMANTIC_CHUNKING_ANALYSIS.md` for detailed analysis.
+//! See `docs/` for repo-local notes and entry points.
 //!
 //! # Example
 //!

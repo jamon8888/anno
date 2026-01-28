@@ -51,9 +51,7 @@
 //!
 //! # See Also
 //!
-//! - `docs/notes/research/systems/HISTORICAL_SYSTEMS.md`: Historical NER survey mapping
-//! - `tests/historical_methods_comparison.rs`: Comparison tests vs HMM, BiLSTM-CRF
-//! - `tests/property_backends.rs`: Property-based tests for CRF invariants
+//! - Historical NER baselines (HMM/CRF-era sequence models)
 //!
 //! # Feature Templates
 //!
@@ -75,8 +73,8 @@
 //!
 //! # Performance
 //!
-//! | Weights | CoNLL-2003 F1 | Notes |
-//! |---------|---------------|-------|
+//! Performance depends on weights, tokenization, and dataset; use the eval harness
+//! for quantitative results.
 //! | Heuristic | ~65-70% | Hand-tuned, always available |
 //! | Trained | ~88-91% | From `train_crf_weights.py` |
 //! | Neural | ~93-95% | For comparison (GLiNER, BERT) |

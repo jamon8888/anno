@@ -55,7 +55,8 @@
 //! 2. Export weights: `just export-model checkpoints/best.ckpt`
 //! 3. Load in anno with this module
 //!
-//! See `docs/notes/design/embeddings/BOX_COREF_INTEGRATION.md` for full details.
+//! See `docs/` for integration notes (repo-local docs; keep this module usable without
+//! assuming unpublished design notes).
 
 use crate::Error;
 use std::path::Path;
