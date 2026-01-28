@@ -709,7 +709,7 @@ impl TypeMapper {
 /// | SoftLexicon | Medium | High | Good for rare types | Low-resource NER |
 /// | GatedEnsemble | Highest | Highest | Contextual | Short texts, domain shift |
 ///
-/// See `docs/notes/design/types/LEXICON_DESIGN.md` for detailed research context.
+/// See `docs/` for repo-local notes and entry points.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[non_exhaustive]
 pub enum ExtractionMethod {

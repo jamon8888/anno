@@ -68,16 +68,6 @@
 //! - Ma & Hovy 2016: "End-to-end Sequence Labeling via Bi-directional LSTM-CNNs-CRF"
 //! - Peters et al. 2018: "Deep Contextualized Word Representations" (ELMo)
 //!
-//! # Performance (CoNLL-2003 English)
-//!
-//! | Model Variant | F1 | Notes |
-//! |---------------|-----|-------|
-//! | CRF (Stanford NER) | ~88.0% | Feature-engineered baseline |
-//! | BiLSTM-CRF (GloVe) | ~90.9% | Lample et al. 2016 |
-//! | BiLSTM-CRF + char CNN | ~91.2% | Ma & Hovy 2016 |
-//! | ELMo + BiLSTM-CRF | ~92.2% | Peters et al. 2018 |
-//! | BERT fine-tuned | ~92.8% | Devlin et al. 2019 |
-//!
 //! # References
 //!
 //! - Collobert, Weston, Bottou, et al. (2011): "Natural Language Processing
@@ -91,9 +81,7 @@
 //!
 //! # See Also
 //!
-//! - `docs/notes/research/systems/HISTORICAL_SYSTEMS.md`: Historical NER survey mapping
-//! - `tests/historical_methods_comparison.rs`: Comparison tests vs HMM, CRF
-//! - `tests/property_backends.rs`: Property-based tests for BiLSTM-CRF invariants
+//! - Historical NER baselines (HMM/CRF-era sequence models)
 //!
 //! # Usage
 //!
