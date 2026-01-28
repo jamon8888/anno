@@ -193,6 +193,19 @@ impl LoadableDatasetId {
 
     #[must_use]
     fn is_loadable_dataset(id: DatasetId) -> bool {
+        // Loader truth: some catalog entries are intentionally non-loadable (blocked, deprecated,
+        // or require manual access) even if they have a parse plan.
+        //
+        // Keep this list small and motivated. Prefer expressing “non-loadable” in the registry
+        // metadata first, then enforcing it here so CLI counts and `LoadableDatasetId` remain
+        // honest.
+        if matches!(
+            id,
+            DatasetId::CoNLL2002 | DatasetId::CoNLL2002Spanish | DatasetId::CoNLL2002Dutch
+        ) {
+            return false;
+        }
+
         Self::parse_plan(id).is_some()
     }
 
@@ -231,9 +244,6 @@ impl LoadableDatasetId {
             | DatasetId::BioMNER
             | DatasetId::MasakhaNER
             | DatasetId::MasakhaNER2
-            | DatasetId::CoNLL2002
-            | DatasetId::CoNLL2002Spanish
-            | DatasetId::CoNLL2002Dutch
             | DatasetId::OntoNotes50
             | DatasetId::GermEval2014
             | DatasetId::HAREM
@@ -688,7 +698,6 @@ impl LoadableDatasetId {
                 | DatasetId::FabNER
                 | DatasetId::WikiNeural
                 | DatasetId::WikiANN
-                | DatasetId::CoNLL2002
                 | DatasetId::MultiCoNER
                 | DatasetId::MultiCoNERv2
                 | DatasetId::PolyglotNER
