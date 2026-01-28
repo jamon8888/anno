@@ -101,7 +101,7 @@
 //!     Domain::Legal,          // E-NER SEC
 //!     Domain::Cybersecurity,  // AnnoCTR
 //!     Domain::Music,          // Distant Listening Corpus
-//!     Domain::Literary,       // LitBank, Mahānāma
+//!     Domain::Literary,       // LitBank, etc.
 //!     Domain::Historical,     // HIPE-2022, medieval corpora
 //! ];
 //! ```
