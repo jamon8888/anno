@@ -99,3 +99,5 @@ If you use spot evaluation, run the aggregator to regenerate:
 - `reports/eval-summary.json`
 - `reports/RESULTS.md`
 
+See `scripts/spot/README.md` and run `uv run scripts/spot/aggregate.py --download` (requires AWS credentials and access to the configured bucket).
+
