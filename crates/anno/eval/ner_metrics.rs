@@ -12,10 +12,9 @@
 //!
 //! # Known Limitations (2023-2024 Research)
 //!
-//! **Benchmark noise**: 7% of CoNLL-03 labels are incorrect. On the original benchmark,
-//! **47% of "errors" were actually correct predictions** penalized by annotation mistakes.
-//! After correction (CleanCoNLL), SOTA F1 jumped from 94% to 97.1%.
-//! (Rücker & Akbik, EMNLP 2023)
+//! **Benchmark noise**: public NER benchmarks can contain annotation noise; this can
+//! distort “headline” scores and error analyses. See CleanCoNLL (Rücker & Akbik, 2023)
+//! for one concrete audit/correction pass on CoNLL-03.
 //!
 //! **Measurement conflation**: Strict F1 conflates:
 //! - Boundary errors ("John" vs "John Smith")

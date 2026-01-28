@@ -49,9 +49,9 @@
 //!   anti-stereotypical pronoun-occupation pairs. This simple resolver doesn't
 //!   address that—use ML-based systems with debiasing for production.
 //!
-//! - **Neopronoun performance gap**: Research (MISGENDERED, ACL 2023) shows
-//!   ML models achieve only ~7.7% accuracy on neopronouns out-of-the-box.
-//!   Our rule-based approach handles them correctly but can't learn context.
+//! - **Neopronoun performance gap**: Research (MISGENDERED, ACL 2023) reports
+//!   poor out-of-the-box handling of neopronouns in ML systems. Our rule-based
+//!   approach recognizes a small set but cannot learn context.
 //!
 //! - **No intersectional analysis**: WinoIdentity shows bias compounds for
 //!   doubly-disadvantaged groups. We don't measure or mitigate this.

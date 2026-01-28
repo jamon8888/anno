@@ -1,9 +1,7 @@
 //! Maverick Coreference Resolution Implementation
 //!
 //! This module implements Maverick (Martinelli, Barba & Navigli, ACL 2024),
-//! a state-of-the-art coreference resolution system achieving 83.6 CoNLL-F1
-//! on OntoNotes while using 0.006x memory and 170x faster inference than
-//! prior SOTA.
+//! a modern coreference resolution system with a coarse-to-fine pipeline.
 //!
 //! # Architecture Overview
 //!
@@ -38,14 +36,6 @@
 //! - **Pronoun**: "he" ↔ "him" ↔ "his"
 //!
 //! This specialization improves precision without sacrificing recall.
-//!
-//! # Model Variants
-//!
-//! | Variant | Use Case | Score |
-//! |---------|----------|-------|
-//! | `maverick-mes-ontonotes` | General text | 83.6 CoNLL-F1 |
-//! | `maverick-mes-litbank` | Literary texts | 78.0 CoNLL-F1 |
-//! | `maverick-mes-preco` | With singletons | 87.4 CoNLL-F1 |
 //!
 //! # References
 //!

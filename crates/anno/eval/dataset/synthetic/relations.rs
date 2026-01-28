@@ -14,7 +14,7 @@
 //! > "Document-level relation extraction requires integrating
 //! > information across sentences."
 //!
-//! Benchmark datasets: TACRED (~70% F1), DocRED (~60% F1), SciERC (~45% F1)
+//! Benchmark datasets include TACRED, DocRED, and SciERC.
 
 use crate::eval::relation::RelationGold;
 

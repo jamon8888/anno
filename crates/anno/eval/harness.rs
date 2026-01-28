@@ -252,7 +252,7 @@ impl BackendRegistry {
             Ok(gliner) => {
                 self.register(
                     "GLiNER",
-                    "Zero-shot NER via ONNX (~90% F1)",
+                    "Zero-shot NER via ONNX",
                     Box::new(gliner),
                 );
             }
@@ -264,7 +264,7 @@ impl BackendRegistry {
         // BERT NER (fine-tuned)
         match BertNEROnnx::new(DEFAULT_BERT_ONNX_MODEL) {
             Ok(bert) => {
-                self.register("BertNEROnnx", "BERT NER via ONNX (~86% F1)", Box::new(bert));
+                self.register("BertNEROnnx", "BERT NER via ONNX", Box::new(bert));
             }
             Err(e) => {
                 log::warn!("Failed to load BERT ONNX: {}", e);
