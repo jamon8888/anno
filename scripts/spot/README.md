@@ -92,8 +92,9 @@ Treat this directory as a runner, not a benchmark; measure your own spend and wa
 | `launch.sh` | Launch spot fleet with specified capacity |
 | `worker.sh` | Runs on each spot instance (pulls tasks, runs eval) |
 | `orchestrate.py` | Generate tasks, monitor progress, aggregate results |
-| `teardown.sh` | Clean up all AWS resources |
-| `cloudformation.yaml` | Full infrastructure as code |
+| `monitor.py` | Live worker monitoring via SSM |
+| `aggregate.py` | Local aggregation utilities for results |
+| `merge_cache.py` | Merge/cache helpers for spot runs |
 
 ## Environment Variables
 
