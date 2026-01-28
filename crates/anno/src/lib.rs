@@ -1012,3 +1012,9 @@ mod regression_f1;
 #[path = "../../../archive/legacy-tests/randomized_matrix_ci.rs"]
 #[cfg(all(feature = "eval-advanced", feature = "cli"))]
 mod randomized_matrix_ci;
+
+// New muxer-backed CI matrix sampler. This lives in-tree (not archived) and is intended
+// to be the stable test target for GitHub Actions.
+#[cfg(test)]
+#[cfg(feature = "eval-advanced")]
+mod matrix_muxer_ci;
