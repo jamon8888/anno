@@ -119,7 +119,10 @@
 //!
 //! 1. Add an entry in `define_datasets!` below
 //! 2. Run tests to verify: `cargo test -p anno --features eval`
-//! 3. Regenerate exports: `cargo test generate_datasets_markdown -- --ignored`
+//! 3. Regenerate exports:
+//!    - `cargo test -p anno --features eval generate_datasets_json -- --ignored`
+//!    - `cargo test -p anno --features eval generate_datasets_jsonl -- --ignored`
+//!    - `cargo test -p anno --features eval generate_datasets_markdown -- --ignored`
 //! 4. If the dataset should be *loadable*, ensure `eval::loader::LoadableDatasetId`
 //!    maps it to a parsing plan.
 //!
@@ -384,6 +387,17 @@ macro_rules! define_datasets {
             pub fn domain(&self) -> &'static str {
                 match self {
                     $(Self::$variant => $domain,)*
+                }
+            }
+
+            /// Get the category tags for this dataset.
+            ///
+            /// Categories are used for discovery/filtering (domain, language family, annotation
+            /// properties). They are not intended to encode benchmark outcomes.
+            #[must_use]
+            pub fn categories(&self) -> &'static [&'static str] {
+                match self {
+                    $(Self::$variant => &[$(stringify!($cat)),*],)*
                 }
             }
 
@@ -9405,164 +9419,6 @@ define_datasets! {
 
 #[allow(clippy::items_after_test_module)]
 impl DatasetId {
-    /// Get expected baseline performance with full context (model, task, split, metric).
-    /// Returns structured baseline data including model architecture, task type, dataset split,
-    /// and evaluation metric. This provides the necessary context for meaningful comparison.
-    #[must_use]
-    pub fn expected_baseline(&self) -> Option<crate::eval::baseline::BaselinePerformance> {
-        use crate::eval::baseline::{common, BaselinePerformance};
-
-        match self {
-            // Core NER benchmarks - BERT-base on test set
-            Self::CoNLL2003Sample => Some(common::bert_base_ner("test", 92.5)),
-            Self::OntoNotesSample => Some(common::bert_base_ner("test", 89.5)),
-            Self::OntoNotes50 => Some(common::bert_base_ner("test", 89.5)),
-
-            // Biomedical NER - BioBERT on test/dev sets
-            Self::GENIA => Some(common::biobert_ner("test", 79.0)),
-            Self::BC5CDR => Some(common::biobert_ner("test", 87.0)),
-            Self::NCBIDisease => Some(common::biobert_ner("test", 89.0)),
-            Self::CHEMDNER => Some(
-                BaselinePerformance::new(87.0, "CHEMDNER-2013-winner", "ner", "test")
-                    .with_citation("CHEMDNER 2013 shared task"),
-            ),
-            Self::JNLPBA => Some(common::biobert_ner("test", 77.0)),
-            Self::BC2GM => Some(common::biobert_ner("test", 84.0)),
-            Self::BC4CHEMD => Some(common::biobert_ner("test", 91.0)),
-            Self::AnatEM => Some(common::biobert_ner("test", 85.0)),
-            Self::CRAFT => Some(common::biobert_ner("test", 82.0)),
-            Self::BC2GMFull => Some(common::biobert_ner("test", 84.0)),
-
-            // Multilingual NER - mBERT baselines
-            Self::WikiANN => {
-                Some(common::mbert_ner("test", 75.0).with_notes("Average across 282 languages"))
-            }
-            Self::MultiNERD => Some(common::mbert_ner("test", 85.0)),
-            Self::MultiCoNER => Some(common::mbert_ner("test", 80.0)),
-            Self::MultiCoNERv2 => Some(common::mbert_ner("test", 82.0)),
-            Self::MasakhaNER => Some(common::mbert_ner("test", 75.0)),
-            Self::CoNLL2002 => Some(common::mbert_ner("test", 88.0)),
-            Self::GermEval2014 => Some(common::mbert_ner("test", 86.0)),
-            Self::FinNER => Some(common::mbert_ner("test", 81.0)),
-
-            // Coreference benchmarks - BERT-base with CoNLL F1 metric
-            Self::GAP => Some(common::bert_coref("test", 85.0)),
-            Self::PreCo => Some(common::bert_coref("test", 82.0)),
-            Self::LitBank => Some(common::bert_coref("test", 75.0)),
-
-            // Relation extraction - BERT/RoBERTa baselines
-            Self::DocRED => {
-                Some(common::bert_re("test", 58.0).with_notes("Document-level RE (harder)"))
-            }
-            Self::ReTACRED => Some(common::bert_re("test", 72.0).with_notes("Sentence-level RE")),
-            Self::EnzChemRED => {
-                Some(common::biobert_ner("test", 86.0).with_notes("Enzyme chemistry RE"))
-            }
-            Self::SciERC => Some(
-                BaselinePerformance::new(68.0, "SciBERT", "re", "test")
-                    .with_citation("Beltagy et al. 2019")
-                    .with_metric("F1"),
-            ),
-
-            // Event extraction - BERT baselines
-            Self::MAVEN => Some(common::bert_base_ner("test", 65.0).with_notes("168 event types")),
-            Self::MAVENArg => {
-                Some(common::bert_base_ner("test", 58.0).with_notes("Argument extraction"))
-            }
-            Self::CASIE => {
-                Some(common::bert_base_ner("test", 72.0).with_notes("Cybersecurity events"))
-            }
-            Self::RAMS => {
-                Some(common::bert_base_ner("test", 70.0).with_notes("Document-level events"))
-            }
-
-            // Domain-specific
-            Self::MitMovie => {
-                Some(common::bert_base_ner("test", 88.0).with_notes("Domain slot filling"))
-            }
-            Self::MitRestaurant => {
-                Some(common::bert_base_ner("test", 79.0).with_notes("Domain slot filling"))
-            }
-            Self::FewNERD => {
-                Some(common::bert_base_ner("test", 70.0).with_notes("Fine-grained (66 types)"))
-            }
-            Self::CrossNER => {
-                Some(common::bert_base_ner("test", 75.0).with_notes("Cross-domain average"))
-            }
-            Self::LegalNER => Some(
-                BaselinePerformance::new(83.0, "Legal-BERT", "ner", "test")
-                    .with_notes("Legal domain specialized BERT"),
-            ),
-            Self::FiNER139 => {
-                Some(common::bert_base_ner("test", 76.0).with_notes("Financial NER (139 types)"))
-            }
-            Self::AgCNER => Some(
-                BaselinePerformance::new(94.0, "BERT-BiLSTM-CRF", "ner", "test")
-                    .with_citation("Yao et al. 2024"),
-            ),
-
-            // Social media (noisy text, lower scores)
-            Self::BroadTwitterCorpus => {
-                Some(common::bert_base_ner("test", 65.0).with_notes("Noisy text"))
-            }
-            Self::TweetNER7 => {
-                Some(common::bert_base_ner("test", 72.0).with_notes("Twitter NER (domain-adapted)"))
-            }
-            Self::Wnut17 => {
-                Some(common::bert_base_ner("test", 55.0).with_notes("Emerging entities"))
-            }
-
-            // Historical/classical languages
-            Self::LatinUD => Some(common::mbert_ner("test", 70.0).with_notes("Classical Latin")),
-            Self::AncientGreekUD => {
-                Some(common::mbert_ner("test", 65.0).with_notes("Ancient Greek"))
-            }
-            Self::SanskritUD => {
-                Some(common::mbert_ner("test", 68.0).with_notes("Classical Sanskrit"))
-            }
-            Self::ClassicalChineseUD => {
-                Some(common::mbert_ner("test", 72.0).with_notes("Historical Chinese"))
-            }
-
-            // WikiGold (smaller, noisier)
-            Self::WikiGold => {
-                Some(common::bert_base_ner("test", 80.0).with_notes("Smaller, noisier dataset"))
-            }
-
-            _ => None, // No baseline available - add as research progresses
-        }
-    }
-
-    /// Get expected baseline F1 score (as percentage, e.g., 93.0 for 93%).
-    ///
-    /// **Deprecated**: Use `expected_baseline()` for full context (model, task, split, metric).
-    /// This method is kept for backwards compatibility but loses important context.
-    #[must_use]
-    #[deprecated(
-        note = "Use expected_baseline() for full context. This method loses model/task/split information."
-    )]
-    pub fn expected_f1(&self) -> Option<f32> {
-        self.expected_baseline().map(|b| b.f1)
-    }
-
-    /// Get expected baseline for zero-shot models (typically 5-15% lower F1).
-    #[must_use]
-    pub fn expected_zero_shot_baseline(
-        &self,
-    ) -> Option<crate::eval::baseline::BaselinePerformance> {
-        self.expected_baseline().map(|b| b.zero_shot_adjustment())
-    }
-
-    /// Get expected F1 for zero-shot models (typically 5-15% lower).
-    ///
-    /// **Deprecated**: Use `expected_zero_shot_baseline()` for full context.
-    #[must_use]
-    #[deprecated(note = "Use expected_zero_shot_baseline() for full context.")]
-    pub fn expected_zero_shot_f1(&self) -> Option<f32> {
-        self.expected_baseline()
-            .map(|b| b.zero_shot_adjustment().f1)
-    }
-
     /// Get tasks with fallback to category-based inference.
     ///
     /// Many datasets don't have explicit `tasks` defined but have task-like
