@@ -6,21 +6,9 @@
 //!
 //! # Why This Matters
 //!
-//! ```text
-//! WITHOUT spawn_blocking:
-//! ─────────────────────────
-//! Request 1 → [ONNX inference 100ms] → Response 1
-//!                                      Request 2 → [ONNX 100ms] → Response 2
-//!                                                                  Request 3 → ...
-//! Total: 300ms for 3 requests (serialized!)
-//!
-//! WITH spawn_blocking:
-//! ────────────────────
-//! Request 1 → [spawn_blocking → ONNX] → Response 1
-//! Request 2 → [spawn_blocking → ONNX] → Response 2   (parallel!)
-//! Request 3 → [spawn_blocking → ONNX] → Response 3
-//! Total: ~100ms for 3 requests (parallel on blocking pool)
-//! ```
+//! Running blocking inference on an async executor thread can starve unrelated
+//! tasks. The adapters here run inference on a blocking thread pool so request
+//! handling stays responsive under concurrency.
 //!
 //! # Example
 //!

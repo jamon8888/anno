@@ -10,12 +10,12 @@
 //!
 //! # Available Encoders
 //!
-//! | Model | Context | Speed | Notes |
-//! |-------|---------|-------|-------|
-//! | BERT | 512 | Fast | Classic, well-tested |
-//! | RoBERTa | 512 | Fast | Improved pre-training |
-//! | DeBERTa | 512 | Medium | Better than BERT |
-//! | ModernBERT | 8192 | Fast | SOTA, recommended |
+//! | Model | Context | Notes |
+//! |-------|---------|-------|
+//! | BERT | 512 | Classic, widely supported |
+//! | RoBERTa | 512 | Similar interface, different pretraining |
+//! | DeBERTa | 512 | Alternative attention formulation |
+//! | ModernBERT | 8192 | Long-context encoder |
 //!
 //! # GLiNER Models by Encoder
 //!
@@ -41,7 +41,7 @@ pub enum EncoderType {
     Deberta,
     /// DeBERTa v3 (512 tokens, latest)
     DebertaV3,
-    /// ModernBERT (8192 tokens, SOTA)
+    /// ModernBERT (8192 tokens)
     ModernBert,
     /// Unknown/custom encoder
     Unknown,
@@ -68,6 +68,8 @@ impl EncoderType {
     }
 
     /// Relative speed (higher = faster).
+    ///
+    /// This is a coarse, internal-only heuristic. Do not treat it as a benchmark.
     #[must_use]
     pub const fn relative_speed(&self) -> u8 {
         match self {
@@ -75,7 +77,7 @@ impl EncoderType {
             EncoderType::Roberta => 5,
             EncoderType::Deberta => 4,
             EncoderType::DebertaV3 => 4,
-            EncoderType::ModernBert => 6, // Unpadding makes it faster
+            EncoderType::ModernBert => 6, // unpadding can reduce wasted compute
             EncoderType::Unknown => 3,
         }
     }
