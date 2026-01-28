@@ -13,11 +13,6 @@
 //! - ORG (Organization)
 //! - LOC (Location)
 //! - MISC (Miscellaneous)
-//!
-//! ## Performance
-//!
-//! - F1 Score: ~86% on CoNLL-03
-//! - Speed: ~50ms/doc on CPU
 
 #![allow(missing_docs)] // Stub implementation
 #![allow(dead_code)] // Placeholder constants

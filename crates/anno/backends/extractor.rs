@@ -7,14 +7,9 @@
 //!
 //! # Backend Selection Priority
 //!
-//! | Backend | Feature | CoNLL-03 F1 | CrossNER F1 | Speed | Notes |
-//! |---------|---------|-------------|-------------|-------|-------|
-//! | GLiNER v2.1 | `onnx` | ~90%* | ~61% | ~100ms | Zero-shot, SOTA |
-//! | BERT ONNX | `onnx` | ~86% | N/A | ~50ms | Fixed 4 types |
-//! | Candle BERT | `candle` | ~74% | N/A | ~50ms | Rust-native |
-//! | RegexNER | always | N/A | N/A | ~400ns | Structured only |
-//!
-//! *CoNLL F1 from original GLiNER paper; CrossNER from arxiv:2507.18546
+//! This module prefers ML backends when available (feature-gated), and otherwise
+//! degrades to pattern extraction (`RegexNER`). Any quantitative comparisons belong
+//! in the eval harness, not in this doc comment.
 //!
 //! # Design Philosophy (from hop)
 //!

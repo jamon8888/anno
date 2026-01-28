@@ -1,7 +1,7 @@
 //! GLiNER-based NER implementation using ONNX Runtime.
 //!
 //! GLiNER (Generalist and Lightweight Model for Named Entity Recognition) is
-//! state-of-the-art for zero-shot NER. This implementation follows the GLiNER prompt format
+//! a popular approach to “open/zero-shot” NER. This implementation follows the GLiNER prompt format
 //! and common community conventions.
 //!
 //! ## Prompt Format
@@ -57,20 +57,8 @@ pub struct GLiNERConfig {
     /// Cache size for prompt encodings (0 = disabled, default 100).
     ///
     /// The prompt cache stores encoded prompts keyed by (text, entity_types, model_id).
-    /// This provides significant speedup (40-50x) when the same text is queried with
-    /// different entity types, which is common in evaluation loops.
-    ///
-    /// # Performance Impact
-    ///
-    /// - Cache hit: ~27ms (reuses prompt encoding)
-    /// - Cache miss: ~1.2s (full encoding + inference)
-    /// - Memory: ~1-2KB per cached entry
-    ///
-    /// # Recommendations
-    ///
-    /// - Default (100): Good for most use cases
-    /// - 0: Disable cache (minimal memory, slower for repeated queries)
-    /// - 500+: For large evaluation runs with many repeated texts
+    /// This can materially reduce repeated work in evaluation loops and API usage patterns
+    /// where the same text is queried with multiple type sets.
     pub prompt_cache_size: usize,
 }
 
