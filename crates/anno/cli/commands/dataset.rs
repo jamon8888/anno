@@ -2696,14 +2696,20 @@ fn run_list(
         } else {
             // Show registry (full catalog)
             let all_datasets: Vec<_> = RegistryDatasetId::all().iter().collect();
+            let loadable_count = RegistryDatasetId::all()
+                .iter()
+                .copied()
+                .filter(|id| LoadableDatasetId::try_from(*id).is_ok())
+                .count();
+            let automatable_count = RegistryDatasetId::all()
+                .iter()
+                .copied()
+                .filter(|id| id.is_automatable_download())
+                .count();
             println!(
                 "  {} datasets in registry ({} loadable):",
                 all_datasets.len(),
-                RegistryDatasetId::all()
-                    .iter()
-                    .copied()
-                    .filter(|id| LoadableDatasetId::try_from(*id).is_ok())
-                    .count()
+                loadable_count
             );
             println!();
 
@@ -2717,8 +2723,9 @@ fn run_list(
                 println!("    NER datasets:           {}", ner_count);
                 println!("    Coreference datasets:   {}", coref_count);
                 println!("    Biomedical datasets:    {}", bio_count);
+                println!("    Automatable downloads:  {}", automatable_count);
                 println!();
-                println!("  Use --loadable to see only downloadable datasets");
+                println!("  Use --loadable to see only datasets with loader implementations");
                 println!("  Use --task ner/coref to filter by task");
                 println!("  Use --verbose for more details");
             } else {
