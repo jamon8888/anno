@@ -1128,13 +1128,29 @@ impl TaskEvaluator {
             // Final progress update with timing
             let total_elapsed = start_time.elapsed();
             let total_secs = total_elapsed.as_secs_f64();
-            let rate = if total_secs > 0.0 {
-                total_sentences as f64 / total_secs
+            let (time_str, rate_str) = if total_secs >= 0.01 {
+                (
+                    format!("{:.2}s", total_secs),
+                    format!("{:.1} sentences/s", total_sentences as f64 / total_secs),
+                )
             } else {
-                0.0
+                let ms = total_elapsed.as_millis();
+                let time_str = if ms == 0 {
+                    "<1ms".to_string()
+                } else {
+                    format!("{ms}ms")
+                };
+                (time_str, "n/a".to_string())
             };
-            eprint!("\rProcessing: {}/{} sentences (100.0%) for backend '{}' on dataset '{}' (completed in {:.1}s, {:.1} sentences/s)\x1b[K",
-                total_sentences, total_sentences, backend_name, dataset.to_string(), total_secs, rate);
+            eprint!(
+                "\rProcessing: {}/{} sentences (100.0%) for backend '{}' on dataset '{}' (completed in {}, {})\x1b[K",
+                total_sentences,
+                total_sentences,
+                backend_name,
+                dataset.to_string(),
+                time_str,
+                rate_str
+            );
             eprintln!(); // Newline after progress
 
             // Aggregate results and track per-example scores if needed
@@ -1327,13 +1343,24 @@ impl TaskEvaluator {
             // Final progress update with timing
             let total_elapsed = start_time.elapsed();
             let total_secs = total_elapsed.as_secs_f64();
-            let rate = if total_secs > 0.0 {
-                total_sentences as f64 / total_secs
+            let (time_str, rate_str) = if total_secs >= 0.01 {
+                (
+                    format!("{:.2}s", total_secs),
+                    format!("{:.1} sentences/s", total_sentences as f64 / total_secs),
+                )
             } else {
-                0.0
+                let ms = total_elapsed.as_millis();
+                let time_str = if ms == 0 {
+                    "<1ms".to_string()
+                } else {
+                    format!("{ms}ms")
+                };
+                (time_str, "n/a".to_string())
             };
-            eprint!("\rProcessing: {}/{} sentences (100.0%) for backend '{}' on dataset '{}' (completed in {:.1}s, {:.1} sentences/s)\x1b[K",
-                total_sentences, total_sentences, backend_name, dataset, total_secs, rate);
+            eprint!(
+                "\rProcessing: {}/{} sentences (100.0%) for backend '{}' on dataset '{}' (completed in {}, {})\x1b[K",
+                total_sentences, total_sentences, backend_name, dataset, time_str, rate_str
+            );
             eprintln!(); // Newline after progress
         }
 
