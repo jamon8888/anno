@@ -59,15 +59,11 @@
 use crate::core::{Corpus, Identity, IdentityId, IdentitySource, TrackId, TrackRef};
 use std::collections::HashMap;
 
-use super::alignment::AdaptiveResolutionConfig;
-
 /// Coalescer for inter-document entity resolution.
 #[derive(Debug, Clone)]
 pub struct Resolver {
     similarity_threshold: f32,
     require_type_match: bool,
-    /// Optional adaptive resolution configuration
-    adaptive_config: Option<AdaptiveResolutionConfig>,
 }
 
 impl Resolver {
@@ -76,7 +72,6 @@ impl Resolver {
         Self {
             similarity_threshold: 0.7,
             require_type_match: true,
-            adaptive_config: None,
         }
     }
 
@@ -90,32 +85,6 @@ impl Resolver {
     pub fn require_type_match(mut self, require: bool) -> Self {
         self.require_type_match = require;
         self
-    }
-
-    /// Set adaptive resolution configuration.
-    ///
-    /// When enabled, thresholds are dynamically adjusted based on:
-    /// - Entity type nameability (how consistently entities of that type are named)
-    /// - Accumulated alignment evidence (how reliably the cluster has matched)
-    /// - Generalization gradients (how threshold changes with similarity)
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use anno::coalesce::{AdaptiveResolutionConfig, Resolver};
-    ///
-    /// let resolver = Resolver::new()
-    ///     .with_threshold(0.7)
-    ///     .with_adaptive(AdaptiveResolutionConfig::default());
-    /// ```
-    pub fn with_adaptive(mut self, config: AdaptiveResolutionConfig) -> Self {
-        self.adaptive_config = Some(config);
-        self
-    }
-
-    /// Get the adaptive configuration, if set.
-    pub fn adaptive_config(&self) -> Option<&AdaptiveResolutionConfig> {
-        self.adaptive_config.as_ref()
     }
 
     /// Coalesce inter-document entities across all documents in a corpus.
