@@ -20,8 +20,8 @@
 //! │                                                                     │
 //! │    Dr. Smith ✗ (can't!)         $100.00 ✗ (no pattern!)             │
 //! │                                                                     │
-//! │  Precision: ~99%              Precision: ~70%                       │
-//! │  (When it fires, it's right)  (Makes guesses based on heuristics)   │
+//! │  Precision: high              Precision: lower                       │
+//! │  (When it fires, it's right)  (Makes guesses based on heuristics)    │
 //! └─────────────────────────────────────────────────────────────────────┘
 //! ```
 //!

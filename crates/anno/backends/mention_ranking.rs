@@ -207,8 +207,7 @@ struct ScoredPair {
 /// - **Left-to-right**: Traditional approach, processes mentions in document order
 /// - **Easy-first**: Process high-confidence decisions first, constrains later decisions
 ///
-/// Easy-first combined with global proper noun coreference yields +3 CoNLL F1
-/// on documents >2k tokens.
+/// Easy-first combined with global proper noun coreference can improve outcomes on long documents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ClusteringStrategy {
     /// Process mentions left-to-right in document order (traditional).
@@ -225,7 +224,7 @@ pub enum ClusteringStrategy {
 /// # Research-Informed Defaults
 ///
 /// The defaults are informed by findings from Bourgois & Poibeau (2025):
-/// - Pronouns have shorter antecedent distances (95% within 7 mentions)
+/// - Pronouns tend to have shorter antecedent distances than proper nouns
 /// - Proper/common nouns can span thousands of mentions
 /// - Type-specific limits outperform uniform limits
 ///
@@ -369,7 +368,7 @@ pub struct MentionRankingConfig {
     /// # Coreference Impact (J2N Paper)
     ///
     /// Qi, Han & Xie (arXiv:2409.14374) showed that correctly detecting these
-    /// as mentions improves coreference F1 by ~0.1%. Without detection, pronouns
+    /// as mentions can improve coreference metrics slightly. Without detection, pronouns
     /// like "they" that refer back to "the poor" become orphaned.
     ///
     /// # Grammatical Number

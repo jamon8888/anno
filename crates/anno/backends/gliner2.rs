@@ -2749,7 +2749,7 @@ impl crate::StreamingCapable for GLiNER2Onnx {
     // Uses default extract_entities_streaming implementation which adjusts offsets
 
     fn recommended_chunk_size(&self) -> usize {
-        4096 // Characters - translates to ~500 words
+        4096 // Characters - translates to roughly a few hundred words
     }
 }
 

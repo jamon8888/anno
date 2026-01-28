@@ -71,7 +71,7 @@ use crate::{Entity, EntityType, Model, Result};
 /// Burn backend types.
 ///
 /// Each backend has different tradeoffs:
-/// - **NdArray**: Pure Rust, no dependencies, portable, ~10x slower than GPU
+/// - **NdArray**: Pure Rust, no dependencies, portable (typically slower than GPU backends)
 /// - **Wgpu**: WebGPU, works on most GPUs, browser-compatible
 /// - **Tch**: PyTorch backend, fastest but requires libtorch
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
