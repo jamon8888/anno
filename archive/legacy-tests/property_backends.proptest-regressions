@@ -1,8 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc d979b12e6346004c6ca7f09512b95aaeda0526f37901413d30adfe4451952f68 # shrinks to text = "東京"
-cc 893a1add64ffb300c662fdaa7250725ec2ca432b5f727068676fc13e422440e3 # shrinks to text = "北京 Beijing"
