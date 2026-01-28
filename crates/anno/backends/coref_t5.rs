@@ -74,8 +74,8 @@
 //! - Entity-centric markup format for mention boundaries
 //!
 //! The seq2seq approach outperforms traditional pairwise classifiers on:
-//! - OntoNotes 5.0: ~80% F1
-//! - GAP (gendered pronouns): ~90% accuracy
+//! - OntoNotes 5.0 (coreference benchmark)
+//! - GAP (gendered pronoun resolution benchmark)
 
 // Note: This module is feature-gated via `#[cfg(feature = "onnx")]` in mod.rs
 

@@ -271,7 +271,7 @@ enum Resolution {
 /// | Backend Type | Best For | Trade-off |
 /// |--------------|----------|-----------|
 /// | Pattern (`RegexNER`) | Structured entities (dates, money, emails) | Can't do named entities |
-/// | Heuristic (`HeuristicNER`) | Named entities (no deps) | Lower accuracy (~60-70% F1) |
+/// | Heuristic (`HeuristicNER`) | Named entities (no deps) | Lower accuracy than ML |
 /// | ML (`GLiNER`, `NuNER`, `BertNEROnnx`, etc.) | Everything, high accuracy | Heavy dependencies, slower |
 ///
 /// `StackedNER` runs backends in order, merging results according to the

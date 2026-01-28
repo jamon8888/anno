@@ -973,7 +973,7 @@ impl Model for CrfNER {
     }
 
     fn description(&self) -> &'static str {
-        "CRF-based NER (classical statistical method, ~88% F1 on CoNLL-2003)"
+        "CRF-based NER (classical statistical method)"
     }
 }
 
