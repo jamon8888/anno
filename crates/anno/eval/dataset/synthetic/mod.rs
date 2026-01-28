@@ -21,9 +21,9 @@
 //!
 //! # What This Dataset IS NOT Good For
 //!
-//! - **Zero-shot claims**: Label overlap with training ≈ 100%
+//! - **Zero-shot claims**: Synthetic labels and templates are not a proxy for true novelty
 //! - **Real-world performance**: Synthetic ≠ domain-specific noise
-//! - **Model comparison**: Needs WikiGold/CoNLL/WNUT for fair eval
+//! - **Model comparison**: Use real datasets for fair comparisons
 //!
 //! # Domain Modules
 //!

@@ -12,7 +12,6 @@
 //!
 //! Focusing on characters provides:
 //! - **Simpler annotation**: Only track anthropomorphized entities
-//! - **Higher agreement**: 96.1% inter-annotator MUC (vs 83% for OntoNotes)
 //! - **Narrative relevance**: Characters drive plot, relationships, themes
 //!
 //! # The BookCoref Pipeline
@@ -34,7 +33,7 @@
 //!    └── Link new mentions to character clusters
 //!
 //! 4. Grouped Window Expansion
-//!    ├── Merge G consecutive windows (G=10)
+//!    ├── Merge groups of consecutive windows
 //!    ├── Second-pass resolution for missed mentions
 //!    └── Final cluster consolidation
 //! ```
@@ -61,17 +60,11 @@
 //! # Dataset Support
 //!
 //! This pipeline is designed to work with:
-//! - **LitBank**: 100 literary excerpts (2k tokens each)
-//! - **BOOKCOREF**: 53 full novels (200k+ tokens average)
+//! - **LitBank**: literary excerpts
+//! - **BOOKCOREF**: book-scale literary coreference
 //! - **MovieCoref**: Screenplays with character annotations
 //! - **DROC**: German novel character coreference
-//! - **KoCoNovel**: Korean novel characters (50 novels, 178K tokens, 19K mentions)
-//!   - Mention distribution: Pronominal 30.7%, Proper Name 22.8%, Single Noun 24.1%, NP 22.4%
-//!   - Address term culture (호칭 문화): Kinship terms (9.2%) and titles (3.1%) substitute names
-//!   - Four versions: Reader/Omniscient × Separate/Overlapped entity handling
-//!   - Distance stats: Antecedent avg 70.7 tokens, Spread avg 1583.3 tokens
-//!   - Challenges: No determiners, pro-drop, morpheme-unit spans, "Bobu emma" patterns
-//!   - BERT baseline: ~62-73% MUC F1 (domain-specific training helps despite smaller size)
+//! - **KoCoNovel**: Korean novel character coreference (address terms, pro-drop, morphology)
 //!
 //! # References
 //!

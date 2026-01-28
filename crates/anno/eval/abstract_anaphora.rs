@@ -2,8 +2,8 @@
 //!
 //! # Why This Exists
 //!
-//! Standard coreference resolvers achieve 70-80% F1 on benchmarks like OntoNotes.
-//! But they **completely fail** on abstract anaphora—references to events,
+//! Standard coreference resolvers are typically evaluated on nominal entity
+//! coreference. They often fail on abstract anaphora—references to events,
 //! propositions, facts, and situations rather than nominal entities.
 //!
 //! ```text
@@ -20,28 +20,20 @@
 //! This module provides evaluation infrastructure to measure this gap and
 //! track progress toward systems that handle abstract anaphora.
 //!
-//! # The Problem in Numbers
-//!
-//! | Anaphora Type | Standard Coref F1 | Specialized Systems |
-//! |---------------|-------------------|---------------------|
-//! | Nominal | ~75% | ~75% |
-//! | Event | ~5% | ~40% |
-//! | Proposition | ~2% | ~35% |
-//! | Shell nouns | ~10% | ~65% |
-//!
-//! The gap is not a minor limitation—it's a fundamental blind spot.
+//! The gap is not a minor limitation—it is a different kind of reference
+//! that requires different modeling and evaluation.
 //!
 //! # Theoretical Foundation
 //!
 //! Following Dalrymple, Shieber & Pereira (1991), anaphora resolution can be
 //! framed as solving `P(s₁, ..., sₙ) = s` where P is the property being
 //! predicated. For abstract anaphora, P operates over events/propositions,
-//! not entities. See `docs/notes/research/systems/ABSTRACT_ANAPHORA_RESEARCH.md` for full treatment.
+//! not entities.
 //!
 //! # Key Papers
 //!
 //! - Dalrymple et al. (1991): "Ellipsis and Higher-Order Unification" - theoretical foundation
-//! - Kolhatkar & Hirst (2012): "Resolving 'this-issue' anaphors" - 92% antecedent recall
+//! - Kolhatkar & Hirst (2012): "Resolving 'this-issue' anaphors"
 //! - Marasović et al. (2017): LSTM-Siamese model, EMNLP, outperforms on shell nouns
 //! - Moosavi & Strube (2016): LEA metric addresses "mention identification effect"
 //!
@@ -60,7 +52,6 @@
 //! let results = evaluator.evaluate(&dataset);
 //! println!("Nominal accuracy: {:.1}%", results.nominal_accuracy * 100.0);
 //! println!("Abstract accuracy: {:.1}%", results.abstract_accuracy * 100.0);
-//! // Expected: Nominal ~70%, Abstract ~0%
 //! ```
 
 use crate::discourse::{classify_shell_noun, ReferentType, ShellNoun, ShellNounClass};
