@@ -781,7 +781,8 @@ impl LoadableDatasetId {
         // above) take precedence, so we don't override e.g. CoNLL/JSONL datasets that are
         // hosted on HuggingFace but should be parsed as raw files.
         if id.hf_id().is_some()
-            && id.access_status() == crate::eval::dataset_registry::DatasetAccessibility::HuggingFace
+            && id.access_status()
+                == crate::eval::dataset_registry::DatasetAccessibility::HuggingFace
         {
             return Some(DatasetParsePlan::HfApiResponse);
         }

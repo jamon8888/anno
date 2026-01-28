@@ -250,11 +250,7 @@ impl BackendRegistry {
         // GLiNER v2.1 (zero-shot NER)
         match GLiNEROnnx::new(DEFAULT_GLINER_MODEL) {
             Ok(gliner) => {
-                self.register(
-                    "GLiNER",
-                    "Zero-shot NER via ONNX",
-                    Box::new(gliner),
-                );
+                self.register("GLiNER", "Zero-shot NER via ONNX", Box::new(gliner));
             }
             Err(e) => {
                 log::warn!("Failed to load GLiNER ONNX: {}", e);
