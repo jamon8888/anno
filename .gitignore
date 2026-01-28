@@ -49,6 +49,9 @@ crates/anno/target/
 *.swo
 .cursor/
 
+# Cargo crates.io packaging (local scratch)
+crates/*/README.md
+
 # OS
 .DS_Store
 Thumbs.db
