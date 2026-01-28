@@ -59,6 +59,8 @@ pub enum MuxerPerspective {
     Coref,
     /// Cross-document clustering slice.
     Coalesce,
+    /// Relation extraction slice.
+    Relation,
 }
 
 impl MuxerPerspective {
@@ -67,6 +69,7 @@ impl MuxerPerspective {
             Self::Ner => "ner",
             Self::Coref => "coref",
             Self::Coalesce => "coalesce",
+            Self::Relation => "relation",
         }
     }
 
@@ -75,6 +78,7 @@ impl MuxerPerspective {
             Self::Ner => vec![Task::NER],
             Self::Coref => vec![Task::IntraDocCoref],
             Self::Coalesce => vec![Task::InterDocCoref],
+            Self::Relation => vec![Task::RelationExtraction],
         }
     }
 }
@@ -247,6 +251,15 @@ fn backend_candidates(tasks: &[Task], include_ml: bool) -> Vec<String> {
     for b in ["pattern", "heuristic", "stacked", "crf", "hmm", "ensemble"] {
         if want(b) {
             out.push(b.to_string());
+        }
+    }
+
+    // Task-specific “baselines”.
+    if tasks.iter().any(|t| *t == Task::RelationExtraction) {
+        for b in ["tplinker"] {
+            if want(b) {
+                out.push(b.to_string());
+            }
         }
     }
 
