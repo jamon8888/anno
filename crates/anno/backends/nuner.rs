@@ -123,8 +123,7 @@ pub struct NuNER {
     threshold: f64,
     /// Whether model requires span tensors (detected on load)
     #[cfg(feature = "onnx")]
-    #[allow(dead_code)] // Reserved for future span tensor support
-    requires_span_tensors: bool,
+    requires_span_tensors: std::sync::atomic::AtomicBool,
     /// Default entity labels for Model trait
     default_labels: Vec<String>,
     /// ONNX session (when feature enabled)
@@ -146,7 +145,7 @@ impl NuNER {
             model_id: "numind/NuNER_Zero".to_string(),
             threshold: 0.5,
             #[cfg(feature = "onnx")]
-            requires_span_tensors: false, // Will be set when model is loaded
+            requires_span_tensors: std::sync::atomic::AtomicBool::new(false),
             default_labels: vec![
                 "person".to_string(),
                 "organization".to_string(),
@@ -215,15 +214,10 @@ impl NuNER {
         let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| Error::Retrieval(format!("Failed to load tokenizer: {}", e)))?;
 
-        // Some NuNER ONNX exports require span tensors (span_idx/span_mask), others are token-only.
-        // We don't rely on session metadata here because `ort` versions differ across workspaces.
-        // Instead we default to token-only and fall back to span tensors at runtime on demand.
-        let requires_span_tensors = false;
-
         Ok(Self {
             model_id: model_id.to_string(),
             threshold: 0.5,
-            requires_span_tensors,
+            requires_span_tensors: std::sync::atomic::AtomicBool::new(false),
             default_labels: vec![
                 "person".to_string(),
                 "organization".to_string(),
@@ -316,108 +310,135 @@ impl NuNER {
         let (input_ids, attention_mask, words_mask, text_lengths) =
             self.encode_prompt(tokenizer, &text_words, entity_types)?;
 
-        // Build ONNX tensors
-        use ndarray::Array2;
-
         let batch_size = 1;
         let seq_len = input_ids.len();
 
-        let input_ids_array = Array2::from_shape_vec((batch_size, seq_len), input_ids)
-            .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
-        let attention_mask_array = Array2::from_shape_vec((batch_size, seq_len), attention_mask)
-            .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
-        let words_mask_array = Array2::from_shape_vec((batch_size, seq_len), words_mask)
-            .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
-        let text_lengths_array = Array2::from_shape_vec((batch_size, 1), vec![text_lengths])
-            .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
+        // Note: ort tensors are consumed by `into_dyn()`, so we rebuild them for retries.
+        let make_token_tensors = || -> Result<(_, _, _, _)> {
+            use ndarray::Array2;
 
-        let input_ids_t = super::ort_compat::tensor_from_ndarray(input_ids_array)
-            .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let attention_mask_t = super::ort_compat::tensor_from_ndarray(attention_mask_array)
-            .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let words_mask_t = super::ort_compat::tensor_from_ndarray(words_mask_array)
-            .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let text_lengths_t = super::ort_compat::tensor_from_ndarray(text_lengths_array)
-            .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
+            let input_ids_array = Array2::from_shape_vec((batch_size, seq_len), input_ids.clone())
+                .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
+            let attention_mask_array =
+                Array2::from_shape_vec((batch_size, seq_len), attention_mask.clone())
+                    .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
+            let words_mask_array =
+                Array2::from_shape_vec((batch_size, seq_len), words_mask.clone())
+                    .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
+            let text_lengths_array = Array2::from_shape_vec((batch_size, 1), vec![text_lengths])
+                .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
+
+            let input_ids_t = super::ort_compat::tensor_from_ndarray(input_ids_array)
+                .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
+            let attention_mask_t = super::ort_compat::tensor_from_ndarray(attention_mask_array)
+                .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
+            let words_mask_t = super::ort_compat::tensor_from_ndarray(words_mask_array)
+                .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
+            let text_lengths_t = super::ort_compat::tensor_from_ndarray(text_lengths_array)
+                .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
+
+            Ok((input_ids_t, attention_mask_t, words_mask_t, text_lengths_t))
+        };
 
         // Some NuNER ONNX exports require span tensors (span_idx/span_mask), others are token-only.
-        // We detect this at load time from the model's declared input names.
-        let needs_span_tensors = self.requires_span_tensors;
+        // We default to token-only, and flip to span tensors on the first "missing input" error.
+        use std::sync::atomic::Ordering;
+        let mut needs_span_tensors = self.requires_span_tensors.load(Ordering::Relaxed);
 
         // Use blocking lock for thread-safe parallel access
         let mut session_guard = crate::sync::lock(session);
 
-        let outputs = if needs_span_tensors {
-            // Generate span tensors similar to GLiNER
-            // Use checked_mul to prevent overflow (same as gliner2.rs:2388)
-            let num_spans = match text_words.len().checked_mul(MAX_SPAN_WIDTH) {
-                Some(v) => v,
-                None => {
-                    return Err(Error::InvalidInput(format!(
-                        "Span count overflow: {} words * {} MAX_SPAN_WIDTH",
-                        text_words.len(),
-                        MAX_SPAN_WIDTH
-                    )));
+        let outputs = loop {
+            if needs_span_tensors {
+                let (input_ids_t, attention_mask_t, words_mask_t, text_lengths_t) =
+                    make_token_tensors()?;
+                // Generate span tensors similar to GLiNER
+                // Use checked_mul to prevent overflow (same as gliner2.rs:2388)
+                let num_spans = match text_words.len().checked_mul(MAX_SPAN_WIDTH) {
+                    Some(v) => v,
+                    None => {
+                        return Err(Error::InvalidInput(format!(
+                            "Span count overflow: {} words * {} MAX_SPAN_WIDTH",
+                            text_words.len(),
+                            MAX_SPAN_WIDTH
+                        )));
+                    }
+                };
+                let (span_idx, span_mask) = NuNER::make_span_tensors(text_words.len());
+
+                use ndarray::Array2;
+                use ndarray::Array3;
+                let span_idx_array = Array3::from_shape_vec((1, num_spans, 2), span_idx)
+                    .map_err(|e| Error::Parse(format!("Span idx array error: {}", e)))?;
+                let span_mask_array = Array2::from_shape_vec((1, num_spans), span_mask)
+                    .map_err(|e| Error::Parse(format!("Span mask array error: {}", e)))?;
+
+                let span_idx_t = super::ort_compat::tensor_from_ndarray(span_idx_array)
+                    .map_err(|e| Error::Parse(format!("Span idx tensor error: {}", e)))?;
+                let span_mask_t = super::ort_compat::tensor_from_ndarray(span_mask_array)
+                    .map_err(|e| Error::Parse(format!("Span mask tensor error: {}", e)))?;
+
+                break session_guard
+                    .run(ort::inputs![
+                        "input_ids" => input_ids_t.into_dyn(),
+                        "attention_mask" => attention_mask_t.into_dyn(),
+                        "words_mask" => words_mask_t.into_dyn(),
+                        "text_lengths" => text_lengths_t.into_dyn(),
+                        "span_idx" => span_idx_t.into_dyn(),
+                        "span_mask" => span_mask_t.into_dyn(),
+                    ])
+                    .map_err(|e| {
+                        Error::Parse(format!(
+                            "ONNX inference failed: {}\n\n\
+                             NuNER model: {}\n\
+                             requires_span_tensors={}\n\
+                             input_ids=(1,{seq_len}) attention_mask=(1,{seq_len}) words_mask=(1,{seq_len}) text_lengths=(1,1)\n\
+                             span_idx=(1,{num_spans},2) span_mask=(1,{num_spans})\n\n\
+                             Hint: If this looks like a shape mismatch, the ONNX export may have fixed span dimensions.\n\
+                             Try a different NuNER export (e.g., deepanwa/NuNerZero_onnx) or re-export with dynamic axes.",
+                            e,
+                            self.model_id,
+                            self.requires_span_tensors.load(Ordering::Relaxed)
+                        ))
+                    })?;
+            } else {
+                let (input_ids_t, attention_mask_t, words_mask_t, text_lengths_t) =
+                    make_token_tensors()?;
+                // Token mode - only 4 inputs
+                let res = session_guard.run(ort::inputs![
+                    "input_ids" => input_ids_t.into_dyn(),
+                    "attention_mask" => attention_mask_t.into_dyn(),
+                    "words_mask" => words_mask_t.into_dyn(),
+                    "text_lengths" => text_lengths_t.into_dyn(),
+                ]);
+
+                match res {
+                    Ok(o) => break o,
+                    Err(e) => {
+                        let msg = format!("{e}");
+                        let looks_like_missing_span = msg.contains("Missing Input: span_mask")
+                            || msg.contains("Missing Input: span_idx")
+                            || msg.contains("span_mask")
+                            || msg.contains("span_idx");
+                        if looks_like_missing_span {
+                            // Memoize and retry once in span mode (same request).
+                            self.requires_span_tensors.store(true, Ordering::Relaxed);
+                            needs_span_tensors = true;
+                            continue;
+                        }
+                        return Err(Error::Parse(format!(
+                            "ONNX inference failed: {}\n\n\
+                             NuNER model: {}\n\
+                             requires_span_tensors={}\n\
+                             input_ids=(1,{seq_len}) attention_mask=(1,{seq_len}) words_mask=(1,{seq_len}) text_lengths=(1,1)\n\n\
+                             Hint: If this looks like an input-name mismatch, your ONNX export may expect span tensors or different input names.",
+                            e,
+                            self.model_id,
+                            self.requires_span_tensors.load(Ordering::Relaxed),
+                        )));
+                    }
                 }
-            };
-            let (span_idx, span_mask) = NuNER::make_span_tensors(text_words.len());
-
-            use ndarray::Array2;
-            use ndarray::Array3;
-            let span_idx_array = Array3::from_shape_vec((1, num_spans, 2), span_idx)
-                .map_err(|e| Error::Parse(format!("Span idx array error: {}", e)))?;
-            let span_mask_array = Array2::from_shape_vec((1, num_spans), span_mask)
-                .map_err(|e| Error::Parse(format!("Span mask array error: {}", e)))?;
-
-            let span_idx_t = super::ort_compat::tensor_from_ndarray(span_idx_array)
-                .map_err(|e| Error::Parse(format!("Span idx tensor error: {}", e)))?;
-            let span_mask_t = super::ort_compat::tensor_from_ndarray(span_mask_array)
-                .map_err(|e| Error::Parse(format!("Span mask tensor error: {}", e)))?;
-
-            session_guard
-                .run(ort::inputs![
-                    "input_ids" => input_ids_t.into_dyn(),
-                    "attention_mask" => attention_mask_t.into_dyn(),
-                    "words_mask" => words_mask_t.into_dyn(),
-                    "text_lengths" => text_lengths_t.into_dyn(),
-                    "span_idx" => span_idx_t.into_dyn(),
-                    "span_mask" => span_mask_t.into_dyn(),
-                ])
-                .map_err(|e| {
-                    Error::Parse(format!(
-                        "ONNX inference failed: {}\n\n\
-                         NuNER model: {}\n\
-                         requires_span_tensors={}\n\
-                         input_ids=(1,{seq_len}) attention_mask=(1,{seq_len}) words_mask=(1,{seq_len}) text_lengths=(1,1)\n\
-                         span_idx=(1,{num_spans},2) span_mask=(1,{num_spans})\n\n\
-                         Hint: If this looks like a shape mismatch, the ONNX export may have fixed span dimensions.\n\
-                         Try a different NuNER export (e.g., deepanwa/NuNerZero_onnx) or re-export with dynamic axes.",
-                        e,
-                        self.model_id,
-                        self.requires_span_tensors
-                    ))
-                })?
-        } else {
-            // Token mode - only 4 inputs
-            session_guard
-                .run(ort::inputs![
-                    "input_ids" => input_ids_t.into_dyn(),
-                    "attention_mask" => attention_mask_t.into_dyn(),
-                    "words_mask" => words_mask_t.into_dyn(),
-                    "text_lengths" => text_lengths_t.into_dyn(),
-                ])
-                .map_err(|e| {
-                    Error::Parse(format!(
-                        "ONNX inference failed: {}\n\n\
-                         NuNER model: {}\n\
-                         requires_span_tensors={}\n\
-                         input_ids=(1,{seq_len}) attention_mask=(1,{seq_len}) words_mask=(1,{seq_len}) text_lengths=(1,1)\n\n\
-                         Hint: If this looks like an input-name mismatch, your ONNX export may expect span tensors or different input names.",
-                        e,
-                        self.model_id,
-                        self.requires_span_tensors
-                    ))
-                })?
+            }
         };
 
         // Decode span-level output to entities

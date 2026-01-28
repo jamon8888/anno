@@ -78,6 +78,7 @@ enum MatrixPerspective {
     Ner,
     Coref,
     Coalesce,
+    Relation,
 }
 
 impl MatrixPerspective {
@@ -90,6 +91,7 @@ impl MatrixPerspective {
         {
             "coref" | "intra-coref" | "intracoref" => Self::Coref,
             "coalesce" | "inter-coref" | "intercoref" | "cdcr" => Self::Coalesce,
+            "relation" | "rel" => Self::Relation,
             _ => Self::Ner,
         }
     }
@@ -99,6 +101,7 @@ impl MatrixPerspective {
             Self::Ner => vec![Task::NER],
             Self::Coref => vec![Task::IntraDocCoref],
             Self::Coalesce => vec![Task::InterDocCoref],
+            Self::Relation => vec![Task::RelationExtraction],
         }
     }
 
@@ -120,18 +123,28 @@ impl MatrixPerspective {
             ],
             // Cross-doc / CDCR style.
             Self::Coalesce => &[DatasetId::ECBPlus, DatasetId::WikiCoref],
+            Self::Relation => &[DatasetId::DocRED],
+        }
+    }
+
+    fn tag(&self) -> &'static str {
+        match self {
+            Self::Ner => "ner",
+            Self::Coref => "coref",
+            Self::Coalesce => "coalesce",
+            Self::Relation => "relation",
         }
     }
 }
 
-fn history_path() -> PathBuf {
+fn history_path(perspective: MatrixPerspective) -> PathBuf {
     if let Ok(p) = std::env::var("ANNO_HISTORY_FILE") {
         return PathBuf::from(p);
     }
 
     // Prefer ANNO_CACHE_DIR so it matches CI caching.
     if let Ok(dir) = std::env::var("ANNO_CACHE_DIR") {
-        return PathBuf::from(dir).join("muxer_history.json");
+        return PathBuf::from(dir).join(format!("muxer_history.{}.json", perspective.tag()));
     }
 
     // Fallback: place next to default dataset cache root.
@@ -140,10 +153,12 @@ fn history_path() -> PathBuf {
     #[cfg(feature = "eval")]
     {
         if let Some(base) = dirs::cache_dir() {
-            return base.join("anno").join("muxer_history.json");
+            return base
+                .join("anno")
+                .join(format!("muxer_history.{}.json", perspective.tag()));
         }
     }
-    PathBuf::from(".").join("muxer_history.json")
+    PathBuf::from(".").join(format!("muxer_history.{}.json", perspective.tag()))
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -301,6 +316,18 @@ fn select_backends(
 
             for round in 0..k.min(remaining.len()) {
                 let summaries = history.summaries_for(&remaining);
+
+                // Explore unseen arms first (stable order), so we eventually saturate coverage.
+                if let Some(unseen) = remaining
+                    .iter()
+                    .find(|b| summaries.get(*b).copied().unwrap_or_default().calls == 0)
+                {
+                    let pick = unseen.clone();
+                    remaining.retain(|b| b != &pick);
+                    chosen.push(pick);
+                    continue;
+                }
+
                 let total_calls: f64 = summaries
                     .values()
                     .map(|s| s.calls as f64)
@@ -447,7 +474,7 @@ fn test_randomized_matrix_sample() {
     let seed = ci_seed();
     let strategy = SampleStrategy::from_env();
     let perspective = MatrixPerspective::from_env();
-    let hist_path = history_path();
+    let hist_path = history_path(perspective);
     let window_cap = 50;
 
     let loader = DatasetLoader::new().expect("DatasetLoader::new");
