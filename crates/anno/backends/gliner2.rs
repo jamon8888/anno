@@ -6,26 +6,9 @@
 //! - Hierarchical Structure Extraction
 //! - Task Composition (multiple tasks in one pass)
 //!
-//! # Architecture
-//!
-//! Based on arXiv:2507.18546 (July 2025):
-//!
-//! ```text
-//! Input: [Task Prompt] ⊕ [SEP] ⊕ [Input Text]
-//!
-//! Task Prompts:
-//!   NER:    [P] entities ([E]type1 [E]type2 ...) [SEP] text
-//!   Class:  [P] task ([L]label1 [L]label2 ...) [SEP] text
-//!   Struct: [P] parent ([C]field1 [C]field2 ...) [SEP] text
-//! ```
-//!
-//! # Special Tokens
-//!
-//! - `[P]` - Prompt marker (task specification)
-//! - `[E]` - Entity type marker
-//! - `[C]` - Child/Component marker (for hierarchical)
-//! - `[L]` - Label marker (for classification)
-//! - `[SEP]` - Separator between task and text
+//! This backend is based on the GLiNER2 paper (arXiv:2507.18546). The details of
+//! prompt formatting and the full task schema are paper-defined; this module
+//! focuses on the inference integration and trait wiring used by `anno`.
 //!
 //! # Trait Integration
 //!
