@@ -541,8 +541,8 @@ impl std::fmt::Display for LabelShift {
 /// │  "a tall man" ─── (no other mentions)                                   │
 /// │  "the servant" ─── (no other mentions)                                  │
 /// │                                                                         │
-/// │  These aren't really coreference—they're just entity detection.         │
-/// │  Including them in CoNLL F1 INFLATES your score.                        │
+/// │  These are closer to entity detection than coreference.                  │
+/// │  Including them in CoNLL F1 can change the interpretation of the score.  │
 /// └─────────────────────────────────────────────────────────────────────────┘
 /// ```
 ///
