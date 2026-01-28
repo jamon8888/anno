@@ -90,6 +90,7 @@ mutants.out*/
 scripts/spot/config.env
 scripts/spot/fleet_id.txt
 scripts/spot/instance_ids.txt
+runctl.toml
 
 # Spot evaluation artifacts (raw results ignored, aggregated kept for baselines)
 reports/spot/result-*.txt
