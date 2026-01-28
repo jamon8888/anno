@@ -1,12 +1,12 @@
 # AWS Spot Instance Evaluation Infrastructure
 
-Fast, parallel NER/Coref evaluation across all backends and datasets using AWS Spot instances.
+Parallel NER/Coref evaluation across many backends and datasets using AWS Spot instances.
 
 ## Overview
 
 This infrastructure uses:
-- **Spot Fleet** with capacity-optimized allocation for cost efficiency (~70-90% savings)
-- **Persistent EBS volume** for cargo/sccache caching (never rebuild deps on instance churn)
+- **Spot Fleet** for distributed execution
+- **Persistent EBS volume** for cargo/sccache caching
 - **Parallel work distribution** via SQS queue
 - **S3** for results aggregation
 
@@ -22,7 +22,7 @@ just eval-local-quick
 just eval-local BACKENDS="heuristic,stacked" DATASETS="WikiGold,Wnut17" MAX=100
 ```
 
-### AWS Spot (distributed, ~$1-2)
+### AWS Spot (distributed)
 
 ```bash
 # 1. Initial setup (one-time)
@@ -79,15 +79,10 @@ Each task in the queue is a (backend, dataset, seed) triple:
 
 Workers pull tasks, run evaluation, write results to S3.
 
-## Cost Estimates
+## Costs and runtime
 
-| Scenario | Instances | Time | Cost |
-|----------|-----------|------|------|
-| Quick (3 datasets, 3 backends) | 1x c7i.xlarge | ~5 min | ~$0.02 |
-| Standard (10 datasets, 5 backends) | 4x c7i.xlarge | ~15 min | ~$0.20 |
-| Full (20 datasets, 12 backends, 5 seeds) | 8x c7i.2xlarge | ~30 min | ~$1.00 |
-
-*Spot prices vary; estimates assume ~$0.05/hr for c7i.xlarge*
+Costs and runtime vary materially with instance types, fleet size, dataset volume, cache warmth, and region.
+Treat this directory as a runner, not a benchmark; measure your own spend and wall-clock time for your setup.
 
 ## Files
 
@@ -181,10 +176,10 @@ The spot evaluation complements the CI randomized matrix tests:
 | Aspect | CI (`matrix_muxer_ci::test_randomized_matrix_sample`) | Spot Evaluation |
 |--------|----------------------------|-----------------|
 | **When** | Every PR, every push | On-demand, nightly, pre-release |
-| **Scope** | 3-5 backend×dataset pairs | 780 combinations (12×13×5) |
-| **Examples** | 15-50 per dataset | 500 per dataset |
-| **Duration** | ~2 min (CI timeout) | ~100 min (4 workers) |
-| **Cost** | Free (GitHub Actions) | ~$0.40 per full run |
+| **Scope** | Small cached-only slice | Many backends × datasets × seeds |
+| **Examples** | Small cap per dataset | Larger caps per dataset |
+| **Duration** | Bounded by CI timeouts | Depends on fleet size and workload |
+| **Cost** | Covered by CI | Billed by AWS usage |
 | **Goal** | Catch regressions fast | Comprehensive coverage |
 
 ### Integration Points
@@ -224,25 +219,25 @@ The spot worker script calls the same `anno benchmark` CLI that the CI tests use
 
 ### Local (no AWS)
 
-| Command | Description | Cost |
-|---------|-------------|------|
-| `just eval-local-quick` | Quick local eval (zero-dep backends) | Free |
-| `just eval-local BACKENDS DATASETS MAX` | Custom local eval | Free |
+| Command | Description |
+|---------|-------------|
+| `just eval-local-quick` | Quick local eval (zero-dep backends) |
+| `just eval-local BACKENDS DATASETS MAX` | Custom local eval |
 
 ### AWS Spot
 
-| Command | Description | Cost |
-|---------|-------------|------|
-| `just spot-setup` | One-time AWS infrastructure setup | Free |
-| `just spot-upload-src` | Upload source code to S3 | Free |
-| `just spot-eval-quick` | Quick test (1 worker, 3 backends, 2 datasets) | ~$0.02 |
-| `just spot-eval` | Full evaluation (4 workers, all combinations) | ~$1-2 |
-| `just spot-eval-ml` | ML backends only (ONNX/Candle) | ~$0.50 |
-| `just spot-monitor` | Monitor workers via SSM | Free |
-| `just spot-status` | Check fleet and queue status | Free |
-| `just spot-results` | Download and aggregate results | Free |
-| `just spot-teardown` | Cancel fleet, cleanup | Free |
-| `just ci-matrix-local` | Run CI test with spot badness history | Free |
+| Command | Description |
+|---------|-------------|
+| `just spot-setup` | One-time AWS infrastructure setup |
+| `just spot-upload-src` | Upload source code to S3 |
+| `just spot-eval-quick` | Quick distributed smoke run |
+| `just spot-eval` | Full distributed evaluation |
+| `just spot-eval-ml` | ML backends only (ONNX/Candle) |
+| `just spot-monitor` | Monitor workers via SSM |
+| `just spot-status` | Check fleet and queue status |
+| `just spot-results` | Download and aggregate results |
+| `just spot-teardown` | Cancel fleet, cleanup |
+| `just ci-matrix-local` | Run CI sampler locally |
 
 ## trainctl Integration (Optional)
 
