@@ -22,6 +22,8 @@ pub mod import;
 pub mod info; // Deprecated: use backends
 pub mod joint;
 pub mod models; // Deprecated: use backends
+#[cfg(feature = "eval-advanced")]
+pub mod muxer;
 pub mod pipeline;
 pub mod privacy;
 pub mod query;
@@ -69,5 +71,7 @@ pub use watch::WatchArgs;
 pub use benchmark::BenchmarkArgs;
 #[cfg(feature = "eval-advanced")]
 pub use crossdoc::CrossDocArgs;
+#[cfg(feature = "eval-advanced")]
+pub use muxer::MuxerArgs;
 #[cfg(feature = "eval-advanced")]
 pub use tier::TierArgs;
