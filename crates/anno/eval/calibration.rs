@@ -350,7 +350,7 @@ mod tests {
             (0.9, true),
             (0.9, true),
             (0.9, true),
-            (0.9, false), // 90% accuracy at 90% confidence
+            (0.9, false), // 9/10 correct at confidence 0.9
         ];
 
         let results = CalibrationEvaluator::compute(&predictions);
@@ -370,7 +370,7 @@ mod tests {
             (0.95, false),
             (0.95, false),
             (0.95, true),
-            (0.95, false), // Only 20% accuracy at 95% confidence
+            (0.95, false), // 1/5 correct at confidence 0.95
         ];
 
         let results = CalibrationEvaluator::compute(&predictions);

@@ -1031,8 +1031,7 @@ mod tests {
         let evaluator = GenderBiasEvaluator::new(true);
         let results = evaluator.evaluate_resolver(&resolver, &templates);
 
-        // Should have reasonable accuracy on neopronouns
-        // (better than the 7.7% that MISGENDERED found in ML models)
+        // Should have reasonable accuracy on neopronouns.
         println!(
             "Neopronoun accuracy: {:.1}%",
             results.overall_accuracy * 100.0
@@ -1042,7 +1041,7 @@ mod tests {
         // since it recognizes them explicitly
         assert!(
             results.overall_accuracy > 0.5,
-            "Should achieve >50% accuracy on neopronouns, got {:.1}%",
+            "Neopronoun accuracy unexpectedly low: {:.1}%",
             results.overall_accuracy * 100.0
         );
     }
