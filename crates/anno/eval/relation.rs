@@ -20,11 +20,7 @@
 //!
 //! # Research Alignment
 //!
-//! Standard benchmarks:
-//! - **DocRED**: Document-level RE (F1: ~60-65%)
-//! - **TACRED**: Sentence-level RE (F1: ~70-75%)
-//! - **SciERC**: Scientific domain (F1: ~45-50%)
-//! - **NYT**: News text (F1: ~50-60%)
+//! Standard benchmarks include DocRED, TACRED, SciERC, and NYT-style corpora.
 
 use crate::RelationTriple;
 use serde::{Deserialize, Serialize};

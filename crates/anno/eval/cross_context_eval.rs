@@ -5,13 +5,8 @@
 //!
 //! # Supported Benchmarks
 //!
-//! | Benchmark | Type | Size | CoNLL-F1 (xCoRe) |
-//! |-----------|------|------|------------------|
-//! | ECB+ | Cross-document | 996 articles | 40.3 |
-//! | SciCo | Cross-document | ~27k docs | 27.8 |
-//! | LitBank | Long-document | 100 works | 78.2 |
-//! | BookCoref | Long-document | 53 novels | 62.9 |
-//! | Animal Farm | Long-document | 1 novel | 42.2 |
+//! This harness is intended for ECB+, SciCo, LitBank, BookCoref, and similar
+//! long-document / cross-document benchmarks.
 //!
 //! # Usage
 //!
@@ -65,9 +60,9 @@ pub enum CrossContextBenchmark {
     SciCo,
     /// LitBank - Long-document coreference (literary fiction)
     LitBank,
-    /// BookCoref - Full-book coreference (novels, 200k+ tokens)
+    /// BookCoref - Full-book coreference (book-scale)
     BookCoref,
-    /// Animal Farm - Single long novel benchmark (~35k tokens)
+    /// Animal Farm - Single long novel benchmark
     AnimalFarm,
 }
 
@@ -91,17 +86,6 @@ impl CrossContextBenchmark {
     /// Is this a long-document benchmark?
     pub fn is_long_document(&self) -> bool {
         matches!(self, Self::LitBank | Self::BookCoref | Self::AnimalFarm)
-    }
-
-    /// Get expected xCoRe state-of-the-art CoNLL F1.
-    pub fn xcore_sota_f1(&self) -> f64 {
-        match self {
-            Self::ECBPlus => 40.3,
-            Self::SciCo => 27.8,
-            Self::LitBank => 78.2,
-            Self::BookCoref => 62.9,
-            Self::AnimalFarm => 42.2,
-        }
     }
 
     /// Get recommended window size for this benchmark.

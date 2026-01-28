@@ -13,7 +13,7 @@
 //! > "Discontinuous NER remains challenging because entities can be
 //! > scattered across non-adjacent text positions."
 //!
-//! Benchmark datasets: CADEC (~70% F1), ShARe13 (~80% F1), ShARe14 (~85% F1)
+//! Benchmark datasets include CADEC and ShARe/CLEF tasks.
 
 use crate::eval::discontinuous::DiscontinuousGold;
 
