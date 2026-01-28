@@ -205,6 +205,8 @@ pub struct TaskEvalResult {
     pub dataset: DatasetId,
     /// Backend name
     pub backend: String,
+    /// Random seed used for sampling/examples.
+    pub seed: u64,
     /// Whether evaluation succeeded
     pub success: bool,
     /// Error message if failed
@@ -446,6 +448,7 @@ impl TaskEvaluator {
         sentences_to_use: usize,
         config: &TaskEvalConfig,
     ) -> TaskEvalResult {
+        let seed = config.seed.unwrap_or(42);
         // Try to evaluate backend (handles backend creation internally)
         let start = Instant::now();
         match self.try_evaluate_backend(task, dataset, backend_name, sampled_data, config) {
@@ -525,6 +528,7 @@ impl TaskEvaluator {
                     task,
                     dataset,
                     backend: backend_name.to_string(),
+                    seed,
                     success: true,
                     error: None,
                     metrics,
@@ -546,6 +550,7 @@ impl TaskEvaluator {
                     task,
                     dataset,
                     backend: backend_name.to_string(),
+                    seed,
                     success: false,
                     error: Some(format!("{}", e)),
                     metrics: HashMap::new(),
@@ -566,6 +571,7 @@ impl TaskEvaluator {
 
     /// Run comprehensive evaluation across all valid combinations.
     pub fn evaluate_all(&self, config: TaskEvalConfig) -> Result<ComprehensiveEvalResults> {
+        let seed = config.seed.unwrap_or(42);
         let mut results = Vec::new();
         let mut tasks_evaluated = Vec::new();
         let mut datasets_used = Vec::new();
@@ -648,6 +654,7 @@ impl TaskEvaluator {
                         task: *task,
                         dataset: *dataset,
                         backend: backend_name.to_string(),
+                        seed,
                         success: false,
                         error: Some(format!(
                             "incompatible: backend '{}' doesn't support dataset entity types: {:?}",
@@ -702,6 +709,7 @@ impl TaskEvaluator {
                                     task: *task,
                                     dataset: *dataset,
                                     backend: backend_name.to_string(),
+                                    seed,
                                     success: false,
                                     error: Some(format!("Failed to load dataset: {}", e)),
                                     metrics: HashMap::new(),
@@ -733,6 +741,7 @@ impl TaskEvaluator {
                             task: *task,
                             dataset: *dataset,
                             backend: backend_name.to_string(),
+                            seed,
                             success: false,
                             error: Some(format!(
                                 "Dataset '{}' is empty (no sentences found)",
@@ -796,13 +805,9 @@ impl TaskEvaluator {
         profiling::print_summary();
 
         // Store results in history if available
-        // Extract seed from config to include in history entries
-        let seed = config.seed.unwrap_or(42);
         if let Some(ref history) = self.history {
             for result in &results {
-                // Create entry with seed from config
-                let mut entry = super::history::EvalHistoryEntry::from(result);
-                entry.seed = seed;
+                let entry = super::history::EvalHistoryEntry::from(result);
                 if let Err(e) = history.append_entry(&entry) {
                     log::warn!("Failed to store result in history: {}", e);
                 }
@@ -3972,6 +3977,7 @@ mod tests {
             task: Task::NER,
             dataset: DatasetId::WikiGold,
             backend: "stacked".to_string(),
+            seed: 42,
             success,
             error: error.map(|s| s.to_string()),
             metrics,
@@ -4010,6 +4016,7 @@ mod tests {
             task: Task::NER,
             dataset: DatasetId::WikiGold,
             backend: "missing".to_string(),
+            seed: 42,
             success: false,
             error: Some("Feature not available".to_string()),
             metrics: HashMap::new(),
@@ -4031,6 +4038,7 @@ mod tests {
             task: Task::NER,
             dataset: DatasetId::WikiGold,
             backend: "missing".to_string(),
+            seed: 42,
             success: false,
             error: Some("Connection timeout".to_string()),
             metrics: HashMap::new(),

@@ -24,6 +24,7 @@ use crate::eval::loader::{DatasetId, DatasetLoader};
 use crate::eval::task_evaluator::{TaskEvalConfig, TaskEvaluator};
 use crate::eval::task_mapping::{backend_tasks, dataset_tasks, Task};
 use muxer::{MabConfig, Outcome, Summary, Window};
+use std::collections::VecDeque;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
@@ -147,6 +148,8 @@ fn history_path() -> PathBuf {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct BackendHistory {
+    #[serde(default)]
+    version: u32,
     window_cap: usize,
     windows: BTreeMap<String, Window>,
 }
@@ -155,13 +158,49 @@ impl BackendHistory {
     fn load(path: &PathBuf, window_cap: usize) -> Self {
         let bytes = fs::read(path).ok();
         if let Some(bytes) = bytes {
-            if let Ok(mut h) = serde_json::from_slice::<BackendHistory>(&bytes) {
-                // Ensure all windows have the current cap.
-                h.window_cap = window_cap.max(1);
-                return h;
+            if let Ok(h) = serde_json::from_slice::<BackendHistory>(&bytes) {
+                // v2+ format (explicit version field).
+                if h.version >= 2 {
+                    return h;
+                }
+                // Otherwise, fall through to legacy migration path below.
+            }
+
+            // Legacy format (no version field, Window serialized as {cap, buf}).
+            #[derive(Debug, Clone, serde::Deserialize)]
+            struct WindowSerde {
+                cap: usize,
+                buf: VecDeque<Outcome>,
+            }
+            #[derive(Debug, Clone, serde::Deserialize)]
+            struct BackendHistoryLegacy {
+                window_cap: usize,
+                windows: BTreeMap<String, WindowSerde>,
+            }
+
+            if let Ok(legacy) = serde_json::from_slice::<BackendHistoryLegacy>(&bytes) {
+                // Keep these fields to document/validate the legacy shape.
+                let _ = legacy.window_cap;
+                let mut windows: BTreeMap<String, Window> = BTreeMap::new();
+                for (backend, w) in legacy.windows {
+                    let _ = w.cap;
+                    let mut out = Window::new(window_cap.max(1));
+                    for mut o in w.buf {
+                        // v1 semantics stored ok := bad. Recover success from hard_junk.
+                        o.ok = !o.hard_junk;
+                        out.push(o);
+                    }
+                    windows.insert(backend, out);
+                }
+                return Self {
+                    version: 2,
+                    window_cap: window_cap.max(1),
+                    windows,
+                };
             }
         }
         Self {
+            version: 2,
             window_cap: window_cap.max(1),
             windows: BTreeMap::new(),
         }
@@ -228,16 +267,13 @@ fn select_backends(
 
     match strategy {
         SampleStrategy::Random => pick_random_subset(seed, candidates_in_order, k),
-        SampleStrategy::MlOnly | SampleStrategy::WorstFirst => {
-            // Muxer selection: treat Outcome.ok as "bad happened" so we prioritize failures/junk.
-            // We choose k backends without replacement by iteratively selecting and removing.
+        SampleStrategy::MlOnly => {
+            // MAB selection (muxer): pick historically "best" arms (high ok_rate, low junk),
+            // with exploration to avoid fixating too early.
             let cfg = MabConfig {
-                // Higher exploration keeps the sampler from fixating too early.
                 exploration_c: 0.8,
-                // CI selection: we don't optimize cost/latency here (that’s recorded but not optimized).
                 cost_weight: 0.0,
                 latency_weight: 0.0,
-                // We don't want to *avoid* junk; we want to find it. So keep penalties 0.
                 junk_weight: 0.0,
                 hard_junk_weight: 0.0,
                 ..MabConfig::default()
@@ -248,11 +284,60 @@ fn select_backends(
             for _ in 0..k.min(remaining.len()) {
                 let summaries = history.summaries_for(&remaining);
                 let sel = muxer::select_mab(&remaining, &summaries, cfg);
-                // Deterministic tie-break already lives inside muxer.
                 let pick = sel.chosen;
                 remaining.retain(|b| b != &pick);
                 chosen.push(pick);
             }
+            chosen
+        }
+        SampleStrategy::WorstFirst => {
+            // Worst-first selection is intentionally *not* muxer::select_mab:
+            // muxer is designed to pick "good" providers. Here we want to bias toward
+            // historically bad/flaky arms (to find regressions), while still exploring.
+            //
+            // Score: higher means "worse", with an exploration term favoring under-sampled arms.
+            let mut remaining: Vec<String> = candidates_in_order.to_vec();
+            let mut chosen: Vec<String> = Vec::new();
+
+            for round in 0..k.min(remaining.len()) {
+                let summaries = history.summaries_for(&remaining);
+                let total_calls: f64 = summaries
+                    .values()
+                    .map(|s| s.calls as f64)
+                    .sum::<f64>()
+                    .max(1.0);
+
+                let mut best: Option<(String, f64)> = None;
+                for b in &remaining {
+                    let s = summaries.get(b).copied().unwrap_or_default();
+                    let calls = (s.calls as f64).max(1.0);
+                    let ok_rate = s.ok_rate();
+                    let hard_junk = s.hard_junk_rate();
+                    let soft_junk = s.soft_junk_rate();
+
+                    let bad_rate = 1.0 - ok_rate;
+                    let exploration = 0.8 * ((total_calls.ln() / calls).sqrt());
+                    let score = bad_rate + 0.7 * hard_junk + 0.3 * soft_junk + exploration;
+
+                    match best {
+                        None => best = Some((b.clone(), score)),
+                        Some((ref best_name, best_score)) => {
+                            if score > best_score
+                                || ((score - best_score).abs() <= 1e-12 && b < best_name)
+                            {
+                                best = Some((b.clone(), score));
+                            }
+                        }
+                    }
+                }
+
+                let pick = best
+                    .map(|(b, _)| b)
+                    .unwrap_or_else(|| remaining[round].clone());
+                remaining.retain(|b| b != &pick);
+                chosen.push(pick);
+            }
+
             chosen
         }
     }
@@ -475,17 +560,18 @@ fn test_randomized_matrix_sample() {
 
     // Update per-backend muxer windows.
     //
-    // We track “badness” as muxer Outcome.ok=true (so the MAB selector prioritizes it).
-    // A result is considered “bad” if:
-    // - it failed, or
-    // - it succeeded but has f1 < 0.30 (very low signal).
+    // Record outcomes into per-backend windows.
+    //
+    // Muxer semantics:
+    // - Outcome.ok: "request succeeded" (here: evaluation succeeded)
+    // - Outcome.junk: low-signal output (here: very low F1)
+    // - Outcome.hard_junk: hard failure (here: evaluation failed)
     for r in &results.results {
         let f1 = r.metrics.get("f1").copied().unwrap_or(0.0);
         let dur_ms = r.duration_ms.unwrap_or(0.0).max(0.0);
-        let bad = (!r.success) || f1 < 0.30;
 
         let o = Outcome {
-            ok: bad,
+            ok: r.success,
             http_429: false,
             junk: f1 < 0.30,
             hard_junk: !r.success,
