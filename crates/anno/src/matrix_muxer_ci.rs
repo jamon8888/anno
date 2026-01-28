@@ -264,7 +264,7 @@ fn select_backends(
     }
 }
 
-fn backend_candidates(strategy: SampleStrategy) -> Vec<String> {
+fn backend_candidates(strategy: SampleStrategy, tasks: &[Task]) -> Vec<String> {
     // Start from what is actually feature-enabled in this build.
     let available: BTreeSet<String> = BackendFactory::available_backends()
         .into_iter()
@@ -283,11 +283,33 @@ fn backend_candidates(strategy: SampleStrategy) -> Vec<String> {
         }
     }
 
+    // Coreference resolvers do not implement `Model`, so they are not returned by
+    // `BackendFactory::available_backends()`. They are created via
+    // `eval::backend_factory::create_coref_resolver()` and are still valid backend
+    // “arms” for coref-family tasks.
+    if tasks.iter().any(|t| t.is_coref_family()) {
+        out.extend(
+            ["coref_resolver", "mention_ranking", "box"]
+                .into_iter()
+                .map(|s| s.to_string()),
+        );
+    }
+
     match strategy {
         SampleStrategy::Random => {
             // Include the full available set, but keep a stable order.
             let mut all: Vec<String> = available.into_iter().collect();
             all.sort();
+            // Also include coref resolvers when coref tasks are requested.
+            if tasks.iter().any(|t| t.is_coref_family()) {
+                for b in ["coref_resolver", "mention_ranking", "box"] {
+                    if !all.iter().any(|x| x == b) {
+                        all.push(b.to_string());
+                    }
+                }
+                all.sort();
+                all.dedup();
+            }
             all
         }
         SampleStrategy::MlOnly | SampleStrategy::WorstFirst => {
@@ -367,7 +389,7 @@ fn test_randomized_matrix_sample() {
     let tasks = perspective.tasks();
 
     // Backends: choose a *tiny* subset per run (keep this test fast).
-    let mut candidates = backend_candidates(strategy);
+    let mut candidates = backend_candidates(strategy, &tasks);
     if candidates.is_empty() {
         eprintln!("matrix-muxer: no backend candidates available for this feature set");
         return;
