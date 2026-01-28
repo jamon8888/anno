@@ -159,13 +159,13 @@ pub static GLINER_MODELS: &[GLiNERModel] = &[
         supports_relations: false,
         notes: "Higher accuracy, recommended for GPU",
     },
-    // ModernBERT-based (SOTA)
+    // ModernBERT-based (long-context)
     GLiNERModel {
         model_id: "knowledgator/modern-gliner-bi-large-v1.0",
         encoder: EncoderType::ModernBert,
         size: ModelSize::Large,
         supports_relations: false,
-        notes: "SOTA accuracy, 8K context, ~3% better than DeBERTa",
+        notes: "Long-context encoder variant",
     },
     // Multitask (relations)
     GLiNERModel {
@@ -218,7 +218,7 @@ impl GLiNERModel {
     /// Get the most accurate model.
     #[must_use]
     pub fn most_accurate() -> &'static GLiNERModel {
-        // ModernBERT-large is SOTA
+        // Prefer the ModernBERT variant when present; otherwise fall back to the largest DeBERTa v3.
         GLINER_MODELS
             .iter()
             .find(|m| m.encoder == EncoderType::ModernBert)

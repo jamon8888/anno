@@ -133,7 +133,7 @@ impl NERExtractor {
 
     /// Create with regex-based backend only.
     ///
-    /// Fast (~400ns) but limited to structured entities:
+    /// Limited to structured entities:
     /// DATE, TIME, MONEY, PERCENT, EMAIL, URL, PHONE
     #[must_use]
     pub fn pattern_only() -> Self {
@@ -147,9 +147,9 @@ impl NERExtractor {
     /// Create the best available NER extractor.
     ///
     /// Tries backends in priority order:
-    /// 1. GLiNER (if `onnx` feature enabled) - zero-shot, best accuracy (~90% CoNLL F1)
-    /// 2. BERT ONNX (if `onnx` feature enabled) - reliable, fixed types (~86% F1)
-    /// 3. Candle (if `candle` feature enabled) - Rust-native (~74% F1)
+    /// 1. GLiNER (if `onnx` feature enabled) - zero-shot
+    /// 2. BERT ONNX (if `onnx` feature enabled) - reliable fixed-type NER
+    /// 3. Candle (if `candle` feature enabled) - Rust-native inference
     /// 4. RegexNER (always) - structured entities only
     #[must_use]
     pub fn best_available() -> Self {
@@ -157,14 +157,14 @@ impl NERExtractor {
         #[cfg(feature = "onnx")]
         {
             if let Ok(extractor) = Self::with_gliner(defaults::GLINER_SMALL) {
-                log::info!("[NER] Using GLiNER Small (~90% F1, zero-shot)");
+                log::info!("[NER] Using GLiNER Small (zero-shot)");
                 return extractor;
             }
             log::warn!("[NER] GLiNER init failed, trying BERT ONNX");
 
             // Fallback to BERT ONNX (reliable)
             if let Ok(extractor) = Self::with_bert_onnx(defaults::BERT_ONNX) {
-                log::info!("[NER] Using BERT ONNX (~86% F1)");
+                log::info!("[NER] Using BERT ONNX");
                 return extractor;
             }
             log::warn!("[NER] BERT ONNX init failed, trying Candle");
@@ -174,7 +174,7 @@ impl NERExtractor {
         #[cfg(feature = "candle")]
         {
             if let Ok(extractor) = Self::with_candle(defaults::CANDLE_BERT) {
-                log::info!("[NER] Using Candle (~74% F1)");
+                log::info!("[NER] Using Candle");
                 return extractor;
             }
             log::warn!("[NER] Candle init failed, falling back to patterns");
@@ -189,7 +189,7 @@ impl NERExtractor {
     ///
     /// Prioritizes speed over accuracy:
     /// 1. GLiNER small (if `onnx` feature) - fast zero-shot
-    /// 2. RegexNER (always) - ~400ns per call
+    /// 2. RegexNER (always)
     #[must_use]
     pub fn fast() -> Self {
         #[cfg(feature = "onnx")]

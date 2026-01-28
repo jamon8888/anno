@@ -399,12 +399,6 @@ impl GLiNEROnnx {
     /// This provides significant speedup when the same text is queried with different entity types
     /// (common in evaluation loops).
     ///
-    /// # Performance
-    ///
-    /// - Cache hit: ~27ms (reuses prompt encoding)
-    /// - Cache miss: ~1.2s (full encoding + inference)
-    /// - Typical speedup: 40-50x for evaluation loop patterns
-    ///
     /// # Lock Strategy
     ///
     /// The lock is dropped before the expensive `encode_prompt` operation to avoid blocking

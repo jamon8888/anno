@@ -190,11 +190,11 @@ const CONLL_LABELS: &[&str] = &[
 ///
 /// # Backends
 ///
-/// | Backend | Feature | Speed | Dependencies |
-/// |---------|---------|-------|--------------|
-/// | NdArray | `burn` | ~10ms/doc | None |
-/// | Wgpu | `burn-gpu` | ~2ms/doc | WebGPU runtime |
-/// | Tch | `burn-torch` | ~1ms/doc | libtorch |
+/// | Backend | Feature | Dependencies |
+/// |---------|---------|--------------|
+/// | NdArray | `burn` | None |
+/// | Wgpu | `burn-gpu` | WebGPU runtime |
+/// | Tch | `burn-torch` | libtorch |
 #[derive(Debug, Clone)]
 pub struct BurnNER {
     config: BurnConfig,
