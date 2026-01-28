@@ -312,10 +312,6 @@ impl EvidenceSource {
 pub struct PairEvidence {
     /// All evidence sources
     pub sources: Vec<EvidenceSource>,
-    /// Cached positive evidence sum
-    positive_cache: Option<f32>,
-    /// Cached negative evidence sum
-    negative_cache: Option<f32>,
 }
 
 impl PairEvidence {
@@ -327,17 +323,10 @@ impl PairEvidence {
     /// Add an evidence source.
     pub fn add_source(&mut self, source: EvidenceSource) {
         self.sources.push(source);
-        // Invalidate caches
-        self.positive_cache = None;
-        self.negative_cache = None;
     }
 
     /// Get total positive evidence.
     pub fn positive(&self) -> f32 {
-        if let Some(cached) = self.positive_cache {
-            return cached;
-        }
-
         self.sources
             .iter()
             .map(|s| s.score_contribution())
@@ -347,10 +336,6 @@ impl PairEvidence {
 
     /// Get total negative evidence.
     pub fn negative(&self) -> f32 {
-        if let Some(cached) = self.negative_cache {
-            return cached;
-        }
-
         self.sources
             .iter()
             .map(|s| s.score_contribution())
@@ -580,7 +565,7 @@ impl MediationStrategy {
                 .map(|s| s.score_contribution())
                 .fold(f32::NEG_INFINITY, f32::max)
                 .clamp(-1.0, 1.0)
-                .pipe(|x| (x + 1.0) / 2.0),
+                .map_to_unit_interval(),
 
             Self::Min => evidence
                 .sources
@@ -588,7 +573,7 @@ impl MediationStrategy {
                 .map(|s| s.score_contribution())
                 .fold(f32::INFINITY, f32::min)
                 .clamp(-1.0, 1.0)
-                .pipe(|x| (x + 1.0) / 2.0),
+                .map_to_unit_interval(),
 
             Self::Product => {
                 // Normalize scores to [0.1, 0.9] to avoid zeros
@@ -616,17 +601,15 @@ impl MediationStrategy {
     }
 }
 
-// Helper trait for pipe syntax
-trait Pipe: Sized {
-    fn pipe<F, R>(self, f: F) -> R
-    where
-        F: FnOnce(Self) -> R,
-    {
-        f(self)
-    }
+trait MapToUnitInterval {
+    fn map_to_unit_interval(self) -> f32;
 }
 
-impl Pipe for f32 {}
+impl MapToUnitInterval for f32 {
+    fn map_to_unit_interval(self) -> f32 {
+        (self + 1.0) / 2.0
+    }
+}
 
 // =============================================================================
 // Transitivity Analysis
