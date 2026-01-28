@@ -18,7 +18,7 @@
 //! |------|-----------|--------|-------------|
 //! | [`Confidence`] | f64 | [0, 1] | Model/entity confidence scores |
 //! | [`Score`] | f32 | [0, 1] | Neural network outputs (GPU-native) |
-//! | [`crate::eval::MetricValue`] | f64 | [0, 1] | Evaluation metrics (P/R/F1) |
+//! | `MetricValue` | f64 | [0, 1] | Evaluation metrics (P/R/F1) |
 //!
 //! **Relationship:**
 //! - `Score` converts to `Confidence` via `.to_confidence()` (f32 -> f64)
