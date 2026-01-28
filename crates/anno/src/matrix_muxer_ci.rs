@@ -1,0 +1,411 @@
+//! CI-friendly randomized matrix test (muxer-backed).
+//!
+//! This replaces the older archived test harness with something that:
+//! - compiles under `--features eval-advanced` (no `cli` feature required)
+//! - uses `muxer` for deterministic, windowed MAB-style backend selection
+//! - respects `ANNO_CI_SEED` and `ANNO_SAMPLE_STRATEGY`
+//! - only evaluates cached datasets when running in CI (fast + offline)
+//!
+//! Environment variables:
+//! - `ANNO_CI_SEED`: u64 seed (default: 0)
+//! - `ANNO_SAMPLE_STRATEGY`: `random` | `ml-only` | `worst-first` (default: `ml-only`)
+//! - `ANNO_HISTORY_FILE`: optional JSON path for muxer history
+//! - `ANNO_MAX_EXAMPLES`: max examples per dataset (default: 20 in CI, 50 locally)
+//! - `ANNO_CACHE_DIR`: cache root (datasets live under `$ANNO_CACHE_DIR/datasets`)
+//!
+//! Notes:
+//! - “worst-first” here means “prioritize historically bad outcomes” where “bad” is
+//!   an eval failure or low F1, recorded into a muxer window.
+
+#![cfg(all(test, feature = "eval-advanced"))]
+
+use crate::eval::backend_factory::BackendFactory;
+use crate::eval::loader::{DatasetId, DatasetLoader};
+use crate::eval::task_evaluator::{TaskEvalConfig, TaskEvaluator};
+use crate::eval::task_mapping::Task;
+use muxer::{MabConfig, Outcome, Summary, Window};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::PathBuf;
+
+#[derive(Debug, Clone, Copy)]
+enum SampleStrategy {
+    Random,
+    MlOnly,
+    WorstFirst,
+}
+
+impl SampleStrategy {
+    fn from_env() -> Self {
+        match std::env::var("ANNO_SAMPLE_STRATEGY")
+            .ok()
+            .unwrap_or_else(|| "ml-only".to_string())
+            .to_lowercase()
+            .as_str()
+        {
+            "random" => Self::Random,
+            "worst-first" | "worstfirst" => Self::WorstFirst,
+            // Historical default in the legacy harness.
+            "ml-only" | "mlonly" | "ml" => Self::MlOnly,
+            _ => Self::MlOnly,
+        }
+    }
+}
+
+fn in_ci() -> bool {
+    std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok()
+}
+
+fn ci_seed() -> u64 {
+    std::env::var("ANNO_CI_SEED")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+}
+
+fn max_examples_per_dataset() -> usize {
+    // Keep this intentionally small: this test runs inside `cargo test` and must not time out.
+    let default = if in_ci() { 10 } else { 25 };
+    std::env::var("ANNO_MAX_EXAMPLES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(default)
+}
+
+fn history_path() -> PathBuf {
+    if let Ok(p) = std::env::var("ANNO_HISTORY_FILE") {
+        return PathBuf::from(p);
+    }
+
+    // Prefer ANNO_CACHE_DIR so it matches CI caching.
+    if let Ok(dir) = std::env::var("ANNO_CACHE_DIR") {
+        return PathBuf::from(dir).join("muxer_history.json");
+    }
+
+    // Fallback: place next to default dataset cache root.
+    // DatasetLoader::new() uses platform cache: ~/.cache/anno/datasets (linux).
+    // We'll store history alongside `.../anno/`.
+    #[cfg(feature = "eval")]
+    {
+        if let Some(base) = dirs::cache_dir() {
+            return base.join("anno").join("muxer_history.json");
+        }
+    }
+    PathBuf::from(".").join("muxer_history.json")
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct BackendHistory {
+    window_cap: usize,
+    windows: BTreeMap<String, Window>,
+}
+
+impl BackendHistory {
+    fn load(path: &PathBuf, window_cap: usize) -> Self {
+        let bytes = fs::read(path).ok();
+        if let Some(bytes) = bytes {
+            if let Ok(mut h) = serde_json::from_slice::<BackendHistory>(&bytes) {
+                // Ensure all windows have the current cap.
+                h.window_cap = window_cap.max(1);
+                return h;
+            }
+        }
+        Self {
+            window_cap: window_cap.max(1),
+            windows: BTreeMap::new(),
+        }
+    }
+
+    fn save(&self, path: &PathBuf) {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if let Ok(bytes) = serde_json::to_vec_pretty(self) {
+            let _ = fs::write(path, bytes);
+        }
+    }
+
+    fn window_mut(&mut self, backend: &str) -> &mut Window {
+        self.windows
+            .entry(backend.to_string())
+            .or_insert_with(|| Window::new(self.window_cap))
+    }
+
+    fn summaries_for(&self, arms: &[String]) -> BTreeMap<String, Summary> {
+        let mut out = BTreeMap::new();
+        for a in arms {
+            let s = self
+                .windows
+                .get(a)
+                .map(|w| w.summary())
+                .unwrap_or_default();
+            out.insert(a.clone(), s);
+        }
+        out
+    }
+}
+
+fn stable_hash64(seed: u64, s: &str) -> u64 {
+    // Deterministic (not crypto): stable per process and platform.
+    // FNV-1a 64-bit with seed mixing.
+    let mut h: u64 = 14695981039346656037u64 ^ seed;
+    for b in s.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(1099511628211u64);
+    }
+    h
+}
+
+fn pick_random_subset(seed: u64, items: &[String], k: usize) -> Vec<String> {
+    // Deterministic sampling without external RNG dependencies.
+    let mut scored: Vec<(u64, &String)> = items
+        .iter()
+        .map(|s| (stable_hash64(seed, s), s))
+        .collect();
+    scored.sort_by_key(|(h, s)| (*h, (*s).as_str()));
+    scored
+        .into_iter()
+        .take(k.min(items.len()))
+        .map(|(_, s)| s.clone())
+        .collect()
+}
+
+fn select_backends(
+    strategy: SampleStrategy,
+    seed: u64,
+    history: &BackendHistory,
+    candidates_in_order: &[String],
+    k: usize,
+) -> Vec<String> {
+    if candidates_in_order.is_empty() || k == 0 {
+        return Vec::new();
+    }
+
+    match strategy {
+        SampleStrategy::Random => pick_random_subset(seed, candidates_in_order, k),
+        SampleStrategy::MlOnly | SampleStrategy::WorstFirst => {
+            // Muxer selection: treat Outcome.ok as "bad happened" so we prioritize failures/junk.
+            // We choose k backends without replacement by iteratively selecting and removing.
+            let cfg = MabConfig {
+                // Higher exploration keeps the sampler from fixating too early.
+                exploration_c: 0.8,
+                // CI selection: we don't optimize cost/latency here (that’s recorded but not optimized).
+                cost_weight: 0.0,
+                latency_weight: 0.0,
+                // We don't want to *avoid* junk; we want to find it. So keep penalties 0.
+                junk_weight: 0.0,
+                hard_junk_weight: 0.0,
+                ..MabConfig::default()
+            };
+
+            let mut remaining: Vec<String> = candidates_in_order.to_vec();
+            let mut chosen: Vec<String> = Vec::new();
+            for _ in 0..k.min(remaining.len()) {
+                let summaries = history.summaries_for(&remaining);
+                let sel = muxer::select_mab(&remaining, &summaries, cfg);
+                // Deterministic tie-break already lives inside muxer.
+                let pick = sel.chosen;
+                remaining.retain(|b| b != &pick);
+                chosen.push(pick);
+            }
+            chosen
+        }
+    }
+}
+
+fn backend_candidates(strategy: SampleStrategy) -> Vec<String> {
+    // Start from what is actually feature-enabled in this build.
+    let available: BTreeSet<String> = BackendFactory::available_backends()
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    // Keep the CI matrix focused: always include fast baselines; include ML only when asked.
+    // Note: BackendFactory names are stable across the codebase.
+    let mut out: Vec<String> = Vec::new();
+    let want = |name: &str| available.contains(name);
+
+    // Baselines.
+    for b in ["pattern", "heuristic", "stacked", "crf", "hmm", "ensemble"] {
+        if want(b) {
+            out.push(b.to_string());
+        }
+    }
+
+    match strategy {
+        SampleStrategy::Random => {
+            // Include the full available set, but keep a stable order.
+            let mut all: Vec<String> = available.into_iter().collect();
+            all.sort();
+            all
+        }
+        SampleStrategy::MlOnly | SampleStrategy::WorstFirst => {
+            // CI default: baselines only.
+            //
+            // Rationale: the default feature set enables `onnx`, so ML backends are *available*
+            // but can be expensive and flaky if model caches are cold. Make ML opt-in via env:
+            // `ANNO_ML_IN_MATRIX=1`.
+            let allow_ml = std::env::var("ANNO_ML_IN_MATRIX")
+                .ok()
+                .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+            if allow_ml {
+                for b in [
+                    "gliner",
+                    "gliner_onnx",
+                    "nuner",
+                    "w2ner",
+                    "gliner2",
+                    "bert_onnx",
+                    "deberta_v3",
+                    "albert",
+                    "candle_ner",
+                    "gliner_candle",
+                    "burn",
+                ] {
+                    if want(b) {
+                        out.push(b.to_string());
+                    }
+                }
+            }
+            out.sort();
+            out.dedup();
+            out
+        }
+    }
+}
+
+fn cached_dataset_candidates(loader: &DatasetLoader) -> Vec<DatasetId> {
+    // Prefer cached datasets only; TaskEvaluator can filter further by task support.
+    let mut out = Vec::new();
+    for &ds in DatasetId::all() {
+        let Ok(loadable) = crate::eval::LoadableDatasetId::try_from(ds) else {
+            continue;
+        };
+        if loader.is_cached(loadable) {
+            out.push(ds);
+        }
+    }
+    out
+}
+
+#[test]
+fn test_randomized_matrix_sample() {
+    crate::env::load_dotenv();
+
+    let seed = ci_seed();
+    let strategy = SampleStrategy::from_env();
+    let hist_path = history_path();
+    let window_cap = 50;
+
+    let loader = DatasetLoader::new().expect("DatasetLoader::new");
+    let cached_datasets = cached_dataset_candidates(&loader);
+
+    // If CI cache is cold, do not fail the whole build; this job is intended to be best-effort.
+    // (Other jobs provide strict compile/test guarantees.)
+    if cached_datasets.is_empty() {
+        eprintln!(
+            "matrix-muxer: no cached datasets found; set ANNO_CACHE_DIR and cache it in CI (path={:?})",
+            loader.cache_dir()
+        );
+        return;
+    }
+
+    let mut history = BackendHistory::load(&hist_path, window_cap);
+
+    // Backends: choose a *tiny* subset per run (keep this test fast).
+    let candidates = backend_candidates(strategy);
+    if candidates.is_empty() {
+        eprintln!("matrix-muxer: no backend candidates available for this feature set");
+        return;
+    }
+
+    let chosen_backends = select_backends(strategy, seed, &history, &candidates, 2);
+
+    // Datasets: choose 2 cached datasets, biased toward small/common ones.
+    // Keep this deterministic and stable across runs.
+    let preferred = [
+        DatasetId::WikiGold,
+        DatasetId::Wnut17,
+        DatasetId::MitRestaurant,
+        DatasetId::MitMovie,
+        DatasetId::CoNLL2003Sample,
+    ];
+    let mut chosen_datasets: Vec<DatasetId> = preferred
+        .into_iter()
+        .filter(|d| cached_datasets.contains(d))
+        .take(2)
+        .collect();
+    if chosen_datasets.len() < 2 {
+        // Fallback: deterministic sample of whatever is cached.
+        let ds_strings: Vec<String> = cached_datasets.iter().map(|d| format!("{:?}", d)).collect();
+        let chosen_ds_strings = pick_random_subset(seed ^ 0xDADA_BEEF, &ds_strings, 2);
+        chosen_datasets.extend(
+            cached_datasets
+                .into_iter()
+                .filter(|d| chosen_ds_strings.contains(&format!("{:?}", d))),
+        );
+        chosen_datasets.sort_by_key(|d| format!("{:?}", d));
+        chosen_datasets.dedup();
+        chosen_datasets.truncate(2);
+    }
+
+    // Tasks: keep it to NER only (fast + ubiquitous). Other tasks are covered by
+    // dedicated eval workflows (`eval-full`, etc.).
+    let tasks = vec![Task::NER];
+
+    let eval = TaskEvaluator::new().expect("TaskEvaluator::new");
+
+    let config = TaskEvalConfig {
+        tasks,
+        datasets: chosen_datasets,
+        backends: chosen_backends.clone(),
+        max_examples: Some(max_examples_per_dataset()),
+        seed: Some(seed),
+        require_cached: true,
+        relation_threshold: 0.5,
+        robustness: false,
+        compute_familiarity: false,
+        temporal_stratification: false,
+        confidence_intervals: false,
+        custom_coref_resolver: None,
+        coref_use_gold_mentions: false,
+    };
+
+    let results = match eval.evaluate_all(config) {
+        Ok(r) => r,
+        Err(e) => {
+            // If the requested slice has no valid combinations, treat as non-fatal.
+            eprintln!("matrix-muxer: evaluation returned error: {}", e);
+            return;
+        }
+    };
+
+    // Update per-backend muxer windows.
+    //
+    // We track “badness” as muxer Outcome.ok=true (so the MAB selector prioritizes it).
+    // A result is considered “bad” if:
+    // - it failed, or
+    // - it succeeded but has f1 < 0.30 (very low signal).
+    for r in &results.results {
+        let f1 = r.metrics.get("f1").copied().unwrap_or(0.0);
+        let dur_ms = r.duration_ms.unwrap_or(0.0).max(0.0);
+        let bad = (!r.success) || f1 < 0.30;
+
+        let o = Outcome {
+            ok: bad,
+            http_429: false,
+            junk: f1 < 0.30,
+            hard_junk: !r.success,
+            cost_units: 1,
+            elapsed_ms: dur_ms as u64,
+        };
+        history.window_mut(&r.backend).push(o);
+    }
+
+    // Persist history best-effort for future runs.
+    history.save(&hist_path);
+
+    // If we got here, the harness executed. Failures are recorded, not fatal.
+    // (This job is intended to find regressions over time, not block all merges on flaky data.)
+}
+

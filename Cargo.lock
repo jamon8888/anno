@@ -76,6 +76,7 @@ dependencies = [
  "itertools 0.14.0",
  "log",
  "lru",
+ "muxer",
  "ndarray",
  "once_cell",
  "ort",
@@ -1990,6 +1991,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "muxer"
+version = "0.1.0"
+dependencies = [
+ "pare",
+ "serde",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2266,6 +2275,15 @@ dependencies = [
  "sha2",
  "tar",
  "ureq 3.1.4",
+]
+
+[[package]]
+name = "pare"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bb46f53fc725819cde594b6d42bfaf4f57623d58a62f783dbb20710b6fb571a"
+dependencies = [
+ "thiserror 2.0.17",
 ]
 
 [[package]]
