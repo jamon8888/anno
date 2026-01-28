@@ -5,17 +5,18 @@
 //!
 //! # Research Foundations
 //!
-//! This implementation synthesizes findings from two key papers:
+//! This module is primarily a practical implementation of mention-ranking coreference:
+//! score candidate antecedents for each mention, then cluster by transitive closure.
 //!
-//! 1. **Bourgois & Poibeau (2025)**: "The Elephant in the Coreference Room"
-//!    (arXiv:2510.15594) - Book-scale literary coreference
-//! 2. **Chen et al. (2011)**: "A Rule Based Solution to Co-reference Resolution
-//!    in Clinical Text" (AMIA 2011) - i2b2 NLP Challenge clinical coref
+//! Where this module cites papers, treat those citations as *context* for ideas that are
+//! instantiated here (feature hooks, configuration defaults). If a comment cannot be
+//! traced to a cited source, it should be removed rather than treated as authoritative.
 //!
-//! # Research Findings: Chen et al. 2011 (i2b2 Clinical Coref)
+//! # Clinical heuristics (inspired by clinical-coref literature)
 //!
-//! The i2b2 NLP Challenge paper demonstrated that rule-based coreference
-//! achieves high performance on clinical text (89.6% F1). Key techniques:
+//! This implementation includes optional heuristics commonly discussed in clinical-coref
+//! settings (acronym expansion, “be-phrase” patterns, local context filtering). When
+//! enabled, they should be validated on your target dataset; defaults aim to be conservative.
 //!
 //! ## "Be Phrase" Detection
 //!
@@ -44,12 +45,10 @@
 //!
 //! Enabled via [`MentionRankingConfig::enable_context_filtering`].
 //!
-//! ## Synonym Matching (UMLS Integration)
+//! ## Synonym matching
 //!
-//! The original paper used UMLS for concept synonymy. Our implementation
-//! includes a basic synonym table for common medical terms.
-//!
-//! Enabled via [`MentionRankingConfig::enable_synonym_matching`].
+//! This module supports synonym-aware matching via pluggable sources (see code), but
+//! avoids shipping large hardcoded domain synonym tables by default.
 //!
 //! ## Clinical Configuration
 //!
@@ -65,40 +64,11 @@
 //! let clusters = coref.resolve(text).unwrap();
 //! ```
 //!
-//! # Research Findings (Bourgois & Poibeau 2025)
+//! # Long-document notes
 //!
-//! The "Elephant in the Coreference Room" paper (arXiv:2510.15594) on French
-//! literary coreference at book scale provides several insights relevant here:
-//!
-//! ## Mention-Type-Specific Antecedent Limits
-//!
-//! Different mention types have different antecedent distance distributions:
-//! - **Pronouns**: 95% within 7 mentions of antecedent → limit to 30 candidates
-//! - **Proper/Common nouns**: Can span 1700+ mentions → limit to 300 candidates
-//!
-//! The paper shows this type-specific approach outperforms uniform limits.
-//!
-//! ## Global Proper Noun Coreference
-//!
-//! For long documents, propagate high-confidence proper noun decisions globally:
-//! "If all local predictions involving 'Sir Ralph Brown' and 'Raphael' are
-//! coreferent, propagate this decision to all mention-pairs at global scale."
-//!
-//! This helps bridge mentions that exceed the local antecedent window.
-//!
-//! ## Easy-First Clustering
-//!
-//! Instead of left-to-right greedy clustering, process mentions by confidence:
-//! - High-confidence decisions first (constrains later decisions)
-//! - Use non-coreference predictions to prevent incorrect merges
-//! - Combined with global proper noun strategy: +3 CoNLL F1 on documents >2k tokens
-//!
-//! ## Document Length Impact
-//!
-//! Performance degrades significantly with document length:
-//! - Most loss occurs in 0-10k token range
-//! - Global proper mentions strategy gains 5-10 B³ points on documents >20k tokens
-//! - Current models trained on ~500 token documents struggle at 100k+ tokens
+//! Long-document coreference is difficult. The long-doc literature is a good source of
+//! evaluation benchmarks and error modes, but this implementation does not aim to
+//! reproduce specific reported numbers in its doc comments.
 //!
 //! # Historical Context
 //!
@@ -120,33 +90,16 @@
 //! - Fast inference without GPU
 //! - Scenarios with good external mention detection
 //!
-//! ## Connection to Kehler (1997)
+//! ## Configuration-level uncertainty
 //!
-//! Kehler's "merging decision model" anticipated mention-ranking: he modeled
-//! the probability of a configuration as the product of sequential merge
-//! decisions, processing mentions in document order. Modern mention-ranking
-//! replaces his maximum entropy features with neural representations, but
-//! the core idea—model P(antecedent | mention) rather than P(config)—is the same.
+//! Some classic probabilistic formulations treat coreference as a distribution over
+//! clusterings/configurations. This implementation is greedy and does not attempt to
+//! represent full configuration uncertainty.
 //!
-//! The key difference: Kehler maintained a distribution over all configurations,
-//! enabling uncertainty quantification. Mention-ranking commits to greedy
-//! decisions, losing this uncertainty but gaining scalability.
+//! ## Graph refinement (separate implementation)
 //!
-//! ## Connection to G2GT (2022)
-//!
-//! Miculicich & Henderson's "reduced document" strategy for G2GT is essentially
-//! mention-ranking with graph refinement:
-//!
-//! 1. **Stage 1**: Detect mentions (like this module's external detection)
-//! 2. **Stage 2**: Operate on condensed input (only mention tokens)
-//! 3. **Refinement**: Iteratively update graph based on previous predictions
-//!
-//! The key insight: the two-stage architecture (detect mentions, then resolve)
-//! outperforms single-stage approaches on long documents. This validates
-//! anno's Extract → Coalesce pipeline design.
-//!
-//! See [`graph_coref`](super::graph_coref) for an implementation that adds
-//! iterative refinement to mention-level coreference.
+//! If you want iterative/global graph refinement, use the dedicated graph-coref backend
+//! (separate module) rather than treating this mention-ranking implementation as equivalent.
 //!
 //! # Architecture
 //!
@@ -182,18 +135,11 @@
 //! Output: {[John, He], [Mary]}
 //! ```
 //!
-//! # Compared to Other Approaches
+//! # Compared to other approaches
 //!
-//! | Aspect | Mention-Ranking | E2E-Coref | Graph-Coref |
-//! |--------|-----------------|-----------|-------------|
-//! | Mention Detection | External | Learned | External |
-//! | Decisions | Greedy | Greedy | Iterative |
-//! | Transitivity | Post-hoc | Post-hoc | **Built-in** |
-//! | Complexity | O(N² × K) | O(N⁴) | O(N² × T) |
-//! | Speed | Fast | Slow | Medium |
-//! | Accuracy | ~75% F1 | ~80% F1 | ~80.5% F1 |
-//!
-//! Where N = tokens, K = max antecedents, T = refinement iterations.
+//! Mention-ranking is typically simpler than end-to-end span models and can be faster to
+//! debug and iterate on. For accuracy claims, rely on the evaluation harness and dataset
+//! reports rather than prose numbers in docs.
 //!
 //! # References
 //!
