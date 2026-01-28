@@ -22,7 +22,7 @@
 use crate::eval::backend_factory::BackendFactory;
 use crate::eval::loader::{DatasetId, DatasetLoader};
 use crate::eval::task_evaluator::{TaskEvalConfig, TaskEvaluator};
-use crate::eval::task_mapping::{backend_tasks, dataset_tasks, Task};
+use crate::eval::task_mapping::{backend_tasks, dataset_tasks, get_task_backends, Task};
 use muxer::{MabConfig, Outcome, Summary, Window};
 use std::collections::VecDeque;
 use std::collections::{BTreeMap, BTreeSet};
@@ -377,28 +377,43 @@ fn backend_candidates(strategy: SampleStrategy, tasks: &[Task]) -> Vec<String> {
         .map(|s| s.to_string())
         .collect();
 
-    // Keep the CI matrix focused: always include fast baselines; include ML only when asked.
-    // Note: BackendFactory names are stable across the codebase.
-    let mut out: Vec<String> = Vec::new();
-    let want = |name: &str| available.contains(name);
+    // Keep the matrix aligned with what the evaluator will actually run:
+    // TaskEvaluator filters explicit backends through `get_task_backends(task)`.
+    let allowed: BTreeSet<&'static str> = tasks
+        .iter()
+        .flat_map(|t| get_task_backends(*t))
+        .collect();
 
-    // Baselines.
-    for b in ["pattern", "heuristic", "stacked", "crf", "hmm", "ensemble"] {
-        if want(b) {
+    // CI default: baselines only.
+    //
+    // Rationale: the default feature set enables `onnx`, so ML backends are *available*
+    // but can be expensive and flaky if model caches are cold. Make ML opt-in via env:
+    // `ANNO_ML_IN_MATRIX=1`.
+    let allow_ml = std::env::var("ANNO_ML_IN_MATRIX")
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+
+    let mut out: Vec<String> = Vec::new();
+    for b in allowed {
+        // Baselines: always include if present in this build.
+        if matches!(b, "stacked" | "crf" | "heuristic") {
+            if available.contains(b) {
+                out.push(b.to_string());
+            }
+            continue;
+        }
+
+        // Coref-family resolvers do not implement `Model`, so they are not returned by
+        // `BackendFactory::available_backends()`. They are still valid eval “arms”.
+        if b == "coref_resolver" || b == "mention_ranking" || b == "box" {
+            out.push(b.to_string());
+            continue;
+        }
+
+        // Everything else is treated as optional/ML-ish.
+        if allow_ml && available.contains(b) {
             out.push(b.to_string());
         }
-    }
-
-    // Coreference resolvers do not implement `Model`, so they are not returned by
-    // `BackendFactory::available_backends()`. They are created via
-    // `eval::backend_factory::create_coref_resolver()` and are still valid backend
-    // “arms” for coref-family tasks.
-    if tasks.iter().any(|t| t.is_coref_family()) {
-        out.extend(
-            ["coref_resolver", "mention_ranking", "box"]
-                .into_iter()
-                .map(|s| s.to_string()),
-        );
     }
 
     match strategy {
@@ -419,33 +434,6 @@ fn backend_candidates(strategy: SampleStrategy, tasks: &[Task]) -> Vec<String> {
             all
         }
         SampleStrategy::MlOnly | SampleStrategy::WorstFirst => {
-            // CI default: baselines only.
-            //
-            // Rationale: the default feature set enables `onnx`, so ML backends are *available*
-            // but can be expensive and flaky if model caches are cold. Make ML opt-in via env:
-            // `ANNO_ML_IN_MATRIX=1`.
-            let allow_ml = std::env::var("ANNO_ML_IN_MATRIX")
-                .ok()
-                .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
-            if allow_ml {
-                for b in [
-                    "gliner",
-                    "gliner_onnx",
-                    "nuner",
-                    "w2ner",
-                    "gliner2",
-                    "bert_onnx",
-                    "deberta_v3",
-                    "albert",
-                    "candle_ner",
-                    "gliner_candle",
-                    "burn",
-                ] {
-                    if want(b) {
-                        out.push(b.to_string());
-                    }
-                }
-            }
             out.sort();
             out.dedup();
             out

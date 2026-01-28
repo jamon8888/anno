@@ -12,7 +12,7 @@ use std::path::PathBuf;
 #[cfg(feature = "eval-advanced")]
 use crate::eval::backend_factory::BackendFactory;
 #[cfg(feature = "eval-advanced")]
-use crate::eval::task_mapping::{backend_tasks, Task};
+use crate::eval::task_mapping::{backend_tasks, get_task_backends, Task};
 
 // Note: we intentionally do NOT depend on the `muxer` crate here.
 // In this repo, `muxer` is a dev-dependency used by the matrix test harness. The CLI should
@@ -244,59 +244,48 @@ fn backend_candidates(tasks: &[Task], include_ml: bool) -> Vec<String> {
         .map(|s| s.to_string())
         .collect();
 
-    let mut out: Vec<String> = Vec::new();
-    let want = |name: &str| available.contains(name);
+    // Use the same "allowed backends per task" list as the evaluator to avoid
+    // reporting "unseen" arms that will never be executed.
+    let allowed: BTreeSet<&'static str> =
+        tasks.iter().flat_map(|t| get_task_backends(*t)).collect();
 
-    // Baselines.
-    for b in ["pattern", "heuristic", "stacked", "crf", "hmm", "ensemble"] {
-        if want(b) {
+    let mut out: Vec<String> = Vec::new();
+    for b in allowed {
+        // Keep the CLI behavior: ML-only controls whether we include ML backends,
+        // but always include the core baselines if they are available.
+        if !include_ml
+            && matches!(
+                b,
+                "gliner"
+                    | "gliner_onnx"
+                    | "gliner_candle"
+                    | "gliner2"
+                    | "gliner_poly"
+                    | "bert_onnx"
+                    | "deberta_v3"
+                    | "albert"
+                    | "candle_ner"
+                    | "burn"
+                    | "nuner"
+                    | "w2ner"
+                    | "universal_ner"
+            )
+        {
+            continue;
+        }
+        // Some coref resolvers aren't in `BackendFactory::available_backends()`, but they still
+        // show up in history, so keep them even if not "available" per factory.
+        if b == "coref_resolver" || b == "mention_ranking" || b == "box" {
+            out.push(b.to_string());
+            continue;
+        }
+        if available.contains(b) {
             out.push(b.to_string());
         }
     }
 
-    // Task-specific “baselines”.
-    if tasks.iter().any(|t| *t == Task::RelationExtraction) {
-        for b in ["tplinker"] {
-            if want(b) {
-                out.push(b.to_string());
-            }
-        }
-    }
-
-    // Coref-family resolvers are not `Model` backends, but still valid eval "arms".
-    if tasks.iter().any(|t| t.is_coref_family()) {
-        out.extend(
-            ["coref_resolver", "mention_ranking", "box"]
-                .into_iter()
-                .map(|s| s.to_string()),
-        );
-    }
-
-    if include_ml {
-        for b in [
-            "gliner",
-            "gliner_onnx",
-            "nuner",
-            "w2ner",
-            "gliner2",
-            "bert_onnx",
-            "deberta_v3",
-            "albert",
-            "candle_ner",
-            "gliner_candle",
-            "burn",
-        ] {
-            if want(b) {
-                out.push(b.to_string());
-            }
-        }
-    }
-
-    // Filter to task support.
-    out.retain(|b| {
-        let ts = backend_tasks(b);
-        tasks.iter().any(|t| ts.contains(t))
-    });
+    // Filter to task support (defensive).
+    out.retain(|b| tasks.iter().any(|t| backend_tasks(b).contains(t)));
     out.sort();
     out.dedup();
     out
