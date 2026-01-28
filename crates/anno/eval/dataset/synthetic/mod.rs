@@ -2,7 +2,8 @@
 //!
 //! # Research Context
 //!
-//! Synthetic data has known limitations (arXiv:2505.16814 "Does Synthetic Data Help NER"):
+//! Synthetic data has known limitations (see the synthetic-data literature; do not treat synthetic
+//! evaluation as a proxy for real-world performance):
 //!
 //! | Issue | Mitigation |
 //! |-------|------------|
