@@ -379,10 +379,8 @@ fn backend_candidates(strategy: SampleStrategy, tasks: &[Task]) -> Vec<String> {
 
     // Keep the matrix aligned with what the evaluator will actually run:
     // TaskEvaluator filters explicit backends through `get_task_backends(task)`.
-    let allowed: BTreeSet<&'static str> = tasks
-        .iter()
-        .flat_map(|t| get_task_backends(*t))
-        .collect();
+    let allowed: BTreeSet<&'static str> =
+        tasks.iter().flat_map(|t| get_task_backends(*t)).collect();
 
     // CI default: baselines only.
     //
