@@ -80,6 +80,8 @@ fn main() -> ExitCode {
         Some(Commands::Dataset(args)) => dataset::run(args).map_err(CliError::from),
         #[cfg(feature = "eval-advanced")]
         Some(Commands::Benchmark(args)) => benchmark::run(args).map_err(CliError::from),
+        #[cfg(feature = "eval-advanced")]
+        Some(Commands::Muxer(args)) => muxer::run(args).map_err(CliError::from),
         Some(Commands::Info) => info::run().map_err(CliError::from),
         Some(Commands::Models(args)) => models::run(args).map_err(CliError::from),
         #[cfg(feature = "eval-advanced")]
