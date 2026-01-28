@@ -70,7 +70,7 @@ pub struct SampleEfficiencyMetrics {
     pub f1_per_100_samples: f64,
     /// Estimated samples needed for various F1 targets
     pub samples_for_targets: HashMap<String, Option<usize>>,
-    /// Diminishing returns threshold (where adding data helps <1% F1)
+    /// Diminishing returns threshold (where adding data helps very little)
     pub diminishing_returns_threshold: Option<usize>,
     /// Current saturation level (0-1, how close to plateau)
     pub saturation_level: f64,
@@ -206,7 +206,7 @@ impl LearningCurveAnalyzer {
             return None;
         }
 
-        // Find where F1 improvement drops below 1% per doubling of data
+        // Find where F1 improvement drops below a small threshold per doubling of data
         for i in 1..sorted.len() {
             let prev = &sorted[i - 1];
             let curr = &sorted[i];
@@ -214,7 +214,7 @@ impl LearningCurveAnalyzer {
             let sample_ratio = curr.train_size as f64 / prev.train_size as f64;
             let f1_improvement = curr.f1 - prev.f1;
 
-            // If doubling data gives < 1% F1 improvement, we hit diminishing returns
+            // If doubling data yields negligible improvement, we hit diminishing returns
             if sample_ratio >= 1.5 && f1_improvement < 0.01 {
                 return Some(prev.train_size);
             }
@@ -350,7 +350,7 @@ impl LearningCurveAnalyzer {
         // Target-based recommendations
         if let Some(Some(samples_90)) = efficiency.samples_for_targets.get("90%") {
             recs.push(format!(
-                "Estimated ~{} samples needed to reach 90% F1",
+                "Estimated ~{} samples needed to reach target F1",
                 samples_90
             ));
         }
