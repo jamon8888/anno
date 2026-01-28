@@ -1163,7 +1163,7 @@ impl crate::BatchCapable for GLiNERCandle {
 #[cfg(feature = "candle")]
 impl crate::StreamingCapable for GLiNERCandle {
     fn recommended_chunk_size(&self) -> usize {
-        4096 // Characters - translates to ~500 words
+        4096 // Characters - translates to roughly a few hundred words
     }
 }
 

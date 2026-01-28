@@ -26,13 +26,13 @@ pub mod defaults {
     /// BERT ONNX model (protectai, reliable).
     pub const BERT_ONNX: &str = "protectai/bert-base-NER-onnx";
 
-    /// GLiNER small model (~50M params, fastest).
+    /// GLiNER small model (smaller/faster).
     pub const GLINER_SMALL: &str = "onnx-community/gliner_small-v2.1";
 
-    /// GLiNER medium model (~110M params, balanced) - default.
+    /// GLiNER medium model (balanced) - default.
     pub const GLINER_MEDIUM: &str = "onnx-community/gliner_medium-v2.1";
 
-    /// GLiNER large model (~340M params, most accurate).
+    /// GLiNER large model (larger; potentially higher quality, slower).
     pub const GLINER_LARGE: &str = "onnx-community/gliner_large-v2.1";
 
     /// GLiNER multitask model (relation extraction too).

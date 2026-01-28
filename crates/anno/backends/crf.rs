@@ -75,9 +75,9 @@
 //!
 //! Performance depends on weights, tokenization, and dataset; use the eval harness
 //! for quantitative results.
-//! | Heuristic | ~65-70% | Hand-tuned, always available |
-//! | Trained | ~88-91% | From `train_crf_weights.py` |
-//! | Neural | ~93-95% | For comparison (GLiNER, BERT) |
+//! | Heuristic | Lower | Hand-tuned, always available |
+//! | Trained | Higher | From `train_crf_weights.py` |
+//! | Neural | Highest | For comparison (GLiNER, BERT) |
 //!
 //! # Usage
 //!
@@ -107,10 +107,10 @@
 //! # Advantages Over Neural Methods
 //!
 //! - **Interpretable**: Features and weights are human-readable
-//! - **Fast training**: Minutes on CPU vs hours on GPU
+//! - **Fast training**: CPU-only training; typically faster to iterate than neural training loops
 //! - **No dependencies**: Pure Rust, no ONNX/Candle required
 //! - **Deterministic**: Same input always produces same output
-//! - **Small footprint**: Weights file is typically <1MB
+//! - **Small footprint**: Small weights file compared to ML model artifacts
 
 use crate::{Entity, EntityType, Model, Result};
 use std::collections::HashMap;
