@@ -169,21 +169,22 @@ ci-eval: ci
 # Run randomized matrix test (backends x datasets x tasks)
 # Strategies: random, ml-only, worst-first, ml-all
 # Example: just matrix worst-first 42
-matrix strategy="random" seed="":
+matrix strategy="random" seed="" perspective="ner":
     #!/usr/bin/env bash
     echo "Running randomized matrix test (strategy: {{strategy}})..."
     export ANNO_SAMPLE_STRATEGY={{strategy}}
+    export ANNO_MATRIX_PERSPECTIVE={{perspective}}
     if [ -n "{{seed}}" ]; then export ANNO_CI_SEED={{seed}}; fi
-    cargo test --test randomized_matrix_ci --features "eval-advanced" -- --nocapture
+    cargo test -p anno --lib --features "eval-advanced" test_randomized_matrix_sample -- --nocapture
 
 # Run matrix test with ML backends (requires onnx/candle features)
 matrix-ml:
     @echo "Running ML-focused matrix test..."
-    @ANNO_SAMPLE_STRATEGY=ml-all cargo test --test randomized_matrix_ci --features "eval-advanced onnx" -- --nocapture
+    @ANNO_SAMPLE_STRATEGY=ml-only ANNO_ML_IN_MATRIX=1 cargo test -p anno --lib --features "eval-advanced onnx" test_randomized_matrix_sample -- --nocapture
 
 # Show backend availability matrix
 matrix-backends:
-    cargo test --test randomized_matrix_ci --features "eval-advanced" test_backend_availability_matrix -- --nocapture
+    @echo "Deprecated: legacy backend availability matrix was removed with archive cleanup."
 
 # Run evaluation on synthetic data (fast, no downloads)
 eval-quick:
