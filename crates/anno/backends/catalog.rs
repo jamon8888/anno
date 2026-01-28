@@ -1,163 +1,18 @@
 //! NER Backend Catalog
 //!
-//! Comprehensive catalog of NER backends in `anno`, with research context.
+//! This module is documentation-only: it describes the set of backends that live
+//! under `crate::backends` and gives a few “where to start” pointers.
 //!
-//! # Backend Overview
+//! Keep in mind:
+//! - Many backends are **feature-gated** (`onnx`, `candle`, etc.).
+//! - Any “speed” or “quality” comparisons belong in the eval harness, not in
+//!   rustdoc prose.
 //!
-//! ```text
-//! ┌─────────────────────────────────────────────────────────────────────┐
-//! │                        NER Backend Spectrum                         │
-//! ├─────────────────────────────────────────────────────────────────────┤
-//! │                                                                     │
-//! │  Zero-Shot NER (any entity type)                                    │
-//! │  ├─ GLiNER (span classification) - onnx feature                     │
-//! │  ├─ NuNER (token classification) - arbitrary length entities        │
-//! │  └─ UniversalNER (LLM-based) - expensive but powerful               │
-//! │                                                                     │
-//! │  Complex Structures (nested/discontinuous)                          │
-//! │  ├─ W2NER (word-word grids) - handles nested entities               │
-//! │  └─ TPLinker (handshaking) - joint entity-relation                  │
-//! │                                                                     │
-//! │  Traditional NER (fixed types)                                      │
-//! │  ├─ BertNEROnnx (sequence labeling) - fast, reliable                │
-//! │  └─ CRF-based (conditional random fields) - classical               │
-//! │                                                                     │
-//! │  Zero Dependency (always available)                                 │
-//! │  ├─ RegexNER (regex) - structured entities                        │
-//! │  └─ HeuristicNER (heuristics) - Person/Org/Location               │
-//! │                                                                     │
-//! └─────────────────────────────────────────────────────────────────────┘
-//! ```
-//!
-//! # Implemented Backends
-//!
-//! | Backend | Feature | Zero-Shot | Nested | Speed | Status |
-//! |---------|---------|-----------|--------|-------|--------|
-//! | `RegexNER` | - | No | No | ~400ns | ✅ Complete |
-//! | `HeuristicNER` | - | No | No | ~50μs | ✅ Complete |
-//! | `StackedNER` | - | No | No | varies | ✅ Complete |
-//! | `BertNEROnnx` | `onnx` | No | No | ~50ms | ✅ Complete |
-//! | `GLiNEROnnx` | `onnx` | **Yes** | No | ~100ms | ✅ Complete |
-//! | `NuNER` | `onnx` | **Yes** | No | ~100ms | ✅ Complete |
-//! | `W2NER` | `onnx` | No | **Yes** | ~150ms | ✅ Complete |
-//! | `CandleNER` | `candle` | No | No | varies | ✅ Complete |
-//! | `GLiNERCandle` | `candle` | **Yes** | No | varies | Experimental (Candle port; prefer ONNX for production until further validation) |
-//! | `GLiNERPoly` | `onnx` | **Yes** | No | ~120ms | Placeholder |
-//! | `TPLinker` | - | No | No | varies | Placeholder (heuristic baseline today; no neural handshaking inference yet) |
-//! | `DeBERTaV3NER` | `onnx` | No | No | ~50ms | Beta (wrapper around BERT ONNX; requires exported ONNX artifacts) |
-//! | `ALBERTNER` | `onnx` | No | No | ~40ms | Beta (wrapper around BERT ONNX; requires exported ONNX artifacts) |
-//! | `UniversalNER` | - | **Yes** | No | varies | Beta (requires LLM API key; errors when unavailable) |
-//!
-//! # Research Landscape (2024-2025)
-//!
-//! ## Zero-Shot NER
-//!
-//! ### GLiNER (Implemented)
-//!
-//! Bi-encoder architecture that embeds entity labels and text spans
-//! into the same space, enabling zero-shot classification.
-//!
-//! - **Paper**: [GLiNER: Generalist Model for NER](https://arxiv.org/abs/2311.08526)
-//! - **Best for**: Custom entity types without retraining
-//! - **Limitation**: Fixed span window
-//!
-//! ### NuNER (Implemented)
-//!
-//! Token classifier variant of GLiNER from NuMind. Uses BIO tagging
-//! instead of span classification, enabling arbitrary-length entities.
-//!
-//! - **Models**: `numind/NuNER_Zero`, `numind/NuNER_Zero_4k`
-//! - **License**: MIT (open weights)
-//! - **Best for**: Long entities, variable-length spans
-//!
-//! ### UniversalNER
-//!
-//! Instruction-tuned LLM (LLaMA-based) for open NER.
-//!
-//! - **Paper**: [UniversalNER](https://universal-ner.github.io)
-//! - **Pros**: 45 entity types, competitive with ChatGPT
-//! - **Cons**: LLM-based (expensive inference)
-//!
-//! ## Complex Structures
-//!
-//! ### W2NER (Implemented)
-//!
-//! Word-word relation classification for nested/discontinuous entities.
-//! Models NER as classifying relations between every token pair.
-//!
-//! - **Paper**: [W2NER: Unified NER via Word-Word Relations](https://arxiv.org/abs/2112.10070)
-//! - **Best for**: Medical NER ("severe \[pain\] in \[abdomen\]")
-//! - **Grid**: N×N×L tensor (sequence × sequence × labels)
-//!
-//! ### TPLinker (HandshakingMatrix)
-//!
-//! Handshaking tagging scheme for joint entity-relation extraction.
-//! `HandshakingMatrix` utilities are implemented in `inference.rs`, but the `TPLinker` backend
-//! is currently a **heuristic placeholder** (it does not run a neural handshaking model yet).
-//!
-//! - **Paper**: [TPLinker: Single-stage Joint Extraction](https://aclanthology.org/2020.coling-main.138/)
-//! - **Best for**: Knowledge graph construction
-//!
-//! ## Encoder Comparison
-//!
-//! | Encoder | Context | ONNX | Candle | Notes |
-//! |---------|---------|------|--------|-------|
-//! | BERT | 512 | ✅ | ✅ | Classic, well-tested |
-//! | DeBERTa-v3 | 512 | ✅ | ✅ | Disentangled attention |
-//! | ModernBERT | 8192 | ✅ | ✅ | SOTA (2024), RoPE, GeGLU |
-//! | RoBERTa | 512 | ✅ | ✅ | Improved pretraining |
-//!
-//! All encoders are implemented in `encoder_candle.rs` with:
-//! - `EncoderConfig::bert_base()` / `::deberta_v3_base()` / `::modernbert_base()`
-//! - Automatic config detection from HuggingFace `config.json`
-//! - RoPE (Rotary Position Embeddings) for long-context models
-//! - GeGLU activation for ModernBERT
-//!
-//! # Model Recommendations
-//!
-//! | Use Case | Recommended |
-//! |----------|-------------|
-//! | Simple NER | `StackedNER::default()` |
-//! | Custom entity types | `NuNER` or `GLiNEROnnx` |
-//! | Nested entities | `W2NER` |
-//! | Production (fixed types) | `BertNEROnnx` |
-//! | Knowledge graphs | `HandshakingMatrix` utilities (TPLinker-style); `TPLinker` backend is heuristic today |
-//! | Structured data | `RegexNER` |
-//!
-//! # Why Multiple GLiNER Implementations?
-//!
-//! We have three GLiNER-related implementations:
-//!
-//! ## 1. `GLiNEROnnx` (Manual ONNX)
-//!
-//! Hand-written ONNX inference code.
-//!
-//! - **Feature**: `onnx`
-//! - **Deps**: `ort`, `tokenizers`, `hf-hub`
-//! - **Status**: Implemented and tested
-//!
-//! **Why**: Full control over tokenization and custom error handling.
-//!
-//! ## 2. `GLiNERCandle` (Pure Rust, GPU)
-//!
-//! Pure Rust implementation for native GPU support.
-//!
-//! - **Feature**: `candle`
-//! - **Deps**: `candle-core`, `candle-nn`, `tokenizers`
-//! - **Status**: ✅ Implemented
-//!
-//! **Why**: Metal (Apple Silicon) and CUDA acceleration
-//! without C++ dependencies. Pure Rust ML inference.
-//!
-//! **Components**:
-//! - `CandleEncoder`: Transformer encoder (BERT/ModernBERT/DeBERTa)
-//! - `SpanRepLayer`: Span embeddings from [start, end, width]
-//! - `LabelEncoder`: Project label embeddings
-//! - `SpanLabelMatcher`: Cosine similarity matching
-//!
-//! # Default Thresholds (Data-Motivated)
-//!
-//! | Parameter | Default | Source |
+//! Paper pointers (context only):
+//! - GLiNER: arXiv:2311.08526
+//! - UniversalNER: arXiv:2308.03279
+//! - W2NER: arXiv:2112.10070
+//! - TPLinker: `https://aclanthology.org/2020.coling-main.138/`
 //! |-----------|---------|--------|
 //! | `threshold` | 0.5 | GLiNER paper |
 //! | `max_width` | 12 | Standard span width |
