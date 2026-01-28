@@ -1000,19 +1000,6 @@ impl Model for MockModel {
     }
 }
 
-// Workspace-level CI tests were historically kept at the repo root under `tests/`.
-// Since this repo has no root Cargo package, we archive them under `archive/legacy-tests/` and
-// compile the ones CI still relies on as unit-test modules for `anno`.
-#[cfg(test)]
-#[path = "../../../archive/legacy-tests/regression_f1.rs"]
-#[cfg(feature = "eval")]
-mod regression_f1;
-
-#[cfg(test)]
-#[path = "../../../archive/legacy-tests/randomized_matrix_ci.rs"]
-#[cfg(all(feature = "eval-advanced", feature = "cli"))]
-mod randomized_matrix_ci;
-
 // New muxer-backed CI matrix sampler. This lives in-tree (not archived) and is intended
 // to be the stable test target for GitHub Actions.
 #[cfg(test)]
