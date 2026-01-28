@@ -567,7 +567,11 @@ pub fn globally_diverse_dataset() -> Vec<AnnotatedExample> {
     ]
 }
 
-/// Technology/startup dataset for emerging tech entities.
+/// Technology-oriented synthetic dataset.
+///
+/// This data is **synthetic** and intended for fast unit tests and coverage checks.
+/// It is not intended to model any real distribution and should not be used to make
+/// real-world performance claims.
 pub fn technology_dataset() -> Vec<AnnotatedExample> {
     vec![
         AnnotatedExample {
