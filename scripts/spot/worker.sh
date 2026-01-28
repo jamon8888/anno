@@ -98,7 +98,7 @@ setup_rust_env() {
 
 sync_from_s3() {
     # Skip full sync - ANNO_S3_CACHE=1 fetches datasets on-demand
-    # This saves ~10 minutes of upfront data transfer
+    # This avoids a large upfront data transfer step.
     log_info "S3 cache enabled - datasets/models fetched on-demand"
     export ANNO_S3_CACHE=1
     export ANNO_S3_BUCKET="$BUCKET"
@@ -125,7 +125,7 @@ clone_and_build() {
     fi
     
     # Build release with ONNX support for ML backends
-    log_info "Building anno with ONNX (this may take 4-5 minutes)..."
+    log_info "Building anno with ONNX (this may take a while on fresh instances)..."
     cargo build --release --bin anno --features "cli,eval-advanced,onnx" 2>&1 | tail -5
     
     log_info "Build complete: $($CARGO_TARGET_DIR/release/anno --version 2>/dev/null || echo 'built')"
