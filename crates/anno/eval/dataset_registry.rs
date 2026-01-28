@@ -1458,6 +1458,7 @@ define_datasets! {
         size_hint: "Spanish + Dutch news articles",
         notes: "Meta entry only; use `CoNLL2002Spanish` / `CoNLL2002Dutch` for loadable data.",
         tasks: ["blocked"],
+        access_status: Deprecated,
         categories: [ner, multilingual],
     },
 
@@ -6878,6 +6879,7 @@ define_datasets! {
         annotation_scheme: "BIO",
         notes: "Dutch newspaper NER; upstream download is currently blocked (HTTP 403).",
         tasks: ["blocked"],
+        access_status: ContactAuthors,
         categories: [ner, multilingual],
     },
 
@@ -6898,6 +6900,7 @@ define_datasets! {
         annotation_scheme: "BIO",
         notes: "Spanish EFE news agency articles; upstream download is currently blocked (HTTP 403).",
         tasks: ["blocked"],
+        access_status: ContactAuthors,
         categories: [ner, multilingual],
     },
 
