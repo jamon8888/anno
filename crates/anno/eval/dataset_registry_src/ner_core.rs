@@ -91,7 +91,7 @@
         annotation_scheme: "IOB2",
         size_hint: "~300k tokens, ~35k entities",
         example: "EU B-ORG\nrejects O\nGerman B-MISC\ncall O\nto O\nboycott O\nBritish B-MISC\nlamb O\n. O",
-        notes: "Original has ~7% annotation errors (CleanCoNLL 2023); still the most-cited NER benchmark",
+        notes: "Known annotation noise; see CleanCoNLL (2023) for one audit/correction pass",
         tasks: ["ner"],
         categories: [ner],
     },
