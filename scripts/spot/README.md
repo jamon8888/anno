@@ -178,7 +178,7 @@ aws s3 ls s3://arc-anno-data/results/
 
 The spot evaluation complements the CI randomized matrix tests:
 
-| Aspect | CI (`randomized_matrix_ci`) | Spot Evaluation |
+| Aspect | CI (`matrix_muxer_ci::test_randomized_matrix_sample`) | Spot Evaluation |
 |--------|----------------------------|-----------------|
 | **When** | Every PR, every push | On-demand, nightly, pre-release |
 | **Scope** | 3-5 backend×dataset pairs | 780 combinations (12×13×5) |
@@ -189,16 +189,10 @@ The spot evaluation complements the CI randomized matrix tests:
 
 ### Integration Points
 
-1. **Badness Scores Flow to CI**:
-   Spot evaluation computes "badness scores" for each backend×dataset pair.
-   CI can use `ANNO_HISTORY_FILE` to prioritize worst-performing combinations:
-   ```bash
-   # After spot run, export badness history
-   just spot-results --badness-export reports/badness-history.csv
-   
-   # CI uses it for MAB-style sampling
-   ANNO_HISTORY_FILE=reports/badness-history.csv cargo test --test randomized_matrix_ci
-   ```
+1. **Muxer history (optional)**:
+   The CI matrix sampler can read/write muxer history via `ANNO_HISTORY_FILE` (JSON). Spot runs
+   can share artifacts in `reports/`, but a direct “spot → muxer history” export is not wired up
+   by default in this directory.
 
 2. **CI Seeds Trace Back to Spot**:
    When CI finds a regression, reproduce it in spot:
