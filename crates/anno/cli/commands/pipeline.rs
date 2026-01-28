@@ -17,11 +17,11 @@ pub struct PipelineArgs {
     pub text: Vec<String>,
 
     /// Read input from file(s)
-    #[arg(short, long, value_name = "PATH")]
+    #[arg(short, long, value_name = "PATH", visible_alias = "input")]
     pub files: Vec<String>,
 
     /// Process directory of text files
-    #[arg(short, long, value_name = "DIR")]
+    #[arg(short, long, value_name = "DIR", visible_alias = "input-dir")]
     pub dir: Option<String>,
 
     /// Model backend to use
@@ -109,7 +109,10 @@ pub fn run(args: PipelineArgs) -> Result<(), String> {
     }
 
     if texts.is_empty() {
-        return Err("No input provided. Use --text, --files, or --dir".to_string());
+        return Err(
+            "No input provided. Use positional TEXT, --files/--input, or --dir/--input-dir."
+                .to_string(),
+        );
     }
 
     // Process each document
