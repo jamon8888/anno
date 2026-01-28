@@ -72,7 +72,7 @@ impl From<&TaskEvalResult> for EvalHistoryEntry {
             backend: result.backend.clone(),
             dataset: result.dataset.name().to_string(),
             task: format!("{:?}", result.task),
-            seed: 42, // TODO: Extract from config if available
+            seed: result.seed,
             f1,
             precision,
             recall,
@@ -769,6 +769,7 @@ mod tests {
             task: crate::eval::task_mapping::Task::NER,
             dataset: crate::eval::loader::DatasetId::WikiGold,
             backend: "test-backend".to_string(),
+            seed: 42,
             success: true,
             error: None,
             metrics: {
@@ -810,6 +811,7 @@ mod tests {
                 task: crate::eval::task_mapping::Task::NER,
                 dataset: crate::eval::loader::DatasetId::WikiGold,
                 backend: format!("backend-{}", i % 2),
+                seed: 42,
                 success: true,
                 error: None,
                 metrics: {
@@ -851,6 +853,7 @@ mod tests {
                 } else {
                     "backend-b".to_string()
                 },
+                seed: 42,
                 success: true,
                 error: None,
                 metrics: {
@@ -887,6 +890,7 @@ mod tests {
                 task: crate::eval::task_mapping::Task::NER,
                 dataset: crate::eval::loader::DatasetId::WikiGold,
                 backend: "test-backend".to_string(),
+                seed: 42,
                 success: true,
                 error: None,
                 metrics: {
@@ -929,6 +933,7 @@ mod tests {
                 task: crate::eval::task_mapping::Task::NER,
                 dataset: crate::eval::loader::DatasetId::WikiGold,
                 backend: backend.to_string(),
+                seed: 42,
                 success: true,
                 error: None,
                 metrics: {
@@ -967,6 +972,7 @@ mod tests {
             task: crate::eval::task_mapping::Task::NER,
             dataset: crate::eval::loader::DatasetId::WikiGold,
             backend: "test-backend".to_string(),
+            seed: 42,
             success: true,
             error: None,
             metrics: {
