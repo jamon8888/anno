@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-# Small random samples for sanity (fast, ~5-10 min)
+# Small random samples for sanity
 MAX_EXAMPLES=${MAX_EXAMPLES:-20}
 RANDOM_SEED=${RANDOM_SEED:-42}
 

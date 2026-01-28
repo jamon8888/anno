@@ -208,7 +208,7 @@ eval-wide MAX_EXAMPLES="50":
         --max-examples {{MAX_EXAMPLES}} \
         --output reports/eval-wide-report.md
 
-# Run sanity check evaluations (small random samples, ~5-10 min)
+# Run sanity check evaluations (small random samples)
 # Used in CI on push
 eval-sanity:
     ./scripts/eval-sanity.sh
@@ -712,8 +712,8 @@ setup-hooks:
     @chmod +x .git/hooks/commit-msg
     @echo ""
     @echo "Hooks installed:"
-    @echo "  pre-commit   fast checks (format, compile)     ~5-10s"
-    @echo "  pre-push     full checks (clippy, tests)       ~30-60s"
+    @echo "  pre-commit   fast checks (format, compile)"
+    @echo "  pre-push     full checks (clippy, tests)"
     @echo "  commit-msg   message format hints"
     @echo ""
     @echo "To bypass: git commit --no-verify"
@@ -814,7 +814,6 @@ spot-prepare-datasets:
 
 # Run comprehensive evaluation on spot instances (full pipeline)
 # Generates tasks, launches fleet, waits for completion, aggregates results
-# Cost: ~$1-2 for full evaluation (20 datasets x 12 backends x 5 seeds)
 spot-eval:
     @uv run scripts/spot/orchestrate.py full
 
@@ -907,7 +906,6 @@ spot-eval-quick:
         --fleet-size 1
 
 # Local evaluation (no AWS, runs on this machine)
-# Cost: FREE, Time: ~2-5 min depending on backends
 eval-local BACKENDS="heuristic,stacked" DATASETS="WikiGold" MAX="50":
     @cargo build --release -p anno --features "cli,eval-advanced" > /dev/null
     @uv run scripts/spot/orchestrate.py local \

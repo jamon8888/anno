@@ -278,12 +278,12 @@ export ANNO_CACHE_DIR="$ANNO_CACHE_MOUNT"
 export ANNO_SOURCE_DIR="$HOME/anno"
 mkdir -p "$CARGO_TARGET_DIR" "$SCCACHE_DIR"
 
-# Build anno with ONNX support (~4-5 min on c7i.xlarge)
+# Build anno with ONNX support (can be slow on fresh instances)
 # ONNX enables ML backends: gliner, gliner2, nuner, w2ner
 echo "Building anno with ONNX support..."
 cargo build --release --bin anno --features "cli,eval-advanced,onnx" 2>&1 | tail -20
 
-# Sync NER models from S3 (GLiNER ~1.2GB, needed for ML backends)
+# Sync NER models from S3 (large; needed for ML backends)
 echo "Syncing NER models from S3..."
 mkdir -p "$ANNO_CACHE_MOUNT/models"
 export HF_HOME="$ANNO_CACHE_MOUNT/models"
