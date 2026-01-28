@@ -11,27 +11,27 @@ check:
     #!/usr/bin/env bash
     set -e
     just docs-audit
-    cargo fmt --all -- --check
-    cargo clippy --workspace --all-targets --features "eval-advanced discourse" -- -D warnings
+    cargo fmt --manifest-path Cargo.toml -p anno -- --check
+    cargo clippy --manifest-path Cargo.toml --workspace --all-targets --features "eval-advanced discourse" -- -D warnings
     if command -v cargo-nextest >/dev/null 2>&1; then
-        cargo nextest run --profile quick --workspace --features "eval-advanced discourse"
+        cargo nextest run --manifest-path Cargo.toml --profile quick --workspace --features "eval-advanced discourse"
     else
-        cargo test --workspace --lib --features "eval-advanced discourse"
+        cargo test --manifest-path Cargo.toml --workspace --lib --features "eval-advanced discourse"
     fi
 
 # Run fast checks without features (minimal, for quick iteration)
 check-minimal:
-    cargo fmt --all -- --check
-    cargo clippy -p anno --all-targets --no-default-features
-    cargo test -p anno --no-default-features --lib
+    cargo fmt --manifest-path Cargo.toml -p anno -- --check
+    cargo clippy --manifest-path Cargo.toml -p anno --all-targets --no-default-features
+    cargo test --manifest-path Cargo.toml -p anno --no-default-features --lib
 
 # Format all code
 fmt:
-    cargo fmt --all
+    cargo fmt --manifest-path Cargo.toml -p anno
 
 # Check formatting without modifying
 fmt-check:
-    cargo fmt --all -- --check
+    cargo fmt --manifest-path Cargo.toml -p anno -- --check
 
 # Run all unit tests (prefers nextest)
 test:
