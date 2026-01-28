@@ -2476,24 +2476,24 @@ fn african_names() -> Vec<NameExample> {
     names
 }
 
-/// Validate demographic distribution against reference (US Census proportions).
+/// Validate demographic distribution against a reference distribution.
 ///
-/// Returns validation results comparing observed distribution to expected
-/// proportions based on US Census data.
+/// The reference distribution here is a coarse, hard-coded default used for
+/// sanity checks in tests; do not treat it as authoritative demographic data.
 fn validate_demographic_distribution(
     observed: &HashMap<String, f64>,
 ) -> crate::eval::bias_config::DistributionValidation {
-    // Reference distribution based on US Census 2020 data
-    // These are approximate proportions for name recognition testing
+    // Coarse default reference distribution for name-recognition sanity checks.
+    // Replace with a cited, task-appropriate reference distribution for any real analysis.
     let mut reference = HashMap::new();
-    reference.insert("European".to_string(), 0.60); // ~60% of US population
-    reference.insert("Hispanic".to_string(), 0.19); // ~19%
-    reference.insert("AfricanAmerican".to_string(), 0.13); // ~13%
-    reference.insert("EastAsian".to_string(), 0.06); // ~6%
-    reference.insert("SouthAsian".to_string(), 0.02); // ~2%
-    reference.insert("MiddleEastern".to_string(), 0.01); // ~1%
-    reference.insert("African".to_string(), 0.01); // ~1%
-    reference.insert("Indigenous".to_string(), 0.01); // ~1%
+    reference.insert("European".to_string(), 0.60);
+    reference.insert("Hispanic".to_string(), 0.19);
+    reference.insert("AfricanAmerican".to_string(), 0.13);
+    reference.insert("EastAsian".to_string(), 0.06);
+    reference.insert("SouthAsian".to_string(), 0.02);
+    reference.insert("MiddleEastern".to_string(), 0.01);
+    reference.insert("African".to_string(), 0.01);
+    reference.insert("Indigenous".to_string(), 0.01);
 
     // Normalize observed to proportions (if they're counts, convert to rates)
     let total: f64 = observed.values().sum();
