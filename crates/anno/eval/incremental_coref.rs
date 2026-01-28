@@ -8,10 +8,9 @@
 //!
 //! Standard coreference systems struggle at book scale (200k+ tokens) because:
 //!
-//! 1. **Memory limitations**: Quadratic attention complexity makes encoding
-//!    entire books infeasible (~1200 GB VRAM for a 300k token book)
-//! 2. **Long-range dependencies**: Coreferent mentions can be 70k+ characters apart
-//! 3. **Metric divergence**: MUC and CEAF-e disagree by 30+ F1 points at scale
+//! 1. **Memory limitations**: naive “full-context” encoding does not scale.
+//! 2. **Long-range dependencies**: coreferent mentions can be very far apart.
+//! 3. **Metric divergence**: aggregate metrics can hide long-document failure modes.
 //!
 //! # The Incremental Approach
 //!
@@ -35,17 +34,6 @@
 //!                     Cluster 2: [Mary, she, ...]
 //!                     ...
 //! ```
-//!
-//! # Key Findings from BOOKCOREF (Martinelli et al., 2025)
-//!
-//! | System | Full Book CoNLL-F1 | Windowed CoNLL-F1 | Drop |
-//! |--------|-------------------|-------------------|------|
-//! | Longdoc | 67.0% | 77.1% | 10.1 |
-//! | Maverick | 61.0% | 82.2% | 21.2 |
-//! | Dual-cache | 52.5% | 77.3% | 24.8 |
-//!
-//! Incremental approaches (Longdoc) show the smallest performance drop
-//! when moving from windowed to full-book evaluation.
 //!
 //! # Memory Policies
 //!
@@ -71,7 +59,7 @@
 //! - No training data required
 //! - Fast inference (no neural forward pass)
 //! - Interpretable decisions
-//! - Good enough for many applications (string match works for ~80% of cases)
+//! - Useful as a baseline and as plumbing for eval harnesses
 //!
 //! **When to consider neural:**
 //! - Need to handle ambiguous mentions ("the president" → multiple candidates)

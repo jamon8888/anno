@@ -24,7 +24,7 @@
 //! let analysis = analyzer.analyze();
 //!
 //! if let Some(samples) = analysis.samples_for_target(0.90) {
-//!     println!("Estimated samples for 90% F1: {}", samples);
+//!     println!("Estimated samples for target F1: {}", samples);
 //! }
 //! ```
 
