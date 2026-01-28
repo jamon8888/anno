@@ -306,42 +306,10 @@ pub mod script;
 pub mod similarity;
 pub mod streaming;
 
-pub use alignment::{
-    entity_type_nameability, AdaptiveResolutionConfig, AlignmentScore, GeneralizationGradient,
-    Nameability, NameabilityLevel,
-};
-pub use canonical::{
-    detect_mention_type, is_pronoun, CanonicalSelector, FirstMentionSelector,
-    LongestMentionSelector, MentionFeatures, MentionType, NamedFirstSelector,
-    SalienceBasedSelector,
-};
-pub use configuration::{
-    bell_number, ConfigurationBuilder, ConfigurationDistribution, CorefConfiguration,
-};
-pub use correlation::{
-    // Chromatic Correlation Clustering: color-constrained clustering
-    chromatic_clustering,
-    compare_algorithms,
-    compare_algorithms_extended,
-    greedy_agglomerative,
-    // Min-Max Correlation Clustering (2024): minimizes worst-case per-cluster disagreements
-    min_max_clustering,
-    modified_pivot_clustering,
-    pivot_clustering,
-    pivot_clustering_best_of,
-    ChromaticClusteringConfig,
-    ClusteringResult,
-    EdgeLabel,
-    LabeledGraph,
-    MinMaxClusteringResult,
-};
-pub use evidence::{
-    EvidenceSource, MediationStrategy, PairEvidence, TransitivityAnalyzer, TransitivityViolation,
-};
-pub use hierarchical::{
-    cluster_entities, cluster_with_threshold, hierarchical_clustering,
-    hierarchical_from_similarity, similarity_to_distance, Dendrogram, DendrogramStep, Linkage,
-};
+// =============================================================================
+// Public surface (keep small; the rest is reachable via submodules)
+// =============================================================================
+
 pub use lsh::{LSHConfig, LSHItem, MinHashLSH, SimHashLSH};
 pub use resolver::{embedding_similarity, string_similarity, Resolver};
 pub use similarity::{
@@ -352,3 +320,16 @@ pub use similarity::{
 pub use streaming::{
     trigram_similarity, EntityCluster, EntityMention, StreamingConfig, StreamingResolver,
 };
+
+/// Experimental / research-facing APIs.
+///
+/// These remain supported for now, but are intentionally not re-exported at the
+/// `anno::coalesce::*` level to keep the default surface area small.
+pub mod experimental {
+    pub use super::alignment::*;
+    pub use super::canonical::*;
+    pub use super::configuration::*;
+    pub use super::correlation::*;
+    pub use super::evidence::*;
+    pub use super::hierarchical::*;
+}
