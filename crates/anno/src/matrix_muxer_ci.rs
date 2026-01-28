@@ -185,11 +185,7 @@ impl BackendHistory {
     fn summaries_for(&self, arms: &[String]) -> BTreeMap<String, Summary> {
         let mut out = BTreeMap::new();
         for a in arms {
-            let s = self
-                .windows
-                .get(a)
-                .map(|w| w.summary())
-                .unwrap_or_default();
+            let s = self.windows.get(a).map(|w| w.summary()).unwrap_or_default();
             out.insert(a.clone(), s);
         }
         out
@@ -209,10 +205,8 @@ fn stable_hash64(seed: u64, s: &str) -> u64 {
 
 fn pick_random_subset(seed: u64, items: &[String], k: usize) -> Vec<String> {
     // Deterministic sampling without external RNG dependencies.
-    let mut scored: Vec<(u64, &String)> = items
-        .iter()
-        .map(|s| (stable_hash64(seed, s), s))
-        .collect();
+    let mut scored: Vec<(u64, &String)> =
+        items.iter().map(|s| (stable_hash64(seed, s), s)).collect();
     scored.sort_by_key(|(h, s)| (*h, (*s).as_str()));
     scored
         .into_iter()
@@ -433,7 +427,6 @@ fn test_randomized_matrix_sample() {
         .preferred_datasets()
         .iter()
         .copied()
-        .into_iter()
         .filter(|d| eligible_cached.contains(d))
         .take(2)
         .collect();
@@ -508,4 +501,3 @@ fn test_randomized_matrix_sample() {
     // If we got here, the harness executed. Failures are recorded, not fatal.
     // (This job is intended to find regressions over time, not block all merges on flaky data.)
 }
-

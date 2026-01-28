@@ -1507,7 +1507,7 @@ mod tests {
         let positions = vec![0, 50, 80];
 
         // Custom scorer: only connect if both indices are even
-        let scorer = |i: usize, j: usize| i % 2 == 0 && j % 2 == 0;
+        let scorer = |i: usize, j: usize| i.is_multiple_of(2) && j.is_multiple_of(2);
         graph.seed_cooccurrence_edges(&positions, 100, Some(scorer));
 
         assert!(graph.has_edge(0, 2), "0 and 2 are both even");

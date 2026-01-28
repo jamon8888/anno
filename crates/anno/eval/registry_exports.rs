@@ -5,8 +5,6 @@
 //!
 //! We keep the export payload intentionally small: no benchmark numbers, and no long prose.
 
-#![cfg(test)]
-
 use crate::eval::dataset_registry::DatasetId;
 use serde::Serialize;
 use std::fs;
@@ -105,7 +103,11 @@ fn write_markdown(path: &Path, datasets: &[DatasetExport]) {
             ds.name,
             ds.language,
             ds.domain,
-            if ds.license.is_empty() { "—" } else { ds.license },
+            if ds.license.is_empty() {
+                "—"
+            } else {
+                ds.license
+            },
             if ds.tasks.is_empty() {
                 "—".to_string()
             } else {
@@ -149,4 +151,3 @@ fn generate_datasets_markdown() {
     datasets.sort_by_key(|d| d.id.clone());
     write_markdown(&out, &datasets);
 }
-
