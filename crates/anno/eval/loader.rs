@@ -7991,6 +7991,12 @@ Blackburn NNP I-NP I-PER
                 continue;
             }
 
+            // Skip explicitly blocked datasets (they may be present in the registry for metadata,
+            // but intentionally cannot be downloaded/loaded automatically).
+            if ds.tasks_or_inferred().contains(&"blocked") {
+                continue;
+            }
+
             // Skip joint task datasets (they use CoNLL but with different structure)
             if is_re || is_coref || is_event {
                 continue;

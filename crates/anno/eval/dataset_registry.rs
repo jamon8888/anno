@@ -2421,9 +2421,9 @@ define_datasets! {
         paper_url: "https://aclanthology.org/2021.emnlp-main.672/",
         year: 2021,
         format: "JSONL",
-        notes: "Shape-shifting, possession, disguise - unique challenges; data on GitHub",
+        notes: "Shape-shifting, possession, disguise - unique challenges. Prior GitHub URL is currently 404; treat as non-automatable until mirrored.",
         tasks: ["coref"],
-        access_status: Public,
+        access_status: ContactAuthors,
         categories: [coref, literary],
     },
 
