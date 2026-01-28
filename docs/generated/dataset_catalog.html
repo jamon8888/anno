@@ -183,21 +183,20 @@
             <label for="category">Category</label>
             <select id="category">
                 <option value="">All Categories</option>
-                <option value="abstract_anaphora">abstract_anaphora (4)</option>
-<option value="arcane_domain">arcane_domain (1)</option>
+                <option value="abstract_anaphora">abstract_anaphora (9)</option>
+<option value="arcane_domain">arcane_domain (3)</option>
 <option value="bias_evaluation">bias_evaluation (7)</option>
-<option value="biomedical">biomedical (5)</option>
-<option value="constructed">constructed (9)</option>
+<option value="constructed">constructed (13)</option>
 <option value="coref">coref (74)</option>
-<option value="dialogue">dialogue (7)</option>
-<option value="entity_linking">entity_linking (8)</option>
+<option value="dialogue">dialogue (2)</option>
+<option value="entity_linking">entity_linking (14)</option>
 <option value="event_coref">event_coref (2)</option>
-<option value="historical">historical (10)</option>
-<option value="literary">literary (1)</option>
-<option value="low_resource">low_resource (3)</option>
-<option value="multilingual">multilingual (14)</option>
+<option value="historical">historical (9)</option>
+<option value="indigenous">indigenous (1)</option>
+<option value="long_document">long_document (1)</option>
+<option value="multilingual">multilingual (5)</option>
 <option value="ner">ner (289)</option>
-<option value="relation_extraction">relation_extraction (16)</option>
+<option value="relation_extraction">relation_extraction (21)</option>
 <option value="social_media">social_media (1)</option>
             </select>
         </div>
@@ -237,7 +236,7 @@
 <option value="la">la (4)</option>
 <option value="lzh">lzh (2)</option>
 <option value="mi">mi (1)</option>
-<option value="multi">multi (49)</option>
+<option value="mul">mul (49)</option>
 <option value="nah">nah (1)</option>
 <option value="nav">nav (1)</option>
 <option value="nl">nl (4)</option>
@@ -267,7 +266,7 @@
             <span>datasets shown</span>
         </div>
         <div class="stat">
-            <span class="stat-value">16</span>
+            <span class="stat-value">15</span>
             <span>categories</span>
         </div>
         <div class="stat">
@@ -300,11 +299,11 @@
             <td><a href="https://github.com/Living-with-machines/" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="JSONL">
+        <tr data-category="ner" data-language="mul" data-format="JSONL">
             <td class="name">2M-NER</td>
             <td class="desc">Multilingual Multimodal NER. Four languages with text-image pairs.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>PER, LOC, ORG, MISC</td>
             <td><a href="https://github.com/Alibaba-NLP/2M-NER" target="_blank">Link</a></td>
@@ -417,7 +416,7 @@
             <td>en</td>
             <td>JSONL</td>
             <td>Gene, Disease, Chemical, Species</td>
-            <td><a href="https://github.com/AIONER/AIONER" target="_blank">Link</a></td>
+            <td><a href="https://github.com/ncbi/AIONER" target="_blank">Link</a></td>
         </tr>
 
         <tr data-category="ner" data-language="zh" data-format="Custom">
@@ -450,10 +449,10 @@
             <td>N/A</td>
         </tr>
 
-        <tr data-category="literary" data-language="en" data-format="JSONL">
+        <tr data-category="relation_extraction" data-language="en" data-format="JSONL">
             <td class="name">ARF (Artificial Relationships in Fiction)</td>
             <td class="desc">Synthetic RE dataset for literary texts. GPT-4o generated annotations.</td>
-            <td>literary</td>
+            <td>relation_extraction</td>
             <td>en</td>
             <td>JSONL</td>
             <td>Character, Location, Object, Event</td>
@@ -550,21 +549,21 @@
             <td><a href="https://arc.aiaa.org/doi/10.2514/1.I011251" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="multi" data-format="JSONL">
+        <tr data-category="multilingual" data-language="mul" data-format="JSONL">
             <td class="name">AfriQA</td>
             <td class="desc">Cross-lingual QA for 10 African languages. Wikipedia-based.</td>
             <td>multilingual</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td></td>
             <td><a href="https://huggingface.co/datasets/masakhane/afriqa" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="multi" data-format="HuggingFace">
+        <tr data-category="multilingual" data-language="mul" data-format="HuggingFace">
             <td class="name">AfriSenti</td>
             <td class="desc">Sentiment analysis for 14 African languages. 110k+ tweets. SemEval 2023 Task 12.</td>
             <td>multilingual</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>HuggingFace</td>
             <td>positive, neutral, negative</td>
             <td><a href="https://huggingface.co/datasets/shmuhammad/AfriSenti-twitter-sentiment" target="_blank">Link</a></td>
@@ -577,7 +576,7 @@
             <td>zh</td>
             <td>JSONL</td>
             <td>CROP, DISEASE, PEST, CHEMICAL, VARIETY...</td>
-            <td><a href="https://github.com/AgCNER/AgCNER" target="_blank">Link</a></td>
+            <td><a href="https://springernature.figshare.com/collections/AgCNER_the_First_Large-Scale_Chinese_Named_Entity_Recognition_Dataset_for_Agricultural_Diseases_and_Pests/6807873" target="_blank">Link</a></td>
         </tr>
 
         <tr data-category="ner" data-language="zh" data-format="JSONL">
@@ -620,11 +619,11 @@
             <td><a href="https://universaldependencies.org/treebanks/akk_pisandub/index.html" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="multi" data-format="TSV">
+        <tr data-category="indigenous" data-language="mul" data-format="TSV">
             <td class="name">AmericasNLI</td>
             <td class="desc">NLI for 10 Indigenous American languages (Quechua, Guaraní, Nahuatl, etc.).</td>
-            <td>multilingual</td>
-            <td>multi</td>
+            <td>indigenous</td>
+            <td>mul</td>
             <td>TSV</td>
             <td></td>
             <td><a href="https://raw.githubusercontent.com/nala-cub/AmericasNLI/be3c351b7e1ae69936c61bfde3e24f30757db9ac/test.tsv" target="_blank">Link</a></td>
@@ -680,11 +679,11 @@
             <td><a href="https://universaldependencies.org/treebanks/hbo_ptnk/index.html" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="JSONL">
+        <tr data-category="ner" data-language="mul" data-format="JSONL">
             <td class="name">Anime/Manga NER</td>
             <td class="desc">Anime and manga entities. Titles, characters, studios, genres.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>Title, Character, Studio, Genre, Author...</td>
             <td><a href="https://github.com/juand-r/entity-recognition-datasets" target="_blank">Link</a></td>
@@ -837,7 +836,7 @@
             <td>en</td>
             <td>BIO</td>
             <td>Chemical, Disease</td>
-            <td><a href="https://raw.githubusercontent.com/shreyashub/BioFLAIR/master/data/ner/bc5cdr/test.txt" target="_blank">Link</a></td>
+            <td><a href="https://huggingface.co/datasets/tner/bc5cdr" target="_blank">Link</a></td>
         </tr>
 
         <tr data-category="arcane_domain" data-language="en" data-format="Custom">
@@ -850,10 +849,10 @@
             <td><a href="https://github.com/earthspecies/beans-zero" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="biomedical" data-language="en" data-format="JSONL">
+        <tr data-category="entity_linking" data-language="en" data-format="JSONL">
             <td class="name">BELB</td>
             <td class="desc">Biomedical Entity Linking Benchmark unifying 11 corpora across 7 knowledge bases. Standardized biome</td>
-            <td>biomedical</td>
+            <td>entity_linking</td>
             <td>en</td>
             <td>JSONL</td>
             <td>Disease, Chemical, Gene, Species, CellLine...</td>
@@ -937,7 +936,7 @@
             <td>en</td>
             <td>JSONL</td>
             <td>Disease, Chemical, Gene</td>
-            <td><a href="https://github.com/BioNER-LLaMA/BioNER-LLaMA" target="_blank">Link</a></td>
+            <td><a href="https://github.com/BIDS-Xu-Lab/BioNER-LLaMA" target="_blank">Link</a></td>
         </tr>
 
         <tr data-category="ner" data-language="en" data-format="Custom">
@@ -1020,21 +1019,21 @@
             <td><a href="https://huggingface.co/datasets/KevinSpaghetti/cadec" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">CALCS</td>
             <td class="desc">Computational Approaches to Linguistic Code-Switching. Multiple language pairs.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG</td>
             <td><a href="https://code-switching.github.io/" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">CALCS-2018</td>
             <td class="desc">Code-Switching Workshop shared task. English-Spanish Twitter NER with 9 entity types.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG, GROUP, TITLE...</td>
             <td><a href="https://code-switching.github.io/2018/" target="_blank">Link</a></td>
@@ -1100,11 +1099,11 @@
             <td>N/A</td>
         </tr>
 
-        <tr data-category="coref" data-language="multi" data-format="CoNLL">
+        <tr data-category="coref" data-language="mul" data-format="CoNLL">
             <td class="name">CODI-CRAC</td>
             <td class="desc">CODI/CRAC shared task on anaphora and coreference. Multiple languages.</td>
             <td>coref</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, ORG, LOC, Event</td>
             <td><a href="https://github.com/UniversalAnaphora/UA-CODI-CRAC" target="_blank">Link</a></td>
@@ -1150,11 +1149,11 @@
             <td><a href="https://github.com/UCDenver-ccp/CRAFT" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="JSONL">
+        <tr data-category="ner" data-language="mul" data-format="JSONL">
             <td class="name">CSN</td>
             <td class="desc">Code Search Net. Programming language dataset for code understanding.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>Function, Class, Variable</td>
             <td><a href="https://github.com/github/CodeSearchNet" target="_blank">Link</a></td>
@@ -1250,14 +1249,14 @@
             <td><a href="https://learninganalytics.upenn.edu/ryanbaker/" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">CoNLL-2002</td>
             <td class="desc">Spanish and Dutch NER from CoNLL 2002 shared task. Multi-language NER benchmark.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG, MISC</td>
-            <td><a href="https://huggingface.co/datasets/eriktks/conll2002" target="_blank">Link</a></td>
+            <td>N/A</td>
         </tr>
 
         <tr data-category="ner" data-language="nl" data-format="CoNLL">
@@ -1267,7 +1266,7 @@
             <td>nl</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG, MISC</td>
-            <td><a href="https://www.clips.uantwerpen.be/conll2002/ner/data/ned.testa" target="_blank">Link</a></td>
+            <td>N/A</td>
         </tr>
 
         <tr data-category="ner" data-language="es" data-format="CoNLL">
@@ -1277,7 +1276,7 @@
             <td>es</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG, MISC</td>
-            <td><a href="https://www.clips.uantwerpen.be/conll2002/ner/data/esp.testa" target="_blank">Link</a></td>
+            <td>N/A</td>
         </tr>
 
         <tr data-category="ner" data-language="en" data-format="CoNLL">
@@ -1287,7 +1286,7 @@
             <td>en</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG, MISC</td>
-            <td><a href="https://raw.githubusercontent.com/autoih/conll2003/master/CoNLL-2003/eng.testb" target="_blank">Link</a></td>
+            <td><a href="https://huggingface.co/datasets/tner/conll2003" target="_blank">Link</a></td>
         </tr>
 
         <tr data-category="ner" data-language="en" data-format="CoNLL">
@@ -1320,11 +1319,11 @@
             <td><a href="https://github.com/juand-r/entity-recognition-datasets" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="multi" data-format="JSONL">
+        <tr data-category="arcane_domain" data-language="mul" data-format="JSONL">
             <td class="name">CodeSearchNet</td>
             <td class="desc">Code understanding benchmark. Function documentation and code search across 6 languages.</td>
-            <td>multilingual</td>
-            <td>multi</td>
+            <td>arcane_domain</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>FUNCTION, CLASS, VARIABLE, MODULE</td>
             <td><a href="https://github.com/github/CodeSearchNet" target="_blank">Link</a></td>
@@ -1360,20 +1359,20 @@
             <td><a href="https://universaldependencies.org/treebanks/cop_scriptorium/index.html" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="coref" data-language="multi" data-format="CoNLLU">
+        <tr data-category="coref" data-language="mul" data-format="CoNLLU">
             <td class="name">CorefUD</td>
             <td class="desc">Multilingual coreference (17 languages, 22 datasets). CRAC shared task standard.</td>
             <td>coref</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLLU</td>
             <td>PER, LOC, ORG</td>
             <td><a href="http://hdl.handle.net/11234/1-5987" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="biomedical" data-language="en" data-format="JSONL">
+        <tr data-category="relation_extraction" data-language="en" data-format="JSONL">
             <td class="name">CovEReD</td>
             <td class="desc">COVID-19 relation extraction dataset. Biomedical relations from pandemic literature.</td>
-            <td>biomedical</td>
+            <td>relation_extraction</td>
             <td>en</td>
             <td>JSONL</td>
             <td>Drug, Disease, Gene, Symptom</td>
@@ -1500,21 +1499,21 @@
             <td><a href="https://ux.opencontext.org/endangered-data-and-the-digital-index-of-north-american-archaeology-dinaa/" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="dialogue" data-language="en" data-format="JSONL">
+        <tr data-category="abstract_anaphora" data-language="en" data-format="JSONL">
             <td class="name">DISAPERE</td>
             <td class="desc">Discourse Structure in Peer Review Discussions. 20k sentences in 506 review-rebuttal pairs with argu</td>
-            <td>dialogue</td>
+            <td>abstract_anaphora</td>
             <td>en</td>
             <td>JSONL</td>
             <td>REVIEW_ARG, REBUTTAL_ARG, STANCE</td>
             <td><a href="https://github.com/nnkennard/DISAPERE" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="multi" data-format="CoNLL">
+        <tr data-category="abstract_anaphora" data-language="mul" data-format="CoNLL">
             <td class="name">DISRPT 2025</td>
             <td class="desc">Cross-formalism benchmark for discourse segmentation, connective detection, and relation classificat</td>
-            <td>multilingual</td>
-            <td>multi</td>
+            <td>abstract_anaphora</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>DISCOURSE_UNIT, CONNECTIVE, DISCOURSE_RELATION</td>
             <td><a href="https://github.com/disrpt/sharedtask2025" target="_blank">Link</a></td>
@@ -1540,41 +1539,41 @@
             <td><a href="https://github.com/switchablenorms/DeepFashion2" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="dialogue" data-language="en" data-format="JSONL">
+        <tr data-category="relation_extraction" data-language="en" data-format="JSONL">
             <td class="name">DialogRE</td>
             <td class="desc">Dialogue-based relation extraction. Multi-turn conversations requiring entity tracking across turns.</td>
-            <td>dialogue</td>
+            <td>relation_extraction</td>
             <td>en</td>
             <td>JSONL</td>
             <td>PER, ORG, LOC</td>
             <td><a href="https://github.com/nlpdata/dialogre" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="zh-en" data-format="Custom">
+        <tr data-category="abstract_anaphora" data-language="zh-en" data-format="Custom">
             <td class="name">Disco-Bench</td>
             <td class="desc">Discourse-aware evaluation benchmark for language modeling. 9 document-level testsets covering cohes</td>
-            <td>multilingual</td>
+            <td>abstract_anaphora</td>
             <td>zh-en</td>
             <td>Custom</td>
             <td></td>
             <td>N/A</td>
         </tr>
 
-        <tr data-category="coref" data-language="multi" data-format="Custom">
+        <tr data-category="coref" data-language="mul" data-format="Custom">
             <td class="name">DiscoTrack</td>
             <td class="desc">Multilingual LLM benchmark for discourse tracking. 12 languages, 4 levels: salience, entity tracking</td>
             <td>coref</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>Custom</td>
             <td>SALIENT_ENTITY, TRACKED_ENTITY, BRIDGING_REF</td>
             <td>N/A</td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="TSV">
+        <tr data-category="ner" data-language="mul" data-format="TSV">
             <td class="name">Distant Listening Corpus</td>
             <td class="desc">1,283 musical scores with harmonic annotations. String quartet + piano music with Roman numeral anal</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>TSV</td>
             <td>CHORD, KEY, MODULATION, CADENCE, PHRASE</td>
             <td><a href="https://zenodo.org/records/15150283" target="_blank">Link</a></td>
@@ -1600,10 +1599,10 @@
             <td><a href="https://wiki.dothraki.org/" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="biomedical" data-language="en" data-format="BRAT">
+        <tr data-category="relation_extraction" data-language="en" data-format="BRAT">
             <td class="name">DrugProt</td>
             <td class="desc">Chemical-protein interactions from BioCreative VII challenge.</td>
-            <td>biomedical</td>
+            <td>relation_extraction</td>
             <td>en</td>
             <td>BRAT</td>
             <td>Chemical, Gene, Protein</td>
@@ -1710,11 +1709,11 @@
             <td><a href="https://github.com/rsttools/signal" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="multi" data-format="Custom">
+        <tr data-category="entity_linking" data-language="mul" data-format="Custom">
             <td class="name">ESCO Skills EL</td>
             <td class="desc">Entity linking for occupational skills to ESCO taxonomy. Job market domain, multilingual.</td>
-            <td>multilingual</td>
-            <td>multi</td>
+            <td>entity_linking</td>
+            <td>mul</td>
             <td>Custom</td>
             <td>SKILL</td>
             <td>N/A</td>
@@ -1737,7 +1736,7 @@
             <td>en</td>
             <td>JSONL</td>
             <td>Enzyme, Substrate, Product, Cofactor, Reaction</td>
-            <td><a href="https://github.com/EnzChemRED/EnzChemRED" target="_blank">Link</a></td>
+            <td><a href="https://github.com/ncbi-nlp/EnzChemRED" target="_blank">Link</a></td>
         </tr>
 
         <tr data-category="ner" data-language="en" data-format="CoNLL">
@@ -1887,7 +1886,7 @@
             <td>en</td>
             <td>JSONL</td>
             <td>COMPANY, EXECUTIVE, SUBSIDIARY, PRODUCT, REGULATION...</td>
-            <td><a href="https://github.com/FiNER-139/FiNER-139" target="_blank">Link</a></td>
+            <td><a href="https://huggingface.co/datasets/nlpaueb/finer-139" target="_blank">Link</a></td>
         </tr>
 
         <tr data-category="ner" data-language="en" data-format="JSONL">
@@ -1950,11 +1949,11 @@
             <td><a href="https://github.com/juand-r/entity-recognition-datasets" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="Custom">
+        <tr data-category="ner" data-language="mul" data-format="Custom">
             <td class="name">Folklore Motif Distribution</td>
             <td class="desc">548 folklore motifs across 309 ethnic traditions in the Old World.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>Custom</td>
             <td>Motif, Tradition, Region, Character</td>
             <td><a href="https://www.academia.edu/14481230/" target="_blank">Link</a></td>
@@ -2070,11 +2069,11 @@
             <td><a href="https://raw.githubusercontent.com/TristaCao/into_inclusivecoref/master/GICoref/coref.combo.conll" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="JSONL">
+        <tr data-category="ner" data-language="mul" data-format="JSONL">
             <td class="name">GLUECoS</td>
             <td class="desc">Code-Switching GLUE benchmark. NLU for code-switched text.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>PER, LOC, ORG</td>
             <td><a href="https://github.com/microsoft/GLUECoS" target="_blank">Link</a></td>
@@ -2220,11 +2219,11 @@
             <td><a href="https://www.linguateca.pt/HAREM/" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="TSV">
+        <tr data-category="ner" data-language="mul" data-format="TSV">
             <td class="name">HIPE-2022</td>
             <td class="desc">Multilingual Historical NER. 6 datasets across 11 languages including Latin.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>TSV</td>
             <td>PER, LOC, ORG, PROD</td>
             <td><a href="https://raw.githubusercontent.com/hipe-eval/HIPE-2022-data/147f5bc3c7fb7e5c6b024a9ffd6503cd019fb9ea/data/v2.1/hipe2020/de/HIPE-2022-v2.1-hipe2020-test-de.tsv" target="_blank">Link</a></td>
@@ -2290,11 +2289,11 @@
             <td><a href="https://github.com/juand-r/entity-recognition-datasets" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="JSONL">
+        <tr data-category="ner" data-language="mul" data-format="JSONL">
             <td class="name">Hinglish NER</td>
             <td class="desc">Hindi-English code-mixed social media NER. Roman script Hindi mixed with English.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>PER, LOC, ORG</td>
             <td><a href="https://github.com/murali1996/CodemixedNLP" target="_blank">Link</a></td>
@@ -2330,10 +2329,10 @@
             <td><a href="https://universaldependencies.org/treebanks/hit_hittb/index.html" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="dialogue" data-language="fr" data-format="JSONL">
+        <tr data-category="abstract_anaphora" data-language="fr" data-format="JSONL">
             <td class="name">Human-Voice Agent Interaction</td>
             <td class="desc">Naturalistic French dialogue from human-voice agent interactions. Response tokens, aside sequences, </td>
-            <td>dialogue</td>
+            <td>abstract_anaphora</td>
             <td>fr</td>
             <td>JSONL</td>
             <td>RESPONSE_TOKEN, DISCOURSE_DEIXIS, PROPOSITIONAL_ANAPHORA</td>
@@ -2360,11 +2359,11 @@
             <td><a href="https://github.com/nlpAThits/ISNotes1.0/archive/refs/heads/master.zip" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">IndicNER</td>
             <td class="desc">Indian languages NER covering 11 Indian languages. Low-resource multilingual NER.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG</td>
             <td><a href="https://github.com/AI4Bharat/IndicNER" target="_blank">Link</a></td>
@@ -2380,10 +2379,10 @@
             <td><a href="https://github.com/juand-r/entity-recognition-datasets" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="low_resource" data-language="ie" data-format="XML">
+        <tr data-category="constructed" data-language="ie" data-format="XML">
             <td class="name">Interlingue Wikipedia</td>
             <td class="desc">Interlingue (Occidental) Wikipedia text corpus. International auxiliary language.</td>
-            <td>low_resource</td>
+            <td>constructed</td>
             <td>ie</td>
             <td>XML</td>
             <td></td>
@@ -2440,11 +2439,11 @@
             <td><a href="https://github.com/klingonlanguage/klingon-data" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="multi" data-format="Custom">
+        <tr data-category="constructed" data-language="mul" data-format="Custom">
             <td class="name">Klingon Effect LID</td>
             <td class="desc">Language ID dataset with 11 constructed languages. 14.2M sentences across 101 languages.</td>
-            <td>multilingual</td>
-            <td>multi</td>
+            <td>constructed</td>
+            <td>mul</td>
             <td>Custom</td>
             <td></td>
             <td><a href="https://wmdqs.org/submissions-2025/19.pdf" target="_blank">Link</a></td>
@@ -2470,11 +2469,11 @@
             <td><a href="https://github.com/storidient/KoCoNovel" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="coref" data-language="multi" data-format="JSONL">
+        <tr data-category="coref" data-language="mul" data-format="JSONL">
             <td class="name">LEMONADE</td>
             <td class="desc">Large-scale multilingual conflict event corpus. 39k events across 20 languages for CDEC search.</td>
             <td>coref</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>EVENT, PARTICIPANT, LOCATION, TIME</td>
             <td><a href="https://github.com/lemonade-coref/lemonade" target="_blank">Link</a></td>
@@ -2590,11 +2589,11 @@
             <td><a href="https://github.com/coastalcph/lex-glue" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">LinCE</td>
             <td class="desc">Linguistic Code-switching Evaluation. Multiple code-switching benchmarks.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG</td>
             <td><a href="https://ritual.uh.edu/lince/" target="_blank">Link</a></td>
@@ -2630,10 +2629,10 @@
             <td><a href="https://mw.lojban.org/" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="low_resource" data-language="jbo" data-format="TSV">
+        <tr data-category="constructed" data-language="jbo" data-format="TSV">
             <td class="name">Lojban Tatoeba</td>
             <td class="desc">Lojban-English sentence pairs from Tatoeba. Logical language translation corpus.</td>
-            <td>low_resource</td>
+            <td>constructed</td>
             <td>jbo</td>
             <td>TSV</td>
             <td></td>
@@ -2710,30 +2709,30 @@
             <td><a href="https://github.com/THU-KEG/MAVEN-Argument" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="coref" data-language="multi" data-format="Custom">
+        <tr data-category="coref" data-language="mul" data-format="Custom">
             <td class="name">MEANTIME</td>
             <td class="desc">Multilingual news corpus with within- and cross-document event coreference. 4 languages.</td>
             <td>coref</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>Custom</td>
             <td>EVENT, TIMEX, PARTICIPANT, LOCATION</td>
             <td><a href="https://github.com/newsreader/meantime" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="multi" data-format="JSONL">
+        <tr data-category="entity_linking" data-language="mul" data-format="JSONL">
             <td class="name">MELO</td>
             <td class="desc">Multilingual Entity Linking of Occupations. 48 datasets across 21 languages for occupation EL.</td>
-            <td>multilingual</td>
-            <td>multi</td>
+            <td>entity_linking</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>OCCUPATION</td>
             <td><a href="https://github.com/avature/melo-benchmark" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="historical" data-language="en" data-format="JSONL">
+        <tr data-category="entity_linking" data-language="en" data-format="JSONL">
             <td class="name">MHERCL</td>
             <td class="desc">Historical long-tail entity linking benchmark. Tests LLM behavior on rare/historical Wikidata entiti</td>
-            <td>historical</td>
+            <td>entity_linking</td>
             <td>en</td>
             <td>JSONL</td>
             <td>HISTORICAL_ENTITY</td>
@@ -2790,11 +2789,11 @@
             <td>N/A</td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">MSNER</td>
             <td class="desc">Multilingual Spoken NER. Speech-to-NER on VoxPopuli parliamentary speeches.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG, MISC</td>
             <td><a href="https://rdr.kuleuven.be/dataset.xhtml?persistentId=doi:10.48804/ZTVMIX" target="_blank">Link</a></td>
@@ -2870,41 +2869,41 @@
             <td><a href="https://github.com/juand-r/entity-recognition-datasets" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">MasakhaNER</td>
             <td class="desc">NER for 10 African languages. PER/LOC/ORG/DATE.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG, DATE</td>
             <td><a href="https://raw.githubusercontent.com/masakhane-io/masakhane-ner/main/data/yor/test.txt" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">MasakhaNER 2.0</td>
             <td class="desc">Extended MasakhaNER with 20+ African languages.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG, DATE</td>
             <td><a href="https://huggingface.co/datasets/masakhane/masakhaner2" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="multi" data-format="HuggingFace">
+        <tr data-category="multilingual" data-language="mul" data-format="HuggingFace">
             <td class="name">MasakhaNEWS</td>
             <td class="desc">News topic classification for 16 African languages.</td>
             <td>multilingual</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>HuggingFace</td>
             <td>business, entertainment, health, politics, religion...</td>
             <td><a href="https://huggingface.co/datasets/masakhane/masakhanews" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="multi" data-format="CoNLL-U">
+        <tr data-category="multilingual" data-language="mul" data-format="CoNLL-U">
             <td class="name">MasakhaPOS</td>
             <td class="desc">Part-of-speech tagging for 20 African languages.</td>
             <td>multilingual</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL-U</td>
             <td>NOUN, VERB, ADJ, ADV, PRON...</td>
             <td><a href="https://github.com/masakhane-io/masakhane-pos" target="_blank">Link</a></td>
@@ -2940,11 +2939,11 @@
             <td><a href="https://github.com/chanzuckerberg/MedMentions" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">Medieval Charter NER</td>
             <td class="desc">Multilingual medieval charter NER. Latin, French, Spanish from major charter collections.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG, DATE</td>
             <td><a href="https://zenodo.org/records/6463699" target="_blank">Link</a></td>
@@ -2970,14 +2969,14 @@
             <td><a href="https://github.com/mention-resolution/mention-resolution-llm" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="multi" data-format="TSV">
+        <tr data-category="entity_linking" data-language="mul" data-format="TSV">
             <td class="name">Mewsli-X</td>
             <td class="desc">Multilingual entity linking across 50 languages. Wikipedia-linked mentions for zero-shot cross-lingu</td>
-            <td>multilingual</td>
-            <td>multi</td>
+            <td>entity_linking</td>
+            <td>mul</td>
             <td>TSV</td>
             <td>ENTITY</td>
-            <td><a href="https://github.com/google-research/google-research/tree/master/mewslix" target="_blank">Link</a></td>
+            <td><a href="https://huggingface.co/datasets/izhx/mewsli-x" target="_blank">Link</a></td>
         </tr>
 
         <tr data-category="relation_extraction" data-language="en" data-format="JSONL">
@@ -3020,21 +3019,21 @@
             <td><a href="https://github.com/dmis-lab/multi-bio-ner" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">MultiCoNER</td>
             <td class="desc">Multilingual Complex NER. 11 languages with fine-grained and complex entities.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, CORP, GRP, PROD...</td>
             <td><a href="https://huggingface.co/datasets/samanjoy2/multiconer_v1" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">MultiCoNER v2</td>
             <td class="desc">MultiCoNER v2 with expanded languages and fine-grained types.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, CORP, GRP, PROD...</td>
             <td><a href="https://huggingface.co/datasets/MultiCoNER/multiconer_v2" target="_blank">Link</a></td>
@@ -3220,20 +3219,20 @@
             <td>N/A</td>
         </tr>
 
-        <tr data-category="biomedical" data-language="en" data-format="JSONL">
+        <tr data-category="relation_extraction" data-language="en" data-format="JSONL">
             <td class="name">Natural Products RE</td>
             <td class="desc">Relation extraction in underexplored biomedical domains. Diversity-sampled entities.</td>
-            <td>biomedical</td>
+            <td>relation_extraction</td>
             <td>en</td>
             <td>JSONL</td>
             <td>NaturalProduct, Organism, Activity, Target</td>
             <td><a href="https://direct.mit.edu/coli/article/50/3/953/121178" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="multilingual" data-language="en" data-format="Custom">
+        <tr data-category="arcane_domain" data-language="en" data-format="Custom">
             <td class="name">NatureLM-audio</td>
             <td class="desc">Foundation model training collection for bioacoustics. Multi-species audio-text pairs.</td>
-            <td>multilingual</td>
+            <td>arcane_domain</td>
             <td>en</td>
             <td>Custom</td>
             <td>SPECIES, CALL_TYPE, BEHAVIOR</td>
@@ -3280,11 +3279,11 @@
             <td><a href="https://github.com/ltgoslo/norne" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="coref" data-language="multi" data-format="JSONL">
+        <tr data-category="coref" data-language="mul" data-format="JSONL">
             <td class="name">NovelCR</td>
             <td class="desc">Large-scale bilingual (EN/ZH) novel coreference. 148k EN mentions, 311k ZH mentions with 74-83% span</td>
             <td>coref</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>PER, LOC, ORG</td>
             <td><a href="https://github.com/NovelCR/NovelCR" target="_blank">Link</a></td>
@@ -3377,7 +3376,7 @@
             <td>en</td>
             <td>CoNLL</td>
             <td>PERSON, ORG, GPE, LOC, DATE...</td>
-            <td><a href="https://raw.githubusercontent.com/autoih/conll2003/master/CoNLL-2003/eng.testb" target="_blank">Link</a></td>
+            <td><a href="https://huggingface.co/datasets/tner/ontonotes5" target="_blank">Link</a></td>
         </tr>
 
         <tr data-category="coref" data-language="nl" data-format="CoNLL">
@@ -3430,11 +3429,11 @@
             <td><a href="https://catalog.ldc.upenn.edu/LDC2019T05" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="JSONL">
+        <tr data-category="ner" data-language="mul" data-format="JSONL">
             <td class="name">PII Masking 200k</td>
             <td class="desc">200k synthetic examples for PII detection and masking. Covers 50+ PII types.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>EMAIL, PHONE, SSN, ADDRESS, NAME...</td>
             <td><a href="https://huggingface.co/datasets/ai4privacy/pii-masking-200k" target="_blank">Link</a></td>
@@ -3510,20 +3509,20 @@
             <td><a href="https://ramprasad.mse.gatech.edu/PolyIE/" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">Polyglot-NER</td>
             <td class="desc">Massively multilingual NER. 40 languages with silver annotations from Wikipedia.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG</td>
             <td><a href="https://huggingface.co/datasets/rmyeid/polyglot_ner" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="dialogue" data-language="en" data-format="TSV">
+        <tr data-category="abstract_anaphora" data-language="en" data-format="TSV">
             <td class="name">PragmEval</td>
             <td class="desc">Pragmatics-centered evaluation framework: 11 datasets covering discourse relations, speech acts, sta</td>
-            <td>dialogue</td>
+            <td>abstract_anaphora</td>
             <td>en</td>
             <td>TSV</td>
             <td></td>
@@ -3780,10 +3779,10 @@
             <td><a href="https://species.jensenlab.org/files/S800-1.0.tar.gz" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="dialogue" data-language="en" data-format="JSONL">
+        <tr data-category="long_document" data-language="en" data-format="JSONL">
             <td class="name">SCROLLS QMSum</td>
             <td class="desc">Long-document QA from SCROLLS benchmark. Query-focused meeting summarization.</td>
-            <td>dialogue</td>
+            <td>long_document</td>
             <td>en</td>
             <td>JSONL</td>
             <td></td>
@@ -3810,10 +3809,10 @@
             <td><a href="https://github.com/asappresearch/slue-toolkit" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="biomedical" data-language="en" data-format="Custom">
+        <tr data-category="entity_linking" data-language="en" data-format="Custom">
             <td class="name">SNOMED CT EL Challenge</td>
             <td class="desc">Clinical entity linking to SNOMED CT. From SNOMED International 2024 challenge.</td>
-            <td>biomedical</td>
+            <td>entity_linking</td>
             <td>en</td>
             <td>Custom</td>
             <td>CLINICAL_CONCEPT</td>
@@ -3850,11 +3849,11 @@
             <td><a href="https://raw.githubusercontent.com/UniversalDependencies/UD_Sanskrit-Vedic/master/sa_vedic-ud-test.conllu" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="JSONL">
+        <tr data-category="ner" data-language="mul" data-format="JSONL">
             <td class="name">Saraga</td>
             <td class="desc">Indian Art Music dataset. Carnatic and Hindustani traditions.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>Raaga, Taala, Artist, Composition, Instrument</td>
             <td><a href="https://arxiv.org/pdf/2309.16396.pdf" target="_blank">Link</a></td>
@@ -4150,11 +4149,11 @@
             <td><a href="https://github.com/tridis/tridis" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="coref" data-language="multi" data-format="CoNLL">
+        <tr data-category="coref" data-language="mul" data-format="CoNLL">
             <td class="name">TV Show Multilingual Coreference</td>
             <td class="desc">English TV show transcripts with projections to Chinese and Farsi.</td>
             <td>coref</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>Character, Location, Object</td>
             <td><a href="https://direct.mit.edu/tacl/article/doi/10.1162/tacl_a_00581/117162" target="_blank">Link</a></td>
@@ -4280,10 +4279,10 @@
             <td><a href="https://github.com/kilipan/toki-pona-corpus" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="low_resource" data-language="tok" data-format="TXT">
+        <tr data-category="constructed" data-language="tok" data-format="TXT">
             <td class="name">Toki Pona Corpus</td>
             <td class="desc">Toki Pona minimalist language corpus. 120-word language for semantic simplification.</td>
-            <td>low_resource</td>
+            <td>constructed</td>
             <td>tok</td>
             <td>TXT</td>
             <td></td>
@@ -4300,11 +4299,11 @@
             <td><a href="https://github.com/juand-r/entity-recognition-datasets" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="coref" data-language="multi" data-format="JSONL">
+        <tr data-category="coref" data-language="mul" data-format="JSONL">
             <td class="name">TransMuCoRes</td>
             <td class="desc">Coreference in 31 South Asian languages. Silver annotations via NLLB-200 translation.</td>
             <td>coref</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>PER, LOC, ORG</td>
             <td>N/A</td>
@@ -4390,31 +4389,31 @@
             <td>N/A</td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLLU">
+        <tr data-category="ner" data-language="mul" data-format="CoNLLU">
             <td class="name">UNER</td>
             <td class="desc">Universal NER on Universal Dependencies. Gold NER with unified schema across 13 languages.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLLU</td>
             <td>PER, LOC, ORG</td>
             <td><a href="https://github.com/UniversalNER/UNER" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">Universal NER</td>
             <td class="desc">Cross-lingual NER benchmark spanning 13 diverse languages. Tests zero-shot transfer.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG</td>
             <td><a href="https://github.com/UniversalNER/uner_code" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="JSONL">
+        <tr data-category="ner" data-language="mul" data-format="JSONL">
             <td class="name">UniversalNER</td>
             <td class="desc">Universal NER model benchmark. Multiple domains and languages.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>JSONL</td>
             <td>PER, LOC, ORG</td>
             <td><a href="https://huggingface.co/datasets/universalner/universal_ner" target="_blank">Link</a></td>
@@ -4560,11 +4559,11 @@
             <td>N/A</td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="">
+        <tr data-category="ner" data-language="mul" data-format="">
             <td class="name">WikiANN</td>
             <td class="desc">Silver-standard NER from Wikipedia hyperlinks. 282 languages.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td></td>
             <td>PER, LOC, ORG</td>
             <td><a href="https://huggingface.co/datasets/unimelb-nlp/wikiann" target="_blank">Link</a></td>
@@ -4590,21 +4589,21 @@
             <td><a href="https://raw.githubusercontent.com/juand-r/entity-recognition-datasets/master/data/wikigold/CONLL-format/data/wikigold.conll.txt" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="ner" data-language="multi" data-format="CoNLL">
+        <tr data-category="ner" data-language="mul" data-format="CoNLL">
             <td class="name">WikiNeural</td>
             <td class="desc">Silver-standard multilingual NER from Wikipedia. 9 languages with automatic annotation.</td>
             <td>ner</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>PER, LOC, ORG, MISC</td>
             <td><a href="https://huggingface.co/datasets/Babelscape/wikineural" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="entity_linking" data-language="multi" data-format="Custom">
+        <tr data-category="entity_linking" data-language="mul" data-format="Custom">
             <td class="name">Wikidata Semantic Drift</td>
             <td class="desc">Semantic drift detection in Wikidata. LLM-based classification inconsistency detection.</td>
             <td>entity_linking</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>Custom</td>
             <td></td>
             <td><a href="https://arxiv.org/abs/2511.04926" target="_blank">Link</a></td>
@@ -4680,11 +4679,11 @@
             <td><a href="https://huggingface.co/datasets/community-datasets/yahoo_answers_topics" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="coref" data-language="multi" data-format="CoNLL">
+        <tr data-category="coref" data-language="mul" data-format="CoNLL">
             <td class="name">Z-coref</td>
             <td class="desc">Joint coreference and zero-pronoun resolution. For languages with pro-drop (Chinese, Japanese, Korea</td>
             <td>coref</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>CoNLL</td>
             <td>ZERO_PRONOUN, ENTITY</td>
             <td>N/A</td>
@@ -4750,11 +4749,11 @@
             <td><a href="https://www.i2b2.org/NLP/DataSets/" target="_blank">Link</a></td>
         </tr>
 
-        <tr data-category="coref" data-language="multi" data-format="TSV">
+        <tr data-category="coref" data-language="mul" data-format="TSV">
             <td class="name">mGAP</td>
             <td class="desc">Multilingual Gender-Ambiguous Pronouns. 27 South Asian languages.</td>
             <td>coref</td>
-            <td>multi</td>
+            <td>mul</td>
             <td>TSV</td>
             <td>PER</td>
             <td>N/A</td>

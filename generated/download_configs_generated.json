@@ -1,6 +1,6 @@
 {
   "generated_from": "generated/datasets_generated.json",
-  "total_datasets": 371,
+  "total_datasets": 374,
   "configs": {
     "wikigold": {
       "group": "general",
@@ -68,7 +68,7 @@
     },
     "conll2003sample": {
       "group": "general",
-      "url": "https://raw.githubusercontent.com/autoih/conll2003/master/CoNLL-2003/eng.testb",
+      "url": "https://huggingface.co/datasets/tner/conll2003",
       "output": "conll2003sample.txt",
       "description": "Classic news NER benchmark from Reuters Corpus. Foundational dataset that established modern NER evaluation standards.",
       "entity_types": [
@@ -81,7 +81,7 @@
     },
     "ontonotessample": {
       "group": "general",
-      "url": "https://raw.githubusercontent.com/autoih/conll2003/master/CoNLL-2003/eng.testb",
+      "url": "https://huggingface.co/datasets/tner/ontonotes5",
       "output": "ontonotessample.txt",
       "description": "Multi-genre 18-type NER from OntoNotes 5.0. Rich annotation including coreference, parsing, and PropBank.",
       "entity_types": [
@@ -177,7 +177,7 @@
     },
     "broadtwittercorpus": {
       "group": "general",
-      "url": "https://raw.githubusercontent.com/GateNLP/broad_twitter_corpus/master/test.bio",
+      "url": "https://huggingface.co/datasets/tner/btc",
       "output": "broadtwittercorpus.txt",
       "description": "Twitter NER across multiple time periods. Tests temporal robustness of NER systems.",
       "entity_types": [
@@ -199,11 +199,11 @@
         "ORG",
         "MISC"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "polyglotner": {
       "group": "multilingual",
-      "url": "https://sites.google.com/site/rmaborhoo/polyglot-ner",
+      "url": "https://huggingface.co/datasets/rmyeid/polyglot_ner",
       "output": "polyglotner.txt",
       "description": "Massively multilingual NER. 40 languages with silver annotations from Wikipedia.",
       "entity_types": [
@@ -211,11 +211,11 @@
         "LOC",
         "ORG"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "universalnerbench": {
       "group": "multilingual",
-      "url": "https://github.com/UniversalNER/UNER",
+      "url": "https://github.com/UniversalNER/uner_code",
       "output": "universalnerbench.txt",
       "description": "Cross-lingual NER benchmark spanning 13 diverse languages. Tests zero-shot transfer.",
       "entity_types": [
@@ -223,20 +223,7 @@
         "LOC",
         "ORG"
       ],
-      "language": "multi"
-    },
-    "conll2002": {
-      "group": "multilingual",
-      "url": "https://www.clips.uantwerpen.be/conll2002/ner/",
-      "output": "conll2002.txt",
-      "description": "Spanish and Dutch NER from CoNLL 2002 shared task. Multi-language NER benchmark.",
-      "entity_types": [
-        "PER",
-        "LOC",
-        "ORG",
-        "MISC"
-      ],
-      "language": "multi"
+      "language": "mul"
     },
     "tweetner7": {
       "group": "general",
@@ -256,8 +243,8 @@
     },
     "googlere": {
       "group": "relations",
-      "url": "https://github.com/google-research-datasets/relation-extraction-corpus",
-      "output": "googlere.txt",
+      "url": "https://raw.githubusercontent.com/google-research-datasets/relation-extraction-corpus/master/20130403-place_of_birth.json",
+      "output": "googlere.json",
       "description": "Google Relation Extraction dataset. Wikipedia sentences with relation annotations.",
       "entity_types": [
         "PER",
@@ -293,7 +280,7 @@
     },
     "multiconer": {
       "group": "multilingual",
-      "url": "https://multiconer.github.io/",
+      "url": "https://huggingface.co/datasets/samanjoy2/multiconer_v1",
       "output": "multiconer.txt",
       "description": "Multilingual Complex NER. 11 languages with fine-grained and complex entities.",
       "entity_types": [
@@ -304,11 +291,11 @@
         "PROD",
         "CW"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "multiconerv2": {
       "group": "multilingual",
-      "url": "https://multiconer.github.io/",
+      "url": "https://huggingface.co/datasets/MultiCoNER/multiconer_v2",
       "output": "multiconerv2.txt",
       "description": "MultiCoNER v2 with expanded languages and fine-grained types.",
       "entity_types": [
@@ -321,11 +308,11 @@
         "Medical",
         "Scientist"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "bc5cdr": {
       "group": "biomedical",
-      "url": "https://raw.githubusercontent.com/shreyashub/BioFLAIR/master/data/ner/bc5cdr/test.txt",
+      "url": "https://huggingface.co/datasets/tner/bc5cdr",
       "output": "bc5cdr.txt",
       "description": "Biomedical NER for diseases and chemicals. Created for BioCreative V CDR task, a major biomedical NLP benchmark.",
       "entity_types": [
@@ -370,7 +357,7 @@
     },
     "bc2gm": {
       "group": "biomedical",
-      "url": "https://huggingface.co/datasets/bigbio/bc2gm_corpus",
+      "url": "https://huggingface.co/datasets/spyysalo/bc2gm_corpus",
       "output": "bc2gm.txt",
       "description": "BioCreative II Gene Mention recognition. Gold-standard gene/protein name tagging.",
       "entity_types": [
@@ -381,7 +368,7 @@
     },
     "bc4chemd": {
       "group": "biomedical",
-      "url": "https://huggingface.co/datasets/bigbio/bc4chemd",
+      "url": "https://huggingface.co/datasets/chintagunta85/bc4chemd",
       "output": "bc4chemd.txt",
       "description": "BioCreative IV Chemical Entity Mention Detection. Drug and chemical name recognition.",
       "entity_types": [
@@ -401,7 +388,7 @@
     },
     "preco": {
       "group": "coreference",
-      "url": "https://preschool-lab.github.io/PreCo/",
+      "url": "https://huggingface.co/datasets/coref-data/preco_raw",
       "output": "preco.txt",
       "description": "Large-scale coreference from PreCo reading comprehension corpus. 10x larger than OntoNotes.",
       "entity_types": [
@@ -454,18 +441,6 @@
       ],
       "language": "en"
     },
-    "wikicoref": {
-      "group": "coreference",
-      "url": "https://rali.iro.umontreal.ca/rali/en/wikicoref-corpus",
-      "output": "wikicoref.txt",
-      "description": "Wikipedia coreference corpus. 30 documents with full coreference annotation.",
-      "entity_types": [
-        "PER",
-        "ORG",
-        "LOC"
-      ],
-      "language": "en"
-    },
     "amimeeting": {
       "group": "coreference",
       "url": "https://groups.inf.ed.ac.uk/ami/download/",
@@ -475,18 +450,6 @@
         "PER",
         "ORG",
         "LOC"
-      ],
-      "language": "en"
-    },
-    "clefclinicalcoref": {
-      "group": "biomedical",
-      "url": "https://physionet.org/content/shareclefehealth2013coreference/",
-      "output": "clefclinicalcoref.txt",
-      "description": "Clinical coreference from ShARe/CLEF eHealth. Patient records with coref.",
-      "entity_types": [
-        "Disorder",
-        "Drug",
-        "Procedure"
       ],
       "language": "en"
     },
@@ -510,7 +473,7 @@
     },
     "qxoref": {
       "group": "indigenous",
-      "url": "https://raw.githubusercontent.com/Lguyogiro/qxoRef/main/data/conll/all.conll",
+      "url": "https://raw.githubusercontent.com/elizabethpankratz/qxoRef/f0eb5716573b3f428bfcfdda923b195d0e7967b8/qxoRef_AZ23.conll",
       "output": "qxoref.conll",
       "description": "First coreference corpus for Conchucos Quechua. Historically significant as first indigenous coref resource.",
       "entity_types": [
@@ -522,65 +485,15 @@
     },
     "americasnli": {
       "group": "indigenous",
-      "url": "https://raw.githubusercontent.com/nala-cub/AmericasNLI/main/data/test/quechua_test.tsv",
+      "url": "https://raw.githubusercontent.com/nala-cub/AmericasNLI/be3c351b7e1ae69936c61bfde3e24f30757db9ac/test.tsv",
       "output": "americasnli.tsv",
       "description": "NLI for 10 Indigenous American languages (Quechua, Guaran\u00ed, Nahuatl, etc.).",
       "entity_types": [],
-      "language": "multi"
-    },
-    "cherokeener": {
-      "group": "indigenous",
-      "url": "https://raw.githubusercontent.com/ZhangShiyworkhub/ChrEn/main/chr/chr.txt",
-      "output": "cherokeener.txt",
-      "description": "Cherokee-English parallel corpus for NER transfer. Uses Syllabary script.",
-      "entity_types": [
-        "PER",
-        "LOC",
-        "ORG"
-      ],
-      "language": "chr"
-    },
-    "nahuatlner": {
-      "group": "ancient",
-      "url": "https://github.com/Lguyogiro/nahuatl-ner",
-      "output": "nahuatlner.txt",
-      "description": "Named entity recognition for Nahuatl (Aztec language). Colonial-era texts and modern usage.",
-      "entity_types": [
-        "PER",
-        "LOC",
-        "ORG"
-      ],
-      "language": "nah"
-    },
-    "welshner": {
-      "group": "indigenous",
-      "url": "https://github.com/Portulan/welsh-ner",
-      "output": "welshner.txt",
-      "description": "Named entity recognition for Welsh (Cymraeg). Celtic language NER corpus.",
-      "entity_types": [
-        "PER",
-        "LOC",
-        "ORG",
-        "MISC"
-      ],
-      "language": "cy"
-    },
-    "basquener": {
-      "group": "indigenous",
-      "url": "https://github.com/ixa-ehu/eusner",
-      "output": "basquener.txt",
-      "description": "Named entity recognition for Basque (Euskara). Language isolate NER corpus.",
-      "entity_types": [
-        "PER",
-        "LOC",
-        "ORG",
-        "MISC"
-      ],
-      "language": "eu"
+      "language": "mul"
     },
     "hipe2022": {
       "group": "ancient",
-      "url": "https://raw.githubusercontent.com/hipe-eval/HIPE-2022-data/main/data/v2.1/de/HIPE-2022-v2.1-hipe2020-de-test.tsv",
+      "url": "https://raw.githubusercontent.com/hipe-eval/HIPE-2022-data/147f5bc3c7fb7e5c6b024a9ffd6503cd019fb9ea/data/v2.1/hipe2020/de/HIPE-2022-v2.1-hipe2020-test-de.tsv",
       "output": "hipe2022.tsv",
       "description": "Multilingual Historical NER. 6 datasets across 11 languages including Latin.",
       "entity_types": [
@@ -589,11 +502,11 @@
         "ORG",
         "PROD"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "histnero": {
       "group": "ancient",
-      "url": "https://github.com/UniBuc-HistNERo/HistNERo",
+      "url": "https://github.com/avramandrei/histnero",
       "output": "histnero.txt",
       "description": "Romanian historical newspaper NER. First Romanian historical NER corpus from four regions.",
       "entity_types": [
@@ -632,20 +545,6 @@
       ],
       "language": "en",
       "expected_docs": 5053
-    },
-    "retacred": {
-      "group": "relations",
-      "url": "https://raw.githubusercontent.com/mainlp/CrossRE/main/crossre_data/news-test.json",
-      "output": "retacred.json",
-      "description": "Large-scale relation extraction. 41 relation types + no_relation. Cleaned TACRED.",
-      "entity_types": [
-        "PER",
-        "ORG",
-        "LOC",
-        "DATE",
-        "NUM"
-      ],
-      "language": "en"
     },
     "cadec": {
       "group": "biomedical",
@@ -690,15 +589,15 @@
     },
     "corefud": {
       "group": "coreference",
-      "url": "https://ufal.mff.cuni.cz/corefud/corefud-1.3.zip",
-      "output": "corefud.zip",
+      "url": "http://hdl.handle.net/11234/1-5987",
+      "output": "corefud.txt",
       "description": "Multilingual coreference (17 languages, 22 datasets). CRAC shared task standard.",
       "entity_types": [
         "PER",
         "LOC",
         "ORG"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "crowspairs": {
       "group": "general",
@@ -732,15 +631,17 @@
       "entity_types": [],
       "language": "en"
     },
-    "droc": {
+    "fantasycoref": {
       "group": "coreference",
-      "url": "https://raw.githubusercontent.com/dbamman/droc/main/data/dta_reduced.jsonl",
-      "output": "droc.jsonl",
-      "description": "German novel coreference. 90 German novels from DTA (Deutsches Textarchiv).",
+      "url": "https://github.com/emorynlp/FantasyCoref/archive/refs/heads/main.zip",
+      "output": "fantasycoref.zip",
+      "description": "Fantasy fiction coreference. Handles entity transformations. 211 Grimms' stories.",
       "entity_types": [
-        "PER"
+        "PER",
+        "LOC",
+        "ORG"
       ],
-      "language": "de"
+      "language": "en"
     },
     "bookcoref": {
       "group": "coreference",
@@ -832,7 +733,7 @@
       "group": "coreference",
       "url": "https://stanfordnlp.github.io/coqa/",
       "output": "coqaentities.txt",
-      "description": "Conversational Question Answering. Multi-turn QA requiring entity mention resolution.",
+      "description": "Conversational QA across 7 domains: children's stories, literature, mid/high school exams, news, Wikipedia, science, Reddit.",
       "entity_types": [
         "ANSWER_SPAN"
       ],
@@ -854,8 +755,8 @@
     },
     "isnotes": {
       "group": "coreference",
-      "url": "https://www.h-its.org/software/isnotes-corpus/",
-      "output": "isnotes.txt",
+      "url": "https://github.com/nlpAThits/ISNotes1.0/archive/refs/heads/master.zip",
+      "output": "isnotes.zip",
       "description": "Unrestricted bridging anaphora on OntoNotes. ~660 bridging pairs.",
       "entity_types": [
         "PER",
@@ -873,6 +774,38 @@
         "BRIDGING_REF"
       ],
       "language": "en"
+    },
+    "disapere": {
+      "group": "scientific",
+      "url": "https://github.com/nnkennard/DISAPERE",
+      "output": "disapere.txt",
+      "description": "Discourse Structure in Peer Review Discussions. 20k sentences in 506 review-rebuttal pairs with argumentation annotation.",
+      "entity_types": [
+        "REVIEW_ARG",
+        "REBUTTAL_ARG",
+        "STANCE"
+      ],
+      "language": "en"
+    },
+    "pragmeval": {
+      "group": "general",
+      "url": "https://github.com/sileod/pragmeval",
+      "output": "pragmeval.txt",
+      "description": "Pragmatics-centered evaluation framework: 11 datasets covering discourse relations, speech acts, stance, sarcasm, verifiability.",
+      "entity_types": [],
+      "language": "en"
+    },
+    "disrpt2025": {
+      "group": "multilingual",
+      "url": "https://github.com/disrpt/sharedtask2025",
+      "output": "disrpt2025.txt",
+      "description": "Cross-formalism benchmark for discourse segmentation, connective detection, and relation classification. 39 corpora, 16 languages, 6 frameworks.",
+      "entity_types": [
+        "DISCOURSE_UNIT",
+        "CONNECTIVE",
+        "DISCOURSE_RELATION"
+      ],
+      "language": "mul"
     },
     "ancientgreekud": {
       "group": "ancient",
@@ -934,7 +867,7 @@
         "ORG",
         "DATE"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "masakhaner2": {
       "group": "multilingual",
@@ -947,15 +880,19 @@
         "ORG",
         "DATE"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "afrisenti": {
       "group": "multilingual",
       "url": "https://huggingface.co/datasets/shmuhammad/AfriSenti-twitter-sentiment",
       "output": "afrisenti.txt",
       "description": "Sentiment analysis for 14 African languages. 110k+ tweets. SemEval 2023 Task 12.",
-      "entity_types": [],
-      "language": "multi"
+      "entity_types": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "language": "mul"
     },
     "afriqa": {
       "group": "multilingual",
@@ -963,27 +900,138 @@
       "output": "afriqa.txt",
       "description": "Cross-lingual QA for 10 African languages. Wikipedia-based.",
       "entity_types": [],
-      "language": "multi"
+      "language": "mul"
     },
     "masakhanews": {
       "group": "multilingual",
       "url": "https://huggingface.co/datasets/masakhane/masakhanews",
       "output": "masakhanews.txt",
       "description": "News topic classification for 16 African languages.",
-      "entity_types": [],
-      "language": "multi"
+      "entity_types": [
+        "business",
+        "entertainment",
+        "health",
+        "politics",
+        "religion",
+        "sports",
+        "technology"
+      ],
+      "language": "mul"
+    },
+    "agnews": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/fancyzhx/ag_news",
+      "output": "agnews.txt",
+      "description": "News article topic classification. 4 classes: World, Sports, Business, Sci/Tech.",
+      "entity_types": [
+        "World",
+        "Sports",
+        "Business",
+        "Sci/Tech"
+      ],
+      "language": "en"
+    },
+    "dbpedia14": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/fancyzhx/dbpedia_14",
+      "output": "dbpedia14.txt",
+      "description": "Wikipedia article classification. 14 non-overlapping classes from DBpedia ontology.",
+      "entity_types": [
+        "Company",
+        "EducationalInstitution",
+        "Artist",
+        "Athlete",
+        "OfficeHolder",
+        "MeanOfTransportation",
+        "Building",
+        "NaturalPlace",
+        "Village",
+        "Animal",
+        "Plant",
+        "Album",
+        "Film",
+        "WrittenWork"
+      ],
+      "language": "en"
+    },
+    "yahooanswers": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/community-datasets/yahoo_answers_topics",
+      "output": "yahooanswers.txt",
+      "description": "Question-answer topic classification. 10 classes covering diverse topics.",
+      "entity_types": [
+        "Society",
+        "Science",
+        "Health",
+        "Education",
+        "Computers",
+        "Sports",
+        "Business",
+        "Entertainment",
+        "Family",
+        "Politics"
+      ],
+      "language": "en"
+    },
+    "trec": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/trec",
+      "output": "trec.txt",
+      "description": "Question type classification. 6 coarse classes, 50 fine-grained types.",
+      "entity_types": [
+        "ABBR",
+        "DESC",
+        "ENTY",
+        "HUM",
+        "LOC",
+        "NUM"
+      ],
+      "language": "en"
+    },
+    "tweettopic": {
+      "group": "general",
+      "url": "https://huggingface.co/datasets/cardiffnlp/tweet_topic_multi",
+      "output": "tweettopic.txt",
+      "description": "Multi-label topic classification for tweets. 6 domains, 19 topics.",
+      "entity_types": [
+        "arts",
+        "business",
+        "daily_life",
+        "pop_culture",
+        "science",
+        "sports"
+      ],
+      "language": "en"
     },
     "masakhapos": {
       "group": "multilingual",
       "url": "https://github.com/masakhane-io/masakhane-pos",
       "output": "masakhapos.txt",
       "description": "Part-of-speech tagging for 20 African languages.",
-      "entity_types": [],
-      "language": "multi"
+      "entity_types": [
+        "NOUN",
+        "VERB",
+        "ADJ",
+        "ADV",
+        "PRON",
+        "PROPN",
+        "ADP",
+        "AUX",
+        "CCONJ",
+        "DET",
+        "INTJ",
+        "NUM",
+        "PART",
+        "PUNCT",
+        "SCONJ",
+        "SYM",
+        "X"
+      ],
+      "language": "mul"
     },
     "wikiann": {
       "group": "multilingual",
-      "url": "https://huggingface.co/datasets/wikiann",
+      "url": "https://huggingface.co/datasets/unimelb-nlp/wikiann",
       "output": "wikiann.txt",
       "description": "Silver-standard NER from Wikipedia hyperlinks. 282 languages.",
       "entity_types": [
@@ -991,7 +1039,7 @@
         "LOC",
         "ORG"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "wiesp2022ner": {
       "group": "scientific",
@@ -1086,14 +1134,16 @@
     },
     "wnut16": {
       "group": "general",
-      "url": "https://raw.githubusercontent.com/napsternxg/TwitterNER/master/data/wnut16/test",
+      "url": "https://raw.githubusercontent.com/aritter/twitter_nlp/65f3d77134c40d920db8d431c5c6faef1c051c94/data/annotated/wnut16/data/test",
       "output": "wnut16.txt",
       "description": "Twitter NER workshop shared task. Focus on rare and emerging entities in noisy social media text.",
       "entity_types": [
-        "PER",
-        "LOC",
-        "ORG",
-        "MISC"
+        "person",
+        "geo-loc",
+        "company",
+        "facility",
+        "product",
+        "other"
       ],
       "language": "en"
     },
@@ -1111,7 +1161,7 @@
     },
     "oldenglishud": {
       "group": "ancient",
-      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Old_English-YCOE/master/ang_ycoe-ud-test.conllu",
+      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Old_English-Cairo/118f11ad906fb15d930825fadce9ef9eccca9347/ang_cairo-ud-test.conllu",
       "output": "oldenglishud.conllu",
       "description": "Universal Dependencies for Old English (Anglo-Saxon). York-Toronto-Helsinki corpus.",
       "entity_types": [
@@ -1123,7 +1173,7 @@
     },
     "oldnorseud": {
       "group": "ancient",
-      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Old_Norse-ICEPAHC/master/non_icepahc-ud-test.conllu",
+      "url": "https://raw.githubusercontent.com/UniversalDependencies/UD_Icelandic-IcePaHC/ca72a59affd87c4b7b9067ae56efa7a694a7b4c4/is_icepahc-ud-test.conllu",
       "output": "oldnorseud.conllu",
       "description": "Universal Dependencies for Old Norse/Icelandic Sagas. PROIEL and ISWOC treebanks.",
       "entity_types": [
@@ -1149,7 +1199,7 @@
         "TIME",
         "OTHER"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "hinglishner": {
       "group": "multilingual",
@@ -1161,7 +1211,7 @@
         "LOC",
         "ORG"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "medievalcharterner": {
       "group": "ancient",
@@ -1174,7 +1224,7 @@
         "ORG",
         "DATE"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "msner": {
       "group": "multilingual",
@@ -1187,11 +1237,11 @@
         "ORG",
         "MISC"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "noisebench": {
       "group": "general",
-      "url": "https://github.com/elenamer/NoiseBench",
+      "url": "https://raw.githubusercontent.com/elenamer/NoiseBench/main/data/annotations/clean.traindev",
       "output": "noisebench.txt",
       "description": "Robustness benchmark for NER. 6 real noise types: expert, crowd, LLM, distant/weak supervision.",
       "entity_types": [
@@ -1217,23 +1267,27 @@
     },
     "crossweigh": {
       "group": "multilingual",
-      "url": "https://github.com/ZihanWangKi/CrossWeigh",
+      "url": "https://raw.githubusercontent.com/ZihanWangKi/CrossWeigh/master/data/conllpp_test.txt",
       "output": "crossweigh.txt",
       "description": "Cross-lingual adversarial NER evaluation. Tests multilingual model robustness.",
       "entity_types": [
         "PER",
         "LOC",
-        "ORG"
+        "ORG",
+        "MISC"
       ],
-      "language": "multi"
+      "language": "en"
     },
     "zelda": {
       "group": "general",
-      "url": "https://github.com/flairNLP/zelda",
-      "output": "zelda.txt",
+      "url": "https://raw.githubusercontent.com/flairNLP/zelda/main/test_data/conll/test_aida-b.conll",
+      "output": "zelda.conll",
       "description": "Entity disambiguation benchmark. 95k Wikipedia paragraphs, 8 ED datasets unified.",
       "entity_types": [
-        "ENTITY"
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
       ],
       "language": "en"
     },
@@ -1365,7 +1419,10 @@
       "url": "https://github.com/sahitya0000/Relation-Classification",
       "output": "semeval2010task8.txt",
       "description": "Semantic relation classification between nominals. 9 relation types.",
-      "entity_types": [],
+      "entity_types": [
+        "e1",
+        "e2"
+      ],
       "language": "en"
     },
     "fewrel": {
@@ -1373,7 +1430,10 @@
       "url": "https://raw.githubusercontent.com/thunlp/FewRel/master/data/val_wiki.json",
       "output": "fewrel.json",
       "description": "Few-shot relation classification benchmark. 100 relations from Wikidata.",
-      "entity_types": [],
+      "entity_types": [
+        "head",
+        "tail"
+      ],
       "language": "en"
     },
     "nyt10": {
@@ -1470,7 +1530,7 @@
         "CADENCE",
         "PHRASE"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "piimasking200k": {
       "group": "general",
@@ -1489,7 +1549,7 @@
         "IP_ADDRESS",
         "LICENSE"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "enersec": {
       "group": "legal",
@@ -1553,7 +1613,17 @@
       "entity_types": [
         "OCCUPATION"
       ],
-      "language": "multi"
+      "language": "mul"
+    },
+    "mewslix": {
+      "group": "multilingual",
+      "url": "https://huggingface.co/datasets/izhx/mewsli-x",
+      "output": "mewslix.txt",
+      "description": "Multilingual entity linking across 50 languages. Wikipedia-linked mentions for zero-shot cross-lingual EL.",
+      "entity_types": [
+        "ENTITY"
+      ],
+      "language": "mul"
     },
     "bookcorefbamman": {
       "group": "coreference",
@@ -1577,11 +1647,11 @@
         "LOC",
         "ORG"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "agcner": {
       "group": "multilingual",
-      "url": "https://github.com/AgCNER/AgCNER",
+      "url": "https://springernature.figshare.com/collections/AgCNER_the_First_Large-Scale_Chinese_Named_Entity_Recognition_Dataset_for_Agricultural_Diseases_and_Pests/6807873",
       "output": "agcner.txt",
       "description": "Large-scale Chinese agricultural NER. 66k samples, ~207k entities, 3.9M characters.",
       "entity_types": [
@@ -1664,7 +1734,7 @@
         "PARTICIPANT",
         "LOCATION"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "fcct": {
       "group": "coreference",
@@ -1690,7 +1760,7 @@
         "LOCATION",
         "TIME"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "biored": {
       "group": "biomedical",
@@ -1719,7 +1789,7 @@
     },
     "enzchemred": {
       "group": "biomedical",
-      "url": "https://github.com/EnzChemRED/EnzChemRED",
+      "url": "https://github.com/ncbi-nlp/EnzChemRED",
       "output": "enzchemred.txt",
       "description": "Enzyme chemistry relation extraction. Links enzymes, substrates, products, cofactors from biochemical literature.",
       "entity_types": [
@@ -1794,7 +1864,7 @@
         "LOC",
         "ORG"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "indicner": {
       "group": "multilingual",
@@ -1806,13 +1876,13 @@
         "LOC",
         "ORG"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "norne": {
       "group": "general",
       "url": "https://github.com/ltgoslo/norne",
       "output": "norne.txt",
-      "description": "Norwegian NER covering Bokm\u00e5l and Nynorsk. Morphologically rich language NER.",
+      "description": "Norwegian NER covering Bokm\u00e5l and Nynorsk. Morphologically rich language from news and parliament text.",
       "entity_types": [
         "PER",
         "LOC",
@@ -1852,7 +1922,7 @@
     },
     "bionerllama": {
       "group": "biomedical",
-      "url": "https://github.com/BioNER-LLaMA/BioNER-LLaMA",
+      "url": "https://github.com/BIDS-Xu-Lab/BioNER-LLaMA",
       "output": "bionerllama.txt",
       "description": "Instruction-tuned biomedical NER benchmark. Evaluates generative models on disease/chemical/gene NER.",
       "entity_types": [
@@ -1906,7 +1976,7 @@
     },
     "finer139": {
       "group": "general",
-      "url": "https://github.com/FiNER-139/FiNER-139",
+      "url": "https://huggingface.co/datasets/nlpaueb/finer-139",
       "output": "finer139.txt",
       "description": "Financial NER with 139 fine-grained entity types. SEC 10-K/10-Q filings.",
       "entity_types": [
@@ -1961,7 +2031,7 @@
       "output": "klingoneffectlid.txt",
       "description": "Language ID dataset with 11 constructed languages. 14.2M sentences across 101 languages.",
       "entity_types": [],
-      "language": "multi"
+      "language": "mul"
     },
     "lojbantatoeba": {
       "group": "general",
@@ -2082,7 +2152,7 @@
         "ORG",
         "MISC"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "mathentities": {
       "group": "scientific",
@@ -2174,7 +2244,7 @@
         "VARIABLE",
         "MODULE"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "fable": {
       "group": "general",
@@ -2268,7 +2338,7 @@
     },
     "aioner": {
       "group": "biomedical",
-      "url": "https://github.com/AIONER/AIONER",
+      "url": "https://github.com/ncbi/AIONER",
       "output": "aioner.txt",
       "description": "All-in-one biomedical NER. Unified biomedical entity extraction model.",
       "entity_types": [
@@ -2345,7 +2415,7 @@
     },
     "openner": {
       "group": "general",
-      "url": "https://huggingface.co/datasets/Babelscape/OpenNER",
+      "url": "https://huggingface.co/datasets/yongsun-yoon/open-ner-english",
       "output": "openner.txt",
       "description": "Open domain NER benchmark. Broad coverage across multiple domains.",
       "entity_types": [
@@ -2401,7 +2471,7 @@
     },
     "fictionner750m": {
       "group": "general",
-      "url": "https://huggingface.co/datasets/fiction-ner/750M",
+      "url": "https://huggingface.co/datasets/SaladTechnologies/fiction-ner-750m",
       "output": "fictionner750m.txt",
       "description": "Fiction NER at scale. Named entities from 750M tokens of fiction text.",
       "entity_types": [
@@ -2528,6 +2598,53 @@
       ],
       "language": "en"
     },
+    "maven": {
+      "group": "general",
+      "url": "https://github.com/THU-KEG/MAVEN-dataset",
+      "output": "maven.txt",
+      "description": "Massive general-domain event detection. 168 event types from Wikipedia, 4x larger than ACE.",
+      "entity_types": [
+        "EVENT_TRIGGER"
+      ],
+      "language": "en"
+    },
+    "mavenarg": {
+      "group": "relations",
+      "url": "https://github.com/THU-KEG/MAVEN-Argument",
+      "output": "mavenarg.txt",
+      "description": "MAVEN extended with event arguments and relations. Complete event extraction benchmark.",
+      "entity_types": [
+        "EVENT_TRIGGER",
+        "EVENT_ARGUMENT",
+        "EVENT_RELATION"
+      ],
+      "language": "en"
+    },
+    "casie": {
+      "group": "general",
+      "url": "https://github.com/Ebiquity/CASIE",
+      "output": "casie.txt",
+      "description": "Cybersecurity event extraction. Attack patterns, vulnerabilities, malware events.",
+      "entity_types": [
+        "Attack-Pattern",
+        "Vulnerability",
+        "Data-Breach",
+        "Malware",
+        "Patch"
+      ],
+      "language": "en"
+    },
+    "rams": {
+      "group": "general",
+      "url": "https://nlp.jhu.edu/rams/",
+      "output": "rams.txt",
+      "description": "Roles Across Multiple Sentences. Cross-sentence event argument extraction with 139 event types.",
+      "entity_types": [
+        "EVENT_TRIGGER",
+        "EVENT_ARGUMENT"
+      ],
+      "language": "en"
+    },
     "slue": {
       "group": "general",
       "url": "https://github.com/asappresearch/slue-toolkit",
@@ -2590,7 +2707,7 @@
         "LOC",
         "Event"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "mixred": {
       "group": "relations",
@@ -2817,10 +2934,10 @@
       ],
       "language": "nav"
     },
-    "interslavic": {
+    "interslaviccorpus": {
       "group": "general",
       "url": "https://interslavic.fun/",
-      "output": "interslavic.txt",
+      "output": "interslaviccorpus.txt",
       "description": "Interslavic zonal auxiliary language. Constructed for Slavic intelligibility.",
       "entity_types": [
         "PER",
@@ -2915,7 +3032,7 @@
         "LOC",
         "ORG"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "lince": {
       "group": "multilingual",
@@ -2927,7 +3044,7 @@
         "LOC",
         "ORG"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "gluecos": {
       "group": "multilingual",
@@ -2939,7 +3056,7 @@
         "LOC",
         "ORG"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "chemdataextractor": {
       "group": "biomedical",
@@ -3122,13 +3239,11 @@
     },
     "koconovel": {
       "group": "coreference",
-      "url": "https://github.com/koco-novel",
+      "url": "https://github.com/storidient/KoCoNovel",
       "output": "koconovel.txt",
-      "description": "Korean coreference in novels. Literary Korean coreference.",
+      "description": "Korean character coreference in 50 modern/contemporary novels. First Korean literary coreference dataset. Four versions: Reader/Omniscient perspective \u00d7 Separate/Overlapped entity treatment. 178K tokens, 19K mentions, ~1.4K entities.",
       "entity_types": [
-        "PER",
-        "LOC",
-        "ORG"
+        "PER"
       ],
       "language": "ko"
     },
@@ -3198,32 +3313,6 @@
         "ORG"
       ],
       "language": "en"
-    },
-    "conll2002dutch": {
-      "group": "multilingual",
-      "url": "https://www.clips.uantwerpen.be/conll2002/ner/data/ned.testa",
-      "output": "conll2002dutch.txt",
-      "description": "Dutch portion of CoNLL-2002 NER shared task. Newspaper text.",
-      "entity_types": [
-        "PER",
-        "LOC",
-        "ORG",
-        "MISC"
-      ],
-      "language": "nl"
-    },
-    "conll2002spanish": {
-      "group": "multilingual",
-      "url": "https://www.clips.uantwerpen.be/conll2002/ner/data/esp.testa",
-      "output": "conll2002spanish.txt",
-      "description": "Spanish portion of CoNLL-2002 NER shared task. News articles.",
-      "entity_types": [
-        "PER",
-        "LOC",
-        "ORG",
-        "MISC"
-      ],
-      "language": "es"
     },
     "bc2gmfull": {
       "group": "biomedical",
@@ -3304,22 +3393,9 @@
       ],
       "language": "en"
     },
-    "ulner": {
-      "group": "general",
-      "url": "https://huggingface.co/datasets/ULNER",
-      "output": "ulner.txt",
-      "description": "Ultra-Large Scale NER. Massive silver-standard dataset.",
-      "entity_types": [
-        "PER",
-        "LOC",
-        "ORG",
-        "MISC"
-      ],
-      "language": "en"
-    },
     "universalner": {
       "group": "multilingual",
-      "url": "https://universal-ner.github.io/",
+      "url": "https://huggingface.co/datasets/universalner/universal_ner",
       "output": "universalner.txt",
       "description": "Universal NER model benchmark. Multiple domains and languages.",
       "entity_types": [
@@ -3327,7 +3403,7 @@
         "LOC",
         "ORG"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "nombankimplicit": {
       "group": "coreference",
@@ -3432,7 +3508,7 @@
         "Class",
         "Variable"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "homomex": {
       "group": "multilingual",
@@ -3510,6 +3586,18 @@
       ],
       "language": "sa"
     },
+    "mahanama": {
+      "group": "ancient",
+      "url": "https://github.com/sujoysarkarai/mahanama",
+      "output": "mahanama.txt",
+      "description": "Sanskrit Entity Discovery and Linking from Mah\u0101bh\u0101rata. World's largest epic with extreme name variation.",
+      "entity_types": [
+        "Person",
+        "Location",
+        "Miscellaneous"
+      ],
+      "language": "sa"
+    },
     "akkadiancuneiformdataset": {
       "group": "ancient",
       "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7592802/",
@@ -3561,7 +3649,7 @@
         "Region",
         "Character"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "ndner": {
       "group": "general",
@@ -3685,7 +3773,7 @@
         "Location",
         "Object"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "visdialcoref": {
       "group": "coreference",
@@ -3988,7 +4076,7 @@
     },
     "secfilingsner": {
       "group": "general",
-      "url": "https://github.com/juand-r/entity-recognition-datasets",
+      "url": "https://raw.githubusercontent.com/juand-r/entity-recognition-datasets/master/data/SEC-filings/CONLL-format/data/test/FIN3.txt",
       "output": "secfilingsner.txt",
       "description": "Finance domain NER from SEC filing documents.",
       "entity_types": [
@@ -4738,7 +4826,7 @@
         "Author",
         "Year"
       ],
-      "language": "multi"
+      "language": "mul"
     },
     "cryptoner": {
       "group": "general",
