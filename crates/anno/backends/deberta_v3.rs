@@ -8,7 +8,7 @@
 //! DeBERTa-v3 improves upon BERT with:
 //! - **Disentangled attention**: Separates content and position embeddings
 //! - **Enhanced mask decoder**: Better masked language modeling
-//! - **Improved performance**: ~2-3 F1 points better than BERT on NER tasks
+//! - **Improved performance**: often stronger than standard BERT in published evaluations
 //!
 //! # Usage
 //!

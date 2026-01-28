@@ -21,20 +21,11 @@
 //! // Now ready for production traffic
 //! ```
 //!
-//! # Timing Example
+//! # Notes
 //!
-//! ```text
-//! Without warmup:
-//!   Request 1: 450ms (cold start)
-//!   Request 2: 85ms
-//!   Request 3: 82ms
-//!
-//! With warmup:
-//!   Warmup: 450ms (during init, not user-facing)
-//!   Request 1: 83ms
-//!   Request 2: 82ms
-//!   Request 3: 84ms
-//! ```
+//! Warmup shifts “one-time” costs (graph optimization, allocations, cache effects) from the first
+//! user-facing request into an explicit initialization step. Use [`WarmupResult`] to measure the
+//! effect in your environment; do not treat static numbers as portable.
 
 use crate::{Model, Result};
 use std::time::{Duration, Instant};

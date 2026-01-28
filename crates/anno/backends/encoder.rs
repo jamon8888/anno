@@ -114,13 +114,13 @@ pub struct GLiNERModel {
 /// Model size category.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ModelSize {
-    /// ~50M parameters
+    /// Smaller model size class.
     Small,
-    /// ~110M parameters
+    /// Medium model size class.
     Medium,
-    /// ~330M parameters
+    /// Large model size class.
     Large,
-    /// ~1B+ parameters
+    /// Extra-large model size class.
     XLarge,
 }
 
