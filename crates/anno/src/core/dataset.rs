@@ -46,24 +46,22 @@
 //! # Custom Dataset
 //!
 //! ```rust
-//! use anno::core::dataset::{DatasetSpec, Task, ParserHint, License, Domain, DatasetStats};
+//! use anno::core::dataset::{DatasetSpec, DatasetStats, Domain, License, ParserHint, Task};
 //!
-//! struct MyCompanyNER;
+//! /// Example NER dataset spec (replace with your own dataset details).
+//! struct ExampleNER;
 //!
-//! impl DatasetSpec for MyCompanyNER {
-//!     fn name(&self) -> &str { "MyCompany Internal NER" }
-//!     fn id(&self) -> &str { "mycompany_ner_v1" }
+//! impl DatasetSpec for ExampleNER {
+//!     fn name(&self) -> &str { "Example NER" }
+//!     fn id(&self) -> &str { "example_ner_v1" }
 //!     fn task(&self) -> Task { Task::NER }
-//!     fn languages(&self) -> &[&str] { &["en", "de", "fr"] }
-//!     fn entity_types(&self) -> &[&str] {
-//!         &["PRODUCT", "INTERNAL_TEAM", "PROJECT_CODE", "CUSTOMER"]
-//!     }
+//!     fn languages(&self) -> &[&str] { &["en"] }
+//!     fn entity_types(&self) -> &[&str] { &["PER", "ORG", "LOC"] }
 //!     fn parser_hint(&self) -> ParserHint { ParserHint::CoNLL }
-//!     fn license(&self) -> License { License::Proprietary }
-//!     fn domain(&self) -> Domain { Domain::Other("enterprise".into()) }
-//!     // Use stats() to provide document count via DatasetStats
+//!     fn license(&self) -> License { License::CCBY }
+//!     fn domain(&self) -> Domain { Domain::News }
 //!     fn stats(&self) -> DatasetStats {
-//!         DatasetStats { doc_count: Some(50_000), ..Default::default() }
+//!         DatasetStats { doc_count: Some(1_000), ..Default::default() }
 //!     }
 //! }
 //! ```
@@ -110,38 +108,9 @@
 //!
 //! # Classical & Historical Languages
 //!
-//! For ancient/classical language datasets, use the `.historical()` builder method
-//! and appropriate ISO 639-3 codes:
-//!
-//! ```rust
-//! use anno::core::dataset::{CustomDataset, Task, ParserHint, License, Domain, DatasetStats, SplitSizes};
-//!
-//! // Mahānāma: Sanskrit EDL from Mahābhārata (arXiv:2509.19844)
-//! // Extreme challenges: 124 avg name forms/entity, 47% ambiguity
-//! let mahanama = CustomDataset::new("mahanama", Task::NED)
-//!     .with_name("Mahānāma")
-//!     .with_languages(&["sa"])  // Sanskrit ISO 639-1
-//!     .with_entity_types(&["Person", "Location", "Miscellaneous"])
-//!     .with_parser(ParserHint::CoNLLU)  // CorefUD format
-//!     .with_license(License::CCBY)
-//!     .with_domain(Domain::Literary)
-//!     .with_url("https://github.com/sujoysarkarai/mahanama")
-//!     .with_secondary_tasks(vec![Task::IntraDocCoref, Task::NER])
-//!     .with_stats(DatasetStats {
-//!         doc_count: Some(2110),
-//!         mention_count: Some(109_000),
-//!         entity_count: Some(5_500),
-//!         token_count: Some(988_502),
-//!         split_sizes: Some(SplitSizes { train: 1688, dev: 211, test: 211 }),
-//!     })
-//!     .with_citation("Sarkar et al. (2025)")
-//!     .historical();
-//! ```
-//!
-//! Key classical language datasets:
-//! - **Mahānāma** (sa): Sanskrit EDL, world's largest epic, extreme name variation
-//! - **NEReus** (grc): Ancient Greek with GOD, NORP entity types
-//! - **HIPE-2022** (multi): Historical NER across 11 languages including Latin
+//! For historical-language datasets, prefer ISO 639-3 codes and explicit provenance fields.
+//! Keep examples here generic; put dataset-specific details (URLs, stats, citations) in the
+//! dataset registry where they can be reviewed for correctness.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -1420,41 +1389,28 @@ mod tests {
     }
 
     #[test]
-    fn test_classical_language_dataset() {
-        // Test the Mahānāma-style dataset from the docs
-        let mahanama = CustomDataset::new("mahanama", Task::NED)
-            .with_name("Mahānāma")
+    fn test_historical_custom_dataset_smoke() {
+        // Keep tests generic; dataset-specific examples belong in the dataset registry.
+        let ds = CustomDataset::new("historical_edl", Task::NED)
+            .with_name("Historical EDL (example)")
             .with_languages(&["sa"])
-            .with_entity_types(&["Person", "Location", "Miscellaneous"])
+            .with_entity_types(&["Person", "Location"])
             .with_parser(ParserHint::CoNLLU)
             .with_license(License::CCBY)
             .with_domain(Domain::Literary)
-            .with_url("https://github.com/sujoysarkarai/mahanama")
             .with_secondary_tasks(vec![Task::IntraDocCoref, Task::NER])
             .with_stats(DatasetStats {
-                doc_count: Some(2110),
-                mention_count: Some(109_000),
-                entity_count: Some(5_500),
-                token_count: Some(988_502),
-                split_sizes: Some(SplitSizes {
-                    train: 1688,
-                    dev: 211,
-                    test: 211,
-                }),
+                doc_count: Some(10),
+                mention_count: Some(100),
+                ..Default::default()
             })
-            .with_citation("Sarkar et al. (2025)")
+            .with_citation("Example citation")
             .historical();
 
-        // Verify properties
-        assert_eq!(mahanama.name(), "Mahānāma");
-        assert_eq!(mahanama.task(), Task::NED);
-        assert!(mahanama.supports_task(Task::IntraDocCoref));
-        assert!(mahanama.supports_task(Task::NER));
-        assert!(mahanama.supports_language("sa"));
-        assert!(mahanama.is_historical());
-        assert!(mahanama.is_public()); // CC-BY allows redistribution
-        assert_eq!(mahanama.stats().mention_count, Some(109_000));
-        assert_eq!(mahanama.citation(), Some("Sarkar et al. (2025)"));
+        assert_eq!(ds.task(), Task::NED);
+        assert!(ds.supports_language("sa"));
+        assert!(ds.is_historical());
+        assert!(ds.is_public());
     }
 
     #[test]
