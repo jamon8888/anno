@@ -1858,6 +1858,12 @@ impl TaskEvaluator {
             match self.loader.load_coref(dataset_data.id) {
                 Ok(docs) => {
                     if docs.is_empty() {
+                        if config.require_cached {
+                            return Err(crate::Error::InvalidInput(format!(
+                                "Coreference dataset {:?} not cached (require_cached=1)",
+                                dataset_data.id
+                            )));
+                        }
                         // If load_coref returns empty, try downloading first
                         #[cfg(feature = "eval-advanced")]
                         {
@@ -1882,6 +1888,12 @@ impl TaskEvaluator {
                     }
                 }
                 Err(e) => {
+                    if config.require_cached {
+                        return Err(crate::Error::InvalidInput(format!(
+                            "Coreference dataset {:?} not cached: {} (require_cached=1)",
+                            dataset_data.id, e
+                        )));
+                    }
                     // Try downloading if not cached
                     #[cfg(feature = "eval-advanced")]
                     {
