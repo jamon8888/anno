@@ -99,7 +99,6 @@
 //! - Rao Delip, McNamee, Dredze (2010). "Streaming cross document entity
 //!   coreference resolution". COLING 2010.
 
-use super::evidence::{EvidenceSource, MediationStrategy, PairEvidence};
 use super::lsh::{LSHConfig, MinHashLSH};
 use crate::core as anno_core;
 use std::collections::HashMap;
@@ -119,10 +118,6 @@ pub struct StreamingConfig {
     pub lsh_config: LSHConfig,
     /// Whether to require entity type match
     pub require_type_match: bool,
-    /// Whether to use evidence-based similarity computation
-    pub use_evidence: bool,
-    /// Mediation strategy for combining evidence signals
-    pub mediation_strategy: MediationStrategy,
 }
 
 impl Default for StreamingConfig {
@@ -134,8 +129,6 @@ impl Default for StreamingConfig {
             use_lsh: true,
             lsh_config: LSHConfig::default(),
             require_type_match: true,
-            use_evidence: false, // Backward compatible
-            mediation_strategy: MediationStrategy::default(),
         }
     }
 }
@@ -163,18 +156,8 @@ impl StreamingConfig {
         }
     }
 
-    /// Enable evidence-based similarity with a specific mediation strategy.
-    pub fn with_evidence(mut self, strategy: MediationStrategy) -> Self {
-        self.use_evidence = true;
-        self.mediation_strategy = strategy;
-        self
-    }
-
-    /// Enable evidence-based similarity with the default strategy.
-    pub fn with_default_evidence(mut self) -> Self {
-        self.use_evidence = true;
-        self
-    }
+    // Evidence-based similarity was intentionally removed to keep this module
+    // small and avoid bespoke tuning logic.
 }
 
 /// A mention of an entity in a document.
@@ -646,204 +629,18 @@ impl StreamingResolver {
 
     /// Compute similarity between a mention and a cluster.
     fn mention_cluster_similarity(&self, mention: &EntityMention, cluster: &EntityCluster) -> f32 {
-        if self.config.use_evidence {
-            self.mention_cluster_evidence(mention, cluster)
-                .mediate(&self.config.mediation_strategy)
-        } else {
-            // Legacy single-signal approach
-            if let (Some(emb), Some(centroid)) = (&mention.embedding, &cluster.centroid) {
-                return cosine_similarity(emb, centroid);
-            }
-            trigram_similarity(&mention.canonical_surface, &cluster.canonical_name)
-        }
-    }
-
-    /// Build evidence for mention-cluster similarity.
-    fn mention_cluster_evidence(
-        &self,
-        mention: &EntityMention,
-        cluster: &EntityCluster,
-    ) -> PairEvidence {
-        let mut evidence = PairEvidence::new();
-
-        // Trigram string similarity
-        let trigram_sim = trigram_similarity(&mention.canonical_surface, &cluster.canonical_name);
-        evidence.add_source(EvidenceSource::StringSimilarity {
-            method: "trigram".into(),
-            score: trigram_sim,
-        });
-
-        // Embedding similarity if available
         if let (Some(emb), Some(centroid)) = (&mention.embedding, &cluster.centroid) {
-            let emb_sim = cosine_similarity(emb, centroid);
-            // Normalize from [-1, 1] to [0, 1]
-            let normalized = (emb_sim + 1.0) / 2.0;
-            evidence.add_source(EvidenceSource::Embedding {
-                model: "cluster_centroid".into(),
-                score: normalized,
-            });
+            return cosine_similarity(emb, centroid);
         }
-
-        // Type matching
-        if let (Some(t1), Some(t2)) = (&mention.entity_type, &cluster.entity_type) {
-            let matched = types_compatible(t1, t2);
-            evidence.add_source(EvidenceSource::TypeMatch {
-                matched,
-                type_a: t1.clone(),
-                type_b: t2.clone(),
-            });
-        }
-
-        // Temporal consistency check (for diachronic entities)
-        // If both mention and cluster have temporal bounds, check for overlap
-        let temporal_score = self.compute_temporal_consistency(mention, cluster);
-        if let Some(score) = temporal_score {
-            evidence.add_source(EvidenceSource::TemporalConsistency {
-                score,
-                mention_valid: mention.valid_from.is_some() || mention.valid_until.is_some(),
-                cluster_valid: cluster.has_temporal_bounds(),
-            });
-        }
-
-        evidence
-    }
-
-    /// Compute temporal consistency score between a mention and cluster.
-    ///
-    /// Returns:
-    /// - `Some(1.0)` if temporal bounds overlap or are both absent (consistent)
-    /// - `Some(0.0)` if bounds are incompatible (anachronistic)
-    /// - `Some(0.5)` if one has bounds and other doesn't (uncertain)
-    /// - `None` if temporal checking is not applicable
-    fn compute_temporal_consistency(
-        &self,
-        mention: &EntityMention,
-        cluster: &EntityCluster,
-    ) -> Option<f32> {
-        let mention_has_bounds = mention.valid_from.is_some() || mention.valid_until.is_some();
-        let cluster_bounds = cluster.temporal_bounds();
-        let cluster_has_bounds = cluster_bounds.0.is_some() || cluster_bounds.1.is_some();
-
-        match (mention_has_bounds, cluster_has_bounds) {
-            // Both have temporal bounds - check for overlap
-            (true, true) => {
-                let (cluster_from, cluster_until) = cluster_bounds;
-
-                // Check if the mention's validity overlaps with cluster's validity
-                // This is a simplified overlap check
-                let overlaps = match (
-                    mention.valid_from,
-                    mention.valid_until,
-                    cluster_from,
-                    cluster_until,
-                ) {
-                    (Some(m_from), Some(m_until), Some(c_from), Some(c_until)) => {
-                        // Full bounds on both - check overlap
-                        m_from <= c_until && m_until >= c_from
-                    }
-                    (Some(m_from), None, _, Some(c_until)) => {
-                        // Mention started, cluster ended
-                        m_from <= c_until
-                    }
-                    (None, Some(m_until), Some(c_from), _) => {
-                        // Mention ended, cluster started
-                        m_until >= c_from
-                    }
-                    _ => true, // Partial bounds - assume overlap
-                };
-
-                Some(if overlaps { 1.0 } else { 0.0 })
-            }
-            // One has bounds, other doesn't - uncertain
-            (true, false) | (false, true) => Some(0.5),
-            // Neither has bounds - not applicable (but consistent)
-            (false, false) => None,
-        }
+        trigram_similarity(&mention.canonical_surface, &cluster.canonical_name)
     }
 
     /// Compute similarity between two clusters.
     fn cluster_similarity(&self, cluster_a: &EntityCluster, cluster_b: &EntityCluster) -> f32 {
-        if self.config.use_evidence {
-            self.cluster_cluster_evidence(cluster_a, cluster_b)
-                .mediate(&self.config.mediation_strategy)
-        } else {
-            // Legacy single-signal approach
-            if let (Some(c1), Some(c2)) = (&cluster_a.centroid, &cluster_b.centroid) {
-                return cosine_similarity(c1, c2);
-            }
-            trigram_similarity(&cluster_a.canonical_name, &cluster_b.canonical_name)
-        }
-    }
-
-    /// Build evidence for cluster-cluster similarity.
-    fn cluster_cluster_evidence(
-        &self,
-        cluster_a: &EntityCluster,
-        cluster_b: &EntityCluster,
-    ) -> PairEvidence {
-        let mut evidence = PairEvidence::new();
-
-        // Trigram string similarity
-        let trigram_sim = trigram_similarity(&cluster_a.canonical_name, &cluster_b.canonical_name);
-        evidence.add_source(EvidenceSource::StringSimilarity {
-            method: "trigram".into(),
-            score: trigram_sim,
-        });
-
-        // Embedding similarity if available
         if let (Some(c1), Some(c2)) = (&cluster_a.centroid, &cluster_b.centroid) {
-            let emb_sim = cosine_similarity(c1, c2);
-            let normalized = (emb_sim + 1.0) / 2.0;
-            evidence.add_source(EvidenceSource::Embedding {
-                model: "cluster_centroid".into(),
-                score: normalized,
-            });
+            return cosine_similarity(c1, c2);
         }
-
-        // Type matching
-        if let (Some(t1), Some(t2)) = (&cluster_a.entity_type, &cluster_b.entity_type) {
-            let matched = types_compatible(t1, t2);
-            evidence.add_source(EvidenceSource::TypeMatch {
-                matched,
-                type_a: t1.clone(),
-                type_b: t2.clone(),
-            });
-        }
-
-        // Cross-cluster mention overlap (shared documents)
-        let docs_a: std::collections::HashSet<&str> = cluster_a
-            .mentions
-            .iter()
-            .map(|m| m.doc_id.as_str())
-            .collect();
-        let docs_b: std::collections::HashSet<&str> = cluster_b
-            .mentions
-            .iter()
-            .map(|m| m.doc_id.as_str())
-            .collect();
-        let shared_docs = docs_a.intersection(&docs_b).count();
-        if shared_docs > 0 {
-            // Shared documents are a weak negative signal - entities from same doc
-            // should have been merged during within-doc coref
-            evidence.add_source(EvidenceSource::NegativeEvidence {
-                reason: "shared_documents".into(),
-                confidence: 0.3 * (shared_docs as f32 / docs_a.len().max(docs_b.len()) as f32),
-            });
-        }
-
-        evidence
-    }
-
-    /// Get the evidence breakdown for a mention-cluster comparison.
-    ///
-    /// Useful for debugging and understanding why entities did/didn't match.
-    pub fn explain_similarity(
-        &self,
-        mention: &EntityMention,
-        cluster_id: anno_core::IdentityId,
-    ) -> Option<PairEvidence> {
-        let cluster = self.clusters.get(&cluster_id)?;
-        Some(self.mention_cluster_evidence(mention, cluster))
+        trigram_similarity(&cluster_a.canonical_name, &cluster_b.canonical_name)
     }
 }
 
@@ -908,36 +705,8 @@ pub fn string_similarity(a: &str, b: &str) -> f32 {
     trigram_similarity(a, b)
 }
 
-/// Check if two entity types are compatible.
-///
-/// Handles common variations like PER/PERSON, ORG/ORGANIZATION, etc.
-fn types_compatible(t1: &str, t2: &str) -> bool {
-    // Exact match (case-insensitive)
-    if t1.eq_ignore_ascii_case(t2) {
-        return true;
-    }
-
-    // Check if they normalize to the same canonical type
-    match (normalize_type(t1), normalize_type(t2)) {
-        (Some(n1), Some(n2)) => n1 == n2,
-        _ => false, // Unknown types only match exactly
-    }
-}
-
-/// Normalize entity type to canonical form.
-/// Returns None for unknown types (which should only match exactly).
-fn normalize_type(s: &str) -> Option<&'static str> {
-    Some(match s.to_uppercase().as_str() {
-        "PER" | "PERSON" | "PEOPLE" => "PERSON",
-        "ORG" | "ORGANIZATION" | "COMPANY" | "CORP" => "ORG",
-        "LOC" | "LOCATION" | "PLACE" | "GPE" => "LOC",
-        "MISC" | "OTHER" | "UNKNOWN" => "MISC",
-        "DATE" | "TIME" | "TEMPORAL" => "TIME",
-        "MONEY" | "CURRENCY" | "PRICE" => "MONEY",
-        "PERCENT" | "PERCENTAGE" => "PERCENT",
-        _ => return None,
-    })
-}
+// NOTE: this module intentionally avoids bespoke type/temporal heuristics.
+// If needed, add them as a higher-level adapter layer that is explicitly sourced.
 
 // =============================================================================
 // Conversion to/from `anno::core` types
@@ -1186,49 +955,17 @@ mod tests {
     }
 
     #[test]
-    fn test_evidence_based_streaming() {
-        // Create resolver with evidence-based similarity
-        let config = StreamingConfig::default().with_default_evidence();
-        let mut resolver = StreamingResolver::new(config);
+    fn test_streaming_basic_similarity_smoke() {
+        let mut resolver = StreamingResolver::new(StreamingConfig::default());
 
-        // Add entities with type information
         resolver.add_entity("doc1", "Barack Obama", Some("Person".to_string()));
         resolver.add_entity("doc2", "obama", Some("Person".to_string()));
         resolver.add_entity("doc3", "Donald Trump", Some("Person".to_string()));
 
-        // Obama mentions should cluster together
         assert!(resolver.num_clusters() <= 3);
-
-        // Explain similarity for debugging
-        let obama_mention = EntityMention::new("test", "Obama").with_type("Person".to_string());
-        if let Some(cluster) = resolver.clusters().first() {
-            let evidence = resolver.explain_similarity(&obama_mention, cluster.id);
-            assert!(evidence.is_some());
-            if let Some(ev) = evidence {
-                // Should have multiple evidence sources
-                assert!(!ev.sources.is_empty());
-            }
-        }
     }
 
-    #[test]
-    fn test_type_compatibility() {
-        // Test type normalization
-        assert!(types_compatible("PER", "PERSON"));
-        assert!(types_compatible("Person", "PEOPLE"));
-        assert!(types_compatible("ORG", "Organization"));
-        assert!(types_compatible("LOC", "GPE"));
-        assert!(types_compatible("DATE", "TIME"));
-
-        // Different types should not be compatible
-        assert!(!types_compatible("PER", "ORG"));
-        assert!(!types_compatible("PERSON", "LOCATION"));
-
-        // Unknown types should only match exactly
-        assert!(types_compatible("EVENT", "EVENT"));
-        assert!(types_compatible("event", "EVENT")); // Case insensitive
-        assert!(!types_compatible("EVENT", "THING"));
-    }
+    // Type-compatibility heuristics were intentionally removed.
 }
 
 // =============================================================================

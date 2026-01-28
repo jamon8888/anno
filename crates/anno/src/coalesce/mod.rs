@@ -294,12 +294,6 @@
 
 #![warn(missing_docs)]
 
-pub mod alignment;
-pub mod canonical;
-pub mod configuration;
-pub mod correlation;
-pub mod evidence;
-pub mod hierarchical;
 pub mod lsh;
 pub mod resolver;
 pub mod script;
@@ -321,15 +315,5 @@ pub use streaming::{
     trigram_similarity, EntityCluster, EntityMention, StreamingConfig, StreamingResolver,
 };
 
-/// Experimental / research-facing APIs.
-///
-/// These remain supported for now, but are intentionally not re-exported at the
-/// `anno::coalesce::*` level to keep the default surface area small.
-pub mod experimental {
-    pub use super::alignment::*;
-    pub use super::canonical::*;
-    pub use super::configuration::*;
-    pub use super::correlation::*;
-    pub use super::evidence::*;
-    pub use super::hierarchical::*;
-}
+// NOTE: additional clustering / evidence aggregation experiments were intentionally
+// removed to keep this module paper-grounded and reduce bespoke surface area.
