@@ -19,15 +19,11 @@
 //!
 //! # Research Alignment
 //!
-//! From W2NER paper:
-//! > "The Entity Boundary F1 score (EBF) employs a more lenient strategy that
-//! > allows for prediction of more potential entities, considering whether
-//! > the head and tail tokens of predicted entities are correctly identified."
+//! This module’s “boundary” metric is a lenient strategy that checks whether the
+//! head/tail tokens of predicted entities are correctly identified (see W2NER,
+//! arXiv:2112.10070).
 //!
-//! Benchmark datasets for discontinuous NER:
-//! - **CADEC**: Clinical Adverse Drug Events (F1: ~70-80%)
-//! - **ShARe13**: Clinical entity recognition 2013 (F1: ~80-85%)
-//! - **ShARe14**: Clinical entity recognition 2014 (F1: ~85%)
+//! Benchmark datasets for discontinuous NER include CADEC and ShARe/CLEF tasks.
 
 use crate::DiscontinuousEntity;
 use serde::{Deserialize, Serialize};

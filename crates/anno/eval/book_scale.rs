@@ -7,22 +7,15 @@
 //!
 //! # The Book-Scale Challenge
 //!
-//! Coreference systems optimized for short documents (OntoNotes ~467 tokens)
-//! show dramatically different behavior at book scale (200k+ tokens):
-//!
-//! | Metric | Short Doc | Book Scale | Issue |
-//! |--------|-----------|------------|-------|
-//! | MUC | 85% | 93% | Inflated (favors long chains) |
-//! | B³ | 78% | 62% | Moderate drop |
-//! | CEAF-e | 72% | 33% | Severe collapse |
-//! | CoNLL-F1 | 78% | 63% | Masks divergence |
+//! Coreference systems optimized for short documents can show different behavior
+//! at book scale. In particular, common metrics can diverge in what they “reward”
+//! (e.g., favoring long chains vs penalizing boundary errors).
 //!
 //! # Key Insights
 //!
-//! 1. **Metric Divergence**: MUC and CEAF-e disagree by 30+ F1 points at scale
-//! 2. **Windowed vs Full**: Systems lose ~15 F1 from windowed to full-book eval
-//! 3. **Long Chains Dominate**: Main characters have 100s of mentions, skewing metrics
-//! 4. **Incremental Helps**: Longdoc-style approaches show smallest performance drop
+//! 1. **Metric divergence**: different metrics can disagree substantially at scale.
+//! 2. **Windowed vs full**: long-range dependencies can be masked by windowed evaluation.
+//! 3. **Long chains dominate**: a few long chains can dominate aggregate scores.
 //!
 //! # This Module Provides
 //!
@@ -47,7 +40,7 @@
 //! );
 //!
 //! if analysis.has_scale_issues() {
-//!     println!("⚠️ Book-scale issues detected:");
+//!     println!("Book-scale issues detected:");
 //!     println!("{}", analysis.diagnostic_report());
 //! }
 //! ```
