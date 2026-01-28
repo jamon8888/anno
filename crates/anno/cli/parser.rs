@@ -18,8 +18,8 @@ CAPABILITIES:
   • Named Entity Recognition (NER) - detect persons, orgs, locations, etc.
   • Coreference Resolution - link mentions to same entity ("She" → "Marie Curie")
   • Relation Extraction - extract (head, relation, tail) triples
-  • Entity Linking - connect entities to knowledge bases (Wikidata)
-  • Event Extraction - discourse-level events and shell nouns
+  • Entity Linking - connect entities to knowledge bases (when configured)
+  • Event Extraction - discourse-level event extraction
 
 SIGNAL → TRACK → IDENTITY HIERARCHY:
   Level 1 (Signal)   : Raw detections/mentions with spans
@@ -29,7 +29,7 @@ SIGNAL → TRACK → IDENTITY HIERARCHY:
 BACKENDS:
   • pattern    - High-precision patterns (dates, money, emails)
   • heuristic (alias: statistical) - Capitalization + context heuristics
-  • stacked    - Best available stack (defaults to ONNX when enabled)
+  • stacked    - Best available stack (uses available feature-gated backends when enabled)
   • extra backends via feature flags (e.g., Candle); see `anno models list`
 
 EXAMPLES:
