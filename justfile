@@ -879,49 +879,10 @@ spot-teardown:
 spot-teardown-full:
     @uv run scripts/spot/orchestrate.py teardown --purge-queue
 
-# === Spot Evaluation (runctl-based) ===
-# New runctl-based orchestration (recommended)
-# Uses runctl for instance lifecycle, SQS for task distribution
-
-# Setup runctl (one-time, installs runctl if needed)
-spot-runctl-setup:
-    @cd ../runctl && cargo build --release
-    @if [ ! -f runctl.toml ]; then \
-        echo "Creating runctl.toml from example..."; \
-        cp runctl.toml.example runctl.toml 2>/dev/null || echo "Example file not found"; \
-    fi
-    @echo "✓ runctl built. Configure runctl.toml:"
-    @echo "  [aws]"
-    @echo "  region = \"us-east-1\""
-    @echo "  s3_bucket = \"arc-anno-data\""
-    @echo "  use_spot = true"
-    @runctl --version 2>/dev/null || echo "  (runctl not in PATH, use: ../runctl/target/release/runctl)"
-
-# Generate tasks and launch instances via runctl
-spot-runctl-eval FLEET_SIZE="4" INSTANCE_TYPE="c7i.xlarge":
-    uv run scripts/spot/orchestrate_runctl.py full \
-        --fleet-size {{FLEET_SIZE}} \
-        --instance-type {{INSTANCE_TYPE}} \
-        --max-examples 50
-
-# Launch spot instances via runctl
-spot-runctl-launch FLEET_SIZE="4" INSTANCE_TYPE="c7i.xlarge":
-    uv run scripts/spot/orchestrate_runctl.py launch \
-        --fleet-size {{FLEET_SIZE}} \
-        --instance-type {{INSTANCE_TYPE}}
-
-# Check status (instances + queue + results)
-spot-runctl-status:
-    uv run scripts/spot/orchestrate_runctl.py status
-
-# Terminate instances created by runctl
-spot-runctl-teardown:
-    uv run scripts/spot/orchestrate_runctl.py teardown
-
-# Test runctl integration (small test run)
-spot-runctl-test INSTANCE_TYPE="c7i.xlarge" BACKEND="gliner2" DATASET="WikiGold":
-    INSTANCE_TYPE={{INSTANCE_TYPE}} BACKEND={{BACKEND}} DATASET={{DATASET}} \
-    bash scripts/spot/test_runctl_integration.sh
+## Note: runctl integration removed.
+##
+## This repo previously supported runctl-managed spot evals. That path is intentionally
+## deleted now; keep orchestration under `scripts/spot/orchestrate.py` (SQS/SSM-based).
 
 # Quick spot eval (3 fast backends, 2 datasets, 1 seed) - good for testing
 spot-eval-quick:
