@@ -507,16 +507,40 @@ impl LoadableDatasetId {
             return Some(DatasetParsePlan::TweetNer7);
         }
 
-        // HuggingFace datasets: if the registry provides an HF id/config and marks the
-        // dataset as HuggingFace-accessible, we can treat it as an HfApiResponse plan.
+        // HuggingFace-hosted datasets with bespoke (non-generic) parse plans.
         //
-        // This keeps the "catalog vs loadable" distinction: many datasets are catalogued
-        // with `hf_id` but are not marked HuggingFace-accessible (or are missing metadata),
-        // in which case we stay conservative and return None.
-        if id.hf_id().is_some()
-            && id.access_status() == crate::eval::dataset_registry::DatasetAccessibility::HuggingFace
-        {
-            return Some(DatasetParsePlan::HfApiResponse);
+        // These are marked `access_status: HuggingFace` in the registry, so they must be
+        // hintable; but their parse plans are not derivable from `format` alone (or use
+        // specialized parsing despite being hosted on the Hub).
+        if id == DatasetId::BC5CDR {
+            return Some(DatasetParsePlan::Bc5cdr);
+        }
+        if id == DatasetId::NCBIDisease {
+            return Some(DatasetParsePlan::NcbiDisease);
+        }
+        if id == DatasetId::AfriSenti {
+            return Some(DatasetParsePlan::AfriSenti);
+        }
+        if id == DatasetId::AfriQA {
+            return Some(DatasetParsePlan::AfriQa);
+        }
+        if id == DatasetId::MasakhaNEWS {
+            return Some(DatasetParsePlan::MasakhaNews);
+        }
+        if id == DatasetId::AGNews {
+            return Some(DatasetParsePlan::AgNews);
+        }
+        if id == DatasetId::DBPedia14 {
+            return Some(DatasetParsePlan::Dbpedia14);
+        }
+        if id == DatasetId::YahooAnswers {
+            return Some(DatasetParsePlan::YahooAnswers);
+        }
+        if id == DatasetId::TREC {
+            return Some(DatasetParsePlan::Trec);
+        }
+        if id == DatasetId::TweetTopic {
+            return Some(DatasetParsePlan::TweetTopic);
         }
 
         // Coref datasets in CoNLL format (not GAP TSV): parse as regular CoNLL.
@@ -682,60 +706,87 @@ impl LoadableDatasetId {
         let is_re = inferred_tasks.contains(&"re");
         let is_event = inferred_tasks.contains(&"event_extraction");
 
-        // Format string is about the *source* dataset, not necessarily our cached
-        // representation; still useful for many direct-download datasets.
-        let format = id.format()?;
         let annotation_scheme = id.annotation_scheme().unwrap_or("");
 
-        match format {
-            "CoNLL" | "BIO" | "IOB2" if is_ner && !is_coref && !is_re && !is_event => {
-                Some(DatasetParsePlan::Conll)
-            }
-            "CoNLL-U" | "CoNLLU" if is_ner && !is_coref && !is_re && !is_event => {
-                Some(DatasetParsePlan::Conllu)
-            }
-            "JSONL" if is_ner && !is_coref && !is_re && !is_event => {
-                Some(DatasetParsePlan::JsonlNer)
-            }
-            // Coreference: we only treat these as unambiguous when the dataset is *only* coref.
-            // Check both format field and annotation_scheme for CoNLLCoref datasets.
-            "TSV" | "ConllCoref" | "CoNLLCoref" if is_coref && !is_ner && !is_re && !is_event => {
-                // GAP-style TSV and similar "coref-only" exports.
-                Some(DatasetParsePlan::GapTsv)
-            }
-            // CoNLL format with CoNLLCoref annotation scheme (e.g., GICoref, qxoRef)
-            "CoNLL"
-                if annotation_scheme == "CoNLLCoref"
-                    && is_coref
-                    && !is_ner
-                    && !is_re
-                    && !is_event =>
-            {
-                Some(DatasetParsePlan::GapTsv)
-            }
-            "JSONL" if is_coref && !is_ner && !is_re && !is_event => {
-                // PreCo/SciCo style JSONL exports.
-                Some(DatasetParsePlan::PrecoJsonl)
-            }
+        // Format string is about the *source* dataset, not necessarily our cached
+        // representation; still useful for many direct-download datasets.
+        if let Some(format) = id.format() {
+            let plan = match format {
+                "CoNLL" | "BIO" | "IOB2" if is_ner && !is_coref && !is_re && !is_event => {
+                    Some(DatasetParsePlan::Conll)
+                }
+                "CoNLL-U" | "CoNLLU" if is_ner && !is_coref && !is_re && !is_event => {
+                    Some(DatasetParsePlan::Conllu)
+                }
+                "JSONL" if is_ner && !is_coref && !is_re && !is_event => {
+                    Some(DatasetParsePlan::JsonlNer)
+                }
+                // Coreference: we only treat these as unambiguous when the dataset is *only* coref.
+                // Check both format field and annotation_scheme for CoNLLCoref datasets.
+                "TSV" | "ConllCoref" | "CoNLLCoref"
+                    if is_coref && !is_ner && !is_re && !is_event =>
+                {
+                    // GAP-style TSV and similar "coref-only" exports.
+                    Some(DatasetParsePlan::GapTsv)
+                }
+                // CoNLL format with CoNLLCoref annotation scheme (e.g., GICoref, qxoRef)
+                "CoNLL"
+                    if annotation_scheme == "CoNLLCoref"
+                        && is_coref
+                        && !is_ner
+                        && !is_re
+                        && !is_event =>
+                {
+                    Some(DatasetParsePlan::GapTsv)
+                }
+                "JSONL" if is_coref && !is_ner && !is_re && !is_event => {
+                    // PreCo/SciCo style JSONL exports.
+                    Some(DatasetParsePlan::PrecoJsonl)
+                }
 
-            // Relation extraction: unambiguous only when the dataset is *only* RE.
-            // Also handle RE datasets that might have NER as secondary task (e.g., SciERCNER).
-            "JSON" | "JSONL" if is_re && !is_coref && !is_event => {
-                Some(DatasetParsePlan::DocredJson)
+                // Relation extraction: unambiguous only when the dataset is *only* RE.
+                // Also handle RE datasets that might have NER as secondary task (e.g., SciERCNER).
+                "JSON" | "JSONL" if is_re && !is_coref && !is_event => {
+                    Some(DatasetParsePlan::DocredJson)
+                }
+
+                // Event extraction: treat JSONL as MAVEN-ish only when the dataset is event-only.
+                "JSONL" if is_event && !is_ner && !is_coref && !is_re => {
+                    Some(DatasetParsePlan::Maven)
+                }
+
+                // TSV NER format (HIPE-2022 style)
+                "TSV" if is_ner && !is_coref && !is_re && !is_event => {
+                    Some(DatasetParsePlan::TsvNer)
+                }
+
+                // CSV NER format (E-NER/EDGAR-NER style: Token,Tag)
+                "CSV" if is_ner && !is_coref && !is_re && !is_event => {
+                    Some(DatasetParsePlan::CsvNer)
+                }
+
+                // These are too ambiguous across sources; treat as unknown for now.
+                _ => None,
+            };
+
+            if plan.is_some() {
+                return plan;
             }
-
-            // Event extraction: treat JSONL as MAVEN-ish only when the dataset is event-only.
-            "JSONL" if is_event && !is_ner && !is_coref && !is_re => Some(DatasetParsePlan::Maven),
-
-            // TSV NER format (HIPE-2022 style)
-            "TSV" if is_ner && !is_coref && !is_re && !is_event => Some(DatasetParsePlan::TsvNer),
-
-            // CSV NER format (E-NER/EDGAR-NER style: Token,Tag)
-            "CSV" if is_ner && !is_coref && !is_re && !is_event => Some(DatasetParsePlan::CsvNer),
-
-            // These are too ambiguous across sources; treat as unknown for now.
-            _ => None,
         }
+
+        // HuggingFace datasets: if the registry provides an HF id/config and marks the
+        // dataset as HuggingFace-accessible, we can treat it as an HfApiResponse plan.
+        //
+        // Keep this as a *fallback*: registry format/task signals (and explicit hint lists
+        // above) take precedence, so we don't override e.g. CoNLL/JSONL datasets that are
+        // hosted on HuggingFace but should be parsed as raw files.
+        if id.hf_id().is_some()
+            && id.access_status() == crate::eval::dataset_registry::DatasetAccessibility::HuggingFace
+        {
+            return Some(DatasetParsePlan::HfApiResponse);
+        }
+
+        None
     }
 }
 
