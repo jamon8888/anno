@@ -551,18 +551,9 @@ impl std::fmt::Display for LabelShift {
 /// ```text
 /// Model Performance:
 ///
-///   Long chains (protagonists):  92% F1  ← Model understands plot!
-///   Short chains (secondary):    71% F1  ← Decent
-///   Singletons (background):     45% F1  ← Poor, but who cares?
-///
-/// CoNLL F1 (averaged):           65% F1  ← Misleadingly low!
-///
-/// The average HIDES that the model is excellent at what matters most.
-///
-/// ALWAYS report stratified metrics:
-///   • "Protagonist F1: 92%"
-///   • "Secondary F1: 71%"
-///   • "Singleton F1: 45% (excluded from final score)"
+/// A single averaged metric can hide systematic differences across chain sizes.
+/// Prefer reporting stratified metrics by chain length (and be explicit about
+/// whether singletons are included).
 /// ```
 ///
 /// # Research Context (arXiv:2401.00238)
