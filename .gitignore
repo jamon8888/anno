@@ -32,6 +32,9 @@ repo-specific-analysis.md
 *.html
 !docs/**/*.html
 
+# Export outputs (the CLI `anno export` writes here by convention)
+exports/
+
 # Cache directories
 .anno_cache/
 .cache/
