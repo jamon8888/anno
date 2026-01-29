@@ -2009,6 +2009,36 @@ fn detect_relation_type<'a>(
     // Note: For CJK languages, case doesn't apply, but this is safe
     let between_lower = between_text.to_lowercase();
 
+    // Normalize relation slugs so datasets that use kebab-case / colon-separated schemas
+    // (e.g. DocRED: "part-of", "general-affiliation") can match our canonical patterns
+    // (e.g. "PART_OF", "GENERAL_AFFILIATION").
+    fn norm_rel_slug(s: &str) -> String {
+        // Uppercase + map non-alphanumerics to '_' so we can compare across naming schemes.
+        let mut out = String::with_capacity(s.len());
+        let mut prev_underscore = false;
+        for ch in s.chars() {
+            if ch.is_alphanumeric() {
+                // Keep Unicode letters/digits; uppercase ASCII for stable matching.
+                if ch.is_ascii_alphabetic() {
+                    out.push(ch.to_ascii_uppercase());
+                } else {
+                    out.push(ch);
+                }
+                prev_underscore = false;
+            } else if !prev_underscore {
+                out.push('_');
+                prev_underscore = true;
+            }
+        }
+        while out.starts_with('_') {
+            out.remove(0);
+        }
+        while out.ends_with('_') {
+            out.pop();
+        }
+        out
+    }
+
     // Common patterns: (relation_slug, triggers, confidence)
     struct RelPattern {
         slug: &'static str,
@@ -2208,6 +2238,198 @@ fn detect_relation_type<'a>(
             slug: "USES",
             triggers: &["uses", "utilizes", "employs", "adopts", "implements"],
             confidence: 0.6,
+        },
+        // Dataset-style relation labels (DocRED/CHisIEC-like)
+        //
+        // These are the *coarse* label names we actually see in the CrossRE/DocRED-style
+        // exports used by this repo (e.g. `docred_dev.json`), which differ from the
+        // “canonical” IE labels above.
+        RelPattern {
+            slug: "NAMED",
+            triggers: &[
+                "called",
+                "known as",
+                "also known as",
+                "named",
+                "referred to as",
+                "nickname",
+            ],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "TYPE_OF",
+            triggers: &[
+                "type of",
+                "kind of",
+                "form of",
+                "a type of",
+                "is a",
+                "are a",
+            ],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "RELATED_TO",
+            triggers: &["related to", "associated with", "connected to", "linked to"],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "ORIGIN",
+            triggers: &[
+                "from",
+                "born",
+                "originated",
+                "created by",
+                "invented by",
+                "derived from",
+                "spinoff",
+                "spin-off",
+            ],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "ROLE",
+            triggers: &[
+                "president",
+                "ceo",
+                "chair",
+                "director",
+                "editor",
+                "producer",
+                "actor",
+                "professor",
+                "fellow",
+                "member",
+            ],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "TEMPORAL",
+            triggers: &[
+                "in 19", "in 20", "during", "before", "after", "between", "until", "since",
+            ],
+            confidence: 0.5,
+        },
+        RelPattern {
+            slug: "PHYSICAL",
+            triggers: &["located in", "based in", "headquartered in", "at "],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "TOPIC",
+            triggers: &["topic", "about", "on", "regarding", "focused on"],
+            confidence: 0.5,
+        },
+        RelPattern {
+            slug: "OPPOSITE",
+            triggers: &["opposite", "contrasts with", "as opposed to"],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "WIN_DEFEAT",
+            triggers: &["defeated", "beat", "won", "win", "lose", "lost to"],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "CAUSE_EFFECT",
+            triggers: &["caused", "causes", "leads to", "results in", "because"],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "USAGE",
+            triggers: &["use", "uses", "used", "using", "utilize", "employ", "adopt"],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "ARTIFACT",
+            triggers: &[
+                "tool",
+                "library",
+                "framework",
+                "system",
+                "artifact",
+                "implementation",
+            ],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "COMPARE",
+            triggers: &[
+                "compare",
+                "compared to",
+                "versus",
+                "vs",
+                "better than",
+                "worse than",
+            ],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "GENERAL_AFFILIATION",
+            triggers: &[
+                "affiliation",
+                "affiliated with",
+                "member of",
+                "part of",
+                "associated with",
+            ],
+            confidence: 0.55,
+        },
+        // CHisIEC (classical Chinese) relations (match either simplified or traditional labels)
+        RelPattern {
+            slug: "父母",
+            triggers: &["父", "母", "父母"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "兄弟",
+            triggers: &["兄", "弟", "兄弟"],
+            confidence: 0.7,
+        },
+        RelPattern {
+            slug: "別名",
+            triggers: &["別名", "别名"],
+            confidence: 0.75,
+        },
+        RelPattern {
+            slug: "到達",
+            triggers: &["到", "至", "達", "到達", "到达"],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "出生於某地",
+            triggers: &["生於", "生于", "出生於", "出生于"],
+            confidence: 0.65,
+        },
+        RelPattern {
+            slug: "任職",
+            triggers: &["任", "拜", "任職", "任职"],
+            confidence: 0.6,
+        },
+        RelPattern {
+            slug: "管理",
+            triggers: &["管", "治", "守", "管理"],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "駐守",
+            triggers: &["駐", "驻", "守", "駐守", "驻守"],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "敵對攻伐",
+            triggers: &["敵", "敌", "攻", "伐", "戰", "战"],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "同僚",
+            triggers: &["同僚"],
+            confidence: 0.55,
+        },
+        RelPattern {
+            slug: "政治奧援",
+            triggers: &["奧援", "奥援"],
+            confidence: 0.55,
         },
         // Communication/Interaction
         RelPattern {
@@ -2478,10 +2700,12 @@ fn detect_relation_type<'a>(
     for pattern in patterns {
         // Find the canonical label in the registry (case-insensitive).
         // We return the label's *original* slug so callers preserve user-provided casing.
-        let label = match relation_labels
-            .iter()
-            .find(|l| l.slug.eq_ignore_ascii_case(pattern.slug))
-        {
+        let label = match relation_labels.iter().find(|l| {
+            // Match both:
+            // - exact canonical names (e.g. "PART_OF")
+            // - normalized dataset slugs (e.g. "part-of" -> "PART_OF")
+            norm_rel_slug(&l.slug) == pattern.slug || l.slug.eq_ignore_ascii_case(pattern.slug)
+        }) {
             Some(l) => *l,
             None => continue,
         };
@@ -2492,53 +2716,97 @@ fn detect_relation_type<'a>(
                 let valid = match pattern.slug {
                     // Person-Organization relations
                     "CEO_OF" | "WORKS_FOR" | "FOUNDED" | "MANAGES" | "REPORTS_TO" => {
-                        matches!(head.entity_type, EntityType::Person)
-                            && matches!(tail.entity_type, EntityType::Organization)
+                        // If either side is unknown/misc, don't reject on type alone (relation datasets
+                        // often use a richer schema than `EntityType`).
+                        matches!(
+                            head.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || matches!(
+                            tail.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || (matches!(head.entity_type, EntityType::Person)
+                            && matches!(tail.entity_type, EntityType::Organization))
                     }
                     // Location relations (any entity can be located in/born in a location)
                     "LOCATED_IN" | "BORN_IN" | "LIVES_IN" | "DIED_IN" => {
-                        matches!(tail.entity_type, EntityType::Location)
+                        matches!(
+                            tail.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || matches!(tail.entity_type, EntityType::Location)
                     }
                     // Temporal relations (any entity can have temporal attributes)
                     "OCCURRED_ON" | "STARTED_ON" | "ENDED_ON" => {
-                        matches!(tail.entity_type, EntityType::Date | EntityType::Time)
+                        matches!(
+                            tail.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || matches!(tail.entity_type, EntityType::Date | EntityType::Time)
                     }
                     // Organizational relations
                     "PART_OF" | "ACQUIRED" | "MERGED_WITH" | "PARENT_OF" => {
-                        matches!(head.entity_type, EntityType::Organization)
-                            && matches!(tail.entity_type, EntityType::Organization)
+                        matches!(
+                            head.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || matches!(
+                            tail.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || (matches!(head.entity_type, EntityType::Organization)
+                            && matches!(tail.entity_type, EntityType::Organization))
                     }
                     // Social relations
                     "MARRIED_TO" | "CHILD_OF" | "SIBLING_OF" => {
-                        matches!(head.entity_type, EntityType::Person)
-                            && matches!(tail.entity_type, EntityType::Person)
+                        matches!(
+                            head.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || matches!(
+                            tail.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || (matches!(head.entity_type, EntityType::Person)
+                            && matches!(tail.entity_type, EntityType::Person))
                     }
                     // Academic relations
                     "STUDIED_AT" | "TEACHES_AT" => {
-                        matches!(head.entity_type, EntityType::Person)
+                        matches!(
+                            head.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || matches!(
+                            tail.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || (matches!(head.entity_type, EntityType::Person)
                             && matches!(
                                 tail.entity_type,
                                 EntityType::Organization | EntityType::Location
-                            )
+                            ))
                     }
                     // Product relations
                     "DEVELOPS" | "USES" => {
                         matches!(
+                            head.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || matches!(
                             head.entity_type,
                             EntityType::Organization | EntityType::Person
                         )
                     }
                     // Interaction relations
                     "MET_WITH" | "SPOKE_WITH" => {
-                        matches!(head.entity_type, EntityType::Person)
+                        matches!(
+                            head.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || matches!(
+                            tail.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || (matches!(head.entity_type, EntityType::Person)
                             && matches!(
                                 tail.entity_type,
                                 EntityType::Person | EntityType::Organization
-                            )
+                            ))
                     }
                     // Ownership
                     "OWNS" => {
                         matches!(
+                            head.entity_type,
+                            EntityType::Other(_) | EntityType::Custom { .. }
+                        ) || matches!(
                             head.entity_type,
                             EntityType::Person | EntityType::Organization
                         )

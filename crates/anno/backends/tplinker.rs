@@ -97,12 +97,16 @@ impl TPLinker {
         relation_types: &[&str],
         threshold: f32,
     ) -> Result<ExtractionWithRelations> {
-        let threshold = if threshold > 0.0 {
+        // Interpret the call-site `threshold` as the *relation* threshold.
+        // Entity extraction should remain governed by `self.entity_threshold`, otherwise
+        // relation-eval runs with `threshold=0.5` can accidentally wipe out almost all
+        // heuristic entities and produce zero relations.
+        let rel_threshold = if threshold > 0.0 {
             threshold
         } else {
-            // Preserve historical defaults if callers pass 0.0.
-            self.entity_threshold.max(self.relation_threshold)
+            self.relation_threshold
         };
+        let ent_threshold = self.entity_threshold;
 
         // Placeholder: Use HeuristicNER for entity extraction
         // This properly handles multi-word entity names
@@ -110,18 +114,42 @@ impl TPLinker {
         let mut entities = heuristic.extract_entities(text, None)?;
 
         // Respect the requested entity schema when possible.
-        // Note: HeuristicNER only produces a small fixed set of entity types; filtering is still
-        // useful to avoid surprising outputs when callers request a narrower schema.
+        // Note: Some relation datasets provide rich, dataset-specific entity type labels
+        // (e.g. "programlang", "academicjournal"). Those are not representable in our
+        // `EntityType` enum, so filtering via `EntityType::from_label` would collapse them
+        // (typically to `Misc`) and accidentally drop all HeuristicNER entities.
+        //
+        // We only apply filtering when the requested schema looks like it targets the
+        // canonical types we can actually emit.
         if !entity_types.is_empty() {
-            let allowed: HashSet<EntityType> = entity_types
-                .iter()
-                .map(|s| EntityType::from_label(s))
-                .collect();
-            entities.retain(|e| allowed.contains(&e.entity_type));
+            let requested: Vec<String> = entity_types.iter().map(|s| s.to_lowercase()).collect();
+            let looks_supported = requested.iter().all(|t| {
+                matches!(
+                    t.as_str(),
+                    "person"
+                        | "per"
+                        | "organization"
+                        | "organisation"
+                        | "org"
+                        | "location"
+                        | "loc"
+                        | "date"
+                        | "time"
+                        | "money"
+                        | "misc"
+                )
+            });
+            if looks_supported {
+                let allowed: HashSet<EntityType> = entity_types
+                    .iter()
+                    .map(|s| EntityType::from_label(s))
+                    .collect();
+                entities.retain(|e| allowed.contains(&e.entity_type));
+            }
         }
 
-        // Apply threshold to entity confidences.
-        entities.retain(|e| e.confidence >= f64::from(threshold));
+        // Apply the *entity* threshold to entity confidences.
+        entities.retain(|e| e.confidence >= f64::from(ent_threshold));
 
         // Add provenance to indicate heuristic baseline (not a neural TPLinker).
         for entity in &mut entities {
@@ -151,7 +179,7 @@ impl TPLinker {
         };
 
         let rel_config = RelationExtractionConfig {
-            threshold,
+            threshold: rel_threshold,
             max_span_distance: 120,
             extract_triggers: false,
         };

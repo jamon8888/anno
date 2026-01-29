@@ -272,12 +272,10 @@ impl BackendFactory {
             // Poly-Encoder GLiNER (requires onnx)
             #[cfg(feature = "onnx")]
             "gliner_poly" | "gliner-poly" | "poly_gliner" => {
-                use crate::backends::gliner_poly::GLiNERPoly;
-                // Use default GLiNER model for now (poly-encoder models pending)
-                Ok(
-                    Box::new(GLiNERPoly::new("onnx-community/gliner_small-v2.1")?)
-                        as Box<dyn Model>,
-                )
+                Err(crate::Error::FeatureNotAvailable(
+                    "GLiNERPoly is currently disabled: poly-encoder fusion ONNX export is not supported in this repo yet. Use gliner_onnx or gliner2 instead."
+                        .to_string(),
+                ))
             }
             #[cfg(not(feature = "onnx"))]
             "gliner_poly" | "gliner-poly" | "poly_gliner" => Err(crate::Error::FeatureNotAvailable(
@@ -288,9 +286,13 @@ impl BackendFactory {
             #[cfg(feature = "onnx")]
             "deberta_v3" | "deberta-v3" | "deberta" => {
                 use crate::backends::deberta_v3::DeBERTaV3NER;
-                // Allow override via environment variable for custom/exported models
-                let model_path = std::env::var("DEBERTA_MODEL_PATH")
-                    .unwrap_or_else(|_| "microsoft/deberta-v3-base".to_string());
+                // Require an explicit local/exported ONNX model path.
+                let Ok(model_path) = std::env::var("DEBERTA_MODEL_PATH") else {
+                    return Err(crate::Error::FeatureNotAvailable(
+                        "DeBERTa-v3 backend requires a local ONNX export. Set DEBERTA_MODEL_PATH (e.g. after running `uv run scripts/export_deberta_ner_to_onnx.py`)."
+                            .to_string(),
+                    ));
+                };
                 DeBERTaV3NER::new(&model_path)
                     .map(|m| Box::new(m) as Box<dyn Model>)
                     .map_err(|e| {
@@ -313,9 +315,13 @@ impl BackendFactory {
             #[cfg(feature = "onnx")]
             "albert" | "albert_ner" => {
                 use crate::backends::albert::ALBERTNER;
-                // Allow override via environment variable for custom/exported models
-                let model_path = std::env::var("ALBERT_MODEL_PATH")
-                    .unwrap_or_else(|_| "albert-base-v2".to_string());
+                // Require an explicit local/exported ONNX model path.
+                let Ok(model_path) = std::env::var("ALBERT_MODEL_PATH") else {
+                    return Err(crate::Error::FeatureNotAvailable(
+                        "ALBERT backend requires a local ONNX export. Set ALBERT_MODEL_PATH to a local model directory containing ONNX weights."
+                            .to_string(),
+                    ));
+                };
                 ALBERTNER::new(&model_path)
                     .map(|m| Box::new(m) as Box<dyn Model>)
                     .map_err(|e| {
@@ -337,7 +343,14 @@ impl BackendFactory {
             // UniversalNER (placeholder - LLM integration pending)
             "universal_ner" | "universal-ner" | "universalner" => {
                 use crate::backends::universal_ner::UniversalNER;
-                Ok(Box::new(UniversalNER::new()?) as Box<dyn Model>)
+                let m = UniversalNER::new()?;
+                if !m.is_available() {
+                    return Err(crate::Error::FeatureNotAvailable(
+                        "UniversalNER requires the `llm` feature and a non-empty API key. Set one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY, or UNIVERSAL_NER_API_KEY."
+                            .to_string(),
+                    ));
+                }
+                Ok(Box::new(m) as Box<dyn Model>)
             }
 
             // Unknown backend
@@ -345,7 +358,7 @@ impl BackendFactory {
                 "Unknown backend: '{}'. Available: pattern, heuristic, stacked, crf, hmm, ensemble, bilstm_crf, tplinker{}",
                 backend_name,
                 if cfg!(feature = "onnx") {
-                    ", bert_onnx, gliner_onnx, nuner, w2ner, gliner2, gliner_poly, deberta_v3, albert"
+                    ", bert_onnx, gliner_onnx, nuner, w2ner, gliner2"
                 } else {
                     ""
                 }
@@ -366,8 +379,17 @@ impl BackendFactory {
             "ensemble",
             "bilstm_crf",
             "tplinker",
-            "universal_ner",
         ];
+
+        // UniversalNER requires the optional `llm` feature plus a non-empty API key.
+        // If either is missing, treat it as unavailable to avoid “Feature not available”
+        // failures in the matrix harness.
+        if cfg!(feature = "llm") {
+            crate::env::load_dotenv();
+            if crate::env::has_llm_api_key() || std::env::var("UNIVERSAL_NER_API_KEY").is_ok() {
+                backends.push("universal_ner");
+            }
+        }
 
         #[cfg(feature = "onnx")]
         {
@@ -378,10 +400,15 @@ impl BackendFactory {
                 "nuner",
                 "w2ner",
                 "gliner2",
-                "gliner_poly",
-                "deberta_v3",
-                "albert",
             ]);
+
+            // Optional backends that require explicit local ONNX exports.
+            if std::env::var("DEBERTA_MODEL_PATH").is_ok() {
+                backends.push("deberta_v3");
+            }
+            if std::env::var("ALBERT_MODEL_PATH").is_ok() {
+                backends.push("albert");
+            }
         }
 
         #[cfg(feature = "candle")]

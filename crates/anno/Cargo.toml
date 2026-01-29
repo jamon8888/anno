@@ -38,6 +38,7 @@ sha2 = { workspace = true, optional = true }
 dirs = { workspace = true }
 glob = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
+muxer = { path = "../../../muxer", optional = true, features = ["serde"] }
 
 # ML
 # `ort`'s ndarray interop is feature-gated in newer releases.
@@ -74,7 +75,6 @@ tracing-subscriber = { workspace = true, optional = true }
 proptest = { workspace = true }
 tempfile = "3"
 criterion = { workspace = true }
-muxer = { path = "../../../muxer", features = ["serde"] }
 
 [features]
 default = ["onnx"]
@@ -92,7 +92,7 @@ gramdex = ["dep:gramdex"]
 schema = ["dep:schemars"]
 eval = ["dep:toml", "dep:ureq", "dep:rusqlite", "dep:sha2"]
 eval-bias = ["eval"]
-eval-advanced = ["eval", "dep:glob", "dep:sha2"]
+eval-advanced = ["eval", "dep:glob", "dep:sha2", "dep:muxer"]
 eval-parallel = ["eval", "dep:rayon"]
 eval-profiling = ["eval"]
 eval-full = ["eval-advanced", "eval-bias", "eval-parallel", "eval-profiling"]

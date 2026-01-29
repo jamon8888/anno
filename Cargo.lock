@@ -1995,6 +1995,8 @@ name = "muxer"
 version = "0.1.0"
 dependencies = [
  "pare",
+ "rand",
+ "rand_distr",
  "serde",
 ]
 
