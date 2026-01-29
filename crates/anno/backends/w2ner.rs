@@ -326,9 +326,14 @@ impl W2NER {
                         };
 
                         // Export location under the cache dir.
-                        let cache_dir = crate::eval::DatasetLoader::new()
-                            .map(|l| l.cache_dir().to_path_buf())
-                            .unwrap_or_else(|_| {
+                        //
+                        // IMPORTANT: `anno::eval` is feature-gated, so backends must not depend on
+                        // it. Mirror the cache-root logic in a lightweight way here.
+                        let cache_dir = std::env::var("ANNO_CACHE_DIR")
+                            .ok()
+                            .filter(|v| !v.trim().is_empty())
+                            .map(std::path::PathBuf::from)
+                            .unwrap_or_else(|| {
                                 dirs::cache_dir()
                                     .unwrap_or_else(|| std::path::PathBuf::from("."))
                                     .join("anno")
