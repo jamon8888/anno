@@ -31,6 +31,66 @@ pub enum ModelsAction {
     /// Compare available models side-by-side
     #[command(visible_alias = "c")]
     Compare,
+
+    /// Prefetch/download model artifacts into cache.
+    ///
+    /// This works by instantiating the model backend(s), which triggers the normal
+    /// “download if missing” paths (HF Hub / local cache) used by the rest of the CLI.
+    ///
+    /// Notes:
+    /// - If `ANNO_NO_DOWNLOADS=1` or `HF_HUB_OFFLINE=1` is set, downloads will likely fail.
+    /// - For some backends (e.g. `deberta-v3`, `albert`) you must provide local ONNX exports
+    ///   via env vars (`DEBERTA_MODEL_PATH`, `ALBERT_MODEL_PATH`).
+    #[command(visible_alias = "dl")]
+    Download {
+        /// One or more model backends to download (e.g., gliner, gliner2, bert-onnx).
+        #[arg(value_name = "MODEL", required = true)]
+        models: Vec<String>,
+
+        /// Also prefetch the GLiNER2 relation-extraction multitask model (when `gliner2` is included).
+        #[arg(long, default_value_t = false)]
+        include_relation: bool,
+    },
+}
+
+fn parse_model_backend(s: &str) -> Option<super::super::parser::ModelBackend> {
+    use super::super::parser::ModelBackend;
+    match s.to_lowercase().as_str() {
+        "pattern" | "regex" => Some(ModelBackend::Pattern),
+        "heuristic" | "statistical" => Some(ModelBackend::Heuristic),
+        "minimal" => Some(ModelBackend::Minimal),
+        "auto" => Some(ModelBackend::Auto),
+        "stacked" => Some(ModelBackend::Stacked),
+        "crf" => Some(ModelBackend::Crf),
+        "hmm" => Some(ModelBackend::Hmm),
+        "ensemble" => Some(ModelBackend::Ensemble),
+        "bilstm-crf" | "bilstm_crf" => Some(ModelBackend::BiLstmCrf),
+        "tplinker" | "tplink" => Some(ModelBackend::Tplinker),
+        "universal-ner" | "universal_ner" | "universalner" => Some(ModelBackend::UniversalNer),
+        #[cfg(feature = "onnx")]
+        "gliner" | "gliner_onnx" => Some(ModelBackend::Gliner),
+        #[cfg(feature = "onnx")]
+        "gliner2" => Some(ModelBackend::Gliner2),
+        #[cfg(feature = "onnx")]
+        "nuner" => Some(ModelBackend::Nuner),
+        #[cfg(feature = "onnx")]
+        "w2ner" => Some(ModelBackend::W2ner),
+        #[cfg(feature = "onnx")]
+        "bert-onnx" | "bert_onnx" | "bert" => Some(ModelBackend::BertOnnx),
+        #[cfg(feature = "onnx")]
+        "deberta-v3" | "deberta_v3" | "deberta" => Some(ModelBackend::DebertaV3),
+        #[cfg(feature = "onnx")]
+        "albert" | "albert_ner" => Some(ModelBackend::Albert),
+        #[cfg(feature = "onnx")]
+        "gliner-poly" | "gliner_poly" => Some(ModelBackend::GlinerPoly),
+        #[cfg(feature = "candle")]
+        "gliner-candle" | "gliner_candle" => Some(ModelBackend::GlinerCandle),
+        #[cfg(feature = "candle")]
+        "candle-ner" | "candle_ner" => Some(ModelBackend::CandleNer),
+        #[cfg(feature = "burn")]
+        "burn" | "burn-ner" | "burn_ner" => Some(ModelBackend::Burn),
+        _ => None,
+    }
 }
 
 /// Execute the models command.
@@ -197,6 +257,73 @@ pub fn run(args: ModelsArgs) -> Result<(), String> {
                 println!("{:<20} {:<15} {:<20}", name, status, types_str);
             }
             println!();
+        }
+        ModelsAction::Download {
+            models,
+            include_relation,
+        } => {
+            use super::super::parser::ModelBackend;
+
+            if std::env::var("ANNO_NO_DOWNLOADS")
+                .ok()
+                .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                || std::env::var("HF_HUB_OFFLINE")
+                    .ok()
+                    .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            {
+                println!(
+                    "{} Downloads may fail because ANNO_NO_DOWNLOADS or HF_HUB_OFFLINE is set.",
+                    color("33", "warning:")
+                );
+            }
+
+            println!();
+            println!("{}", color("1;36", "Downloading models"));
+            println!();
+
+            let mut any_err = false;
+            for m in models {
+                let Some(backend) = parse_model_backend(&m) else {
+                    any_err = true;
+                    println!("{} Unknown model backend: {}", color("31", "error:"), m);
+                    continue;
+                };
+
+                print!("  {} {} ... ", color("36", "→"), backend.name());
+                match backend.create_model() {
+                    Ok(_model) => {
+                        println!("{}", color("32", "ok"));
+                    }
+                    Err(e) => {
+                        any_err = true;
+                        println!("{}", color("31", "failed"));
+                        println!("    {}", e);
+                    }
+                }
+
+                // Optional: prefetch relation-capable GLiNER2 weights as well.
+                #[cfg(feature = "onnx")]
+                {
+                    if include_relation && matches!(backend, ModelBackend::Gliner2) {
+                        // Match the dataset CLI’s default relation model id.
+                        let rel_id = "onnx-community/gliner-multitask-large-v0.5";
+                        print!("  {} gliner2(relation) ... ", color("36", "→"));
+                        match crate::backends::gliner2::GLiNER2Onnx::from_pretrained(rel_id) {
+                            Ok(_m) => println!("{}", color("32", "ok")),
+                            Err(e) => {
+                                any_err = true;
+                                println!("{}", color("31", "failed"));
+                                println!("    {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+
+            println!();
+            if any_err {
+                return Err("Some downloads failed. See errors above.".to_string());
+            }
         }
     }
 

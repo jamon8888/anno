@@ -2344,6 +2344,27 @@ fn get_likely_relations(head_type: &str, tail_type: &str) -> Vec<(&'static str, 
     let tail = tail_type.to_uppercase();
 
     match (head.as_str(), tail.as_str()) {
+        // CHisIEC-style entity type codes
+        ("PER", "OFI") | ("PERSON", "OFI") => vec![("任职", 0.7), ("任職", 0.7)],
+        ("OFI", "PER") => vec![("上下级", 0.6), ("上下級", 0.6)],
+        ("PER", "LOC") => vec![
+            ("到达", 0.55),
+            ("到達", 0.55),
+            ("出生于某地", 0.4),
+            ("出生於某地", 0.4),
+        ],
+        ("LOC", "PER") => vec![("到达", 0.5), ("到達", 0.5)],
+        ("PER", "PER") => vec![
+            ("上下级", 0.45),
+            ("上下級", 0.45),
+            ("同僚", 0.4),
+            ("父母", 0.3),
+            ("兄弟", 0.3),
+        ],
+        ("OFI", "LOC") | ("LOC", "OFI") => vec![("管理", 0.5)],
+        ("BOOK", "BOOK") | ("BOOK", "PER") | ("PER", "BOOK") => {
+            vec![("别名", 0.35), ("別名", 0.35)]
+        }
         // Person-Organization relations
         ("PERSON", "ORGANIZATION") | ("PER", "ORG") => vec![
             ("WORKS_FOR", 0.7),
@@ -2355,7 +2376,7 @@ fn get_likely_relations(head_type: &str, tail_type: &str) -> Vec<(&'static str, 
             vec![("EMPLOYS", 0.7), ("FOUNDED_BY", 0.5), ("LED_BY", 0.4)]
         }
         // Person-Location relations
-        ("PERSON", "LOCATION") | ("PER", "LOC") | ("PERSON", "GPE") | ("PER", "GPE") => {
+        ("PERSON", "LOCATION") | ("PERSON", "GPE") | ("PER", "GPE") => {
             vec![("LIVES_IN", 0.6), ("BORN_IN", 0.5), ("VISITED", 0.4)]
         }
         // Organization-Location relations
@@ -2392,22 +2413,129 @@ fn extract_relations_heuristic(
 ) -> Vec<crate::backends::inference::RelationTriple> {
     use crate::backends::inference::RelationTriple;
 
+    // Normalize relation slugs so dataset styles like "part-of" match canonical "PART_OF".
+    fn norm_rel_slug(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut prev_underscore = false;
+        for ch in s.chars() {
+            if ch.is_alphanumeric() {
+                // Keep Unicode letters/digits; uppercase ASCII for stable matching.
+                if ch.is_ascii_alphabetic() {
+                    out.push(ch.to_ascii_uppercase());
+                } else {
+                    out.push(ch);
+                }
+                prev_underscore = false;
+            } else if !prev_underscore {
+                out.push('_');
+                prev_underscore = true;
+            }
+        }
+        while out.starts_with('_') {
+            out.remove(0);
+        }
+        while out.ends_with('_') {
+            out.pop();
+        }
+        out
+    }
+
+    fn pick_relation_label(canonical: &str, relation_types: &[&str]) -> Option<String> {
+        if relation_types.is_empty() {
+            return None;
+        }
+        let want = norm_rel_slug(canonical);
+        relation_types
+            .iter()
+            .find(|r| norm_rel_slug(r) == want)
+            .map(|s| (*s).to_string())
+    }
+
     let mut relations = Vec::new();
     // Entity offsets in anno are character offsets. Keep all length math consistent with chars.
     let text_char_count = text.chars().count();
     let text_char_len = text_char_count.max(1) as f32;
 
-    // Relation trigger patterns
+    // Relation trigger patterns (canonicalized).
+    //
+    // IMPORTANT: Many evaluation datasets use hyphenated / lowercase labels (e.g. "part-of",
+    // "general-affiliation"). We emit the dataset’s exact label when it’s present in
+    // `relation_types`; otherwise we fall back to the canonical name.
     let trigger_patterns: Vec<(&str, &str)> = vec![
+        // CrossRE/DocRED-style coarse labels
+        ("part of", "PART_OF"),
+        ("subset of", "PART_OF"),
+        ("member of", "PART_OF"),
+        ("type of", "TYPE_OF"),
+        ("kind of", "TYPE_OF"),
+        ("is a", "TYPE_OF"),
+        ("are a", "TYPE_OF"),
+        ("related to", "RELATED_TO"),
+        ("also known as", "NAMED"),
+        ("known as", "NAMED"),
+        ("called", "NAMED"),
+        ("named", "NAMED"),
+        ("born", "TEMPORAL"),
+        ("in 19", "TEMPORAL"),
+        ("in 20", "TEMPORAL"),
+        ("during", "TEMPORAL"),
+        ("from", "ORIGIN"),
+        ("based in", "PHYSICAL"),
+        ("located in", "PHYSICAL"),
+        ("headquartered", "PHYSICAL"),
+        ("at ", "PHYSICAL"),
+        ("vs", "COMPARE"),
+        ("versus", "COMPARE"),
+        ("compared", "COMPARE"),
+        ("use", "USAGE"),
+        ("used", "USAGE"),
+        ("uses", "USAGE"),
+        ("invented", "ARTIFACT"),
+        ("created", "ARTIFACT"),
+        ("built", "ARTIFACT"),
+        ("developed", "ARTIFACT"),
+        ("won", "WIN_DEFEAT"),
+        ("defeated", "WIN_DEFEAT"),
+        ("beat", "WIN_DEFEAT"),
+        ("caused", "CAUSE_EFFECT"),
+        ("causes", "CAUSE_EFFECT"),
+        ("leads to", "CAUSE_EFFECT"),
+        ("because", "CAUSE_EFFECT"),
+        // CHisIEC (classical Chinese) relation labels + minimal triggers
+        // Note: CHisIEC text is character-tokenized (no spaces), so we match short substrings.
+        ("父", "父母"),
+        ("母", "父母"),
+        ("兄", "兄弟"),
+        ("弟", "兄弟"),
+        ("别名", "别名"),
+        ("別名", "別名"),
+        ("生于", "出生于某地"),
+        ("生於", "出生於某地"),
+        ("到", "到达"),
+        ("到", "到達"),
+        ("至", "到达"),
+        ("至", "到達"),
+        ("驻", "驻守"),
+        ("駐", "駐守"),
+        ("守", "驻守"),
+        ("守", "駐守"),
+        ("攻", "敌对攻伐"),
+        ("伐", "敌对攻伐"),
+        ("攻", "敵對攻伐"),
+        ("伐", "敵對攻伐"),
+        ("任", "任职"),
+        ("任", "任職"),
+        ("拜", "任职"),
+        ("拜", "任職"),
+        ("管", "管理"),
+        ("治", "管理"),
+        // Legacy canonical names (kept for non-CrossRE label sets)
         ("ceo", "CEO_OF"),
         ("founder", "FOUNDED"),
         ("founded", "FOUNDED"),
         ("works at", "WORKS_FOR"),
         ("works for", "WORKS_FOR"),
         ("employee", "WORKS_FOR"),
-        ("headquartered", "HEADQUARTERED_IN"),
-        ("based in", "LOCATED_IN"),
-        ("located in", "LOCATED_IN"),
         ("born in", "BORN_IN"),
         ("lives in", "LIVES_IN"),
         ("announced", "ANNOUNCED"),
@@ -2458,15 +2586,22 @@ fn extract_relations_heuristic(
 
             // Check trigger patterns
             for (trigger, rel_type) in &trigger_patterns {
-                if between_lower.contains(trigger) {
-                    // Filter by requested relation types if specified
+                let hit = if trigger.is_ascii() {
+                    between_lower.contains(trigger)
+                } else {
+                    between_text.contains(trigger)
+                };
+                if hit {
+                    // Filter by requested relation types if specified, using normalization.
+                    // This allows "part-of" to match canonical "PART_OF", etc.
                     if !relation_types.is_empty()
-                        && !relation_types
-                            .iter()
-                            .any(|r| r.eq_ignore_ascii_case(rel_type))
+                        && pick_relation_label(rel_type, relation_types).is_none()
                     {
                         continue;
                     }
+
+                    let out_label = pick_relation_label(rel_type, relation_types)
+                        .unwrap_or_else(|| rel_type.to_string());
 
                     let confidence = (proximity_score * 0.6 + 0.4)
                         * (head.confidence + tail.confidence) as f32
@@ -2475,7 +2610,7 @@ fn extract_relations_heuristic(
                         relations.push(RelationTriple {
                             head_idx: i,
                             tail_idx: j,
-                            relation_type: rel_type.to_string(),
+                            relation_type: out_label,
                             confidence,
                         });
                     }
@@ -2487,12 +2622,12 @@ fn extract_relations_heuristic(
             if !has_trigger_relation && proximity_score > 0.3 {
                 for (rel_type, base_score) in type_relations {
                     if !relation_types.is_empty()
-                        && !relation_types
-                            .iter()
-                            .any(|r| r.eq_ignore_ascii_case(rel_type))
+                        && pick_relation_label(rel_type, relation_types).is_none()
                     {
                         continue;
                     }
+                    let out_label = pick_relation_label(rel_type, relation_types)
+                        .unwrap_or_else(|| rel_type.to_string());
 
                     let confidence =
                         proximity_score * base_score * (head.confidence + tail.confidence) as f32
@@ -2501,7 +2636,7 @@ fn extract_relations_heuristic(
                         relations.push(RelationTriple {
                             head_idx: i,
                             tail_idx: j,
-                            relation_type: rel_type.to_string(),
+                            relation_type: out_label,
                             confidence,
                         });
                         break; // Only add one type-based relation per pair
