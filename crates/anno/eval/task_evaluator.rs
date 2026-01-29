@@ -817,10 +817,10 @@ impl TaskEvaluator {
                     continue;
                 }
 
-                if !sampled_cache.contains_key(&(*task, *dataset)) {
+                sampled_cache.entry((*task, *dataset)).or_insert_with(|| {
                     let (sampled, n) = Self::sample_dataset_for_task(*task, dataset_data, &config);
-                    sampled_cache.insert((*task, *dataset), (sampled, n));
-                }
+                    (sampled, n)
+                });
                 let (sampled_data, sentences_to_use) = sampled_cache
                     .get(&(*task, *dataset))
                     .expect("sampled cache populated");
