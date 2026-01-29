@@ -502,6 +502,11 @@ impl LoadableDatasetId {
     #[must_use]
     fn registry_hint_plan(id: DatasetId) -> Option<DatasetParsePlan> {
         // Hybrids / special cases first.
+        if id == DatasetId::CHisIEC {
+            // CHisIEC is multi-task and uses a custom JSON array format (not DocRED/CrossRE).
+            // It MUST not be auto-detected as DocredJson.
+            return Some(DatasetParsePlan::ChisiecJson);
+        }
         if matches!(
             id,
             DatasetId::CADEC | DatasetId::ShARe13 | DatasetId::ShARe14

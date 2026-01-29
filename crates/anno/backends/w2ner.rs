@@ -243,6 +243,7 @@ impl W2NER {
         use ort::execution_providers::CPUExecutionProvider;
         use ort::session::Session;
         use std::path::Path;
+        use std::process::Command;
 
         // Load .env if present (for HF_TOKEN)
         crate::env::load_dotenv();
@@ -271,26 +272,134 @@ impl W2NER {
             };
             let repo = api.model(model_path.to_string());
 
-            let model_file = repo
+            let (model_file, tokenizer_file) = match repo
                 .get("model.onnx")
                 .or_else(|_| repo.get("onnx/model.onnx"))
-                .map_err(|e| {
-                    let error_msg = format!("{}", e);
+            {
+                Ok(p) => {
+                    let tok = repo.get("tokenizer.json").map_err(|e| {
+                        Error::Retrieval(format!("Failed to download tokenizer: {}", e))
+                    })?;
+                    (p, tok)
+                }
+                Err(e) => {
+                    let error_msg = format!("{e}");
                     // Check if it's an authentication error (401) or gated model
                     if error_msg.contains("401") || error_msg.contains("Unauthorized") {
-                        Error::Retrieval(format!(
+                        return Err(Error::Retrieval(format!(
                             "W2NER model '{}' requires HuggingFace authentication.\n\
                              \n\
                              To fix this:\n\
                              1. Get a HuggingFace token from https://huggingface.co/settings/tokens\n\
                              2. Request access to the model on HuggingFace (if it's gated)\n\
-                             3. Set the token: export HF_TOKEN=your_token_here\n\
+                             3. Set the token: export HF_TOKEN=your_token_here (or HF_API_TOKEN)\n\
                              \n\
-                             Alternative: Use a different nested/discontinuous NER backend or skip W2NER in evaluation.",
+                             Alternative: set W2NER_MODEL_PATH to a local export (see scripts/export_w2ner_to_onnx.py).",
                             model_path
-                        ))
-                    } else if error_msg.contains("404") || error_msg.contains("Not Found") {
-                        Error::Retrieval(format!(
+                        )));
+                    }
+
+                    // 404 / missing ONNX is common: HF repos typically don't ship `model.onnx`.
+                    // We can auto-export a local ONNX model (bounded by env + CI) and proceed.
+                    let in_ci =
+                        std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok();
+                    let auto_export = match std::env::var("ANNO_W2NER_AUTO_EXPORT").ok() {
+                        None => !in_ci,
+                        Some(v) => {
+                            let t = v.trim().to_lowercase();
+                            t == "1" || t == "true" || t == "yes" || t == "y" || t == "on"
+                        }
+                    };
+
+                    if auto_export {
+                        let Some(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR").ok() else {
+                            return Err(Error::Retrieval(format!(
+                                "W2NER model '{}' is missing ONNX files, and auto-export is enabled, but CARGO_MANIFEST_DIR is not set.\n\
+                                 \n\
+                                 Fix:\n\
+                                 - Run from the repo via cargo (so CARGO_MANIFEST_DIR is present), or\n\
+                                 - Export manually and set W2NER_MODEL_PATH to the export directory.\n\
+                                 \n\
+                                 Original error: {e}",
+                                model_path
+                            )));
+                        };
+
+                        // Export location under the cache dir.
+                        let cache_dir = crate::eval::DatasetLoader::new()
+                            .map(|l| l.cache_dir().to_path_buf())
+                            .unwrap_or_else(|_| {
+                                dirs::cache_dir()
+                                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+                                    .join("anno")
+                            });
+                        // Export model choice: default to a public BERT id so auto-export works
+                        // even when the configured W2NER HF repo is gated.
+                        let export_bert_model = std::env::var("W2NER_EXPORT_BERT_MODEL")
+                            .ok()
+                            .filter(|v| !v.trim().is_empty())
+                            .unwrap_or_else(|| "bert-base-cased".to_string());
+                        let safe_id = export_bert_model
+                            .chars()
+                            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                            .collect::<String>();
+                        let out_dir = cache_dir.join("models").join("w2ner").join(safe_id);
+                        std::fs::create_dir_all(&out_dir).map_err(|ioe| {
+                            Error::Retrieval(format!(
+                                "Failed to create W2NER export dir {:?}: {}",
+                                out_dir, ioe
+                            ))
+                        })?;
+
+                        let script_path = std::path::PathBuf::from(manifest_dir)
+                            .join("../../scripts/export_w2ner_to_onnx.py");
+                        let out_onnx = out_dir.join("model.onnx");
+
+                        // Run export via `uv`, which is expected in dev environments.
+                        let mut cmd = Command::new("uv");
+                        cmd.arg("run")
+                            .arg(script_path)
+                            .arg("--bert-model")
+                            .arg(&export_bert_model)
+                            .arg("--output")
+                            .arg(&out_onnx);
+
+                        let output = cmd.output().map_err(|ioe| {
+                            Error::Retrieval(format!(
+                                "Failed to spawn W2NER auto-export (uv): {}",
+                                ioe
+                            ))
+                        })?;
+                        if !output.status.success() {
+                            let stderr = String::from_utf8_lossy(&output.stderr);
+                            let stdout = String::from_utf8_lossy(&output.stdout);
+                            return Err(Error::Retrieval(format!(
+                                "W2NER auto-export failed (exit={}).\n\
+                                 \n\
+                                 stdout:\n{}\n\
+                                 \n\
+                                 stderr:\n{}\n\
+                                 \n\
+                                 Original HF error: {e}",
+                                output.status.code().unwrap_or(-1),
+                                stdout,
+                                stderr
+                            )));
+                        }
+
+                        // Tokenizer is saved alongside the ONNX by the export script.
+                        let tok = out_dir.join("tokenizer.json");
+                        if !out_onnx.exists() || !tok.exists() {
+                            return Err(Error::Retrieval(format!(
+                                "W2NER auto-export succeeded but expected files are missing.\n\
+                                 expected: {:?} and {:?}",
+                                out_onnx, tok
+                            )));
+                        }
+
+                        (out_onnx, tok)
+                    } else {
+                        return Err(Error::Retrieval(format!(
                             "W2NER model '{}' not found or missing ONNX files.\n\
                              \n\
                              The model may be:\n\
@@ -298,18 +407,19 @@ impl W2NER {
                              - Missing pre-exported ONNX files (model.onnx or onnx/model.onnx)\n\
                              - Removed or renamed on HuggingFace\n\
                              \n\
+                             Fix options:\n\
+                             - Set ANNO_W2NER_AUTO_EXPORT=1 (dev) to auto-export to ONNX\n\
+                             - Or export manually and set W2NER_MODEL_PATH to the export directory\n\
+                             \n\
                              If you have HF_TOKEN set, ensure you've requested and received access to this model.\n\
-                             Alternative: Use nuner, gliner2, or other available NER backends.",
+                             Alternative: Use nuner, gliner2, or other available NER backends.\n\
+                             \n\
+                             Original error: {e}",
                             model_path, model_path
-                        ))
-                    } else {
-                        Error::Retrieval(format!("Failed to download W2NER model: {}", e))
+                        )));
                     }
-                })?;
-
-            let tokenizer_file = repo
-                .get("tokenizer.json")
-                .map_err(|e| Error::Retrieval(format!("Failed to download tokenizer: {}", e)))?;
+                }
+            };
 
             (model_file, tokenizer_file)
         };

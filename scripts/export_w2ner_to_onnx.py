@@ -188,7 +188,13 @@ def main():
     parser.add_argument(
         "--bert-model",
         default="bert-base-cased",
-        help="Base BERT model to use",
+        help="Base BERT model to use (HuggingFace model id)",
+    )
+    # Back-compat: earlier docs used `--hf-model`.
+    parser.add_argument(
+        "--hf-model",
+        dest="bert_model",
+        help="Alias for --bert-model (deprecated)",
     )
     parser.add_argument(
         "--num-labels",

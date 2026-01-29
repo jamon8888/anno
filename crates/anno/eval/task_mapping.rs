@@ -419,7 +419,8 @@ pub fn backend_tasks(backend_name: &str) -> &'static [Task] {
         "w2ner" | "W2NER" => &[Task::NER, Task::DiscontinuousNER],
 
         // Joint entity-relation backends
-        "tplinker" | "TPLinker" => &[Task::NER, Task::RelationExtraction],
+        // TPLinker is a relation extraction model. It is not a general NER backend.
+        "tplinker" | "TPLinker" => &[Task::RelationExtraction],
 
         // Coreference backends (implement CoreferenceResolver trait)
         //

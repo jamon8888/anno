@@ -21,6 +21,7 @@
 //! | Variable | Purpose |
 //! |----------|---------|
 //! | `HF_TOKEN` | HuggingFace API token for gated models |
+//! | `HF_API_TOKEN` | Alias for `HF_TOKEN` (HuggingFace API token) |
 //! | `OPENAI_API_KEY` | OpenAI API key for LLM backends |
 //! | `ANTHROPIC_API_KEY` | Anthropic API key for Claude LLM backends |
 //! | `OPENROUTER_API_KEY` | OpenRouter API key for LLM backends |
@@ -28,6 +29,45 @@
 //! | `ANNO_CACHE_DIR` | Custom cache directory for models/datasets |
 //! | `ANNO_CI_SEED` | Fixed seed for reproducible CI testing |
 //! | `ANNO_SAMPLE_STRATEGY` | Backend sampling strategy (random, ml-only, worst-first) |
+//! | `ANNO_MATRIX_PERSPECTIVE` | CI matrix slice (ner, coref, coalesce, relation) |
+//! | `ANNO_ML_IN_MATRIX` | Include ML-ish backends in CI matrix (1/true to enable) |
+//! | `ANNO_HISTORY_FILE` | Override muxer history JSON path for matrix harness |
+//! | `ANNO_MUXER_WINDOW_CAP` | Muxer history window size (per arm) |
+//! | `ANNO_MUXER_PER_DATASET` | Use dataset-scoped muxer history + selection (1/true recommended) |
+//! | `ANNO_MUXER_DATASETS_PER_RUN` | Matrix harness: datasets per run (default 2) |
+//! | `ANNO_MUXER_EXPLORATION_C` | Muxer UCB exploration coefficient |
+//! | `ANNO_MUXER_JUNK_WEIGHT` | Muxer soft-junk penalty weight |
+//! | `ANNO_MUXER_HARD_JUNK_WEIGHT` | Muxer hard-junk penalty weight |
+//! | `ANNO_MUXER_COST_WEIGHT` | Muxer mean-cost penalty weight |
+//! | `ANNO_MUXER_LATENCY_WEIGHT` | Muxer mean-latency penalty weight |
+//! | `ANNO_MUXER_MAX_MEAN_ELAPSED_MS` | Optional constraint for ml-only selection: exclude arms above this mean latency (ms) |
+//! | `ANNO_MUXER_LATENCY_GUARDRAIL_ALLOW_FEWER` | If true (default), ml-only may return fewer than K arms instead of falling back to slow ones |
+//! | `ANNO_MUXER_LATENCY_GUARDRAIL_REQUIRE_MEASUREMENT` | If true, untried arms (calls=0) are excluded under the latency guardrail |
+//! | `ANNO_MUXER_PROFILE` | Presets for latency guardrail (`off`, `fast`, `fast-strict`, `regress`) |
+//! | `ANNO_MUXER_JUNK_F1_NER` | Junk cutoff for NER F1 (0..1) (default 0.05) |
+//! | `ANNO_MUXER_JUNK_F1_COREF` | Junk cutoff for coref CoNLL F1 (0..1) |
+//! | `ANNO_MUXER_JUNK_F1_RELATION` | Junk cutoff for relation strict F1 (0..1) |
+//! | `ANNO_MUXER_VERBOSE` | Print chosen slice + per-result outcomes in matrix harness |
+//! | `ANNO_MUXER_HISTORY_SALT` | Optional suffix to isolate muxer history files (useful when semantics change) |
+//! | `ANNO_MUXER_DECISIONS_FILE` | Optional path to write selection decisions as JSONL |
+//! | `ANNO_MUXER_DECISIONS_TOP` | Max candidate rows included per decision (JSONL; default 8) |
+//! | `ANNO_WORST_EXPLORATION_C` | Worst-first exploration coefficient (default 0.8) |
+//! | `ANNO_WORST_HARD_WEIGHT` | Worst-first weight for hard failures (default 1.0) |
+//! | `ANNO_WORST_SOFT_WEIGHT` | Worst-first weight for soft junk (default 0.0) |
+//! | `ANNO_RELATION_TPLINKER_ORACLE_ENTITIES` | If true (default), TPLinker relation eval uses gold entity spans as candidates (keeps placeholder baseline non-degenerate) |
+//!
+//! # Muxer presets (recommended)
+//!
+//! Prefer `ANNO_MUXER_PROFILE` over individual latency-guardrail env vars:
+//!
+//! - `ANNO_MUXER_PROFILE=fast`: cap mean latency around 2s in ml-only selection
+//! - `ANNO_MUXER_PROFILE=fast-strict`: like `fast`, but excludes untried arms under the cap
+//! - `ANNO_MUXER_PROFILE=regress`: disable latency guardrail (useful for worst-first regression hunting)
+//!
+//! You can still override the preset explicitly with:
+//! - `ANNO_MUXER_MAX_MEAN_ELAPSED_MS`
+//! - `ANNO_MUXER_LATENCY_GUARDRAIL_ALLOW_FEWER`
+//! - `ANNO_MUXER_LATENCY_GUARDRAIL_REQUIRE_MEASUREMENT`
 
 use once_cell::sync::OnceCell;
 use std::path::Path;
@@ -81,6 +121,20 @@ fn load_dotenv_impl() {
             parse_dotenv(&contents);
         }
     }
+
+    // Token alias normalization (non-overriding):
+    //
+    // Some tools (transformers/huggingface_hub) look for `HF_TOKEN` or
+    // `HUGGINGFACE_HUB_TOKEN`. If the user provided `HF_API_TOKEN` in `.env`,
+    // mirror it into those conventional vars (but never override).
+    if std::env::var("HF_TOKEN").is_err() {
+        if let Ok(v) = std::env::var("HF_API_TOKEN") {
+            std::env::set_var("HF_TOKEN", v.clone());
+            if std::env::var("HUGGINGFACE_HUB_TOKEN").is_err() {
+                std::env::set_var("HUGGINGFACE_HUB_TOKEN", v);
+            }
+        }
+    }
 }
 
 fn parse_dotenv(contents: &str) {
@@ -120,13 +174,16 @@ fn parse_dotenv(contents: &str) {
 /// Check if HuggingFace token is available.
 #[must_use]
 pub fn has_hf_token() -> bool {
-    std::env::var("HF_TOKEN").is_ok()
+    // Support common aliases so `.env` can use a more explicit name.
+    std::env::var("HF_TOKEN").is_ok() || std::env::var("HF_API_TOKEN").is_ok()
 }
 
 /// Get HuggingFace token if available.
 #[must_use]
 pub fn hf_token() -> Option<String> {
-    std::env::var("HF_TOKEN").ok()
+    std::env::var("HF_TOKEN")
+        .ok()
+        .or_else(|| std::env::var("HF_API_TOKEN").ok())
 }
 
 /// Check if any LLM API key is available.
