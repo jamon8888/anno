@@ -9,7 +9,5 @@
 textprep = { path = "../textprep" }
 logp = { path = "../logp" }
 pare = { path = "../pare" }
-
-[patch."https://github.com/arclabs561/muxer.git"]
 muxer = { path = "../muxer" }
 
