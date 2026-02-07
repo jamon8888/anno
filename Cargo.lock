@@ -2024,8 +2024,9 @@ dependencies = [
 
 [[package]]
 name = "muxer"
-version = "0.1.1"
-source = "git+https://github.com/arclabs561/muxer.git?rev=97af4dd#97af4dd9cebcd0cafa5c894383da1a0974af2c2d"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b98d5653f03c991f4d7a301330d47b9ba41dbaab9c06c2d7b54306a920fad146"
 dependencies = [
  "logp",
  "pare",
@@ -2279,9 +2280,9 @@ dependencies = [
 
 [[package]]
 name = "pare"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bb46f53fc725819cde594b6d42bfaf4f57623d58a62f783dbb20710b6fb571a"
+checksum = "b9ff39cf8d6a0407dbb656f59a4a8356c22ab009f638499ad8b00d2732137b09"
 dependencies = [
  "thiserror 2.0.18",
 ]
