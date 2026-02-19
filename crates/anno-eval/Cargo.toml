@@ -1,6 +1,6 @@
 [package]
 name = "anno-eval"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/arclabs561/anno"
@@ -20,9 +20,9 @@ name = "muxer_audit"
 path = "src/bin/muxer_audit.rs"
 
 [dependencies]
-anno = { path = "../anno", package = "anno-lib", version = "0.2.0", default-features = false, features = ["analysis"] }
-anno-core = { path = "../anno-core", version = "0.2.0" }
-anno-metrics = { path = "../anno-metrics", version = "0.2.0" }
+anno = { path = "../anno", package = "anno-lib", version = "0.3.0", default-features = false, features = ["analysis"] }
+anno-core = { path = "../anno-core", version = "0.3.0" }
+anno-metrics = { path = "../anno-metrics", version = "0.3.0" }
 
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
