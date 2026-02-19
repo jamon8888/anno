@@ -1622,9 +1622,8 @@ fn select_backends(
             // Sort by observation count ascending (least-observed first).
             // Tie-break: deterministic hash for stability.
             scored.sort_by(|a, b| {
-                a.0.cmp(&b.0).then_with(|| {
-                    mh::stable_hash64(seed, &a.1).cmp(&mh::stable_hash64(seed, &b.1))
-                })
+                a.0.cmp(&b.0)
+                    .then_with(|| mh::stable_hash64(seed, &a.1).cmp(&mh::stable_hash64(seed, &b.1)))
             });
 
             let chosen: Vec<String> = scored.into_iter().take(k).map(|(_, b)| b).collect();
@@ -1633,7 +1632,11 @@ fn select_backends(
                 eprintln!(
                     "matrix-muxer: estimate chosen={:?} (least-observed on {:?})",
                     chosen,
-                    datasets.unwrap_or(&[]).iter().map(|d| format!("{d:?}")).collect::<Vec<_>>()
+                    datasets
+                        .unwrap_or(&[])
+                        .iter()
+                        .map(|d| format!("{d:?}"))
+                        .collect::<Vec<_>>()
                 );
             }
 
@@ -1877,7 +1880,10 @@ fn test_fast_profile_filters_known_slow_datasets() {
         ds2.contains(&DatasetId::OntoNotesSample),
         "include override should allow OntoNotesSample"
     );
-    assert!(ds2.contains(&DatasetId::BioMNER), "include override should allow BioMNER");
+    assert!(
+        ds2.contains(&DatasetId::BioMNER),
+        "include override should allow BioMNER"
+    );
 }
 
 #[cfg(test)]
@@ -2721,8 +2727,11 @@ pub fn run_randomized_matrix_sample_with_seed(seed: u64) {
                         .cmp(&mh::stable_hash64(seed ^ 0xE571, &format!("{:?}", b.1)))
                 })
             });
-            let override_ds: Vec<DatasetId> =
-                scored.into_iter().take(datasets_per_run).map(|(_, d)| d).collect();
+            let override_ds: Vec<DatasetId> = scored
+                .into_iter()
+                .take(datasets_per_run)
+                .map(|(_, d)| d)
+                .collect();
             if !override_ds.is_empty() {
                 if mh::env_bool("ANNO_MUXER_VERBOSE", false) {
                     eprintln!(
@@ -2746,7 +2755,11 @@ pub fn run_randomized_matrix_sample_with_seed(seed: u64) {
     let backends_per_run_default = if matches!(MlOnlyPolicy::from_env(), MlOnlyPolicy::LinUcb) {
         // LinUCB benefits from more arms per run: each observation updates the
         // per-arm ridge regression, accelerating convergence.
-        if require_cached { 3 } else { 4 }
+        if require_cached {
+            3
+        } else {
+            4
+        }
     } else if require_cached {
         2
     } else {
@@ -3246,7 +3259,10 @@ pub fn run_randomized_matrix_sample_with_seed(seed: u64) {
             eprintln!(
                 "matrix-muxer: linucb chosen={:?} context={:?} arms={} profile=contextual",
                 result.fill.chosen,
-                context.iter().map(|x| format!("{:.2}", x)).collect::<Vec<_>>(),
+                context
+                    .iter()
+                    .map(|x| format!("{:.2}", x))
+                    .collect::<Vec<_>>(),
                 candidates.len()
             );
             for (arm, (ucb, mean, bonus)) in &result.scores {
@@ -3794,9 +3810,9 @@ pub fn run_randomized_matrix_sample_with_seed(seed: u64) {
             // Threshold: Cohen's d >= 2.0 (very large).  At this level, false alarms
             // from sampling noise are rare (requires a ~2 standard deviation shift).
             if let Ok(alerts) = h.detect_regressions_recent(
-                5,    // compare last 5 observations
-                2.0,  // Cohen's d >= 2.0 (very large -- only flags severe regressions)
-                20,   // min 20 total observations per cell
+                5,   // compare last 5 observations
+                2.0, // Cohen's d >= 2.0 (very large -- only flags severe regressions)
+                20,  // min 20 total observations per cell
             ) {
                 for alert in &alerts {
                     eprintln!(
