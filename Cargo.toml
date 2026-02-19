@@ -17,7 +17,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -127,7 +127,7 @@ categories = ["text-processing"]
 publish = true
 
 [dependencies]
-anno-lib = { path = "crates/anno", package = "anno-lib", version = "0.2.0", default-features = false }
+anno-lib = { path = "crates/anno", package = "anno-lib", version = "0.3.0", default-features = false }
 serde_json = { workspace = true }
 
 [features]
