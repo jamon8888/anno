@@ -122,7 +122,7 @@ homepage = { workspace = true }
 documentation = { workspace = true }
 description = "Information extraction for Rust: Named Entity Recognition (NER), coreference resolution, and structured extraction"
 readme = "README.md"
-keywords = ["ner", "nlp", "information-extraction", "coreference", "rust"]
+keywords = ["ner", "nlp", "extraction", "coreference", "rust"]
 categories = ["text-processing"]
 publish = true
 

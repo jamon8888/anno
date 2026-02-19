@@ -54,7 +54,7 @@ checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
 name = "anno"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anno-lib",
  "serde_json",
@@ -62,7 +62,7 @@ dependencies = [
 
 [[package]]
 name = "anno-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anno-core",
  "anno-eval",
@@ -91,7 +91,7 @@ dependencies = [
 
 [[package]]
 name = "anno-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bitflags",
  "chrono",
@@ -114,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "anno-eval"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anno-core",
  "anno-lib",
@@ -146,7 +146,7 @@ dependencies = [
 
 [[package]]
 name = "anno-lattix"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anno-core",
  "lattix",
@@ -154,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "anno-lib"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anno-core",
  "anno-metrics",
@@ -200,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "anno-metrics"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anno-core",
  "proptest",
