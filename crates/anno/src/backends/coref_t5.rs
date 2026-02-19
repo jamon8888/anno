@@ -84,6 +84,7 @@
 // Note: This module is feature-gated via `#[cfg(feature = "onnx")]` in mod.rs
 
 use crate::{Entity, Error, Result};
+use ndarray::{Array2, Array3};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -143,19 +144,15 @@ impl Default for T5CorefConfig {
 /// Currently uses a simplified rule-based fallback. Full seq2seq inference
 /// is planned for a future release when encoder-decoder ONNX support matures.
 pub struct T5Coref {
-    /// Encoder session (used in future seq2seq implementation).
-    #[allow(dead_code)]
+    /// Encoder ONNX session.
     encoder: crate::sync::Mutex<Session>,
-    /// Decoder session (used in future seq2seq implementation).
-    #[allow(dead_code)]
+    /// Decoder ONNX session.
     decoder: crate::sync::Mutex<Session>,
-    /// Tokenizer (used in future seq2seq implementation).
-    #[allow(dead_code)]
+    /// HuggingFace tokenizer for input encoding and output decoding.
     tokenizer: Arc<Tokenizer>,
-    /// Configuration (used in future seq2seq implementation).
-    #[allow(dead_code)]
+    /// Inference configuration.
     config: T5CorefConfig,
-    /// Model path
+    /// Model path or HuggingFace model ID.
     model_path: String,
 }
 
@@ -297,21 +294,311 @@ impl T5Coref {
 
     /// Resolve coreference in text.
     ///
-    /// # Arguments
-    ///
-    /// * `text` - Input text
-    ///
-    /// # Returns
-    ///
-    /// Vector of coreference clusters
+    /// Runs the T5 encoder-decoder loop when ONNX weights are available.
+    /// Falls back to the rule-based heuristic if inference fails or produces
+    /// no clusters (e.g. model not fine-tuned for coref, or GPU OOM).
     pub fn resolve(&self, text: &str) -> Result<Vec<CorefCluster>> {
         if text.is_empty() {
             return Ok(vec![]);
         }
+        match self.resolve_t5(text) {
+            Ok(clusters) if !clusters.is_empty() => Ok(clusters),
+            Ok(_) => {
+                log::debug!("[T5-Coref] inference produced no clusters, using heuristic fallback");
+                self.resolve_simple(text)
+            }
+            Err(e) => {
+                log::warn!(
+                    "[T5-Coref] inference failed ({}), using heuristic fallback",
+                    e
+                );
+                self.resolve_simple(text)
+            }
+        }
+    }
 
-        // For now, use a simplified rule-based fallback
-        // Full T5 inference requires proper encoder-decoder loop
-        self.resolve_simple(text)
+    // -------------------------------------------------------------------------
+    // T5 encoder-decoder inference
+    // -------------------------------------------------------------------------
+
+    /// Full T5 inference path: mark → encode → greedy-decode → parse.
+    fn resolve_t5(&self, text: &str) -> Result<Vec<CorefCluster>> {
+        let marked = self.mark_mentions(text);
+        let (input_ids, attention_mask) = self.tokenize_input(&marked)?;
+        let (enc_hidden, enc_seq_len, hidden_size) =
+            self.run_encoder(&input_ids, &attention_mask)?;
+        let output_ids =
+            self.greedy_decode(&enc_hidden, enc_seq_len, hidden_size, &attention_mask)?;
+        let decoded = self.decode_tokens(&output_ids)?;
+        Ok(self.parse_coref_output(&decoded))
+    }
+
+    /// Heuristically mark pronouns and capitalised tokens with `<m>…</m>` so the
+    /// T5 model sees explicit mention boundaries.
+    fn mark_mentions(&self, text: &str) -> String {
+        const PRONOUNS: &[&str] = &[
+            "he", "she", "they", "it", "him", "her", "them", "his", "hers", "their", "its",
+        ];
+        let mut out = String::with_capacity(text.len() + 64);
+        for (i, word) in text.split_whitespace().enumerate() {
+            if i > 0 {
+                out.push(' ');
+            }
+            let lower = word
+                .trim_matches(|c: char| !c.is_alphabetic())
+                .to_lowercase();
+            let is_pronoun = PRONOUNS.contains(&lower.as_str());
+            let is_cap = word.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+            if is_pronoun || is_cap {
+                out.push_str("<m> ");
+                out.push_str(word);
+                out.push_str(" </m>");
+            } else {
+                out.push_str(word);
+            }
+        }
+        out
+    }
+
+    /// Tokenize `text` with the HuggingFace tokenizer.
+    /// Returns `(input_ids, attention_mask)` as `i64` vecs, truncated to
+    /// `config.max_input_length`.
+    fn tokenize_input(&self, text: &str) -> Result<(Vec<i64>, Vec<i64>)> {
+        let mut enc = self
+            .tokenizer
+            .encode(text, true)
+            .map_err(|e| Error::Parse(format!("T5Coref tokenizer encode: {e}")))?;
+        // Encoding::truncate returns () — not a Result.
+        enc.truncate(self.config.max_input_length, 0, tokenizers::TruncationDirection::Right);
+        let input_ids: Vec<i64> = enc.get_ids().iter().map(|&x| x as i64).collect();
+        let attention_mask: Vec<i64> = enc
+            .get_attention_mask()
+            .iter()
+            .map(|&x| x as i64)
+            .collect();
+        Ok((input_ids, attention_mask))
+    }
+
+    /// Run the T5 encoder.  Returns `(flat_hidden_states, seq_len, hidden_size)`.
+    fn run_encoder(
+        &self,
+        input_ids: &[i64],
+        attention_mask: &[i64],
+    ) -> Result<(Vec<f32>, usize, usize)> {
+        let batch = 1usize;
+        let seq_len = input_ids.len();
+
+        let ids_arr = Array2::<i64>::from_shape_vec((batch, seq_len), input_ids.to_vec())
+            .map_err(|e| Error::Parse(format!("encoder ids shape: {e}")))?;
+        let mask_arr =
+            Array2::<i64>::from_shape_vec((batch, seq_len), attention_mask.to_vec())
+                .map_err(|e| Error::Parse(format!("encoder mask shape: {e}")))?;
+
+        let ids_t = super::ort_compat::tensor_from_ndarray(ids_arr)
+            .map_err(|e| Error::Parse(format!("encoder ids tensor: {e}")))?;
+        let mask_t = super::ort_compat::tensor_from_ndarray(mask_arr)
+            .map_err(|e| Error::Parse(format!("encoder mask tensor: {e}")))?;
+
+        // Scope the mutex guard: `outputs` borrows from the session; extract owned
+        // data before the guard drops.
+        let (hidden_flat, hidden_size) = {
+            let mut enc = crate::sync::lock(&self.encoder);
+            let outputs = enc
+                .run(ort::inputs![
+                    "input_ids" => ids_t.into_dyn(),
+                    "attention_mask" => mask_t.into_dyn(),
+                ])
+                .map_err(|e| Error::Parse(format!("T5Coref encoder run: {e}")))?;
+            let hidden_val = outputs.get("last_hidden_state").ok_or_else(|| {
+                Error::Parse(
+                    "T5 encoder output 'last_hidden_state' not found; check ONNX export".into(),
+                )
+            })?;
+            let (shape, data) = hidden_val
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Parse(format!("encoder extract tensor: {e}")))?;
+            if shape.len() != 3 || shape[0] != 1 {
+                return Err(Error::Parse(format!(
+                    "T5 encoder: unexpected hidden-state shape {:?}",
+                    shape
+                )));
+            }
+            (data.to_vec(), shape[2] as usize)
+        }; // enc guard drops here
+        Ok((hidden_flat, seq_len, hidden_size))
+    }
+
+    /// Run one greedy decoder step and return the next token ID.
+    ///
+    /// The full `decoder_input_ids` sequence is fed each time (no KV-cache),
+    /// which is O(n²) but correct and avoids managing past key-values.
+    fn decoder_step(
+        &self,
+        encoder_hidden: &[f32],
+        enc_seq_len: usize,
+        hidden_size: usize,
+        attention_mask: &[i64],
+        decoder_input_ids: &[i64],
+    ) -> Result<i64> {
+        let batch = 1usize;
+        let dec_len = decoder_input_ids.len();
+
+        let enc_h =
+            Array3::<f32>::from_shape_vec((batch, enc_seq_len, hidden_size), encoder_hidden.to_vec())
+                .map_err(|e| Error::Parse(format!("decoder enc_hidden shape: {e}")))?;
+        let attn = Array2::<i64>::from_shape_vec((batch, enc_seq_len), attention_mask.to_vec())
+            .map_err(|e| Error::Parse(format!("decoder attn shape: {e}")))?;
+        let dec_ids =
+            Array2::<i64>::from_shape_vec((batch, dec_len), decoder_input_ids.to_vec())
+                .map_err(|e| Error::Parse(format!("decoder_ids shape: {e}")))?;
+
+        let enc_h_t = super::ort_compat::tensor_from_ndarray(enc_h)
+            .map_err(|e| Error::Parse(format!("enc_h tensor: {e}")))?;
+        let attn_t = super::ort_compat::tensor_from_ndarray(attn)
+            .map_err(|e| Error::Parse(format!("attn tensor: {e}")))?;
+        let dec_ids_t = super::ort_compat::tensor_from_ndarray(dec_ids)
+            .map_err(|e| Error::Parse(format!("dec_ids tensor: {e}")))?;
+
+        // Scope the mutex guard: extract owned data before the guard drops.
+        let next_token = {
+            let mut dec = crate::sync::lock(&self.decoder);
+            let outputs = dec
+                .run(ort::inputs![
+                    "encoder_hidden_states" => enc_h_t.into_dyn(),
+                    "attention_mask"        => attn_t.into_dyn(),
+                    "decoder_input_ids"     => dec_ids_t.into_dyn(),
+                ])
+                .map_err(|e| Error::Parse(format!("T5Coref decoder run: {e}")))?;
+            let logits_val = outputs.get("logits").ok_or_else(|| {
+                Error::Parse("T5 decoder output 'logits' not found; check ONNX export".into())
+            })?;
+            let (shape, logits_data) = logits_val
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Parse(format!("decoder logits extract: {e}")))?;
+            // Expected shape: [1, dec_len, vocab_size]
+            if shape.len() != 3 || shape[0] != 1 {
+                return Err(Error::Parse(format!(
+                    "T5 decoder: unexpected logits shape {:?}",
+                    shape
+                )));
+            }
+            let vocab_size = shape[2] as usize;
+            let last_offset = (dec_len - 1) * vocab_size;
+            let last_logits = &logits_data[last_offset..last_offset + vocab_size];
+            last_logits
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(i, _)| i as i64)
+                .unwrap_or(1) // EOS as fallback
+        }; // dec guard drops here
+        Ok(next_token)
+    }
+
+    /// Greedy decode from encoder output.  Returns generated token IDs (excluding the
+    /// leading pad/decoder-start token).
+    fn greedy_decode(
+        &self,
+        encoder_hidden: &[f32],
+        enc_seq_len: usize,
+        hidden_size: usize,
+        attention_mask: &[i64],
+    ) -> Result<Vec<i64>> {
+        // T5 uses pad token (0) as the decoder start token; EOS is 1.
+        const T5_PAD: i64 = 0;
+        const T5_EOS: i64 = 1;
+        let mut generated = vec![T5_PAD];
+
+        for _ in 0..self.config.max_output_length {
+            let next = self.decoder_step(
+                encoder_hidden,
+                enc_seq_len,
+                hidden_size,
+                attention_mask,
+                &generated,
+            )?;
+            if next == T5_EOS {
+                break;
+            }
+            generated.push(next);
+        }
+
+        Ok(generated[1..].to_vec()) // drop the leading pad start token
+    }
+
+    /// Decode output token IDs to a string with the tokenizer.
+    fn decode_tokens(&self, token_ids: &[i64]) -> Result<String> {
+        let ids: Vec<u32> = token_ids.iter().map(|&x| x as u32).collect();
+        self.tokenizer
+            .decode(&ids, true)
+            .map_err(|e| Error::Parse(format!("T5Coref decode_tokens: {e}")))
+    }
+
+    /// Parse T5 cluster-ID output format (`"word | N"`) into `CorefCluster`s.
+    ///
+    /// The expected output format is:
+    /// ```text
+    /// "Elon | 1 founded Tesla | 2. He | 1 later led SpaceX."
+    /// ```
+    /// where ` | N` immediately follows a mention token and assigns it to cluster `N`.
+    ///
+    /// Singletons (clusters with only one mention) are filtered out.
+    fn parse_coref_output(&self, decoded: &str) -> Vec<CorefCluster> {
+        let mut clusters: HashMap<u32, CorefCluster> = HashMap::new();
+        let tokens: Vec<&str> = decoded.split_whitespace().collect();
+        let mut offset: usize = 0;
+        let mut i = 0;
+
+        while i < tokens.len() {
+            let tok = tokens[i];
+            // Look for the pattern: <word> "|" <digits>
+            let is_pipe = tokens.get(i + 1).map(|&t| t == "|").unwrap_or(false);
+            let cluster_id: Option<u32> = if is_pipe {
+                tokens
+                    .get(i + 2)
+                    .and_then(|t| t.trim_matches(|c: char| !c.is_ascii_digit()).parse().ok())
+            } else {
+                None
+            };
+
+            if let Some(cid) = cluster_id {
+                let mention = tok.trim_matches(|c: char| !c.is_alphanumeric()).to_string();
+                if !mention.is_empty() {
+                    let start = offset;
+                    let end = offset + mention.len();
+                    let entry = clusters.entry(cid).or_insert_with(|| CorefCluster {
+                        id: cid,
+                        mentions: Vec::new(),
+                        spans: Vec::new(),
+                        canonical: String::new(),
+                    });
+                    entry.mentions.push(mention);
+                    entry.spans.push((start, end));
+                }
+                offset += tok.len() + 1;
+                i += 3; // skip: word, "|", number
+                continue;
+            }
+
+            offset += tok.len() + 1;
+            i += 1;
+        }
+
+        let mut result: Vec<CorefCluster> = clusters
+            .into_values()
+            .filter(|c| c.mentions.len() > 1)
+            .collect();
+
+        for c in &mut result {
+            c.canonical = c
+                .mentions
+                .iter()
+                .max_by_key(|m| m.len())
+                .cloned()
+                .unwrap_or_default();
+        }
+        result.sort_by_key(|c| c.id);
+        result
     }
 
     /// Resolve coreference with pre-marked mentions.
