@@ -16,8 +16,8 @@ publish = true
 name = "anno"
 
 [dependencies]
-anno-core = { path = "../anno-core", version = "0.2.0" }
-anno-metrics = { path = "../anno-metrics", version = "0.2.0", optional = true }
+anno-core = { path = "../anno-core", version = "0.3.0" }
+anno-metrics = { path = "../anno-metrics", version = "0.3.0", optional = true }
 textprep = { workspace = true }
 sketchir = { workspace = true }
 clump = { workspace = true }
