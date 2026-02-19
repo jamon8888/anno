@@ -1,4 +1,4 @@
-use anno_lib::{Model, StackedNER};
+use anno::{Model, StackedNER};
 
 fn main() {
     let ner = StackedNER::default();
