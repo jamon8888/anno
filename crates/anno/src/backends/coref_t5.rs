@@ -348,7 +348,11 @@ impl T5Coref {
                 .trim_matches(|c: char| !c.is_alphabetic())
                 .to_lowercase();
             let is_pronoun = PRONOUNS.contains(&lower.as_str());
-            let is_cap = word.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+            let is_cap = word
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false);
             if is_pronoun || is_cap {
                 out.push_str("<m> ");
                 out.push_str(word);
@@ -369,13 +373,13 @@ impl T5Coref {
             .encode(text, true)
             .map_err(|e| Error::Parse(format!("T5Coref tokenizer encode: {e}")))?;
         // Encoding::truncate returns () — not a Result.
-        enc.truncate(self.config.max_input_length, 0, tokenizers::TruncationDirection::Right);
+        enc.truncate(
+            self.config.max_input_length,
+            0,
+            tokenizers::TruncationDirection::Right,
+        );
         let input_ids: Vec<i64> = enc.get_ids().iter().map(|&x| x as i64).collect();
-        let attention_mask: Vec<i64> = enc
-            .get_attention_mask()
-            .iter()
-            .map(|&x| x as i64)
-            .collect();
+        let attention_mask: Vec<i64> = enc.get_attention_mask().iter().map(|&x| x as i64).collect();
         Ok((input_ids, attention_mask))
     }
 
@@ -390,9 +394,8 @@ impl T5Coref {
 
         let ids_arr = Array2::<i64>::from_shape_vec((batch, seq_len), input_ids.to_vec())
             .map_err(|e| Error::Parse(format!("encoder ids shape: {e}")))?;
-        let mask_arr =
-            Array2::<i64>::from_shape_vec((batch, seq_len), attention_mask.to_vec())
-                .map_err(|e| Error::Parse(format!("encoder mask shape: {e}")))?;
+        let mask_arr = Array2::<i64>::from_shape_vec((batch, seq_len), attention_mask.to_vec())
+            .map_err(|e| Error::Parse(format!("encoder mask shape: {e}")))?;
 
         let ids_t = super::ort_compat::tensor_from_ndarray(ids_arr)
             .map_err(|e| Error::Parse(format!("encoder ids tensor: {e}")))?;
@@ -443,14 +446,15 @@ impl T5Coref {
         let batch = 1usize;
         let dec_len = decoder_input_ids.len();
 
-        let enc_h =
-            Array3::<f32>::from_shape_vec((batch, enc_seq_len, hidden_size), encoder_hidden.to_vec())
-                .map_err(|e| Error::Parse(format!("decoder enc_hidden shape: {e}")))?;
+        let enc_h = Array3::<f32>::from_shape_vec(
+            (batch, enc_seq_len, hidden_size),
+            encoder_hidden.to_vec(),
+        )
+        .map_err(|e| Error::Parse(format!("decoder enc_hidden shape: {e}")))?;
         let attn = Array2::<i64>::from_shape_vec((batch, enc_seq_len), attention_mask.to_vec())
             .map_err(|e| Error::Parse(format!("decoder attn shape: {e}")))?;
-        let dec_ids =
-            Array2::<i64>::from_shape_vec((batch, dec_len), decoder_input_ids.to_vec())
-                .map_err(|e| Error::Parse(format!("decoder_ids shape: {e}")))?;
+        let dec_ids = Array2::<i64>::from_shape_vec((batch, dec_len), decoder_input_ids.to_vec())
+            .map_err(|e| Error::Parse(format!("decoder_ids shape: {e}")))?;
 
         let enc_h_t = super::ort_compat::tensor_from_ndarray(enc_h)
             .map_err(|e| Error::Parse(format!("enc_h tensor: {e}")))?;

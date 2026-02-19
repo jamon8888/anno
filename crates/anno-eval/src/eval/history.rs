@@ -306,10 +306,7 @@ impl EvalHistory {
 
         // Schema evolution: add git_commit column if not present.
         // This enables change-point detection tied to specific code versions.
-        let _ = conn.execute(
-            "ALTER TABLE eval_results ADD COLUMN git_commit TEXT",
-            [],
-        ); // Silently ignore if column already exists.
+        let _ = conn.execute("ALTER TABLE eval_results ADD COLUMN git_commit TEXT", []); // Silently ignore if column already exists.
 
         Ok(())
     }
@@ -868,8 +865,7 @@ impl EvalHistory {
         let Some(ref db_path) = self.sqlite_path else {
             return Ok(Vec::new());
         };
-        let conn = rusqlite::Connection::open(db_path)
-            .map_err(std::io::Error::other)?;
+        let conn = rusqlite::Connection::open(db_path).map_err(std::io::Error::other)?;
 
         // For each cell, split observations by the median timestamp and compare means.
         let mut stmt = conn
@@ -949,8 +945,7 @@ impl EvalHistory {
         let Some(ref db_path) = self.sqlite_path else {
             return Ok(Vec::new());
         };
-        let conn = rusqlite::Connection::open(db_path)
-            .map_err(std::io::Error::other)?;
+        let conn = rusqlite::Connection::open(db_path).map_err(std::io::Error::other)?;
 
         // Include evaluation size (n) so we can match comparable observations.
         let mut stmt = conn
@@ -961,16 +956,26 @@ impl EvalHistory {
             )
             .map_err(std::io::Error::other)?;
 
-        let mut cells: HashMap<(String, String), Vec<(String, f64, i64)>> = HashMap::new();
+        // (backend, dataset) → [(timestamp, f1, n)]
+        type CellKey = (String, String);
+        type CellRow = (String, f64, i64);
+        let mut cells: HashMap<CellKey, Vec<CellRow>> = HashMap::new();
         let rows = stmt
             .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?, row.get::<_, f64>(3)?,
-                    row.get::<_, i64>(4)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, f64>(3)?,
+                    row.get::<_, i64>(4)?,
+                ))
             })
             .map_err(std::io::Error::other)?;
         for row in rows.flatten() {
-            cells.entry((row.0, row.1)).or_default().push((row.2, row.3, row.4));
+            cells
+                .entry((row.0, row.1))
+                .or_default()
+                .push((row.2, row.3, row.4));
         }
 
         let mut alerts = Vec::new();
@@ -992,9 +997,7 @@ impl EvalHistory {
             // (within 2x) to avoid the n-dependent variance confound.
             let old: Vec<f64> = obs[..split]
                 .iter()
-                .filter(|(_, _, n)| {
-                    *n >= median_recent_n / 2 && *n <= median_recent_n * 2
-                })
+                .filter(|(_, _, n)| *n >= median_recent_n / 2 && *n <= median_recent_n * 2)
                 .map(|(_, f, _)| *f)
                 .collect();
             let new: Vec<f64> = obs[split..].iter().map(|(_, f, _)| *f).collect();
@@ -1053,8 +1056,7 @@ impl EvalHistory {
         let Some(ref db_path) = self.sqlite_path else {
             return Ok(Vec::new());
         };
-        let conn = rusqlite::Connection::open(db_path)
-            .map_err(std::io::Error::other)?;
+        let conn = rusqlite::Connection::open(db_path).map_err(std::io::Error::other)?;
 
         // Check if the git_commit column exists.
         let has_column = conn
@@ -1077,8 +1079,12 @@ impl EvalHistory {
         let mut new_cells: HashMap<(String, String), Vec<f64>> = HashMap::new();
         let rows = stmt
             .query_map(rusqlite::params![old_commit, new_commit], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?, row.get::<_, f64>(3)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, f64>(3)?,
+                ))
             })
             .map_err(std::io::Error::other)?;
         for row in rows.flatten() {

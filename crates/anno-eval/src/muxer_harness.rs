@@ -971,14 +971,16 @@ pub const CONTEXT_DIM: usize = 8;
 /// Build a context feature vector from dataset metadata.
 ///
 /// Layout (dim=8):
-///   [0] bias (always 1.0)
-///   [1] lang_en (1.0 if language is "en")
-///   [2] lang_multilingual (1.0 if language is "mul" or "mixed")
-///   [3] domain_biomedical (1.0 if domain contains "biomedical" or "clinical")
-///   [4] domain_news (1.0 if domain contains "news")
-///   [5] domain_social (1.0 if domain contains "social")
-///   [6] domain_science (1.0 if domain contains "science" or "technical")
-///   [7] num_entity_types_normalized (|entity_types| / 20.0, clamped to [0,1])
+/// ```text
+/// [0] bias (always 1.0)
+/// [1] lang_en (1.0 if language is "en")
+/// [2] lang_multilingual (1.0 if language is "mul" or "mixed")
+/// [3] domain_biomedical (1.0 if domain contains "biomedical" or "clinical")
+/// [4] domain_news (1.0 if domain contains "news")
+/// [5] domain_social (1.0 if domain contains "social")
+/// [6] domain_science (1.0 if domain contains "science" or "technical")
+/// [7] num_entity_types_normalized (|entity_types| / 20.0, clamped to [0,1])
+/// ```
 ///
 /// The feature vector is deterministic given the dataset set and is designed
 /// so that LinUCB can learn generalizable patterns across slices (e.g.

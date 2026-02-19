@@ -1096,13 +1096,15 @@ mod tests {
     #[test]
     fn test_is_acronym_word_cyrillic() {
         assert!(is_acronym_word("\u{041D}\u{0410}\u{0422}\u{041E}")); // НАТО
-        assert!(is_acronym_word("\u{041C}\u{0418}\u{0414}"));         // МИД
-        assert!(!is_acronym_word("\u{041C}\u{043E}\u{0441}\u{043A}\u{0432}\u{0430}")); // Москва
+        assert!(is_acronym_word("\u{041C}\u{0418}\u{0414}")); // МИД
+        assert!(!is_acronym_word(
+            "\u{041C}\u{043E}\u{0441}\u{043A}\u{0432}\u{0430}"
+        )); // Москва
     }
 
     #[test]
     fn test_is_acronym_word_caseless_scripts() {
-        assert!(!is_acronym_word("\u{6771}\u{4EAC}"));   // 東京 (CJK)
+        assert!(!is_acronym_word("\u{6771}\u{4EAC}")); // 東京 (CJK)
         assert!(!is_acronym_word("\u{30BD}\u{30CB}\u{30FC}")); // ソニー (Katakana)
         assert!(!is_acronym_word("\u{062D}\u{0645}\u{0627}\u{0633}")); // حماس (Arabic)
     }
@@ -1117,7 +1119,10 @@ mod tests {
             )
             .unwrap();
         let xerox_parc = entities.iter().find(|e| e.text == "Xerox PARC");
-        assert!(xerox_parc.is_some(), "Should detect 'Xerox PARC': {entities:?}");
+        assert!(
+            xerox_parc.is_some(),
+            "Should detect 'Xerox PARC': {entities:?}"
+        );
         assert!(
             matches!(xerox_parc.unwrap().entity_type, EntityType::Organization),
             "Xerox PARC should be ORG, got {:?}",
