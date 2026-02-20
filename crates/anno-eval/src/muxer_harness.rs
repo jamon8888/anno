@@ -1057,8 +1057,8 @@ mod tests {
     fn test_context_features_empty() {
         let f = context_features(&[]);
         assert!((f[0] - 1.0).abs() < 1e-9, "bias always 1.0");
-        for i in 1..CONTEXT_DIM {
-            assert!((f[i]).abs() < 1e-9, "empty datasets -> zero features");
+        for x in f.iter().skip(1).take(CONTEXT_DIM - 1) {
+            assert!(x.abs() < 1e-9, "empty datasets -> zero features");
         }
     }
 

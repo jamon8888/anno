@@ -30,8 +30,6 @@ coverage-html/
 static-analysis-benchmark.txt
 tool-comparison.md
 .unsafe-code-trends/
-evaluation-pattern-analysis.md
-repo-specific-analysis.md
 *.html
 !docs/**/*.html
 
@@ -140,12 +138,11 @@ REVIEW_ISSUES.md
 *.md
 !README.md
 !CHANGELOG.md
+!CONTRIBUTING.md
+!SECURITY.md
 !docs/**/*.md
 
 # Reports directory (generated; do not track)
 reports/
 
 .env
-
-# Archived review documents (not actively maintained)
-docs/archive/
