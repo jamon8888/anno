@@ -609,38 +609,115 @@ impl T5Coref {
     ///
     /// Expects mentions marked with `<m>` and `</m>` tags:
     /// `"<m> Sophie Wilson </m> designed ARM. <m> She </m> changed computing."`
+    /// Resolve coreference with pre-marked mentions.
+    ///
+    /// Expects mentions marked with `<m>` and `</m>` tags:
+    /// `"<m> Sophie Wilson </m> designed ARM. <m> She </m> changed computing."`
+    ///
+    /// Runs T5 inference directly on the marked text (skipping the auto-marking
+    /// step used by [`resolve`]).  Falls back to similarity-based clustering when
+    /// inference fails or produces no clusters.
     pub fn resolve_marked(&self, marked_text: &str) -> Result<Vec<CorefCluster>> {
-        // Extract mentions from marked text
         let (plain_text, mentions) = self.extract_mentions(marked_text)?;
-
         if mentions.is_empty() {
             return Ok(vec![]);
         }
-
-        // For full T5 inference, we would:
-        // 1. Encode the marked text
-        // 2. Run autoregressive decoding
-        // 3. Parse cluster IDs from output
-
-        // Simplified: cluster by string similarity
-        self.cluster_mentions(&plain_text, &mentions)
+        // The text is already marked — feed it directly to T5 without re-marking.
+        match self.resolve_t5_raw(marked_text) {
+            Ok(clusters) if !clusters.is_empty() => Ok(clusters),
+            Ok(_) => self.cluster_mentions(&plain_text, &mentions),
+            Err(e) => {
+                log::warn!(
+                    "[T5-Coref] resolve_marked inference failed ({}), using fallback",
+                    e
+                );
+                self.cluster_mentions(&plain_text, &mentions)
+            }
+        }
     }
 
-    /// Resolve coreference for a set of entities.
+    /// Resolve coreference for a set of entities from NER.
     ///
-    /// Takes entities from NER and groups coreferent mentions.
+    /// Reconstructs `<m>…</m>` markers from entity spans, then runs T5 inference.
+    /// Falls back to similarity-based clustering when inference fails.
     pub fn resolve_entities(&self, text: &str, entities: &[Entity]) -> Result<Vec<CorefCluster>> {
         if entities.is_empty() {
             return Ok(vec![]);
         }
 
-        // Convert entities to mentions
-        let mentions: Vec<(String, usize, usize)> = entities
-            .iter()
-            .map(|e| (e.text.clone(), e.start, e.end))
-            .collect();
+        // Rebuild marked text from entity spans so T5 sees explicit mention boundaries.
+        let marked = self.mark_entity_spans(text, entities);
+        match self.resolve_t5_raw(&marked) {
+            Ok(clusters) if !clusters.is_empty() => Ok(clusters),
+            Ok(_) => {
+                let mentions: Vec<(String, usize, usize)> = entities
+                    .iter()
+                    .map(|e| (e.text.clone(), e.start, e.end))
+                    .collect();
+                self.cluster_mentions(text, &mentions)
+            }
+            Err(e) => {
+                log::warn!(
+                    "[T5-Coref] resolve_entities inference failed ({}), using fallback",
+                    e
+                );
+                let mentions: Vec<(String, usize, usize)> = entities
+                    .iter()
+                    .map(|e| (e.text.clone(), e.start, e.end))
+                    .collect();
+                self.cluster_mentions(text, &mentions)
+            }
+        }
+    }
 
-        self.cluster_mentions(text, &mentions)
+    /// Run T5 on pre-marked text (already has `<m>…</m>` tags).
+    ///
+    /// This is the shared inner path for [`resolve_marked`] and [`resolve_entities`];
+    /// unlike [`resolve_t5`] it does **not** call `mark_mentions`.
+    fn resolve_t5_raw(&self, marked_text: &str) -> Result<Vec<CorefCluster>> {
+        let (input_ids, attention_mask) = self.tokenize_input(marked_text)?;
+        let (enc_hidden, enc_seq_len, hidden_size) =
+            self.run_encoder(&input_ids, &attention_mask)?;
+        let output_ids =
+            self.greedy_decode(&enc_hidden, enc_seq_len, hidden_size, &attention_mask)?;
+        let decoded = self.decode_tokens(&output_ids)?;
+        Ok(self.parse_coref_output(&decoded))
+    }
+
+    /// Reconstruct a `<m>…</m>`-marked string from entity spans.
+    ///
+    /// Entities are sorted by start offset; overlapping spans are skipped.
+    fn mark_entity_spans(&self, text: &str, entities: &[Entity]) -> String {
+        let chars: Vec<char> = text.chars().collect();
+        let char_len = chars.len();
+
+        let mut sorted: Vec<&Entity> = entities.iter().collect();
+        sorted.sort_by_key(|e| e.start);
+
+        let mut out = String::with_capacity(text.len() + entities.len() * 10);
+        let mut cursor = 0usize; // char offset
+
+        for e in &sorted {
+            if e.start >= e.end || e.start < cursor || e.end > char_len {
+                continue;
+            }
+            // Text before this entity
+            for &ch in &chars[cursor..e.start] {
+                out.push(ch);
+            }
+            out.push_str("<m> ");
+            for &ch in &chars[e.start..e.end] {
+                out.push(ch);
+            }
+            out.push_str(" </m>");
+            cursor = e.end;
+        }
+
+        // Remaining text
+        for &ch in &chars[cursor..] {
+            out.push(ch);
+        }
+        out
     }
 
     /// Simple rule-based coreference (fallback).
