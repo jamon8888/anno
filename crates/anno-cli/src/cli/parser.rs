@@ -414,6 +414,8 @@ Use `--model bert-onnx`, `--model gliner`, or `--model candle-ner` instead."
                 }
                 #[cfg(feature = "onnx")]
                 Self::GlinerPoly => unreachable!("rejected above"),
+                // Burn (rejected above; scaffolding only)
+                Self::Burn => unreachable!("rejected above"),
                 // Candle
                 #[cfg(feature = "candle")]
                 Self::GlinerCandle => anno::backends::gliner_candle::GLiNERCandle::from_pretrained(anno::DEFAULT_GLINER_CANDLE_MODEL)

@@ -8,7 +8,7 @@ API docs (may lag behind `main` while crates.io publishing is paused): [docs.rs/
 
 ## Install
 
-This repo is **not** using crates.io as its primary distribution path right now; see `docs/PUBLISH_STATUS.md`.
+This repo is **not** using crates.io as its primary distribution path right now; see [publish status](docs/PUBLISH_STATUS.md).
 
 ### Full CLI (`crates/anno-cli`)
 
@@ -65,10 +65,10 @@ cargo install --path . --bin anno --features onnx
 Notes:
 
 - All NER backends return **variable-length spans** (start/end offsets). Some are token-labeling models internally.
-- Offsets are **character offsets** (Unicode scalar values), not byte offsets; see `docs/CONTRACT.md`.
+- Offsets are **character offsets** (Unicode scalar values), not byte offsets; see [interface contract](docs/CONTRACT.md).
 - ML backends are feature-gated behind `onnx` or `candle`. The published `anno` crate keeps defaults minimal; enable `onnx` explicitly when you want ML backends.
 - ML model weights download from HuggingFace on first use (see “Offline / downloads” below).
-- The table is the **NER backend surface**; for a fuller capability/provenance discussion see `docs/BACKENDS.md`.
+- The table is the **NER backend surface**; for a fuller capability/provenance discussion see [backend selection](docs/BACKENDS.md).
 - Evaluation tooling adds additional notions (dataset/backend compatibility gates, label-shift “true zero-shot” accounting); those live in `anno-eval`, not in the runtime `Model` trait surface.
 
 ## Offline / downloads
@@ -181,7 +181,7 @@ assert!(!ents.is_empty());
 # Ok::<(), anno::Error>(())
 ```
 
-More examples: `docs/QUICKSTART.md`.
+More examples: [QUICKSTART](docs/QUICKSTART.md).
 
 ## Advanced: sampler (muxer)
 
@@ -195,6 +195,6 @@ This command is hidden from the top-level help; use `anno help sampler`.
 
 ## Docs
 
-- `docs/QUICKSTART.md`
-- `docs/CONTRACT.md` — interface contract
-- `docs/BACKENDS.md` — backend selection
+- [QUICKSTART](docs/QUICKSTART.md)
+- [CONTRACT](docs/CONTRACT.md) — interface contract
+- [BACKENDS](docs/BACKENDS.md) — backend selection
