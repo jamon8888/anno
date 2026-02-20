@@ -357,9 +357,9 @@ download-datasets:
 clean:
     cargo clean
 
-# Verify locked workspace builds. Strict MSRV 1.85 is enforced in CI (see ci.yml).
+# Check MSRV 1.85 (matches workspace and CI). Requires locked Cargo.lock (ort pinned to rc.10).
 msrv:
-    cargo check --workspace --locked
+    cargo +1.85.0 check --workspace --locked
 
 # Run property tests with more cases
 proptest:
