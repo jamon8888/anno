@@ -415,6 +415,7 @@ Use `--model bert-onnx`, `--model gliner`, or `--model candle-ner` instead."
                 #[cfg(feature = "onnx")]
                 Self::GlinerPoly => unreachable!("rejected above"),
                 // Burn (rejected above; scaffolding only)
+                #[cfg(feature = "burn")]
                 Self::Burn => unreachable!("rejected above"),
                 // Candle
                 #[cfg(feature = "candle")]
