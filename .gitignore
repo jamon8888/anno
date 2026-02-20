@@ -6,6 +6,7 @@ target*/
 # Generated files
 # Local scratch artifacts (regenerated)
 .generated/
+generated/
 # Static analysis reports
 unified-static-analysis-report.md
 static-analysis-failures-summary.md
@@ -141,18 +142,10 @@ REVIEW_ISSUES.md
 !CHANGELOG.md
 !docs/**/*.md
 
-# Reports directory - track summaries, ignore raw/generated
+# Reports directory (generated; do not track)
 reports/
-!reports/eval-results.jsonl
-!reports/eval-summary.json
-!reports/RESULTS.md
-!reports/RESULTS.html
 
 .env
 
-# Deprecated generated artifacts (see generated/README.md)
-generated/datasets.toml
-
 # Archived review documents (not actively maintained)
 docs/archive/
-reports/eval-comprehensive.jsonl
