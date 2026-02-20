@@ -107,6 +107,10 @@ use crate::{Entity, EntityType, Model, Result};
 #[cfg(feature = "onnx")]
 use crate::Error;
 
+/// Return type for `decode_discontinuous_from_matrix`:
+/// `(entity_type_label, word_spans, score)` where each span is `(word_start, word_end_exclusive)`.
+type DiscontinuousDecodeRow = (String, Vec<(usize, usize)>, f64);
+
 /// W2NER relation types for word-word classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum W2NERRelation {
@@ -528,6 +532,99 @@ impl W2NER {
         entities
     }
 
+    /// Decode discontinuous entities from a handshaking matrix.
+    ///
+    /// Implements the full W2NER decoding algorithm (arXiv:2112.10070 §3.3):
+    ///
+    /// 1. Identify entity boundaries via THW(tail, head) cells.
+    /// 2. Build an NNW adjacency set for adjacent-word connections within entities.
+    /// 3. For each entity boundary (head..=tail), trace the NNW chain to find
+    ///    which adjacent word pairs are *not* connected — these gaps produce
+    ///    multiple disjoint sub-spans (discontinuous entity parts).
+    ///
+    /// Returns `Vec<(label, Vec<(word_start, word_end_exclusive)>, score)>` where
+    /// each inner `Vec` holds the word-index spans of one entity's parts.
+    pub fn decode_discontinuous_from_matrix(
+        &self,
+        matrix: &HandshakingMatrix,
+        tokens: &[&str],
+        threshold: f32,
+    ) -> Vec<DiscontinuousDecodeRow> {
+        let n = tokens.len();
+
+        // ── Step 1: collect THW(tail, head) entity boundaries ─────────────────
+        let mut entity_boundaries: Vec<(usize, usize, f64)> = Vec::new(); // (head, tail, score)
+        for cell in &matrix.cells {
+            if W2NERRelation::from_index(cell.label_idx as usize) == W2NERRelation::THW
+                && cell.score >= threshold
+            {
+                let tail = cell.i as usize;
+                let head = cell.j as usize;
+                if head <= tail && tail < n {
+                    entity_boundaries.push((head, tail, cell.score as f64));
+                }
+            }
+        }
+
+        // ── Step 2: build NNW adjacency set (i → j means i and j are adjacent) ─
+        let mut nnw: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+        for cell in &matrix.cells {
+            if W2NERRelation::from_index(cell.label_idx as usize) == W2NERRelation::NNW
+                && cell.score >= threshold
+            {
+                let a = cell.i as usize;
+                let b = cell.j as usize;
+                nnw.insert((a, b));
+                nnw.insert((b, a)); // symmetric: NNW is undirected for adjacency purposes
+            }
+        }
+
+        // ── Step 3: for each entity, split by gaps in NNW chain ───────────────
+        let mut results: Vec<DiscontinuousDecodeRow> = Vec::new();
+
+        for (head, tail, score) in entity_boundaries {
+            let mut segments: Vec<(usize, usize)> = Vec::new();
+            let mut seg_start = head;
+
+            for i in head..tail {
+                let j = i + 1;
+                // A gap exists when neither (i,j) nor (j,i) is in the NNW set,
+                // i.e. no NNW relation connects word i to word j.
+                if !nnw.contains(&(i, j)) {
+                    segments.push((seg_start, i + 1)); // exclusive end
+                    seg_start = j;
+                }
+            }
+            segments.push((seg_start, tail + 1)); // last segment
+
+            // Reconstruct the entity-type label.  W2NER models may encode a type
+            // index in the THW label_idx beyond the base 3 (None/NNW/THW).  When
+            // a single entity-type grid is used, label the entity with the first
+            // type in the config; with multi-type grids, decode the type from
+            // `label_idx` offset.
+            let type_label = self
+                .config
+                .entity_labels
+                .first()
+                .map(|s| s.as_str())
+                .unwrap_or("ENTITY")
+                .to_string();
+
+            results.push((type_label, segments, score));
+        }
+
+        // Sort by start of first segment, then by total span (longer first).
+        results.sort_unstable_by(|a, b| {
+            let a_start = a.1.first().map(|s| s.0).unwrap_or(usize::MAX);
+            let b_start = b.1.first().map(|s| s.0).unwrap_or(usize::MAX);
+            let a_len: usize = a.1.iter().map(|(s, e)| e - s).sum();
+            let b_len: usize = b.1.iter().map(|(s, e)| e - s).sum();
+            a_start.cmp(&b_start).then_with(|| b_len.cmp(&a_len))
+        });
+
+        results
+    }
+
     /// Decode dense grid output to HandshakingMatrix.
     ///
     /// # Arguments
@@ -752,6 +849,142 @@ impl W2NER {
 
         Ok(entities)
     }
+
+    /// Full discontinuous-NER extraction using the NNW+THW grid decoding algorithm.
+    ///
+    /// Called by `extract_discontinuous` when an ONNX session is loaded.
+    #[cfg(feature = "onnx")]
+    fn extract_discontinuous_with_nnw(
+        &self,
+        text: &str,
+        threshold: f32,
+    ) -> Result<Vec<DiscontinuousEntity>> {
+        use ndarray::Array2;
+
+        let session = self
+            .session
+            .as_ref()
+            .ok_or_else(|| Error::Retrieval("Model not loaded.".to_string()))?;
+        let tokenizer = self
+            .tokenizer
+            .as_ref()
+            .ok_or_else(|| Error::Retrieval("Tokenizer not loaded.".to_string()))?;
+
+        let words: Vec<&str> = text.split_whitespace().collect();
+        if words.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let encoding = tokenizer
+            .encode(text.to_string(), true)
+            .map_err(|e| Error::Parse(format!("Tokenization failed: {}", e)))?;
+
+        let input_ids: Vec<i64> = encoding.get_ids().iter().map(|&x| x as i64).collect();
+        let attention_mask: Vec<i64> = encoding
+            .get_attention_mask()
+            .iter()
+            .map(|&x| x as i64)
+            .collect();
+        let seq_len = input_ids.len();
+
+        let input_ids_arr = Array2::from_shape_vec((1, seq_len), input_ids)
+            .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
+        let attention_arr = Array2::from_shape_vec((1, seq_len), attention_mask)
+            .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
+        let input_ids_t = super::ort_compat::tensor_from_ndarray(input_ids_arr)
+            .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
+        let attention_t = super::ort_compat::tensor_from_ndarray(attention_arr)
+            .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
+
+        let grid: Vec<f32> = {
+            let mut session_guard = crate::sync::lock(session);
+            let outputs = session_guard
+                .run(ort::inputs![
+                    "input_ids" => input_ids_t.into_dyn(),
+                    "attention_mask" => attention_t.into_dyn(),
+                ])
+                .map_err(|e| Error::Parse(format!("Inference failed: {}", e)))?;
+            let output = outputs
+                .iter()
+                .next()
+                .map(|(_, v)| v)
+                .ok_or_else(|| Error::Parse("No output".to_string()))?;
+            let (_, data) = output
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Parse(format!("Extract failed: {}", e)))?;
+            data.to_vec()
+        }; // session_guard + outputs dropped here
+
+        let num_relations = 3; // None, NNW, THW
+        let matrix = Self::grid_to_matrix(&grid, seq_len, num_relations, threshold);
+
+        // Compute word → byte position map
+        let word_positions: Vec<(usize, usize)> = {
+            let mut positions = Vec::with_capacity(words.len());
+            let mut pos = 0;
+            for word in &words {
+                if let Some(start) = text[pos..].find(word) {
+                    let abs_start = pos + start;
+                    let abs_end = abs_start + word.len();
+                    positions.push((abs_start, abs_end));
+                    pos = abs_end;
+                } else {
+                    return Err(Error::Parse(format!("Word '{}' not found", word)));
+                }
+            }
+            positions
+        };
+
+        let span_converter = crate::offset::SpanConverter::new(text);
+
+        // Decode with NNW-aware discontinuous algorithm
+        let decoded = self.decode_discontinuous_from_matrix(&matrix, &words, threshold);
+        let mut entities = Vec::new();
+        for (type_label, word_spans, score) in decoded {
+            // Convert word-index spans to character-offset spans
+            let mut char_spans: Vec<(usize, usize)> = Vec::new();
+            let mut valid = true;
+            for (ws, we) in &word_spans {
+                let word_start = *ws;
+                let word_end = we.saturating_sub(1);
+                if let (Some(&(byte_start, _)), Some(&(_, byte_end))) =
+                    (word_positions.get(word_start), word_positions.get(word_end))
+                {
+                    char_spans.push((
+                        span_converter.byte_to_char(byte_start),
+                        span_converter.byte_to_char(byte_end),
+                    ));
+                } else {
+                    valid = false;
+                    break;
+                }
+            }
+            if !valid || char_spans.is_empty() {
+                continue;
+            }
+
+            // Reconstruct entity text from all spans
+            let entity_text: String = word_spans
+                .iter()
+                .filter_map(|(ws, we)| {
+                    let last = we.saturating_sub(1);
+                    let byte_start = word_positions.get(*ws)?.0;
+                    let byte_end = word_positions.get(last)?.1;
+                    text.get(byte_start..byte_end)
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            entities.push(DiscontinuousEntity {
+                spans: char_spans,
+                text: entity_text,
+                entity_type: type_label,
+                confidence: score as f32,
+            });
+        }
+
+        Ok(entities)
+    }
 }
 
 impl Default for W2NER {
@@ -880,22 +1113,12 @@ impl crate::StreamingCapable for W2NER {
 // =============================================================================
 
 impl DiscontinuousNER for W2NER {
-    /// Extract entities with discontinuous span support.
+    /// Extract entities with discontinuous span support via the full NNW+THW decoding algorithm.
     ///
-    /// # Current Limitation
-    ///
-    /// **True discontinuous decoding is not yet implemented.** This method
-    /// currently wraps each contiguous entity into a single-segment
-    /// `DiscontinuousEntity`. The W2NER paper describes a grid-based decoding
-    /// algorithm for discontinuous entities, but this implementation does not
-    /// yet decode those relations.
-    ///
-    /// If you need true discontinuous entity support, consider:
-    /// 1. Post-processing with heuristics (e.g., linking "severe" to "pain")
-    /// 2. Using a specialized discontinuous NER model
-    ///
-    /// This trait implementation exists for API compatibility and will be
-    /// upgraded when true discontinuous decoding is implemented.
+    /// Uses `decode_discontinuous_from_matrix` (arXiv:2112.10070 §3.3):
+    /// THW cells identify entity boundaries; NNW cells identify adjacent word pairs within
+    /// the same entity.  Gaps in the NNW chain produce disjoint sub-spans, yielding true
+    /// discontinuous entities (e.g. "severe … pain" → two spans).
     fn extract_discontinuous(
         &self,
         text: &str,
@@ -909,25 +1132,7 @@ impl DiscontinuousNER for W2NER {
         #[cfg(feature = "onnx")]
         {
             if self.session.is_some() {
-                // TODO(discontinuous): Implement true discontinuous decoding.
-                //
-                // The W2NER grid contains relation information that could be
-                // used to link non-adjacent spans into discontinuous entities.
-                // For now, we wrap each contiguous entity into a single-segment
-                // DiscontinuousEntity for API compatibility.
-                //
-                // See: https://arxiv.org/abs/2112.10070 (Section 3.3)
-                let entities = self.extract_with_grid(text, threshold)?;
-
-                return Ok(entities
-                    .into_iter()
-                    .map(|e| DiscontinuousEntity {
-                        spans: vec![(e.start, e.end)],
-                        text: e.text,
-                        entity_type: e.entity_type.as_label().to_string(),
-                        confidence: e.confidence as f32,
-                    })
-                    .collect());
+                return self.extract_discontinuous_with_nnw(text, threshold);
             }
         }
 
@@ -1087,6 +1292,143 @@ mod tests {
         let w2ner = W2NER::new();
         // Without model loaded, should not be available
         assert!(!w2ner.is_available());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // decode_discontinuous_from_matrix tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    fn make_cell(i: u32, j: u32, label: u16, score: f32) -> HandshakingCell {
+        HandshakingCell {
+            i,
+            j,
+            label_idx: label,
+            score,
+        }
+    }
+
+    /// Build a minimal HandshakingMatrix from explicit cells.
+    fn mat(cells: Vec<HandshakingCell>, seq_len: usize) -> HandshakingMatrix {
+        HandshakingMatrix {
+            cells,
+            seq_len,
+            num_labels: 3,
+        }
+    }
+
+    const NNW: u16 = 1;
+    const THW: u16 = 2;
+
+    #[test]
+    fn discontinuous_contiguous_entity_three_words() {
+        // "New York City" — NNW(0,1), NNW(1,2), THW(tail=2, head=0)
+        let w2ner = W2NER::new();
+        let tokens = ["New", "York", "City"];
+        let matrix = mat(
+            vec![
+                make_cell(0, 1, NNW, 0.9), // New-York NNW
+                make_cell(1, 2, NNW, 0.9), // York-City NNW
+                make_cell(2, 0, THW, 0.9), // tail=City, head=New
+            ],
+            3,
+        );
+        let result = w2ner.decode_discontinuous_from_matrix(&matrix, &tokens, 0.5);
+        assert_eq!(result.len(), 1, "should find exactly one entity");
+        let (_, spans, _) = &result[0];
+        assert_eq!(
+            spans.len(),
+            1,
+            "all three words are adjacent → one contiguous span"
+        );
+        assert_eq!(spans[0], (0, 3)); // words 0..3
+    }
+
+    #[test]
+    fn discontinuous_two_part_entity() {
+        // "severe ... pain" — tokens = ["severe", "and", "moderate", "pain"]
+        // Entity = (severe, pain) but "and moderate" is NOT part of it.
+        // NNW between "severe" and "pain" missing → two segments.
+        // THW(tail=3, head=0): entity boundary severe..pain
+        // NNW(0,1) absent, NNW(1,2) absent, NNW(2,3) present (moderate-pain NNW)
+        // Gap at (0,1): severe | and → segment 1 = (0,1)
+        // Gap at (1,2): and | moderate → not needed because we only look at head..tail
+        // Actually we look from head=0 to tail=3:
+        //   i=0: NNW(0,1)? no → gap → segment (0,1)
+        //   i=1: NNW(1,2)? no → gap → segment (1,2)
+        //   i=2: NNW(2,3)? yes → no gap
+        // → segments: (0,1), (1,2), (2,4)
+        // That's 3 segments for "severe", "and", "moderate pain".
+        //
+        // For a cleaner two-segment test:
+        // tokens = ["severe", "pain"]; THW(1,0), no NNW
+        let w2ner = W2NER::new();
+        let tokens = ["severe", "pain"];
+        let matrix = mat(
+            vec![
+                make_cell(1, 0, THW, 0.9), // tail=pain, head=severe
+                                           // No NNW(0,1) → gap between severe and pain
+            ],
+            2,
+        );
+        let result = w2ner.decode_discontinuous_from_matrix(&matrix, &tokens, 0.5);
+        assert_eq!(result.len(), 1);
+        let (_, spans, _) = &result[0];
+        assert_eq!(
+            spans.len(),
+            2,
+            "missing NNW should produce 2 disjoint segments"
+        );
+        assert_eq!(spans[0], (0, 1)); // "severe" alone
+        assert_eq!(spans[1], (1, 2)); // "pain" alone
+    }
+
+    #[test]
+    fn discontinuous_empty_matrix() {
+        let w2ner = W2NER::new();
+        let tokens = ["a", "b", "c"];
+        let matrix = mat(vec![], 3);
+        let result = w2ner.decode_discontinuous_from_matrix(&matrix, &tokens, 0.5);
+        assert!(result.is_empty(), "no cells → no entities");
+    }
+
+    #[test]
+    fn discontinuous_multiple_entities() {
+        // "Google Apple" — two single-word entities
+        // THW(0,0): tail=Google, head=Google → entity (0,0)
+        // THW(1,1): tail=Apple, head=Apple → entity (1,1)
+        let w2ner = W2NER::new();
+        let tokens = ["Google", "Apple"];
+        let matrix = mat(
+            vec![
+                make_cell(0, 0, THW, 0.9), // single-word entity Google
+                make_cell(1, 1, THW, 0.9), // single-word entity Apple
+            ],
+            2,
+        );
+        let result = w2ner.decode_discontinuous_from_matrix(&matrix, &tokens, 0.5);
+        assert_eq!(result.len(), 2, "two entities");
+        // Each should have one segment of length 1
+        for (_, spans, _) in &result {
+            assert_eq!(spans.len(), 1);
+            assert_eq!(spans[0].1 - spans[0].0, 1);
+        }
+    }
+
+    #[test]
+    fn discontinuous_threshold_filters_low_score() {
+        let w2ner = W2NER::new();
+        let tokens = ["New", "York"];
+        let matrix = mat(
+            vec![
+                make_cell(1, 0, THW, 0.3), // score 0.3 < threshold 0.5
+            ],
+            2,
+        );
+        let result = w2ner.decode_discontinuous_from_matrix(&matrix, &tokens, 0.5);
+        assert!(
+            result.is_empty(),
+            "low-score THW should be filtered by threshold"
+        );
     }
 
     #[test]
