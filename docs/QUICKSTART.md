@@ -18,12 +18,14 @@ CLI (from source):
 ```bash
 git clone https://github.com/arclabs561/anno
 cd anno
+```
 
 Note: this workspace contains **two binaries named `anno`**:
 
 - **Full CLI**: package `anno-cli` (`crates/anno-cli/`) — many commands (used below)
 - **Minimal facade CLI**: package `anno` — `extract` only, small dependency set
 
+```bash
 # Minimal facade CLI (extract only):
 cargo build --release -p anno --bin anno
 

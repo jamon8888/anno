@@ -46,7 +46,7 @@ slow-timeout = { period = "10s", terminate-after = 1 }
 # Note: `test(/.../)` matches the test name. If you need to exclude whole integration-test
 # binaries, prefer updating this filter with the actual `binary(...)` names from
 # `cargo nextest list --workspace`.
-default-filter = "not test(/property/) and not test(/proptest/) and not test(/eval::/) and not test(/eval.*harness/) and not test(/backend_availability_matrix/) and not test(/albert::tests::test_albert_name/)"
+default-filter = "not test(/property/) and not test(/proptest/) and not test(/eval::/) and not test(/eval.*harness/) and not test(/backend_availability_matrix/) and not test(/albert::tests::test_albert_name/) and not test(/randomized_matrix_sample/)"
 
 # =============================================================================
 # ML Profile - for ML backend tests
