@@ -34,6 +34,9 @@ pub use muxer::{
     select_k_without_replacement_by_with_meta, stable_hash64, worst_first_pick_k,
     worst_first_pick_one, LatencyGuardrail, PipelineOrder, PolicyFill, PolicyPlan,
     WorstFirstConfig,
+    // 0.3.x: control-arm helpers + window sizing
+    ControlConfig, pick_control_arms, split_control_budget, suggested_window_cap,
+    suggested_window_cap_for_k,
 };
 
 use std::fmt;

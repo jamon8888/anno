@@ -861,6 +861,25 @@ fn linucb_global_state_path() -> PathBuf {
     PathBuf::from(".").join(suffix)
 }
 
+/// Path for the eval-results JSONL file (and its SQLite sibling).
+///
+/// Resolution order mirrors `TaskEvaluator::new()`:
+/// 1. `ANNO_EVAL_HISTORY` — explicit override
+/// 2. `ANNO_CACHE_DIR` — CI-consistent cache directory
+/// 3. `dirs::cache_dir()/anno/eval-results.jsonl` — platform default
+fn eval_history_jsonl_path() -> PathBuf {
+    if let Ok(p) = std::env::var("ANNO_EVAL_HISTORY") {
+        return PathBuf::from(p);
+    }
+    if let Ok(dir) = std::env::var("ANNO_CACHE_DIR") {
+        return PathBuf::from(dir).join("eval-results.jsonl");
+    }
+    if let Some(base) = dirs::cache_dir() {
+        return base.join("anno").join("eval-results.jsonl");
+    }
+    PathBuf::from("eval-results.jsonl")
+}
+
 fn load_linucb_global_state(path: &PathBuf) -> Option<muxer::LinUcbState> {
     let bytes = std::fs::read(path).ok()?;
     serde_json::from_slice(&bytes).ok()
@@ -1021,17 +1040,15 @@ fn select_backends(
             // Never let the *default* control pick consume the entire budget; if k==1, reserving
             // a control pick would fully bypass ML selection and produce confusing outcome-only
             // logs. Users can still force `control_k == k` explicitly via env.
-            let control_k_default = default_control_k_for_mode().min(k.saturating_sub(1));
-            let control_k = control_k_default
-                .max(mh::control_k_from_env())
-                .min(k)
-                .min(candidates_in_order.len());
-            let control = if control_k > 0 {
-                mh::pick_random_subset(seed ^ 0xC0E1_1A11, candidates_in_order, control_k)
-            } else {
-                Vec::new()
-            };
-            let remaining_k = k.saturating_sub(control.len());
+            let control_k = default_control_k_for_mode()
+                .min(k.saturating_sub(1))
+                .max(mh::control_k_from_env());
+            let (control, remaining_k) = mh::split_control_budget(
+                seed,
+                candidates_in_order,
+                k,
+                mh::ControlConfig::with_k(control_k),
+            );
             let mut candidates_for_muxer: Vec<String> = candidates_in_order.to_vec();
             candidates_for_muxer.retain(|b| !control.contains(b));
 
@@ -1595,9 +1612,7 @@ fn select_backends(
             // Query from SQLite eval-history DB for accurate counts across ALL historical
             // runs, not just the muxer's sliding window.
             let cell_counts: std::collections::HashMap<(String, String), u64> = {
-                let hist_path = dirs::cache_dir()
-                    .map(|d| d.join("anno").join("eval-results.jsonl"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("eval-results.jsonl"));
+                let hist_path = eval_history_jsonl_path();
                 crate::eval::history::EvalHistory::new(&hist_path)
                     .ok()
                     .and_then(|h| h.cell_observation_counts().ok())
@@ -2352,6 +2367,8 @@ fn test_matrix_coverage_report() {
 pub fn run_randomized_matrix_sample_with_seed(seed: u64) {
     anno::env::load_dotenv();
     let strategy = SampleStrategy::from_env();
+    // Default window cap: 50 observations per arm.
+    // For throughput-aware sizing use mh::suggested_window_cap(calls_per_arm, change_rate).
     let window_cap = env_usize("ANNO_MUXER_WINDOW_CAP", 50);
 
     let loader = DatasetLoader::new().expect("DatasetLoader::new");
@@ -2703,10 +2720,10 @@ pub fn run_randomized_matrix_sample_with_seed(seed: u64) {
         if !all_ds.is_empty() {
             // Try to get counts from SQLite eval-history DB (fast, accurate, uses all
             // historical data).  This is the ground truth for matrix coverage.
+            // Path resolution uses ANNO_EVAL_HISTORY → ANNO_CACHE_DIR → platform cache dir
+            // so CI writes and reads from the same cached location.
             let db_counts: std::collections::HashMap<String, u64> = {
-                let hist_path = dirs::cache_dir()
-                    .map(|d| d.join("anno").join("eval-results.jsonl"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("eval-results.jsonl"));
+                let hist_path = eval_history_jsonl_path();
                 crate::eval::history::EvalHistory::new(&hist_path)
                     .ok()
                     .and_then(|h| h.dataset_observation_counts().ok())
@@ -2858,15 +2875,12 @@ pub fn run_randomized_matrix_sample_with_seed(seed: u64) {
         // Build eligible set + decide under latency guardrail in muxer (single shared semantics).
         let guard = mh::latency_guardrail_from_env();
         // Optional selection-bias anchor: reserve K deterministic-random control picks.
-        let control_k = mh::control_k_from_env()
-            .min(backends_per_run)
-            .min(candidates.len());
-        let control = if control_k > 0 {
-            mh::pick_random_subset(seed ^ 0xC0E1_1A11, &candidates, control_k)
-        } else {
-            Vec::new()
-        };
-        let remaining_k = backends_per_run.saturating_sub(control.len());
+        let (control, remaining_k) = mh::split_control_budget(
+            seed,
+            &candidates,
+            backends_per_run,
+            mh::ControlConfig::with_k(mh::control_k_from_env()),
+        );
         let mut candidates_for_policy = candidates.clone();
         candidates_for_policy.retain(|b| !control.contains(b));
 
@@ -3796,9 +3810,7 @@ pub fn run_randomized_matrix_sample_with_seed(seed: u64) {
         || mh::env_bool("ANNO_MUXER_VERBOSE", false)
         || matches!(MuxerMode::from_env(), Some(MuxerMode::Triage))
     {
-        let hist_path = dirs::cache_dir()
-            .map(|d| d.join("anno").join("eval-results.jsonl"))
-            .unwrap_or_else(|| std::path::PathBuf::from("eval-results.jsonl"));
+        let hist_path = eval_history_jsonl_path();
         if let Ok(h) = crate::eval::history::EvalHistory::new(&hist_path) {
             // Use the recent-window method (last 5 observations vs n-comparable historical).
             //
