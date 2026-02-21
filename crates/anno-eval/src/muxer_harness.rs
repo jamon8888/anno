@@ -28,17 +28,33 @@ use muxer::{DriftConfig, DriftMetric, MabConfig};
 
 // Prefer centralizing generic policy helpers in `muxer` itself so harnesses/CLIs don’t drift.
 pub use muxer::{
-    apply_prior_counts_to_summary, guardrail_filter_observed, guardrail_filter_observed_elapsed,
-    novelty_pick_unseen, pick_random_subset, policy_fill_generic, policy_fill_k_observed_with,
-    policy_plan_generic, policy_plan_observed, select_k_without_replacement_by,
-    select_k_without_replacement_by_with_meta, stable_hash64, worst_first_pick_k,
-    worst_first_pick_one, LatencyGuardrail, PipelineOrder, PolicyFill, PolicyPlan,
-    WorstFirstConfig,
-    // 0.3.x: control-arm helpers + window sizing
-    ControlConfig, pick_control_arms, split_control_budget, suggested_window_cap,
+    apply_prior_counts_to_summary,
+    guardrail_filter_observed,
+    guardrail_filter_observed_elapsed,
+    novelty_pick_unseen,
+    pick_control_arms,
+    pick_random_subset,
+    policy_fill_generic,
+    policy_fill_k_observed_with,
+    policy_plan_generic,
+    policy_plan_observed,
+    select_k_without_replacement_by,
+    select_k_without_replacement_by_with_meta,
+    split_control_budget,
+    stable_hash64,
+    suggested_window_cap,
     suggested_window_cap_for_k,
+    worst_first_pick_k,
+    worst_first_pick_one,
     // 0.3.7: quality signal
     BanditPolicy,
+    // 0.3.x: control-arm helpers + window sizing
+    ControlConfig,
+    LatencyGuardrail,
+    PipelineOrder,
+    PolicyFill,
+    PolicyPlan,
+    WorstFirstConfig,
 };
 
 use std::fmt;

@@ -736,7 +736,11 @@ impl SummarySerde {
                 q_n += 1;
             }
         }
-        out.mean_quality_score = if q_n > 0 { Some(q_sum / q_n as f64) } else { None };
+        out.mean_quality_score = if q_n > 0 {
+            Some(q_sum / q_n as f64)
+        } else {
+            None
+        };
         out
     }
 
@@ -1120,7 +1124,11 @@ impl BackendHistoryCliExt for BackendHistory {
                 q_n += 1;
             }
         }
-        out.mean_quality_score = if q_n > 0 { Some(q_sum / q_n as f64) } else { None };
+        out.mean_quality_score = if q_n > 0 {
+            Some(q_sum / q_n as f64)
+        } else {
+            None
+        };
         out
     }
 
