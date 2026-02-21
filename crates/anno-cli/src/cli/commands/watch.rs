@@ -233,7 +233,7 @@ fn scan_directory(dir: &PathBuf, extensions: &[String]) -> Result<Vec<PathBuf>, 
             if let Some(ext) = path.extension() {
                 if extensions
                     .iter()
-                    .any(|e| e == ext.to_string_lossy().as_ref())
+                    .any(|e| *e == *ext.to_string_lossy())
                 {
                     files.push(path);
                 }
