@@ -3517,6 +3517,8 @@ pub fn run_randomized_matrix_sample_with_seed(seed: u64) {
             // tuning and for offline inspection.
             cost_units: r.num_examples as u64,
             elapsed_ms: dur_ms as u64,
+            // primary_f1 is the natural quality signal; feed it as the continuous gradient.
+            quality_score: r.primary_f1().map(|f| f.clamp(0.0, 1.0)),
         };
         let fail_kind = if hard_junk {
             Some(
