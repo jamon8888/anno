@@ -127,6 +127,16 @@ verify_new_features_report.md
 # Muxer history cache (ephemeral; don't commit)
 crates/anno-eval/muxer_history*.json
 
+# LinUCB global state (ephemeral; don't commit)
+linucb_global_state.json
+
+# Eval history + SQLite index (ephemeral; don't commit)
+eval-results.jsonl
+eval-history.db
+
+# Atomic-write temp files (leftover on crash)
+*.json.tmp
+
 # Muxer decisions logs (ephemeral; don't commit)
 # Default local path is under the OS cache, but devs may point ANNO_CACHE_DIR into the repo.
 muxer_decisions*.jsonl

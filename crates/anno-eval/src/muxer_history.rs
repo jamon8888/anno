@@ -53,9 +53,14 @@ impl HistoryWindow {
     }
 
     /// Summarize the current buffer (counts + sums).
+    ///
+    /// `mean_quality_score` is computed from outcomes that have `quality_score` set,
+    /// matching the aggregation in `muxer::Window::summarize()`.
     #[must_use]
     pub fn summary(&self) -> Summary {
         let mut s = Summary::default();
+        let mut q_sum = 0.0f64;
+        let mut q_n = 0u64;
         for o in &self.buf {
             s.calls = s.calls.saturating_add(1);
             s.ok = s.ok.saturating_add(o.ok as u64);
@@ -63,7 +68,12 @@ impl HistoryWindow {
             s.hard_junk = s.hard_junk.saturating_add(o.hard_junk as u64);
             s.cost_units = s.cost_units.saturating_add(o.cost_units);
             s.elapsed_ms_sum = s.elapsed_ms_sum.saturating_add(o.elapsed_ms);
+            if let Some(q) = o.quality_score {
+                q_sum += q;
+                q_n += 1;
+            }
         }
+        s.mean_quality_score = if q_n > 0 { Some(q_sum / q_n as f64) } else { None };
         s
     }
 }
@@ -145,16 +155,12 @@ impl BackendHistory {
         for (k, w) in h.windows {
             let mut out = HistoryWindow::new(cap);
             for mut o in w.buf {
-                match h.version {
-                    0 | 1 => {
-                        o.ok = !o.hard_junk && !o.junk;
-                    }
-                    2 => {
-                        o.ok = o.ok && !o.hard_junk && !o.junk;
-                    }
-                    _ => {
-                        o.ok = o.ok && !o.hard_junk && !o.junk;
-                    }
+                // v0/1: ok was ambiguous → recompute from junk flags
+                // v2+: ok := ok && !junk (v2 had ok := "succeeded"; v3+ adds junk guard)
+                if h.version <= 1 {
+                    o.ok = !o.hard_junk && !o.junk;
+                } else {
+                    o.ok = o.ok && !o.hard_junk && !o.junk;
                 }
                 out.push(o);
             }
@@ -190,12 +196,23 @@ impl BackendHistory {
     }
 
     /// Save history to a JSON file.
+    ///
+    /// Atomic: writes to a `.tmp` sibling and renames, matching `save_linucb_global_state`.
     pub fn save(&self, path: &PathBuf) {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        if let Ok(bytes) = serde_json::to_vec_pretty(self) {
-            let _ = fs::write(path, bytes);
+        let Ok(bytes) = serde_json::to_vec_pretty(self) else {
+            return;
+        };
+        // Build tmp path by appending ".tmp" to the full filename.
+        let tmp_path = {
+            let mut name = path.file_name().unwrap_or_default().to_owned();
+            name.push(".tmp");
+            path.with_file_name(name)
+        };
+        if fs::write(&tmp_path, &bytes).is_ok() {
+            let _ = fs::rename(&tmp_path, path);
         }
     }
 
@@ -545,5 +562,114 @@ mod tests {
         assert_eq!(fk[0].as_deref(), Some("timeout"));
         assert_eq!(fk[1].as_deref(), Some("backend"));
         assert_eq!(fk[2].as_deref(), Some("low_signal"));
+    }
+
+    #[test]
+    fn history_window_summary_aggregates_mean_quality_score() {
+        let mut w = HistoryWindow::new(10);
+        // Two outcomes with quality scores, one without.
+        w.push(muxer::Outcome {
+            ok: true,
+            junk: false,
+            hard_junk: false,
+            cost_units: 0,
+            elapsed_ms: 0,
+            quality_score: Some(0.8),
+        });
+        w.push(muxer::Outcome {
+            ok: true,
+            junk: false,
+            hard_junk: false,
+            cost_units: 0,
+            elapsed_ms: 0,
+            quality_score: Some(0.4),
+        });
+        w.push(muxer::Outcome {
+            ok: false,
+            junk: true,
+            hard_junk: false,
+            cost_units: 0,
+            elapsed_ms: 0,
+            quality_score: None, // no quality signal
+        });
+        let s = w.summary();
+        assert_eq!(s.calls, 3);
+        let mean = s.mean_quality_score.expect("mean_quality_score should be Some");
+        assert!((mean - 0.6).abs() < 1e-9, "mean of 0.8 and 0.4 should be 0.6, got {mean}");
+    }
+
+    #[test]
+    fn history_window_summary_no_quality_scores_gives_none() {
+        let mut w = HistoryWindow::new(5);
+        for _ in 0..3 {
+            w.push(muxer::Outcome {
+                ok: true,
+                junk: false,
+                hard_junk: false,
+                cost_units: 1,
+                elapsed_ms: 1,
+                quality_score: None,
+            });
+        }
+        let s = w.summary();
+        assert!(
+            s.mean_quality_score.is_none(),
+            "mean_quality_score must be None when no outcomes carry a score"
+        );
+    }
+
+    #[test]
+    fn backend_history_save_is_atomic_and_round_trips() {
+        use std::path::PathBuf;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "anno-muxer-history-save-test-pid{}-{nanos}.json",
+            std::process::id()
+        ));
+        let tmp_path = PathBuf::from(format!("{}.tmp", path.display()));
+
+        let mut h = BackendHistory {
+            version: 3,
+            window_cap: 5,
+            windows: std::collections::BTreeMap::new(),
+            fail_kinds: std::collections::BTreeMap::new(),
+            exp3ix_state: None,
+            linucb_state: None,
+        };
+        let mut w = HistoryWindow::new(5);
+        w.push(muxer::Outcome {
+            ok: true,
+            junk: false,
+            hard_junk: false,
+            cost_units: 7,
+            elapsed_ms: 42,
+            quality_score: Some(0.9),
+        });
+        h.windows.insert("test_arm".to_string(), w);
+
+        h.save(&path);
+
+        // Primary file written, temp file cleaned up.
+        assert!(path.exists(), "saved file should exist at {}", path.display());
+        assert!(
+            !tmp_path.exists(),
+            ".tmp sibling should be gone after atomic rename"
+        );
+
+        // Round-trip: load and verify.
+        let loaded = BackendHistory::try_load(&path, 5).expect("reload");
+        let arm = loaded.windows.get("test_arm").expect("test_arm window");
+        assert_eq!(arm.buf.len(), 1);
+        assert_eq!(arm.buf[0].cost_units, 7);
+        assert_eq!(arm.buf[0].elapsed_ms, 42);
+        assert!((arm.buf[0].quality_score.unwrap() - 0.9).abs() < 1e-9);
+
+        let _ = std::fs::remove_file(&path);
     }
 }

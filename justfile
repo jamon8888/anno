@@ -150,7 +150,7 @@ ci: fmt
     just docs-audit
     cargo fmt --all -- --check
     cargo check --workspace --all-targets
-    cargo clippy --workspace --lib --features "eval discourse" -- -D warnings
+    cargo clippy --workspace --all-targets --features "eval discourse" -- -D warnings
     cargo test --package anno --no-default-features --lib
     cargo test --package anno --lib
     cargo build --workspace --features "eval discourse"
@@ -173,6 +173,8 @@ ci-eval: ci
 matrix strategy="random" seed="" perspective="ner":
     #!/usr/bin/env bash
     echo "Running randomized matrix test (strategy: {{strategy}})..."
+    export ANNO_CACHE_DIR="${HOME}/.anno_cache"
+    export ANNO_EVAL_HISTORY="${HOME}/.anno_cache/eval-results.jsonl"
     export ANNO_SAMPLE_STRATEGY={{strategy}}
     export ANNO_MATRIX_PERSPECTIVE={{perspective}}
     if [ -n "{{seed}}" ]; then export ANNO_CI_SEED={{seed}}; fi
@@ -192,6 +194,8 @@ eval-quick:
     # Fast, bounded benchmark run that writes an artifact under ./reports/.
     # Note: this may still download datasets/models unless caches are already warm.
     mkdir -p reports
+    ANNO_CACHE_DIR="${HOME}/.anno_cache" \
+    ANNO_EVAL_HISTORY="${HOME}/.anno_cache/eval-results.jsonl" \
     cargo run --release -p anno-cli --bin anno --features "eval onnx" -- benchmark \
         --tasks ner \
         --datasets CoNLL2003Sample,WikiGold,Wnut17,WikiANN,MasakhaNER \
@@ -202,6 +206,8 @@ eval-quick:
 # Wider local eval (still bounded, but broader than eval-quick)
 eval-wide MAX_EXAMPLES="50":
     mkdir -p reports
+    ANNO_CACHE_DIR="${HOME}/.anno_cache" \
+    ANNO_EVAL_HISTORY="${HOME}/.anno_cache/eval-results.jsonl" \
     cargo run --release -p anno-cli --bin anno --features "eval onnx" -- benchmark \
         --tasks ner \
         --datasets CoNLL2003Sample,WikiGold,Wnut17,WikiANN,MasakhaNER,MultiCoNERv2,MultiNERD \
@@ -936,9 +942,11 @@ spot-upload-src:
     @echo "Source uploaded to s3://arc-anno-data/src/anno-src.tar.gz"
 
 # Run CI-style muxer-backed sampler locally.
-# This runs a small cached-only slice and persists muxer state to `ANNO_HISTORY_FILE` (JSON)
-# or to the default `muxer_history.json` location when unset.
+# Uses ~/.anno_cache to match the CI actions/cache path for both muxer state and eval history.
+# Override with ANNO_HISTORY_FILE, ANNO_EVAL_HISTORY, or ANNO_LINUCB_STATE_FILE for isolation.
 ci-matrix-local SEED="42" PERSPECTIVE="ner":
+    ANNO_CACHE_DIR="${HOME}/.anno_cache" \
+    ANNO_EVAL_HISTORY="${HOME}/.anno_cache/eval-results.jsonl" \
     ANNO_CI_SEED="{{SEED}}" \
     ANNO_MATRIX_PERSPECTIVE="{{PERSPECTIVE}}" \
     ANNO_SAMPLE_STRATEGY=worst-first \
@@ -949,6 +957,8 @@ ci-matrix-local SEED="42" PERSPECTIVE="ner":
 # Detect regressions in the quality matrix.
 # Runs a quick eval then checks the full SQLite history for F1 drops.
 check-regressions SEED="42":
+    ANNO_CACHE_DIR="${HOME}/.anno_cache" \
+    ANNO_EVAL_HISTORY="${HOME}/.anno_cache/eval-results.jsonl" \
     ANNO_SAMPLE_STRATEGY=estimate \
     ANNO_ML_IN_MATRIX=1 \
     ANNO_CI_SEED="{{SEED}}" \
