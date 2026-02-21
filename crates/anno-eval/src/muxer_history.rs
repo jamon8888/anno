@@ -73,7 +73,11 @@ impl HistoryWindow {
                 q_n += 1;
             }
         }
-        s.mean_quality_score = if q_n > 0 { Some(q_sum / q_n as f64) } else { None };
+        s.mean_quality_score = if q_n > 0 {
+            Some(q_sum / q_n as f64)
+        } else {
+            None
+        };
         s
     }
 }
@@ -594,8 +598,13 @@ mod tests {
         });
         let s = w.summary();
         assert_eq!(s.calls, 3);
-        let mean = s.mean_quality_score.expect("mean_quality_score should be Some");
-        assert!((mean - 0.6).abs() < 1e-9, "mean of 0.8 and 0.4 should be 0.6, got {mean}");
+        let mean = s
+            .mean_quality_score
+            .expect("mean_quality_score should be Some");
+        assert!(
+            (mean - 0.6).abs() < 1e-9,
+            "mean of 0.8 and 0.4 should be 0.6, got {mean}"
+        );
     }
 
     #[test]
@@ -656,7 +665,11 @@ mod tests {
         h.save(&path);
 
         // Primary file written, temp file cleaned up.
-        assert!(path.exists(), "saved file should exist at {}", path.display());
+        assert!(
+            path.exists(),
+            "saved file should exist at {}",
+            path.display()
+        );
         assert!(
             !tmp_path.exists(),
             ".tmp sibling should be gone after atomic rename"
