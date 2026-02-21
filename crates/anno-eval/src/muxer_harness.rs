@@ -37,6 +37,8 @@ pub use muxer::{
     // 0.3.x: control-arm helpers + window sizing
     ControlConfig, pick_control_arms, split_control_budget, suggested_window_cap,
     suggested_window_cap_for_k,
+    // 0.3.7: quality signal
+    BanditPolicy,
 };
 
 use std::fmt;
@@ -113,6 +115,7 @@ mod prior_tests {
             hard_junk: 5,
             cost_units: 200,
             elapsed_ms_sum: 1000,
+            mean_quality_score: None,
         };
         apply_prior_counts_to_summary(&mut out, prior, 10);
         assert_eq!(out.calls, 10);
@@ -728,6 +731,9 @@ pub fn mab_config_from_env() -> MabConfig {
         latency_weight: env_f64("ANNO_MUXER_LATENCY_WEIGHT", 0.0).max(0.0),
         junk_weight: env_f64("ANNO_MUXER_JUNK_WEIGHT", 0.8).max(0.0),
         hard_junk_weight: env_f64("ANNO_MUXER_HARD_JUNK_WEIGHT", 1.6).max(0.0),
+        // Quality signal from continuous F1 scores (requires quality_score set on Outcome).
+        // Default 0.0 = disabled; set > 0 to blend into the MAB objective.
+        quality_weight: env_f64("ANNO_MUXER_QUALITY_WEIGHT", 0.0).max(0.0),
         // Hard constraints (BwK-ish gating).
         max_junk_rate: env_f64_opt("ANNO_MUXER_MAX_JUNK_RATE"),
         max_hard_junk_rate: env_f64_opt("ANNO_MUXER_MAX_HARD_JUNK_RATE"),

@@ -312,6 +312,7 @@ fn test_exp3ix_can_outperform_mab_when_summaries_equal_but_reward_differs() {
         hard_junk: 0,
         cost_units: 0,
         elapsed_ms_sum: 0,
+        mean_quality_score: None,
     };
 
     // MAB will deterministically pick one arm under identical summaries.
@@ -1491,6 +1492,7 @@ fn select_backends(
                                 ok_rate: Some(s.ok_rate()),
                                 junk_rate: Some(s.junk_rate()),
                                 hard_junk_rate: Some(s.hard_junk_rate()),
+                                mean_quality_score: s.mean_quality_score,
                             })
                             .collect(),
                     };
@@ -1573,6 +1575,7 @@ fn select_backends(
                                             ok_rate: Some(s.ok_rate()),
                                             junk_rate: Some(s.junk_rate()),
                                             hard_junk_rate: Some(s.hard_junk_rate()),
+                                            mean_quality_score: s.mean_quality_score,
                                         })
                                         .collect(),
                                 },
@@ -4072,6 +4075,7 @@ fn test_muxer_prior_prefers_facet_matched_history() {
             hard_junk: false,
             cost_units: 1,
             elapsed_ms: 1,
+            quality_score: None,
         });
     }
     prior.windows.insert(
@@ -4087,6 +4091,7 @@ fn test_muxer_prior_prefers_facet_matched_history() {
             hard_junk: false,
             cost_units: 1,
             elapsed_ms: 1,
+            quality_score: None,
         });
     }
     prior.windows.insert(
@@ -4143,6 +4148,7 @@ fn test_latency_guardrail_require_measured_uses_observed_calls() {
             hard_junk: false,
             cost_units: 1,
             elapsed_ms: 1,
+            quality_score: None,
         });
     }
     prior.windows.insert("stacked".to_string(), w);
@@ -4229,6 +4235,7 @@ fn test_latency_guardrail_require_measured_prefers_observed_measured_arm() {
             hard_junk: false,
             cost_units: 1,
             elapsed_ms: 1, // fast
+            quality_score: None,
         });
     }
     prior.windows.insert("prior_only".to_string(), w_prior);
@@ -4250,6 +4257,7 @@ fn test_latency_guardrail_require_measured_prefers_observed_measured_arm() {
             hard_junk: false,
             cost_units: 1,
             elapsed_ms: 1, // fast
+            quality_score: None,
         });
     }
     current.windows.insert("measured_fast".to_string(), w_obs);
@@ -4370,6 +4378,7 @@ fn test_novelty_still_triggers_under_priors() {
             hard_junk: false,
             cost_units: 1,
             elapsed_ms: 1,
+            quality_score: None,
         });
     }
     prior.windows.insert("stacked".to_string(), w);
@@ -4498,8 +4507,11 @@ fn test_measure_mode_default_control_does_not_bypass_ml_when_k_is_one() {
 
 #[test]
 fn test_control_only_still_writes_minimal_decision_log_row() {
-    // Regression test: if users explicitly set control_k == k, we should still write a minimal
-    // decision row (even though ML selection never ran) so audits don't show decisions=0.
+    // Regression test: with ANNO_MUXER_CONTROL_K set and n >= 2, the decision log must include
+    // control_arms (≥1 control pick) alongside a MAB round for the remaining slots.
+    //
+    // Note: with n=1 muxer always reserves the single slot for MAB (max_control = min(k, n-1) = 0).
+    // Use n=2 so control_k=1 yields 1 control arm + 1 MAB pick.
     let _env = env_lock();
 
     let tmp = std::env::temp_dir().join("anno-matrix-muxer-test-control-only.jsonl");
@@ -4549,7 +4561,7 @@ fn test_control_only_still_writes_minimal_decision_log_row() {
         exp3ix_state: None,
         linucb_state: None,
     };
-    let arms = vec!["a".to_string(), "b".to_string()];
+    let arms = vec!["a".to_string(), "b".to_string(), "c".to_string()];
     let _chosen = select_backends(
         SampleStrategy::MlOnly,
         0,
@@ -4558,18 +4570,86 @@ fn test_control_only_still_writes_minimal_decision_log_row() {
         None,
         &arms,
         None,
-        1,
+        2, // n=2: max_control = min(1, 2-1) = 1 → 1 control arm + 1 MAB pick
         0,
     );
 
     let s = std::fs::read_to_string(&tmp).expect("read decisions log");
     assert!(
         s.contains("\"control_arms\""),
-        "expected a minimal decision row with control_arms; log={s}"
+        "expected decision row with control_arms when control_k=1, n=2; log={s}"
     );
+    // MAB also runs for the remaining n-control_arms slots.
     assert!(
-        !s.contains("\"mab_k_round\""),
-        "expected control-only decision row to omit mab_k_round; log={s}"
+        s.contains("\"mab_k_round\""),
+        "expected mab_k_round alongside control_arms; log={s}"
     );
     let _ = std::fs::remove_file(&tmp);
+}
+
+// ─── eval_history_jsonl_path resolution ──────────────────────────────────────
+
+#[test]
+fn eval_history_path_anno_eval_history_wins() {
+    let _env = env_lock();
+    let key = "ANNO_EVAL_HISTORY";
+    let old = std::env::var(key).ok();
+    std::env::set_var(key, "/explicit/eval-results.jsonl");
+    std::env::remove_var("ANNO_CACHE_DIR");
+    let p = eval_history_jsonl_path();
+    match old.as_deref() {
+        None => std::env::remove_var(key),
+        Some(v) => std::env::set_var(key, v),
+    }
+    assert_eq!(p, std::path::PathBuf::from("/explicit/eval-results.jsonl"));
+}
+
+#[test]
+fn eval_history_path_anno_cache_dir_fallback() {
+    let _env = env_lock();
+    let key_hist = "ANNO_EVAL_HISTORY";
+    let key_cache = "ANNO_CACHE_DIR";
+    let old_hist = std::env::var(key_hist).ok();
+    let old_cache = std::env::var(key_cache).ok();
+    std::env::remove_var(key_hist);
+    std::env::set_var(key_cache, "/my/cache");
+    let p = eval_history_jsonl_path();
+    match old_hist.as_deref() {
+        None => std::env::remove_var(key_hist),
+        Some(v) => std::env::set_var(key_hist, v),
+    }
+    match old_cache.as_deref() {
+        None => std::env::remove_var(key_cache),
+        Some(v) => std::env::set_var(key_cache, v),
+    }
+    assert_eq!(
+        p,
+        std::path::PathBuf::from("/my/cache/eval-results.jsonl"),
+        "ANNO_CACHE_DIR should be used when ANNO_EVAL_HISTORY is unset"
+    );
+}
+
+#[test]
+fn eval_history_path_anno_eval_history_beats_cache_dir() {
+    let _env = env_lock();
+    let key_hist = "ANNO_EVAL_HISTORY";
+    let key_cache = "ANNO_CACHE_DIR";
+    let old_hist = std::env::var(key_hist).ok();
+    let old_cache = std::env::var(key_cache).ok();
+    std::env::set_var(key_hist, "/override/eval.jsonl");
+    std::env::set_var(key_cache, "/should/be/ignored");
+    let p = eval_history_jsonl_path();
+    match old_hist.as_deref() {
+        None => std::env::remove_var(key_hist),
+        Some(v) => std::env::set_var(key_hist, v),
+    }
+    match old_cache.as_deref() {
+        None => std::env::remove_var(key_cache),
+        Some(v) => std::env::set_var(key_cache, v),
+    }
+    assert_eq!(
+        p,
+        std::path::PathBuf::from("/override/eval.jsonl"),
+        "ANNO_EVAL_HISTORY must beat ANNO_CACHE_DIR"
+    );
 }
