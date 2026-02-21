@@ -342,19 +342,25 @@ impl TaskEvaluator {
 
     /// Create a new task evaluator.
     pub fn new() -> Result<Self> {
-        // Initialize evaluation history if path is specified
-        let history = std::env::var("ANNO_EVAL_HISTORY")
+        // Resolution order (mirrors eval_history_jsonl_path() in matrix_muxer_ci):
+        //   1. ANNO_EVAL_HISTORY — explicit override
+        //   2. ANNO_CACHE_DIR   — CI-consistent cache root (avoids split-brain with the harness)
+        //   3. platform cache   — dirs::cache_dir()/anno/eval-results.jsonl
+        let history_path: std::path::PathBuf = std::env::var("ANNO_EVAL_HISTORY")
             .map(std::path::PathBuf::from)
             .or_else(|_| {
-                dirs::cache_dir()
-                    .ok_or_else(|| std::io::Error::other("no cache dir"))
-                    .map(|d| d.join("anno").join("eval-results.jsonl"))
+                std::env::var("ANNO_CACHE_DIR")
+                    .map(|d| std::path::PathBuf::from(d).join("eval-results.jsonl"))
             })
-            .and_then(|path| {
-                super::history::EvalHistory::new(path).map_err(|e| {
-                    log::warn!("Failed to initialize eval history: {}", e);
-                    e
-                })
+            .unwrap_or_else(|_| {
+                dirs::cache_dir()
+                    .map(|d| d.join("anno").join("eval-results.jsonl"))
+                    .unwrap_or_else(|| std::path::PathBuf::from("eval-results.jsonl"))
+            });
+        let history = super::history::EvalHistory::new(&history_path)
+            .map_err(|e| {
+                log::warn!("Failed to initialize eval history: {}", e);
+                e
             })
             .ok();
 

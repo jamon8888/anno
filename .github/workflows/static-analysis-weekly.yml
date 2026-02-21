@@ -21,17 +21,36 @@ jobs:
           fetch-depth: 0  # Full history for trend analysis
       
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: miri
       - uses: Swatinem/rust-cache@v2
-      
-      - name: Install all static analysis tools
+        with:
+          cache-all-crates: true
+
+      # Cache installed Cargo binaries to avoid recompiling them every Monday.
+      - name: Cache cargo bin tools
+        id: cache-cargo-bins
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-deny
+            ~/.cargo/bin/cargo-machete
+            ~/.cargo/bin/cargo-geiger
+            ~/.cargo/bin/cargo-nextest
+            ~/.cargo/bin/cargo-llvm-cov
+          key: weekly-cargo-bins-${{ runner.os }}-v1
+
+      - name: Install cargo tools (skip if cached)
+        if: steps.cache-cargo-bins.outputs.cache-hit != 'true'
         run: |
           cargo install --locked cargo-deny
           cargo install cargo-machete
           cargo install cargo-geiger
           cargo install cargo-nextest
           cargo install cargo-llvm-cov
-          rustup component add miri
-          cargo install cargo-miri
+
+      - name: Install opengrep
+        run: |
           curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH
       

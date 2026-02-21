@@ -91,8 +91,13 @@ In GitHub repo settings:
 
 The workflow will:
 
-- set `ANNO_CACHE_DIR=$HOME/.anno_cache`
+- set `ANNO_CACHE_DIR=$HOME/.anno_cache` (dataset loader + muxer state root)
+- set `ANNO_EVAL_HISTORY=$HOME/.anno_cache/eval-results.jsonl` (eval JSONL + SQLite index)
 - enable S3 cache only when `ANNO_AWS_ROLE_ARN` is set and the run is not a fork PR
+- persist muxer state (`muxer_history.*.json`, `linucb_global_state.json`) and eval history
+  (`eval-results.jsonl`, `eval-history.db`) under the `anno-muxer-${{ runner.os }}-v1-` GitHub
+  Actions cache key, separate from the `anno-datasets` key so MAB learning survives unrelated
+  job cache overwrites
 
 ## Optional: sync local cache → S3
 

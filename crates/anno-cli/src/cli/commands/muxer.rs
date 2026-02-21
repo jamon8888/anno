@@ -697,6 +697,7 @@ struct SummarySerde {
     hard_junk: u64,
     cost_units: u64,
     elapsed_ms_sum: u64,
+    mean_quality_score: Option<f64>,
 }
 
 impl SummarySerde {
@@ -722,13 +723,20 @@ impl SummarySerde {
             calls: w.buf.len() as u64,
             ..Default::default()
         };
+        let mut q_sum = 0.0f64;
+        let mut q_n = 0u64;
         for o in &w.buf {
             out.ok += o.ok as u64;
             out.junk += o.junk as u64;
             out.hard_junk += o.hard_junk as u64;
             out.cost_units = out.cost_units.saturating_add(o.cost_units);
             out.elapsed_ms_sum = out.elapsed_ms_sum.saturating_add(o.elapsed_ms);
+            if let Some(q) = o.quality_score {
+                q_sum += q;
+                q_n += 1;
+            }
         }
+        out.mean_quality_score = if q_n > 0 { Some(q_sum / q_n as f64) } else { None };
         out
     }
 
@@ -940,6 +948,7 @@ impl BackendHistoryCliExt for BackendHistory {
                     hard_junk: obs.hard_junk,
                     cost_units: obs.cost_units,
                     elapsed_ms_sum: obs.elapsed_ms_sum,
+                    mean_quality_score: obs.mean_quality_score,
                 };
                 let prior_m = muxer::Summary {
                     calls: prior_s.calls,
@@ -948,6 +957,7 @@ impl BackendHistoryCliExt for BackendHistory {
                     hard_junk: prior_s.hard_junk,
                     cost_units: prior_s.cost_units,
                     elapsed_ms_sum: prior_s.elapsed_ms_sum,
+                    mean_quality_score: prior_s.mean_quality_score,
                 };
                 mh::apply_prior_counts_to_summary(&mut out_m, prior_m, prior_calls);
                 obs = SummarySerde {
@@ -957,6 +967,7 @@ impl BackendHistoryCliExt for BackendHistory {
                     hard_junk: out_m.hard_junk,
                     cost_units: out_m.cost_units,
                     elapsed_ms_sum: out_m.elapsed_ms_sum,
+                    mean_quality_score: out_m.mean_quality_score,
                 };
             }
 
@@ -1096,13 +1107,20 @@ impl BackendHistoryCliExt for BackendHistory {
             calls: take as u64,
             ..Default::default()
         };
+        let mut q_sum = 0.0f64;
+        let mut q_n = 0u64;
         for o in w.buf.iter().skip(n - take) {
             out.ok += o.ok as u64;
             out.junk += o.junk as u64;
             out.hard_junk += o.hard_junk as u64;
             out.cost_units = out.cost_units.saturating_add(o.cost_units);
             out.elapsed_ms_sum = out.elapsed_ms_sum.saturating_add(o.elapsed_ms);
+            if let Some(q) = o.quality_score {
+                q_sum += q;
+                q_n += 1;
+            }
         }
+        out.mean_quality_score = if q_n > 0 { Some(q_sum / q_n as f64) } else { None };
         out
     }
 
@@ -2400,6 +2418,7 @@ pub fn run(args: MuxerArgs) -> Result<(), String> {
                                             hard_junk: s.hard_junk,
                                             cost_units: s.cost_units,
                                             elapsed_ms_sum: s.elapsed_ms_sum,
+                                            mean_quality_score: s.mean_quality_score,
                                         },
                                     );
                                 }

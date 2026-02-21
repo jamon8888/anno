@@ -74,8 +74,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
-      # Match pre-push hook: lib-only with eval + discourse features, warnings as errors
-      - run: cargo clippy --workspace --lib --features "eval discourse" -- -D warnings
+      # All targets (lib + tests + bins + examples) so test code is also linted.
+      - run: cargo clippy --workspace --all-targets --features "eval discourse" -- -D warnings
 
   # ==========================================================================
   # Unit tests - no features (zero-dependency baseline)
@@ -105,8 +105,10 @@ jobs:
         with:
           cache-all-crates: true
       
-      - name: Set ANNO cache dir (matches actions/cache)
-        run: echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
+      - name: Set ANNO cache dir and eval history path (matches actions/cache)
+        run: |
+          echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
+          echo "ANNO_EVAL_HISTORY=$HOME/.anno_cache/eval-results.jsonl" >> "$GITHUB_ENV"
 
       # Optional: enable S3 dataset cache via AWS OIDC (no long-lived secrets).
       # Configure the role ARN as a repo variable: Settings → Secrets and variables → Actions → Variables.
@@ -376,8 +378,10 @@ jobs:
         with:
           cache-all-crates: true
       
-      - name: Set ANNO cache dir (matches actions/cache)
-        run: echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
+      - name: Set ANNO cache dir and eval history path (matches actions/cache)
+        run: |
+          echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
+          echo "ANNO_EVAL_HISTORY=$HOME/.anno_cache/eval-results.jsonl" >> "$GITHUB_ENV"
 
       - name: Configure AWS credentials (OIDC) for dataset cache
         if: ${{ vars.ANNO_AWS_ROLE_ARN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
@@ -411,6 +415,20 @@ jobs:
           key: anno-datasets-${{ runner.os }}-v3-${{ github.run_id }}
           restore-keys: |
             anno-datasets-${{ runner.os }}-v3-
+
+      # Muxer history + eval history in their own cache lineage so MAB learning and
+      # dataset observation counts are never overwritten by test-eval/eval-sanity writes.
+      - name: Cache muxer state and eval history (persistent MAB learning)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.anno_cache/muxer_history.*.json
+            ~/.anno_cache/linucb_global_state.json
+            ~/.anno_cache/eval-results.jsonl
+            ~/.anno_cache/eval-history.db
+          key: anno-muxer-${{ runner.os }}-v1-${{ github.run_id }}
+          restore-keys: |
+            anno-muxer-${{ runner.os }}-v1-
       
       - name: Build matrix sampler harness (enable ML backends)
         run: cargo build -p anno-eval --features "onnx,eval"
@@ -461,7 +479,7 @@ jobs:
           ANNO_MATRIX_REQUIRE_CACHED: ${{ github.event_name == 'pull_request' && '1' || '0' }}
           ANNO_MAX_DOWNLOAD_BYTES: 8000000
       
-      - name: Run worst-first matrix test
+      - name: Run worst-first matrix test (+ regression detection)
         run: |
           cargo test -p anno-eval --lib --features "onnx,eval" test_randomized_matrix_sample -- --nocapture
         env:
@@ -471,12 +489,17 @@ jobs:
           ANNO_MATRIX_TRY_DOWNLOAD_ON_EMPTY: "1"
           ANNO_MATRIX_REQUIRE_CACHED: ${{ github.event_name == 'pull_request' && '1' || '0' }}
           ANNO_MAX_DOWNLOAD_BYTES: 8000000
+          # Enable regression detection (emits warnings when Cohen's d >= 2.0 over 20+ obs).
+          # Non-fatal: fires on stderr, does not fail the job.
+          ANNO_CHECK_REGRESSIONS: "1"
 
   # ==========================================================================
-  # F1 Regression Tests
+  # F1 Unit Tests (evaluator math invariants)
+  # Note: actual eval-history regression detection runs in matrix-test (worst-first step,
+  # ANNO_CHECK_REGRESSIONS=1) once sufficient history has accumulated (≥20 obs per cell).
   # ==========================================================================
   regression:
-    name: F1 Regression
+    name: F1 Evaluator Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -484,7 +507,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
-      - name: Run regression tests
+      - name: Run evaluator unit tests
         run: cargo test -p anno-eval --lib --features "eval discourse" test_comprehensive_eval_results_average_f1 -- --nocapture
 
   # ==========================================================================
@@ -518,8 +541,10 @@ jobs:
         with:
           cache-all-crates: true
 
-      - name: Set ANNO cache dir (matches actions/cache)
-        run: echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
+      - name: Set ANNO cache dir and eval history path (matches actions/cache)
+        run: |
+          echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
+          echo "ANNO_EVAL_HISTORY=$HOME/.anno_cache/eval-results.jsonl" >> "$GITHUB_ENV"
 
       - name: Configure AWS credentials (OIDC) for dataset cache
         if: ${{ vars.ANNO_AWS_ROLE_ARN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
@@ -553,6 +578,18 @@ jobs:
           key: anno-datasets-${{ runner.os }}-v3-${{ github.run_id }}
           restore-keys: |
             anno-datasets-${{ runner.os }}-v3-
+
+      # Restore eval history so CLI benchmark accumulates observation counts across runs.
+      # Uses the same anno-muxer key family as matrix-test to share state.
+      - name: Cache eval history (persistent observation counts)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.anno_cache/eval-results.jsonl
+            ~/.anno_cache/eval-history.db
+          key: anno-muxer-${{ runner.os }}-v1-${{ github.run_id }}
+          restore-keys: |
+            anno-muxer-${{ runner.os }}-v1-
 
       - name: Run sanity check evaluations
         run: ./scripts/eval-sanity.sh
@@ -598,8 +635,10 @@ jobs:
         with:
           cache-all-crates: true
 
-      - name: Set ANNO cache dir (matches actions/cache)
-        run: echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
+      - name: Set ANNO cache dir and eval history path (matches actions/cache)
+        run: |
+          echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
+          echo "ANNO_EVAL_HISTORY=$HOME/.anno_cache/eval-results.jsonl" >> "$GITHUB_ENV"
 
       - name: Configure AWS credentials (OIDC) for dataset cache
         if: ${{ vars.ANNO_AWS_ROLE_ARN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/eval-')) }}
@@ -633,6 +672,17 @@ jobs:
           key: anno-datasets-${{ runner.os }}-v3-${{ github.run_id }}
           restore-keys: |
             anno-datasets-${{ runner.os }}-v3-
+
+      # Restore eval history so full evals seed from accumulated observation counts.
+      - name: Cache eval history (persistent observation counts)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.anno_cache/eval-results.jsonl
+            ~/.anno_cache/eval-history.db
+          key: anno-muxer-${{ runner.os }}-v1-${{ github.run_id }}
+          restore-keys: |
+            anno-muxer-${{ runner.os }}-v1-
 
       - name: Run full evaluations
         run: ./scripts/eval-full.sh
