@@ -19,6 +19,11 @@ required-features = ["eval"]
 name = "muxer_audit"
 path = "src/bin/muxer_audit.rs"
 
+[[example]]
+name = "muxer_decision_loop"
+path = "examples/muxer_decision_loop.rs"
+required-features = ["eval"]
+
 [dependencies]
 anno = { path = "../anno", package = "anno-lib", version = "0.3.0", default-features = false, features = ["analysis"] }
 anno-core = { path = "../anno-core", version = "0.3.0" }

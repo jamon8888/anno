@@ -407,6 +407,10 @@ test-count:
 example-minimal:
     cargo run -p anno --example minimal
 
+# Run deterministic offline muxer decision-loop example
+example-muxer:
+    cargo run -p anno-eval --example muxer_decision_loop --features eval
+
 # === Mutation Testing ===
 
 # Run mutation tests on entity.rs (fast, targeted)
