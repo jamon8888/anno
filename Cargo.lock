@@ -66,6 +66,7 @@ version = "0.3.0"
 dependencies = [
  "anno-core",
  "anno-eval",
+ "anno-graph",
  "anno-lib",
  "chrono",
  "clap",
@@ -75,10 +76,10 @@ dependencies = [
  "indicatif 0.17.11",
  "is-terminal",
  "itertools 0.14.0",
- "lattix",
  "log",
  "muxer",
  "once_cell",
+ "rayon",
  "regex",
  "serde",
  "serde_json",
@@ -145,7 +146,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "anno-lattix"
+name = "anno-graph"
 version = "0.3.0"
 dependencies = [
  "anno-core",
@@ -1942,10 +1943,7 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 [[package]]
 name = "logp"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e987f585a288705e7e9ab2f7cea5fcfe67c5fffe8d581d8b48a4d5504a032bd"
 dependencies = [
- "ndarray",
  "thiserror 2.0.18",
 ]
 
@@ -2067,8 +2065,6 @@ dependencies = [
 [[package]]
 name = "muxer"
 version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "accbe95582a29725184f53ca758d318cb72514e9dba4fd79dedebb7804aefba4"
 dependencies = [
  "logp",
  "pare",
@@ -2309,8 +2305,6 @@ dependencies = [
 [[package]]
 name = "pare"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "420eea7a64b3c3cff5fa56ec6975bd5b908d70313c420636635fd33653480225"
 dependencies = [
  "thiserror 2.0.18",
 ]
@@ -3272,8 +3266,6 @@ dependencies = [
 [[package]]
 name = "textprep"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f891a1690186f1c7e1d883cfd8b49861ec55c4b91e8aed72ecd206dbdf6b25c4"
 dependencies = [
  "aho-corasick",
  "unicode-normalization",
