@@ -64,9 +64,25 @@ pub enum CacheAction {
     },
 }
 
+/// Walk a directory tree, calling `f` for every regular file found.
+fn walk_files(dir: &std::path::Path, f: &mut impl FnMut(&std::path::Path)) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            f(&path);
+        } else if path.is_dir() {
+            walk_files(&path, f);
+        }
+    }
+}
+
 /// Execute the cache management command.
 pub fn run(args: CacheArgs) -> Result<(), String> {
     let cache_dir = get_cache_dir()?;
+
+    // Result cache lives under {cache_dir}/results/
+    let result_cache_dir = cache_dir.join("results");
 
     match args.action {
         CacheAction::List => {
@@ -75,42 +91,62 @@ pub fn run(args: CacheArgs) -> Result<(), String> {
                 return Ok(());
             }
 
-            let entries = fs::read_dir(&cache_dir)
-                .map_err(|e| format!("Failed to read cache directory: {}", e))?;
+            // Top-level files (model downloads, datasets, etc.)
+            let top_files: Vec<_> = fs::read_dir(&cache_dir)
+                .map(|entries| {
+                    entries
+                        .filter_map(|e| e.ok())
+                        .filter(|e| e.path().is_file())
+                        .collect()
+                })
+                .unwrap_or_default();
 
-            let mut files: Vec<_> = entries
-                .filter_map(|e| e.ok())
-                .filter(|e| e.path().is_file())
-                .collect();
-            files.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
+            if !top_files.is_empty() {
+                println!("Model / dataset cache ({} files):", top_files.len());
+                let mut sorted = top_files;
+                sorted.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
+                for entry in sorted {
+                    if let Ok(meta) = entry.metadata() {
+                        println!(
+                            "  {} ({})",
+                            entry.file_name().to_string_lossy(),
+                            format_size(meta.len())
+                        );
+                    }
+                }
+            }
 
-            println!("Cached results ({} files):", files.len());
-            for entry in files {
-                if let Ok(metadata) = entry.metadata() {
-                    let size = metadata.len();
-                    let modified = if let Ok(modified_time) = metadata.modified() {
-                        if let Ok(duration) = modified_time.duration_since(std::time::UNIX_EPOCH) {
-                            if let Some(dt) = chrono::DateTime::<chrono::Utc>::from_timestamp(
-                                duration.as_secs() as i64,
-                                0,
-                            ) {
-                                dt.format("%Y-%m-%d %H:%M:%S").to_string()
-                            } else {
-                                "unknown".to_string()
-                            }
-                        } else {
-                            "unknown".to_string()
-                        }
-                    } else {
-                        "unknown".to_string()
-                    };
+            // Result cache: group by model segment
+            if result_cache_dir.exists() {
+                let mut result_count = 0usize;
+                let mut result_size = 0u64;
+                let mut by_model: std::collections::BTreeMap<String, (usize, u64)> =
+                    std::collections::BTreeMap::new();
 
-                    println!(
-                        "  {} ({}) - {}",
-                        entry.file_name().to_string_lossy(),
-                        format_size(size),
-                        modified
-                    );
+                walk_files(&result_cache_dir, &mut |path| {
+                    let size = path.metadata().map(|m| m.len()).unwrap_or(0);
+                    result_count += 1;
+                    result_size += size;
+                    // Path pattern: results/{model-version}/{shard}/{hash}.json
+                    if let Some(model_seg) = path
+                        .strip_prefix(&result_cache_dir)
+                        .ok()
+                        .and_then(|p| p.components().next())
+                        .and_then(|c| c.as_os_str().to_str())
+                    {
+                        let e = by_model.entry(model_seg.to_string()).or_default();
+                        e.0 += 1;
+                        e.1 += size;
+                    }
+                });
+
+                println!(
+                    "\nResult cache ({} entries, {}):",
+                    result_count,
+                    format_size(result_size)
+                );
+                for (model, (count, size)) in &by_model {
+                    println!("  {} — {} entries, {}", model, count, format_size(*size));
                 }
             }
         }
@@ -118,7 +154,7 @@ pub fn run(args: CacheArgs) -> Result<(), String> {
             if cache_dir.exists() {
                 fs::remove_dir_all(&cache_dir)
                     .map_err(|e| format!("Failed to clear cache: {}", e))?;
-                println!("{} Cache cleared", color("32", "✓"));
+                println!("{} Cache cleared (model cache + result cache)", color("32", "✓"));
             } else {
                 println!("Cache directory does not exist");
             }
@@ -126,29 +162,41 @@ pub fn run(args: CacheArgs) -> Result<(), String> {
         CacheAction::Stats => {
             if !cache_dir.exists() {
                 println!("Cache directory does not exist");
-            } else {
-                let entries = fs::read_dir(&cache_dir)
-                    .map_err(|e| format!("Failed to read cache directory: {}", e))?;
+                return Ok(());
+            }
 
-                let mut total_size = 0u64;
-                let mut count = 0usize;
+            let mut model_count = 0usize;
+            let mut model_size = 0u64;
+            let mut result_count = 0usize;
+            let mut result_size = 0u64;
 
-                for entry in entries {
-                    if let Ok(entry) = entry.and_then(|e| e.metadata().map(|m| (e, m))) {
-                        total_size += entry.1.len();
-                        count += 1;
-                    }
+            walk_files(&cache_dir, &mut |path| {
+                let size = path.metadata().map(|m| m.len()).unwrap_or(0);
+                if path.starts_with(&result_cache_dir) {
+                    result_count += 1;
+                    result_size += size;
+                } else {
+                    model_count += 1;
+                    model_size += size;
                 }
+            });
 
-                println!("File Cache Statistics:");
-                println!("  Files: {}", count);
-                println!("  Total size: {}", format_size(total_size));
-            }
-
-            #[cfg(feature = "eval")]
-            {
-                // Prediction cache has been removed (it was implementation-sensitive and could mask regressions).
-            }
+            println!("Cache statistics:");
+            println!(
+                "  Model / dataset cache: {} files, {}",
+                model_count,
+                format_size(model_size)
+            );
+            println!(
+                "  Result cache (--batch --cache): {} entries, {}",
+                result_count,
+                format_size(result_size)
+            );
+            println!(
+                "  Total: {} files, {}",
+                model_count + result_count,
+                format_size(model_size + result_size)
+            );
         }
         CacheAction::Invalidate { model, file } => {
             if !cache_dir.exists() {
@@ -156,27 +204,28 @@ pub fn run(args: CacheArgs) -> Result<(), String> {
                 return Ok(());
             }
 
-            let entries = fs::read_dir(&cache_dir)
-                .map_err(|e| format!("Failed to read cache directory: {}", e))?;
-
             let mut removed = 0usize;
 
-            for entry in entries.flatten() {
-                let path = entry.path();
-                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            walk_files(&cache_dir, &mut |path| {
+                let path_str = path.to_string_lossy();
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default();
 
                 let should_remove = if let Some(ref m) = model {
-                    name.starts_with(&format!("{}-", m))
+                    // Match both top-level (model download) and result cache path segments
+                    name.starts_with(&format!("{}-", m)) || path_str.contains(m)
                 } else if let Some(ref f) = file {
-                    name.contains(f)
+                    name.contains(f) || path_str.contains(f)
                 } else {
                     false
                 };
 
-                if should_remove && fs::remove_file(&path).is_ok() {
+                if should_remove && fs::remove_file(path).is_ok() {
                     removed += 1;
                 }
-            }
+            });
 
             println!("{} Removed {} cache entries", color("32", "✓"), removed);
         }

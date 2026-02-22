@@ -6,6 +6,12 @@
 //! - JSONL (one entity per line)
 //! - N-Triples (RDF triples for knowledge graphs)
 //! - JSON-LD (linked data for knowledge graphs)
+//! - graph-ntriples (N-Triples via the lattix graph substrate; stable triple rendering)
+//! - Kuzu CSV (node + co-occurrence edge tables for Kuzu graph DB import)
+//!
+//! When the selected backend is `RelationCapable` (e.g. `tplinker`), graph-oriented formats
+//! (graph-ntriples, ntriples, jsonld, kuzu) emit typed semantic triples instead of falling
+//! back to co-occurrence edges.
 
 use clap::{Parser, ValueEnum};
 use std::fs;
@@ -29,7 +35,9 @@ pub struct ExportArgs {
     #[arg(short, long, default_value = "brat")]
     pub format: ExportFormat,
 
-    /// Model backend to use for extraction
+    /// Model backend to use for extraction.
+    /// Use `--model tplinker` to enable joint entity+relation extraction (actual semantic
+    /// triples rather than co-occurrence edges) for graph-oriented formats.
     #[arg(short, long, default_value = "stacked")]
     pub model: ModelBackend,
 
@@ -40,6 +48,14 @@ pub struct ExportArgs {
     /// Include confidence scores in output
     #[arg(long)]
     pub include_confidence: bool,
+
+    /// Base URI prefix for RDF/KG namespaces (ntriples, jsonld, graph-ntriples).
+    /// Use a real namespace for interoperable output, e.g.:
+    ///   --base-uri https://www.gutenberg.org/ebooks/   (Project Gutenberg texts)
+    ///   --base-uri https://dbpedia.org/resource/        (DBpedia-aligned)
+    ///   --base-uri urn:anno:                            (default, stable URN prefix)
+    #[arg(long, default_value = "urn:anno:")]
+    pub base_uri: String,
 
     /// Quiet mode
     #[arg(short, long)]
@@ -62,10 +78,30 @@ pub enum ExportFormat {
     /// JSON-LD (linked data format for knowledge graphs)
     #[value(name = "jsonld")]
     JsonLd,
-    /// N-Triples exported via `lattix` (graph/KG adapter; stable triple rendering).
+    /// N-Triples via the lattix graph substrate (stable triple rendering; requires `--features graph`).
+    /// With a RelationCapable model (e.g. `--model tplinker`), emits real semantic triples.
     #[cfg(feature = "graph")]
-    #[value(name = "lattix-ntriples")]
-    LattixNTriples,
+    #[value(name = "graph-ntriples")]
+    GraphNTriples,
+    /// Kuzu CSV: node table + co-occurrence (or semantic) edge table for Kuzu graph DB import.
+    #[value(name = "kuzu")]
+    KuzuCsv,
+}
+
+// =============================================================================
+// Extraction result
+// =============================================================================
+
+struct Extracted {
+    entities: Vec<anno_core::Entity>,
+    /// Populated when the backend is RelationCapable; empty otherwise.
+    relations: Vec<anno_core::Relation>,
+}
+
+impl Extracted {
+    fn entities_only(entities: Vec<anno_core::Entity>) -> Self {
+        Self { entities, relations: Vec::new() }
+    }
 }
 
 /// Run the export command.
@@ -81,8 +117,13 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
             .map_err(|e| format!("Failed to create output directory: {}", e))?;
     }
 
-    // Create model
-    let model = args.model.create_model()?;
+    // Choose extraction path: relation-capable model vs plain model.
+    let relation_model = args.model.try_create_relation_model().transpose()?;
+    let plain_model = if relation_model.is_none() {
+        Some(args.model.create_model()?)
+    } else {
+        None
+    };
 
     // Collect files to process
     let files: Vec<PathBuf> = if args.input.is_file() {
@@ -101,11 +142,13 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
     }
 
     if !args.quiet {
+        let mode = if relation_model.is_some() { " (relation-capable)" } else { "" };
         eprintln!(
-            "{} Exporting {} files to {:?} format",
+            "{} Exporting {} files to {:?} format{}",
             color("32", "[export]"),
             files.len(),
-            args.format
+            args.format,
+            mode,
         );
     }
 
@@ -113,25 +156,26 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
     let mut error_count = 0;
 
     for file in &files {
-        match export_file(
-            file,
-            &args.output,
-            &*model,
-            args.format,
-            args.include_confidence,
-            args.overwrite,
-        ) {
-            Ok(entity_count) => {
-                success_count += 1;
-                if !args.quiet {
-                    eprintln!(
-                        "  {} {:?} ({} entities)",
-                        color("32", "✓"),
-                        file.file_name().unwrap_or_default(),
-                        entity_count
-                    );
-                }
-            }
+        // Extract — relation model takes priority; plain model is the fallback.
+        let extracted = if let Some(ref rm) = relation_model {
+            let content =
+                fs::read_to_string(file).map_err(|e| format!("Failed to read file: {}", e))?;
+            let (entities, relations) = rm
+                .extract_with_relations(&content, None)
+                .map_err(|e| format!("Extraction failed: {}", e))?;
+            Ok((content, Extracted { entities, relations }))
+        } else if let Some(ref m) = plain_model {
+            let content =
+                fs::read_to_string(file).map_err(|e| format!("Failed to read file: {}", e))?;
+            let entities = m
+                .extract_entities(&content, None)
+                .map_err(|e| format!("Extraction failed: {}", e))?;
+            Ok((content, Extracted::entities_only(entities)))
+        } else {
+            Err("No model available".to_string())
+        };
+
+        match extracted {
             Err(e) => {
                 error_count += 1;
                 if !args.quiet {
@@ -141,6 +185,49 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
                         file.file_name().unwrap_or_default(),
                         e
                     );
+                }
+            }
+            Ok((content, ext)) => {
+                let entity_count = ext.entities.len();
+                let rel_count = ext.relations.len();
+                match export_file(
+                    file,
+                    &args.output,
+                    &content,
+                    ext,
+                    args.format,
+                    args.include_confidence,
+                    args.overwrite,
+                    &args.base_uri,
+                ) {
+                    Ok(()) => {
+                        success_count += 1;
+                        if !args.quiet {
+                            let rel_suffix = if rel_count > 0 {
+                                format!(", {} relations", rel_count)
+                            } else {
+                                String::new()
+                            };
+                            eprintln!(
+                                "  {} {:?} ({} entities{})",
+                                color("32", "✓"),
+                                file.file_name().unwrap_or_default(),
+                                entity_count,
+                                rel_suffix,
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        error_count += 1;
+                        if !args.quiet {
+                            eprintln!(
+                                "  {} {:?}: {}",
+                                color("31", "✗"),
+                                file.file_name().unwrap_or_default(),
+                                e
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -166,23 +253,40 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
 fn export_file(
     input: &Path,
     output_dir: &Path,
-    model: &dyn anno::Model,
+    content: &str,
+    ext: Extracted,
     format: ExportFormat,
     include_confidence: bool,
     overwrite: bool,
-) -> Result<usize, String> {
-    // Read input file
-    let content = fs::read_to_string(input).map_err(|e| format!("Failed to read file: {}", e))?;
-
-    // Extract entities
-    let entities = model
-        .extract_entities(&content, None)
-        .map_err(|e| format!("Extraction failed: {}", e))?;
-
-    let entity_count = entities.len();
-
-    // Determine output filename
+    base_uri: &str,
+) -> Result<(), String> {
     let stem = input.file_stem().unwrap_or_default().to_string_lossy();
+
+    // Kuzu writes two CSVs (nodes + edges); handle before the single-path logic below.
+    if matches!(format, ExportFormat::KuzuCsv) {
+        let nodes_path = output_dir.join(format!("{}-nodes.csv", stem));
+        let edges_path = output_dir.join(format!("{}-edges.csv", stem));
+
+        for path in [&nodes_path, &edges_path] {
+            if path.exists() && !overwrite {
+                return Err(format!(
+                    "Output file already exists: {:?} (use --overwrite)",
+                    path
+                ));
+            }
+        }
+
+        let (nodes_csv, edges_csv) =
+            export_kuzu(&ext.entities, &ext.relations, input, include_confidence);
+        fs::write(&nodes_path, nodes_csv)
+            .map_err(|e| format!("Failed to write nodes CSV: {}", e))?;
+        fs::write(&edges_path, edges_csv)
+            .map_err(|e| format!("Failed to write edges CSV: {}", e))?;
+
+        return Ok(());
+    }
+
+    // Determine output filename for single-file formats
     let output_path = match format {
         ExportFormat::Brat => output_dir.join(format!("{}.ann", stem)),
         ExportFormat::Conll => output_dir.join(format!("{}.conll", stem)),
@@ -190,10 +294,10 @@ fn export_file(
         ExportFormat::NTriples => output_dir.join(format!("{}.nt", stem)),
         ExportFormat::JsonLd => output_dir.join(format!("{}.jsonld", stem)),
         #[cfg(feature = "graph")]
-        ExportFormat::LattixNTriples => output_dir.join(format!("{}.nt", stem)),
+        ExportFormat::GraphNTriples => output_dir.join(format!("{}.nt", stem)),
+        ExportFormat::KuzuCsv => unreachable!(),
     };
 
-    // Check if output exists
     if output_path.exists() && !overwrite {
         return Err(format!(
             "Output file already exists: {:?} (use --overwrite)",
@@ -201,48 +305,54 @@ fn export_file(
         ));
     }
 
-    // Generate output content
     let output_content = match format {
-        ExportFormat::Brat => export_brat(&entities, include_confidence),
-        ExportFormat::Conll => export_conll(&content, &entities),
-        ExportFormat::Jsonl => export_jsonl(&entities, input, include_confidence),
-        ExportFormat::NTriples => export_ntriples(&entities, &content, input),
-        ExportFormat::JsonLd => export_jsonld(&entities, &content, input, include_confidence),
+        ExportFormat::Brat => export_brat(&ext.entities, include_confidence),
+        ExportFormat::Conll => export_conll(content, &ext.entities),
+        ExportFormat::Jsonl => export_jsonl(&ext.entities, input, include_confidence),
+        ExportFormat::NTriples => {
+            export_ntriples(&ext.entities, &ext.relations, input, base_uri)
+        }
+        ExportFormat::JsonLd => {
+            export_jsonld(&ext.entities, &ext.relations, input, include_confidence, base_uri)
+        }
         #[cfg(feature = "graph")]
-        ExportFormat::LattixNTriples => export_lattix_ntriples(&entities, input),
+        ExportFormat::GraphNTriples => {
+            export_graph_ntriples(&ext.entities, &ext.relations, input, base_uri)
+        }
+        ExportFormat::KuzuCsv => unreachable!(),
     };
 
-    // Write output
     fs::write(&output_path, output_content)
         .map_err(|e| format!("Failed to write output: {}", e))?;
 
-    // For brat format, also copy the source text file
+    // brat also copies the source text alongside the .ann file
     if matches!(format, ExportFormat::Brat) {
         let txt_path = output_dir.join(format!("{}.txt", stem));
         if !txt_path.exists() || overwrite {
-            fs::write(&txt_path, &content)
+            fs::write(&txt_path, content)
                 .map_err(|e| format!("Failed to write text file: {}", e))?;
         }
     }
 
-    Ok(entity_count)
+    Ok(())
 }
 
-/// Export to brat standoff format
+// =============================================================================
+// Non-graph formats
+// =============================================================================
+
 fn export_brat(entities: &[anno_core::Entity], include_confidence: bool) -> String {
     let mut lines = Vec::new();
-
     for (idx, entity) in entities.iter().enumerate() {
         let tid = format!("T{}", idx + 1);
-        let entity_type = entity.entity_type.as_label();
-
-        // brat format: T1	Type Start End	Text
         let line = format!(
             "{}\t{} {} {}\t{}",
-            tid, entity_type, entity.start, entity.end, entity.text
+            tid,
+            entity.entity_type.as_label(),
+            entity.start,
+            entity.end,
+            entity.text
         );
-
-        // Add confidence as attribute
         if include_confidence {
             let aid = format!("A{}", idx + 1);
             lines.push(line);
@@ -250,21 +360,16 @@ fn export_brat(entities: &[anno_core::Entity], include_confidence: bool) -> Stri
                 "{}\tConfidence {} {:.2}",
                 aid, tid, entity.confidence
             ));
-            continue;
+        } else {
+            lines.push(line);
         }
-
-        lines.push(line);
     }
-
     lines.join("\n")
 }
 
-/// Export to CoNLL IOB format
 fn export_conll(text: &str, entities: &[anno_core::Entity]) -> String {
     let mut lines = Vec::new();
     let mut char_idx = 0;
-
-    // Simple word tokenization
     for word in text.split_whitespace() {
         let word_start = text[char_idx..]
             .find(word)
@@ -272,17 +377,12 @@ fn export_conll(text: &str, entities: &[anno_core::Entity]) -> String {
             .unwrap_or(char_idx);
         let word_end = word_start + word.len();
         char_idx = word_end;
-
-        // Find entity covering this word
-        let entity = entities.iter().find(|e| {
-            // Word overlaps with entity
-            word_start < e.end && word_end > e.start
-        });
-
+        let entity = entities
+            .iter()
+            .find(|e| word_start < e.end && word_end > e.start);
         let tag = match entity {
             Some(e) => {
-                let is_begin = word_start <= e.start;
-                if is_begin {
+                if word_start <= e.start {
                     format!("B-{}", e.entity_type.as_label())
                 } else {
                     format!("I-{}", e.entity_type.as_label())
@@ -290,41 +390,35 @@ fn export_conll(text: &str, entities: &[anno_core::Entity]) -> String {
             }
             None => "O".to_string(),
         };
-
         lines.push(format!("{}\t{}", word, tag));
     }
-
     lines.join("\n")
 }
 
-/// Export to JSONL format
 fn export_jsonl(entities: &[anno_core::Entity], source: &Path, include_confidence: bool) -> String {
-    let mut lines = Vec::new();
-
-    for entity in entities {
-        let mut obj = serde_json::json!({
-            "text": entity.text,
-            "type": entity.entity_type.as_label(),
-            "start": entity.start,
-            "end": entity.end,
-            "source": source.to_string_lossy(),
-        });
-
-        if include_confidence {
-            obj["confidence"] = serde_json::json!(entity.confidence);
-        }
-
-        lines.push(obj.to_string());
-    }
-
-    lines.join("\n")
+    entities
+        .iter()
+        .map(|e| {
+            let mut obj = serde_json::json!({
+                "text": e.text,
+                "type": e.entity_type.as_label(),
+                "start": e.start,
+                "end": e.end,
+                "source": source.to_string_lossy(),
+            });
+            if include_confidence {
+                obj["confidence"] = serde_json::json!(e.confidence);
+            }
+            obj.to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 // =============================================================================
-// Knowledge Graph Export Formats
+// Shared RDF helpers
 // =============================================================================
 
-/// Escape a string for N-Triples format (RDF).
 fn escape_ntriples(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('"', "\\\"")
@@ -333,7 +427,6 @@ fn escape_ntriples(s: &str) -> String {
         .replace('\t', "\\t")
 }
 
-/// Generate a URI-safe identifier from text.
 fn uri_safe(s: &str) -> String {
     s.chars()
         .map(|c| {
@@ -346,194 +439,175 @@ fn uri_safe(s: &str) -> String {
         .collect()
 }
 
-/// Export to N-Triples format (RDF triples for knowledge graphs).
-///
-/// Generates triples:
-/// - Entity type assertions: `<entity> <rdf:type> <EntityType>`
-/// - Entity text: `<entity> <rdfs:label> "text"`
-/// - Entity position: `<entity> <anno:startOffset> "N"`
-/// - Entity provenance: `<entity> <prov:hadPrimarySource> <document>`
-///
-/// For relations (when available), also generates:
-/// - <head_entity> <relation_type> <tail_entity>
-fn export_ntriples(entities: &[anno_core::Entity], _text: &str, source: &Path) -> String {
-    let mut lines = Vec::new();
-    let doc_uri = format!(
-        "<http://example.org/doc/{}>",
-        uri_safe(&source.to_string_lossy())
-    );
+fn doc_uri(base_uri: &str, source: &Path) -> String {
+    let base = base_uri.trim_end_matches('/');
+    let stem = uri_safe(&source.file_stem().unwrap_or_default().to_string_lossy());
+    format!("<{}/doc/{}>", base, stem)
+}
 
-    // Standard prefixes (expanded inline for N-Triples)
+fn entity_uri(base_uri: &str, entity_type: &str, idx: usize, text: &str, start: usize) -> String {
+    let base = base_uri.trim_end_matches('/');
+    format!(
+        "<{}/entity/{}/{}_{}_{}>",
+        base,
+        entity_type.to_lowercase(),
+        idx,
+        uri_safe(text),
+        start,
+    )
+}
+
+fn rel_predicate_uri(base_uri: &str, rel_type: &str) -> String {
+    let base = base_uri.trim_end_matches('/');
+    format!("<{}/rel/{}>", base, uri_safe(rel_type))
+}
+
+// =============================================================================
+// N-Triples (plain, no lattix)
+// =============================================================================
+
+fn export_ntriples(
+    entities: &[anno_core::Entity],
+    relations: &[anno_core::Relation],
+    source: &Path,
+    base_uri: &str,
+) -> String {
+    let mut lines = Vec::new();
+    let doc = doc_uri(base_uri, source);
+    let base = base_uri.trim_end_matches('/');
+    let anno_ns = format!("{}/vocab#", base);
+
     let rdf_type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
     let rdfs_label = "<http://www.w3.org/2000/01/rdf-schema#label>";
-    let anno_ns = "http://example.org/anno#";
-    let entity_ns = "http://example.org/entity/";
+
+    // Index entities by (start, type) so we can resolve relation head/tail to URIs.
+    let ent_uri: Vec<String> = entities
+        .iter()
+        .enumerate()
+        .map(|(i, e)| entity_uri(base_uri, e.entity_type.as_label(), i, &e.text, e.start))
+        .collect();
 
     for (idx, entity) in entities.iter().enumerate() {
-        let entity_id = format!("e{}_{}", idx, uri_safe(&entity.text));
-        let entity_uri = format!("<{}{}>", entity_ns, entity_id);
+        let ent = &ent_uri[idx];
         let type_uri = format!("<{}{}Type>", anno_ns, entity.entity_type.as_label());
-
-        // Type assertion
-        lines.push(format!("{} {} {} .", entity_uri, rdf_type, type_uri));
-
-        // Label (the actual text)
+        lines.push(format!("{} {} {} .", ent, rdf_type, type_uri));
         lines.push(format!(
             "{} {} \"{}\" .",
-            entity_uri,
+            ent,
             rdfs_label,
             escape_ntriples(&entity.text)
         ));
-
-        // Position in document
         lines.push(format!(
             "{} <{}startOffset> \"{}\"^^<http://www.w3.org/2001/XMLSchema#integer> .",
-            entity_uri, anno_ns, entity.start
+            ent, anno_ns, entity.start
         ));
         lines.push(format!(
             "{} <{}endOffset> \"{}\"^^<http://www.w3.org/2001/XMLSchema#integer> .",
-            entity_uri, anno_ns, entity.end
+            ent, anno_ns, entity.end
         ));
-
-        // Confidence score
         lines.push(format!(
             "{} <{}confidence> \"{}\"^^<http://www.w3.org/2001/XMLSchema#float> .",
-            entity_uri, anno_ns, entity.confidence
+            ent, anno_ns, entity.confidence
         ));
-
-        // Provenance
         lines.push(format!(
             "{} <http://www.w3.org/ns/prov#hadPrimarySource> {} .",
-            entity_uri, doc_uri
+            ent, doc
         ));
     }
 
-    // TODO: When relation extraction is integrated into Model trait,
-    // add relation triples here:
-    // <head_entity> <relation_type> <tail_entity> .
+    // Semantic relation triples (available when backend is RelationCapable).
+    // Head and tail entities are identified by their position in the entity list.
+    for rel in relations {
+        // Find matching entity URIs by matching head/tail text + offsets.
+        let head_uri = ent_uri.iter().zip(entities.iter()).find_map(|(u, e)| {
+            (e.text == rel.head.text && e.start == rel.head.start).then_some(u.as_str())
+        });
+        let tail_uri = ent_uri.iter().zip(entities.iter()).find_map(|(u, e)| {
+            (e.text == rel.tail.text && e.start == rel.tail.start).then_some(u.as_str())
+        });
+        if let (Some(h), Some(t)) = (head_uri, tail_uri) {
+            let pred = rel_predicate_uri(base_uri, &rel.relation_type);
+            lines.push(format!("{} {} {} .", h, pred, t));
+        }
+    }
 
     lines.join("\n")
 }
 
-#[cfg(feature = "graph")]
-fn escape_literal(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
-}
+// =============================================================================
+// JSON-LD
+// =============================================================================
 
-/// Export N-Triples using `lattix` as the triple renderer.
-///
-/// This produces N-Triples compatible with `lattix::KnowledgeGraph::from_ntriples_file(...)`.
-#[cfg(feature = "graph")]
-fn export_lattix_ntriples(entities: &[anno_core::Entity], source: &Path) -> String {
-    use lattix::{KnowledgeGraph, Triple};
-
-    let mut kg = KnowledgeGraph::with_capacity(entities.len().max(1), entities.len() * 8);
-
-    let doc_iri = format!(
-        "http://example.org/doc/{}",
-        uri_safe(&source.to_string_lossy())
-    );
-    let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-    let rdfs_label = "http://www.w3.org/2000/01/rdf-schema#label";
-    let prov_src = "http://www.w3.org/ns/prov#hadPrimarySource";
-    let anno_ns = "http://example.org/anno#";
-    let entity_ns = "http://example.org/entity/";
-    let xsd_int = "http://www.w3.org/2001/XMLSchema#integer";
-    let xsd_float = "http://www.w3.org/2001/XMLSchema#float";
-
-    for (idx, entity) in entities.iter().enumerate() {
-        let entity_id = format!("e{}_{}", idx, uri_safe(&entity.text));
-        let entity_iri = format!("{}{}", entity_ns, entity_id);
-        let type_iri = format!("{}{}Type", anno_ns, entity.entity_type.as_label());
-
-        kg.add_triple(Triple::new(
-            entity_iri.as_str(),
-            rdf_type,
-            type_iri.as_str(),
-        ));
-
-        // Label literal
-        kg.add_triple(Triple::new(
-            entity_iri.as_str(),
-            rdfs_label,
-            format!("\"{}\"", escape_literal(&entity.text)),
-        ));
-
-        // Offsets + confidence as typed literals
-        kg.add_triple(Triple::new(
-            entity_iri.as_str(),
-            format!("{}startOffset", anno_ns),
-            format!("\"{}\"^^<{}>", entity.start, xsd_int),
-        ));
-        kg.add_triple(Triple::new(
-            entity_iri.as_str(),
-            format!("{}endOffset", anno_ns),
-            format!("\"{}\"^^<{}>", entity.end, xsd_int),
-        ));
-        kg.add_triple(Triple::new(
-            entity_iri.as_str(),
-            format!("{}confidence", anno_ns),
-            format!("\"{}\"^^<{}>", entity.confidence, xsd_float),
-        ));
-
-        // Provenance
-        kg.add_triple(Triple::new(entity_iri.as_str(), prov_src, doc_iri.as_str()));
-
-        // Convenience: doc mentions entity
-        kg.add_triple(Triple::new(
-            doc_iri.as_str(),
-            format!("{}mentions", anno_ns),
-            entity_iri.as_str(),
-        ));
-    }
-
-    kg.triples()
-        .map(|t| t.to_ntriples())
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// Export to JSON-LD format (linked data for knowledge graphs).
-///
-/// Produces a JSON-LD document with:
-/// - @context with standard prefixes
-/// - @graph array of entity nodes
-/// - Each entity has @id, @type, label, offsets, and provenance
 fn export_jsonld(
     entities: &[anno_core::Entity],
-    _text: &str,
+    relations: &[anno_core::Relation],
     source: &Path,
     include_confidence: bool,
+    base_uri: &str,
 ) -> String {
-    let entity_ns = "http://example.org/entity/";
-    let anno_ns = "http://example.org/anno#";
+    let base = base_uri.trim_end_matches('/');
+    let entity_ns = format!("{}/entity/", base);
+    let anno_ns = format!("{}/vocab#", base);
+    let doc_stem = uri_safe(&source.file_stem().unwrap_or_default().to_string_lossy());
 
-    let mut graph = Vec::new();
+    // Build entity ID map for relation resolution.
+    let entity_ids: Vec<String> = entities
+        .iter()
+        .enumerate()
+        .map(|(i, e)| {
+            format!(
+                "{}/{}/{}_{}_{}",
+                entity_ns,
+                e.entity_type.as_label().to_lowercase(),
+                i,
+                uri_safe(&e.text),
+                e.start,
+            )
+        })
+        .collect();
 
-    for (idx, entity) in entities.iter().enumerate() {
-        let entity_id = format!("e{}_{}", idx, uri_safe(&entity.text));
-
-        let mut node = serde_json::json!({
-            "@id": format!("{}{}", entity_ns, entity_id),
-            "@type": format!("{}{}Type", anno_ns, entity.entity_type.as_label()),
-            "rdfs:label": entity.text,
-            "anno:startOffset": entity.start,
-            "anno:endOffset": entity.end,
-            "prov:hadPrimarySource": {
-                "@id": format!("http://example.org/doc/{}", uri_safe(&source.to_string_lossy()))
-            }
+    // Group relation triples by head entity ID.
+    let mut rel_by_head: std::collections::HashMap<&str, Vec<serde_json::Value>> =
+        std::collections::HashMap::new();
+    for rel in relations {
+        let head_id = entity_ids.iter().zip(entities.iter()).find_map(|(id, e)| {
+            (e.text == rel.head.text && e.start == rel.head.start).then_some(id.as_str())
         });
-
-        if include_confidence {
-            node["anno:confidence"] = serde_json::json!(entity.confidence);
+        let tail_id = entity_ids.iter().zip(entities.iter()).find_map(|(id, e)| {
+            (e.text == rel.tail.text && e.start == rel.tail.start).then_some(id.as_str())
+        });
+        if let (Some(h), Some(t)) = (head_id, tail_id) {
+            rel_by_head.entry(h).or_default().push(serde_json::json!({
+                "@type": format!("{}/rel/{}", base, uri_safe(&rel.relation_type)),
+                "target": { "@id": t }
+            }));
         }
-
-        graph.push(node);
     }
+
+    let graph: Vec<serde_json::Value> = entities
+        .iter()
+        .enumerate()
+        .map(|(i, e)| {
+            let id = &entity_ids[i];
+            let mut node = serde_json::json!({
+                "@id": id,
+                "@type": format!("{}{}Type", anno_ns, e.entity_type.as_label()),
+                "rdfs:label": e.text,
+                "anno:startOffset": e.start,
+                "anno:endOffset": e.end,
+                "prov:hadPrimarySource": {
+                    "@id": format!("{}/doc/{}", base, doc_stem)
+                }
+            });
+            if include_confidence {
+                node["anno:confidence"] = serde_json::json!(e.confidence);
+            }
+            if let Some(rels) = rel_by_head.get(id.as_str()) {
+                node["anno:relations"] = serde_json::json!(rels);
+            }
+            node
+        })
+        .collect();
 
     let doc = serde_json::json!({
         "@context": {
@@ -546,4 +620,155 @@ fn export_jsonld(
     });
 
     serde_json::to_string_pretty(&doc).unwrap_or_else(|_| "{}".to_string())
+}
+
+// =============================================================================
+// graph-ntriples (via anno-graph substrate)
+// =============================================================================
+
+/// N-Triples rendered via `anno-graph`.
+///
+/// All triple construction (offset/confidence/provenance triples, relation arcs) lives in
+/// `anno-graph::entities_to_knowledge_graph` — this function is just the CLI glue.
+#[cfg(feature = "graph")]
+fn export_graph_ntriples(
+    entities: &[anno_core::Entity],
+    relations: &[anno_core::Relation],
+    source: &Path,
+    base_uri: &str,
+) -> String {
+    let base = base_uri.trim_end_matches('/');
+    let stem = anno_graph::uri_safe(
+        &source.file_stem().unwrap_or_default().to_string_lossy(),
+    );
+    let doc_iri = format!("{}/doc/{}", base, stem);
+
+    let kg = anno_graph::entities_to_knowledge_graph(entities, relations, &doc_iri, base_uri);
+    kg.triples()
+        .map(|t| t.to_ntriples())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// =============================================================================
+// Kuzu CSV
+// =============================================================================
+
+/// Export entities as Kuzu-compatible CSV node and edge tables.
+///
+/// Returns `(nodes_csv, edges_csv)`.
+///
+/// **Kuzu import**:
+/// ```cypher
+/// CREATE NODE TABLE Entity(
+///     id STRING, entity_type STRING, text STRING,
+///     start INT64, end INT64, source STRING,
+///     PRIMARY KEY(id)
+/// );
+/// CREATE REL TABLE Relation(FROM Entity TO Entity, rel_type STRING, confidence DOUBLE);
+/// COPY Entity FROM 'doc-nodes.csv' (HEADER=TRUE);
+/// COPY Relation FROM 'doc-edges.csv' (HEADER=TRUE);
+/// ```
+///
+/// When the backend is `RelationCapable` (e.g. `--model tplinker`), edges are extracted
+/// semantic triples. Otherwise they fall back to co-occurrence pairs (within 200 chars).
+fn export_kuzu(
+    entities: &[anno_core::Entity],
+    relations: &[anno_core::Relation],
+    source: &Path,
+    include_confidence: bool,
+) -> (String, String) {
+    let source_str = source.to_string_lossy();
+
+    // Entity IDs: stable per-document keys.
+    let entity_ids: Vec<String> = entities
+        .iter()
+        .enumerate()
+        .map(|(i, e)| {
+            format!(
+                "{}:{}_{}",
+                e.entity_type.as_label().to_lowercase(),
+                i,
+                uri_safe(&e.text)
+            )
+        })
+        .collect();
+
+    // Nodes CSV
+    let mut nodes = String::from("id,entity_type,text,start,end,source");
+    if include_confidence {
+        nodes.push_str(",confidence");
+    }
+    nodes.push('\n');
+    for (i, e) in entities.iter().enumerate() {
+        nodes.push_str(&format!(
+            "{},{},{},{},{},{}",
+            csv_escape(&entity_ids[i]),
+            csv_escape(e.entity_type.as_label()),
+            csv_escape(&e.text),
+            e.start,
+            e.end,
+            csv_escape(&source_str),
+        ));
+        if include_confidence {
+            nodes.push_str(&format!(",{:.4}", e.confidence));
+        }
+        nodes.push('\n');
+    }
+
+    // Edges CSV: semantic relations when available, co-occurrence fallback otherwise.
+    let mut edges = String::from("from,to,rel_type,confidence\n");
+
+    if !relations.is_empty() {
+        // Real semantic edges from a RelationCapable backend.
+        for rel in relations {
+            let head_id = entity_ids.iter().zip(entities.iter()).find_map(|(id, e)| {
+                (e.text == rel.head.text && e.start == rel.head.start).then_some(id.as_str())
+            });
+            let tail_id = entity_ids.iter().zip(entities.iter()).find_map(|(id, e)| {
+                (e.text == rel.tail.text && e.start == rel.tail.start).then_some(id.as_str())
+            });
+            if let (Some(h), Some(t)) = (head_id, tail_id) {
+                edges.push_str(&format!(
+                    "{},{},{},{:.4}\n",
+                    csv_escape(h),
+                    csv_escape(t),
+                    csv_escape(&rel.relation_type),
+                    rel.confidence,
+                ));
+            }
+        }
+    } else {
+        // Co-occurrence fallback: entities within 200 chars in the same document.
+        const COOCCUR_WINDOW: usize = 200;
+        for (i, a) in entities.iter().enumerate() {
+            for (j, b) in entities.iter().enumerate().skip(i + 1) {
+                let distance = if a.end <= b.start {
+                    b.start.saturating_sub(a.end)
+                } else if b.end <= a.start {
+                    a.start.saturating_sub(b.end)
+                } else {
+                    0
+                };
+                if distance <= COOCCUR_WINDOW {
+                    edges.push_str(&format!(
+                        "{},{},CO_OCCURS,1.0000\n",
+                        csv_escape(&entity_ids[i]),
+                        csv_escape(&entity_ids[j]),
+                    ));
+                }
+            }
+        }
+    }
+
+    (nodes, edges)
+}
+
+/// Minimal CSV field escaping.
+fn csv_escape(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
 }
