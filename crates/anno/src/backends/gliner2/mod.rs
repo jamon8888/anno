@@ -1,0 +1,802 @@
+//! GLiNER2: Multi-task Information Extraction.
+//!
+//! GLiNER2 extends GLiNER to support:
+//! - Named Entity Recognition (with label descriptions)
+//! - Text Classification (single/multi-label)
+//! - Hierarchical Structure Extraction
+//! - Task Composition (multiple tasks in one pass)
+//!
+//! This backend is based on the GLiNER2 paper (arXiv:2507.18546). The details of
+//! prompt formatting and the full task schema are paper-defined; this module
+//! focuses on the inference integration and trait wiring used by `anno`.
+//!
+//! # Trait Integration
+//!
+//! GLiNER2 implements the standard `anno` traits:
+//! - `Model` - Core entity extraction interface
+//! - `ZeroShotNER` - Open-domain entity types
+//! - `RelationExtractor` - Joint entity-relation extraction (via GLiREL)
+//! - `BatchCapable` - Efficient batch processing
+//!
+//! # Usage
+//!
+//! ```rust,ignore
+//! use anno::{Model, ZeroShotNER, DEFAULT_GLINER2_MODEL};
+//! use anno::backends::gliner2::{GLiNER2, TaskSchema};
+//!
+//! // Use the official Fastino Labs GLiNER2 model
+//! let model = GLiNER2::from_pretrained(DEFAULT_GLINER2_MODEL)?;
+//! // Or: GLiNER2::from_pretrained("fastino/gliner2-base-v1")?;
+//!
+//! // Standard Model trait
+//! let entities = model.extract_entities("Apple announced iPhone 15", None)?;
+//!
+//! // Zero-shot with custom types
+//! let types = &["company", "product", "event"];
+//! let entities = model.extract_with_types(text, types, 0.5)?;
+//!
+//! // Multi-task extraction with schema
+//! let schema = TaskSchema::new()
+//!     .with_entities(&["person", "organization", "product"])
+//!     .with_classification("sentiment", &["positive", "negative", "neutral"]);
+//!
+//! let result = model.extract_with_schema("Apple announced iPhone 15", &schema)?;
+//! ```
+//!
+//! # Backends
+//!
+//! - **ONNX** (recommended): `cargo build --features onnx`
+//! - **Candle** (native): `cargo build --features candle`
+
+#[cfg(feature = "onnx")]
+use crate::sync::lock;
+use crate::{Entity, EntityType, Error, Result};
+use anno_core::EntityCategory;
+
+pub(crate) mod relations;
+
+use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, ZeroShotNER};
+
+pub mod schema;
+pub mod onnx;
+pub mod candle;
+pub use schema::{
+    ClassificationResult, ClassificationTask, EntityTask, ExtractedStructure,
+    ExtractionResult, FieldType, LabelCache, StructureTask, StructureValue, TaskSchema,
+};
+#[cfg(feature = "onnx")]
+pub use onnx::GLiNER2Onnx;
+#[cfg(feature = "candle")]
+pub use candle::GLiNER2Candle;
+
+// Stub implementations (no feature)
+// =============================================================================
+
+/// GLiNER2 stub (requires onnx or candle feature).
+#[cfg(not(any(feature = "onnx", feature = "candle")))]
+#[derive(Debug)]
+pub struct GLiNER2 {
+    _private: (),
+}
+
+#[cfg(not(any(feature = "onnx", feature = "candle")))]
+impl GLiNER2 {
+    /// Load model (requires feature).
+    pub fn from_pretrained(_model_id: &str) -> Result<Self> {
+        Err(Error::FeatureNotAvailable(
+            "GLiNER2 requires 'onnx' or 'candle' feature. \
+             Build with: cargo build --features candle"
+                .to_string(),
+        ))
+    }
+
+    /// Extract (requires feature).
+    pub fn extract(&self, _text: &str, _schema: &TaskSchema) -> Result<ExtractionResult> {
+        Err(Error::FeatureNotAvailable(
+            "GLiNER2 requires features".to_string(),
+        ))
+    }
+}
+
+// =============================================================================
+// Unified GLiNER2 type
+// =============================================================================
+
+/// GLiNER2 model - automatically selects best available backend.
+#[cfg(feature = "candle")]
+pub type GLiNER2 = GLiNER2Candle;
+
+/// GLiNER2 model - ONNX backend (when candle not enabled).
+#[cfg(all(feature = "onnx", not(feature = "candle")))]
+pub type GLiNER2 = GLiNER2Onnx;
+
+// =============================================================================
+// Helper functions
+// =============================================================================
+
+/// Convert word span indices to character offsets.
+pub(super) fn word_span_to_char_offsets(
+    text: &str,
+    words: &[&str],
+    start_word: usize,
+    end_word: usize,
+) -> (usize, usize) {
+    // Defensive: Validate bounds
+    if words.is_empty()
+        || start_word >= words.len()
+        || end_word >= words.len()
+        || start_word > end_word
+    {
+        // Return safe defaults: empty span at start of text
+        return (0, 0);
+    }
+
+    // Track our search position in **bytes**.
+    let mut byte_pos = 0;
+    let mut start_byte = 0;
+    let mut end_byte = text.len();
+    let mut found_start = false;
+    let mut found_end = false;
+
+    for (i, word) in words.iter().enumerate() {
+        if let Some(pos) = text.get(byte_pos..).and_then(|s| s.find(word)) {
+            let abs_pos = byte_pos + pos;
+
+            if i == start_word {
+                start_byte = abs_pos;
+                found_start = true;
+            }
+            if i == end_word {
+                end_byte = abs_pos + word.len();
+                found_end = true;
+                // Early exit: we found both start and end
+                break;
+            }
+
+            byte_pos = abs_pos + word.len();
+        } else {
+            // Word not found - this shouldn't happen in normal operation,
+            // but if it does, we can't reliably compute offsets
+            // Continue searching but mark that we may have incorrect results
+        }
+    }
+
+    // If we didn't find the words, return safe defaults
+    if !found_start || !found_end {
+        // Return empty span to avoid incorrect entity extraction
+        (0, 0)
+    } else {
+        // Convert byte offsets to character offsets (anno spans are char-based).
+        crate::offset::bytes_to_chars(text, start_byte, end_byte)
+    }
+}
+
+/// Map entity type string to EntityType.
+///
+/// Uses the canonical schema mapper for consistent semantics across all backends.
+pub(super) fn map_entity_type(type_str: &str) -> EntityType {
+    crate::schema::map_to_canonical(type_str, None)
+}
+
+// =============================================================================
+// Model Trait Implementation (ONNX)
+// =============================================================================
+
+#[cfg(feature = "onnx")]
+impl crate::Model for GLiNER2Onnx {
+    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+        let schema = TaskSchema::new().with_entities(&[
+            "person",
+            "organization",
+            "location",
+            "date",
+            "event",
+        ]);
+
+        let result = self.extract(text, &schema)?;
+        Ok(result.entities)
+    }
+
+    fn supported_types(&self) -> Vec<EntityType> {
+        vec![
+            EntityType::Person,
+            EntityType::Organization,
+            EntityType::Location,
+            EntityType::Date,
+            EntityType::Custom {
+                name: "event".to_string(),
+                category: EntityCategory::Creative,
+            },
+            EntityType::Custom {
+                name: "product".to_string(),
+                category: EntityCategory::Creative,
+            },
+            EntityType::Other("misc".to_string()),
+        ]
+    }
+
+    fn is_available(&self) -> bool {
+        true
+    }
+
+    fn name(&self) -> &'static str {
+        "GLiNER2-ONNX"
+    }
+
+    fn description(&self) -> &'static str {
+        "Multi-task information extraction via GLiNER2 (ONNX backend)"
+    }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            streaming_capable: true,
+            relation_capable: true,
+            dynamic_labels: true,
+            ..Default::default()
+        }
+    }
+}
+
+#[cfg(feature = "onnx")]
+impl crate::NamedEntityCapable for GLiNER2Onnx {}
+
+#[cfg(feature = "onnx")]
+impl crate::DynamicLabels for GLiNER2Onnx {
+    fn extract_with_labels(
+        &self,
+        text: &str,
+        labels: &[&str],
+        _language: Option<&str>,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        <Self as ZeroShotNER>::extract_with_types(self, text, labels, 0.3)
+    }
+}
+
+// =============================================================================
+// Model Trait Implementation (Candle)
+// =============================================================================
+
+#[cfg(feature = "candle")]
+impl crate::Model for GLiNER2Candle {
+    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+        let schema = TaskSchema::new().with_entities(&[
+            "person",
+            "organization",
+            "location",
+            "date",
+            "event",
+        ]);
+
+        let result = self.extract(text, &schema)?;
+        Ok(result.entities)
+    }
+
+    fn supported_types(&self) -> Vec<EntityType> {
+        vec![
+            EntityType::Person,
+            EntityType::Organization,
+            EntityType::Location,
+            EntityType::Date,
+            EntityType::Custom {
+                name: "event".to_string(),
+                category: EntityCategory::Creative,
+            },
+            EntityType::Custom {
+                name: "product".to_string(),
+                category: EntityCategory::Creative,
+            },
+            EntityType::Other("misc".to_string()),
+        ]
+    }
+
+    fn is_available(&self) -> bool {
+        true
+    }
+
+    fn name(&self) -> &'static str {
+        "GLiNER2-Candle"
+    }
+
+    fn description(&self) -> &'static str {
+        "Multi-task information extraction via GLiNER2 (native Rust/Candle)"
+    }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            streaming_capable: true,
+            gpu_capable: true,
+            relation_capable: true,
+            dynamic_labels: true,
+            ..Default::default()
+        }
+    }
+}
+
+#[cfg(feature = "candle")]
+impl crate::NamedEntityCapable for GLiNER2Candle {}
+
+#[cfg(feature = "candle")]
+impl crate::DynamicLabels for GLiNER2Candle {
+    fn extract_with_labels(
+        &self,
+        text: &str,
+        labels: &[&str],
+        _language: Option<&str>,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        <Self as ZeroShotNER>::extract_with_types(self, text, labels, 0.3)
+    }
+}
+
+// =============================================================================
+// ZeroShotNER Trait Implementation
+// =============================================================================
+
+#[cfg(feature = "onnx")]
+impl ZeroShotNER for GLiNER2Onnx {
+    fn default_types(&self) -> &[&'static str] {
+        &["person", "organization", "location", "date", "event"]
+    }
+
+    fn extract_with_types(
+        &self,
+        text: &str,
+        types: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<Entity>> {
+        self.extract_ner(text, types, threshold)
+    }
+
+    fn extract_with_descriptions(
+        &self,
+        text: &str,
+        descriptions: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<Entity>> {
+        // Use descriptions as entity types directly (GLiNER2 supports this)
+        self.extract_ner(text, descriptions, threshold)
+    }
+}
+
+#[cfg(feature = "candle")]
+impl ZeroShotNER for GLiNER2Candle {
+    fn default_types(&self) -> &[&'static str] {
+        &["person", "organization", "location", "date", "event"]
+    }
+
+    fn extract_with_types(
+        &self,
+        text: &str,
+        types: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<Entity>> {
+        let type_strings: Vec<String> = types.iter().map(|s| s.to_string()).collect();
+        self.extract_entities(text, &type_strings, threshold)
+    }
+
+    fn extract_with_descriptions(
+        &self,
+        text: &str,
+        descriptions: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<Entity>> {
+        // Use descriptions as entity types directly (GLiNER2 supports this)
+        let type_strings: Vec<String> = descriptions.iter().map(|s| s.to_string()).collect();
+        self.extract_entities(text, &type_strings, threshold)
+    }
+}
+
+#[cfg(feature = "onnx")]
+impl RelationExtractor for GLiNER2Onnx {
+    fn extract_with_relations(
+        &self,
+        text: &str,
+        types: &[&str],
+        relation_types: &[&str],
+        threshold: f32,
+    ) -> Result<ExtractionWithRelations> {
+        // Extract entities first
+        let entities = self.extract_ner(text, types, threshold)?;
+
+        // Extract relations using heuristics
+        let relations = relations::extract_relations_heuristic(&entities, text, relation_types, threshold);
+
+        Ok(ExtractionWithRelations {
+            entities,
+            relations,
+        })
+    }
+}
+
+#[cfg(feature = "candle")]
+impl RelationExtractor for GLiNER2Candle {
+    fn extract_with_relations(
+        &self,
+        text: &str,
+        types: &[&str],
+        relation_types: &[&str],
+        threshold: f32,
+    ) -> Result<ExtractionWithRelations> {
+        let type_strings: Vec<String> = types.iter().map(|s| s.to_string()).collect();
+        let entities = self.extract_entities(text, &type_strings, threshold)?;
+
+        // Extract relations using heuristics
+        let relations = relations::extract_relations_heuristic(&entities, text, relation_types, threshold);
+
+        Ok(ExtractionWithRelations {
+            entities,
+            relations,
+        })
+    }
+}
+
+// =============================================================================
+// RelationCapable Trait Implementation (high-level public interface)
+// =============================================================================
+
+#[cfg(feature = "onnx")]
+impl crate::RelationCapable for GLiNER2Onnx {
+    fn extract_with_relations(
+        &self,
+        text: &str,
+        _language: Option<&str>,
+    ) -> Result<(Vec<Entity>, Vec<crate::Relation>)> {
+        use crate::backends::inference::{DEFAULT_ENTITY_TYPES, DEFAULT_RELATION_TYPES};
+        let result = <Self as RelationExtractor>::extract_with_relations(
+            self,
+            text,
+            DEFAULT_ENTITY_TYPES,
+            DEFAULT_RELATION_TYPES,
+            0.3,
+        )?;
+        Ok(result.into_anno_relations())
+    }
+}
+
+#[cfg(feature = "candle")]
+impl crate::RelationCapable for GLiNER2Candle {
+    fn extract_with_relations(
+        &self,
+        text: &str,
+        _language: Option<&str>,
+    ) -> Result<(Vec<Entity>, Vec<crate::Relation>)> {
+        use crate::backends::inference::{DEFAULT_ENTITY_TYPES, DEFAULT_RELATION_TYPES};
+        let result = <Self as RelationExtractor>::extract_with_relations(
+            self,
+            text,
+            DEFAULT_ENTITY_TYPES,
+            DEFAULT_RELATION_TYPES,
+            0.3,
+        )?;
+        Ok(result.into_anno_relations())
+    }
+}
+
+// =============================================================================
+// BatchCapable Trait Implementation
+// =============================================================================
+
+#[cfg(feature = "onnx")]
+impl crate::BatchCapable for GLiNER2Onnx {
+    fn extract_entities_batch(
+        &self,
+        texts: &[&str],
+        _language: Option<&str>,
+    ) -> Result<Vec<Vec<Entity>>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let default_types = &["person", "organization", "location", "date", "event"];
+
+        // For true batching, we need to:
+        // 1. Tokenize all texts
+        // 2. Pad to max length
+        // 3. Run as single batch
+        // 4. Split results back
+
+        // Collect word-level tokenizations
+        let text_words: Vec<Vec<&str>> = texts
+            .iter()
+            .map(|t| t.split_whitespace().collect())
+            .collect();
+
+        // Find max word count
+        let max_words = text_words.iter().map(|w| w.len()).max().unwrap_or(0);
+        if max_words == 0 {
+            return Ok(texts.iter().map(|_| Vec::new()).collect());
+        }
+
+        // Encode all prompts (no span tensors needed for current model)
+        let mut all_input_ids = Vec::new();
+        let mut all_attention_masks = Vec::new();
+        let mut all_words_masks = Vec::new();
+        let mut all_text_lengths = Vec::new();
+        let mut seq_lens = Vec::new();
+
+        for words in &text_words {
+            if words.is_empty() {
+                // Handle empty text
+                seq_lens.push(0);
+                continue;
+            }
+
+            let (input_ids, attention_mask, words_mask) =
+                self.encode_ner_prompt(words, default_types)?;
+            seq_lens.push(input_ids.len());
+            all_input_ids.push(input_ids);
+            all_attention_masks.push(attention_mask);
+            all_words_masks.push(words_mask);
+            all_text_lengths.push(words.len() as i64);
+        }
+
+        // If all texts were empty, return empty results
+        if seq_lens.iter().all(|&l| l == 0) {
+            return Ok(texts.iter().map(|_| Vec::new()).collect());
+        }
+
+        // Pad sequences to max length
+        let max_seq_len = seq_lens.iter().copied().max().unwrap_or(0);
+
+        for i in 0..all_input_ids.len() {
+            let pad_len = max_seq_len - all_input_ids[i].len();
+            all_input_ids[i].extend(std::iter::repeat_n(0i64, pad_len));
+            all_attention_masks[i].extend(std::iter::repeat_n(0i64, pad_len));
+            all_words_masks[i].extend(std::iter::repeat_n(0i64, pad_len));
+        }
+
+        // Build batched tensors - only 4 inputs (no span tensors)
+        use ndarray::Array2;
+
+        let batch_size = all_input_ids.len();
+
+        let input_ids_flat: Vec<i64> = all_input_ids.into_iter().flatten().collect();
+        let attention_mask_flat: Vec<i64> = all_attention_masks.into_iter().flatten().collect();
+        let words_mask_flat: Vec<i64> = all_words_masks.into_iter().flatten().collect();
+
+        // Validate lengths before array creation
+        let expected_input_len = batch_size * max_seq_len;
+        if input_ids_flat.len() != expected_input_len {
+            return Err(Error::Parse(format!(
+                "Input IDs length mismatch: expected {}, got {}",
+                expected_input_len,
+                input_ids_flat.len()
+            )));
+        }
+
+        let input_ids_arr = Array2::from_shape_vec((batch_size, max_seq_len), input_ids_flat)
+            .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
+        let attention_mask_arr =
+            Array2::from_shape_vec((batch_size, max_seq_len), attention_mask_flat)
+                .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
+        let words_mask_arr = Array2::from_shape_vec((batch_size, max_seq_len), words_mask_flat)
+            .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
+        let text_lengths_arr = Array2::from_shape_vec((batch_size, 1), all_text_lengths)
+            .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
+
+        let input_ids_t = super::ort_compat::tensor_from_ndarray(input_ids_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+        let attention_mask_t = super::ort_compat::tensor_from_ndarray(attention_mask_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+        let words_mask_t = super::ort_compat::tensor_from_ndarray(words_mask_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+        let text_lengths_t = super::ort_compat::tensor_from_ndarray(text_lengths_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+
+        // Run batched inference with blocking lock for thread-safe parallel access
+        let mut session = lock(&self.session);
+
+        let outputs = session
+            .run(ort::inputs![
+                "input_ids" => input_ids_t.into_dyn(),
+                "attention_mask" => attention_mask_t.into_dyn(),
+                "words_mask" => words_mask_t.into_dyn(),
+                "text_lengths" => text_lengths_t.into_dyn(),
+            ])
+            .map_err(|e| Error::Inference(format!("ONNX batch run: {}", e)))?;
+
+        // Decode batch results
+        self.decode_ner_batch_output(&outputs, texts, &text_words, default_types, 0.5)
+    }
+
+    fn optimal_batch_size(&self) -> Option<usize> {
+        Some(16)
+    }
+}
+
+#[cfg(feature = "candle")]
+impl crate::BatchCapable for GLiNER2Candle {
+    fn extract_entities_batch(
+        &self,
+        texts: &[&str],
+        _language: Option<&str>,
+    ) -> Result<Vec<Vec<Entity>>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let default_types = vec![
+            "person".to_string(),
+            "organization".to_string(),
+            "location".to_string(),
+            "date".to_string(),
+            "event".to_string(),
+        ];
+
+        // Pre-compute label embeddings once for all texts
+        let label_refs: Vec<&str> = default_types.iter().map(|s| s.as_str()).collect();
+        let _ = self.encode_labels_cached(&label_refs)?;
+
+        // Process texts - labels are now cached for efficiency
+        let mut results = Vec::with_capacity(texts.len());
+
+        for text in texts {
+            let entities = self.extract_entities(text, &default_types, 0.5)?;
+            results.push(entities);
+        }
+
+        Ok(results)
+    }
+
+    fn optimal_batch_size(&self) -> Option<usize> {
+        Some(8)
+    }
+}
+
+// =============================================================================
+// StreamingCapable Trait Implementation
+// =============================================================================
+
+#[cfg(feature = "onnx")]
+impl crate::StreamingCapable for GLiNER2Onnx {
+    // Uses default extract_entities_streaming implementation which adjusts offsets
+
+    fn recommended_chunk_size(&self) -> usize {
+        4096 // Characters - translates to roughly a few hundred words
+    }
+}
+
+#[cfg(feature = "candle")]
+impl crate::StreamingCapable for GLiNER2Candle {
+    // Uses default extract_entities_streaming implementation which adjusts offsets
+
+    fn recommended_chunk_size(&self) -> usize {
+        4096
+    }
+}
+
+// =============================================================================
+// GpuCapable Trait Implementation
+// =============================================================================
+
+#[cfg(feature = "candle")]
+impl crate::GpuCapable for GLiNER2Candle {
+    fn is_gpu_active(&self) -> bool {
+        matches!(&self.device, Device::Metal(_) | Device::Cuda(_))
+    }
+
+    fn device(&self) -> &str {
+        match &self.device {
+            Device::Cpu => "cpu",
+            Device::Metal(_) => "metal",
+            Device::Cuda(_) => "cuda",
+        }
+    }
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(any(feature = "onnx", feature = "candle"))]
+    fn test_relation_heuristic_unicode_safe_and_case_insensitive() {
+        use crate::backends::inference::RelationTriple;
+        use crate::offset::bytes_to_chars;
+
+        let text = "Dr. 田中 is CEO of Apple Inc. in 東京. François works at OpenAI.";
+        let span = |needle: &str| {
+            let (b_start, _) = text
+                .match_indices(needle)
+                .next()
+                .expect("needle should exist in test text");
+            let b_end = b_start + needle.len();
+            bytes_to_chars(text, b_start, b_end)
+        };
+
+        let (s, e) = span("田中");
+        let e_tanaka = Entity::new("田中", EntityType::Person, s, e, 0.9);
+        let (s, e) = span("Apple Inc.");
+        let e_apple = Entity::new("Apple Inc.", EntityType::Organization, s, e, 0.9);
+        let (s, e) = span("東京");
+        let e_tokyo = Entity::new("東京", EntityType::Location, s, e, 0.9);
+        let (s, e) = span("François");
+        let e_francois = Entity::new("François", EntityType::Person, s, e, 0.9);
+        let (s, e) = span("OpenAI");
+        let e_openai = Entity::new("OpenAI", EntityType::Organization, s, e, 0.9);
+
+        let entities = vec![e_tanaka, e_apple, e_tokyo, e_francois, e_openai];
+
+        // Should not panic on Unicode text; should detect at least one trigger relation.
+        let rels: Vec<RelationTriple> = relations::extract_relations_heuristic(&entities, text, &[], 0.0);
+        assert!(
+            rels.iter()
+                .any(|r| r.relation_type == "CEO_OF" || r.relation_type == "WORKS_FOR"),
+            "expected at least one trigger-based relation, got {:?}",
+            rels
+        );
+    }
+
+    #[test]
+    fn test_task_schema_builder() {
+        let schema = TaskSchema::new()
+            .with_entities(&["person", "organization"])
+            .with_classification("sentiment", &["positive", "negative"], false);
+
+        assert!(schema.entities.is_some());
+        assert_eq!(schema.entities.as_ref().unwrap().types.len(), 2);
+        assert_eq!(schema.classifications.len(), 1);
+    }
+
+    #[test]
+    fn test_structure_task_builder() {
+        let task = StructureTask::new("product")
+            .with_field("name", FieldType::String)
+            .with_field_described("price", FieldType::String, "Product price in USD")
+            .with_choice_field("category", &["electronics", "clothing"]);
+
+        assert_eq!(task.fields.len(), 3);
+        assert_eq!(task.fields[2].choices.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_word_span_to_char_offsets() {
+        use crate::offset::TextSpan;
+
+        let text = "John works at Apple";
+        let words: Vec<&str> = text.split_whitespace().collect();
+
+        let (start, end) = word_span_to_char_offsets(text, &words, 0, 0);
+        assert_eq!(TextSpan::from_chars(text, start, end).extract(text), "John");
+
+        let (start, end) = word_span_to_char_offsets(text, &words, 3, 3);
+        assert_eq!(
+            TextSpan::from_chars(text, start, end).extract(text),
+            "Apple"
+        );
+
+        let (start, end) = word_span_to_char_offsets(text, &words, 0, 2);
+        assert_eq!(
+            TextSpan::from_chars(text, start, end).extract(text),
+            "John works at"
+        );
+    }
+
+    #[test]
+    fn test_map_entity_type() {
+        assert!(matches!(map_entity_type("person"), EntityType::Person));
+        assert!(matches!(
+            map_entity_type("ORGANIZATION"),
+            EntityType::Organization
+        ));
+        assert!(matches!(map_entity_type("loc"), EntityType::Location));
+        // Unknown types map to Other with the uppercase version (due to schema normalization)
+        assert!(
+            matches!(map_entity_type("custom_type"), EntityType::Other(ref s) if s == "CUSTOM_TYPE")
+        );
+        // Known special types map to Custom
+        assert!(matches!(
+            map_entity_type("product"),
+            EntityType::Custom { .. }
+        ));
+        assert!(matches!(
+            map_entity_type("event"),
+            EntityType::Custom { .. }
+        ));
+    }
+}
