@@ -261,8 +261,14 @@ pub struct RelationTriple {
 ///
 /// These cover the most common NER taxonomies (CoNLL, OntoNotes, ACE). Callers that need
 /// precise control should use `RelationExtractor::extract_with_relations` directly.
-pub(crate) const DEFAULT_ENTITY_TYPES: &[&str] =
-    &["person", "organization", "location", "date", "product", "event"];
+pub(crate) const DEFAULT_ENTITY_TYPES: &[&str] = &[
+    "person",
+    "organization",
+    "location",
+    "date",
+    "product",
+    "event",
+];
 
 /// Broad default relation types for the no-arg `RelationCapable` convenience interface.
 pub(crate) const DEFAULT_RELATION_TYPES: &[&str] = &[

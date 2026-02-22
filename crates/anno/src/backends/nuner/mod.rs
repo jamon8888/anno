@@ -245,5 +245,3 @@ impl crate::StreamingCapable for NuNER {
 
 #[cfg(test)]
 mod tests;
-
-

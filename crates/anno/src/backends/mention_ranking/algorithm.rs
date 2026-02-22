@@ -1,9 +1,9 @@
 //! MentionRankingCoref model: scoring, clustering, and coreference resolution.
 
 #[allow(unused_imports)]
-use super::*;
-#[allow(unused_imports)]
 use super::types::*;
+#[allow(unused_imports)]
+use super::*;
 
 /// Mention-ranking coreference resolver.
 pub struct MentionRankingCoref {
@@ -2020,8 +2020,6 @@ impl CoreferenceResolver for MentionRankingCoref {
         "MentionRankingCoref"
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -4471,5 +4469,4 @@ mod tests {
             }
         }
     }
-
 }

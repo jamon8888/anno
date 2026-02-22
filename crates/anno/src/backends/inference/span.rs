@@ -3,8 +3,8 @@
 //! - `Span`, `SpanCandidate`, `SpanWindow`: character-offset span types
 //! - `HandshakingMatrix`, `HandshakingCell`: sparse grid for W2NER / TPLinker
 
-use anno_core::{RaggedBatch, SpanCandidate};
 use super::registry::{LabelCategory, LabelDefinition, SemanticRegistry};
+use anno_core::{RaggedBatch, SpanCandidate};
 
 // Span Representation
 // =============================================================================

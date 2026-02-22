@@ -1,7 +1,7 @@
 //! Coreference resolution utilities and data structures.
 
-use std::collections::HashMap;
 use crate::Entity;
+use std::collections::HashMap;
 
 // Coreference Resolution
 // =============================================================================
@@ -176,8 +176,3 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         0.0
     }
 }
-
-
-
-
-

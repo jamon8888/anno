@@ -50,26 +50,26 @@
 
 #[cfg(feature = "onnx")]
 use crate::sync::lock;
-#[cfg(feature = "candle")]
-use candle_core::Device;
 use crate::{Entity, EntityType, Error, Result};
 use anno_core::EntityCategory;
+#[cfg(feature = "candle")]
+use candle_core::Device;
 
 pub(crate) mod relations;
 
 use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, ZeroShotNER};
 
-pub mod schema;
-pub mod onnx;
 pub mod candle;
-pub use schema::{
-    ClassificationResult, ClassificationTask, EntityTask, ExtractedStructure,
-    ExtractionResult, FieldType, LabelCache, StructureTask, StructureValue, TaskSchema,
-};
-#[cfg(feature = "onnx")]
-pub use onnx::GLiNER2Onnx;
+pub mod onnx;
+pub mod schema;
 #[cfg(feature = "candle")]
 pub use candle::GLiNER2Candle;
+#[cfg(feature = "onnx")]
+pub use onnx::GLiNER2Onnx;
+pub use schema::{
+    ClassificationResult, ClassificationTask, EntityTask, ExtractedStructure, ExtractionResult,
+    FieldType, LabelCache, StructureTask, StructureValue, TaskSchema,
+};
 
 // Stub implementations (no feature)
 // =============================================================================
@@ -402,7 +402,8 @@ impl RelationExtractor for GLiNER2Onnx {
         let entities = self.extract_ner(text, types, threshold)?;
 
         // Extract relations using heuristics
-        let relations = relations::extract_relations_heuristic(&entities, text, relation_types, threshold);
+        let relations =
+            relations::extract_relations_heuristic(&entities, text, relation_types, threshold);
 
         Ok(ExtractionWithRelations {
             entities,
@@ -424,7 +425,8 @@ impl RelationExtractor for GLiNER2Candle {
         let entities = self.extract_entities(text, &type_strings, threshold)?;
 
         // Extract relations using heuristics
-        let relations = relations::extract_relations_heuristic(&entities, text, relation_types, threshold);
+        let relations =
+            relations::extract_relations_heuristic(&entities, text, relation_types, threshold);
 
         Ok(ExtractionWithRelations {
             entities,
@@ -725,7 +727,8 @@ mod tests {
         let entities = vec![e_tanaka, e_apple, e_tokyo, e_francois, e_openai];
 
         // Should not panic on Unicode text; should detect at least one trigger relation.
-        let rels: Vec<RelationTriple> = relations::extract_relations_heuristic(&entities, text, &[], 0.0);
+        let rels: Vec<RelationTriple> =
+            relations::extract_relations_heuristic(&entities, text, &[], 0.0);
         assert!(
             rels.iter()
                 .any(|r| r.relation_type == "CEO_OF" || r.relation_type == "WORKS_FOR"),

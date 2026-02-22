@@ -327,4 +327,3 @@ pub(crate) fn extract_relations_heuristic(
 
     relations
 }
-

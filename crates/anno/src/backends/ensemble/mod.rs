@@ -126,7 +126,6 @@ fn method_for_backend_id(backend_id: &str) -> anno_core::ExtractionMethod {
     }
 }
 
-
 pub mod weights;
 pub use weights::*;
 
@@ -810,4 +809,3 @@ impl WeightLearner {
 
 #[cfg(test)]
 mod tests;
-

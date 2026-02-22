@@ -186,12 +186,18 @@ pub fn entities_to_knowledge_graph(
 
     // Semantic relation triples from RelationCapable backends.
     for rel in relations {
-        let head_iri = entity_iris.iter().zip(entities.iter()).find_map(|(iri, e)| {
-            (e.text == rel.head.text && e.start == rel.head.start).then_some(iri.as_str())
-        });
-        let tail_iri = entity_iris.iter().zip(entities.iter()).find_map(|(iri, e)| {
-            (e.text == rel.tail.text && e.start == rel.tail.start).then_some(iri.as_str())
-        });
+        let head_iri = entity_iris
+            .iter()
+            .zip(entities.iter())
+            .find_map(|(iri, e)| {
+                (e.text == rel.head.text && e.start == rel.head.start).then_some(iri.as_str())
+            });
+        let tail_iri = entity_iris
+            .iter()
+            .zip(entities.iter())
+            .find_map(|(iri, e)| {
+                (e.text == rel.tail.text && e.start == rel.tail.start).then_some(iri.as_str())
+            });
         if let (Some(h), Some(t)) = (head_iri, tail_iri) {
             let pred = format!("{}/rel/{}", base, uri_safe(&rel.relation_type));
             let mut triple = Triple::new(h, pred.as_str(), t);
@@ -220,10 +226,18 @@ mod tests {
         let kg = entities_to_knowledge_graph(&entities, &[], "urn:test:doc/d1", "urn:test:");
         let triples: Vec<String> = kg.triples().map(|t| t.to_ntriples()).collect();
 
-        assert!(triples.len() >= 6, "expected ≥6 triples, got {}", triples.len());
-        assert!(triples.iter().any(|t| t.contains("rdf-syntax-ns#type") && t.contains("PERType")));
+        assert!(
+            triples.len() >= 6,
+            "expected ≥6 triples, got {}",
+            triples.len()
+        );
+        assert!(triples
+            .iter()
+            .any(|t| t.contains("rdf-syntax-ns#type") && t.contains("PERType")));
         assert!(triples.iter().any(|t| t.contains("rdf-schema#label")));
-        assert!(triples.iter().any(|t| t.contains("prov#hadPrimarySource") || t.contains("prov/ns#")));
+        assert!(triples
+            .iter()
+            .any(|t| t.contains("prov#hadPrimarySource") || t.contains("prov/ns#")));
     }
 
     #[test]
@@ -234,8 +248,11 @@ mod tests {
 
         let kg = entities_to_knowledge_graph(&[head, tail], &[rel], "urn:test:doc/d2", "urn:test:");
         let triples: Vec<String> = kg.triples().map(|t| t.to_ntriples()).collect();
-        assert!(triples.iter().any(|t| t.contains("rel/founded")),
-            "missing relation triple; triples:\n{}", triples.join("\n"));
+        assert!(
+            triples.iter().any(|t| t.contains("rel/founded")),
+            "missing relation triple; triples:\n{}",
+            triples.join("\n")
+        );
     }
 
     #[test]

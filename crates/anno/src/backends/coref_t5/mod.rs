@@ -975,4 +975,3 @@ pub fn extract_t5_mentions(marked_text: &str) -> Result<MentionList> {
 
 #[cfg(test)]
 mod tests;
-

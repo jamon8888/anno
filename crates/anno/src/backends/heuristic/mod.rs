@@ -826,4 +826,3 @@ impl crate::StreamingCapable for HeuristicNER {
 
 #[cfg(test)]
 mod tests;
-

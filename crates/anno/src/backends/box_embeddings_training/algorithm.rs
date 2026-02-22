@@ -1,9 +1,9 @@
 //! Box embedding trainer: gradient steps, AMSGrad, coreference training loop.
 
 #[allow(unused_imports)]
-use super::*;
-#[allow(unused_imports)]
 use super::types::*;
+#[allow(unused_imports)]
+use super::*;
 use std::collections::HashMap;
 
 /// Trainer for box embedding models.
@@ -1500,4 +1500,3 @@ fn simple_random() -> f32 {
     let hash = hasher.finish();
     (hash as f32) / (u64::MAX as f32)
 }
-

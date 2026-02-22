@@ -680,7 +680,12 @@ impl CrfNER {
     /// Uses token position tracking to correctly handle duplicate entity texts.
     /// The previous implementation used `text.find()` which always returned the
     /// first occurrence, causing incorrect offsets for duplicate entities.
-    pub(super) fn labels_to_entities(&self, text: &str, tokens: &[&str], labels: &[String]) -> Vec<Entity> {
+    pub(super) fn labels_to_entities(
+        &self,
+        text: &str,
+        tokens: &[&str],
+        labels: &[String],
+    ) -> Vec<Entity> {
         use crate::offset::SpanConverter;
 
         let mut entities = Vec::new();
@@ -809,4 +814,3 @@ impl CrfNER {
         text.split_whitespace().collect()
     }
 }
-

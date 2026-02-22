@@ -1,390 +1,390 @@
-    use super::*;
+use super::*;
 
-    fn extract(text: &str) -> Vec<Entity> {
-        StackedNER::default().extract_entities(text, None).unwrap()
-    }
+fn extract(text: &str) -> Vec<Entity> {
+    StackedNER::default().extract_entities(text, None).unwrap()
+}
 
-    fn has_type(entities: &[Entity], ty: &EntityType) -> bool {
-        entities.iter().any(|e| e.entity_type == *ty)
-    }
+fn has_type(entities: &[Entity], ty: &EntityType) -> bool {
+    entities.iter().any(|e| e.entity_type == *ty)
+}
 
-    // =========================================================================
-    // Default Configuration Tests
-    // =========================================================================
+// =========================================================================
+// Default Configuration Tests
+// =========================================================================
 
-    #[test]
-    fn test_default_finds_patterns() {
-        let e = extract("Cost: $100");
-        assert!(has_type(&e, &EntityType::Money));
-    }
+#[test]
+fn test_default_finds_patterns() {
+    let e = extract("Cost: $100");
+    assert!(has_type(&e, &EntityType::Money));
+}
 
-    #[test]
-    fn test_default_finds_heuristic() {
-        let e = extract("Mr. Smith said hello");
-        assert!(has_type(&e, &EntityType::Person));
-    }
+#[test]
+fn test_default_finds_heuristic() {
+    let e = extract("Mr. Smith said hello");
+    assert!(has_type(&e, &EntityType::Person));
+}
 
-    #[test]
-    fn test_default_finds_both() {
-        let e = extract("Dr. Smith charges $200/hr");
-        assert!(has_type(&e, &EntityType::Money));
-        // May also find Person
-    }
+#[test]
+fn test_default_finds_both() {
+    let e = extract("Dr. Smith charges $200/hr");
+    assert!(has_type(&e, &EntityType::Money));
+    // May also find Person
+}
 
-    #[test]
-    fn test_no_overlaps() {
-        let e = extract("Price is $100 from John at Google Inc.");
-        for i in 0..e.len() {
-            for j in (i + 1)..e.len() {
-                let overlap = e[i].start < e[j].end && e[j].start < e[i].end;
-                assert!(!overlap, "Overlap: {:?} and {:?}", e[i], e[j]);
-            }
+#[test]
+fn test_no_overlaps() {
+    let e = extract("Price is $100 from John at Google Inc.");
+    for i in 0..e.len() {
+        for j in (i + 1)..e.len() {
+            let overlap = e[i].start < e[j].end && e[j].start < e[i].end;
+            assert!(!overlap, "Overlap: {:?} and {:?}", e[i], e[j]);
         }
     }
+}
 
-    #[test]
-    fn test_sorted_output() {
-        let e = extract("$100 for John in Paris on 2024-01-15");
-        for i in 1..e.len() {
-            assert!(e[i - 1].start <= e[i].start);
-        }
+#[test]
+fn test_sorted_output() {
+    let e = extract("$100 for John in Paris on 2024-01-15");
+    for i in 1..e.len() {
+        assert!(e[i - 1].start <= e[i].start);
     }
+}
 
-    /// Verify stacked default includes an ML backend when onnx is enabled and models are available.
-    #[cfg(feature = "onnx")]
-    #[test]
-    fn test_default_includes_ml_backend_when_available() {
-        let ner = StackedNER::default();
-        let stats = ner.stats();
+/// Verify stacked default includes an ML backend when onnx is enabled and models are available.
+#[cfg(feature = "onnx")]
+#[test]
+fn test_default_includes_ml_backend_when_available() {
+    let ner = StackedNER::default();
+    let stats = ner.stats();
 
-        // With onnx AND model available: 3 layers (ML + regex + heuristic)
-        // With onnx but no model: 2 layers (regex + heuristic)
-        if stats.layer_count == 3 {
-            let has_ml = stats.layer_names.iter().any(|name| {
-                let n = name.to_lowercase();
-                n.contains("bert") || n.contains("gliner")
-            });
-            assert!(
-                has_ml,
-                "StackedNER with 3 layers should include an ML backend. Got layers: {:?}",
-                stats.layer_names
-            );
-        } else {
-            assert_eq!(stats.layer_count, 2);
-            assert!(stats.layer_names.iter().any(|n| n.contains("regex")));
-            assert!(stats.layer_names.iter().any(|n| n.contains("heuristic")));
-        }
-    }
-
-    // =========================================================================
-    // Builder Tests
-    // =========================================================================
-
-    #[test]
-    #[should_panic(expected = "requires at least one layer")]
-    fn test_builder_empty_panics() {
-        let _ner = StackedNER::builder().build();
-    }
-
-    #[test]
-    fn test_builder_single_layer() {
-        let ner = StackedNER::builder().layer(RegexNER::new()).build();
-        let e = ner.extract_entities("$100", None).unwrap();
-        assert!(has_type(&e, &EntityType::Money));
-    }
-
-    #[test]
-    fn test_builder_layer_names() {
-        let ner = StackedNER::builder()
-            .layer(RegexNER::new())
-            .layer(HeuristicNER::new())
-            .build();
-
-        let names = ner.layer_names();
-        assert!(names.iter().any(|n| n.contains("regex")));
-        assert!(names.iter().any(|n| n.contains("heuristic")));
-    }
-
-    #[test]
-    fn test_builder_strategy() {
-        let ner = StackedNER::builder()
-            .layer(RegexNER::new())
-            .strategy(ConflictStrategy::LongestSpan)
-            .build();
-
-        assert_eq!(ner.strategy(), ConflictStrategy::LongestSpan);
-    }
-
-    // =========================================================================
-    // Convenience Constructor Tests
-    // =========================================================================
-
-    #[test]
-    fn test_pattern_only() {
-        let ner = StackedNER::pattern_only();
-        let e = ner.extract_entities("$100 for Dr. Smith", None).unwrap();
-
-        // Should find money
-        assert!(has_type(&e, &EntityType::Money));
-        // Should NOT find person (no heuristic layer)
-        assert!(!has_type(&e, &EntityType::Person));
-    }
-
-    #[test]
-    fn test_heuristic_only() {
-        let ner = StackedNER::heuristic_only();
-        // Use a name that HeuristicNER can detect (capitalized single word)
-        let e = ner.extract_entities("$100 for John", None).unwrap();
-
-        // HeuristicNER uses heuristics - may or may not find person
-        // The key test is that it does NOT find money (no pattern layer)
+    // With onnx AND model available: 3 layers (ML + regex + heuristic)
+    // With onnx but no model: 2 layers (regex + heuristic)
+    if stats.layer_count == 3 {
+        let has_ml = stats.layer_names.iter().any(|name| {
+            let n = name.to_lowercase();
+            n.contains("bert") || n.contains("gliner")
+        });
         assert!(
-            !has_type(&e, &EntityType::Money),
-            "Should NOT find money without pattern layer: {:?}",
-            e
+            has_ml,
+            "StackedNER with 3 layers should include an ML backend. Got layers: {:?}",
+            stats.layer_names
         );
+    } else {
+        assert_eq!(stats.layer_count, 2);
+        assert!(stats.layer_names.iter().any(|n| n.contains("regex")));
+        assert!(stats.layer_names.iter().any(|n| n.contains("heuristic")));
     }
+}
 
-    #[test]
-    #[allow(deprecated)]
-    fn test_statistical_only_deprecated_alias() {
-        // Verify backwards compatibility
-        let ner = StackedNER::statistical_only();
-        let e = ner.extract_entities("John", None).unwrap();
-        // Just verify it doesn't panic
-        let _ = e;
+// =========================================================================
+// Builder Tests
+// =========================================================================
+
+#[test]
+#[should_panic(expected = "requires at least one layer")]
+fn test_builder_empty_panics() {
+    let _ner = StackedNER::builder().build();
+}
+
+#[test]
+fn test_builder_single_layer() {
+    let ner = StackedNER::builder().layer(RegexNER::new()).build();
+    let e = ner.extract_entities("$100", None).unwrap();
+    assert!(has_type(&e, &EntityType::Money));
+}
+
+#[test]
+fn test_builder_layer_names() {
+    let ner = StackedNER::builder()
+        .layer(RegexNER::new())
+        .layer(HeuristicNER::new())
+        .build();
+
+    let names = ner.layer_names();
+    assert!(names.iter().any(|n| n.contains("regex")));
+    assert!(names.iter().any(|n| n.contains("heuristic")));
+}
+
+#[test]
+fn test_builder_strategy() {
+    let ner = StackedNER::builder()
+        .layer(RegexNER::new())
+        .strategy(ConflictStrategy::LongestSpan)
+        .build();
+
+    assert_eq!(ner.strategy(), ConflictStrategy::LongestSpan);
+}
+
+// =========================================================================
+// Convenience Constructor Tests
+// =========================================================================
+
+#[test]
+fn test_pattern_only() {
+    let ner = StackedNER::pattern_only();
+    let e = ner.extract_entities("$100 for Dr. Smith", None).unwrap();
+
+    // Should find money
+    assert!(has_type(&e, &EntityType::Money));
+    // Should NOT find person (no heuristic layer)
+    assert!(!has_type(&e, &EntityType::Person));
+}
+
+#[test]
+fn test_heuristic_only() {
+    let ner = StackedNER::heuristic_only();
+    // Use a name that HeuristicNER can detect (capitalized single word)
+    let e = ner.extract_entities("$100 for John", None).unwrap();
+
+    // HeuristicNER uses heuristics - may or may not find person
+    // The key test is that it does NOT find money (no pattern layer)
+    assert!(
+        !has_type(&e, &EntityType::Money),
+        "Should NOT find money without pattern layer: {:?}",
+        e
+    );
+}
+
+#[test]
+#[allow(deprecated)]
+fn test_statistical_only_deprecated_alias() {
+    // Verify backwards compatibility
+    let ner = StackedNER::statistical_only();
+    let e = ner.extract_entities("John", None).unwrap();
+    // Just verify it doesn't panic
+    let _ = e;
+}
+
+// =========================================================================
+// Conflict Strategy Tests
+// =========================================================================
+
+#[test]
+fn test_strategy_default_is_priority() {
+    let ner = StackedNER::default();
+    assert_eq!(ner.strategy(), ConflictStrategy::Priority);
+}
+
+// =========================================================================
+// Mock Backend Tests for Conflict Resolution
+// =========================================================================
+
+use crate::MockModel;
+
+fn mock_model(name: &'static str, entities: Vec<Entity>) -> MockModel {
+    MockModel::new(name).with_entities(entities)
+}
+
+fn mock_entity(text: &str, start: usize, ty: EntityType, conf: f64) -> Entity {
+    Entity {
+        text: text.to_string(),
+        entity_type: ty,
+        start,
+        end: start + text.len(),
+        confidence: conf,
+        provenance: None,
+        kb_id: None,
+        canonical_id: None,
+        normalized: None,
+        hierarchical_confidence: None,
+        visual_span: None,
+        discontinuous_span: None,
+        valid_from: None,
+        valid_until: None,
+        viewport: None,
     }
+}
 
-    // =========================================================================
-    // Conflict Strategy Tests
-    // =========================================================================
+#[test]
+fn test_priority_first_wins() {
+    let layer1 = mock_model(
+        "l1",
+        vec![mock_entity("New York", 0, EntityType::Location, 0.8)],
+    );
+    let layer2 = mock_model(
+        "l2",
+        vec![mock_entity("New York City", 0, EntityType::Location, 0.9)],
+    );
 
-    #[test]
-    fn test_strategy_default_is_priority() {
-        let ner = StackedNER::default();
-        assert_eq!(ner.strategy(), ConflictStrategy::Priority);
-    }
+    let ner = StackedNER::builder()
+        .layer(layer1)
+        .layer(layer2)
+        .strategy(ConflictStrategy::Priority)
+        .build();
 
-    // =========================================================================
-    // Mock Backend Tests for Conflict Resolution
-    // =========================================================================
+    let e = ner.extract_entities("New York City", None).unwrap();
+    assert_eq!(e.len(), 1);
+    assert_eq!(e[0].text, "New York"); // First layer wins
+}
 
-    use crate::MockModel;
+#[test]
+fn test_longest_span_wins() {
+    let layer1 = mock_model(
+        "l1",
+        vec![mock_entity("New York", 0, EntityType::Location, 0.8)],
+    );
+    let layer2 = mock_model(
+        "l2",
+        vec![mock_entity("New York City", 0, EntityType::Location, 0.7)],
+    );
 
-    fn mock_model(name: &'static str, entities: Vec<Entity>) -> MockModel {
-        MockModel::new(name).with_entities(entities)
-    }
+    let ner = StackedNER::builder()
+        .layer(layer1)
+        .layer(layer2)
+        .strategy(ConflictStrategy::LongestSpan)
+        .build();
 
-    fn mock_entity(text: &str, start: usize, ty: EntityType, conf: f64) -> Entity {
-        Entity {
-            text: text.to_string(),
-            entity_type: ty,
-            start,
-            end: start + text.len(),
-            confidence: conf,
-            provenance: None,
-            kb_id: None,
-            canonical_id: None,
-            normalized: None,
-            hierarchical_confidence: None,
-            visual_span: None,
-            discontinuous_span: None,
-            valid_from: None,
-            valid_until: None,
-            viewport: None,
-        }
-    }
+    let e = ner.extract_entities("New York City", None).unwrap();
+    assert_eq!(e.len(), 1);
+    assert_eq!(e[0].text, "New York City"); // Longer wins
+}
 
-    #[test]
-    fn test_priority_first_wins() {
-        let layer1 = mock_model(
-            "l1",
-            vec![mock_entity("New York", 0, EntityType::Location, 0.8)],
-        );
-        let layer2 = mock_model(
-            "l2",
-            vec![mock_entity("New York City", 0, EntityType::Location, 0.9)],
-        );
+#[test]
+fn test_highest_conf_wins() {
+    let layer1 = mock_model(
+        "l1",
+        vec![mock_entity("Apple", 0, EntityType::Organization, 0.6)],
+    );
+    let layer2 = mock_model(
+        "l2",
+        vec![mock_entity("Apple", 0, EntityType::Organization, 0.95)],
+    );
 
-        let ner = StackedNER::builder()
-            .layer(layer1)
-            .layer(layer2)
-            .strategy(ConflictStrategy::Priority)
-            .build();
+    let ner = StackedNER::builder()
+        .layer(layer1)
+        .layer(layer2)
+        .strategy(ConflictStrategy::HighestConf)
+        .build();
 
-        let e = ner.extract_entities("New York City", None).unwrap();
-        assert_eq!(e.len(), 1);
-        assert_eq!(e[0].text, "New York"); // First layer wins
-    }
+    let e = ner.extract_entities("Apple Inc", None).unwrap();
+    assert_eq!(e.len(), 1);
+    assert!(e[0].confidence > 0.9);
+}
 
-    #[test]
-    fn test_longest_span_wins() {
-        let layer1 = mock_model(
-            "l1",
-            vec![mock_entity("New York", 0, EntityType::Location, 0.8)],
-        );
-        let layer2 = mock_model(
-            "l2",
-            vec![mock_entity("New York City", 0, EntityType::Location, 0.7)],
-        );
+#[test]
+fn test_union_keeps_all() {
+    let layer1 = mock_model("l1", vec![mock_entity("John", 0, EntityType::Person, 0.8)]);
+    let layer2 = mock_model("l2", vec![mock_entity("John", 0, EntityType::Person, 0.9)]);
 
-        let ner = StackedNER::builder()
-            .layer(layer1)
-            .layer(layer2)
-            .strategy(ConflictStrategy::LongestSpan)
-            .build();
+    let ner = StackedNER::builder()
+        .layer(layer1)
+        .layer(layer2)
+        .strategy(ConflictStrategy::Union)
+        .build();
 
-        let e = ner.extract_entities("New York City", None).unwrap();
-        assert_eq!(e.len(), 1);
-        assert_eq!(e[0].text, "New York City"); // Longer wins
-    }
+    let e = ner.extract_entities("John is here", None).unwrap();
+    assert_eq!(e.len(), 2); // Both kept
+}
 
-    #[test]
-    fn test_highest_conf_wins() {
-        let layer1 = mock_model(
-            "l1",
-            vec![mock_entity("Apple", 0, EntityType::Organization, 0.6)],
-        );
-        let layer2 = mock_model(
-            "l2",
-            vec![mock_entity("Apple", 0, EntityType::Organization, 0.95)],
-        );
+#[test]
+fn test_highest_conf_multiple_overlaps_ties_prefer_existing() {
+    // Regression: when a candidate overlaps multiple existing entities, we pick a "best"
+    // existing entity to compare against. In tie cases, we must prefer earlier layers
+    // (existing) to match the design note in ConflictStrategy::resolve.
+    let text = "aaaaa     bbbbb"; // 5 + 5 + 5 = 15 chars
 
-        let ner = StackedNER::builder()
-            .layer(layer1)
-            .layer(layer2)
-            .strategy(ConflictStrategy::HighestConf)
-            .build();
+    let layer1 = mock_model(
+        "l1",
+        vec![
+            mock_entity("aaaaa", 0, EntityType::Person, 0.9),
+            mock_entity("bbbbb", 10, EntityType::Person, 0.9), // same confidence
+        ],
+    );
+    // Candidate spans across both existing entities, but is low confidence.
+    let layer2 = mock_model("l2", vec![mock_entity(text, 0, EntityType::Person, 0.1)]);
 
-        let e = ner.extract_entities("Apple Inc", None).unwrap();
-        assert_eq!(e.len(), 1);
-        assert!(e[0].confidence > 0.9);
-    }
+    let ner = StackedNER::builder()
+        .layer(layer1)
+        .layer(layer2)
+        .strategy(ConflictStrategy::HighestConf)
+        .build();
 
-    #[test]
-    fn test_union_keeps_all() {
-        let layer1 = mock_model("l1", vec![mock_entity("John", 0, EntityType::Person, 0.8)]);
-        let layer2 = mock_model("l2", vec![mock_entity("John", 0, EntityType::Person, 0.9)]);
+    let e = ner.extract_entities(text, None).unwrap();
+    assert_eq!(e.len(), 1);
+    assert_eq!(e[0].text, "aaaaa", "should keep earliest existing entity");
+    assert_eq!(e[0].start, 0);
+    assert_eq!(e[0].end, 5);
+}
 
-        let ner = StackedNER::builder()
-            .layer(layer1)
-            .layer(layer2)
-            .strategy(ConflictStrategy::Union)
-            .build();
+#[test]
+fn test_layer_name_rule_maps_to_heuristic_method() {
+    // StackedNER adds provenance when a backend doesn't.
+    // For legacy RuleBasedNER-like layers (id "rule"), provenance.method should not be Neural.
+    use anno_core::ExtractionMethod;
 
-        let e = ner.extract_entities("John is here", None).unwrap();
-        assert_eq!(e.len(), 2); // Both kept
-    }
+    let ner = StackedNER::builder()
+        .layer(mock_model(
+            "rule",
+            vec![mock_entity("Apple", 0, EntityType::Organization, 0.8)],
+        ))
+        .strategy(ConflictStrategy::Priority)
+        .build();
 
-    #[test]
-    fn test_highest_conf_multiple_overlaps_ties_prefer_existing() {
-        // Regression: when a candidate overlaps multiple existing entities, we pick a "best"
-        // existing entity to compare against. In tie cases, we must prefer earlier layers
-        // (existing) to match the design note in ConflictStrategy::resolve.
-        let text = "aaaaa     bbbbb"; // 5 + 5 + 5 = 15 chars
+    let e = ner.extract_entities("Apple", None).unwrap();
+    assert_eq!(e.len(), 1);
+    let prov = e[0].provenance.as_ref().expect("provenance should be set");
+    assert_eq!(prov.source.as_ref(), "rule");
+    assert_eq!(prov.method, ExtractionMethod::Heuristic);
+}
 
-        let layer1 = mock_model(
-            "l1",
-            vec![
-                mock_entity("aaaaa", 0, EntityType::Person, 0.9),
-                mock_entity("bbbbb", 10, EntityType::Person, 0.9), // same confidence
-            ],
-        );
-        // Candidate spans across both existing entities, but is low confidence.
-        let layer2 = mock_model("l2", vec![mock_entity(text, 0, EntityType::Person, 0.1)]);
+#[test]
+fn test_clamped_spans_keep_text_consistent() {
+    // If a buggy backend produces an out-of-bounds end offset, StackedNER clamps the span.
+    // The returned entity should have `text` matching the adjusted span.
+    let layer = MockModel::new("l1")
+        .with_entities(vec![Entity::new(
+            "hello world",
+            EntityType::Person,
+            0,
+            100,
+            0.9,
+        )])
+        .without_validation();
 
-        let ner = StackedNER::builder()
-            .layer(layer1)
-            .layer(layer2)
-            .strategy(ConflictStrategy::HighestConf)
-            .build();
+    let ner = StackedNER::builder()
+        .layer(layer)
+        .strategy(ConflictStrategy::Priority)
+        .build();
 
-        let e = ner.extract_entities(text, None).unwrap();
-        assert_eq!(e.len(), 1);
-        assert_eq!(e[0].text, "aaaaa", "should keep earliest existing entity");
-        assert_eq!(e[0].start, 0);
-        assert_eq!(e[0].end, 5);
-    }
+    let text = "hello";
+    let e = ner.extract_entities(text, None).unwrap();
+    assert_eq!(e.len(), 1);
+    assert_eq!(e[0].start, 0);
+    assert_eq!(e[0].end, 5);
+    assert_eq!(e[0].text, "hello");
+}
 
-    #[test]
-    fn test_layer_name_rule_maps_to_heuristic_method() {
-        // StackedNER adds provenance when a backend doesn't.
-        // For legacy RuleBasedNER-like layers (id "rule"), provenance.method should not be Neural.
-        use anno_core::ExtractionMethod;
-
+#[test]
+fn test_non_overlapping_always_kept() {
+    for strategy in [
+        ConflictStrategy::Priority,
+        ConflictStrategy::LongestSpan,
+        ConflictStrategy::HighestConf,
+    ] {
         let ner = StackedNER::builder()
             .layer(mock_model(
-                "rule",
-                vec![mock_entity("Apple", 0, EntityType::Organization, 0.8)],
+                "l1",
+                vec![mock_entity("John", 0, EntityType::Person, 0.8)],
             ))
-            .strategy(ConflictStrategy::Priority)
+            .layer(mock_model(
+                "l2",
+                vec![mock_entity("Paris", 8, EntityType::Location, 0.9)],
+            ))
+            .strategy(strategy)
             .build();
 
-        let e = ner.extract_entities("Apple", None).unwrap();
-        assert_eq!(e.len(), 1);
-        let prov = e[0].provenance.as_ref().expect("provenance should be set");
-        assert_eq!(prov.source.as_ref(), "rule");
-        assert_eq!(prov.method, ExtractionMethod::Heuristic);
+        let e = ner.extract_entities("John in Paris", None).unwrap();
+        assert_eq!(e.len(), 2, "Strategy {:?} should keep both", strategy);
     }
+}
 
-    #[test]
-    fn test_clamped_spans_keep_text_consistent() {
-        // If a buggy backend produces an out-of-bounds end offset, StackedNER clamps the span.
-        // The returned entity should have `text` matching the adjusted span.
-        let layer = MockModel::new("l1")
-            .with_entities(vec![Entity::new(
-                "hello world",
-                EntityType::Person,
-                0,
-                100,
-                0.9,
-            )])
-            .without_validation();
+// =========================================================================
+// Complex Document Tests
+// =========================================================================
 
-        let ner = StackedNER::builder()
-            .layer(layer)
-            .strategy(ConflictStrategy::Priority)
-            .build();
-
-        let text = "hello";
-        let e = ner.extract_entities(text, None).unwrap();
-        assert_eq!(e.len(), 1);
-        assert_eq!(e[0].start, 0);
-        assert_eq!(e[0].end, 5);
-        assert_eq!(e[0].text, "hello");
-    }
-
-    #[test]
-    fn test_non_overlapping_always_kept() {
-        for strategy in [
-            ConflictStrategy::Priority,
-            ConflictStrategy::LongestSpan,
-            ConflictStrategy::HighestConf,
-        ] {
-            let ner = StackedNER::builder()
-                .layer(mock_model(
-                    "l1",
-                    vec![mock_entity("John", 0, EntityType::Person, 0.8)],
-                ))
-                .layer(mock_model(
-                    "l2",
-                    vec![mock_entity("Paris", 8, EntityType::Location, 0.9)],
-                ))
-                .strategy(strategy)
-                .build();
-
-            let e = ner.extract_entities("John in Paris", None).unwrap();
-            assert_eq!(e.len(), 2, "Strategy {:?} should keep both", strategy);
-        }
-    }
-
-    // =========================================================================
-    // Complex Document Tests
-    // =========================================================================
-
-    #[test]
-    fn test_press_release() {
-        let text = r#"
+#[test]
+fn test_press_release() {
+    let text = r#"
             PRESS RELEASE - January 15, 2024
 
             Mr. John Smith, CEO of Acme Corporation, announced today that the company
@@ -395,653 +395,653 @@
             The expansion is expected to increase revenue by 25%.
         "#;
 
-        let e = extract(text);
+    let e = extract(text);
 
-        // Pattern entities
-        assert!(has_type(&e, &EntityType::Date));
-        assert!(has_type(&e, &EntityType::Money));
-        assert!(has_type(&e, &EntityType::Email));
-        assert!(has_type(&e, &EntityType::Phone));
-        assert!(has_type(&e, &EntityType::Percent));
-    }
+    // Pattern entities
+    assert!(has_type(&e, &EntityType::Date));
+    assert!(has_type(&e, &EntityType::Money));
+    assert!(has_type(&e, &EntityType::Email));
+    assert!(has_type(&e, &EntityType::Phone));
+    assert!(has_type(&e, &EntityType::Percent));
+}
 
-    #[test]
-    fn test_empty_text() {
-        let e = extract("");
-        assert!(e.is_empty());
-    }
+#[test]
+fn test_empty_text() {
+    let e = extract("");
+    assert!(e.is_empty());
+}
 
-    #[test]
-    fn test_no_entities() {
-        let e = extract("the quick brown fox jumps over the lazy dog");
-        assert!(e.is_empty());
-    }
+#[test]
+fn test_no_entities() {
+    let e = extract("the quick brown fox jumps over the lazy dog");
+    assert!(e.is_empty());
+}
 
-    #[test]
-    fn test_supported_types() {
-        let ner = StackedNER::default();
-        let types = ner.supported_types();
+#[test]
+fn test_supported_types() {
+    let ner = StackedNER::default();
+    let types = ner.supported_types();
 
-        // Should include both pattern and heuristic types
-        assert!(types.contains(&EntityType::Date));
-        assert!(types.contains(&EntityType::Money));
-        assert!(types.contains(&EntityType::Person));
-        assert!(types.contains(&EntityType::Organization));
-        assert!(types.contains(&EntityType::Location));
-    }
+    // Should include both pattern and heuristic types
+    assert!(types.contains(&EntityType::Date));
+    assert!(types.contains(&EntityType::Money));
+    assert!(types.contains(&EntityType::Person));
+    assert!(types.contains(&EntityType::Organization));
+    assert!(types.contains(&EntityType::Location));
+}
 
-    #[test]
-    fn test_stats() {
-        let ner = StackedNER::default();
-        let stats = ner.stats();
+#[test]
+fn test_stats() {
+    let ner = StackedNER::default();
+    let stats = ner.stats();
 
-        // When ONNX is enabled and GLiNER model is available, default has 3 layers
-        // Otherwise, it has 2 layers (RegexNER + HeuristicNER)
-        assert!(
-            stats.layer_count == 2 || stats.layer_count == 3,
-            "Expected 2 or 3 layers, got {}",
-            stats.layer_count
-        );
-        assert_eq!(stats.strategy, ConflictStrategy::Priority);
-        assert_eq!(stats.layer_names.len(), stats.layer_count);
-        assert!(stats.layer_names.iter().any(|n| n.contains("regex")));
-        assert!(stats.layer_names.iter().any(|n| n.contains("heuristic")));
-    }
+    // When ONNX is enabled and GLiNER model is available, default has 3 layers
+    // Otherwise, it has 2 layers (RegexNER + HeuristicNER)
+    assert!(
+        stats.layer_count == 2 || stats.layer_count == 3,
+        "Expected 2 or 3 layers, got {}",
+        stats.layer_count
+    );
+    assert_eq!(stats.strategy, ConflictStrategy::Priority);
+    assert_eq!(stats.layer_names.len(), stats.layer_count);
+    assert!(stats.layer_names.iter().any(|n| n.contains("regex")));
+    assert!(stats.layer_names.iter().any(|n| n.contains("heuristic")));
+}
 
-    // =========================================================================
-    // Edge Case Tests
-    // =========================================================================
+// =========================================================================
+// Edge Case Tests
+// =========================================================================
 
-    #[test]
-    fn test_many_overlapping_entities() {
-        // Test scenario where one candidate overlaps with 3+ existing entities
-        let text = "New York City is a large metropolitan area";
+#[test]
+fn test_many_overlapping_entities() {
+    // Test scenario where one candidate overlaps with 3+ existing entities
+    let text = "New York City is a large metropolitan area";
 
-        // Layer 1: "New York" at [0, 8)
-        let layer1 = mock_model(
-            "l1",
-            vec![mock_entity("New York", 0, EntityType::Location, 0.8)],
-        );
+    // Layer 1: "New York" at [0, 8)
+    let layer1 = mock_model(
+        "l1",
+        vec![mock_entity("New York", 0, EntityType::Location, 0.8)],
+    );
 
-        // Layer 2: "York City" at [4, 13) - overlaps with layer1
-        let layer2 = mock_model(
-            "l2",
-            vec![mock_entity("York City", 4, EntityType::Location, 0.7)],
-        );
+    // Layer 2: "York City" at [4, 13) - overlaps with layer1
+    let layer2 = mock_model(
+        "l2",
+        vec![mock_entity("York City", 4, EntityType::Location, 0.7)],
+    );
 
-        // Layer 3: "New York City" at [0, 13) - overlaps with both
-        let layer3 = mock_model(
-            "l3",
-            vec![mock_entity("New York City", 0, EntityType::Location, 0.9)],
-        );
+    // Layer 3: "New York City" at [0, 13) - overlaps with both
+    let layer3 = mock_model(
+        "l3",
+        vec![mock_entity("New York City", 0, EntityType::Location, 0.9)],
+    );
 
-        // Layer 4: "City is" at [9, 16) - overlaps with layer2 and layer3
-        let layer4 = mock_model(
-            "l4",
-            vec![mock_entity("City is", 9, EntityType::Location, 0.6)],
-        );
+    // Layer 4: "City is" at [9, 16) - overlaps with layer2 and layer3
+    let layer4 = mock_model(
+        "l4",
+        vec![mock_entity("City is", 9, EntityType::Location, 0.6)],
+    );
 
-        let ner = StackedNER::builder()
-            .layer(layer1)
-            .layer(layer2)
-            .layer(layer3)
-            .layer(layer4)
-            .strategy(ConflictStrategy::Priority)
-            .build();
+    let ner = StackedNER::builder()
+        .layer(layer1)
+        .layer(layer2)
+        .layer(layer3)
+        .layer(layer4)
+        .strategy(ConflictStrategy::Priority)
+        .build();
 
-        let e = ner.extract_entities(text, None).unwrap();
-        // With Priority strategy, first layer should win
-        assert!(!e.is_empty());
-        // Should not panic and should resolve conflicts correctly
-    }
+    let e = ner.extract_entities(text, None).unwrap();
+    // With Priority strategy, first layer should win
+    assert!(!e.is_empty());
+    // Should not panic and should resolve conflicts correctly
+}
 
-    #[test]
-    fn test_large_entity_set() {
-        // Test with 1000 entities from multiple layers
-        let mut layer1_entities = Vec::new();
-        let mut layer2_entities = Vec::new();
+#[test]
+fn test_large_entity_set() {
+    // Test with 1000 entities from multiple layers
+    let mut layer1_entities = Vec::new();
+    let mut layer2_entities = Vec::new();
 
-        let base_text = "word ".repeat(2000); // 10k chars
+    let base_text = "word ".repeat(2000); // 10k chars
 
-        // Layer 1: 500 entities
-        for i in 0..500 {
-            let start = i * 10;
-            let end = start + 5;
-            if end < base_text.len() {
-                layer1_entities.push(mock_entity(
-                    &base_text[start..end],
-                    start,
-                    EntityType::Person,
-                    0.5 + (i % 10) as f64 / 20.0,
-                ));
-            }
-        }
-
-        // Layer 2: 500 entities with some overlaps
-        for i in 0..500 {
-            let start = i * 10 + 3; // Offset to create overlaps
-            let end = start + 5;
-            if end < base_text.len() {
-                layer2_entities.push(mock_entity(
-                    &base_text[start..end],
-                    start,
-                    EntityType::Organization,
-                    0.5 + (i % 10) as f64 / 20.0,
-                ));
-            }
-        }
-
-        let layer1 = mock_model("l1", layer1_entities);
-        let layer2 = mock_model("l2", layer2_entities);
-
-        let ner = StackedNER::builder()
-            .layer(layer1)
-            .layer(layer2)
-            .strategy(ConflictStrategy::LongestSpan)
-            .build();
-
-        let e = ner.extract_entities(&base_text, None).unwrap();
-        // Should handle large sets without panicking
-        assert!(!e.is_empty());
-        assert!(e.len() <= 1000); // Should resolve overlaps
-    }
-
-    #[test]
-    fn test_layer_error_handling() {
-        // Test that errors from one layer don't crash the whole stack.
-        //
-        // This test must be fast and deterministic. Using `StackedNER::default()` here is
-        // problematic because it may initialize real ML backends (and potentially do disk/network
-        // work under some configurations), which can make this test slow/flaky under `nextest`
-        // quick profile.
-
-        #[derive(Clone)]
-        struct FailingModel {
-            name: &'static str,
-        }
-
-        impl crate::sealed::Sealed for FailingModel {}
-
-        impl crate::Model for FailingModel {
-            fn extract_entities(
-                &self,
-                _text: &str,
-                _language: Option<&str>,
-            ) -> crate::Result<Vec<anno_core::Entity>> {
-                Err(crate::Error::Inference(format!(
-                    "intentional failure from {}",
-                    self.name
-                )))
-            }
-
-            fn supported_types(&self) -> Vec<anno_core::EntityType> {
-                vec![anno_core::EntityType::Person]
-            }
-
-            fn is_available(&self) -> bool {
-                true
-            }
-
-            fn name(&self) -> &'static str {
-                self.name
-            }
-        }
-
-        // Test 1: Working layer after failing layer - fail-fast behavior
-        // When first layer fails with no prior entities, we fail fast
-        let ner_fail_first = StackedNER::builder()
-            .layer(FailingModel { name: "fail" }) // Failing layer first
-            .layer(crate::HeuristicNER::new())
-            .strategy(ConflictStrategy::Priority)
-            .build();
-
-        // This should fail because first layer fails with no prior entities
-        let result = ner_fail_first.extract_entities("John Smith at Apple", None);
-        assert!(result.is_err(), "Should fail when first layer fails");
-
-        // Test 2: Failing layer AFTER working layer that produces entities
-        // - partial results are returned when subsequent layers fail
-        let ner_fail_second = StackedNER::builder()
-            .layer(crate::HeuristicNER::new()) // Working layer first
-            .layer(FailingModel { name: "fail" }) // Failing layer second
-            .strategy(ConflictStrategy::Priority)
-            .build();
-
-        // Text with entities: first layer extracts entities, failing layer is skipped
-        let result = ner_fail_second.extract_entities("Dr. John Smith works at Apple Inc.", None);
-        // Should succeed because HeuristicNER extracted entities before FailingModel was called
-        assert!(
-            result.is_ok(),
-            "Should succeed with partial results: {:?}",
-            result
-        );
-        let entities = result.unwrap();
-        // HeuristicNER should have found at least one entity
-        assert!(
-            !entities.is_empty(),
-            "Should have entities from working layer"
-        );
-
-        // Test 3: All-working layers should work normally
-        let ner_all_working = StackedNER::builder()
-            .layer(crate::RegexNER::new())
-            .layer(crate::HeuristicNER::new())
-            .strategy(ConflictStrategy::Priority)
-            .build();
-
-        let long_text = "word ".repeat(2000);
-        let _ = ner_all_working.extract_entities(&long_text, None).unwrap();
-    }
-
-    #[test]
-    fn test_many_layers() {
-        // Test with 10 layers
-        let mut builder = StackedNER::builder();
-
-        // Use static string literals for layer names
-        let layer_names = [
-            "layer0", "layer1", "layer2", "layer3", "layer4", "layer5", "layer6", "layer7",
-            "layer8", "layer9",
-        ];
-
-        for (i, &name) in layer_names.iter().enumerate() {
-            let entities = vec![mock_entity(
-                "test",
-                0,
+    // Layer 1: 500 entities
+    for i in 0..500 {
+        let start = i * 10;
+        let end = start + 5;
+        if end < base_text.len() {
+            layer1_entities.push(mock_entity(
+                &base_text[start..end],
+                start,
                 EntityType::Person,
-                0.5 + (i as f64 / 20.0),
-            )];
-            builder = builder.layer(mock_model(name, entities));
+                0.5 + (i % 10) as f64 / 20.0,
+            ));
+        }
+    }
+
+    // Layer 2: 500 entities with some overlaps
+    for i in 0..500 {
+        let start = i * 10 + 3; // Offset to create overlaps
+        let end = start + 5;
+        if end < base_text.len() {
+            layer2_entities.push(mock_entity(
+                &base_text[start..end],
+                start,
+                EntityType::Organization,
+                0.5 + (i % 10) as f64 / 20.0,
+            ));
+        }
+    }
+
+    let layer1 = mock_model("l1", layer1_entities);
+    let layer2 = mock_model("l2", layer2_entities);
+
+    let ner = StackedNER::builder()
+        .layer(layer1)
+        .layer(layer2)
+        .strategy(ConflictStrategy::LongestSpan)
+        .build();
+
+    let e = ner.extract_entities(&base_text, None).unwrap();
+    // Should handle large sets without panicking
+    assert!(!e.is_empty());
+    assert!(e.len() <= 1000); // Should resolve overlaps
+}
+
+#[test]
+fn test_layer_error_handling() {
+    // Test that errors from one layer don't crash the whole stack.
+    //
+    // This test must be fast and deterministic. Using `StackedNER::default()` here is
+    // problematic because it may initialize real ML backends (and potentially do disk/network
+    // work under some configurations), which can make this test slow/flaky under `nextest`
+    // quick profile.
+
+    #[derive(Clone)]
+    struct FailingModel {
+        name: &'static str,
+    }
+
+    impl crate::sealed::Sealed for FailingModel {}
+
+    impl crate::Model for FailingModel {
+        fn extract_entities(
+            &self,
+            _text: &str,
+            _language: Option<&str>,
+        ) -> crate::Result<Vec<anno_core::Entity>> {
+            Err(crate::Error::Inference(format!(
+                "intentional failure from {}",
+                self.name
+            )))
         }
 
-        let ner = builder.strategy(ConflictStrategy::Priority).build();
-        let e = ner.extract_entities("test", None).unwrap();
-        // Should only keep one entity (first layer wins with Priority)
-        assert_eq!(e.len(), 1);
-    }
-
-    #[test]
-    fn test_union_with_many_overlaps() {
-        // Test Union strategy with many overlapping entities
-        let mut builder = StackedNER::builder();
-
-        // Use static string literals for layer names
-        let layer_names = ["layer0", "layer1", "layer2", "layer3", "layer4"];
-
-        // Create 5 layers, each with overlapping entities
-        for (i, &name) in layer_names.iter().enumerate() {
-            let entities = vec![mock_entity(
-                "New York",
-                0,
-                EntityType::Location,
-                0.5 + (i as f64 / 10.0),
-            )];
-            builder = builder.layer(mock_model(name, entities));
+        fn supported_types(&self) -> Vec<anno_core::EntityType> {
+            vec![anno_core::EntityType::Person]
         }
 
-        let ner = builder.strategy(ConflictStrategy::Union).build();
-        let e = ner.extract_entities("New York", None).unwrap();
-        // Union should keep all overlapping entities
-        assert_eq!(e.len(), 5);
+        fn is_available(&self) -> bool {
+            true
+        }
+
+        fn name(&self) -> &'static str {
+            self.name
+        }
     }
 
-    #[test]
-    fn test_highest_conf_with_ties() {
-        // Test HighestConf when confidences are equal (should prefer existing)
-        let layer1 = mock_model(
-            "l1",
-            vec![mock_entity("Apple", 0, EntityType::Organization, 0.8)],
-        );
-        let layer2 = mock_model(
-            "l2",
-            vec![mock_entity("Apple", 0, EntityType::Organization, 0.8)], // Same confidence
-        );
+    // Test 1: Working layer after failing layer - fail-fast behavior
+    // When first layer fails with no prior entities, we fail fast
+    let ner_fail_first = StackedNER::builder()
+        .layer(FailingModel { name: "fail" }) // Failing layer first
+        .layer(crate::HeuristicNER::new())
+        .strategy(ConflictStrategy::Priority)
+        .build();
 
-        let ner = StackedNER::builder()
-            .layer(layer1)
-            .layer(layer2)
-            .strategy(ConflictStrategy::HighestConf)
-            .build();
+    // This should fail because first layer fails with no prior entities
+    let result = ner_fail_first.extract_entities("John Smith at Apple", None);
+    assert!(result.is_err(), "Should fail when first layer fails");
 
-        let e = ner.extract_entities("Apple Inc", None).unwrap();
-        assert_eq!(e.len(), 1);
-        // Should prefer layer1 (existing) when confidences are equal
-        assert_eq!(e[0].confidence, 0.8);
+    // Test 2: Failing layer AFTER working layer that produces entities
+    // - partial results are returned when subsequent layers fail
+    let ner_fail_second = StackedNER::builder()
+        .layer(crate::HeuristicNER::new()) // Working layer first
+        .layer(FailingModel { name: "fail" }) // Failing layer second
+        .strategy(ConflictStrategy::Priority)
+        .build();
+
+    // Text with entities: first layer extracts entities, failing layer is skipped
+    let result = ner_fail_second.extract_entities("Dr. John Smith works at Apple Inc.", None);
+    // Should succeed because HeuristicNER extracted entities before FailingModel was called
+    assert!(
+        result.is_ok(),
+        "Should succeed with partial results: {:?}",
+        result
+    );
+    let entities = result.unwrap();
+    // HeuristicNER should have found at least one entity
+    assert!(
+        !entities.is_empty(),
+        "Should have entities from working layer"
+    );
+
+    // Test 3: All-working layers should work normally
+    let ner_all_working = StackedNER::builder()
+        .layer(crate::RegexNER::new())
+        .layer(crate::HeuristicNER::new())
+        .strategy(ConflictStrategy::Priority)
+        .build();
+
+    let long_text = "word ".repeat(2000);
+    let _ = ner_all_working.extract_entities(&long_text, None).unwrap();
+}
+
+#[test]
+fn test_many_layers() {
+    // Test with 10 layers
+    let mut builder = StackedNER::builder();
+
+    // Use static string literals for layer names
+    let layer_names = [
+        "layer0", "layer1", "layer2", "layer3", "layer4", "layer5", "layer6", "layer7", "layer8",
+        "layer9",
+    ];
+
+    for (i, &name) in layer_names.iter().enumerate() {
+        let entities = vec![mock_entity(
+            "test",
+            0,
+            EntityType::Person,
+            0.5 + (i as f64 / 20.0),
+        )];
+        builder = builder.layer(mock_model(name, entities));
     }
 
-    #[test]
-    fn test_longest_span_with_ties() {
-        // Test LongestSpan when spans are equal (should prefer existing)
-        let layer1 = mock_model(
-            "l1",
-            vec![mock_entity("Apple", 0, EntityType::Organization, 0.8)],
-        );
-        let layer2 = mock_model(
-            "l2",
-            vec![mock_entity("Apple", 0, EntityType::Organization, 0.9)], // Same length, higher conf
-        );
+    let ner = builder.strategy(ConflictStrategy::Priority).build();
+    let e = ner.extract_entities("test", None).unwrap();
+    // Should only keep one entity (first layer wins with Priority)
+    assert_eq!(e.len(), 1);
+}
 
-        let ner = StackedNER::builder()
-            .layer(layer1)
-            .layer(layer2)
-            .strategy(ConflictStrategy::LongestSpan)
-            .build();
+#[test]
+fn test_union_with_many_overlaps() {
+    // Test Union strategy with many overlapping entities
+    let mut builder = StackedNER::builder();
 
-        let e = ner.extract_entities("Apple Inc", None).unwrap();
-        assert_eq!(e.len(), 1);
-        // Should prefer layer1 (existing) when spans are equal
-        assert_eq!(e[0].text, "Apple");
+    // Use static string literals for layer names
+    let layer_names = ["layer0", "layer1", "layer2", "layer3", "layer4"];
+
+    // Create 5 layers, each with overlapping entities
+    for (i, &name) in layer_names.iter().enumerate() {
+        let entities = vec![mock_entity(
+            "New York",
+            0,
+            EntityType::Location,
+            0.5 + (i as f64 / 10.0),
+        )];
+        builder = builder.layer(mock_model(name, entities));
     }
 
-    // =========================================================================
-    // Property-Based Tests (Proptest)
-    // =========================================================================
+    let ner = builder.strategy(ConflictStrategy::Union).build();
+    let e = ner.extract_entities("New York", None).unwrap();
+    // Union should keep all overlapping entities
+    assert_eq!(e.len(), 5);
+}
 
-    #[cfg(test)]
-    mod proptests {
-        use super::*;
-        use proptest::prelude::*;
+#[test]
+fn test_highest_conf_with_ties() {
+    // Test HighestConf when confidences are equal (should prefer existing)
+    let layer1 = mock_model(
+        "l1",
+        vec![mock_entity("Apple", 0, EntityType::Organization, 0.8)],
+    );
+    let layer2 = mock_model(
+        "l2",
+        vec![mock_entity("Apple", 0, EntityType::Organization, 0.8)], // Same confidence
+    );
 
-        /// Small, deterministic stack used for proptests.
+    let ner = StackedNER::builder()
+        .layer(layer1)
+        .layer(layer2)
+        .strategy(ConflictStrategy::HighestConf)
+        .build();
+
+    let e = ner.extract_entities("Apple Inc", None).unwrap();
+    assert_eq!(e.len(), 1);
+    // Should prefer layer1 (existing) when confidences are equal
+    assert_eq!(e[0].confidence, 0.8);
+}
+
+#[test]
+fn test_longest_span_with_ties() {
+    // Test LongestSpan when spans are equal (should prefer existing)
+    let layer1 = mock_model(
+        "l1",
+        vec![mock_entity("Apple", 0, EntityType::Organization, 0.8)],
+    );
+    let layer2 = mock_model(
+        "l2",
+        vec![mock_entity("Apple", 0, EntityType::Organization, 0.9)], // Same length, higher conf
+    );
+
+    let ner = StackedNER::builder()
+        .layer(layer1)
+        .layer(layer2)
+        .strategy(ConflictStrategy::LongestSpan)
+        .build();
+
+    let e = ner.extract_entities("Apple Inc", None).unwrap();
+    assert_eq!(e.len(), 1);
+    // Should prefer layer1 (existing) when spans are equal
+    assert_eq!(e[0].text, "Apple");
+}
+
+// =========================================================================
+// Property-Based Tests (Proptest)
+// =========================================================================
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// Small, deterministic stack used for proptests.
+    ///
+    /// IMPORTANT: Do not use `StackedNER::default()` in proptests:
+    /// - it may initialize feature-gated ML backends
+    /// - it can become slow/flaky as defaults evolve
+    fn fast_stack() -> StackedNER {
+        StackedNER::builder()
+            .layer(RegexNER::new())
+            .layer(HeuristicNER::new())
+            .strategy(ConflictStrategy::Priority)
+            .build()
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 50,
+            // nextest runs from the workspace root; default persistence can warn.
+            failure_persistence: None,
+            ..ProptestConfig::default()
+        })]
+
+        /// Property: StackedNER never panics on any input text
+        #[test]
+        fn never_panics(text in ".*") {
+            let ner = fast_stack();
+            let _ = ner.extract_entities(&text, None);
+        }
+
+        /// Property: All entities have valid spans (start < end)
         ///
-        /// IMPORTANT: Do not use `StackedNER::default()` in proptests:
-        /// - it may initialize feature-gated ML backends
-        /// - it can become slow/flaky as defaults evolve
-        fn fast_stack() -> StackedNER {
-            StackedNER::builder()
-                .layer(RegexNER::new())
-                .layer(HeuristicNER::new())
-                .strategy(ConflictStrategy::Priority)
-                .build()
+        /// Note: Some backends may produce entities with slightly out-of-bounds
+        /// offsets in edge cases. We validate start < end, but allow end to be
+        /// slightly beyond text length as a defensive measure.
+        #[test]
+        fn valid_spans(text in ".{0,1000}") {
+            let ner = fast_stack();
+            let entities = ner.extract_entities(&text, None).unwrap();
+            let text_char_count = text.chars().count();
+            for entity in entities {
+                // Core invariant: start must be < end
+                prop_assert!(
+                    entity.start < entity.end,
+                    "Invalid span: start={}, end={}",
+                    entity.start,
+                    entity.end
+                );
+                // End should generally be within bounds, but we allow small overflows
+                // as some backends may produce edge-case entities
+                // (In production, these should be caught by validation)
+                if text_char_count > 0 && entity.end > text_char_count + 2 {
+                    // Only fail if significantly out of bounds (>2 chars)
+                    prop_assert!(
+                        entity.end <= text_char_count + 2,
+                        "Entity end significantly exceeds text length: end={}, text_len={}",
+                        entity.end,
+                        text_char_count
+                    );
+                }
+            }
         }
 
-        proptest! {
-            #![proptest_config(ProptestConfig {
-                cases: 50,
-                // nextest runs from the workspace root; default persistence can warn.
-                failure_persistence: None,
-                ..ProptestConfig::default()
-            })]
-
-            /// Property: StackedNER never panics on any input text
-            #[test]
-            fn never_panics(text in ".*") {
-                let ner = fast_stack();
-                let _ = ner.extract_entities(&text, None);
+        /// Property: All entities have confidence in [0.0, 1.0]
+        #[test]
+        fn confidence_in_range(text in ".{0,1000}") {
+            let ner = fast_stack();
+            let entities = ner.extract_entities(&text, None).unwrap();
+            for entity in entities {
+                prop_assert!(entity.confidence >= 0.0 && entity.confidence <= 1.0,
+                    "Confidence out of range: {}", entity.confidence);
             }
+        }
 
-            /// Property: All entities have valid spans (start < end)
-            ///
-            /// Note: Some backends may produce entities with slightly out-of-bounds
-            /// offsets in edge cases. We validate start < end, but allow end to be
-            /// slightly beyond text length as a defensive measure.
-            #[test]
-            fn valid_spans(text in ".{0,1000}") {
-                let ner = fast_stack();
-                let entities = ner.extract_entities(&text, None).unwrap();
-                let text_char_count = text.chars().count();
-                for entity in entities {
-                    // Core invariant: start must be < end
-                    prop_assert!(
-                        entity.start < entity.end,
-                        "Invalid span: start={}, end={}",
-                        entity.start,
-                        entity.end
-                    );
-                    // End should generally be within bounds, but we allow small overflows
-                    // as some backends may produce edge-case entities
-                    // (In production, these should be caught by validation)
-                    if text_char_count > 0 && entity.end > text_char_count + 2 {
-                        // Only fail if significantly out of bounds (>2 chars)
+        /// Property: Entities are sorted by position (start, then end)
+        #[test]
+        fn sorted_output(text in ".{0,1000}") {
+            let ner = fast_stack();
+            let entities = ner.extract_entities(&text, None).unwrap();
+            for i in 1..entities.len() {
+                let prev = &entities[i - 1];
+                let curr = &entities[i];
+                prop_assert!(
+                    prev.start < curr.start || (prev.start == curr.start && prev.end <= curr.end),
+                    "Entities not sorted: prev=[{},{}), curr=[{}, {})",
+                    prev.start, prev.end, curr.start, curr.end
+                );
+            }
+        }
+
+        /// Property: No overlapping entities (except with Union strategy)
+        #[test]
+        fn no_overlaps_default_strategy(text in ".{0,500}") {
+            let ner = fast_stack(); // Uses Priority strategy
+            let entities = ner.extract_entities(&text, None).unwrap();
+            for i in 0..entities.len() {
+                for j in (i + 1)..entities.len() {
+                    let e1 = &entities[i];
+                    let e2 = &entities[j];
+                    let overlap = e1.start < e2.end && e2.start < e1.end;
+                    prop_assert!(!overlap, "Overlapping entities with Priority strategy: {:?} and {:?}", e1, e2);
+                }
+            }
+        }
+
+        /// Property: Entity text matches the span in input (when span is valid)
+        ///
+        /// Note: Some backends normalize text (trim, case changes) or may extract
+        /// slightly different text due to Unicode handling. We allow for reasonable
+        /// differences while ensuring the core content matches.
+        #[test]
+        fn entity_text_matches_span(text in ".{0,500}") {
+            let ner = fast_stack();
+            let entities = ner.extract_entities(&text, None).unwrap();
+            let text_chars: Vec<char> = text.chars().collect();
+            let text_char_count = text_chars.len();
+
+            for entity in entities {
+                // Only check if the span is within bounds
+                if entity.start < text_char_count && entity.end <= text_char_count && entity.start < entity.end {
+                    let span_text: String = text_chars[entity.start..entity.end].iter().collect();
+
+                    // Normalize both for comparison (trim, lowercase for comparison)
+                    let entity_text_normalized = entity.text.trim().to_lowercase();
+                    let span_text_normalized = span_text.trim().to_lowercase();
+
+                    // Check multiple matching strategies:
+                    // 1. Exact match after normalization
+                    // 2. Substring match (entity text is contained in span or vice versa)
+                    // 3. Character overlap (at least 50% of characters match)
+                    let exact_match = entity_text_normalized == span_text_normalized;
+                    let substring_match = span_text_normalized.contains(&entity_text_normalized) ||
+                                         entity_text_normalized.contains(&span_text_normalized);
+
+                    // Calculate character overlap ratio
+                    let entity_chars: Vec<char> = entity_text_normalized.chars().collect();
+                    let span_chars: Vec<char> = span_text_normalized.chars().collect();
+                    let common_chars = entity_chars.iter()
+                        .filter(|c| span_chars.contains(c))
+                        .count();
+                    let overlap_ratio = if entity_chars.len().max(span_chars.len()) > 0 {
+                        common_chars as f64 / entity_chars.len().max(span_chars.len()) as f64
+                    } else {
+                        1.0
+                    };
+
+                    // Allow match if any of these conditions are true
+                    // For edge cases (control chars, Unicode), be very lenient
+                    let is_valid_match = exact_match || substring_match || overlap_ratio > 0.2;
+
+                    // Skip check entirely if overlap is very low and text contains problematic chars
+                    // (likely a backend bug with edge cases, not a StackedNER issue)
+                    let has_control_chars = entity.text.chars().any(|c| c.is_control()) ||
+                                            span_text.chars().any(|c| c.is_control());
+                    let has_null_bytes = entity.text.contains('\0') || span_text.contains('\0');
+                    let has_weird_unicode = entity.text.chars().any(|c| c as u32 > 0xFFFF) ||
+                                             span_text.chars().any(|c| c as u32 > 0xFFFF);
+                    let has_non_printable = entity.text.chars().any(|c| !c.is_ascii() && c.is_control()) ||
+                                            span_text.chars().any(|c| !c.is_ascii() && c.is_control());
+
+                    // Very lenient: skip if any problematic chars and low overlap
+                    let should_skip = (has_control_chars || has_null_bytes || has_weird_unicode || has_non_printable) && overlap_ratio < 0.3;
+
+                    // Also skip if both texts are very short and different (likely normalization issue)
+                    let both_short = entity.text.len() <= 2 && span_text.len() <= 2;
+                    let should_skip_short = both_short && !exact_match && overlap_ratio < 0.5;
+
+                    // Skip if entity text is single char and span is different single char (normalization)
+                    let single_char_mismatch = entity.text.chars().count() == 1 && span_text.chars().count() == 1 &&
+                                               entity.text != span_text;
+
+                    // Skip if texts are completely different single characters (backend normalization issue)
+                    let completely_different = !exact_match && !substring_match && overlap_ratio < 0.1 &&
+                                               entity.text.len() <= 3 && span_text.len() <= 3;
+
+                    // Skip if entity text is empty or span is empty (edge case)
+                    let has_empty = entity.text.is_empty() || span_text.is_empty();
+
+                    // Skip if text contains problematic Unicode that backends may normalize differently
+                    // This includes: combining marks, zero-width chars, control chars, non-printable chars
+                    // Check both the original text and the extracted entity/span texts
+                    let has_problematic_unicode_in_text = text.chars().any(|c| {
+                        c.is_control() ||
+                        c as u32 > 0xFFFF ||
+                        (c as u32 >= 0x300 && c as u32 <= 0x36F) || // Combining diacritical marks
+                        (c as u32 >= 0x200B && c as u32 <= 0x200F) || // Zero-width spaces
+                        (c as u32 >= 0x202A && c as u32 <= 0x202E) || // Bidirectional marks
+                        c == '\u{FEFF}' // BOM
+                    });
+                    let has_problematic_unicode = has_problematic_unicode_in_text || entity.text.chars().any(|c| {
+                        c.is_control() ||
+                        c as u32 > 0xFFFF ||
+                        (c as u32 >= 0x300 && c as u32 <= 0x36F) || // Combining diacritical marks
+                        (c as u32 >= 0x200B && c as u32 <= 0x200F) || // Zero-width spaces
+                        (c as u32 >= 0x202A && c as u32 <= 0x202E) // Bidirectional marks
+                    }) || span_text.chars().any(|c| {
+                        c.is_control() ||
+                        c as u32 > 0xFFFF ||
+                        (c as u32 >= 0x300 && c as u32 <= 0x36F) ||
+                        (c as u32 >= 0x200B && c as u32 <= 0x200F) ||
+                        (c as u32 >= 0x202A && c as u32 <= 0x202E)
+                    });
+
+                    // Final check: only assert if none of the skip conditions are met
+                    // Skip entirely if problematic Unicode is present (backend normalization issue)
+                    // Also skip if overlap is very low (< 0.5) with problematic Unicode
+                    let should_skip_problematic = has_problematic_unicode && overlap_ratio < 0.5;
+                    if !should_skip && !should_skip_short && !single_char_mismatch && !completely_different &&
+                       !has_empty && !has_problematic_unicode && !should_skip_problematic {
                         prop_assert!(
-                            entity.end <= text_char_count + 2,
-                            "Entity end significantly exceeds text length: end={}, text_len={}",
-                            entity.end,
-                            text_char_count
+                            is_valid_match,
+                            "Entity text doesn't match span: expected '{}', got '{}' at [{},{}) (overlap: {:.2})",
+                            span_text, entity.text, entity.start, entity.end, overlap_ratio
                         );
                     }
                 }
             }
+        }
 
-            /// Property: All entities have confidence in [0.0, 1.0]
-            #[test]
-            fn confidence_in_range(text in ".{0,1000}") {
-                let ner = fast_stack();
-                let entities = ner.extract_entities(&text, None).unwrap();
-                for entity in entities {
-                    prop_assert!(entity.confidence >= 0.0 && entity.confidence <= 1.0,
-                        "Confidence out of range: {}", entity.confidence);
+        /// Property: StackedNER with Union strategy may have overlaps
+        #[test]
+        fn union_allows_overlaps(text in ".{0,200}") {
+            let ner = StackedNER::builder()
+                .layer(RegexNER::new())
+                .layer(HeuristicNER::new())
+                .strategy(ConflictStrategy::Union)
+                .build();
+            let entities = ner.extract_entities(&text, None).unwrap();
+            // Union strategy intentionally allows overlaps, so we just verify it doesn't panic
+            let _ = entities;
+        }
+
+        /// Property: Multiple layers produce consistent results
+        ///
+        /// Note: Entities from earlier layers should appear in later stacks,
+        /// though they may be modified by conflict resolution. We check that
+        /// the core content is preserved.
+        #[test]
+        fn multiple_layers_consistent(text in ".{0,200}") {
+            let ner1 = StackedNER::builder()
+                .layer(RegexNER::new())
+                .build();
+            let ner2 = StackedNER::builder()
+                .layer(RegexNER::new())
+                .layer(HeuristicNER::new())
+                .build();
+
+            let e1 = ner1.extract_entities(&text, None).unwrap();
+            let e2 = ner2.extract_entities(&text, None).unwrap();
+
+            // All entities from ner1 should be in ner2 (since ner2 includes ner1's layer)
+            // We allow for slight text differences due to normalization and conflict resolution
+            for entity in &e1 {
+                let found = e2.iter().any(|e| {
+                    // Check if spans match first (common condition)
+                    let spans_match = e.start == entity.start && e.end == entity.end;
+                    // Same span, text matches exactly or after normalization
+                    spans_match
+                        && (e.text == entity.text
+                            || e.text.trim().to_lowercase() == entity.text.trim().to_lowercase())
+                        // Same entity type and overlapping span (conflict resolution may have modified)
+                        || (e.entity_type == entity.entity_type
+                            && e.start <= entity.start
+                            && e.end >= entity.end)
+                });
+                // Note: Some entities may be filtered out by conflict resolution in ner2
+                // This is expected behavior, so we're lenient here
+                if !found && e2.is_empty() {
+                    // If ner2 found nothing, that's suspicious but not necessarily wrong
+                    // (could be conflict resolution filtering everything)
                 }
             }
+        }
 
-            /// Property: Entities are sorted by position (start, then end)
-            #[test]
-            fn sorted_output(text in ".{0,1000}") {
-                let ner = fast_stack();
-                let entities = ner.extract_entities(&text, None).unwrap();
-                for i in 1..entities.len() {
-                    let prev = &entities[i - 1];
-                    let curr = &entities[i];
-                    prop_assert!(
-                        prev.start < curr.start || (prev.start == curr.start && prev.end <= curr.end),
-                        "Entities not sorted: prev=[{},{}), curr=[{}, {})",
-                        prev.start, prev.end, curr.start, curr.end
-                    );
-                }
-            }
+        /// Property: Different strategies produce valid results
+        #[test]
+        fn all_strategies_valid(text in ".{0,200}") {
+            let strategies = [
+                ConflictStrategy::Priority,
+                ConflictStrategy::LongestSpan,
+                ConflictStrategy::HighestConf,
+                ConflictStrategy::Union,
+            ];
 
-            /// Property: No overlapping entities (except with Union strategy)
-            #[test]
-            fn no_overlaps_default_strategy(text in ".{0,500}") {
-                let ner = fast_stack(); // Uses Priority strategy
-                let entities = ner.extract_entities(&text, None).unwrap();
-                for i in 0..entities.len() {
-                    for j in (i + 1)..entities.len() {
-                        let e1 = &entities[i];
-                        let e2 = &entities[j];
-                        let overlap = e1.start < e2.end && e2.start < e1.end;
-                        prop_assert!(!overlap, "Overlapping entities with Priority strategy: {:?} and {:?}", e1, e2);
-                    }
-                }
-            }
+            // Performance: Cache text length once (optimization invariant test)
+            let text_char_count = text.chars().count();
 
-            /// Property: Entity text matches the span in input (when span is valid)
-            ///
-            /// Note: Some backends normalize text (trim, case changes) or may extract
-            /// slightly different text due to Unicode handling. We allow for reasonable
-            /// differences while ensuring the core content matches.
-            #[test]
-            fn entity_text_matches_span(text in ".{0,500}") {
-                let ner = fast_stack();
-                let entities = ner.extract_entities(&text, None).unwrap();
-                let text_chars: Vec<char> = text.chars().collect();
-                let text_char_count = text_chars.len();
-
-                for entity in entities {
-                    // Only check if the span is within bounds
-                    if entity.start < text_char_count && entity.end <= text_char_count && entity.start < entity.end {
-                        let span_text: String = text_chars[entity.start..entity.end].iter().collect();
-
-                        // Normalize both for comparison (trim, lowercase for comparison)
-                        let entity_text_normalized = entity.text.trim().to_lowercase();
-                        let span_text_normalized = span_text.trim().to_lowercase();
-
-                        // Check multiple matching strategies:
-                        // 1. Exact match after normalization
-                        // 2. Substring match (entity text is contained in span or vice versa)
-                        // 3. Character overlap (at least 50% of characters match)
-                        let exact_match = entity_text_normalized == span_text_normalized;
-                        let substring_match = span_text_normalized.contains(&entity_text_normalized) ||
-                                             entity_text_normalized.contains(&span_text_normalized);
-
-                        // Calculate character overlap ratio
-                        let entity_chars: Vec<char> = entity_text_normalized.chars().collect();
-                        let span_chars: Vec<char> = span_text_normalized.chars().collect();
-                        let common_chars = entity_chars.iter()
-                            .filter(|c| span_chars.contains(c))
-                            .count();
-                        let overlap_ratio = if entity_chars.len().max(span_chars.len()) > 0 {
-                            common_chars as f64 / entity_chars.len().max(span_chars.len()) as f64
-                        } else {
-                            1.0
-                        };
-
-                        // Allow match if any of these conditions are true
-                        // For edge cases (control chars, Unicode), be very lenient
-                        let is_valid_match = exact_match || substring_match || overlap_ratio > 0.2;
-
-                        // Skip check entirely if overlap is very low and text contains problematic chars
-                        // (likely a backend bug with edge cases, not a StackedNER issue)
-                        let has_control_chars = entity.text.chars().any(|c| c.is_control()) ||
-                                                span_text.chars().any(|c| c.is_control());
-                        let has_null_bytes = entity.text.contains('\0') || span_text.contains('\0');
-                        let has_weird_unicode = entity.text.chars().any(|c| c as u32 > 0xFFFF) ||
-                                                 span_text.chars().any(|c| c as u32 > 0xFFFF);
-                        let has_non_printable = entity.text.chars().any(|c| !c.is_ascii() && c.is_control()) ||
-                                                span_text.chars().any(|c| !c.is_ascii() && c.is_control());
-
-                        // Very lenient: skip if any problematic chars and low overlap
-                        let should_skip = (has_control_chars || has_null_bytes || has_weird_unicode || has_non_printable) && overlap_ratio < 0.3;
-
-                        // Also skip if both texts are very short and different (likely normalization issue)
-                        let both_short = entity.text.len() <= 2 && span_text.len() <= 2;
-                        let should_skip_short = both_short && !exact_match && overlap_ratio < 0.5;
-
-                        // Skip if entity text is single char and span is different single char (normalization)
-                        let single_char_mismatch = entity.text.chars().count() == 1 && span_text.chars().count() == 1 &&
-                                                   entity.text != span_text;
-
-                        // Skip if texts are completely different single characters (backend normalization issue)
-                        let completely_different = !exact_match && !substring_match && overlap_ratio < 0.1 &&
-                                                   entity.text.len() <= 3 && span_text.len() <= 3;
-
-                        // Skip if entity text is empty or span is empty (edge case)
-                        let has_empty = entity.text.is_empty() || span_text.is_empty();
-
-                        // Skip if text contains problematic Unicode that backends may normalize differently
-                        // This includes: combining marks, zero-width chars, control chars, non-printable chars
-                        // Check both the original text and the extracted entity/span texts
-                        let has_problematic_unicode_in_text = text.chars().any(|c| {
-                            c.is_control() ||
-                            c as u32 > 0xFFFF ||
-                            (c as u32 >= 0x300 && c as u32 <= 0x36F) || // Combining diacritical marks
-                            (c as u32 >= 0x200B && c as u32 <= 0x200F) || // Zero-width spaces
-                            (c as u32 >= 0x202A && c as u32 <= 0x202E) || // Bidirectional marks
-                            c == '\u{FEFF}' // BOM
-                        });
-                        let has_problematic_unicode = has_problematic_unicode_in_text || entity.text.chars().any(|c| {
-                            c.is_control() ||
-                            c as u32 > 0xFFFF ||
-                            (c as u32 >= 0x300 && c as u32 <= 0x36F) || // Combining diacritical marks
-                            (c as u32 >= 0x200B && c as u32 <= 0x200F) || // Zero-width spaces
-                            (c as u32 >= 0x202A && c as u32 <= 0x202E) // Bidirectional marks
-                        }) || span_text.chars().any(|c| {
-                            c.is_control() ||
-                            c as u32 > 0xFFFF ||
-                            (c as u32 >= 0x300 && c as u32 <= 0x36F) ||
-                            (c as u32 >= 0x200B && c as u32 <= 0x200F) ||
-                            (c as u32 >= 0x202A && c as u32 <= 0x202E)
-                        });
-
-                        // Final check: only assert if none of the skip conditions are met
-                        // Skip entirely if problematic Unicode is present (backend normalization issue)
-                        // Also skip if overlap is very low (< 0.5) with problematic Unicode
-                        let should_skip_problematic = has_problematic_unicode && overlap_ratio < 0.5;
-                        if !should_skip && !should_skip_short && !single_char_mismatch && !completely_different &&
-                           !has_empty && !has_problematic_unicode && !should_skip_problematic {
-                            prop_assert!(
-                                is_valid_match,
-                                "Entity text doesn't match span: expected '{}', got '{}' at [{},{}) (overlap: {:.2})",
-                                span_text, entity.text, entity.start, entity.end, overlap_ratio
-                            );
-                        }
-                    }
-                }
-            }
-
-            /// Property: StackedNER with Union strategy may have overlaps
-            #[test]
-            fn union_allows_overlaps(text in ".{0,200}") {
+            for strategy in strategies.iter() {
                 let ner = StackedNER::builder()
                     .layer(RegexNER::new())
                     .layer(HeuristicNER::new())
-                    .strategy(ConflictStrategy::Union)
+                    .strategy(*strategy)
                     .build();
+
                 let entities = ner.extract_entities(&text, None).unwrap();
-                // Union strategy intentionally allows overlaps, so we just verify it doesn't panic
-                let _ = entities;
-            }
-
-            /// Property: Multiple layers produce consistent results
-            ///
-            /// Note: Entities from earlier layers should appear in later stacks,
-            /// though they may be modified by conflict resolution. We check that
-            /// the core content is preserved.
-            #[test]
-            fn multiple_layers_consistent(text in ".{0,200}") {
-                let ner1 = StackedNER::builder()
-                    .layer(RegexNER::new())
-                    .build();
-                let ner2 = StackedNER::builder()
-                    .layer(RegexNER::new())
-                    .layer(HeuristicNER::new())
-                    .build();
-
-                let e1 = ner1.extract_entities(&text, None).unwrap();
-                let e2 = ner2.extract_entities(&text, None).unwrap();
-
-                // All entities from ner1 should be in ner2 (since ner2 includes ner1's layer)
-                // We allow for slight text differences due to normalization and conflict resolution
-                for entity in &e1 {
-                    let found = e2.iter().any(|e| {
-                        // Check if spans match first (common condition)
-                        let spans_match = e.start == entity.start && e.end == entity.end;
-                        // Same span, text matches exactly or after normalization
-                        spans_match
-                            && (e.text == entity.text
-                                || e.text.trim().to_lowercase() == entity.text.trim().to_lowercase())
-                            // Same entity type and overlapping span (conflict resolution may have modified)
-                            || (e.entity_type == entity.entity_type
-                                && e.start <= entity.start
-                                && e.end >= entity.end)
-                    });
-                    // Note: Some entities may be filtered out by conflict resolution in ner2
-                    // This is expected behavior, so we're lenient here
-                    if !found && e2.is_empty() {
-                        // If ner2 found nothing, that's suspicious but not necessarily wrong
-                        // (could be conflict resolution filtering everything)
-                    }
-                }
-            }
-
-            /// Property: Different strategies produce valid results
-            #[test]
-            fn all_strategies_valid(text in ".{0,200}") {
-                let strategies = [
-                    ConflictStrategy::Priority,
-                    ConflictStrategy::LongestSpan,
-                    ConflictStrategy::HighestConf,
-                    ConflictStrategy::Union,
-                ];
-
-                // Performance: Cache text length once (optimization invariant test)
-                let text_char_count = text.chars().count();
-
-                for strategy in strategies.iter() {
-                    let ner = StackedNER::builder()
-                        .layer(RegexNER::new())
-                        .layer(HeuristicNER::new())
-                        .strategy(*strategy)
-                        .build();
-
-                    let entities = ner.extract_entities(&text, None).unwrap();
-                    // Verify all entities are valid
-                    for entity in entities {
-                        prop_assert!(entity.start < entity.end, "Invalid span: start={}, end={}", entity.start, entity.end);
-                        prop_assert!(entity.end <= text_char_count, "Entity end exceeds text: end={}, text_len={}", entity.end, text_char_count);
-                        prop_assert!(entity.confidence >= 0.0 && entity.confidence <= 1.0, "Invalid confidence: {}", entity.confidence);
-                    }
+                // Verify all entities are valid
+                for entity in entities {
+                    prop_assert!(entity.start < entity.end, "Invalid span: start={}, end={}", entity.start, entity.end);
+                    prop_assert!(entity.end <= text_char_count, "Entity end exceeds text: end={}, text_len={}", entity.end, text_char_count);
+                    prop_assert!(entity.confidence >= 0.0 && entity.confidence <= 1.0, "Invalid confidence: {}", entity.confidence);
                 }
             }
         }
     }
+}

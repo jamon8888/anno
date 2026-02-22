@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
 //! GLiNER Candle inference engine.
 
-use super::*;
 use super::layers::*;
+use super::*;
 
 pub struct GLiNERCandle {
     /// Text encoder (BERT/ModernBERT/DeBERTa)

@@ -3,7 +3,6 @@
 #[allow(unused_imports)]
 use super::*;
 
-
 use crate::backends::box_embeddings::BoxEmbedding;
 use anno_core::Entity;
 use anno_core::{CorefChain, CorefDocument};

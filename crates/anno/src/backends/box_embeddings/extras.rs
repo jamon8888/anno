@@ -639,4 +639,3 @@ impl subsume_core::GumbelBox for GumbelBox {
 
 // Note: BoxCorefResolver is implemented in src/eval/coref_resolver.rs
 // to be alongside other coreference resolvers.
-

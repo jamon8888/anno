@@ -66,9 +66,7 @@ pub struct BatchArgs {
     pub quiet: bool,
 }
 
-
 // Cache helpers
-
 
 /// Derive a filesystem path for a cached document result.
 ///
@@ -110,9 +108,7 @@ fn store_cached(path: &Path, doc: &anno_core::GroundedDocument) {
     }
 }
 
-
 // Per-document extraction
-
 
 struct DocOpts<'a> {
     coref: bool,
@@ -171,9 +167,7 @@ fn process_document(
     Ok(doc)
 }
 
-
 // Main entry point
-
 
 /// Execute the batch processing command.
 pub fn run(args: BatchArgs) -> Result<(), String> {
@@ -206,8 +200,7 @@ pub fn run(args: BatchArgs) -> Result<(), String> {
         let stdin = io::stdin();
         let mut out = Vec::new();
         for (i, line) in stdin.lock().lines().enumerate() {
-            let line =
-                line.map_err(|e| format!("Failed to read stdin line {}: {}", i + 1, e))?;
+            let line = line.map_err(|e| format!("Failed to read stdin line {}: {}", i + 1, e))?;
             if line.trim().is_empty() {
                 continue;
             }
@@ -376,7 +369,11 @@ pub fn run(args: BatchArgs) -> Result<(), String> {
             .filter(|p| p.as_ref().is_some_and(|p| p.exists()))
             .count();
         if args.cache && cached > 0 {
-            eprintln!("[batch] {} cache hits, {} computed", cached, documents.len() - cached);
+            eprintln!(
+                "[batch] {} cache hits, {} computed",
+                cached,
+                documents.len() - cached
+            );
         }
         if let Some(ref out) = args.output {
             eprintln!("[batch] wrote {} document(s) to {}", documents.len(), out);
@@ -386,9 +383,7 @@ pub fn run(args: BatchArgs) -> Result<(), String> {
     Ok(())
 }
 
-
 // Output writing
-
 
 fn write_outputs(
     documents: &[anno_core::GroundedDocument],

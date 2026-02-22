@@ -718,4 +718,3 @@ impl crate::BatchCapable for BiLstmCrfNER {
 
 #[cfg(test)]
 mod tests;
-
