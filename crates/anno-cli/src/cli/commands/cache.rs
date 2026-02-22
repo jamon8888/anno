@@ -66,7 +66,9 @@ pub enum CacheAction {
 
 /// Walk a directory tree, calling `f` for every regular file found.
 fn walk_files(dir: &std::path::Path, f: &mut impl FnMut(&std::path::Path)) {
-    let Ok(entries) = fs::read_dir(dir) else { return };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_file() {
@@ -154,7 +156,10 @@ pub fn run(args: CacheArgs) -> Result<(), String> {
             if cache_dir.exists() {
                 fs::remove_dir_all(&cache_dir)
                     .map_err(|e| format!("Failed to clear cache: {}", e))?;
-                println!("{} Cache cleared (model cache + result cache)", color("32", "✓"));
+                println!(
+                    "{} Cache cleared (model cache + result cache)",
+                    color("32", "✓")
+                );
             } else {
                 println!("Cache directory does not exist");
             }

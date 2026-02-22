@@ -104,7 +104,6 @@ pub fn best_device() -> Result<Device> {
 /// Span representation using the SpanMarker approach from GLiNER.
 /// Projects start and end positions separately and combines them.
 #[cfg(feature = "candle")]
-
 pub mod layers;
 pub use layers::*;
 
@@ -118,9 +117,9 @@ pub use layers::*;
 /// Supports Metal (Apple Silicon) and CUDA (NVIDIA) GPU acceleration.
 mod inference;
 #[cfg(feature = "candle")]
-pub use inference::GLiNERCandle;
-#[cfg(feature = "candle")]
 pub(crate) use inference::convert_pytorch_to_safetensors;
+#[cfg(feature = "candle")]
+pub use inference::GLiNERCandle;
 
 const DEFAULT_GLINER_LABELS: &[&str] = &[
     "person",
@@ -400,5 +399,3 @@ impl crate::GpuCapable for GLiNERCandle {
 
 #[cfg(test)]
 mod tests;
-
-

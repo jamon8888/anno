@@ -286,9 +286,7 @@ impl crate::RelationCapable for TPLinker {
         text: &str,
         _language: Option<&str>,
     ) -> Result<(Vec<Entity>, Vec<crate::Relation>)> {
-        use crate::backends::inference::{
-            DEFAULT_ENTITY_TYPES, DEFAULT_RELATION_TYPES,
-        };
+        use crate::backends::inference::{DEFAULT_ENTITY_TYPES, DEFAULT_RELATION_TYPES};
         let result = <Self as RelationExtractor>::extract_with_relations(
             self,
             text,

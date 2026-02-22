@@ -982,4 +982,3 @@ impl crate::StreamingCapable for RegexNER {
 
 #[cfg(test)]
 mod proptests;
-

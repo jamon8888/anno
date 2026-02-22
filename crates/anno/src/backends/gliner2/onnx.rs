@@ -3,18 +3,18 @@
 //!
 //! Requires `--features onnx`. Trait implementations live in `super` (mod.rs).
 
-use crate::{Entity, EntityType, Error, Result};
-use anno_core::EntityCategory;
-use std::collections::HashMap;
 use super::schema::{
-    ClassificationResult, ClassificationTask, EntityTask, ExtractionResult,
-    ExtractedStructure, FieldType, LabelCache, StructureTask, StructureValue, TaskSchema,
-    TOKEN_ENT, TOKEN_END, TOKEN_SEP, TOKEN_START, MAX_SPAN_WIDTH,
+    ClassificationResult, ClassificationTask, EntityTask, ExtractedStructure, ExtractionResult,
+    FieldType, LabelCache, StructureTask, StructureValue, TaskSchema, MAX_SPAN_WIDTH, TOKEN_END,
+    TOKEN_ENT, TOKEN_SEP, TOKEN_START,
 };
 use super::{map_entity_type, word_span_to_char_offsets};
 use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, ZeroShotNER};
 #[cfg(feature = "onnx")]
 use crate::sync::{lock, Mutex};
+use crate::{Entity, EntityType, Error, Result};
+use anno_core::EntityCategory;
+use std::collections::HashMap;
 
 // ONNX Backend
 // =============================================================================

@@ -693,7 +693,12 @@ impl HmmNER {
     /// Uses token position tracking to correctly handle duplicate entity texts.
     /// The previous implementation used `text.find()` which always returned the
     /// first occurrence, causing incorrect offsets for duplicate entities.
-    pub(super) fn decode_entities(&self, text: &str, words: &[&str], labels: &[usize]) -> Vec<Entity> {
+    pub(super) fn decode_entities(
+        &self,
+        text: &str,
+        words: &[&str],
+        labels: &[usize],
+    ) -> Vec<Entity> {
         use crate::offset::SpanConverter;
 
         let converter = SpanConverter::new(text);
@@ -974,4 +979,3 @@ impl Default for HmmNER {
         Self::new()
     }
 }
-

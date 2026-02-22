@@ -2,11 +2,10 @@
 //!
 //! Used by TPLinker and other relation-capable backends.
 
-use crate::{Entity, EntityType};
-use anno_core::Relation;
 use super::registry::{LabelDefinition, SemanticRegistry};
 use super::RelationTriple;
-
+use crate::{Entity, EntityType};
+use anno_core::Relation;
 
 /// Configuration for relation extraction.
 #[derive(Debug, Clone)]
@@ -1058,4 +1057,3 @@ fn detect_relation_type<'a>(
 
     None
 }
-

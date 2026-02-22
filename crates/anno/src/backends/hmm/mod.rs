@@ -177,7 +177,6 @@ pub struct HmmNER {
     backoff: Option<HmmBackoff>,
 }
 
-
 mod algorithm;
 // HMM Viterbi, forward-backward, and emission scoring: see algorithm.rs.
 impl Model for HmmNER {
@@ -221,5 +220,3 @@ impl crate::NamedEntityCapable for HmmNER {}
 
 #[cfg(test)]
 mod tests;
-
-

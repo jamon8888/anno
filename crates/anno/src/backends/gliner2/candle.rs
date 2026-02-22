@@ -3,20 +3,19 @@
 //!
 //! Requires `--features candle`. Trait implementations live in `super` (mod.rs).
 
+#[cfg(feature = "candle")]
+use super::schema::MAX_COUNT;
+use super::schema::{
+    ClassificationResult, ClassificationTask, EntityTask, ExtractedStructure, ExtractionResult,
+    FieldType, LabelCache, StructureTask, StructureValue, TaskSchema, MAX_SPAN_WIDTH,
+};
+use super::{map_entity_type, word_span_to_char_offsets};
+use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, ZeroShotNER};
 use crate::{Entity, EntityType, Error, Result};
 use anno_core::EntityCategory;
 use std::collections::HashMap;
 #[cfg(feature = "candle")]
 use std::sync::RwLock;
-use super::schema::{
-    ClassificationResult, ClassificationTask, EntityTask, ExtractionResult,
-    ExtractedStructure, FieldType, LabelCache, StructureTask, StructureValue, TaskSchema,
-    MAX_SPAN_WIDTH,
-};
-#[cfg(feature = "candle")]
-use super::schema::MAX_COUNT;
-use super::{map_entity_type, word_span_to_char_offsets};
-use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, ZeroShotNER};
 
 // Candle Backend
 // =============================================================================

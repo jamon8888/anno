@@ -198,12 +198,14 @@ impl NuNER {
 
             let input_ids_t = crate::backends::ort_compat::tensor_from_ndarray(input_ids_array)
                 .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-            let attention_mask_t = crate::backends::ort_compat::tensor_from_ndarray(attention_mask_array)
-                .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
+            let attention_mask_t =
+                crate::backends::ort_compat::tensor_from_ndarray(attention_mask_array)
+                    .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
             let words_mask_t = crate::backends::ort_compat::tensor_from_ndarray(words_mask_array)
                 .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-            let text_lengths_t = crate::backends::ort_compat::tensor_from_ndarray(text_lengths_array)
-                .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
+            let text_lengths_t =
+                crate::backends::ort_compat::tensor_from_ndarray(text_lengths_array)
+                    .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
 
             Ok((input_ids_t, attention_mask_t, words_mask_t, text_lengths_t))
         };
@@ -241,8 +243,9 @@ impl NuNER {
                 let span_mask_array = Array2::from_shape_vec((1, num_spans), span_mask)
                     .map_err(|e| Error::Parse(format!("Span mask array error: {}", e)))?;
 
-                let span_idx_t = crate::backends::ort_compat::tensor_from_ndarray(span_idx_array)
-                    .map_err(|e| Error::Parse(format!("Span idx tensor error: {}", e)))?;
+                let span_idx_t =
+                    crate::backends::ort_compat::tensor_from_ndarray(span_idx_array)
+                        .map_err(|e| Error::Parse(format!("Span idx tensor error: {}", e)))?;
                 let span_mask_t = crate::backends::ort_compat::tensor_from_ndarray(span_mask_array)
                     .map_err(|e| Error::Parse(format!("Span mask tensor error: {}", e)))?;
 
@@ -892,4 +895,3 @@ impl NuNER {
         }
     }
 }
-

@@ -100,7 +100,10 @@ struct Extracted {
 
 impl Extracted {
     fn entities_only(entities: Vec<anno_core::Entity>) -> Self {
-        Self { entities, relations: Vec::new() }
+        Self {
+            entities,
+            relations: Vec::new(),
+        }
     }
 }
 
@@ -142,7 +145,11 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
     }
 
     if !args.quiet {
-        let mode = if relation_model.is_some() { " (relation-capable)" } else { "" };
+        let mode = if relation_model.is_some() {
+            " (relation-capable)"
+        } else {
+            ""
+        };
         eprintln!(
             "{} Exporting {} files to {:?} format{}",
             color("32", "[export]"),
@@ -163,7 +170,13 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
             let (entities, relations) = rm
                 .extract_with_relations(&content, None)
                 .map_err(|e| format!("Extraction failed: {}", e))?;
-            Ok((content, Extracted { entities, relations }))
+            Ok((
+                content,
+                Extracted {
+                    entities,
+                    relations,
+                },
+            ))
         } else if let Some(ref m) = plain_model {
             let content =
                 fs::read_to_string(file).map_err(|e| format!("Failed to read file: {}", e))?;
@@ -262,7 +275,16 @@ struct ExportFileOpts<'a> {
 }
 
 fn export_file(opts: ExportFileOpts<'_>) -> Result<(), String> {
-    let ExportFileOpts { input, output_dir, content, ext, format, include_confidence, overwrite, base_uri } = opts;
+    let ExportFileOpts {
+        input,
+        output_dir,
+        content,
+        ext,
+        format,
+        include_confidence,
+        overwrite,
+        base_uri,
+    } = opts;
     let stem = input.file_stem().unwrap_or_default().to_string_lossy();
 
     // Kuzu writes two CSVs (nodes + edges); handle before the single-path logic below.
@@ -312,12 +334,14 @@ fn export_file(opts: ExportFileOpts<'_>) -> Result<(), String> {
         ExportFormat::Brat => export_brat(&ext.entities, include_confidence),
         ExportFormat::Conll => export_conll(content, &ext.entities),
         ExportFormat::Jsonl => export_jsonl(&ext.entities, input, include_confidence),
-        ExportFormat::NTriples => {
-            export_ntriples(&ext.entities, &ext.relations, input, base_uri)
-        }
-        ExportFormat::JsonLd => {
-            export_jsonld(&ext.entities, &ext.relations, input, include_confidence, base_uri)
-        }
+        ExportFormat::NTriples => export_ntriples(&ext.entities, &ext.relations, input, base_uri),
+        ExportFormat::JsonLd => export_jsonld(
+            &ext.entities,
+            &ext.relations,
+            input,
+            include_confidence,
+            base_uri,
+        ),
         #[cfg(feature = "graph")]
         ExportFormat::GraphNTriples => {
             export_graph_ntriples(&ext.entities, &ext.relations, input, base_uri)
@@ -641,9 +665,7 @@ fn export_graph_ntriples(
     base_uri: &str,
 ) -> String {
     let base = base_uri.trim_end_matches('/');
-    let stem = anno_graph::uri_safe(
-        &source.file_stem().unwrap_or_default().to_string_lossy(),
-    );
+    let stem = anno_graph::uri_safe(&source.file_stem().unwrap_or_default().to_string_lossy());
     let doc_iri = format!("{}/doc/{}", base, stem);
 
     let kg = anno_graph::entities_to_knowledge_graph(entities, relations, &doc_iri, base_uri);

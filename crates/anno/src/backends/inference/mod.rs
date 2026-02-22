@@ -18,7 +18,6 @@
 
 use std::borrow::Cow;
 
-
 // =============================================================================
 // Modality Types
 // =============================================================================
@@ -99,7 +98,9 @@ pub mod coref;
 pub use coref::*;
 
 pub mod relation_extraction;
-pub use relation_extraction::{RelationExtractionConfig, extract_relation_triples, extract_relations};
+pub use relation_extraction::{
+    extract_relation_triples, extract_relations, RelationExtractionConfig,
+};
 
 pub mod binary_embeddings;
 pub use binary_embeddings::*;
@@ -108,10 +109,10 @@ pub use binary_embeddings::*;
 
 #[cfg(test)]
 mod tests {
+    use super::coref::{resolve_coreferences, CoreferenceConfig};
+    use super::late_interaction::{DotProductInteraction, MaxSimInteraction};
     use super::*;
     use crate::{Entity, EntityType};
-    use super::late_interaction::{DotProductInteraction, MaxSimInteraction};
-    use super::coref::{resolve_coreferences, CoreferenceConfig};
 
     #[test]
     fn test_semantic_registry_builder() {

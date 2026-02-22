@@ -1,7 +1,7 @@
 //! GLiNER ONNX inference engine: extraction, tokenization, span scoring.
 
-use super::*;
 use super::config::*;
+use super::*;
 
 #[cfg(feature = "onnx")]
 impl GLiNEROnnx {
@@ -221,8 +221,9 @@ impl GLiNEROnnx {
 
         let input_ids_t = crate::backends::ort_compat::tensor_from_ndarray(input_ids_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let attention_mask_t = crate::backends::ort_compat::tensor_from_ndarray(attention_mask_array)
-            .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
+        let attention_mask_t =
+            crate::backends::ort_compat::tensor_from_ndarray(attention_mask_array)
+                .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
         let words_mask_t = crate::backends::ort_compat::tensor_from_ndarray(words_mask_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
         let text_lengths_t = crate::backends::ort_compat::tensor_from_ndarray(text_lengths_array)
@@ -866,7 +867,6 @@ pub(crate) fn looks_like_company_name(text: &str) -> bool {
     false
 }
 
-
 /// Extract a substring by character offsets (not byte offsets).
 ///
 /// This handles Unicode text correctly by iterating over characters.
@@ -922,4 +922,3 @@ pub(super) const DEFAULT_GLINER_LABELS: &[&str] = &[
     "law",
     "language",
 ];
-

@@ -3,7 +3,6 @@
 #[allow(unused_imports)]
 use super::*;
 
-
 #[allow(unused_imports)]
 use crate::{Model, Result};
 use anno_core::{Gender, MentionType};
@@ -657,4 +656,3 @@ impl RankedMention {
         }
     }
 }
-

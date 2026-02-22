@@ -60,4 +60,4 @@ pub mod types;
 pub use types::*;
 
 pub mod algorithm;
-pub use algorithm::{BoxEmbeddingTrainer, split_train_val};
+pub use algorithm::{split_train_val, BoxEmbeddingTrainer};

@@ -100,7 +100,7 @@
 //! - [TPLinker](https://aclanthology.org/2020.coling-main.138/) (related approach)
 
 pub mod decode;
-pub use decode::{DiscontinuousDecodeRow, W2NERRelation, map_label_to_entity_type};
+pub use decode::{map_label_to_entity_type, DiscontinuousDecodeRow, W2NERRelation};
 
 use crate::backends::inference::{DiscontinuousEntity, DiscontinuousNER, HandshakingMatrix};
 use crate::{Entity, EntityType, Model, Result};
@@ -964,4 +964,3 @@ impl DiscontinuousNER for W2NER {
 
 #[cfg(test)]
 mod tests;
-

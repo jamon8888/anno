@@ -196,4 +196,3 @@ pub use types::*;
 
 pub mod algorithm;
 pub use algorithm::MentionRankingCoref;
-

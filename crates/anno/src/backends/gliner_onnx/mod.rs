@@ -352,7 +352,5 @@ impl crate::StreamingCapable for GLiNEROnnx {
     }
 }
 
-
-
 #[cfg(test)]
 mod postprocess_tests;

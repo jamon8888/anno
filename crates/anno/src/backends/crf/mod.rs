@@ -171,7 +171,6 @@ impl Default for CrfNER {
     }
 }
 
-
 mod algorithm;
 // CRF algorithm: feature extraction, Viterbi decoding, weight loading (see algorithm.rs).
 impl Model for CrfNER {
@@ -238,4 +237,3 @@ impl crate::StreamingCapable for CrfNER {
 
 #[cfg(test)]
 mod tests;
-

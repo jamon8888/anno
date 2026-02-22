@@ -371,8 +371,7 @@ fn import_jsonl(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
 /// Groups triples by subject IRI, then extracts entity type, surface text, character offsets,
 /// confidence, and provenance from the standard predicates written by `anno export`.
 fn import_ntriples(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
-    let content =
-        fs::read_to_string(input).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = fs::read_to_string(input).map_err(|e| format!("Failed to read file: {}", e))?;
 
     let mut triples: Vec<(String, String, String)> = Vec::new();
     for line in content.lines() {
@@ -389,7 +388,10 @@ fn import_ntriples(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
     let mut by_subject: std::collections::HashMap<&str, Vec<(&str, &str)>> =
         std::collections::HashMap::new();
     for (s, p, o) in &triples {
-        by_subject.entry(s.as_str()).or_default().push((p.as_str(), o.as_str()));
+        by_subject
+            .entry(s.as_str())
+            .or_default()
+            .push((p.as_str(), o.as_str()));
     }
 
     const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -413,7 +415,10 @@ fn import_ntriples(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
             .map(|(_, o)| {
                 let iri = o.trim_start_matches('<').trim_end_matches('>');
                 let after_hash = iri.rsplit('#').next().unwrap_or(iri);
-                after_hash.strip_suffix("Type").unwrap_or(after_hash).to_string()
+                after_hash
+                    .strip_suffix("Type")
+                    .unwrap_or(after_hash)
+                    .to_string()
             })
             .unwrap_or_else(|| "ENTITY".to_string());
 
@@ -515,8 +520,7 @@ fn unescape_literal(s: &str) -> String {
 /// Parses documents produced by `anno export --format jsonld`.
 /// Each object in the `@graph` array maps to one `ImportedAnnotation`.
 fn import_jsonld(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
-    let content =
-        fs::read_to_string(input).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = fs::read_to_string(input).map_err(|e| format!("Failed to read file: {}", e))?;
 
     let doc: serde_json::Value =
         serde_json::from_str(&content).map_err(|e| format!("Invalid JSON-LD: {}", e))?;

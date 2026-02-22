@@ -81,9 +81,7 @@ pub fn decode_from_matrix(
         }
     }
 
-    entities.sort_unstable_by(|a, b| {
-        a.0.cmp(&b.0).then_with(|| (b.1 - b.0).cmp(&(a.1 - a.0)))
-    });
+    entities.sort_unstable_by(|a, b| a.0.cmp(&b.0).then_with(|| (b.1 - b.0).cmp(&(a.1 - a.0))));
 
     if !allow_nested {
         entities = remove_nested(&entities);
@@ -194,7 +192,11 @@ pub fn grid_to_matrix(
             }
         }
     }
-    HandshakingMatrix { cells, seq_len, num_labels: num_relations }
+    HandshakingMatrix {
+        cells,
+        seq_len,
+        num_labels: num_relations,
+    }
 }
 
 /// Remove nested entities, keeping the outermost span at each position.
@@ -232,11 +234,20 @@ mod tests {
     use crate::backends::inference::{HandshakingCell, HandshakingMatrix};
 
     fn cell(i: u32, j: u32, rel: W2NERRelation, score: f32) -> HandshakingCell {
-        HandshakingCell { i, j, label_idx: rel.to_index() as u16, score }
+        HandshakingCell {
+            i,
+            j,
+            label_idx: rel.to_index() as u16,
+            score,
+        }
     }
 
     fn mat(cells: Vec<HandshakingCell>, seq_len: usize) -> HandshakingMatrix {
-        HandshakingMatrix { cells, seq_len, num_labels: 3 }
+        HandshakingMatrix {
+            cells,
+            seq_len,
+            num_labels: 3,
+        }
     }
 
     #[test]
@@ -285,7 +296,12 @@ mod tests {
         assert_eq!(result.len(), 1);
         let (label, spans, _score) = &result[0];
         assert_eq!(label, "SYMPTOM");
-        assert_eq!(spans.len(), 2, "expected 2 disjoint segments; got {}", spans.len());
+        assert_eq!(
+            spans.len(),
+            2,
+            "expected 2 disjoint segments; got {}",
+            spans.len()
+        );
         assert_eq!(spans[0], (0, 2)); // words 0-1
         assert_eq!(spans[1], (2, 4)); // words 2-3
     }
@@ -307,6 +323,9 @@ mod tests {
         assert_eq!(map_label_to_entity_type("PER"), EntityType::Person);
         assert_eq!(map_label_to_entity_type("ORG"), EntityType::Organization);
         assert_eq!(map_label_to_entity_type("GPE"), EntityType::Location);
-        assert!(matches!(map_label_to_entity_type("CUSTOM"), EntityType::Other(_)));
+        assert!(matches!(
+            map_label_to_entity_type("CUSTOM"),
+            EntityType::Other(_)
+        ));
     }
 }
