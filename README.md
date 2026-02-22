@@ -253,6 +253,16 @@ anno benchmark --model gliner --dataset conll2003
 
 `anno sampler` (`--features eval`) provides a randomized matrix sampler with two modes: **triage** (worst-first) and **measure** (ML-only stable measurement).
 
+### Sampler examples
+
+```sh
+# Deterministic offline decision-loop smoke example (also run in CI).
+cargo run -p anno-eval --example muxer_decision_loop --features eval
+
+# Run the CI sampler harness locally (uses ~/.anno_cache for history/cache).
+just ci-matrix-local 42 ner
+```
+
 ## Scope
 
 Inference-time extraction only. Training is out of scope — use upstream frameworks (Hugging Face Transformers, Flair, etc.) and export ONNX weights for consumption.
