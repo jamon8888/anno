@@ -1,3 +1,5 @@
+#[cfg(feature = "candle")]
+use super::layers::l2_normalize;
 use super::*;
 
 #[test]

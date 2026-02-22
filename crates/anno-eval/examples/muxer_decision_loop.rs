@@ -16,7 +16,7 @@ fn simulated_outcome(backend: &str, round: usize) -> (Outcome, Option<&'static s
     match backend {
         // Usually strong, occasional low-signal run.
         "stacked" => {
-            let soft_junk = round % 7 == 0;
+            let soft_junk = round.is_multiple_of(7);
             let quality = if soft_junk { 0.12 } else { 0.86 };
             (
                 Outcome {
@@ -32,7 +32,7 @@ fn simulated_outcome(backend: &str, round: usize) -> (Outcome, Option<&'static s
         }
         // Mid-quality baseline with frequent soft junk.
         "heuristic" => {
-            let soft_junk = round % 2 == 0;
+            let soft_junk = round.is_multiple_of(2);
             let quality = if soft_junk { 0.18 } else { 0.55 };
             (
                 Outcome {
@@ -48,7 +48,7 @@ fn simulated_outcome(backend: &str, round: usize) -> (Outcome, Option<&'static s
         }
         // Low-latency structured backend with occasional hard failure.
         _ => {
-            let hard_fail = round % 3 == 0;
+            let hard_fail = round.is_multiple_of(3);
             (
                 Outcome {
                     ok: !hard_fail,

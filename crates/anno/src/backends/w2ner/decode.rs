@@ -310,8 +310,8 @@ mod tests {
     fn grid_to_matrix_filters_none_and_below_threshold() {
         // 2×2×3 grid: only rel=2 (THW) at (0,1) with score 0.9 should survive
         let mut grid = vec![0.0f32; 2 * 2 * 3];
-        grid[0 * 2 * 3 + 1 * 3 + 2] = 0.9; // (i=0,j=1,rel=2)
-        grid[0 * 2 * 3 + 1 * 3 + 1] = 0.2; // below threshold
+        grid[5] = 0.9; // (i=0,j=1,rel=2)
+        grid[4] = 0.2; // below threshold
         let m = grid_to_matrix(&grid, 2, 3, 0.5);
         assert_eq!(m.cells.len(), 1);
         assert_eq!(m.cells[0].label_idx, 2);
