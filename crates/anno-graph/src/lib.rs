@@ -1,0 +1,253 @@
+//! Adapters between `anno-core` and `lattix`.
+//!
+//! This crate exists to avoid introducing a dependency edge from `anno-core` → `lattix` while
+//! still letting downstream tooling treat `lattix` as the graph/KG substrate.
+//!
+//! ## Functions
+//!
+//! - [`to_lattix_knowledge_graph`] — convert a [`GraphDocument`](anno_core::GraphDocument) to a
+//!   `lattix::KnowledgeGraph` (canonical graph shape, no offset/provenance triples).
+//! - [`grounded_to_lattix_knowledge_graph`] — same, from a `GroundedDocument`.
+//! - [`entities_to_knowledge_graph`] — the preferred export path: takes raw extraction output
+//!   (`Entity` + `Relation` slices) and emits a fully-annotated `KnowledgeGraph` including
+//!   character-offset, confidence, and provenance triples. Used by `anno export --format
+//!   graph-ntriples`.
+
+use lattix::{KnowledgeGraph, Triple};
+
+// ---------------------------------------------------------------------------
+// URI helpers (shared across all export paths)
+// ---------------------------------------------------------------------------
+
+/// Make a string safe for use inside a URI path segment.
+pub fn uri_safe(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn escape_literal(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
+
+// ---------------------------------------------------------------------------
+// GraphDocument → KnowledgeGraph
+// ---------------------------------------------------------------------------
+
+/// Convert an `anno_core::GraphDocument` into a `lattix::KnowledgeGraph`.
+///
+/// Maps:
+/// - Each `GraphEdge` → one triple: `(source, relation, target)`
+/// - Each `GraphNode` → best-effort `rdf:type` and `rdfs:label` triples when fields are set
+#[must_use]
+pub fn to_lattix_knowledge_graph(g: &anno_core::GraphDocument) -> KnowledgeGraph {
+    let mut kg = KnowledgeGraph::new();
+
+    const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+    const ANNO_NODE_TYPE: &str = "urn:anno:node_type:";
+
+    for n in &g.nodes {
+        if !n.node_type.is_empty() {
+            kg.add_triple(Triple::new(
+                n.id.as_str(),
+                RDF_TYPE,
+                format!("{ANNO_NODE_TYPE}{}", n.node_type),
+            ));
+        }
+        if !n.name.trim().is_empty() {
+            let lit = format!("\"{}\"", escape_literal(n.name.as_str()));
+            kg.add_triple(Triple::new(n.id.as_str(), RDFS_LABEL, lit));
+        }
+    }
+
+    for e in &g.edges {
+        let mut t = Triple::new(e.source.as_str(), e.relation.as_str(), e.target.as_str());
+        if e.confidence.is_finite() {
+            t = t.with_confidence((e.confidence as f32).clamp(0.0, 1.0));
+        }
+        kg.add_triple(t);
+    }
+
+    kg
+}
+
+/// Convert a `GroundedDocument` into a `lattix::KnowledgeGraph`.
+#[must_use]
+pub fn grounded_to_lattix_knowledge_graph(doc: &anno_core::GroundedDocument) -> KnowledgeGraph {
+    let g = anno_core::GraphDocument::from_grounded_document(doc);
+    to_lattix_knowledge_graph(&g)
+}
+
+// ---------------------------------------------------------------------------
+// Raw entity/relation extraction output → KnowledgeGraph
+// ---------------------------------------------------------------------------
+
+/// Build a fully-annotated `KnowledgeGraph` from raw NER + relation extraction output.
+///
+/// Each entity becomes a subject with:
+/// - `rdf:type` assertion
+/// - `rdfs:label` (surface text)
+/// - character offset and confidence typed literals
+/// - `prov:hadPrimarySource` provenance link to the document IRI
+///
+/// When `relations` is non-empty (i.e. the model is `RelationCapable`), each triple becomes
+/// a predicate arc: `<head_entity> <{base}/rel/{type}> <tail_entity>`.
+///
+/// # Arguments
+///
+/// - `entities` — extracted entity spans
+/// - `relations` — semantic triples; empty for entity-only backends
+/// - `doc_iri` — IRI identifying this document (e.g. `https://www.gutenberg.org/ebooks/doc/pg1342`)
+/// - `base_uri` — namespace prefix (e.g. `https://www.gutenberg.org/ebooks/`)
+///
+/// # Returns
+///
+/// A `KnowledgeGraph` whose triples can be serialised to N-Triples via
+/// `kg.triples().map(|t| t.to_ntriples()).collect::<Vec<_>>().join("\n")`.
+#[must_use]
+pub fn entities_to_knowledge_graph(
+    entities: &[anno_core::Entity],
+    relations: &[anno_core::Relation],
+    doc_iri: &str,
+    base_uri: &str,
+) -> KnowledgeGraph {
+    let mut kg =
+        KnowledgeGraph::with_capacity(entities.len().max(1), entities.len() * 7 + relations.len());
+
+    let base = base_uri.trim_end_matches('/');
+    let anno_ns = format!("{}/vocab#", base);
+    let entity_ns = format!("{}/entity/", base);
+
+    const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+    const PROV_SOURCE: &str = "http://www.w3.org/ns/prov#hadPrimarySource";
+    const XSD_INT: &str = "http://www.w3.org/2001/XMLSchema#integer";
+    const XSD_FLOAT: &str = "http://www.w3.org/2001/XMLSchema#float";
+
+    // Stable per-doc entity IRIs used for both entity triples and relation arcs.
+    let entity_iris: Vec<String> = entities
+        .iter()
+        .enumerate()
+        .map(|(i, e)| {
+            format!(
+                "{}{}/{}_{}_{}/",
+                entity_ns,
+                e.entity_type.as_label().to_lowercase(),
+                i,
+                uri_safe(&e.text),
+                e.start,
+            )
+        })
+        .collect();
+
+    for (idx, entity) in entities.iter().enumerate() {
+        let iri = &entity_iris[idx];
+        let type_iri = format!("{}{}Type", anno_ns, entity.entity_type.as_label());
+
+        kg.add_triple(Triple::new(iri.as_str(), RDF_TYPE, type_iri.as_str()));
+        kg.add_triple(Triple::new(
+            iri.as_str(),
+            RDFS_LABEL,
+            format!("\"{}\"", escape_literal(&entity.text)),
+        ));
+        kg.add_triple(Triple::new(
+            iri.as_str(),
+            format!("{}startOffset", anno_ns),
+            format!("\"{}\"^^<{}>", entity.start, XSD_INT),
+        ));
+        kg.add_triple(Triple::new(
+            iri.as_str(),
+            format!("{}endOffset", anno_ns),
+            format!("\"{}\"^^<{}>", entity.end, XSD_INT),
+        ));
+        kg.add_triple(Triple::new(
+            iri.as_str(),
+            format!("{}confidence", anno_ns),
+            format!("\"{}\"^^<{}>", entity.confidence, XSD_FLOAT),
+        ));
+        kg.add_triple(Triple::new(iri.as_str(), PROV_SOURCE, doc_iri));
+        kg.add_triple(Triple::new(
+            doc_iri,
+            format!("{}mentions", anno_ns),
+            iri.as_str(),
+        ));
+    }
+
+    // Semantic relation triples from RelationCapable backends.
+    for rel in relations {
+        let head_iri = entity_iris.iter().zip(entities.iter()).find_map(|(iri, e)| {
+            (e.text == rel.head.text && e.start == rel.head.start).then_some(iri.as_str())
+        });
+        let tail_iri = entity_iris.iter().zip(entities.iter()).find_map(|(iri, e)| {
+            (e.text == rel.tail.text && e.start == rel.tail.start).then_some(iri.as_str())
+        });
+        if let (Some(h), Some(t)) = (head_iri, tail_iri) {
+            let pred = format!("{}/rel/{}", base, uri_safe(&rel.relation_type));
+            let mut triple = Triple::new(h, pred.as_str(), t);
+            if rel.confidence.is_finite() {
+                triple = triple.with_confidence(rel.confidence as f32);
+            }
+            kg.add_triple(triple);
+        }
+    }
+
+    kg
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anno_core::{Entity, EntityType, Relation};
+
+    fn ent(text: &str, start: usize, end: usize, ty: EntityType) -> Entity {
+        Entity::new(text, ty, start, end, 0.9)
+    }
+
+    #[test]
+    fn kg_produces_type_label_provenance_triples() {
+        let entities = vec![ent("Lynn Conway", 0, 11, EntityType::Person)];
+        let kg = entities_to_knowledge_graph(&entities, &[], "urn:test:doc/d1", "urn:test:");
+        let triples: Vec<String> = kg.triples().map(|t| t.to_ntriples()).collect();
+
+        assert!(triples.len() >= 6, "expected ≥6 triples, got {}", triples.len());
+        assert!(triples.iter().any(|t| t.contains("rdf-syntax-ns#type") && t.contains("PERType")));
+        assert!(triples.iter().any(|t| t.contains("rdf-schema#label")));
+        assert!(triples.iter().any(|t| t.contains("prov#hadPrimarySource") || t.contains("prov/ns#")));
+    }
+
+    #[test]
+    fn kg_includes_relation_arc() {
+        let head = ent("Steve Jobs", 0, 10, EntityType::Person);
+        let tail = ent("Apple", 19, 24, EntityType::Organization);
+        let rel = Relation::new(head.clone(), tail.clone(), "founded", 0.85);
+
+        let kg = entities_to_knowledge_graph(&[head, tail], &[rel], "urn:test:doc/d2", "urn:test:");
+        let triples: Vec<String> = kg.triples().map(|t| t.to_ntriples()).collect();
+        assert!(triples.iter().any(|t| t.contains("rel/founded")),
+            "missing relation triple; triples:\n{}", triples.join("\n"));
+    }
+
+    #[test]
+    fn empty_entities_empty_kg() {
+        let kg = entities_to_knowledge_graph(&[], &[], "urn:test:doc/empty", "urn:test:");
+        assert_eq!(kg.triples().count(), 0);
+    }
+
+    #[test]
+    fn uri_safe_replaces_specials() {
+        assert_eq!(uri_safe("Lynn Conway"), "Lynn_Conway");
+        assert_eq!(uri_safe("IBM"), "IBM");
+        assert_eq!(uri_safe("New York"), "New_York");
+    }
+}

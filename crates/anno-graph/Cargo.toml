@@ -1,14 +1,13 @@
 [package]
-name = "anno-lattix"
+name = "anno-graph"
 version = "0.3.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/arclabs561/anno"
-description = "Adapters between anno-core and lattix graph substrates"
+description = "Graph/KG export adapters for anno: converts extraction output to lattix::KnowledgeGraph and N-Triples"
 publish = false
 
 [dependencies]
 anno-core = { path = "../anno-core", version = "0.3.0" }
-# crates.io `lattix` expects its default feature set to be enabled to pull in optional deps.
+# crates.io `lattix` currently requires its default feature set enabled.
 lattix = { version = "0.1.1" }
-
