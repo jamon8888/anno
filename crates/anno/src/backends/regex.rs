@@ -393,6 +393,14 @@ impl Model for RegexNER {
     fn description(&self) -> &'static str {
         "Regex-based NER (dates, times, money, percentages, emails, URLs, phones)"
     }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            streaming_capable: true,
+            ..Default::default()
+        }
+    }
 }
 
 /// Check if a span overlaps with existing entities.

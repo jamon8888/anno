@@ -254,7 +254,19 @@ impl Model for TPLinker {
     fn description(&self) -> &'static str {
         "TPLinker (heuristic baseline today; neural handshaking model TBD)"
     }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            streaming_capable: true,
+            recommended_chunk_size: Some(10_000),
+            relation_capable: true,
+            ..Default::default()
+        }
+    }
 }
+
+impl crate::NamedEntityCapable for TPLinker {}
 
 impl RelationExtractor for TPLinker {
     fn extract_with_relations(
@@ -265,6 +277,26 @@ impl RelationExtractor for TPLinker {
         threshold: f32,
     ) -> Result<ExtractionWithRelations> {
         self.extract_with_handshaking(text, entity_types, relation_types, threshold)
+    }
+}
+
+impl crate::RelationCapable for TPLinker {
+    fn extract_with_relations(
+        &self,
+        text: &str,
+        _language: Option<&str>,
+    ) -> Result<(Vec<Entity>, Vec<crate::Relation>)> {
+        use crate::backends::inference::{
+            DEFAULT_ENTITY_TYPES, DEFAULT_RELATION_TYPES,
+        };
+        let result = <Self as RelationExtractor>::extract_with_relations(
+            self,
+            text,
+            DEFAULT_ENTITY_TYPES,
+            DEFAULT_RELATION_TYPES,
+            0.5,
+        )?;
+        Ok(result.into_anno_relations())
     }
 }
 

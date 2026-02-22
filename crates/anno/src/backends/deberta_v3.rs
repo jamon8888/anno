@@ -100,7 +100,17 @@ impl Model for DeBERTaV3NER {
     fn description(&self) -> &'static str {
         "DeBERTa-v3 NER with disentangled attention (wraps BERT ONNX backend)"
     }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            streaming_capable: true,
+            ..Default::default()
+        }
+    }
 }
+
+impl crate::NamedEntityCapable for DeBERTaV3NER {}
 
 impl crate::BatchCapable for DeBERTaV3NER {
     fn extract_entities_batch(

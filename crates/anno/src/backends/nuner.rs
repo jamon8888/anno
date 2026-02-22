@@ -1087,6 +1087,29 @@ impl Model for NuNER {
     fn version(&self) -> String {
         format!("nuner-zero-{}", self.model_id)
     }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            streaming_capable: true,
+            dynamic_labels: true,
+            ..Default::default()
+        }
+    }
+}
+
+impl crate::NamedEntityCapable for NuNER {}
+
+#[cfg(feature = "onnx")]
+impl crate::DynamicLabels for NuNER {
+    fn extract_with_labels(
+        &self,
+        text: &str,
+        labels: &[&str],
+        _language: Option<&str>,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        self.extract(text, labels, self.threshold as f32)
+    }
 }
 
 // =============================================================================

@@ -498,10 +498,20 @@ impl Model for CandleNER {
     }
 
     fn version(&self) -> String {
-        // Version depends on model name and device
         format!("candle-ner-{}-{}", self.model_name, self.device())
     }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            streaming_capable: true,
+            gpu_capable: true,
+            ..Default::default()
+        }
+    }
 }
+
+impl crate::NamedEntityCapable for CandleNER {}
 
 // =============================================================================
 // GpuCapable Trait Implementation
