@@ -1,5 +1,6 @@
 //! Late interaction scoring for span-level entity matching.
 
+#[allow(unused_imports)]
 use crate::Entity;
 
 /// | DotProduct  | s·l     | Fast  | Good     | General purpose |

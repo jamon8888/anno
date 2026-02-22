@@ -43,7 +43,7 @@ pub struct GLiNER2Candle {
     /// Structure count predictor for [P] tokens
     count_predictor: CountPredictor,
     /// Device
-    device: Device,
+    pub(super) device: Device,
     #[allow(dead_code)]
     model_name: String,
     hidden_size: usize,
@@ -327,7 +327,7 @@ impl GLiNER2Candle {
     }
 
     /// Extract named entities with zero-shot labels.
-    fn extract_entities(
+    pub(super) fn extract_entities(
         &self,
         text: &str,
         types: &[String],
@@ -619,7 +619,7 @@ impl GLiNER2Candle {
         Ok((tensor, word_positions))
     }
 
-    fn encode_labels_cached(&self, labels: &[&str]) -> Result<Tensor> {
+    pub(super) fn encode_labels_cached(&self, labels: &[&str]) -> Result<Tensor> {
         let mut all_embeddings = Vec::new();
 
         for label in labels {

@@ -1,14 +1,12 @@
-//! Candle encoder implementations (BERT, ModernBERT, etc.).
-
 use super::*;
-use super::config::*;
+
 
 // =============================================================================
 // Candle Implementations
 // =============================================================================
 
 #[cfg(feature = "candle")]
-mod candle_impl {
+pub mod candle_impl {
     use super::*;
 
     /// Get the best available device.

@@ -1,6 +1,7 @@
 //! Core extraction traits: ZeroShotNER, RelationExtractor, RelationCapable defaults,
 //! and DiscontinuousNER.
 
+#[allow(unused_imports)]
 use crate::{Entity, EntityType, Relation};
 
 // Zero-Shot NER Trait

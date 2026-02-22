@@ -184,8 +184,11 @@
 //!     .with_salience(salience_scores);
 //! ```
 
+#[allow(unused_imports)]
 use crate::{Entity, Model, Result};
-use anno_core::{CoreferenceResolver, Gender, MentionType, Number};
+#[allow(unused_imports)]
+use anno_core::{CoreferenceResolver, Gender, MentionType};
+#[allow(unused_imports)]
 use std::collections::{HashMap, HashSet};
 
 pub mod types;

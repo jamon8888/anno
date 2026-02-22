@@ -50,6 +50,8 @@
 
 #[cfg(feature = "onnx")]
 use crate::sync::lock;
+#[cfg(feature = "candle")]
+use candle_core::Device;
 use crate::{Entity, EntityType, Error, Result};
 use anno_core::EntityCategory;
 

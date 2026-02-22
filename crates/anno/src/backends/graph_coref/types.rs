@@ -2,6 +2,7 @@
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Coreference graph: undirected edges between mention indices.
 pub struct CorefGraph {
     /// Number of mentions (nodes).
     pub(super) num_mentions: usize,

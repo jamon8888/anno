@@ -1,8 +1,11 @@
 //! MentionRankingCoref model: scoring, clustering, and coreference resolution.
 
+#[allow(unused_imports)]
 use super::*;
+#[allow(unused_imports)]
 use super::types::*;
 
+/// Mention-ranking coreference resolver.
 pub struct MentionRankingCoref {
     /// Configuration.
     config: MentionRankingConfig,

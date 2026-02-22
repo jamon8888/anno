@@ -52,17 +52,17 @@ pub struct LabelCache {
 
 #[cfg(feature = "candle")]
 impl LabelCache {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             cache: RwLock::new(HashMap::new()),
         }
     }
 
-    fn get(&self, label: &str) -> Option<Vec<f32>> {
+    pub(super) fn get(&self, label: &str) -> Option<Vec<f32>> {
         self.cache.read().ok()?.get(label).cloned()
     }
 
-    fn insert(&self, label: String, embedding: Vec<f32>) {
+    pub(super) fn insert(&self, label: String, embedding: Vec<f32>) {
         if let Ok(mut cache) = self.cache.write() {
             cache.insert(label, embedding);
         }

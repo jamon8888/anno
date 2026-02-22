@@ -190,16 +190,16 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
             Ok((content, ext)) => {
                 let entity_count = ext.entities.len();
                 let rel_count = ext.relations.len();
-                match export_file(
-                    file,
-                    &args.output,
-                    &content,
+                match export_file(ExportFileOpts {
+                    input: file,
+                    output_dir: &args.output,
+                    content: &content,
                     ext,
-                    args.format,
-                    args.include_confidence,
-                    args.overwrite,
-                    &args.base_uri,
-                ) {
+                    format: args.format,
+                    include_confidence: args.include_confidence,
+                    overwrite: args.overwrite,
+                    base_uri: &args.base_uri,
+                }) {
                     Ok(()) => {
                         success_count += 1;
                         if !args.quiet {
@@ -250,16 +250,19 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
     }
 }
 
-fn export_file(
-    input: &Path,
-    output_dir: &Path,
-    content: &str,
+struct ExportFileOpts<'a> {
+    input: &'a Path,
+    output_dir: &'a Path,
+    content: &'a str,
     ext: Extracted,
     format: ExportFormat,
     include_confidence: bool,
     overwrite: bool,
-    base_uri: &str,
-) -> Result<(), String> {
+    base_uri: &'a str,
+}
+
+fn export_file(opts: ExportFileOpts<'_>) -> Result<(), String> {
+    let ExportFileOpts { input, output_dir, content, ext, format, include_confidence, overwrite, base_uri } = opts;
     let stem = input.file_stem().unwrap_or_default().to_string_lossy();
 
     // Kuzu writes two CSVs (nodes + edges); handle before the single-path logic below.

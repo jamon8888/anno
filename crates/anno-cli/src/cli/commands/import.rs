@@ -398,7 +398,7 @@ fn import_ntriples(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
 
     let mut annotations = Vec::new();
 
-    for (_subject, pairs) in &by_subject {
+    for pairs in by_subject.values() {
         // Skip document nodes (no rdfs:label).
         let label = pairs
             .iter()
@@ -491,8 +491,8 @@ fn parse_iri_or_bnode(s: &str) -> Option<(String, &str)> {
 /// Extract value from an N-Triples literal: `"foo"^^<type>` → `"foo"`.
 fn strip_literal(o: &str) -> &str {
     let o = o.trim();
-    if o.starts_with('"') {
-        o[1..].find('"').map(|i| &o[1..i + 1]).unwrap_or(&o[1..])
+    if let Some(inner) = o.strip_prefix('"') {
+        inner.find('"').map(|i| &inner[..i]).unwrap_or(inner)
     } else {
         o.trim_start_matches('<').trim_end_matches('>')
     }

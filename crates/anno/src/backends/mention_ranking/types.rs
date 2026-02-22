@@ -1,10 +1,13 @@
 //! Configuration and data types for mention-ranking coreference.
 
+#[allow(unused_imports)]
 use super::*;
 
 
+#[allow(unused_imports)]
 use crate::{Model, Result};
 use anno_core::{Gender, MentionType};
+#[allow(unused_imports)]
 use std::collections::{HashMap, HashSet};
 
 /// A scored mention pair for easy-first clustering.

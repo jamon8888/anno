@@ -2,6 +2,7 @@
 
 use super::*;
 
+/// Configuration for box-embedding-based coreference.
 pub struct BoxCorefConfig {
     /// Minimum coreference score to link entities
     pub coreference_threshold: f32,
