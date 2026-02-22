@@ -788,6 +788,14 @@ impl Model for EnsembleNER {
     fn description(&self) -> &'static str {
         "Ensemble NER: weighted voting across multiple backends"
     }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            streaming_capable: true,
+            ..Default::default()
+        }
+    }
 }
 
 // Implement required traits

@@ -698,6 +698,14 @@ impl Model for BiLstmCrfNER {
     fn is_available(&self) -> bool {
         true // Always available with heuristic fallback
     }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            optimal_batch_size: Some(32),
+            ..Default::default()
+        }
+    }
 }
 
 impl crate::sealed::Sealed for BiLstmCrfNER {}

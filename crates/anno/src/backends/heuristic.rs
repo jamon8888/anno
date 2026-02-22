@@ -644,6 +644,14 @@ impl Model for HeuristicNER {
     fn description(&self) -> &'static str {
         "Heuristic NER optimized for low complexity"
     }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            streaming_capable: true,
+            ..Default::default()
+        }
+    }
 }
 
 /// Domain-agnostic, language-agnostic acronym check.  True when every

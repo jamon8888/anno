@@ -328,6 +328,26 @@ impl Model for UniversalNER {
     fn description(&self) -> &'static str {
         "UniversalNER: LLM-based zero-shot NER (requires `llm` feature + API key)"
     }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            dynamic_labels: true,
+            ..Default::default()
+        }
+    }
+}
+
+impl crate::NamedEntityCapable for UniversalNER {}
+
+impl crate::DynamicLabels for UniversalNER {
+    fn extract_with_labels(
+        &self,
+        text: &str,
+        labels: &[&str],
+        _language: Option<&str>,
+    ) -> crate::Result<Vec<Entity>> {
+        <Self as ZeroShotNER>::extract_with_types(self, text, labels, 0.3)
+    }
 }
 
 impl ZeroShotNER for UniversalNER {

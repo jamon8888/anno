@@ -553,6 +553,11 @@ pub struct ModelCapabilities {
     pub recommended_chunk_size: Option<usize>,
     /// True if the model implements `RelationCapable`.
     pub relation_capable: bool,
+    /// True if the model implements `DynamicLabels` (zero-shot, caller-supplied entity types).
+    pub dynamic_labels: bool,
+    /// True if the model can extract discontinuous entities spanning non-adjacent spans.
+    /// Only `W2NER` (when loaded with an ONNX session) sets this today.
+    pub discontinuous_capable: bool,
 }
 
 /// Trait for models that can extract relations between entities.

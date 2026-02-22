@@ -106,7 +106,17 @@ impl Model for ALBERTNER {
     fn description(&self) -> &'static str {
         "ALBERT NER - efficient, small model (11MB) with competitive performance"
     }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            streaming_capable: true,
+            ..Default::default()
+        }
+    }
 }
+
+impl crate::NamedEntityCapable for ALBERTNER {}
 
 impl crate::BatchCapable for ALBERTNER {
     fn extract_entities_batch(

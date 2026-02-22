@@ -592,14 +592,23 @@ impl crate::Model for BertNEROnnx {
     }
 
     fn version(&self) -> String {
-        // Version depends on the model weights and quantization status
         format!(
             "bert-onnx-{}-{}",
             self.model_name,
             if self.is_quantized { "q" } else { "fp32" }
         )
     }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            batch_capable: true,
+            streaming_capable: true,
+            ..Default::default()
+        }
+    }
 }
+
+impl crate::NamedEntityCapable for BertNEROnnx {}
 
 // =============================================================================
 // BatchCapable Trait Implementation
