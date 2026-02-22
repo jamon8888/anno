@@ -212,7 +212,7 @@ impl SpanLabelMatcher {
 }
 
 #[cfg(feature = "candle")]
-fn l2_normalize(tensor: &Tensor, dim: D) -> Result<Tensor> {
+pub(crate) fn l2_normalize(tensor: &Tensor, dim: D) -> Result<Tensor> {
     let norm = tensor.sqr()?.sum(dim)?.sqrt()?;
     let norm = norm.unsqueeze(D::Minus1)?;
     // Clamp norm to prevent division by zero (same as gliner2.rs)

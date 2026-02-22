@@ -110,7 +110,7 @@ pub use binary_embeddings::*;
 #[cfg(test)]
 mod tests {
     use super::coref::{resolve_coreferences, CoreferenceConfig};
-    use super::late_interaction::{DotProductInteraction, MaxSimInteraction};
+    use super::late_interaction::DotProductInteraction;
     use super::*;
     use crate::{Entity, EntityType};
 
