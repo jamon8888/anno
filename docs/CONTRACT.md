@@ -7,41 +7,45 @@ This document is the **interface contract** for `anno`: what it does, what it gu
 `anno` turns **UTF-8 text** into **structured extractions**:
 
 - **NER**: span detection + entity typing (fixed or zero-shot custom types)
+- **Relation extraction**: typed `(head, relation, tail)` triples; available on `RelationCapable` backends (`tplinker`, `gliner2`)
 - **Within-document coreference**: cluster mentions into tracks
 - **Cross-document coalescing**: cluster tracks across documents into identities
 
 ## Primary interoperability contract
 
 - **Offsets are character offsets** (Unicode scalar values), not byte offsets.
-- **Core types are the interface**: downstream code should integrate against the stable shapes re-exported by `anno` (prefer `anno::core::*`) (`Entity`, `Signal`, `Track`, `Identity`, `GroundedDocument`, `Corpus`) and treat them as the stable “shape”.
+- **Core types are the interface**: downstream code should integrate against the stable shapes re-exported by `anno` (prefer `anno::core::*`) (`Entity`, `Signal`, `Track`, `Identity`, `GroundedDocument`, `Corpus`) and treat them as the stable "shape".
 
 ## Input text contract (what backends expect)
 
-`anno` backends operate on **plain UTF-8 text**. They will run on “messy” text, but you should be
+`anno` backends operate on **plain UTF-8 text**. They will run on "messy" text, but you should be
 explicit about what the *authoritative* input string is, because offsets are always relative to the
 exact string you pass in.
 
-- **Accepted**: raw text, OCR text, and extracted HTML/PDF text *after* you’ve turned it into a
+- **Accepted**: raw text, OCR text, and extracted HTML/PDF text *after* you've turned it into a
   single plain string.
 - **Recommended upstream normalization** (in your ingestion layer, e.g. `textprep`):
   - normalize newlines (`\r\n`/`\r` → `\n`) if your sources vary
   - remove bidi controls / suspicious invisibles if your corpora come from untrusted sources
-  - avoid “pretty reflow” that changes character positions after extraction (it invalidates spans)
+  - avoid "pretty reflow" that changes character positions after extraction (it invalidates spans)
+- **CLI convenience**: the CLI exposes `--clean` and `--normalize` flags as opt-in helpers;
+  offsets in the output are relative to the post-normalized string.
 - **Not a product goal**: `anno` does not promise to be an HTML/PDF parser or a crawler. Feed it
   text; keep parsing/cleaning upstream.
 
-## Scope (what’s in / out)
+## Scope (what's in / out)
 
 **In scope**
 - Inference-time extraction (regex/heuristics/ML backends).
-- Zero-shot extraction with custom entity types (via GLiNER, `--extract-types`).
+- Zero-shot extraction with custom entity types (`DynamicLabels` backends: GLiNER, GLiNER2, NuNER — use `extract_with_labels`; CLI `--extract-types`).
+- Relation extraction (`RelationCapable` backends: `tplinker`, `gliner2`).
+- Graph/KG export: the `graph` feature exposes `GraphDocument` and N-Triples export.
 - Evaluation + dataset loading behind feature flags (for benchmarking, not required for usage).
 
 **Out of scope by design**
 - Training.
 - Document parsing as a product (HTML/PDF pipelines, crawling, etc.). Feed `anno` text; keep ingestion upstream.
-- Heavy graph/community-detection toolchains. `GraphDocument` exists for legacy interop/export; run graph algorithms elsewhere.
-  - If you want a KG substrate + algorithms, use `lattix` downstream (e.g. import N-Triples exports).
+- Heavy graph algorithms (community detection, node ranking, etc.). Export via N-Triples and run algorithms downstream (e.g. in `lattix`).
 
 ## Feature gating (how to depend on it)
 
@@ -50,20 +54,20 @@ exact string you pass in.
 
 Important default: the facade keeps defaults minimal.
 
-- The `anno` **package** has `default = []`.
+- The `anno` **package** has `default = ["onnx"]` — ONNX ML backends are on by default.
 - It depends on `anno-lib` with `default-features = false`.
-- Enable ML backends explicitly when you want them.
+- Use `default-features = false` in your `Cargo.toml` to opt out of ONNX and pull only what you need.
 
 Major feature flags:
 
 - `onnx`: ONNX Runtime backends (GLiNER, BERT-NER, etc.)
 - `candle`: pure-Rust transformer backend (GPU via platform support)
-- `analysis`: lightweight analysis primitives (metrics, encoders)
-- `eval`: evaluation-adjacent helpers (used by `anno-cli` benchmarking)
+- `analysis`: lightweight analysis primitives (metrics, encoders) — available at inference time, safe to include in production
+- `eval`: evaluation harnesses (dataset loading, benchmarking) — only needed for benchmarking runs; pulls in heavier dataset/IO deps
 - `discourse`: discourse-level utilities
 - `graph`: graph/KG export surface
 
-Treat feature flags as **capability toggles**: depend on the narrowest set you need.
+Treat feature flags as **capability toggles**: depend on the narrowest set you need. In particular, do not include `eval` in a production dependency; use `analysis` instead if you need metrics primitives.
 
 ## CLI packages (two `anno` binaries)
 
@@ -74,16 +78,16 @@ The workspace contains **two binaries named `anno`**:
 
 ## Integration posture
 
-- **Upstream**: `textprep` / `sketchir` handle text cleaning + lightweight structure; `anno` consumes the resulting text.
+- **Upstream**: `textprep` handles text cleaning and normalization; `anno` consumes the resulting text. (Internally, `anno-core` uses `sketchir` for similarity sketching during coalescing — this is not a user-facing dependency.)
 - **Downstream**: other code can safely:
   - index/store entities/tracks/identities (using the stable `anno` shapes),
   - join with other signals (audio/vision/etc.) using the shared offset discipline,
-  - export graphs via `GraphDocument` without importing graph-algorithm choices into `anno`.
+  - export graphs via `anno-graph::entities_to_knowledge_graph` (which owns the triple construction) or `GraphDocument`, then run algorithms on the exported data.
 
 ## Minimal usage obligations
 
 - If you persist results, persist both the **source text identity** (doc id / provenance) and the **character-offset spans**.
-- Don’t reinterpret spans as byte offsets.
+- Don't reinterpret spans as byte offsets.
 
 ## CLI default (best available)
 
@@ -93,46 +97,9 @@ The default CLI model (`--model stacked`) prefers the **best available** ML back
 - To force cached-only / offline behavior: set `ANNO_NO_DOWNLOADS=1` (or `HF_HUB_OFFLINE=1`).
 - To prefetch explicitly: use the **full CLI** (`anno-cli`): `anno models download gliner gliner2 bert-onnx` (then `stacked` will pick it up).
 
-## Evaluation (expected runtime + artifacts)
+## Evaluation (two layers)
 
-`anno` has two “eval” layers; they serve different goals and have very different runtimes.
+`anno` has two eval layers with very different runtimes:
 
-### 1) Local, single-text eval (fast)
-
-Use the CLI `eval` command when you have **one** text and **gold spans** (inline or from a file).
-This is typically milliseconds–seconds plus model inference time.
-
-```bash
-anno eval --help
-```
-
-### 2) Benchmark/eval matrix (can be slow by design)
-
-The “real evaluation” pipeline runs `anno benchmark` across many backends × datasets × seeds and writes a report file.
-This can take minutes to hours depending on:
-- how many combinations you run,
-- model downloads/warmup,
-- dataset downloads/IO,
-- and whether caches are already populated.
-
-Recommended bounded profiles (generated artifacts; avoid prose claims):
-
-```bash
-# Fast, bounded local benchmark (writes reports/eval-quick-report.md)
-just eval-quick
-
-# CI-ish sanity (small sample; writes reports/eval-sanity-report.md; cached-only)
-just eval-sanity
-
-# Full matrix but bounded (writes your chosen OUTPUT file)
-just eval-full-limit MAX_EXAMPLES=50
-```
-
-**Source of truth**: read the generated report files under `reports/` (or whatever output path you set), not markdown claims embedded in docs.
-
-If you use spot evaluation, run the aggregator to regenerate:
-- `reports/eval-results.jsonl` (source of truth)
-- `reports/eval-summary.json`
-- `reports/RESULTS.md`
-
-See `scripts/spot/README.md` and run `uv run scripts/spot/aggregate.py --download` (requires AWS credentials and access to the configured bucket).
+- **Single-text eval** (`anno eval`): inline gold spans against one text; typically milliseconds–seconds.
+- **Benchmark matrix** (`anno benchmark`): many backends × datasets × seeds; can take minutes to hours. See `docs/QUICKSTART.md` for bounded `just eval-*` profiles and artifact paths.

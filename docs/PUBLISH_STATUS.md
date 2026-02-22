@@ -12,7 +12,7 @@
 | `crates/anno-metrics` | `anno-metrics` | no | Yanked on crates.io; `publish = false` |
 | `crates/anno-eval` | `anno-eval` | no | Internal eval harness |
 | `crates/anno-cli` | `anno-cli` | no | Internal CLI tooling |
-| `crates/anno-lattix` | `anno-lattix` | no | Internal graph substrate adapters |
+| `crates/anno-graph` | `anno-graph` | no | Internal graph substrate adapters |
 
 `anno-core`, `anno-metrics`, and `anno-lib` were published once (v0.3.0) and have been **yanked**. They remain on crates.io only so that the published `anno` crate can resolve its dependencies; they must not be published again.
 
