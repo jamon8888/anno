@@ -326,6 +326,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
+          # Cache key includes Cargo.lock hash to ensure stale registry
+          # index entries don't cause "lock file needs updating" failures.
+          key: msrv-1.85
       - name: Check MSRV
         run: cargo check --workspace --locked
 
