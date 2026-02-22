@@ -130,6 +130,7 @@ fn method_for_backend_id(backend_id: &str) -> anno_core::ExtractionMethod {
 pub mod weights;
 pub use weights::*;
 
+/// Weighted ensemble of NER backends.
 pub struct EnsembleNER {
     backends: Vec<Arc<dyn Model + Send + Sync>>,
     /// Stable backend IDs used for weighting and source tracking.

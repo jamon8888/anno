@@ -373,7 +373,7 @@ pub fn run(args: BatchArgs) -> Result<(), String> {
     if !args.quiet {
         let cached = cache_paths
             .iter()
-            .filter(|p| p.as_ref().map_or(false, |p| p.exists()))
+            .filter(|p| p.as_ref().is_some_and(|p| p.exists()))
             .count();
         if args.cache && cached > 0 {
             eprintln!("[batch] {} cache hits, {} computed", cached, documents.len() - cached);
@@ -435,7 +435,7 @@ fn write_outputs(
                 std::fs::write(&path, payload + "\n")
                     .map_err(|e| format!("Failed to write '{}': {}", path.display(), e))?;
             }
-            OutputFormat::Json | OutputFormat::Grounded | _ => {
+            _ => {
                 let path = out_dir.join(format!("{}.json", doc.id));
                 let payload = serde_json::to_string_pretty(doc)
                     .map_err(|e| format!("Failed to serialize '{}': {}", doc.id, e))?;

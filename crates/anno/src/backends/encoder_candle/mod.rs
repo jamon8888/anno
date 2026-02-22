@@ -315,11 +315,12 @@ impl std::fmt::Display for EncoderArchitecture {
 pub mod config;
 pub use config::*;
 pub mod implementations;
-pub use implementations::*;
+#[cfg(feature = "candle")]
+pub use implementations::candle_impl::{CandleEncoder, best_device};
+#[cfg(feature = "candle")]
 
 // Re-export candle implementations
 #[cfg(feature = "candle")]
-pub use candle_impl::*;
 
 // =============================================================================
 // Stub for non-candle builds

@@ -1,8 +1,12 @@
 //! Box embedding trainer: gradient steps, AMSGrad, coreference training loop.
 
+#[allow(unused_imports)]
 use super::*;
+#[allow(unused_imports)]
 use super::types::*;
+use std::collections::HashMap;
 
+/// Trainer for box embedding models.
 pub struct BoxEmbeddingTrainer {
     /// Training configuration
     config: TrainingConfig,

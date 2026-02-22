@@ -42,11 +42,8 @@
 //! We enforce mᵢ ≤ Mᵢ for all dimensions using:
 //! - Reparameterization: Mᵢ = mᵢ + exp(δᵢ) where δᵢ is the learned parameter
 
+#[allow(unused_imports)]
 use crate::backends::box_embeddings::BoxEmbedding;
-use anno_core::Entity;
-use anno_core::{CorefChain, CorefDocument};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // =============================================================================
 // Trainable Box Embedding
@@ -59,7 +56,6 @@ use std::collections::HashMap;
 /// - max = mu + exp(delta)/2
 ///
 /// This ensures boxes are always valid (min <= max).
-
 pub mod types;
 pub use types::*;
 

@@ -181,10 +181,10 @@ pub enum EdgeType {
 /// let clusters = graph.extract_clusters();
 /// assert_eq!(clusters.len(), 1);  // All connected
 /// ```
-
 pub mod types;
 pub use types::*;
 
+/// Graph-based coreference resolver.
 pub struct GraphCoref {
     config: GraphCorefConfig,
 }

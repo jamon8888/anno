@@ -1,5 +1,6 @@
 //! Training data types and configuration for box embedding training.
 
+#[allow(unused_imports)]
 use super::*;
 
 

@@ -279,19 +279,19 @@ Inference-time extraction only. Training is out of scope — use upstream framew
 
 ## References
 
-Key citations; see [docs/REFERENCES.md](docs/REFERENCES.md) for the full list.
+Key citations; see [docs/REFERENCES.md](docs/REFERENCES.md) for the full list with links.
 
-1. Grishman & Sundheim, *COLING* 1996 (MUC-6 NER).
-2. Tjong Kim Sang & De Meulder, *CoNLL* 2003 (CoNLL benchmark).
-3. Lee et al., *EMNLP* 2017 (end-to-end coreference).
-4. Jurafsky & Martin, *SLP3* 2024 (coreference fundamentals).
-5. Zaratiana et al., *NAACL* 2024 (GLiNER).
-6. Bogdanov et al., arXiv:2402.15343 2024 (NuNER).
-7. Li et al., *AAAI* 2022 (W2NER).
-8. Devlin et al., *NAACL* 2019 (BERT).
+1. Grishman & Sundheim, *COLING* 1996 (MUC-6 NER). [[PDF]](https://aclanthology.org/C96-1079.pdf)
+2. Tjong Kim Sang & De Meulder, *CoNLL* 2003 (CoNLL benchmark). [[PDF]](https://aclanthology.org/W03-0419.pdf)
+3. Lee et al., *EMNLP* 2017 (end-to-end coreference). [[arXiv]](https://arxiv.org/abs/1707.07045)
+4. Jurafsky & Martin, *SLP3* 2024 (coreference fundamentals). [[Online]](https://web.stanford.edu/~jurafsky/slp3/)
+5. Zaratiana et al., *NAACL* 2024 (GLiNER). [[arXiv]](https://arxiv.org/abs/2311.08526)
+6. Bogdanov et al., 2024 (NuNER). [[arXiv]](https://arxiv.org/abs/2402.15343)
+7. Li et al., *AAAI* 2022 (W2NER). [[arXiv]](https://arxiv.org/abs/2112.10070)
+8. Devlin et al., *NAACL* 2019 (BERT). [[arXiv]](https://arxiv.org/abs/1810.04805)
 9. Lafferty et al., *ICML* 2001 (CRF).
-10. Wang et al., *COLING* 2020 (TPLinker).
-11. Zaratiana et al., arXiv:2507.18546 2025 (GLiNER2).
+10. Wang et al., *COLING* 2020 (TPLinker). [[arXiv]](https://arxiv.org/abs/2010.13415)
+11. Zaratiana et al., 2025 (GLiNER2). [[arXiv]](https://arxiv.org/abs/2507.18546)
 
 Citeable via [CITATION.cff](CITATION.cff).
 
