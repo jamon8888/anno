@@ -1,12 +1,17 @@
 //! # anno
 //!
-//! Published facade crate for the `anno` workspace.
+//! Information extraction for unstructured text: named entity recognition (NER),
+//! within-document coreference resolution, and structured pattern extraction.
 //!
-//! This package provides:
-//! - the `anno` library API (re-exported from the internal `anno-lib` crate)
-//! - the `anno` CLI (see `crates/anno-cli/`)
+//! This is the published facade crate for the `anno` workspace.  It re-exports
+//! the internal `anno-lib` library API.  The full CLI lives in `crates/anno-cli/`.
 //!
-//! Internal crates remain workspace-private (not separately published) for now.
+//! - **NER**: variable-length spans with character offsets (Unicode scalar values).
+//! - **Coreference**: mention clusters ("tracks") within a single document.
+//! - **Patterns**: dates, monetary amounts, emails, URLs, phone numbers.
+//!
+//! Internal crates (`anno-lib`, `anno-core`, `anno-metrics`, `anno-eval`,
+//! `anno-cli`, `anno-lattix`) are workspace-private and not separately published.
 
 #![warn(missing_docs)]
 
