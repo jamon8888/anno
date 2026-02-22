@@ -1,9 +1,11 @@
-//! Import command - Import annotations from brat/CoNLL/JSONL for training/evaluation
+//! Import command - Import annotations from various formats for training/evaluation
 //!
-//! Supports importing from:
-//! - brat standoff format (.ann files)
+//! Supported formats:
+//! - brat standoff (.ann files)
 //! - CoNLL format (IOB/BIO tagging)
-//! - JSONL format
+//! - JSONL (one entity per line)
+//! - N-Triples (.nt) — round-trips with `anno export --format ntriples`
+//! - JSON-LD (.jsonld) — round-trips with `anno export --format jsonld`
 
 use clap::Parser;
 use std::fs;
@@ -71,7 +73,8 @@ pub fn run(args: ImportArgs) -> Result<(), String> {
             ExportFormat::NTriples => "nt",
             ExportFormat::JsonLd => "jsonld",
             #[cfg(feature = "graph")]
-            ExportFormat::LattixNTriples => "nt",
+            ExportFormat::GraphNTriples => "nt",
+            ExportFormat::KuzuCsv => "csv",
         };
         fs::read_dir(&args.input)
             .map_err(|e| format!("Failed to read directory: {}", e))?
@@ -174,17 +177,12 @@ fn import_file(
         ExportFormat::Brat => import_brat(input, include_text),
         ExportFormat::Conll => import_conll(input),
         ExportFormat::Jsonl => import_jsonl(input),
-        ExportFormat::NTriples => {
-            // TODO: Parse N-Triples and extract entity annotations
-            Err("Import from N-Triples format not yet supported. Use jsonl or brat.".into())
-        }
-        ExportFormat::JsonLd => {
-            // TODO: Parse JSON-LD and extract entity annotations
-            Err("Import from JSON-LD format not yet supported. Use jsonl or brat.".into())
-        }
+        ExportFormat::NTriples => import_ntriples(input),
+        ExportFormat::JsonLd => import_jsonld(input),
         #[cfg(feature = "graph")]
-        ExportFormat::LattixNTriples => {
-            Err("Import from `lattix-ntriples` is not yet supported. Use jsonl or brat.".into())
+        ExportFormat::GraphNTriples => import_ntriples(input),
+        ExportFormat::KuzuCsv => {
+            Err("Import from `kuzu` CSV format is not yet supported. Use jsonl or brat.".into())
         }
     }
 }
@@ -360,5 +358,230 @@ fn import_jsonl(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
         });
     }
 
+    Ok(annotations)
+}
+
+// =============================================================================
+// N-Triples import
+// =============================================================================
+
+/// Import entity annotations from N-Triples (`.nt`) format.
+///
+/// Parses triples produced by `anno export --format ntriples` or `--format graph-ntriples`.
+/// Groups triples by subject IRI, then extracts entity type, surface text, character offsets,
+/// confidence, and provenance from the standard predicates written by `anno export`.
+fn import_ntriples(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
+    let content =
+        fs::read_to_string(input).map_err(|e| format!("Failed to read file: {}", e))?;
+
+    let mut triples: Vec<(String, String, String)> = Vec::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(t) = parse_nt_line(line) {
+            triples.push(t);
+        }
+    }
+
+    // Group by subject.
+    let mut by_subject: std::collections::HashMap<&str, Vec<(&str, &str)>> =
+        std::collections::HashMap::new();
+    for (s, p, o) in &triples {
+        by_subject.entry(s.as_str()).or_default().push((p.as_str(), o.as_str()));
+    }
+
+    const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+    const PROV_SRC: &str = "http://www.w3.org/ns/prov#hadPrimarySource";
+
+    let mut annotations = Vec::new();
+
+    for (_subject, pairs) in &by_subject {
+        // Skip document nodes (no rdfs:label).
+        let label = pairs
+            .iter()
+            .find(|(p, _)| *p == RDFS_LABEL)
+            .map(|(_, o)| unescape_literal(strip_literal(o)));
+        let Some(text) = label else { continue };
+
+        // `…vocab#PERType` → `PER`
+        let entity_type = pairs
+            .iter()
+            .find(|(p, _)| *p == RDF_TYPE)
+            .map(|(_, o)| {
+                let iri = o.trim_start_matches('<').trim_end_matches('>');
+                let after_hash = iri.rsplit('#').next().unwrap_or(iri);
+                after_hash.strip_suffix("Type").unwrap_or(after_hash).to_string()
+            })
+            .unwrap_or_else(|| "ENTITY".to_string());
+
+        let start = pairs
+            .iter()
+            .find(|(p, _)| p.ends_with("startOffset"))
+            .and_then(|(_, o)| strip_literal(o).parse::<usize>().ok())
+            .unwrap_or(0);
+
+        let end = pairs
+            .iter()
+            .find(|(p, _)| p.ends_with("endOffset"))
+            .and_then(|(_, o)| strip_literal(o).parse::<usize>().ok())
+            .unwrap_or(0);
+
+        let confidence = pairs
+            .iter()
+            .find(|(p, _)| p.ends_with("confidence"))
+            .and_then(|(_, o)| strip_literal(o).parse::<f64>().ok());
+
+        let source = pairs
+            .iter()
+            .find(|(p, _)| *p == PROV_SRC)
+            .map(|(_, o)| o.trim_start_matches('<').trim_end_matches('>').to_string())
+            .unwrap_or_default();
+
+        if !text.is_empty() && end > start {
+            annotations.push(ImportedAnnotation {
+                text,
+                entity_type,
+                start,
+                end,
+                source,
+                confidence,
+            });
+        }
+    }
+
+    annotations.sort_unstable_by_key(|a| a.start);
+    Ok(annotations)
+}
+
+/// Parse one N-Triples line into a (subject, predicate, object) triple.
+fn parse_nt_line(line: &str) -> Option<(String, String, String)> {
+    let line = line.strip_suffix(" .").or_else(|| line.strip_suffix('.'))?;
+    let line = line.trim();
+
+    let (s, rest) = parse_iri_or_bnode(line)?;
+    let rest = rest.trim_start();
+    let (p, rest) = parse_iri_or_bnode(rest)?;
+    let rest = rest.trim_start();
+
+    let o = if rest.starts_with('<') {
+        let end = rest.find('>').unwrap_or(rest.len() - 1);
+        rest[1..end].to_string()
+    } else {
+        rest.to_string()
+    };
+
+    Some((s, p, o))
+}
+
+fn parse_iri_or_bnode(s: &str) -> Option<(String, &str)> {
+    if s.starts_with('<') {
+        let end = s.find('>')?;
+        Some((s[1..end].to_string(), &s[end + 1..]))
+    } else if s.starts_with("_:") {
+        let end = s.find(|c: char| c.is_whitespace()).unwrap_or(s.len());
+        Some((s[..end].to_string(), &s[end..]))
+    } else {
+        None
+    }
+}
+
+/// Extract value from an N-Triples literal: `"foo"^^<type>` → `"foo"`.
+fn strip_literal(o: &str) -> &str {
+    let o = o.trim();
+    if o.starts_with('"') {
+        o[1..].find('"').map(|i| &o[1..i + 1]).unwrap_or(&o[1..])
+    } else {
+        o.trim_start_matches('<').trim_end_matches('>')
+    }
+}
+
+fn unescape_literal(s: &str) -> String {
+    s.replace("\\\"", "\"")
+        .replace("\\\\", "\\")
+        .replace("\\n", "\n")
+        .replace("\\r", "\r")
+        .replace("\\t", "\t")
+}
+
+// =============================================================================
+// JSON-LD import
+// =============================================================================
+
+/// Import entity annotations from JSON-LD (`.jsonld`) format.
+///
+/// Parses documents produced by `anno export --format jsonld`.
+/// Each object in the `@graph` array maps to one `ImportedAnnotation`.
+fn import_jsonld(input: &PathBuf) -> Result<Vec<ImportedAnnotation>, String> {
+    let content =
+        fs::read_to_string(input).map_err(|e| format!("Failed to read file: {}", e))?;
+
+    let doc: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("Invalid JSON-LD: {}", e))?;
+
+    let graph = doc
+        .get("@graph")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "JSON-LD document missing '@graph' array".to_string())?;
+
+    let source_default = input.to_string_lossy().to_string();
+    let mut annotations = Vec::new();
+
+    for node in graph {
+        // `@type` → `"…#PERType"` → `"PER"`
+        let entity_type = node
+            .get("@type")
+            .and_then(|v| v.as_str())
+            .map(|t| {
+                let after = t.rsplit('#').next().unwrap_or(t);
+                after.strip_suffix("Type").unwrap_or(after).to_string()
+            })
+            .unwrap_or_else(|| "ENTITY".to_string());
+
+        let text = node
+            .get("rdfs:label")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let start = node
+            .get("anno:startOffset")
+            .or_else(|| node.get("startOffset"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+
+        let end = node
+            .get("anno:endOffset")
+            .or_else(|| node.get("endOffset"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+
+        let confidence = node
+            .get("anno:confidence")
+            .or_else(|| node.get("confidence"))
+            .and_then(|v| v.as_f64());
+
+        let source = node
+            .get("prov:hadPrimarySource")
+            .and_then(|v| v.get("@id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(&source_default)
+            .to_string();
+
+        if !text.is_empty() && end > start {
+            annotations.push(ImportedAnnotation {
+                text,
+                entity_type,
+                start,
+                end,
+                source,
+                confidence,
+            });
+        }
+    }
+
+    annotations.sort_unstable_by_key(|a| a.start);
     Ok(annotations)
 }
