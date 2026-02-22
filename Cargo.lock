@@ -3272,6 +3272,8 @@ dependencies = [
 [[package]]
 name = "textprep"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f891a1690186f1c7e1d883cfd8b49861ec55c4b91e8aed72ecd206dbdf6b25c4"
 dependencies = [
  "aho-corasick",
  "unicode-normalization",
