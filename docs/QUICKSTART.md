@@ -1,6 +1,6 @@
 # Quickstart
 
-This is a short, practical starting point for using `anno` via the CLI and as a Rust library.
+Practical starting point for using `anno` via the CLI and as a Rust library.
 
 ## Install
 
@@ -11,27 +11,17 @@ As a Rust library:
 anno = "0.3"
 ```
 
-CLI (from source):
+Full CLI (recommended):
 
 ```bash
-git clone https://github.com/arclabs561/anno
-cd anno
+cargo install --git https://github.com/arclabs561/anno \
+  --package anno-cli --bin anno --features "onnx eval"
 ```
 
-Note: this workspace contains **two binaries named `anno`**:
-
-- **Full CLI**: package `anno-cli` (`crates/anno-cli/`) — many commands (used below)
-- **Minimal facade CLI**: package `anno` — `extract` only, small dependency set
+From a local clone:
 
 ```bash
-# Minimal facade CLI (extract only):
-cargo build --release -p anno --bin anno
-
-# Full CLI without ML backends:
-cargo build --release -p anno-cli --bin anno
-
-# Recommended (ONNX ML backends + zero-shot):
-cargo build --release -p anno-cli --bin anno --features "onnx eval"
+cargo install --path crates/anno-cli --bin anno --features "onnx eval"
 ```
 
 ## CLI: extract entities
@@ -40,7 +30,7 @@ cargo build --release -p anno-cli --bin anno --features "onnx eval"
 anno extract --text "Lynn Conway worked at IBM and Xerox PARC in California."
 ```
 
-Pattern-only extraction (emails, dates, money):
+Pattern-only extraction (offline, no weights):
 
 ```bash
 anno extract --model pattern --text "Email jobs@acme.com by 2024-01-15 for \$100."
@@ -59,6 +49,21 @@ Machine-readable output:
 anno extract --format json --text "Lynn Conway worked at IBM and Xerox PARC in California."
 ```
 
+## CLI: relation extraction
+
+Extract typed `(head, relation, tail)` triples with a `RelationCapable` backend:
+
+```bash
+# tplinker: heuristic baseline, no extra deps
+anno extract --extract-relations --model tplinker \
+  --text "Steve Jobs founded Apple in 1976."
+
+# gliner2: zero-shot entity types + heuristic relations (requires onnx)
+anno extract --extract-relations --model gliner2 \
+  --relation-types "FOUNDED,WORKS_FOR" \
+  --text "Steve Jobs founded Apple in 1976."
+```
+
 ## CLI: coreference
 
 Link pronouns to their referents:
@@ -66,6 +71,24 @@ Link pronouns to their referents:
 ```bash
 anno debug --coref -t "Sophie Wilson designed the ARM processor. She revolutionized computing."
 ```
+
+## CLI: batch processing
+
+Process a directory of `.txt`/`.md` files with optional parallelism and result caching:
+
+```bash
+# Sequential, write per-document JSON to results/
+anno batch --dir docs/ --output results/
+
+# 4 parallel workers; cache results by text hash + model version
+anno batch --dir docs/ --parallel 4 --cache --output results/
+
+# Stream JSONL from stdin: {"id":"…","text":"…"} per line
+cat corpus.jsonl | anno batch --stdin --parallel 4 --cache --output results/
+```
+
+Cache entries live in `{cache_dir}/results/` keyed by `xxh3(text) + model + version`.
+Flush with `anno cache clear`.
 
 ## CLI: cross-document clustering
 
@@ -94,5 +117,5 @@ Offsets are **character offsets** (Unicode scalar values), not byte offsets. See
 
 ## Next
 
-- `docs/CONTRACT.md` — scope + guarantees
+- `docs/CONTRACT.md` — scope, offset guarantees, feature gating
 - `docs/BACKENDS.md` — backend selection and feature flags

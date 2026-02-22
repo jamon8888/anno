@@ -1,0 +1,74 @@
+cff-version: 1.2.0
+message: "If you use anno in research, please cite it using the metadata in this file."
+type: software
+title: "anno: Information Extraction for Rust"
+abstract: >
+  anno is a Rust library and CLI for inference-time information extraction from
+  unstructured text: named entity recognition (NER), coreference resolution,
+  relation extraction, and structured pattern extraction. Backends range from
+  deterministic regex grammars to zero-shot ML models (GLiNER, NuNER, BERT) via
+  ONNX Runtime and Candle.
+authors:
+  - alias: Arc
+    email: attobop@gmail.com
+repository-code: "https://github.com/arclabs561/anno"
+url: "https://docs.rs/anno"
+license: MIT OR Apache-2.0
+version: "0.3.0"
+date-released: "2026-02-22"
+keywords:
+  - rust
+  - nlp
+  - ner
+  - named-entity-recognition
+  - coreference-resolution
+  - information-extraction
+  - onnx
+
+references:
+  - type: software
+    title: "lattix: Graph substrate for Rust"
+    repository-code: "https://github.com/arclabs561/lattix"
+    notes: "Used as the graph/KG substrate for anno's triple export surface."
+
+  - type: software
+    title: "muxer: Randomised matrix sampler"
+    repository-code: "https://github.com/arclabs561/muxer"
+    notes: "Used by anno-eval for the evaluation sampling harness."
+
+  - type: software
+    title: "Oxigraph: RDF graph database"
+    repository-code: "https://github.com/oxigraph/oxigraph"
+    notes: "Recommended downstream RDF store for anno's N-Triples export."
+
+  - type: article
+    title: "GLiNER: Generalist Model for Named Entity Recognition using Bidirectional Transformer"
+    authors:
+      - family-names: Zaratiana
+        given-names: Urchade
+      - family-names: Tomeh
+        given-names: Nadi
+      - family-names: Holat
+        given-names: Pierre
+      - family-names: Charnois
+        given-names: Thierry
+    journal: "Proceedings of NAACL"
+    year: 2024
+
+  - type: article
+    title: "NuNER: Entity Recognition Encoder Pre-training via LLM-Annotated Data"
+    authors:
+      - family-names: Bogdanov
+        given-names: Dmitri
+    journal: "arXiv:2402.15343"
+    year: 2024
+
+  - type: article
+    title: "Unified Named Entity Recognition as Word-Word Relation Classification"
+    authors:
+      - family-names: Li
+        given-names: Jingye
+      - family-names: Fei
+        given-names: Hao
+    journal: "Proceedings of AAAI"
+    year: 2022

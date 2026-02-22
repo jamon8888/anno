@@ -4,11 +4,13 @@ Information extraction for unstructured text: named entity recognition (NER), wi
 
 Dual-licensed under MIT or Apache-2.0. API docs: [docs.rs/anno](https://docs.rs/anno).
 
-## Task definitions
+## Tasks
 
 **Named entity recognition.** Given input text, identify spans `(start, end, type, confidence)` where each span denotes a named entity [1, 2]. Entity types follow standard taxonomies (PER, ORG, LOC, MISC for CoNLL-style [2]) or caller-defined labels for zero-shot extraction. Offsets are **character offsets** (Unicode scalar values), not byte offsets; see [CONTRACT.md](docs/CONTRACT.md).
 
-**Coreference resolution.** Identify mention spans and partition them into equivalence classes, where each class corresponds to a single real-world entity [3, 4]. "Sophie Wilson" and "She" in adjacent sentences form a cluster.
+**Coreference resolution.** Identify mention spans and group them into clusters, where each cluster tracks a consistent discourse referent within the document [3, 4]. Referents may be concrete or abstract, singular or plural, real-world or fictional — the constraint is within-document consistency, not ontological uniqueness. Coreferring mentions span proper names, definite descriptions, and pronouns: "Sophie Wilson", "the designer", and "She" form one cluster.
+
+**Relation extraction.** Extract typed `(head, relation, tail)` triples from text. Available on `RelationCapable` backends; others fall back to co-occurrence edges for graph export.
 
 **Structured pattern extraction.** Dates, monetary amounts, email addresses, URLs, phone numbers via deterministic regex grammars.
 
@@ -16,54 +18,38 @@ Dual-licensed under MIT or Apache-2.0. API docs: [docs.rs/anno](https://docs.rs/
 
 All backends produce the same output type: variable-length spans with character offsets.
 
-| Backend | Architecture | Labels | Zero-shot | Weights | Reference |
-|---|---|---|---|---|---|
-| `stacked` (default) | Selector/fallback | Best available | No | HuggingFace (when ML enabled) | -- |
-| `gliner` | Bi-encoder span classifier | Custom | Yes | [gliner_small-v2.1](https://huggingface.co/onnx-community/gliner_small-v2.1) | Zaratiana et al. [5] |
-| `gliner2` | Multi-task span classifier | Custom | Yes | [gliner-multitask-large-v0.5](https://huggingface.co/onnx-community/gliner-multitask-large-v0.5) | [5] |
-| `nuner` | Token classifier (BIO) | Custom | Yes | [NuNerZero_onnx](https://huggingface.co/deepanwa/NuNerZero_onnx) | Bogdanov et al. [6] |
-| `w2ner` | Word-word relation grids | Trained (nested) | No | [w2ner-bert-base](https://huggingface.co/ljynlp/w2ner-bert-base) | Li et al. [7] |
-| `bert-onnx` | Sequence labeling (BERT) | PER/ORG/LOC/MISC | No | [bert-base-NER-onnx](https://huggingface.co/protectai/bert-base-NER-onnx) | Devlin et al. [8] |
-| `crf` | Conditional Random Field | Trained | No | Bundled (`bundled-crf-weights`) | Lafferty et al. [9] |
-| `hmm` | Hidden Markov Model | Trained | No | Bundled (`bundled-hmm-params`) | [9] |
-| `pattern` | Regex grammars | DATE/MONEY/EMAIL/URL/PHONE | N/A | None | -- |
-| `heuristic` | Capitalization + context | PER/ORG/LOC | N/A | None | -- |
-| `ensemble` | Weighted voting combiner | Mixed | Varies | Varies | -- |
+| Backend | Architecture | Labels | Zero-shot | Relations | Weights | Reference |
+|---|---|---|---|---|---|---|
+| `stacked` (default) | Selector/fallback | Best available | — | — | HuggingFace (when ML enabled) | -- |
+| `gliner` | Bi-encoder span classifier | Custom | Yes | — | [gliner_small-v2.1](https://huggingface.co/onnx-community/gliner_small-v2.1) | Zaratiana et al. [5] |
+| `gliner2` | Multi-task span classifier | Custom | Yes | Heuristic | [gliner-multitask-large-v0.5](https://huggingface.co/onnx-community/gliner-multitask-large-v0.5) | [11] |
+| `nuner` | Token classifier (BIO) | Custom | Yes | — | [NuNerZero_onnx](https://huggingface.co/deepanwa/NuNerZero_onnx) | Bogdanov et al. [6] |
+| `w2ner` | Word-word relation grids | Trained (nested) | No | — | [w2ner-bert-base](https://huggingface.co/ljynlp/w2ner-bert-base) | Li et al. [7] |
+| `bert-onnx` | Sequence labeling (BERT) | PER/ORG/LOC/MISC | No | — | [bert-base-NER-onnx](https://huggingface.co/protectai/bert-base-NER-onnx) | Devlin et al. [8] |
+| `tplinker` | Joint entity-relation (heuristic) | Custom | — | Heuristic | None | [10] |
+| `crf` | Conditional Random Field | Trained | No | — | Bundled (`bundled-crf-weights`) | Lafferty et al. [9] |
+| `hmm` | Hidden Markov Model | Trained | No | — | Bundled (`bundled-hmm-params`) | [9] |
+| `pattern` | Regex grammars | DATE/MONEY/EMAIL/URL/PHONE | N/A | — | None | -- |
+| `heuristic` | Capitalization + context | PER/ORG/LOC | N/A | — | None | -- |
+| `ensemble` | Weighted voting combiner | Mixed | Varies | — | Varies | -- |
 
-ML backends are feature-gated (`onnx` or `candle`). Weights download from HuggingFace on first use. See [BACKENDS.md](docs/BACKENDS.md) for selection guidance and feature-flag details.
+ML backends are feature-gated (`onnx` or `candle`). Weights download from HuggingFace on first use. All backends expose `model.capabilities()` for runtime discovery. See [BACKENDS.md](docs/BACKENDS.md) for selection guidance and feature-flag details.
 
 ## Install
-
-Not using crates.io as primary distribution; see [publish status](docs/PUBLISH_STATUS.md).
-
-### Full CLI (`anno-cli`)
-
-```sh
-cargo install --path crates/anno-cli --bin anno --features "onnx eval"
-```
-
-Without cloning:
 
 ```sh
 cargo install --git https://github.com/arclabs561/anno --package anno-cli --bin anno --features "onnx eval"
 ```
 
-### Minimal CLI (package `anno`)
-
-`anno extract` only:
+From a local clone:
 
 ```sh
-cargo install --path . --bin anno
-cargo install --path . --bin anno --features onnx  # with ML
+cargo install --path crates/anno-cli --bin anno --features "onnx eval"
 ```
-
-### Offline
 
 `ANNO_NO_DOWNLOADS=1` or `HF_HUB_OFFLINE=1` forces cached-only behavior.
 
 ## Examples
-
-Full CLI (`anno-cli`) unless noted.
 
 ```sh
 anno extract --text "Lynn Conway worked at IBM and Xerox PARC in California."
@@ -89,7 +75,7 @@ anno extract --model pattern --format json --text "Contact jobs@acme.com by Marc
 ]
 ```
 
-Zero-shot (custom entity types via GLiNER [5]):
+Zero-shot custom entity types (via GLiNER [5]):
 
 ```sh
 anno extract --model gliner --extract-types "DRUG,SYMPTOM" \
@@ -110,12 +96,100 @@ anno debug --coref -t "Sophie Wilson designed the ARM processor. She revolutioni
 Coreference: "Sophie Wilson" → "She"
 ```
 
+## Downstream
+
+Filter and pipe JSON output:
+
+```sh
+# All person entities, text only
+anno extract --format json --file article.txt \
+  | jq '[.[] | select(.entity_type == "PER") | .text]'
+
+# Unique organizations, sorted
+anno extract --format json --file article.txt \
+  | jq '[.[] | select(.entity_type == "ORG") | .text] | unique | sort[]'
+```
+
+Batch a directory (parallel, cached):
+
+```sh
+anno batch --dir docs/ --parallel 4 --cache --output results/
+
+# Stream stdin JSONL: {"id":"…","text":"…"} per line
+cat corpus.jsonl | anno batch --stdin --parallel 4 --cache --output results/
+```
+
+### Knowledge Graph (RDF / Oxigraph)
+
+`anno export` emits N-Triples or JSON-LD. `--base-uri` sets the IRI namespace — use a URI you own or one that aligns to a known linked-data vocabulary:
+
+```sh
+# Own namespace (recommended for private corpora)
+anno export --input docs/ --output /tmp/kg/ --format ntriples \
+  --base-uri https://myproject.example.com/kg/
+
+# Align to DBpedia (widely used LOD namespace)
+anno export --input docs/ --output /tmp/kg/ --format ntriples \
+  --base-uri https://dbpedia.org/resource/
+```
+
+Default (`urn:anno:`) produces stable URNs suitable for local use without a registered domain.
+
+Load into [Oxigraph](https://github.com/oxigraph/oxigraph) (pure-Rust RDF store, SPARQL 1.1):
+
+```sh
+cat /tmp/kg/*.nt | oxigraph load --location /tmp/anno-store --format ntriples
+
+oxigraph query --location /tmp/anno-store \
+  --query 'SELECT ?label WHERE {
+    ?e a <https://myproject.example.com/kg/vocab#PERType> ;
+       <http://www.w3.org/2000/01/rdf-schema#label> ?label .
+  }'
+```
+
+**Semantic relation triples** — `RelationCapable` backends (`tplinker`, `gliner2`) produce typed `(head, relation, tail)` triples instead of co-occurrence edges. Use `--format graph-ntriples` (`--features graph`) for routing through the internal graph substrate:
+
+```sh
+anno export --input docs/ --output /tmp/kg/ \
+  --format graph-ntriples --model gliner2 \
+  --base-uri https://myproject.example.com/kg/
+# → <entity/person/0_Lynn_Conway_0> <rel/works_for> <entity/org/1_IBM_13> .
+```
+
+### Property Graph (Kuzu)
+
+Export node and edge tables for [Kuzu](https://kuzudb.com):
+
+```sh
+# Semantic edges (gliner2 or tplinker)
+anno export --input docs/ --output /tmp/kg/ --format kuzu --model gliner2
+
+# Co-occurrence edges (any other backend)
+anno export --input docs/ --output /tmp/kg/ --format kuzu
+```
+
+Each file produces `{stem}-nodes.csv` + `{stem}-edges.csv`. Schema:
+
+```cypher
+CREATE NODE TABLE Entity(
+  id STRING, entity_type STRING, text STRING,
+  start INT64, end INT64, source STRING,
+  PRIMARY KEY(id)
+);
+CREATE REL TABLE Relation(FROM Entity TO Entity, rel_type STRING, confidence DOUBLE);
+
+COPY Entity   FROM '/tmp/kg/doc-nodes.csv' (HEADER=TRUE);
+COPY Relation FROM '/tmp/kg/doc-edges.csv' (HEADER=TRUE);
+```
+
 ## Library
 
 ```toml
 [dependencies]
 anno = "0.3"
 ```
+
+Basic extraction:
 
 ```rust
 use anno::{Model, StackedNER};
@@ -126,19 +200,48 @@ assert!(!ents.is_empty());
 # Ok::<(), anno::Error>(())
 ```
 
+Zero-shot custom types via `DynamicLabels` (GLiNER, GLiNER2, NuNER):
+
+```rust
+use anno::{DynamicLabels, GLiNEROnnx};
+
+let m = GLiNEROnnx::new("onnx-community/gliner_small-v2.1")?;
+let ents = m.extract_with_labels(
+    "Aspirin treats headaches.",
+    &["drug", "symptom"],
+    None,
+)?;
+# Ok::<(), anno::Error>(())
+```
+
+Runtime capability discovery — all backends now report accurately:
+
+```rust
+use anno::Model;
+
+fn print_caps(m: &dyn Model) {
+    let c = m.capabilities();
+    println!(
+        "batch={} streaming={} gpu={} relations={} zero-shot={}",
+        c.batch_capable, c.streaming_capable, c.gpu_capable,
+        c.relation_capable, c.dynamic_labels,
+    );
+}
+```
+
 ## Architecture
 
 | Crate | Purpose |
 |---|---|
 | `anno` (root) | Published facade; re-exports `anno-lib` |
-| `anno-lib` | Backends, `Model` trait, extraction pipeline |
-| `anno-core` | Stable data model (`Entity`, `Signal`, `Track`, `Identity`, `Corpus`) |
-| `anno-eval` | Evaluation harnesses, dataset loaders, matrix sampling |
-| `anno-cli` | Full CLI |
-| `anno-metrics` | Shared evaluation primitives |
-| `anno-lattix` | Adapters to `lattix` graph substrate |
+| `anno-lib` | Backends, `Model` / `RelationCapable` traits, extraction pipeline |
+| `anno-core` | Stable data model (`Entity`, `Relation`, `Signal`, `Track`, `Identity`, `Corpus`) |
+| `anno-graph` | Graph/KG export adapters: converts extraction output to `lattix::KnowledgeGraph`; owns triple construction and `--format graph-ntriples` |
+| `anno-eval` | Evaluation harnesses, dataset loaders, matrix sampling (uses `muxer`) |
+| `anno-cli` | Full CLI; graph feature routes through `anno-graph` |
+| `anno-metrics` | Shared evaluation primitives (CoNLL F1, encoders) |
 
-Pipeline: Text -> Extract -> Coalesce -> structured output. See [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Pipeline: Text → Extract → Coalesce → structured output. See [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Evaluation
 
@@ -148,34 +251,40 @@ Pipeline: Text -> Extract -> Coalesce -> structured output. See [ARCHITECTURE.md
 anno benchmark --model gliner --dataset conll2003
 ```
 
-`anno sampler` (`--features eval`) exposes a [muxer](https://github.com/arclabs561/muxer)-backed randomized matrix sampler with two modes: **triage** (worst-first) and **measure** (ML-only stable measurement).
+`anno sampler` (`--features eval`) provides a randomized matrix sampler with two modes: **triage** (worst-first) and **measure** (ML-only stable measurement).
 
 ## Scope
 
-Inference-time extraction only. Training is out of scope -- use upstream frameworks (Hugging Face Transformers, Flair [10], etc.) and export ONNX weights for consumption.
+Inference-time extraction only. Training is out of scope — use upstream frameworks (Hugging Face Transformers, Flair, etc.) and export ONNX weights for consumption.
 
 ## Documentation
 
 - [QUICKSTART](docs/QUICKSTART.md)
-- [CONTRACT](docs/CONTRACT.md) -- offset semantics, scope, feature gating
-- [BACKENDS](docs/BACKENDS.md) -- backend selection, architecture, feature flags
-- [ARCHITECTURE](docs/ARCHITECTURE.md) -- crate layout, dependency flow
+- [CONTRACT](docs/CONTRACT.md) — offset semantics, scope, feature gating
+- [BACKENDS](docs/BACKENDS.md) — backend selection, architecture, feature flags
+- [ARCHITECTURE](docs/ARCHITECTURE.md) — crate layout, dependency flow
+- [REFERENCES](docs/REFERENCES.md) — full bibliography (NER, coref, relation extraction, software)
 - [API docs](https://docs.rs/anno)
 - [Changelog](CHANGELOG.md)
 
 ## References
 
-1. R. Grishman and B. Sundheim. "Message Understanding Conference -- 6: A Brief History." *COLING*, 1996.
-2. E. F. Tjong Kim Sang and F. De Meulder. "Introduction to the CoNLL-2003 Shared Task." *CoNLL*, 2003.
-3. K. Lee, L. He, M. Lewis, and L. Zettlemoyer. "End-to-end Neural Coreference Resolution." *EMNLP*, 2017.
-4. D. Jurafsky and J. H. Martin. *Speech and Language Processing*, Ch. 21, 3rd ed. draft, 2024.
-5. U. Zaratiana, N. Tomeh, P. Holat, and T. Charnois. "GLiNER: Generalist Model for Named Entity Recognition using Bidirectional Transformer." *NAACL*, 2024.
-6. D. Bogdanov, A. Mokhov, et al. "NuNER: Entity Recognition Encoder Pre-training via LLM-Annotated Data." arXiv:2402.15343, 2024.
-7. J. Li, Y. Fei, et al. "Unified Named Entity Recognition as Word-Word Relation Classification." *AAAI*, 2022.
-8. J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova. "BERT: Pre-training of Deep Bidirectional Transformers." *NAACL*, 2019.
-9. J. Lafferty, A. McCallum, and F. Pereira. "Conditional Random Fields." *ICML*, 2001.
-10. A. Akbik, T. Bergmann, D. Blythe, K. Rasul, S. Schweter, and R. Vollgraf. "FLAIR: An Easy-to-Use Framework for State-of-the-Art NLP." *NAACL*, 2019.
+Key citations; see [docs/REFERENCES.md](docs/REFERENCES.md) for the full list.
+
+1. Grishman & Sundheim, *COLING* 1996 (MUC-6 NER).
+2. Tjong Kim Sang & De Meulder, *CoNLL* 2003 (CoNLL benchmark).
+3. Lee et al., *EMNLP* 2017 (end-to-end coreference).
+4. Jurafsky & Martin, *SLP3* 2024 (coreference fundamentals).
+5. Zaratiana et al., *NAACL* 2024 (GLiNER).
+6. Bogdanov et al., arXiv:2402.15343 2024 (NuNER).
+7. Li et al., *AAAI* 2022 (W2NER).
+8. Devlin et al., *NAACL* 2019 (BERT).
+9. Lafferty et al., *ICML* 2001 (CRF).
+10. Wang et al., *COLING* 2020 (TPLinker).
+11. Zaratiana et al., arXiv:2507.18546 2025 (GLiNER2).
+
+Citeable via [CITATION.cff](CITATION.cff).
 
 ## License
 
-Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE).
+Dual-licensed under MIT or Apache-2.0.

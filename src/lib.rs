@@ -11,7 +11,7 @@
 //! - **Patterns**: dates, monetary amounts, emails, URLs, phone numbers.
 //!
 //! Internal crates (`anno-lib`, `anno-core`, `anno-metrics`, `anno-eval`,
-//! `anno-cli`, `anno-lattix`) are workspace-private and not separately published.
+//! `anno-cli`, `anno-graph`) are workspace-private and not separately published.
 
 #![warn(missing_docs)]
 

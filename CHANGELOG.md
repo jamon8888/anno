@@ -5,7 +5,7 @@
 ## [0.3.0] - 2026-02-19
 
 ### Changed
-- Workspace refactor: split into `anno-core`, `anno`, `anno-eval`, `anno-cli`, `anno-metrics`, `anno-lattix`
+- Workspace refactor: split into `anno-core`, `anno`, `anno-eval`, `anno-cli`, `anno-metrics`, `anno-graph`
 - `PatternNER` → `RegexNER`
 - Lib target renamed to `anno` (package name remains `anno-lib`); fixes `use anno::` in doctests and integration tests
 
@@ -17,7 +17,7 @@
 - **Task evaluation system** (`anno-eval`): dataset loaders, multi-objective LinUCB routing, regression detection, quality matrix, git-tagged scoring
 - **Discourse analysis** (`anno::discourse`): centering theory, uncertain reference (ε-terms), abstract anaphora, shell nouns, event extraction
 - `anno-metrics` crate: shared CorefChainStats and cluster evaluation primitives
-- `anno-lattix` crate: adapters between `anno-core` and `lattix` graph substrates
+- `anno-graph` crate: adapters between `anno-core` and `lattix` graph substrates
 - Contextual backend routing via muxer 0.1.2 (LinUCB + objective manifold)
 
 ### Notes
