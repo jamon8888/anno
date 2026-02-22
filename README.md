@@ -114,7 +114,7 @@ Coreference: "Sophie Wilson" → "She"
 
 ```toml
 [dependencies]
-anno = { git = "https://github.com/arclabs561/anno", rev = "<commit>" }
+anno = "0.3"
 ```
 
 ```rust

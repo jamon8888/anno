@@ -4,14 +4,12 @@ This is a short, practical starting point for using `anno` via the CLI and as a 
 
 ## Install
 
-As a Rust library (from Git, recommended for now):
+As a Rust library:
 
 ```toml
 [dependencies]
-anno = { git = "https://github.com/arclabs561/anno", rev = "<commit>" }
+anno = "0.3"
 ```
-
-Crates.io publishing is intentionally paused for now; see `docs/PUBLISH_STATUS.md` and `docs/TAGS.md`.
 
 CLI (from source):
 
