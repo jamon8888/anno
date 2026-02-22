@@ -47,62 +47,9 @@ const MAX_SPAN_WIDTH: usize = 12;
 
 /// Configuration for GLiNER model loading.
 #[cfg(feature = "onnx")]
-#[derive(Debug, Clone)]
-pub struct GLiNERConfig {
-    /// Prefer quantized models (INT8) for faster CPU inference.
-    pub prefer_quantized: bool,
-    /// ONNX optimization level (1-3, default 3).
-    pub optimization_level: u8,
-    /// Number of threads for inference (0 = auto).
-    pub num_threads: usize,
-    /// Cache size for prompt encodings (0 = disabled, default 100).
-    ///
-    /// The prompt cache stores encoded prompts keyed by (text, entity_types, model_id).
-    /// This can materially reduce repeated work in evaluation loops and API usage patterns
-    /// where the same text is queried with multiple type sets.
-    pub prompt_cache_size: usize,
-}
+pub mod config;
+pub use config::*;
 
-#[cfg(feature = "onnx")]
-impl Default for GLiNERConfig {
-    fn default() -> Self {
-        Self {
-            prefer_quantized: true,
-            optimization_level: 3,
-            num_threads: 4,
-            prompt_cache_size: 100,
-        }
-    }
-}
-
-/// Cache key for prompt encodings.
-///
-/// Keyed by (text_hash, entity_types_hash, model_id) to ensure cache hits
-/// only when text, entity types, and model are identical.
-#[cfg(feature = "onnx")]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct PromptCacheKey {
-    text_hash: u64,
-    entity_types_hash: u64,
-    model_id: String,
-}
-
-/// Cached prompt encoding result.
-#[cfg(feature = "onnx")]
-#[derive(Debug, Clone)]
-struct PromptCacheValue {
-    input_ids: Vec<i64>,
-    attention_mask: Vec<i64>,
-    words_mask: Vec<i64>,
-    text_lengths: i64,
-    entity_count: usize,
-}
-
-/// GLiNER model for zero-shot NER.
-///
-/// Thread-safe with `Arc<Tokenizer>` for efficient sharing across threads.
-#[cfg(feature = "onnx")]
-#[derive(Debug)]
 pub struct GLiNEROnnx {
     session: Mutex<ort::session::Session>,
     /// Arc-wrapped tokenizer for cheap cloning across threads.
@@ -331,17 +278,17 @@ impl GLiNEROnnx {
         let span_mask_array = Array2::from_shape_vec((batch_size, num_spans), span_mask)
             .map_err(|e| Error::Parse(format!("Array error: {}", e)))?;
 
-        let input_ids_t = super::ort_compat::tensor_from_ndarray(input_ids_array)
+        let input_ids_t = crate::backends::ort_compat::tensor_from_ndarray(input_ids_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let attention_mask_t = super::ort_compat::tensor_from_ndarray(attention_mask_array)
+        let attention_mask_t = crate::backends::ort_compat::tensor_from_ndarray(attention_mask_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let words_mask_t = super::ort_compat::tensor_from_ndarray(words_mask_array)
+        let words_mask_t = crate::backends::ort_compat::tensor_from_ndarray(words_mask_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let text_lengths_t = super::ort_compat::tensor_from_ndarray(text_lengths_array)
+        let text_lengths_t = crate::backends::ort_compat::tensor_from_ndarray(text_lengths_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let span_idx_t = super::ort_compat::tensor_from_ndarray(span_idx_array)
+        let span_idx_t = crate::backends::ort_compat::tensor_from_ndarray(span_idx_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
-        let span_mask_t = super::ort_compat::tensor_from_ndarray(span_mask_array)
+        let span_mask_t = crate::backends::ort_compat::tensor_from_ndarray(span_mask_array)
             .map_err(|e| Error::Parse(format!("Tensor error: {}", e)))?;
 
         // Run inference with blocking lock for thread-safe parallel access
@@ -1322,3 +1269,4 @@ impl crate::StreamingCapable for GLiNEROnnx {
         4096
     }
 }
+
