@@ -231,10 +231,10 @@ pub mod gliner_pipeline;
 pub mod gliner2;
 
 // Production infrastructure
-#[cfg(feature = "async-inference")]
+#[cfg(feature = "production")]
 pub mod async_adapter;
 
-#[cfg(feature = "session-pool")]
+#[cfg(all(feature = "production", feature = "onnx"))]
 pub mod session_pool;
 
 // Model warmup for cold-start mitigation
@@ -322,10 +322,10 @@ pub use gliner2::GLiNER2Onnx;
 pub use gliner2::GLiNER2Candle;
 
 // Production infrastructure re-exports
-#[cfg(feature = "async-inference")]
+#[cfg(feature = "production")]
 pub use async_adapter::{batch_extract, batch_extract_limited, AsyncNER, IntoAsync};
 
-#[cfg(feature = "session-pool")]
+#[cfg(all(feature = "production", feature = "onnx"))]
 pub use session_pool::{GLiNERPool, PoolConfig, SessionPool};
 
 // T5 coreference

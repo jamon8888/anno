@@ -44,7 +44,7 @@
 //! let entities = pool.extract("John works at Apple", &["person", "organization"], 0.5)?;
 //! ```
 
-#![cfg(feature = "session-pool")]
+#![cfg(all(feature = "production", feature = "onnx"))]
 
 use crate::{Entity, Error, Result};
 use crossbeam_channel::{bounded, Receiver, Sender};

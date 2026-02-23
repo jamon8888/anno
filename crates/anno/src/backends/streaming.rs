@@ -320,7 +320,8 @@ fn find_word_boundary(chars: &[char], target: usize) -> usize {
 // Async Stream Support (requires tokio/async-std)
 // =============================================================================
 
-#[cfg(feature = "async-inference")]
+/// Async streaming adapters for `StreamingExtractor`.
+#[cfg(feature = "production")]
 pub mod async_stream {
     use super::*;
     use futures::stream::{self, Stream};

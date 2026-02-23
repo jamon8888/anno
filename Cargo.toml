@@ -133,29 +133,21 @@ serde_json = { workspace = true }
 [features]
 default = ["onnx"]
 
-# Forward library feature flags to `anno-lib`.
+# Keep the facade surface intentionally small: expose stable capability toggles,
+# not every internal wiring switch from `anno-lib`.
 discourse = ["anno-lib/discourse"]
 eval = ["anno-lib/eval"]
 analysis = ["anno-lib/analysis"]
 graph = ["anno-lib/graph"]
-gramdex = ["anno-lib/gramdex"]
 schema = ["anno-lib/schema"]
 onnx = ["anno-lib/onnx"]
 candle = ["anno-lib/candle"]
 metal = ["anno-lib/metal"]
 cuda = ["anno-lib/cuda"]
 burn = ["anno-lib/burn"]
-semantic-chunking = ["anno-lib/semantic-chunking"]
-async-inference = ["anno-lib/async-inference"]
-session-pool = ["anno-lib/session-pool"]
-subsume = ["anno-lib/subsume"]
-instrument = ["anno-lib/instrument"]
 llm = ["anno-lib/llm"]
-fast-lock = ["anno-lib/fast-lock"]
-jiff-time = ["anno-lib/jiff-time"]
+semantic-chunking = ["anno-lib/semantic-chunking"]
 production = ["anno-lib/production"]
-full = ["anno-lib/full"]
-full-workspace = ["anno-lib/full-workspace"]
 bundled-crf-weights = ["anno-lib/bundled-crf-weights"]
 bundled-hmm-params = ["anno-lib/bundled-hmm-params"]
 

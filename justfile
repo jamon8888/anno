@@ -25,6 +25,27 @@ check-minimal:
     cargo clippy --manifest-path Cargo.toml -p anno --all-targets --no-default-features
     cargo test --manifest-path Cargo.toml -p anno --no-default-features --lib
 
+# Check compile coverage for feature-gated code paths.
+#
+# This keeps optional features from silently drifting into non-compiling states.
+check-feature-matrix:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    features=(
+        "semantic-chunking"
+        "subsume"
+        "jiff-time"
+        "llm"
+        "production"
+        "bundled-crf-weights"
+        "bundled-hmm-params"
+        "burn"
+    )
+    for feature in "${features[@]}"; do
+        echo "==> cargo check -p anno-lib --no-default-features --features ${feature}"
+        cargo check -p anno-lib --no-default-features --features "${feature}"
+    done
+
 # Format all code
 fmt:
     cargo fmt --manifest-path Cargo.toml -p anno
@@ -662,6 +683,7 @@ pre-commit-full:
     @just check-filenames
     @just check-compile
     @just check-tests-compile
+    @just check-feature-matrix
     @just fmt-check
     @echo "ok: Pre-commit checks passed!"
 

@@ -60,11 +60,12 @@ parking_lot = { workspace = true, optional = true }
 itertools = { workspace = true }
 smallvec = { workspace = true }
 dashmap = { workspace = true }
-unicode-normalization = { workspace = true }
 
 # Observability
 tracing = { workspace = true, optional = true }
-tracing-subscriber = { workspace = true, optional = true }
+jiff = { version = "0.2.21", optional = true }
+# Optional box-embedding interop traits.
+subsume_core = { git = "https://github.com/arclabs561/subsume", version = "0.1.0", package = "subsume-core", optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
@@ -96,23 +97,18 @@ metal = ["candle"]
 cuda = ["candle"]
 burn = []
 semantic-chunking = []
-async-inference = ["dep:tokio", "dep:futures"]
-session-pool = ["dep:crossbeam-channel"]
-subsume = []
-instrument = ["dep:tracing"]
+subsume = ["dep:subsume_core"]
 llm = ["dep:ureq"]
-fast-lock = ["dep:parking_lot"]
-jiff-time = []
-
-production = ["async-inference", "session-pool", "fast-lock", "instrument"]
-
-# Convenience umbrella.
-full = ["onnx", "candle", "discourse", "graph"]
-
-# Workspace-local convenience: enable local `gramdex` integration alongside `full`.
-# This is intentionally separate from `full` so external clones aren't forced to have
-# `../gramdex` available.
-full-workspace = ["full", "gramdex"]
+jiff-time = ["dep:jiff"]
+# Runtime-oriented infra toggles are intentionally collapsed to one feature to keep
+# the public feature surface smaller and avoid "splintered" combinatorics.
+production = [
+  "dep:tokio",
+  "dep:futures",
+  "dep:crossbeam-channel",
+  "dep:parking_lot",
+  "dep:tracing",
+]
 
 # Bundled classical assets (opt-in).
 #
@@ -121,6 +117,3 @@ full-workspace = ["full", "gramdex"]
 # redistribution of large artifacts.
 bundled-crf-weights = []
 bundled-hmm-params = []
-
-# Stub features referenced behind cfg gates.
-unicode-normalization = []

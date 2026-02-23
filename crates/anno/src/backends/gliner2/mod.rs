@@ -59,7 +59,9 @@ pub(crate) mod relations;
 
 use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, ZeroShotNER};
 
+#[cfg(feature = "candle")]
 pub mod candle;
+#[cfg(feature = "onnx")]
 pub mod onnx;
 pub mod schema;
 #[cfg(feature = "candle")]

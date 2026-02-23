@@ -88,7 +88,6 @@ pub mod coref;
 pub mod dataset;
 pub mod entity;
 pub mod error;
-pub mod graph;
 pub mod grounded;
 pub mod historical;
 pub mod ontology;
@@ -109,7 +108,6 @@ pub use grounded::{
 };
 
 pub use error::{Error, Result};
-pub use graph::{GraphDocument, GraphEdge, GraphExportFormat, GraphNode};
 
 // Dataset types
 pub use dataset::{

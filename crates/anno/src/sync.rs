@@ -1,17 +1,17 @@
 //! Synchronization primitives with conditional compilation.
 //!
 //! Provides a unified mutex interface that uses `parking_lot::Mutex` when
-//! the `fast-lock` feature is enabled, falling back to `std::sync::Mutex` otherwise.
+//! the `production` feature is enabled, falling back to `std::sync::Mutex` otherwise.
 
-#[cfg(feature = "fast-lock")]
+#[cfg(feature = "production")]
 use parking_lot::Mutex as ParkingLotMutex;
 
-#[cfg(not(feature = "fast-lock"))]
+#[cfg(not(feature = "production"))]
 use std::sync::Mutex as StdMutex;
 
 /// Mutex type that conditionally uses parking_lot or std::sync::Mutex.
 ///
-/// When `fast-lock` feature is enabled, uses `parking_lot::Mutex` for better
+/// When `production` feature is enabled, uses `parking_lot::Mutex` for better
 /// performance (1.5-3x faster on uncontended locks). Otherwise uses `std::sync::Mutex`.
 ///
 /// # Example
@@ -22,11 +22,11 @@ use std::sync::Mutex as StdMutex;
 /// let data = Mutex::new(42);
 /// *data.lock() = 100;
 /// ```
-#[cfg(feature = "fast-lock")]
+#[cfg(feature = "production")]
 pub type Mutex<T> = ParkingLotMutex<T>;
 
-/// Mutex type using std::sync::Mutex (default, no fast-lock feature).
-#[cfg(not(feature = "fast-lock"))]
+/// Mutex type using std::sync::Mutex (default, no `production` feature).
+#[cfg(not(feature = "production"))]
 pub type Mutex<T> = StdMutex<T>;
 
 /// Lock a mutex and return the guard, handling poisoning gracefully.
@@ -42,13 +42,13 @@ pub type Mutex<T> = StdMutex<T>;
 /// let mutex = Mutex::new(42);
 /// let guard = lock(&mutex);
 /// ```
-#[cfg(feature = "fast-lock")]
+#[cfg(feature = "production")]
 pub fn lock<T>(mutex: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
     mutex.lock()
 }
 
 /// Lock a mutex using std::sync::Mutex, recovering from poisoning.
-#[cfg(not(feature = "fast-lock"))]
+#[cfg(not(feature = "production"))]
 pub fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -74,7 +74,7 @@ pub fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 ///     Err(e) => println!("Lock failed: {}", e),
 /// }
 /// ```
-#[cfg(feature = "fast-lock")]
+#[cfg(feature = "production")]
 pub fn try_lock<T>(mutex: &Mutex<T>) -> crate::Result<parking_lot::MutexGuard<'_, T>> {
     mutex
         .try_lock()
@@ -82,7 +82,7 @@ pub fn try_lock<T>(mutex: &Mutex<T>) -> crate::Result<parking_lot::MutexGuard<'_
 }
 
 /// Try to lock a mutex using std::sync::Mutex without blocking.
-#[cfg(not(feature = "fast-lock"))]
+#[cfg(not(feature = "production"))]
 pub fn try_lock<T>(mutex: &Mutex<T>) -> crate::Result<std::sync::MutexGuard<'_, T>> {
     mutex.try_lock().map_err(|e| match e {
         std::sync::TryLockError::Poisoned(poison) => {

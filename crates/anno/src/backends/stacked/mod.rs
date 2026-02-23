@@ -488,7 +488,7 @@ impl Default for StackedNER {
 }
 
 impl Model for StackedNER {
-    #[cfg_attr(feature = "instrument", tracing::instrument(skip(self, text), fields(text_len = text.len(), num_layers = self.layers.len())))]
+    #[cfg_attr(feature = "production", tracing::instrument(skip(self, text), fields(text_len = text.len(), num_layers = self.layers.len())))]
     fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
         // Performance: Pre-allocate entities vec with estimated capacity
         // Most texts have 0-20 entities, but we'll start with a reasonable default

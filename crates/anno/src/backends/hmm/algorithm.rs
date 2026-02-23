@@ -126,7 +126,7 @@ impl HmmNER {
             static ONCE: OnceLock<Option<HmmParams>> = OnceLock::new();
             return ONCE
                 .get_or_init(|| {
-                    let s = include_str!("hmm_params.json");
+                    let s = include_str!("../hmm_params.json");
                     let v: serde_json::Value = serde_json::from_str(s).ok()?;
                     let states = v
                         .get("states")?

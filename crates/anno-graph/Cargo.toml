@@ -11,3 +11,4 @@ publish = false
 anno-core = { path = "../anno-core", version = "0.3.0" }
 # crates.io `lattix` currently requires its default feature set enabled.
 lattix = { version = "0.1.1" }
+serde_json.workspace = true

@@ -617,6 +617,20 @@ impl subsume_core::Box for GumbelBox {
         }
         Ok(dist_sq.sqrt())
     }
+
+    fn truncate(&self, k: usize) -> Result<Self, subsume_core::BoxError> {
+        if k > self.dim() {
+            return Err(subsume_core::BoxError::MatryoshkaMismatch {
+                requested: k,
+                actual: self.dim(),
+            });
+        }
+        Ok(GumbelBox {
+            mean_min: self.mean_min[..k].to_vec(),
+            mean_max: self.mean_max[..k].to_vec(),
+            temperature: self.temperature,
+        })
+    }
 }
 
 #[cfg(feature = "subsume")]
@@ -633,7 +647,11 @@ impl subsume_core::GumbelBox for GumbelBox {
     }
 
     fn sample(&self) -> Self::Vector {
-        self.center().unwrap_or_default()
+        self.mean_min
+            .iter()
+            .zip(self.mean_max.iter())
+            .map(|(mn, mx)| (mn + mx) / 2.0)
+            .collect()
     }
 }
 
