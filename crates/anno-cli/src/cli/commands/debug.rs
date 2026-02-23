@@ -10,11 +10,11 @@ use super::super::utils::{get_input_text, link_tracks_to_kb, resolve_coreference
 #[cfg(feature = "eval")]
 use anno::ingest::url_resolver::{CompositeResolver, UrlResolver};
 use anno::ingest::DocumentPreprocessor;
-#[cfg(feature = "graph")]
-use lattix::{GraphDocument, GraphExportFormat};
 use anno_core::core::grounded::{
     render_document_html, GroundedDocument, Location, Signal, SignalId,
 };
+#[cfg(feature = "graph")]
+use lattix::{GraphDocument, GraphExportFormat};
 
 /// Generate HTML debug visualization
 #[derive(Parser, Debug)]

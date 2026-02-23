@@ -10,10 +10,7 @@
 //!   character-offset, confidence, and provenance triples. Used by `anno export --format
 //!   graph-ntriples`.
 
-use lattix::{
-    GraphDocument, GraphEdge, GraphNode,
-    KnowledgeGraph, Triple,
-};
+use lattix::{GraphDocument, GraphEdge, GraphNode, KnowledgeGraph, Triple};
 
 /// Convert a `GroundedDocument` into a `lattix::exchange::GraphDocument`.
 #[must_use]
@@ -30,7 +27,8 @@ pub fn entities_to_graph_document(
 ) -> GraphDocument {
     let mut doc = GraphDocument::new();
     let mut seen_nodes: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    let mut entity_to_node: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
+    let mut entity_to_node: std::collections::HashMap<usize, String> =
+        std::collections::HashMap::new();
 
     let get_node_id = |e: &anno_core::Entity| -> String {
         if let Some(ref kb_id) = e.kb_id {
@@ -39,7 +37,11 @@ pub fn entities_to_graph_document(
         if let Some(canonical_id) = e.canonical_id {
             return format!("coref_{}", canonical_id);
         }
-        format!("{}:{}", e.entity_type.as_label().to_lowercase(), uri_safe(&e.text))
+        format!(
+            "{}:{}",
+            e.entity_type.as_label().to_lowercase(),
+            uri_safe(&e.text)
+        )
     };
 
     for (idx, entity) in entities.iter().enumerate() {
@@ -71,20 +73,26 @@ pub fn entities_to_graph_document(
         doc.nodes.push(node);
     }
 
-    let mut seen_edges: std::collections::HashMap<(String, String, String), usize> = std::collections::HashMap::new();
+    let mut seen_edges: std::collections::HashMap<(String, String, String), usize> =
+        std::collections::HashMap::new();
     for relation in relations {
         let source_node_id = get_node_id(&relation.head);
         let target_node_id = get_node_id(&relation.tail);
 
         if seen_nodes.contains_key(&source_node_id) && seen_nodes.contains_key(&target_node_id) {
-            let key = (source_node_id.clone(), target_node_id.clone(), relation.relation_type.clone());
+            let key = (
+                source_node_id.clone(),
+                target_node_id.clone(),
+                relation.relation_type.clone(),
+            );
             if let Some(&idx) = seen_edges.get(&key) {
                 if let Some(existing) = doc.edges.get_mut(idx) {
                     existing.confidence = existing.confidence.max(relation.confidence);
                 }
             } else {
-                let edge = GraphEdge::new(&source_node_id, &target_node_id, &relation.relation_type)
-                    .with_confidence(relation.confidence);
+                let edge =
+                    GraphEdge::new(&source_node_id, &target_node_id, &relation.relation_type)
+                        .with_confidence(relation.confidence);
                 doc.edges.push(edge);
                 seen_edges.insert(key, doc.edges.len().saturating_sub(1));
             }

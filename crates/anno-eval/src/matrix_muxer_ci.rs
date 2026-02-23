@@ -3856,6 +3856,7 @@ pub fn run_randomized_matrix_sample_with_seed(seed: u64) {
 
 #[cfg(test)]
 #[test]
+#[ignore] // Slow (often >60s); run with: cargo test -p anno-eval --lib test_randomized_matrix_sample -- --ignored --include-ignored
 fn test_randomized_matrix_sample() {
     run_randomized_matrix_sample_with_seed(ci_seed());
 }

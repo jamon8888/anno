@@ -113,11 +113,10 @@ pub use error::{Error, Result};
 pub use anno_core::{
     generate_span_candidates, CorefChain, CorefDocument, CoreferenceResolver, Corpus,
     DiscontinuousSpan, Entity, EntityBuilder, EntityCategory, EntityType, EntityViewport,
-    ExtractionMethod, Gender,
-    GroundedDocument, HashMapLexicon, HierarchicalConfidence, Identity, IdentityId, IdentitySource,
-    Lexicon, Location, Mention, MentionType, Modality, Number, Person, PhiFeatures, Provenance,
-    Quantifier, RaggedBatch, Relation, Signal, SignalId, SignalRef, Span, SpanCandidate, Track,
-    TrackId, TrackRef, TrackStats, TypeLabel, TypeMapper, ValidationIssue,
+    ExtractionMethod, Gender, GroundedDocument, HashMapLexicon, HierarchicalConfidence, Identity,
+    IdentityId, IdentitySource, Lexicon, Location, Mention, MentionType, Modality, Number, Person,
+    PhiFeatures, Provenance, Quantifier, RaggedBatch, Relation, Signal, SignalId, SignalRef, Span,
+    SpanCandidate, Track, TrackId, TrackRef, TrackStats, TypeLabel, TypeMapper, ValidationIssue,
 };
 
 /// `anno-core`’s stable types under a namespaced module.

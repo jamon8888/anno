@@ -15,11 +15,11 @@ use anno::backends::inference::{
 #[cfg(feature = "eval")]
 use anno::ingest::url_resolver::CompositeResolver;
 use anno::ingest::DocumentPreprocessor;
-#[cfg(feature = "graph")]
-use lattix::{GraphDocument, GraphExportFormat};
 use anno_core::core::grounded::{
     GroundedDocument, Location, Modality, Signal, SignalId, SignalValidationError,
 };
+#[cfg(feature = "graph")]
+use lattix::{GraphDocument, GraphExportFormat};
 
 use crate::cli::CliError;
 
@@ -790,7 +790,9 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
         #[cfg(not(feature = "graph"))]
         {
             let _ = graph_format_str;
-            return Err(CliError::from("Graph export requires the 'graph' feature to be enabled."));
+            return Err(CliError::from(
+                "Graph export requires the 'graph' feature to be enabled.",
+            ));
         }
 
         #[cfg(feature = "graph")]
