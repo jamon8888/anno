@@ -1,5 +1,5 @@
 [patch.crates-io]
-# Local super-workspace dev override.
+# Local super-workspace dev override. Do NOT commit; .cargo/config.toml is gitignored.
 #
 # If you have sibling checkouts (e.g. `dev/textprep/`) next to `dev/anno/`, add the stanzas below
 # to your `.cargo/config.toml` (create it if missing).
