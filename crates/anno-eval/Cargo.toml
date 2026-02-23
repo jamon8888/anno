@@ -69,7 +69,6 @@ onnx = ["anno/onnx", "hf-hub"]
 candle = ["anno/candle"]
 burn = ["anno/burn"]
 llm = ["anno/llm"]
-rank-eval = []
 hf-hub = ["dep:hf-hub"]
 
 # Pass-through feature gates for bundled classical assets.
