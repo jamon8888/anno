@@ -79,7 +79,7 @@ burn-wgpu = "0.20.0"
 burn-autodiff = "0.20.0"
 
 # Async
-tokio = { version = "1", features = ["rt", "sync"] }
+tokio = { version = "1", features = ["rt", "sync", "macros", "rt-multi-thread"] }
 futures = "0.3"
 
 # Performance
