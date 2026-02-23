@@ -491,7 +491,7 @@ impl GumbelBox {
 // =============================================================================
 
 #[cfg(feature = "subsume")]
-impl subsume_core::Box for GumbelBox {
+impl subsume::Box for GumbelBox {
     type Scalar = f32;
     type Vector = Vec<f32>;
 
@@ -507,7 +507,7 @@ impl subsume_core::Box for GumbelBox {
         self.mean_min.len()
     }
 
-    fn volume(&self, temperature: Self::Scalar) -> Result<Self::Scalar, subsume_core::BoxError> {
+    fn volume(&self, temperature: Self::Scalar) -> Result<Self::Scalar, subsume::BoxError> {
         // Use log-space volume approximation for Gumbel boxes
         let mut log_vol = 0.0;
         for i in 0..self.dim() {
@@ -518,9 +518,9 @@ impl subsume_core::Box for GumbelBox {
         Ok(log_vol.exp())
     }
 
-    fn intersection(&self, other: &Self) -> Result<Self, subsume_core::BoxError> {
+    fn intersection(&self, other: &Self) -> Result<Self, subsume::BoxError> {
         if self.dim() != other.dim() {
-            return Err(subsume_core::BoxError::DimensionMismatch {
+            return Err(subsume::BoxError::DimensionMismatch {
                 expected: self.dim(),
                 actual: other.dim(),
             });
@@ -555,7 +555,7 @@ impl subsume_core::Box for GumbelBox {
         &self,
         other: &Self,
         temperature: Self::Scalar,
-    ) -> Result<Self::Scalar, subsume_core::BoxError> {
+    ) -> Result<Self::Scalar, subsume::BoxError> {
         let intersection = self.intersection(other)?;
         let vol_int = intersection.volume(temperature)?;
         let vol_other = other.volume(temperature)?;
@@ -569,7 +569,7 @@ impl subsume_core::Box for GumbelBox {
         &self,
         other: &Self,
         temperature: Self::Scalar,
-    ) -> Result<Self::Scalar, subsume_core::BoxError> {
+    ) -> Result<Self::Scalar, subsume::BoxError> {
         let intersection = self.intersection(other)?;
         let vol_int = intersection.volume(temperature)?;
         let vol_self = self.volume(temperature)?;
@@ -581,7 +581,7 @@ impl subsume_core::Box for GumbelBox {
         Ok(vol_int / vol_union)
     }
 
-    fn union(&self, other: &Self) -> Result<Self, subsume_core::BoxError> {
+    fn union(&self, other: &Self) -> Result<Self, subsume::BoxError> {
         let mut new_min = Vec::with_capacity(self.dim());
         let mut new_max = Vec::with_capacity(self.dim());
         for i in 0..self.dim() {
@@ -595,7 +595,7 @@ impl subsume_core::Box for GumbelBox {
         })
     }
 
-    fn center(&self) -> Result<Self::Vector, subsume_core::BoxError> {
+    fn center(&self) -> Result<Self::Vector, subsume::BoxError> {
         let mut center = Vec::with_capacity(self.dim());
         for i in 0..self.dim() {
             center.push((self.mean_min[i] + self.mean_max[i]) / 2.0);
@@ -603,7 +603,7 @@ impl subsume_core::Box for GumbelBox {
         Ok(center)
     }
 
-    fn distance(&self, other: &Self) -> Result<Self::Scalar, subsume_core::BoxError> {
+    fn distance(&self, other: &Self) -> Result<Self::Scalar, subsume::BoxError> {
         let mut dist_sq = 0.0;
         for i in 0..self.dim() {
             let gap = if self.mean_max[i] < other.mean_min[i] {
@@ -618,9 +618,9 @@ impl subsume_core::Box for GumbelBox {
         Ok(dist_sq.sqrt())
     }
 
-    fn truncate(&self, k: usize) -> Result<Self, subsume_core::BoxError> {
+    fn truncate(&self, k: usize) -> Result<Self, subsume::BoxError> {
         if k > self.dim() {
-            return Err(subsume_core::BoxError::MatryoshkaMismatch {
+            return Err(subsume::BoxError::MatryoshkaMismatch {
                 requested: k,
                 actual: self.dim(),
             });
@@ -634,7 +634,7 @@ impl subsume_core::Box for GumbelBox {
 }
 
 #[cfg(feature = "subsume")]
-impl subsume_core::GumbelBox for GumbelBox {
+impl subsume::GumbelBox for GumbelBox {
     fn temperature(&self) -> Self::Scalar {
         self.temperature
     }
@@ -642,7 +642,7 @@ impl subsume_core::GumbelBox for GumbelBox {
     fn membership_probability(
         &self,
         point: &Self::Vector,
-    ) -> Result<Self::Scalar, subsume_core::BoxError> {
+    ) -> Result<Self::Scalar, subsume::BoxError> {
         Ok(self.membership_probability(point))
     }
 
