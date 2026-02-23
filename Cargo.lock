@@ -191,7 +191,7 @@ dependencies = [
  "serde_json",
  "sketchir",
  "smallvec 1.15.1",
- "subsume-core",
+ "subsume",
  "tempfile",
  "textprep",
  "thiserror 2.0.18",
@@ -1607,6 +1607,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyperball"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c17c93947a203ae58a702530d6d1aeb36cfe52a1fcf635bed6e5f97e7854baf"
+dependencies = [
+ "ndarray",
+ "num-traits",
+ "skel",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2151,6 +2163,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "rawpointer",
+ "serde",
 ]
 
 [[package]]
@@ -3124,6 +3137,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
 
 [[package]]
+name = "skel"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcbc024a20713bfc84f13dbbb7a0b621a16351b260ff6ac8674a3825fca1afa3"
+dependencies = [
+ "ndarray",
+]
+
+[[package]]
 name = "sketchir"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3206,11 +3228,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
-name = "subsume-core"
+name = "subsume"
 version = "0.1.0"
-source = "git+https://github.com/arclabs561/subsume#ca227b589b0cf9fe3cb5e52c0be9e51a49d30222"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "476f01274c7e8ed480a9a6d9263fdc13f6f4cc8b0bbe2e82928372307f551a80"
 dependencies = [
+ "hyperball",
+ "ndarray",
+ "rand",
  "serde",
+ "serde_json",
+ "skel",
  "thiserror 2.0.18",
 ]
 
