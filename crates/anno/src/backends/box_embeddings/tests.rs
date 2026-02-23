@@ -321,7 +321,7 @@ fn test_distance() {
 #[test]
 #[cfg(feature = "subsume")]
 fn test_subsume_trait_implementation() {
-    use subsume_core::Box as SubsumeBox;
+    use subsume::Box as SubsumeBox;
 
     let a = BoxEmbedding::new(vec![0.0, 0.0], vec![2.0, 2.0]);
     let b = BoxEmbedding::new(vec![0.5, 0.5], vec![1.5, 1.5]);
