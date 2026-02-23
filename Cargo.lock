@@ -76,6 +76,7 @@ dependencies = [
  "indicatif 0.17.11",
  "is-terminal",
  "itertools 0.14.0",
+ "lattix",
  "log",
  "muxer",
  "once_cell",
@@ -1891,14 +1892,14 @@ dependencies = [
 
 [[package]]
 name = "lattix"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "lattix-core",
 ]
 
 [[package]]
 name = "lattix-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "csv",
  "oxiri",

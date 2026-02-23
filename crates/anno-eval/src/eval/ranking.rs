@@ -35,8 +35,6 @@
 //! println!("Hits@5: {:.3}", metrics.hits_at_5);  // 1.0
 //! ```
 
-#[cfg(feature = "rank-eval")]
-use rank_eval::binary::{mrr, ndcg_at_k, precision_at_k, recall_at_k};
 use std::collections::HashSet;
 
 /// Metrics for Named Entity Disambiguation evaluation.
@@ -109,34 +107,6 @@ impl CandidateRanking {
 
 impl NedMetrics {
     /// Compute all NED metrics for a single ranking.
-    #[cfg(feature = "rank-eval")]
-    pub fn compute(ranking: &CandidateRanking, _max_k: usize) -> Self {
-        let ranked: Vec<&str> = ranking
-            .candidates
-            .iter()
-            .map(|(id, _)| id.as_str())
-            .collect();
-
-        // Convert gold_ids to &str for rank-eval
-        let relevant: HashSet<&str> = ranking.gold_ids.iter().map(|s| s.as_str()).collect();
-
-        Self {
-            mrr: mrr(&ranked, &relevant),
-            precision_at_1: precision_at_k(&ranked, &relevant, 1),
-            precision_at_5: precision_at_k(&ranked, &relevant, 5),
-            recall_at_5: recall_at_k(&ranked, &relevant, 5),
-            hits_at_5: if ranked.iter().take(5).any(|id| relevant.contains(id)) {
-                1.0
-            } else {
-                0.0
-            },
-            ndcg_at_5: ndcg_at_k(&ranked, &relevant, 5),
-            ndcg_at_10: ndcg_at_k(&ranked, &relevant, 10),
-        }
-    }
-
-    /// Fallback computation when rank-eval is not available.
-    #[cfg(not(feature = "rank-eval"))]
     pub fn compute(ranking: &CandidateRanking, _max_k: usize) -> Self {
         // Simple fallback implementation
         let mut mrr = 0.0;
