@@ -10,7 +10,7 @@ documentation = "https://docs.rs/anno"
 readme = "../../README.md"
 keywords = ["ner", "nlp", "extraction", "coreference", "rust"]
 categories = ["text-processing"]
-publish = false
+publish = true
 
 [lib]
 name = "anno"
