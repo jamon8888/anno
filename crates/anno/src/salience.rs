@@ -17,25 +17,25 @@
 //! │  ────────────────────────────────────────────────────────                │
 //! │  "Obama" ─[PRESIDENT_OF]→ "USA"                                         │
 //! │  "Obama" ─[BORN_IN]→ "Hawaii"                                           │
-//! │  → Use GraphDocument::from_extraction(entities, relations)              │
+//! │  → Use `entities_to_knowledge_graph` (from `anno-graph`)                │
 //! │  → PageRank reveals structurally central entities                       │
 //! │                                                                          │
 //! │  WEAK: Co-occurrence proximity (fallback when no relations)             │
 //! │  ───────────────────────────────────────────────────────                │
 //! │  "Obama" ─[NEAR]→ "USA"  (appeared within 50 chars)                     │
-//! │  → Use GraphDocument::from_entities_cooccurrence(entities, window)      │
+//! │  → Use TextRankSalience (computes adjacency matrix internally)          │
 //! │  → PageRank on proximity is a noisy signal                              │
 //! │                                                                          │
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 //!
-//! **If you have relation extraction, use `GraphRankSalience` with a
-//! `GraphDocument`. If you only have entities, `TextRankSalience` falls
+//! **If you have relation extraction, use `lattix::algo::pagerank`.
+//! If you only have entities, `TextRankSalience` falls
 //! back to co-occurrence.**
 //!
 //! # Relationship to community detection
 //!
-//! Both this module and any community-detection layer operate on the same `GraphDocument`:
+//! Both this module and any community-detection layer operate on extracted entities:
 //!
 //! | Module | Algorithm | Output | Question Answered |
 //! |--------|-----------|--------|-------------------|
@@ -51,8 +51,7 @@
 //!
 //! | Algorithm | Graph Source | Description |
 //! |-----------|--------------|-------------|
-//! | `GraphRankSalience` | `GraphDocument` | PageRank on actual relations (PREFERRED) |
-//! | `TextRankSalience` | Entities only | PageRank on co-occurrence (fallback) |
+//! | `TextRankSalience` | Entities only | PageRank on co-occurrence |
 //! | `PositionSalience` | Entities only | Heuristic: early position + frequency |
 //!
 //! # Example

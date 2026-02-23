@@ -10,7 +10,8 @@ use super::super::utils::{get_input_text, link_tracks_to_kb, resolve_coreference
 #[cfg(feature = "eval")]
 use anno::ingest::url_resolver::{CompositeResolver, UrlResolver};
 use anno::ingest::DocumentPreprocessor;
-use anno_core::core::graph::{GraphDocument, GraphExportFormat};
+#[cfg(feature = "graph")]
+use lattix::{GraphDocument, GraphExportFormat};
 use anno_core::core::grounded::{
     render_document_html, GroundedDocument, Location, Signal, SignalId,
 };
@@ -294,31 +295,40 @@ pub fn run(args: DebugArgs) -> Result<(), String> {
 
     // Export to graph format if requested (always prints to stdout).
     if let Some(graph_format_str) = args.export_graph.as_deref() {
-        let graph_format = match graph_format_str.to_lowercase().as_str() {
-            "neo4j" | "cypher" => GraphExportFormat::Cypher,
-            "networkx" | "nx" => GraphExportFormat::NetworkXJson,
-            "jsonld" | "json-ld" => GraphExportFormat::JsonLd,
-            _ => {
-                return Err(format!(
-                    "Invalid graph format '{}'. Use: neo4j, networkx, or jsonld",
-                    graph_format_str
-                ));
-            }
-        };
-
-        let graph = GraphDocument::from_grounded_document(&doc);
-        let graph_output = graph.export(graph_format);
-
-        if !args.quiet {
-            eprintln!(
-                "{} Exported graph ({} nodes, {} edges) in {} format",
-                color("32", "✓"),
-                graph.node_count(),
-                graph.edge_count(),
-                graph_format_str
-            );
+        #[cfg(not(feature = "graph"))]
+        {
+            let _ = graph_format_str;
+            return Err("Graph export requires the 'graph' feature to be enabled.".to_string());
         }
-        println!("{}", graph_output);
+
+        #[cfg(feature = "graph")]
+        {
+            let graph_format = match graph_format_str.to_lowercase().as_str() {
+                "neo4j" | "cypher" => GraphExportFormat::Cypher,
+                "networkx" | "nx" => GraphExportFormat::NetworkXJson,
+                "jsonld" | "json-ld" => GraphExportFormat::JsonLd,
+                _ => {
+                    return Err(format!(
+                        "Invalid graph format '{}'. Use: neo4j, networkx, or jsonld",
+                        graph_format_str
+                    ));
+                }
+            };
+
+            let graph = anno_graph::grounded_to_graph_document(&doc);
+            let graph_output = graph.export(graph_format);
+
+            if !args.quiet {
+                eprintln!(
+                    "{} Exported graph ({} nodes, {} edges) in {} format",
+                    color("32", "✓"),
+                    graph.node_count(),
+                    graph.edge_count(),
+                    graph_format_str
+                );
+            }
+            println!("{}", graph_output);
+        }
     }
 
     Ok(())

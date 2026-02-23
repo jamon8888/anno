@@ -5,15 +5,93 @@
 //!
 //! ## Functions
 //!
-//! - [`to_lattix_knowledge_graph`] — convert a [`GraphDocument`](anno_core::GraphDocument) to a
-//!   `lattix::KnowledgeGraph` (canonical graph shape, no offset/provenance triples).
-//! - [`grounded_to_lattix_knowledge_graph`] — same, from a `GroundedDocument`.
 //! - [`entities_to_knowledge_graph`] — the preferred export path: takes raw extraction output
 //!   (`Entity` + `Relation` slices) and emits a fully-annotated `KnowledgeGraph` including
 //!   character-offset, confidence, and provenance triples. Used by `anno export --format
 //!   graph-ntriples`.
 
-use lattix::{KnowledgeGraph, Triple};
+use lattix::{
+    GraphDocument, GraphEdge, GraphNode,
+    KnowledgeGraph, Triple,
+};
+
+/// Convert a `GroundedDocument` into a `lattix::exchange::GraphDocument`.
+#[must_use]
+pub fn grounded_to_graph_document(doc: &anno_core::GroundedDocument) -> GraphDocument {
+    let entities = doc.to_entities();
+    entities_to_graph_document(&entities, &[])
+}
+
+/// Convert entities and relations into a `lattix::exchange::GraphDocument`.
+#[must_use]
+pub fn entities_to_graph_document(
+    entities: &[anno_core::Entity],
+    relations: &[anno_core::Relation],
+) -> GraphDocument {
+    let mut doc = GraphDocument::new();
+    let mut seen_nodes: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut entity_to_node: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
+
+    let get_node_id = |e: &anno_core::Entity| -> String {
+        if let Some(ref kb_id) = e.kb_id {
+            return kb_id.clone();
+        }
+        if let Some(canonical_id) = e.canonical_id {
+            return format!("coref_{}", canonical_id);
+        }
+        format!("{}:{}", e.entity_type.as_label().to_lowercase(), uri_safe(&e.text))
+    };
+
+    for (idx, entity) in entities.iter().enumerate() {
+        let node_id = get_node_id(entity);
+
+        if let Some(&existing_idx) = seen_nodes.get(&node_id) {
+            if let Some(count) = doc.nodes[existing_idx].properties.get_mut("mentions_count") {
+                if let Some(n) = count.as_u64() {
+                    *count = serde_json::Value::from(n + 1);
+                }
+            }
+            entity_to_node.insert(idx, node_id);
+            continue;
+        }
+
+        let mut node = GraphNode::new(&node_id, entity.entity_type.as_label(), &entity.text)
+            .with_mentions_count(1)
+            .with_first_seen(entity.start);
+
+        if let Some(valid_from) = &entity.valid_from {
+            node = node.with_property("valid_from", valid_from.to_rfc3339());
+        }
+        if let Some(valid_until) = &entity.valid_until {
+            node = node.with_property("valid_until", valid_until.to_rfc3339());
+        }
+
+        seen_nodes.insert(node_id.clone(), doc.nodes.len());
+        entity_to_node.insert(idx, node_id);
+        doc.nodes.push(node);
+    }
+
+    let mut seen_edges: std::collections::HashMap<(String, String, String), usize> = std::collections::HashMap::new();
+    for relation in relations {
+        let source_node_id = get_node_id(&relation.head);
+        let target_node_id = get_node_id(&relation.tail);
+
+        if seen_nodes.contains_key(&source_node_id) && seen_nodes.contains_key(&target_node_id) {
+            let key = (source_node_id.clone(), target_node_id.clone(), relation.relation_type.clone());
+            if let Some(&idx) = seen_edges.get(&key) {
+                if let Some(existing) = doc.edges.get_mut(idx) {
+                    existing.confidence = existing.confidence.max(relation.confidence);
+                }
+            } else {
+                let edge = GraphEdge::new(&source_node_id, &target_node_id, &relation.relation_type)
+                    .with_confidence(relation.confidence);
+                doc.edges.push(edge);
+                seen_edges.insert(key, doc.edges.len().saturating_sub(1));
+            }
+        }
+    }
+    doc
+}
 
 // ---------------------------------------------------------------------------
 // URI helpers (shared across all export paths)
@@ -38,55 +116,6 @@ fn escape_literal(s: &str) -> String {
         .replace('\n', "\\n")
         .replace('\r', "\\r")
         .replace('\t', "\\t")
-}
-
-// ---------------------------------------------------------------------------
-// GraphDocument → KnowledgeGraph
-// ---------------------------------------------------------------------------
-
-/// Convert an `anno_core::GraphDocument` into a `lattix::KnowledgeGraph`.
-///
-/// Maps:
-/// - Each `GraphEdge` → one triple: `(source, relation, target)`
-/// - Each `GraphNode` → best-effort `rdf:type` and `rdfs:label` triples when fields are set
-#[must_use]
-pub fn to_lattix_knowledge_graph(g: &anno_core::GraphDocument) -> KnowledgeGraph {
-    let mut kg = KnowledgeGraph::new();
-
-    const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-    const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
-    const ANNO_NODE_TYPE: &str = "urn:anno:node_type:";
-
-    for n in &g.nodes {
-        if !n.node_type.is_empty() {
-            kg.add_triple(Triple::new(
-                n.id.as_str(),
-                RDF_TYPE,
-                format!("{ANNO_NODE_TYPE}{}", n.node_type),
-            ));
-        }
-        if !n.name.trim().is_empty() {
-            let lit = format!("\"{}\"", escape_literal(n.name.as_str()));
-            kg.add_triple(Triple::new(n.id.as_str(), RDFS_LABEL, lit));
-        }
-    }
-
-    for e in &g.edges {
-        let mut t = Triple::new(e.source.as_str(), e.relation.as_str(), e.target.as_str());
-        if e.confidence.is_finite() {
-            t = t.with_confidence((e.confidence as f32).clamp(0.0, 1.0));
-        }
-        kg.add_triple(t);
-    }
-
-    kg
-}
-
-/// Convert a `GroundedDocument` into a `lattix::KnowledgeGraph`.
-#[must_use]
-pub fn grounded_to_lattix_knowledge_graph(doc: &anno_core::GroundedDocument) -> KnowledgeGraph {
-    let g = anno_core::GraphDocument::from_grounded_document(doc);
-    to_lattix_knowledge_graph(&g)
 }
 
 // ---------------------------------------------------------------------------

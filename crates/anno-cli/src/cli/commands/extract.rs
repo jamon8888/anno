@@ -15,7 +15,8 @@ use anno::backends::inference::{
 #[cfg(feature = "eval")]
 use anno::ingest::url_resolver::CompositeResolver;
 use anno::ingest::DocumentPreprocessor;
-use anno_core::core::graph::{GraphDocument, GraphExportFormat};
+#[cfg(feature = "graph")]
+use lattix::{GraphDocument, GraphExportFormat};
 use anno_core::core::grounded::{
     GroundedDocument, Location, Modality, Signal, SignalId, SignalValidationError,
 };
@@ -786,50 +787,59 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
 
     // Export to graph format if requested
     if let Some(graph_format_str) = args.export_graph {
-        let graph_format = match graph_format_str.to_lowercase().as_str() {
-            "neo4j" | "cypher" => GraphExportFormat::Cypher,
-            "networkx" | "nx" => GraphExportFormat::NetworkXJson,
-            "jsonld" | "json-ld" => GraphExportFormat::JsonLd,
-            _ => {
-                return Err(CliError::from(format!(
-                    "Invalid graph format '{}'. Use: neo4j, networkx, or jsonld",
-                    graph_format_str
-                )));
-            }
-        };
-
-        let graph = if args.extract_relations && !relation_triples.is_empty() {
-            let mut rels: Vec<anno_core::Relation> = Vec::new();
-            for r in &relation_triples {
-                if let (Some(head), Some(tail)) =
-                    (entities.get(r.head_idx), entities.get(r.tail_idx))
-                {
-                    rels.push(anno_core::Relation::new(
-                        head.clone(),
-                        tail.clone(),
-                        r.relation_type.clone(),
-                        f64::from(r.confidence),
-                    ));
-                }
-            }
-            GraphDocument::from_extraction(&entities, &rels, None)
-        } else {
-            GraphDocument::from_grounded_document(&doc)
-        };
-        let graph_output = graph.export(graph_format);
-
-        // Output graph to stdout (always print to stdout for graph export)
-        // Note: If user wants to save to file, they can use shell redirection: --export-graph neo4j > output.cypher
-        if !args.quiet {
-            eprintln!(
-                "{} Exported graph ({} nodes, {} edges) in {} format",
-                color("32", "✓"),
-                graph.node_count(),
-                graph.edge_count(),
-                graph_format_str
-            );
+        #[cfg(not(feature = "graph"))]
+        {
+            let _ = graph_format_str;
+            return Err(CliError::from("Graph export requires the 'graph' feature to be enabled."));
         }
-        println!("{}", graph_output);
+
+        #[cfg(feature = "graph")]
+        {
+            let graph_format = match graph_format_str.to_lowercase().as_str() {
+                "neo4j" | "cypher" => GraphExportFormat::Cypher,
+                "networkx" | "nx" => GraphExportFormat::NetworkXJson,
+                "jsonld" | "json-ld" => GraphExportFormat::JsonLd,
+                _ => {
+                    return Err(CliError::from(format!(
+                        "Invalid graph format '{}'. Use: neo4j, networkx, or jsonld",
+                        graph_format_str
+                    )));
+                }
+            };
+
+            let graph = if args.extract_relations && !relation_triples.is_empty() {
+                let mut rels: Vec<anno_core::Relation> = Vec::new();
+                for r in &relation_triples {
+                    if let (Some(head), Some(tail)) =
+                        (entities.get(r.head_idx), entities.get(r.tail_idx))
+                    {
+                        rels.push(anno_core::Relation::new(
+                            head.clone(),
+                            tail.clone(),
+                            r.relation_type.clone(),
+                            f64::from(r.confidence),
+                        ));
+                    }
+                }
+                anno_graph::entities_to_graph_document(&entities, &rels)
+            } else {
+                anno_graph::grounded_to_graph_document(&doc)
+            };
+            let graph_output = graph.export(graph_format);
+
+            // Output graph to stdout (always print to stdout for graph export)
+            // Note: If user wants to save to file, they can use shell redirection: --export-graph neo4j > output.cypher
+            if !args.quiet {
+                eprintln!(
+                    "{} Exported graph ({} nodes, {} edges) in {} format",
+                    color("32", "✓"),
+                    graph.node_count(),
+                    graph.edge_count(),
+                    graph_format_str
+                );
+            }
+            println!("{}", graph_output);
+        }
     }
 
     Ok(())

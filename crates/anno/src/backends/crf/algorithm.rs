@@ -198,7 +198,7 @@ impl CrfNER {
                 .get_or_init(|| {
                     // Keep this lightweight and robust:
                     // - parsing failure should not break the backend (fall back to heuristics)
-                    let s = include_str!("crf_weights.json");
+                    let s = include_str!("../crf_weights.json");
                     serde_json::from_str::<HashMap<String, f64>>(s).ok()
                 })
                 .clone();

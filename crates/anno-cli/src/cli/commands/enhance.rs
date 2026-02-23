@@ -8,7 +8,9 @@ use super::super::output::{color, print_signals};
 use super::super::parser::OutputFormat;
 use super::super::utils::{link_tracks_to_kb, log_success, resolve_coreference};
 use anno_core::GroundedDocument;
-use anno_core::{GraphDocument, GraphExportFormat, SignalId};
+use anno_core::SignalId;
+#[cfg(feature = "graph")]
+use lattix::{GraphDocument, GraphExportFormat};
 
 /// Enhance existing GroundedDocument with additional processing
 #[derive(Parser, Debug)]
@@ -174,33 +176,42 @@ pub fn run(args: EnhanceArgs) -> Result<(), String> {
 
     // Export to graph format if requested
     if let Some(graph_format_str) = args.export_graph {
-        let graph_format = match graph_format_str.to_lowercase().as_str() {
-            "neo4j" | "cypher" => GraphExportFormat::Cypher,
-            "networkx" | "nx" => GraphExportFormat::NetworkXJson,
-            "jsonld" | "json-ld" => GraphExportFormat::JsonLd,
-            _ => {
-                return Err(format!(
-                    "Invalid graph format '{}'. Use: neo4j, networkx, or jsonld",
-                    graph_format_str
-                ));
-            }
-        };
-
-        let graph = GraphDocument::from_grounded_document(&doc);
-        let graph_output = graph.export(graph_format);
-
-        // Output graph to stdout (always print to stdout for graph export)
-        // Note: If user wants to save to file, they can use shell redirection: --export-graph neo4j > output.cypher
-        if !args.quiet {
-            eprintln!(
-                "{} Exported graph ({} nodes, {} edges) in {} format",
-                color("32", "✓"),
-                graph.node_count(),
-                graph.edge_count(),
-                graph_format_str
-            );
+        #[cfg(not(feature = "graph"))]
+        {
+            let _ = graph_format_str;
+            return Err("Graph export requires the 'graph' feature to be enabled.".to_string());
         }
-        println!("{}", graph_output);
+
+        #[cfg(feature = "graph")]
+        {
+            let graph_format = match graph_format_str.to_lowercase().as_str() {
+                "neo4j" | "cypher" => GraphExportFormat::Cypher,
+                "networkx" | "nx" => GraphExportFormat::NetworkXJson,
+                "jsonld" | "json-ld" => GraphExportFormat::JsonLd,
+                _ => {
+                    return Err(format!(
+                        "Invalid graph format '{}'. Use: neo4j, networkx, or jsonld",
+                        graph_format_str
+                    ));
+                }
+            };
+
+            let graph = anno_graph::grounded_to_graph_document(&doc);
+            let graph_output = graph.export(graph_format);
+
+            // Output graph to stdout (always print to stdout for graph export)
+            // Note: If user wants to save to file, they can use shell redirection: --export-graph neo4j > output.cypher
+            if !args.quiet {
+                eprintln!(
+                    "{} Exported graph ({} nodes, {} edges) in {} format",
+                    color("32", "✓"),
+                    graph.node_count(),
+                    graph.edge_count(),
+                    graph_format_str
+                );
+            }
+            println!("{}", graph_output);
+        }
     }
 
     Ok(())

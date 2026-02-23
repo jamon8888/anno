@@ -425,6 +425,19 @@ impl subsume_core::Box for BoxEmbedding {
         }
         Ok(BoxEmbedding::distance(self, other))
     }
+
+    fn truncate(&self, k: usize) -> Result<Self, subsume_core::BoxError> {
+        if k > self.dim() {
+            return Err(subsume_core::BoxError::MatryoshkaMismatch {
+                requested: k,
+                actual: self.dim(),
+            });
+        }
+        Ok(BoxEmbedding::new(
+            self.min[..k].to_vec(),
+            self.max[..k].to_vec(),
+        ))
+    }
 }
 
 /// Configuration for box-based coreference resolution.
