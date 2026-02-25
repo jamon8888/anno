@@ -5,6 +5,7 @@ use super::*;
 // =============================================================================
 
 #[cfg(feature = "candle")]
+/// Candle-based encoder implementations.
 pub mod candle_impl {
     use super::*;
 
@@ -604,7 +605,7 @@ pub mod candle_impl {
                 tokenizer_impl.with_pre_tokenizer(Some(BertPreTokenizer));
                 tokenizer_impl.with_post_processor(Some(BertProcessing::default()));
 
-                Tokenizer::from(tokenizer_impl)
+                tokenizer_impl
             } else {
                 return Err(Error::Retrieval(format!(
                     "Unsupported tokenizer format: {}. Expected tokenizer.json or vocab.txt.",
@@ -1088,6 +1089,7 @@ pub mod candle_impl {
         /// - Token embeddings: `[seq_len, hidden_dim]` (flattened)
         /// - Sequence length
         /// - Token offsets (byte_start, byte_end) for each token (tokenizers uses byte indices in Rust)
+        #[allow(clippy::type_complexity)]
         pub fn encode_with_offsets(
             &self,
             text: &str,

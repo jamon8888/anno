@@ -4,6 +4,7 @@
 use super::layers::*;
 use super::*;
 
+/// GLiNER inference engine backed by the Candle framework.
 pub struct GLiNERCandle {
     /// Text encoder (BERT/ModernBERT/DeBERTa)
     encoder: CandleEncoder,
@@ -94,14 +95,12 @@ pub(crate) fn convert_pytorch_to_safetensors(pytorch_path: &Path) -> Result<Path
             ))
         })?;
 
-    if output.status.success() {
-        if safetensors_path.exists() {
-            log::info!(
-                "Successfully converted to safetensors: {:?}",
-                safetensors_path
-            );
-            return Ok(safetensors_path);
-        }
+    if output.status.success() && safetensors_path.exists() {
+        log::info!(
+            "Successfully converted to safetensors: {:?}",
+            safetensors_path
+        );
+        return Ok(safetensors_path);
     }
 
     // If Python conversion failed, provide helpful error
@@ -422,8 +421,8 @@ impl GLiNERCandle {
                 word_embeddings.extend(std::iter::repeat_n(0.0f32, self.hidden_size));
             } else {
                 let denom = count as f32;
-                for h in 0..self.hidden_size {
-                    acc[h] /= denom;
+                for val in acc.iter_mut().take(self.hidden_size) {
+                    *val /= denom;
                 }
                 word_embeddings.extend(acc);
             }

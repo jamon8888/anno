@@ -196,7 +196,7 @@ impl CandleNER {
             tokenizer_impl.with_pre_tokenizer(Some(BertPreTokenizer));
             tokenizer_impl.with_post_processor(Some(BertProcessing::default()));
 
-            Tokenizer::from(tokenizer_impl)
+            tokenizer_impl
         } else {
             return Err(Error::Retrieval("Unsupported tokenizer format".to_string()));
         };

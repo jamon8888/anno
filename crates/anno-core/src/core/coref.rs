@@ -78,6 +78,15 @@ impl Mention {
     /// `Mention::new("John", 0, 4)` creates a mention for "John" at characters 0..4.
     ///
     /// Offsets are character positions, not byte positions.
+    ///
+    /// ```
+    /// use anno_core::Mention;
+    ///
+    /// let m = Mention::new("John", 0, 4);
+    /// assert_eq!(m.text, "John");
+    /// assert_eq!(m.len(), 4);
+    /// assert_eq!(m.span_id(), (0, 4));
+    /// ```
     #[must_use]
     pub fn new(text: impl Into<String>, start: usize, end: usize) -> Self {
         Self {
@@ -398,6 +407,18 @@ pub struct CorefDocument {
 
 impl CorefDocument {
     /// Create a new document with chains.
+    ///
+    /// ```
+    /// use anno_core::core::coref::{CorefDocument, CorefChain, Mention};
+    ///
+    /// let chain = CorefChain::new(vec![
+    ///     Mention::new("John", 0, 4),
+    ///     Mention::new("He", 24, 26),
+    /// ]);
+    /// let doc = CorefDocument::new("John went to the store. He bought milk.", vec![chain]);
+    /// assert_eq!(doc.mention_count(), 2);
+    /// assert_eq!(doc.chain_count(), 1);
+    /// ```
     #[must_use]
     pub fn new(text: impl Into<String>, chains: Vec<CorefChain>) -> Self {
         Self {

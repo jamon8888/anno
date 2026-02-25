@@ -124,42 +124,41 @@ impl HmmNER {
         #[cfg(feature = "bundled-hmm-params")]
         {
             static ONCE: OnceLock<Option<HmmParams>> = OnceLock::new();
-            return ONCE
-                .get_or_init(|| {
-                    let s = include_str!("../hmm_params.json");
-                    let v: serde_json::Value = serde_json::from_str(s).ok()?;
-                    let states = v
-                        .get("states")?
-                        .as_array()?
-                        .iter()
-                        .map(|x| x.as_str().map(|s| s.to_string()))
-                        .collect::<Option<Vec<_>>>()?;
-                    let initial = v
-                        .get("initial")?
-                        .as_array()?
-                        .iter()
-                        .map(|x| x.as_f64())
-                        .collect::<Option<Vec<_>>>()?;
-                    let transitions = v
-                        .get("transitions")?
-                        .as_array()?
-                        .iter()
-                        .map(|row| {
-                            row.as_array()?
-                                .iter()
-                                .map(|x| x.as_f64())
-                                .collect::<Option<Vec<_>>>()
-                        })
-                        .collect::<Option<Vec<_>>>()?;
-                    let backoff = v.get("backoff")?.clone();
-                    Some(HmmParams {
-                        states,
-                        initial,
-                        transitions,
-                        backoff,
+            ONCE.get_or_init(|| {
+                let s = include_str!("../hmm_params.json");
+                let v: serde_json::Value = serde_json::from_str(s).ok()?;
+                let states = v
+                    .get("states")?
+                    .as_array()?
+                    .iter()
+                    .map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect::<Option<Vec<_>>>()?;
+                let initial = v
+                    .get("initial")?
+                    .as_array()?
+                    .iter()
+                    .map(|x| x.as_f64())
+                    .collect::<Option<Vec<_>>>()?;
+                let transitions = v
+                    .get("transitions")?
+                    .as_array()?
+                    .iter()
+                    .map(|row| {
+                        row.as_array()?
+                            .iter()
+                            .map(|x| x.as_f64())
+                            .collect::<Option<Vec<_>>>()
                     })
+                    .collect::<Option<Vec<_>>>()?;
+                let backoff = v.get("backoff")?.clone();
+                Some(HmmParams {
+                    states,
+                    initial,
+                    transitions,
+                    backoff,
                 })
-                .clone();
+            })
+            .clone()
         }
         #[cfg(not(feature = "bundled-hmm-params"))]
         {

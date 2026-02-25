@@ -1,5 +1,6 @@
 use super::*;
 
+/// Span representation layer that computes span embeddings from token-level hidden states.
 pub struct SpanRepLayer {
     /// MLP for projecting start positions (Linear -> ReLU -> Dropout -> Linear)
     project_start_0: Linear,

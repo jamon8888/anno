@@ -341,6 +341,7 @@ pub trait TextEncoderWithOffsets: TextEncoder {
     /// - Token embeddings: `[seq_len, hidden_dim]` (flattened)
     /// - Sequence length
     /// - Token byte offsets: `(byte_start, byte_end)` for each token
+    #[allow(clippy::type_complexity)]
     fn encode_with_offsets(&self, text: &str) -> Result<(Vec<f32>, usize, Vec<(usize, usize)>)>;
 }
 
@@ -647,14 +648,14 @@ fn mean_pool_embeddings(embeddings: &[f32], seq_len: usize, hidden_dim: usize) -
     let mut pooled = vec![0.0f32; hidden_dim];
     for t in start..end {
         let base = t * hidden_dim;
-        for h in 0..hidden_dim {
-            pooled[h] += embeddings[base + h];
+        for (h, val) in pooled.iter_mut().enumerate().take(hidden_dim) {
+            *val += embeddings[base + h];
         }
     }
 
     let denom = count as f32;
-    for h in 0..hidden_dim {
-        pooled[h] /= denom;
+    for val in pooled.iter_mut().take(hidden_dim) {
+        *val /= denom;
     }
     pooled
 }
