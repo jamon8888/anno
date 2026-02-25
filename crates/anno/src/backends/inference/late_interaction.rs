@@ -3,9 +3,11 @@
 #[allow(unused_imports)]
 use crate::Entity;
 
-/// | DotProduct  | s·l     | Fast  | Good     | General purpose |
-/// | MaxSim      | max(s·l)| Medium| Better   | Multi-token labels |
-/// | Bilinear    | s·W·l   | Slow  | Best     | When accuracy critical |
+/// | Strategy    | Formula  | Speed  | Quality  | Use case                |
+/// |-------------|----------|--------|----------|-------------------------|
+/// | DotProduct  | s·l      | Fast   | Good     | General purpose         |
+/// | MaxSim      | max(s·l) | Medium | Better   | Multi-token labels      |
+/// | Bilinear    | s·W·l    | Slow   | Best     | When accuracy critical  |
 ///
 /// # Example
 ///

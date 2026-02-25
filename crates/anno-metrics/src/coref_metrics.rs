@@ -1,5 +1,19 @@
 //! Coreference resolution evaluation metrics.
 //!
+//! This module implements the standard coreference scoring metrics used in
+//! shared tasks (CoNLL-2011/2012, CRAC). Each metric captures a different
+//! aspect of clustering quality:
+//!
+//! | Metric  | Unit of evaluation | Reference |
+//! |---------|--------------------|-----------|
+//! | MUC     | Links between mentions within an entity | Vilain et al., 1995 |
+//! | B3      | Per-mention precision/recall | Bagga & Baldwin, 1998 |
+//! | CEAF-e  | Entity-level optimal alignment | Luo, 2005 |
+//! | CEAF-m  | Mention-level optimal alignment | Luo, 2005 |
+//! | LEA     | Link-based, entity-importance weighted | Moosavi & Strube, 2016 |
+//! | BLANC   | Rand-index over mention pairs | Recasens & Hovy, 2010 |
+//! | CoNLL   | Avg of MUC, B3, CEAF-e F1 scores | Pradhan et al., 2012 |
+//!
 //! This module is shared by both `anno` (analysis features) and `anno-eval` (evaluation harness).
 //! It is intentionally dependency-light: it relies only on `anno-core`, `serde`, and `std`.
 
@@ -240,7 +254,20 @@ impl std::fmt::Display for CorefEvaluation {
 // MUC (Vilain et al., 1995)
 // =============================================================================
 
-/// MUC link-based metric.
+/// MUC link-based metric (Vilain et al., 1995).
+///
+/// Counts the minimum number of links needed to reconstruct each gold entity
+/// from the predicted partition. For a gold entity K with mentions partitioned
+/// into p(K) predicted clusters:
+///
+/// ```text
+///   Recall    = Sigma(|K_i| - |p(K_i)|) / Sigma(|K_i| - 1)
+///   Precision = Sigma(|R_j| - |p(R_j)|) / Sigma(|R_j| - 1)
+/// ```
+///
+/// where K_i are gold entities, R_j are predicted entities, and p(X) is the
+/// set of partitions induced by the other clustering. Singletons contribute
+/// nothing (denominator term |X| - 1 = 0 when |X| = 1).
 ///
 /// Returns `(precision, recall, f1)`. Perfect prediction yields `(1.0, 1.0, 1.0)`.
 ///
@@ -329,7 +356,20 @@ pub fn muc_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f6
 // B³ (Bagga & Baldwin, 1998)
 // =============================================================================
 
-/// B-cubed mention-based metric.
+/// B-cubed mention-based metric (Bagga & Baldwin, 1998).
+///
+/// Computes precision and recall per mention, then averages over all mentions.
+/// For each mention m, let K(m) be its gold entity and R(m) its predicted entity:
+///
+/// ```text
+///   Precision_m = |K(m) cap R(m)| / |R(m)|
+///   Recall_m    = |K(m) cap R(m)| / |K(m)|
+///   P = (1/N) Sigma Precision_m
+///   R = (1/N) Sigma Recall_m
+/// ```
+///
+/// where N is the number of mentions and `cap` denotes set intersection.
+/// B3 is sensitive to singleton entities, unlike MUC.
 ///
 /// Returns `(precision, recall, f1)`.
 ///
@@ -471,7 +511,20 @@ fn greedy_assignment(
     total_sim
 }
 
-/// CEAF entity-based (phi4).
+/// CEAF entity-based metric (Luo, 2005), using the phi4 similarity function.
+///
+/// Finds an optimal one-to-one alignment between predicted and gold entities
+/// using a greedy approximation to the Kuhn-Munkres (Hungarian) algorithm.
+/// The entity similarity function phi4 counts shared mentions:
+///
+/// ```text
+///   phi4(K, R) = |K cap R|
+///   Precision  = Sigma phi4(K*_i, R*_i) / Sigma |R_j|
+///   Recall     = Sigma phi4(K*_i, R*_i) / Sigma |K_j|
+/// ```
+///
+/// where (K\*\_i, R\*\_i) are the aligned entity pairs and the denominators
+/// sum over all predicted (resp. gold) entity sizes.
 ///
 /// Returns `(precision, recall, f1)`.
 ///
@@ -506,7 +559,17 @@ pub fn ceaf_e_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64,
     (precision, recall, f1)
 }
 
-/// CEAF mention-based (phi3).
+/// CEAF mention-based metric (Luo, 2005), using the phi3 similarity function.
+///
+/// Like CEAF-e but uses a normalized similarity that penalizes size mismatches:
+///
+/// ```text
+///   phi3(K, R) = 2|K cap R| / (|K| + |R|)
+///   Precision  = Sigma phi3(K*_i, R*_i) / |R|   (number of predicted entities)
+///   Recall     = Sigma phi3(K*_i, R*_i) / |K|   (number of gold entities)
+/// ```
+///
+/// Returns `(precision, recall, f1)`.
 #[must_use]
 pub fn ceaf_m_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f64) {
     let similarity = greedy_assignment(predicted, gold, ceaf_phi3);
@@ -528,7 +591,23 @@ pub fn ceaf_m_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64,
 // LEA (Moosavi & Strube, 2016)
 // =============================================================================
 
-/// LEA link-based entity-aware metric.
+/// LEA link-based entity-aware metric (Moosavi & Strube, 2016).
+///
+/// Weights each entity by its size (importance) and measures the fraction
+/// of correctly resolved within-entity links:
+///
+/// ```text
+///   link(K_i) = |correct coreference links in K_i| / (|K_i| choose 2)
+///   Recall    = Sigma(|K_i| * link(K_i)) / Sigma |K_i|
+///   Precision = Sigma(|R_j| * link(R_j)) / Sigma |R_j|
+/// ```
+///
+/// where K_i are gold entities, R_j are predicted entities, and a "correct
+/// coreference link" is a mention pair (m_a, m_b) that appears in the same
+/// entity in both the gold and predicted clusterings.
+///
+/// LEA is designed to give larger entities proportionally more weight,
+/// addressing a limitation of B3 where small entities dominate the score.
 ///
 /// Returns `(precision, recall, f1)`.
 ///
@@ -678,7 +757,25 @@ pub fn lea_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f6
 // BLANC (Recasens & Hovy, 2010)
 // =============================================================================
 
-/// BLANC Rand-index-style metric.
+/// BLANC Rand-index-style metric (Recasens & Hovy, 2010).
+///
+/// Evaluates coreference by classifying all mention pairs as either
+/// coreferent (C) or non-coreferent (N), then computing P/R/F1 for
+/// each class separately:
+///
+/// ```text
+///   P_c = tp_c / (tp_c + fp_c)      R_c = tp_c / (tp_c + fn_c)
+///   P_n = tp_n / (tp_n + fp_n)      R_n = tp_n / (tp_n + fn_n)
+///   P   = (P_c + P_n) / 2           R   = (R_c + R_n) / 2
+///   F1  = (F1_c + F1_n) / 2
+/// ```
+///
+/// where tp/fp/fn are true-positive, false-positive, and false-negative
+/// counts for coreferent (c) and non-coreferent (n) pair decisions.
+/// A false positive coreferent pair is simultaneously a false negative
+/// non-coreferent pair, and vice versa.
+///
+/// Returns `(precision, recall, f1)`.
 #[must_use]
 pub fn blanc_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f64) {
     let common: Vec<SpanId> = common_mentions(predicted, gold).into_iter().collect();
@@ -767,7 +864,15 @@ pub fn blanc_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, 
 // CoNLL F1
 // =============================================================================
 
-/// CoNLL F1 = avg(F1(MUC), F1(B-cubed), F1(CEAFe)).
+/// CoNLL F1: the official shared-task aggregate (Pradhan et al., 2012).
+///
+/// ```text
+///   CoNLL_F1 = (F1_MUC + F1_B3 + F1_CEAFe) / 3
+/// ```
+///
+/// This is the primary metric used in CoNLL-2011/2012 shared tasks on
+/// coreference resolution. It balances the link-based (MUC), mention-based
+/// (B3), and entity-based (CEAF-e) perspectives.
 ///
 /// ```
 /// use anno_core::core::coref::{CorefChain, Mention};
