@@ -1,0 +1,24 @@
+# Managed by repository-settings/app
+# https://github.com/repository-settings/app
+
+repository:
+  description: "Information extraction in Rust: NER, coreference resolution, relation extraction, and zero-shot entity types"
+  homepage: "https://docs.rs/anno"
+  private: false
+  has_issues: true
+  has_wiki: false
+  has_downloads: true
+  default_branch: main
+  allow_squash_merge: true
+  allow_merge_commit: true
+  allow_rebase_merge: true
+  delete_branch_on_merge: true
+
+  topics:
+    - coreference-resolution
+    - information-extraction
+    - ner
+    - nlp
+    - relation-extraction
+    - rust
+    - zero-shot
