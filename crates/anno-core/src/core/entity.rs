@@ -264,7 +264,7 @@ impl std::fmt::Display for EntityViewport {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```
 /// use anno_core::EntityType;
 ///
 /// let ty = EntityType::Email;
@@ -366,6 +366,13 @@ impl EntityType {
     }
 
     /// Convert to standard label string (CoNLL/OntoNotes format).
+    ///
+    /// ```
+    /// use anno_core::EntityType;
+    ///
+    /// assert_eq!(EntityType::Person.as_label(), "PER");
+    /// assert_eq!(EntityType::Location.as_label(), "LOC");
+    /// ```
     #[must_use]
     pub fn as_label(&self) -> &str {
         match self {
@@ -390,6 +397,14 @@ impl EntityType {
     /// Parse from standard label string.
     ///
     /// Handles various formats: CoNLL (PER), OntoNotes (PERSON), BIO (B-PER).
+    ///
+    /// ```
+    /// use anno_core::EntityType;
+    ///
+    /// assert_eq!(EntityType::from_label("PER"), EntityType::Person);
+    /// assert_eq!(EntityType::from_label("B-ORG"), EntityType::Organization);
+    /// assert_eq!(EntityType::from_label("PERSON"), EntityType::Person);
+    /// ```
     #[must_use]
     pub fn from_label(label: &str) -> Self {
         // Strip BIO prefix if present
@@ -444,15 +459,14 @@ impl EntityType {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
+    /// ```
     /// use anno_core::{EntityType, EntityCategory};
     ///
-    /// // Medical entity - custom domain-specific type
     /// let disease = EntityType::custom("DISEASE", EntityCategory::Agent);
     /// assert!(disease.requires_ml());
     ///
-    /// // ID patterns - can be detected via patterns
     /// let product_id = EntityType::custom("PRODUCT_ID", EntityCategory::Misc);
+    /// assert!(!product_id.requires_ml());
     /// ```
     #[must_use]
     pub fn custom(name: impl Into<String>, category: EntityCategory) -> Self {
@@ -1817,6 +1831,15 @@ pub struct Entity {
 
 impl Entity {
     /// Create a new entity.
+    ///
+    /// ```
+    /// use anno_core::{Entity, EntityType};
+    ///
+    /// let e = Entity::new("Berlin", EntityType::Location, 10, 16, 0.95);
+    /// assert_eq!(e.text, "Berlin");
+    /// assert_eq!(e.entity_type, EntityType::Location);
+    /// assert_eq!((e.start, e.end), (10, 16));
+    /// ```
     #[must_use]
     pub fn new(
         text: impl Into<String>,
@@ -1942,10 +1965,11 @@ impl Entity {
     /// Link this entity to an external knowledge base.
     ///
     /// # Examples
-    /// ```rust,ignore
+    /// ```
     /// use anno_core::{Entity, EntityType};
     /// let mut e = Entity::new("Marie Curie", EntityType::Person, 0, 11, 0.95);
-    /// e.link_to_kb("Q7186"); // Wikidata ID
+    /// e.link_to_kb("Q7186");
+    /// assert_eq!(e.kb_id.as_deref(), Some("Q7186"));
     /// ```
     pub fn link_to_kb(&mut self, kb_id: impl Into<String>) {
         self.kb_id = Some(kb_id.into());

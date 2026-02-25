@@ -311,8 +311,11 @@ impl std::fmt::Display for EncoderArchitecture {
     }
 }
 
+/// Encoder configuration types and defaults.
 pub mod config;
+#[allow(unused_imports)]
 pub use config::*;
+/// Encoder backend implementations (Candle, stubs).
 pub mod implementations;
 #[cfg(feature = "candle")]
 pub use implementations::candle_impl::{best_device, CandleEncoder};

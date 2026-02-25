@@ -194,14 +194,13 @@ impl CrfNER {
         #[cfg(feature = "bundled-crf-weights")]
         {
             static ONCE: OnceLock<Option<HashMap<String, f64>>> = OnceLock::new();
-            return ONCE
-                .get_or_init(|| {
-                    // Keep this lightweight and robust:
-                    // - parsing failure should not break the backend (fall back to heuristics)
-                    let s = include_str!("../crf_weights.json");
-                    serde_json::from_str::<HashMap<String, f64>>(s).ok()
-                })
-                .clone();
+            ONCE.get_or_init(|| {
+                // Keep this lightweight and robust:
+                // - parsing failure should not break the backend (fall back to heuristics)
+                let s = include_str!("../crf_weights.json");
+                serde_json::from_str::<HashMap<String, f64>>(s).ok()
+            })
+            .clone()
         }
         #[cfg(not(feature = "bundled-crf-weights"))]
         {

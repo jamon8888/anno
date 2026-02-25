@@ -185,7 +185,6 @@ impl crate::DynamicLabels for GLiNERCandle {
         labels: &[&str],
         _language: Option<&str>,
     ) -> crate::Result<Vec<Entity>> {
-        use crate::backends::inference::ZeroShotNER as _;
         <Self as crate::backends::inference::ZeroShotNER>::extract_with_types(
             self, text, labels, 0.3,
         )

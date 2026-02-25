@@ -55,7 +55,14 @@ pub struct CorefScores {
 }
 
 impl CorefScores {
-    /// Create a new score triple.
+    /// Create a new score triple (F1 computed automatically).
+    ///
+    /// ```
+    /// use anno_metrics::coref_metrics::CorefScores;
+    ///
+    /// let s = CorefScores::new(0.8, 0.6);
+    /// assert!((s.f1 - 2.0 * 0.8 * 0.6 / (0.8 + 0.6)).abs() < 1e-9);
+    /// ```
     #[must_use]
     pub fn new(precision: f64, recall: f64) -> Self {
         let f1 = prf1(precision, recall);
@@ -102,6 +109,19 @@ pub struct CorefEvaluation {
 
 impl CorefEvaluation {
     /// Compute the full metric bundle.
+    ///
+    /// ```
+    /// use anno_core::core::coref::{CorefChain, Mention};
+    /// use anno_metrics::coref_metrics::CorefEvaluation;
+    ///
+    /// let gold = vec![CorefChain::new(vec![
+    ///     Mention::new("John", 0, 4),
+    ///     Mention::new("he", 10, 12),
+    /// ])];
+    /// let eval = CorefEvaluation::compute(&gold, &gold);
+    /// assert!((eval.conll_f1 - 1.0).abs() < 1e-9);
+    /// assert!((eval.muc.f1 - 1.0).abs() < 1e-9);
+    /// ```
     #[must_use]
     pub fn compute(predicted: &[CorefChain], gold: &[CorefChain]) -> Self {
         let muc = CorefScores::from_tuple(muc_score(predicted, gold));
@@ -221,6 +241,20 @@ impl std::fmt::Display for CorefEvaluation {
 // =============================================================================
 
 /// MUC link-based metric.
+///
+/// Returns `(precision, recall, f1)`. Perfect prediction yields `(1.0, 1.0, 1.0)`.
+///
+/// ```
+/// use anno_core::core::coref::{CorefChain, Mention};
+/// use anno_metrics::coref_metrics::muc_score;
+///
+/// let gold = vec![CorefChain::new(vec![
+///     Mention::new("John", 0, 4),
+///     Mention::new("he", 10, 12),
+/// ])];
+/// let (p, r, f1) = muc_score(&gold, &gold);
+/// assert!((f1 - 1.0).abs() < 1e-9);
+/// ```
 #[must_use]
 pub fn muc_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f64) {
     let common = common_mentions(predicted, gold);
@@ -295,7 +329,21 @@ pub fn muc_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f6
 // B³ (Bagga & Baldwin, 1998)
 // =============================================================================
 
-/// B³ mention-based metric.
+/// B-cubed mention-based metric.
+///
+/// Returns `(precision, recall, f1)`.
+///
+/// ```
+/// use anno_core::core::coref::{CorefChain, Mention};
+/// use anno_metrics::coref_metrics::b_cubed_score;
+///
+/// let gold = vec![CorefChain::new(vec![
+///     Mention::new("John", 0, 4),
+///     Mention::new("he", 10, 12),
+/// ])];
+/// let (p, r, f1) = b_cubed_score(&gold, &gold);
+/// assert!((f1 - 1.0).abs() < 1e-9);
+/// ```
 #[must_use]
 pub fn b_cubed_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f64) {
     let common = common_mentions(predicted, gold);
@@ -424,6 +472,20 @@ fn greedy_assignment(
 }
 
 /// CEAF entity-based (phi4).
+///
+/// Returns `(precision, recall, f1)`.
+///
+/// ```
+/// use anno_core::core::coref::{CorefChain, Mention};
+/// use anno_metrics::coref_metrics::ceaf_e_score;
+///
+/// let gold = vec![CorefChain::new(vec![
+///     Mention::new("John", 0, 4),
+///     Mention::new("he", 10, 12),
+/// ])];
+/// let (_, _, f1) = ceaf_e_score(&gold, &gold);
+/// assert!((f1 - 1.0).abs() < 1e-9);
+/// ```
 #[must_use]
 pub fn ceaf_e_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f64) {
     let similarity = greedy_assignment(predicted, gold, ceaf_phi4);
@@ -467,6 +529,20 @@ pub fn ceaf_m_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64,
 // =============================================================================
 
 /// LEA link-based entity-aware metric.
+///
+/// Returns `(precision, recall, f1)`.
+///
+/// ```
+/// use anno_core::core::coref::{CorefChain, Mention};
+/// use anno_metrics::coref_metrics::lea_score;
+///
+/// let gold = vec![CorefChain::new(vec![
+///     Mention::new("John", 0, 4),
+///     Mention::new("he", 10, 12),
+/// ])];
+/// let (_, _, f1) = lea_score(&gold, &gold);
+/// assert!((f1 - 1.0).abs() < 1e-9);
+/// ```
 #[must_use]
 pub fn lea_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f64) {
     let common = common_mentions(predicted, gold);
@@ -691,7 +767,19 @@ pub fn blanc_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, 
 // CoNLL F1
 // =============================================================================
 
-/// CoNLL F1 = avg(F1(MUC), F1(B³), F1(CEAFe)).
+/// CoNLL F1 = avg(F1(MUC), F1(B-cubed), F1(CEAFe)).
+///
+/// ```
+/// use anno_core::core::coref::{CorefChain, Mention};
+/// use anno_metrics::coref_metrics::conll_f1;
+///
+/// let gold = vec![CorefChain::new(vec![
+///     Mention::new("John", 0, 4),
+///     Mention::new("he", 10, 12),
+/// ])];
+/// let f1 = conll_f1(&gold, &gold);
+/// assert!((f1 - 1.0).abs() < 1e-9);
+/// ```
 #[must_use]
 pub fn conll_f1(predicted: &[CorefChain], gold: &[CorefChain]) -> f64 {
     let (_, _, muc_f1) = muc_score(predicted, gold);

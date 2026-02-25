@@ -54,7 +54,7 @@ use std::sync::Arc;
 use {
     hf_hub::api::sync::Api,
     ndarray::{Array2, Array3},
-    ort::{execution_providers::CPUExecutionProvider, session::Session, value::Tensor},
+    ort::{execution_providers::CPUExecutionProvider, session::Session},
     std::path::PathBuf,
     tokenizers::Tokenizer,
 };
@@ -313,7 +313,7 @@ pub struct GLiNERPool {
 #[cfg(feature = "onnx")]
 impl GLiNERPool {
     fn validate_output(output_data: &[f32], shape: &[i64]) -> Result<()> {
-        if output_data.is_empty() || shape.iter().any(|&d| d == 0) {
+        if output_data.is_empty() || shape.contains(&0) {
             return Err(Error::Inference(
                 "GLiNER session-pool returned empty/degenerate output tensor. This usually indicates an incompatible ONNX export (shape mismatch or missing dynamic axes).".to_string(),
             ));
@@ -414,6 +414,7 @@ impl GLiNERPool {
     }
 
     /// Encode prompt following GLiNER pattern.
+    #[allow(clippy::type_complexity)]
     fn encode_prompt(
         &self,
         words: &[&str],

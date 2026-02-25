@@ -42,7 +42,6 @@
 //! }
 //! ```
 
-#![cfg(feature = "production")]
 
 use crate::{Entity, Error, Model, Result};
 use std::sync::Arc;
