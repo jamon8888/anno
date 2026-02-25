@@ -33,6 +33,16 @@ fn common_mentions(pred: &[CorefChain], gold: &[CorefChain]) -> HashSet<SpanId> 
     pred_spans.intersection(&gold_spans).copied().collect()
 }
 
+/// Compute F1 from precision and recall.
+#[inline]
+fn prf1(precision: f64, recall: f64) -> f64 {
+    if precision + recall > 0.0 {
+        2.0 * precision * recall / (precision + recall)
+    } else {
+        0.0
+    }
+}
+
 /// Coreference evaluation scores (precision, recall, F1).
 #[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
 pub struct CorefScores {
@@ -48,11 +58,7 @@ impl CorefScores {
     /// Create a new score triple.
     #[must_use]
     pub fn new(precision: f64, recall: f64) -> Self {
-        let f1 = if precision + recall > 0.0 {
-            2.0 * precision * recall / (precision + recall)
-        } else {
-            0.0
-        };
+        let f1 = prf1(precision, recall);
         Self {
             precision,
             recall,
@@ -281,11 +287,7 @@ pub fn muc_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f6
     } else {
         0.0
     };
-    let f1 = if precision + recall > 0.0 {
-        2.0 * precision * recall / (precision + recall)
-    } else {
-        0.0
-    };
+    let f1 = prf1(precision, recall);
     (precision, recall, f1)
 }
 
@@ -359,11 +361,7 @@ pub fn b_cubed_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64
     } else {
         0.0
     };
-    let f1 = if precision + recall > 0.0 {
-        2.0 * precision * recall / (precision + recall)
-    } else {
-        0.0
-    };
+    let f1 = prf1(precision, recall);
 
     (precision, recall, f1)
 }
@@ -442,11 +440,7 @@ pub fn ceaf_e_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64,
     } else {
         0.0
     };
-    let f1 = if precision + recall > 0.0 {
-        2.0 * precision * recall / (precision + recall)
-    } else {
-        0.0
-    };
+    let f1 = prf1(precision, recall);
     (precision, recall, f1)
 }
 
@@ -464,11 +458,7 @@ pub fn ceaf_m_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64,
     } else {
         0.0
     };
-    let f1 = if precision + recall > 0.0 {
-        2.0 * precision * recall / (precision + recall)
-    } else {
-        0.0
-    };
+    let f1 = prf1(precision, recall);
     (precision, recall, f1)
 }
 
@@ -603,11 +593,7 @@ pub fn lea_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f6
     } else {
         0.0
     };
-    let f1 = if precision + recall > 0.0 {
-        2.0 * precision * recall / (precision + recall)
-    } else {
-        0.0
-    };
+    let f1 = prf1(precision, recall);
 
     (precision, recall, f1)
 }
@@ -754,8 +740,8 @@ pub fn compute_chain_length_stratified(
 
     let long_chain_f1 = if !long_pred.is_empty() || !long_gold.is_empty() {
         let (_, _, f1) = lea_score(
-            &long_pred.iter().copied().cloned().collect::<Vec<_>>(),
-            &long_gold.iter().copied().cloned().collect::<Vec<_>>(),
+            &long_pred.iter().map(|c| (*c).clone()).collect::<Vec<_>>(),
+            &long_gold.iter().map(|c| (*c).clone()).collect::<Vec<_>>(),
         );
         f1
     } else {
@@ -764,8 +750,8 @@ pub fn compute_chain_length_stratified(
 
     let short_chain_f1 = if !short_pred.is_empty() || !short_gold.is_empty() {
         let (_, _, f1) = lea_score(
-            &short_pred.iter().copied().cloned().collect::<Vec<_>>(),
-            &short_gold.iter().copied().cloned().collect::<Vec<_>>(),
+            &short_pred.iter().map(|c| (*c).clone()).collect::<Vec<_>>(),
+            &short_gold.iter().map(|c| (*c).clone()).collect::<Vec<_>>(),
         );
         f1
     } else {
@@ -774,8 +760,8 @@ pub fn compute_chain_length_stratified(
 
     let singleton_f1 = if !singleton_pred.is_empty() || !singleton_gold.is_empty() {
         let (_, _, f1) = lea_score(
-            &singleton_pred.iter().copied().cloned().collect::<Vec<_>>(),
-            &singleton_gold.iter().copied().cloned().collect::<Vec<_>>(),
+            &singleton_pred.iter().map(|c| (*c).clone()).collect::<Vec<_>>(),
+            &singleton_gold.iter().map(|c| (*c).clone()).collect::<Vec<_>>(),
         );
         f1
     } else {
@@ -825,16 +811,6 @@ impl ZeroAnaphorEvaluation {
     /// Returns `None` when neither gold nor predicted contains any zero/empty mentions.
     #[must_use]
     pub fn compute(predicted: &[CorefChain], gold: &[CorefChain]) -> Option<Self> {
-        fn build_mention_index(chains: &[CorefChain]) -> HashMap<SpanId, usize> {
-            let mut index = HashMap::new();
-            for (chain_idx, chain) in chains.iter().enumerate() {
-                for mention in &chain.mentions {
-                    index.insert(mention.span_id(), chain_idx);
-                }
-            }
-            index
-        }
-
         fn zero_spans(chains: &[CorefChain]) -> HashSet<SpanId> {
             chains
                 .iter()
@@ -917,11 +893,7 @@ impl ZeroAnaphorEvaluation {
         } else {
             0.0
         };
-        let f1 = if precision + recall > 0.0 {
-            2.0 * precision * recall / (precision + recall)
-        } else {
-            0.0
-        };
+        let f1 = prf1(precision, recall);
 
         Some(Self {
             precision,
@@ -1283,6 +1255,714 @@ impl WindowFragmentationStats {
             None
         } else {
             Some(stats)
+        }
+    }
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::coref::{CorefChain, Mention};
+
+    // ---- helpers ----
+
+    /// Shorthand: create a mention at given offsets.
+    fn m(text: &str, start: usize, end: usize) -> Mention {
+        Mention::new(text, start, end)
+    }
+
+    /// Build chains from a vec of vecs of (text, start, end).
+    fn chains(specs: Vec<Vec<(&str, usize, usize)>>) -> Vec<CorefChain> {
+        specs
+            .into_iter()
+            .map(|mentions| {
+                CorefChain::new(mentions.into_iter().map(|(t, s, e)| m(t, s, e)).collect())
+            })
+            .collect()
+    }
+
+    const EPS: f64 = 1e-9;
+
+    fn approx_eq(a: f64, b: f64) -> bool {
+        (a - b).abs() < EPS
+    }
+
+    fn approx_eq_loose(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-6
+    }
+
+    // =========================================================================
+    // 1. prf1 helper
+    // =========================================================================
+
+    #[test]
+    fn prf1_perfect() {
+        assert!(approx_eq(prf1(1.0, 1.0), 1.0));
+    }
+
+    #[test]
+    fn prf1_balanced_half() {
+        assert!(approx_eq(prf1(0.5, 0.5), 0.5));
+    }
+
+    #[test]
+    fn prf1_zero_recall() {
+        assert!(approx_eq(prf1(1.0, 0.0), 0.0));
+    }
+
+    #[test]
+    fn prf1_both_zero() {
+        assert!(approx_eq(prf1(0.0, 0.0), 0.0));
+    }
+
+    #[test]
+    fn prf1_zero_precision() {
+        assert!(approx_eq(prf1(0.0, 1.0), 0.0));
+    }
+
+    // =========================================================================
+    // 2. CorefScores::new
+    // =========================================================================
+
+    #[test]
+    fn coref_scores_new_computes_harmonic_mean() {
+        let s = CorefScores::new(0.8, 0.6);
+        let expected_f1 = 2.0 * 0.8 * 0.6 / (0.8 + 0.6);
+        assert!(approx_eq(s.f1, expected_f1));
+        assert!(approx_eq(s.precision, 0.8));
+        assert!(approx_eq(s.recall, 0.6));
+    }
+
+    #[test]
+    fn coref_scores_new_perfect() {
+        let s = CorefScores::new(1.0, 1.0);
+        assert!(approx_eq(s.f1, 1.0));
+    }
+
+    #[test]
+    fn coref_scores_new_zero() {
+        let s = CorefScores::new(0.0, 0.0);
+        assert!(approx_eq(s.f1, 0.0));
+    }
+
+    // =========================================================================
+    // 3. muc_score
+    // =========================================================================
+
+    #[test]
+    fn muc_perfect_prediction() {
+        // Gold: {A(0,1), B(2,3), C(4,5)}
+        // Pred: identical
+        let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5)]]);
+        let pred = gold.clone();
+        let (p, r, f1) = muc_score(&pred, &gold);
+        assert!(approx_eq(p, 1.0), "p={p}");
+        assert!(approx_eq(r, 1.0), "r={r}");
+        assert!(approx_eq(f1, 1.0), "f1={f1}");
+    }
+
+    #[test]
+    fn muc_all_singletons_vs_one_chain() {
+        // Gold: one chain {A, B, C}
+        // Pred: three singletons {A}, {B}, {C}
+        let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5)]]);
+        let pred = chains(vec![
+            vec![("A", 0, 1)],
+            vec![("B", 2, 3)],
+            vec![("C", 4, 5)],
+        ]);
+        let (p, r, f1) = muc_score(&pred, &gold);
+        // Recall: gold chain has 3 mentions, split into 3 predicted partitions -> (3-3)/(3-1) = 0
+        assert!(approx_eq(r, 0.0), "r={r}");
+        // Precision: each pred chain has 1 mention, so pred chains with <=1 common mention are skipped
+        assert!(approx_eq(p, 0.0), "p={p}");
+        assert!(approx_eq(f1, 0.0), "f1={f1}");
+    }
+
+    #[test]
+    fn muc_empty_inputs() {
+        let empty: Vec<CorefChain> = vec![];
+        let (p, r, f1) = muc_score(&empty, &empty);
+        assert!(approx_eq(p, 0.0));
+        assert!(approx_eq(r, 0.0));
+        assert!(approx_eq(f1, 0.0));
+    }
+
+    #[test]
+    fn muc_singleton_only() {
+        // Both gold and pred have a single singleton -- MUC skips chains with <=1 common mention
+        let gold = chains(vec![vec![("A", 0, 1)]]);
+        let pred = gold.clone();
+        let (p, r, f1) = muc_score(&pred, &gold);
+        // MUC is undefined for singletons; implementation returns 0
+        assert!(approx_eq(p, 0.0));
+        assert!(approx_eq(r, 0.0));
+        assert!(approx_eq(f1, 0.0));
+    }
+
+    #[test]
+    fn muc_partial_overlap() {
+        // Gold: {A, B, C}, {D, E}
+        // Pred: {A, B}, {C, D, E}
+        // C moved from chain 0 to chain 1, D and E correctly together
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5)],
+            vec![("D", 6, 7), ("E", 8, 9)],
+        ]);
+        let pred = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5), ("D", 6, 7), ("E", 8, 9)],
+        ]);
+        let (p, r, f1) = muc_score(&pred, &gold);
+        assert!(p > 0.0 && p < 1.0, "p={p} should be partial");
+        assert!(r > 0.0 && r < 1.0, "r={r} should be partial");
+        assert!(f1 > 0.0 && f1 < 1.0, "f1={f1} should be partial");
+    }
+
+    // =========================================================================
+    // 4. b_cubed_score
+    // =========================================================================
+
+    #[test]
+    fn b_cubed_perfect_prediction() {
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5), ("D", 6, 7)],
+        ]);
+        let pred = gold.clone();
+        let (p, r, f1) = b_cubed_score(&pred, &gold);
+        assert!(approx_eq(p, 1.0), "p={p}");
+        assert!(approx_eq(r, 1.0), "r={r}");
+        assert!(approx_eq(f1, 1.0), "f1={f1}");
+    }
+
+    #[test]
+    fn b_cubed_empty_inputs() {
+        let empty: Vec<CorefChain> = vec![];
+        let (p, r, f1) = b_cubed_score(&empty, &empty);
+        assert!(approx_eq(p, 0.0));
+        assert!(approx_eq(r, 0.0));
+        assert!(approx_eq(f1, 0.0));
+    }
+
+    #[test]
+    fn b_cubed_over_clustering() {
+        // Gold: one chain {A, B, C, D}
+        // Pred: two chains {A, B}, {C, D} -- over-split
+        let gold = chains(vec![vec![
+            ("A", 0, 1),
+            ("B", 2, 3),
+            ("C", 4, 5),
+            ("D", 6, 7),
+        ]]);
+        let pred = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5), ("D", 6, 7)],
+        ]);
+        let (p, r, f1) = b_cubed_score(&pred, &gold);
+        // Precision = 1.0 (each pred cluster is a subset of gold)
+        assert!(approx_eq(p, 1.0), "p={p}");
+        // Recall < 1.0 (gold cluster split)
+        assert!(r < 1.0, "r={r} should be < 1.0");
+        assert!(r > 0.0, "r={r} should be > 0.0");
+        assert!(f1 < 1.0 && f1 > 0.0, "f1={f1}");
+    }
+
+    #[test]
+    fn b_cubed_under_clustering() {
+        // Gold: {A, B}, {C, D}
+        // Pred: one chain {A, B, C, D} -- merged
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5), ("D", 6, 7)],
+        ]);
+        let pred = chains(vec![vec![
+            ("A", 0, 1),
+            ("B", 2, 3),
+            ("C", 4, 5),
+            ("D", 6, 7),
+        ]]);
+        let (p, r, f1) = b_cubed_score(&pred, &gold);
+        // Recall = 1.0 (every gold pair is in same pred cluster)
+        assert!(approx_eq(r, 1.0), "r={r}");
+        // Precision < 1.0 (pred cluster contains non-coreferent mentions)
+        assert!(p < 1.0, "p={p} should be < 1.0");
+        assert!(p > 0.0, "p={p} should be > 0.0");
+        assert!(f1 < 1.0 && f1 > 0.0, "f1={f1}");
+    }
+
+    // =========================================================================
+    // 5. ceaf_e_score
+    // =========================================================================
+
+    #[test]
+    fn ceaf_e_perfect_prediction() {
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5)],
+        ]);
+        let pred = gold.clone();
+        let (p, r, f1) = ceaf_e_score(&pred, &gold);
+        assert!(approx_eq(p, 1.0), "p={p}");
+        assert!(approx_eq(r, 1.0), "r={r}");
+        assert!(approx_eq(f1, 1.0), "f1={f1}");
+    }
+
+    #[test]
+    fn ceaf_e_empty_inputs() {
+        let empty: Vec<CorefChain> = vec![];
+        let (p, r, f1) = ceaf_e_score(&empty, &empty);
+        assert!(approx_eq(p, 0.0));
+        assert!(approx_eq(r, 0.0));
+        assert!(approx_eq(f1, 0.0));
+    }
+
+    #[test]
+    fn ceaf_e_no_overlap() {
+        // Gold and pred have completely different mentions
+        let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3)]]);
+        let pred = chains(vec![vec![("X", 10, 11), ("Y", 12, 13)]]);
+        let (p, r, f1) = ceaf_e_score(&pred, &gold);
+        assert!(approx_eq(p, 0.0), "p={p}");
+        assert!(approx_eq(r, 0.0), "r={r}");
+        assert!(approx_eq(f1, 0.0), "f1={f1}");
+    }
+
+    // =========================================================================
+    // 6. lea_score
+    // =========================================================================
+
+    #[test]
+    fn lea_perfect_prediction() {
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5)],
+            vec![("D", 6, 7), ("E", 8, 9)],
+        ]);
+        let pred = gold.clone();
+        let (p, r, f1) = lea_score(&pred, &gold);
+        assert!(approx_eq(p, 1.0), "p={p}");
+        assert!(approx_eq(r, 1.0), "r={r}");
+        assert!(approx_eq(f1, 1.0), "f1={f1}");
+    }
+
+    #[test]
+    fn lea_empty_inputs() {
+        let empty: Vec<CorefChain> = vec![];
+        let (p, r, f1) = lea_score(&empty, &empty);
+        assert!(approx_eq(p, 0.0));
+        assert!(approx_eq(r, 0.0));
+        assert!(approx_eq(f1, 0.0));
+    }
+
+    #[test]
+    fn lea_partial_overlap() {
+        let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5)]]);
+        let pred = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5)],
+        ]);
+        let (_p, r, f1) = lea_score(&pred, &gold);
+        assert!(r < 1.0 && r > 0.0, "r={r}");
+        assert!(f1 < 1.0 && f1 > 0.0, "f1={f1}");
+    }
+
+    // =========================================================================
+    // 7. conll_f1
+    // =========================================================================
+
+    #[test]
+    fn conll_f1_perfect() {
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5)],
+            vec![("D", 6, 7), ("E", 8, 9)],
+        ]);
+        let pred = gold.clone();
+        let score = conll_f1(&pred, &gold);
+        assert!(approx_eq(score, 1.0), "conll_f1={score}");
+    }
+
+    #[test]
+    fn conll_f1_empty() {
+        let empty: Vec<CorefChain> = vec![];
+        let score = conll_f1(&empty, &empty);
+        assert!(approx_eq(score, 0.0), "conll_f1={score}");
+    }
+
+    #[test]
+    fn conll_f1_is_average_of_three() {
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5)],
+            vec![("D", 6, 7), ("E", 8, 9)],
+        ]);
+        let pred = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5), ("D", 6, 7), ("E", 8, 9)],
+        ]);
+        let score = conll_f1(&pred, &gold);
+        let (_, _, muc_f) = muc_score(&pred, &gold);
+        let (_, _, b3_f) = b_cubed_score(&pred, &gold);
+        let (_, _, ceafe_f) = ceaf_e_score(&pred, &gold);
+        let expected = (muc_f + b3_f + ceafe_f) / 3.0;
+        assert!(approx_eq(score, expected), "conll_f1={score}, expected={expected}");
+    }
+
+    // =========================================================================
+    // 8. CorefEvaluation::compute
+    // =========================================================================
+
+    #[test]
+    fn coref_evaluation_compute_perfect() {
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5), ("D", 6, 7)],
+        ]);
+        let pred = gold.clone();
+        let eval = CorefEvaluation::compute(&pred, &gold);
+        assert!(approx_eq(eval.muc.f1, 1.0), "muc.f1={}", eval.muc.f1);
+        assert!(approx_eq(eval.b_cubed.f1, 1.0), "b3.f1={}", eval.b_cubed.f1);
+        assert!(approx_eq(eval.ceaf_e.f1, 1.0), "ceafe.f1={}", eval.ceaf_e.f1);
+        assert!(approx_eq(eval.lea.f1, 1.0), "lea.f1={}", eval.lea.f1);
+        assert!(approx_eq(eval.conll_f1, 1.0), "conll_f1={}", eval.conll_f1);
+        assert!(eval.chain_stats.is_some());
+    }
+
+    #[test]
+    fn coref_evaluation_compute_populates_all_metrics() {
+        let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5)]]);
+        let pred = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5)],
+        ]);
+        let eval = CorefEvaluation::compute(&pred, &gold);
+        // All metrics should be populated (may not be perfect)
+        // Just verify they are finite numbers
+        assert!(eval.muc.f1.is_finite());
+        assert!(eval.b_cubed.f1.is_finite());
+        assert!(eval.ceaf_e.f1.is_finite());
+        assert!(eval.ceaf_m.f1.is_finite());
+        assert!(eval.lea.f1.is_finite());
+        assert!(eval.blanc.f1.is_finite());
+        assert!(eval.conll_f1.is_finite());
+    }
+
+    // =========================================================================
+    // 9. AggregateCorefEvaluation::compute
+    // =========================================================================
+
+    #[test]
+    fn aggregate_multiple_documents() {
+        let gold1 = chains(vec![vec![("A", 0, 1), ("B", 2, 3)]]);
+        let pred1 = gold1.clone();
+        let gold2 = chains(vec![vec![("X", 0, 1), ("Y", 2, 3), ("Z", 4, 5)]]);
+        let pred2 = gold2.clone();
+
+        let pairs: Vec<(&[CorefChain], &[CorefChain])> =
+            vec![(&pred1, &gold1), (&pred2, &gold2)];
+        let agg = AggregateCorefEvaluation::compute(&pairs);
+
+        assert_eq!(agg.num_documents, 2);
+        assert_eq!(agg.per_document.len(), 2);
+        // Both perfect -> mean should be perfect
+        assert!(approx_eq(agg.mean.conll_f1, 1.0), "mean conll={}", agg.mean.conll_f1);
+        // Std dev should be 0 for identical scores
+        assert!(approx_eq(agg.std_dev.conll, 0.0), "std_dev conll={}", agg.std_dev.conll);
+    }
+
+    #[test]
+    fn aggregate_empty_document_list() {
+        let pairs: Vec<(&[CorefChain], &[CorefChain])> = vec![];
+        let agg = AggregateCorefEvaluation::compute(&pairs);
+        assert_eq!(agg.num_documents, 0);
+        assert!(agg.per_document.is_empty());
+    }
+
+    // =========================================================================
+    // 10. Edge cases
+    // =========================================================================
+
+    #[test]
+    fn edge_overlapping_mention_spans() {
+        // Mentions with overlapping spans (unusual but possible)
+        // "John Smith" (0,10) and "Smith" (5,10) in the same chain
+        let gold = chains(vec![vec![("John Smith", 0, 10), ("Smith", 5, 10), ("he", 15, 17)]]);
+        let pred = gold.clone();
+        let (p, r, f1) = b_cubed_score(&pred, &gold);
+        assert!(approx_eq(p, 1.0), "p={p}");
+        assert!(approx_eq(r, 1.0), "r={r}");
+        assert!(approx_eq(f1, 1.0), "f1={f1}");
+    }
+
+    #[test]
+    fn edge_singletons_only() {
+        // All chains are singletons in both gold and pred
+        let gold = chains(vec![
+            vec![("A", 0, 1)],
+            vec![("B", 2, 3)],
+            vec![("C", 4, 5)],
+        ]);
+        let pred = gold.clone();
+        // MUC is 0 for singletons
+        let (_, _, muc_f) = muc_score(&pred, &gold);
+        assert!(approx_eq(muc_f, 0.0));
+        // B-cubed should be perfect for identical singletons
+        let (p, r, f1) = b_cubed_score(&pred, &gold);
+        assert!(approx_eq(p, 1.0), "b3 p={p}");
+        assert!(approx_eq(r, 1.0), "b3 r={r}");
+        assert!(approx_eq(f1, 1.0), "b3 f1={f1}");
+    }
+
+    #[test]
+    fn edge_no_common_mentions() {
+        // Pred and gold share no mention spans at all
+        let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3)]]);
+        let pred = chains(vec![vec![("X", 100, 101), ("Y", 102, 103)]]);
+        let (p, r, f1) = muc_score(&pred, &gold);
+        assert!(approx_eq(p, 0.0));
+        assert!(approx_eq(r, 0.0));
+        assert!(approx_eq(f1, 0.0));
+        let (p, r, f1) = b_cubed_score(&pred, &gold);
+        assert!(approx_eq(p, 0.0));
+        assert!(approx_eq(r, 0.0));
+        assert!(approx_eq(f1, 0.0));
+        let (p, r, f1) = lea_score(&pred, &gold);
+        assert!(approx_eq(p, 0.0));
+        assert!(approx_eq(r, 0.0));
+        assert!(approx_eq(f1, 0.0));
+    }
+
+    #[test]
+    fn edge_pred_empty_gold_nonempty() {
+        let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3)]]);
+        let empty: Vec<CorefChain> = vec![];
+        let (_p, _r, f1) = muc_score(&empty, &gold);
+        assert!(approx_eq(f1, 0.0), "muc f1={f1}");
+        let (_p, _r, f1) = b_cubed_score(&empty, &gold);
+        assert!(approx_eq(f1, 0.0), "b3 f1={f1}");
+        let score = conll_f1(&empty, &gold);
+        assert!(approx_eq(score, 0.0));
+    }
+
+    #[test]
+    fn edge_gold_empty_pred_nonempty() {
+        let pred = chains(vec![vec![("A", 0, 1), ("B", 2, 3)]]);
+        let empty: Vec<CorefChain> = vec![];
+        let (_p, _r, f1) = muc_score(&pred, &empty);
+        assert!(approx_eq(f1, 0.0), "muc f1={f1}");
+        let (_p, _r, f1) = b_cubed_score(&pred, &empty);
+        assert!(approx_eq(f1, 0.0), "b3 f1={f1}");
+        let score = conll_f1(&pred, &empty);
+        assert!(approx_eq(score, 0.0));
+    }
+
+    #[test]
+    fn blanc_perfect_prediction() {
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5), ("D", 6, 7)],
+        ]);
+        let pred = gold.clone();
+        let (p, r, f1) = blanc_score(&pred, &gold);
+        assert!(approx_eq(p, 1.0), "p={p}");
+        assert!(approx_eq(r, 1.0), "r={r}");
+        assert!(approx_eq(f1, 1.0), "f1={f1}");
+    }
+
+    #[test]
+    fn ceaf_m_perfect() {
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5)],
+        ]);
+        let pred = gold.clone();
+        let (p, r, f1) = ceaf_m_score(&pred, &gold);
+        assert!(approx_eq(p, 1.0), "p={p}");
+        assert!(approx_eq(r, 1.0), "r={r}");
+        assert!(approx_eq(f1, 1.0), "f1={f1}");
+    }
+
+    #[test]
+    fn all_metrics_symmetric_for_identical_input() {
+        // When pred == gold, all metrics should give P=R=F1
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5)],
+            vec![("D", 6, 7), ("E", 8, 9)],
+            vec![("F", 10, 11)],
+        ]);
+        let pred = gold.clone();
+        let eval = CorefEvaluation::compute(&pred, &gold);
+        // For each metric, P should equal R
+        assert!(
+            approx_eq_loose(eval.muc.precision, eval.muc.recall),
+            "muc P={} R={}",
+            eval.muc.precision,
+            eval.muc.recall
+        );
+        assert!(
+            approx_eq_loose(eval.b_cubed.precision, eval.b_cubed.recall),
+            "b3 P={} R={}",
+            eval.b_cubed.precision,
+            eval.b_cubed.recall
+        );
+        assert!(
+            approx_eq_loose(eval.ceaf_e.precision, eval.ceaf_e.recall),
+            "ceafe P={} R={}",
+            eval.ceaf_e.precision,
+            eval.ceaf_e.recall
+        );
+        assert!(
+            approx_eq_loose(eval.lea.precision, eval.lea.recall),
+            "lea P={} R={}",
+            eval.lea.precision,
+            eval.lea.recall
+        );
+    }
+
+    #[test]
+    fn display_format_smoke() {
+        let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3)]]);
+        let eval = CorefEvaluation::compute(&gold, &gold);
+        let display = format!("{eval}");
+        assert!(display.contains("MUC:"));
+        assert!(display.contains("CoNLL:"));
+    }
+
+    // =========================================================================
+    // Property-based tests (proptest)
+    // =========================================================================
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        /// Strategy: generate a valid precision or recall value in [0.0, 1.0].
+        fn unit_interval() -> impl Strategy<Value = f64> {
+            (0u32..=1_000_000u32).prop_map(|n| n as f64 / 1_000_000.0)
+        }
+
+        /// Strategy: generate a non-empty vec of CorefChains with unique, non-overlapping spans.
+        ///
+        /// Produces 1..=max_chains chains, each with 1..=max_mentions mentions.
+        /// Spans are assigned sequentially to guarantee uniqueness.
+        fn arb_chains(
+            max_chains: usize,
+            max_mentions: usize,
+        ) -> impl Strategy<Value = Vec<CorefChain>> {
+            // First decide the shape: how many chains, and how many mentions per chain.
+            proptest::collection::vec(1..=max_mentions, 1..=max_chains).prop_map(|sizes| {
+                let mut offset = 0usize;
+                sizes
+                    .into_iter()
+                    .map(|n| {
+                        let mentions: Vec<Mention> = (0..n)
+                            .map(|_| {
+                                let start = offset;
+                                let end = offset + 1;
+                                offset += 2; // gap so spans never collide
+                                Mention::new("m", start, end)
+                            })
+                            .collect();
+                        CorefChain::new(mentions)
+                    })
+                    .collect()
+            })
+        }
+
+        // 1. F1 range: prf1(p, r) is in [0.0, 1.0] for any p, r in [0.0, 1.0].
+        proptest! {
+            #[test]
+            fn prop_prf1_range(p in unit_interval(), r in unit_interval()) {
+                let f1 = prf1(p, r);
+                prop_assert!(f1 >= 0.0, "f1={f1} < 0 for p={p}, r={r}");
+                prop_assert!(f1 <= 1.0, "f1={f1} > 1 for p={p}, r={r}");
+            }
+        }
+
+        // 2. Perfect score: identical pred and gold => all metrics F1 == 1.0.
+        //    Requires chains with >= 2 mentions each (MUC needs multi-mention chains).
+        proptest! {
+            #[test]
+            fn prop_perfect_score(
+                chains in proptest::collection::vec(2..=5usize, 1..=4)
+            ) {
+                // Build chains with unique spans.
+                let mut offset = 0usize;
+                let built: Vec<CorefChain> = chains.iter().map(|&n| {
+                    let mentions: Vec<Mention> = (0..n).map(|_| {
+                        let start = offset;
+                        let end = offset + 1;
+                        offset += 2;
+                        Mention::new("m", start, end)
+                    }).collect();
+                    CorefChain::new(mentions)
+                }).collect();
+
+                let eval = CorefEvaluation::compute(&built, &built);
+                let eps = 1e-9;
+                prop_assert!((eval.muc.f1 - 1.0).abs() < eps,
+                    "MUC F1={} != 1.0", eval.muc.f1);
+                prop_assert!((eval.b_cubed.f1 - 1.0).abs() < eps,
+                    "B3 F1={} != 1.0", eval.b_cubed.f1);
+                prop_assert!((eval.ceaf_e.f1 - 1.0).abs() < eps,
+                    "CEAFe F1={} != 1.0", eval.ceaf_e.f1);
+                prop_assert!((eval.lea.f1 - 1.0).abs() < eps,
+                    "LEA F1={} != 1.0", eval.lea.f1);
+            }
+        }
+
+        // 3. Symmetry of prf1: prf1(p, r) == prf1(r, p).
+        proptest! {
+            #[test]
+            fn prop_prf1_symmetric(p in unit_interval(), r in unit_interval()) {
+                let f1_pr = prf1(p, r);
+                let f1_rp = prf1(r, p);
+                prop_assert!(
+                    (f1_pr - f1_rp).abs() < 1e-15,
+                    "prf1({p},{r})={f1_pr} != prf1({r},{p})={f1_rp}"
+                );
+            }
+        }
+
+        // 4. CoNLL F1 range: always in [0.0, 1.0] for any valid input.
+        proptest! {
+            #[test]
+            fn prop_conll_f1_range(
+                pred in arb_chains(4, 4),
+                gold in arb_chains(4, 4),
+            ) {
+                let score = conll_f1(&pred, &gold);
+                prop_assert!(score >= 0.0, "conll_f1={score} < 0");
+                prop_assert!(score <= 1.0 + 1e-9, "conll_f1={score} > 1");
+            }
+        }
+
+        // 5. Empty clusters: empty input should not panic and returns 0.0.
+        proptest! {
+            #[test]
+            fn prop_empty_clusters_no_panic(
+                other in arb_chains(3, 3),
+            ) {
+                let empty: Vec<CorefChain> = vec![];
+
+                // Empty vs empty
+                let eval_ee = CorefEvaluation::compute(&empty, &empty);
+                prop_assert!(eval_ee.conll_f1.is_finite());
+
+                // Empty vs non-empty
+                let eval_eo = CorefEvaluation::compute(&empty, &other);
+                prop_assert!(eval_eo.conll_f1.is_finite());
+                prop_assert!(eval_eo.conll_f1 >= 0.0);
+                prop_assert!(eval_eo.conll_f1 <= 1.0 + 1e-9);
+
+                // Non-empty vs empty
+                let eval_oe = CorefEvaluation::compute(&other, &empty);
+                prop_assert!(eval_oe.conll_f1.is_finite());
+                prop_assert!(eval_oe.conll_f1 >= 0.0);
+                prop_assert!(eval_oe.conll_f1 <= 1.0 + 1e-9);
+            }
         }
     }
 }
