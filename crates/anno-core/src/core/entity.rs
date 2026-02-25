@@ -160,7 +160,7 @@ impl std::fmt::Display for EntityCategory {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust
 /// use anno_core::{Entity, EntityType, EntityViewport};
 ///
 /// let mut entity = Entity::new("Marie Curie", EntityType::Person, 0, 11, 0.9);
@@ -519,7 +519,7 @@ impl std::str::FromStr for EntityType {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust
 /// use anno_core::{TypeMapper, EntityType, EntityCategory};
 ///
 /// // MIT Movie dataset mapping
@@ -795,7 +795,7 @@ impl ExtractionMethod {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::ExtractionMethod;
     ///
     /// assert!(ExtractionMethod::Neural.is_calibrated());
@@ -893,7 +893,7 @@ impl std::fmt::Display for ExtractionMethod {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust
 /// use anno_core::{Lexicon, EntityType, HashMapLexicon};
 ///
 /// // Create a domain-specific lexicon
@@ -1033,12 +1033,15 @@ impl Provenance {
     /// Create provenance for ML-based extraction.
     ///
     /// Accepts both static strings and owned strings:
-    /// ```rust,ignore
+    /// ```rust
+    /// use anno_core::Provenance;
+    ///
     /// // Static string (zero allocation)
-    /// Provenance::ml("gliner", 0.95);
+    /// let p1 = Provenance::ml("gliner", 0.95);
     ///
     /// // Owned string (dynamic model name)
-    /// Provenance::ml(model_name.to_string(), 0.95);
+    /// let model_name = "bert-base";
+    /// let p2 = Provenance::ml(model_name.to_string(), 0.95);
     /// ```
     #[must_use]
     pub fn ml(model_name: impl Into<Cow<'static, str>>, confidence: f64) -> Self {
@@ -1254,7 +1257,7 @@ impl Span {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust
 /// use anno_core::DiscontinuousSpan;
 ///
 /// // "severe pain in the abdomen" where "severe" modifies "pain"
@@ -1790,7 +1793,7 @@ pub struct Entity {
     /// - Atemporal (timeless fact like "Paris is in France")
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::{Entity, EntityType};
     /// use chrono::{TimeZone, Utc};
     ///
@@ -1819,7 +1822,7 @@ pub struct Entity {
     /// given a query context, project the entity manifold to the relevant viewport.
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::{Entity, EntityType, EntityViewport};
     ///
     /// let mut entity = Entity::new("Marie Curie", EntityType::Person, 0, 11, 0.9);
@@ -2065,7 +2068,7 @@ impl Entity {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::{Entity, EntityType};
     ///
     /// let mut entity = Entity::new("Jan 15", EntityType::Date, 0, 6, 0.95);
@@ -2232,7 +2235,7 @@ impl Entity {
     /// The extracted text, or empty string if offsets are invalid
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::{Entity, EntityType};
     ///
     /// let text = "Hello, 日本!";
@@ -2278,7 +2281,7 @@ impl Entity {
     /// Set the temporal validity start for this entity assertion.
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::{Entity, EntityType};
     /// use chrono::{TimeZone, Utc};
     ///
@@ -2318,7 +2321,7 @@ impl Entity {
     /// - The timestamp falls within [valid_from, valid_until]
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::{Entity, EntityType};
     /// use chrono::{TimeZone, Utc};
     ///
@@ -2355,7 +2358,7 @@ impl Entity {
     /// Set the viewport context for this entity.
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::{Entity, EntityType, EntityViewport};
     ///
     /// let mut entity = Entity::new("Marie Curie", EntityType::Person, 0, 11, 0.9);
@@ -2415,7 +2418,7 @@ impl Entity {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::{Entity, EntityType};
     ///
     /// let text = "John works at Apple";
@@ -2537,7 +2540,7 @@ impl Entity {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::{Entity, EntityType};
     ///
     /// let text = "John and Jane work at Apple";
@@ -2646,7 +2649,7 @@ impl std::fmt::Display for ValidationIssue {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust
 /// use anno_core::{Entity, EntityType, Provenance};
 ///
 /// let entity = Entity::builder("Marie Curie", EntityType::Person)
@@ -2773,7 +2776,7 @@ impl EntityBuilder {
     /// Set temporal validity start (when this entity assertion became true).
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::{EntityBuilder, EntityType};
     /// use chrono::{TimeZone, Utc};
     ///
@@ -2811,7 +2814,7 @@ impl EntityBuilder {
     /// Set the viewport context for multi-faceted entity representation.
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust
     /// use anno_core::{EntityBuilder, EntityType, EntityViewport};
     ///
     /// let entity = EntityBuilder::new("Marie Curie", EntityType::Person)
