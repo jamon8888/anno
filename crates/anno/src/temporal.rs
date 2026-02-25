@@ -2518,8 +2518,8 @@ pub mod jiff_interop {
             self.entities
                 .iter()
                 .filter(|(_, from, until)| {
-                    let after_start = from.map_or(true, |f| ts >= &f);
-                    let before_end = until.map_or(true, |u| ts < &u);
+                    let after_start = from.is_none_or(|f| ts >= &f);
+                    let before_end = until.is_none_or(|u| ts < &u);
                     after_start && before_end
                 })
                 .map(|(e, _, _)| e)

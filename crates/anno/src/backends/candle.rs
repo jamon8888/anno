@@ -645,6 +645,6 @@ mod tests {
     fn test_conll_labels() {
         assert_eq!(CONLL_LABELS.len(), 9);
         assert_eq!(CONLL_LABELS[0], "O");
-        assert!(CONLL_LABELS.iter().any(|l| *l == "B-PER"));
+        assert!(CONLL_LABELS.contains(&"B-PER"));
     }
 }

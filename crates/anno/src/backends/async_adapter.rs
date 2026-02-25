@@ -317,7 +317,7 @@ mod tests {
 
         let async_model = mock.into_async();
 
-        let texts = vec!["test one", "test two", "test three"];
+        let texts = ["test one", "test two", "test three"];
 
         let futures: Vec<_> = texts
             .iter()
