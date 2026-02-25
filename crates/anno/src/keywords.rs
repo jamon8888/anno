@@ -1271,7 +1271,7 @@ mod tests {
             let _keywords_textrank = textrank.extract(text_cjk, 10);
 
             // All should complete without error
-            assert!(text_cjk.len() > 0);
+            assert!(!text_cjk.is_empty());
         }
 
         #[test]
