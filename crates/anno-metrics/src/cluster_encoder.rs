@@ -496,3 +496,325 @@ impl UnionFind {
         }
     }
 }
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- helpers ----
+
+    fn make_mention(text: &str, start: usize, end: usize, context_id: usize) -> ClusterMention {
+        ClusterMention {
+            start,
+            end,
+            text: text.to_string(),
+            context_id,
+        }
+    }
+
+    fn make_cluster(id: usize, context_id: usize, mentions: Vec<(&str, usize, usize)>) -> LocalCluster {
+        let mut cluster = LocalCluster::new(id, context_id);
+        for (text, start, end) in mentions {
+            cluster.add_mention(make_mention(text, start, end, context_id));
+        }
+        cluster
+    }
+
+    // =========================================================================
+    // 1. HeuristicClusterEncoder
+    // =========================================================================
+
+    #[test]
+    fn heuristic_encoder_output_shape() {
+        let encoder = HeuristicClusterEncoder::new(64);
+        let cluster = make_cluster(0, 0, vec![("John", 0, 4), ("he", 10, 12)]);
+        let emb = encoder.encode_cluster(&cluster, None);
+
+        assert_eq!(emb.embedding.len(), 64);
+        assert_eq!(emb.cluster_id, 0);
+        assert_eq!(emb.context_id, 0);
+        assert_eq!(emb.mention_count, 2);
+    }
+
+    #[test]
+    fn heuristic_encoder_embedding_dim() {
+        let encoder = HeuristicClusterEncoder::new(128);
+        assert_eq!(encoder.embedding_dim(), 128);
+    }
+
+    #[test]
+    fn heuristic_encoder_same_mention_same_embedding() {
+        let encoder = HeuristicClusterEncoder::new(64);
+        let cluster1 = make_cluster(0, 0, vec![("John Smith", 0, 10)]);
+        let cluster2 = make_cluster(1, 0, vec![("John Smith", 0, 10)]);
+
+        let emb1 = encoder.encode_cluster(&cluster1, None);
+        let emb2 = encoder.encode_cluster(&cluster2, None);
+
+        // Same text -> same embedding (ignoring metadata)
+        assert_eq!(emb1.embedding, emb2.embedding);
+    }
+
+    #[test]
+    fn heuristic_encoder_different_mentions_different_embedding() {
+        let encoder = HeuristicClusterEncoder::new(64);
+        let cluster1 = make_cluster(0, 0, vec![("John Smith", 0, 10)]);
+        let cluster2 = make_cluster(1, 0, vec![("completely different text", 0, 25)]);
+
+        let emb1 = encoder.encode_cluster(&cluster1, None);
+        let emb2 = encoder.encode_cluster(&cluster2, None);
+
+        assert_ne!(emb1.embedding, emb2.embedding);
+    }
+
+    #[test]
+    fn heuristic_encoder_normalized_output() {
+        let encoder = HeuristicClusterEncoder::new(64);
+        let cluster = make_cluster(0, 0, vec![("John Smith", 0, 10)]);
+        let emb = encoder.encode_cluster(&cluster, None);
+
+        let norm: f32 = emb.embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!((norm - 1.0).abs() < 1e-5, "norm={norm}, expected ~1.0");
+    }
+
+    #[test]
+    fn heuristic_encoder_batch() {
+        let encoder = HeuristicClusterEncoder::new(32);
+        let clusters = vec![
+            make_cluster(0, 0, vec![("A", 0, 1)]),
+            make_cluster(1, 0, vec![("B", 2, 3)]),
+            make_cluster(2, 0, vec![("C", 4, 5)]),
+        ];
+        let embeddings = encoder.encode_clusters(&clusters, None);
+        assert_eq!(embeddings.len(), 3);
+    }
+
+    // =========================================================================
+    // 2. CosineMergeScorer
+    // =========================================================================
+
+    #[test]
+    fn cosine_scorer_identical_embeddings() {
+        let scorer = CosineMergeScorer::new(0.5);
+        let emb_a = ClusterEmbedding {
+            embedding: vec![1.0, 0.0, 0.0],
+            cluster_id: 0,
+            context_id: 0,
+            mention_count: 1,
+        };
+        let emb_b = ClusterEmbedding {
+            embedding: vec![1.0, 0.0, 0.0],
+            cluster_id: 1,
+            context_id: 1,
+            mention_count: 1,
+        };
+        let score = scorer.score(&emb_a, &emb_b);
+        assert!((score - 1.0).abs() < 1e-5, "score={score}");
+    }
+
+    #[test]
+    fn cosine_scorer_orthogonal_embeddings() {
+        let scorer = CosineMergeScorer::new(0.5);
+        let emb_a = ClusterEmbedding {
+            embedding: vec![1.0, 0.0, 0.0],
+            cluster_id: 0,
+            context_id: 0,
+            mention_count: 1,
+        };
+        let emb_b = ClusterEmbedding {
+            embedding: vec![0.0, 1.0, 0.0],
+            cluster_id: 1,
+            context_id: 1,
+            mention_count: 1,
+        };
+        let score = scorer.score(&emb_a, &emb_b);
+        assert!(score.abs() < 1e-5, "score={score}, expected ~0.0");
+    }
+
+    #[test]
+    fn cosine_scorer_mismatched_dims() {
+        let scorer = CosineMergeScorer::new(0.5);
+        let emb_a = ClusterEmbedding {
+            embedding: vec![1.0, 0.0],
+            cluster_id: 0,
+            context_id: 0,
+            mention_count: 1,
+        };
+        let emb_b = ClusterEmbedding {
+            embedding: vec![1.0, 0.0, 0.0],
+            cluster_id: 1,
+            context_id: 1,
+            mention_count: 1,
+        };
+        let score = scorer.score(&emb_a, &emb_b);
+        assert_eq!(score, 0.0);
+    }
+
+    #[test]
+    fn cosine_scorer_zero_embedding() {
+        let scorer = CosineMergeScorer::new(0.5);
+        let emb_a = ClusterEmbedding {
+            embedding: vec![0.0, 0.0, 0.0],
+            cluster_id: 0,
+            context_id: 0,
+            mention_count: 1,
+        };
+        let emb_b = ClusterEmbedding {
+            embedding: vec![1.0, 0.0, 0.0],
+            cluster_id: 1,
+            context_id: 1,
+            mention_count: 1,
+        };
+        let score = scorer.score(&emb_a, &emb_b);
+        assert_eq!(score, 0.0);
+    }
+
+    // =========================================================================
+    // 3. UnionFind / merge_clusters
+    // =========================================================================
+
+    #[test]
+    fn union_find_no_merges() {
+        let mut uf = UnionFind::new(5);
+        // No unions -- each element is its own root
+        for i in 0..5 {
+            assert_eq!(uf.find(i), i);
+        }
+    }
+
+    #[test]
+    fn union_find_basic_merge() {
+        let mut uf = UnionFind::new(5);
+        uf.union(0, 1);
+        uf.union(2, 3);
+        // 0 and 1 should share a root
+        assert_eq!(uf.find(0), uf.find(1));
+        // 2 and 3 should share a root
+        assert_eq!(uf.find(2), uf.find(3));
+        // 0 and 2 should be in different sets
+        assert_ne!(uf.find(0), uf.find(2));
+        // 4 is alone
+        assert_ne!(uf.find(4), uf.find(0));
+        assert_ne!(uf.find(4), uf.find(2));
+    }
+
+    #[test]
+    fn union_find_transitive_merge() {
+        let mut uf = UnionFind::new(4);
+        uf.union(0, 1);
+        uf.union(1, 2);
+        uf.union(2, 3);
+        // All should share same root
+        let root = uf.find(0);
+        assert_eq!(uf.find(1), root);
+        assert_eq!(uf.find(2), root);
+        assert_eq!(uf.find(3), root);
+    }
+
+    #[test]
+    fn cross_context_resolver_no_merge_below_threshold() {
+        let encoder = HeuristicClusterEncoder::new(32);
+        let scorer = CosineMergeScorer::new(0.99); // very high threshold
+        let config = CrossContextConfig {
+            threshold: 0.99,
+            compare_same_context: false,
+            max_clusters: None,
+        };
+        let resolver = CrossContextResolver::new(encoder, scorer, config);
+
+        let mut local_clusters: HashMap<usize, Vec<LocalCluster>> = HashMap::new();
+        // Two clusters in different contexts with completely different text
+        local_clusters.insert(0, vec![make_cluster(0, 0, vec![("alpha beta gamma", 0, 16)])]);
+        local_clusters.insert(1, vec![make_cluster(0, 1, vec![("xyz completely different", 0, 23)])]);
+
+        let merged = resolver.resolve(&local_clusters, None);
+        // With a very high threshold and very different text, they should not merge
+        assert!(merged.len() >= 2, "expected >=2 clusters, got {}", merged.len());
+    }
+
+    #[test]
+    fn cross_context_resolver_identical_text_merges() {
+        let encoder = HeuristicClusterEncoder::new(32);
+        let scorer = CosineMergeScorer::new(0.5);
+        let config = CrossContextConfig {
+            threshold: 0.5,
+            compare_same_context: false,
+            max_clusters: None,
+        };
+        let resolver = CrossContextResolver::new(encoder, scorer, config);
+
+        let mut local_clusters: HashMap<usize, Vec<LocalCluster>> = HashMap::new();
+        // Identical mentions across two contexts -- should merge
+        local_clusters.insert(0, vec![make_cluster(0, 0, vec![("John Smith", 0, 10)])]);
+        local_clusters.insert(1, vec![make_cluster(0, 1, vec![("John Smith", 0, 10)])]);
+
+        let merged = resolver.resolve(&local_clusters, None);
+        // Should merge into a single cluster (same text -> cosine = 1.0 > 0.5 threshold)
+        assert_eq!(merged.len(), 1, "expected 1 merged cluster, got {}", merged.len());
+        assert_eq!(merged[0].mentions.len(), 2);
+    }
+
+    // =========================================================================
+    // LocalCluster
+    // =========================================================================
+
+    #[test]
+    fn local_cluster_compute_canonical() {
+        let mut cluster = make_cluster(0, 0, vec![
+            ("he", 10, 12),
+            ("John Smith", 0, 10),
+            ("him", 20, 23),
+        ]);
+        cluster.compute_canonical();
+        assert_eq!(cluster.canonical.as_deref(), Some("John Smith"));
+    }
+
+    #[test]
+    fn local_cluster_compute_canonical_all_pronouns() {
+        let mut cluster = make_cluster(0, 0, vec![
+            ("he", 0, 2),
+            ("him", 5, 8),
+        ]);
+        cluster.compute_canonical();
+        // Falls back to first mention
+        assert_eq!(cluster.canonical.as_deref(), Some("he"));
+    }
+
+    // =========================================================================
+    // MergeScorer trait: get_merges and score_batch
+    // =========================================================================
+
+    #[test]
+    fn cosine_scorer_get_merges() {
+        let scorer = CosineMergeScorer::new(0.5);
+        let a = vec![ClusterEmbedding {
+            embedding: vec![1.0, 0.0],
+            cluster_id: 0,
+            context_id: 0,
+            mention_count: 1,
+        }];
+        let b = vec![
+            ClusterEmbedding {
+                embedding: vec![1.0, 0.0], // identical to a
+                cluster_id: 0,
+                context_id: 1,
+                mention_count: 1,
+            },
+            ClusterEmbedding {
+                embedding: vec![0.0, 1.0], // orthogonal to a
+                cluster_id: 1,
+                context_id: 1,
+                mention_count: 1,
+            },
+        ];
+        let merges = scorer.get_merges(&a, &b, 0.5);
+        // Only the first pair should be above threshold
+        assert_eq!(merges.len(), 1, "merges: {merges:?}");
+        assert_eq!(merges[0].0, 0); // index in a
+        assert_eq!(merges[0].1, 0); // index in b
+    }
+}

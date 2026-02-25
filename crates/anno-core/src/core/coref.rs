@@ -704,4 +704,187 @@ mod tests {
         assert_eq!(index.get(&(5, 9)), Some(&1));
         assert_eq!(index.get(&(30, 33)), Some(&1));
     }
+
+    // =========================================================================
+    // Edge case tests
+    // =========================================================================
+
+    #[test]
+    fn test_unicode_mention_offsets() {
+        // "北京 Beijing" — character offsets, not byte offsets.
+        // "北" is 3 bytes in UTF-8 but 1 character.
+        let m = Mention::new("北京", 0, 2); // 2 characters, not 6 bytes
+        assert_eq!(m.len(), 2);
+        assert_eq!(m.span_id(), (0, 2));
+        assert!(!m.is_empty());
+    }
+
+    #[test]
+    fn test_zero_length_mention() {
+        // Zero anaphora / empty mention at position 5.
+        let m = Mention::new("", 5, 5);
+        assert!(m.is_empty());
+        assert_eq!(m.len(), 0);
+        assert_eq!(m.span_id(), (5, 5));
+    }
+
+    #[test]
+    fn test_empty_chain() {
+        let chain = CorefChain::new(vec![]);
+        assert!(chain.is_empty());
+        assert_eq!(chain.link_count(), 0);
+        assert!(chain.all_pairs().is_empty());
+        assert!(chain.first().is_none());
+        assert!(chain.canonical_mention().is_none());
+    }
+
+    #[test]
+    fn test_chain_sorting_out_of_order() {
+        // Mentions given out of document order should be sorted by (start, end).
+        let chain = CorefChain::new(vec![
+            Mention::new("c", 20, 21),
+            Mention::new("a", 0, 1),
+            Mention::new("b", 10, 11),
+        ]);
+        assert_eq!(chain.mentions[0].text, "a");
+        assert_eq!(chain.mentions[1].text, "b");
+        assert_eq!(chain.mentions[2].text, "c");
+    }
+
+    #[test]
+    fn test_chain_sorting_ties_broken_by_end() {
+        // Same start, different end: shorter span first.
+        let chain = CorefChain::new(vec![
+            Mention::new("John Smith", 0, 10),
+            Mention::new("John", 0, 4),
+        ]);
+        assert_eq!(chain.mentions[0].text, "John");
+        assert_eq!(chain.mentions[1].text, "John Smith");
+    }
+
+    #[test]
+    fn test_entities_to_chains_grouped() {
+        use super::super::entity::EntityType;
+        use super::super::types::CanonicalId;
+
+        let e1 = super::super::Entity::new("John", EntityType::Person, 0, 4, 0.9)
+            .with_canonical_id(1_u64);
+        let e2 = super::super::Entity::new("he", EntityType::Person, 20, 22, 0.8)
+            .with_canonical_id(1_u64);
+        let e3 = super::super::Entity::new("Mary", EntityType::Person, 5, 9, 0.95)
+            .with_canonical_id(2_u64);
+
+        let chains = entities_to_chains(&[e1, e2, e3]);
+
+        // Two canonical_ids -> two chains
+        assert_eq!(chains.len(), 2);
+
+        // Find the chain with cluster_id=1 (John + he)
+        let chain1 = chains
+            .iter()
+            .find(|c| c.cluster_id == Some(CanonicalId::new(1)))
+            .expect("chain with id=1");
+        assert_eq!(chain1.len(), 2);
+
+        // Find the chain with cluster_id=2 (Mary)
+        let chain2 = chains
+            .iter()
+            .find(|c| c.cluster_id == Some(CanonicalId::new(2)))
+            .expect("chain with id=2");
+        assert_eq!(chain2.len(), 1);
+    }
+
+    #[test]
+    fn test_entities_to_chains_singletons() {
+        use super::super::entity::EntityType;
+
+        // Entities without canonical_id become individual singleton chains.
+        let e1 = super::super::Entity::new("Paris", EntityType::Location, 0, 5, 0.9);
+        let e2 = super::super::Entity::new("London", EntityType::Location, 10, 16, 0.85);
+
+        let chains = entities_to_chains(&[e1, e2]);
+        assert_eq!(chains.len(), 2);
+        assert!(chains.iter().all(|c| c.is_singleton()));
+    }
+
+    #[test]
+    fn test_entities_to_chains_empty() {
+        let chains = entities_to_chains(&[]);
+        assert!(chains.is_empty());
+    }
+
+    #[test]
+    fn test_without_singletons_filters() {
+        let singleton = CorefChain::singleton(Mention::new("solo", 0, 4));
+        let multi = CorefChain::new(vec![
+            Mention::new("John", 10, 14),
+            Mention::new("he", 20, 22),
+        ]);
+        let doc = CorefDocument::new("text", vec![singleton, multi]);
+
+        let filtered = doc.without_singletons();
+        assert_eq!(filtered.chain_count(), 1);
+        assert_eq!(filtered.chains[0].len(), 2);
+        assert!(!filtered.includes_singletons);
+    }
+
+    #[test]
+    fn test_without_singletons_preserves_non_singletons() {
+        let c1 = CorefChain::new(vec![
+            Mention::new("a", 0, 1),
+            Mention::new("b", 2, 3),
+        ]);
+        let c2 = CorefChain::new(vec![
+            Mention::new("x", 10, 11),
+            Mention::new("y", 12, 13),
+            Mention::new("z", 14, 15),
+        ]);
+        let doc = CorefDocument::new("text", vec![c1.clone(), c2.clone()]);
+
+        let filtered = doc.without_singletons();
+        assert_eq!(filtered.chain_count(), 2);
+    }
+
+    #[test]
+    fn test_without_singletons_all_singletons() {
+        let s1 = CorefChain::singleton(Mention::new("a", 0, 1));
+        let s2 = CorefChain::singleton(Mention::new("b", 2, 3));
+        let doc = CorefDocument::new("text", vec![s1, s2]);
+
+        let filtered = doc.without_singletons();
+        assert!(filtered.chains.is_empty());
+    }
+
+    #[test]
+    fn test_overlaps_adjacent_non_overlapping() {
+        // [0,5) and [5,10) are adjacent but NOT overlapping (half-open intervals).
+        let m1 = Mention::new("hello", 0, 5);
+        let m2 = Mention::new("world", 5, 10);
+        assert!(!m1.overlaps(&m2));
+        assert!(!m2.overlaps(&m1));
+    }
+
+    #[test]
+    fn test_overlaps_nested() {
+        // [0,10) fully contains [2,5).
+        let outer = Mention::new("the big dog", 0, 10);
+        let inner = Mention::new("big", 2, 5);
+        assert!(outer.overlaps(&inner));
+        assert!(inner.overlaps(&outer));
+    }
+
+    #[test]
+    fn test_chain_with_id() {
+        let chain = CorefChain::with_id(
+            vec![Mention::new("John", 0, 4), Mention::new("he", 10, 12)],
+            42_u64,
+        );
+        assert_eq!(
+            chain.canonical_id(),
+            Some(super::super::types::CanonicalId::new(42))
+        );
+        assert_eq!(chain.cluster_id, Some(super::super::types::CanonicalId::new(42)));
+        // Mentions should still be sorted.
+        assert_eq!(chain.mentions[0].text, "John");
+    }
 }

@@ -341,7 +341,7 @@ impl BoxEmbedding {
 /// This allows anno's BoxEmbedding to be used with subsume's distance metrics,
 /// training utilities, and other advanced box operations.
 #[cfg(feature = "subsume")]
-impl subsume_core::Box for BoxEmbedding {
+impl subsume::Box for BoxEmbedding {
     type Scalar = f32;
     type Vector = Vec<f32>;
 
@@ -357,14 +357,14 @@ impl subsume_core::Box for BoxEmbedding {
         self.min.len()
     }
 
-    fn volume(&self, _temperature: Self::Scalar) -> Result<Self::Scalar, subsume_core::BoxError> {
+    fn volume(&self, _temperature: Self::Scalar) -> Result<Self::Scalar, subsume::BoxError> {
         // anno's BoxEmbedding doesn't use temperature (hard boxes)
         Ok(BoxEmbedding::volume(self))
     }
 
-    fn intersection(&self, other: &Self) -> Result<Self, subsume_core::BoxError> {
+    fn intersection(&self, other: &Self) -> Result<Self, subsume::BoxError> {
         if self.dim() != other.dim() {
-            return Err(subsume_core::BoxError::DimensionMismatch {
+            return Err(subsume::BoxError::DimensionMismatch {
                 expected: self.dim(),
                 actual: other.dim(),
             });
@@ -376,9 +376,9 @@ impl subsume_core::Box for BoxEmbedding {
         &self,
         other: &Self,
         _temperature: Self::Scalar,
-    ) -> Result<Self::Scalar, subsume_core::BoxError> {
+    ) -> Result<Self::Scalar, subsume::BoxError> {
         if self.dim() != other.dim() {
-            return Err(subsume_core::BoxError::DimensionMismatch {
+            return Err(subsume::BoxError::DimensionMismatch {
                 expected: self.dim(),
                 actual: other.dim(),
             });
@@ -392,9 +392,9 @@ impl subsume_core::Box for BoxEmbedding {
         &self,
         other: &Self,
         _temperature: Self::Scalar,
-    ) -> Result<Self::Scalar, subsume_core::BoxError> {
+    ) -> Result<Self::Scalar, subsume::BoxError> {
         if self.dim() != other.dim() {
-            return Err(subsume_core::BoxError::DimensionMismatch {
+            return Err(subsume::BoxError::DimensionMismatch {
                 expected: self.dim(),
                 actual: other.dim(),
             });
@@ -402,9 +402,9 @@ impl subsume_core::Box for BoxEmbedding {
         Ok(BoxEmbedding::overlap_prob(self, other))
     }
 
-    fn union(&self, other: &Self) -> Result<Self, subsume_core::BoxError> {
+    fn union(&self, other: &Self) -> Result<Self, subsume::BoxError> {
         if self.dim() != other.dim() {
-            return Err(subsume_core::BoxError::DimensionMismatch {
+            return Err(subsume::BoxError::DimensionMismatch {
                 expected: self.dim(),
                 actual: other.dim(),
             });
@@ -412,13 +412,13 @@ impl subsume_core::Box for BoxEmbedding {
         Ok(BoxEmbedding::union(self, other))
     }
 
-    fn center(&self) -> Result<Self::Vector, subsume_core::BoxError> {
+    fn center(&self) -> Result<Self::Vector, subsume::BoxError> {
         Ok(BoxEmbedding::center(self))
     }
 
-    fn distance(&self, other: &Self) -> Result<Self::Scalar, subsume_core::BoxError> {
+    fn distance(&self, other: &Self) -> Result<Self::Scalar, subsume::BoxError> {
         if self.dim() != other.dim() {
-            return Err(subsume_core::BoxError::DimensionMismatch {
+            return Err(subsume::BoxError::DimensionMismatch {
                 expected: self.dim(),
                 actual: other.dim(),
             });
@@ -426,9 +426,9 @@ impl subsume_core::Box for BoxEmbedding {
         Ok(BoxEmbedding::distance(self, other))
     }
 
-    fn truncate(&self, k: usize) -> Result<Self, subsume_core::BoxError> {
+    fn truncate(&self, k: usize) -> Result<Self, subsume::BoxError> {
         if k > self.dim() {
-            return Err(subsume_core::BoxError::MatryoshkaMismatch {
+            return Err(subsume::BoxError::MatryoshkaMismatch {
                 requested: k,
                 actual: self.dim(),
             });

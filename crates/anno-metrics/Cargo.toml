@@ -5,6 +5,8 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/arclabs561/anno"
 description = "Shared evaluation/analysis primitives for anno (metrics + cluster encoders)"
+keywords = ["coreference", "evaluation", "metrics", "nlp"]
+categories = ["text-processing", "science"]
 publish = true
 
 [dependencies]
