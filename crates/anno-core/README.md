@@ -27,6 +27,8 @@ anno-core = "0.3"
 | `Corpus` | Collection of grounded documents |
 | `Relation` | Typed `(head, relation, tail)` triple |
 
+...and ~30 supporting types; see [docs.rs](https://docs.rs/anno-core) for the full API.
+
 ## Usage
 
 ```rust
