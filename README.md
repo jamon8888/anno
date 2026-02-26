@@ -1,8 +1,12 @@
 # anno
 
+[![crates.io](https://img.shields.io/crates/v/anno-lib.svg)](https://crates.io/crates/anno-lib)
+[![Documentation](https://docs.rs/anno/badge.svg)](https://docs.rs/anno)
+[![CI](https://github.com/arclabs561/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/anno/actions/workflows/ci.yml)
+
 Information extraction for unstructured text: named entity recognition (NER), within-document coreference resolution, and structured pattern extraction.
 
-Dual-licensed under MIT or Apache-2.0. API docs: [docs.rs/anno](https://docs.rs/anno).
+Dual-licensed under MIT or Apache-2.0.
 
 ## Tasks
 
