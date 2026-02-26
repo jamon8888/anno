@@ -458,13 +458,15 @@ pub fn b_cubed_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64
 // CEAF (Luo, 2005)
 // =============================================================================
 
-fn ceaf_phi4(pred_chain: &CorefChain, gold_chain: &CorefChain) -> f64 {
+/// Luo's phi3: raw mention intersection count `|K cap R|`. Used for CEAF-m.
+fn ceaf_phi3(pred_chain: &CorefChain, gold_chain: &CorefChain) -> f64 {
     let pred_spans: HashSet<SpanId> = pred_chain.mentions.iter().map(|m| m.span_id()).collect();
     let gold_spans: HashSet<SpanId> = gold_chain.mentions.iter().map(|m| m.span_id()).collect();
     pred_spans.intersection(&gold_spans).count() as f64
 }
 
-fn ceaf_phi3(pred_chain: &CorefChain, gold_chain: &CorefChain) -> f64 {
+/// Luo's phi4: Dice coefficient `2|K cap R| / (|K| + |R|)`. Used for CEAF-e.
+fn ceaf_phi4(pred_chain: &CorefChain, gold_chain: &CorefChain) -> f64 {
     let pred_spans: HashSet<SpanId> = pred_chain.mentions.iter().map(|m| m.span_id()).collect();
     let gold_spans: HashSet<SpanId> = gold_chain.mentions.iter().map(|m| m.span_id()).collect();
     let overlap = pred_spans.intersection(&gold_spans).count();
@@ -511,20 +513,20 @@ fn greedy_assignment(
     total_sim
 }
 
-/// CEAF entity-based metric (Luo, 2005), using the phi4 similarity function.
+/// CEAF entity-based metric (Luo, 2005), using the phi4 (Dice) similarity.
 ///
 /// Finds a one-to-one alignment between predicted and gold entities
 /// using a greedy approximation (not the Kuhn-Munkres / Hungarian algorithm).
-/// The entity similarity function phi4 counts shared mentions:
+/// The entity similarity function phi4 is the Dice coefficient:
 ///
 /// ```text
-///   phi4(K, R) = |K cap R|
-///   Precision  = Sigma phi4(K*_i, R*_i) / Sigma |R_j|
-///   Recall     = Sigma phi4(K*_i, R*_i) / Sigma |K_j|
+///   phi4(K, R) = 2|K cap R| / (|K| + |R|)
+///   Precision  = Sigma phi4(K*_i, R*_i) / |R|   (number of predicted entities)
+///   Recall     = Sigma phi4(K*_i, R*_i) / |K|   (number of gold entities)
 /// ```
 ///
 /// where (K\*\_i, R\*\_i) are the aligned entity pairs and the denominators
-/// sum over all predicted (resp. gold) entity sizes.
+/// count the number of entities (not mentions).
 ///
 /// Returns `(precision, recall, f1)`.
 ///
@@ -542,6 +544,34 @@ fn greedy_assignment(
 #[must_use]
 pub fn ceaf_e_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f64) {
     let similarity = greedy_assignment(predicted, gold, ceaf_phi4);
+    let precision = if !predicted.is_empty() {
+        similarity / predicted.len() as f64
+    } else {
+        0.0
+    };
+    let recall = if !gold.is_empty() {
+        similarity / gold.len() as f64
+    } else {
+        0.0
+    };
+    let f1 = prf1(precision, recall);
+    (precision, recall, f1)
+}
+
+/// CEAF mention-based metric (Luo, 2005), using the phi3 similarity function.
+///
+/// Uses raw mention intersection count, normalized by total mentions:
+///
+/// ```text
+///   phi3(K, R) = |K cap R|
+///   Precision  = Sigma phi3(K*_i, R*_i) / Sigma |R_j|
+///   Recall     = Sigma phi3(K*_i, R*_i) / Sigma |K_j|
+/// ```
+///
+/// Returns `(precision, recall, f1)`.
+#[must_use]
+pub fn ceaf_m_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f64) {
+    let similarity = greedy_assignment(predicted, gold, ceaf_phi3);
     let pred_mentions: usize = predicted.iter().map(|c| c.len()).sum();
     let gold_mentions: usize = gold.iter().map(|c| c.len()).sum();
 
@@ -552,34 +582,6 @@ pub fn ceaf_e_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64,
     };
     let recall = if gold_mentions > 0 {
         similarity / gold_mentions as f64
-    } else {
-        0.0
-    };
-    let f1 = prf1(precision, recall);
-    (precision, recall, f1)
-}
-
-/// CEAF mention-based metric (Luo, 2005), using the phi3 similarity function.
-///
-/// Like CEAF-e but uses a normalized similarity that penalizes size mismatches:
-///
-/// ```text
-///   phi3(K, R) = 2|K cap R| / (|K| + |R|)
-///   Precision  = Sigma phi3(K*_i, R*_i) / |R|   (number of predicted entities)
-///   Recall     = Sigma phi3(K*_i, R*_i) / |K|   (number of gold entities)
-/// ```
-///
-/// Returns `(precision, recall, f1)`.
-#[must_use]
-pub fn ceaf_m_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f64) {
-    let similarity = greedy_assignment(predicted, gold, ceaf_phi3);
-    let precision = if !predicted.is_empty() {
-        similarity / predicted.len() as f64
-    } else {
-        0.0
-    };
-    let recall = if !gold.is_empty() {
-        similarity / gold.len() as f64
     } else {
         0.0
     };
@@ -1962,6 +1964,47 @@ mod tests {
         assert!(approx_eq(p, 1.0), "p={p}");
         assert!(approx_eq(r, 1.0), "r={r}");
         assert!(approx_eq(f1, 1.0), "f1={f1}");
+    }
+
+    /// Discriminating test: verify CEAF-e uses Dice (phi4) with entity denominators,
+    /// and CEAF-m uses raw count (phi3) with mention denominators.
+    ///
+    /// Gold: {A,B,C,D} {E}  (5 mentions, 2 entities)
+    /// Pred: {A,B} {C,D,E}  (5 mentions, 2 entities)
+    ///
+    /// CEAF-e (phi4 = Dice, denom = #entities):
+    ///   greedy aligns gold{A,B,C,D}<->pred{A,B}: phi4 = 2*2/(4+2) = 2/3
+    ///   then gold{E}<->pred{C,D,E}: phi4 = 2*1/(1+3) = 1/2
+    ///   total = 7/6, P = R = 7/12 ~ 0.583
+    ///
+    /// CEAF-m (phi3 = raw count, denom = #mentions):
+    ///   greedy aligns gold{A,B,C,D}<->pred{A,B}: phi3 = 2
+    ///   then gold{E}<->pred{C,D,E}: phi3 = 1
+    ///   total = 3, P = R = 3/5 = 0.6
+    #[test]
+    fn ceaf_e_vs_ceaf_m_differ() {
+        let gold = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5), ("D", 6, 7)],
+            vec![("E", 8, 9)],
+        ]);
+        let pred = chains(vec![
+            vec![("A", 0, 1), ("B", 2, 3)],
+            vec![("C", 4, 5), ("D", 6, 7), ("E", 8, 9)],
+        ]);
+        let (pe, re, _) = ceaf_e_score(&pred, &gold);
+        let (pm, rm, _) = ceaf_m_score(&pred, &gold);
+
+        // CEAF-e: Dice similarity / #entities = (2/3 + 1/2) / 2 = 7/12
+        let expected_e = 7.0 / 12.0;
+        assert!(approx_eq(pe, expected_e), "ceaf_e P={pe} expected {expected_e}");
+        assert!(approx_eq(re, expected_e), "ceaf_e R={re} expected {expected_e}");
+
+        // CEAF-m: raw count / #mentions = 3/5 = 0.6
+        assert!(approx_eq(pm, 0.6), "ceaf_m P={pm} expected 0.6");
+        assert!(approx_eq(rm, 0.6), "ceaf_m R={rm} expected 0.6");
+
+        // They give different values (the whole point of having two variants)
+        assert!((pe - pm).abs() > 0.01, "ceaf_e and ceaf_m should differ: e={pe}, m={pm}");
     }
 
     #[test]

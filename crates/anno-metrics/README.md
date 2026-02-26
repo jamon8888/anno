@@ -23,8 +23,8 @@ Implements the standard coreference scoring metrics used in CoNLL-2011/2012 and 
 |--------|--------------------|-----------|
 | MUC | Links between mentions within an entity | Vilain et al., 1995 |
 | B3 | Per-mention precision/recall | Bagga & Baldwin, 1998 |
-| CEAF-e | Entity-level greedy alignment | Luo, 2005 |
-| CEAF-m | Mention-level optimal alignment | Luo, 2005 |
+| CEAF-e | Entity-level alignment (Dice phi4) | Luo, 2005 |
+| CEAF-m | Mention-level alignment (raw count phi3) | Luo, 2005 |
 | LEA | Link-based, entity-importance weighted | Moosavi & Strube, 2016 |
 | BLANC | Rand-index over mention pairs | Recasens & Hovy, 2010 |
 | CoNLL | Average of MUC, B3, CEAF-e F1 | Pradhan et al., 2012 |
@@ -55,9 +55,9 @@ Metric     P       R       F1
 ------     -----   -----   -----
 MUC        1.000   0.750   0.857
 B3         1.000   0.810   0.895
-CEAF-e     0.857   0.857   0.857
+CEAF-e     0.700   0.933   0.800
 ------
-CoNLL F1:  0.870
+CoNLL F1:  0.851
 ```
 
 ## Cluster encoder
