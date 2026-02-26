@@ -569,6 +569,18 @@ pub fn ceaf_e_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64,
 /// ```
 ///
 /// Returns `(precision, recall, f1)`.
+///
+/// ```
+/// use anno_core::core::coref::{CorefChain, Mention};
+/// use anno_metrics::coref_metrics::ceaf_m_score;
+///
+/// let gold = vec![CorefChain::new(vec![
+///     Mention::new("John", 0, 4),
+///     Mention::new("he", 10, 12),
+/// ])];
+/// let (_, _, f1) = ceaf_m_score(&gold, &gold);
+/// assert!((f1 - 1.0).abs() < 1e-9);
+/// ```
 #[must_use]
 pub fn ceaf_m_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f64) {
     let similarity = greedy_assignment(predicted, gold, ceaf_phi3);
@@ -778,6 +790,24 @@ pub fn lea_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f6
 /// non-coreferent pair, and vice versa.
 ///
 /// Returns `(precision, recall, f1)`.
+///
+/// ```
+/// use anno_core::core::coref::{CorefChain, Mention};
+/// use anno_metrics::coref_metrics::blanc_score;
+///
+/// // Two chains: coreferent and non-coreferent pairs both exist.
+/// let gold = vec![
+///     CorefChain::new(vec![
+///         Mention::new("John", 0, 4),
+///         Mention::new("he", 10, 12),
+///     ]),
+///     CorefChain::new(vec![
+///         Mention::new("Mary", 20, 24),
+///     ]),
+/// ];
+/// let (_, _, f1) = blanc_score(&gold, &gold);
+/// assert!((f1 - 1.0).abs() < 1e-9);
+/// ```
 #[must_use]
 pub fn blanc_score(predicted: &[CorefChain], gold: &[CorefChain]) -> (f64, f64, f64) {
     let common: Vec<SpanId> = common_mentions(predicted, gold).into_iter().collect();
