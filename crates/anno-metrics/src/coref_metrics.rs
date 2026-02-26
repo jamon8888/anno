@@ -2200,5 +2200,82 @@ mod tests {
                 prop_assert!(eval_oe.conll_f1 <= 1.0 + 1e-9);
             }
         }
+
+        // 6. CEAF-e uses entity denominators: similarity / P == #entities (predicted).
+        //    For identical pred=gold, similarity from phi4 self-alignment should be
+        //    exactly #entities (since phi4(K, K) = 1.0 for each chain).
+        //    Therefore precision = similarity / #pred_entities = 1.0,
+        //    meaning similarity == #pred_entities.
+        proptest! {
+            #[test]
+            fn prop_ceaf_e_entity_denominators(
+                chains_spec in arb_chains(5, 5),
+            ) {
+                // When pred == gold, each chain aligns to itself with phi4 = 1.0.
+                // Total similarity = number of chains.
+                // Precision = similarity / #pred_entities, recall = similarity / #gold_entities.
+                let (p, r, f1) = ceaf_e_score(&chains_spec, &chains_spec);
+
+                // Both should be 1.0 (meaning denominator = #entities, not #mentions).
+                prop_assert!(
+                    (p - 1.0).abs() < 1e-9,
+                    "CEAF-e precision should be 1.0 for identical clusters, got {p}. \
+                     #chains={}, total_mentions={}",
+                    chains_spec.len(),
+                    chains_spec.iter().map(|c| c.len()).sum::<usize>()
+                );
+                prop_assert!(
+                    (r - 1.0).abs() < 1e-9,
+                    "CEAF-e recall should be 1.0 for identical clusters, got {r}"
+                );
+                prop_assert!(
+                    (f1 - 1.0).abs() < 1e-9,
+                    "CEAF-e F1 should be 1.0 for identical clusters, got {f1}"
+                );
+            }
+        }
+
+        // 7. All metrics are 1.0 for identical single-mention (singleton) clusters.
+        //    This is an edge case: MUC is known to be 0/0 for singletons, so we
+        //    only check B3, CEAF-e, CEAF-m, and LEA.
+        proptest! {
+            #[test]
+            fn prop_all_metrics_one_for_identical_singletons(
+                n_chains in 1usize..=8,
+            ) {
+                // Build n singleton chains with unique spans.
+                let singletons: Vec<CorefChain> = (0..n_chains)
+                    .map(|i| {
+                        CorefChain::new(vec![Mention::new("m", i * 2, i * 2 + 1)])
+                    })
+                    .collect();
+
+                let (b3_p, b3_r, b3_f1) = b_cubed_score(&singletons, &singletons);
+                prop_assert!(
+                    (b3_f1 - 1.0).abs() < 1e-9,
+                    "B3 F1 should be 1.0 for identical singletons, got {b3_f1}"
+                );
+
+                let (ce_p, ce_r, ce_f1) = ceaf_e_score(&singletons, &singletons);
+                prop_assert!(
+                    (ce_f1 - 1.0).abs() < 1e-9,
+                    "CEAF-e F1 should be 1.0 for identical singletons, got {ce_f1}"
+                );
+
+                let (cm_p, cm_r, cm_f1) = ceaf_m_score(&singletons, &singletons);
+                prop_assert!(
+                    (cm_f1 - 1.0).abs() < 1e-9,
+                    "CEAF-m F1 should be 1.0 for identical singletons, got {cm_f1}"
+                );
+
+                // LEA: singletons have 0 choose 2 = 0 links, so link resolution
+                // is trivially 0/0. Implementation should handle this gracefully.
+                let (lea_p, lea_r, lea_f1) = lea_score(&singletons, &singletons);
+                prop_assert!(
+                    lea_f1.is_finite(),
+                    "LEA F1 should be finite for identical singletons, got {lea_f1}"
+                );
+            }
+        }
     }
 }
