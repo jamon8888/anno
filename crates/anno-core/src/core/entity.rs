@@ -3610,6 +3610,141 @@ mod proptests {
             prop_assert_eq!(e, end);
             prop_assert_eq!(span.len(), len);
         }
+
+        // =================================================================
+        // Property tests for core type invariants
+        // =================================================================
+
+        /// Entity with start < end always passes the span validity check in validate().
+        #[test]
+        fn entity_span_validity(
+            start in 0usize..10000,
+            len in 1usize..500,
+            conf in 0.0f64..=1.0,
+        ) {
+            let end = start + len;
+            // Build a source text long enough to cover the span
+            let text_content: String = "x".repeat(end);
+            let entity_text: String = text_content.chars().skip(start).take(len).collect();
+            let e = Entity::new(&entity_text, EntityType::Person, start, end, conf);
+            let issues = e.validate(&text_content);
+            // No InvalidSpan or SpanOutOfBounds issues
+            for issue in &issues {
+                match issue {
+                    ValidationIssue::InvalidSpan { .. } => {
+                        prop_assert!(false, "start < end should never produce InvalidSpan");
+                    }
+                    ValidationIssue::SpanOutOfBounds { .. } => {
+                        prop_assert!(false, "span within text should never produce SpanOutOfBounds");
+                    }
+                    _ => {} // TextMismatch or others are fine to check separately
+                }
+            }
+        }
+
+        /// EntityType::from_label(et.as_label()) == et for all standard (non-Custom, non-Other) types.
+        #[test]
+        fn entity_type_label_roundtrip_standard(
+            idx in 0usize..13,
+        ) {
+            let standard_types = [
+                EntityType::Person,
+                EntityType::Organization,
+                EntityType::Location,
+                EntityType::Date,
+                EntityType::Time,
+                EntityType::Money,
+                EntityType::Percent,
+                EntityType::Quantity,
+                EntityType::Cardinal,
+                EntityType::Ordinal,
+                EntityType::Email,
+                EntityType::Url,
+                EntityType::Phone,
+            ];
+            let et = &standard_types[idx];
+            let label = et.as_label();
+            let roundtripped = EntityType::from_label(label);
+            prop_assert_eq!(&roundtripped, et,
+                "from_label(as_label()) must roundtrip for {:?} (label={:?})", et, label);
+        }
+
+        /// Span containment: if span A contains span B, then A.start <= B.start && A.end >= B.end.
+        #[test]
+        fn span_containment_property(
+            a_start in 0usize..5000,
+            a_len in 1usize..5000,
+            b_offset in 0usize..5000,
+            b_len in 1usize..5000,
+        ) {
+            let a_end = a_start + a_len;
+            let b_start = a_start + (b_offset % a_len); // B starts within A
+            let b_end_candidate = b_start + b_len;
+
+            // Only test the containment invariant when B is actually inside A
+            if b_start >= a_start && b_end_candidate <= a_end {
+                // B is contained in A
+                prop_assert!(a_start <= b_start);
+                prop_assert!(a_end >= b_end_candidate);
+
+                // Also verify via Entity overlap: A must overlap B if A contains B
+                let ea = Entity::new("a", EntityType::Person, a_start, a_end, 1.0);
+                let eb = Entity::new("b", EntityType::Person, b_start, b_end_candidate, 1.0);
+                prop_assert!(ea.overlaps(&eb),
+                    "containing span must overlap contained span");
+            }
+        }
+
+        /// Serde roundtrip preserves all fields of Entity.
+        #[test]
+        fn entity_serde_roundtrip(
+            start in 0usize..10000,
+            len in 1usize..500,
+            conf in 0.0f64..=1.0,
+            type_idx in 0usize..5,
+        ) {
+            let end = start + len;
+            let types = [
+                EntityType::Person,
+                EntityType::Organization,
+                EntityType::Location,
+                EntityType::Date,
+                EntityType::Email,
+            ];
+            let et = types[type_idx].clone();
+            let text = format!("entity_{}", start);
+            let e = Entity::new(&text, et, start, end, conf);
+
+            let json = serde_json::to_string(&e).unwrap();
+            let e2: Entity = serde_json::from_str(&json).unwrap();
+
+            prop_assert_eq!(&e.text, &e2.text);
+            prop_assert_eq!(&e.entity_type, &e2.entity_type);
+            prop_assert_eq!(e.start, e2.start);
+            prop_assert_eq!(e.end, e2.end);
+            // f64 roundtrip through JSON: compare with tolerance
+            prop_assert!((e.confidence - e2.confidence).abs() < 1e-10,
+                "confidence roundtrip: {} vs {}", e.confidence, e2.confidence);
+            prop_assert_eq!(&e.normalized, &e2.normalized);
+            prop_assert_eq!(&e.kb_id, &e2.kb_id);
+        }
+
+        /// DiscontinuousSpan: total_len() == sum of individual segment lengths.
+        #[test]
+        fn discontinuous_span_total_length(
+            segments in proptest::collection::vec(
+                (0usize..5000, 1usize..500),
+                1..6
+            ),
+        ) {
+            let ranges: Vec<std::ops::Range<usize>> = segments.iter()
+                .map(|&(start, len)| start..start + len)
+                .collect();
+            let expected_sum: usize = ranges.iter().map(|r| r.end - r.start).sum();
+            let span = DiscontinuousSpan::new(ranges);
+            prop_assert_eq!(span.total_len(), expected_sum,
+                "total_len must equal sum of segment lengths");
+        }
     }
 
     // ========================================================================
