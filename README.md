@@ -32,7 +32,7 @@ All backends produce the same output type: variable-length spans with character 
 | `bert-onnx` | Sequence labeling (BERT) | PER/ORG/LOC/MISC | No | — | [bert-base-NER-onnx](https://huggingface.co/protectai/bert-base-NER-onnx) | Devlin et al. [8] |
 | `tplinker` | Joint entity-relation (heuristic) | Custom | — | Heuristic | None | [10] |
 | `crf` | Conditional Random Field | Trained | No | — | Bundled (`bundled-crf-weights`) | Lafferty et al. [9] |
-| `hmm` | Hidden Markov Model | Trained | No | — | Bundled (`bundled-hmm-params`) | [9] |
+| `hmm` | Hidden Markov Model | Trained | No | — | Bundled (`bundled-hmm-params`) | Rabiner [12] |
 | `pattern` | Regex grammars | DATE/MONEY/EMAIL/URL/PHONE | N/A | — | None | -- |
 | `heuristic` | Capitalization + context | PER/ORG/LOC | N/A | — | None | -- |
 | `ensemble` | Weighted voting combiner | Mixed | Varies | — | Varies | -- |
@@ -190,8 +190,22 @@ COPY Relation FROM '/tmp/kg/doc-edges.csv' (HEADER=TRUE);
 
 ```toml
 [dependencies]
-anno = "0.3"
+anno-lib = "0.3"
 ```
+
+The crate is published as `anno-lib` on crates.io; the Rust import name is `anno`.
+
+### Feature flags
+
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `onnx` | Yes | ONNX Runtime backends (GLiNER, NuNER, BERT, W2NER) via `ort` |
+| `candle` | No | Pure-Rust Candle backends (no C++ runtime needed) |
+| `eval` | No | Evaluation harnesses, dataset loaders, and matrix sampling |
+| `graph` | No | Knowledge-graph export adapters (N-Triples, JSON-LD, Kuzu) |
+| `schema` | No | JSON Schema generation for output types via `schemars` |
+
+The `onnx` feature (default) pulls in `ort` (ONNX Runtime bindings), which requires a C++ runtime. For minimal builds, use `default-features = false`.
 
 Basic extraction:
 
@@ -296,6 +310,7 @@ Key citations; see [docs/REFERENCES.md](docs/REFERENCES.md) for the full list wi
 9. Lafferty et al., *ICML* 2001 (CRF).
 10. Wang et al., *COLING* 2020 (TPLinker). [[arXiv]](https://arxiv.org/abs/2010.13415)
 11. Zaratiana et al., 2025 (GLiNER2). [[arXiv]](https://arxiv.org/abs/2507.18546)
+12. Rabiner, *Proceedings of the IEEE* 1989 (HMM tutorial). [[PDF]](https://www.cs.ubc.ca/~murphyk/Bayes/rabiner.pdf)
 
 Citeable via [CITATION.cff](CITATION.cff).
 

@@ -513,8 +513,8 @@ fn greedy_assignment(
 
 /// CEAF entity-based metric (Luo, 2005), using the phi4 similarity function.
 ///
-/// Finds an optimal one-to-one alignment between predicted and gold entities
-/// using a greedy approximation to the Kuhn-Munkres (Hungarian) algorithm.
+/// Finds a one-to-one alignment between predicted and gold entities
+/// using a greedy approximation (not the Kuhn-Munkres / Hungarian algorithm).
 /// The entity similarity function phi4 counts shared mentions:
 ///
 /// ```text
