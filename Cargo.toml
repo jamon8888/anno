@@ -125,6 +125,13 @@ readme = "README.md"
 keywords = ["ner", "nlp", "extraction", "coreference", "rust"]
 categories = ["text-processing"]
 publish = true
+include = [
+    "/src/**/*.rs",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/LICENSE-*",
+    "/README.md",
+]
 
 [dependencies]
 anno-lib = { path = "crates/anno", package = "anno-lib", version = "0.3.0", default-features = false }
