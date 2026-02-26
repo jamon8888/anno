@@ -759,3 +759,551 @@ impl CoreferenceResolver for DiscourseAwareResolver {
         "discourse-aware"
     }
 }
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eval::coref::{entities_to_chains, CorefChain, Mention};
+    use crate::eval::coref_metrics::{
+        b_cubed_score, ceaf_e_score, conll_f1, lea_score, muc_score, CorefEvaluation, CorefScores,
+    };
+    use anno_core::CanonicalId;
+
+    // ---- helpers ----
+
+    fn person(text: &str, start: usize, end: usize) -> Entity {
+        Entity::new(text, EntityType::Person, start, end, 0.9)
+    }
+
+    fn org(text: &str, start: usize, end: usize) -> Entity {
+        Entity::new(text, EntityType::Organization, start, end, 0.9)
+    }
+
+    fn loc(text: &str, start: usize, end: usize) -> Entity {
+        Entity::new(text, EntityType::Location, start, end, 0.9)
+    }
+
+    // ---- SimpleCorefResolver: basic clustering ----
+
+    #[test]
+    fn resolve_empty_entities() {
+        let resolver = SimpleCorefResolver::default();
+        let result = resolver.resolve(&[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn resolve_single_entity_gets_cluster_id() {
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![person("Alice", 0, 5)];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(resolved.len(), 1);
+        assert!(resolved[0].canonical_id.is_some(), "singleton should get a cluster id");
+    }
+
+    #[test]
+    fn exact_name_match_clusters_together() {
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("John Smith", 0, 10),
+            org("Acme Corp", 15, 24),
+            person("John Smith", 30, 40),
+        ];
+        let resolved = resolver.resolve(&entities);
+
+        // Both "John Smith" mentions should share the same cluster.
+        let id0 = resolved[0].canonical_id.unwrap();
+        let id2 = resolved[2].canonical_id.unwrap();
+        assert_eq!(id0, id2, "exact name matches must share cluster id");
+
+        // "Acme Corp" should be in a different cluster.
+        let id1 = resolved[1].canonical_id.unwrap();
+        assert_ne!(id0, id1, "different names must be in different clusters");
+    }
+
+    #[test]
+    fn fuzzy_substring_match() {
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: true,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("John Smith", 0, 10),
+            person("Smith", 20, 25),
+        ];
+        let resolved = resolver.resolve(&entities);
+        let id0 = resolved[0].canonical_id.unwrap();
+        let id1 = resolved[1].canonical_id.unwrap();
+        assert_eq!(id0, id1, "substring match should cluster together");
+    }
+
+    #[test]
+    fn fuzzy_matching_disabled_does_not_merge_substrings() {
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("John Smith", 0, 10),
+            person("Smith", 20, 25),
+        ];
+        let resolved = resolver.resolve(&entities);
+        let id0 = resolved[0].canonical_id.unwrap();
+        let id1 = resolved[1].canonical_id.unwrap();
+        assert_ne!(id0, id1, "with fuzzy off, substring should not cluster");
+    }
+
+    #[test]
+    fn type_mismatch_prevents_clustering() {
+        let resolver = SimpleCorefResolver::default();
+        // Same text, different entity types.
+        let entities = vec![
+            person("Apple", 0, 5),
+            org("Apple", 10, 15),
+        ];
+        let resolved = resolver.resolve(&entities);
+        let id0 = resolved[0].canonical_id.unwrap();
+        let id1 = resolved[1].canonical_id.unwrap();
+        assert_ne!(
+            id0, id1,
+            "same text but different EntityType must be separate clusters"
+        );
+    }
+
+    // ---- Pronoun resolution ----
+
+    #[test]
+    fn pronoun_resolves_to_nearest_compatible_entity() {
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("Alice", 0, 5),
+            person("Bob", 10, 13),
+            person("she", 20, 23),
+        ];
+        let resolved = resolver.resolve(&entities);
+        // "she" is feminine; "Bob" is not gendered (unknown) but "Alice" is also unknown in
+        // infer_gender since it's not a pronoun. The resolver picks the nearest non-pronoun that
+        // is compatible.  Since infer_gender returns None for proper nouns, gender doesn't filter,
+        // so the nearest compatible entity ("Bob") wins.
+        let she_id = resolved[2].canonical_id.unwrap();
+        let bob_id = resolved[1].canonical_id.unwrap();
+        assert_eq!(she_id, bob_id, "pronoun should resolve to nearest compatible entity");
+    }
+
+    #[test]
+    fn pronoun_it_resolves_to_org() {
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("Alice", 0, 5),
+            org("Acme Corp", 10, 19),
+            org("it", 25, 27),
+        ];
+        let resolved = resolver.resolve(&entities);
+        // "it" is compatible with Organization but not Person.
+        let it_id = resolved[2].canonical_id.unwrap();
+        let acme_id = resolved[1].canonical_id.unwrap();
+        assert_eq!(it_id, acme_id, "\"it\" should resolve to the org, not the person");
+    }
+
+    #[test]
+    fn pronoun_it_not_compatible_with_person() {
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("Alice", 0, 5),
+            // "it" referring to a person entity type should not match.
+            person("it", 10, 12),
+        ];
+        let resolved = resolver.resolve(&entities);
+        let alice_id = resolved[0].canonical_id.unwrap();
+        let it_id = resolved[1].canonical_id.unwrap();
+        assert_ne!(alice_id, it_id, "\"it\" is not compatible with Person");
+    }
+
+    // ---- resolve_to_chains ----
+
+    #[test]
+    fn resolve_to_chains_produces_correct_clusters() {
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("Marie Curie", 0, 11),
+            org("Nobel Committee", 15, 30),
+            person("Marie Curie", 35, 46),
+            person("she", 50, 53),
+        ];
+        let chains = resolver.resolve_to_chains(&entities);
+        // At least one chain should have multiple mentions.
+        let multi_mention_chains: Vec<_> = chains.iter().filter(|c| c.len() > 1).collect();
+        assert!(
+            !multi_mention_chains.is_empty(),
+            "coreferent entities should produce multi-mention chains"
+        );
+    }
+
+    // ---- CorefEvaluation: perfect prediction ----
+
+    #[test]
+    fn coref_evaluation_perfect_prediction() {
+        let gold = vec![
+            CorefChain::new(vec![
+                Mention::new("John", 0, 4),
+                Mention::new("he", 10, 12),
+            ]),
+            CorefChain::new(vec![
+                Mention::new("IBM", 20, 23),
+                Mention::new("the company", 30, 41),
+            ]),
+        ];
+        let eval = CorefEvaluation::compute(&gold, &gold);
+
+        assert!(
+            (eval.conll_f1 - 1.0).abs() < 1e-9,
+            "perfect prediction should yield CoNLL F1 = 1.0, got {}",
+            eval.conll_f1
+        );
+        assert!((eval.muc.f1 - 1.0).abs() < 1e-9);
+        assert!((eval.b_cubed.f1 - 1.0).abs() < 1e-9);
+        assert!((eval.ceaf_e.f1 - 1.0).abs() < 1e-9);
+        assert!((eval.lea.f1 - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn coref_evaluation_no_overlap() {
+        let predicted = vec![CorefChain::new(vec![
+            Mention::new("Alice", 0, 5),
+            Mention::new("she", 10, 13),
+        ])];
+        let gold = vec![CorefChain::new(vec![
+            Mention::new("Bob", 20, 23),
+            Mention::new("he", 30, 32),
+        ])];
+        let eval = CorefEvaluation::compute(&predicted, &gold);
+        // No common mentions => metrics should be zero (except BLANC edge case).
+        assert!(
+            eval.muc.f1.abs() < 1e-9,
+            "no overlap should yield MUC F1 = 0, got {}",
+            eval.muc.f1
+        );
+        assert!(eval.b_cubed.f1.abs() < 1e-9);
+        assert!(eval.conll_f1.abs() < 1e-9);
+    }
+
+    #[test]
+    fn coref_evaluation_partial_overlap() {
+        // Gold: {A, B, C} in one cluster.
+        let gold = vec![CorefChain::new(vec![
+            Mention::new("John", 0, 4),
+            Mention::new("he", 10, 12),
+            Mention::new("him", 20, 23),
+        ])];
+        // Predicted: splits into two clusters: {A, B} and {C}.
+        let predicted = vec![
+            CorefChain::new(vec![
+                Mention::new("John", 0, 4),
+                Mention::new("he", 10, 12),
+            ]),
+            CorefChain::new(vec![Mention::new("him", 20, 23)]),
+        ];
+        let eval = CorefEvaluation::compute(&predicted, &gold);
+        // Should be imperfect but nonzero.
+        assert!(eval.conll_f1 > 0.0, "partial overlap should yield nonzero F1");
+        assert!(eval.conll_f1 < 1.0, "partial overlap should not yield perfect F1");
+    }
+
+    // ---- Individual metric functions ----
+
+    #[test]
+    fn muc_score_perfect() {
+        let chains = vec![CorefChain::new(vec![
+            Mention::new("A", 0, 1),
+            Mention::new("B", 5, 6),
+            Mention::new("C", 10, 11),
+        ])];
+        let (p, r, f1) = muc_score(&chains, &chains);
+        assert!((p - 1.0).abs() < 1e-9);
+        assert!((r - 1.0).abs() < 1e-9);
+        assert!((f1 - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn b_cubed_singleton_perfect() {
+        // Single mention chains: B3 should give perfect scores when predicted == gold.
+        let chains = vec![
+            CorefChain::new(vec![Mention::new("X", 0, 1)]),
+            CorefChain::new(vec![Mention::new("Y", 5, 6)]),
+        ];
+        let (p, r, f1) = b_cubed_score(&chains, &chains);
+        assert!((p - 1.0).abs() < 1e-9);
+        assert!((r - 1.0).abs() < 1e-9);
+        assert!((f1 - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn lea_score_empty() {
+        let (p, r, f1) = lea_score(&[], &[]);
+        // Empty inputs: no common mentions.
+        assert!(p.abs() < 1e-9);
+        assert!(r.abs() < 1e-9);
+        assert!(f1.abs() < 1e-9);
+    }
+
+    #[test]
+    fn conll_f1_is_average_of_three() {
+        let gold = vec![CorefChain::new(vec![
+            Mention::new("A", 0, 1),
+            Mention::new("B", 5, 6),
+        ])];
+        let predicted = vec![CorefChain::new(vec![
+            Mention::new("A", 0, 1),
+            Mention::new("B", 5, 6),
+        ])];
+        let conll = conll_f1(&predicted, &gold);
+        let (_, _, muc_f1) = muc_score(&predicted, &gold);
+        let (_, _, b3_f1) = b_cubed_score(&predicted, &gold);
+        let (_, _, ceaf_f1) = ceaf_e_score(&predicted, &gold);
+        let expected = (muc_f1 + b3_f1 + ceaf_f1) / 3.0;
+        assert!(
+            (conll - expected).abs() < 1e-9,
+            "conll_f1 should equal mean of MUC, B3, CEAFe F1"
+        );
+    }
+
+    // ---- CorefScores ----
+
+    #[test]
+    fn coref_scores_f1_computation() {
+        let s = CorefScores::new(0.8, 0.6);
+        let expected_f1 = 2.0 * 0.8 * 0.6 / (0.8 + 0.6);
+        assert!((s.f1 - expected_f1).abs() < 1e-9);
+    }
+
+    #[test]
+    fn coref_scores_zero_precision_and_recall() {
+        let s = CorefScores::new(0.0, 0.0);
+        assert!(s.f1.abs() < 1e-9, "0/0 should yield F1 = 0");
+    }
+
+    // ---- CorefEvaluation aggregate helpers ----
+
+    #[test]
+    fn coref_evaluation_all_f1_scores_len() {
+        let gold = vec![CorefChain::new(vec![
+            Mention::new("A", 0, 1),
+            Mention::new("B", 5, 6),
+        ])];
+        let eval = CorefEvaluation::compute(&gold, &gold);
+        assert_eq!(eval.all_f1_scores().len(), 6, "should report 6 metric F1 values");
+    }
+
+    #[test]
+    fn coref_evaluation_average_f1_upper_bound() {
+        // With perfect prediction, average F1 (across 6 metrics) should be high.
+        // BLANC can deviate from 1.0 when there is only one cluster (no negative pairs),
+        // so we check that average_f1 >= 0.9 rather than == 1.0.
+        let gold = vec![
+            CorefChain::new(vec![
+                Mention::new("A", 0, 1),
+                Mention::new("B", 5, 6),
+                Mention::new("C", 10, 11),
+            ]),
+            CorefChain::new(vec![
+                Mention::new("X", 20, 21),
+                Mention::new("Y", 25, 26),
+            ]),
+        ];
+        let eval = CorefEvaluation::compute(&gold, &gold);
+        assert!(
+            eval.average_f1() > 0.9,
+            "perfect prediction with multiple clusters should have high average F1, got {}",
+            eval.average_f1()
+        );
+        // The core three (MUC, B3, CEAFe) used in CoNLL should each be 1.0.
+        assert!((eval.muc.f1 - 1.0).abs() < 1e-9);
+        assert!((eval.b_cubed.f1 - 1.0).abs() < 1e-9);
+        assert!((eval.ceaf_e.f1 - 1.0).abs() < 1e-9);
+    }
+
+    // ---- BoxCorefResolver ----
+
+    #[test]
+    fn box_resolver_empty_entities() {
+        let resolver = BoxCorefResolver::new(BoxCorefConfig::default());
+        let result = resolver.resolve_with_boxes(&[], &[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn box_resolver_identical_boxes_cluster_together() {
+        let config = BoxCorefConfig {
+            coreference_threshold: 0.5,
+            enforce_syntactic_constraints: false,
+            ..BoxCorefConfig::default()
+        };
+        let resolver = BoxCorefResolver::new(config);
+
+        let entities = vec![
+            person("Alice", 0, 5),
+            person("she", 100, 103),
+        ];
+        // Identical boxes should have coreference_score = 1.0.
+        let box_a = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
+        let box_b = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
+        let boxes = vec![box_a, box_b];
+
+        let resolved = resolver.resolve_with_boxes(&entities, &boxes);
+        let id0 = resolved[0].canonical_id.unwrap();
+        let id1 = resolved[1].canonical_id.unwrap();
+        assert_eq!(id0, id1, "identical boxes should cluster together");
+    }
+
+    #[test]
+    fn box_resolver_distant_boxes_stay_separate() {
+        let config = BoxCorefConfig {
+            coreference_threshold: 0.5,
+            enforce_syntactic_constraints: false,
+            ..BoxCorefConfig::default()
+        };
+        let resolver = BoxCorefResolver::new(config);
+
+        let entities = vec![
+            person("Alice", 0, 5),
+            person("Bob", 100, 103),
+        ];
+        // Very different vectors => low coreference score.
+        let box_a = BoxEmbedding::from_vector(&[0.0, 0.0, 0.0], 0.01);
+        let box_b = BoxEmbedding::from_vector(&[100.0, 100.0, 100.0], 0.01);
+        let boxes = vec![box_a, box_b];
+
+        let resolved = resolver.resolve_with_boxes(&entities, &boxes);
+        let id0 = resolved[0].canonical_id.unwrap();
+        let id1 = resolved[1].canonical_id.unwrap();
+        assert_ne!(id0, id1, "distant boxes should remain separate");
+    }
+
+    #[test]
+    fn box_resolver_type_mismatch_prevents_merge() {
+        let config = BoxCorefConfig {
+            coreference_threshold: 0.5,
+            enforce_syntactic_constraints: false,
+            ..BoxCorefConfig::default()
+        };
+        let resolver = BoxCorefResolver::new(config);
+
+        // Same box coordinates but different entity types.
+        let entities = vec![
+            person("Apple", 0, 5),
+            org("Apple", 100, 105),
+        ];
+        let box_a = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
+        let box_b = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
+        let boxes = vec![box_a, box_b];
+
+        let resolved = resolver.resolve_with_boxes(&entities, &boxes);
+        let id0 = resolved[0].canonical_id.unwrap();
+        let id1 = resolved[1].canonical_id.unwrap();
+        assert_ne!(id0, id1, "different entity types must not merge even with identical boxes");
+    }
+
+    // ---- vectors_to_boxes ----
+
+    #[test]
+    fn vectors_to_boxes_correct_count() {
+        let embeddings = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]; // 2 entities, dim=3
+        let boxes = super::vectors_to_boxes(&embeddings, 3, Some(0.1));
+        assert_eq!(boxes.len(), 2);
+        assert_eq!(boxes[0].min.len(), 3);
+        assert_eq!(boxes[1].min.len(), 3);
+    }
+
+    #[test]
+    fn vectors_to_boxes_radius_applied() {
+        let embeddings = vec![5.0, 10.0];
+        let boxes = super::vectors_to_boxes(&embeddings, 2, Some(0.5));
+        assert_eq!(boxes.len(), 1);
+        // min should be center - radius, max should be center + radius.
+        assert!((boxes[0].min[0] - 4.5).abs() < 1e-6);
+        assert!((boxes[0].max[0] - 5.5).abs() < 1e-6);
+        assert!((boxes[0].min[1] - 9.5).abs() < 1e-6);
+        assert!((boxes[0].max[1] - 10.5).abs() < 1e-6);
+    }
+
+    // ---- entities_to_chains round-trip ----
+
+    #[test]
+    fn entities_to_chains_groups_by_canonical_id() {
+        let mut e1 = person("Alice", 0, 5);
+        e1.canonical_id = Some(CanonicalId::new(1));
+        let mut e2 = person("she", 10, 13);
+        e2.canonical_id = Some(CanonicalId::new(1));
+        let mut e3 = org("Acme", 20, 24);
+        e3.canonical_id = Some(CanonicalId::new(2));
+
+        let chains = entities_to_chains(&[e1, e2, e3]);
+        // Cluster 1 should have 2 mentions, cluster 2 should have 1.
+        let two_mention = chains.iter().find(|c| c.len() == 2);
+        let one_mention = chains.iter().find(|c| c.len() == 1);
+        assert!(two_mention.is_some(), "should have a 2-mention chain");
+        assert!(one_mention.is_some(), "should have a 1-mention chain");
+    }
+
+    #[test]
+    fn entities_without_canonical_id_become_singletons() {
+        let entities = vec![person("Alice", 0, 5), person("Bob", 10, 13)];
+        let chains = entities_to_chains(&entities);
+        // Each unresolved entity becomes its own singleton chain.
+        assert_eq!(chains.len(), 2);
+        assert!(chains.iter().all(|c| c.len() == 1));
+    }
+
+    // ---- CoreferenceResolver trait impl ----
+
+    #[test]
+    fn simple_resolver_trait_name() {
+        let resolver = SimpleCorefResolver::default();
+        assert_eq!(CoreferenceResolver::name(&resolver), "simple-rule-based");
+    }
+
+    #[test]
+    fn box_resolver_trait_name() {
+        let resolver = BoxCorefResolver::new(BoxCorefConfig::default());
+        assert_eq!(CoreferenceResolver::name(&resolver), "box-embedding");
+    }
+
+    // ---- End-to-end: resolve then evaluate ----
+
+    #[test]
+    fn resolve_then_evaluate_round_trip() {
+        let resolver = SimpleCorefResolver::default();
+
+        // Synthetic document: "Alice went to Paris. She loved Paris."
+        let entities = vec![
+            person("Alice", 0, 5),
+            loc("Paris", 14, 19),
+            person("she", 21, 24),
+            loc("Paris", 31, 36),
+        ];
+
+        let predicted_chains = resolver.resolve_to_chains(&entities);
+        // Build gold: Alice+she in one cluster, Paris+Paris in another.
+        let gold_chains = vec![
+            CorefChain::new(vec![
+                Mention::new("Alice", 0, 5),
+                Mention::new("she", 21, 24),
+            ]),
+            CorefChain::new(vec![
+                Mention::new("Paris", 14, 19),
+                Mention::new("Paris", 31, 36),
+            ]),
+        ];
+
+        let eval = CorefEvaluation::compute(&predicted_chains, &gold_chains);
+        // The resolver should get at least partial credit.
+        assert!(
+            eval.conll_f1 > 0.0,
+            "resolve-then-evaluate should produce nonzero CoNLL F1"
+        );
+    }
+}
