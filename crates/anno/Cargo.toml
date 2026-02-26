@@ -117,3 +117,7 @@ production = [
 # redistribution of large artifacts.
 bundled-crf-weights = []
 bundled-hmm-params = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
