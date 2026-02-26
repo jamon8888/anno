@@ -160,9 +160,9 @@ anno export --input docs/ --output /tmp/kg/ \
 # → <entity/person/0_Lynn_Conway_0> <rel/works_for> <entity/org/1_IBM_13> .
 ```
 
-### Property Graph (Kuzu)
+### Property Graph CSV
 
-Export node and edge tables for [Kuzu](https://kuzudb.com):
+Export node and edge tables as CSV for import into any property-graph database:
 
 ```sh
 # Semantic edges (gliner2 or tplinker)
@@ -172,19 +172,9 @@ anno export --input docs/ --output /tmp/kg/ --format kuzu --model gliner2
 anno export --input docs/ --output /tmp/kg/ --format kuzu
 ```
 
-Each file produces `{stem}-nodes.csv` + `{stem}-edges.csv`. Schema:
-
-```cypher
-CREATE NODE TABLE Entity(
-  id STRING, entity_type STRING, text STRING,
-  start INT64, end INT64, source STRING,
-  PRIMARY KEY(id)
-);
-CREATE REL TABLE Relation(FROM Entity TO Entity, rel_type STRING, confidence DOUBLE);
-
-COPY Entity   FROM '/tmp/kg/doc-nodes.csv' (HEADER=TRUE);
-COPY Relation FROM '/tmp/kg/doc-edges.csv' (HEADER=TRUE);
-```
+Each file produces `{stem}-nodes.csv` + `{stem}-edges.csv` with columns:
+- **Nodes**: `id`, `entity_type`, `text`, `start`, `end`, `source`
+- **Edges**: `from`, `to`, `rel_type`, `confidence`
 
 ## Library
 
@@ -202,7 +192,7 @@ The crate is published as `anno-lib` on crates.io; the Rust import name is `anno
 | `onnx` | Yes | ONNX Runtime backends (GLiNER, NuNER, BERT, W2NER) via `ort` |
 | `candle` | No | Pure-Rust Candle backends (no C++ runtime needed) |
 | `eval` | No | Evaluation harnesses, dataset loaders, and matrix sampling |
-| `graph` | No | Knowledge-graph export adapters (N-Triples, JSON-LD, Kuzu) |
+| `graph` | No | Knowledge-graph export adapters (N-Triples, JSON-LD, CSV) |
 | `schema` | No | JSON Schema generation for output types via `schemars` |
 
 The `onnx` feature (default) pulls in `ort` (ONNX Runtime bindings), which requires a C++ runtime. For minimal builds, use `default-features = false`.
