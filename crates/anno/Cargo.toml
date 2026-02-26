@@ -1,6 +1,6 @@
 [package]
 name = "anno-lib"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2021"
 description = "Information extraction for Rust: Named Entity Recognition (NER), coreference resolution, and structured extraction"
 license = "MIT OR Apache-2.0"
@@ -23,8 +23,8 @@ include = [
 name = "anno"
 
 [dependencies]
-anno-core = { path = "../anno-core", version = "0.3.4" }
-anno-metrics = { path = "../anno-metrics", version = "0.3.4", optional = true }
+anno-core = { path = "../anno-core", version = "0.3.5" }
+anno-metrics = { path = "../anno-metrics", version = "0.3.5", optional = true }
 textprep = { workspace = true }
 sketchir = { workspace = true }
 clump = { workspace = true }
