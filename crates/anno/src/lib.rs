@@ -31,6 +31,7 @@
 //! `ANNO_NO_DOWNLOADS=1` (after prefetching models).
 
 #![warn(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 // Allow unit tests (and included CI test modules) to refer to this crate as `anno::...`,
 // matching integration-test style imports.
@@ -47,6 +48,7 @@ pub mod error;
 /// This module is only available when the legacy `eval` feature (or the preferred `analysis`
 /// alias) is enabled.
 #[cfg(any(feature = "analysis", feature = "eval"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "analysis", feature = "eval"))))]
 pub mod eval;
 /// Entity feature extraction for downstream ML and analysis.
 pub mod features;
@@ -58,6 +60,7 @@ pub mod ingest;
 pub mod joint;
 /// Keyword and keyphrase extraction (TF-IDF, YAKE, TextRank).
 #[cfg(feature = "graph")]
+#[cfg_attr(docsrs, doc(cfg(feature = "graph")))]
 pub mod keywords;
 pub mod lang;
 /// Knowledge-base linking helpers (experimental).
@@ -65,16 +68,19 @@ pub mod linking;
 pub mod offset;
 /// Shared PageRank algorithm for graph-based ranking.
 #[cfg(feature = "graph")]
+#[cfg_attr(docsrs, doc(cfg(feature = "graph")))]
 pub mod pagerank;
 /// Preprocessing for mention detection.
 pub mod preprocess;
 /// Entity salience and importance ranking.
 #[cfg(feature = "graph")]
+#[cfg_attr(docsrs, doc(cfg(feature = "graph")))]
 pub mod salience;
 pub mod schema;
 pub mod similarity;
 /// Extractive summarization.
 #[cfg(feature = "graph")]
+#[cfg_attr(docsrs, doc(cfg(feature = "graph")))]
 pub mod summarize;
 pub mod sync;
 /// Temporal entity tracking, parsing, and diachronic NER.
@@ -100,6 +106,7 @@ pub mod types;
 /// See `discourse::centering` for salience-based pronoun resolution and
 /// `discourse::uncertain_reference` for handling ambiguous references.
 #[cfg(feature = "discourse")]
+#[cfg_attr(docsrs, doc(cfg(feature = "discourse")))]
 pub mod discourse;
 
 // Re-export error types
@@ -624,9 +631,11 @@ pub use backends::mention_ranking::{
 pub use backends::inference::*;
 
 #[cfg(feature = "onnx")]
+#[cfg_attr(docsrs, doc(cfg(feature = "onnx")))]
 pub use backends::{BertNEROnnx, GLiNEROnnx};
 
 #[cfg(feature = "candle")]
+#[cfg_attr(docsrs, doc(cfg(feature = "candle")))]
 pub use backends::CandleNER;
 
 // Constants
