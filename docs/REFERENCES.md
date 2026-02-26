@@ -81,4 +81,3 @@ Academic papers, datasets, and software cited across the anno codebase.
 - lattix. <https://github.com/arclabs561/lattix> — graph/KG substrate used by `anno-graph`.
 - muxer. <https://github.com/arclabs561/muxer> — randomised matrix sampler used by `anno-eval`.
 - Oxigraph. <https://github.com/oxigraph/oxigraph> — recommended downstream RDF store for N-Triples export.
-- Kuzu. <https://kuzudb.com> — recommended downstream property-graph DB for CSV export.
