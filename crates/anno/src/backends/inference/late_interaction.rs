@@ -57,16 +57,22 @@ pub trait LateInteraction: Send + Sync {
 }
 
 /// Dot product interaction (default, fast).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct DotProductInteraction {
     /// Temperature scaling (higher = sharper distribution)
     pub temperature: f32,
 }
 
+impl Default for DotProductInteraction {
+    fn default() -> Self {
+        Self { temperature: 1.0 }
+    }
+}
+
 impl DotProductInteraction {
     /// Create with default temperature (1.0).
     pub fn new() -> Self {
-        Self { temperature: 1.0 }
+        Self::default()
     }
 
     /// Create with custom temperature.
