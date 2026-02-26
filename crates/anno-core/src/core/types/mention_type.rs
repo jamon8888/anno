@@ -45,8 +45,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// # Examples
 ///
-/// ```rust,ignore
-/// use anno_core::types::MentionType;
+/// ```rust
+/// use anno_core::MentionType;
 ///
 /// let mention_type = MentionType::classify("John Smith");
 /// assert_eq!(mention_type, MentionType::Proper);
@@ -159,8 +159,8 @@ impl MentionType {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use anno_core::types::MentionType;
+    /// ```rust
+    /// use anno_core::MentionType;
     ///
     /// assert_eq!(MentionType::classify("Barack Obama"), MentionType::Proper);
     /// assert_eq!(MentionType::classify("the former president"), MentionType::Nominal);

@@ -12,8 +12,8 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use anno_core::types::{SignalId, TrackId};
+//! ```rust
+//! use anno_core::{SignalId, TrackId};
 //!
 //! fn process_signal(id: SignalId) { /* ... */ }
 //! fn process_track(id: TrackId) { /* ... */ }
@@ -211,8 +211,8 @@ define_id! {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use anno_core::types::CharOffset;
+/// ```rust
+/// use anno_core::core::types::CharOffset;
 ///
 /// let text = "日本語";
 /// let start = CharOffset::new(0);

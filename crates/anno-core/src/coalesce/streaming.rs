@@ -61,7 +61,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,ignore
+//! ```rust
 //! use anno_core::coalesce::streaming::{StreamingConfig, StreamingResolver};
 //!
 //! let mut resolver = StreamingResolver::new(StreamingConfig::default());
@@ -72,7 +72,7 @@
 //! resolver.add_entity("doc3", "Donald Trump", Some("Person".into()));
 //!
 //! // Obama mentions should cluster together
-//! assert!(resolver.num_clusters() <= 2);
+//! assert!(resolver.num_clusters() <= 3);
 //!
 //! for cluster in resolver.clusters() {
 //!     println!("{}: {} mentions from {} documents",

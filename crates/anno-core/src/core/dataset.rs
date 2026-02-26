@@ -550,8 +550,9 @@ pub struct SplitSizes {
 ///
 /// # Implementing Custom Datasets
 ///
-/// ```rust,ignore
+/// ```rust
 /// use anno_core::core::dataset::*;
+/// use std::path::PathBuf;
 ///
 /// struct MyDataset {
 ///     path: PathBuf,

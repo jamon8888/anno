@@ -20,12 +20,12 @@ use serde::{Deserialize, Serialize};
 ///
 /// # Examples
 ///
-/// ```rust,ignore
-/// use anno_core::types::MetricStats;
+/// ```rust
+/// use anno_core::core::MetricStats;
 ///
 /// let stats = MetricStats::from_samples(&[0.85, 0.87, 0.82, 0.88, 0.84]);
-/// println!("F1: {}", stats.format_ci());  // "85.2% ± 2.1%"
-/// println!("Range: {}", stats.format_range());  // "85.2% (82.0%-88.0%)"
+/// println!("F1: {}", stats.format_ci());
+/// println!("Range: {}", stats.format_range());
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct MetricStats {
@@ -70,8 +70,8 @@ impl MetricStats {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use anno_core::types::MetricStats;
+    /// ```rust
+    /// use anno_core::core::MetricStats;
     ///
     /// let stats = MetricStats::from_samples(&[0.80, 0.82, 0.85, 0.83, 0.80]);
     /// assert!((stats.mean - 0.82).abs() < 0.01);
@@ -146,11 +146,11 @@ impl MetricStats {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use anno_core::types::MetricStats;
+    /// ```rust
+    /// use anno_core::core::MetricStats;
     ///
     /// let stats = MetricStats::from_samples(&[0.85, 0.87, 0.83]);
-    /// println!("{}", stats.format_ci());  // e.g., "85.0% ± 2.3%"
+    /// println!("{}", stats.format_ci());
     /// ```
     #[must_use]
     pub fn format_ci(&self) -> String {

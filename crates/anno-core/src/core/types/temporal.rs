@@ -42,8 +42,8 @@ pub enum DatePrecision {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
-/// use anno_core::types::HistoricalDate;
+/// ```rust
+/// use anno_core::core::HistoricalDate;
 ///
 /// // Julius Caesar's death
 /// let caesar_death = HistoricalDate::bce(44, 3, 15);
@@ -75,8 +75,8 @@ impl HistoricalDate {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use anno_core::types::HistoricalDate;
+    /// ```rust
+    /// use anno_core::core::HistoricalDate;
     ///
     /// let date = HistoricalDate::ce(2024, 6, 15);
     /// assert_eq!(date.year, 2024);
@@ -97,8 +97,8 @@ impl HistoricalDate {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use anno_core::types::HistoricalDate;
+    /// ```rust
+    /// use anno_core::core::HistoricalDate;
     ///
     /// let date = HistoricalDate::bce(44, 3, 15);  // 44 BCE March 15
     /// assert_eq!(date.year, -44);
@@ -145,8 +145,8 @@ impl HistoricalDate {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use anno_core::types::HistoricalDate;
+    /// ```rust
+    /// use anno_core::core::HistoricalDate;
     ///
     /// let bce = HistoricalDate::bce(44, 3, 15);
     /// assert_eq!(bce.format_year(), "44 BCE");
@@ -167,8 +167,8 @@ impl HistoricalDate {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// use anno_core::types::HistoricalDate;
+    /// ```rust
+    /// use anno_core::core::HistoricalDate;
     ///
     /// let date = HistoricalDate::bce(44, 3, 15);
     /// assert_eq!(date.to_iso8601(), "-0044-03-15");
@@ -346,8 +346,8 @@ impl std::str::FromStr for HistoricalDate {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
-/// use anno_core::types::{HistoricalDate, TemporalValidity};
+/// ```rust
+/// use anno_core::core::{HistoricalDate, TemporalValidity};
 ///
 /// // Julius Caesar: 100 BCE - 44 BCE
 /// let caesar = TemporalValidity {
