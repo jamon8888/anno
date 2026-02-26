@@ -137,7 +137,17 @@ anno export --input docs/ --output /tmp/kg/ --format ntriples \
   --base-uri https://dbpedia.org/resource/
 ```
 
-Default (`urn:anno:`) produces stable URNs suitable for local use without a registered domain. The output is standard W3C N-Triples, so any SPARQL-capable store can query it.
+Default (`urn:anno:`) produces stable URNs suitable for local use without a registered domain. The output is standard W3C N-Triples, so any SPARQL-capable store can query it:
+
+```sh
+# Example: load into a SPARQL store and query
+cat /tmp/kg/*.nt | your-rdf-store load --format ntriples
+
+your-rdf-store query 'SELECT ?label WHERE {
+  ?e a <https://myproject.example.com/kg/vocab#PERType> ;
+     <http://www.w3.org/2000/01/rdf-schema#label> ?label .
+}'
+```
 
 **Semantic relation triples** — `RelationCapable` backends (`tplinker`, `gliner2`) produce typed `(head, relation, tail)` triples instead of co-occurrence edges. Use `--format graph-ntriples` (`--features graph`) for routing through the internal graph substrate:
 
