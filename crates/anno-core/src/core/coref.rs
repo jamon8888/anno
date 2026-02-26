@@ -912,3 +912,76 @@ mod tests {
         assert_eq!(chain.mentions[0].text, "John");
     }
 }
+
+#[cfg(test)]
+mod proptests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+    use proptest::prelude::*;
+
+    /// Strategy to generate a Mention with bounded offsets.
+    fn arb_mention(max_offset: usize) -> impl Strategy<Value = Mention> {
+        (0usize..max_offset, 1usize..500)
+            .prop_map(|(start, len)| Mention::new(format!("m_{}", start), start, start + len))
+    }
+
+    proptest! {
+        /// Mentions sort by (start, end) consistently after CorefChain::new.
+        #[test]
+        fn mention_ordering_after_chain_construction(
+            mentions in proptest::collection::vec(arb_mention(10000), 1..20),
+        ) {
+            let chain = CorefChain::new(mentions);
+            for w in chain.mentions.windows(2) {
+                prop_assert!(
+                    (w[0].start, w[0].end) <= (w[1].start, w[1].end),
+                    "mentions must be sorted by (start, end): ({},{}) vs ({},{})",
+                    w[0].start, w[0].end, w[1].start, w[1].end
+                );
+            }
+        }
+
+        /// CorefChain constructed with at least one mention is never empty.
+        #[test]
+        fn coref_chain_non_empty(
+            mentions in proptest::collection::vec(arb_mention(10000), 1..20),
+        ) {
+            let n = mentions.len();
+            let chain = CorefChain::new(mentions);
+            prop_assert!(!chain.is_empty());
+            prop_assert_eq!(chain.len(), n);
+        }
+
+        /// CorefChain::singleton always produces a chain with exactly one mention.
+        #[test]
+        fn coref_chain_singleton_has_one(start in 0usize..10000, len in 1usize..500) {
+            let m = Mention::new("x", start, start + len);
+            let chain = CorefChain::singleton(m);
+            prop_assert!(chain.is_singleton());
+            prop_assert_eq!(chain.len(), 1);
+            prop_assert_eq!(chain.link_count(), 0);
+        }
+
+        /// Mention::overlaps is symmetric.
+        #[test]
+        fn mention_overlap_symmetric(
+            s1 in 0usize..10000, len1 in 1usize..500,
+            s2 in 0usize..10000, len2 in 1usize..500,
+        ) {
+            let m1 = Mention::new("a", s1, s1 + len1);
+            let m2 = Mention::new("b", s2, s2 + len2);
+            prop_assert_eq!(m1.overlaps(&m2), m2.overlaps(&m1));
+        }
+
+        /// Mention serde roundtrip preserves all fields.
+        #[test]
+        fn mention_serde_roundtrip(
+            start in 0usize..10000, len in 1usize..500,
+        ) {
+            let m = Mention::new(format!("mention_{}", start), start, start + len);
+            let json = serde_json::to_string(&m).unwrap();
+            let m2: Mention = serde_json::from_str(&json).unwrap();
+            prop_assert_eq!(&m, &m2);
+        }
+    }
+}
