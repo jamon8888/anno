@@ -588,21 +588,24 @@ pub fn entities_to_chains(entities: &[Entity]) -> Vec<CorefChain> {
 ///
 /// # Example Implementation
 ///
-/// ```rust,ignore
-/// use anno_core::{CoreferenceResolver, Entity, CorefChain};
+/// ```rust
+/// use anno_core::{CoreferenceResolver, Entity, EntityType};
 ///
 /// struct ExactMatchResolver;
 ///
 /// impl CoreferenceResolver for ExactMatchResolver {
 ///     fn resolve(&self, entities: &[Entity]) -> Vec<Entity> {
-///         // Cluster entities with identical text
-///         // ... implementation ...
+///         // Trivially return entities unchanged for this example
+///         entities.to_vec()
 ///     }
 ///
 ///     fn name(&self) -> &'static str {
 ///         "exact-match"
 ///     }
 /// }
+///
+/// let resolver = ExactMatchResolver;
+/// assert_eq!(resolver.name(), "exact-match");
 /// ```
 pub trait CoreferenceResolver: Send + Sync {
     /// Resolve coreference, assigning canonical IDs to entities.
@@ -851,10 +854,7 @@ mod tests {
 
     #[test]
     fn test_without_singletons_preserves_non_singletons() {
-        let c1 = CorefChain::new(vec![
-            Mention::new("a", 0, 1),
-            Mention::new("b", 2, 3),
-        ]);
+        let c1 = CorefChain::new(vec![Mention::new("a", 0, 1), Mention::new("b", 2, 3)]);
         let c2 = CorefChain::new(vec![
             Mention::new("x", 10, 11),
             Mention::new("y", 12, 13),
@@ -904,7 +904,10 @@ mod tests {
             chain.canonical_id(),
             Some(super::super::types::CanonicalId::new(42))
         );
-        assert_eq!(chain.cluster_id, Some(super::super::types::CanonicalId::new(42)));
+        assert_eq!(
+            chain.cluster_id,
+            Some(super::super::types::CanonicalId::new(42))
+        );
         // Mentions should still be sorted.
         assert_eq!(chain.mentions[0].text, "John");
     }

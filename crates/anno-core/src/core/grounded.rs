@@ -658,8 +658,8 @@ impl Signal<Location> {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// use anno_core::grounded::{Signal, Location};
+    /// ```rust
+    /// use anno_core::{Signal, Location};
     ///
     /// let text = "Lynn Conway worked at IBM.";
     /// let good = Signal::new(0, Location::text(0, 11), "Lynn Conway", "PER", 0.9);
@@ -719,8 +719,8 @@ impl Signal<Location> {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// use anno_core::grounded::{Signal, Location};
+    /// ```rust
+    /// use anno_core::{Signal, Location};
     ///
     /// let text = "Lynn Conway worked at IBM.";
     /// let signal = Signal::<Location>::from_text(text, "Lynn Conway", "PER", 0.95);
@@ -1023,10 +1023,8 @@ impl Track {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// use anno_core::core::grounded::Track;
-    /// use anno_core::core::types::TypeLabel;
-    /// use anno_core::EntityType;
+    /// ```rust
+    /// use anno_core::{Track, TypeLabel, EntityType};
     ///
     /// let track = Track::new(0, "Marie Curie")
     ///     .with_type_label(TypeLabel::Core(EntityType::Person));
@@ -1452,14 +1450,14 @@ impl Identity {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// use anno_core::grounded::{GroundedDocument, Signal, Track, Identity, Location};
+/// ```rust
+/// use anno_core::{GroundedDocument, Signal, Track, Identity, Location};
 ///
 /// let mut doc = GroundedDocument::new("doc1", "Marie Curie won the Nobel Prize. She was a physicist.");
 ///
 /// // Add signals (Level 1)
-/// doc.add_signal(Signal::new(0, Location::text(0, 12), "Marie Curie", "Person", 0.95));
-/// doc.add_signal(Signal::new(1, Location::text(38, 41), "She", "Person", 0.88));
+/// doc.add_signal(Signal::new(0, Location::text(0, 11), "Marie Curie", "Person", 0.95));
+/// doc.add_signal(Signal::new(1, Location::text(33, 36), "She", "Person", 0.88));
 ///
 /// // Form track (Level 2)
 /// let mut track = Track::new(0, "Marie Curie");
@@ -1975,8 +1973,8 @@ impl GroundedDocument {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// use anno_core::grounded::{GroundedDocument, Signal, Location};
+    /// ```rust
+    /// use anno_core::{GroundedDocument, Signal, Location};
     ///
     /// let mut doc = GroundedDocument::new("test", "Marie Curie was a physicist.");
     /// doc.add_signal(Signal::new(0, Location::text(0, 11), "Marie Curie", "PER", 0.9));
@@ -2010,8 +2008,8 @@ impl GroundedDocument {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// use anno_core::grounded::{GroundedDocument, Signal, Location};
+    /// ```rust
+    /// use anno_core::{GroundedDocument, Signal, Location};
     ///
     /// let mut doc = GroundedDocument::new("test", "Marie Curie was a physicist.");
     /// doc.add_signal(Signal::new(0, Location::text(0, 11), "Marie Curie", "PER", 0.9));
@@ -2135,8 +2133,8 @@ impl GroundedDocument {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// use anno_core::grounded::GroundedDocument;
+    /// ```rust
+    /// use anno_core::GroundedDocument;
     ///
     /// let mut doc = GroundedDocument::new("test", "Marie Curie was a physicist.");
     /// let id = doc.add_signal_from_text("Marie Curie", "PER", 0.95);
@@ -2609,8 +2607,8 @@ impl GroundedDocument {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// use anno_core::grounded::{GroundedDocument, Signal, Location};
+    /// ```rust
+    /// use anno_core::{GroundedDocument, Signal, Location};
     ///
     /// let mut doc = GroundedDocument::new("doc", "Some text with entities.");
     /// doc.add_signal(Signal::new(0, Location::text(0, 4), "Some", "T", 0.9));
@@ -3660,8 +3658,9 @@ impl EvalComparison {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// use anno_core::grounded::{EvalComparison, Signal, Location};
+    /// ```rust
+    /// use anno_core::core::grounded::{EvalComparison};
+    /// use anno_core::{Signal, Location};
     ///
     /// let text = "Marie Curie won the Nobel Prize.";
     /// let gold = vec![

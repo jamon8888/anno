@@ -19,9 +19,8 @@
 //!
 //! `TypeLabel` unifies these by supporting both core and custom types:
 //!
-//! ```rust,ignore
-//! use anno_core::types::TypeLabel;
-//! use anno_core::EntityType;
+//! ```rust
+//! use anno_core::{TypeLabel, EntityType};
 //!
 //! // From a known type
 //! let person = TypeLabel::Core(EntityType::Person);
@@ -33,7 +32,7 @@
 //! let from_str: TypeLabel = "Person".parse().unwrap();
 //! assert_eq!(from_str, TypeLabel::Core(EntityType::Person));
 //!
-//! let custom_str: TypeLabel = "DISEASE".parse().unwrap();
+//! let custom_str: TypeLabel = "UNKNOWN_TYPE_XYZ".parse().unwrap();
 //! assert!(matches!(custom_str, TypeLabel::Custom(_)));
 //! ```
 

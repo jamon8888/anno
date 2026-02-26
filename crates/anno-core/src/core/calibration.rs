@@ -19,12 +19,12 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
-//! use anno_core::calibration::{IsotonicCalibrator, Calibrator};
+//! ```rust
+//! use anno_core::core::calibration::{IsotonicCalibrator, Calibrator};
 //!
 //! // Collect (predicted_confidence, was_correct) pairs from validation set
 //! let validation_data = vec![
-//!     (0.9, true), (0.8, true), (0.7, false), (0.6, true), ...
+//!     (0.9, true), (0.8, true), (0.7, false), (0.6, true), (0.5, false),
 //! ];
 //!
 //! let calibrator = IsotonicCalibrator::fit(&validation_data);

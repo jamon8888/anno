@@ -142,9 +142,9 @@ impl BoxEmbedding {
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// use anno_core::grounded::Identity;
-/// use anno_core::provisional::{ProvisionalIdentity, BoxEmbedding};
+/// ```rust
+/// use anno_core::Identity;
+/// use anno_core::core::provisional::{ProvisionalIdentity, BoxEmbedding};
 ///
 /// let identity = Identity::new(0, "Marie Curie");
 /// let provisional = ProvisionalIdentity::from_identity(identity)

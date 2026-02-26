@@ -46,8 +46,8 @@
 //!
 //! Define or discover evaluation datasets:
 //!
-//! ```rust,ignore
-//! use anno_core::{CustomDataset, Task, Domain, License};
+//! ```rust
+//! use anno_core::core::dataset::{CustomDataset, Task, Domain, License};
 //!
 //! let dataset = CustomDataset::new("my_ner", Task::NER)
 //!     .with_languages(&["en"])
