@@ -123,9 +123,9 @@ anno batch --dir docs/ --parallel 4 --cache --output results/
 cat corpus.jsonl | anno batch --stdin --parallel 4 --cache --output results/
 ```
 
-### Knowledge Graph (RDF / Oxigraph)
+### Knowledge Graph (RDF)
 
-`anno export` emits N-Triples or JSON-LD. `--base-uri` sets the IRI namespace — use a URI you own or one that aligns to a known linked-data vocabulary:
+`anno export` emits standard **N-Triples** or **JSON-LD** -- loadable into any RDF store (Oxigraph, Jena, Blazegraph, etc.). `--base-uri` sets the IRI namespace:
 
 ```sh
 # Own namespace (recommended for private corpora)
@@ -137,19 +137,7 @@ anno export --input docs/ --output /tmp/kg/ --format ntriples \
   --base-uri https://dbpedia.org/resource/
 ```
 
-Default (`urn:anno:`) produces stable URNs suitable for local use without a registered domain.
-
-Load into [Oxigraph](https://github.com/oxigraph/oxigraph) (pure-Rust RDF store, SPARQL 1.1):
-
-```sh
-cat /tmp/kg/*.nt | oxigraph load --location /tmp/anno-store --format ntriples
-
-oxigraph query --location /tmp/anno-store \
-  --query 'SELECT ?label WHERE {
-    ?e a <https://myproject.example.com/kg/vocab#PERType> ;
-       <http://www.w3.org/2000/01/rdf-schema#label> ?label .
-  }'
-```
+Default (`urn:anno:`) produces stable URNs suitable for local use without a registered domain. The output is standard W3C N-Triples, so any SPARQL-capable store can query it.
 
 **Semantic relation triples** — `RelationCapable` backends (`tplinker`, `gliner2`) produce typed `(head, relation, tail)` triples instead of co-occurrence edges. Use `--format graph-ntriples` (`--features graph`) for routing through the internal graph substrate:
 
