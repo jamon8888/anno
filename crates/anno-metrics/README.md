@@ -45,6 +45,21 @@ let f1 = conll_f1(&pred, &gold);
 assert!((f1 - 1.0).abs() < 1e-9);
 ```
 
+## Output example
+
+A runnable demo is at `examples/scoring_demo.rs` (`cargo run -p anno-metrics --example scoring_demo`).
+It constructs three gold entities, introduces a split error in one predicted cluster, and scores the result:
+
+```text
+Metric     P       R       F1
+------     -----   -----   -----
+MUC        1.000   0.750   0.857
+B3         1.000   0.810   0.895
+CEAF-e     0.857   0.857   0.857
+------
+CoNLL F1:  0.870
+```
+
 ## Cluster encoder
 
 Primitives for representing within-context clusters and scoring merges across contexts (document windows or separate documents), used in cross-document coreference pipelines. Key types:
