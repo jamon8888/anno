@@ -591,4 +591,166 @@ mod tests {
             Some(SpeechActType::Alignment)
         );
     }
+
+    // -------------------------------------------------------------------------
+    // Additional tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn classify_response_token_case_insensitive() {
+        // Uppercase, mixed-case, and lowercase should all match.
+        assert_eq!(
+            classify_response_token("OUI", Some("fr")),
+            Some(SpeechActType::Continuer),
+        );
+        assert_eq!(
+            classify_response_token("Okay", None),
+            Some(SpeechActType::Acknowledgment),
+        );
+        assert_eq!(
+            classify_response_token("WOW", Some("fr")),
+            Some(SpeechActType::Assessment),
+        );
+    }
+
+    #[test]
+    fn classify_response_token_unknown_returns_none() {
+        assert_eq!(classify_response_token("blargfizzle", None), None);
+        assert_eq!(classify_response_token("xyzzy", Some("fr")), None);
+        // A recognisable English token, but the lang is French -- still matches
+        // because "ok" is in the French lexicon too.
+        assert_eq!(
+            classify_response_token("ok", Some("fr")),
+            Some(SpeechActType::Acknowledgment),
+        );
+    }
+
+    #[test]
+    fn classify_greetings_and_farewells() {
+        // English
+        assert_eq!(
+            classify_response_token("hello", None),
+            Some(SpeechActType::Greeting),
+        );
+        assert_eq!(
+            classify_response_token("bye", None),
+            Some(SpeechActType::Farewell),
+        );
+        // French
+        assert_eq!(
+            classify_response_token("bonjour", Some("fr")),
+            Some(SpeechActType::Greeting),
+        );
+        assert_eq!(
+            classify_response_token("au revoir", Some("fr")),
+            Some(SpeechActType::Farewell),
+        );
+    }
+
+    #[test]
+    fn speech_act_non_response_tokens() {
+        // Greeting, Farewell, Question, Statement, Request, Other are NOT response tokens.
+        let non_response = [
+            SpeechActType::Question,
+            SpeechActType::Statement,
+            SpeechActType::Request,
+            SpeechActType::Farewell,
+            SpeechActType::Greeting,
+            SpeechActType::Other,
+        ];
+        for act in non_response {
+            assert!(
+                !act.is_response_token(),
+                "{:?} should not be a response token",
+                act
+            );
+        }
+    }
+
+    #[test]
+    fn speech_act_as_str_roundtrip() {
+        let all = [
+            SpeechActType::Continuer,
+            SpeechActType::Acknowledgment,
+            SpeechActType::Assessment,
+            SpeechActType::Alignment,
+            SpeechActType::BackChannel,
+            SpeechActType::Question,
+            SpeechActType::Statement,
+            SpeechActType::Request,
+            SpeechActType::Farewell,
+            SpeechActType::Greeting,
+            SpeechActType::Other,
+        ];
+        for act in all {
+            let label = act.as_str();
+            assert!(!label.is_empty(), "{:?} has empty label", act);
+            // Labels should be lowercase ASCII.
+            assert!(
+                label.chars().all(|c| c.is_ascii_lowercase()),
+                "{:?} label {:?} contains non-lowercase-ascii",
+                act,
+                label,
+            );
+        }
+    }
+
+    #[test]
+    fn dialogue_turn_no_speech_act_is_not_response_token() {
+        let turn = DialogueTurn::new("hello", "EMM");
+        assert!(!turn.is_response_token());
+    }
+
+    #[test]
+    fn dialogue_context_last_turns() {
+        let mut ctx = DialogueContext::new();
+        for i in 0..5 {
+            ctx.add_turn(DialogueTurn::new(format!("turn {i}"), "A"));
+        }
+        assert_eq!(ctx.last_turns(3).len(), 3);
+        assert_eq!(ctx.last_turns(3)[0].text, "turn 2");
+        assert_eq!(ctx.last_turns(10).len(), 5); // more than total -> all
+        assert_eq!(ctx.last_turns(0).len(), 0);
+    }
+
+    #[test]
+    fn dialogue_context_turns_by_speaker() {
+        let mut ctx = DialogueContext::new();
+        ctx.add_turn(DialogueTurn::new("hi", "A"));
+        ctx.add_turn(DialogueTurn::new("hey", "B"));
+        ctx.add_turn(DialogueTurn::new("sup", "A"));
+
+        assert_eq!(ctx.turns_by_speaker("A").len(), 2);
+        assert_eq!(ctx.turns_by_speaker("B").len(), 1);
+        assert_eq!(ctx.turns_by_speaker("C").len(), 0);
+    }
+
+    #[test]
+    fn dialogue_context_aside_count_and_full_text() {
+        let mut ctx = DialogueContext::new();
+        ctx.add_turn(DialogueTurn::new("hello", "A"));
+        ctx.add_turn(DialogueTurn::new("psst", "B").as_aside(true));
+        ctx.add_turn(DialogueTurn::new("what?", "A").as_aside(true));
+
+        assert_eq!(ctx.aside_count(), 2);
+
+        let text = ctx.full_text();
+        assert!(text.contains("A: hello"));
+        assert!(text.contains("B: psst"));
+        assert!(text.contains("A: what?"));
+    }
+
+    #[test]
+    fn dialogue_context_addressee_tracking() {
+        let mut ctx = DialogueContext::new();
+        ctx.add_turn(DialogueTurn::new("hi", "A").with_addressee("B"));
+        assert_eq!(ctx.current_addressee.as_deref(), Some("B"));
+
+        // Turn without addressee does not clear the tracked addressee.
+        ctx.add_turn(DialogueTurn::new("ok", "B"));
+        assert_eq!(ctx.current_addressee.as_deref(), Some("B"));
+
+        ctx.add_turn(DialogueTurn::new("hey C", "A").with_addressee("C"));
+        assert_eq!(ctx.current_addressee.as_deref(), Some("C"));
+    }
 }
