@@ -1057,3 +1057,483 @@ fn detect_relation_type<'a>(
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Entity, EntityType};
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    /// Build a registry that contains the given relation slugs.
+    fn registry_with_relations(slugs: &[&str]) -> SemanticRegistry {
+        let mut builder = SemanticRegistry::builder();
+        for slug in slugs {
+            builder = builder.add_relation(slug, "test relation");
+        }
+        builder.build_placeholder(4)
+    }
+
+    /// Convenience: default config with extract_triggers enabled.
+    fn default_config() -> RelationExtractionConfig {
+        RelationExtractionConfig::default()
+    }
+
+    /// Build a person entity at the given character offsets.
+    fn person(text: &str, start: usize, end: usize) -> Entity {
+        Entity::new(text, EntityType::Person, start, end, 0.9)
+    }
+
+    /// Build an organization entity at the given character offsets.
+    fn org(text: &str, start: usize, end: usize) -> Entity {
+        Entity::new(text, EntityType::Organization, start, end, 0.9)
+    }
+
+    /// Build a location entity at the given character offsets.
+    fn loc(text: &str, start: usize, end: usize) -> Entity {
+        Entity::new(text, EntityType::Location, start, end, 0.9)
+    }
+
+    // =======================================================================
+    // English pattern tests
+    // =======================================================================
+
+    #[test]
+    fn test_works_for_pattern_english() {
+        let text = "Alice works for Acme Corp in the city.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 16, 25)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "WORKS_FOR");
+        assert_eq!(rels[0].head.text, "Alice");
+        assert_eq!(rels[0].tail.text, "Acme Corp");
+    }
+
+    #[test]
+    fn test_founded_pattern_english() {
+        let text = "Bob founded WidgetCo last year.";
+        let entities = vec![person("Bob", 0, 3), org("WidgetCo", 12, 20)];
+        let reg = registry_with_relations(&["FOUNDED"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "FOUNDED");
+        assert_eq!(rels[0].head.text, "Bob");
+        assert_eq!(rels[0].tail.text, "WidgetCo");
+    }
+
+    #[test]
+    fn test_located_in_pattern_english() {
+        let text = "Acme Corp based in Berlin serves customers.";
+        let entities = vec![org("Acme Corp", 0, 9), loc("Berlin", 19, 25)];
+        let reg = registry_with_relations(&["LOCATED_IN"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "LOCATED_IN");
+        assert_eq!(rels[0].head.text, "Acme Corp");
+        assert_eq!(rels[0].tail.text, "Berlin");
+    }
+
+    #[test]
+    fn test_married_to_pattern_english() {
+        let text = "Alice married to Bob at the ceremony.";
+        let entities = vec![person("Alice", 0, 5), person("Bob", 17, 20)];
+        let reg = registry_with_relations(&["MARRIED_TO"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+
+        // Both (Alice, Bob) and (Bob, Alice) pairs are checked; both find the
+        // trigger in the between-text, so we expect 2 directed relations.
+        assert_eq!(rels.len(), 2);
+        assert!(rels.iter().all(|r| r.relation_type == "MARRIED_TO"));
+    }
+
+    #[test]
+    fn test_born_in_pattern_english() {
+        let text = "Alice born in Berlin many years ago.";
+        let entities = vec![person("Alice", 0, 5), loc("Berlin", 14, 20)];
+        let reg = registry_with_relations(&["BORN_IN"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "BORN_IN");
+    }
+
+    #[test]
+    fn test_ceo_of_pattern_english() {
+        let text = "Alice ceo of Acme Corp recently.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 13, 22)];
+        let reg = registry_with_relations(&["CEO_OF"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "CEO_OF");
+    }
+
+    // =======================================================================
+    // Type constraint tests
+    // =======================================================================
+
+    #[test]
+    fn test_married_to_requires_person_person() {
+        // Two persons: should match in both directions.
+        let text = "Alice married to Bob yesterday.";
+        let entities = vec![person("Alice", 0, 5), person("Bob", 17, 20)];
+        let reg = registry_with_relations(&["MARRIED_TO"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 2);
+    }
+
+    #[test]
+    fn test_married_to_rejects_person_org() {
+        // Person + Organization: should NOT match MARRIED_TO.
+        let text = "Alice married to Acme Corp yesterday.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 17, 26)];
+        let reg = registry_with_relations(&["MARRIED_TO"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert!(
+            rels.is_empty(),
+            "MARRIED_TO should not match Person-Organization pair"
+        );
+    }
+
+    #[test]
+    fn test_works_for_requires_person_org() {
+        // Person + Org: should match.
+        let text = "Alice works for Acme Corp here.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 16, 25)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        assert_eq!(
+            extract_relations(&entities, text, &reg, &default_config()).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_works_for_rejects_loc_loc() {
+        // Location + Location: should NOT match WORKS_FOR.
+        let text = "Berlin works for Munich today.";
+        let entities = vec![loc("Berlin", 0, 6), loc("Munich", 17, 23)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert!(
+            rels.is_empty(),
+            "WORKS_FOR should not match Location-Location pair"
+        );
+    }
+
+    // =======================================================================
+    // Multilingual trigger tests
+    // =======================================================================
+
+    #[test]
+    fn test_chinese_founded_pattern() {
+        // "X 创立 Y" -- Chinese trigger for FOUNDED.
+        let text = "张三 创立 华为公司 在深圳";
+        let entities = vec![person("张三", 0, 2), org("华为公司", 5, 9)];
+        let reg = registry_with_relations(&["FOUNDED"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "FOUNDED");
+    }
+
+    #[test]
+    fn test_spanish_founded_pattern() {
+        // "X fundó Y" -- Spanish trigger for FOUNDED.
+        let text = "Carlos fundó Empresa aqui.";
+        let entities = vec![person("Carlos", 0, 6), org("Empresa", 13, 20)];
+        let reg = registry_with_relations(&["FOUNDED"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "FOUNDED");
+    }
+
+    #[test]
+    fn test_french_married_to_pattern() {
+        // "X marié avec Y" -- French trigger for MARRIED_TO.
+        // Both directions match for Person-Person symmetric relations.
+        let text = "Pierre marié avec Marie hier.";
+        let entities = vec![person("Pierre", 0, 6), person("Marie", 18, 23)];
+        let reg = registry_with_relations(&["MARRIED_TO"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+
+        assert_eq!(rels.len(), 2);
+        assert!(rels.iter().all(|r| r.relation_type == "MARRIED_TO"));
+    }
+
+    #[test]
+    fn test_german_born_in_pattern() {
+        // "X geboren in Y" -- German trigger for BORN_IN.
+        let text = "Hans geboren in Berlin damals.";
+        let entities = vec![person("Hans", 0, 4), loc("Berlin", 16, 22)];
+        let reg = registry_with_relations(&["BORN_IN"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "BORN_IN");
+    }
+
+    // =======================================================================
+    // Distance penalty and threshold filtering
+    // =======================================================================
+
+    #[test]
+    fn test_distance_penalty_close_entities() {
+        // Entities adjacent (distance = 1 char of space): minimal penalty.
+        let text = "A works for B end.";
+        let entities = vec![person("A", 0, 1), org("B", 12, 13)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 1);
+        // With distance 11, penalty factor = 1.0 - (11/50)*0.5 = 0.89.
+        // Base confidence 0.7 * 0.89 ~ 0.623, above default threshold 0.5.
+        assert!(rels[0].confidence > 0.5);
+    }
+
+    #[test]
+    fn test_distance_penalty_filters_low_confidence() {
+        // High threshold should filter out distant, lower-confidence matches.
+        let text = "A works for B end.";
+        let entities = vec![person("A", 0, 1), org("B", 12, 13)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let config = RelationExtractionConfig {
+            threshold: 0.95,
+            ..default_config()
+        };
+        let rels = extract_relations(&entities, text, &reg, &config);
+        assert!(
+            rels.is_empty(),
+            "High threshold should filter distance-penalized relation"
+        );
+    }
+
+    #[test]
+    fn test_entities_beyond_max_distance_skipped() {
+        // Entities separated by more than max_span_distance should produce no relations.
+        let text = "Alice works for Acme Corp";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 16, 25)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let config = RelationExtractionConfig {
+            max_span_distance: 2, // very small
+            ..default_config()
+        };
+        let rels = extract_relations(&entities, text, &reg, &config);
+        assert!(
+            rels.is_empty(),
+            "Entities beyond max_span_distance should be skipped"
+        );
+    }
+
+    // =======================================================================
+    // Edge cases
+    // =======================================================================
+
+    #[test]
+    fn test_empty_entities_list() {
+        let text = "No entities here.";
+        let entities: Vec<Entity> = vec![];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert!(rels.is_empty());
+    }
+
+    #[test]
+    fn test_single_entity_no_pairs() {
+        let text = "Only Alice here.";
+        let entities = vec![person("Alice", 5, 10)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert!(rels.is_empty());
+    }
+
+    #[test]
+    fn test_no_relation_labels_in_registry() {
+        // Registry with only entity labels, no relation labels -- should return empty.
+        let reg = SemanticRegistry::standard_ner(4);
+        let text = "Alice works for Acme Corp here.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 16, 25)];
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert!(rels.is_empty());
+    }
+
+    #[test]
+    fn test_overlapping_spans_skipped_in_triples() {
+        // "New York" overlapping with "York": extract_relation_triples skips overlapping spans.
+        let text = "New York is in New York State area.";
+        let entities = vec![
+            loc("New York", 0, 8),
+            loc("York", 4, 8), // overlaps with "New York"
+        ];
+        let reg = registry_with_relations(&["LOCATED_IN"]);
+        let triples =
+            extract_relation_triples(&entities, text, &reg, &default_config());
+        assert!(
+            triples.is_empty(),
+            "Overlapping spans should be skipped in extract_relation_triples"
+        );
+    }
+
+    // =======================================================================
+    // Trigger span extraction
+    // =======================================================================
+
+    #[test]
+    fn test_trigger_span_present_when_enabled() {
+        let text = "Alice works for Acme Corp today.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 16, 25)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let config = RelationExtractionConfig {
+            extract_triggers: true,
+            ..default_config()
+        };
+        let rels = extract_relations(&entities, text, &reg, &config);
+        assert_eq!(rels.len(), 1);
+        let trigger = rels[0].trigger_span.expect("trigger_span should be Some");
+        // Trigger should point to "works for" in the between-text " works for ".
+        let trigger_text: String = text.chars().skip(trigger.0).take(trigger.1 - trigger.0).collect();
+        assert!(
+            trigger_text.contains("works for"),
+            "trigger text '{}' should contain 'works for'",
+            trigger_text
+        );
+    }
+
+    #[test]
+    fn test_trigger_span_absent_when_disabled() {
+        let text = "Alice works for Acme Corp today.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 16, 25)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let config = RelationExtractionConfig {
+            extract_triggers: false,
+            ..default_config()
+        };
+        let rels = extract_relations(&entities, text, &reg, &config);
+        assert_eq!(rels.len(), 1);
+        assert!(
+            rels[0].trigger_span.is_none(),
+            "trigger_span should be None when extract_triggers is disabled"
+        );
+    }
+
+    // =======================================================================
+    // Relation direction (subject vs object ordering)
+    // =======================================================================
+
+    #[test]
+    fn test_relation_direction_head_before_tail() {
+        // Head entity appears before tail in text.
+        let text = "Alice works for Acme Corp here.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 16, 25)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].head.text, "Alice");
+        assert_eq!(rels[0].tail.text, "Acme Corp");
+    }
+
+    #[test]
+    fn test_relation_direction_both_orderings_checked() {
+        // Both (i,j) and (j,i) are checked. If "Acme Corp ... employed by ... Alice"
+        // appears, the (Acme Corp -> Alice) pair should also look at the between text.
+        // Here we have "Alice employed by Acme Corp" so head=Alice, tail=Acme Corp.
+        let text = "Alice employed by Acme Corp now.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 18, 27)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+
+        // The trigger "employed by" is in the between-text for (Alice, Acme Corp).
+        assert!(!rels.is_empty());
+        let forward = rels
+            .iter()
+            .find(|r| r.head.text == "Alice" && r.tail.text == "Acme Corp");
+        assert!(
+            forward.is_some(),
+            "Should find relation with Alice as head and Acme Corp as tail"
+        );
+    }
+
+    // =======================================================================
+    // extract_relation_triples API
+    // =======================================================================
+
+    #[test]
+    fn test_extract_relation_triples_basic() {
+        let text = "Alice works for Acme Corp here.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 16, 25)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let triples =
+            extract_relation_triples(&entities, text, &reg, &default_config());
+
+        assert_eq!(triples.len(), 1);
+        assert_eq!(triples[0].head_idx, 0);
+        assert_eq!(triples[0].tail_idx, 1);
+        assert_eq!(triples[0].relation_type, "WORKS_FOR");
+    }
+
+    #[test]
+    fn test_extract_relation_triples_single_entity_returns_empty() {
+        let text = "Only Alice here.";
+        let entities = vec![person("Alice", 5, 10)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let triples =
+            extract_relation_triples(&entities, text, &reg, &default_config());
+        assert!(triples.is_empty());
+    }
+
+    // =======================================================================
+    // Dataset-style / normalized slug matching
+    // =======================================================================
+
+    #[test]
+    fn test_kebab_case_slug_matches_pattern() {
+        // DocRED-style "part-of" should match the PART_OF pattern.
+        // Both directions match for Org-Org pair.
+        let text = "Division part of Corporation here.";
+        let entities = vec![org("Division", 0, 8), org("Corporation", 17, 28)];
+        let reg = registry_with_relations(&["part-of"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 2);
+        // The returned type should be the registry's slug, not the canonical one.
+        assert!(rels.iter().all(|r| r.relation_type == "part-of"));
+    }
+
+    #[test]
+    fn test_confidence_clamped_to_unit_interval() {
+        // Confidence must always be in [0.0, 1.0].
+        let text = "Alice works for Acme Corp end.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 16, 25)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        for r in &rels {
+            assert!(
+                (0.0..=1.0).contains(&r.confidence),
+                "confidence {} not in [0, 1]",
+                r.confidence
+            );
+        }
+    }
+
+    #[test]
+    fn test_other_entity_type_allows_any_relation() {
+        // EntityType::Other should bypass type constraints.
+        // Both directions match since both entities are Other.
+        let text = "FooEntity married to BarEntity now.";
+        let entities = vec![
+            Entity::new("FooEntity", EntityType::Other("MISC".into()), 0, 9, 0.9),
+            Entity::new("BarEntity", EntityType::Other("MISC".into()), 21, 30, 0.9),
+        ];
+        let reg = registry_with_relations(&["MARRIED_TO"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(
+            rels.len(),
+            2,
+            "Other entity type should bypass type constraints (both directions)"
+        );
+    }
+}
