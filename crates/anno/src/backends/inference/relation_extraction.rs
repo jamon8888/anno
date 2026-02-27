@@ -1371,8 +1371,7 @@ mod tests {
             loc("York", 4, 8), // overlaps with "New York"
         ];
         let reg = registry_with_relations(&["LOCATED_IN"]);
-        let triples =
-            extract_relation_triples(&entities, text, &reg, &default_config());
+        let triples = extract_relation_triples(&entities, text, &reg, &default_config());
         assert!(
             triples.is_empty(),
             "Overlapping spans should be skipped in extract_relation_triples"
@@ -1396,7 +1395,11 @@ mod tests {
         assert_eq!(rels.len(), 1);
         let trigger = rels[0].trigger_span.expect("trigger_span should be Some");
         // Trigger should point to "works for" in the between-text " works for ".
-        let trigger_text: String = text.chars().skip(trigger.0).take(trigger.1 - trigger.0).collect();
+        let trigger_text: String = text
+            .chars()
+            .skip(trigger.0)
+            .take(trigger.1 - trigger.0)
+            .collect();
         assert!(
             trigger_text.contains("works for"),
             "trigger text '{}' should contain 'works for'",
@@ -1467,8 +1470,7 @@ mod tests {
         let text = "Alice works for Acme Corp here.";
         let entities = vec![person("Alice", 0, 5), org("Acme Corp", 16, 25)];
         let reg = registry_with_relations(&["WORKS_FOR"]);
-        let triples =
-            extract_relation_triples(&entities, text, &reg, &default_config());
+        let triples = extract_relation_triples(&entities, text, &reg, &default_config());
 
         assert_eq!(triples.len(), 1);
         assert_eq!(triples[0].head_idx, 0);
@@ -1481,8 +1483,7 @@ mod tests {
         let text = "Only Alice here.";
         let entities = vec![person("Alice", 5, 10)];
         let reg = registry_with_relations(&["WORKS_FOR"]);
-        let triples =
-            extract_relation_triples(&entities, text, &reg, &default_config());
+        let triples = extract_relation_triples(&entities, text, &reg, &default_config());
         assert!(triples.is_empty());
     }
 
@@ -1535,5 +1536,232 @@ mod tests {
             2,
             "Other entity type should bypass type constraints (both directions)"
         );
+    }
+
+    // =====================================================================
+    // Additional English pattern tests (manages, studied_at, child_of)
+    // =====================================================================
+
+    #[test]
+    fn test_manages_pattern_english() {
+        let text = "Alice manages Engineering at the office.";
+        let entities = vec![person("Alice", 0, 5), org("Engineering", 14, 25)];
+        let reg = registry_with_relations(&["MANAGES"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "MANAGES");
+        assert_eq!(rels[0].head.text, "Alice");
+        assert_eq!(rels[0].tail.text, "Engineering");
+    }
+
+    #[test]
+    fn test_studied_at_pattern_english() {
+        let text = "Alice studied at MIT before her career.";
+        let entities = vec![person("Alice", 0, 5), org("MIT", 17, 20)];
+        let reg = registry_with_relations(&["STUDIED_AT"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "STUDIED_AT");
+    }
+
+    #[test]
+    fn test_child_of_pattern_english() {
+        // Both directions produce a match because the between-text contains
+        // "daughter of" regardless of which entity is head vs tail.
+        let text = "Alice daughter of Bob in the family.";
+        let entities = vec![person("Alice", 0, 5), person("Bob", 18, 21)];
+        let reg = registry_with_relations(&["CHILD_OF"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 2);
+        assert!(rels.iter().all(|r| r.relation_type == "CHILD_OF"));
+    }
+
+    // =====================================================================
+    // Additional type constraint tests
+    // =====================================================================
+
+    #[test]
+    fn test_studied_at_rejects_org_org() {
+        let text = "Acme studied at BigCorp recently.";
+        let entities = vec![org("Acme", 0, 4), org("BigCorp", 16, 23)];
+        let reg = registry_with_relations(&["STUDIED_AT"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert!(
+            rels.is_empty(),
+            "STUDIED_AT should not match Organization-Organization pair"
+        );
+    }
+
+    #[test]
+    fn test_located_in_rejects_person_tail() {
+        let text = "Acme based in Alice recently.";
+        let entities = vec![org("Acme", 0, 4), person("Alice", 14, 19)];
+        let reg = registry_with_relations(&["LOCATED_IN"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert!(
+            rels.is_empty(),
+            "LOCATED_IN should not match when tail is Person"
+        );
+    }
+
+    #[test]
+    fn test_part_of_requires_org_org() {
+        let text = "Skunkworks part of Lockheed here.";
+        let entities = vec![org("Skunkworks", 0, 10), org("Lockheed", 19, 27)];
+        let reg = registry_with_relations(&["PART_OF"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert!(
+            !rels.is_empty(),
+            "PART_OF should match Organization-Organization pair"
+        );
+        assert!(rels.iter().all(|r| r.relation_type == "PART_OF"));
+    }
+
+    // =====================================================================
+    // Distance penalty value verification
+    // =====================================================================
+
+    #[test]
+    fn test_distance_penalty_monotonically_decreases_confidence() {
+        // Two texts, same trigger, different entity distances.
+        // Use low threshold so distance penalty does not filter the far pair.
+        let text_close = "Alice works for BigCo end.";
+        let text_far = "Alice ..... works for ..... BigCo end.";
+        let entities_close = vec![person("Alice", 0, 5), org("BigCo", 16, 21)];
+        let entities_far = vec![person("Alice", 0, 5), org("BigCo", 28, 33)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let low_threshold = RelationExtractionConfig {
+            threshold: 0.3,
+            ..default_config()
+        };
+        let rels_close = extract_relations(&entities_close, text_close, &reg, &low_threshold);
+        let rels_far = extract_relations(&entities_far, text_far, &reg, &low_threshold);
+        assert_eq!(rels_close.len(), 1);
+        assert_eq!(rels_far.len(), 1);
+        assert!(
+            rels_close[0].confidence > rels_far[0].confidence,
+            "Closer entities ({:.3}) should have higher confidence than farther ({:.3})",
+            rels_close[0].confidence,
+            rels_far[0].confidence
+        );
+    }
+
+    #[test]
+    fn test_threshold_filters_marginal_confidence() {
+        // Set a threshold just above the penalized confidence to verify filtering.
+        let text = "Alice works for Acme Corp end.";
+        let entities = vec![person("Alice", 0, 5), org("Acme Corp", 16, 25)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        // Get actual confidence.
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 1);
+        let actual_conf = rels[0].confidence;
+        // Threshold just above actual confidence: should filter.
+        let config = RelationExtractionConfig {
+            threshold: (actual_conf + 0.01) as f32,
+            ..default_config()
+        };
+        let rels2 = extract_relations(&entities, text, &reg, &config);
+        assert!(
+            rels2.is_empty(),
+            "Threshold above confidence should filter the relation"
+        );
+    }
+
+    // =====================================================================
+    // Multiple relations from distinct entity pairs
+    // =====================================================================
+
+    #[test]
+    fn test_multiple_entity_pairs_yield_multiple_relations() {
+        let text = "Alice works for Acme Corp based in Berlin today.";
+        let entities = vec![
+            person("Alice", 0, 5),
+            org("Acme Corp", 16, 25),
+            loc("Berlin", 35, 41),
+        ];
+        let reg = registry_with_relations(&["WORKS_FOR", "LOCATED_IN"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        let works_for: Vec<_> = rels
+            .iter()
+            .filter(|r| r.relation_type == "WORKS_FOR")
+            .collect();
+        let located_in: Vec<_> = rels
+            .iter()
+            .filter(|r| r.relation_type == "LOCATED_IN")
+            .collect();
+        assert!(
+            !works_for.is_empty(),
+            "Should find WORKS_FOR between Alice and Acme Corp"
+        );
+        assert!(
+            !located_in.is_empty(),
+            "Should find LOCATED_IN between Acme Corp and Berlin"
+        );
+    }
+
+    // =====================================================================
+    // Additional multilingual trigger tests
+    // =====================================================================
+
+    #[test]
+    fn test_chinese_works_for_pattern() {
+        // Chinese trigger for WORKS_FOR.
+        let text = "李明 工作于 百度公司 在北京";
+        let entities = vec![person("李明", 0, 2), org("百度公司", 7, 11)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "WORKS_FOR");
+    }
+
+    #[test]
+    fn test_spanish_works_for_pattern() {
+        // Spanish trigger for WORKS_FOR.
+        let text = "Maria trabaja en Google aqui.";
+        let entities = vec![person("Maria", 0, 5), org("Google", 17, 23)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "WORKS_FOR");
+    }
+
+    #[test]
+    fn test_french_works_for_pattern() {
+        // French trigger for WORKS_FOR.
+        let text = "Pierre travaille pour Renault ici.";
+        let entities = vec![person("Pierre", 0, 6), org("Renault", 22, 29)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "WORKS_FOR");
+    }
+
+    #[test]
+    fn test_german_works_for_pattern() {
+        // German trigger for WORKS_FOR.
+        let text = "Hans arbeitet bei Siemens dort.";
+        let entities = vec![person("Hans", 0, 4), org("Siemens", 18, 25)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "WORKS_FOR");
+    }
+
+    // =====================================================================
+    // Unicode multi-byte text with character offsets
+    // =====================================================================
+
+    #[test]
+    fn test_unicode_multibyte_offsets_correct() {
+        // Ensure character offsets work with multi-byte chars in between-text.
+        let text = "Ren\u{00e9} travaille pour CNRS ici.";
+        // R(0) e(1) n(2) e-acute(3) = 4 chars; CNRS at char 20..24
+        let entities = vec![person("Ren\u{00e9}", 0, 4), org("CNRS", 20, 24)];
+        let reg = registry_with_relations(&["WORKS_FOR"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "WORKS_FOR");
+        assert_eq!(rels[0].head.text, "Ren\u{00e9}");
     }
 }
