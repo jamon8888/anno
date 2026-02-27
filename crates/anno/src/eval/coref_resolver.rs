@@ -1,7 +1,23 @@
 //! Simple coreference resolution for analysis/evaluation pipelines.
 //!
-//! Provides minimal resolvers to produce coreference chains from entities, completing the loop
+//! Provides rule-based resolvers to produce coreference chains from entities, completing the loop
 //! between extraction and coreference metric computation.
+//!
+//! # Sieve pipeline
+//!
+//! [`SimpleCorefResolver`] applies six sieves in order, returning the first match:
+//!
+//! 1. **Pronoun resolution** -- links pronouns to a compatible antecedent within a lookback window,
+//!    using gender inference from a name gazetteer and pronoun-entity-type compatibility rules.
+//! 2. **Exact canonical match** -- matches entities with identical `type:lowercased_text` keys.
+//! 3. **Acronym match** -- links single-token acronyms to multi-word names whose initials match
+//!    (e.g., "IBM" ~ "International Business Machines"), same entity type required.
+//! 4. **Relaxed head match** -- links multi-word mentions sharing a head word (last token) and
+//!    entity type (e.g., "President Obama" ~ "Barack Obama").
+//! 5. **Proper containment** -- links mentions where one is a contiguous word subsequence of the
+//!    other in original text, same entity type required (e.g., "Obama" in "Barack Obama").
+//! 6. **Substring/fuzzy match** -- links mentions sharing a substring (>= 3 chars) or a matching
+//!    last word, same entity type required.
 
 use super::coref::CorefChain;
 use crate::backends::box_embeddings::{BoxCorefConfig, BoxEmbedding};
@@ -9,44 +25,76 @@ use crate::{Entity, EntityType};
 use anno_core::{CanonicalId, Gender};
 use std::collections::HashMap;
 
-/// Configuration for simple coreference resolver.
+/// Configuration for [`SimpleCorefResolver`].
+///
+/// All boolean sieve toggles default to `true`. Disable individual sieves to measure their
+/// contribution or to reduce false merges on a particular dataset.
 #[derive(Debug, Clone)]
 pub struct CorefConfig {
-    /// Similarity threshold for name matching (0.0-1.0).
+    /// Similarity threshold for name matching (0.0--1.0).
+    ///
+    /// Default: `0.7`.
     #[deprecated(note = "Not currently used by any matching logic. Will be wired into names_match() in a future version.")]
     pub similarity_threshold: f64,
-    /// Maximum number of preceding entities to search when resolving a pronoun.
+
+    /// Maximum number of preceding entities to search when resolving a pronoun (sieve 1).
     ///
-    /// The actual lookback window is `max_pronoun_lookback * 10` entities
-    /// (a rough approximation of sentence distance by entity count).
+    /// The actual lookback window is `max_pronoun_lookback * 10` entities,
+    /// a rough approximation of sentence distance by entity count.
+    ///
+    /// Default: `3` (i.e., 30 entities).
     pub max_pronoun_lookback: usize,
-    /// Enable fuzzy name matching (e.g., "John Smith" ~ "J. Smith").
+
+    /// Enable substring/fuzzy name matching (sieve 6).
+    ///
+    /// When enabled, two mentions match if one is a substring of the other (>= 3 chars)
+    /// or if they share a last word and entity type.
+    ///
+    /// Default: `true`.
     pub fuzzy_matching: bool,
-    /// Include singletons in output chains.
+
+    /// Include singletons (entities with no coreferent) in output chains.
+    ///
+    /// Default: `true`.
     pub include_singletons: bool,
-    /// Use a built-in name-to-gender gazetteer for pronoun resolution.
+
+    /// Use a built-in name-to-gender gazetteer for pronoun resolution (sieve 1).
     ///
     /// When enabled, common English names (e.g., "Alice" -> Feminine,
     /// "Bob" -> Masculine) are used to infer gender for proper nouns,
     /// improving pronoun resolution accuracy. Disable for non-English
     /// text or when names don't follow English gender conventions.
-    pub use_name_gazetteer: bool,
-    /// Enable acronym matching (e.g., "IBM" matches "International Business Machines").
     ///
-    /// Checks if one mention is an uppercase acronym whose letters match the
+    /// Default: `true`.
+    pub use_name_gazetteer: bool,
+
+    /// Enable acronym matching (sieve 3).
+    ///
+    /// Checks if one mention is a single-token acronym whose letters match the
     /// initial letters of the other mention's words. Requires same entity type.
+    /// Example: "IBM" matches "International Business Machines".
+    ///
+    /// Default: `true`.
     pub acronym_matching: bool,
-    /// Enable relaxed head match (e.g., "President Obama" ~ "Barack Obama" via shared head "Obama").
+
+    /// Enable relaxed head match (sieve 4).
     ///
     /// Two mentions corefer if their head words (last word) match and they share the same
     /// entity type. Only applies when both mentions have 2+ words.
+    /// Example: "President Obama" ~ "Barack Obama" via shared head "Obama".
+    ///
+    /// Default: `true`.
     pub relaxed_head_match: bool,
-    /// Enable proper noun containment (e.g., "Obama" is contained in "Barack Obama").
+
+    /// Enable proper noun containment (sieve 5).
     ///
     /// One mention's original text must be a proper subsequence of the other, matching
-    /// at word boundaries, and both must share the same entity type. Unlike fuzzy/substring
-    /// matching, this operates on original text (not canonical lowercased form) and requires
-    /// complete word boundary alignment.
+    /// at word boundaries, and both must share the same entity type. Unlike sieve 6
+    /// (fuzzy/substring), this operates on original text (not canonical lowercased form)
+    /// and requires complete word-boundary alignment.
+    /// Example: "Obama" is contained in "Barack Obama".
+    ///
+    /// Default: `true`.
     pub proper_containment: bool,
 }
 
@@ -67,6 +115,31 @@ impl Default for CorefConfig {
 }
 
 /// Simple rule-based coreference resolver.
+///
+/// Applies the six-sieve pipeline described in the [module documentation](self) to assign
+/// [`CanonicalId`]s to a sequence of [`Entity`] values. Entities that corefer receive the
+/// same id; singletons receive a unique id.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use anno::Entity;
+/// use anno::EntityType;
+/// use anno::eval::coref_resolver::{SimpleCorefResolver, CorefConfig};
+///
+/// let resolver = SimpleCorefResolver::new(CorefConfig::default());
+///
+/// let entities = vec![
+///     Entity::new("John Smith", EntityType::Person, 0, 10, 0.9),
+///     Entity::new("he", EntityType::Person, 15, 17, 0.8),
+///     Entity::new("John Smith", EntityType::Person, 30, 40, 0.9),
+/// ];
+///
+/// let resolved = resolver.resolve(&entities);
+/// // All three mentions share the same canonical_id.
+/// assert_eq!(resolved[0].canonical_id, resolved[1].canonical_id);
+/// assert_eq!(resolved[0].canonical_id, resolved[2].canonical_id);
+/// ```
 #[derive(Debug, Clone)]
 pub struct SimpleCorefResolver {
     config: CorefConfig,
