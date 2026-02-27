@@ -108,10 +108,11 @@ Features:
 
 - Multilingual pronoun detection: English (default), French, Spanish, German. Unsupported languages (CJK, Arabic, etc.) safely produce no rewrites.
 - Pleonastic "it" filter: skips non-referential uses (weather, extraposition, idioms) to avoid spurious rewrites.
+- Overlap guard: when nested or overlapping NER spans produce competing rewrites, the longer span wins and shorter overlapping rewrites are dropped.
 - Cataphoric resolution: optional second pass resolves forward-pointing pronouns.
 - Configurable: reflexive and demonstrative pronoun rewrites are off by default.
 
-The underlying `SimpleCorefResolver` uses a name-to-gender gazetteer (common English first names mapped to gender) for pronoun-antecedent agreement. `Gender::Unknown` acts as a wildcard, compatible with all other genders, so ungendered entities do not block resolution.
+The underlying `SimpleCorefResolver` uses a name-to-gender gazetteer (common English first names mapped to gender) for pronoun-antecedent agreement. `Gender::Unknown` acts as a wildcard, compatible with all other genders, so ungendered entities do not block resolution. Acronym matching clusters mentions like "IBM" with "International Business Machines" by checking that each letter of the short form matches the initial letter of each word in the long form.
 
 ### Neural Coreference (f-coref)
 
