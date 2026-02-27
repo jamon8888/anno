@@ -59,11 +59,15 @@ use std::collections::HashSet;
 /// Uses handshaking matrix to simultaneously extract entities and relations.
 #[derive(Debug)]
 pub struct TPLinker {
-    /// Confidence threshold for entity extraction
-    #[allow(dead_code)]
+    /// Confidence threshold for entity extraction.
+    ///
+    /// Applied in both `Model::extract_entities` and the heuristic relation pipeline
+    /// (`extract_with_handshaking`) to filter low-confidence entities.
     entity_threshold: f32,
-    /// Confidence threshold for relation extraction
-    #[allow(dead_code)]
+    /// Confidence threshold for relation extraction.
+    ///
+    /// Used as the default relation-confidence floor in `extract_with_handshaking`
+    /// when the caller passes `threshold <= 0.0`.
     relation_threshold: f32,
 }
 
@@ -81,13 +85,15 @@ impl TPLinker {
         }
     }
 
-    /// Reserved decoder entrypoint (not implemented).
+    /// Heuristic baseline for joint entity-relation extraction.
     ///
-    /// A full TPLinker implementation would:
+    /// Called by `RelationExtractor::extract_with_relations`. Uses stacked NER for
+    /// entities and trigger-based heuristics for relations.
+    ///
+    /// TODO(neural): A full TPLinker implementation would replace the body with:
     /// 1. Run ONNX model to get handshaking matrix predictions
     /// 2. Decode entity boundaries from SH2OH/OH2SH tags
     /// 3. Decode relations from handshaking between entity pairs
-    #[allow(dead_code)] // Placeholder helper; kept for future TPLinker ONNX decoding work.
     fn extract_with_handshaking(
         &self,
         text: &str,
