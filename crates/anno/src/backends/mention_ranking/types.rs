@@ -673,3 +673,216 @@ impl RankedMention {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =========================================================================
+    // Helper constructors
+    // =========================================================================
+
+    fn make_mention(text: &str, start: usize, end: usize, mt: MentionType) -> RankedMention {
+        RankedMention {
+            start,
+            end,
+            text: text.to_string(),
+            mention_type: mt,
+            gender: None,
+            number: None,
+            head: extract_head(text),
+        }
+    }
+
+    fn make_proper(text: &str, start: usize, end: usize) -> RankedMention {
+        make_mention(text, start, end, MentionType::Proper)
+    }
+
+    fn make_pronoun(text: &str, start: usize, end: usize) -> RankedMention {
+        make_mention(text, start, end, MentionType::Pronominal)
+    }
+
+    // =========================================================================
+    // ClusteringStrategy
+    // =========================================================================
+
+    #[test]
+    fn clustering_strategy_default_is_left_to_right() {
+        assert_eq!(ClusteringStrategy::default(), ClusteringStrategy::LeftToRight);
+    }
+
+    #[test]
+    fn clustering_strategy_eq() {
+        assert_eq!(ClusteringStrategy::EasyFirst, ClusteringStrategy::EasyFirst);
+        assert_ne!(ClusteringStrategy::LeftToRight, ClusteringStrategy::EasyFirst);
+    }
+
+    // =========================================================================
+    // MentionRankingConfig defaults
+    // =========================================================================
+
+    #[test]
+    fn config_default_values() {
+        let cfg = MentionRankingConfig::default();
+        assert!((cfg.link_threshold - 0.3).abs() < f64::EPSILON);
+        assert_eq!(cfg.pronoun_max_antecedents, 30);
+        assert_eq!(cfg.proper_max_antecedents, 300);
+        assert_eq!(cfg.nominal_max_antecedents, 300);
+        assert_eq!(cfg.max_distance, 100);
+        assert!(!cfg.enable_global_proper_coref);
+        assert_eq!(cfg.clustering_strategy, ClusteringStrategy::LeftToRight);
+        assert!(!cfg.use_non_coref_constraints);
+        assert!((cfg.salience_weight - 0.0).abs() < f64::EPSILON);
+        assert!(!cfg.enable_be_phrase_detection);
+        assert!(!cfg.enable_acronym_matching);
+        assert!(!cfg.enable_context_filtering);
+        assert!(!cfg.enable_synonym_matching);
+        assert!(!cfg.enable_nominal_adjective_detection);
+        assert_eq!(cfg.language, "en");
+        assert!(cfg.external_scores.is_none());
+    }
+
+    // =========================================================================
+    // Named constructors: book_scale, clinical
+    // =========================================================================
+
+    #[test]
+    fn config_book_scale_enables_long_doc_features() {
+        let cfg = MentionRankingConfig::book_scale();
+        assert!(cfg.enable_global_proper_coref);
+        assert_eq!(cfg.clustering_strategy, ClusteringStrategy::EasyFirst);
+        assert!(cfg.use_non_coref_constraints);
+        assert!(cfg.enable_be_phrase_detection);
+        assert!(cfg.enable_acronym_matching);
+        assert!(cfg.enable_context_filtering);
+        // Salience enabled for long docs
+        assert!(cfg.salience_weight > 0.0);
+        // Distance weight lower than default for long docs
+        assert!(cfg.distance_weight < MentionRankingConfig::default().distance_weight);
+        assert_eq!(cfg.max_distance, 500);
+    }
+
+    #[test]
+    fn config_clinical_enables_i2b2_features() {
+        let cfg = MentionRankingConfig::clinical();
+        assert!(cfg.enable_be_phrase_detection);
+        assert!(cfg.enable_acronym_matching);
+        assert!(cfg.enable_context_filtering);
+        assert!(cfg.enable_synonym_matching);
+        assert!(cfg.enable_global_proper_coref);
+        assert_eq!(cfg.clustering_strategy, ClusteringStrategy::EasyFirst);
+        // Clinical has smaller antecedent windows than book_scale
+        let book = MentionRankingConfig::book_scale();
+        assert!(cfg.proper_max_antecedents < book.proper_max_antecedents);
+        assert!(cfg.nominal_max_antecedents < book.nominal_max_antecedents);
+    }
+
+    // =========================================================================
+    // with_salience (builder pattern)
+    // =========================================================================
+
+    #[test]
+    fn with_salience_clamps_to_unit_interval() {
+        let cfg = MentionRankingConfig::default().with_salience(2.0);
+        assert!((cfg.salience_weight - 1.0).abs() < f64::EPSILON);
+
+        let cfg = MentionRankingConfig::default().with_salience(-0.5);
+        assert!((cfg.salience_weight - 0.0).abs() < f64::EPSILON);
+
+        let cfg = MentionRankingConfig::default().with_salience(0.25);
+        assert!((cfg.salience_weight - 0.25).abs() < f64::EPSILON);
+    }
+
+    // =========================================================================
+    // max_antecedents_for_type
+    // =========================================================================
+
+    #[test]
+    fn max_antecedents_for_type_dispatches_correctly() {
+        let cfg = MentionRankingConfig::default();
+        assert_eq!(cfg.max_antecedents_for_type(MentionType::Pronominal), 30);
+        assert_eq!(cfg.max_antecedents_for_type(MentionType::Proper), 300);
+        assert_eq!(cfg.max_antecedents_for_type(MentionType::Nominal), 300);
+        // Zero and Unknown fall back to nominal limits
+        assert_eq!(cfg.max_antecedents_for_type(MentionType::Zero), 300);
+        assert_eq!(cfg.max_antecedents_for_type(MentionType::Unknown), 300);
+    }
+
+    // =========================================================================
+    // extract_head
+    // =========================================================================
+
+    #[test]
+    fn extract_head_returns_last_word() {
+        assert_eq!(extract_head("the former president"), "president");
+        assert_eq!(extract_head("Obama"), "Obama");
+        assert_eq!(extract_head(""), "");
+        assert_eq!(extract_head("  spaced  words  "), "words");
+    }
+
+    // =========================================================================
+    // RankedMention
+    // =========================================================================
+
+    #[test]
+    fn ranked_mention_span() {
+        let m = make_proper("Alice", 10, 15);
+        assert_eq!(m.span(), (10, 15));
+    }
+
+    // =========================================================================
+    // ScoredPair construction
+    // =========================================================================
+
+    #[test]
+    fn scored_pair_fields() {
+        let pair = ScoredPair {
+            mention_idx: 5,
+            antecedent_idx: 2,
+            score: 0.87,
+        };
+        assert_eq!(pair.mention_idx, 5);
+        assert_eq!(pair.antecedent_idx, 2);
+        assert!((pair.score - 0.87).abs() < f64::EPSILON);
+    }
+
+    // =========================================================================
+    // MentionCluster
+    // =========================================================================
+
+    #[test]
+    fn canonical_mention_prefers_proper() {
+        let cluster = MentionCluster {
+            id: 0,
+            mentions: vec![
+                make_pronoun("she", 100, 103),
+                make_proper("Alice", 0, 5),
+                make_mention("the woman", 50, 59, MentionType::Nominal),
+            ],
+        };
+        let canon = cluster.canonical_mention().unwrap();
+        assert_eq!(canon.text, "Alice");
+    }
+
+    #[test]
+    fn canonical_mention_falls_back_to_first() {
+        let cluster = MentionCluster {
+            id: 1,
+            mentions: vec![
+                make_pronoun("she", 10, 13),
+                make_pronoun("her", 20, 23),
+            ],
+        };
+        let canon = cluster.canonical_mention().unwrap();
+        assert_eq!(canon.text, "she");
+    }
+
+    #[test]
+    fn canonical_mention_empty_cluster() {
+        let cluster = MentionCluster {
+            id: 2,
+            mentions: vec![],
+        };
+        assert!(cluster.canonical_mention().is_none());
+    }
+}
