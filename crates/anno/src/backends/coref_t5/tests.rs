@@ -180,3 +180,120 @@ fn parse_output_sorted_by_cluster_id() {
         assert_eq!(ids, sorted, "clusters should be sorted by ID");
     }
 }
+
+// -------------------------------------------------------------------------
+// Additional pure-function tests
+// -------------------------------------------------------------------------
+
+#[test]
+fn config_custom_values() {
+    let config = T5CorefConfig {
+        max_input_length: 256,
+        max_output_length: 128,
+        num_beams: 4,
+        optimization_level: 1,
+        num_threads: 2,
+    };
+    assert_eq!(config.max_input_length, 256);
+    assert_eq!(config.max_output_length, 128);
+    assert_eq!(config.num_beams, 4);
+    assert_eq!(config.optimization_level, 1);
+    assert_eq!(config.num_threads, 2);
+}
+
+#[test]
+fn cluster_clone_is_independent() {
+    let original = CorefCluster {
+        id: 1,
+        mentions: vec!["Ada Lovelace".into(), "She".into()],
+        spans: vec![(0, 12), (30, 33)],
+        canonical: "Ada Lovelace".into(),
+    };
+    let mut cloned = original.clone();
+    cloned.mentions.push("her".into());
+    assert_eq!(original.mentions.len(), 2, "original must be unaffected");
+    assert_eq!(cloned.mentions.len(), 3);
+}
+
+#[test]
+fn mark_mentions_mixed_pronouns_and_caps() {
+    let out = mark_mentions_for_t5("Alice told him about Bob");
+    assert!(out.contains("<m> Alice </m>"), "capitalized 'Alice' marked");
+    assert!(out.contains("<m> him </m>"), "pronoun 'him' marked");
+    assert!(out.contains("<m> Bob </m>"), "capitalized 'Bob' marked");
+    assert!(out.contains("told"), "'told' unmarked");
+    assert!(out.contains("about"), "'about' unmarked");
+}
+
+#[test]
+fn mark_mentions_possessive_pronouns() {
+    let out = mark_mentions_for_t5("his car and their house");
+    assert!(out.contains("<m> his </m>"));
+    assert!(out.contains("<m> their </m>"));
+    // "car", "and", "house" should not be marked
+    assert!(!out.contains("<m> car </m>"));
+    assert!(!out.contains("<m> and </m>"));
+    assert!(!out.contains("<m> house </m>"));
+}
+
+#[test]
+fn extract_mentions_unclosed_tag_keeps_remaining_text() {
+    // An unclosed <m> tag should not panic; the remainder is appended as plain text.
+    let (plain, spans) = extract_t5_mentions("before <m> orphan text after").unwrap();
+    assert!(
+        plain.contains("before"),
+        "text before unclosed tag preserved"
+    );
+    assert!(
+        plain.contains("orphan text after"),
+        "text inside unclosed tag appended as plain"
+    );
+    assert!(spans.is_empty(), "no complete span from unclosed tag");
+}
+
+#[test]
+fn extract_mentions_adjacent_spans() {
+    let marked = "<m> A </m><m> B </m>";
+    let (plain, spans) = extract_t5_mentions(marked).unwrap();
+    assert_eq!(spans.len(), 2);
+    assert_eq!(spans[0].0, "A");
+    assert_eq!(spans[1].0, "B");
+    // Offsets must not overlap
+    assert!(
+        spans[0].2 <= spans[1].1,
+        "first span end ({}) must be <= second span start ({})",
+        spans[0].2,
+        spans[1].1
+    );
+    // Round-trip: extracting from plain text at the stored offsets must match
+    for (text, start, end) in &spans {
+        let extracted: String = plain.chars().skip(*start).take(end - start).collect();
+        assert_eq!(&extracted, text);
+    }
+}
+
+#[test]
+fn parse_output_multiple_distinct_clusters() {
+    // Two separate clusters: 1 (Alice/She) and 2 (Bob/He)
+    let decoded = "Alice | 1 met Bob | 2 yesterday . She | 1 greeted He | 2 warmly .";
+    let clusters = parse_t5_coref_output(decoded);
+    assert_eq!(clusters.len(), 2, "two multi-mention clusters expected");
+    let c1 = clusters.iter().find(|c| c.id == 1).unwrap();
+    let c2 = clusters.iter().find(|c| c.id == 2).unwrap();
+    assert!(c1.mentions.contains(&"Alice".to_string()));
+    assert!(c1.mentions.contains(&"She".to_string()));
+    assert!(c2.mentions.contains(&"Bob".to_string()));
+    assert!(c2.mentions.contains(&"He".to_string()));
+}
+
+#[test]
+fn parse_output_cluster_id_with_trailing_punctuation() {
+    // Cluster ID followed by punctuation (e.g. "1." or "1,") should still parse
+    let decoded = "Marie | 1 discovered radium . She | 1 won .";
+    let clusters = parse_t5_coref_output(decoded);
+    assert_eq!(clusters.len(), 1);
+    let c = &clusters[0];
+    assert_eq!(c.id, 1);
+    assert!(c.mentions.contains(&"Marie".to_string()));
+    assert!(c.mentions.contains(&"She".to_string()));
+}

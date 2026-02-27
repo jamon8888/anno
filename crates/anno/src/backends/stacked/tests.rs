@@ -736,6 +736,249 @@ fn test_longest_span_with_ties() {
 }
 
 // =========================================================================
+// Pure Function / Deterministic Tests
+// =========================================================================
+
+#[test]
+fn test_method_for_layer_name_all_branches() {
+    use anno_core::ExtractionMethod;
+    assert_eq!(method_for_layer_name("regex"), ExtractionMethod::Pattern);
+    assert_eq!(
+        method_for_layer_name("heuristic"),
+        ExtractionMethod::Heuristic
+    );
+    assert_eq!(method_for_layer_name("rule"), ExtractionMethod::Heuristic);
+    // Anything else maps to Neural (onnx, candle, custom names, etc.)
+    assert_eq!(method_for_layer_name("onnx-bert"), ExtractionMethod::Neural);
+    assert_eq!(method_for_layer_name("candle"), ExtractionMethod::Neural);
+    assert_eq!(method_for_layer_name(""), ExtractionMethod::Neural);
+}
+
+#[test]
+fn test_resolve_priority_always_keeps_existing() {
+    let existing = mock_entity("A", 0, EntityType::Person, 0.1);
+    let candidate = mock_entity("ABCDE", 0, EntityType::Person, 1.0);
+    // Priority ignores both length and confidence -- existing always wins.
+    assert!(matches!(
+        ConflictStrategy::Priority.resolve(&existing, &candidate),
+        Resolution::KeepExisting
+    ));
+}
+
+#[test]
+fn test_resolve_longest_span_picks_longer() {
+    let short = mock_entity("AB", 0, EntityType::Person, 0.9);
+    let long = mock_entity("ABCDE", 0, EntityType::Person, 0.1);
+    assert!(matches!(
+        ConflictStrategy::LongestSpan.resolve(&short, &long),
+        Resolution::Replace
+    ));
+    assert!(matches!(
+        ConflictStrategy::LongestSpan.resolve(&long, &short),
+        Resolution::KeepExisting
+    ));
+}
+
+#[test]
+fn test_resolve_longest_span_equal_prefers_existing() {
+    let a = mock_entity("ABC", 0, EntityType::Person, 0.5);
+    let b = mock_entity("XYZ", 0, EntityType::Person, 0.9);
+    // Same length: existing wins.
+    assert!(matches!(
+        ConflictStrategy::LongestSpan.resolve(&a, &b),
+        Resolution::KeepExisting
+    ));
+}
+
+#[test]
+fn test_resolve_highest_conf_picks_higher() {
+    let low = mock_entity("A", 0, EntityType::Person, 0.3);
+    let high = mock_entity("A", 0, EntityType::Person, 0.9);
+    assert!(matches!(
+        ConflictStrategy::HighestConf.resolve(&low, &high),
+        Resolution::Replace
+    ));
+    assert!(matches!(
+        ConflictStrategy::HighestConf.resolve(&high, &low),
+        Resolution::KeepExisting
+    ));
+}
+
+#[test]
+fn test_resolve_highest_conf_equal_prefers_existing() {
+    let a = mock_entity("A", 0, EntityType::Person, 0.7);
+    let b = mock_entity("B", 0, EntityType::Person, 0.7);
+    assert!(matches!(
+        ConflictStrategy::HighestConf.resolve(&a, &b),
+        Resolution::KeepExisting
+    ));
+}
+
+#[test]
+fn test_resolve_union_always_keeps_both() {
+    let a = mock_entity("A", 0, EntityType::Person, 0.1);
+    let b = mock_entity("BCDEF", 0, EntityType::Organization, 1.0);
+    assert!(matches!(
+        ConflictStrategy::Union.resolve(&a, &b),
+        Resolution::KeepBoth
+    ));
+}
+
+#[test]
+fn test_try_build_empty_returns_error() {
+    let result = StackedNER::builder().try_build();
+    assert!(result.is_err());
+    let msg = format!("{}", result.err().unwrap());
+    assert!(
+        msg.contains("at least one layer"),
+        "unexpected error: {msg}"
+    );
+}
+
+#[test]
+fn test_try_build_ok_single_layer() {
+    let result = StackedNER::builder().layer(RegexNER::new()).try_build();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_invalid_span_start_ge_end_skipped() {
+    // Backend produces an entity where start == end (zero-width).
+    let layer = MockModel::new("l1")
+        .with_entities(vec![])
+        // We'll construct an entity with start >= end via without_validation + raw entity.
+        ;
+    // Build a raw entity with start > end using Entity::new then manually set.
+    let mut bad = Entity::new("ghost", EntityType::Person, 5, 5, 0.9);
+    bad.start = 5;
+    bad.end = 5; // zero-width
+    let layer = MockModel::new("l1")
+        .with_entities(vec![bad])
+        .without_validation();
+
+    let ner = StackedNER::builder()
+        .layer(layer)
+        .strategy(ConflictStrategy::Priority)
+        .build();
+
+    let result = ner.extract_entities("hello world", None).unwrap();
+    assert!(
+        result.is_empty(),
+        "zero-width entity should be filtered out, got: {result:?}"
+    );
+}
+
+#[test]
+fn test_provenance_not_overwritten_when_already_set() {
+    use anno_core::{ExtractionMethod, Provenance};
+    let mut entity = mock_entity("Apple", 0, EntityType::Organization, 0.9);
+    entity.provenance = Some(Provenance {
+        source: Cow::Borrowed("custom-source"),
+        method: ExtractionMethod::Pattern,
+        pattern: Some("custom-pattern".into()),
+        raw_confidence: Some(0.5),
+        model_version: None,
+        timestamp: None,
+    });
+
+    let layer = MockModel::new("l1").with_entities(vec![entity]);
+    let ner = StackedNER::builder()
+        .layer(layer)
+        .strategy(ConflictStrategy::Priority)
+        .build();
+
+    let e = ner.extract_entities("Apple", None).unwrap();
+    assert_eq!(e.len(), 1);
+    let prov = e[0].provenance.as_ref().unwrap();
+    // Should keep the original provenance, NOT overwrite with layer name.
+    assert_eq!(prov.source.as_ref(), "custom-source");
+    assert_eq!(prov.method, ExtractionMethod::Pattern);
+    assert_eq!(prov.pattern.as_deref(), Some("custom-pattern"));
+}
+
+#[test]
+fn test_dedup_removes_same_span_same_type_non_union() {
+    // Two layers producing identical span+type entities. Non-Union strategies should dedup.
+    let e1 = mock_entity("Apple", 0, EntityType::Organization, 0.8);
+    let e2 = mock_entity("Apple", 0, EntityType::Organization, 0.8);
+
+    // With Union they both survive (tested elsewhere). With HighestConf, conflict
+    // resolution keeps existing (same conf), so only 1 reaches the dedup pass.
+    // This test verifies the final dedup_by guard in case both somehow survive.
+    let layer1 = mock_model("l1", vec![e1]);
+    let layer2 = mock_model("l2", vec![e2]);
+
+    let ner = StackedNER::builder()
+        .layer(layer1)
+        .layer(layer2)
+        .strategy(ConflictStrategy::Priority)
+        .build();
+
+    let e = ner.extract_entities("Apple", None).unwrap();
+    assert_eq!(e.len(), 1, "duplicates should be deduplicated");
+}
+
+#[test]
+fn test_multiple_overlaps_longest_span_replaces() {
+    // Three existing entities from layer1, then layer2 produces one big span covering them all.
+    // With LongestSpan, the big span should win.
+    let text = "New York City area is large";
+    let layer1 = mock_model(
+        "l1",
+        vec![
+            mock_entity("New", 0, EntityType::Location, 0.5),
+            mock_entity("York", 4, EntityType::Location, 0.5),
+            mock_entity("City", 9, EntityType::Location, 0.5),
+        ],
+    );
+    let layer2 = mock_model(
+        "l2",
+        vec![mock_entity("New York City", 0, EntityType::Location, 0.4)],
+    );
+
+    let ner = StackedNER::builder()
+        .layer(layer1)
+        .layer(layer2)
+        .strategy(ConflictStrategy::LongestSpan)
+        .build();
+
+    let e = ner.extract_entities(text, None).unwrap();
+    assert_eq!(e.len(), 1);
+    assert_eq!(e[0].text, "New York City");
+}
+
+#[test]
+fn test_stats_custom_build() {
+    let ner = StackedNER::builder()
+        .layer(mock_model("alpha", vec![]))
+        .layer(mock_model("beta", vec![]))
+        .layer(mock_model("gamma", vec![]))
+        .strategy(ConflictStrategy::HighestConf)
+        .build();
+
+    let stats = ner.stats();
+    assert_eq!(stats.layer_count, 3);
+    assert_eq!(stats.strategy, ConflictStrategy::HighestConf);
+    assert_eq!(stats.layer_names, vec!["alpha", "beta", "gamma"]);
+}
+
+#[test]
+fn test_name_reflects_layers() {
+    let ner = StackedNER::builder()
+        .layer(RegexNER::new())
+        .layer(HeuristicNER::new())
+        .build();
+
+    let name = ner.name();
+    assert!(name.starts_with("stacked("), "name = {name}");
+    assert!(name.contains("regex"), "name should contain regex: {name}");
+    assert!(
+        name.contains("heuristic"),
+        "name should contain heuristic: {name}"
+    );
+}
+
+// =========================================================================
 // Property-Based Tests (Proptest)
 // =========================================================================
 
