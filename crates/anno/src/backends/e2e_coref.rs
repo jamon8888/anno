@@ -589,5 +589,219 @@ mod tests {
             }
         }
     }
+
+    // -- New tests below --
+
+    #[test]
+    fn test_whitespace_only_input() {
+        let coref = E2ECoref::new();
+        let clusters = coref.resolve("   \t\n  ").unwrap();
+        assert!(clusters.is_empty(), "Whitespace-only input should yield no clusters");
+    }
+
+    #[test]
+    fn test_single_token_no_coreference() {
+        let coref = E2ECoref::new();
+        let clusters = coref.resolve("Hello").unwrap();
+        // A single lowercase token has no antecedent and low mention score;
+        // no clusters should form.
+        assert!(clusters.is_empty(), "Single token should yield no clusters");
+    }
+
+    #[test]
+    fn test_single_mention_no_cluster() {
+        // Even a strong mention candidate (a pronoun) needs an antecedent
+        // to form a cluster. A lone pronoun should produce zero clusters.
+        let coref = E2ECoref::new();
+        let clusters = coref.resolve("He").unwrap();
+        assert!(clusters.is_empty(), "Lone pronoun has no antecedent to link to");
+    }
+
+    #[test]
+    fn test_heuristic_definite_description() {
+        let coref = E2ECoref::new();
+        let score = coref.heuristic_mention_score("the president");
+        assert!(
+            score > 0.3,
+            "Definite description 'the ...' should score > 0.3, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_heuristic_corporate_suffix() {
+        let coref = E2ECoref::new();
+        for suffix in &["Acme Inc.", "Foo Corp.", "Bar Ltd."] {
+            let score = coref.heuristic_mention_score(suffix);
+            assert!(
+                score > 0.5,
+                "Corporate entity '{suffix}' should score > 0.5, got {score}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_heuristic_long_span_penalty() {
+        let coref = E2ECoref::new();
+        let long_span = "the very large and complicated entity name description";
+        let short_span = "the entity";
+        let long_score = coref.heuristic_mention_score(long_span);
+        let short_score = coref.heuristic_mention_score(short_span);
+        assert!(
+            short_score > long_score,
+            "Short span ({short_score}) should outscore long span ({long_score}) due to length penalty"
+        );
+    }
+
+    #[test]
+    fn test_heuristic_empty_text_score() {
+        let coref = E2ECoref::new();
+        let score = coref.heuristic_mention_score("");
+        assert!(score < 0.0, "Empty text should get negative score, got {score}");
+    }
+
+    #[test]
+    fn test_heuristic_lowercase_word() {
+        let coref = E2ECoref::new();
+        let score = coref.heuristic_mention_score("running");
+        // A plain lowercase non-pronoun word should score very low.
+        assert!(
+            score <= 0.0,
+            "Plain lowercase word should score <= 0, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_antecedent_head_match() {
+        let coref = E2ECoref::new();
+        let m_full = make_mention(0, 2, "Barack Obama");
+        let m_last = make_mention(5, 6, "Obama");
+        let score = coref.antecedent_score(&m_last, &m_full);
+        // Head match ("Obama" == "Obama") + substring containment should contribute.
+        assert!(
+            score > 0.5,
+            "Head-word match should yield antecedent score > 0.5, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_antecedent_no_match() {
+        let coref = E2ECoref::new();
+        let m1 = make_mention(0, 1, "cat");
+        let m2 = make_mention(3, 4, "dog");
+        let score = coref.antecedent_score(&m2, &m1);
+        // No string overlap, distance penalty applies: score should be low.
+        assert!(
+            score < 0.1,
+            "Unrelated mentions should have low antecedent score, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_antecedent_distance_penalty() {
+        let coref = E2ECoref::new();
+        let anchor = make_mention(0, 1, "John");
+        let near = make_mention(2, 3, "John");
+        let far = make_mention(100, 101, "John");
+
+        let score_near = coref.antecedent_score(&near, &anchor);
+        let score_far = coref.antecedent_score(&far, &anchor);
+        assert!(
+            score_near > score_far,
+            "Closer mention ({score_near}) should outscore farther mention ({score_far})"
+        );
+    }
+
+    #[test]
+    fn test_enumerate_spans_count() {
+        let config = E2ECorefConfig {
+            max_span_width: 3,
+            ..E2ECorefConfig::default()
+        };
+        let coref = E2ECoref::with_config(config);
+        let text = "A B C D";
+        let tokens: Vec<&str> = text.split_whitespace().collect();
+        let positions = coref.calculate_token_positions(text, &tokens);
+        let spans = coref.enumerate_spans(&tokens, &positions, text);
+
+        // With 4 tokens and max_span_width=3:
+        // width 1: 4 spans, width 2: 3 spans, width 3: 2 spans = 9 total
+        assert_eq!(spans.len(), 9, "Expected 9 spans for 4 tokens with max_span_width=3");
+
+        // All spans should have start < end (token indices).
+        for span in &spans {
+            assert!(span.start < span.end, "Span start must be < end");
+        }
+    }
+
+    #[test]
+    fn test_enumerate_spans_max_width_clamp() {
+        // When max_span_width exceeds token count, spans are still bounded
+        // by the number of tokens.
+        let config = E2ECorefConfig {
+            max_span_width: 100,
+            ..E2ECorefConfig::default()
+        };
+        let coref = E2ECoref::with_config(config);
+        let text = "A B";
+        let tokens: Vec<&str> = text.split_whitespace().collect();
+        let positions = coref.calculate_token_positions(text, &tokens);
+        let spans = coref.enumerate_spans(&tokens, &positions, text);
+
+        // With 2 tokens: width 1: 2 spans, width 2: 1 span = 3 total
+        assert_eq!(spans.len(), 3, "Expected 3 spans for 2 tokens");
+    }
+
+    #[test]
+    fn test_link_mentions_empty() {
+        let coref = E2ECoref::new();
+        let clusters = coref.link_mentions(&[]);
+        assert!(clusters.is_empty(), "Empty mentions should yield no clusters");
+    }
+
+    #[test]
+    fn test_config_defaults() {
+        let config = E2ECorefConfig::default();
+        assert_eq!(config.max_span_width, 10);
+        assert_eq!(config.max_antecedents, 50);
+        assert!((config.top_spans_ratio - 0.4).abs() < f64::EPSILON);
+        assert!((config.mention_threshold - 0.0).abs() < f64::EPSILON);
+        assert!((config.link_threshold - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_high_link_threshold_suppresses_clusters() {
+        // With a very high link_threshold, no antecedent pair should pass,
+        // so no clusters form even for text with obvious coreference.
+        let config = E2ECorefConfig {
+            link_threshold: 100.0,
+            ..E2ECorefConfig::default()
+        };
+        let coref = E2ECoref::with_config(config);
+        let clusters = coref.resolve("John ran. John stopped.").unwrap();
+        assert!(
+            clusters.is_empty(),
+            "High link_threshold should suppress all clusters"
+        );
+    }
+
+    #[test]
+    fn test_default_trait() {
+        // E2ECoref implements Default via E2ECoref::new().
+        let coref = E2ECoref::default();
+        assert_eq!(coref.config.max_span_width, 10);
+    }
+
+    // -- Helpers --
+
+    fn make_mention(start: usize, end: usize, text: &str) -> Mention {
+        Mention {
+            start,
+            end,
+            char_start: 0,
+            char_end: text.len(),
+            text: text.to_string(),
+            score: 0.5,
+        }
+    }
 }
 
