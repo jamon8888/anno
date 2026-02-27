@@ -273,6 +273,7 @@ fn coref_resolver_with_custom_config() {
         fuzzy_matching: false,
         include_singletons: false,
         use_name_gazetteer: true,
+        acronym_matching: true,
     };
 
     let resolver = SimpleCorefResolver::new(config);

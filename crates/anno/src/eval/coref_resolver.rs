@@ -31,6 +31,11 @@ pub struct CorefConfig {
     /// improving pronoun resolution accuracy. Disable for non-English
     /// text or when names don't follow English gender conventions.
     pub use_name_gazetteer: bool,
+    /// Enable acronym matching (e.g., "IBM" matches "International Business Machines").
+    ///
+    /// Checks if one mention is an uppercase acronym whose letters match the
+    /// initial letters of the other mention's words. Requires same entity type.
+    pub acronym_matching: bool,
 }
 
 #[allow(deprecated)]
@@ -42,6 +47,7 @@ impl Default for CorefConfig {
             fuzzy_matching: true,
             include_singletons: true,
             use_name_gazetteer: true,
+            acronym_matching: true,
         }
     }
 }
@@ -138,7 +144,16 @@ impl SimpleCorefResolver {
             return Some(cluster_id);
         }
 
-        // Strategy 3: substring/fuzzy matching.
+        // Strategy 3: acronym matching (e.g., "IBM" ~ "International Business Machines").
+        if self.config.acronym_matching {
+            for (other_canonical, &cluster_id) in canonical_map {
+                if self.is_acronym_match(&canonical, other_canonical) {
+                    return Some(cluster_id);
+                }
+            }
+        }
+
+        // Strategy 4: substring/fuzzy matching.
         if self.config.fuzzy_matching {
             for (other_canonical, &cluster_id) in canonical_map {
                 if self.names_match(&canonical, other_canonical) {
@@ -276,6 +291,45 @@ impl SimpleCorefResolver {
     fn canonical_form(&self, text: &str, entity_type: &EntityType) -> String {
         let normalized = text.to_lowercase().trim().to_string();
         format!("{}:{}", entity_type.as_label(), normalized)
+    }
+
+    /// Check if one mention is an acronym of the other.
+    ///
+    /// "IBM" matches "International Business Machines" because the first letter of
+    /// each word in the full name matches the acronym characters. Both mentions must
+    /// share the same entity type (enforced by the canonical form prefix).
+    fn is_acronym_match(&self, name1: &str, name2: &str) -> bool {
+        let (type1, text1) = name1.split_once(':').unwrap_or(("", name1));
+        let (type2, text2) = name2.split_once(':').unwrap_or(("", name2));
+        if type1 != type2 {
+            return false;
+        }
+
+        // Canonical form lowercases text, so we can't check for uppercase.
+        // Instead: one side must be a single "word" (no spaces) with length > 1,
+        // the other must be multi-word with word count == single-word char count.
+        let words1: Vec<&str> = text1.split_whitespace().collect();
+        let words2: Vec<&str> = text2.split_whitespace().collect();
+
+        let (acronym, words) = if words1.len() == 1 && words2.len() > 1 {
+            (text1, &words2)
+        } else if words2.len() == 1 && words1.len() > 1 {
+            (text2, &words1)
+        } else {
+            return false;
+        };
+
+        let acronym_chars: Vec<char> = acronym.chars().collect();
+        // Acronym must be at least 2 chars and match word count.
+        if acronym_chars.len() < 2 || acronym_chars.len() != words.len() {
+            return false;
+        }
+
+        // Each acronym letter must match the first letter of the corresponding word.
+        acronym_chars
+            .iter()
+            .zip(words.iter())
+            .all(|(&ac, word)| word.starts_with(ac))
     }
 
     fn names_match(&self, name1: &str, name2: &str) -> bool {
@@ -1521,11 +1575,30 @@ mod tests {
     }
 
     #[test]
-    fn names_match_abbreviation_gap() {
-        // Known gap: "IBM" does NOT match "International Business Machines".
-        // The resolver has no abbreviation/acronym expansion logic.
+    fn names_match_acronym() {
+        // Acronym matching: "IBM" matches "International Business Machines".
         let resolver = SimpleCorefResolver::new(CorefConfig {
-            fuzzy_matching: true,
+            acronym_matching: true,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            org("International Business Machines", 0, 31),
+            org("IBM", 40, 43),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "'IBM' should cluster with 'International Business Machines' via acronym matching"
+        );
+    }
+
+    #[test]
+    fn acronym_matching_disabled() {
+        // When acronym_matching is disabled, "IBM" does NOT match.
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            acronym_matching: false,
+            fuzzy_matching: false,
             ..CorefConfig::default()
         });
         let entities = vec![
@@ -1536,7 +1609,60 @@ mod tests {
         assert_ne!(
             resolved[0].canonical_id.unwrap(),
             resolved[1].canonical_id.unwrap(),
-            "Known gap: acronym 'IBM' does not match full name (no abbreviation expansion)"
+            "Acronym matching disabled: 'IBM' should not cluster"
+        );
+    }
+
+    #[test]
+    fn acronym_type_mismatch_rejected() {
+        // Acronym must share entity type.
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            org("International Business Machines", 0, 31),
+            person("IBM", 40, 43),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "Acronym across different entity types should not cluster"
+        );
+    }
+
+    #[test]
+    fn acronym_length_mismatch_rejected() {
+        // "UN" (2 letters) does not match "United Nations Organization" (3 words)
+        // via acronym matching. Fuzzy matching disabled to isolate the acronym check.
+        let config = CorefConfig {
+            fuzzy_matching: false,
+            ..Default::default()
+        };
+        let resolver = SimpleCorefResolver::new(config);
+        let entities = vec![
+            org("United Nations Organization", 0, 26),
+            org("UN", 30, 32),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "Acronym letter count must match word count"
+        );
+    }
+
+    #[test]
+    fn acronym_un_matches() {
+        // "UN" (2 letters) matches "United Nations" (2 words).
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            org("United Nations", 0, 14),
+            org("UN", 20, 22),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "'UN' should cluster with 'United Nations'"
         );
     }
 
