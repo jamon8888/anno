@@ -806,4 +806,173 @@ mod tests {
             EntityType::Custom { .. }
         ));
     }
+
+    // =========================================================================
+    // word_span_to_char_offsets: edge cases
+    // =========================================================================
+
+    #[test]
+    fn test_word_span_empty_words() {
+        let text = "hello world";
+        let words: Vec<&str> = vec![];
+        let (s, e) = word_span_to_char_offsets(text, &words, 0, 0);
+        assert_eq!((s, e), (0, 0), "empty words should return (0,0)");
+    }
+
+    #[test]
+    fn test_word_span_start_gt_end() {
+        let text = "a b c";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let (s, e) = word_span_to_char_offsets(text, &words, 2, 1);
+        assert_eq!((s, e), (0, 0), "start > end should return (0,0)");
+    }
+
+    #[test]
+    fn test_word_span_out_of_bounds() {
+        let text = "a b c";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let (s, e) = word_span_to_char_offsets(text, &words, 0, 10);
+        assert_eq!((s, e), (0, 0), "end_word >= words.len() should return (0,0)");
+    }
+
+    #[test]
+    fn test_word_span_single_word_text() {
+        use crate::offset::TextSpan;
+        let text = "hello";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let (s, e) = word_span_to_char_offsets(text, &words, 0, 0);
+        assert_eq!(TextSpan::from_chars(text, s, e).extract(text), "hello");
+    }
+
+    #[test]
+    fn test_word_span_unicode_multibyte() {
+        use crate::offset::TextSpan;
+        // Each CJK char is 3 bytes but 1 char offset.
+        let text = "田中 works at 東京タワー";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        // words = ["田中", "works", "at", "東京タワー"]
+
+        let (s, e) = word_span_to_char_offsets(text, &words, 0, 0);
+        assert_eq!(TextSpan::from_chars(text, s, e).extract(text), "田中");
+
+        let (s, e) = word_span_to_char_offsets(text, &words, 3, 3);
+        assert_eq!(TextSpan::from_chars(text, s, e).extract(text), "東京タワー");
+
+        // Multi-word span across the boundary
+        let (s, e) = word_span_to_char_offsets(text, &words, 1, 2);
+        assert_eq!(TextSpan::from_chars(text, s, e).extract(text), "works at");
+    }
+
+    #[test]
+    fn test_word_span_emoji_text() {
+        use crate::offset::TextSpan;
+        let text = "I love 🎉 party";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        // words = ["I", "love", "🎉", "party"]
+        let (s, e) = word_span_to_char_offsets(text, &words, 2, 2);
+        assert_eq!(TextSpan::from_chars(text, s, e).extract(text), "🎉");
+
+        let (s, e) = word_span_to_char_offsets(text, &words, 3, 3);
+        assert_eq!(TextSpan::from_chars(text, s, e).extract(text), "party");
+    }
+
+    // =========================================================================
+    // map_entity_type: additional coverage
+    // =========================================================================
+
+    #[test]
+    fn test_map_entity_type_case_variations() {
+        // All case variants should resolve to the same canonical type
+        assert!(matches!(map_entity_type("Person"), EntityType::Person));
+        assert!(matches!(map_entity_type("PERSON"), EntityType::Person));
+        assert!(matches!(map_entity_type("PER"), EntityType::Person));
+        assert!(matches!(
+            map_entity_type("location"),
+            EntityType::Location
+        ));
+        assert!(matches!(
+            map_entity_type("Location"),
+            EntityType::Location
+        ));
+        assert!(matches!(map_entity_type("LOC"), EntityType::Location));
+        // GPE maps to Custom (geopolitical entity), not Location
+        assert!(matches!(map_entity_type("GPE"), EntityType::Custom { .. }));
+        assert!(matches!(map_entity_type("ORG"), EntityType::Organization));
+        assert!(matches!(map_entity_type("date"), EntityType::Date));
+        assert!(matches!(map_entity_type("DATE"), EntityType::Date));
+    }
+
+    #[test]
+    fn test_map_entity_type_empty_string() {
+        // Empty string should not panic; falls through to Other
+        let ty = map_entity_type("");
+        assert!(matches!(ty, EntityType::Other(_)));
+    }
+
+    // =========================================================================
+    // TaskSchema builder: deeper coverage
+    // =========================================================================
+
+    #[test]
+    fn test_task_schema_empty() {
+        let schema = TaskSchema::new();
+        assert!(schema.entities.is_none());
+        assert!(schema.classifications.is_empty());
+        assert!(schema.structures.is_empty());
+    }
+
+    #[test]
+    fn test_task_schema_with_entities_described() {
+        let mut desc = std::collections::HashMap::new();
+        desc.insert("person".to_string(), "A human being".to_string());
+        desc.insert("org".to_string(), "An organization".to_string());
+
+        let schema = TaskSchema::new().with_entities_described(desc);
+        let ent = schema.entities.as_ref().unwrap();
+        assert_eq!(ent.types.len(), 2);
+        assert_eq!(ent.descriptions.len(), 2);
+        assert!(ent.descriptions.contains_key("person"));
+    }
+
+    #[test]
+    fn test_task_schema_multiple_classifications() {
+        let schema = TaskSchema::new()
+            .with_classification("sentiment", &["pos", "neg"], false)
+            .with_classification("topic", &["tech", "sports", "politics"], true);
+
+        assert_eq!(schema.classifications.len(), 2);
+        assert_eq!(schema.classifications[0].name, "sentiment");
+        assert!(!schema.classifications[0].multi_label);
+        assert_eq!(schema.classifications[1].name, "topic");
+        assert!(schema.classifications[1].multi_label);
+        assert_eq!(schema.classifications[1].labels.len(), 3);
+    }
+
+    #[test]
+    fn test_task_schema_full_pipeline() {
+        // Build a schema using all builder methods in a chain
+        let schema = TaskSchema::new()
+            .with_entities(&["person", "org", "product"])
+            .with_classification("sentiment", &["positive", "negative"], false)
+            .with_structure(
+                StructureTask::new("invoice")
+                    .with_field("vendor", FieldType::String)
+                    .with_field("items", FieldType::List)
+                    .with_choice_field("currency", &["USD", "EUR", "GBP"]),
+            );
+
+        assert_eq!(schema.entities.as_ref().unwrap().types.len(), 3);
+        assert_eq!(schema.classifications.len(), 1);
+        assert_eq!(schema.structures.len(), 1);
+        let st = &schema.structures[0];
+        assert_eq!(st.name, "invoice");
+        assert_eq!(st.fields.len(), 3);
+        assert_eq!(st.fields[0].field_type, FieldType::String);
+        assert_eq!(st.fields[1].field_type, FieldType::List);
+        assert_eq!(st.fields[2].field_type, FieldType::Choice);
+        assert_eq!(
+            st.fields[2].choices.as_ref().unwrap(),
+            &["USD", "EUR", "GBP"]
+        );
+    }
 }
