@@ -57,10 +57,18 @@ pub enum Gender {
     Masculine,
     /// Feminine (she/her/hers)
     Feminine,
-    /// Neutral or non-binary (they/them/theirs, it/its)
-    #[default]
+    /// Neutral or non-binary (they/them/theirs, it/its).
+    ///
+    /// Encompasses both grammatical neutrality (singular "they"/"it" as convenience
+    /// or for inanimate referents) and personal pronoun choice (they/it as identity,
+    /// used by some genderqueer individuals).
     Neutral,
-    /// Unknown or unspecified
+    /// Unknown or unspecified (default).
+    ///
+    /// Absence of information about gender. Compatible with all other genders
+    /// (acts as a wildcard in coreference). Distinct from Neutral, which is a
+    /// positive assertion ("uses they/it").
+    #[default]
     Unknown,
 }
 
@@ -90,22 +98,25 @@ impl Gender {
             "they" | "them" | "their" | "theirs" | "themself" | "themselves" => {
                 Some(Gender::Neutral)
             }
-            // Inanimate (Neutral)
+            // Neutral/inanimate (also used as personal pronouns by some genderqueer individuals)
             "it" | "its" | "itself" => Some(Gender::Neutral),
             // Neopronouns (Unknown - explicitly non-binary, distinct from neutral "they")
             // xe/xem set
             "xe" | "xem" | "xyr" | "xyrs" | "xemself" => Some(Gender::Unknown),
-            // ze/hir set
-            "ze" | "hir" | "hirs" | "hirself" => Some(Gender::Unknown),
+            // ze/hir/zir set
+            "ze" | "hir" | "zir" | "hirs" | "zirs" | "hirself" | "zirself" => Some(Gender::Unknown),
             // ey/em set (Spivak pronouns)
             "ey" | "em" | "eir" | "eirs" | "emself" => Some(Gender::Unknown),
             // fae/faer set
-            "fae" | "faer" | "faers" | "faerself" => Some(Gender::Unknown),
+            "fae" | "faer" | "faers" | "faeself" | "faerself" => Some(Gender::Unknown),
             _ => None,
         }
     }
 
-    /// Get typical subject pronoun for this gender.
+    /// Get typical subject pronoun for this gender (English only).
+    ///
+    /// Returns English pronouns unconditionally. For other languages, use
+    /// language-specific pronoun generation (e.g., French il/elle, German er/sie/es).
     #[must_use]
     pub fn subject_pronoun(&self) -> &'static str {
         match self {
@@ -115,7 +126,9 @@ impl Gender {
         }
     }
 
-    /// Get typical object pronoun for this gender.
+    /// Get typical object pronoun for this gender (English only).
+    ///
+    /// Returns English pronouns unconditionally. See [`subject_pronoun`](Self::subject_pronoun).
     #[must_use]
     pub fn object_pronoun(&self) -> &'static str {
         match self {
@@ -125,7 +138,9 @@ impl Gender {
         }
     }
 
-    /// Get typical possessive pronoun for this gender.
+    /// Get typical possessive pronoun for this gender (English only).
+    ///
+    /// Returns English pronouns unconditionally. See [`subject_pronoun`](Self::subject_pronoun).
     #[must_use]
     pub fn possessive_pronoun(&self) -> &'static str {
         match self {
@@ -274,11 +289,6 @@ mod tests {
     }
 
     #[test]
-    fn test_default() {
-        assert_eq!(Gender::default(), Gender::Neutral);
-    }
-
-    #[test]
     fn test_neopronoun_detection() {
         // Neopronouns should return Gender::Unknown (explicitly non-binary)
         // xe/xem set
@@ -329,8 +339,8 @@ mod tests {
     /// - "The doctor said they would call back" (gender unknown)
     /// - "Alex brought their laptop" (Alex could be any gender)
     ///
-    /// Also models "it" for inanimate referents that have grammatical gender
-    /// in other languages (e.g., German "das Mädchen" = neuter "girl").
+    /// Also models "it" for inanimate referents and as a personal pronoun
+    /// (used by some genderqueer individuals, e.g., "Alex uses it/its pronouns").
     #[test]
     fn test_neutral_is_universally_compatible() {
         for gender in [
@@ -422,5 +432,148 @@ mod tests {
 
         // This means: Neutral is a grammatical convenience,
         // Unknown is a semantic marker of gender identity
+    }
+
+    // =========================================================================
+    // Audit-driven regression tests
+    // =========================================================================
+
+    /// Gender::default() must be Unknown, not Neutral or Masculine.
+    ///
+    /// Unknown means "no information yet"; Neutral means "uses they/it".
+    /// Getting this wrong causes all ungendered entities to appear non-binary
+    /// instead of simply unresolved.
+    #[test]
+    fn test_gender_default_is_unknown() {
+        assert_eq!(Gender::default(), Gender::Unknown);
+        // Confirm it is NOT Neutral (the audit's key concern)
+        assert_ne!(Gender::default(), Gender::Neutral);
+    }
+
+    /// Neutral is a positive assertion: the referent uses they/it pronouns.
+    ///
+    /// This is distinct from Unknown (no gender info). Conflating them causes
+    /// false coreference links between ungendered mentions and they/it-using
+    /// individuals.
+    #[test]
+    fn test_neutral_is_positive_assertion() {
+        // Neutral comes from explicit they/it pronouns
+        assert_eq!(Gender::from_pronoun("they"), Some(Gender::Neutral));
+        assert_eq!(Gender::from_pronoun("it"), Some(Gender::Neutral));
+
+        // Neutral is NOT the default
+        assert_ne!(Gender::default(), Gender::Neutral);
+
+        // Neutral is compatible with everything (singular "they" can refer to anyone)
+        assert!(Gender::Neutral.is_compatible(&Gender::Masculine));
+        assert!(Gender::Neutral.is_compatible(&Gender::Feminine));
+    }
+
+    /// "her" appears as both object and possessive in English.
+    /// Both forms should map to Feminine.
+    #[test]
+    fn test_from_pronoun_her_is_feminine() {
+        assert_eq!(Gender::from_pronoun("her"), Some(Gender::Feminine));
+        assert_eq!(Gender::from_pronoun("hers"), Some(Gender::Feminine));
+        assert_eq!(Gender::from_pronoun("herself"), Some(Gender::Feminine));
+    }
+
+    /// from_pronoun must be case-insensitive for all recognized forms.
+    #[test]
+    fn test_from_pronoun_case_insensitive_all_forms() {
+        let cases = [
+            ("HE", Gender::Masculine),
+            ("Him", Gender::Masculine),
+            ("HIS", Gender::Masculine),
+            ("HIMSELF", Gender::Masculine),
+            ("SHE", Gender::Feminine),
+            ("Her", Gender::Feminine),
+            ("HERS", Gender::Feminine),
+            ("HERSELF", Gender::Feminine),
+            ("THEY", Gender::Neutral),
+            ("Them", Gender::Neutral),
+            ("THEIR", Gender::Neutral),
+            ("THEIRS", Gender::Neutral),
+            ("IT", Gender::Neutral),
+            ("Its", Gender::Neutral),
+            ("XE", Gender::Unknown),
+            ("Ze", Gender::Unknown),
+            ("FAE", Gender::Unknown),
+            ("Ey", Gender::Unknown),
+        ];
+        for (pronoun, expected) in cases {
+            assert_eq!(
+                Gender::from_pronoun(pronoun),
+                Some(expected),
+                "from_pronoun({:?}) should be {:?}",
+                pronoun,
+                expected
+            );
+        }
+    }
+
+    /// Unknown = identity signal (no info), Neutral = grammatical convenience (they/it).
+    ///
+    /// Neopronouns map to Unknown because they explicitly reject the binary
+    /// but don't map to the grammatical "they/it" category. This distinction
+    /// prevents false conflation in coreference chains.
+    #[test]
+    fn test_neopronoun_unknown_not_neutral_semantic() {
+        // Neopronouns -> Unknown (identity signal: explicitly non-binary)
+        for neo in ["xe", "ze", "fae", "ey"] {
+            assert_eq!(
+                Gender::from_pronoun(neo),
+                Some(Gender::Unknown),
+                "{} should be Unknown (identity signal), not Neutral",
+                neo
+            );
+        }
+        // Traditional neutral -> Neutral (grammatical convenience)
+        for trad in ["they", "them", "it", "its"] {
+            assert_eq!(
+                Gender::from_pronoun(trad),
+                Some(Gender::Neutral),
+                "{} should be Neutral (grammatical), not Unknown",
+                trad
+            );
+        }
+    }
+
+    /// Compatibility is NOT transitive: Masc~Unknown and Unknown~Fem,
+    /// but Masc is NOT compatible with Fem.
+    ///
+    /// This is intentional: Unknown is a wildcard, not a bridge.
+    #[test]
+    fn test_compatibility_not_transitive() {
+        // Masc is compatible with Unknown
+        assert!(Gender::Masculine.is_compatible(&Gender::Unknown));
+        // Unknown is compatible with Fem
+        assert!(Gender::Unknown.is_compatible(&Gender::Feminine));
+        // But Masc is NOT compatible with Fem (transitivity does not hold)
+        assert!(!Gender::Masculine.is_compatible(&Gender::Feminine));
+    }
+
+    /// from_pronoun returns None for names, not Some(Unknown).
+    #[test]
+    fn test_from_pronoun_returns_none_for_names() {
+        assert_eq!(Gender::from_pronoun("Alice"), None);
+        assert_eq!(Gender::from_pronoun("Bob"), None);
+        assert_eq!(Gender::from_pronoun("NATO"), None);
+        assert_eq!(Gender::from_pronoun("London"), None);
+        assert_eq!(Gender::from_pronoun("the"), None);
+    }
+
+    /// "em" is a Spivak pronoun (ey/em/eir), not an HTML <em> tag.
+    ///
+    /// This test documents that from_pronoun expects tokenized text
+    /// (individual words), not raw HTML. In tokenized text, "em" is
+    /// the Spivak object pronoun.
+    #[test]
+    fn test_em_is_spivak_not_html() {
+        assert_eq!(
+            Gender::from_pronoun("em"),
+            Some(Gender::Unknown),
+            "'em' is the Spivak object pronoun; expects tokenized text, not HTML"
+        );
     }
 }

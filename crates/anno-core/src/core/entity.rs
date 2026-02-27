@@ -35,6 +35,7 @@
 //! 4. **Hierarchical confidence**: Coarse (linkage) + fine (type) scores
 //! 5. **Multi-modal ready**: Spans can be text offsets or visual bboxes
 
+use super::types::{MentionType, PhiFeatures};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
@@ -1830,6 +1831,20 @@ pub struct Entity {
     /// ```
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewport: Option<EntityViewport>,
+    /// Phi-features (person, number, gender) for morphological agreement.
+    ///
+    /// Used for coreference constraints and zero pronoun resolution.
+    /// In pro-drop languages (Arabic, Spanish, Japanese), verb morphology
+    /// encodes subject features even when the pronoun is dropped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phi_features: Option<PhiFeatures>,
+    /// Mention type classification (Proper, Nominal, Pronominal, Zero).
+    ///
+    /// Classifies the referring expression type for coreference resolution.
+    /// Follows the Accessibility Hierarchy (Ariel 1990):
+    /// Proper > Nominal > Pronominal > Zero.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mention_type: Option<MentionType>,
 }
 
 impl Entity {
@@ -1867,6 +1882,8 @@ impl Entity {
             valid_from: None,
             valid_until: None,
             viewport: None,
+            phi_features: None,
+            mention_type: None,
         }
     }
 
@@ -1896,6 +1913,8 @@ impl Entity {
             valid_from: None,
             valid_until: None,
             viewport: None,
+            phi_features: None,
+            mention_type: None,
         }
     }
 
@@ -1924,6 +1943,8 @@ impl Entity {
             valid_from: None,
             valid_until: None,
             viewport: None,
+            phi_features: None,
+            mention_type: None,
         }
     }
 
@@ -1951,6 +1972,8 @@ impl Entity {
             valid_from: None,
             valid_until: None,
             viewport: None,
+            phi_features: None,
+            mention_type: None,
         }
     }
 
@@ -2676,6 +2699,8 @@ pub struct EntityBuilder {
     valid_from: Option<chrono::DateTime<chrono::Utc>>,
     valid_until: Option<chrono::DateTime<chrono::Utc>>,
     viewport: Option<EntityViewport>,
+    phi_features: Option<PhiFeatures>,
+    mention_type: Option<MentionType>,
 }
 
 impl EntityBuilder {
@@ -2698,6 +2723,8 @@ impl EntityBuilder {
             valid_from: None,
             valid_until: None,
             viewport: None,
+            phi_features: None,
+            mention_type: None,
         }
     }
 
@@ -2829,6 +2856,20 @@ impl EntityBuilder {
         self
     }
 
+    /// Set phi-features (person, number, gender) for morphological agreement.
+    #[must_use]
+    pub fn phi_features(mut self, phi_features: PhiFeatures) -> Self {
+        self.phi_features = Some(phi_features);
+        self
+    }
+
+    /// Set mention type classification.
+    #[must_use]
+    pub fn mention_type(mut self, mention_type: MentionType) -> Self {
+        self.mention_type = Some(mention_type);
+        self
+    }
+
     /// Build the entity.
     #[must_use]
     pub fn build(self) -> Entity {
@@ -2848,6 +2889,8 @@ impl EntityBuilder {
             valid_from: self.valid_from,
             valid_until: self.valid_until,
             viewport: self.viewport,
+            phi_features: self.phi_features,
+            mention_type: self.mention_type,
         }
     }
 }

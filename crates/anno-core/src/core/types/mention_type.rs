@@ -157,6 +157,12 @@ impl MentionType {
     /// - Capitalization patterns
     /// - Article presence
     ///
+    /// # Multilingual Note
+    ///
+    /// English-only heuristics. The pronoun list, article prefixes ("the", "a", "an"),
+    /// and capitalization-based proper noun detection assume English text. For other
+    /// languages, prefer model-based mention type classification.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -191,16 +197,13 @@ impl MentionType {
         }
 
         // Check for capitalization (indicates proper noun)
-        // Skip single-word all-caps (might be acronym or emphasis)
+        // All-caps words (NATO, IBM, FBI) are proper nouns (acronyms),
+        // not emphasis, as long as they aren't pronouns (already handled above).
         let words: Vec<&str> = trimmed.split_whitespace().collect();
         if !words.is_empty() {
             let first_char = words[0].chars().next();
             if let Some(c) = first_char {
-                if c.is_uppercase()
-                    && !trimmed
-                        .chars()
-                        .all(|c| c.is_uppercase() || !c.is_alphabetic())
-                {
+                if c.is_uppercase() {
                     return MentionType::Proper;
                 }
             }
@@ -240,6 +243,11 @@ impl MentionType {
                 | "one" | "ones" | "someone" | "anyone" | "everyone" | "no one"
                 | "somebody" | "anybody" | "everybody" | "nobody"
                 | "something" | "anything" | "everything" | "nothing"
+                // Neopronouns
+                | "xe" | "xem" | "xyr" | "xyrs" | "xemself"
+                | "ze" | "hir" | "zir" | "hirs" | "zirs" | "hirself" | "zirself"
+                | "ey" | "em" | "eir" | "eirs" | "emself"
+                | "fae" | "faer" | "faers" | "faeself" | "faerself"
         )
     }
 
@@ -540,5 +548,121 @@ mod tests {
     #[test]
     fn test_default_is_nominal() {
         assert_eq!(MentionType::default(), MentionType::Nominal);
+    }
+
+    /// All-caps acronyms (NATO, IBM, FBI) should be classified as Proper,
+    /// not fall through to Nominal.
+    #[test]
+    fn test_classify_nato_is_proper() {
+        assert_eq!(MentionType::classify("NATO"), MentionType::Proper);
+        assert_eq!(MentionType::classify("IBM"), MentionType::Proper);
+        assert_eq!(MentionType::classify("FBI"), MentionType::Proper);
+        assert_eq!(MentionType::classify("UN"), MentionType::Proper);
+    }
+
+    // =========================================================================
+    // Audit-driven regression tests
+    // =========================================================================
+
+    /// "IBM" is an all-caps acronym and should be Proper.
+    #[test]
+    fn test_classify_ibm_is_proper() {
+        assert_eq!(MentionType::classify("IBM"), MentionType::Proper);
+    }
+
+    /// "FBI" is an all-caps acronym and should be Proper.
+    #[test]
+    fn test_classify_fbi_is_proper() {
+        assert_eq!(MentionType::classify("FBI"), MentionType::Proper);
+    }
+
+    /// "I" is a pronoun and should be Pronominal, not Proper.
+    ///
+    /// The pronoun check must run before the capitalization check,
+    /// otherwise "I" looks like a capitalized word -> Proper.
+    #[test]
+    fn test_classify_i_is_pronominal() {
+        assert_eq!(
+            MentionType::classify("I"),
+            MentionType::Pronominal,
+            "'I' is a pronoun, not a proper noun"
+        );
+    }
+
+    /// Empty string should produce a deterministic result (Nominal default).
+    #[test]
+    fn test_classify_empty_is_nominal() {
+        // Empty string: no words, no pronoun match, no capitalization -> Nominal
+        assert_eq!(MentionType::classify(""), MentionType::Nominal);
+    }
+
+    /// Whitespace-only string should produce a deterministic result.
+    #[test]
+    fn test_classify_whitespace_only() {
+        // Whitespace-only: trimmed is empty, split_whitespace yields nothing -> Nominal
+        assert_eq!(MentionType::classify("  "), MentionType::Nominal);
+        assert_eq!(MentionType::classify("\t"), MentionType::Nominal);
+    }
+
+    /// "iPhone" starts lowercase but has internal caps. Since the first
+    /// character is lowercase, classify falls through to Nominal.
+    ///
+    /// This documents current behavior; a smarter heuristic could detect
+    /// camelCase brand names as Proper.
+    #[test]
+    fn test_classify_mixed_case_acronym() {
+        // "iPhone" starts with lowercase 'i', so it doesn't match the
+        // "first char is uppercase" check -> Nominal
+        assert_eq!(
+            MentionType::classify("iPhone"),
+            MentionType::Nominal,
+            "iPhone starts lowercase -> Nominal (current heuristic)"
+        );
+    }
+
+    /// All standard English personal pronouns should be recognized by is_pronoun.
+    #[test]
+    fn test_is_pronoun_completeness() {
+        let standard_pronouns = [
+            // Personal: subject, object, possessive det, possessive pro, reflexive
+            "i", "me", "my", "mine", "myself",
+            "you", "your", "yours", "yourself", "yourselves",
+            "he", "him", "his", "himself",
+            "she", "her", "hers", "herself",
+            "it", "its", "itself",
+            "we", "us", "our", "ours", "ourselves",
+            "they", "them", "their", "theirs", "themselves", "themself",
+        ];
+        for pronoun in standard_pronouns {
+            assert_eq!(
+                MentionType::classify(pronoun),
+                MentionType::Pronominal,
+                "'{}' should be classified as Pronominal",
+                pronoun
+            );
+        }
+    }
+
+    /// Neopronoun sets (xe, ze, fae) should all be recognized as pronouns.
+    #[test]
+    fn test_is_pronoun_neopronouns() {
+        let neopronoun_sets = [
+            // xe/xem set
+            "xe", "xem", "xyr", "xyrs", "xemself",
+            // ze/hir/zir set
+            "ze", "hir", "zir", "hirs", "zirs", "hirself", "zirself",
+            // ey/em set (Spivak)
+            "ey", "em", "eir", "eirs", "emself",
+            // fae/faer set
+            "fae", "faer", "faers", "faeself", "faerself",
+        ];
+        for pronoun in neopronoun_sets {
+            assert_eq!(
+                MentionType::classify(pronoun),
+                MentionType::Pronominal,
+                "neopronoun '{}' should be classified as Pronominal",
+                pronoun
+            );
+        }
     }
 }

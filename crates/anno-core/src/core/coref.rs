@@ -518,7 +518,7 @@ impl From<&Entity> for Mention {
             head_start: None,
             head_end: None,
             entity_type: Some(entity.entity_type.as_label().to_string()),
-            mention_type: None,
+            mention_type: entity.mention_type,
         }
     }
 }

@@ -64,6 +64,81 @@
 use super::Gender;
 use serde::{Deserialize, Serialize};
 
+/// Animacy classification for coreference constraints.
+///
+/// Animacy distinguishes animate referents (people, animals) from inanimate
+/// ones (objects, abstractions). This matters for coreference: "John... it"
+/// is typically ungrammatical because animate entities resist inanimate pronouns.
+///
+/// # Cross-Linguistic Significance
+///
+/// Animacy plays a role in many languages:
+///
+/// | Language | Animacy Effect |
+/// |----------|---------------|
+/// | English | Pronoun choice: "he/she" (animate) vs "it" (inanimate) |
+/// | Algonquian | Noun class: animate vs inanimate determines morphology |
+/// | Japanese | Verb choice: "iru" (animate) vs "aru" (inanimate) |
+/// | Slavic | Case system: animacy affects accusative in masculine nouns |
+///
+/// # References
+///
+/// - Silverstein (1976): Hierarchy of Features and Ergativity
+/// - Comrie (1989): Language Universals and Linguistic Typology
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Animacy {
+    /// Animate: people, animals, personified entities
+    Animate,
+
+    /// Inanimate: objects, abstractions, places
+    Inanimate,
+
+    /// Unknown or unspecified animacy (default)
+    ///
+    /// Used when animacy cannot be determined from context, or when the
+    /// language/annotation scheme does not mark animacy.
+    #[default]
+    Unknown,
+}
+
+impl Animacy {
+    /// Check if this animacy is compatible with another for coreference.
+    ///
+    /// Unknown is compatible with anything (permissive).
+    #[must_use]
+    pub fn is_compatible(&self, other: &Animacy) -> bool {
+        match (self, other) {
+            (a, b) if a == b => true,
+            (Animacy::Unknown, _) | (_, Animacy::Unknown) => true,
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Display for Animacy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Animacy::Animate => write!(f, "animate"),
+            Animacy::Inanimate => write!(f, "inanimate"),
+            Animacy::Unknown => write!(f, "?anim"),
+        }
+    }
+}
+
+impl std::str::FromStr for Animacy {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "animate" | "anim" | "a" => Ok(Animacy::Animate),
+            "inanimate" | "inanim" | "i" => Ok(Animacy::Inanimate),
+            "?" | "?anim" | "unknown" | "unk" => Ok(Animacy::Unknown),
+            _ => Err(format!("Unknown animacy: {}", s)),
+        }
+    }
+}
+
 /// Grammatical person (1st, 2nd, 3rd).
 ///
 /// Person distinguishes the speaker (1st), the listener (2nd), and everyone
@@ -106,13 +181,24 @@ pub enum Person {
     /// refer to third-person entities.
     #[default]
     Third,
+
+    /// Unknown or unspecified person
+    ///
+    /// Used when person cannot be determined from context. Compatible with
+    /// all other person values (acts as a wildcard).
+    Unknown,
 }
 
 impl Person {
     /// Check if this person is compatible with another for coreference.
+    ///
+    /// Unknown is compatible with everything (wildcard).
     #[must_use]
     pub fn is_compatible(&self, other: &Person) -> bool {
-        self == other
+        match (self, other) {
+            (Person::Unknown, _) | (_, Person::Unknown) => true,
+            (a, b) => a == b,
+        }
     }
 }
 
@@ -122,6 +208,7 @@ impl std::fmt::Display for Person {
             Person::First => write!(f, "1st"),
             Person::Second => write!(f, "2nd"),
             Person::Third => write!(f, "3rd"),
+            Person::Unknown => write!(f, "?per"),
         }
     }
 }
@@ -134,6 +221,7 @@ impl std::str::FromStr for Person {
             "1" | "1st" | "first" => Ok(Person::First),
             "2" | "2nd" | "second" => Ok(Person::Second),
             "3" | "3rd" | "third" => Ok(Person::Third),
+            "?" | "?per" | "unknown" | "unk" => Ok(Person::Unknown),
             _ => Err(format!("Unknown person: {}", s)),
         }
     }
@@ -315,6 +403,12 @@ pub struct PhiFeatures {
     /// In languages like Arabic, gender is grammatically assigned to all nouns,
     /// not just animate entities.
     pub gender: Gender,
+
+    /// Animacy (animate/inanimate)
+    ///
+    /// Distinguishes people and animals from objects and abstractions.
+    /// Defaults to Unknown when not specified.
+    pub animacy: Animacy,
 }
 
 impl PhiFeatures {
@@ -334,6 +428,7 @@ impl PhiFeatures {
             person,
             number,
             gender,
+            animacy: Animacy::Unknown,
         }
     }
 
@@ -357,6 +452,7 @@ impl PhiFeatures {
             person: Person::Third,
             number: Number::Singular,
             gender: Gender::Masculine,
+            animacy: Animacy::Unknown,
         }
     }
 
@@ -378,6 +474,7 @@ impl PhiFeatures {
             person: Person::Third,
             number: Number::Singular,
             gender: Gender::Feminine,
+            animacy: Animacy::Unknown,
         }
     }
 
@@ -400,8 +497,27 @@ impl PhiFeatures {
         Self {
             person: Person::Third,
             number: Number::Plural,
-            gender: Gender::Neutral,
+            gender: Gender::Unknown,
+            animacy: Animacy::Unknown,
         }
+    }
+
+    /// Return a copy with the given animacy.
+    ///
+    /// Builder-style method for setting animacy on an existing `PhiFeatures`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use anno_core::{PhiFeatures, Animacy};
+    ///
+    /// let phi = PhiFeatures::third_sg_masc().with_animacy(Animacy::Animate);
+    /// assert_eq!(phi.animacy, Animacy::Animate);
+    /// ```
+    #[must_use]
+    pub fn with_animacy(mut self, animacy: Animacy) -> Self {
+        self.animacy = animacy;
+        self
     }
 
     /// Check if these phi-features are compatible with another set.
@@ -431,6 +547,7 @@ impl PhiFeatures {
         self.person.is_compatible(&other.person)
             && self.number.is_compatible(&other.number)
             && self.gender.is_compatible(&other.gender)
+            && self.animacy.is_compatible(&other.animacy)
     }
 
     /// Parse phi-features from a compact string notation.
@@ -478,11 +595,26 @@ impl PhiFeatures {
             Number::Singular // default
         };
 
-        let gender = if rest.contains('m') && !rest.contains("fem") {
+        // Gender detection: use precise token matching to avoid false positives.
+        // E.g. "3sing" should NOT match neutral via the 'n' in "sing".
+        let gender_rest = if rest.contains("sing") {
+            rest.replace("sing", "")
+        } else if rest.contains("sg") {
+            rest.replace("sg", "")
+        } else if rest.contains("du") {
+            rest.replace("du", "")
+        } else if rest.contains("plur") {
+            rest.replace("plur", "")
+        } else if rest.contains("pl") {
+            rest.replace("pl", "")
+        } else {
+            rest.to_string()
+        };
+        let gender = if gender_rest.contains('m') && !gender_rest.contains("fem") {
             Gender::Masculine
-        } else if rest.contains('f') || rest.contains("fem") {
+        } else if gender_rest.contains('f') || gender_rest.contains("fem") {
             Gender::Feminine
-        } else if rest.contains('n') || rest.contains("neut") {
+        } else if gender_rest.contains('n') || gender_rest.contains("neut") {
             Gender::Neutral
         } else {
             Gender::Unknown
@@ -492,6 +624,7 @@ impl PhiFeatures {
             person,
             number,
             gender,
+            animacy: Animacy::Unknown,
         })
     }
 }
@@ -727,6 +860,590 @@ mod tests {
             assert_eq!(phi.person, expected_person, "Person for {}", input);
             assert_eq!(phi.number, expected_number, "Number for {}", input);
             assert_eq!(phi.gender, expected_gender, "Gender for {}", input);
+            // parse always produces Unknown animacy
+            assert_eq!(phi.animacy, Animacy::Unknown, "Animacy for {}", input);
         }
+    }
+
+    // =========================================================================
+    // Animacy tests
+    // =========================================================================
+
+    #[test]
+    fn test_animacy_default() {
+        assert_eq!(Animacy::default(), Animacy::Unknown);
+    }
+
+    #[test]
+    fn test_animacy_compatibility() {
+        // Exact matches
+        assert!(Animacy::Animate.is_compatible(&Animacy::Animate));
+        assert!(Animacy::Inanimate.is_compatible(&Animacy::Inanimate));
+        assert!(Animacy::Unknown.is_compatible(&Animacy::Unknown));
+
+        // Unknown is compatible with everything
+        assert!(Animacy::Unknown.is_compatible(&Animacy::Animate));
+        assert!(Animacy::Unknown.is_compatible(&Animacy::Inanimate));
+        assert!(Animacy::Animate.is_compatible(&Animacy::Unknown));
+        assert!(Animacy::Inanimate.is_compatible(&Animacy::Unknown));
+
+        // Animate and Inanimate are mutually exclusive
+        assert!(!Animacy::Animate.is_compatible(&Animacy::Inanimate));
+        assert!(!Animacy::Inanimate.is_compatible(&Animacy::Animate));
+    }
+
+    #[test]
+    fn test_animacy_display() {
+        assert_eq!(format!("{}", Animacy::Animate), "animate");
+        assert_eq!(format!("{}", Animacy::Inanimate), "inanimate");
+        assert_eq!(format!("{}", Animacy::Unknown), "?anim");
+    }
+
+    #[test]
+    fn test_animacy_from_str() {
+        assert_eq!(
+            "animate".parse::<Animacy>().expect("parse 'animate'"),
+            Animacy::Animate
+        );
+        assert_eq!(
+            "anim".parse::<Animacy>().expect("parse 'anim'"),
+            Animacy::Animate
+        );
+        assert_eq!(
+            "inanimate".parse::<Animacy>().expect("parse 'inanimate'"),
+            Animacy::Inanimate
+        );
+        assert_eq!(
+            "inanim".parse::<Animacy>().expect("parse 'inanim'"),
+            Animacy::Inanimate
+        );
+        assert_eq!(
+            "unknown".parse::<Animacy>().expect("parse 'unknown'"),
+            Animacy::Unknown
+        );
+        assert!("bogus".parse::<Animacy>().is_err());
+    }
+
+    #[test]
+    fn test_animacy_serde_roundtrip() {
+        for animacy in [Animacy::Animate, Animacy::Inanimate, Animacy::Unknown] {
+            let json = serde_json::to_string(&animacy).expect("serialize Animacy");
+            let recovered: Animacy = serde_json::from_str(&json).expect("deserialize Animacy");
+            assert_eq!(animacy, recovered);
+        }
+    }
+
+    #[test]
+    fn test_with_animacy_builder() {
+        let phi = PhiFeatures::third_sg_masc().with_animacy(Animacy::Animate);
+        assert_eq!(phi.person, Person::Third);
+        assert_eq!(phi.number, Number::Singular);
+        assert_eq!(phi.gender, Gender::Masculine);
+        assert_eq!(phi.animacy, Animacy::Animate);
+    }
+
+    /// Animacy mismatch blocks coreference even when other features match.
+    ///
+    /// "John (animate)... it (inanimate)" should be incompatible.
+    #[test]
+    fn test_animacy_blocks_coreference() {
+        let john = PhiFeatures::third_sg_masc().with_animacy(Animacy::Animate);
+        let table = PhiFeatures::third_sg_masc().with_animacy(Animacy::Inanimate);
+
+        // Same person/number/gender but different animacy
+        assert!(!john.is_compatible(&table));
+    }
+
+    /// Unknown animacy does not block coreference.
+    #[test]
+    fn test_unknown_animacy_is_permissive() {
+        let known = PhiFeatures::third_sg_masc().with_animacy(Animacy::Animate);
+        let unknown = PhiFeatures::third_sg_masc(); // animacy defaults to Unknown
+
+        assert!(known.is_compatible(&unknown));
+        assert!(unknown.is_compatible(&known));
+    }
+
+    /// PhiFeatures default has Unknown animacy.
+    #[test]
+    fn test_phi_features_default_animacy() {
+        let phi = PhiFeatures::default();
+        assert_eq!(phi.animacy, Animacy::Unknown);
+    }
+
+    // =========================================================================
+    // Exhaustive compatibility matrix: Animacy x Animacy (3x3 = 9 cases)
+    // =========================================================================
+
+    /// Full 3x3 Animacy compatibility matrix.
+    ///
+    /// Expected truth table:
+    /// ```text
+    ///              Animate  Inanimate  Unknown
+    /// Animate        T         F         T
+    /// Inanimate      F         T         T
+    /// Unknown        T         T         T
+    /// ```
+    #[test]
+    fn test_animacy_exhaustive_compatibility_matrix() {
+        use Animacy::*;
+        let all = [Animate, Inanimate, Unknown];
+        // Encode expected compatibility as a 3x3 bool matrix (row = self, col = other)
+        let expected: [[bool; 3]; 3] = [
+            // Animate x {Animate, Inanimate, Unknown}
+            [true, false, true],
+            // Inanimate x {Animate, Inanimate, Unknown}
+            [false, true, true],
+            // Unknown x {Animate, Inanimate, Unknown}
+            [true, true, true],
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                assert_eq!(
+                    a.is_compatible(b),
+                    expected[i][j],
+                    "{:?}.is_compatible({:?}) should be {}",
+                    a,
+                    b,
+                    expected[i][j]
+                );
+            }
+        }
+    }
+
+    // =========================================================================
+    // PhiFeatures: mixed Unknown/specific fields act as wildcards
+    // =========================================================================
+
+    /// When one PhiFeatures has Unknown gender and the other has a specific
+    /// gender, they should still be compatible (Unknown acts as wildcard).
+    #[test]
+    fn test_phi_unknown_gender_wildcard() {
+        let specific = PhiFeatures::new(Person::Third, Number::Singular, Gender::Masculine);
+        let wildcard = PhiFeatures::new(Person::Third, Number::Singular, Gender::Unknown);
+        assert!(specific.is_compatible(&wildcard));
+        assert!(wildcard.is_compatible(&specific));
+    }
+
+    /// When one PhiFeatures has Unknown number, it wildcards.
+    #[test]
+    fn test_phi_unknown_number_wildcard() {
+        let specific = PhiFeatures::new(Person::First, Number::Plural, Gender::Feminine);
+        let wildcard = PhiFeatures {
+            person: Person::First,
+            number: Number::Unknown,
+            gender: Gender::Feminine,
+            animacy: Animacy::Unknown,
+        };
+        assert!(specific.is_compatible(&wildcard));
+        assert!(wildcard.is_compatible(&specific));
+    }
+
+    /// All-Unknown PhiFeatures is compatible with any concrete PhiFeatures.
+    #[test]
+    fn test_phi_all_unknown_is_universal_wildcard() {
+        let all_unknown = PhiFeatures {
+            person: Person::Unknown,
+            number: Number::Unknown,
+            gender: Gender::Unknown,
+            animacy: Animacy::Unknown,
+        };
+        // Should be compatible with any features (all unknown = universal wildcard)
+        let cases = [
+            PhiFeatures::third_sg_masc(),
+            PhiFeatures::third_sg_fem(),
+            PhiFeatures::third_plural(),
+            PhiFeatures::new(Person::Third, Number::Dual, Gender::Neutral),
+        ];
+        for (i, phi) in cases.iter().enumerate() {
+            assert!(
+                all_unknown.is_compatible(phi),
+                "all_unknown should be compatible with case {}: {:?}",
+                i,
+                phi
+            );
+            assert!(
+                phi.is_compatible(&all_unknown),
+                "case {} should be compatible with all_unknown: {:?}",
+                i,
+                phi
+            );
+        }
+        // With Person::Unknown, all_unknown is compatible with any person
+        let first = PhiFeatures::new(Person::First, Number::Unknown, Gender::Unknown);
+        assert!(all_unknown.is_compatible(&first));
+    }
+
+    /// A single incompatible field is sufficient to block compatibility.
+    #[test]
+    fn test_phi_single_field_mismatch_blocks() {
+        let base = PhiFeatures::third_sg_masc().with_animacy(Animacy::Animate);
+
+        // Person mismatch only
+        let diff_person = PhiFeatures {
+            person: Person::First,
+            ..base
+        };
+        assert!(!base.is_compatible(&diff_person));
+
+        // Number mismatch only
+        let diff_number = PhiFeatures {
+            number: Number::Plural,
+            ..base
+        };
+        assert!(!base.is_compatible(&diff_number));
+
+        // Gender mismatch only
+        let diff_gender = PhiFeatures {
+            gender: Gender::Feminine,
+            ..base
+        };
+        assert!(!base.is_compatible(&diff_gender));
+
+        // Animacy mismatch only
+        let diff_animacy = PhiFeatures {
+            animacy: Animacy::Inanimate,
+            ..base
+        };
+        assert!(!base.is_compatible(&diff_animacy));
+    }
+
+    // =========================================================================
+    // Entity integration: phi_features serde round-trip
+    // =========================================================================
+
+    #[test]
+    fn test_entity_phi_features_serde_roundtrip() {
+        use crate::{Entity, EntityType};
+
+        let mut entity = Entity::new("Ahmad", EntityType::Person, 0, 5, 0.95);
+        entity.phi_features = Some(PhiFeatures::third_sg_masc().with_animacy(Animacy::Animate));
+        entity.mention_type = Some(crate::MentionType::Proper);
+
+        let json = serde_json::to_string(&entity).expect("serialize Entity");
+        let recovered: Entity = serde_json::from_str(&json).expect("deserialize Entity");
+
+        assert_eq!(recovered.phi_features, entity.phi_features);
+        assert_eq!(recovered.mention_type, entity.mention_type);
+    }
+
+    #[test]
+    fn test_entity_without_phi_features_omits_field() {
+        use crate::{Entity, EntityType};
+
+        let entity = Entity::new("Berlin", EntityType::Location, 0, 6, 0.90);
+        let json = serde_json::to_string(&entity).expect("serialize Entity");
+
+        // phi_features is skip_serializing_if = "Option::is_none", so absent
+        assert!(
+            !json.contains("phi_features"),
+            "phi_features should be omitted when None, got: {}",
+            json
+        );
+    }
+
+    // =========================================================================
+    // Property tests (proptest)
+    // =========================================================================
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        fn arb_person() -> impl Strategy<Value = Person> {
+            prop_oneof![
+                Just(Person::First),
+                Just(Person::Second),
+                Just(Person::Third),
+                Just(Person::Unknown),
+            ]
+        }
+
+        fn arb_number() -> impl Strategy<Value = Number> {
+            prop_oneof![
+                Just(Number::Singular),
+                Just(Number::Dual),
+                Just(Number::Plural),
+                Just(Number::Unknown),
+            ]
+        }
+
+        fn arb_gender() -> impl Strategy<Value = Gender> {
+            prop_oneof![
+                Just(Gender::Masculine),
+                Just(Gender::Feminine),
+                Just(Gender::Neutral),
+                Just(Gender::Unknown),
+            ]
+        }
+
+        fn arb_animacy() -> impl Strategy<Value = Animacy> {
+            prop_oneof![
+                Just(Animacy::Animate),
+                Just(Animacy::Inanimate),
+                Just(Animacy::Unknown),
+            ]
+        }
+
+        fn arb_phi() -> impl Strategy<Value = PhiFeatures> {
+            (arb_person(), arb_number(), arb_gender(), arb_animacy()).prop_map(
+                |(person, number, gender, animacy)| PhiFeatures {
+                    person,
+                    number,
+                    gender,
+                    animacy,
+                },
+            )
+        }
+
+        proptest! {
+            /// PhiFeatures::is_compatible is reflexive: a.is_compatible(&a) == true.
+            #[test]
+            fn phi_compatible_reflexive(phi in arb_phi()) {
+                prop_assert!(phi.is_compatible(&phi),
+                    "PhiFeatures {:?} should be compatible with itself", phi);
+            }
+
+            /// PhiFeatures::is_compatible is symmetric.
+            #[test]
+            fn phi_compatible_symmetric(a in arb_phi(), b in arb_phi()) {
+                prop_assert_eq!(
+                    a.is_compatible(&b),
+                    b.is_compatible(&a),
+                    "Symmetry violated: {:?} vs {:?}", a, b
+                );
+            }
+
+            /// Animacy::is_compatible is reflexive.
+            #[test]
+            fn animacy_compatible_reflexive(a in arb_animacy()) {
+                prop_assert!(a.is_compatible(&a),
+                    "Animacy {:?} should be compatible with itself", a);
+            }
+
+            /// Animacy::is_compatible is symmetric.
+            #[test]
+            fn animacy_compatible_symmetric(a in arb_animacy(), b in arb_animacy()) {
+                prop_assert_eq!(
+                    a.is_compatible(&b),
+                    b.is_compatible(&a),
+                    "Animacy symmetry violated: {:?} vs {:?}", a, b
+                );
+            }
+
+            /// Unknown animacy is compatible with everything.
+            #[test]
+            fn animacy_unknown_universal(a in arb_animacy()) {
+                prop_assert!(Animacy::Unknown.is_compatible(&a),
+                    "Unknown should be compatible with {:?}", a);
+                prop_assert!(a.is_compatible(&Animacy::Unknown),
+                    "{:?} should be compatible with Unknown", a);
+            }
+
+            /// Number::is_compatible is reflexive.
+            #[test]
+            fn number_compatible_reflexive(n in arb_number()) {
+                prop_assert!(n.is_compatible(&n));
+            }
+
+            /// Number::is_compatible is symmetric.
+            #[test]
+            fn number_compatible_symmetric(a in arb_number(), b in arb_number()) {
+                prop_assert_eq!(
+                    a.is_compatible(&b),
+                    b.is_compatible(&a),
+                    "Number symmetry violated: {:?} vs {:?}", a, b
+                );
+            }
+
+            /// Person::is_compatible is reflexive.
+            #[test]
+            fn person_compatible_reflexive(p in arb_person()) {
+                prop_assert!(p.is_compatible(&p));
+            }
+
+            /// PhiFeatures serde round-trip preserves equality.
+            #[test]
+            fn phi_serde_roundtrip(phi in arb_phi()) {
+                let json = serde_json::to_string(&phi).unwrap();
+                let recovered: PhiFeatures = serde_json::from_str(&json).unwrap();
+                prop_assert_eq!(phi, recovered);
+            }
+
+            /// Animacy parse round-trip: Display output can be re-parsed.
+            #[test]
+            fn animacy_display_parse_roundtrip(a in arb_animacy()) {
+                let displayed = format!("{}", a);
+                let parsed: Animacy = displayed.parse().unwrap();
+                prop_assert_eq!(a, parsed);
+            }
+
+            /// Number parse round-trip: Display output can be re-parsed.
+            #[test]
+            fn number_display_parse_roundtrip(n in arb_number()) {
+                let displayed = format!("{}", n);
+                let parsed: Number = displayed.parse().unwrap();
+                prop_assert_eq!(n, parsed);
+            }
+
+            /// Person parse round-trip: Display output can be re-parsed.
+            #[test]
+            fn person_display_parse_roundtrip(p in arb_person()) {
+                let displayed = format!("{}", p);
+                let parsed: Person = displayed.parse().unwrap();
+                prop_assert_eq!(p, parsed);
+            }
+        }
+    }
+
+    // =========================================================================
+    // Audit-driven regression tests
+    // =========================================================================
+
+    /// Person::Unknown is compatible with First, Second, Third, and Unknown.
+    #[test]
+    fn test_person_unknown_compatible_with_all() {
+        for p in [Person::First, Person::Second, Person::Third, Person::Unknown] {
+            assert!(
+                Person::Unknown.is_compatible(&p),
+                "Person::Unknown should be compatible with {:?}",
+                p
+            );
+        }
+    }
+
+    /// Unknown.is_compatible(x) == x.is_compatible(Unknown) for all Person values.
+    #[test]
+    fn test_person_unknown_wildcard_symmetric() {
+        for p in [Person::First, Person::Second, Person::Third, Person::Unknown] {
+            assert_eq!(
+                Person::Unknown.is_compatible(&p),
+                p.is_compatible(&Person::Unknown),
+                "Person::Unknown symmetry broken for {:?}",
+                p
+            );
+        }
+    }
+
+    /// parse("3sing") should produce gender Unknown, not Neutral.
+    ///
+    /// The 'n' in "sing" must not be misinterpreted as a gender marker.
+    /// This was a real bug: the parser matched 'n' in "sing" as Neutral.
+    #[test]
+    fn test_parse_3sing_no_false_gender() {
+        let phi = PhiFeatures::parse("3sing").expect("should parse '3sing'");
+        assert_eq!(phi.person, Person::Third);
+        assert_eq!(phi.number, Number::Singular);
+        assert_eq!(
+            phi.gender,
+            Gender::Unknown,
+            "3sing should have Unknown gender, not Neutral (the 'n' is part of 'sing')"
+        );
+    }
+
+    /// parse("3sgn") should produce gender Neutral (explicit neutral marker).
+    #[test]
+    fn test_parse_3sgn_is_neutral() {
+        let phi = PhiFeatures::parse("3sgn").expect("should parse '3sgn'");
+        assert_eq!(phi.person, Person::Third);
+        assert_eq!(phi.number, Number::Singular);
+        assert_eq!(phi.gender, Gender::Neutral);
+    }
+
+    /// parse("3fem") should produce Third, Singular (default), Feminine.
+    #[test]
+    fn test_parse_3fem_defaults_singular() {
+        let phi = PhiFeatures::parse("3fem").expect("should parse '3fem'");
+        assert_eq!(phi.person, Person::Third);
+        assert_eq!(phi.number, Number::Singular, "no number marker -> default Singular");
+        assert_eq!(phi.gender, Gender::Feminine);
+    }
+
+    /// For each valid combo, Display -> parse -> compare field-by-field.
+    ///
+    /// Display format is "Xth.YY.gender" which doesn't round-trip through
+    /// PhiFeatures::parse (different format), so we test Display -> FromStr
+    /// on individual components instead.
+    #[test]
+    fn test_parse_roundtrip_all_combinations() {
+        // Test all parse-format strings that should round-trip
+        let cases = [
+            ("1sgm", Person::First, Number::Singular, Gender::Masculine),
+            ("1sgf", Person::First, Number::Singular, Gender::Feminine),
+            ("1sgn", Person::First, Number::Singular, Gender::Neutral),
+            ("1sg", Person::First, Number::Singular, Gender::Unknown),
+            ("2dum", Person::Second, Number::Dual, Gender::Masculine),
+            ("2duf", Person::Second, Number::Dual, Gender::Feminine),
+            ("3plm", Person::Third, Number::Plural, Gender::Masculine),
+            ("3plf", Person::Third, Number::Plural, Gender::Feminine),
+            ("3pln", Person::Third, Number::Plural, Gender::Neutral),
+            ("3pl", Person::Third, Number::Plural, Gender::Unknown),
+        ];
+        for (input, exp_p, exp_n, exp_g) in cases {
+            let phi = PhiFeatures::parse(input)
+                .unwrap_or_else(|| panic!("should parse '{}'", input));
+            assert_eq!(phi.person, exp_p, "Person for {}", input);
+            assert_eq!(phi.number, exp_n, "Number for {}", input);
+            assert_eq!(phi.gender, exp_g, "Gender for {}", input);
+            assert_eq!(phi.animacy, Animacy::Unknown, "Animacy for {}", input);
+        }
+    }
+
+    /// All 3 Animacy variants roundtrip through Display -> FromStr.
+    #[test]
+    fn test_animacy_display_parse_roundtrip_all() {
+        for animacy in [Animacy::Animate, Animacy::Inanimate, Animacy::Unknown] {
+            let displayed = format!("{}", animacy);
+            let parsed: Animacy = displayed.parse().unwrap_or_else(|e| {
+                panic!("Animacy::{}  display='{}' failed to parse: {}", format!("{:?}", animacy), displayed, e)
+            });
+            assert_eq!(animacy, parsed, "Animacy roundtrip failed for {:?}", animacy);
+        }
+    }
+
+    /// Animacy::Unknown is compatible with all animacy values (wildcard).
+    #[test]
+    fn test_animacy_unknown_compatible_with_all() {
+        for a in [Animacy::Animate, Animacy::Inanimate, Animacy::Unknown] {
+            assert!(
+                Animacy::Unknown.is_compatible(&a),
+                "Animacy::Unknown should be compatible with {:?}",
+                a
+            );
+            assert!(
+                a.is_compatible(&Animacy::Unknown),
+                "{:?} should be compatible with Animacy::Unknown",
+                a
+            );
+        }
+    }
+
+    /// PhiFeatures compatibility is NOT transitive (same pattern as Gender).
+    ///
+    /// 3sg_masc ~ 3sg_unknown and 3sg_unknown ~ 3sg_fem,
+    /// but 3sg_masc is NOT compatible with 3sg_fem.
+    #[test]
+    fn test_phi_compatibility_not_transitive() {
+        let masc = PhiFeatures::third_sg_masc();
+        let fem = PhiFeatures::third_sg_fem();
+        let unknown_gender = PhiFeatures::new(Person::Third, Number::Singular, Gender::Unknown);
+
+        assert!(masc.is_compatible(&unknown_gender), "masc ~ unknown");
+        assert!(unknown_gender.is_compatible(&fem), "unknown ~ fem");
+        assert!(!masc.is_compatible(&fem), "masc NOT ~ fem (transitivity must not hold)");
+    }
+
+    /// Dual is compatible with Plural (Arabic linguistics).
+    ///
+    /// In Arabic, dual nouns can be referred to with plural pronouns:
+    /// "The two boys... they went" is grammatical.
+    #[test]
+    fn test_number_dual_plural_compatible() {
+        assert!(Number::Dual.is_compatible(&Number::Plural));
+        assert!(Number::Plural.is_compatible(&Number::Dual));
+
+        // But Dual is NOT compatible with Singular
+        assert!(!Number::Dual.is_compatible(&Number::Singular));
+        assert!(!Number::Singular.is_compatible(&Number::Dual));
     }
 }

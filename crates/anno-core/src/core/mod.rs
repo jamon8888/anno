@@ -120,6 +120,6 @@ pub use coref::{entities_to_chains, CorefChain, CorefDocument, CoreferenceResolv
 
 // Other modules accessible via anno_core::module_name
 pub use types::{
-    DatePrecision, Gender, HistoricalDate, MentionType, MetricStats, Number, Person, PhiFeatures,
-    TemporalValidity, TypeLabel,
+    Animacy, DatePrecision, Gender, HistoricalDate, MentionType, MetricStats, Number, Person,
+    PhiFeatures, TemporalValidity, TypeLabel,
 };

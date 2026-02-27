@@ -83,6 +83,6 @@ pub use ids::{
 };
 pub use mention_type::MentionType;
 pub use metric::MetricStats;
-pub use phi_features::{Number, Person, PhiFeatures};
+pub use phi_features::{Animacy, Number, Person, PhiFeatures};
 pub use temporal::{DatePrecision, HistoricalDate, TemporalValidity};
 pub use type_label::TypeLabel;

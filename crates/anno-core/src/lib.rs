@@ -9,7 +9,7 @@ pub mod core;
 pub mod minimal;
 
 pub use crate::core::{
-    generate_span_candidates, CorefChain, CorefDocument, CoreferenceResolver, Corpus,
+    generate_span_candidates, Animacy, CorefChain, CorefDocument, CoreferenceResolver, Corpus,
     DiscontinuousSpan, Entity, EntityBuilder, EntityCategory, EntityType, EntityViewport,
     ExtractionMethod, Gender, GroundedDocument, HashMapLexicon, HierarchicalConfidence, Identity,
     IdentityId, IdentitySource, Lexicon, Location, Mention, MentionType, Modality, Number, Person,
