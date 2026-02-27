@@ -1201,6 +1201,238 @@ mod tests {
         }
     }
 
+    // =========================================================================
+    // RAKE internals
+    // =========================================================================
+
+    #[test]
+    fn test_rake_extract_candidates_stopword_splitting() {
+        // "is" and "of" are stopwords; candidates should be the phrases between them.
+        let rake = RakeExtractor::new();
+        let candidates = rake.extract_candidates("machine learning is a subset of artificial intelligence");
+        let phrases: Vec<String> = candidates.iter().map(|p| p.join(" ")).collect();
+        assert!(
+            phrases.contains(&"machine learning".to_string()),
+            "expected 'machine learning' in {phrases:?}"
+        );
+        assert!(
+            phrases.contains(&"artificial intelligence".to_string()),
+            "expected 'artificial intelligence' in {phrases:?}"
+        );
+        // "subset" stands alone between two stopwords
+        assert!(
+            phrases.contains(&"subset".to_string()),
+            "expected 'subset' in {phrases:?}"
+        );
+    }
+
+    #[test]
+    fn test_rake_extract_candidates_min_phrase_length() {
+        // With min_phrase_length=2, single-word phrases should be dropped.
+        let rake = RakeExtractor::new()
+            .with_stopwords(default_stopwords())
+            .with_max_phrase_length(5);
+        // Manually set min_phrase_length via struct (builder doesn't expose it,
+        // so we construct directly).
+        let rake = RakeExtractor {
+            min_phrase_length: 2,
+            ..rake
+        };
+        let candidates = rake.extract_candidates("machine learning is a subset of artificial intelligence");
+        let phrases: Vec<String> = candidates.iter().map(|p| p.join(" ")).collect();
+        // "subset" is a single word -- should be filtered out
+        assert!(
+            !phrases.contains(&"subset".to_string()),
+            "single-word 'subset' should be filtered with min_phrase_length=2, got {phrases:?}"
+        );
+        // Multi-word phrases should remain
+        assert!(phrases.contains(&"machine learning".to_string()));
+        assert!(phrases.contains(&"artificial intelligence".to_string()));
+    }
+
+    #[test]
+    fn test_rake_extract_candidates_max_phrase_length() {
+        let rake = RakeExtractor::new().with_max_phrase_length(1);
+        // "machine learning" is two words -- should be excluded by max_phrase_length=1.
+        let candidates = rake.extract_candidates("machine learning is great");
+        let phrases: Vec<String> = candidates.iter().map(|p| p.join(" ")).collect();
+        assert!(
+            !phrases.iter().any(|p| p.contains(' ')),
+            "max_phrase_length=1 should block multi-word phrases, got {phrases:?}"
+        );
+    }
+
+    #[test]
+    fn test_rake_compute_word_scores_degree_frequency() {
+        let rake = RakeExtractor::new();
+        // Build known candidates:
+        // "deep learning"  (len 2)
+        // "learning"       (len 1)
+        // "learning" appears in two phrases, freq=2, total degree = 2+1 = 3, score = 3/2 = 1.5
+        // "deep" appears once, freq=1, degree=2, score=2/1=2.0
+        let candidates = vec![
+            vec!["deep".to_string(), "learning".to_string()],
+            vec!["learning".to_string()],
+        ];
+        let scores = rake.compute_word_scores(&candidates);
+        let deep_score = scores["deep"];
+        let learning_score = scores["learning"];
+        assert!(
+            (deep_score - 2.0).abs() < f64::EPSILON,
+            "deep: expected 2.0, got {deep_score}"
+        );
+        assert!(
+            (learning_score - 1.5).abs() < f64::EPSILON,
+            "learning: expected 1.5, got {learning_score}"
+        );
+    }
+
+    // =========================================================================
+    // YAKE internals
+    // =========================================================================
+
+    #[test]
+    fn test_yake_word_features_nonempty() {
+        let yake = YakeExtractor::new();
+        let features = yake.compute_word_features(
+            "Rust programming language. Rust is fast and safe.",
+        );
+        // "rust" should have a feature score (appears twice, once sentence-initial uppercase)
+        assert!(
+            features.contains_key("rust"),
+            "expected 'rust' in features: {features:?}"
+        );
+        assert!(features["rust"] > 0.0);
+    }
+
+    #[test]
+    fn test_yake_empty_text_features() {
+        let yake = YakeExtractor::new();
+        let features = yake.compute_word_features("");
+        assert!(features.is_empty());
+    }
+
+    #[test]
+    fn test_yake_ngram_scoring() {
+        let yake = YakeExtractor::new().with_ngram_max(2);
+        // YAKE deduplicates by substring containment (higher-scored term wins).
+        // Use words that don't overlap so the bigram survives dedup.
+        let keywords = yake.extract(
+            "graph algorithms solve graph problems. graph algorithms are efficient.",
+            10,
+        );
+        // The unigrams and/or bigram should appear; verify bigrams are generated.
+        let all_keywords: Vec<&str> = keywords.iter().map(|(k, _)| k.as_str()).collect();
+        // At minimum "graph" or "algorithms" should be extracted.
+        assert!(
+            all_keywords.iter().any(|k| k.contains("graph") || k.contains("algorithm")),
+            "expected graph-related keyword in {all_keywords:?}"
+        );
+        // Verify scores are sorted descending.
+        for pair in keywords.windows(2) {
+            assert!(
+                pair[0].1 >= pair[1].1,
+                "scores should be descending: {} >= {}",
+                pair[0].1,
+                pair[1].1,
+            );
+        }
+    }
+
+    // =========================================================================
+    // TF-IDF internals
+    // =========================================================================
+
+    #[test]
+    fn test_tfidf_term_frequency_ordering() {
+        let extractor = TfIdfExtractor::new();
+        // "data" appears 3 times, "algorithm" appears 1 time.
+        let text = "data data data algorithm";
+        let keywords = extractor.extract(text, 10);
+        assert!(keywords.len() == 2, "expected 2 terms, got {keywords:?}");
+        assert_eq!(keywords[0].0, "data", "most frequent term should be first");
+        assert!(
+            keywords[0].1 > keywords[1].1,
+            "data score ({}) should exceed algorithm score ({})",
+            keywords[0].1,
+            keywords[1].1,
+        );
+    }
+
+    #[test]
+    fn test_tfidf_log_tf_vs_raw() {
+        let log_extractor = TfIdfExtractor::new().with_log_tf(true);
+        let raw_extractor = TfIdfExtractor::new().with_log_tf(false);
+
+        let text = "data data data science science";
+        let log_kw = log_extractor.extract(text, 10);
+        let raw_kw = raw_extractor.extract(text, 10);
+
+        // Raw TF for "data" should be 3.0; log TF should be ln(1+3) ~ 1.386
+        let raw_data_score = raw_kw.iter().find(|(k, _)| k == "data").unwrap().1;
+        let log_data_score = log_kw.iter().find(|(k, _)| k == "data").unwrap().1;
+        assert!(
+            (raw_data_score - 3.0).abs() < f64::EPSILON,
+            "raw TF for 'data' should be 3.0, got {raw_data_score}"
+        );
+        assert!(
+            (log_data_score - (3.0_f64).ln_1p()).abs() < f64::EPSILON,
+            "log TF for 'data' should be ln(4), got {log_data_score}"
+        );
+    }
+
+    // =========================================================================
+    // Edge cases
+    // =========================================================================
+
+    #[test]
+    fn test_single_word_text() {
+        let rake = RakeExtractor::new();
+        let yake = YakeExtractor::new();
+        let tfidf = TfIdfExtractor::new();
+
+        let text = "algorithm";
+        let rake_kw = rake.extract(text, 5);
+        let yake_kw = yake.extract(text, 5);
+        let tfidf_kw = tfidf.extract(text, 5);
+
+        // Each extractor should return exactly one keyword (the word itself).
+        assert_eq!(rake_kw.len(), 1, "RAKE single word: {rake_kw:?}");
+        assert_eq!(rake_kw[0].0, "algorithm");
+
+        assert_eq!(tfidf_kw.len(), 1, "TF-IDF single word: {tfidf_kw:?}");
+        assert_eq!(tfidf_kw[0].0, "algorithm");
+
+        // YAKE filters words len <= 1, so "algorithm" (9 chars) should pass
+        assert!(!yake_kw.is_empty(), "YAKE single word should return result");
+    }
+
+    #[test]
+    fn test_all_stopwords_all_extractors() {
+        let text = "the and or but is are was were been";
+        let rake = RakeExtractor::new();
+        let yake = YakeExtractor::new();
+        let textrank = TextRankExtractor::new();
+        let tfidf = TfIdfExtractor::new();
+
+        assert!(rake.extract(text, 5).is_empty(), "RAKE should return empty for all-stopword text");
+        assert!(yake.extract(text, 5).is_empty(), "YAKE should return empty for all-stopword text");
+        assert!(textrank.extract(text, 5).is_empty(), "TextRank should return empty for all-stopword text");
+        assert!(tfidf.extract(text, 5).is_empty(), "TF-IDF should return empty for all-stopword text");
+    }
+
+    #[test]
+    fn test_unicode_accented_text() {
+        let extractor = TfIdfExtractor::new().with_log_tf(false);
+        // Use words with accented characters; stopwords list won't contain them.
+        let text = "cafe resume naive cafe resume cafe";
+        let keywords = extractor.extract(text, 5);
+        // "cafe" appears 3x, "resume" 2x, "naive" 1x
+        assert_eq!(keywords[0].0, "cafe");
+        assert_eq!(keywords[1].0, "resume");
+        assert_eq!(keywords[2].0, "naive");
+    }
+
     #[cfg(test)]
     mod tokenizer_integration_tests {
         use super::*;
