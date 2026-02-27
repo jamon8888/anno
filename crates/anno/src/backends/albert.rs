@@ -120,6 +120,7 @@ impl Model for ALBERTNER {
     }
 }
 
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for ALBERTNER {}
 
 impl crate::BatchCapable for ALBERTNER {

@@ -221,6 +221,7 @@ impl Model for CrfNER {
     }
 }
 
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for CrfNER {}
 
 impl crate::BatchCapable for CrfNER {

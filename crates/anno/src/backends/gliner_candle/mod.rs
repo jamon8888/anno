@@ -175,6 +175,7 @@ impl crate::Model for GLiNERCandle {
     }
 }
 
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for GLiNERCandle {}
 
 #[cfg(feature = "candle")]

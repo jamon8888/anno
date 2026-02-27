@@ -355,6 +355,7 @@ not implemented yet; see the error from `extract_entities` once a model is confi
 }
 
 // Implement marker traits
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for BurnNER {}
 
 // =============================================================================

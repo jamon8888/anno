@@ -337,6 +337,7 @@ impl Model for UniversalNER {
     }
 }
 
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for UniversalNER {}
 
 impl crate::DynamicLabels for UniversalNER {

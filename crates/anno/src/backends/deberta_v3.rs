@@ -110,6 +110,7 @@ impl Model for DeBERTaV3NER {
     }
 }
 
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for DeBERTaV3NER {}
 
 impl crate::BatchCapable for DeBERTaV3NER {

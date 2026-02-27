@@ -802,6 +802,7 @@ fn classify_minimal(
     (EntityType::Person, 0.45, "capitalized")
 }
 
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for HeuristicNER {}
 
 // =============================================================================

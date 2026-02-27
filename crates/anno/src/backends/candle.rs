@@ -511,6 +511,7 @@ impl Model for CandleNER {
     }
 }
 
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for CandleNER {}
 
 // =============================================================================

@@ -409,6 +409,7 @@ fn overlaps(entities: &[Entity], start: usize, end: usize) -> bool {
 }
 
 // Capability marker: RegexNER extracts structured entities via regex
+#[allow(deprecated)]
 impl crate::StructuredEntityCapable for RegexNER {}
 
 #[cfg(test)]

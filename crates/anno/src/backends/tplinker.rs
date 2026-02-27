@@ -272,6 +272,7 @@ impl Model for TPLinker {
     }
 }
 
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for TPLinker {}
 
 impl RelationExtractor for TPLinker {

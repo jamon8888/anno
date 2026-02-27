@@ -608,6 +608,7 @@ impl crate::Model for BertNEROnnx {
     }
 }
 
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for BertNEROnnx {}
 
 // =============================================================================

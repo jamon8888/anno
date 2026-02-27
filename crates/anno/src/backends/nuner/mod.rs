@@ -209,6 +209,7 @@ impl Model for NuNER {
     }
 }
 
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for NuNER {}
 
 #[cfg(feature = "onnx")]

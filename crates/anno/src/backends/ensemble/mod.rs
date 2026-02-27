@@ -565,6 +565,7 @@ impl Model for EnsembleNER {
 }
 
 // Implement required traits
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for EnsembleNER {}
 
 impl crate::BatchCapable for EnsembleNER {

@@ -820,7 +820,9 @@ pub type TieredNER = StackedNER;
 pub type CompositeNER = StackedNER;
 
 // Capability markers: StackedNER combines pattern and heuristic extraction
+#[allow(deprecated)]
 impl crate::StructuredEntityCapable for StackedNER {}
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for StackedNER {}
 
 // =============================================================================

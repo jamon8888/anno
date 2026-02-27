@@ -243,6 +243,7 @@ impl crate::Model for GLiNER2Onnx {
 }
 
 #[cfg(feature = "onnx")]
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for GLiNER2Onnx {}
 
 #[cfg(feature = "onnx")]
@@ -319,6 +320,7 @@ impl crate::Model for GLiNER2Candle {
 }
 
 #[cfg(feature = "candle")]
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for GLiNER2Candle {}
 
 #[cfg(feature = "candle")]

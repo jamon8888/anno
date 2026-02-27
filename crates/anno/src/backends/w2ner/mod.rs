@@ -893,6 +893,7 @@ impl Model for W2NER {
     }
 }
 
+#[allow(deprecated)]
 impl crate::NamedEntityCapable for W2NER {}
 
 // =============================================================================
