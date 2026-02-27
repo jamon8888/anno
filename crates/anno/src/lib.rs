@@ -341,6 +341,14 @@ pub trait Model: sealed::Sealed + Send + Sync {
 /// Type alias for the `AnyModel` extractor closure.
 type AnyModelExtractor = dyn Fn(&str, Option<&str>) -> Result<Vec<Entity>> + Send + Sync;
 
+/// Type alias for the `AnyModel` label-extraction closure (`DynamicLabels`).
+type AnyModelLabelExtractor =
+    dyn Fn(&str, &[&str], Option<&str>) -> Result<Vec<Entity>> + Send + Sync;
+
+/// Type alias for the `AnyModel` relation-extraction closure (`RelationCapable`).
+type AnyModelRelationExtractor =
+    dyn Fn(&str, Option<&str>) -> Result<(Vec<Entity>, Vec<Relation>)> + Send + Sync;
+
 /// A wrapper that turns an extractor closure into a `Model`.
 pub struct AnyModel {
     name: &'static str,
@@ -348,6 +356,10 @@ pub struct AnyModel {
     supported_types: Vec<EntityType>,
     extractor: Box<AnyModelExtractor>,
     version: String,
+    /// Optional closure backing [`DynamicLabels::extract_with_labels`].
+    label_extractor: Option<Box<AnyModelLabelExtractor>>,
+    /// Optional closure backing [`RelationCapable::extract_with_relations`].
+    relation_extractor: Option<Box<AnyModelRelationExtractor>>,
 }
 
 impl AnyModel {
@@ -371,12 +383,43 @@ impl AnyModel {
             supported_types,
             extractor: Box::new(extractor),
             version: "1".to_string(),
+            label_extractor: None,
+            relation_extractor: None,
         }
     }
 
     /// Set the version string for cache invalidation.
     pub fn with_version(mut self, version: impl Into<String>) -> Self {
         self.version = version.into();
+        self
+    }
+
+    /// Attach a `DynamicLabels` implementation via closure.
+    ///
+    /// When set, `AnyModel` will implement [`DynamicLabels`] by delegating to this
+    /// closure, and [`Model::capabilities()`] will report `dynamic_labels = true`.
+    #[must_use]
+    pub fn with_dynamic_labels(
+        mut self,
+        f: impl Fn(&str, &[&str], Option<&str>) -> Result<Vec<Entity>> + Send + Sync + 'static,
+    ) -> Self {
+        self.label_extractor = Some(Box::new(f));
+        self
+    }
+
+    /// Attach a `RelationCapable` implementation via closure.
+    ///
+    /// When set, `AnyModel` will implement [`RelationCapable`] by delegating to this
+    /// closure, and [`Model::capabilities()`] will report `relation_capable = true`.
+    #[must_use]
+    pub fn with_relations(
+        mut self,
+        f: impl Fn(&str, Option<&str>) -> Result<(Vec<Entity>, Vec<Relation>)>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        self.relation_extractor = Some(Box::new(f));
         self
     }
 }
@@ -415,8 +458,48 @@ impl Model for AnyModel {
         self.description
     }
 
+    fn capabilities(&self) -> ModelCapabilities {
+        ModelCapabilities {
+            dynamic_labels: self.label_extractor.is_some(),
+            relation_capable: self.relation_extractor.is_some(),
+            ..ModelCapabilities::default()
+        }
+    }
+
     fn version(&self) -> String {
         self.version.clone()
+    }
+}
+
+impl DynamicLabels for AnyModel {
+    fn extract_with_labels(
+        &self,
+        text: &str,
+        labels: &[&str],
+        language: Option<&str>,
+    ) -> Result<Vec<Entity>> {
+        match &self.label_extractor {
+            Some(f) => f(text, labels, language),
+            None => Err(Error::FeatureNotAvailable(
+                "AnyModel: DynamicLabels closure not configured (use .with_dynamic_labels())"
+                    .into(),
+            )),
+        }
+    }
+}
+
+impl RelationCapable for AnyModel {
+    fn extract_with_relations(
+        &self,
+        text: &str,
+        language: Option<&str>,
+    ) -> Result<(Vec<Entity>, Vec<Relation>)> {
+        match &self.relation_extractor {
+            Some(f) => f(text, language),
+            None => Err(Error::FeatureNotAvailable(
+                "AnyModel: RelationCapable closure not configured (use .with_relations())".into(),
+            )),
+        }
     }
 }
 
@@ -428,6 +511,10 @@ impl Model for AnyModel {
 ///
 /// Models implementing this trait can process multiple texts efficiently,
 /// potentially using parallel processing or optimized batch operations.
+///
+/// **Note:** When working with `Box<dyn Model>` (trait objects), use
+/// [`Model::capabilities()`] for runtime discovery instead of downcasting.
+/// The [`ModelCapabilities::batch_capable`] field mirrors this trait.
 pub trait BatchCapable: Model {
     /// Extract entities from multiple texts in a batch.
     ///
@@ -461,6 +548,10 @@ pub trait BatchCapable: Model {
 ///
 /// Models implementing this trait can report whether GPU is active
 /// and which device they're using.
+///
+/// **Note:** When working with `Box<dyn Model>` (trait objects), use
+/// [`Model::capabilities()`] for runtime discovery instead of downcasting.
+/// The [`ModelCapabilities::gpu_capable`] field mirrors this trait.
 pub trait GpuCapable: Model {
     /// Check if GPU acceleration is currently active.
     ///
@@ -477,6 +568,10 @@ pub trait GpuCapable: Model {
 ///
 /// Useful for processing very long documents by splitting them into chunks
 /// and extracting entities from each chunk with proper offset tracking.
+///
+/// **Note:** When working with `Box<dyn Model>` (trait objects), use
+/// [`Model::capabilities()`] for runtime discovery instead of downcasting.
+/// The [`ModelCapabilities::streaming_capable`] field mirrors this trait.
 pub trait StreamingCapable: Model {
     /// Extract entities from a chunk of text, adjusting offsets by the chunk's position.
     ///
@@ -513,23 +608,35 @@ pub trait StreamingCapable: Model {
 ///
 /// This is a marker trait used for type-level distinctions between different
 /// model capabilities. All NER models should implement this.
+#[deprecated(
+    since = "0.4.0",
+    note = "Empty marker trait -- use Model::capabilities() for runtime capability discovery instead"
+)]
 pub trait NamedEntityCapable: Model {}
 
 /// Marker trait for models that extract structured entities (dates, times, money, etc.).
 ///
 /// This is a marker trait used for type-level distinctions between different
 /// model capabilities. Models that extract structured data (like `RegexNER`) should implement this.
+#[deprecated(
+    since = "0.4.0",
+    note = "Empty marker trait -- use Model::capabilities() for runtime capability discovery instead"
+)]
 pub trait StructuredEntityCapable: Model {}
 
 // =============================================================================
 // Capability Discovery for Trait Objects
 // =============================================================================
 
-/// Summary of a model's capabilities, useful when working with `Box<dyn Model>`.
+/// Primary runtime discovery mechanism for model capabilities behind `Box<dyn Model>`.
 ///
-/// Since capability traits (`BatchCapable`, `GpuCapable`, etc.) can't be queried
-/// through a `Box<dyn Model>` without downcasting, this struct provides a static
-/// summary of what the model supports.
+/// Capability traits like [`BatchCapable`], [`GpuCapable`], and [`StreamingCapable`]
+/// carry useful methods but cannot be queried through a `dyn Model` trait object
+/// without downcasting. This struct surfaces the same information through
+/// [`Model::capabilities()`], making it available for any `&dyn Model`.
+///
+/// Prefer this over checking concrete types or downcasting when writing generic
+/// code that operates on `Box<dyn Model>` or `&dyn Model`.
 ///
 /// # Example
 ///
@@ -630,6 +737,9 @@ pub use backends::{
 pub use backends::mention_ranking::{
     ClusteringStrategy, MentionCluster, MentionRankingConfig, MentionRankingCoref, RankedMention,
 };
+
+// Unified coref backend trait (open, not sealed)
+pub use backends::CorefBackend;
 
 // Re-export MockModel for testing
 
@@ -878,3 +988,76 @@ impl Model for MockModel {
 }
 
 // CI matrix harness moved to `anno-eval`.
+
+#[cfg(test)]
+mod any_model_tests {
+    use super::*;
+
+    fn base_any_model() -> AnyModel {
+        AnyModel::new(
+            "test-any",
+            "test model",
+            vec![EntityType::Person],
+            |_text, _lang| Ok(vec![]),
+        )
+    }
+
+    #[test]
+    fn any_model_capabilities_default_no_dynamic_no_relations() {
+        let m = base_any_model();
+        let caps = m.capabilities();
+        assert!(!caps.dynamic_labels, "should not report dynamic_labels without closure");
+        assert!(!caps.relation_capable, "should not report relation_capable without closure");
+    }
+
+    #[test]
+    fn any_model_dynamic_labels_returns_entities() {
+        let m = base_any_model().with_dynamic_labels(|_text, labels, _lang| {
+            Ok(labels
+                .iter()
+                .enumerate()
+                .map(|(i, &lbl)| Entity::new(lbl, EntityType::Other(lbl.to_string()), i, i + 1, 0.8))
+                .collect())
+        });
+        assert!(m.capabilities().dynamic_labels);
+        let ents = m.extract_with_labels("hello world", &["GREETING", "NOUN"], None).unwrap();
+        assert_eq!(ents.len(), 2);
+        assert_eq!(ents[0].text, "GREETING");
+        assert_eq!(ents[1].text, "NOUN");
+    }
+
+    #[test]
+    fn any_model_dynamic_labels_missing_returns_feature_not_available() {
+        let m = base_any_model();
+        let err = m.extract_with_labels("hello", &["X"], None).unwrap_err();
+        assert!(
+            matches!(err, Error::FeatureNotAvailable(_)),
+            "expected FeatureNotAvailable, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn any_model_relations_returns_entities_and_relations() {
+        let m = base_any_model().with_relations(|_text, _lang| {
+            let head = Entity::new("Alice", EntityType::Person, 0, 5, 0.9);
+            let tail = Entity::new("Acme", EntityType::Organization, 15, 19, 0.85);
+            let rel = Relation::new(head.clone(), tail.clone(), "WORKS_AT", 0.8);
+            Ok((vec![head, tail], vec![rel]))
+        });
+        assert!(m.capabilities().relation_capable);
+        let (ents, rels) = m.extract_with_relations("Alice works at Acme Corp", None).unwrap();
+        assert_eq!(ents.len(), 2);
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].relation_type, "WORKS_AT");
+    }
+
+    #[test]
+    fn any_model_relations_missing_returns_feature_not_available() {
+        let m = base_any_model();
+        let err = m.extract_with_relations("hello", None).unwrap_err();
+        assert!(
+            matches!(err, Error::FeatureNotAvailable(_)),
+            "expected FeatureNotAvailable, got: {err:?}"
+        );
+    }
+}
