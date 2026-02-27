@@ -113,6 +113,21 @@ Features:
 
 The underlying `SimpleCorefResolver` uses a name-to-gender gazetteer (common English first names mapped to gender) for pronoun-antecedent agreement. `Gender::Unknown` acts as a wildcard, compatible with all other genders, so ungendered entities do not block resolution.
 
+### Neural Coreference (f-coref)
+
+For higher-quality coreference, `FCoref` provides neural resolution using a DistilRoBERTa encoder with learned mention and antecedent scorers (Otmazgin et al., AACL 2022). Requires a one-time model export via `uv run scripts/export_fcoref.py`.
+
+```rust
+let coref = FCoref::from_path("fcoref_onnx")?;
+let clusters = coref.resolve("Marie Curie was born in Warsaw. She discovered radium.")?;
+// clusters[0] = { mentions: ["Marie Curie", "She"], canonical: "Marie Curie" }
+
+// Wire into RAG rewriting:
+let result = resolve_for_rag_neural(text, &clusters, None);
+```
+
+`resolve_for_rag_neural` applies the same pronoun rewriting pipeline (pleonastic filter, case preservation, overlap rejection) but uses FCoref's neural clusters instead of rule-based resolution.
+
 ## Downstream
 
 Filter and pipe JSON output:
