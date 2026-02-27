@@ -14,6 +14,16 @@ use ndarray::{s, Array1, Array2};
 
 use crate::{Error, Result};
 
+/// Output of `score_mentions`: top-k mention spans with their coref representations.
+#[derive(Debug)]
+pub(crate) struct MentionScoringResult {
+    pub top_k_starts: Vec<usize>,
+    pub top_k_ends: Vec<usize>,
+    pub top_k_logits: Vec<f32>,
+    pub start_coref_reps: Array2<f32>,
+    pub end_coref_reps: Array2<f32>,
+}
+
 /// Weights for a single FullyConnectedLayer (Linear + LayerNorm, no dropout at inference).
 #[derive(Debug)]
 pub(crate) struct FcLayerWeights {
@@ -167,13 +177,13 @@ impl ScorerWeights {
 ///
 /// # Returns
 ///
-/// `(top_k_starts, top_k_ends, top_k_mention_logits, start_coref_reps, end_coref_reps)`
+/// A [`MentionScoringResult`] with top-k mention spans and coref representations.
 pub(crate) fn score_mentions(
     hidden: &Array2<f32>,
     weights: &ScorerWeights,
     max_span_length: usize,
     top_lambda: f32,
-) -> (Vec<usize>, Vec<usize>, Vec<f32>, Array2<f32>, Array2<f32>) {
+) -> MentionScoringResult {
     let seq_len = hidden.nrows();
 
     // Compute mention representations
@@ -222,13 +232,13 @@ pub(crate) fn score_mentions(
     let start_coref_reps = weights.start_coref_mlp.forward(hidden);
     let end_coref_reps = weights.end_coref_mlp.forward(hidden);
 
-    (
+    MentionScoringResult {
         top_k_starts,
         top_k_ends,
         top_k_logits,
         start_coref_reps,
         end_coref_reps,
-    )
+    }
 }
 
 /// Score antecedent pairs and return best antecedent for each mention.

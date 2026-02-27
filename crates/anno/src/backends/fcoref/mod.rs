@@ -204,24 +204,54 @@ impl FCoref {
     }
 
     /// Load from HuggingFace with custom config.
-    pub fn from_pretrained_with_config(model_id: &str, config: FCorefConfig) -> Result<Self> {
+    pub fn from_pretrained_with_config(model_id: &str, mut config: FCorefConfig) -> Result<Self> {
         let api = Api::new()
             .map_err(|e| Error::Retrieval(format!("HuggingFace API: {}", e)))?;
         let repo = api.model(model_id.to_string());
 
-        // Download all required files
-        let encoder_path = repo
-            .get("encoder.onnx")
-            .map_err(|e| Error::Retrieval(format!("encoder.onnx download: {}", e)))?;
+        // Helper to download a file, returning Ok(None) if not found
+        let try_get = |name: &str| -> Result<Option<std::path::PathBuf>> {
+            match repo.get(name) {
+                Ok(p) => Ok(Some(p)),
+                Err(_) => Ok(None),
+            }
+        };
+
+        // Download required files
         let weights_path = repo
             .get("scorer_weights.safetensors")
             .map_err(|e| Error::Retrieval(format!("scorer_weights download: {}", e)))?;
         let tokenizer_path = repo
             .get("tokenizer.json")
             .map_err(|e| Error::Retrieval(format!("tokenizer download: {}", e)))?;
-        let _config_path = repo
-            .get("config.json")
-            .map_err(|e| Error::Retrieval(format!("config download: {}", e)))?;
+
+        // Prefer quantized encoder if available
+        let encoder_path = if let Some(q) = try_get("encoder_quantized.onnx")? {
+            log::info!("[f-coref] Using quantized encoder from {}", model_id);
+            q
+        } else {
+            repo.get("encoder.onnx")
+                .map_err(|e| Error::Retrieval(format!("encoder.onnx download: {}", e)))?
+        };
+
+        // Parse config.json if available (override defaults)
+        if let Some(config_path) = try_get("config.json")? {
+            if let Ok(config_str) = std::fs::read_to_string(&config_path) {
+                if let Ok(cfg) = serde_json::from_str::<serde_json::Value>(&config_str) {
+                    if let Some(head) = cfg.get("coref_head") {
+                        if let Some(v) = head.get("max_span_length").and_then(|v| v.as_u64()) {
+                            config.max_span_length = v as usize;
+                        }
+                        if let Some(v) = head.get("top_lambda").and_then(|v| v.as_f64()) {
+                            config.top_lambda = v as f32;
+                        }
+                        if let Some(v) = head.get("max_segment_len").and_then(|v| v.as_u64()) {
+                            config.max_segment_len = v as usize;
+                        }
+                    }
+                }
+            }
+        }
 
         // Load encoder session
         let opt_level = match config.optimization_level {
@@ -292,25 +322,24 @@ impl FCoref {
         let hidden = self.run_encoder(input_ids, attention_mask)?;
 
         // 3. Score mentions (skip special tokens: positions 1..seq_len-1)
-        let (top_k_starts, top_k_ends, top_k_logits, start_coref_reps, end_coref_reps) =
-            scoring::score_mentions(
-                &hidden,
-                &self.scorer,
-                self.config.max_span_length,
-                self.config.top_lambda,
-            );
+        let mentions_result = scoring::score_mentions(
+            &hidden,
+            &self.scorer,
+            self.config.max_span_length,
+            self.config.top_lambda,
+        );
 
-        if top_k_starts.is_empty() {
+        if mentions_result.top_k_starts.is_empty() {
             return Ok(vec![]);
         }
 
         // 4. Score antecedents
         let antecedents = scoring::score_antecedents(
-            &top_k_starts,
-            &top_k_ends,
-            &top_k_logits,
-            &start_coref_reps,
-            &end_coref_reps,
+            &mentions_result.top_k_starts,
+            &mentions_result.top_k_ends,
+            &mentions_result.top_k_logits,
+            &mentions_result.start_coref_reps,
+            &mentions_result.end_coref_reps,
             &self.scorer,
         );
 
@@ -318,9 +347,10 @@ impl FCoref {
         let offsets = encoding.get_offsets();
         let span_converter = SpanConverter::new(text);
 
-        let mentions: Vec<MentionSpan> = top_k_starts
+        let mentions: Vec<MentionSpan> = mentions_result
+            .top_k_starts
             .iter()
-            .zip(top_k_ends.iter())
+            .zip(mentions_result.top_k_ends.iter())
             .filter_map(|(&ts, &te)| {
                 if ts >= offsets.len() || te >= offsets.len() {
                     return None;
@@ -346,12 +376,15 @@ impl FCoref {
 
         // 6. Build clusters
         // Re-index antecedents to match the filtered mentions
-        let original_count = top_k_starts.len();
+        let original_count = mentions_result.top_k_starts.len();
         let mut index_map = vec![None; original_count];
         for (new_idx, mention) in mentions.iter().enumerate() {
             // Find original index by matching token positions
-            for (old_idx, (&os, &oe)) in
-                top_k_starts.iter().zip(top_k_ends.iter()).enumerate()
+            for (old_idx, (&os, &oe)) in mentions_result
+                .top_k_starts
+                .iter()
+                .zip(mentions_result.top_k_ends.iter())
+                .enumerate()
             {
                 if os == mention.token_start && oe == mention.token_end {
                     index_map[old_idx] = Some(new_idx);
@@ -365,9 +398,10 @@ impl FCoref {
             .enumerate()
             .map(|(new_i, mention)| {
                 // Find original index
-                let old_i = top_k_starts
+                let old_i = mentions_result
+                    .top_k_starts
                     .iter()
-                    .zip(top_k_ends.iter())
+                    .zip(mentions_result.top_k_ends.iter())
                     .position(|(&os, &oe)| os == mention.token_start && oe == mention.token_end)
                     .unwrap_or(new_i);
 
