@@ -15,7 +15,7 @@
 //! 1. **Canonical types** that all components agree on
 //! 2. **Rich metadata** beyond basic spans (confidence, provenance, relations)
 //! 3. **Grounded hierarchy** for multi-document, multi-modal processing
-//! 4. **Dataset abstractions** for evaluation and benchmarking
+//! 4. **Coreference** chains and resolver traits
 //!
 //! ## Core Concepts
 //!
@@ -42,19 +42,6 @@
 //! doc2.ground_mention(mention2, obama_id);
 //! ```
 //!
-//! ### Dataset Specifications
-//!
-//! Define or discover evaluation datasets:
-//!
-//! ```rust
-//! use anno_core::core::dataset::{CustomDataset, Task, Domain, License};
-//!
-//! let dataset = CustomDataset::new("my_ner", Task::NER)
-//!     .with_languages(&["en"])
-//!     .with_domain(Domain::Biomedical)
-//!     .with_license(License::CCBY);
-//! ```
-//!
 //! ## Module Overview
 //!
 //! | Module | Purpose |
@@ -63,7 +50,6 @@
 //! | [`grounded`] | `GroundedDocument`, `Identity`, `Signal`, `Track` |
 //! | [`coref`] | `Mention`, `CorefChain`, `CorefDocument` |
 //! | [`graph`] | Export to Neo4j, GraphML, JSON-LD |
-//! | [`dataset`] | `DatasetSpec`, `CustomDataset`, `DatasetRegistry` |
 //! | [`calibration`] | Confidence score calibration |
 //! | [`historical`] | Ancient language provenance (BCE dates, epigraphy) |
 //! | [`provenance`] | Document origin tracking |
@@ -83,15 +69,17 @@
 //! `anno_core::minimal` (or `anno::core::*` in the `anno` crate) rather than grabbing the entire
 //! re-export surface.
 
+#[cfg(feature = "calibration")]
 pub mod calibration;
 pub mod coref;
-pub mod dataset;
 pub mod entity;
 pub mod error;
 pub mod grounded;
+#[cfg(feature = "historical")]
 pub mod historical;
 pub mod ontology;
 pub mod provenance;
+#[cfg(feature = "provisional")]
 pub mod provisional;
 pub mod types;
 
@@ -108,12 +96,6 @@ pub use grounded::{
 };
 
 pub use error::{Error, Result};
-
-// Dataset types
-pub use dataset::{
-    CustomDataset, DatasetRegistry, DatasetSpec, DatasetStats, Domain, License, ParserHint,
-    SplitSizes, Task, TemporalCoverage,
-};
 
 // Coreference types
 pub use coref::{entities_to_chains, CorefChain, CorefDocument, CoreferenceResolver, Mention};

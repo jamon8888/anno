@@ -46,7 +46,7 @@
 //! # Custom Dataset
 //!
 //! ```rust
-//! use anno_core::core::dataset::{DatasetSpec, DatasetStats, Domain, License, ParserHint, Task};
+//! use anno_eval::eval::dataset_spec::{DatasetSpec, DatasetStats, Domain, License, ParserHint, Task};
 //!
 //! /// Example NER dataset spec (replace with your own dataset details).
 //! struct ExampleNER;
@@ -90,7 +90,7 @@
 //! # Domain Coverage
 //!
 //! ```rust
-//! use anno_core::core::dataset::Domain;
+//! use anno_eval::eval::dataset_spec::Domain;
 //!
 //! // Built-in domains
 //! let domains = [
@@ -217,7 +217,7 @@ impl std::str::FromStr for Task {
     /// # Examples
     ///
     /// ```rust
-    /// use anno_core::core::dataset::Task;
+    /// use anno_eval::eval::dataset_spec::Task;
     ///
     /// assert_eq!("ner".parse::<Task>().unwrap(), Task::NER);
     /// assert_eq!("coref".parse::<Task>().unwrap(), Task::IntraDocCoref);
@@ -551,7 +551,7 @@ pub struct SplitSizes {
 /// # Implementing Custom Datasets
 ///
 /// ```rust
-/// use anno_core::core::dataset::*;
+/// use anno_eval::eval::dataset_spec::*;
 /// use std::path::PathBuf;
 ///
 /// struct MyDataset {
@@ -739,7 +739,7 @@ pub trait DatasetSpec: Send + Sync {
 /// # Example
 ///
 /// ```rust
-/// use anno_core::core::dataset::{CustomDataset, Task, ParserHint, License, Domain};
+/// use anno_eval::eval::dataset_spec::{CustomDataset, Task, ParserHint, License, Domain};
 /// use std::path::PathBuf;
 ///
 /// let dataset = CustomDataset::new("my_ner_data", Task::NER)
