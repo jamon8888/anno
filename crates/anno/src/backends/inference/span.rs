@@ -419,7 +419,7 @@ impl HandshakingMatrix {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ModalityHint;
+    use crate::backends::inference::registry::ModalityHint;
     use std::collections::HashMap;
 
     // ---- SpanRepConfig defaults ----

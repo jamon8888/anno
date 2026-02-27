@@ -327,3 +327,130 @@ pub(crate) fn extract_relations_heuristic(
 
     relations
 }
+
+#[cfg(test)]
+#[cfg(any(feature = "onnx", feature = "candle"))]
+mod tests {
+    use super::*;
+
+    /// Helper: build a minimal Entity at given char offsets.
+    fn entity(text: &str, ty: crate::EntityType, start: usize, end: usize) -> Entity {
+        Entity::new(text, ty, start, end, 0.9)
+    }
+
+    // ---- get_likely_relations tests ----
+
+    #[test]
+    fn person_org_returns_works_for() {
+        let rels = get_likely_relations("PER", "ORG");
+        assert!(!rels.is_empty());
+        let labels: Vec<&str> = rels.iter().map(|(l, _)| *l).collect();
+        assert!(labels.contains(&"WORKS_FOR"), "expected WORKS_FOR in {labels:?}");
+    }
+
+    #[test]
+    fn org_location_returns_located_in() {
+        let rels = get_likely_relations("ORG", "LOC");
+        let labels: Vec<&str> = rels.iter().map(|(l, _)| *l).collect();
+        assert!(labels.contains(&"LOCATED_IN"), "expected LOCATED_IN in {labels:?}");
+    }
+
+    #[test]
+    fn case_insensitive_type_matching() {
+        // The function uppercases inputs, so "per"/"org" should match "PER"/"ORG".
+        let rels = get_likely_relations("per", "org");
+        assert!(!rels.is_empty(), "lowercase type codes should match");
+    }
+
+    #[test]
+    fn unknown_pair_returns_empty() {
+        let rels = get_likely_relations("WIDGET", "GADGET");
+        assert!(rels.is_empty(), "unknown type pair should return no relations");
+    }
+
+    #[test]
+    fn date_wildcard_matches_any_head() {
+        let rels = get_likely_relations("PERSON", "DATE");
+        assert!(!rels.is_empty(), "any head + DATE tail should match");
+        let labels: Vec<&str> = rels.iter().map(|(l, _)| *l).collect();
+        assert!(labels.contains(&"OCCURRED_ON"));
+    }
+
+    #[test]
+    fn chisiec_per_ofi_returns_chinese_relation() {
+        let rels = get_likely_relations("PER", "OFI");
+        let labels: Vec<&str> = rels.iter().map(|(l, _)| *l).collect();
+        // Should contain the traditional or simplified label for "hold office"
+        assert!(
+            labels.contains(&"\u{4efb}\u{804c}") || labels.contains(&"\u{4efb}\u{8077}"),
+            "expected CHisIEC office-holding relation in {labels:?}"
+        );
+    }
+
+    // ---- extract_relations_heuristic tests ----
+
+    #[test]
+    fn trigger_pattern_extracts_works_for() {
+        let text = "Alice works for Acme Corp in the city";
+        let entities = vec![
+            entity("Alice", crate::EntityType::Person, 0, 5),
+            entity("Acme Corp", crate::EntityType::Organization, 16, 25),
+        ];
+        let rel_types: Vec<&str> = vec!["WORKS_FOR", "LOCATED_IN"];
+        let rels = extract_relations_heuristic(&entities, text, &rel_types, 0.0);
+        let labels: Vec<&str> = rels.iter().map(|r| r.relation_type.as_str()).collect();
+        assert!(
+            labels.contains(&"WORKS_FOR"),
+            "expected WORKS_FOR from trigger 'works for', got {labels:?}"
+        );
+    }
+
+    #[test]
+    fn empty_entities_returns_empty() {
+        let rels = extract_relations_heuristic(&[], "some text", &["WORKS_FOR"], 0.0);
+        assert!(rels.is_empty());
+    }
+
+    #[test]
+    fn single_entity_returns_empty() {
+        let entities = vec![entity("Alice", crate::EntityType::Person, 0, 5)];
+        let rels = extract_relations_heuristic(&entities, "Alice is here", &[], 0.0);
+        assert!(rels.is_empty(), "need at least two entities for a relation");
+    }
+
+    #[test]
+    fn high_threshold_filters_low_confidence() {
+        let text = "Alice works for Bob";
+        let entities = vec![
+            entity("Alice", crate::EntityType::Person, 0, 5),
+            entity("Bob", crate::EntityType::Person, 16, 19),
+        ];
+        let rels = extract_relations_heuristic(&entities, text, &[], 0.99);
+        // With threshold 0.99, most heuristic relations should be filtered out.
+        // (proximity * base_score * avg_confidence will rarely exceed 0.99)
+        assert!(
+            rels.is_empty() || rels.iter().all(|r| r.confidence >= 0.99),
+            "all surviving relations must meet threshold"
+        );
+    }
+
+    #[test]
+    fn deduplicates_to_top_per_pair() {
+        // "born in" can trigger both a trigger-pattern and a type-based relation.
+        // The output should have at most one relation per directed (head, tail) pair.
+        let text = "Alice born in Paris";
+        let entities = vec![
+            entity("Alice", crate::EntityType::Person, 0, 5),
+            entity("Paris", crate::EntityType::Location, 14, 19),
+        ];
+        let rels = extract_relations_heuristic(&entities, text, &[], 0.0);
+        let pair_count = rels
+            .iter()
+            .filter(|r| r.head_idx == 0 && r.tail_idx == 1)
+            .count();
+        assert!(
+            pair_count <= 1,
+            "expected at most 1 relation per directed pair, got {pair_count}"
+        );
+    }
+}
