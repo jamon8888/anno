@@ -354,3 +354,200 @@ fn test_known_loc_acronym_still_loc() {
         usa.unwrap().entity_type,
     );
 }
+
+// =========================================================================
+// classify_minimal rule-path tests
+// =========================================================================
+
+/// Rule 1: International org suffixes (GmbH, AG, S.A., etc.)
+#[test]
+fn test_international_org_suffix_gmbh() {
+    let ner = HeuristicNER::new();
+    let entities = ner
+        .extract_entities("Siemens GmbH reported earnings.", None)
+        .unwrap();
+
+    let orgs: Vec<_> = entities
+        .iter()
+        .filter(|e| matches!(e.entity_type, EntityType::Organization))
+        .collect();
+    assert!(!orgs.is_empty(), "Should detect 'Siemens GmbH' as ORG");
+    assert!(
+        orgs.iter().any(|e| e.text.contains("GmbH")),
+        "Entity text should include GmbH suffix: {orgs:?}"
+    );
+}
+
+/// classify_minimal skip_word: job titles (CEO, VP) are filtered out.
+#[test]
+fn test_skip_word_filters_job_titles() {
+    let ner = HeuristicNER::with_threshold(0.0);
+    let entities = ner
+        .extract_entities("the CEO spoke at the event.", None)
+        .unwrap();
+
+    let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+    assert!(
+        !texts.iter().any(|t| t.eq_ignore_ascii_case("CEO")),
+        "CEO should be filtered as skip_word: {texts:?}"
+    );
+}
+
+/// classify_minimal skip_pronoun: single pronouns at sentence start are
+/// filtered even when capitalized.
+#[test]
+fn test_skip_pronoun_filters_single_pronouns() {
+    let ner = HeuristicNER::with_threshold(0.0);
+    let entities = ner
+        .extract_entities("He ran. She swam. They left.", None)
+        .unwrap();
+
+    let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+    for pronoun in &["He", "She", "They"] {
+        assert!(
+            !texts.contains(pronoun),
+            "{pronoun} should be filtered: {texts:?}"
+        );
+    }
+}
+
+/// classify_minimal single_letter: a lone uppercase letter is not an entity.
+#[test]
+fn test_single_letter_not_entity() {
+    let ner = HeuristicNER::with_threshold(0.0);
+    let entities = ner
+        .extract_entities("variable X was defined.", None)
+        .unwrap();
+
+    let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+    assert!(
+        !texts.contains(&"X"),
+        "Single letter 'X' should be skipped: {texts:?}"
+    );
+}
+
+/// classify_minimal long_span_org: three+ capitalized words default to ORG.
+#[test]
+fn test_three_word_span_defaults_to_org() {
+    let ner = HeuristicNER::new();
+    let entities = ner
+        .extract_entities("Global Dynamics Research announced funding.", None)
+        .unwrap();
+
+    let span = entities
+        .iter()
+        .find(|e| e.text == "Global Dynamics Research");
+    assert!(
+        span.is_some(),
+        "Should detect 'Global Dynamics Research': {entities:?}"
+    );
+    assert!(
+        matches!(span.unwrap().entity_type, EntityType::Organization),
+        "Three-word span should be ORG, got {:?}",
+        span.unwrap().entity_type,
+    );
+}
+
+/// classify_minimal capitalized default: single capitalized word mid-sentence
+/// with no other signal defaults to Person.
+#[test]
+fn test_single_capitalized_mid_sentence_defaults_person() {
+    let ner = HeuristicNER::new();
+    let entities = ner
+        .extract_entities("I spoke with Valentina about the plan.", None)
+        .unwrap();
+
+    let val = entities.iter().find(|e| e.text == "Valentina");
+    assert!(
+        val.is_some(),
+        "Should detect 'Valentina': {entities:?}"
+    );
+    assert!(
+        matches!(val.unwrap().entity_type, EntityType::Person),
+        "Single capitalized mid-sentence should be PER, got {:?}",
+        val.unwrap().entity_type,
+    );
+}
+
+/// "and" should separate entities, not merge them.
+#[test]
+fn test_and_separates_entities() {
+    let ner = HeuristicNER::new();
+    let entities = ner
+        .extract_entities("We met Alice and Bob at the event.", None)
+        .unwrap();
+
+    let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+    // "Alice and Bob" should NOT be one entity
+    assert!(
+        !texts.iter().any(|t| t.contains("and")),
+        "'and' should separate entities, not join them: {texts:?}"
+    );
+    assert!(
+        texts.contains(&"Alice"),
+        "Should detect Alice: {texts:?}"
+    );
+    assert!(
+        texts.contains(&"Bob"),
+        "Should detect Bob: {texts:?}"
+    );
+}
+
+/// German preposition "aus" triggers location context.
+#[test]
+fn test_german_preposition_location_context() {
+    let ner = HeuristicNER::new();
+    let entities = ner
+        .extract_entities("Er kommt aus Hamburg zum Meeting.", None)
+        .unwrap();
+
+    let locs: Vec<_> = entities
+        .iter()
+        .filter(|e| matches!(e.entity_type, EntityType::Location))
+        .collect();
+    assert!(
+        locs.iter().any(|e| e.text == "Hamburg"),
+        "German preposition 'aus' should signal LOC for Hamburg: {entities:?}"
+    );
+}
+
+/// BatchCapable and StreamingCapable trait methods return expected values.
+#[test]
+fn test_batch_and_streaming_capabilities() {
+    let ner = HeuristicNER::new();
+    assert_eq!(
+        crate::BatchCapable::optimal_batch_size(&ner),
+        Some(16),
+        "optimal_batch_size should be 16"
+    );
+    assert_eq!(
+        crate::StreamingCapable::recommended_chunk_size(&ner),
+        8192,
+        "recommended_chunk_size should be 8192"
+    );
+    let caps = Model::capabilities(&ner);
+    assert!(caps.batch_capable, "batch_capable should be true");
+    assert!(caps.streaming_capable, "streaming_capable should be true");
+}
+
+/// Trailing punctuation is stripped from entity text.
+#[test]
+fn test_trailing_punctuation_stripped() {
+    let ner = HeuristicNER::new();
+    let entities = ner
+        .extract_entities("She met Google, Microsoft, and Tesla.", None)
+        .unwrap();
+
+    for entity in &entities {
+        assert!(
+            !entity.text.ends_with(','),
+            "Entity '{}' should not end with comma",
+            entity.text
+        );
+        assert!(
+            !entity.text.ends_with('.'),
+            "Entity '{}' should not end with period",
+            entity.text
+        );
+    }
+}
