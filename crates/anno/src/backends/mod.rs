@@ -118,6 +118,11 @@
 //! }
 //! ```
 
+/// Unified trait for coreference resolution backends.
+///
+/// Open trait (not sealed) -- external coref backends can implement it.
+pub mod coref_trait;
+
 // Always available (zero deps beyond std)
 /// BiLSTM + CRF NER - neural baseline from 2015-2018.
 ///
@@ -251,6 +256,9 @@ pub mod fcoref;
 // Graph-based coreference (iterative refinement)
 pub mod graph_coref;
 
+// End-to-end coreference resolution (Lee et al. 2017/2018)
+pub mod e2e_coref;
+
 // Mention-ranking coreference (Bourgois & Poibeau 2025 inspired)
 pub mod mention_ranking;
 
@@ -364,6 +372,9 @@ pub use box_embeddings_training::{
 
 // Coreference resolution trait (from anno-core, always available)
 pub use anno_core::CoreferenceResolver;
+
+// Unified coref backend trait
+pub use coref_trait::CorefBackend;
 
 // Classical HMM NER (zero deps)
 pub use hmm::{HmmConfig, HmmNER};
