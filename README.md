@@ -100,6 +100,19 @@ anno debug --coref -t "Sophie Wilson designed the ARM processor. She revolutioni
 Coreference: "Sophie Wilson" → "She"
 ```
 
+## RAG Coreference Preprocessing
+
+`rag::resolve_for_rag()` rewrites pronouns with their antecedents so that document chunks remain self-contained after splitting for retrieval-augmented generation. Pronouns like "she" or "they" are replaced with the resolved entity text (e.g., "Alice"), producing chunks that embed and retrieve without losing referent context.
+
+Features:
+
+- Multilingual pronoun detection: English (default), French, Spanish, German. Unsupported languages (CJK, Arabic, etc.) safely produce no rewrites.
+- Pleonastic "it" filter: skips non-referential uses (weather, extraposition, idioms) to avoid spurious rewrites.
+- Cataphoric resolution: optional second pass resolves forward-pointing pronouns.
+- Configurable: reflexive and demonstrative pronoun rewrites are off by default.
+
+The underlying `SimpleCorefResolver` uses a name-to-gender gazetteer (common English first names mapped to gender) for pronoun-antecedent agreement. `Gender::Unknown` acts as a wildcard, compatible with all other genders, so ungendered entities do not block resolution.
+
 ## Downstream
 
 Filter and pipe JSON output:
