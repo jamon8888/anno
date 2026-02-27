@@ -731,6 +731,276 @@ mod tests {
         assert!(!config.prefer_quantized);
     }
 
+    #[test]
+    fn test_pool_config_default_values() {
+        let config = PoolConfig::default();
+        // pool_size should match available parallelism (or fallback 4)
+        assert_eq!(config.pool_size, num_cpus());
+        assert_eq!(config.acquire_timeout_ms, 5000);
+        assert!(config.prefer_quantized);
+        assert_eq!(config.optimization_level, 3);
+    }
+
+    #[test]
+    fn test_pool_config_with_size_preserves_defaults() {
+        let config = PoolConfig::with_size(2);
+        assert_eq!(config.pool_size, 2);
+        // Other fields keep default values
+        assert_eq!(config.acquire_timeout_ms, 5000);
+        assert!(config.prefer_quantized);
+        assert_eq!(config.optimization_level, 3);
+    }
+
+    #[test]
+    fn test_pool_config_builder_chaining() {
+        let config = PoolConfig::with_size(16)
+            .with_timeout(500)
+            .prefer_quantized(false);
+
+        assert_eq!(config.pool_size, 16);
+        assert_eq!(config.acquire_timeout_ms, 500);
+        assert!(!config.prefer_quantized);
+    }
+
+    #[test]
+    fn test_pool_config_with_size_one() {
+        let config = PoolConfig::with_size(1);
+        assert_eq!(config.pool_size, 1);
+    }
+
+    // ---- num_cpus ----
+
+    #[test]
+    fn test_num_cpus_returns_positive() {
+        let cpus = num_cpus();
+        assert!(cpus >= 1, "num_cpus() must be at least 1, got {}", cpus);
+    }
+
+    // ---- word_offsets ----
+
+    #[test]
+    fn test_word_offsets_empty_text() {
+        // Empty text with no words: degenerate case, returns (0, 0)
+        let (start, end) = GLiNERPool::word_offsets("", &[], 0, 0);
+        assert_eq!(start, 0);
+        assert_eq!(end, 0);
+    }
+
+    #[test]
+    fn test_word_offsets_single_word() {
+        let text = "hello";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let (start, end) = GLiNERPool::word_offsets(text, &words, 0, 0);
+        assert_eq!(start, 0);
+        assert_eq!(end, 5);
+    }
+
+    #[test]
+    fn test_word_offsets_multi_word() {
+        let text = "John works at Apple";
+        let words: Vec<&str> = text.split_whitespace().collect();
+
+        // "John" is word 0
+        let (s, e) = GLiNERPool::word_offsets(text, &words, 0, 0);
+        assert_eq!(&text[s..e], "John");
+
+        // "works" is word 1
+        let (s, e) = GLiNERPool::word_offsets(text, &words, 1, 1);
+        assert_eq!(&text[s..e], "works");
+
+        // "Apple" is word 3
+        let (s, e) = GLiNERPool::word_offsets(text, &words, 3, 3);
+        assert_eq!(&text[s..e], "Apple");
+
+        // Span "works at" is words 1..2
+        let (s, e) = GLiNERPool::word_offsets(text, &words, 1, 2);
+        assert_eq!(&text[s..e], "works at");
+
+        // Full span "John works at Apple" is words 0..3
+        let (s, e) = GLiNERPool::word_offsets(text, &words, 0, 3);
+        assert_eq!(&text[s..e], "John works at Apple");
+    }
+
+    #[test]
+    fn test_word_offsets_unicode_text() {
+        let text = "Tokio est magnifique";
+        let words: Vec<&str> = text.split_whitespace().collect();
+
+        let (s, e) = GLiNERPool::word_offsets(text, &words, 0, 0);
+        assert_eq!(&text[s..e], "Tokio");
+
+        let (s, e) = GLiNERPool::word_offsets(text, &words, 2, 2);
+        assert_eq!(&text[s..e], "magnifique");
+    }
+
+    #[test]
+    fn test_word_offsets_unicode_multibyte() {
+        // Words with multi-byte UTF-8 characters
+        let text = "Zurich Munchen";
+        let words: Vec<&str> = text.split_whitespace().collect();
+
+        let (s, e) = GLiNERPool::word_offsets(text, &words, 0, 0);
+        assert_eq!(&text[s..e], "Zurich");
+
+        let (s, e) = GLiNERPool::word_offsets(text, &words, 1, 1);
+        assert_eq!(&text[s..e], "Munchen");
+    }
+
+    #[test]
+    fn test_word_offsets_extra_whitespace() {
+        // text has multiple spaces between words
+        let text = "hello   world";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        assert_eq!(words, vec!["hello", "world"]);
+
+        let (s, e) = GLiNERPool::word_offsets(text, &words, 0, 0);
+        assert_eq!(&text[s..e], "hello");
+
+        let (s, e) = GLiNERPool::word_offsets(text, &words, 1, 1);
+        assert_eq!(&text[s..e], "world");
+    }
+
+    // ---- validate_output ----
+
+    #[test]
+    fn test_validate_output_ok() {
+        assert!(GLiNERPool::validate_output(&[1.0, 2.0, 3.0], &[1, 1, 3]).is_ok());
+    }
+
+    #[test]
+    fn test_validate_output_empty_data() {
+        assert!(GLiNERPool::validate_output(&[], &[1, 1, 1]).is_err());
+    }
+
+    #[test]
+    fn test_validate_output_zero_in_shape() {
+        assert!(GLiNERPool::validate_output(&[1.0], &[0, 1, 1]).is_err());
+        assert!(GLiNERPool::validate_output(&[1.0], &[1, 0, 1]).is_err());
+        assert!(GLiNERPool::validate_output(&[1.0], &[1, 1, 0]).is_err());
+    }
+
+    #[test]
+    fn test_validate_output_empty_shape() {
+        // Non-empty data but empty shape: no zero dims, should be ok
+        assert!(GLiNERPool::validate_output(&[1.0], &[]).is_ok());
+    }
+
+    // ---- make_span_tensors ----
+
+    #[test]
+    fn test_make_span_tensors_zero_words() {
+        let (span_idx, span_mask) = GLiNERPool::make_span_tensors(0);
+        assert!(span_idx.is_empty());
+        assert!(span_mask.is_empty());
+    }
+
+    #[test]
+    fn test_make_span_tensors_one_word() {
+        let (span_idx, span_mask) = GLiNERPool::make_span_tensors(1);
+        // 1 word * MAX_SPAN_WIDTH = 12 spans allocated
+        assert_eq!(span_mask.len(), MAX_SPAN_WIDTH);
+        assert_eq!(span_idx.len(), MAX_SPAN_WIDTH * 2);
+        // Only the first span (0,0) should be valid since we have 1 word
+        assert!(span_mask[0], "first span should be valid");
+        assert_eq!(span_idx[0], 0); // start = 0
+        assert_eq!(span_idx[1], 0); // end = 0
+        // Remaining spans should be masked out
+        for i in 1..MAX_SPAN_WIDTH {
+            assert!(!span_mask[i], "span {} should be invalid for 1-word input", i);
+        }
+    }
+
+    #[test]
+    fn test_make_span_tensors_two_words() {
+        let (span_idx, span_mask) = GLiNERPool::make_span_tensors(2);
+        let num_spans = 2 * MAX_SPAN_WIDTH;
+        assert_eq!(span_mask.len(), num_spans);
+        assert_eq!(span_idx.len(), num_spans * 2);
+
+        // Word 0: spans (0,0) and (0,1) are valid
+        assert!(span_mask[0]); // (0,0)
+        assert_eq!(span_idx[0], 0);
+        assert_eq!(span_idx[1], 0);
+        assert!(span_mask[1]); // (0,1)
+        assert_eq!(span_idx[2], 0);
+        assert_eq!(span_idx[3], 1);
+
+        // Word 1: only span (1,1) is valid (can't go past num_words)
+        let w1_base = MAX_SPAN_WIDTH; // offset for word 1 in span arrays
+        assert!(span_mask[w1_base]); // (1,1)
+        assert_eq!(span_idx[w1_base * 2], 1);
+        assert_eq!(span_idx[w1_base * 2 + 1], 1);
+    }
+
+    #[test]
+    fn test_make_span_tensors_three_words() {
+        let (_span_idx, span_mask) = GLiNERPool::make_span_tensors(3);
+
+        // Count valid spans: word0 has 3, word1 has 2, word2 has 1 = 6 total
+        let valid_count = span_mask.iter().filter(|&&m| m).count();
+        assert_eq!(valid_count, 6, "3-word input should have 6 valid spans");
+    }
+
+    // ---- map_type ----
+
+    #[test]
+    fn test_map_type_person() {
+        use anno_core::EntityType;
+        assert_eq!(GLiNERPool::map_type("person"), EntityType::Person);
+        assert_eq!(GLiNERPool::map_type("Person"), EntityType::Person);
+        assert_eq!(GLiNERPool::map_type("PERSON"), EntityType::Person);
+        assert_eq!(GLiNERPool::map_type("per"), EntityType::Person);
+        assert_eq!(GLiNERPool::map_type("PER"), EntityType::Person);
+    }
+
+    #[test]
+    fn test_map_type_organization() {
+        use anno_core::EntityType;
+        assert_eq!(GLiNERPool::map_type("organization"), EntityType::Organization);
+        assert_eq!(GLiNERPool::map_type("org"), EntityType::Organization);
+        assert_eq!(GLiNERPool::map_type("ORG"), EntityType::Organization);
+    }
+
+    #[test]
+    fn test_map_type_location() {
+        use anno_core::EntityType;
+        assert_eq!(GLiNERPool::map_type("location"), EntityType::Location);
+        assert_eq!(GLiNERPool::map_type("loc"), EntityType::Location);
+        assert_eq!(GLiNERPool::map_type("gpe"), EntityType::Location);
+        assert_eq!(GLiNERPool::map_type("GPE"), EntityType::Location);
+    }
+
+    #[test]
+    fn test_map_type_date_and_time() {
+        use anno_core::EntityType;
+        assert_eq!(GLiNERPool::map_type("date"), EntityType::Date);
+        assert_eq!(GLiNERPool::map_type("time"), EntityType::Date);
+        assert_eq!(GLiNERPool::map_type("DATE"), EntityType::Date);
+        assert_eq!(GLiNERPool::map_type("TIME"), EntityType::Date);
+    }
+
+    #[test]
+    fn test_map_type_money() {
+        use anno_core::EntityType;
+        assert_eq!(GLiNERPool::map_type("money"), EntityType::Money);
+        assert_eq!(GLiNERPool::map_type("currency"), EntityType::Money);
+    }
+
+    #[test]
+    fn test_map_type_percent() {
+        use anno_core::EntityType;
+        assert_eq!(GLiNERPool::map_type("percent"), EntityType::Percent);
+        assert_eq!(GLiNERPool::map_type("percentage"), EntityType::Percent);
+    }
+
+    #[test]
+    fn test_map_type_other_fallback() {
+        use anno_core::EntityType;
+        assert_eq!(GLiNERPool::map_type("product"), EntityType::Other("product".to_string()));
+        assert_eq!(GLiNERPool::map_type("event"), EntityType::Other("event".to_string()));
+        assert_eq!(GLiNERPool::map_type("VEHICLE"), EntityType::Other("vehicle".to_string()));
+    }
+
     // Integration tests require model download
     #[test]
     #[ignore = "Requires model download"]
