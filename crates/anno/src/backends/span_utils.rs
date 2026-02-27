@@ -534,4 +534,232 @@ mod tests {
         assert!(!ranges_overlap(0, 5, 10, 15)); // No overlap
         assert!(!ranges_overlap(0, 5, 5, 10)); // Adjacent (not overlapping)
     }
+
+    // ---------------------------------------------------------------
+    // Additional tests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_make_span_tensors_zero_words() {
+        let (span_idx, span_mask) = make_span_tensors(0, 5);
+        assert!(span_idx.is_empty());
+        assert!(span_mask.is_empty());
+    }
+
+    #[test]
+    fn test_make_span_tensors_zero_width() {
+        let (span_idx, span_mask) = make_span_tensors(4, 0);
+        assert!(span_idx.is_empty());
+        assert!(span_mask.is_empty());
+    }
+
+    #[test]
+    fn test_make_span_tensors_single_word() {
+        let (span_idx, span_mask) = make_span_tensors(1, 3);
+        // 1 word * 3 max_width = 3 slots, but only 1 valid span (0,0)
+        assert_eq!(span_mask.len(), 3);
+        assert_eq!(span_idx.len(), 6);
+
+        // Only the first span (word 0, width 0) is valid
+        assert!(span_mask[0]);
+        assert_eq!(span_idx[0], 0);
+        assert_eq!(span_idx[1], 0);
+
+        // Remaining slots are invalid (width exceeds word count)
+        assert!(!span_mask[1]);
+        assert!(!span_mask[2]);
+    }
+
+    #[test]
+    fn test_make_span_tensors_width_exceeds_words() {
+        // 2 words, max_width 5: only 3 valid spans (0,0), (0,1), (1,1)
+        let (span_idx, span_mask) = make_span_tensors(2, 5);
+        assert_eq!(span_mask.len(), 10); // 2 * 5
+
+        // Word 0: width 0 -> (0,0), width 1 -> (0,1)
+        assert!(span_mask[0]);
+        assert_eq!((span_idx[0], span_idx[1]), (0, 0));
+        assert!(span_mask[1]);
+        assert_eq!((span_idx[2], span_idx[3]), (0, 1));
+        // Word 0: widths 2..4 invalid
+        assert!(!span_mask[2]);
+        assert!(!span_mask[3]);
+        assert!(!span_mask[4]);
+
+        // Word 1: width 0 -> (1,1)
+        assert!(span_mask[5]);
+        assert_eq!((span_idx[10], span_idx[11]), (1, 1));
+        // Word 1: widths 1..4 invalid
+        assert!(!span_mask[6]);
+    }
+
+    #[test]
+    fn test_make_span_tensors_valid_span_count() {
+        // For n words and max_width w, the number of valid spans is
+        // sum_{i=0}^{n-1} min(w, n-i).
+        let (_, mask) = make_span_tensors(4, 3);
+        let valid = mask.iter().filter(|&&v| v).count();
+        // start=0: min(3,4)=3, start=1: min(3,3)=3, start=2: min(3,2)=2, start=3: min(3,1)=1
+        assert_eq!(valid, 3 + 3 + 2 + 1);
+    }
+
+    #[test]
+    fn test_calculate_word_positions_unicode() {
+        let text = "le cafe\u{0301} cou\u{0302}te cher";
+        // "le café coûte cher" with combining marks
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let positions = calculate_word_positions(text, &words).unwrap();
+
+        assert_eq!(positions.len(), 4);
+        // "le" at bytes 0..2
+        assert_eq!(positions[0], (0, 2));
+        // Verify each word round-trips
+        for (i, word) in words.iter().enumerate() {
+            let (s, e) = positions[i];
+            assert_eq!(&text[s..e], *word);
+        }
+    }
+
+    #[test]
+    fn test_calculate_word_positions_multiple_spaces() {
+        let text = "hello   world";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let positions = calculate_word_positions(text, &words).unwrap();
+
+        assert_eq!(positions.len(), 2);
+        assert_eq!(positions[0], (0, 5)); // "hello"
+        assert_eq!(positions[1], (8, 13)); // "world"
+    }
+
+    #[test]
+    fn test_calculate_word_positions_missing_word() {
+        let text = "hello world";
+        let words = vec!["hello", "missing"];
+        let result = calculate_word_positions(text, &words);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_extract_span_out_of_bounds() {
+        let positions = vec![(0, 5), (6, 10)];
+        let text = "hello world";
+
+        // start_word beyond positions length
+        assert!(extract_span(text, &positions, 5, 5).is_none());
+
+        // end_word beyond positions length
+        assert!(extract_span(text, &positions, 0, 5).is_none());
+    }
+
+    #[test]
+    fn test_extract_span_last_word() {
+        let text = "one two three";
+        let positions = vec![(0, 3), (4, 7), (8, 13)];
+
+        let (span, start, end) = extract_span(text, &positions, 2, 2).unwrap();
+        assert_eq!(span, "three");
+        assert_eq!((start, end), (8, 13));
+    }
+
+    #[test]
+    fn test_ranges_overlap_identical() {
+        assert!(ranges_overlap(3, 7, 3, 7));
+    }
+
+    #[test]
+    fn test_ranges_overlap_fully_contained() {
+        // Inner range fully inside outer range
+        assert!(ranges_overlap(0, 20, 5, 10));
+        assert!(ranges_overlap(5, 10, 0, 20));
+    }
+
+    #[test]
+    fn test_ranges_overlap_empty_and_adjacent() {
+        // Empty range (start == end): start1 < end2 && start2 < end1
+        // (5,5) vs (5,5): 5 < 5 is false => no overlap
+        assert!(!ranges_overlap(5, 5, 5, 5));
+        // (5,5) vs (5,10): 5 < 10 && 5 < 5 => false (second condition)
+        assert!(!ranges_overlap(5, 5, 5, 10));
+        // (5,10) vs (5,5): 5 < 5 && 5 < 10 => false (first condition)
+        assert!(!ranges_overlap(5, 10, 5, 5));
+        // (0,10) vs (3,3): 0 < 3 && 3 < 10 => true (zero-width point inside range)
+        assert!(ranges_overlap(0, 10, 3, 3));
+
+        // Adjacent ranges (half-open convention: [0,5) and [5,10))
+        assert!(!ranges_overlap(0, 5, 5, 10));
+        assert!(!ranges_overlap(5, 10, 0, 5));
+    }
+
+    #[test]
+    fn test_map_label_to_entity_type_case_insensitivity() {
+        assert_eq!(map_label_to_entity_type("Person"), EntityType::Person);
+        assert_eq!(map_label_to_entity_type("PERSON"), EntityType::Person);
+        assert_eq!(map_label_to_entity_type("PerSoN"), EntityType::Person);
+        assert_eq!(
+            map_label_to_entity_type("ORGANIZATION"),
+            EntityType::Organization
+        );
+        assert_eq!(map_label_to_entity_type("Loc"), EntityType::Location);
+    }
+
+    #[test]
+    fn test_map_label_to_entity_type_extended_labels() {
+        assert_eq!(map_label_to_entity_type("date"), EntityType::Date);
+        assert_eq!(map_label_to_entity_type("datetime"), EntityType::Date);
+        assert_eq!(map_label_to_entity_type("time"), EntityType::Time);
+        assert_eq!(map_label_to_entity_type("money"), EntityType::Money);
+        assert_eq!(map_label_to_entity_type("currency"), EntityType::Money);
+        assert_eq!(map_label_to_entity_type("monetary"), EntityType::Money);
+        assert_eq!(map_label_to_entity_type("percent"), EntityType::Percent);
+        assert_eq!(map_label_to_entity_type("percentage"), EntityType::Percent);
+        assert_eq!(map_label_to_entity_type("email"), EntityType::Email);
+        assert_eq!(map_label_to_entity_type("phone"), EntityType::Phone);
+        assert_eq!(map_label_to_entity_type("url"), EntityType::Url);
+        assert_eq!(map_label_to_entity_type("quantity"), EntityType::Quantity);
+        assert_eq!(map_label_to_entity_type("cardinal"), EntityType::Cardinal);
+        assert_eq!(map_label_to_entity_type("number"), EntityType::Cardinal);
+        assert_eq!(map_label_to_entity_type("ordinal"), EntityType::Ordinal);
+        assert_eq!(
+            map_label_to_entity_type("event"),
+            EntityType::Other("EVENT".to_string())
+        );
+        assert_eq!(
+            map_label_to_entity_type("product"),
+            EntityType::Other("PRODUCT".to_string())
+        );
+        assert_eq!(
+            map_label_to_entity_type("norp"),
+            EntityType::Other("NORP".to_string())
+        );
+        assert_eq!(
+            map_label_to_entity_type("facility"),
+            EntityType::Other("FACILITY".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_span_unicode_multibyte() {
+        // Text with multi-byte characters: each CJK char is 3 bytes in UTF-8
+        let text = "\u{6771}\u{4eac} \u{304f} \u{91ce}";
+        // "東京 く 野" -- 3 words
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let positions = calculate_word_positions(text, &words).unwrap();
+
+        // Verify byte positions account for multi-byte chars
+        // "東京" = 6 bytes (2 chars * 3 bytes each)
+        assert_eq!(positions[0], (0, 6));
+
+        // Full span from first to last word
+        let (span, s, e) = extract_span(text, &positions, 0, 2).unwrap();
+        assert_eq!(span, text);
+        assert_eq!(s, 0);
+        assert_eq!(e, text.len());
+    }
+
+    #[test]
+    fn test_span_config_default() {
+        let config = SpanConfig::default();
+        assert_eq!(config.max_span_width, DEFAULT_MAX_SPAN_WIDTH);
+        assert!((config.threshold - 0.5).abs() < f32::EPSILON);
+    }
 }
