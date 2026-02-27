@@ -278,6 +278,18 @@ just ci-matrix-local 42 ner
 
 Inference-time extraction. Training pipelines are out of scope -- use upstream frameworks (Hugging Face Transformers, Flair, etc.) and export ONNX weights for consumption. (The repo contains some experimental training code for box embeddings; this is research-only and not part of the public API.)
 
+## Troubleshooting
+
+**ONNX Runtime linking errors.** The `onnx` feature pulls in `ort`, which needs the ONNX Runtime C++ library. If linking fails, use `default-features = false` for a minimal build without native deps. If you need ONNX backends, ensure `ort` can download the prebuilt runtime -- check proxy/firewall settings and the `ORT_DYLIB_PATH` env var.
+
+**Model download failures.** First use of ML backends downloads weights from HuggingFace to `~/.cache/huggingface/hub/`. Behind firewalls, pre-fetch models on a connected machine, then set `HF_HUB_OFFLINE=1` (or `ANNO_NO_DOWNLOADS=1`) to force cached-only mode.
+
+**FCoref export script not found.** The export script (`scripts/export_fcoref.py`) is only present in the git repository, not in the crates.io package. Clone the repo to access it: `uv run scripts/export_fcoref.py`.
+
+**"Feature not available" errors.** Most ML backends are feature-gated behind `onnx` or `candle`. If a backend constructor returns an error about a missing feature, check which features are enabled. The feature flags table above lists what each feature unlocks.
+
+**Character offset mismatches.** All spans use character offsets (Unicode scalar values), not byte offsets. If offsets look wrong, ensure you are indexing by `chars()` count, not by byte position. See [CONTRACT.md](docs/CONTRACT.md).
+
 ## Documentation
 
 - [QUICKSTART](docs/QUICKSTART.md)
