@@ -36,6 +36,18 @@ pub struct CorefConfig {
     /// Checks if one mention is an uppercase acronym whose letters match the
     /// initial letters of the other mention's words. Requires same entity type.
     pub acronym_matching: bool,
+    /// Enable relaxed head match (e.g., "President Obama" ~ "Barack Obama" via shared head "Obama").
+    ///
+    /// Two mentions corefer if their head words (last word) match and they share the same
+    /// entity type. Only applies when both mentions have 2+ words.
+    pub relaxed_head_match: bool,
+    /// Enable proper noun containment (e.g., "Obama" is contained in "Barack Obama").
+    ///
+    /// One mention's original text must be a proper subsequence of the other, matching
+    /// at word boundaries, and both must share the same entity type. Unlike fuzzy/substring
+    /// matching, this operates on original text (not canonical lowercased form) and requires
+    /// complete word boundary alignment.
+    pub proper_containment: bool,
 }
 
 #[allow(deprecated)]
@@ -48,6 +60,8 @@ impl Default for CorefConfig {
             include_singletons: true,
             use_name_gazetteer: true,
             acronym_matching: true,
+            relaxed_head_match: true,
+            proper_containment: true,
         }
     }
 }
@@ -153,7 +167,29 @@ impl SimpleCorefResolver {
             }
         }
 
-        // Strategy 4: substring/fuzzy matching.
+        // Strategy 4: relaxed head match (e.g., "President Obama" ~ "Barack Obama").
+        if self.config.relaxed_head_match {
+            for prev in previous.iter().rev() {
+                if let Some(cluster_id) = prev.canonical_id {
+                    if self.is_relaxed_head_match(entity, prev) {
+                        return Some(cluster_id);
+                    }
+                }
+            }
+        }
+
+        // Strategy 5: proper noun containment (e.g., "Obama" in "Barack Obama").
+        if self.config.proper_containment {
+            for prev in previous.iter().rev() {
+                if let Some(cluster_id) = prev.canonical_id {
+                    if self.is_proper_containment(entity, prev) {
+                        return Some(cluster_id);
+                    }
+                }
+            }
+        }
+
+        // Strategy 6: substring/fuzzy matching.
         if self.config.fuzzy_matching {
             for (other_canonical, &cluster_id) in canonical_map {
                 if self.names_match(&canonical, other_canonical) {
@@ -330,6 +366,66 @@ impl SimpleCorefResolver {
             .iter()
             .zip(words.iter())
             .all(|(&ac, word)| word.starts_with(ac))
+    }
+
+    /// Check if two mentions share a head word (last word) and entity type.
+    ///
+    /// Only applies when both mentions have 2+ words, so single-word mentions
+    /// are not spuriously matched (those are handled by exact/fuzzy sieves).
+    fn is_relaxed_head_match(&self, a: &Entity, b: &Entity) -> bool {
+        if a.entity_type != b.entity_type {
+            return false;
+        }
+        let words_a: Vec<&str> = a.text.split_whitespace().collect();
+        let words_b: Vec<&str> = b.text.split_whitespace().collect();
+        if words_a.len() < 2 || words_b.len() < 2 {
+            return false;
+        }
+        // Head word = last word, compared case-insensitively.
+        words_a
+            .last()
+            .unwrap()
+            .eq_ignore_ascii_case(words_b.last().unwrap())
+    }
+
+    /// Check if one mention's original text is properly contained in the other
+    /// at word boundaries, with matching entity type.
+    ///
+    /// "Obama" is properly contained in "Barack Obama" because "Obama" appears
+    /// as a complete word. Unlike `names_match`, this uses the original text
+    /// (not canonical lowercased form) and requires word-boundary alignment.
+    fn is_proper_containment(&self, a: &Entity, b: &Entity) -> bool {
+        if a.entity_type != b.entity_type {
+            return false;
+        }
+        let text_a = a.text.trim();
+        let text_b = b.text.trim();
+        if text_a.is_empty() || text_b.is_empty() || text_a.eq_ignore_ascii_case(text_b) {
+            return false; // must be a *proper* subsequence, not equal
+        }
+
+        let (shorter, longer) = if text_a.len() < text_b.len() {
+            (text_a, text_b)
+        } else if text_b.len() < text_a.len() {
+            (text_b, text_a)
+        } else {
+            return false; // same length but different text => not contained
+        };
+
+        // Check if shorter appears as a complete word sequence in longer.
+        let longer_lower = longer.to_lowercase();
+        let shorter_lower = shorter.to_lowercase();
+        let longer_words: Vec<&str> = longer_lower.split_whitespace().collect();
+        let shorter_words: Vec<&str> = shorter_lower.split_whitespace().collect();
+
+        if shorter_words.is_empty() || shorter_words.len() >= longer_words.len() {
+            return false;
+        }
+
+        // Check if shorter_words appears as a contiguous subsequence of longer_words.
+        longer_words
+            .windows(shorter_words.len())
+            .any(|window| window == shorter_words.as_slice())
     }
 
     fn names_match(&self, name1: &str, name2: &str) -> bool {
@@ -961,6 +1057,7 @@ mod tests {
     fn fuzzy_matching_disabled_does_not_merge_substrings() {
         let resolver = SimpleCorefResolver::new(CorefConfig {
             fuzzy_matching: false,
+            proper_containment: false,
             ..CorefConfig::default()
         });
         let entities = vec![
@@ -1666,6 +1763,209 @@ mod tests {
         );
     }
 
+    // ---- Relaxed head match ----
+
+    #[test]
+    fn relaxed_head_match_shared_last_word() {
+        // "President Obama" and "Barack Obama" share head word "Obama".
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: false,
+            proper_containment: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("President Obama", 0, 15),
+            person("Barack Obama", 20, 32),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "'President Obama' and 'Barack Obama' should cluster via shared head 'Obama'"
+        );
+    }
+
+    #[test]
+    fn relaxed_head_match_requires_two_words() {
+        // Single-word mentions should NOT match via relaxed head match.
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: false,
+            proper_containment: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("Obama", 0, 5),
+            person("Barack Obama", 20, 32),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "Relaxed head match requires both mentions to have 2+ words"
+        );
+    }
+
+    #[test]
+    fn relaxed_head_match_type_mismatch() {
+        // Different entity types should not match even with same head word.
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: false,
+            proper_containment: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("President Obama", 0, 15),
+            org("Foundation Obama", 20, 36),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "Relaxed head match requires same entity type"
+        );
+    }
+
+    #[test]
+    fn relaxed_head_match_case_insensitive() {
+        // Head word comparison should be case-insensitive.
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: false,
+            proper_containment: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("President OBAMA", 0, 15),
+            person("Barack obama", 20, 32),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "Relaxed head match should be case-insensitive"
+        );
+    }
+
+    #[test]
+    fn relaxed_head_match_disabled() {
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            relaxed_head_match: false,
+            fuzzy_matching: false,
+            proper_containment: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("President Obama", 0, 15),
+            person("Barack Obama", 20, 32),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "With relaxed_head_match disabled, should not cluster"
+        );
+    }
+
+    // ---- Proper noun containment ----
+
+    #[test]
+    fn proper_containment_word_boundary() {
+        // "Obama" is a complete word in "Barack Obama".
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: false,
+            relaxed_head_match: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("Barack Obama", 0, 12),
+            person("Obama", 20, 25),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "'Obama' should cluster with 'Barack Obama' via proper containment"
+        );
+    }
+
+    #[test]
+    fn proper_containment_not_partial_word() {
+        // "Nation" is NOT a complete word in "United Nations" (it would be "Nations").
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: false,
+            relaxed_head_match: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            org("United Nations", 0, 14),
+            org("Nation", 20, 26),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "'Nation' is not a word-boundary match in 'United Nations'"
+        );
+    }
+
+    #[test]
+    fn proper_containment_type_mismatch() {
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: false,
+            relaxed_head_match: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("Barack Obama", 0, 12),
+            org("Obama", 20, 25),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "Proper containment requires same entity type"
+        );
+    }
+
+    #[test]
+    fn proper_containment_disabled() {
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            proper_containment: false,
+            fuzzy_matching: false,
+            relaxed_head_match: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("Barack Obama", 0, 12),
+            person("Obama", 20, 25),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "With proper_containment disabled, should not cluster"
+        );
+    }
+
+    #[test]
+    fn proper_containment_multi_word_subsequence() {
+        // "New York" is contained as a word sequence in "New York City".
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: false,
+            relaxed_head_match: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            loc("New York City", 0, 13),
+            loc("New York", 20, 28),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "'New York' should cluster with 'New York City' via proper containment"
+        );
+    }
+
     #[test]
     fn names_match_case_insensitive() {
         let resolver = SimpleCorefResolver::new(CorefConfig {
@@ -1842,6 +2142,7 @@ mod tests {
     fn fuzzy_matching_disabled_prevents_substring() {
         let resolver = SimpleCorefResolver::new(CorefConfig {
             fuzzy_matching: false,
+            proper_containment: false,
             ..CorefConfig::default()
         });
         let entities = vec![

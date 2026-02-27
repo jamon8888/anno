@@ -274,6 +274,8 @@ fn coref_resolver_with_custom_config() {
         include_singletons: false,
         use_name_gazetteer: true,
         acronym_matching: true,
+        relaxed_head_match: true,
+        proper_containment: true,
     };
 
     let resolver = SimpleCorefResolver::new(config);
