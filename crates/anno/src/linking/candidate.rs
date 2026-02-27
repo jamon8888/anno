@@ -934,6 +934,111 @@ mod tests {
         // Identical CJK
         assert!(metric.compute("東京", "東京") > 0.99);
     }
+
+    // =========================================================================
+    // Additional unit tests for pure functions
+    // =========================================================================
+
+    #[test]
+    fn test_compute_score_weights() {
+        // Verify compute_score uses all four signals and produces deterministic output.
+        let mut c = Candidate::new("Q1", CandidateSource::Wikidata, "Test");
+        c.string_sim = 1.0;
+        c.prior = 1.0;
+        c.type_score = 1.0;
+        c.sitelinks = Some(10_000_000); // log10(1e7) = 7 => sitelinks component = 1.0
+
+        c.compute_score();
+        // 0.4*1 + 0.3*1 + 0.2*1 + 0.1*1 = 1.0
+        assert!(
+            (c.score - 1.0).abs() < 1e-9,
+            "Expected ~1.0 with all signals maxed, got {}",
+            c.score
+        );
+
+        // With no sitelinks, sitelinks component is 0.
+        let mut c2 = Candidate::new("Q2", CandidateSource::Wikidata, "Test");
+        c2.string_sim = 1.0;
+        c2.prior = 0.0;
+        c2.type_score = 0.0;
+        c2.sitelinks = None;
+        c2.compute_score();
+        assert!(
+            (c2.score - 0.4).abs() < 1e-9,
+            "Expected 0.4 with only string_sim, got {}",
+            c2.score
+        );
+    }
+
+    #[test]
+    fn test_temporal_compatibility_bce_dates() {
+        // Entity active in antiquity: document from same era should be fully compatible.
+        let ancient = Candidate::new("Q1", CandidateSource::Wikidata, "Ancient")
+            .with_valid_from("-0500")
+            .with_valid_until("-0400");
+
+        assert!(
+            ancient.temporal_compatibility("-0450") > 0.99,
+            "Should be 1.0 within active range"
+        );
+        // Far in the future from the entity's perspective
+        assert!(
+            ancient.temporal_compatibility("2024") < 0.2,
+            "Should be low for document 2400+ years after entity died"
+        );
+    }
+
+    #[test]
+    fn test_parse_year_edge_cases() {
+        // Whitespace handling
+        assert_eq!(parse_year("  1990  "), Some(1990));
+        // Pure garbage
+        assert_eq!(parse_year("not-a-date"), None);
+        // Just a dash (BCE with no digits following -> empty split)
+        assert_eq!(parse_year("-"), None);
+    }
+
+    #[test]
+    fn test_type_compatibility_symmetric_mismatch() {
+        // Two unrelated types should produce the mismatch score (0.3)
+        let score = type_compatibility(Some("EVENT"), Some("city"));
+        assert!(
+            (score - 0.3).abs() < 1e-9,
+            "Unrelated types should score 0.3, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn test_type_compatibility_none_inputs() {
+        // Both None -> 1.0 (no constraint)
+        assert!((type_compatibility(None, None) - 1.0).abs() < 1e-9);
+        // One None -> 1.0
+        assert!((type_compatibility(Some("PERSON"), None) - 1.0).abs() < 1e-9);
+        assert!((type_compatibility(None, Some("human")) - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_candidate_to_curie_all_sources() {
+        let cases: &[(CandidateSource, &str, &str)] = &[
+            (CandidateSource::Wikidata, "Q937", "wd:Q937"),
+            (CandidateSource::YAGO, "Einstein", "yago:Einstein"),
+            (CandidateSource::DBpedia, "Einstein", "dbr:Einstein"),
+            (CandidateSource::Wikipedia, "Einstein", "wp:Einstein"),
+            (CandidateSource::Freebase, "m.0jcx", "fb:m.0jcx"),
+            (CandidateSource::UMLS, "C001", "umls:C001"),
+            (CandidateSource::GeoNames, "123", "gn:123"),
+            (
+                CandidateSource::Custom("mydb".into()),
+                "42",
+                "mydb:42",
+            ),
+        ];
+        for (source, id, expected) in cases {
+            let c = Candidate::new(id, source.clone(), "label");
+            assert_eq!(c.to_curie(), *expected, "CURIE mismatch for {:?}", source);
+        }
+    }
 }
 
 // =============================================================================

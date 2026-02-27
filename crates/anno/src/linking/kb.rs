@@ -723,4 +723,61 @@ mod tests {
         let cluster = NILCluster::new(1, "John Doe");
         assert!(cluster.temp_uri().starts_with("urn:nil:"));
     }
+
+    // =========================================================================
+    // Additional unit tests
+    // =========================================================================
+
+    #[test]
+    fn test_kb_is_active() {
+        assert!(KnowledgeBase::Wikidata.is_active());
+        assert!(KnowledgeBase::DBpedia.is_active());
+        assert!(!KnowledgeBase::Freebase.is_active());
+        assert!(!KnowledgeBase::OpenCyc.is_active());
+    }
+
+    #[test]
+    fn test_entity_uri_parse_unknown_prefix() {
+        // URI that doesn't match any known KB
+        let result = EntityURI::parse("https://example.com/entity/42");
+        assert!(result.is_none(), "Unknown prefix should return None");
+    }
+
+    #[test]
+    fn test_entity_uri_is_wikidata_non_q() {
+        // Wikidata property (P-item) should not be flagged as a Q-item
+        let uri = EntityURI::new(KnowledgeBase::Wikidata, "P31");
+        assert!(
+            !uri.is_wikidata(),
+            "P-items should not satisfy is_wikidata()"
+        );
+    }
+
+    #[test]
+    fn test_cross_kb_mapper_reverse_lookup() {
+        let mapper = CrossKBMapper::with_common_mappings();
+        // DBpedia URI for Einstein -> should resolve back to Q937
+        let qid = mapper.to_wikidata("http://dbpedia.org/resource/Albert_Einstein");
+        assert_eq!(qid, Some("Q937"));
+    }
+
+    #[test]
+    fn test_unified_linker_default_kb() {
+        // Builder with no KBs added should default to Wikidata
+        let linker = UnifiedLinker::builder().build();
+        let uris = linker.expand_wikidata("Q937");
+        assert!(
+            uris.iter().any(|u| u.kb == KnowledgeBase::Wikidata),
+            "Default linker should include Wikidata"
+        );
+    }
+
+    #[test]
+    fn test_kb_sparql_endpoints() {
+        assert!(KnowledgeBase::Wikidata.sparql_endpoint().is_some());
+        assert!(KnowledgeBase::DBpedia.sparql_endpoint().is_some());
+        assert!(KnowledgeBase::YAGO.sparql_endpoint().is_some());
+        assert!(KnowledgeBase::Wikipedia.sparql_endpoint().is_none());
+        assert!(KnowledgeBase::GeoNames.sparql_endpoint().is_none());
+    }
 }

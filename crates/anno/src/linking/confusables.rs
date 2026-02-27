@@ -597,4 +597,80 @@ mod tests {
         assert!(beijing_ids.contains(&&"Q956".to_string()));
         assert!(peking_ids.contains(&&"Q956".to_string()));
     }
+
+    // =========================================================================
+    // Additional unit tests
+    // =========================================================================
+
+    #[test]
+    fn test_confusable_entity_difficulty_clamp() {
+        // difficulty is clamped to [0, 1]
+        let e = ConfusableEntity::new("Q1", ConfusableReason::NameCollision).with_difficulty(1.5);
+        assert!((e.difficulty - 1.0).abs() < 1e-9, "Should clamp to 1.0");
+
+        let e2 = ConfusableEntity::new("Q2", ConfusableReason::NameCollision).with_difficulty(-0.5);
+        assert!((e2.difficulty - 0.0).abs() < 1e-9, "Should clamp to 0.0");
+    }
+
+    #[test]
+    fn test_registry_merge_dedup() {
+        // Adding two ConfusableSets with the same surface form should merge,
+        // and duplicate kb_ids should not be duplicated.
+        let mut registry = ConfusableRegistry::new();
+
+        let mut set1 = ConfusableSet::new("Test");
+        set1.add("Q1", ConfusableReason::NameCollision, None);
+        set1.add("Q2", ConfusableReason::NameCollision, None);
+
+        let mut set2 = ConfusableSet::new("Test");
+        set2.add("Q2", ConfusableReason::NameCollision, None); // duplicate
+        set2.add("Q3", ConfusableReason::NameCollision, None);
+
+        registry.add(set1);
+        registry.add(set2);
+
+        let merged = registry.get("test").unwrap();
+        // Q1, Q2, Q3 -- Q2 is not duplicated
+        assert_eq!(merged.len(), 3, "Expected 3 unique entities after merge");
+        let ids: Vec<_> = merged.entities.iter().map(|e| &e.kb_id).collect();
+        assert!(ids.contains(&&"Q1".to_string()));
+        assert!(ids.contains(&&"Q3".to_string()));
+    }
+
+    #[test]
+    fn test_registry_case_insensitive_lookup() {
+        let registry = ConfusableRegistry::new().with_well_known();
+        // Lookup is case-insensitive
+        assert!(registry.get("George Bush").is_some());
+        assert!(registry.get("GEORGE BUSH").is_some());
+        assert!(registry.get("george bush").is_some());
+    }
+
+    #[test]
+    fn test_filter_by_type() {
+        let registry = ConfusableRegistry::new().with_well_known();
+        let humans = registry.filter_by_type("human");
+        assert!(
+            !humans.is_empty(),
+            "Should find human-typed entities in well-known set"
+        );
+        // All returned entities should have entity_type == "human"
+        for e in &humans {
+            assert_eq!(e.entity_type.as_deref(), Some("human"));
+        }
+    }
+
+    #[test]
+    fn test_training_pairs_exclude_self() {
+        let mut set = ConfusableSet::new("Ambiguous");
+        set.add("Q1", ConfusableReason::NameCollision, Some("desc A"));
+        set.add("Q2", ConfusableReason::NameCollision, Some("desc B"));
+        set.add("Q3", ConfusableReason::NameCollision, Some("desc C"));
+
+        let pairs = set.to_training_pairs("Q2");
+        // Should have 2 pairs: (Q2, Q1) and (Q2, Q3)
+        assert_eq!(pairs.len(), 2);
+        assert!(pairs.iter().all(|p| p.positive_kb_id == "Q2"));
+        assert!(pairs.iter().all(|p| p.negative_kb_id != "Q2"));
+    }
 }

@@ -542,6 +542,7 @@ fn is_likely_entity_name(mention: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::super::candidate::CandidateSource;
     use super::*;
 
     #[test]
@@ -669,5 +670,66 @@ mod tests {
     fn test_nil_reason_display() {
         assert_eq!(NilReason::OutOfKnowledgebase.to_string(), "out_of_kb");
         assert_eq!(NilReason::EmergingEntity.to_string(), "emerging_entity");
+    }
+
+    // =========================================================================
+    // Additional unit tests
+    // =========================================================================
+
+    #[test]
+    fn test_is_noisy_mention_cjk_single_char() {
+        // Single CJK character should NOT be noisy (per is_cjk gate)
+        let detector = NilDetector::new();
+        let result = detector.check_nil("人", &[], None);
+        // Should fail on NoCandidates, not NoisyMention -- single CJK is allowed
+        assert_eq!(result, Some(NilReason::NoCandidates));
+    }
+
+    #[test]
+    fn test_is_noisy_mention_punctuation() {
+        let detector = NilDetector::new();
+        assert_eq!(
+            detector.check_nil("...", &[], None),
+            Some(NilReason::NoisyMention)
+        );
+        assert_eq!(
+            detector.check_nil("!?", &[], None),
+            Some(NilReason::NoisyMention)
+        );
+    }
+
+    #[test]
+    fn test_check_nil_large_margin_detection() {
+        // Two candidates with very close scores and low top score -> LargeMargin
+        let detector = NilDetector::new().with_score_threshold(0.1);
+        let mut c1 =
+            super::super::candidate::Candidate::new("Q1", CandidateSource::Wikidata, "A");
+        c1.score = 0.45; // Below 0.6 threshold for margin check
+        let mut c2 =
+            super::super::candidate::Candidate::new("Q2", CandidateSource::Wikidata, "B");
+        c2.score = 0.40; // margin = 0.05 < 0.1
+
+        let result = detector.check_nil("Test Entity", &[c1, c2], None);
+        assert_eq!(result, Some(NilReason::LargeMargin));
+    }
+
+    #[test]
+    fn test_analyze_action_for_likely_entity_name() {
+        // A proper-cased multi-word mention with no candidates should suggest CreateEntry
+        let detector = NilDetector::new();
+        let analysis = detector.analyze("Mayor Thomas Jenkins", &[], None);
+        assert!(analysis.is_nil);
+        assert_eq!(analysis.reason, Some(NilReason::NoCandidates));
+        assert_eq!(analysis.action, NilAction::CreateEntry);
+    }
+
+    #[test]
+    fn test_analyze_action_for_noise() {
+        // Noisy mention -> Skip
+        let detector = NilDetector::new();
+        let analysis = detector.analyze("42", &[], None);
+        assert!(analysis.is_nil);
+        assert_eq!(analysis.reason, Some(NilReason::NoisyMention));
+        assert_eq!(analysis.action, NilAction::Skip);
     }
 }
