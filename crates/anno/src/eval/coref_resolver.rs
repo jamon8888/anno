@@ -439,8 +439,26 @@ impl SimpleCorefResolver {
             return true;
         }
 
-        if text1.contains(text2) || text2.contains(text1) {
-            return true;
+        // Substring containment -- guarded against short-name false positives.
+        // "Li" must not match "political" just because "li" is a substring.
+        // Rule: the shorter string must be >= 3 chars, OR it must match a
+        // complete word in the longer string (word-boundary check).
+        let (shorter, longer) = if text1.len() <= text2.len() {
+            (text1, text2)
+        } else {
+            (text2, text1)
+        };
+        if longer.contains(shorter) {
+            if shorter.chars().count() >= 3 {
+                return true;
+            }
+            // For very short names (< 3 chars), only match at word boundaries.
+            if longer
+                .split_whitespace()
+                .any(|word| word == shorter)
+            {
+                return true;
+            }
         }
 
         let words1: Vec<&str> = text1.split_whitespace().collect();
@@ -1631,9 +1649,8 @@ mod tests {
 
     #[test]
     fn names_match_substring_short_name() {
-        // "Li" should NOT match "political" via substring containment, but currently
-        // names_match uses `contains()` which is too broad for short names.
-        // This test documents the current (incorrect) behavior.
+        // "Li" should NOT match "political" via substring containment.
+        // Short names (< 3 chars) require word-boundary alignment.
         let resolver = SimpleCorefResolver::new(CorefConfig {
             fuzzy_matching: true,
             ..CorefConfig::default()
@@ -1645,10 +1662,66 @@ mod tests {
         let resolved = resolver.resolve(&entities);
         let id0 = resolved[0].canonical_id.unwrap();
         let id1 = resolved[1].canonical_id.unwrap();
-        // Known bug: "li" is a substring of "political", so they erroneously cluster.
-        assert_eq!(
+        assert_ne!(
             id0, id1,
-            "Known bug: 'Li' matches 'political' via substring containment (too broad for short names)"
+            "'Li' must not match 'political' -- short-name substring guard"
+        );
+    }
+
+    #[test]
+    fn names_match_legitimate_substring() {
+        // "Obama" (5 chars, >= 3) should still match "Barack Obama" via substring.
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: true,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("Barack Obama", 0, 12),
+            person("Obama", 20, 25),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "'Obama' should match 'Barack Obama' via substring containment"
+        );
+    }
+
+    #[test]
+    fn names_match_short_unrelated() {
+        // Two-character name "Al" should not match "gallery".
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: true,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("gallery", 0, 7),
+            person("Al", 20, 22),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "'Al' must not match 'gallery' -- short-name substring guard"
+        );
+    }
+
+    #[test]
+    fn names_match_short_word_boundary() {
+        // Short name "Li" SHOULD match "Li Wei" because "li" is a complete word in "li wei".
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: true,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("Li Wei", 0, 6),
+            person("Li", 20, 22),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "'Li' should match 'Li Wei' via word-boundary containment"
         );
     }
 
