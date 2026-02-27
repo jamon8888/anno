@@ -326,6 +326,13 @@ pub struct GraphCorefConfig {
     /// This is an analogue of “overthinking” / redundancy detection (CoRE-Eval),
     /// implemented using observable signals (graph structure) rather than hidden states.
     pub early_stop: Option<GraphCorefEarlyStopConfig>,
+
+    /// Optional external pairwise scores (mention index pair -> score).
+    /// Injected by callers who have pre-computed similarity signals (e.g., box containment).
+    /// Score is added to pairwise_score() weighted by `external_score_weight`.
+    pub external_scores: Option<HashMap<(usize, usize), f64>>,
+    /// Weight for external scores in pairwise scoring.
+    pub external_score_weight: f64,
 }
 
 /// Configuration for early stopping in iterative graph refinement.
@@ -363,6 +370,8 @@ impl Default for GraphCorefConfig {
             include_singletons: false,
             pronoun_proper_bonus: 0.3,
             early_stop: None,
+            external_scores: None,
+            external_score_weight: 0.5,
         }
     }
 }

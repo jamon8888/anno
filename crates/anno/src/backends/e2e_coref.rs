@@ -449,7 +449,7 @@ impl E2ECoref {
             score += 0.3;
         }
 
-        // Pronoun resolution heuristics
+        // English-only pronoun resolution heuristics
         let pronouns_masc = ["he", "him", "his"];
         let pronouns_fem = ["she", "her", "hers"];
         let pronouns_neut = ["it", "its"];

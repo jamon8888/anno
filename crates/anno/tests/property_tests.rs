@@ -615,6 +615,7 @@ fn arb_person() -> impl Strategy<Value = Person> {
         Just(Person::First),
         Just(Person::Second),
         Just(Person::Third),
+        Just(Person::Unknown),
     ]
 }
 
@@ -784,10 +785,12 @@ proptest! {
     /// This is true in ALL known human languages.
     #[test]
     fn person_exclusion(p1 in arb_person(), p2 in arb_person()) {
-        if p1 != p2 {
+        // Person::Unknown is a wildcard (compatible with everything),
+        // so only assert incompatibility when neither variant is Unknown.
+        if p1 != p2 && p1 != Person::Unknown && p2 != Person::Unknown {
             prop_assert!(
                 !p1.is_compatible(&p2),
-                "Different persons {:?} and {:?} should not be compatible",
+                "Different concrete persons {:?} and {:?} should not be compatible",
                 p1,
                 p2
             );

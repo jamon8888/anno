@@ -505,6 +505,11 @@ impl MaverickCpu {
     }
 
     /// Get pronoun gender for compatibility checking.
+    ///
+    /// # Multilingual Note
+    ///
+    /// English-only. Other languages have different pronoun-gender mappings
+    /// (e.g., French "il/elle", German "er/sie/es" with grammatical gender on nouns).
     fn pronoun_gender(&self, pronoun: &str) -> Option<&'static str> {
         match pronoun.to_lowercase().as_str() {
             "he" | "him" | "his" | "himself" => Some("masculine"),
@@ -533,8 +538,9 @@ impl MaverickCpu {
             return Some("feminine");
         }
         
-        // Check common masculine names (English)
-        let masculine_names = ["john", "james", "william", "henry", "charles", 
+        // English names only -- titles like "Mr."/"Mrs." are English conventions.
+        // For multilingual name-gender inference, use language-specific gazetteers.
+        let masculine_names = ["john", "james", "william", "henry", "charles",
             "george", "edward", "thomas", "david", "michael", "robert"];
         let first_word: &str = lower.split_whitespace().next().unwrap_or("");
         if masculine_names.contains(&first_word) {

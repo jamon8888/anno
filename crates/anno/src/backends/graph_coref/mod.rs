@@ -355,7 +355,7 @@ impl GraphCoref {
                 }
 
                 // Compute score with graph context
-                let base_score = self.pairwise_score(mentions[i], mentions[j]);
+                let base_score = self.pairwise_score(i, j, mentions[i], mentions[j]);
                 let context_bonus = self.graph_context_bonus(i, j, prev_graph);
                 let total_score = base_score + context_bonus;
 
@@ -376,7 +376,7 @@ impl GraphCoref {
     /// - Head word match (uses `head_start`/`head_end` if available)
     /// - Pronoun-to-proper linking (uses `mention_type` if available)
     /// - Distance penalty
-    fn pairwise_score(&self, m1: &Mention, m2: &Mention) -> f64 {
+    fn pairwise_score(&self, i: usize, j: usize, m1: &Mention, m2: &Mention) -> f64 {
         let mut score = 0.0;
 
         let t1 = m1.text.to_lowercase();
@@ -406,6 +406,14 @@ impl GraphCoref {
         let distance = m1.start.abs_diff(m2.end).min(m2.start.abs_diff(m1.end));
         if distance > 0 {
             score -= self.config.distance_weight * (distance as f64).ln();
+        }
+
+        // External score (e.g., box containment)
+        if let Some(ref ext) = self.config.external_scores {
+            let key = if i < j { (i, j) } else { (j, i) };
+            if let Some(&ext_score) = ext.get(&key) {
+                score += self.config.external_score_weight * ext_score;
+            }
         }
 
         score
@@ -465,7 +473,7 @@ impl GraphCoref {
     fn infer_mention_type(&self, mention: &Mention) -> MentionType {
         let text_lower = mention.text.to_lowercase();
 
-        // Check for pronouns
+        // English-only pronoun list for mention type inference
         const PRONOUNS: &[&str] = &[
             "i",
             "me",

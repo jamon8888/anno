@@ -50,6 +50,12 @@ pub mod error;
 #[cfg(any(feature = "analysis", feature = "eval"))]
 #[cfg_attr(docsrs, doc(cfg(any(feature = "analysis", feature = "eval"))))]
 pub mod eval;
+/// Coreference preprocessing for RAG: rewrite pronouns for self-contained chunks.
+///
+/// See [`rag::resolve_for_rag`] for the main entry point.
+#[cfg(any(feature = "analysis", feature = "eval"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "analysis", feature = "eval"))))]
+pub mod rag;
 /// Entity feature extraction for downstream ML and analysis.
 pub mod features;
 /// Small, dependency-light heuristics (negation, quantifiers, etc.).

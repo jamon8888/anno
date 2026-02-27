@@ -741,6 +741,7 @@ impl T5Coref {
         let mut clusters: Vec<CorefCluster> = Vec::new();
         let mut assigned: HashMap<usize, u32> = HashMap::new();
 
+        // English-only pronoun list for T5 coref clustering heuristic.
         let pronouns = [
             "he", "she", "they", "it", "him", "her", "them", "his", "hers", "their", "its",
         ];
@@ -842,6 +843,7 @@ impl T5Coref {
 /// This is the same logic used by `T5Coref::mark_mentions` and is exposed as a free
 /// function so it can be tested and reused without an ONNX session.
 pub fn mark_mentions_for_t5(text: &str) -> String {
+    // English-only pronoun list for T5 mention marking.
     const PRONOUNS: &[&str] = &[
         "he", "she", "they", "it", "him", "her", "them", "his", "hers", "their", "its",
     ];

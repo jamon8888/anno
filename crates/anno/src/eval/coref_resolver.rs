@@ -6,29 +6,42 @@
 use super::coref::CorefChain;
 use crate::backends::box_embeddings::{BoxCorefConfig, BoxEmbedding};
 use crate::{Entity, EntityType};
-use anno_core::CanonicalId;
+use anno_core::{CanonicalId, Gender};
 use std::collections::HashMap;
 
 /// Configuration for simple coreference resolver.
 #[derive(Debug, Clone)]
 pub struct CorefConfig {
     /// Similarity threshold for name matching (0.0-1.0).
+    #[deprecated(note = "Not currently used by any matching logic. Will be wired into names_match() in a future version.")]
     pub similarity_threshold: f64,
-    /// Maximum sentence distance for pronoun resolution.
-    pub max_pronoun_distance: usize,
+    /// Maximum number of preceding entities to search when resolving a pronoun.
+    ///
+    /// The actual lookback window is `max_pronoun_lookback * 10` entities
+    /// (a rough approximation of sentence distance by entity count).
+    pub max_pronoun_lookback: usize,
     /// Enable fuzzy name matching (e.g., "John Smith" ~ "J. Smith").
     pub fuzzy_matching: bool,
     /// Include singletons in output chains.
     pub include_singletons: bool,
+    /// Use a built-in name-to-gender gazetteer for pronoun resolution.
+    ///
+    /// When enabled, common English names (e.g., "Alice" -> Feminine,
+    /// "Bob" -> Masculine) are used to infer gender for proper nouns,
+    /// improving pronoun resolution accuracy. Disable for non-English
+    /// text or when names don't follow English gender conventions.
+    pub use_name_gazetteer: bool,
 }
 
+#[allow(deprecated)]
 impl Default for CorefConfig {
     fn default() -> Self {
         Self {
             similarity_threshold: 0.7,
-            max_pronoun_distance: 3,
+            max_pronoun_lookback: 3,
             fuzzy_matching: true,
             include_singletons: true,
+            use_name_gazetteer: true,
         }
     }
 }
@@ -143,7 +156,7 @@ impl SimpleCorefResolver {
         for entity in previous
             .iter()
             .rev()
-            .take(self.config.max_pronoun_distance * 10)
+            .take(self.config.max_pronoun_lookback * 10)
         {
             if self.is_pronoun(&entity.text) {
                 continue;
@@ -154,15 +167,12 @@ impl SimpleCorefResolver {
 
             let entity_gender = self.infer_gender(&entity.text);
             match (pronoun_gender, entity_gender) {
-                (Some('n'), _) => {}
-                (_, Some('n')) => {}
                 (Some(pg), Some(eg)) => {
-                    if pg != eg {
+                    if !pg.is_compatible(&eg) {
                         continue;
                     }
                 }
-                (_, None) => {}
-                (None, Some(_)) => {}
+                _ => {}
             }
 
             return entity.canonical_id;
@@ -171,6 +181,11 @@ impl SimpleCorefResolver {
         None
     }
 
+    /// # Multilingual Note
+    ///
+    /// English-only. This resolver is used in the eval pipeline where English
+    /// datasets (OntoNotes, PreCo, LitBank) dominate. For multilingual eval,
+    /// use model-based mention detection or extend with language-specific lists.
     fn is_pronoun(&self, text: &str) -> bool {
         matches!(
             text.to_lowercase().as_str(),
@@ -184,10 +199,14 @@ impl SimpleCorefResolver {
             "xe" | "xem" | "xyr" | "xyrs" | "xemself" |
             "ze" | "hir" | "zir" | "hirs" | "zirs" | "hirself" | "zirself" |
             "ey" | "em" | "eir" | "eirs" | "emself" |
-            "fae" | "faer" | "faers" | "faeself"
+            "fae" | "faer" | "faers" | "faeself" | "faerself"
         )
     }
 
+    /// # Multilingual Note
+    ///
+    /// English-only. Pronoun-entity type compatibility rules are language-specific
+    /// (e.g., French gendered articles, German grammatical gender on nouns).
     fn pronoun_compatible(&self, pronoun: &str, entity_type: &EntityType) -> bool {
         let lower = pronoun.to_lowercase();
         match entity_type {
@@ -206,6 +225,10 @@ impl SimpleCorefResolver {
                     | "herself"
                     | "themselves"
                     | "themself"
+                    // it/its as personal pronouns (used by some genderqueer individuals)
+                    | "it"
+                    | "its"
+                    | "itself"
                     | "xe"
                     | "xem"
                     | "xyr"
@@ -237,18 +260,20 @@ impl SimpleCorefResolver {
         }
     }
 
-    fn infer_gender(&self, text: &str) -> Option<char> {
-        let lower = text.to_lowercase();
-        match lower.as_str() {
-            "he" | "him" | "his" | "himself" => Some('m'),
-            "she" | "her" | "hers" | "herself" => Some('f'),
-            "they" | "them" | "their" | "theirs" | "themselves" | "themself" => Some('n'),
-            "xe" | "xem" | "xyr" | "xyrs" | "xemself" => Some('n'),
-            "ze" | "hir" | "zir" | "hirs" | "zirs" | "hirself" | "zirself" => Some('n'),
-            "ey" | "em" | "eir" | "eirs" | "emself" => Some('n'),
-            "fae" | "faer" | "faers" | "faeself" => Some('n'),
-            _ => None,
+    /// # Multilingual Note
+    ///
+    /// English-only. Delegates to `Gender::from_pronoun()` which covers English
+    /// pronouns and neopronouns. Falls back to a name gazetteer (if enabled)
+    /// for common English proper nouns. Other languages need language-specific
+    /// gender inference (grammatical gender, morphological agreement, etc.).
+    fn infer_gender(&self, text: &str) -> Option<Gender> {
+        if let Some(g) = Gender::from_pronoun(text) {
+            return Some(g);
         }
+        if self.config.use_name_gazetteer {
+            return gender_from_name(text);
+        }
+        None
     }
 
     fn canonical_form(&self, text: &str, entity_type: &EntityType) -> String {
@@ -282,6 +307,46 @@ impl SimpleCorefResolver {
         }
 
         false
+    }
+}
+
+/// Infer gender from a proper noun using a small English name gazetteer.
+///
+/// Returns `None` for unrecognized names. Case-insensitive on the first word
+/// of the input (handles "Alice Smith" by checking "alice").
+fn gender_from_name(text: &str) -> Option<Gender> {
+    let first_word = text.split_whitespace().next()?;
+    let lower = first_word.to_lowercase();
+    // ~100 common English given names, covering the most frequent names
+    // in US/UK census data. This is intentionally small and conservative.
+    match lower.as_str() {
+        // Masculine
+        "james" | "john" | "robert" | "michael" | "david" | "william" | "richard"
+        | "joseph" | "thomas" | "charles" | "christopher" | "daniel" | "matthew"
+        | "anthony" | "mark" | "donald" | "steven" | "paul" | "andrew" | "joshua"
+        | "kenneth" | "kevin" | "brian" | "george" | "timothy" | "ronald" | "edward"
+        | "jason" | "jeffrey" | "ryan" | "jacob" | "gary" | "nicholas" | "eric"
+        | "jonathan" | "stephen" | "larry" | "justin" | "scott" | "brandon"
+        | "benjamin" | "samuel" | "raymond" | "gregory" | "frank" | "alexander"
+        | "patrick" | "jack" | "dennis" | "peter" | "bob" | "jim" | "tom" | "mike"
+        | "bill" | "joe" | "dan" | "matt" | "steve" | "chris" | "nick" | "ben"
+        | "sam" | "jake" | "adam" | "henry" | "nathan" | "philip" | "carl"
+        | "ahmed" | "ahmad" | "mohammed" | "muhammad" | "omar" | "ali" | "hassan"
+        | "hussein" | "khalid" | "ibrahim" => Some(Gender::Masculine),
+        // Feminine
+        "mary" | "patricia" | "jennifer" | "linda" | "barbara" | "elizabeth"
+        | "susan" | "jessica" | "sarah" | "karen" | "lisa" | "nancy" | "betty"
+        | "margaret" | "sandra" | "ashley" | "dorothy" | "kimberly" | "emily"
+        | "donna" | "michelle" | "carol" | "amanda" | "melissa" | "deborah"
+        | "stephanie" | "rebecca" | "sharon" | "laura" | "cynthia" | "kathleen"
+        | "amy" | "angela" | "shirley" | "anna" | "brenda" | "pamela" | "emma"
+        | "nicole" | "helen" | "samantha" | "katherine" | "christine" | "debra"
+        | "rachel" | "carolyn" | "janet" | "catherine" | "maria" | "heather"
+        | "diane" | "ruth" | "julie" | "olivia" | "joyce" | "virginia" | "victoria"
+        | "kelly" | "lauren" | "christina" | "joan" | "evelyn" | "judith"
+        | "alice" | "ann" | "anne" | "jane" | "jean" | "marie" | "rose" | "grace"
+        | "fatima" | "aisha" | "maryam" | "nour" | "layla" | "hana" => Some(Gender::Feminine),
+        _ => None,
     }
 }
 
@@ -877,7 +942,7 @@ mod tests {
     // ---- Pronoun resolution ----
 
     #[test]
-    fn pronoun_resolves_to_nearest_compatible_entity() {
+    fn pronoun_resolves_to_gender_compatible_entity() {
         let resolver = SimpleCorefResolver::default();
         let entities = vec![
             person("Alice", 0, 5),
@@ -885,13 +950,12 @@ mod tests {
             person("she", 20, 23),
         ];
         let resolved = resolver.resolve(&entities);
-        // "she" is feminine; "Bob" is not gendered (unknown) but "Alice" is also unknown in
-        // infer_gender since it's not a pronoun. The resolver picks the nearest non-pronoun that
-        // is compatible.  Since infer_gender returns None for proper nouns, gender doesn't filter,
-        // so the nearest compatible entity ("Bob") wins.
+        // With the name gazetteer, "Alice" -> Feminine, "Bob" -> Masculine.
+        // "she" is feminine, so it should match "Alice" (gender compatible),
+        // skipping "Bob" (masculine, incompatible).
         let she_id = resolved[2].canonical_id.unwrap();
-        let bob_id = resolved[1].canonical_id.unwrap();
-        assert_eq!(she_id, bob_id, "pronoun should resolve to nearest compatible entity");
+        let alice_id = resolved[0].canonical_id.unwrap();
+        assert_eq!(she_id, alice_id, "pronoun should resolve to gender-compatible entity");
     }
 
     #[test]
@@ -910,17 +974,17 @@ mod tests {
     }
 
     #[test]
-    fn pronoun_it_not_compatible_with_person() {
+    fn pronoun_it_compatible_with_person() {
+        // "it/its" can be used as personal pronouns (e.g., some genderqueer individuals).
         let resolver = SimpleCorefResolver::default();
         let entities = vec![
             person("Alice", 0, 5),
-            // "it" referring to a person entity type should not match.
             person("it", 10, 12),
         ];
         let resolved = resolver.resolve(&entities);
         let alice_id = resolved[0].canonical_id.unwrap();
         let it_id = resolved[1].canonical_id.unwrap();
-        assert_ne!(alice_id, it_id, "\"it\" is not compatible with Person");
+        assert_eq!(alice_id, it_id, "\"it\" should resolve to Person antecedent");
     }
 
     // ---- resolve_to_chains ----
@@ -1272,6 +1336,31 @@ mod tests {
         assert_eq!(CoreferenceResolver::name(&resolver), "box-embedding");
     }
 
+    #[test]
+    fn it_pronoun_resolves_to_person() {
+        // "it/its" should be compatible with Person entities (used as personal pronouns
+        // by some genderqueer individuals, e.g., "Alex uses it/its pronouns").
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("Alex", 0, 4),
+            person("it", 6, 8),
+        ];
+        let chains = resolver.resolve_to_chains(&entities);
+        // Alex and "it" should be in the same chain.
+        let alex_chain = chains
+            .iter()
+            .find(|c| c.mentions.iter().any(|m| m.text == "Alex"));
+        assert!(
+            alex_chain.is_some(),
+            "Alex should appear in a chain"
+        );
+        let alex_chain = alex_chain.unwrap();
+        assert!(
+            alex_chain.mentions.iter().any(|m| m.text == "it"),
+            "\"it\" should corefer with Person entity \"Alex\""
+        );
+    }
+
     // ---- End-to-end: resolve then evaluate ----
 
     #[test]
@@ -1305,5 +1394,474 @@ mod tests {
             eval.conll_f1 > 0.0,
             "resolve-then-evaluate should produce nonzero CoNLL F1"
         );
+    }
+
+    // ====================================================================
+    // Audit-driven regression tests
+    // ====================================================================
+
+    // ---- Gender-blind pronoun resolution (documenting known limitation) ----
+
+    #[test]
+    fn pronoun_resolves_with_gazetteer() {
+        // With name gazetteer enabled (default), "She" should resolve to "Alice"
+        // (Feminine) instead of "Bob" (Masculine), even though Bob is nearer.
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("Alice", 0, 5),
+            person("Bob", 20, 23),
+            person("She", 30, 33),
+        ];
+        let resolved = resolver.resolve(&entities);
+
+        let she_id = resolved[2].canonical_id.unwrap();
+        let alice_id = resolved[0].canonical_id.unwrap();
+        assert_eq!(
+            she_id, alice_id,
+            "With gazetteer, 'She' should resolve to 'Alice' (gender match)"
+        );
+    }
+
+    #[test]
+    fn pronoun_gender_blind_without_gazetteer() {
+        // Without gazetteer, falls back to nearest compatible entity.
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            use_name_gazetteer: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("Alice", 0, 5),
+            person("Bob", 20, 23),
+            person("She", 30, 33),
+        ];
+        let resolved = resolver.resolve(&entities);
+
+        let she_id = resolved[2].canonical_id.unwrap();
+        let bob_id = resolved[1].canonical_id.unwrap();
+        // "She" resolves to "Bob" (nearest) because infer_gender("Bob") returns None,
+        // which is compatible with Feminine via the (None, Some) match arm.
+        assert_eq!(
+            she_id, bob_id,
+            "Without gazetteer, 'She' resolves to nearest entity 'Bob' (gender-blind)"
+        );
+    }
+
+    // ---- Dead config documentation ----
+
+    #[test]
+    #[allow(deprecated)]
+    fn similarity_threshold_has_no_effect() {
+        // similarity_threshold is currently dead code -- it is stored in CorefConfig
+        // but never read by any matching logic in SimpleCorefResolver.
+        let resolver_low = SimpleCorefResolver::new(CorefConfig {
+            similarity_threshold: 0.1,
+            ..CorefConfig::default()
+        });
+        let resolver_high = SimpleCorefResolver::new(CorefConfig {
+            similarity_threshold: 0.99,
+            ..CorefConfig::default()
+        });
+
+        let entities = vec![
+            person("John Smith", 0, 10),
+            person("Smith", 20, 25),
+            person("he", 30, 32),
+        ];
+
+        let resolved_low = resolver_low.resolve(&entities);
+        let resolved_high = resolver_high.resolve(&entities);
+
+        for (a, b) in resolved_low.iter().zip(resolved_high.iter()) {
+            assert_eq!(
+                a.canonical_id, b.canonical_id,
+                "similarity_threshold is dead code: changing it must not alter output"
+            );
+        }
+    }
+
+    // ---- String matching edge cases ----
+
+    #[test]
+    fn names_match_substring_short_name() {
+        // "Li" should NOT match "political" via substring containment, but currently
+        // names_match uses `contains()` which is too broad for short names.
+        // This test documents the current (incorrect) behavior.
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: true,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("political", 0, 9),
+            person("Li", 20, 22),
+        ];
+        let resolved = resolver.resolve(&entities);
+        let id0 = resolved[0].canonical_id.unwrap();
+        let id1 = resolved[1].canonical_id.unwrap();
+        // Known bug: "li" is a substring of "political", so they erroneously cluster.
+        assert_eq!(
+            id0, id1,
+            "Known bug: 'Li' matches 'political' via substring containment (too broad for short names)"
+        );
+    }
+
+    #[test]
+    fn names_match_last_word() {
+        // "John Smith" should match "Smith" via last-word heuristic.
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: true,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("John Smith", 0, 10),
+            person("Smith", 20, 25),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "'John Smith' and 'Smith' should cluster via last-word match"
+        );
+    }
+
+    #[test]
+    fn names_match_abbreviation_gap() {
+        // Known gap: "IBM" does NOT match "International Business Machines".
+        // The resolver has no abbreviation/acronym expansion logic.
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: true,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            org("International Business Machines", 0, 31),
+            org("IBM", 40, 43),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "Known gap: acronym 'IBM' does not match full name (no abbreviation expansion)"
+        );
+    }
+
+    #[test]
+    fn names_match_case_insensitive() {
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: true,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("alice", 0, 5),
+            person("Alice", 20, 25),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "'alice' and 'Alice' should cluster (canonical_form lowercases)"
+        );
+    }
+
+    // ---- Missing coref features (negative tests documenting gaps) ----
+
+    #[test]
+    fn no_apposition_handling() {
+        // Known gap: appositions require syntactic parse. "Obama" and "the president"
+        // are not clustered because SimpleCorefResolver has no apposition detection.
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("Obama", 0, 5),
+            person("the president", 7, 20),
+            person("He", 28, 30),
+        ];
+        let resolved = resolver.resolve(&entities);
+        let obama_id = resolved[0].canonical_id.unwrap();
+        let president_id = resolved[1].canonical_id.unwrap();
+        assert_ne!(
+            obama_id, president_id,
+            "Known gap: apposition 'Obama' / 'the president' not clustered (needs syntactic parse)"
+        );
+    }
+
+    #[test]
+    fn no_predicate_nominal() {
+        // Known gap: "John is a doctor. The doctor left." -- predicate nominal
+        // coreference requires understanding copular constructions.
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("John", 0, 4),
+            person("The doctor", 22, 32),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "Known gap: predicate nominal 'John' / 'The doctor' not clustered"
+        );
+    }
+
+    #[test]
+    fn no_demonstrative_resolution() {
+        // Known gap: "This" is not in the pronoun list for SimpleCorefResolver,
+        // so abstract demonstrative anaphora is not resolved.
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            org("The company", 0, 11),
+            // "This" as demonstrative anaphor
+            person("This", 35, 39),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "Known gap: demonstrative 'This' not resolved by SimpleCorefResolver"
+        );
+    }
+
+    #[test]
+    fn no_split_antecedent() {
+        // Known gap: "They" cannot resolve to the set {John, Mary}. The data model
+        // represents canonical_id as a single ID, not a set of antecedents.
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("John", 0, 4),
+            person("Mary", 9, 13),
+            person("They", 20, 24),
+        ];
+        let resolved = resolver.resolve(&entities);
+        let they_id = resolved[2].canonical_id.unwrap();
+        // "They" will resolve to the nearest compatible entity (Mary), not {John, Mary}.
+        let john_id = resolved[0].canonical_id.unwrap();
+        let mary_id = resolved[1].canonical_id.unwrap();
+        let resolves_to_both = they_id == john_id && they_id == mary_id;
+        assert!(
+            !resolves_to_both,
+            "Known gap: split antecedent -- 'They' cannot resolve to {{John, Mary}}"
+        );
+    }
+
+    #[test]
+    fn no_relative_pronoun() {
+        // "who" is correctly NOT in the pronoun list. Relative pronouns should not
+        // be rewritten in coreference output.
+        let resolver = SimpleCorefResolver::default();
+        assert!(
+            !resolver.is_pronoun("who"),
+            "'who' should not be treated as a resolvable pronoun"
+        );
+        assert!(!resolver.is_pronoun("which"));
+        assert!(!resolver.is_pronoun("that"));
+    }
+
+    // ---- Boundary conditions ----
+
+    #[test]
+    fn empty_entities_no_crash() {
+        let resolver = SimpleCorefResolver::default();
+        let result = resolver.resolve(&[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn single_entity_gets_canonical_id() {
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![person("Alice", 0, 5)];
+        let resolved = resolver.resolve(&entities);
+        assert!(resolved[0].canonical_id.is_some());
+    }
+
+    #[test]
+    fn all_same_type_cluster_by_name() {
+        // Multiple Person entities with the same name should all cluster together.
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("Alice", 0, 5),
+            person("Alice", 20, 25),
+            person("Alice", 40, 45),
+        ];
+        let resolved = resolver.resolve(&entities);
+        let id = resolved[0].canonical_id.unwrap();
+        assert!(
+            resolved.iter().all(|e| e.canonical_id.unwrap() == id),
+            "All 'Alice' entities should be in the same cluster"
+        );
+    }
+
+    #[test]
+    fn max_pronoun_lookback_respected() {
+        // With max_pronoun_lookback=1, the pronoun search window is small (1*10 = 10 entities).
+        // Place a pronoun far after many intervening entities to test boundary.
+        let mut entities = Vec::new();
+        entities.push(person("Alice", 0, 5));
+        // Insert enough non-pronoun entities to exceed the window.
+        for i in 1..=20 {
+            entities.push(org(&format!("Corp{}", i), i * 10, i * 10 + 5));
+        }
+        entities.push(person("she", 300, 303));
+
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            max_pronoun_lookback: 1,
+            ..CorefConfig::default()
+        });
+        let resolved = resolver.resolve(&entities);
+
+        let alice_id = resolved[0].canonical_id.unwrap();
+        let she_id = resolved.last().unwrap().canonical_id.unwrap();
+        // "she" is beyond the pronoun distance window (1 * 10 = 10 entities back),
+        // but it may still find a compatible entity within those 10. The key invariant
+        // is that Alice (entity 0) is NOT within the window when there are 20 intervening.
+        assert_ne!(
+            alice_id, she_id,
+            "Pronoun too far from antecedent should stay unresolved or resolve to nearer entity"
+        );
+    }
+
+    #[test]
+    fn fuzzy_matching_disabled_prevents_substring() {
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            fuzzy_matching: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("John Smith", 0, 10),
+            person("Smith", 20, 25),
+        ];
+        let resolved = resolver.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id.unwrap(),
+            resolved[1].canonical_id.unwrap(),
+            "fuzzy_matching=false should prevent substring matching"
+        );
+    }
+
+    // ---- Task #5 regression tests ----
+
+    #[test]
+    fn test_alice_bob_she_resolves_to_alice() {
+        // With gazetteer: Alice -> Feminine, Bob -> Masculine.
+        // "she" (Feminine) should skip Bob and resolve to Alice.
+        let resolver = SimpleCorefResolver::default();
+        let entities = vec![
+            person("Alice", 0, 5),
+            person("Bob", 10, 13),
+            person("she", 20, 23),
+        ];
+        let resolved = resolver.resolve(&entities);
+        let she_id = resolved[2].canonical_id.unwrap();
+        let alice_id = resolved[0].canonical_id.unwrap();
+        assert_eq!(
+            she_id, alice_id,
+            "With gazetteer, 'she' should resolve to 'Alice' (Feminine), not 'Bob' (Masculine)"
+        );
+    }
+
+    #[test]
+    fn test_gazetteer_disabled_falls_back_to_nearest() {
+        let resolver = SimpleCorefResolver::new(CorefConfig {
+            use_name_gazetteer: false,
+            ..CorefConfig::default()
+        });
+        let entities = vec![
+            person("Alice", 0, 5),
+            person("Bob", 10, 13),
+            person("she", 20, 23),
+        ];
+        let resolved = resolver.resolve(&entities);
+        let she_id = resolved[2].canonical_id.unwrap();
+        let bob_id = resolved[1].canonical_id.unwrap();
+        assert_eq!(
+            she_id, bob_id,
+            "Without gazetteer, 'she' falls back to nearest compatible entity 'Bob'"
+        );
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn test_similarity_threshold_deprecated() {
+        // similarity_threshold is deprecated and has no effect.
+        let config = CorefConfig {
+            similarity_threshold: 0.99,
+            ..CorefConfig::default()
+        };
+        // Should compile with deprecation warning, and not affect output.
+        let resolver = SimpleCorefResolver::new(config);
+        let entities = vec![person("Alice", 0, 5), person("Alice", 10, 15)];
+        let resolved = resolver.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id, resolved[1].canonical_id,
+            "similarity_threshold should not affect exact name matching"
+        );
+    }
+
+    // ---- Property tests ----
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        fn arb_entity_type() -> impl Strategy<Value = EntityType> {
+            prop_oneof![
+                Just(EntityType::Person),
+                Just(EntityType::Organization),
+                Just(EntityType::Location),
+            ]
+        }
+
+        fn arb_entity() -> impl Strategy<Value = Entity> {
+            (
+                "[a-zA-Z ]{1,20}",   // text
+                arb_entity_type(),
+                0..1000usize,         // start
+            )
+                .prop_map(|(text, entity_type, start)| {
+                    let end = start + text.len();
+                    Entity::new(text, entity_type, start, end, 0.9)
+                })
+        }
+
+        fn arb_entity_vec() -> impl Strategy<Value = Vec<Entity>> {
+            proptest::collection::vec(arb_entity(), 0..30)
+        }
+
+        proptest! {
+            #[test]
+            fn resolve_never_panics(entities in arb_entity_vec()) {
+                let resolver = SimpleCorefResolver::default();
+                let _ = resolver.resolve(&entities);
+            }
+
+            #[test]
+            fn every_entity_has_canonical_id(entities in arb_entity_vec()) {
+                let resolver = SimpleCorefResolver::default();
+                let resolved = resolver.resolve(&entities);
+                for (i, entity) in resolved.iter().enumerate() {
+                    prop_assert!(
+                        entity.canonical_id.is_some(),
+                        "Entity {} ({:?}) missing canonical_id after resolve",
+                        i, entity.text
+                    );
+                }
+            }
+
+            #[test]
+            fn canonical_id_reflexive(entities in arb_entity_vec()) {
+                // Every entity's canonical_id should point to a cluster that contains
+                // at least the entity itself (i.e., some entity in the output shares
+                // the same canonical_id).
+                let resolver = SimpleCorefResolver::default();
+                let resolved = resolver.resolve(&entities);
+                for entity in &resolved {
+                    if let Some(cid) = entity.canonical_id {
+                        let count = resolved.iter()
+                            .filter(|e| e.canonical_id == Some(cid))
+                            .count();
+                        prop_assert!(
+                            count >= 1,
+                            "canonical_id {:?} has no members in output",
+                            cid
+                        );
+                    }
+                }
+            }
+        }
     }
 }

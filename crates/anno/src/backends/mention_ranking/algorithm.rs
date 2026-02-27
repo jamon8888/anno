@@ -1820,6 +1820,16 @@ impl MentionRankingCoref {
         score -= self.config.distance_weight * (distance as f64).ln().max(0.0);
 
         // =========================================================================
+        // External score (e.g., box containment)
+        // =========================================================================
+        if let Some(ref ext) = self.config.external_scores {
+            let key = (mention.start, antecedent.start);
+            if let Some(&ext_score) = ext.get(&key) {
+                score += self.config.external_score_weight * ext_score;
+            }
+        }
+
+        // =========================================================================
         // Salience boost
         // =========================================================================
         if self.config.salience_weight > 0.0 {

@@ -170,6 +170,15 @@ pub struct MentionRankingConfig {
     pub synonym_weight: f64,
 
     // =========================================================================
+    // External score injection
+    // =========================================================================
+    /// Optional external score provider: maps (mention_start, antecedent_start) → score.
+    /// Used for injecting pre-computed similarity signals (e.g., box containment).
+    pub external_scores: Option<HashMap<(usize, usize), f64>>,
+    /// Weight for external scores.
+    pub external_score_weight: f64,
+
+    // =========================================================================
     // Nominal adjective detection (J2N: arXiv:2409.14374)
     // =========================================================================
     /// Enable detection of nominal adjectives as mentions.
@@ -254,6 +263,10 @@ impl Default for MentionRankingConfig {
             enable_synonym_matching: false,
             synonym_weight: 0.5,
 
+            // External scores (disabled by default)
+            external_scores: None,
+            external_score_weight: 0.5,
+
             // Nominal adjective detection (J2N: arXiv:2409.14374)
             enable_nominal_adjective_detection: false,
 
@@ -306,6 +319,8 @@ impl MentionRankingConfig {
             enable_context_filtering: true,
             enable_synonym_matching: false, // Off by default, requires domain synonyms
             synonym_weight: 0.5,
+            external_scores: None,
+            external_score_weight: 0.5,
             enable_nominal_adjective_detection: false,
             language: "en".to_string(),
         }
@@ -366,6 +381,8 @@ impl MentionRankingConfig {
             enable_context_filtering: true,
             enable_synonym_matching: true, // Enable with medical synonyms
             synonym_weight: 0.6,
+            external_scores: None,
+            external_score_weight: 0.5,
             enable_nominal_adjective_detection: false,
             language: "en".to_string(),
         }

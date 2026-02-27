@@ -51,6 +51,25 @@ impl Language {
         matches!(self, Language::Arabic | Language::Hebrew)
     }
 
+    /// Returns true if this language uses the Latin script with sentence-initial
+    /// capitalization (English, French, Spanish, German, Italian, Portuguese).
+    ///
+    /// Used to gate capitalization adjustments in pronoun rewriting: only these
+    /// languages capitalize the first word of a sentence, so replacing a
+    /// sentence-initial pronoun with a proper noun needs case adjustment.
+    #[must_use]
+    pub fn uses_latin_capitalization(&self) -> bool {
+        matches!(
+            self,
+            Language::English
+                | Language::French
+                | Language::Spanish
+                | Language::German
+                | Language::Italian
+                | Language::Portuguese
+        )
+    }
+
     /// Get ISO 639-1 language code (2-letter).
     #[must_use]
     pub fn iso_code(&self) -> &'static str {
