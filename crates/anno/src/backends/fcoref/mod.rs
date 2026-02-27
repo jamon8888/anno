@@ -35,12 +35,15 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use anno::backends::fcoref::FCoref;
 //!
 //! let coref = FCoref::from_path("fcoref_onnx")?;
 //! let clusters = coref.resolve("John went to the store. He bought milk.")?;
 //! // clusters[0] = { mentions: ["John", "He"], canonical: "John" }
+//! # Ok(())
+//! # }
 //! ```
 
 pub(crate) mod clustering;
@@ -469,10 +472,15 @@ mod tests {
     // Integration tests require model download -- mark as #[ignore].
     // Run with: cargo test -p anno-lib --features onnx -- fcoref --ignored
 
+    fn model_dir() -> String {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        format!("{}/fcoref_onnx", manifest)
+    }
+
     #[test]
     #[ignore]
     fn test_fcoref_basic_resolution() {
-        let coref = FCoref::from_path("fcoref_onnx")
+        let coref = FCoref::from_path(&model_dir())
             .expect("Model not found. Run: uv run scripts/export_fcoref.py");
         let clusters = coref
             .resolve("John went to the store. He bought milk.")
@@ -492,7 +500,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_fcoref_no_coreference() {
-        let coref = FCoref::from_path("fcoref_onnx")
+        let coref = FCoref::from_path(&model_dir())
             .expect("Model not found. Run: uv run scripts/export_fcoref.py");
         let clusters = coref.resolve("The weather is nice today.").unwrap();
         // No pronouns referring to named entities
@@ -505,7 +513,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_fcoref_long_chain() {
-        let coref = FCoref::from_path("fcoref_onnx")
+        let coref = FCoref::from_path(&model_dir())
             .expect("Model not found. Run: uv run scripts/export_fcoref.py");
         let text = "Marie Curie was born in Warsaw. She studied in Paris. \
                      She discovered radium. She won two Nobel Prizes.";
