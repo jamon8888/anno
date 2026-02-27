@@ -562,4 +562,275 @@ mod tests {
         // Small chunks should be merged
         assert!(chunks.len() <= 1 || chunks[0].text.chars().count() >= 100);
     }
+
+    // ── char_to_byte_map / byte_at_char ──────────────────────────────────
+
+    #[test]
+    fn char_to_byte_map_ascii() {
+        let text = "hello";
+        let map = super::char_to_byte_map(text);
+        // 5 chars + sentinel = 6 entries; all byte==char for ASCII.
+        assert_eq!(map, vec![0, 1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn char_to_byte_map_multibyte() {
+        // 'e', U+0301 COMBINING ACUTE (2 bytes), ' ', 'a' => 4 chars, 5 bytes total.
+        let text = "e\u{0301} a";
+        let map = super::char_to_byte_map(text);
+        assert_eq!(map.len(), text.chars().count() + 1);
+        // Sentinel must equal byte length.
+        assert_eq!(*map.last().unwrap(), text.len());
+    }
+
+    #[test]
+    fn char_to_byte_map_emoji() {
+        // Flag emoji U+1F1FA U+1F1F8 is two chars (4 bytes each).
+        let text = "\u{1F1FA}\u{1F1F8}";
+        let map = super::char_to_byte_map(text);
+        assert_eq!(map.len(), 3); // 2 chars + sentinel
+        assert_eq!(map[0], 0);
+        assert_eq!(map[1], 4);
+        assert_eq!(map[2], 8);
+    }
+
+    #[test]
+    fn char_to_byte_map_empty() {
+        let map = super::char_to_byte_map("");
+        // Just the sentinel.
+        assert_eq!(map, vec![0]);
+    }
+
+    #[test]
+    fn byte_at_char_clamping() {
+        let map = super::char_to_byte_map("abc"); // [0,1,2,3]
+        // Within bounds.
+        assert_eq!(super::byte_at_char(&map, 0), 0);
+        assert_eq!(super::byte_at_char(&map, 3), 3); // sentinel
+        // Out of bounds clamps to last entry.
+        assert_eq!(super::byte_at_char(&map, 100), 3);
+        // Empty map returns 0.
+        assert_eq!(super::byte_at_char(&[], 5), 0);
+    }
+
+    // ── paragraph_ranges ─────────────────────────────────────────────────
+
+    #[test]
+    fn paragraph_ranges_basic() {
+        let text = "Hello world.\n\nSecond paragraph.\n\nThird.";
+        let ranges = super::paragraph_ranges(text);
+        assert_eq!(ranges.len(), 3);
+        // First paragraph starts at 0.
+        assert_eq!(ranges[0].0, 0);
+        // The end offset is the char offset of the blank line's start (i.e. includes the
+        // trailing '\n' of the content line). Verify the text round-trips correctly.
+        let chars: Vec<char> = text.chars().collect();
+        let first: String = chars[ranges[0].0..ranges[0].1].iter().collect();
+        // "Hello world." plus trailing '\n' (the blank line closes the paragraph at line_start).
+        assert_eq!(first, "Hello world.\n");
+        // Third paragraph has no trailing newline.
+        let third: String = chars[ranges[2].0..ranges[2].1].iter().collect();
+        assert_eq!(third, "Third.");
+    }
+
+    #[test]
+    fn paragraph_ranges_no_blank_lines() {
+        // No blank lines => entire text is one paragraph.
+        let text = "line one\nline two\nline three";
+        let ranges = super::paragraph_ranges(text);
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(ranges[0], (0, text.chars().count()));
+    }
+
+    #[test]
+    fn paragraph_ranges_all_blank() {
+        let text = "\n\n\n";
+        let ranges = super::paragraph_ranges(text);
+        assert!(ranges.is_empty());
+    }
+
+    #[test]
+    fn paragraph_ranges_crlf() {
+        let text = "Para one.\r\n\r\nPara two.";
+        let ranges = super::paragraph_ranges(text);
+        assert_eq!(ranges.len(), 2);
+    }
+
+    // ── RuleBasedSemanticChunker ──────────────────────────────────────────
+
+    #[test]
+    fn rule_chunker_empty_input() {
+        let chunker = RuleBasedSemanticChunker::new(SemanticChunkConfig::default());
+        let chunks = chunker.chunk("", None).unwrap();
+        assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn rule_chunker_single_paragraph_under_target() {
+        let config = SemanticChunkConfig {
+            target_size: 1000,
+            min_size: 10,
+            max_size: 2000,
+            overlap: 0,
+            ..Default::default()
+        };
+        let chunker = RuleBasedSemanticChunker::new(config);
+        let text = "A single paragraph that fits easily.";
+        let chunks = chunker.chunk(text, None).unwrap();
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].text, text);
+        assert_eq!(chunks[0].start, 0);
+        assert_eq!(chunks[0].end, text.chars().count());
+    }
+
+    #[test]
+    fn rule_chunker_splits_at_target_with_overlap() {
+        // Build text with two paragraphs, each ~60 chars, and set target_size=60 so a split occurs.
+        let p1 = "a".repeat(60);
+        let p2 = "b".repeat(60);
+        let text = format!("{p1}\n\n{p2}");
+        let config = SemanticChunkConfig {
+            target_size: 60,
+            min_size: 10,
+            max_size: 200,
+            overlap: 10,
+            ..Default::default()
+        };
+        let chunker = RuleBasedSemanticChunker::new(config);
+        let chunks = chunker.chunk(&text, None).unwrap();
+        assert!(chunks.len() >= 2, "expected at least 2 chunks, got {}", chunks.len());
+        // Second chunk should start before the second paragraph due to overlap.
+        assert!(
+            chunks[1].start < p1.chars().count() + 2, // +2 for the two newlines
+            "second chunk start {} should be < {}",
+            chunks[1].start,
+            p1.chars().count() + 2
+        );
+    }
+
+    #[test]
+    fn rule_chunker_merges_tiny_trailing_chunk() {
+        // Three paragraphs: first two are big enough, third is tiny.
+        // The tiny third should be merged into the second chunk.
+        let big = "x".repeat(80);
+        let tiny = "y".repeat(5);
+        let text = format!("{big}\n\n{big}\n\n{tiny}");
+        let config = SemanticChunkConfig {
+            target_size: 80,
+            min_size: 50,
+            max_size: 300,
+            overlap: 0,
+            ..Default::default()
+        };
+        let chunker = RuleBasedSemanticChunker::new(config);
+        let chunks = chunker.chunk(&text, None).unwrap();
+        // The tiny trailing paragraph should be merged into the previous chunk.
+        for chunk in &chunks {
+            assert!(
+                chunk.text.chars().count() >= 50 || chunks.len() == 1,
+                "chunk below min_size: {} chars",
+                chunk.text.chars().count()
+            );
+        }
+    }
+
+    #[test]
+    fn rule_chunker_unicode_offsets_round_trip() {
+        // Verify that chunk start/end are char offsets that recover the correct text.
+        let text = "Caf\u{00e9} au lait.\n\nR\u{00e9}sum\u{00e9} section.\n\nNa\u{00ef}ve end.";
+        let config = SemanticChunkConfig {
+            target_size: 20,
+            min_size: 5,
+            max_size: 40,
+            overlap: 0,
+            ..Default::default()
+        };
+        let chunker = RuleBasedSemanticChunker::new(config);
+        let chunks = chunker.chunk(text, None).unwrap();
+        let chars: Vec<char> = text.chars().collect();
+        for chunk in &chunks {
+            let reconstructed: String = chars[chunk.start..chunk.end].iter().collect();
+            assert_eq!(
+                chunk.text, reconstructed,
+                "offset round-trip mismatch: text={:?}, reconstructed={:?}",
+                chunk.text, reconstructed
+            );
+        }
+    }
+
+    // ── Config presets ───────────────────────────────────────────────────
+
+    #[test]
+    fn config_presets_are_valid() {
+        let d = SemanticChunkConfig::default();
+        assert!(d.min_size < d.target_size);
+        assert!(d.target_size < d.max_size);
+
+        let ld = SemanticChunkConfig::long_document();
+        assert!(ld.min_size < ld.target_size);
+        assert!(ld.target_size < ld.max_size);
+
+        let coref = SemanticChunkConfig::coreference();
+        assert!(coref.min_size < coref.target_size);
+        assert!(coref.target_size < coref.max_size);
+        // Coreference should use a higher similarity threshold to keep mentions together.
+        assert!(coref.similarity_threshold > d.similarity_threshold);
+    }
+
+    // ── EmbeddingSemanticChunker helpers (semantic-chunking feature) ──────
+
+    #[cfg(feature = "semantic-chunking")]
+    mod semantic_chunking_feature {
+        use super::super::EmbeddingSemanticChunker;
+        use std::collections::BTreeSet;
+
+        #[test]
+        fn tokenize_filters_short_tokens() {
+            let tokens = EmbeddingSemanticChunker::tokenize_for_similarity("I am a big cat");
+            // "I", "am", "a" are <= 2 chars and should be filtered out.
+            assert!(!tokens.contains("i"));
+            assert!(!tokens.contains("am"));
+            assert!(!tokens.contains("a"));
+            assert!(tokens.contains("big"));
+            assert!(tokens.contains("cat"));
+        }
+
+        #[test]
+        fn jaccard_identical_sets() {
+            let a: BTreeSet<String> = ["foo", "bar"].iter().map(|s| s.to_string()).collect();
+            let sim = EmbeddingSemanticChunker::jaccard(&a, &a);
+            assert!((sim - 1.0).abs() < f32::EPSILON);
+        }
+
+        #[test]
+        fn jaccard_disjoint_sets() {
+            let a: BTreeSet<String> = ["foo"].iter().map(|s| s.to_string()).collect();
+            let b: BTreeSet<String> = ["bar"].iter().map(|s| s.to_string()).collect();
+            let sim = EmbeddingSemanticChunker::jaccard(&a, &b);
+            assert!((sim - 0.0).abs() < f32::EPSILON);
+        }
+
+        #[test]
+        fn jaccard_both_empty() {
+            let empty: BTreeSet<String> = BTreeSet::new();
+            assert!((EmbeddingSemanticChunker::jaccard(&empty, &empty) - 1.0).abs() < f32::EPSILON);
+        }
+
+        #[test]
+        fn split_sentences_spans_basic() {
+            let text = "Hello world. How are you? Fine.";
+            let spans = EmbeddingSemanticChunker::split_sentences_spans(text);
+            assert_eq!(spans.len(), 3);
+            // Verify spans cover the entire text.
+            assert_eq!(spans[0].0, 0);
+            assert_eq!(spans.last().unwrap().1, text.chars().count());
+        }
+
+        #[test]
+        fn split_sentences_spans_cjk_terminators() {
+            let text = "first sentence\u{3002}second\u{FF01}";
+            let spans = EmbeddingSemanticChunker::split_sentences_spans(text);
+            assert_eq!(spans.len(), 2);
+        }
+    }
 }
