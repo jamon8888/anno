@@ -241,7 +241,7 @@ impl CrfNER {
     /// These weights are hand-tuned heuristics, not learned from data.
     /// For better accuracy, train weights using scripts/train_crf_weights.py
     /// and load them with `CrfNER::with_weights("crf_weights.json")`.
-    fn default_weights() -> HashMap<String, f64> {
+    pub(super) fn default_weights() -> HashMap<String, f64> {
         let mut w = HashMap::new();
 
         // Strong bias toward O (outside) by default - entities are rare
@@ -475,7 +475,7 @@ impl CrfNER {
     /// - `-1:word.lower={word}` - Previous word features
     /// - `+1:word.lower={word}` - Next word features
     /// - `BOS` / `EOS` - Beginning/end of sentence markers
-    fn extract_features(&self, tokens: &[&str], pos: usize, _prev_label: &str) -> Vec<String> {
+    pub(super) fn extract_features(&self, tokens: &[&str], pos: usize, _prev_label: &str) -> Vec<String> {
         let mut features = Vec::with_capacity(20);
         let word = tokens[pos];
 
@@ -582,7 +582,7 @@ impl CrfNER {
     }
 
     /// Score a label for given features using learned weights.
-    fn score_label(&self, features: &[String], label: &str) -> f64 {
+    pub(super) fn score_label(&self, features: &[String], label: &str) -> f64 {
         let mut score = 0.0;
         let debug = std::env::var("CRF_DEBUG").is_ok();
 

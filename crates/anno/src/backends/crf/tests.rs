@@ -220,3 +220,372 @@ fn test_token_positions_unicode() {
     assert_eq!(positions[1], (7, 12), "Tokyo at bytes 7-12");
     assert_eq!(positions[2], (13, 19), "Second '東京' at bytes 13-19");
 }
+
+// ---------------------------------------------------------------------------
+// Algorithm-focused unit tests
+// ---------------------------------------------------------------------------
+
+/// Build a minimal CrfNER with only the supplied weights and the standard BIO
+/// label set. No gazetteers, no feature templates beyond the basics.
+fn minimal_crf(weights: HashMap<String, f64>) -> CrfNER {
+    CrfNER {
+        weights,
+        gazetteers: HashMap::new(),
+        labels: vec![
+            "O".to_string(),
+            "B-PER".to_string(),
+            "I-PER".to_string(),
+            "B-ORG".to_string(),
+            "I-ORG".to_string(),
+            "B-LOC".to_string(),
+            "I-LOC".to_string(),
+            "B-MISC".to_string(),
+            "I-MISC".to_string(),
+        ],
+        templates: vec![],
+    }
+}
+
+/// Viterbi on empty input returns empty labels.
+#[test]
+fn test_viterbi_empty_input() {
+    let ner = minimal_crf(HashMap::new());
+    let labels = ner.viterbi_decode(&[]);
+    assert!(labels.is_empty(), "Empty tokens should yield empty labels");
+}
+
+/// Viterbi on a single token should return exactly one label.
+#[test]
+fn test_viterbi_single_token() {
+    let ner = minimal_crf(HashMap::new());
+    let labels = ner.viterbi_decode(&["hello"]);
+    assert_eq!(labels.len(), 1);
+    // With no weights except the default +0.5 O bias inside score_label,
+    // the single token should be labeled O.
+    assert_eq!(labels[0], "O");
+}
+
+/// When emission weights strongly prefer B-PER for a capitalized word,
+/// Viterbi should pick B-PER.
+#[test]
+fn test_viterbi_strong_emission_overrides_o_bias() {
+    let mut w = HashMap::new();
+    // Make B-PER overwhelmingly attractive for the "bias" feature
+    w.insert("bias:B-PER".to_string(), 20.0);
+    let ner = minimal_crf(w);
+
+    let labels = ner.viterbi_decode(&["Alice"]);
+    assert_eq!(labels, vec!["B-PER"]);
+}
+
+/// Transition weights enforce BIO validity: O -> I-PER is penalized,
+/// so the decoder should prefer O -> B-PER -> I-PER over O -> I-PER.
+#[test]
+fn test_viterbi_bio_transition_constraint() {
+    let mut w = HashMap::new();
+
+    // First token: strongly O
+    w.insert("BOS:O".to_string(), 10.0);
+    // Second and third tokens: want some PER tag
+    w.insert("word.lower=john:B-PER".to_string(), 8.0);
+    w.insert("word.lower=john:I-PER".to_string(), 6.0);
+    w.insert("word.lower=smith:I-PER".to_string(), 8.0);
+    w.insert("word.lower=smith:B-PER".to_string(), 4.0);
+
+    // Valid transition: B-PER -> I-PER is rewarded
+    w.insert("trans:B-PER->I-PER".to_string(), 5.0);
+    // Invalid transition: O -> I-PER is heavily penalized
+    w.insert("trans:O->I-PER".to_string(), -50.0);
+
+    let ner = minimal_crf(w);
+    let labels = ner.viterbi_decode(&["The", "John", "Smith"]);
+
+    assert_eq!(labels.len(), 3);
+    // "John" should be B-PER (not I-PER, since previous is O)
+    assert_eq!(labels[1], "B-PER", "Expected B-PER after O, not {}", labels[1]);
+    // "Smith" should be I-PER (continuing the entity)
+    assert_eq!(labels[2], "I-PER", "Expected I-PER continuation, not {}", labels[2]);
+}
+
+/// Cross-type I- transitions are blocked: B-PER -> I-ORG should not happen.
+#[test]
+fn test_viterbi_cross_type_transition_blocked() {
+    let mut w = HashMap::new();
+
+    // First token strongly B-PER
+    w.insert("bias:B-PER".to_string(), 15.0);
+    // Second token: I-ORG has a high emission but cross-type transition is penalized
+    w.insert("word.lower=inc:I-ORG".to_string(), 5.0);
+    w.insert("word.lower=inc:O".to_string(), 1.0);
+    w.insert("trans:B-PER->I-ORG".to_string(), -50.0);
+
+    let ner = minimal_crf(w);
+    let labels = ner.viterbi_decode(&["Alice", "Inc"]);
+
+    assert_eq!(labels.len(), 2);
+    // Second token must NOT be I-ORG because the cross-type penalty is too high
+    assert_ne!(
+        labels[1], "I-ORG",
+        "Cross-type transition B-PER -> I-ORG should be blocked"
+    );
+}
+
+/// score_label returns the default O bias (0.5) when no weights match.
+#[test]
+fn test_score_label_default_o_bias() {
+    let ner = minimal_crf(HashMap::new());
+    let features = vec!["some_unknown_feature".to_string()];
+
+    let o_score = ner.score_label(&features, "O");
+    let b_per_score = ner.score_label(&features, "B-PER");
+
+    assert!(
+        o_score > b_per_score,
+        "O should score higher than B-PER with no matching weights: O={}, B-PER={}",
+        o_score,
+        b_per_score
+    );
+    // O gets +0.5 bias, B-PER gets 0.0
+    assert!((o_score - 0.5).abs() < 1e-9, "O score should be 0.5, got {}", o_score);
+    assert!((b_per_score - 0.0).abs() < 1e-9, "B-PER score should be 0.0, got {}", b_per_score);
+}
+
+/// score_label accumulates weights from both "feature:label" and "feature" keys.
+#[test]
+fn test_score_label_weight_accumulation() {
+    let mut w = HashMap::new();
+    w.insert("feat_a:B-PER".to_string(), 2.0);
+    w.insert("feat_b:B-PER".to_string(), 3.0);
+    // A type-independent weight (applied at 0.5x)
+    w.insert("feat_c".to_string(), 4.0);
+
+    let ner = minimal_crf(w);
+    let features = vec![
+        "feat_a".to_string(),
+        "feat_b".to_string(),
+        "feat_c".to_string(),
+    ];
+
+    let score = ner.score_label(&features, "B-PER");
+    // feat_a:B-PER = 2.0, feat_b:B-PER = 3.0, feat_c (independent) = 4.0 * 0.5 = 2.0
+    // B-PER has no O bias, so total = 2.0 + 3.0 + 2.0 = 7.0
+    assert!(
+        (score - 7.0).abs() < 1e-9,
+        "Expected score 7.0, got {}",
+        score
+    );
+}
+
+/// extract_features produces BOS for the first token and EOS for the last.
+#[test]
+fn test_extract_features_bos_eos() {
+    let ner = minimal_crf(HashMap::new());
+    let tokens = vec!["Hello", "world"];
+
+    let feats_first = ner.extract_features(&tokens, 0, "O");
+    assert!(
+        feats_first.contains(&"BOS".to_string()),
+        "First token should have BOS feature"
+    );
+    assert!(
+        !feats_first.contains(&"EOS".to_string()),
+        "First token should not have EOS"
+    );
+
+    let feats_last = ner.extract_features(&tokens, 1, "O");
+    assert!(
+        feats_last.contains(&"EOS".to_string()),
+        "Last token should have EOS feature"
+    );
+    assert!(
+        !feats_last.contains(&"BOS".to_string()),
+        "Last token should not have BOS"
+    );
+}
+
+/// extract_features for a single token should have both BOS and EOS.
+#[test]
+fn test_extract_features_single_token_bos_and_eos() {
+    let ner = minimal_crf(HashMap::new());
+    let tokens = vec!["Only"];
+    let feats = ner.extract_features(&tokens, 0, "O");
+    assert!(feats.contains(&"BOS".to_string()), "Single token needs BOS");
+    assert!(feats.contains(&"EOS".to_string()), "Single token needs EOS");
+}
+
+/// extract_features includes the expected word identity and shape features.
+#[test]
+fn test_extract_features_word_identity() {
+    let ner = minimal_crf(HashMap::new());
+    let tokens = vec!["John"];
+    let feats = ner.extract_features(&tokens, 0, "O");
+
+    assert!(feats.contains(&"bias".to_string()), "Missing bias feature");
+    assert!(
+        feats.contains(&"word.lower=john".to_string()),
+        "Missing word.lower feature"
+    );
+    assert!(
+        feats.contains(&"word.shape=Xx".to_string()),
+        "Missing word.shape feature"
+    );
+    assert!(
+        feats.contains(&"word.istitle=True".to_string()),
+        "Missing word.istitle feature"
+    );
+    assert!(
+        feats.contains(&"word.isupper=False".to_string()),
+        "Missing word.isupper feature"
+    );
+}
+
+/// labels_to_entities correctly converts BIO labels into Entity spans.
+#[test]
+fn test_labels_to_entities_simple() {
+    let ner = minimal_crf(HashMap::new());
+    let text = "John Smith works at Google";
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let labels = vec![
+        "B-PER".to_string(),
+        "I-PER".to_string(),
+        "O".to_string(),
+        "O".to_string(),
+        "B-ORG".to_string(),
+    ];
+
+    let entities = ner.labels_to_entities(text, &tokens, &labels);
+
+    assert_eq!(entities.len(), 2, "Expected 2 entities, got {}", entities.len());
+
+    // First entity: "John Smith" (Person)
+    assert_eq!(entities[0].text, "John Smith");
+    assert_eq!(entities[0].entity_type, EntityType::Person);
+    assert_eq!(entities[0].start, 0);
+    assert_eq!(entities[0].end, 10);
+
+    // Second entity: "Google" (Organization)
+    assert_eq!(entities[1].text, "Google");
+    assert_eq!(entities[1].entity_type, EntityType::Organization);
+    assert_eq!(entities[1].start, 20);
+    assert_eq!(entities[1].end, 26);
+}
+
+/// labels_to_entities handles entity at end of sequence (no trailing O).
+#[test]
+fn test_labels_to_entities_trailing_entity() {
+    let ner = minimal_crf(HashMap::new());
+    let text = "lives in Paris";
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let labels = vec![
+        "O".to_string(),
+        "O".to_string(),
+        "B-LOC".to_string(),
+    ];
+
+    let entities = ner.labels_to_entities(text, &tokens, &labels);
+    assert_eq!(entities.len(), 1);
+    assert_eq!(entities[0].text, "Paris");
+    assert_eq!(entities[0].entity_type, EntityType::Location);
+}
+
+/// labels_to_entities with all-O labels produces no entities.
+#[test]
+fn test_labels_to_entities_all_outside() {
+    let ner = minimal_crf(HashMap::new());
+    let text = "nothing special here";
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let labels = vec!["O".to_string(), "O".to_string(), "O".to_string()];
+
+    let entities = ner.labels_to_entities(text, &tokens, &labels);
+    assert!(entities.is_empty(), "All-O labels should produce no entities");
+}
+
+/// word_shape compresses repeated characters: "AAAA" -> "X", "aaaa" -> "x".
+#[test]
+fn test_word_shape_compression() {
+    assert_eq!(CrfNER::word_shape("AAAA"), "X");
+    assert_eq!(CrfNER::word_shape("aaaa"), "x");
+    assert_eq!(CrfNER::word_shape("AaBb"), "XxXx");
+    assert_eq!(CrfNER::word_shape("123-456"), "0-0");
+    assert_eq!(CrfNER::word_shape("O'Brien"), "X'Xx");
+}
+
+/// Viterbi with a two-label system and explicit transition matrix to verify
+/// the dynamic programming produces the globally optimal path.
+#[test]
+fn test_viterbi_global_optimality() {
+    // Construct a scenario where the locally greedy choice at position 1
+    // differs from the globally optimal path.
+    //
+    // Labels: O (idx 0), B-PER (idx 1), and the rest are available but
+    // we only put weights on O and B-PER.
+    //
+    // Token 0: O scores 5, B-PER scores 3
+    // Token 1: O scores 1, B-PER scores 4
+    // Transition: O->B-PER = 0, B-PER->B-PER = 10 (huge bonus)
+    //
+    // Greedy: picks O at t=0 (5 > 3), then B-PER at t=1 (1+0+4 < 3+10+4).
+    // Viterbi: picks B-PER at t=0 (3), then B-PER at t=1 (3 + 10 + 4 = 17),
+    //          which beats O at t=0 (5), then B-PER at t=1 (5 + 0 + 4 = 9).
+    let mut w = HashMap::new();
+    w.insert("bias:O".to_string(), 5.0);
+    w.insert("bias:B-PER".to_string(), 3.0);
+    // Override at position 1 to make B-PER more attractive
+    w.insert("word.lower=b:B-PER".to_string(), 1.0);
+    w.insert("trans:B-PER->B-PER".to_string(), 10.0);
+
+    let ner = minimal_crf(w);
+    let labels = ner.viterbi_decode(&["a", "b"]);
+
+    assert_eq!(labels.len(), 2);
+    // The globally optimal path should be B-PER, B-PER
+    assert_eq!(
+        labels,
+        vec!["B-PER", "B-PER"],
+        "Viterbi should find the globally optimal path, not the greedy one"
+    );
+}
+
+/// Default weights include BIO constraint transitions: O -> I-* is penalized at -10.
+#[test]
+fn test_default_weights_bio_constraints() {
+    let w = CrfNER::default_weights();
+
+    // O -> I-* transitions should be strongly negative
+    for tag in ["I-PER", "I-ORG", "I-LOC", "I-MISC"] {
+        let key = format!("trans:O->{}", tag);
+        let val = w.get(&key).copied().unwrap_or(0.0);
+        assert!(
+            val < -5.0,
+            "O -> {} should be heavily penalized, got {}",
+            tag,
+            val
+        );
+    }
+
+    // Same-type B -> I should be positive
+    for (b, i) in [("B-PER", "I-PER"), ("B-ORG", "I-ORG"), ("B-LOC", "I-LOC")] {
+        let key = format!("trans:{}->{}", b, i);
+        let val = w.get(&key).copied().unwrap_or(0.0);
+        assert!(
+            val > 0.0,
+            "{} -> {} should be positive, got {}",
+            b,
+            i,
+            val
+        );
+    }
+
+    // Cross-type B -> I should be strongly negative
+    for (b, i) in [("B-PER", "I-ORG"), ("B-ORG", "I-LOC"), ("B-LOC", "I-PER")] {
+        let key = format!("trans:{}->{}", b, i);
+        let val = w.get(&key).copied().unwrap_or(0.0);
+        assert!(
+            val < -5.0,
+            "{} -> {} should be heavily penalized, got {}",
+            b,
+            i,
+            val
+        );
+    }
+}
