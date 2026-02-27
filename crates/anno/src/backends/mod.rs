@@ -131,11 +131,6 @@ pub mod coref_trait;
 pub mod bilstm_crf;
 /// Box embeddings for geometric coreference resolution.
 pub mod box_embeddings;
-/// Training system for box embeddings.
-///
-/// This is the canonical training implementation. The [matryoshka-box](https://github.com/arclabs561/matryoshka-box)
-/// research project extends this with matryoshka-specific features (variable dimensions, etc.).
-pub mod box_embeddings_training;
 pub mod catalog;
 pub mod crf;
 pub mod encoder;
@@ -362,12 +357,6 @@ pub use warmup::{warmup_model, warmup_with_callback, WarmupConfig, WarmupResult}
 pub use box_embeddings::{
     acquisition_roles, interaction_strength, BoxCorefConfig, BoxEmbedding, BoxVelocity, Conflict,
     GumbelBox, TemporalBox, UncertainBox,
-};
-
-// Box embedding training (canonical implementation; matryoshka-box extends with research features)
-pub use box_embeddings_training::{
-    coref_documents_to_training_examples, split_train_val, BoxEmbeddingTrainer, TrainingConfig,
-    TrainingExample,
 };
 
 // Coreference resolution trait (from anno-core, always available)

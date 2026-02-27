@@ -4,8 +4,7 @@
 //! logical invariants of coreference resolution, addressing limitations of
 //! vector-based approaches.
 //!
-//! **Note**: Training code is in `box_embeddings_training.rs`. The [matryoshka-box](https://github.com/arclabs561/matryoshka-box)
-//! research project extends training with matryoshka-specific features (variable dimensions, etc.).
+//! Training code for the box-coref experiment has been removed (discontinued; 33-35% CoNLL ceiling).
 //!
 //! # Key Concepts
 //!
@@ -18,7 +17,7 @@
 //!
 //! This implementation is related to the **matryoshka-box** research project (not yet published),
 //! which combines matryoshka embeddings (variable dimensions) with box embeddings (hierarchical reasoning).
-//! Standard training is in `box_embeddings_training.rs`; matryoshka-box extends it with research features.
+//! The matryoshka-box research project is archived.
 //!
 //! Based on research from:
 //! - Vilnis et al. (2018): "Probabilistic Embedding of Knowledge Graphs with Box Lattice Measures"
