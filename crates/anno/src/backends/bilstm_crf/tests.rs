@@ -78,8 +78,8 @@ fn test_config() {
     };
 
     let ner = BiLstmCrfNER::with_config(config.clone());
-    assert_eq!(ner.config.hidden_size, 512);
-    assert_eq!(ner.config.num_layers, 3);
+    assert_eq!(ner.config().hidden_size, 512);
+    assert_eq!(ner.config().num_layers, 3);
 }
 
 #[test]
@@ -163,4 +163,34 @@ fn test_token_positions_unicode() {
     assert_eq!(positions[1], (7, 12), "Tokyo at bytes 7-12");
     assert_eq!(positions[2], (13, 19), "Second '東京' at bytes 13-19");
     assert_eq!(positions[3], (20, 25), "Osaka at bytes 20-25");
+}
+
+#[test]
+fn test_config_defaults() {
+    let config = BiLstmCrfConfig::default();
+    assert_eq!(config.hidden_size, 256);
+    assert_eq!(config.num_layers, 2);
+    assert!((config.dropout - 0.5).abs() < f32::EPSILON);
+    assert!(config.use_char_embeddings);
+    assert_eq!(config.max_seq_len, 512);
+}
+
+#[test]
+fn test_vocab_lookup_empty() {
+    let ner = BiLstmCrfNER::new();
+    // Default model has empty vocab (no pre-trained embeddings loaded)
+    assert!(ner.vocab().is_empty());
+    assert_eq!(ner.vocab_lookup("hello"), None);
+}
+
+#[test]
+fn test_labels_accessor() {
+    let ner = BiLstmCrfNER::new();
+    let labels = ner.labels();
+    assert_eq!(labels.len(), 9);
+    assert_eq!(labels[0], "O");
+    assert!(labels.iter().any(|l| l == "B-PER"));
+    assert!(labels.iter().any(|l| l == "I-PER"));
+    assert!(labels.iter().any(|l| l == "B-ORG"));
+    assert!(labels.iter().any(|l| l == "B-LOC"));
 }

@@ -145,7 +145,6 @@ impl Default for BiLstmCrfConfig {
 #[derive(Debug)]
 pub struct BiLstmCrfNER {
     /// Model configuration.
-    #[allow(dead_code)] // Reserved for model serialization
     config: BiLstmCrfConfig,
     /// BIO labels for decoding.
     labels: Vec<String>,
@@ -154,7 +153,6 @@ pub struct BiLstmCrfNER {
     /// Transition scores (from CRF layer).
     transitions: Vec<Vec<f64>>,
     /// Word vocabulary (word -> embedding index).
-    #[allow(dead_code)] // Reserved for embedding lookup
     vocab: HashMap<String, usize>,
     /// ONNX session for inference (when onnx feature enabled).
     #[cfg(feature = "onnx")]
@@ -247,6 +245,32 @@ impl BiLstmCrfNER {
         let mut model = Self::new();
         model.session = Some(session);
         Ok(model)
+    }
+
+    /// Returns a reference to the model configuration.
+    #[must_use]
+    pub fn config(&self) -> &BiLstmCrfConfig {
+        &self.config
+    }
+
+    /// Returns a reference to the word vocabulary.
+    #[must_use]
+    pub fn vocab(&self) -> &HashMap<String, usize> {
+        &self.vocab
+    }
+
+    /// Look up a word's embedding index in the vocabulary.
+    ///
+    /// Returns `None` if the word is not in the vocabulary.
+    #[must_use]
+    pub fn vocab_lookup(&self, word: &str) -> Option<usize> {
+        self.vocab.get(word).copied()
+    }
+
+    /// Returns the BIO label set used by this model.
+    #[must_use]
+    pub fn labels(&self) -> &[String] {
+        &self.labels
     }
 
     /// Tokenize text into words.
