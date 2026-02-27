@@ -528,13 +528,7 @@ mod tests {
 
     #[test]
     fn test_coreference_single_entity_no_cluster() {
-        let entities = vec![Entity::new(
-            "Alice",
-            EntityType::Person,
-            0,
-            5,
-            0.9,
-        )];
+        let entities = vec![Entity::new("Alice", EntityType::Person, 0, 5, 0.9)];
         let embeddings = vec![0.0f32; 768];
         let clusters =
             resolve_coreferences(&entities, &embeddings, 768, &CoreferenceConfig::default());
@@ -567,7 +561,7 @@ mod tests {
         ];
         let embeddings = vec![0.0f32; 2 * 768];
         let config = CoreferenceConfig {
-            max_distance: Some(10), // Very small window
+            max_distance: Some(10),  // Very small window
             use_string_match: false, // Disable string match to test distance alone
             similarity_threshold: 0.85,
         };
@@ -1029,9 +1023,7 @@ mod tests {
     #[test]
     fn test_two_stage_retrieval_top_k_truncation() {
         let query = vec![1.0, 0.0, 0.0, 0.0];
-        let candidates: Vec<Vec<f32>> = (0..10)
-            .map(|_| vec![1.0, 0.0, 0.0, 0.0])
-            .collect();
+        let candidates: Vec<Vec<f32>> = (0..10).map(|_| vec![1.0, 0.0, 0.0, 0.0]).collect();
 
         // All identical -> all should pass binary filter, but top_k=3
         let results = two_stage_retrieval(&query, &candidates, 4, 3);

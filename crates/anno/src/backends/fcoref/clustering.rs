@@ -68,10 +68,7 @@ pub(crate) struct MentionSpan {
 /// # Returns
 ///
 /// Clusters with 2+ members, sorted by cluster ID. Singletons are filtered out.
-pub(crate) fn build_clusters(
-    mentions: &[MentionSpan],
-    antecedents: &[usize],
-) -> Vec<CorefCluster> {
+pub(crate) fn build_clusters(mentions: &[MentionSpan], antecedents: &[usize]) -> Vec<CorefCluster> {
     let n = mentions.len();
     if n == 0 {
         return vec![];
@@ -100,8 +97,10 @@ pub(crate) fn build_clusters(
         .filter(|members| members.len() > 1)
         .enumerate()
         .map(|(id, member_indices)| {
-            let mention_texts: Vec<String> =
-                member_indices.iter().map(|&i| mentions[i].text.clone()).collect();
+            let mention_texts: Vec<String> = member_indices
+                .iter()
+                .map(|&i| mentions[i].text.clone())
+                .collect();
             let spans: Vec<(usize, usize)> = member_indices
                 .iter()
                 .map(|&i| (mentions[i].char_start, mentions[i].char_end))

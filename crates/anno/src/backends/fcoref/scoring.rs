@@ -94,9 +94,9 @@ impl ScorerWeights {
 
         // Helper to load an ndarray from safetensors
         let load_2d = |name: &str| -> Result<Array2<f32>> {
-            let view = tensors.tensor(name).map_err(|e| {
-                Error::Parse(format!("Missing tensor '{}': {}", name, e))
-            })?;
+            let view = tensors
+                .tensor(name)
+                .map_err(|e| Error::Parse(format!("Missing tensor '{}': {}", name, e)))?;
             let shape = view.shape();
             if shape.len() != 2 {
                 return Err(Error::Parse(format!(
@@ -114,9 +114,9 @@ impl ScorerWeights {
         };
 
         let load_1d = |name: &str| -> Result<Array1<f32>> {
-            let view = tensors.tensor(name).map_err(|e| {
-                Error::Parse(format!("Missing tensor '{}': {}", name, e))
-            })?;
+            let view = tensors
+                .tensor(name)
+                .map_err(|e| Error::Parse(format!("Missing tensor '{}': {}", name, e)))?;
             let shape = view.shape();
             if shape.len() != 1 {
                 return Err(Error::Parse(format!(
@@ -334,17 +334,13 @@ pub(crate) fn score_antecedents(
 /// GELU activation (approximation used by PyTorch).
 fn gelu(x: &Array2<f32>) -> Array2<f32> {
     x.mapv(|v| {
-        0.5 * v * (1.0 + ((2.0_f32 / std::f32::consts::PI).sqrt() * (v + 0.044715 * v.powi(3))).tanh())
+        0.5 * v
+            * (1.0 + ((2.0_f32 / std::f32::consts::PI).sqrt() * (v + 0.044715 * v.powi(3))).tanh())
     })
 }
 
 /// Layer normalization over the last axis.
-fn layer_norm(
-    x: &Array2<f32>,
-    weight: &Array1<f32>,
-    bias: &Array1<f32>,
-    eps: f32,
-) -> Array2<f32> {
+fn layer_norm(x: &Array2<f32>, weight: &Array1<f32>, bias: &Array1<f32>, eps: f32) -> Array2<f32> {
     let n = x.ncols() as f32;
     let mut out = Array2::zeros(x.raw_dim());
 

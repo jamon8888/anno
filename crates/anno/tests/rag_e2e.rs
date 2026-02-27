@@ -34,7 +34,11 @@ fn assert_offsets_valid(text: &str, result: &anno::rag::RagCorefResult) {
             char_count
         );
         // Verify the original text at those char offsets matches the rewrite's `original` field.
-        let extracted: String = text.chars().skip(rw.start).take(rw.end - rw.start).collect();
+        let extracted: String = text
+            .chars()
+            .skip(rw.start)
+            .take(rw.end - rw.start)
+            .collect();
         assert_eq!(
             extracted, rw.original,
             "char slice [{},{}) = {:?}, expected {:?}",
@@ -117,8 +121,7 @@ fn cataphoric_pronoun_resolution() {
     let result = resolve_for_rag(text, &entities, None);
 
     assert_eq!(
-        result.text,
-        "When Maria arrived at the airport, Maria checked in immediately.",
+        result.text, "When Maria arrived at the airport, Maria checked in immediately.",
         "cataphoric 'she' should resolve to 'Maria'"
     );
     assert_eq!(result.rewrites.len(), 1);
@@ -177,10 +180,7 @@ fn resolver_produces_chains_with_canonical_ids() {
     let he_id = resolved[2].canonical_id.unwrap();
     let john2_id = resolved[3].canonical_id.unwrap();
 
-    assert_eq!(
-        john_id, john2_id,
-        "'John Smith' and 'John' should corefer"
-    );
+    assert_eq!(john_id, john2_id, "'John Smith' and 'John' should corefer");
     // "He" may or may not resolve to John depending on resolver config, but let's check
     // it has *some* canonical_id.
     assert!(he_id.get() > 0 || he_id.get() == 0, "He has a valid id");
@@ -306,9 +306,7 @@ fn multi_sentence_paragraph_becomes_self_contained() {
     // "Its" -> "The European Central Bank" (case-preserving: "Its" starts uppercase -> "The")
     // The replacement splices at char boundaries, so we just check the antecedent appears.
     assert!(
-        result
-            .text
-            .contains("The European Central Bank president")
+        result.text.contains("The European Central Bank president")
             || result
                 .text
                 .contains("The European Central Bank's president"),

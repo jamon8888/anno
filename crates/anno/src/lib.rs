@@ -50,12 +50,6 @@ pub mod error;
 #[cfg(any(feature = "analysis", feature = "eval"))]
 #[cfg_attr(docsrs, doc(cfg(any(feature = "analysis", feature = "eval"))))]
 pub mod eval;
-/// Coreference preprocessing for RAG: rewrite pronouns for self-contained chunks.
-///
-/// See [`rag::resolve_for_rag`] for the main entry point.
-#[cfg(any(feature = "analysis", feature = "eval"))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "analysis", feature = "eval"))))]
-pub mod rag;
 /// Entity feature extraction for downstream ML and analysis.
 pub mod features;
 /// Small, dependency-light heuristics (negation, quantifiers, etc.).
@@ -78,6 +72,12 @@ pub mod offset;
 pub mod pagerank;
 /// Preprocessing for mention detection.
 pub mod preprocess;
+/// Coreference preprocessing for RAG: rewrite pronouns for self-contained chunks.
+///
+/// See [`rag::resolve_for_rag`] for the main entry point.
+#[cfg(any(feature = "analysis", feature = "eval"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "analysis", feature = "eval"))))]
+pub mod rag;
 /// Entity salience and importance ranking.
 #[cfg(feature = "graph")]
 #[cfg_attr(docsrs, doc(cfg(feature = "graph")))]
@@ -414,10 +414,7 @@ impl AnyModel {
     #[must_use]
     pub fn with_relations(
         mut self,
-        f: impl Fn(&str, Option<&str>) -> Result<(Vec<Entity>, Vec<Relation>)>
-            + Send
-            + Sync
-            + 'static,
+        f: impl Fn(&str, Option<&str>) -> Result<(Vec<Entity>, Vec<Relation>)> + Send + Sync + 'static,
     ) -> Self {
         self.relation_extractor = Some(Box::new(f));
         self
@@ -1006,8 +1003,14 @@ mod any_model_tests {
     fn any_model_capabilities_default_no_dynamic_no_relations() {
         let m = base_any_model();
         let caps = m.capabilities();
-        assert!(!caps.dynamic_labels, "should not report dynamic_labels without closure");
-        assert!(!caps.relation_capable, "should not report relation_capable without closure");
+        assert!(
+            !caps.dynamic_labels,
+            "should not report dynamic_labels without closure"
+        );
+        assert!(
+            !caps.relation_capable,
+            "should not report relation_capable without closure"
+        );
     }
 
     #[test]
@@ -1016,11 +1019,15 @@ mod any_model_tests {
             Ok(labels
                 .iter()
                 .enumerate()
-                .map(|(i, &lbl)| Entity::new(lbl, EntityType::Other(lbl.to_string()), i, i + 1, 0.8))
+                .map(|(i, &lbl)| {
+                    Entity::new(lbl, EntityType::Other(lbl.to_string()), i, i + 1, 0.8)
+                })
                 .collect())
         });
         assert!(m.capabilities().dynamic_labels);
-        let ents = m.extract_with_labels("hello world", &["GREETING", "NOUN"], None).unwrap();
+        let ents = m
+            .extract_with_labels("hello world", &["GREETING", "NOUN"], None)
+            .unwrap();
         assert_eq!(ents.len(), 2);
         assert_eq!(ents[0].text, "GREETING");
         assert_eq!(ents[1].text, "NOUN");
@@ -1045,7 +1052,9 @@ mod any_model_tests {
             Ok((vec![head, tail], vec![rel]))
         });
         assert!(m.capabilities().relation_capable);
-        let (ents, rels) = m.extract_with_relations("Alice works at Acme Corp", None).unwrap();
+        let (ents, rels) = m
+            .extract_with_relations("Alice works at Acme Corp", None)
+            .unwrap();
         assert_eq!(ents.len(), 2);
         assert_eq!(rels.len(), 1);
         assert_eq!(rels[0].relation_type, "WORKS_AT");

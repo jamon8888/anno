@@ -563,9 +563,18 @@ fn is_reflexive_pronoun(text: &str) -> bool {
     let lower = text.to_lowercase();
     matches!(
         lower.as_str(),
-        "herself" | "himself" | "themselves" | "itself" | "themself"
-            | "xemself" | "hirself" | "zirself" | "zemself" | "emself"
-            | "faeself" | "faerself"
+        "herself"
+            | "himself"
+            | "themselves"
+            | "itself"
+            | "themself"
+            | "xemself"
+            | "hirself"
+            | "zirself"
+            | "zemself"
+            | "emself"
+            | "faeself"
+            | "faerself"
     )
 }
 
@@ -586,13 +595,45 @@ fn is_pronoun_for_language(text: &str, lang: Language) -> bool {
     match lang {
         Language::English => matches!(
             s,
-            "he" | "she" | "him" | "her" | "his" | "hers" | "himself" | "herself"
-                | "they" | "them" | "their" | "theirs" | "themselves" | "themself"
-                | "it" | "its" | "itself"
-                | "xe" | "xem" | "xyr" | "xyrs" | "xemself"
-                | "ze" | "hir" | "zir" | "hirs" | "zirs" | "hirself" | "zirself" | "zemself"
-                | "ey" | "em" | "eir" | "eirs" | "emself"
-                | "fae" | "faer" | "faers" | "faeself" | "faerself"
+            "he" | "she"
+                | "him"
+                | "her"
+                | "his"
+                | "hers"
+                | "himself"
+                | "herself"
+                | "they"
+                | "them"
+                | "their"
+                | "theirs"
+                | "themselves"
+                | "themself"
+                | "it"
+                | "its"
+                | "itself"
+                | "xe"
+                | "xem"
+                | "xyr"
+                | "xyrs"
+                | "xemself"
+                | "ze"
+                | "hir"
+                | "zir"
+                | "hirs"
+                | "zirs"
+                | "hirself"
+                | "zirself"
+                | "zemself"
+                | "ey"
+                | "em"
+                | "eir"
+                | "eirs"
+                | "emself"
+                | "fae"
+                | "faer"
+                | "faers"
+                | "faeself"
+                | "faerself"
         ),
         Language::French => matches!(
             s,
@@ -609,8 +650,17 @@ fn is_pronoun_for_language(text: &str, lang: Language) -> bool {
         // to_lowercase preserves accents, so this distinction works correctly.
         Language::Spanish => matches!(
             s,
-            "él" | "ella" | "ellos" | "ellas" | "le" | "les" | "lo" | "la" | "los"
-                | "las" | "se" | "sí"
+            "él" | "ella"
+                | "ellos"
+                | "ellas"
+                | "le"
+                | "les"
+                | "lo"
+                | "la"
+                | "los"
+                | "las"
+                | "se"
+                | "sí"
         ),
         Language::German => matches!(
             s,
@@ -688,10 +738,7 @@ mod tests {
             Entity::new("Mary", EntityType::Person, 20, 24, 0.9),
         ];
         let result = resolve_for_rag(text, &entities, None);
-        assert_eq!(
-            result.text,
-            "Before Mary arrived, Mary ordered food."
-        );
+        assert_eq!(result.text, "Before Mary arrived, Mary ordered food.");
         assert_eq!(result.rewrites.len(), 1);
         assert_eq!(result.rewrites[0].original, "she");
         assert_eq!(result.rewrites[0].replacement, "Mary");
@@ -761,10 +808,7 @@ mod tests {
             ..Default::default()
         };
         let result = resolve_for_rag(text, &entities, Some(config));
-        assert_eq!(
-            result.text,
-            "Pierre reviendra demain. Pierre est parti."
-        );
+        assert_eq!(result.text, "Pierre reviendra demain. Pierre est parti.");
         assert_eq!(result.rewrites.len(), 1);
     }
 
@@ -783,10 +827,7 @@ mod tests {
             ..Default::default()
         };
         let result = resolve_for_rag(text, &entities, Some(config));
-        assert_eq!(
-            result.text,
-            "Pierre est parti. Pierre reviendra demain."
-        );
+        assert_eq!(result.text, "Pierre est parti. Pierre reviendra demain.");
         assert_eq!(result.rewrites.len(), 1);
         assert_eq!(result.unresolved_count, 0);
     }
@@ -833,15 +874,22 @@ mod tests {
             Entity::new("Alice", EntityType::Person, 17, 22, 0.9),
         ];
         let result = resolve_for_rag(text, &entities, None);
-        assert_eq!(result.text, text, "extraposition 'it' should not be rewritten");
+        assert_eq!(
+            result.text, text,
+            "extraposition 'it' should not be rewritten"
+        );
     }
 
     #[test]
     fn test_pleonastic_it_turns_out() {
         let text = "It turns out the data was wrong.";
-        let entities = vec![
-            Entity::new("It", EntityType::Other("Abstract".into()), 0, 2, 0.7),
-        ];
+        let entities = vec![Entity::new(
+            "It",
+            EntityType::Other("Abstract".into()),
+            0,
+            2,
+            0.7,
+        )];
         let result = resolve_for_rag(text, &entities, None);
         assert_eq!(result.text, text);
     }
@@ -877,8 +925,7 @@ mod tests {
         ];
         let result = resolve_for_rag(text, &entities, None);
         assert_eq!(
-            result.text,
-            "Alice went to the store. Alice bought milk.",
+            result.text, "Alice went to the store. Alice bought milk.",
             "unsorted entities should still resolve correctly"
         );
         assert_eq!(result.rewrites.len(), 1);
@@ -892,10 +939,19 @@ mod tests {
         let herself_end = herself_start + "herself".chars().count();
         let entities = vec![
             Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
-            Entity::new("herself", EntityType::Person, herself_start, herself_end, 0.8),
+            Entity::new(
+                "herself",
+                EntityType::Person,
+                herself_start,
+                herself_end,
+                0.8,
+            ),
         ];
         let result = resolve_for_rag(text, &entities, None);
-        assert_eq!(result.text, text, "reflexive 'herself' should not be rewritten by default");
+        assert_eq!(
+            result.text, text,
+            "reflexive 'herself' should not be rewritten by default"
+        );
         assert!(result.rewrites.is_empty());
     }
 
@@ -906,7 +962,13 @@ mod tests {
         let herself_end = herself_start + "herself".chars().count();
         let entities = vec![
             Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
-            Entity::new("herself", EntityType::Person, herself_start, herself_end, 0.8),
+            Entity::new(
+                "herself",
+                EntityType::Person,
+                herself_start,
+                herself_end,
+                0.8,
+            ),
         ];
         let config = RagCorefConfig {
             rewrite_reflexives: true,
@@ -985,10 +1047,7 @@ mod tests {
             Entity::new("she", EntityType::Person, 24, 27, 0.8),
         ];
         let result = resolve_for_rag(text, &entities, None);
-        assert_eq!(
-            result.text,
-            "Alice arrived. Alice said Alice would go."
-        );
+        assert_eq!(result.text, "Alice arrived. Alice said Alice would go.");
         assert_eq!(result.rewrites.len(), 2);
     }
 
@@ -1049,10 +1108,7 @@ mod tests {
             ..Default::default()
         };
         let result = resolve_for_rag(text, &entities, Some(config));
-        assert_eq!(
-            result.text,
-            "Müller ging nach Hause. Müller war müde."
-        );
+        assert_eq!(result.text, "Müller ging nach Hause. Müller war müde.");
         assert_eq!(result.rewrites.len(), 1);
     }
 
@@ -1111,10 +1167,7 @@ mod tests {
             ..Default::default()
         };
         let result = resolve_for_rag(text, &entities, Some(config));
-        assert_eq!(
-            result.text,
-            "María compró pan. María fue al mercado."
-        );
+        assert_eq!(result.text, "María compró pan. María fue al mercado.");
         assert_eq!(result.rewrites.len(), 1);
     }
 
@@ -1135,10 +1188,7 @@ mod tests {
             ..Default::default()
         };
         let result = resolve_for_rag(text, &entities, Some(config));
-        assert_eq!(
-            result.text,
-            "María fue al mercado. María compró pan."
-        );
+        assert_eq!(result.text, "María fue al mercado. María compró pan.");
         assert_eq!(result.rewrites.len(), 1);
         assert_eq!(result.unresolved_count, 0);
     }
@@ -1293,10 +1343,7 @@ mod tests {
             ..Default::default()
         };
         let result = resolve_for_rag(text, &entities, Some(config));
-        assert_eq!(
-            result.text,
-            "Jean est parti tôt. Jean a fermé la porte."
-        );
+        assert_eq!(result.text, "Jean est parti tôt. Jean a fermé la porte.");
         assert_eq!(result.rewrites.len(), 1);
     }
 
@@ -1350,8 +1397,7 @@ mod tests {
         };
         let result = resolve_for_rag(text, &entities, Some(config));
         assert_eq!(
-            result.text,
-            "Acme announced layoffs. Acme upset employees.",
+            result.text, "Acme announced layoffs. Acme upset employees.",
             "demonstratives should be rewritten when enabled"
         );
         assert_eq!(result.rewrites.len(), 1);
@@ -1407,8 +1453,20 @@ mod tests {
         let it_end = it_start + "It".chars().count();
         let entities = vec![
             Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
-            Entity::new("car", EntityType::Other("Product".into()), car_start, car_end, 0.8),
-            Entity::new("It", EntityType::Other("Product".into()), it_start, it_end, 0.7),
+            Entity::new(
+                "car",
+                EntityType::Other("Product".into()),
+                car_start,
+                car_end,
+                0.8,
+            ),
+            Entity::new(
+                "It",
+                EntityType::Other("Product".into()),
+                it_start,
+                it_end,
+                0.7,
+            ),
         ];
         let result = resolve_for_rag(text, &entities, None);
         // "It" is sentence-initial (uppercase), so "car" gets capitalized to "Car".
@@ -1476,7 +1534,9 @@ mod tests {
         );
         // Verify no corruption at the boundary
         assert!(
-            !result.text.contains("He") || result.text.contains("Alice") || result.text.contains("Bob"),
+            !result.text.contains("He")
+                || result.text.contains("Alice")
+                || result.text.contains("Bob"),
             "adjacent rewrites should not corrupt each other, got: {}",
             result.text
         );
@@ -1500,7 +1560,10 @@ mod tests {
             result_forward.text, result_reversed.text,
             "reversed entity order should produce same output"
         );
-        assert_eq!(result_forward.rewrites.len(), result_reversed.rewrites.len());
+        assert_eq!(
+            result_forward.rewrites.len(),
+            result_reversed.rewrites.len()
+        );
     }
 
     #[test]
@@ -1597,7 +1660,12 @@ mod tests {
         for rw in result.rewrites.iter().rev() {
             let mut replacement: Vec<char> = rw.replacement.chars().collect();
             // Mimic the case adjustment from resolve_for_rag
-            if rw.original.chars().next().map_or(false, |c| c.is_uppercase()) {
+            if rw
+                .original
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_uppercase())
+            {
                 if let Some(first) = replacement.first_mut() {
                     *first = first.to_uppercase().next().unwrap_or(*first);
                 }
@@ -1914,10 +1982,7 @@ mod tests {
                 },
             ];
             let result = resolve_for_rag_neural(text, &clusters, None);
-            assert_eq!(
-                result.text,
-                "Alice met Bob. Alice greeted Bob warmly."
-            );
+            assert_eq!(result.text, "Alice met Bob. Alice greeted Bob warmly.");
             assert_eq!(result.rewrites.len(), 2);
         }
 

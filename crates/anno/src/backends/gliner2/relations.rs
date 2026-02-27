@@ -345,14 +345,20 @@ mod tests {
         let rels = get_likely_relations("PER", "ORG");
         assert!(!rels.is_empty());
         let labels: Vec<&str> = rels.iter().map(|(l, _)| *l).collect();
-        assert!(labels.contains(&"WORKS_FOR"), "expected WORKS_FOR in {labels:?}");
+        assert!(
+            labels.contains(&"WORKS_FOR"),
+            "expected WORKS_FOR in {labels:?}"
+        );
     }
 
     #[test]
     fn org_location_returns_located_in() {
         let rels = get_likely_relations("ORG", "LOC");
         let labels: Vec<&str> = rels.iter().map(|(l, _)| *l).collect();
-        assert!(labels.contains(&"LOCATED_IN"), "expected LOCATED_IN in {labels:?}");
+        assert!(
+            labels.contains(&"LOCATED_IN"),
+            "expected LOCATED_IN in {labels:?}"
+        );
     }
 
     #[test]
@@ -365,7 +371,10 @@ mod tests {
     #[test]
     fn unknown_pair_returns_empty() {
         let rels = get_likely_relations("WIDGET", "GADGET");
-        assert!(rels.is_empty(), "unknown type pair should return no relations");
+        assert!(
+            rels.is_empty(),
+            "unknown type pair should return no relations"
+        );
     }
 
     #[test]

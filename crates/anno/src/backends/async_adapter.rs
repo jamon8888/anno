@@ -42,7 +42,6 @@
 //! }
 //! ```
 
-
 use crate::{Entity, Error, Model, Result};
 use std::sync::Arc;
 
@@ -394,7 +393,9 @@ mod tests {
 
         let texts = vec!["a", "b", "c", "d", "e", "f"];
         // Concurrency limit of 2
-        let results = batch_extract_limited(&async_model, &texts, 2).await.unwrap();
+        let results = batch_extract_limited(&async_model, &texts, 2)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 6);
         for result in &results {
             assert_eq!(result.len(), 1);

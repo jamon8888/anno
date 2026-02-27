@@ -834,7 +834,11 @@ mod tests {
         let text = "a b c";
         let words: Vec<&str> = text.split_whitespace().collect();
         let (s, e) = word_span_to_char_offsets(text, &words, 0, 10);
-        assert_eq!((s, e), (0, 0), "end_word >= words.len() should return (0,0)");
+        assert_eq!(
+            (s, e),
+            (0, 0),
+            "end_word >= words.len() should return (0,0)"
+        );
     }
 
     #[test]
@@ -888,14 +892,8 @@ mod tests {
         assert!(matches!(map_entity_type("Person"), EntityType::Person));
         assert!(matches!(map_entity_type("PERSON"), EntityType::Person));
         assert!(matches!(map_entity_type("PER"), EntityType::Person));
-        assert!(matches!(
-            map_entity_type("location"),
-            EntityType::Location
-        ));
-        assert!(matches!(
-            map_entity_type("Location"),
-            EntityType::Location
-        ));
+        assert!(matches!(map_entity_type("location"), EntityType::Location));
+        assert!(matches!(map_entity_type("Location"), EntityType::Location));
         assert!(matches!(map_entity_type("LOC"), EntityType::Location));
         // GPE maps to Custom (geopolitical entity), not Location
         assert!(matches!(map_entity_type("GPE"), EntityType::Custom { .. }));

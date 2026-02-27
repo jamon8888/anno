@@ -195,8 +195,7 @@ fn test_org_suffix_extraction() {
     assert!(
         entities
             .iter()
-            .any(|e| e.text == "Acme Corporation"
-                && e.entity_type == EntityType::Organization),
+            .any(|e| e.text == "Acme Corporation" && e.entity_type == EntityType::Organization),
         "expected 'Acme Corporation' as Organization, got: {entities:?}"
     );
 }
@@ -257,7 +256,10 @@ fn test_date_extraction_formats() {
         .filter(|e| e.entity_type == EntityType::Date)
         .map(|e| e.text.as_str())
         .collect();
-    assert!(dates.contains(&"2024-01-15"), "missing ISO date in {dates:?}");
+    assert!(
+        dates.contains(&"2024-01-15"),
+        "missing ISO date in {dates:?}"
+    );
     assert!(dates.contains(&"Q1"), "missing quarter date in {dates:?}");
     assert!(
         dates.contains(&"12/25/2024"),

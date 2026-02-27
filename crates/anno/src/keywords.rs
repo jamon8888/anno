@@ -584,10 +584,10 @@ impl RakeExtractor {
             if self.stopwords.contains(&word_lower) {
                 // Stopword ends current phrase
                 if current_phrase.len() >= self.min_phrase_length
-                        && current_phrase.len() <= self.max_phrase_length
-                    {
-                        candidates.push(current_phrase.clone());
-                    }
+                    && current_phrase.len() <= self.max_phrase_length
+                {
+                    candidates.push(current_phrase.clone());
+                }
                 current_phrase.clear();
             } else {
                 current_phrase.push(word_lower);
@@ -1209,7 +1209,8 @@ mod tests {
     fn test_rake_extract_candidates_stopword_splitting() {
         // "is" and "of" are stopwords; candidates should be the phrases between them.
         let rake = RakeExtractor::new();
-        let candidates = rake.extract_candidates("machine learning is a subset of artificial intelligence");
+        let candidates =
+            rake.extract_candidates("machine learning is a subset of artificial intelligence");
         let phrases: Vec<String> = candidates.iter().map(|p| p.join(" ")).collect();
         assert!(
             phrases.contains(&"machine learning".to_string()),
@@ -1238,7 +1239,8 @@ mod tests {
             min_phrase_length: 2,
             ..rake
         };
-        let candidates = rake.extract_candidates("machine learning is a subset of artificial intelligence");
+        let candidates =
+            rake.extract_candidates("machine learning is a subset of artificial intelligence");
         let phrases: Vec<String> = candidates.iter().map(|p| p.join(" ")).collect();
         // "subset" is a single word -- should be filtered out
         assert!(
@@ -1294,9 +1296,8 @@ mod tests {
     #[test]
     fn test_yake_word_features_nonempty() {
         let yake = YakeExtractor::new();
-        let features = yake.compute_word_features(
-            "Rust programming language. Rust is fast and safe.",
-        );
+        let features =
+            yake.compute_word_features("Rust programming language. Rust is fast and safe.");
         // "rust" should have a feature score (appears twice, once sentence-initial uppercase)
         assert!(
             features.contains_key("rust"),
@@ -1325,7 +1326,9 @@ mod tests {
         let all_keywords: Vec<&str> = keywords.iter().map(|(k, _)| k.as_str()).collect();
         // At minimum "graph" or "algorithms" should be extracted.
         assert!(
-            all_keywords.iter().any(|k| k.contains("graph") || k.contains("algorithm")),
+            all_keywords
+                .iter()
+                .any(|k| k.contains("graph") || k.contains("algorithm")),
             "expected graph-related keyword in {all_keywords:?}"
         );
         // Verify scores are sorted descending.
@@ -1415,10 +1418,22 @@ mod tests {
         let textrank = TextRankExtractor::new();
         let tfidf = TfIdfExtractor::new();
 
-        assert!(rake.extract(text, 5).is_empty(), "RAKE should return empty for all-stopword text");
-        assert!(yake.extract(text, 5).is_empty(), "YAKE should return empty for all-stopword text");
-        assert!(textrank.extract(text, 5).is_empty(), "TextRank should return empty for all-stopword text");
-        assert!(tfidf.extract(text, 5).is_empty(), "TF-IDF should return empty for all-stopword text");
+        assert!(
+            rake.extract(text, 5).is_empty(),
+            "RAKE should return empty for all-stopword text"
+        );
+        assert!(
+            yake.extract(text, 5).is_empty(),
+            "YAKE should return empty for all-stopword text"
+        );
+        assert!(
+            textrank.extract(text, 5).is_empty(),
+            "TextRank should return empty for all-stopword text"
+        );
+        assert!(
+            tfidf.extract(text, 5).is_empty(),
+            "TF-IDF should return empty for all-stopword text"
+        );
     }
 
     #[test]

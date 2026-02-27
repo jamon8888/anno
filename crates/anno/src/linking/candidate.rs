@@ -1028,11 +1028,7 @@ mod tests {
             (CandidateSource::Freebase, "m.0jcx", "fb:m.0jcx"),
             (CandidateSource::UMLS, "C001", "umls:C001"),
             (CandidateSource::GeoNames, "123", "gn:123"),
-            (
-                CandidateSource::Custom("mydb".into()),
-                "42",
-                "mydb:42",
-            ),
+            (CandidateSource::Custom("mydb".into()), "42", "mydb:42"),
         ];
         for (source, id, expected) in cases {
             let c = Candidate::new(id, source.clone(), "label");

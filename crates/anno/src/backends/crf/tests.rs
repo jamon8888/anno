@@ -302,9 +302,17 @@ fn test_viterbi_bio_transition_constraint() {
 
     assert_eq!(labels.len(), 3);
     // "John" should be B-PER (not I-PER, since previous is O)
-    assert_eq!(labels[1], "B-PER", "Expected B-PER after O, not {}", labels[1]);
+    assert_eq!(
+        labels[1], "B-PER",
+        "Expected B-PER after O, not {}",
+        labels[1]
+    );
     // "Smith" should be I-PER (continuing the entity)
-    assert_eq!(labels[2], "I-PER", "Expected I-PER continuation, not {}", labels[2]);
+    assert_eq!(
+        labels[2], "I-PER",
+        "Expected I-PER continuation, not {}",
+        labels[2]
+    );
 }
 
 /// Cross-type I- transitions are blocked: B-PER -> I-ORG should not happen.
@@ -346,8 +354,16 @@ fn test_score_label_default_o_bias() {
         b_per_score
     );
     // O gets +0.5 bias, B-PER gets 0.0
-    assert!((o_score - 0.5).abs() < 1e-9, "O score should be 0.5, got {}", o_score);
-    assert!((b_per_score - 0.0).abs() < 1e-9, "B-PER score should be 0.0, got {}", b_per_score);
+    assert!(
+        (o_score - 0.5).abs() < 1e-9,
+        "O score should be 0.5, got {}",
+        o_score
+    );
+    assert!(
+        (b_per_score - 0.0).abs() < 1e-9,
+        "B-PER score should be 0.0, got {}",
+        b_per_score
+    );
 }
 
 /// score_label accumulates weights from both "feature:label" and "feature" keys.
@@ -455,7 +471,12 @@ fn test_labels_to_entities_simple() {
 
     let entities = ner.labels_to_entities(text, &tokens, &labels);
 
-    assert_eq!(entities.len(), 2, "Expected 2 entities, got {}", entities.len());
+    assert_eq!(
+        entities.len(),
+        2,
+        "Expected 2 entities, got {}",
+        entities.len()
+    );
 
     // First entity: "John Smith" (Person)
     assert_eq!(entities[0].text, "John Smith");
@@ -476,11 +497,7 @@ fn test_labels_to_entities_trailing_entity() {
     let ner = minimal_crf(HashMap::new());
     let text = "lives in Paris";
     let tokens: Vec<&str> = text.split_whitespace().collect();
-    let labels = vec![
-        "O".to_string(),
-        "O".to_string(),
-        "B-LOC".to_string(),
-    ];
+    let labels = vec!["O".to_string(), "O".to_string(), "B-LOC".to_string()];
 
     let entities = ner.labels_to_entities(text, &tokens, &labels);
     assert_eq!(entities.len(), 1);
@@ -497,7 +514,10 @@ fn test_labels_to_entities_all_outside() {
     let labels = vec!["O".to_string(), "O".to_string(), "O".to_string()];
 
     let entities = ner.labels_to_entities(text, &tokens, &labels);
-    assert!(entities.is_empty(), "All-O labels should produce no entities");
+    assert!(
+        entities.is_empty(),
+        "All-O labels should produce no entities"
+    );
 }
 
 /// word_shape compresses repeated characters: "AAAA" -> "X", "aaaa" -> "x".
@@ -567,13 +587,7 @@ fn test_default_weights_bio_constraints() {
     for (b, i) in [("B-PER", "I-PER"), ("B-ORG", "I-ORG"), ("B-LOC", "I-LOC")] {
         let key = format!("trans:{}->{}", b, i);
         let val = w.get(&key).copied().unwrap_or(0.0);
-        assert!(
-            val > 0.0,
-            "{} -> {} should be positive, got {}",
-            b,
-            i,
-            val
-        );
+        assert!(val > 0.0, "{} -> {} should be positive, got {}", b, i, val);
     }
 
     // Cross-type B -> I should be strongly negative

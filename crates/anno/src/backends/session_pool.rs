@@ -904,9 +904,13 @@ mod tests {
         assert!(span_mask[0], "first span should be valid");
         assert_eq!(span_idx[0], 0); // start = 0
         assert_eq!(span_idx[1], 0); // end = 0
-        // Remaining spans should be masked out
+                                    // Remaining spans should be masked out
         for i in 1..MAX_SPAN_WIDTH {
-            assert!(!span_mask[i], "span {} should be invalid for 1-word input", i);
+            assert!(
+                !span_mask[i],
+                "span {} should be invalid for 1-word input",
+                i
+            );
         }
     }
 
@@ -956,7 +960,10 @@ mod tests {
     #[test]
     fn test_map_type_organization() {
         use anno_core::EntityType;
-        assert_eq!(GLiNERPool::map_type("organization"), EntityType::Organization);
+        assert_eq!(
+            GLiNERPool::map_type("organization"),
+            EntityType::Organization
+        );
         assert_eq!(GLiNERPool::map_type("org"), EntityType::Organization);
         assert_eq!(GLiNERPool::map_type("ORG"), EntityType::Organization);
     }
@@ -996,9 +1003,18 @@ mod tests {
     #[test]
     fn test_map_type_other_fallback() {
         use anno_core::EntityType;
-        assert_eq!(GLiNERPool::map_type("product"), EntityType::Other("product".to_string()));
-        assert_eq!(GLiNERPool::map_type("event"), EntityType::Other("event".to_string()));
-        assert_eq!(GLiNERPool::map_type("VEHICLE"), EntityType::Other("vehicle".to_string()));
+        assert_eq!(
+            GLiNERPool::map_type("product"),
+            EntityType::Other("product".to_string())
+        );
+        assert_eq!(
+            GLiNERPool::map_type("event"),
+            EntityType::Other("event".to_string())
+        );
+        assert_eq!(
+            GLiNERPool::map_type("VEHICLE"),
+            EntityType::Other("vehicle".to_string())
+        );
     }
 
     // Integration tests require model download

@@ -604,10 +604,10 @@ mod tests {
     #[test]
     fn byte_at_char_clamping() {
         let map = super::char_to_byte_map("abc"); // [0,1,2,3]
-        // Within bounds.
+                                                  // Within bounds.
         assert_eq!(super::byte_at_char(&map, 0), 0);
         assert_eq!(super::byte_at_char(&map, 3), 3); // sentinel
-        // Out of bounds clamps to last entry.
+                                                     // Out of bounds clamps to last entry.
         assert_eq!(super::byte_at_char(&map, 100), 3);
         // Empty map returns 0.
         assert_eq!(super::byte_at_char(&[], 5), 0);
@@ -698,7 +698,11 @@ mod tests {
         };
         let chunker = RuleBasedSemanticChunker::new(config);
         let chunks = chunker.chunk(&text, None).unwrap();
-        assert!(chunks.len() >= 2, "expected at least 2 chunks, got {}", chunks.len());
+        assert!(
+            chunks.len() >= 2,
+            "expected at least 2 chunks, got {}",
+            chunks.len()
+        );
         // Second chunk should start before the second paragraph due to overlap.
         assert!(
             chunks[1].start < p1.chars().count() + 2, // +2 for the two newlines

@@ -129,8 +129,7 @@ fn rag_cataphoric_reference() {
 
     // With cataphora enabled, "she" should be resolved to "Dr. Kim"
     assert!(
-        result.text.contains("Dr. Kim left")
-            || result.text.contains("Dr. Kim locked"),
+        result.text.contains("Dr. Kim left") || result.text.contains("Dr. Kim locked"),
         "Cataphoric pronoun not resolved: '{}'",
         result.text
     );
@@ -200,11 +199,9 @@ fn coref_resolver_groups_coreferent_entities() {
     );
 
     // Find the Person chain (should contain "John Smith" and likely "Smith" and "he")
-    let person_chain = chains.iter().find(|c| {
-        c.mentions
-            .iter()
-            .any(|m| m.text == "John Smith")
-    });
+    let person_chain = chains
+        .iter()
+        .find(|c| c.mentions.iter().any(|m| m.text == "John Smith"));
     assert!(
         person_chain.is_some(),
         "Should have a chain containing 'John Smith'"
@@ -222,7 +219,11 @@ fn coref_resolver_groups_coreferent_entities() {
     assert!(
         has_smith,
         "Chain should group 'Smith' with 'John Smith': {:?}",
-        person_chain.mentions.iter().map(|m| &m.text).collect::<Vec<_>>()
+        person_chain
+            .mentions
+            .iter()
+            .map(|m| &m.text)
+            .collect::<Vec<_>>()
     );
 }
 
@@ -240,7 +241,8 @@ fn coref_canonical_mention_prefers_proper_nouns() {
 
     assert!(canonical.is_some(), "Chain should have a canonical mention");
     assert_eq!(
-        canonical.unwrap().text, "John Smith",
+        canonical.unwrap().text,
+        "John Smith",
         "Canonical mention should be the proper noun, not pronoun/nominal"
     );
 }
@@ -259,7 +261,8 @@ fn coref_canonical_mention_falls_back_to_longest() {
 
     assert!(canonical.is_some());
     assert_eq!(
-        canonical.unwrap().text, "the president of the company",
+        canonical.unwrap().text,
+        "the president of the company",
         "Without mention types, should pick longest mention"
     );
 }
@@ -289,12 +292,12 @@ fn coref_resolver_with_custom_config() {
     // With singletons disabled, separate entities should still form chains
     // (each unique entity forms at least one chain unless excluded)
     // Without fuzzy matching, "Alice" and "Bob" should be in separate chains
-    let alice_chain = chains.iter().find(|c| {
-        c.mentions.iter().any(|m| m.text == "Alice")
-    });
-    let bob_chain = chains.iter().find(|c| {
-        c.mentions.iter().any(|m| m.text == "Bob")
-    });
+    let alice_chain = chains
+        .iter()
+        .find(|c| c.mentions.iter().any(|m| m.text == "Alice"));
+    let bob_chain = chains
+        .iter()
+        .find(|c| c.mentions.iter().any(|m| m.text == "Bob"));
 
     // They should not be merged into the same chain
     if let (Some(ac), Some(_bc)) = (alice_chain, bob_chain) {

@@ -702,11 +702,9 @@ mod tests {
     fn test_check_nil_large_margin_detection() {
         // Two candidates with very close scores and low top score -> LargeMargin
         let detector = NilDetector::new().with_score_threshold(0.1);
-        let mut c1 =
-            super::super::candidate::Candidate::new("Q1", CandidateSource::Wikidata, "A");
+        let mut c1 = super::super::candidate::Candidate::new("Q1", CandidateSource::Wikidata, "A");
         c1.score = 0.45; // Below 0.6 threshold for margin check
-        let mut c2 =
-            super::super::candidate::Candidate::new("Q2", CandidateSource::Wikidata, "B");
+        let mut c2 = super::super::candidate::Candidate::new("Q2", CandidateSource::Wikidata, "B");
         c2.score = 0.40; // margin = 0.05 < 0.1
 
         let result = detector.check_nil("Test Entity", &[c1, c2], None);

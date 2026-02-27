@@ -238,7 +238,11 @@ impl E2ECoref {
         let mut mentions = self.score_mentions(candidate_spans);
 
         // Step 3: Filter top-k mentions
-        mentions.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        mentions.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         let max_mentions = ((tokens.len() as f64) * self.config.top_spans_ratio) as usize;
         mentions.truncate(max_mentions.max(1));
 
@@ -327,9 +331,9 @@ impl E2ECoref {
         // Pronouns are strong mention candidates
         let lower = text.to_lowercase();
         let pronouns = [
-            "he", "she", "it", "they", "him", "her", "them", "his", "hers", "its", "their",
-            "who", "whom", "which", "that", "this", "these", "those",
-            "i", "me", "my", "mine", "we", "us", "our", "ours", "you", "your", "yours",
+            "he", "she", "it", "they", "him", "her", "them", "his", "hers", "its", "their", "who",
+            "whom", "which", "that", "this", "these", "those", "i", "me", "my", "mine", "we", "us",
+            "our", "ours", "you", "your", "yours",
         ];
         if pronouns.contains(&lower.as_str()) {
             score += 0.8;
@@ -340,9 +344,11 @@ impl E2ECoref {
             score += 0.5;
 
             // Multi-word proper nouns are stronger
-            if text.contains(' ') && text.split_whitespace().all(|w| {
-                w.chars().next().is_some_and(|c| c.is_uppercase())
-            }) {
+            if text.contains(' ')
+                && text
+                    .split_whitespace()
+                    .all(|w| w.chars().next().is_some_and(|c| c.is_uppercase()))
+            {
                 score += 0.2;
             }
         }
@@ -465,7 +471,12 @@ impl E2ECoref {
         // If mention is a pronoun, check gender/number agreement
         if is_pronoun(&m_lower) {
             // Assume proper nouns can be antecedents for pronouns
-            if antecedent.text.chars().next().is_some_and(|c| c.is_uppercase()) {
+            if antecedent
+                .text
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_uppercase())
+            {
                 score += 0.4;
             }
         }
@@ -564,7 +575,9 @@ mod tests {
     fn test_cluster_transitivity() {
         let coref = E2ECoref::new();
         // Text designed to create a chain: John -> he -> him
-        let clusters = coref.resolve("John entered. He smiled. Mary greeted him.").unwrap();
+        let clusters = coref
+            .resolve("John entered. He smiled. Mary greeted him.")
+            .unwrap();
 
         // Check that mentions are grouped into clusters
         for cluster in &clusters {
@@ -596,7 +609,10 @@ mod tests {
     fn test_whitespace_only_input() {
         let coref = E2ECoref::new();
         let clusters = coref.resolve("   \t\n  ").unwrap();
-        assert!(clusters.is_empty(), "Whitespace-only input should yield no clusters");
+        assert!(
+            clusters.is_empty(),
+            "Whitespace-only input should yield no clusters"
+        );
     }
 
     #[test]
@@ -614,7 +630,10 @@ mod tests {
         // to form a cluster. A lone pronoun should produce zero clusters.
         let coref = E2ECoref::new();
         let clusters = coref.resolve("He").unwrap();
-        assert!(clusters.is_empty(), "Lone pronoun has no antecedent to link to");
+        assert!(
+            clusters.is_empty(),
+            "Lone pronoun has no antecedent to link to"
+        );
     }
 
     #[test]
@@ -656,7 +675,10 @@ mod tests {
     fn test_heuristic_empty_text_score() {
         let coref = E2ECoref::new();
         let score = coref.heuristic_mention_score("");
-        assert!(score < 0.0, "Empty text should get negative score, got {score}");
+        assert!(
+            score < 0.0,
+            "Empty text should get negative score, got {score}"
+        );
     }
 
     #[test]
@@ -725,7 +747,11 @@ mod tests {
 
         // With 4 tokens and max_span_width=3:
         // width 1: 4 spans, width 2: 3 spans, width 3: 2 spans = 9 total
-        assert_eq!(spans.len(), 9, "Expected 9 spans for 4 tokens with max_span_width=3");
+        assert_eq!(
+            spans.len(),
+            9,
+            "Expected 9 spans for 4 tokens with max_span_width=3"
+        );
 
         // All spans should have start < end (token indices).
         for span in &spans {
@@ -755,7 +781,10 @@ mod tests {
     fn test_link_mentions_empty() {
         let coref = E2ECoref::new();
         let clusters = coref.link_mentions(&[]);
-        assert!(clusters.is_empty(), "Empty mentions should yield no clusters");
+        assert!(
+            clusters.is_empty(),
+            "Empty mentions should yield no clusters"
+        );
     }
 
     #[test]
@@ -804,4 +833,3 @@ mod tests {
         }
     }
 }
-

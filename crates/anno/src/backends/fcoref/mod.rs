@@ -205,8 +205,7 @@ impl FCoref {
 
     /// Load from HuggingFace with custom config.
     pub fn from_pretrained_with_config(model_id: &str, mut config: FCorefConfig) -> Result<Self> {
-        let api = Api::new()
-            .map_err(|e| Error::Retrieval(format!("HuggingFace API: {}", e)))?;
+        let api = Api::new().map_err(|e| Error::Retrieval(format!("HuggingFace API: {}", e)))?;
         let repo = api.model(model_id.to_string());
 
         // Helper to download a file, returning Ok(None) if not found
@@ -407,10 +406,7 @@ impl FCoref {
 
                 let old_ante = antecedents.get(old_i).copied().unwrap_or(old_i);
                 // Map to new index
-                index_map
-                    .get(old_ante)
-                    .and_then(|&x| x)
-                    .unwrap_or(new_i) // null if antecedent was filtered out
+                index_map.get(old_ante).and_then(|&x| x).unwrap_or(new_i) // null if antecedent was filtered out
             })
             .collect();
 
@@ -418,11 +414,7 @@ impl FCoref {
     }
 
     /// Run the DistilRoBERTa encoder and return hidden states.
-    fn run_encoder(
-        &self,
-        input_ids: &[i64],
-        attention_mask: &[i64],
-    ) -> Result<Array2<f32>> {
+    fn run_encoder(&self, input_ids: &[i64], attention_mask: &[i64]) -> Result<Array2<f32>> {
         let seq_len = input_ids.len();
 
         let ids_arr = Array2::<i64>::from_shape_vec((1, seq_len), input_ids.to_vec())
@@ -525,8 +517,7 @@ mod tests {
             "Expected at least one coreference cluster"
         );
         let has_john_he = clusters.iter().any(|c| {
-            c.mentions.iter().any(|m| m.contains("John"))
-                && c.mentions.iter().any(|m| m == "He")
+            c.mentions.iter().any(|m| m.contains("John")) && c.mentions.iter().any(|m| m == "He")
         });
         assert!(has_john_he, "Expected John-He cluster, got: {:?}", clusters);
     }

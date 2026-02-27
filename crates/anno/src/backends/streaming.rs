@@ -705,7 +705,10 @@ mod tests {
         let text_chars: Vec<char> = text.chars().collect();
         for e in &entities {
             let span: String = text_chars[e.start..e.end].iter().collect();
-            assert_eq!(span, e.text, "offset-adjusted text should match entity text");
+            assert_eq!(
+                span, e.text,
+                "offset-adjusted text should match entity text"
+            );
         }
     }
 
@@ -744,7 +747,10 @@ mod tests {
         let extractor = StreamingExtractor::with_model(&model);
 
         let entities: Vec<Entity> = extractor.extract("   \n\t  ").collect();
-        assert!(entities.is_empty(), "whitespace-only text should yield no entities");
+        assert!(
+            entities.is_empty(),
+            "whitespace-only text should yield no entities"
+        );
     }
 
     #[test]
@@ -847,13 +853,22 @@ mod tests {
         ];
         let result = dedup.process(entities, "");
         assert_eq!(result.len(), 1);
-        assert!(result[0].confidence > 0.8, "should keep the higher-confidence entity");
+        assert!(
+            result[0].confidence > 0.8,
+            "should keep the higher-confidence entity"
+        );
     }
 
     #[test]
     fn test_normalize_text_trims_and_lowercases() {
         let normalizer = NormalizeText::new(true);
-        let entities = vec![Entity::new("  John Smith  ", EntityType::Person, 0, 10, 0.9)];
+        let entities = vec![Entity::new(
+            "  John Smith  ",
+            EntityType::Person,
+            0,
+            10,
+            0.9,
+        )];
         let result = normalizer.process(entities, "");
         assert_eq!(result[0].text, "john smith");
     }
@@ -861,7 +876,13 @@ mod tests {
     #[test]
     fn test_normalize_text_no_lowercase() {
         let normalizer = NormalizeText::new(false);
-        let entities = vec![Entity::new("  GOOGLE  ", EntityType::Organization, 0, 6, 0.9)];
+        let entities = vec![Entity::new(
+            "  GOOGLE  ",
+            EntityType::Organization,
+            0,
+            6,
+            0.9,
+        )];
         let result = normalizer.process(entities, "");
         assert_eq!(result[0].text, "GOOGLE");
     }

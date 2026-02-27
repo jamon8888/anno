@@ -1152,7 +1152,9 @@ mod tests {
     #[test]
     fn viterbi_path_all_valid_states() {
         let hmm = tiny_hmm();
-        let words: Vec<&str> = "The quick brown fox jumps over the lazy dog".split_whitespace().collect();
+        let words: Vec<&str> = "The quick brown fox jumps over the lazy dog"
+            .split_whitespace()
+            .collect();
         let path = hmm.viterbi(&words);
         assert_eq!(path.len(), words.len());
         let n_states = hmm.states.len();
@@ -1347,10 +1349,8 @@ mod tests {
     #[test]
     fn train_updates_emission_for_seen_word() {
         let mut hmm = tiny_hmm();
-        let sentences: Vec<(&[&str], &[&str])> = vec![(
-            &["Acme", "sells", "widgets"][..],
-            &["B-ORG", "O", "O"][..],
-        )];
+        let sentences: Vec<(&[&str], &[&str])> =
+            vec![(&["Acme", "sells", "widgets"][..], &["B-ORG", "O", "O"][..])];
         hmm.train(&sentences);
 
         let b_org = hmm.state_to_idx["B-ORG"];

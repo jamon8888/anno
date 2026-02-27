@@ -676,25 +676,48 @@ mod tests {
     #[test]
     fn test_negation_substring_chinese() {
         // "没有" (negation) immediately before entity.
-        assert!(is_negated_with_substrings("他没有钱", 3, lexicons::ZH_NEGATION_CUES));
+        assert!(is_negated_with_substrings(
+            "他没有钱",
+            3,
+            lexicons::ZH_NEGATION_CUES
+        ));
         // No negation cue present.
-        assert!(!is_negated_with_substrings("他有钱", 2, lexicons::ZH_NEGATION_CUES));
+        assert!(!is_negated_with_substrings(
+            "他有钱",
+            2,
+            lexicons::ZH_NEGATION_CUES
+        ));
     }
 
     #[test]
     fn test_quantifier_all_four_classes_en() {
         // Verify each quantifier class returns the correct variant.
-        assert_eq!(detect_quantifier_en("all dogs", 4), Some(Quantifier::Universal));
-        assert_eq!(detect_quantifier_en("a dog", 2), Some(Quantifier::Existential));
+        assert_eq!(
+            detect_quantifier_en("all dogs", 4),
+            Some(Quantifier::Universal)
+        );
+        assert_eq!(
+            detect_quantifier_en("a dog", 2),
+            Some(Quantifier::Existential)
+        );
         assert_eq!(detect_quantifier_en("no dogs", 3), Some(Quantifier::None));
-        assert_eq!(detect_quantifier_en("these dogs", 6), Some(Quantifier::Definite));
+        assert_eq!(
+            detect_quantifier_en("these dogs", 6),
+            Some(Quantifier::Definite)
+        );
     }
 
     #[test]
     fn test_quantifier_case_insensitive() {
         // Cue matching lowercases the last word, so "EVERY" should still match Universal.
-        assert_eq!(detect_quantifier_en("EVERY student", 6), Some(Quantifier::Universal));
-        assert_eq!(detect_quantifier_en("The cat", 4), Some(Quantifier::Definite));
+        assert_eq!(
+            detect_quantifier_en("EVERY student", 6),
+            Some(Quantifier::Universal)
+        );
+        assert_eq!(
+            detect_quantifier_en("The cat", 4),
+            Some(Quantifier::Definite)
+        );
     }
 
     #[test]
@@ -707,7 +730,14 @@ mod tests {
     fn test_quantifier_substring_japanese() {
         // Japanese uses substring matching. "全ての" contains "全て" (universal).
         assert_eq!(
-            detect_quantifier_with_substrings("全ての学生", 3, lexicons::JA_UNIVERSAL, &[], &[], &[]),
+            detect_quantifier_with_substrings(
+                "全ての学生",
+                3,
+                lexicons::JA_UNIVERSAL,
+                &[],
+                &[],
+                &[]
+            ),
             Some(Quantifier::Universal)
         );
         // "この" (definite) before entity.
@@ -745,6 +775,9 @@ mod tests {
     #[test]
     fn test_quantifier_lang_other_returns_none() {
         // Language::Other should always return None.
-        assert_eq!(detect_quantifier_lang("every dog", 6, Language::Other), None);
+        assert_eq!(
+            detect_quantifier_lang("every dog", 6, Language::Other),
+            None
+        );
     }
 }

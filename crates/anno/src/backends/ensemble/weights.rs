@@ -211,7 +211,10 @@ mod tests {
     #[test]
     fn backend_weight_default_is_neutral() {
         let w = BackendWeight::default();
-        assert!((w.overall - 0.5).abs() < f64::EPSILON, "default overall should be 0.5");
+        assert!(
+            (w.overall - 0.5).abs() < f64::EPSILON,
+            "default overall should be 0.5"
+        );
         assert!(w.per_type.is_none(), "default per_type should be None");
     }
 
@@ -262,9 +265,20 @@ mod tests {
     #[test]
     fn default_weights_contain_all_known_backends() {
         let w = default_backend_weights();
-        let expected = ["regex", "gliner", "GLiNER-ONNX", "gliner-candle", "bert-ner-onnx", "heuristic"];
+        let expected = [
+            "regex",
+            "gliner",
+            "GLiNER-ONNX",
+            "gliner-candle",
+            "bert-ner-onnx",
+            "heuristic",
+        ];
         for name in expected {
-            assert!(w.contains_key(name), "missing default weight for backend '{}'", name);
+            assert!(
+                w.contains_key(name),
+                "missing default weight for backend '{}'",
+                name
+            );
         }
     }
 
@@ -336,7 +350,10 @@ mod tests {
         // a=[0,10), b=[4,14): overlap=[4,10)=6, smaller=10, ratio=0.6 -> true
         let a = SpanKey { start: 0, end: 10 };
         let b = SpanKey { start: 4, end: 14 };
-        assert!(a.overlaps(&b), "60% overlap should be above the >0.5 threshold");
+        assert!(
+            a.overlaps(&b),
+            "60% overlap should be above the >0.5 threshold"
+        );
         assert!(b.overlaps(&a), "overlap should be symmetric");
     }
 

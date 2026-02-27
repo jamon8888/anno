@@ -108,7 +108,8 @@ pub trait CorefBackend: Send + Sync {
 #[cfg(feature = "onnx")]
 impl CorefBackend for super::fcoref::FCoref {
     fn resolve(&self, text: &str) -> Result<Vec<CorefCluster>> {
-        self.resolve(text).map(|v| v.into_iter().map(CorefCluster::from).collect())
+        self.resolve(text)
+            .map(|v| v.into_iter().map(CorefCluster::from).collect())
     }
 
     fn name(&self) -> &'static str {
@@ -124,7 +125,8 @@ impl CorefBackend for super::fcoref::FCoref {
 #[cfg(feature = "onnx")]
 impl CorefBackend for super::coref_t5::T5Coref {
     fn resolve(&self, text: &str) -> Result<Vec<CorefCluster>> {
-        self.resolve(text).map(|v| v.into_iter().map(CorefCluster::from).collect())
+        self.resolve(text)
+            .map(|v| v.into_iter().map(CorefCluster::from).collect())
     }
 
     fn name(&self) -> &'static str {
@@ -145,8 +147,7 @@ impl CorefBackend for super::mention_ranking::MentionRankingCoref {
             .into_iter()
             .enumerate()
             .map(|(i, mc)| {
-                let mentions: Vec<String> =
-                    mc.mentions.iter().map(|m| m.text.clone()).collect();
+                let mentions: Vec<String> = mc.mentions.iter().map(|m| m.text.clone()).collect();
                 let spans: Vec<(usize, usize)> =
                     mc.mentions.iter().map(|m| (m.start, m.end)).collect();
                 // Canonical: longest mention text (same heuristic as other backends).
@@ -236,7 +237,10 @@ mod tests {
     fn trait_object_empty_input() {
         let backend: Box<dyn CorefBackend> = Box::new(StubCoref { available: true });
         let clusters = backend.resolve("").unwrap();
-        assert!(clusters.is_empty(), "empty input should produce no clusters");
+        assert!(
+            clusters.is_empty(),
+            "empty input should produce no clusters"
+        );
     }
 
     #[test]

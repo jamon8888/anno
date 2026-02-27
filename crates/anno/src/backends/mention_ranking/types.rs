@@ -708,13 +708,19 @@ mod tests {
 
     #[test]
     fn clustering_strategy_default_is_left_to_right() {
-        assert_eq!(ClusteringStrategy::default(), ClusteringStrategy::LeftToRight);
+        assert_eq!(
+            ClusteringStrategy::default(),
+            ClusteringStrategy::LeftToRight
+        );
     }
 
     #[test]
     fn clustering_strategy_eq() {
         assert_eq!(ClusteringStrategy::EasyFirst, ClusteringStrategy::EasyFirst);
-        assert_ne!(ClusteringStrategy::LeftToRight, ClusteringStrategy::EasyFirst);
+        assert_ne!(
+            ClusteringStrategy::LeftToRight,
+            ClusteringStrategy::EasyFirst
+        );
     }
 
     // =========================================================================
@@ -868,10 +874,7 @@ mod tests {
     fn canonical_mention_falls_back_to_first() {
         let cluster = MentionCluster {
             id: 1,
-            mentions: vec![
-                make_pronoun("she", 10, 13),
-                make_pronoun("her", 20, 23),
-            ],
+            mentions: vec![make_pronoun("she", 10, 13), make_pronoun("her", 20, 23)],
         };
         let canon = cluster.canonical_mention().unwrap();
         assert_eq!(canon.text, "she");

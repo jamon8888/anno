@@ -34,7 +34,9 @@ pub struct CorefConfig {
     /// Similarity threshold for name matching (0.0--1.0).
     ///
     /// Default: `0.7`.
-    #[deprecated(note = "Not currently used by any matching logic. Will be wired into names_match() in a future version.")]
+    #[deprecated(
+        note = "Not currently used by any matching logic. Will be wired into names_match() in a future version."
+    )]
     pub similarity_threshold: f64,
 
     /// Maximum number of preceding entities to search when resolving a pronoun (sieve 1).
@@ -526,10 +528,7 @@ impl SimpleCorefResolver {
                 return true;
             }
             // For very short names (< 3 chars), only match at word boundaries.
-            if longer
-                .split_whitespace()
-                .any(|word| word == shorter)
-            {
+            if longer.split_whitespace().any(|word| word == shorter) {
                 return true;
             }
         }
@@ -559,31 +558,28 @@ fn gender_from_name(text: &str) -> Option<Gender> {
     // in US/UK census data. This is intentionally small and conservative.
     match lower.as_str() {
         // Masculine
-        "james" | "john" | "robert" | "michael" | "david" | "william" | "richard"
-        | "joseph" | "thomas" | "charles" | "christopher" | "daniel" | "matthew"
-        | "anthony" | "mark" | "donald" | "steven" | "paul" | "andrew" | "joshua"
-        | "kenneth" | "kevin" | "brian" | "george" | "timothy" | "ronald" | "edward"
-        | "jason" | "jeffrey" | "ryan" | "jacob" | "gary" | "nicholas" | "eric"
-        | "jonathan" | "stephen" | "larry" | "justin" | "scott" | "brandon"
-        | "benjamin" | "samuel" | "raymond" | "gregory" | "frank" | "alexander"
-        | "patrick" | "jack" | "dennis" | "peter" | "bob" | "jim" | "tom" | "mike"
-        | "bill" | "joe" | "dan" | "matt" | "steve" | "chris" | "nick" | "ben"
-        | "sam" | "jake" | "adam" | "henry" | "nathan" | "philip" | "carl"
-        | "ahmed" | "ahmad" | "mohammed" | "muhammad" | "omar" | "ali" | "hassan"
-        | "hussein" | "khalid" | "ibrahim" => Some(Gender::Masculine),
+        "james" | "john" | "robert" | "michael" | "david" | "william" | "richard" | "joseph"
+        | "thomas" | "charles" | "christopher" | "daniel" | "matthew" | "anthony" | "mark"
+        | "donald" | "steven" | "paul" | "andrew" | "joshua" | "kenneth" | "kevin" | "brian"
+        | "george" | "timothy" | "ronald" | "edward" | "jason" | "jeffrey" | "ryan" | "jacob"
+        | "gary" | "nicholas" | "eric" | "jonathan" | "stephen" | "larry" | "justin" | "scott"
+        | "brandon" | "benjamin" | "samuel" | "raymond" | "gregory" | "frank" | "alexander"
+        | "patrick" | "jack" | "dennis" | "peter" | "bob" | "jim" | "tom" | "mike" | "bill"
+        | "joe" | "dan" | "matt" | "steve" | "chris" | "nick" | "ben" | "sam" | "jake" | "adam"
+        | "henry" | "nathan" | "philip" | "carl" | "ahmed" | "ahmad" | "mohammed" | "muhammad"
+        | "omar" | "ali" | "hassan" | "hussein" | "khalid" | "ibrahim" => Some(Gender::Masculine),
         // Feminine
-        "mary" | "patricia" | "jennifer" | "linda" | "barbara" | "elizabeth"
-        | "susan" | "jessica" | "sarah" | "karen" | "lisa" | "nancy" | "betty"
-        | "margaret" | "sandra" | "ashley" | "dorothy" | "kimberly" | "emily"
-        | "donna" | "michelle" | "carol" | "amanda" | "melissa" | "deborah"
-        | "stephanie" | "rebecca" | "sharon" | "laura" | "cynthia" | "kathleen"
-        | "amy" | "angela" | "shirley" | "anna" | "brenda" | "pamela" | "emma"
-        | "nicole" | "helen" | "samantha" | "katherine" | "christine" | "debra"
-        | "rachel" | "carolyn" | "janet" | "catherine" | "maria" | "heather"
-        | "diane" | "ruth" | "julie" | "olivia" | "joyce" | "virginia" | "victoria"
-        | "kelly" | "lauren" | "christina" | "joan" | "evelyn" | "judith"
-        | "alice" | "ann" | "anne" | "jane" | "jean" | "marie" | "rose" | "grace"
-        | "fatima" | "aisha" | "maryam" | "nour" | "layla" | "hana" => Some(Gender::Feminine),
+        "mary" | "patricia" | "jennifer" | "linda" | "barbara" | "elizabeth" | "susan"
+        | "jessica" | "sarah" | "karen" | "lisa" | "nancy" | "betty" | "margaret" | "sandra"
+        | "ashley" | "dorothy" | "kimberly" | "emily" | "donna" | "michelle" | "carol"
+        | "amanda" | "melissa" | "deborah" | "stephanie" | "rebecca" | "sharon" | "laura"
+        | "cynthia" | "kathleen" | "amy" | "angela" | "shirley" | "anna" | "brenda" | "pamela"
+        | "emma" | "nicole" | "helen" | "samantha" | "katherine" | "christine" | "debra"
+        | "rachel" | "carolyn" | "janet" | "catherine" | "maria" | "heather" | "diane" | "ruth"
+        | "julie" | "olivia" | "joyce" | "virginia" | "victoria" | "kelly" | "lauren"
+        | "christina" | "joan" | "evelyn" | "judith" | "alice" | "ann" | "anne" | "jane"
+        | "jean" | "marie" | "rose" | "grace" | "fatima" | "aisha" | "maryam" | "nour"
+        | "layla" | "hana" => Some(Gender::Feminine),
         _ => None,
     }
 }
@@ -1105,7 +1101,10 @@ mod tests {
         let entities = vec![person("Alice", 0, 5)];
         let resolved = resolver.resolve(&entities);
         assert_eq!(resolved.len(), 1);
-        assert!(resolved[0].canonical_id.is_some(), "singleton should get a cluster id");
+        assert!(
+            resolved[0].canonical_id.is_some(),
+            "singleton should get a cluster id"
+        );
     }
 
     #[test]
@@ -1134,10 +1133,7 @@ mod tests {
             fuzzy_matching: true,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("John Smith", 0, 10),
-            person("Smith", 20, 25),
-        ];
+        let entities = vec![person("John Smith", 0, 10), person("Smith", 20, 25)];
         let resolved = resolver.resolve(&entities);
         let id0 = resolved[0].canonical_id.unwrap();
         let id1 = resolved[1].canonical_id.unwrap();
@@ -1151,10 +1147,7 @@ mod tests {
             proper_containment: false,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("John Smith", 0, 10),
-            person("Smith", 20, 25),
-        ];
+        let entities = vec![person("John Smith", 0, 10), person("Smith", 20, 25)];
         let resolved = resolver.resolve(&entities);
         let id0 = resolved[0].canonical_id.unwrap();
         let id1 = resolved[1].canonical_id.unwrap();
@@ -1165,10 +1158,7 @@ mod tests {
     fn type_mismatch_prevents_clustering() {
         let resolver = SimpleCorefResolver::default();
         // Same text, different entity types.
-        let entities = vec![
-            person("Apple", 0, 5),
-            org("Apple", 10, 15),
-        ];
+        let entities = vec![person("Apple", 0, 5), org("Apple", 10, 15)];
         let resolved = resolver.resolve(&entities);
         let id0 = resolved[0].canonical_id.unwrap();
         let id1 = resolved[1].canonical_id.unwrap();
@@ -1194,7 +1184,10 @@ mod tests {
         // skipping "Bob" (masculine, incompatible).
         let she_id = resolved[2].canonical_id.unwrap();
         let alice_id = resolved[0].canonical_id.unwrap();
-        assert_eq!(she_id, alice_id, "pronoun should resolve to gender-compatible entity");
+        assert_eq!(
+            she_id, alice_id,
+            "pronoun should resolve to gender-compatible entity"
+        );
     }
 
     #[test]
@@ -1209,21 +1202,24 @@ mod tests {
         // "it" is compatible with Organization but not Person.
         let it_id = resolved[2].canonical_id.unwrap();
         let acme_id = resolved[1].canonical_id.unwrap();
-        assert_eq!(it_id, acme_id, "\"it\" should resolve to the org, not the person");
+        assert_eq!(
+            it_id, acme_id,
+            "\"it\" should resolve to the org, not the person"
+        );
     }
 
     #[test]
     fn pronoun_it_compatible_with_person() {
         // "it/its" can be used as personal pronouns (e.g., some genderqueer individuals).
         let resolver = SimpleCorefResolver::default();
-        let entities = vec![
-            person("Alice", 0, 5),
-            person("it", 10, 12),
-        ];
+        let entities = vec![person("Alice", 0, 5), person("it", 10, 12)];
         let resolved = resolver.resolve(&entities);
         let alice_id = resolved[0].canonical_id.unwrap();
         let it_id = resolved[1].canonical_id.unwrap();
-        assert_eq!(alice_id, it_id, "\"it\" should resolve to Person antecedent");
+        assert_eq!(
+            alice_id, it_id,
+            "\"it\" should resolve to Person antecedent"
+        );
     }
 
     // ---- resolve_to_chains ----
@@ -1251,10 +1247,7 @@ mod tests {
     #[test]
     fn coref_evaluation_perfect_prediction() {
         let gold = vec![
-            CorefChain::new(vec![
-                Mention::new("John", 0, 4),
-                Mention::new("he", 10, 12),
-            ]),
+            CorefChain::new(vec![Mention::new("John", 0, 4), Mention::new("he", 10, 12)]),
             CorefChain::new(vec![
                 Mention::new("IBM", 20, 23),
                 Mention::new("the company", 30, 41),
@@ -1304,16 +1297,19 @@ mod tests {
         ])];
         // Predicted: splits into two clusters: {A, B} and {C}.
         let predicted = vec![
-            CorefChain::new(vec![
-                Mention::new("John", 0, 4),
-                Mention::new("he", 10, 12),
-            ]),
+            CorefChain::new(vec![Mention::new("John", 0, 4), Mention::new("he", 10, 12)]),
             CorefChain::new(vec![Mention::new("him", 20, 23)]),
         ];
         let eval = CorefEvaluation::compute(&predicted, &gold);
         // Should be imperfect but nonzero.
-        assert!(eval.conll_f1 > 0.0, "partial overlap should yield nonzero F1");
-        assert!(eval.conll_f1 < 1.0, "partial overlap should not yield perfect F1");
+        assert!(
+            eval.conll_f1 > 0.0,
+            "partial overlap should yield nonzero F1"
+        );
+        assert!(
+            eval.conll_f1 < 1.0,
+            "partial overlap should not yield perfect F1"
+        );
     }
 
     // ---- Individual metric functions ----
@@ -1398,7 +1394,11 @@ mod tests {
             Mention::new("B", 5, 6),
         ])];
         let eval = CorefEvaluation::compute(&gold, &gold);
-        assert_eq!(eval.all_f1_scores().len(), 6, "should report 6 metric F1 values");
+        assert_eq!(
+            eval.all_f1_scores().len(),
+            6,
+            "should report 6 metric F1 values"
+        );
     }
 
     #[test]
@@ -1412,10 +1412,7 @@ mod tests {
                 Mention::new("B", 5, 6),
                 Mention::new("C", 10, 11),
             ]),
-            CorefChain::new(vec![
-                Mention::new("X", 20, 21),
-                Mention::new("Y", 25, 26),
-            ]),
+            CorefChain::new(vec![Mention::new("X", 20, 21), Mention::new("Y", 25, 26)]),
         ];
         let eval = CorefEvaluation::compute(&gold, &gold);
         assert!(
@@ -1447,10 +1444,7 @@ mod tests {
         };
         let resolver = BoxCorefResolver::new(config);
 
-        let entities = vec![
-            person("Alice", 0, 5),
-            person("she", 100, 103),
-        ];
+        let entities = vec![person("Alice", 0, 5), person("she", 100, 103)];
         // Identical boxes should have coreference_score = 1.0.
         let box_a = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
         let box_b = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
@@ -1471,10 +1465,7 @@ mod tests {
         };
         let resolver = BoxCorefResolver::new(config);
 
-        let entities = vec![
-            person("Alice", 0, 5),
-            person("Bob", 100, 103),
-        ];
+        let entities = vec![person("Alice", 0, 5), person("Bob", 100, 103)];
         // Very different vectors => low coreference score.
         let box_a = BoxEmbedding::from_vector(&[0.0, 0.0, 0.0], 0.01);
         let box_b = BoxEmbedding::from_vector(&[100.0, 100.0, 100.0], 0.01);
@@ -1496,10 +1487,7 @@ mod tests {
         let resolver = BoxCorefResolver::new(config);
 
         // Same box coordinates but different entity types.
-        let entities = vec![
-            person("Apple", 0, 5),
-            org("Apple", 100, 105),
-        ];
+        let entities = vec![person("Apple", 0, 5), org("Apple", 100, 105)];
         let box_a = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
         let box_b = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
         let boxes = vec![box_a, box_b];
@@ -1507,7 +1495,10 @@ mod tests {
         let resolved = resolver.resolve_with_boxes(&entities, &boxes);
         let id0 = resolved[0].canonical_id.unwrap();
         let id1 = resolved[1].canonical_id.unwrap();
-        assert_ne!(id0, id1, "different entity types must not merge even with identical boxes");
+        assert_ne!(
+            id0, id1,
+            "different entity types must not merge even with identical boxes"
+        );
     }
 
     // ---- vectors_to_boxes ----
@@ -1580,19 +1571,13 @@ mod tests {
         // "it/its" should be compatible with Person entities (used as personal pronouns
         // by some genderqueer individuals, e.g., "Alex uses it/its pronouns").
         let resolver = SimpleCorefResolver::default();
-        let entities = vec![
-            person("Alex", 0, 4),
-            person("it", 6, 8),
-        ];
+        let entities = vec![person("Alex", 0, 4), person("it", 6, 8)];
         let chains = resolver.resolve_to_chains(&entities);
         // Alex and "it" should be in the same chain.
         let alex_chain = chains
             .iter()
             .find(|c| c.mentions.iter().any(|m| m.text == "Alex"));
-        assert!(
-            alex_chain.is_some(),
-            "Alex should appear in a chain"
-        );
+        assert!(alex_chain.is_some(), "Alex should appear in a chain");
         let alex_chain = alex_chain.unwrap();
         assert!(
             alex_chain.mentions.iter().any(|m| m.text == "it"),
@@ -1728,10 +1713,7 @@ mod tests {
             fuzzy_matching: true,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("political", 0, 9),
-            person("Li", 20, 22),
-        ];
+        let entities = vec![person("political", 0, 9), person("Li", 20, 22)];
         let resolved = resolver.resolve(&entities);
         let id0 = resolved[0].canonical_id.unwrap();
         let id1 = resolved[1].canonical_id.unwrap();
@@ -1748,10 +1730,7 @@ mod tests {
             fuzzy_matching: true,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("Barack Obama", 0, 12),
-            person("Obama", 20, 25),
-        ];
+        let entities = vec![person("Barack Obama", 0, 12), person("Obama", 20, 25)];
         let resolved = resolver.resolve(&entities);
         assert_eq!(
             resolved[0].canonical_id.unwrap(),
@@ -1767,10 +1746,7 @@ mod tests {
             fuzzy_matching: true,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("gallery", 0, 7),
-            person("Al", 20, 22),
-        ];
+        let entities = vec![person("gallery", 0, 7), person("Al", 20, 22)];
         let resolved = resolver.resolve(&entities);
         assert_ne!(
             resolved[0].canonical_id.unwrap(),
@@ -1786,10 +1762,7 @@ mod tests {
             fuzzy_matching: true,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("Li Wei", 0, 6),
-            person("Li", 20, 22),
-        ];
+        let entities = vec![person("Li Wei", 0, 6), person("Li", 20, 22)];
         let resolved = resolver.resolve(&entities);
         assert_eq!(
             resolved[0].canonical_id.unwrap(),
@@ -1805,10 +1778,7 @@ mod tests {
             fuzzy_matching: true,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("John Smith", 0, 10),
-            person("Smith", 20, 25),
-        ];
+        let entities = vec![person("John Smith", 0, 10), person("Smith", 20, 25)];
         let resolved = resolver.resolve(&entities);
         assert_eq!(
             resolved[0].canonical_id.unwrap(),
@@ -1881,10 +1851,7 @@ mod tests {
             ..Default::default()
         };
         let resolver = SimpleCorefResolver::new(config);
-        let entities = vec![
-            org("United Nations Organization", 0, 26),
-            org("UN", 30, 32),
-        ];
+        let entities = vec![org("United Nations Organization", 0, 26), org("UN", 30, 32)];
         let resolved = resolver.resolve(&entities);
         assert_ne!(
             resolved[0].canonical_id.unwrap(),
@@ -1897,10 +1864,7 @@ mod tests {
     fn acronym_un_matches() {
         // "UN" (2 letters) matches "United Nations" (2 words).
         let resolver = SimpleCorefResolver::default();
-        let entities = vec![
-            org("United Nations", 0, 14),
-            org("UN", 20, 22),
-        ];
+        let entities = vec![org("United Nations", 0, 14), org("UN", 20, 22)];
         let resolved = resolver.resolve(&entities);
         assert_eq!(
             resolved[0].canonical_id.unwrap(),
@@ -1939,10 +1903,7 @@ mod tests {
             proper_containment: false,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("Obama", 0, 5),
-            person("Barack Obama", 20, 32),
-        ];
+        let entities = vec![person("Obama", 0, 5), person("Barack Obama", 20, 32)];
         let resolved = resolver.resolve(&entities);
         assert_ne!(
             resolved[0].canonical_id.unwrap(),
@@ -2021,10 +1982,7 @@ mod tests {
             relaxed_head_match: false,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("Barack Obama", 0, 12),
-            person("Obama", 20, 25),
-        ];
+        let entities = vec![person("Barack Obama", 0, 12), person("Obama", 20, 25)];
         let resolved = resolver.resolve(&entities);
         assert_eq!(
             resolved[0].canonical_id.unwrap(),
@@ -2041,10 +1999,7 @@ mod tests {
             relaxed_head_match: false,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            org("United Nations", 0, 14),
-            org("Nation", 20, 26),
-        ];
+        let entities = vec![org("United Nations", 0, 14), org("Nation", 20, 26)];
         let resolved = resolver.resolve(&entities);
         assert_ne!(
             resolved[0].canonical_id.unwrap(),
@@ -2060,10 +2015,7 @@ mod tests {
             relaxed_head_match: false,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("Barack Obama", 0, 12),
-            org("Obama", 20, 25),
-        ];
+        let entities = vec![person("Barack Obama", 0, 12), org("Obama", 20, 25)];
         let resolved = resolver.resolve(&entities);
         assert_ne!(
             resolved[0].canonical_id.unwrap(),
@@ -2080,10 +2032,7 @@ mod tests {
             relaxed_head_match: false,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("Barack Obama", 0, 12),
-            person("Obama", 20, 25),
-        ];
+        let entities = vec![person("Barack Obama", 0, 12), person("Obama", 20, 25)];
         let resolved = resolver.resolve(&entities);
         assert_ne!(
             resolved[0].canonical_id.unwrap(),
@@ -2100,10 +2049,7 @@ mod tests {
             relaxed_head_match: false,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            loc("New York City", 0, 13),
-            loc("New York", 20, 28),
-        ];
+        let entities = vec![loc("New York City", 0, 13), loc("New York", 20, 28)];
         let resolved = resolver.resolve(&entities);
         assert_eq!(
             resolved[0].canonical_id.unwrap(),
@@ -2118,10 +2064,7 @@ mod tests {
             fuzzy_matching: true,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("alice", 0, 5),
-            person("Alice", 20, 25),
-        ];
+        let entities = vec![person("alice", 0, 5), person("Alice", 20, 25)];
         let resolved = resolver.resolve(&entities);
         assert_eq!(
             resolved[0].canonical_id.unwrap(),
@@ -2156,10 +2099,7 @@ mod tests {
         // Known gap: "John is a doctor. The doctor left." -- predicate nominal
         // coreference requires understanding copular constructions.
         let resolver = SimpleCorefResolver::default();
-        let entities = vec![
-            person("John", 0, 4),
-            person("The doctor", 22, 32),
-        ];
+        let entities = vec![person("John", 0, 4), person("The doctor", 22, 32)];
         let resolved = resolver.resolve(&entities);
         assert_ne!(
             resolved[0].canonical_id.unwrap(),
@@ -2291,10 +2231,7 @@ mod tests {
             proper_containment: false,
             ..CorefConfig::default()
         });
-        let entities = vec![
-            person("John Smith", 0, 10),
-            person("Smith", 20, 25),
-        ];
+        let entities = vec![person("John Smith", 0, 10), person("Smith", 20, 25)];
         let resolved = resolver.resolve(&entities);
         assert_ne!(
             resolved[0].canonical_id.unwrap(),
@@ -2378,9 +2315,9 @@ mod tests {
 
         fn arb_entity() -> impl Strategy<Value = Entity> {
             (
-                "[a-zA-Z ]{1,20}",   // text
+                "[a-zA-Z ]{1,20}", // text
                 arb_entity_type(),
-                0..1000usize,         // start
+                0..1000usize, // start
             )
                 .prop_map(|(text, entity_type, start)| {
                     let end = start + text.len();

@@ -475,7 +475,12 @@ impl CrfNER {
     /// - `-1:word.lower={word}` - Previous word features
     /// - `+1:word.lower={word}` - Next word features
     /// - `BOS` / `EOS` - Beginning/end of sentence markers
-    pub(super) fn extract_features(&self, tokens: &[&str], pos: usize, _prev_label: &str) -> Vec<String> {
+    pub(super) fn extract_features(
+        &self,
+        tokens: &[&str],
+        pos: usize,
+        _prev_label: &str,
+    ) -> Vec<String> {
         let mut features = Vec::with_capacity(20);
         let word = tokens[pos];
 

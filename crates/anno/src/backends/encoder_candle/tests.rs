@@ -49,8 +49,13 @@ fn test_deberta_v3_large_config() {
     assert!(!config.use_geglu);
     assert!(config.use_pre_norm);
     // Shared vocab and eps with base
-    assert_eq!(config.vocab_size, EncoderConfig::deberta_v3_base().vocab_size);
-    assert!((config.layer_norm_eps - EncoderConfig::deberta_v3_base().layer_norm_eps).abs() < 1e-15);
+    assert_eq!(
+        config.vocab_size,
+        EncoderConfig::deberta_v3_base().vocab_size
+    );
+    assert!(
+        (config.layer_norm_eps - EncoderConfig::deberta_v3_base().layer_norm_eps).abs() < 1e-15
+    );
 }
 
 #[test]
@@ -191,7 +196,12 @@ fn test_geglu_various_sizes() {
     for dim in [4, 16, 64, 256] {
         let x = Tensor::randn(0f32, 1., (1, dim), &device).unwrap();
         let result = super::implementations::candle_impl::geglu(&x).unwrap();
-        assert_eq!(result.dims(), &[1, dim / 2], "GeGLU should halve dim={}", dim);
+        assert_eq!(
+            result.dims(),
+            &[1, dim / 2],
+            "GeGLU should halve dim={}",
+            dim
+        );
     }
 
     // Batch dimension preserved
@@ -203,8 +213,8 @@ fn test_geglu_various_sizes() {
 #[cfg(feature = "candle")]
 #[test]
 fn test_rope_cache_shape() {
-    use candle_core::Device;
     use super::implementations::candle_impl::RotaryEmbedding;
+    use candle_core::Device;
 
     let head_dim = 64;
     let max_seq_len = 128;

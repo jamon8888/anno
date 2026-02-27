@@ -458,10 +458,7 @@ fn test_single_capitalized_mid_sentence_defaults_person() {
         .unwrap();
 
     let val = entities.iter().find(|e| e.text == "Valentina");
-    assert!(
-        val.is_some(),
-        "Should detect 'Valentina': {entities:?}"
-    );
+    assert!(val.is_some(), "Should detect 'Valentina': {entities:?}");
     assert!(
         matches!(val.unwrap().entity_type, EntityType::Person),
         "Single capitalized mid-sentence should be PER, got {:?}",
@@ -483,14 +480,8 @@ fn test_and_separates_entities() {
         !texts.iter().any(|t| t.contains("and")),
         "'and' should separate entities, not join them: {texts:?}"
     );
-    assert!(
-        texts.contains(&"Alice"),
-        "Should detect Alice: {texts:?}"
-    );
-    assert!(
-        texts.contains(&"Bob"),
-        "Should detect Bob: {texts:?}"
-    );
+    assert!(texts.contains(&"Alice"), "Should detect Alice: {texts:?}");
+    assert!(texts.contains(&"Bob"), "Should detect Bob: {texts:?}");
 }
 
 /// German preposition "aus" triggers location context.

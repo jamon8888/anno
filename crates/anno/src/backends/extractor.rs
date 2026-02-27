@@ -541,17 +541,26 @@ mod tests {
 
         // supported_types should include pattern types from RegexNER
         let types = ext.supported_types();
-        assert!(!types.is_empty(), "pattern backend should report supported types");
+        assert!(
+            !types.is_empty(),
+            "pattern backend should report supported types"
+        );
     }
 
     #[test]
     fn test_description_per_backend_type() {
         // Verify each variant produces a distinct description via Model trait
         let cases = [
-            (BackendType::GLiNER, "GLiNER zero-shot NER (ONNX/Candle backends)"),
+            (
+                BackendType::GLiNER,
+                "GLiNER zero-shot NER (ONNX/Candle backends)",
+            ),
             (BackendType::BertOnnx, "BERT NER via ONNX Runtime"),
             (BackendType::Candle, "BERT NER via Candle (Rust-native)"),
-            (BackendType::Pattern, "Regex-based NER (structured entities only)"),
+            (
+                BackendType::Pattern,
+                "Regex-based NER (structured entities only)",
+            ),
         ];
         for (bt, expected) in cases {
             let ext = NERExtractor::new(None, bt);
@@ -604,7 +613,9 @@ mod tests {
         let text = "$42.00";
         let entities = ext.extract(text, None).unwrap();
         assert!(
-            entities.iter().any(|e| matches!(e.entity_type, EntityType::Money)),
+            entities
+                .iter()
+                .any(|e| matches!(e.entity_type, EntityType::Money)),
             "pattern fallback should detect money"
         );
     }
