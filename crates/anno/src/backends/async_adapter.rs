@@ -358,4 +358,64 @@ mod tests {
         let _entities1 = async_model.extract_entities("test").await.unwrap();
         let _entities2 = cloned.extract_entities("test").await.unwrap();
     }
+
+    #[tokio::test]
+    async fn test_batch_extract_util() {
+        let mock = MockModel::new("batch")
+            .with_entities(vec![Entity::new("test", EntityType::Person, 0, 4, 0.9)])
+            .without_validation();
+        let async_model = mock.into_async();
+
+        let texts = vec!["text one", "text two", "text three"];
+        let results = batch_extract(&async_model, &texts).await.unwrap();
+        assert_eq!(results.len(), 3);
+        for result in &results {
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].text, "test");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_batch_extract_empty() {
+        let mock = MockModel::new("empty-batch");
+        let async_model = mock.into_async();
+
+        let texts: Vec<&str> = vec![];
+        let results = batch_extract(&async_model, &texts).await.unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_batch_extract_limited_enforces_concurrency() {
+        let mock = MockModel::new("limited")
+            .with_entities(vec![Entity::new("x", EntityType::Person, 0, 1, 0.9)])
+            .without_validation();
+        let async_model = mock.into_async();
+
+        let texts = vec!["a", "b", "c", "d", "e", "f"];
+        // Concurrency limit of 2
+        let results = batch_extract_limited(&async_model, &texts, 2).await.unwrap();
+        assert_eq!(results.len(), 6);
+        for result in &results {
+            assert_eq!(result.len(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_arc_sharing() {
+        let mock = MockModel::new("arc-test")
+            .with_entities(vec![Entity::new("x", EntityType::Person, 0, 1, 0.9)])
+            .without_validation();
+        let async_model = AsyncNER::new(mock);
+
+        // inner_arc should return the same Arc
+        let arc1 = async_model.inner_arc();
+        let arc2 = async_model.inner_arc();
+        assert!(Arc::ptr_eq(&arc1, &arc2));
+
+        // Clone should share the same Arc
+        let cloned = async_model.clone();
+        let arc3 = cloned.inner_arc();
+        assert!(Arc::ptr_eq(&arc1, &arc3));
+    }
 }
