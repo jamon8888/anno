@@ -529,7 +529,6 @@ pub mod stopwords {
 pub struct RakeExtractor {
     stopwords: HashSet<String>,
     min_word_length: usize,
-    #[allow(dead_code)] // Future configurability
     min_phrase_length: usize,
     max_phrase_length: usize,
 }
@@ -584,9 +583,11 @@ impl RakeExtractor {
 
             if self.stopwords.contains(&word_lower) {
                 // Stopword ends current phrase
-                if !current_phrase.is_empty() && current_phrase.len() <= self.max_phrase_length {
-                    candidates.push(current_phrase.clone());
-                }
+                if current_phrase.len() >= self.min_phrase_length
+                        && current_phrase.len() <= self.max_phrase_length
+                    {
+                        candidates.push(current_phrase.clone());
+                    }
                 current_phrase.clear();
             } else {
                 current_phrase.push(word_lower);
@@ -594,7 +595,9 @@ impl RakeExtractor {
         }
 
         // Don't forget the last phrase
-        if !current_phrase.is_empty() && current_phrase.len() <= self.max_phrase_length {
+        if current_phrase.len() >= self.min_phrase_length
+            && current_phrase.len() <= self.max_phrase_length
+        {
             candidates.push(current_phrase);
         }
 
@@ -679,7 +682,6 @@ impl KeywordExtractor for RakeExtractor {
 #[derive(Debug, Clone)]
 pub struct YakeExtractor {
     stopwords: HashSet<String>,
-    #[allow(dead_code)] // Future configurability
     window_size: usize,
     n_gram_max: usize,
     #[allow(dead_code)] // Future configurability

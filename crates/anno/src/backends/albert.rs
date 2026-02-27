@@ -38,7 +38,6 @@ pub struct ALBERTNER {
     #[cfg(feature = "onnx")]
     inner: BertNEROnnx,
     /// Model name for debugging/logging (e.g., "albert-base-v2")
-    #[allow(dead_code)] // Reserved for future logging/debugging
     model_name: String,
 }
 
@@ -63,6 +62,11 @@ impl ALBERTNER {
                 "ALBERT NER requires 'onnx' feature".to_string(),
             ))
         }
+    }
+
+    /// Return the HuggingFace model ID used to construct this model.
+    pub fn model_id(&self) -> &str {
+        &self.model_name
     }
 }
 
