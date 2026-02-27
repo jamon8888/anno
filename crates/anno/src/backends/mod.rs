@@ -244,6 +244,10 @@ pub mod warmup;
 #[cfg(feature = "onnx")]
 pub mod coref_t5;
 
+// F-coref: fast neural coreference (ONNX encoder + safetensors scorer heads)
+#[cfg(feature = "onnx")]
+pub mod fcoref;
+
 // Graph-based coreference (iterative refinement)
 pub mod graph_coref;
 
@@ -331,6 +335,10 @@ pub use session_pool::{GLiNERPool, PoolConfig, SessionPool};
 // T5 coreference
 #[cfg(feature = "onnx")]
 pub use coref_t5::{CorefCluster, T5Coref, T5CorefConfig};
+
+// F-coref neural coreference
+#[cfg(feature = "onnx")]
+pub use fcoref::{FCoref, FCorefConfig};
 
 // Config re-exports (for quantization control)
 #[cfg(feature = "onnx")]

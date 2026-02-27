@@ -91,7 +91,7 @@ eval = ["analysis", "dep:ureq"]
 graph = []
 gramdex = ["dep:gramdex"]
 schema = ["dep:schemars", "anno-core/schema"]
-onnx = ["dep:ort", "dep:ndarray", "dep:tokenizers", "dep:hf-hub", "dep:lru"]
+onnx = ["dep:ort", "dep:ndarray", "dep:tokenizers", "dep:hf-hub", "dep:lru", "dep:safetensors"]
 candle = [
   "dep:candle-core",
   "dep:candle-nn",

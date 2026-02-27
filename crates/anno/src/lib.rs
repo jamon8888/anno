@@ -640,6 +640,10 @@ pub use backends::inference::*;
 #[cfg_attr(docsrs, doc(cfg(feature = "onnx")))]
 pub use backends::{BertNEROnnx, GLiNEROnnx};
 
+#[cfg(feature = "onnx")]
+#[cfg_attr(docsrs, doc(cfg(feature = "onnx")))]
+pub use backends::{FCoref, FCorefConfig};
+
 #[cfg(feature = "candle")]
 #[cfg_attr(docsrs, doc(cfg(feature = "candle")))]
 pub use backends::CandleNER;
