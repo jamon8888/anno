@@ -351,6 +351,148 @@ pub fn resolve_for_rag(
     }
 }
 
+/// Resolve coreference using neural f-coref and rewrite pronouns for RAG.
+///
+/// Unlike [`resolve_for_rag`] (which requires pre-extracted entities), this
+/// function runs neural coreference resolution directly on raw text using the
+/// f-coref model. It produces higher-quality clusters but requires a model
+/// download.
+///
+/// # Arguments
+///
+/// * `text` - The input text
+/// * `clusters` - Pre-computed coreference clusters from [`FCoref::resolve`]
+/// * `language` - Language for pronoun detection (default: English)
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use anno::backends::fcoref::FCoref;
+/// use anno::rag::resolve_for_rag_neural;
+///
+/// let coref = FCoref::from_path("fcoref_onnx")?;
+/// let clusters = coref.resolve("John went to the store. He bought milk.")?;
+/// let result = resolve_for_rag_neural("John went to the store. He bought milk.", &clusters, None);
+/// assert_eq!(result.text, "John went to the store. John bought milk.");
+/// ```
+#[cfg(feature = "onnx")]
+pub fn resolve_for_rag_neural(
+    text: &str,
+    clusters: &[crate::backends::coref_t5::CorefCluster],
+    language: Option<Language>,
+) -> RagCorefResult {
+    if clusters.is_empty() {
+        return RagCorefResult {
+            text: text.to_string(),
+            rewrites: Vec::new(),
+            unresolved_count: 0,
+        };
+    }
+
+    let lang = language.unwrap_or(Language::English);
+    let mut rewrites = Vec::new();
+
+    for cluster in clusters {
+        if cluster.mentions.len() < 2 {
+            continue;
+        }
+
+        // The canonical mention is the antecedent for pronoun rewrites
+        let antecedent = &cluster.canonical;
+        if is_pronoun_for_language(antecedent, lang) {
+            // If the canonical itself is a pronoun, skip this cluster
+            continue;
+        }
+
+        // Find pronoun mentions in this cluster
+        for (mention_text, &(char_start, char_end)) in
+            cluster.mentions.iter().zip(cluster.spans.iter())
+        {
+            if !is_pronoun_for_language(mention_text, lang) {
+                continue;
+            }
+            // Skip pleonastic "it"
+            if is_pleonastic_it(text, char_start, char_end) {
+                continue;
+            }
+            // Skip reflexive pronouns
+            if is_reflexive_pronoun(mention_text) {
+                continue;
+            }
+            // Don't rewrite if antecedent matches the pronoun
+            if antecedent.to_lowercase() == mention_text.to_lowercase() {
+                continue;
+            }
+            rewrites.push(PronounRewrite {
+                start: char_start,
+                end: char_end,
+                original: mention_text.clone(),
+                replacement: antecedent.clone(),
+            });
+        }
+    }
+
+    // Sort by start position ascending
+    rewrites.sort_by_key(|r| r.start);
+
+    // Overlap rejection: keep longer spans
+    {
+        let mut by_length = rewrites.clone();
+        by_length.sort_by(|a, b| (b.end - b.start).cmp(&(a.end - a.start)));
+        let mut accepted: Vec<PronounRewrite> = Vec::with_capacity(by_length.len());
+        for rw in by_length {
+            let overlaps = accepted
+                .iter()
+                .any(|a| rw.start < a.end && rw.end > a.start);
+            if !overlaps {
+                accepted.push(rw);
+            }
+        }
+        accepted.sort_by_key(|r| r.start);
+        rewrites = accepted;
+    }
+
+    // Apply rewrites right-to-left to preserve offsets
+    let chars: Vec<char> = text.chars().collect();
+    let mut result_chars = chars.clone();
+
+    for rewrite in rewrites.iter().rev() {
+        let replacement_chars: Vec<char> = rewrite.replacement.chars().collect();
+        let replacement_chars = if lang.uses_latin_capitalization()
+            && rewrite
+                .original
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_uppercase())
+        {
+            let mut adjusted = replacement_chars;
+            if let Some(first) = adjusted.first_mut() {
+                *first = first.to_uppercase().next().unwrap_or(*first);
+            }
+            adjusted
+        } else {
+            replacement_chars
+        };
+
+        let end = rewrite.end.min(result_chars.len());
+        let start = rewrite.start.min(end);
+        result_chars.splice(start..end, replacement_chars);
+    }
+
+    let unresolved_count = clusters
+        .iter()
+        .flat_map(|c| c.mentions.iter().zip(c.spans.iter()))
+        .filter(|(m, _)| is_pronoun_for_language(m, lang))
+        .count()
+        .saturating_sub(rewrites.len());
+
+    RagCorefResult {
+        text: result_chars.into_iter().collect(),
+        rewrites,
+        unresolved_count,
+    }
+}
+
 /// Check if "it" is pleonastic (non-referential) based on surrounding context.
 ///
 /// Pleonastic "it" appears in weather expressions ("it rains"), extraposition
@@ -1722,6 +1864,106 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[cfg(feature = "onnx")]
+    mod neural_tests {
+        use crate::backends::coref_t5::CorefCluster;
+        use crate::rag::*;
+
+        #[test]
+        fn test_neural_rag_basic_rewrite() {
+            let text = "John went to the store. He bought milk.";
+            let clusters = vec![CorefCluster {
+                id: 0,
+                mentions: vec!["John".to_string(), "He".to_string()],
+                spans: vec![(0, 4), (24, 26)],
+                canonical: "John".to_string(),
+            }];
+            let result = resolve_for_rag_neural(text, &clusters, None);
+            assert_eq!(result.text, "John went to the store. John bought milk.");
+            assert_eq!(result.rewrites.len(), 1);
+            assert_eq!(result.rewrites[0].original, "He");
+            assert_eq!(result.rewrites[0].replacement, "John");
+        }
+
+        #[test]
+        fn test_neural_rag_no_clusters() {
+            let text = "The weather is nice today.";
+            let result = resolve_for_rag_neural(text, &[], None);
+            assert_eq!(result.text, text);
+            assert_eq!(result.rewrites.len(), 0);
+        }
+
+        #[test]
+        fn test_neural_rag_multiple_clusters() {
+            let text = "Alice met Bob. She greeted him warmly.";
+            let clusters = vec![
+                CorefCluster {
+                    id: 0,
+                    mentions: vec!["Alice".to_string(), "She".to_string()],
+                    spans: vec![(0, 5), (15, 18)],
+                    canonical: "Alice".to_string(),
+                },
+                CorefCluster {
+                    id: 1,
+                    mentions: vec!["Bob".to_string(), "him".to_string()],
+                    spans: vec![(10, 13), (27, 30)],
+                    canonical: "Bob".to_string(),
+                },
+            ];
+            let result = resolve_for_rag_neural(text, &clusters, None);
+            assert_eq!(
+                result.text,
+                "Alice met Bob. Alice greeted Bob warmly."
+            );
+            assert_eq!(result.rewrites.len(), 2);
+        }
+
+        #[test]
+        fn test_neural_rag_skips_pleonastic_it() {
+            let text =
+                "It is raining. John forgot his umbrella. It is clear that he should go back.";
+            let clusters = vec![CorefCluster {
+                id: 0,
+                mentions: vec!["John".to_string(), "he".to_string()],
+                spans: vec![(15, 19), (58, 60)],
+                canonical: "John".to_string(),
+            }];
+            let result = resolve_for_rag_neural(text, &clusters, None);
+            assert!(result.text.contains("John should go back"));
+            assert_eq!(result.rewrites.len(), 1);
+        }
+
+        #[test]
+        fn test_neural_rag_preserves_case() {
+            let text = "Marie Curie was brilliant. She won two Nobel Prizes.";
+            let clusters = vec![CorefCluster {
+                id: 0,
+                mentions: vec!["Marie Curie".to_string(), "She".to_string()],
+                spans: vec![(0, 11), (27, 30)],
+                canonical: "Marie Curie".to_string(),
+            }];
+            let result = resolve_for_rag_neural(text, &clusters, None);
+            assert_eq!(
+                result.text,
+                "Marie Curie was brilliant. Marie Curie won two Nobel Prizes."
+            );
+        }
+
+        #[test]
+        fn test_neural_rag_singleton_cluster_ignored() {
+            let text = "John went to the store.";
+            let clusters = vec![CorefCluster {
+                id: 0,
+                mentions: vec!["John".to_string()],
+                spans: vec![(0, 4)],
+                canonical: "John".to_string(),
+            }];
+            let result = resolve_for_rag_neural(text, &clusters, None);
+            assert_eq!(result.text, text);
+            assert_eq!(result.rewrites.len(), 0);
         }
     }
 }
