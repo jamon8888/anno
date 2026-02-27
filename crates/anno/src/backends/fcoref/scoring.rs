@@ -124,10 +124,10 @@ impl ScorerWeights {
 
         let load_fc = |prefix: &str| -> Result<FcLayerWeights> {
             Ok(FcLayerWeights {
-                linear_weight: load_2d(&format!("{}.0.weight", prefix))?,
-                linear_bias: load_1d(&format!("{}.0.bias", prefix))?,
-                norm_weight: load_1d(&format!("{}.2.weight", prefix))?,
-                norm_bias: load_1d(&format!("{}.2.bias", prefix))?,
+                linear_weight: load_2d(&format!("{}.dense.weight", prefix))?,
+                linear_bias: load_1d(&format!("{}.dense.bias", prefix))?,
+                norm_weight: load_1d(&format!("{}.layer_norm.weight", prefix))?,
+                norm_bias: load_1d(&format!("{}.layer_norm.bias", prefix))?,
             })
         };
 
