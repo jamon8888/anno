@@ -166,13 +166,10 @@ impl SimpleCorefResolver {
             }
 
             let entity_gender = self.infer_gender(&entity.text);
-            match (pronoun_gender, entity_gender) {
-                (Some(pg), Some(eg)) => {
-                    if !pg.is_compatible(&eg) {
-                        continue;
-                    }
+            if let (Some(pg), Some(eg)) = (pronoun_gender, entity_gender) {
+                if !pg.is_compatible(&eg) {
+                    continue;
                 }
-                _ => {}
             }
 
             return entity.canonical_id;

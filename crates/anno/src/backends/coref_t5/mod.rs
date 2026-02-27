@@ -539,7 +539,7 @@ impl T5Coref {
     /// `"<m> Sophie Wilson </m> designed ARM. <m> She </m> changed computing."`
     ///
     /// Runs T5 inference directly on the marked text (skipping the auto-marking
-    /// step used by [`resolve`]).  Falls back to similarity-based clustering when
+    /// step used by `resolve()`).  Falls back to similarity-based clustering when
     /// inference fails or produces no clusters.
     pub fn resolve_marked(&self, marked_text: &str) -> Result<Vec<CorefCluster>> {
         let (plain_text, mentions) = self.extract_mentions(marked_text)?;

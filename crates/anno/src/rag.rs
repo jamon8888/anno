@@ -16,14 +16,14 @@
 //! # Design
 //!
 //! - Pure Rust, no model downloads, sub-millisecond latency
-//! - Uses [`SimpleCorefResolver`] from the `eval` module
+//! - Uses `SimpleCorefResolver` from the `eval` module
 //! - Rewrites right-to-left to preserve character offsets
 //! - Only replaces pronouns (not nominal mentions) by default
 //!
 //! # Multilingual Note
 //!
 //! Pronoun detection supports English (default), French, Spanish, and German
-//! via [`RagCorefConfig::language`]. For CJK, Arabic, and other languages,
+//! via the `language` field in `RagCorefConfig`. For CJK, Arabic, and other languages,
 //! pronoun detection returns `false` (safe: treats unknown pronouns as named
 //! mentions, producing no rewrites). Model-based detection is needed for those
 //! languages. Set `language` to `None` (the default) for English.
@@ -328,7 +328,7 @@ pub fn resolve_for_rag(
                 .original
                 .chars()
                 .next()
-                .map_or(false, |c| c.is_uppercase())
+                .is_some_and(|c| c.is_uppercase())
         {
             let mut adjusted = replacement_chars;
             if let Some(first) = adjusted.first_mut() {
@@ -361,7 +361,7 @@ pub fn resolve_for_rag(
 /// # Arguments
 ///
 /// * `text` - The input text
-/// * `clusters` - Pre-computed coreference clusters from [`FCoref::resolve`]
+/// * `clusters` - Pre-computed coreference clusters from the `FCoref::resolve()` method
 /// * `language` - Language for pronoun detection (default: English)
 ///
 /// # Example
@@ -463,7 +463,7 @@ pub fn resolve_for_rag_neural(
                 .original
                 .chars()
                 .next()
-                .map_or(false, |c| c.is_uppercase())
+                .is_some_and(|c| c.is_uppercase())
         {
             let mut adjusted = replacement_chars;
             if let Some(first) = adjusted.first_mut() {
