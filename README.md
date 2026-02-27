@@ -6,15 +6,63 @@
 
 Information extraction for unstructured text: named entity recognition (NER), within-document coreference resolution, and structured pattern extraction.
 
-Dual-licensed under MIT or Apache-2.0.
+Dual-licensed under MIT or Apache-2.0. MSRV: 1.85.
+
+## Library
+
+The crate is published as **`anno-lib`** on crates.io; the Rust import name is **`anno`**. (The name `anno` was taken on crates.io, so the package is `anno-lib` but `lib.rs` uses `extern crate self as anno`.)
+
+```toml
+[dependencies]
+anno-lib = "0.3"
+```
+
+The default feature (`onnx`) pulls in `ort` (ONNX Runtime C++ bindings). For builds without a C++ runtime, use `default-features = false`.
+
+```rust
+use anno::{Model, StackedNER};
+
+let m = StackedNER::default();
+let ents = m.extract_entities("Sophie Wilson designed the ARM processor.", None)?;
+assert!(!ents.is_empty());
+# Ok::<(), anno::Error>(())
+```
+
+`StackedNER::default()` selects the best available backend at runtime: GLiNER (if `onnx` enabled and model cached), falling back to heuristic + pattern extraction. Set `ANNO_NO_DOWNLOADS=1` or `HF_HUB_OFFLINE=1` to force cached-only behavior.
+
+Zero-shot custom types via `DynamicLabels` (GLiNER, GLiNER2, NuNER):
+
+```rust
+use anno::{DynamicLabels, GLiNEROnnx};
+
+let m = GLiNEROnnx::new("onnx-community/gliner_small-v2.1")?;
+let ents = m.extract_with_labels(
+    "Aspirin treats headaches.",
+    &["drug", "symptom"],
+    None,
+)?;
+# Ok::<(), anno::Error>(())
+```
+
+### Feature flags
+
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `onnx` | Yes | ONNX Runtime backends (GLiNER, NuNER, BERT, W2NER, FCoref) via `ort` |
+| `candle` | No | Pure-Rust Candle backends (no C++ runtime needed) |
+| `analysis` | No | Evaluation helpers, coref metrics, RAG rewriting |
+| `eval` | No | Superset of `analysis`: adds network support for dataset fetching |
+| `graph` | No | Keywords, summarization, salience (TextRank/LexRank/YAKE) |
+| `schema` | No | JSON Schema generation for output types via `schemars` |
+| `discourse` | No | Centering theory, abstract anaphora, shell nouns |
 
 ## Tasks
 
 **Named entity recognition.** Given input text, identify spans `(start, end, type, confidence)` where each span denotes a named entity [1, 2]. Entity types follow standard taxonomies (PER, ORG, LOC, MISC for CoNLL-style [2]) or caller-defined labels for zero-shot extraction. Offsets are **character offsets** (Unicode scalar values), not byte offsets; see [CONTRACT.md](docs/CONTRACT.md).
 
-**Coreference resolution.** Identify mention spans and group them into clusters, where each cluster tracks a consistent discourse referent within the document [3, 4]. Referents may be concrete or abstract, singular or plural, real-world or fictional — the constraint is within-document consistency, not ontological uniqueness. Coreferring mentions span proper names, definite descriptions, and pronouns: "Sophie Wilson", "the designer", and "She" form one cluster.
+**Coreference resolution.** Identify mention spans and group them into clusters, where each cluster tracks a consistent discourse referent within the document [3, 4]. Coreferring mentions span proper names, definite descriptions, and pronouns: "Sophie Wilson", "the designer", and "She" form one cluster. Multiple backends: rule-based sieves (`SimpleCorefResolver`), neural (`FCoref`, 78.5 F1 on CoNLL-2012), and mention-ranking (`MentionRankingCoref`).
 
-**Relation extraction.** Extract typed `(head, relation, tail)` triples from text. Available on `RelationCapable` backends; others fall back to co-occurrence edges for graph export.
+**Relation extraction.** Extract typed `(head, relation, tail)` triples from text. Available on `RelationCapable` backends (`gliner2`, `tplinker`); others fall back to co-occurrence edges for graph export.
 
 **Structured pattern extraction.** Dates, monetary amounts, email addresses, URLs, phone numbers via deterministic regex grammars.
 
@@ -24,7 +72,7 @@ All backends produce the same output type: variable-length spans with character 
 
 | Backend | Architecture | Labels | Zero-shot | Relations | Weights | Reference |
 |---|---|---|---|---|---|---|
-| `stacked` (default) | Selector/fallback | Best available | — | — | HuggingFace (when ML enabled) | -- |
+| `stacked` (default) | Selector/fallback | GLiNER > BERT > heuristic+pattern | — | — | HuggingFace (when ML enabled) | -- |
 | `gliner` | Bi-encoder span classifier | Custom | Yes | — | [gliner_small-v2.1](https://huggingface.co/onnx-community/gliner_small-v2.1) | Zaratiana et al. [5] |
 | `gliner2` | Multi-task span classifier | Custom | Yes | Heuristic | [gliner-multitask-large-v0.5](https://huggingface.co/onnx-community/gliner-multitask-large-v0.5) | [11] |
 | `nuner` | Token classifier (BIO) | Custom | Yes | — | [NuNerZero_onnx](https://huggingface.co/deepanwa/NuNerZero_onnx) | Bogdanov et al. [6] |
@@ -39,21 +87,13 @@ All backends produce the same output type: variable-length spans with character 
 
 ML backends are feature-gated (`onnx` or `candle`). Weights download from HuggingFace on first use. All backends expose `model.capabilities()` for runtime discovery. See [BACKENDS.md](docs/BACKENDS.md) for selection guidance and feature-flag details.
 
-## Install
+## CLI
 
 ```sh
 cargo install --git https://github.com/arclabs561/anno --package anno-cli --bin anno --features "onnx eval"
 ```
 
-From a local clone:
-
-```sh
-cargo install --path crates/anno-cli --bin anno --features "onnx eval"
-```
-
-`ANNO_NO_DOWNLOADS=1` or `HF_HUB_OFFLINE=1` forces cached-only behavior.
-
-## Examples
+### Examples
 
 ```sh
 anno extract --text "Lynn Conway worked at IBM and Xerox PARC in California."
@@ -100,34 +140,30 @@ anno debug --coref -t "Sophie Wilson designed the ARM processor. She revolutioni
 Coreference: "Sophie Wilson" → "She"
 ```
 
-## RAG Coreference Preprocessing
+## Coreference
 
-`rag::resolve_for_rag()` rewrites pronouns with their antecedents so that document chunks remain self-contained after splitting for retrieval-augmented generation. Pronouns like "she" or "they" are replaced with the resolved entity text (e.g., "Alice"), producing chunks that embed and retrieve without losing referent context.
+Three coref backends with different tradeoffs:
 
-Features:
+| Backend | Type | Quality | Speed | Weights |
+|---------|------|---------|-------|---------|
+| `SimpleCorefResolver` | Rule-based (6 sieves) | Low | Fast | None |
+| `FCoref` | Neural (DistilRoBERTa) | 78.5 F1 | Medium | ONNX export |
+| `MentionRankingCoref` | Mention-ranking | Medium | Medium | None |
 
-- Multilingual pronoun detection: English (default), French, Spanish, German. Unsupported languages (CJK, Arabic, etc.) safely produce no rewrites.
-- Pleonastic "it" filter: skips non-referential uses (weather, extraposition, idioms) to avoid spurious rewrites.
-- Overlap guard: when nested or overlapping NER spans produce competing rewrites, the longer span wins and shorter overlapping rewrites are dropped.
-- Cataphoric resolution: optional second pass resolves forward-pointing pronouns.
-- Configurable: reflexive and demonstrative pronoun rewrites are off by default.
+**FCoref** (Otmazgin et al., AACL 2022) requires a one-time model export. The export script is in the repo at `scripts/export_fcoref.py` (not shipped in the crates.io package -- clone the repo to run it):
 
-The underlying `SimpleCorefResolver` uses a name-to-gender gazetteer (common English first names mapped to gender) for pronoun-antecedent agreement. `Gender::Unknown` acts as a wildcard, compatible with all other genders, so ungendered entities do not block resolution. Acronym matching clusters mentions like "IBM" with "International Business Machines" by checking that each letter of the short form matches the initial letter of each word in the long form.
-
-### Neural Coreference (f-coref)
-
-For higher-quality coreference, `FCoref` provides neural resolution using a DistilRoBERTa encoder with learned mention and antecedent scorers (Otmazgin et al., AACL 2022). Requires a one-time model export via `uv run scripts/export_fcoref.py`.
+```sh
+# From a repo clone:
+uv run scripts/export_fcoref.py
+```
 
 ```rust
 let coref = FCoref::from_path("fcoref_onnx")?;
 let clusters = coref.resolve("Marie Curie was born in Warsaw. She discovered radium.")?;
 // clusters[0] = { mentions: ["Marie Curie", "She"], canonical: "Marie Curie" }
-
-// Wire into RAG rewriting:
-let result = resolve_for_rag_neural(text, &clusters, None);
 ```
 
-`resolve_for_rag_neural` applies the same pronoun rewriting pipeline (pleonastic filter, case preservation, overlap rejection) but uses FCoref's neural clusters instead of rule-based resolution.
+**RAG preprocessing** (`rag::resolve_for_rag()`, requires `analysis` feature): rewrites pronouns with their antecedents so document chunks remain self-contained after splitting. Supports English, French, Spanish, German. Includes pleonastic "it" filter and overlap guard.
 
 ## Downstream
 
@@ -203,80 +239,20 @@ Each file produces `{stem}-nodes.csv` + `{stem}-edges.csv` with columns:
 - **Nodes**: `id`, `entity_type`, `text`, `start`, `end`, `source`
 - **Edges**: `from`, `to`, `rel_type`, `confidence`
 
-## Library
-
-```toml
-[dependencies]
-anno-lib = "0.3"
-```
-
-The crate is published as `anno-lib` on crates.io; the Rust import name is `anno`.
-
-### Feature flags
-
-| Feature | Default | Description |
-|---------|---------|-------------|
-| `onnx` | Yes | ONNX Runtime backends (GLiNER, NuNER, BERT, W2NER) via `ort` |
-| `candle` | No | Pure-Rust Candle backends (no C++ runtime needed) |
-| `eval` | No | Evaluation harnesses, dataset loaders, and matrix sampling |
-| `graph` | No | Knowledge-graph export adapters (N-Triples, JSON-LD, CSV) |
-| `schema` | No | JSON Schema generation for output types via `schemars` |
-
-The `onnx` feature (default) pulls in `ort` (ONNX Runtime bindings), which requires a C++ runtime. For minimal builds, use `default-features = false`.
-
-Basic extraction:
-
-```rust
-use anno::{Model, StackedNER};
-
-let m = StackedNER::default();
-let ents = m.extract_entities("Sophie Wilson designed the ARM processor.", None)?;
-assert!(!ents.is_empty());
-# Ok::<(), anno::Error>(())
-```
-
-Zero-shot custom types via `DynamicLabels` (GLiNER, GLiNER2, NuNER):
-
-```rust
-use anno::{DynamicLabels, GLiNEROnnx};
-
-let m = GLiNEROnnx::new("onnx-community/gliner_small-v2.1")?;
-let ents = m.extract_with_labels(
-    "Aspirin treats headaches.",
-    &["drug", "symptom"],
-    None,
-)?;
-# Ok::<(), anno::Error>(())
-```
-
-Runtime capability discovery — all backends now report accurately:
-
-```rust
-use anno::Model;
-
-fn print_caps(m: &dyn Model) {
-    let c = m.capabilities();
-    println!(
-        "batch={} streaming={} gpu={} relations={} zero-shot={}",
-        c.batch_capable, c.streaming_capable, c.gpu_capable,
-        c.relation_capable, c.dynamic_labels,
-    );
-}
-```
-
 ## Architecture
 
-| Crate | Purpose |
-|---|---|
-| `anno` (root) | Published facade; re-exports `anno-lib` |
-| `anno-lib` | Backends, `Model` / `RelationCapable` traits, extraction pipeline |
-| `anno-core` | Stable data model (`Entity`, `Relation`, `Signal`, `Track`, `Identity`, `Corpus`) |
-| `anno-graph` | Graph/KG export adapters: converts extraction output to `lattix::KnowledgeGraph`; owns triple construction and `--format graph-ntriples` |
-| `anno-eval` | Evaluation harnesses, dataset loaders, matrix sampling (uses `muxer`) |
-| `anno-cli` | Full CLI; graph feature routes through `anno-graph` |
-| `anno-metrics` | Shared evaluation primitives (CoNLL F1, encoders) |
+| Crate | Published | Purpose |
+|---|---|---|
+| `anno-lib` | Yes | Backends, `Model` trait, extraction pipeline, coref resolvers. Import as `anno`. |
+| `anno-core` | Yes | Data model (`Entity`, `Relation`, `Mention`, `CorefChain`, `Signal`, `Track`). No ML deps. |
+| `anno-graph` | No | Graph/KG export adapters (N-Triples, JSON-LD, CSV) |
+| `anno-eval` | No | Evaluation harnesses, dataset loaders, matrix sampling |
+| `anno-cli` | No | CLI binary |
+| `anno-metrics` | No | Shared evaluation primitives (CoNLL F1, encoders) |
 
-Pipeline: Text → Extract → Coalesce → structured output. See [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+`anno-core` exists so that crates needing only data types (`Entity`, `Relation`, etc.) don't pull in ML dependencies. `anno-lib` depends on `anno-core` and re-exports all its types at the crate root.
+
+Pipeline: Text -> Extract -> Coalesce -> structured output. See [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Evaluation
 
@@ -300,7 +276,7 @@ just ci-matrix-local 42 ner
 
 ## Scope
 
-Inference-time extraction only. Training is out of scope — use upstream frameworks (Hugging Face Transformers, Flair, etc.) and export ONNX weights for consumption.
+Inference-time extraction. Training pipelines are out of scope -- use upstream frameworks (Hugging Face Transformers, Flair, etc.) and export ONNX weights for consumption. (The repo contains some experimental training code for box embeddings; this is research-only and not part of the public API.)
 
 ## Documentation
 
@@ -314,22 +290,20 @@ Inference-time extraction only. Training is out of scope — use upstream framew
 
 ## References
 
-Key citations; see [docs/REFERENCES.md](docs/REFERENCES.md) for the full list with links.
+[1] Grishman & Sundheim, *COLING* 1996 (MUC-6 NER).
+[2] Tjong Kim Sang & De Meulder, *CoNLL* 2003.
+[3] Lee et al., *EMNLP* 2017 (end-to-end coref).
+[4] Jurafsky & Martin, *SLP3* 2024.
+[5] Zaratiana et al., *NAACL* 2024 (GLiNER).
+[6] Bogdanov et al., 2024 (NuNER).
+[7] Li et al., *AAAI* 2022 (W2NER).
+[8] Devlin et al., *NAACL* 2019 (BERT).
+[9] Lafferty et al., *ICML* 2001 (CRF).
+[10] Wang et al., *COLING* 2020 (TPLinker).
+[11] Zaratiana et al., 2025 (GLiNER2).
+[12] Rabiner, *Proc. IEEE* 1989 (HMM).
 
-1. Grishman & Sundheim, *COLING* 1996 (MUC-6 NER). [[PDF]](https://aclanthology.org/C96-1079.pdf)
-2. Tjong Kim Sang & De Meulder, *CoNLL* 2003 (CoNLL benchmark). [[PDF]](https://aclanthology.org/W03-0419.pdf)
-3. Lee et al., *EMNLP* 2017 (end-to-end coreference). [[arXiv]](https://arxiv.org/abs/1707.07045)
-4. Jurafsky & Martin, *SLP3* 2024 (coreference fundamentals). [[Online]](https://web.stanford.edu/~jurafsky/slp3/)
-5. Zaratiana et al., *NAACL* 2024 (GLiNER). [[arXiv]](https://arxiv.org/abs/2311.08526)
-6. Bogdanov et al., 2024 (NuNER). [[arXiv]](https://arxiv.org/abs/2402.15343)
-7. Li et al., *AAAI* 2022 (W2NER). [[arXiv]](https://arxiv.org/abs/2112.10070)
-8. Devlin et al., *NAACL* 2019 (BERT). [[arXiv]](https://arxiv.org/abs/1810.04805)
-9. Lafferty et al., *ICML* 2001 (CRF).
-10. Wang et al., *COLING* 2020 (TPLinker). [[arXiv]](https://arxiv.org/abs/2010.13415)
-11. Zaratiana et al., 2025 (GLiNER2). [[arXiv]](https://arxiv.org/abs/2507.18546)
-12. Rabiner, *Proceedings of the IEEE* 1989 (HMM tutorial). [[PDF]](https://www.cs.ubc.ca/~murphyk/Bayes/rabiner.pdf)
-
-Citeable via [CITATION.cff](CITATION.cff).
+Full list with links: [docs/REFERENCES.md](docs/REFERENCES.md). Citeable via [CITATION.cff](CITATION.cff).
 
 ## License
 
