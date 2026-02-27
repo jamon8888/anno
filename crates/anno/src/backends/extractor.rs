@@ -485,4 +485,157 @@ mod tests {
         // Should find pattern entities even without ML
         assert!(!entities.is_empty());
     }
+
+    // ---- BackendType enum coverage ----
+
+    #[test]
+    fn test_backend_type_name() {
+        assert_eq!(BackendType::GLiNER.name(), "gliner");
+        assert_eq!(BackendType::BertOnnx.name(), "bert-onnx");
+        assert_eq!(BackendType::Candle.name(), "candle");
+        assert_eq!(BackendType::Pattern.name(), "pattern");
+    }
+
+    #[test]
+    fn test_backend_type_equality_and_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(BackendType::GLiNER);
+        set.insert(BackendType::BertOnnx);
+        set.insert(BackendType::Candle);
+        set.insert(BackendType::Pattern);
+        assert_eq!(set.len(), 4, "all four variants must be distinct");
+
+        // duplicate insert should not grow the set
+        set.insert(BackendType::Pattern);
+        assert_eq!(set.len(), 4);
+    }
+
+    // ---- NERExtractor constructor / accessor coverage ----
+
+    #[test]
+    fn test_new_with_no_primary_is_pattern() {
+        let ext = NERExtractor::new(None, BackendType::Pattern);
+        assert_eq!(ext.backend_type(), BackendType::Pattern);
+        assert!(!ext.has_ml_backend());
+        assert!(!ext.supports_zero_shot());
+    }
+
+    #[test]
+    fn test_pattern_only_active_backend_name() {
+        let ext = NERExtractor::pattern_only();
+        // With no ML primary, active_backend_name falls through to fallback (RegexNER).
+        assert_eq!(ext.active_backend_name(), "regex");
+    }
+
+    #[test]
+    fn test_pattern_only_model_trait() {
+        let ext = NERExtractor::pattern_only();
+        // Model trait: is_available always true (pattern fallback)
+        assert!(ext.is_available());
+        assert_eq!(ext.name(), "regex");
+        assert_eq!(
+            ext.description(),
+            "Regex-based NER (structured entities only)"
+        );
+
+        // supported_types should include pattern types from RegexNER
+        let types = ext.supported_types();
+        assert!(!types.is_empty(), "pattern backend should report supported types");
+    }
+
+    #[test]
+    fn test_description_per_backend_type() {
+        // Verify each variant produces a distinct description via Model trait
+        let cases = [
+            (BackendType::GLiNER, "GLiNER zero-shot NER (ONNX/Candle backends)"),
+            (BackendType::BertOnnx, "BERT NER via ONNX Runtime"),
+            (BackendType::Candle, "BERT NER via Candle (Rust-native)"),
+            (BackendType::Pattern, "Regex-based NER (structured entities only)"),
+        ];
+        for (bt, expected) in cases {
+            let ext = NERExtractor::new(None, bt);
+            assert_eq!(ext.description(), expected, "mismatch for {:?}", bt);
+        }
+    }
+
+    // ---- Hybrid overlap / dedup logic ----
+
+    #[test]
+    fn test_hybrid_entities_sorted_by_start() {
+        let ext = NERExtractor::pattern_only();
+        // Text with multiple pattern-detectable entities in non-sequential discovery order
+        let text = "Call 555-1234 on 2024-06-01 for $99.";
+        let entities = ext.extract_hybrid(text, None).unwrap();
+        for w in entities.windows(2) {
+            assert!(
+                w[0].start <= w[1].start,
+                "entities must be sorted by start: {} vs {}",
+                w[0].start,
+                w[1].start
+            );
+        }
+    }
+
+    #[test]
+    fn test_hybrid_no_overlap_among_pattern_entities() {
+        let ext = NERExtractor::pattern_only();
+        let text = "Paid $1,200.00 on 2024-01-15 at 10:30 AM, ref test@example.com";
+        let entities = ext.extract_hybrid(text, None).unwrap();
+
+        // Verify no two entities overlap
+        for (i, a) in entities.iter().enumerate() {
+            for b in &entities[i + 1..] {
+                let overlaps = !(a.end <= b.start || b.end <= a.start);
+                assert!(
+                    !overlaps,
+                    "entities should not overlap: {:?}[{}..{}] vs {:?}[{}..{}]",
+                    a.text, a.start, a.end, b.text, b.start, b.end
+                );
+            }
+        }
+    }
+
+    // ---- Fallback / extract path ----
+
+    #[test]
+    fn test_extract_falls_through_to_fallback_when_no_primary() {
+        let ext = NERExtractor::pattern_only();
+        let text = "$42.00";
+        let entities = ext.extract(text, None).unwrap();
+        assert!(
+            entities.iter().any(|e| matches!(e.entity_type, EntityType::Money)),
+            "pattern fallback should detect money"
+        );
+    }
+
+    #[test]
+    fn test_extract_empty_text_returns_empty() {
+        let ext = NERExtractor::pattern_only();
+        let entities = ext.extract("", None).unwrap();
+        assert!(entities.is_empty(), "empty text should yield no entities");
+    }
+
+    // ---- Feature-gated constructor stubs (when feature is *disabled*) ----
+
+    #[cfg(not(feature = "onnx"))]
+    #[test]
+    fn test_bert_onnx_stub_returns_pattern() {
+        let ext = NERExtractor::with_bert_onnx("anything").unwrap();
+        assert_eq!(ext.backend_type(), BackendType::Pattern);
+    }
+
+    #[cfg(not(feature = "onnx"))]
+    #[test]
+    fn test_gliner_stub_returns_pattern() {
+        let ext = NERExtractor::with_gliner("anything").unwrap();
+        assert_eq!(ext.backend_type(), BackendType::Pattern);
+    }
+
+    #[cfg(not(feature = "candle"))]
+    #[test]
+    fn test_candle_stub_returns_pattern() {
+        let ext = NERExtractor::with_candle("anything").unwrap();
+        assert_eq!(ext.backend_type(), BackendType::Pattern);
+    }
 }
