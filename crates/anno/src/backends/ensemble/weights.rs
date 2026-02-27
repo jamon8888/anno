@@ -199,3 +199,161 @@ impl SpanKey {
 // =============================================================================
 // EnsembleNER
 // =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =========================================================================
+    // BackendWeight defaults
+    // =========================================================================
+
+    #[test]
+    fn backend_weight_default_is_neutral() {
+        let w = BackendWeight::default();
+        assert!((w.overall - 0.5).abs() < f64::EPSILON, "default overall should be 0.5");
+        assert!(w.per_type.is_none(), "default per_type should be None");
+    }
+
+    // =========================================================================
+    // TypeWeights::get dispatches correctly
+    // =========================================================================
+
+    #[test]
+    fn type_weights_get_returns_matching_field() {
+        let tw = TypeWeights {
+            person: 0.1,
+            organization: 0.2,
+            location: 0.3,
+            date: 0.4,
+            money: 0.5,
+            other: 0.6,
+        };
+
+        assert!((tw.get(&EntityType::Person) - 0.1).abs() < f64::EPSILON);
+        assert!((tw.get(&EntityType::Organization) - 0.2).abs() < f64::EPSILON);
+        assert!((tw.get(&EntityType::Location) - 0.3).abs() < f64::EPSILON);
+        assert!((tw.get(&EntityType::Date) - 0.4).abs() < f64::EPSILON);
+        assert!((tw.get(&EntityType::Money) - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn type_weights_get_falls_back_to_other() {
+        let tw = TypeWeights {
+            other: 0.77,
+            ..TypeWeights::default()
+        };
+
+        // EntityType variants not explicitly matched should return `other`.
+        assert!(
+            (tw.get(&EntityType::Email) - 0.77).abs() < f64::EPSILON,
+            "Email should fall back to `other`"
+        );
+        assert!(
+            (tw.get(&EntityType::Percent) - 0.77).abs() < f64::EPSILON,
+            "Percent should fall back to `other`"
+        );
+    }
+
+    // =========================================================================
+    // default_backend_weights coverage
+    // =========================================================================
+
+    #[test]
+    fn default_weights_contain_all_known_backends() {
+        let w = default_backend_weights();
+        let expected = ["regex", "gliner", "GLiNER-ONNX", "gliner-candle", "bert-ner-onnx", "heuristic"];
+        for name in expected {
+            assert!(w.contains_key(name), "missing default weight for backend '{}'", name);
+        }
+    }
+
+    #[test]
+    fn default_weights_are_in_unit_range() {
+        let weights = default_backend_weights();
+        for (name, bw) in &weights {
+            assert!(
+                (0.0..=1.0).contains(&bw.overall),
+                "overall weight for '{}' out of range: {}",
+                name,
+                bw.overall
+            );
+            if let Some(ref tw) = bw.per_type {
+                for (label, val) in [
+                    ("person", tw.person),
+                    ("organization", tw.organization),
+                    ("location", tw.location),
+                    ("date", tw.date),
+                    ("money", tw.money),
+                    ("other", tw.other),
+                ] {
+                    assert!(
+                        (0.0..=1.0).contains(&val),
+                        "type weight '{}' for '{}' out of range: {}",
+                        label,
+                        name,
+                        val
+                    );
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // SpanKey basics
+    // =========================================================================
+
+    #[test]
+    fn span_key_from_entity_round_trips() {
+        let e = Entity::new("hello", EntityType::Person, 3, 8, 0.9);
+        let sk = SpanKey::from_entity(&e);
+        assert_eq!(sk.start, 3);
+        assert_eq!(sk.end, 8);
+    }
+
+    #[test]
+    fn span_key_no_overlap_when_disjoint() {
+        let a = SpanKey { start: 0, end: 5 };
+        let b = SpanKey { start: 10, end: 15 };
+        assert!(!a.overlaps(&b));
+        assert!(!b.overlaps(&a));
+    }
+
+    #[test]
+    fn span_key_overlap_threshold_boundary() {
+        // Exactly 50% overlap should NOT count (strict >0.5).
+        // a=[0,10), b=[5,15): overlap=[5,10)=5, smaller=10, ratio=0.5 -> false
+        let a = SpanKey { start: 0, end: 10 };
+        let b = SpanKey { start: 5, end: 15 };
+        assert!(
+            !a.overlaps(&b),
+            "exactly 50% overlap should be below the >0.5 threshold"
+        );
+    }
+
+    #[test]
+    fn span_key_overlap_just_above_threshold() {
+        // a=[0,10), b=[4,14): overlap=[4,10)=6, smaller=10, ratio=0.6 -> true
+        let a = SpanKey { start: 0, end: 10 };
+        let b = SpanKey { start: 4, end: 14 };
+        assert!(a.overlaps(&b), "60% overlap should be above the >0.5 threshold");
+        assert!(b.overlaps(&a), "overlap should be symmetric");
+    }
+
+    // =========================================================================
+    // Candidate construction (smoke test)
+    // =========================================================================
+
+    #[test]
+    fn candidate_holds_source_and_weight() {
+        let e = Entity::new("ACME", EntityType::Organization, 0, 4, 0.85);
+        let c = Candidate {
+            entity: e.clone(),
+            source: "test-backend".to_string(),
+            backend_weight: 0.75,
+        };
+        assert_eq!(c.source, "test-backend");
+        assert!((c.backend_weight - 0.75).abs() < f64::EPSILON);
+        assert_eq!(c.entity.text, "ACME");
+    }
+}
