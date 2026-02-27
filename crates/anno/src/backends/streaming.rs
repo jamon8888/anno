@@ -495,7 +495,7 @@ impl PipelineStage for NormalizeText {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::HeuristicNER;
+    use crate::{EntityType, HeuristicNER};
 
     #[test]
     fn test_streaming_basic() {
@@ -631,5 +631,245 @@ mod tests {
         let entities: Vec<Entity> = extractor.extract(text).collect();
         // We don't care about the results, just that it terminates
         let _ = entities;
+    }
+
+    // =========================================================================
+    // Chunk boundary helpers
+    // =========================================================================
+
+    #[test]
+    fn test_find_word_boundary_at_end() {
+        let chars: Vec<char> = "hello world".chars().collect();
+        assert_eq!(find_word_boundary(&chars, 100), chars.len());
+        assert_eq!(find_word_boundary(&chars, chars.len()), chars.len());
+    }
+
+    #[test]
+    fn test_find_word_boundary_mid_word() {
+        let chars: Vec<char> = "hello world foo".chars().collect();
+        // target=14 is inside "foo" -> backtrack to space at 11 -> return 12
+        let boundary = find_word_boundary(&chars, 14);
+        assert_eq!(boundary, 12, "should break before 'foo'");
+    }
+
+    #[test]
+    fn test_find_word_boundary_no_whitespace() {
+        let chars: Vec<char> = "abcdefghij".chars().collect();
+        assert_eq!(find_word_boundary(&chars, 5), 5);
+    }
+
+    #[test]
+    fn test_find_sentence_boundary_cjk_punctuation() {
+        let text: Vec<char> = "这是测试。下一句话开始了".chars().collect();
+        let boundary = find_sentence_boundary(&text, 0, text.len());
+        assert!(boundary <= text.len());
+        // '。' is at index 4; next char (no whitespace) is index 5
+        assert!(boundary >= 5, "should be at or after the CJK period");
+    }
+
+    #[test]
+    fn test_find_sentence_boundary_no_punctuation() {
+        let chars: Vec<char> = "no punctuation here at all".chars().collect();
+        let boundary = find_sentence_boundary(&chars, 0, 20);
+        // Falls through to find_word_boundary
+        assert!(boundary > 0 && boundary <= 20);
+    }
+
+    #[test]
+    fn test_find_sentence_boundary_exclamation_and_question() {
+        let chars: Vec<char> = "Wow! Really? Yes indeed.".chars().collect();
+        // Target 10 => backwards from 10: '!' at 3 followed by ' ' at 4 -> boundary = 5
+        let boundary = find_sentence_boundary(&chars, 0, 10);
+        assert_eq!(boundary, 5, "should split after 'Wow! '");
+    }
+
+    // =========================================================================
+    // Offset adjustment across chunks
+    // =========================================================================
+
+    #[test]
+    fn test_offset_adjustment_multi_chunk() {
+        // Entities in later chunks must have offsets relative to the full text.
+        let model = HeuristicNER::new();
+        let config = ChunkConfig {
+            chunk_size: 30,
+            overlap: 5,
+            respect_sentences: false,
+            buffer_size: 100,
+        };
+        let extractor = StreamingExtractor::new(&model, config);
+
+        let text = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Google Inc is here.";
+        let entities: Vec<Entity> = extractor.extract(text).collect();
+
+        let text_chars: Vec<char> = text.chars().collect();
+        for e in &entities {
+            let span: String = text_chars[e.start..e.end].iter().collect();
+            assert_eq!(span, e.text, "offset-adjusted text should match entity text");
+        }
+    }
+
+    // =========================================================================
+    // Entity dedup at chunk boundaries
+    // =========================================================================
+
+    #[test]
+    fn test_no_duplicate_entities_from_overlap() {
+        let model = HeuristicNER::new();
+        let config = ChunkConfig {
+            chunk_size: 40,
+            overlap: 20,
+            respect_sentences: false,
+            buffer_size: 100,
+        };
+        let extractor = StreamingExtractor::new(&model, config);
+
+        let text = "Dr. John Smith is a researcher at Google Inc in New York City area.";
+        let entities: Vec<Entity> = extractor.extract(text).collect();
+
+        let mut spans: Vec<(usize, usize)> = entities.iter().map(|e| (e.start, e.end)).collect();
+        let before = spans.len();
+        spans.sort();
+        spans.dedup();
+        assert_eq!(before, spans.len(), "duplicate entities found in output");
+    }
+
+    // =========================================================================
+    // Empty / single-token chunks
+    // =========================================================================
+
+    #[test]
+    fn test_whitespace_only_text() {
+        let model = HeuristicNER::new();
+        let extractor = StreamingExtractor::with_model(&model);
+
+        let entities: Vec<Entity> = extractor.extract("   \n\t  ").collect();
+        assert!(entities.is_empty(), "whitespace-only text should yield no entities");
+    }
+
+    #[test]
+    fn test_single_character_text() {
+        let model = HeuristicNER::new();
+        let config = ChunkConfig {
+            chunk_size: 1,
+            overlap: 0,
+            respect_sentences: false,
+            buffer_size: 10,
+        };
+        let extractor = StreamingExtractor::new(&model, config);
+
+        let entities: Vec<Entity> = extractor.extract("A").collect();
+        let _ = entities;
+    }
+
+    #[test]
+    fn test_single_token_chunks() {
+        // Very small chunk_size with space-separated tokens.
+        let model = HeuristicNER::new();
+        let config = ChunkConfig {
+            chunk_size: 2,
+            overlap: 0,
+            respect_sentences: false,
+            buffer_size: 100,
+        };
+        let extractor = StreamingExtractor::new(&model, config);
+
+        let text = "A B C D E";
+        let entities: Vec<Entity> = extractor.extract(text).collect();
+        let char_count = text.chars().count();
+        for e in &entities {
+            assert!(e.end <= char_count, "offset exceeds text length");
+        }
+    }
+
+    // =========================================================================
+    // Config / builder patterns
+    // =========================================================================
+
+    #[test]
+    fn test_chunk_config_no_chunking_values() {
+        let cfg = ChunkConfig::no_chunking();
+        assert_eq!(cfg.chunk_size, usize::MAX);
+        assert_eq!(cfg.overlap, 0);
+        assert!(!cfg.respect_sentences);
+        assert_eq!(cfg.buffer_size, usize::MAX);
+    }
+
+    #[test]
+    fn test_chunk_config_long_document_values() {
+        let cfg = ChunkConfig::long_document();
+        assert_eq!(cfg.chunk_size, 50_000);
+        assert_eq!(cfg.overlap, 200);
+        assert!(cfg.respect_sentences);
+        assert_eq!(cfg.buffer_size, 5000);
+    }
+
+    #[test]
+    fn test_chunk_config_realtime_values() {
+        let cfg = ChunkConfig::realtime();
+        assert_eq!(cfg.chunk_size, 1000);
+        assert_eq!(cfg.overlap, 50);
+        assert!(!cfg.respect_sentences);
+        assert_eq!(cfg.buffer_size, 100);
+    }
+
+    #[test]
+    fn test_chunk_config_default_values() {
+        let cfg = ChunkConfig::default();
+        assert_eq!(cfg.chunk_size, 10_000);
+        assert_eq!(cfg.overlap, 100);
+        assert!(cfg.respect_sentences);
+        assert_eq!(cfg.buffer_size, 1000);
+    }
+
+    // =========================================================================
+    // Pipeline stages
+    // =========================================================================
+
+    #[test]
+    fn test_confidence_filter_removes_low_confidence() {
+        let filter = ConfidenceFilter::new(0.8);
+        let entities = vec![
+            Entity::new("A", EntityType::Person, 0, 1, 0.9),
+            Entity::new("B", EntityType::Person, 2, 3, 0.3),
+        ];
+        let result = filter.process(entities, "");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].text, "A");
+    }
+
+    #[test]
+    fn test_deduplicate_overlapping_keeps_higher_confidence() {
+        let dedup = DeduplicateOverlapping;
+        let entities = vec![
+            Entity::new("New York", EntityType::Location, 0, 8, 0.7),
+            Entity::new("New York City", EntityType::Location, 0, 13, 0.9),
+        ];
+        let result = dedup.process(entities, "");
+        assert_eq!(result.len(), 1);
+        assert!(result[0].confidence > 0.8, "should keep the higher-confidence entity");
+    }
+
+    #[test]
+    fn test_normalize_text_trims_and_lowercases() {
+        let normalizer = NormalizeText::new(true);
+        let entities = vec![Entity::new("  John Smith  ", EntityType::Person, 0, 10, 0.9)];
+        let result = normalizer.process(entities, "");
+        assert_eq!(result[0].text, "john smith");
+    }
+
+    #[test]
+    fn test_normalize_text_no_lowercase() {
+        let normalizer = NormalizeText::new(false);
+        let entities = vec![Entity::new("  GOOGLE  ", EntityType::Organization, 0, 6, 0.9)];
+        let result = normalizer.process(entities, "");
+        assert_eq!(result[0].text, "GOOGLE");
+    }
+
+    #[test]
+    fn test_pipeline_stage_names() {
+        assert_eq!(ConfidenceFilter::new(0.5).name(), "ConfidenceFilter");
+        assert_eq!(DeduplicateOverlapping.name(), "DeduplicateOverlapping");
+        assert_eq!(NormalizeText::new(false).name(), "NormalizeText");
     }
 }
