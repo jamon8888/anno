@@ -978,3 +978,431 @@ impl Default for HmmNER {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a minimal HMM with hand-crafted parameters (no bundled params),
+    /// so tests are deterministic regardless of feature flags.
+    fn tiny_hmm() -> HmmNER {
+        HmmNER::new_heuristic()
+    }
+
+    // ── normalize ───────────────────────────────────────────────────
+
+    #[test]
+    fn normalize_sums_to_one() {
+        let mut v = vec![2.0, 3.0, 5.0];
+        HmmNER::normalize(&mut v);
+        let sum: f64 = v.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-12, "sum = {sum}");
+        assert!((v[0] - 0.2).abs() < 1e-12);
+        assert!((v[1] - 0.3).abs() < 1e-12);
+        assert!((v[2] - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn normalize_all_zeros_unchanged() {
+        let mut v = vec![0.0, 0.0, 0.0];
+        HmmNER::normalize(&mut v);
+        assert!(v.iter().all(|&x| x == 0.0), "all-zero vec should stay zero");
+    }
+
+    // ── len_bucket ──────────────────────────────────────────────────
+
+    #[test]
+    fn len_bucket_boundaries() {
+        assert_eq!(HmmNER::len_bucket("a"), "len:1");
+        assert_eq!(HmmNER::len_bucket("ab"), "len:2");
+        assert_eq!(HmmNER::len_bucket("abc"), "len:3");
+        assert_eq!(HmmNER::len_bucket("abcd"), "len:4_5");
+        assert_eq!(HmmNER::len_bucket("abcde"), "len:4_5");
+        assert_eq!(HmmNER::len_bucket("abcdef"), "len:6_8");
+        assert_eq!(HmmNER::len_bucket("abcdefgh"), "len:6_8");
+        assert_eq!(HmmNER::len_bucket("abcdefghi"), "len:9p");
+        assert_eq!(HmmNER::len_bucket("abcdefghijklm"), "len:9p");
+    }
+
+    #[test]
+    fn len_bucket_unicode_counts_chars_not_bytes() {
+        // 3 CJK characters = 9 bytes, but 3 chars -> bucket "len:3"
+        assert_eq!(HmmNER::len_bucket("\u{6771}\u{4EAC}\u{90FD}"), "len:3");
+    }
+
+    // ── bool_features ───────────────────────────────────────────────
+
+    #[test]
+    fn bool_features_capitalized() {
+        let f = HmmNER::bool_features("Google");
+        assert_eq!(f["is_capitalized"], true);
+        assert_eq!(f["is_all_caps"], false);
+        assert_eq!(f["is_digit"], false);
+        assert_eq!(f["has_digit"], false);
+        assert_eq!(f["has_hyphen"], false);
+        assert_eq!(f["has_dot"], false);
+    }
+
+    #[test]
+    fn bool_features_all_caps_acronym() {
+        let f = HmmNER::bool_features("NASA");
+        assert_eq!(f["is_capitalized"], true);
+        assert_eq!(f["is_all_caps"], true);
+    }
+
+    #[test]
+    fn bool_features_digit_and_hyphen() {
+        let f = HmmNER::bool_features("F-16");
+        assert_eq!(f["has_digit"], true);
+        assert_eq!(f["has_hyphen"], true);
+        assert_eq!(f["is_digit"], false);
+    }
+
+    #[test]
+    fn bool_features_pure_number() {
+        let f = HmmNER::bool_features("2024");
+        assert_eq!(f["is_digit"], true);
+        assert_eq!(f["has_digit"], true);
+    }
+
+    #[test]
+    fn bool_features_dotted() {
+        let f = HmmNER::bool_features("U.S.");
+        assert_eq!(f["has_dot"], true);
+    }
+
+    // ── emission_prob (heuristic path) ──────────────────────────────
+
+    #[test]
+    fn emission_lowercase_non_entity_favors_o() {
+        let hmm = tiny_hmm();
+        let o = hmm.state_to_idx["O"];
+        let b_per = hmm.state_to_idx["B-PER"];
+        let p_o = hmm.emission_prob(o, "works");
+        let p_bper = hmm.emission_prob(b_per, "works");
+        assert!(
+            p_o > p_bper,
+            "lowercase common word should score higher for O ({p_o}) than B-PER ({p_bper})"
+        );
+    }
+
+    #[test]
+    fn emission_known_gazetteer_word() {
+        let hmm = tiny_hmm();
+        let b_org = hmm.state_to_idx["B-ORG"];
+        // "google" is in the org gazetteer
+        let p = hmm.emission_prob(b_org, "google");
+        assert!(
+            (p - 0.4).abs() < 1e-9,
+            "gazetteer hit should return 0.4, got {p}"
+        );
+    }
+
+    #[test]
+    fn emission_org_suffix_hits_gazetteer() {
+        let hmm = tiny_hmm();
+        let b_org = hmm.state_to_idx["B-ORG"];
+        // "Inc" lowercased is "inc", which is in the org gazetteer.
+        // The gazetteer lookup fires first (returns 0.4) before the
+        // heuristic org-suffix branch (0.8) is reached.
+        let p = hmm.emission_prob(b_org, "Inc");
+        assert!(
+            (p - 0.4).abs() < 1e-9,
+            "org suffix 'Inc' hits gazetteer first, expected 0.4, got {p}"
+        );
+    }
+
+    #[test]
+    fn emission_org_suffix_not_in_gazetteer() {
+        let hmm = tiny_hmm();
+        let b_org = hmm.state_to_idx["B-ORG"];
+        // "LLC" is in the gazetteer too. Use a suffix NOT in the gazetteer
+        // to exercise the heuristic branch.
+        let p = hmm.emission_prob(b_org, "Incorporated");
+        // "incorporated" IS in the gazetteer -> 0.4
+        // Try something truly absent from both gazetteer and suffix list:
+        // The heuristic path for a title-case word with entity_type "ORG" returns 0.35.
+        let p2 = hmm.emission_prob(b_org, "Widgets");
+        assert!(
+            (p2 - 0.35).abs() < 1e-9,
+            "Title-case non-gazetteer word should score 0.35 for B-ORG, got {p2}"
+        );
+        // Meanwhile the gazetteer word scores higher
+        assert!(p > p2, "gazetteer word ({p}) should beat heuristic ({p2})");
+    }
+
+    // ── viterbi ─────────────────────────────────────────────────────
+
+    #[test]
+    fn viterbi_empty_input() {
+        let hmm = tiny_hmm();
+        let path = hmm.viterbi(&[]);
+        assert!(path.is_empty());
+    }
+
+    #[test]
+    fn viterbi_single_token() {
+        let hmm = tiny_hmm();
+        let path = hmm.viterbi(&["hello"]);
+        assert_eq!(path.len(), 1);
+        // A single lowercase word should decode as O (state 0)
+        assert_eq!(path[0], hmm.state_to_idx["O"]);
+    }
+
+    #[test]
+    fn viterbi_path_all_valid_states() {
+        let hmm = tiny_hmm();
+        let words: Vec<&str> = "The quick brown fox jumps over the lazy dog".split_whitespace().collect();
+        let path = hmm.viterbi(&words);
+        assert_eq!(path.len(), words.len());
+        let n_states = hmm.states.len();
+        for &s in &path {
+            assert!(s < n_states, "state index {s} out of bounds (n={n_states})");
+        }
+    }
+
+    #[test]
+    fn viterbi_trained_model_finds_entity() {
+        // The heuristic-only model has a strong O prior that dominates even
+        // gazetteer emissions. Training shifts the dynamics so entities are
+        // actually decodable.
+        let mut hmm = tiny_hmm();
+        let sentences: Vec<(&[&str], &[&str])> = vec![
+            (&["John", "works"][..], &["B-PER", "O"][..]),
+            (&["Mary", "runs"][..], &["B-PER", "O"][..]),
+            (&["David", "left"][..], &["B-PER", "O"][..]),
+        ];
+        hmm.train(&sentences);
+
+        let words = vec!["John", "works"];
+        let path = hmm.viterbi(&words);
+        let b_per = hmm.state_to_idx["B-PER"];
+        assert_eq!(
+            path[0], b_per,
+            "After training, 'John' should decode as B-PER, got '{}'",
+            hmm.states[path[0]]
+        );
+    }
+
+    #[test]
+    fn emission_gazetteer_vs_heuristic_o() {
+        // Lowercase "john" hits the person gazetteer (B-PER = 0.4),
+        // but the O heuristic for non-capitalized words returns 0.7.
+        // This shows why the heuristic model alone struggles: the O
+        // emission dominates even for gazetteer-known names when lowercase.
+        let hmm = tiny_hmm();
+        let b_per = hmm.state_to_idx["B-PER"];
+        let o = hmm.state_to_idx["O"];
+
+        let p_bper = hmm.emission_prob(b_per, "john");
+        let p_o = hmm.emission_prob(o, "john");
+        assert!((p_bper - 0.4).abs() < 1e-9, "B-PER gazetteer = {p_bper}");
+        assert!((p_o - 0.7).abs() < 1e-9, "O heuristic (lowercase) = {p_o}");
+
+        // Capitalized "John" has different heuristic for O (title_case -> 0.15)
+        // and gazetteer still fires for B-PER (0.4).
+        let p_bper_cap = hmm.emission_prob(b_per, "John");
+        let p_o_cap = hmm.emission_prob(o, "John");
+        assert!((p_bper_cap - 0.4).abs() < 1e-9);
+        assert!(
+            p_bper_cap > p_o_cap,
+            "Capitalized 'John': B-PER ({p_bper_cap}) should exceed O ({p_o_cap})"
+        );
+    }
+
+    // ── decode_entities ─────────────────────────────────────────────
+
+    #[test]
+    fn decode_entities_single_b_tag() {
+        let hmm = tiny_hmm();
+        let text = "John works";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let b_per = hmm.state_to_idx["B-PER"];
+        let o = hmm.state_to_idx["O"];
+        let labels = vec![b_per, o];
+
+        let entities = hmm.decode_entities(text, &words, &labels);
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].text, "John");
+        assert_eq!(entities[0].entity_type, EntityType::Person);
+        assert_eq!(entities[0].start, 0);
+        assert_eq!(entities[0].end, 4);
+    }
+
+    #[test]
+    fn decode_entities_multi_token_entity() {
+        let hmm = tiny_hmm();
+        let text = "New York is big";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let b_loc = hmm.state_to_idx["B-LOC"];
+        let i_loc = hmm.state_to_idx["I-LOC"];
+        let o = hmm.state_to_idx["O"];
+        let labels = vec![b_loc, i_loc, o, o];
+
+        let entities = hmm.decode_entities(text, &words, &labels);
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].text, "New York");
+        assert_eq!(entities[0].entity_type, EntityType::Location);
+        // "New" starts at char 0, "York" ends at char 8
+        assert_eq!(entities[0].start, 0);
+        assert_eq!(entities[0].end, 8);
+    }
+
+    #[test]
+    fn decode_entities_two_adjacent_entities() {
+        let hmm = tiny_hmm();
+        let text = "John Google";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let b_per = hmm.state_to_idx["B-PER"];
+        let b_org = hmm.state_to_idx["B-ORG"];
+        let labels = vec![b_per, b_org];
+
+        let entities = hmm.decode_entities(text, &words, &labels);
+        assert_eq!(entities.len(), 2);
+        assert_eq!(entities[0].text, "John");
+        assert_eq!(entities[0].entity_type, EntityType::Person);
+        assert_eq!(entities[1].text, "Google");
+        assert_eq!(entities[1].entity_type, EntityType::Organization);
+    }
+
+    #[test]
+    fn decode_entities_entity_at_end() {
+        let hmm = tiny_hmm();
+        let text = "works at Google";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let o = hmm.state_to_idx["O"];
+        let b_org = hmm.state_to_idx["B-ORG"];
+        let labels = vec![o, o, b_org];
+
+        let entities = hmm.decode_entities(text, &words, &labels);
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].text, "Google");
+        // "Google" starts at char 9, ends at char 15
+        assert_eq!(entities[0].start, 9);
+        assert_eq!(entities[0].end, 15);
+    }
+
+    #[test]
+    fn decode_entities_all_o_yields_nothing() {
+        let hmm = tiny_hmm();
+        let text = "the quick fox";
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let o = hmm.state_to_idx["O"];
+        let labels = vec![o, o, o];
+
+        let entities = hmm.decode_entities(text, &words, &labels);
+        assert!(entities.is_empty());
+    }
+
+    // ── calculate_token_positions ───────────────────────────────────
+
+    #[test]
+    fn token_positions_simple() {
+        let text = "hello world";
+        let tokens = vec!["hello", "world"];
+        let pos = HmmNER::calculate_token_positions(text, &tokens);
+        assert_eq!(pos, vec![(0, 5), (6, 11)]);
+    }
+
+    #[test]
+    fn token_positions_extra_whitespace() {
+        let text = "hello   world";
+        let tokens = vec!["hello", "world"];
+        let pos = HmmNER::calculate_token_positions(text, &tokens);
+        assert_eq!(pos[0], (0, 5));
+        assert_eq!(pos[1], (8, 13));
+    }
+
+    // ── init_transitions ────────────────────────────────────────────
+
+    #[test]
+    fn transitions_rows_sum_to_one() {
+        let hmm = tiny_hmm();
+        for (i, row) in hmm.transitions.iter().enumerate() {
+            let sum: f64 = row.iter().sum();
+            assert!(
+                (sum - 1.0).abs() < 1e-9,
+                "row {} ({}) sums to {sum}, not 1.0",
+                i,
+                hmm.states[i]
+            );
+        }
+    }
+
+    #[test]
+    fn transitions_i_tag_cross_type_near_zero() {
+        let hmm = tiny_hmm();
+        // I-PER following B-ORG should be near-zero (BIO constraint violation)
+        let b_org = hmm.state_to_idx["B-ORG"];
+        let i_per = hmm.state_to_idx["I-PER"];
+        assert!(
+            hmm.transitions[b_org][i_per] < 0.01,
+            "B-ORG -> I-PER = {}, should be near-zero",
+            hmm.transitions[b_org][i_per]
+        );
+    }
+
+    // ── train ───────────────────────────────────────────────────────
+
+    #[test]
+    fn train_updates_emission_for_seen_word() {
+        let mut hmm = tiny_hmm();
+        let sentences: Vec<(&[&str], &[&str])> = vec![(
+            &["Acme", "sells", "widgets"][..],
+            &["B-ORG", "O", "O"][..],
+        )];
+        hmm.train(&sentences);
+
+        let b_org = hmm.state_to_idx["B-ORG"];
+        // After training, "acme" (lowercased) should have an explicit emission for B-ORG
+        let p = hmm.emissions.get(&(b_org, "acme".to_string()));
+        assert!(p.is_some(), "training should insert emission for 'acme'");
+        assert!(*p.unwrap() > 0.0);
+    }
+
+    #[test]
+    fn train_empty_sentences_smooths_to_uniform() {
+        // Training with zero data applies smoothing to all counts,
+        // which produces a uniform initial distribution (smoothing / (n * smoothing)).
+        let mut hmm = tiny_hmm();
+        let sentences: Vec<(&[&str], &[&str])> = vec![];
+        hmm.train(&sentences);
+
+        let n = hmm.states.len();
+        let expected = 1.0 / n as f64;
+        for (i, &p) in hmm.initial.iter().enumerate() {
+            assert!(
+                (p - expected).abs() < 1e-9,
+                "state {} initial = {p}, expected uniform {expected}",
+                hmm.states[i]
+            );
+        }
+    }
+
+    // ── initial probs ───────────────────────────────────────────────
+
+    #[test]
+    fn initial_probs_sum_to_one() {
+        let hmm = tiny_hmm();
+        let sum: f64 = hmm.initial.iter().sum();
+        assert!(
+            (sum - 1.0).abs() < 1e-9,
+            "initial probs sum to {sum}, not 1.0"
+        );
+    }
+
+    #[test]
+    fn initial_i_tags_near_zero() {
+        let hmm = tiny_hmm();
+        // I-* tags should have near-zero initial probability (can't start a sequence with I-)
+        for (i, state) in hmm.states.iter().enumerate() {
+            if state.starts_with("I-") {
+                assert!(
+                    hmm.initial[i] < 0.01,
+                    "initial P({state}) = {}, should be near-zero",
+                    hmm.initial[i]
+                );
+            }
+        }
+    }
+}
