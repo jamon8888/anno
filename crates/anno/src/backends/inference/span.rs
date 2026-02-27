@@ -415,3 +415,248 @@ impl HandshakingMatrix {
 }
 
 // =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ModalityHint;
+    use std::collections::HashMap;
+
+    // ---- SpanRepConfig defaults ----
+
+    #[test]
+    fn span_rep_config_default_values() {
+        let cfg = SpanRepConfig::default();
+        assert_eq!(cfg.hidden_dim, 768);
+        assert_eq!(cfg.max_width, 12);
+        assert!(cfg.use_width_embeddings);
+        assert_eq!(cfg.width_emb_dim, 192);
+    }
+
+    // ---- SpanRepresentationLayer construction ----
+
+    #[test]
+    fn span_rep_layer_allocation_sizes() {
+        let cfg = SpanRepConfig {
+            hidden_dim: 4,
+            max_width: 3,
+            use_width_embeddings: true,
+            width_emb_dim: 2,
+        };
+        let layer = SpanRepresentationLayer::new(cfg);
+        // input_dim = 4*2 + 2 = 10; projection_weights = 10*4 = 40
+        assert_eq!(layer.projection_weights.len(), 40);
+        assert_eq!(layer.projection_bias.len(), 4);
+        // width_embeddings = 3 * 2 = 6
+        assert_eq!(layer.width_embeddings.len(), 6);
+    }
+
+    #[test]
+    fn span_rep_layer_no_width_embeddings() {
+        let cfg = SpanRepConfig {
+            hidden_dim: 4,
+            max_width: 3,
+            use_width_embeddings: false,
+            width_emb_dim: 0,
+        };
+        let layer = SpanRepresentationLayer::new(cfg);
+        // input_dim = 4*2 + 0 = 8; projection_weights = 8*4 = 32
+        assert_eq!(layer.projection_weights.len(), 32);
+        assert_eq!(layer.width_embeddings.len(), 0);
+    }
+
+    // ---- Forward pass helpers ----
+
+    fn make_batch_and_embeddings(
+        doc_lengths: &[usize],
+        hidden_dim: usize,
+    ) -> (RaggedBatch, Vec<f32>) {
+        let sequences: Vec<Vec<u32>> = doc_lengths
+            .iter()
+            .map(|&len| (0..len as u32).collect())
+            .collect();
+        let batch = RaggedBatch::from_sequences(&sequences);
+        let total_tokens: usize = doc_lengths.iter().sum();
+        // Fill with value = token_index + 1 so we can verify averaging.
+        let mut embeddings = vec![0.0f32; total_tokens * hidden_dim];
+        for t in 0..total_tokens {
+            for h in 0..hidden_dim {
+                embeddings[t * hidden_dim + h] = (t + 1) as f32;
+            }
+        }
+        (batch, embeddings)
+    }
+
+    #[test]
+    fn forward_single_token_span() {
+        // Span of width 1 (start=0, end=1): start_emb == end_emb, average is itself.
+        let hidden_dim = 4;
+        let (batch, embeddings) = make_batch_and_embeddings(&[3], hidden_dim);
+        let cfg = SpanRepConfig {
+            hidden_dim,
+            max_width: 3,
+            use_width_embeddings: false,
+            width_emb_dim: 0,
+        };
+        let layer = SpanRepresentationLayer::new(cfg);
+        let candidates = vec![SpanCandidate::new(0, 0, 1)];
+        let out = layer.forward(&embeddings, &candidates, &batch);
+        assert_eq!(out.len(), hidden_dim);
+        // start_emb = end_emb = 1.0, average = 1.0
+        for &v in &out {
+            assert!((v - 1.0).abs() < 1e-6, "expected 1.0, got {v}");
+        }
+    }
+
+    #[test]
+    fn forward_multi_token_span_averages_boundary() {
+        // Span (0, 3) => start_global=0, end_global=2 => average of emb[0] and emb[2].
+        let hidden_dim = 2;
+        let (batch, embeddings) = make_batch_and_embeddings(&[5], hidden_dim);
+        let cfg = SpanRepConfig {
+            hidden_dim,
+            max_width: 5,
+            use_width_embeddings: false,
+            width_emb_dim: 0,
+        };
+        let layer = SpanRepresentationLayer::new(cfg);
+        let candidates = vec![SpanCandidate::new(0, 0, 3)];
+        let out = layer.forward(&embeddings, &candidates, &batch);
+        // emb[0] = 1.0, emb[2] = 3.0 => average = 2.0
+        for &v in &out {
+            assert!((v - 2.0).abs() < 1e-6, "expected 2.0, got {v}");
+        }
+    }
+
+    #[test]
+    fn forward_invalid_span_end_leq_start_skipped() {
+        let hidden_dim = 2;
+        let (batch, embeddings) = make_batch_and_embeddings(&[3], hidden_dim);
+        let cfg = SpanRepConfig {
+            hidden_dim,
+            max_width: 3,
+            use_width_embeddings: false,
+            width_emb_dim: 0,
+        };
+        let layer = SpanRepresentationLayer::new(cfg);
+        // end == start is invalid; output slot stays zeroed.
+        let candidates = vec![SpanCandidate::new(0, 2, 2)];
+        let out = layer.forward(&embeddings, &candidates, &batch);
+        for &v in &out {
+            assert!((v).abs() < 1e-6, "expected 0.0 (skipped), got {v}");
+        }
+    }
+
+    #[test]
+    fn forward_empty_candidates_returns_empty() {
+        let hidden_dim = 4;
+        let (batch, embeddings) = make_batch_and_embeddings(&[3], hidden_dim);
+        let cfg = SpanRepConfig {
+            hidden_dim,
+            max_width: 3,
+            use_width_embeddings: false,
+            width_emb_dim: 0,
+        };
+        let layer = SpanRepresentationLayer::new(cfg);
+        let out = layer.forward(&embeddings, &[], &batch);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn forward_out_of_bounds_doc_idx_skipped() {
+        let hidden_dim = 2;
+        let (batch, embeddings) = make_batch_and_embeddings(&[3], hidden_dim);
+        let cfg = SpanRepConfig {
+            hidden_dim,
+            max_width: 3,
+            use_width_embeddings: false,
+            width_emb_dim: 0,
+        };
+        let layer = SpanRepresentationLayer::new(cfg);
+        // doc_idx=5 does not exist in the batch.
+        let candidates = vec![SpanCandidate::new(5, 0, 1)];
+        let out = layer.forward(&embeddings, &candidates, &batch);
+        // Should be zeroed (candidate skipped).
+        for &v in &out {
+            assert!((v).abs() < 1e-6);
+        }
+    }
+
+    // ---- HandshakingMatrix ----
+
+    #[test]
+    fn handshaking_from_dense_thresholding() {
+        // 2 tokens, 1 label => dense shape [2, 2, 1].
+        // Only upper-triangular (i <= j) cells are visited.
+        let scores = vec![
+            0.1, // (0,0) -- below threshold
+            0.9, // (0,1) -- above
+            0.0, // (1,0) -- lower triangle, not visited
+            0.5, // (1,1) -- at threshold
+        ];
+        let matrix = HandshakingMatrix::from_dense(&scores, 2, 1, 0.5);
+        assert_eq!(matrix.cells.len(), 2);
+        assert!((matrix.cells[0].score - 0.9).abs() < 1e-6);
+        assert_eq!(matrix.cells[0].i, 0);
+        assert_eq!(matrix.cells[0].j, 1);
+        assert!((matrix.cells[1].score - 0.5).abs() < 1e-6);
+        assert_eq!(matrix.cells[1].i, 1);
+        assert_eq!(matrix.cells[1].j, 1);
+    }
+
+    #[test]
+    fn handshaking_empty_when_all_below_threshold() {
+        let scores = vec![0.1, 0.2, 0.0, 0.3];
+        let matrix = HandshakingMatrix::from_dense(&scores, 2, 1, 0.5);
+        assert!(matrix.cells.is_empty());
+    }
+
+    #[test]
+    fn handshaking_decode_nms_removes_overlapping() {
+        // Build a minimal registry with one Entity label.
+        let registry = SemanticRegistry {
+            embeddings: vec![0.0; 4],
+            hidden_dim: 4,
+            labels: vec![LabelDefinition {
+                slug: "PER".to_string(),
+                description: "Person".to_string(),
+                category: LabelCategory::Entity,
+                modality: ModalityHint::TextOnly,
+                threshold: 0.0,
+            }],
+            label_index: {
+                let mut m = HashMap::new();
+                m.insert("PER".to_string(), 0);
+                m
+            },
+        };
+
+        // Two overlapping cells: span [0,3) score 0.9 and span [1,4) score 0.8.
+        // W2NER convention: cell.j = start, cell.i = end (inclusive), decoded as [j, i+1).
+        let matrix = HandshakingMatrix {
+            cells: vec![
+                HandshakingCell {
+                    i: 2,
+                    j: 0,
+                    label_idx: 0,
+                    score: 0.9,
+                },
+                HandshakingCell {
+                    i: 3,
+                    j: 1,
+                    label_idx: 0,
+                    score: 0.8,
+                },
+            ],
+            seq_len: 5,
+            num_labels: 1,
+        };
+
+        let entities = matrix.decode_entities(&registry);
+        // Spans [0,3) and [1,4) overlap; NMS keeps only the higher-score one.
+        assert_eq!(entities.len(), 1, "NMS should suppress overlapping span");
+        assert_eq!(entities[0].0.start, 0);
+        assert_eq!(entities[0].0.end, 3);
+        assert!((entities[0].2 - 0.9).abs() < 1e-6);
+    }
+}
