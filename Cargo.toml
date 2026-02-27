@@ -41,6 +41,7 @@ bitflags = "2"
 textprep = "0.1"
 sketchir = "0.1.2"
 clump = "0.1.0"
+graphops = "0.1.0"
 
 ## Clustering / stratification
 #
