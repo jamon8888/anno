@@ -619,4 +619,71 @@ mod tests {
             serde_json::from_str(&json).expect("deserialize TemporalValidity");
         assert_eq!(validity, recovered);
     }
+
+    #[test]
+    fn test_display_fromstr_roundtrip() {
+        let cases = [
+            HistoricalDate::ce(2024, 6, 15),
+            HistoricalDate::bce(44, 3, 15),
+            HistoricalDate::year_only(1990),
+            HistoricalDate::year_only(-500),
+            HistoricalDate::year_month(2024, 6),
+        ];
+        for date in cases {
+            let displayed = date.to_string();
+            let parsed: HistoricalDate = displayed.parse().unwrap_or_else(|e| {
+                panic!("Failed to parse '{}': {}", displayed, e)
+            });
+            assert_eq!(date, parsed, "Round-trip failed for '{}'", displayed);
+        }
+    }
+
+    #[test]
+    fn test_parse_year_extraction() {
+        assert_eq!(HistoricalDate::parse_year("2024-06-15"), Some(2024));
+        assert_eq!(HistoricalDate::parse_year("-0044-03-15"), Some(-44));
+        assert_eq!(HistoricalDate::parse_year("1990"), Some(1990));
+        assert_eq!(HistoricalDate::parse_year(""), None);
+        assert_eq!(HistoricalDate::parse_year("  "), None);
+    }
+
+    #[test]
+    fn test_temporal_validity_display() {
+        let always = TemporalValidity::always();
+        assert_eq!(format!("{}", always), "always");
+
+        let from = TemporalValidity::from_date(HistoricalDate::year_only(2000));
+        assert_eq!(format!("{}", from), "2000 - present");
+
+        let until = TemporalValidity::until_date(HistoricalDate::year_only(1999));
+        assert_eq!(format!("{}", until), "? - 1999");
+
+        let bounded = TemporalValidity::new(
+            Some(HistoricalDate::year_only(1990)),
+            Some(HistoricalDate::year_only(2000)),
+        );
+        assert_eq!(format!("{}", bounded), "1990 - 2000");
+    }
+
+    #[test]
+    fn test_compatibility_score_far_before_entity() {
+        // Entity valid 1900-2000; document from 1800 (100 years before)
+        let validity = TemporalValidity::new(
+            Some(HistoricalDate::year_only(1900)),
+            Some(HistoricalDate::year_only(2000)),
+        );
+        let score = validity.compatibility_score(&HistoricalDate::year_only(1800));
+        // 100 years before -> (1.0 - 100/50) clamped to 0.1
+        assert!((score - 0.1).abs() < 0.01, "score={}", score);
+    }
+
+    #[test]
+    fn test_temporal_validity_always_is_current() {
+        assert!(TemporalValidity::always().is_current());
+        assert!(TemporalValidity::from_date(HistoricalDate::year_only(2000)).is_current());
+        assert!(!TemporalValidity::new(
+            Some(HistoricalDate::year_only(2000)),
+            Some(HistoricalDate::year_only(2020)),
+        ).is_current());
+    }
 }

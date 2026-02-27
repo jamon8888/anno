@@ -214,4 +214,54 @@ mod tests {
         let parsed: BoxEmbedding = serde_json::from_str(&json).unwrap();
         assert_eq!(original, parsed);
     }
+
+    #[test]
+    fn test_box_embedding_invalid() {
+        // min > max in one dimension
+        let invalid = BoxEmbedding::new(vec![2.0, 0.0], vec![1.0, 1.0]);
+        assert!(!invalid.is_valid());
+        // Mismatched dimensions
+        let mismatched = BoxEmbedding { min: vec![0.0], max: vec![1.0, 2.0], temperature: None };
+        assert!(!mismatched.is_valid());
+    }
+
+    #[test]
+    fn test_box_embedding_contains_point() {
+        let b = BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]);
+        assert!(b.contains_point(&[0.5, 0.5]));
+        assert!(b.contains_point(&[0.0, 0.0])); // boundary
+        assert!(b.contains_point(&[1.0, 1.0])); // boundary
+        assert!(!b.contains_point(&[1.5, 0.5])); // outside
+        assert!(!b.contains_point(&[0.5])); // wrong dimension
+    }
+
+    #[test]
+    fn test_box_embedding_zero_volume() {
+        // Flat box (zero volume in one dimension)
+        let flat = BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 0.0]);
+        assert!((flat.volume() - 0.0).abs() < 1e-6);
+        assert!(flat.is_valid()); // min == max is valid
+    }
+
+    #[test]
+    fn test_box_embedding_no_intersection() {
+        let b1 = BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]);
+        let b2 = BoxEmbedding::new(vec![2.0, 2.0], vec![3.0, 3.0]);
+        assert!((b1.intersection_volume(&b2) - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_box_embedding_different_dim_intersection() {
+        let b1 = BoxEmbedding::new(vec![0.0], vec![1.0]);
+        let b2 = BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]);
+        assert!((b1.intersection_volume(&b2) - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_box_embedding_json_roundtrip() {
+        let original = BoxEmbedding::new(vec![0.0, 1.0], vec![2.0, 3.0]);
+        let json_val = original.to_json();
+        let recovered = BoxEmbedding::from_json(&json_val).expect("should parse from JSON value");
+        assert_eq!(original, recovered);
+    }
 }

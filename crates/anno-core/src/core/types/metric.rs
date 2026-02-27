@@ -367,4 +367,56 @@ mod tests {
         let bounds = stats.format_ci_bounds();
         assert!(bounds.contains('['));
     }
+
+    #[test]
+    fn test_format_empty_and_single() {
+        let empty = MetricStats::from_samples(&[]);
+        assert_eq!(empty.format_ci(), "N/A");
+        assert_eq!(empty.format_range(), "N/A");
+        assert_eq!(empty.format_ci_bounds(), "N/A");
+
+        let single = MetricStats::from_single(0.90);
+        let ci = single.format_ci();
+        assert!(ci.contains("90.0%"), "single format_ci: {}", ci);
+        assert!(ci.contains("0.0%"), "single should have zero CI: {}", ci);
+    }
+
+    #[test]
+    fn test_is_stable() {
+        let stable = MetricStats::from_samples(&[0.85, 0.85, 0.85, 0.85]);
+        assert!(stable.is_stable(0.01));
+
+        let variable = MetricStats::from_samples(&[0.50, 0.70, 0.90, 1.00]);
+        assert!(!variable.is_stable(0.05));
+    }
+
+    #[test]
+    fn test_merge_with_empty() {
+        let stats = MetricStats::from_samples(&[0.80, 0.85]);
+        let empty = MetricStats::default();
+
+        let merged_left = empty.merge(&stats);
+        assert_eq!(merged_left.n, stats.n);
+        assert!((merged_left.mean - stats.mean).abs() < 0.001);
+
+        let merged_right = stats.merge(&empty);
+        assert_eq!(merged_right.n, stats.n);
+        assert!((merged_right.mean - stats.mean).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_ci_95_tuple() {
+        let stats = MetricStats::from_samples(&[0.80, 0.82, 0.84, 0.86, 0.88]);
+        let (lower, upper) = stats.ci_95_tuple();
+        assert!(lower < stats.mean);
+        assert!(upper > stats.mean);
+        assert!((upper - lower - 2.0 * stats.ci_half_width).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_display_uses_format_ci() {
+        let stats = MetricStats::from_samples(&[0.85, 0.87, 0.83]);
+        let display = format!("{}", stats);
+        assert_eq!(display, stats.format_ci());
+    }
 }

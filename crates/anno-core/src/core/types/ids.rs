@@ -601,4 +601,79 @@ mod tests {
         let id = SignalId::default();
         assert_eq!(id.get(), 0);
     }
+
+    #[test]
+    fn test_next_mut_sequential() {
+        let mut gen = SignalId::new(10);
+        let first = gen.next_mut();
+        let second = gen.next_mut();
+        assert_eq!(first.get(), 10);
+        assert_eq!(second.get(), 11);
+        assert_eq!(gen.get(), 12);
+    }
+
+    #[test]
+    fn test_add_assign() {
+        let mut id = TrackId::new(5);
+        id += 3;
+        assert_eq!(id.get(), 8);
+    }
+
+    #[test]
+    fn test_from_i32() {
+        let id = IdentityId::from(42i32);
+        assert_eq!(id.get(), 42);
+    }
+
+    #[test]
+    fn test_char_span_basics() {
+        let span = CharSpan::new(5, 10);
+        assert_eq!(span.len(), 5);
+        assert!(!span.is_empty());
+        assert_eq!(span.to_range(), 5..10);
+
+        let empty = CharSpan::new(3, 3);
+        assert!(empty.is_empty());
+        assert_eq!(empty.len(), 0);
+    }
+
+    #[test]
+    fn test_char_span_from_tuple_and_range() {
+        let from_tuple: CharSpan = (2, 7).into();
+        let from_range: CharSpan = (2..7).into();
+        assert_eq!(from_tuple, from_range);
+    }
+
+    #[test]
+    fn test_char_span_serde_roundtrip() {
+        let span = CharSpan::new(10, 20);
+        let json = serde_json::to_string(&span).expect("serialize CharSpan");
+        assert_eq!(json, "[10,20]");
+        let recovered: CharSpan = serde_json::from_str(&json).expect("deserialize CharSpan");
+        assert_eq!(span, recovered);
+    }
+
+    #[test]
+    fn test_byte_span_basics() {
+        let span = ByteSpan::new(0, 9);
+        assert_eq!(span.len(), 9);
+        assert!(!span.is_empty());
+        assert_eq!(span.to_range(), 0..9);
+    }
+
+    #[test]
+    fn test_byte_offset_display_and_conversions() {
+        let offset = ByteOffset::new(42);
+        assert_eq!(format!("{}", offset), "42");
+        let raw: usize = offset.into();
+        assert_eq!(raw, 42);
+        let back: ByteOffset = raw.into();
+        assert_eq!(back, offset);
+    }
+
+    #[test]
+    fn test_canonical_id_zero_constant() {
+        assert_eq!(CanonicalId::ZERO.get(), 0);
+        assert_eq!(CanonicalId::ZERO, CanonicalId::default());
+    }
 }

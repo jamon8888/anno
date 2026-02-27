@@ -550,4 +550,90 @@ mod tests {
         let dbp = ExternalId::dbpedia("Person");
         assert_eq!(dbp.to_iri(), "http://dbpedia.org/resource/Person");
     }
+
+    #[test]
+    fn test_empty_normalizer_knows_nothing() {
+        let norm = LabelNormalizer::new();
+        assert!(!norm.is_known("PER"));
+        assert_eq!(norm.normalize("PERSON"), None);
+        assert!(norm.all_aliases().is_empty());
+    }
+
+    #[test]
+    fn test_bioes_prefix_stripping_all_variants() {
+        let norm = LabelNormalizer::default();
+        // L- and U- prefixes (BIOES extended)
+        assert_eq!(norm.normalize("L-PER"), Some(CoreType::Person));
+        assert_eq!(norm.normalize("U-ORG"), Some(CoreType::Organization));
+    }
+
+    #[test]
+    fn test_unknown_label_returns_none() {
+        let norm = LabelNormalizer::default();
+        assert_eq!(norm.normalize("SPACESHIP"), None);
+        assert_eq!(norm.normalize(""), None);
+        assert!(!norm.is_known("UNKNOWN_TYPE_XYZ"));
+    }
+
+    #[test]
+    fn test_legal_domain_registration() {
+        let norm = LabelNormalizer::default();
+        norm.register_legal();
+
+        assert!(norm.is_known("case_ref"));
+        assert!(norm.is_known("citation"));
+        assert!(norm.is_known("court"));
+        assert!(norm.is_known("statute"));
+        assert!(norm.is_known("judge"));
+
+        match norm.normalize("court") {
+            Some(CoreType::Domain(s)) => assert_eq!(s, "COURT"),
+            other => panic!("Expected Domain(\"COURT\"), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_core_type_display_roundtrip() {
+        // Display produces the canonical label; normalizing that label should recover the type
+        let norm = LabelNormalizer::default();
+        let types = [
+            CoreType::Person,
+            CoreType::Organization,
+            CoreType::Location,
+            CoreType::Date,
+            CoreType::Money,
+            CoreType::Norp,
+            CoreType::Facility,
+            CoreType::Event,
+            CoreType::Language,
+        ];
+        for ct in types {
+            let label = ct.to_string();
+            assert_eq!(
+                norm.normalize(&label),
+                Some(ct),
+                "Display label {:?} should normalize back to {:?}",
+                label,
+                ct
+            );
+        }
+    }
+
+    #[test]
+    fn test_external_id_custom_iri() {
+        let custom = ExternalId::Custom {
+            source: "freebase".to_string(),
+            id: "/m/0123".to_string(),
+        };
+        assert_eq!(custom.to_iri(), "freebase:/m/0123");
+    }
+
+    #[test]
+    fn test_external_id_umls_iri() {
+        let umls = ExternalId::Umls("C0027051".to_string());
+        assert_eq!(
+            umls.to_iri(),
+            "https://uts.nlm.nih.gov/uts/umls/concept/C0027051"
+        );
+    }
 }
