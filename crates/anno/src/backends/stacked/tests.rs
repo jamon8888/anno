@@ -843,21 +843,50 @@ fn test_try_build_ok_single_layer() {
 
 #[test]
 fn test_invalid_span_start_ge_end_skipped() {
-    // Backend produces an entity where start == end (zero-width).
-    let layer = MockModel::new("l1")
-        .with_entities(vec![])
-        // We'll construct an entity with start >= end via without_validation + raw entity.
-        ;
-    // Build a raw entity with start > end using Entity::new then manually set.
-    let mut bad = Entity::new("ghost", EntityType::Person, 5, 5, 0.9);
-    bad.start = 5;
-    bad.end = 5; // zero-width
-    let layer = MockModel::new("l1")
-        .with_entities(vec![bad])
-        .without_validation();
+    // Backend that returns a zero-width entity (start == end).
+    // MockModel::with_entities panics on start >= end, so we use a custom model.
+    #[derive(Clone)]
+    struct ZeroWidthModel;
+    impl crate::sealed::Sealed for ZeroWidthModel {}
+    impl crate::Model for ZeroWidthModel {
+        fn extract_entities(
+            &self,
+            _text: &str,
+            _language: Option<&str>,
+        ) -> crate::Result<Vec<Entity>> {
+            Ok(vec![Entity {
+                text: "ghost".to_string(),
+                entity_type: EntityType::Person,
+                start: 5,
+                end: 5, // zero-width
+                confidence: 0.9,
+                provenance: None,
+                kb_id: None,
+                canonical_id: None,
+                normalized: None,
+                hierarchical_confidence: None,
+                visual_span: None,
+                discontinuous_span: None,
+                valid_from: None,
+                valid_until: None,
+                viewport: None,
+                phi_features: None,
+                mention_type: None,
+            }])
+        }
+        fn supported_types(&self) -> Vec<EntityType> {
+            vec![EntityType::Person]
+        }
+        fn is_available(&self) -> bool {
+            true
+        }
+        fn name(&self) -> &'static str {
+            "zero-width"
+        }
+    }
 
     let ner = StackedNER::builder()
-        .layer(layer)
+        .layer(ZeroWidthModel)
         .strategy(ConflictStrategy::Priority)
         .build();
 
