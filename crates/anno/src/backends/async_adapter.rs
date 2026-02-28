@@ -292,6 +292,132 @@ mod tests {
     use super::*;
     use crate::{EntityType, MockModel};
 
+    // =========================================================================
+    // HeuristicNER integration: real model, no downloads
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_async_heuristic_ner_produces_same_results_as_sync() {
+        use crate::backends::heuristic::HeuristicNER;
+
+        let heuristic = HeuristicNER::new();
+        let text = "John Smith works at Microsoft Corp. in Seattle.";
+
+        // Sync extraction
+        let sync_entities = heuristic
+            .extract_entities(text, None)
+            .expect("sync extraction should succeed");
+
+        // Async extraction (wraps the same model)
+        let async_model = AsyncNER::new(heuristic);
+        let async_entities = async_model
+            .extract_entities(text)
+            .await
+            .expect("async extraction should succeed");
+
+        assert_eq!(
+            sync_entities.len(),
+            async_entities.len(),
+            "async and sync should produce identical entity counts"
+        );
+        for (s, a) in sync_entities.iter().zip(async_entities.iter()) {
+            assert_eq!(s.text, a.text);
+            assert_eq!(s.entity_type, a.entity_type);
+            assert_eq!(s.start, a.start);
+            assert_eq!(s.end, a.end);
+            assert!(
+                (s.confidence - a.confidence).abs() < f64::EPSILON,
+                "confidence mismatch: {} vs {}",
+                s.confidence,
+                a.confidence
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_async_heuristic_ner_empty_input() {
+        use crate::backends::heuristic::HeuristicNER;
+
+        let async_model = HeuristicNER::new().into_async();
+        let entities = async_model
+            .extract_entities("")
+            .await
+            .expect("empty input should succeed");
+        assert!(entities.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_async_heuristic_ner_with_lang() {
+        use crate::backends::heuristic::HeuristicNER;
+
+        let async_model = HeuristicNER::new().into_async();
+        let entities = async_model
+            .extract_entities_with_lang("Dr. Maria Garcia visited Paris.", "en")
+            .await
+            .expect("extraction with lang should succeed");
+
+        // HeuristicNER should find at least one entity in this text
+        assert!(
+            !entities.is_empty(),
+            "expected entities from 'Dr. Maria Garcia visited Paris.'"
+        );
+    }
+
+    // =========================================================================
+    // from_arc constructor
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_from_arc_shares_same_model() {
+        let mock = MockModel::new("arc-ctor")
+            .with_entities(vec![Entity::new("x", EntityType::Person, 0, 1, 0.9)])
+            .without_validation();
+        let arc = Arc::new(mock);
+
+        let a = AsyncNER::from_arc(Arc::clone(&arc));
+        let b = AsyncNER::from_arc(Arc::clone(&arc));
+
+        // Both wrappers should share the same underlying allocation
+        assert!(Arc::ptr_eq(&a.inner_arc(), &b.inner_arc()));
+
+        let res_a = a.extract_entities("x").await.unwrap();
+        let res_b = b.extract_entities("x").await.unwrap();
+        assert_eq!(res_a.len(), res_b.len());
+    }
+
+    // =========================================================================
+    // Concurrent usage: multiple tasks hitting the same model
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_concurrent_extractions() {
+        use crate::backends::heuristic::HeuristicNER;
+
+        let async_model = HeuristicNER::new().into_async();
+
+        let texts = [
+            "Apple Inc. reported earnings.",
+            "Dr. Jane Foster works at MIT.",
+            "Tokyo hosted the Olympics.",
+        ];
+
+        let mut handles = Vec::new();
+        for text in &texts {
+            let m = async_model.clone();
+            let t = text.to_string();
+            handles.push(tokio::spawn(async move { m.extract_entities(&t).await }));
+        }
+
+        for handle in handles {
+            let result = handle.await.expect("task should not panic");
+            assert!(result.is_ok(), "extraction should succeed");
+        }
+    }
+
+    // =========================================================================
+    // Original tests
+    // =========================================================================
+
     #[tokio::test]
     async fn test_async_model_basic() {
         let mock = MockModel::new("test")

@@ -429,3 +429,208 @@ impl DiscontinuousEntity {
 }
 
 // =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =========================================================================
+    // Default constant sanity checks
+    // =========================================================================
+
+    #[test]
+    fn test_default_entity_types_not_empty() {
+        assert!(
+            !DEFAULT_ENTITY_TYPES.is_empty(),
+            "DEFAULT_ENTITY_TYPES must have at least one entry"
+        );
+        assert!(DEFAULT_ENTITY_TYPES.contains(&"person"));
+        assert!(DEFAULT_ENTITY_TYPES.contains(&"organization"));
+        assert!(DEFAULT_ENTITY_TYPES.contains(&"location"));
+    }
+
+    #[test]
+    fn test_default_relation_types_not_empty() {
+        assert!(
+            !DEFAULT_RELATION_TYPES.is_empty(),
+            "DEFAULT_RELATION_TYPES must have at least one entry"
+        );
+        assert!(DEFAULT_RELATION_TYPES.contains(&"founded"));
+        assert!(DEFAULT_RELATION_TYPES.contains(&"works_for"));
+    }
+
+    #[test]
+    fn test_default_types_are_lowercase() {
+        for ty in DEFAULT_ENTITY_TYPES {
+            assert_eq!(*ty, ty.to_lowercase(), "entity type should be lowercase");
+        }
+        for rel in DEFAULT_RELATION_TYPES {
+            assert_eq!(
+                *rel,
+                rel.to_lowercase(),
+                "relation type should be lowercase"
+            );
+        }
+    }
+
+    #[test]
+    fn test_default_types_no_duplicates() {
+        let mut seen = std::collections::HashSet::new();
+        for ty in DEFAULT_ENTITY_TYPES {
+            assert!(seen.insert(*ty), "duplicate entity type: {}", ty);
+        }
+        let mut seen = std::collections::HashSet::new();
+        for rel in DEFAULT_RELATION_TYPES {
+            assert!(seen.insert(*rel), "duplicate relation type: {}", rel);
+        }
+    }
+
+    // =========================================================================
+    // ExtractionWithRelations
+    // =========================================================================
+
+    #[test]
+    fn test_extraction_with_relations_default_is_empty() {
+        let extraction = ExtractionWithRelations::default();
+        assert!(extraction.entities.is_empty());
+        assert!(extraction.relations.is_empty());
+    }
+
+    #[test]
+    fn test_extraction_with_relations_into_anno_empty() {
+        let extraction = ExtractionWithRelations::default();
+        let (entities, relations) = extraction.into_anno_relations();
+        assert!(entities.is_empty());
+        assert!(relations.is_empty());
+    }
+
+    #[test]
+    fn test_extraction_with_relations_multiple_relations() {
+        let extraction = ExtractionWithRelations {
+            entities: vec![
+                Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
+                Entity::new("Bob", EntityType::Person, 10, 13, 0.85),
+                Entity::new("Acme", EntityType::Organization, 20, 24, 0.8),
+            ],
+            relations: vec![
+                RelationTriple {
+                    head_idx: 0,
+                    tail_idx: 2,
+                    relation_type: "WORKS_FOR".to_string(),
+                    confidence: 0.8,
+                },
+                RelationTriple {
+                    head_idx: 1,
+                    tail_idx: 2,
+                    relation_type: "WORKS_FOR".to_string(),
+                    confidence: 0.7,
+                },
+            ],
+        };
+
+        let (entities, relations) = extraction.into_anno_relations();
+        assert_eq!(entities.len(), 3);
+        assert_eq!(relations.len(), 2);
+        assert_eq!(relations[0].head.text, "Alice");
+        assert_eq!(relations[1].head.text, "Bob");
+    }
+
+    #[test]
+    fn test_extraction_mixed_valid_and_invalid_indices() {
+        let extraction = ExtractionWithRelations {
+            entities: vec![
+                Entity::new("X", EntityType::Person, 0, 1, 0.9),
+                Entity::new("Y", EntityType::Organization, 5, 6, 0.8),
+            ],
+            relations: vec![
+                RelationTriple {
+                    head_idx: 0,
+                    tail_idx: 1,
+                    relation_type: "VALID".to_string(),
+                    confidence: 0.9,
+                },
+                RelationTriple {
+                    head_idx: 0,
+                    tail_idx: 100,
+                    relation_type: "INVALID_TAIL".to_string(),
+                    confidence: 0.5,
+                },
+                RelationTriple {
+                    head_idx: 50,
+                    tail_idx: 1,
+                    relation_type: "INVALID_HEAD".to_string(),
+                    confidence: 0.5,
+                },
+            ],
+        };
+
+        let (_, relations) = extraction.into_anno_relations();
+        assert_eq!(relations.len(), 1, "only the valid relation should survive");
+        assert_eq!(relations[0].relation_type, "VALID");
+    }
+
+    // =========================================================================
+    // RelationTriple
+    // =========================================================================
+
+    #[test]
+    fn test_relation_triple_clone() {
+        let triple = RelationTriple {
+            head_idx: 0,
+            tail_idx: 1,
+            relation_type: "FOUNDED".to_string(),
+            confidence: 0.95,
+        };
+        let cloned = triple.clone();
+        assert_eq!(cloned.head_idx, 0);
+        assert_eq!(cloned.tail_idx, 1);
+        assert_eq!(cloned.relation_type, "FOUNDED");
+        assert!((cloned.confidence - 0.95).abs() < f32::EPSILON);
+    }
+
+    // =========================================================================
+    // DiscontinuousEntity
+    // =========================================================================
+
+    #[test]
+    fn test_discontinuous_entity_empty_spans() {
+        let entity = DiscontinuousEntity {
+            spans: vec![],
+            text: String::new(),
+            entity_type: "misc".to_string(),
+            confidence: 0.5,
+        };
+        assert!(!entity.is_contiguous());
+        assert!(entity.to_entity().is_none());
+    }
+
+    #[test]
+    fn test_discontinuous_entity_three_spans() {
+        let entity = DiscontinuousEntity {
+            spans: vec![(0, 3), (10, 15), (20, 25)],
+            text: "compound entity".to_string(),
+            entity_type: "location".to_string(),
+            confidence: 0.7,
+        };
+        assert!(!entity.is_contiguous());
+        assert!(entity.to_entity().is_none());
+    }
+
+    #[test]
+    fn test_discontinuous_entity_to_entity_preserves_fields() {
+        let entity = DiscontinuousEntity {
+            spans: vec![(5, 10)],
+            text: "Smith".to_string(),
+            entity_type: "person".to_string(),
+            confidence: 0.88,
+        };
+        let converted = entity.to_entity().expect("single span should convert");
+        assert_eq!(converted.text, "Smith");
+        assert_eq!(converted.start, 5);
+        assert_eq!(converted.end, 10);
+        assert_eq!(converted.entity_type, EntityType::Person);
+        assert!((converted.confidence - 0.88).abs() < 0.001);
+    }
+}

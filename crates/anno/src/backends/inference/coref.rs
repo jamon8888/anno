@@ -176,3 +176,249 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         0.0
     }
 }
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Entity, EntityType};
+
+    // =========================================================================
+    // CoreferenceConfig
+    // =========================================================================
+
+    #[test]
+    fn test_coreference_config_default() {
+        let config = CoreferenceConfig::default();
+        assert!((config.similarity_threshold - 0.85).abs() < f32::EPSILON);
+        assert_eq!(config.max_distance, Some(500));
+        assert!(config.use_string_match);
+    }
+
+    #[test]
+    fn test_coreference_config_clone() {
+        let config = CoreferenceConfig {
+            similarity_threshold: 0.7,
+            max_distance: None,
+            use_string_match: false,
+        };
+        let cloned = config.clone();
+        assert!((cloned.similarity_threshold - 0.7).abs() < f32::EPSILON);
+        assert!(cloned.max_distance.is_none());
+        assert!(!cloned.use_string_match);
+    }
+
+    // =========================================================================
+    // cosine_similarity
+    // =========================================================================
+
+    #[test]
+    fn test_cosine_similarity_identical() {
+        let a = vec![1.0, 2.0, 3.0];
+        let sim = cosine_similarity(&a, &a);
+        assert!((sim - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cosine_similarity_orthogonal() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![0.0, 1.0, 0.0];
+        assert!(cosine_similarity(&a, &b).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cosine_similarity_opposite() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![-1.0, 0.0, 0.0];
+        assert!((cosine_similarity(&a, &b) - (-1.0)).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cosine_similarity_zero_vector() {
+        let a = vec![1.0, 2.0, 3.0];
+        let zero = vec![0.0, 0.0, 0.0];
+        assert!((cosine_similarity(&a, &zero)).abs() < 0.001);
+        assert!((cosine_similarity(&zero, &a)).abs() < 0.001);
+        assert!((cosine_similarity(&zero, &zero)).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cosine_similarity_scaled_vectors() {
+        // Cosine similarity is scale-invariant
+        let a = vec![1.0, 2.0, 3.0];
+        let b = vec![10.0, 20.0, 30.0]; // same direction, 10x magnitude
+        assert!((cosine_similarity(&a, &b) - 1.0).abs() < 0.001);
+    }
+
+    // =========================================================================
+    // resolve_coreferences: embedding-based clustering
+    // =========================================================================
+
+    #[test]
+    fn test_coreference_embedding_similarity_clusters() {
+        // Two entities of the same type with identical embeddings should cluster
+        let entities = vec![
+            Entity::new("She", EntityType::Person, 0, 3, 0.9),
+            Entity::new("Her", EntityType::Person, 10, 13, 0.9),
+        ];
+
+        let hidden_dim = 4;
+        // Identical embeddings -> cosine similarity = 1.0, above any threshold
+        let embeddings = vec![
+            1.0, 0.0, 0.0, 0.0, // entity 0
+            1.0, 0.0, 0.0, 0.0, // entity 1
+        ];
+
+        let config = CoreferenceConfig {
+            similarity_threshold: 0.85,
+            max_distance: Some(500),
+            use_string_match: false, // disable string match to test embedding path
+        };
+
+        let clusters = resolve_coreferences(&entities, &embeddings, hidden_dim, &config);
+        assert_eq!(clusters.len(), 1, "identical embeddings should cluster");
+        assert_eq!(clusters[0].members.len(), 2);
+    }
+
+    #[test]
+    fn test_coreference_embedding_below_threshold_no_cluster() {
+        // Orthogonal embeddings -> similarity = 0, below threshold
+        let entities = vec![
+            Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
+            Entity::new("Bob", EntityType::Person, 10, 13, 0.9),
+        ];
+
+        let hidden_dim = 4;
+        let embeddings = vec![
+            1.0, 0.0, 0.0, 0.0, // entity 0
+            0.0, 1.0, 0.0, 0.0, // entity 1
+        ];
+
+        let config = CoreferenceConfig {
+            similarity_threshold: 0.85,
+            max_distance: Some(500),
+            use_string_match: false,
+        };
+
+        let clusters = resolve_coreferences(&entities, &embeddings, hidden_dim, &config);
+        assert!(
+            clusters.is_empty(),
+            "orthogonal embeddings should not cluster"
+        );
+    }
+
+    #[test]
+    fn test_coreference_representative_is_longest_mention() {
+        let entities = vec![
+            Entity::new("Dr. Robert Johnson", EntityType::Person, 0, 18, 0.9),
+            Entity::new("Johnson", EntityType::Person, 30, 37, 0.9),
+            Entity::new("He", EntityType::Person, 50, 52, 0.9),
+        ];
+
+        // All identical embeddings
+        let hidden_dim = 4;
+        let embeddings = vec![
+            1.0, 0.0, 0.0, 0.0, //
+            1.0, 0.0, 0.0, 0.0, //
+            1.0, 0.0, 0.0, 0.0, //
+        ];
+
+        let config = CoreferenceConfig {
+            similarity_threshold: 0.5,
+            max_distance: Some(500),
+            use_string_match: false,
+        };
+
+        let clusters = resolve_coreferences(&entities, &embeddings, hidden_dim, &config);
+        assert_eq!(clusters.len(), 1);
+        assert_eq!(
+            clusters[0].canonical_name, "Dr. Robert Johnson",
+            "representative should be the longest mention"
+        );
+    }
+
+    #[test]
+    fn test_coreference_no_distance_limit() {
+        // With max_distance = None, even distant mentions can cluster
+        let entities = vec![
+            Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
+            Entity::new("Alice", EntityType::Person, 10000, 10005, 0.9),
+        ];
+
+        let embeddings = vec![0.0f32; 2 * 4];
+        let config = CoreferenceConfig {
+            similarity_threshold: 0.85,
+            max_distance: None, // no distance limit
+            use_string_match: true,
+        };
+
+        let clusters = resolve_coreferences(&entities, &embeddings, 4, &config);
+        assert_eq!(clusters.len(), 1, "no distance limit should allow clustering");
+    }
+
+    #[test]
+    fn test_coreference_two_separate_clusters() {
+        // Four entities: two "Alice" (Person) and two "Acme" (Org)
+        let entities = vec![
+            Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
+            Entity::new("Alice", EntityType::Person, 20, 25, 0.9),
+            Entity::new("Acme", EntityType::Organization, 40, 44, 0.9),
+            Entity::new("Acme", EntityType::Organization, 60, 64, 0.9),
+        ];
+
+        let embeddings = vec![0.0f32; 4 * 768];
+        let clusters =
+            resolve_coreferences(&entities, &embeddings, 768, &CoreferenceConfig::default());
+
+        assert_eq!(clusters.len(), 2, "should form two separate clusters");
+        // Each cluster should have exactly 2 members
+        for cluster in &clusters {
+            assert_eq!(cluster.members.len(), 2);
+        }
+    }
+
+    #[test]
+    fn test_coreference_cluster_ids_are_sequential() {
+        let entities = vec![
+            Entity::new("A", EntityType::Person, 0, 1, 0.9),
+            Entity::new("A", EntityType::Person, 5, 6, 0.9),
+            Entity::new("B", EntityType::Organization, 10, 11, 0.9),
+            Entity::new("B", EntityType::Organization, 15, 16, 0.9),
+        ];
+
+        let embeddings = vec![0.0f32; 4 * 4];
+        let clusters =
+            resolve_coreferences(&entities, &embeddings, 4, &CoreferenceConfig::default());
+
+        let mut ids: Vec<u64> = clusters.iter().map(|c| c.id).collect();
+        ids.sort();
+        // IDs should be 0, 1, ...
+        for (i, id) in ids.iter().enumerate() {
+            assert_eq!(*id, i as u64, "cluster IDs should be sequential");
+        }
+    }
+
+    // =========================================================================
+    // CoreferenceCluster
+    // =========================================================================
+
+    #[test]
+    fn test_coreference_cluster_debug_and_clone() {
+        let cluster = CoreferenceCluster {
+            id: 0,
+            members: vec![0, 1, 2],
+            representative: 0,
+            canonical_name: "Test Entity".to_string(),
+        };
+        let cloned = cluster.clone();
+        assert_eq!(cloned.id, 0);
+        assert_eq!(cloned.members, vec![0, 1, 2]);
+        assert_eq!(cloned.canonical_name, "Test Entity");
+
+        let debug = format!("{:?}", cluster);
+        assert!(debug.contains("Test Entity"));
+    }
+}
