@@ -603,3 +603,313 @@ fn test_default_weights_bio_constraints() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Additional algorithm tests
+// ---------------------------------------------------------------------------
+
+/// extract_features includes prefix and suffix features for words >= 2 chars.
+#[test]
+fn test_extract_features_prefix_suffix() {
+    let ner = minimal_crf(HashMap::new());
+    let tokens = vec!["Johnson"];
+    let feats = ner.extract_features(&tokens, 0, "O");
+
+    assert!(
+        feats.contains(&"prefix2=jo".to_string()),
+        "Missing prefix2 feature, got: {:?}",
+        feats
+    );
+    assert!(
+        feats.contains(&"prefix3=joh".to_string()),
+        "Missing prefix3 feature"
+    );
+    assert!(
+        feats.contains(&"suffix2=on".to_string()),
+        "Missing suffix2 feature"
+    );
+    assert!(
+        feats.contains(&"suffix3=son".to_string()),
+        "Missing suffix3 feature"
+    );
+}
+
+/// Short words (1 char) should not produce prefix/suffix features.
+#[test]
+fn test_extract_features_no_prefix_suffix_for_short_word() {
+    let ner = minimal_crf(HashMap::new());
+    let tokens = vec!["I"];
+    let feats = ner.extract_features(&tokens, 0, "O");
+
+    let has_prefix = feats.iter().any(|f| f.starts_with("prefix"));
+    let has_suffix = feats.iter().any(|f| f.starts_with("suffix"));
+    assert!(!has_prefix, "Single-char word should have no prefix feature");
+    assert!(!has_suffix, "Single-char word should have no suffix feature");
+}
+
+/// extract_features includes context features for previous and next words.
+#[test]
+fn test_extract_features_context_words() {
+    let ner = minimal_crf(HashMap::new());
+    let tokens = vec!["Dr", "John", "Smith"];
+    let feats = ner.extract_features(&tokens, 1, "O");
+
+    // Previous word features
+    assert!(
+        feats.contains(&"-1:word.lower=dr".to_string()),
+        "Missing -1:word.lower feature"
+    );
+    // "Dr" is titlecase, not all-uppercase
+    assert!(
+        feats.contains(&"-1:word.istitle=True".to_string()),
+        "Missing -1:word.istitle for 'Dr'"
+    );
+    assert!(
+        feats.contains(&"-1:word.isupper=False".to_string()),
+        "Dr is not all-uppercase"
+    );
+
+    // Next word features
+    assert!(
+        feats.contains(&"+1:word.lower=smith".to_string()),
+        "Missing +1:word.lower feature"
+    );
+    assert!(
+        feats.contains(&"+1:word.istitle=True".to_string()),
+        "Missing +1:word.istitle feature"
+    );
+}
+
+/// extract_features: digit-only words get word.isdigit=True.
+#[test]
+fn test_extract_features_digit_word() {
+    let ner = minimal_crf(HashMap::new());
+    let tokens = vec!["2024"];
+    let feats = ner.extract_features(&tokens, 0, "O");
+
+    assert!(
+        feats.contains(&"word.isdigit=True".to_string()),
+        "All-digit word should have isdigit=True"
+    );
+    assert!(
+        feats.contains(&"word.isupper=False".to_string()),
+        "Digits are not uppercase"
+    );
+}
+
+/// extract_features: mixed word gets word.isdigit=False.
+#[test]
+fn test_extract_features_mixed_word_not_digit() {
+    let ner = minimal_crf(HashMap::new());
+    let tokens = vec!["Room42"];
+    let feats = ner.extract_features(&tokens, 0, "O");
+
+    assert!(
+        feats.contains(&"word.isdigit=False".to_string()),
+        "Mixed word should have isdigit=False"
+    );
+}
+
+/// extract_features with gazetteers: a Person gazetteer match emits a gaz:PER feature.
+#[test]
+fn test_extract_features_gazetteer_match() {
+    let ner = CrfNER::new(); // Full model with gazetteers
+    let tokens = vec!["John", "works"];
+    let feats = ner.extract_features(&tokens, 0, "O");
+
+    assert!(
+        feats.contains(&"gaz:PER".to_string()),
+        "John should match Person gazetteer, features: {:?}",
+        feats
+    );
+}
+
+/// extract_features with gazetteers: non-matching word has no gaz feature.
+#[test]
+fn test_extract_features_no_gazetteer_match() {
+    let ner = CrfNER::new();
+    let tokens = vec!["works"];
+    let feats = ner.extract_features(&tokens, 0, "O");
+
+    let has_gaz = feats.iter().any(|f| f.starts_with("gaz:"));
+    assert!(
+        !has_gaz,
+        "'works' should not match any gazetteer, features: {:?}",
+        feats
+    );
+}
+
+/// tokenize: multiple spaces and leading/trailing whitespace.
+#[test]
+fn test_tokenize_whitespace_variants() {
+    assert_eq!(CrfNER::tokenize("  Hello   world  "), vec!["Hello", "world"]);
+    assert!(CrfNER::tokenize("").is_empty());
+    assert!(CrfNER::tokenize("   ").is_empty());
+    assert_eq!(CrfNER::tokenize("single"), vec!["single"]);
+}
+
+/// tokenize: tabs and newlines count as whitespace.
+#[test]
+fn test_tokenize_tabs_newlines() {
+    assert_eq!(
+        CrfNER::tokenize("Hello\tworld\nfoo"),
+        vec!["Hello", "world", "foo"]
+    );
+}
+
+/// labels_to_entities: consecutive B- tags (back-to-back entities, no I- continuation).
+#[test]
+fn test_labels_to_entities_consecutive_b_tags() {
+    let ner = minimal_crf(HashMap::new());
+    let text = "John Mary works";
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let labels = vec![
+        "B-PER".to_string(),
+        "B-PER".to_string(),
+        "O".to_string(),
+    ];
+
+    let entities = ner.labels_to_entities(text, &tokens, &labels);
+    assert_eq!(entities.len(), 2, "Two consecutive B-PER should yield 2 entities");
+    assert_eq!(entities[0].text, "John");
+    assert_eq!(entities[1].text, "Mary");
+}
+
+/// labels_to_entities: MISC entity type.
+#[test]
+fn test_labels_to_entities_misc_type() {
+    let ner = minimal_crf(HashMap::new());
+    let text = "World Cup";
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let labels = vec!["B-MISC".to_string(), "I-MISC".to_string()];
+
+    let entities = ner.labels_to_entities(text, &tokens, &labels);
+    assert_eq!(entities.len(), 1);
+    assert_eq!(entities[0].text, "World Cup");
+    assert_eq!(entities[0].entity_type, EntityType::Other("MISC".to_string()));
+}
+
+/// labels_to_entities: empty tokens and labels produces no entities.
+#[test]
+fn test_labels_to_entities_empty() {
+    let ner = minimal_crf(HashMap::new());
+    let entities = ner.labels_to_entities("", &[], &[]);
+    assert!(entities.is_empty());
+}
+
+/// calculate_token_positions on empty input.
+#[test]
+fn test_calculate_token_positions_empty() {
+    let positions = CrfNER::calculate_token_positions("", &[]);
+    assert!(positions.is_empty());
+}
+
+/// calculate_token_positions with single token.
+#[test]
+fn test_calculate_token_positions_single() {
+    let positions = CrfNER::calculate_token_positions("Hello", &["Hello"]);
+    assert_eq!(positions, vec![(0, 5)]);
+}
+
+/// calculate_token_positions preserves ordering with punctuation-adjacent tokens.
+#[test]
+fn test_calculate_token_positions_with_punctuation() {
+    let text = "Hello, world!";
+    // split_whitespace would give ["Hello,", "world!"]
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let positions = CrfNER::calculate_token_positions(text, &tokens);
+    assert_eq!(positions[0], (0, 6)); // "Hello,"
+    assert_eq!(positions[1], (7, 13)); // "world!"
+}
+
+/// word_shape handles empty string.
+#[test]
+fn test_word_shape_empty() {
+    assert_eq!(CrfNER::word_shape(""), "");
+}
+
+/// word_shape handles mixed punctuation and Unicode.
+#[test]
+fn test_word_shape_unicode_letters() {
+    // Uppercase Cyrillic followed by lowercase
+    let shape = CrfNER::word_shape("Москва");
+    assert_eq!(shape, "Xx", "Titlecase Cyrillic should be Xx");
+}
+
+/// Viterbi on a longer sequence: labels length matches tokens length.
+#[test]
+fn test_viterbi_longer_sequence_length_invariant() {
+    let ner = CrfNER::new();
+    let tokens: Vec<&str> = "The quick brown fox jumps over the lazy dog near London"
+        .split_whitespace()
+        .collect();
+    let labels = ner.viterbi_decode(&tokens);
+    assert_eq!(
+        labels.len(),
+        tokens.len(),
+        "Viterbi must return exactly one label per token"
+    );
+    for label in &labels {
+        assert!(
+            ner.labels.contains(label),
+            "Label '{}' not in label set",
+            label
+        );
+    }
+}
+
+/// Viterbi: all-lowercase common words should mostly be labeled O.
+#[test]
+fn test_viterbi_common_words_are_outside() {
+    let ner = CrfNER::new_heuristic();
+    let tokens = vec!["the", "quick", "brown", "fox"];
+    let labels = ner.viterbi_decode(&tokens);
+    for (tok, label) in tokens.iter().zip(labels.iter()) {
+        assert_eq!(
+            label, "O",
+            "Common lowercase word '{}' should be O, got '{}'",
+            tok, label
+        );
+    }
+}
+
+/// score_label: matching both "feature:label" and "feature" keys accumulates correctly.
+#[test]
+fn test_score_label_both_keys_present() {
+    let mut w = HashMap::new();
+    w.insert("myfeat:O".to_string(), 3.0);
+    w.insert("myfeat".to_string(), 2.0); // type-independent, applied at 0.5x
+    let ner = minimal_crf(w);
+
+    let features = vec!["myfeat".to_string()];
+    let score = ner.score_label(&features, "O");
+    // 3.0 (label-specific) + 2.0 * 0.5 (type-independent) + 0.5 (O bias) = 4.5
+    assert!(
+        (score - 4.5).abs() < 1e-9,
+        "Expected 4.5, got {}",
+        score
+    );
+}
+
+/// new_heuristic produces a model that does not use shipped/trained weights.
+#[test]
+fn test_new_heuristic_uses_default_weights() {
+    let heuristic = CrfNER::new_heuristic();
+    let default_w = CrfNER::default_weights();
+    // The heuristic model's weights should match the default weights exactly.
+    assert_eq!(
+        heuristic.weights.len(),
+        default_w.len(),
+        "Heuristic model should have same number of weights as default_weights()"
+    );
+    for (key, val) in &default_w {
+        let got = heuristic.weights.get(key).copied().unwrap_or(f64::NAN);
+        assert!(
+            (got - val).abs() < 1e-12,
+            "Weight mismatch for '{}': expected {}, got {}",
+            key,
+            val,
+            got
+        );
+    }
+}
