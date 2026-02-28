@@ -283,3 +283,260 @@ pub fn cosine_similarity_f32(a: &[f32], b: &[f32]) -> f32 {
 
     dot / (norm_a * norm_b)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── BinaryHash: sign quantization ────────────────────────────────
+
+    #[test]
+    fn from_embedding_sign_quantization() {
+        // positive → 1, negative → 0, zero → 0
+        let h = BinaryHash::from_embedding(&[1.0, -1.0, 0.5, 0.0, -0.5, 0.0, 0.1, -0.1]);
+        assert_eq!(h.dim, 8);
+        // bits[0]: bit0=1, bit1=0, bit2=1, bit3=0, bit4=0, bit5=0, bit6=1, bit7=0
+        //        = 0b0100_0101 = 0x45
+        assert_eq!(h.bits[0] & 0xFF, 0b0100_0101);
+    }
+
+    #[test]
+    fn from_embedding_f64_matches_f32() {
+        let f32_vals: Vec<f32> = vec![0.1, -0.2, 0.3, -0.4, 0.5, -0.6, 0.7, -0.8];
+        let f64_vals: Vec<f64> = f32_vals.iter().map(|&v| v as f64).collect();
+        let h32 = BinaryHash::from_embedding(&f32_vals);
+        let h64 = BinaryHash::from_embedding_f64(&f64_vals);
+        assert_eq!(h32.bits, h64.bits);
+        assert_eq!(h32.dim, h64.dim);
+    }
+
+    // ── Edge cases ───────────────────────────────────────────────────
+
+    #[test]
+    fn zero_vector_all_bits_zero() {
+        let h = BinaryHash::from_embedding(&[0.0; 128]);
+        assert!(h.bits.iter().all(|&w| w == 0));
+        assert_eq!(h.dim, 128);
+    }
+
+    #[test]
+    fn all_positive_all_bits_set() {
+        let h = BinaryHash::from_embedding(&[1.0; 64]);
+        assert_eq!(h.bits.len(), 1);
+        assert_eq!(h.bits[0], u64::MAX);
+    }
+
+    #[test]
+    fn all_negative_all_bits_zero() {
+        let h = BinaryHash::from_embedding(&[-1.0; 64]);
+        assert_eq!(h.bits.len(), 1);
+        assert_eq!(h.bits[0], 0);
+    }
+
+    #[test]
+    fn empty_embedding() {
+        let h = BinaryHash::from_embedding(&[]);
+        assert_eq!(h.dim, 0);
+        assert!(h.bits.is_empty());
+    }
+
+    #[test]
+    fn non_multiple_of_64_dim() {
+        // 65 dims → 2 u64 words, only bit 0 of second word used
+        let mut vals = vec![-1.0f32; 65];
+        vals[64] = 1.0; // last element positive
+        let h = BinaryHash::from_embedding(&vals);
+        assert_eq!(h.bits.len(), 2);
+        assert_eq!(h.bits[0], 0);
+        assert_eq!(h.bits[1], 1); // only bit 0 set
+    }
+
+    // ── Hamming distance ─────────────────────────────────────────────
+
+    #[test]
+    fn hamming_distance_identical() {
+        let h = BinaryHash::from_embedding(&[1.0, -1.0, 0.5, -0.5]);
+        assert_eq!(h.hamming_distance(&h), 0);
+    }
+
+    #[test]
+    fn hamming_distance_known() {
+        // All positive vs all negative → every bit differs
+        let a = BinaryHash::from_embedding(&[1.0; 64]);
+        let b = BinaryHash::from_embedding(&[-1.0; 64]);
+        assert_eq!(a.hamming_distance(&b), 64);
+    }
+
+    #[test]
+    fn hamming_distance_single_flip() {
+        let a = BinaryHash::from_embedding(&[1.0, 1.0, 1.0, 1.0]);
+        let b = BinaryHash::from_embedding(&[1.0, 1.0, -1.0, 1.0]); // bit 2 flipped
+        assert_eq!(a.hamming_distance(&b), 1);
+    }
+
+    #[test]
+    fn hamming_distance_symmetry() {
+        let a = BinaryHash::from_embedding(&[0.1, -0.2, 0.3, -0.4, 0.5]);
+        let b = BinaryHash::from_embedding(&[-0.1, 0.2, 0.3, 0.4, -0.5]);
+        assert_eq!(a.hamming_distance(&b), b.hamming_distance(&a));
+    }
+
+    #[test]
+    fn hamming_distance_empty() {
+        let a = BinaryHash::from_embedding(&[]);
+        let b = BinaryHash::from_embedding(&[]);
+        assert_eq!(a.hamming_distance(&b), 0);
+    }
+
+    // ── Normalized distance & approximate cosine ─────────────────────
+
+    #[test]
+    fn normalized_distance_range() {
+        let a = BinaryHash::from_embedding(&[1.0, -1.0, 1.0, -1.0]);
+        let b = BinaryHash::from_embedding(&[-1.0, 1.0, 1.0, -1.0]);
+        let norm = a.hamming_distance_normalized(&b);
+        assert!((0.0..=1.0).contains(&norm));
+        // 2 out of 4 bits differ → 0.5
+        assert!((norm - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn normalized_distance_empty_is_zero() {
+        let a = BinaryHash::from_embedding(&[]);
+        let b = BinaryHash::from_embedding(&[]);
+        assert_eq!(a.hamming_distance_normalized(&b), 0.0);
+    }
+
+    #[test]
+    fn approximate_cosine_identical() {
+        let h = BinaryHash::from_embedding(&[1.0, -1.0, 0.5, -0.5]);
+        assert!((h.approximate_cosine(&h) - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn approximate_cosine_opposite() {
+        let a = BinaryHash::from_embedding(&[1.0; 64]);
+        let b = BinaryHash::from_embedding(&[-1.0; 64]);
+        assert!((a.approximate_cosine(&b) - (-1.0)).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn approximate_cosine_symmetry() {
+        let a = BinaryHash::from_embedding(&[0.1, -0.3, 0.5, -0.7, 0.9]);
+        let b = BinaryHash::from_embedding(&[-0.2, 0.4, 0.5, -0.6, -0.8]);
+        assert!((a.approximate_cosine(&b) - b.approximate_cosine(&a)).abs() < f64::EPSILON);
+    }
+
+    // ── BinaryBlocker ────────────────────────────────────────────────
+
+    #[test]
+    fn blocker_query_finds_nearby() {
+        let mut blocker = BinaryBlocker::new(2);
+        let h1 = BinaryHash::from_embedding(&[1.0, 1.0, 1.0, 1.0]);
+        let h2 = BinaryHash::from_embedding(&[-1.0, -1.0, -1.0, -1.0]);
+        blocker.add(0, h1);
+        blocker.add(1, h2);
+
+        let query = BinaryHash::from_embedding(&[1.0, 1.0, 1.0, -1.0]); // 1 bit from h1
+        let results = blocker.query(&query);
+        assert!(results.contains(&0));
+        assert!(!results.contains(&1)); // 3 bits differ, > threshold 2
+    }
+
+    #[test]
+    fn blocker_query_with_distance() {
+        let mut blocker = BinaryBlocker::new(10);
+        let h = BinaryHash::from_embedding(&[1.0; 8]);
+        blocker.add(42, h);
+
+        let query = BinaryHash::from_embedding(&[1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0]);
+        let results = blocker.query_with_distance(&query);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0], (42, 5)); // bits 3..8 differ
+    }
+
+    #[test]
+    fn blocker_add_batch() {
+        let mut blocker = BinaryBlocker::new(0);
+        let entries = vec![
+            (0, BinaryHash::from_embedding(&[1.0; 8])),
+            (1, BinaryHash::from_embedding(&[-1.0; 8])),
+        ];
+        blocker.add_batch(entries);
+        assert_eq!(blocker.len(), 2);
+        assert!(!blocker.is_empty());
+    }
+
+    #[test]
+    fn blocker_clear() {
+        let mut blocker = BinaryBlocker::new(5);
+        blocker.add(0, BinaryHash::from_embedding(&[1.0; 8]));
+        assert_eq!(blocker.len(), 1);
+        blocker.clear();
+        assert!(blocker.is_empty());
+    }
+
+    // ── cosine_similarity_f32 ────────────────────────────────────────
+
+    #[test]
+    fn cosine_identical_vectors() {
+        let v = vec![1.0, 2.0, 3.0];
+        assert!((cosine_similarity_f32(&v, &v) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cosine_opposite_vectors() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![-1.0, 0.0, 0.0];
+        assert!((cosine_similarity_f32(&a, &b) - (-1.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cosine_orthogonal_vectors() {
+        let a = vec![1.0, 0.0];
+        let b = vec![0.0, 1.0];
+        assert!(cosine_similarity_f32(&a, &b).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cosine_zero_vector_returns_zero() {
+        let a = vec![0.0, 0.0];
+        let b = vec![1.0, 2.0];
+        assert_eq!(cosine_similarity_f32(&a, &b), 0.0);
+    }
+
+    #[test]
+    fn cosine_empty_returns_zero() {
+        assert_eq!(cosine_similarity_f32(&[], &[]), 0.0);
+    }
+
+    #[test]
+    fn cosine_mismatched_lengths_returns_zero() {
+        assert_eq!(cosine_similarity_f32(&[1.0, 2.0], &[1.0]), 0.0);
+    }
+
+    // ── two_stage_retrieval ──────────────────────────────────────────
+
+    #[test]
+    fn two_stage_retrieval_basic() {
+        let query = vec![1.0; 8];
+        let candidates = vec![
+            vec![1.0; 8],   // identical → should rank first
+            vec![-1.0; 8],  // opposite → should be filtered or rank last
+            vec![1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0], // partial match
+        ];
+        let results = two_stage_retrieval(&query, &candidates, 8, 3);
+        assert!(!results.is_empty());
+        // First result should be the identical vector
+        assert_eq!(results[0].0, 0);
+        assert!((results[0].1 - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn two_stage_retrieval_respects_top_k() {
+        let query = vec![1.0; 8];
+        let candidates: Vec<Vec<f32>> = (0..10).map(|_| vec![1.0; 8]).collect();
+        let results = two_stage_retrieval(&query, &candidates, 64, 3);
+        assert!(results.len() <= 3);
+    }
+}
