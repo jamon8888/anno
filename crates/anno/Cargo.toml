@@ -29,6 +29,7 @@ textprep = { workspace = true }
 sketchir = { workspace = true }
 clump = { workspace = true }
 graphops = { workspace = true }
+innr = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

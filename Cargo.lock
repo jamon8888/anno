@@ -99,6 +99,7 @@ dependencies = [
  "chrono",
  "clump",
  "dashmap",
+ "innr",
  "itertools 0.14.0",
  "log",
  "once_cell",
@@ -175,6 +176,7 @@ dependencies = [
  "gramdex",
  "graphops",
  "hf-hub",
+ "innr",
  "itertools 0.14.0",
  "jiff",
  "log",
@@ -1805,6 +1807,12 @@ dependencies = [
  "unit-prefix",
  "web-time",
 ]
+
+[[package]]
+name = "innr"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8688f9012e86a9d5688ec55aaf83f82cdf2a1e895bc2ed94bf1975f07164916f"
 
 [[package]]
 name = "ipnet"
