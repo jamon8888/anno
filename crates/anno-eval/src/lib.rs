@@ -11,8 +11,8 @@
 pub use anno::{
     backends, DiscontinuousEntity, DiscontinuousNER, Entity, EntityType, Error, HeuristicNER,
     Model, Provenance, RegexNER, RelationExtractor, RelationTriple, Result, StackedNER,
-    DEFAULT_BERT_ONNX_MODEL, DEFAULT_GLINER2_MODEL, DEFAULT_GLINER_MODEL, DEFAULT_NUNER_MODEL,
-    DEFAULT_W2NER_MODEL,
+    DEFAULT_BERT_ONNX_MODEL, DEFAULT_GLINER2_MODEL, DEFAULT_GLINER_MODEL,
+    DEFAULT_GLINER_POLY_MODEL, DEFAULT_NUNER_MODEL, DEFAULT_W2NER_MODEL,
 };
 
 #[cfg(feature = "onnx")]

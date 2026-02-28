@@ -779,6 +779,11 @@ pub const DEFAULT_GLINER_CANDLE_MODEL: &str = "NeuML/gliner-bert-tiny";
 /// Default NuNER ONNX model identifier (HuggingFace model ID).
 pub const DEFAULT_NUNER_MODEL: &str = "deepanwa/NuNerZero_onnx";
 
+/// Default GLiNER Poly-Encoder ONNX model identifier (HuggingFace model ID).
+///
+/// Uses the bi-encoder large v1.0 (DeBERTa text + BGE label encoder).
+pub const DEFAULT_GLINER_POLY_MODEL: &str = "knowledgator/gliner-bi-large-v1.0";
+
 /// Default W2NER ONNX model identifier (HuggingFace model ID).
 pub const DEFAULT_W2NER_MODEL: &str = "ljynlp/w2ner-bert-base";
 

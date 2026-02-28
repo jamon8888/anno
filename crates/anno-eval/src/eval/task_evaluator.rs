@@ -1615,9 +1615,9 @@ impl TaskEvaluator {
             )),
             #[cfg(feature = "onnx")]
             "gliner_poly" => {
-                use crate::DEFAULT_GLINER_MODEL;
                 use anno::backends::gliner_poly::GLiNERPoly;
-                let gliner_poly = GLiNERPoly::new(DEFAULT_GLINER_MODEL)?;
+                use anno::DEFAULT_GLINER_POLY_MODEL;
+                let gliner_poly = GLiNERPoly::new(DEFAULT_GLINER_POLY_MODEL)?;
                 Ok(CachedBackend::GLiNERPoly(gliner_poly))
             }
             #[cfg(not(feature = "onnx"))]
@@ -1703,9 +1703,9 @@ impl TaskEvaluator {
             "gliner_poly" => {
                 #[cfg(feature = "onnx")]
                 {
-                    use crate::DEFAULT_GLINER_MODEL;
                     use anno::backends::gliner_poly::GLiNERPoly;
-                    let gliner_poly = GLiNERPoly::new(DEFAULT_GLINER_MODEL)?;
+                    use anno::DEFAULT_GLINER_POLY_MODEL;
+                    let gliner_poly = GLiNERPoly::new(DEFAULT_GLINER_POLY_MODEL)?;
                     Ok(Box::new(gliner_poly))
                 }
                 #[cfg(not(feature = "onnx"))]

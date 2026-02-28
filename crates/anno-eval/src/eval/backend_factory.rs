@@ -272,10 +272,11 @@ impl BackendFactory {
             // Poly-Encoder GLiNER (requires onnx)
             #[cfg(feature = "onnx")]
             "gliner_poly" | "gliner-poly" | "poly_gliner" => {
-                Err(crate::Error::FeatureNotAvailable(
-                    "GLiNERPoly is currently disabled: poly-encoder fusion ONNX export is not supported in this repo yet. Use gliner_onnx or gliner2 instead."
-                        .to_string(),
-                ))
+                use anno::backends::gliner_poly::GLiNERPoly;
+                use anno::DEFAULT_GLINER_POLY_MODEL;
+                GLiNERPoly::new(DEFAULT_GLINER_POLY_MODEL)
+                    .map(|m| Box::new(m) as Box<dyn anno::Model>)
+                    .map_err(|e| crate::Error::model_init(e.to_string()))
             }
             #[cfg(not(feature = "onnx"))]
             "gliner_poly" | "gliner-poly" | "poly_gliner" => Err(crate::Error::FeatureNotAvailable(
@@ -400,6 +401,7 @@ impl BackendFactory {
                 "nuner",
                 "w2ner",
                 "gliner2",
+                "gliner_poly",
             ]);
 
             // Optional backends that require explicit local ONNX exports.

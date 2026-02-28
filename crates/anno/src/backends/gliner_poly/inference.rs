@@ -19,17 +19,166 @@ const MAX_SPAN_WIDTH: usize = 12;
 
 #[cfg(feature = "onnx")]
 impl GLiNERPoly {
-    /// Create a new poly-encoder GLiNER model from HuggingFace with default settings.
+    /// Create a new poly-encoder GLiNER model.
     ///
-    /// Downloads the model and tokenizer from the HuggingFace Hub on first use.
-    /// Subsequent calls use the cached files.
+    /// Checks the local anno cache (`~/.cache/anno/models/gliner-poly/`) first.
+    /// If not found, downloads from HuggingFace Hub.
     ///
     /// # Arguments
     ///
     /// * `model_name` - HuggingFace model ID
     ///   (e.g., `"knowledgator/gliner-bi-large-v1.0"`)
     pub fn new(model_name: &str) -> Result<Self> {
+        // Check local caches first (exported ONNX models live here).
+        // The export script writes to ~/.cache/anno/models/gliner-poly/ by default.
+        let candidates = [
+            crate::env::cache_dir().join("models/gliner-poly"),
+            dirs::home_dir()
+                .unwrap_or_default()
+                .join(".cache/anno/models/gliner-poly"),
+        ];
+        for dir in &candidates {
+            if dir.join("model.onnx").exists() && dir.join("tokenizer.json").exists() {
+                log::info!("[GLiNERPoly] Found local model in {}", dir.display());
+                return Self::from_dir(dir);
+            }
+        }
+        // Fallback: try HuggingFace Hub (only works if repo has ONNX files).
         Self::with_options(model_name, true, 3, 4)
+    }
+
+    /// Load from a local directory containing `model.onnx` and `tokenizer.json`.
+    pub fn from_dir(dir: &std::path::Path) -> Result<Self> {
+        Self::from_dir_with_options(dir, 3, 4)
+    }
+
+    /// Load from a local directory with explicit ONNX session options.
+    pub fn from_dir_with_options(
+        dir: &std::path::Path,
+        optimization_level: u8,
+        num_threads: usize,
+    ) -> Result<Self> {
+        use ort::execution_providers::CPUExecutionProvider;
+        use ort::session::builder::GraphOptimizationLevel;
+        use ort::session::Session;
+
+        let model_path = dir.join("model.onnx");
+        let tokenizer_path = dir.join("tokenizer.json");
+
+        if !model_path.exists() {
+            return Err(Error::Retrieval(format!(
+                "model.onnx not found in {}",
+                dir.display()
+            )));
+        }
+        if !tokenizer_path.exists() {
+            return Err(Error::Retrieval(format!(
+                "tokenizer.json not found in {}",
+                dir.display()
+            )));
+        }
+
+        let opt_level = match optimization_level {
+            1 => GraphOptimizationLevel::Level1,
+            2 => GraphOptimizationLevel::Level2,
+            _ => GraphOptimizationLevel::Level3,
+        };
+
+        let mut builder = Session::builder()
+            .map_err(|e| Error::Retrieval(format!("ONNX session builder: {}", e)))?
+            .with_optimization_level(opt_level)
+            .map_err(|e| Error::Retrieval(format!("ONNX optimization level: {}", e)))?
+            .with_execution_providers([CPUExecutionProvider::default().build()])
+            .map_err(|e| Error::Retrieval(format!("ONNX execution providers: {}", e)))?;
+
+        if num_threads > 0 {
+            builder = builder
+                .with_intra_threads(num_threads)
+                .map_err(|e| Error::Retrieval(format!("ONNX thread config: {}", e)))?;
+        }
+
+        let session = builder
+            .commit_from_file(&model_path)
+            .map_err(|e| Error::Retrieval(format!("ONNX model load: {}", e)))?;
+
+        let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
+            .map_err(|e| Error::Retrieval(format!("Tokenizer load: {}", e)))?;
+
+        // Load label tokenizer from gliner_config.json -> labels_encoder field.
+        let label_tokenizer = Self::load_label_tokenizer(dir)?;
+
+        let is_quantized = model_path
+            .file_name()
+            .map_or(false, |n| n.to_string_lossy().contains("quantized"));
+
+        log::info!(
+            "[GLiNERPoly] Loaded from {} (quantized={})",
+            dir.display(),
+            is_quantized
+        );
+
+        Ok(Self {
+            session: Mutex::new(session),
+            tokenizer: std::sync::Arc::new(tokenizer),
+            label_tokenizer: std::sync::Arc::new(label_tokenizer),
+            model_name: dir.display().to_string(),
+            is_quantized,
+        })
+    }
+
+    /// Load the label encoder's tokenizer.
+    ///
+    /// Reads `gliner_config.json` to find `labels_encoder` (e.g. `BAAI/bge-base-en-v1.5`),
+    /// then downloads that model's `tokenizer.json` from HuggingFace Hub.
+    fn load_label_tokenizer(dir: &std::path::Path) -> Result<tokenizers::Tokenizer> {
+        use hf_hub::api::sync::{Api, ApiBuilder};
+
+        let config_path = dir.join("gliner_config.json");
+        let labels_encoder_name = if config_path.exists() {
+            let config_str = std::fs::read_to_string(&config_path)
+                .map_err(|e| Error::Retrieval(format!("Read gliner_config.json: {}", e)))?;
+            let config: serde_json::Value = serde_json::from_str(&config_str)
+                .map_err(|e| Error::Retrieval(format!("Parse gliner_config.json: {}", e)))?;
+            config
+                .get("labels_encoder")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        } else {
+            None
+        };
+
+        let labels_encoder_name =
+            labels_encoder_name.unwrap_or_else(|| "BAAI/bge-base-en-v1.5".to_string());
+
+        // Check if label tokenizer is cached locally.
+        let local_label_tok = dir.join("label_tokenizer.json");
+        if local_label_tok.exists() {
+            return tokenizers::Tokenizer::from_file(&local_label_tok)
+                .map_err(|e| Error::Retrieval(format!("Label tokenizer load: {}", e)));
+        }
+
+        log::info!(
+            "[GLiNERPoly] Downloading label tokenizer from {}",
+            labels_encoder_name
+        );
+
+        crate::env::load_dotenv();
+        let api = if let Some(token) = crate::env::hf_token() {
+            ApiBuilder::new()
+                .with_token(Some(token))
+                .build()
+                .map_err(|e| Error::Retrieval(format!("HF API: {}", e)))?
+        } else {
+            Api::new().map_err(|e| Error::Retrieval(format!("HF API: {}", e)))?
+        };
+
+        let repo = api.model(labels_encoder_name);
+        let tok_path = repo
+            .get("tokenizer.json")
+            .map_err(|e| Error::Retrieval(format!("Download label tokenizer: {}", e)))?;
+
+        tokenizers::Tokenizer::from_file(&tok_path)
+            .map_err(|e| Error::Retrieval(format!("Label tokenizer load: {}", e)))
     }
 
     /// Create a new poly-encoder GLiNER model with explicit options.
@@ -124,15 +273,36 @@ impl GLiNERPoly {
         let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| Error::Retrieval(format!("Tokenizer load: {}", e)))?;
 
+        // Download label encoder tokenizer from gliner_config.json.
+        let config_path = repo.get("gliner_config.json").ok();
+        let labels_encoder_name = config_path
+            .as_ref()
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+            .and_then(|c| c.get("labels_encoder")?.as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| "BAAI/bge-base-en-v1.5".to_string());
+
+        let label_repo = api.model(labels_encoder_name.clone());
+        let label_tok_path = label_repo.get("tokenizer.json").map_err(|e| {
+            Error::Retrieval(format!(
+                "Download label tokenizer from {}: {}",
+                labels_encoder_name, e
+            ))
+        })?;
+        let label_tokenizer = tokenizers::Tokenizer::from_file(&label_tok_path)
+            .map_err(|e| Error::Retrieval(format!("Label tokenizer load: {}", e)))?;
+
         log::info!(
-            "[GLiNERPoly] Loaded {} (quantized={})",
+            "[GLiNERPoly] Loaded {} (quantized={}, labels_encoder={})",
             model_name,
-            is_quantized
+            is_quantized,
+            labels_encoder_name
         );
 
         Ok(Self {
             session: Mutex::new(session),
             tokenizer: std::sync::Arc::new(tokenizer),
+            label_tokenizer: std::sync::Arc::new(label_tokenizer),
             model_name: model_name.to_string(),
             is_quantized,
         })
@@ -292,7 +462,7 @@ impl GLiNERPoly {
 
         for label in entity_types {
             let encoding = self
-                .tokenizer
+                .label_tokenizer
                 .encode(label.to_string(), true)
                 .map_err(|e| Error::Parse(format!("Label tokenizer error: {}", e)))?;
             let ids: Vec<i64> = encoding.get_ids().iter().map(|&id| id as i64).collect();

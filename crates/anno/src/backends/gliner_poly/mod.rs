@@ -76,7 +76,11 @@ use crate::sync::{lock, Mutex};
 #[cfg(feature = "onnx")]
 pub struct GLiNERPoly {
     session: Mutex<ort::session::Session>,
+    /// Text tokenizer (DeBERTa-v3 vocab, ~128k tokens).
     tokenizer: std::sync::Arc<tokenizers::Tokenizer>,
+    /// Label tokenizer (BGE vocab, 30522 tokens) -- separate because the bi-encoder
+    /// uses different encoders for text and entity labels.
+    label_tokenizer: std::sync::Arc<tokenizers::Tokenizer>,
     model_name: String,
     is_quantized: bool,
 }
