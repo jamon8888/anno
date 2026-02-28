@@ -389,8 +389,7 @@ impl E2ECoref {
             let mut best_score = self.config.link_threshold;
 
             // Score against all previous mentions
-            for j in 0..i {
-                let antecedent = &mentions[j];
+            for (j, antecedent) in mentions[..i].iter().enumerate() {
                 let score = self.antecedent_score(mention, antecedent);
 
                 if score > best_score {
