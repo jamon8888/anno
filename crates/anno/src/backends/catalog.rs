@@ -269,11 +269,11 @@ pub static BACKEND_CATALOG: &[BackendInfo] = &[
     BackendInfo {
         name: "gliner_poly",
         feature: Some("onnx"),
-        status: BackendStatus::Planned,
+        status: BackendStatus::Beta,
         zero_shot: true,
         gpu_support: true,
-        description: "GLiNER Poly-encoder scaffolding (not wired for inference yet)",
-        recommended_models: &[],
+        description: "GLiNER Poly-encoder for zero-shot NER with inter-label attention fusion",
+        recommended_models: &["knowledgator/modern-gliner-poly-large-v1.0"],
     },
 ];
 
