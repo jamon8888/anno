@@ -177,8 +177,18 @@ impl GLiNERPoly {
         let (input_ids, attention_mask, words_mask) =
             self.encode_prompt(&text_words, entity_types)?;
 
+        // Generate span tensors (same layout as GLiNEROnnx).
+        let (span_idx, span_mask) = Self::make_span_tensors(num_text_words);
+        let num_spans = num_text_words * MAX_SPAN_WIDTH;
+
+        // Tokenize entity type labels for the label encoder.
+        let (labels_input_ids, labels_attention_mask) =
+            self.encode_labels(entity_types)?;
+        let num_labels = entity_types.len();
+        let label_seq_len = labels_input_ids.len() / num_labels;
+
         // Build ONNX tensors.
-        use ndarray::Array2;
+        use ndarray::{Array2, Array3};
 
         let seq_len = input_ids.len();
 
@@ -191,6 +201,16 @@ impl GLiNERPoly {
         let text_lengths_arr =
             Array2::from_shape_vec((1, 1), vec![num_text_words as i64])
                 .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
+        let span_idx_arr = Array3::from_shape_vec((1, num_spans, 2), span_idx)
+            .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
+        let span_mask_arr = Array2::from_shape_vec((1, num_spans), span_mask)
+            .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
+        let labels_ids_arr =
+            Array2::from_shape_vec((num_labels, label_seq_len), labels_input_ids)
+                .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
+        let labels_mask_arr =
+            Array2::from_shape_vec((num_labels, label_seq_len), labels_attention_mask)
+                .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
 
         let input_ids_t = crate::backends::ort_compat::tensor_from_ndarray(input_ids_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
@@ -202,20 +222,28 @@ impl GLiNERPoly {
         let text_lengths_t =
             crate::backends::ort_compat::tensor_from_ndarray(text_lengths_arr)
                 .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+        let span_idx_t = crate::backends::ort_compat::tensor_from_ndarray(span_idx_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+        let span_mask_t = crate::backends::ort_compat::tensor_from_ndarray(span_mask_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+        let labels_ids_t = crate::backends::ort_compat::tensor_from_ndarray(labels_ids_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+        let labels_mask_t = crate::backends::ort_compat::tensor_from_ndarray(labels_mask_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
 
         // Run inference.
         let mut session = lock(&self.session);
 
-        // TODO: The exact set of ONNX input names depends on the exported model.
-        // The poly-encoder may accept additional inputs (e.g., entity_type_ids,
-        // entity_attention_mask) for the cross-attention fusion. Verify against
-        // the actual exported model and add/remove inputs as needed.
         let outputs = session
             .run(ort::inputs![
                 "input_ids" => input_ids_t.into_dyn(),
                 "attention_mask" => attention_mask_t.into_dyn(),
                 "words_mask" => words_mask_t.into_dyn(),
                 "text_lengths" => text_lengths_t.into_dyn(),
+                "span_idx" => span_idx_t.into_dyn(),
+                "span_mask" => span_mask_t.into_dyn(),
+                "labels_input_ids" => labels_ids_t.into_dyn(),
+                "labels_attention_mask" => labels_mask_t.into_dyn(),
             ])
             .map_err(|e| Error::Inference(format!("ONNX inference failed: {}", e)))?;
 
@@ -226,6 +254,65 @@ impl GLiNERPoly {
         drop(session);
 
         Ok(entities)
+    }
+
+    /// Generate span tensors following the GLiNER span layout.
+    ///
+    /// Returns `(span_idx, span_mask)` where:
+    /// - `span_idx`: `[num_words * max_width, 2]` flattened — start/end word indices per span
+    /// - `span_mask`: `[num_words * max_width]` — which spans are valid
+    fn make_span_tensors(num_words: usize) -> (Vec<i64>, Vec<bool>) {
+        let num_spans = num_words * MAX_SPAN_WIDTH;
+        let mut span_idx: Vec<i64> = vec![0; num_spans * 2];
+        let mut span_mask: Vec<bool> = vec![false; num_spans];
+
+        for start in 0..num_words {
+            let remaining = num_words - start;
+            let actual_max = MAX_SPAN_WIDTH.min(remaining);
+            for width in 0..actual_max {
+                let dim = start * MAX_SPAN_WIDTH + width;
+                if dim < num_spans {
+                    span_idx[dim * 2] = start as i64;
+                    span_idx[dim * 2 + 1] = (start + width) as i64;
+                    span_mask[dim] = true;
+                }
+            }
+        }
+
+        (span_idx, span_mask)
+    }
+
+    /// Tokenize entity type labels for the bi-encoder's label encoder input.
+    ///
+    /// Returns `(labels_input_ids, labels_attention_mask)` where each label is
+    /// tokenized and padded to the same length.
+    fn encode_labels(&self, entity_types: &[&str]) -> Result<(Vec<i64>, Vec<i64>)> {
+        let mut all_ids: Vec<Vec<i64>> = Vec::with_capacity(entity_types.len());
+        let mut max_len = 0;
+
+        for label in entity_types {
+            let encoding = self
+                .tokenizer
+                .encode(label.to_string(), true)
+                .map_err(|e| Error::Parse(format!("Label tokenizer error: {}", e)))?;
+            let ids: Vec<i64> = encoding.get_ids().iter().map(|&id| id as i64).collect();
+            max_len = max_len.max(ids.len());
+            all_ids.push(ids);
+        }
+
+        // Pad all labels to the same length.
+        let mut labels_input_ids = Vec::with_capacity(entity_types.len() * max_len);
+        let mut labels_attention_mask = Vec::with_capacity(entity_types.len() * max_len);
+
+        for ids in &all_ids {
+            labels_input_ids.extend_from_slice(ids);
+            labels_attention_mask.extend(vec![1i64; ids.len()]);
+            let pad = max_len - ids.len();
+            labels_input_ids.extend(vec![0i64; pad]);
+            labels_attention_mask.extend(vec![0i64; pad]);
+        }
+
+        Ok((labels_input_ids, labels_attention_mask))
     }
 
     /// Encode prompt following the GLiNER format: word-by-word encoding.

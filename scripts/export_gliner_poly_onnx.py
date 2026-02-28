@@ -8,6 +8,7 @@
 #     "onnxruntime>=1.16.0",
 #     "transformers>=4.30.0",
 #     "numpy>=1.21.0",
+#     "onnxscript>=0.1.0",
 # ]
 # ///
 """
@@ -85,8 +86,19 @@ def check_onnx_model(path: str | Path) -> None:
     """Load and verify an ONNX model, printing input/output specs."""
     import onnx
 
-    model = onnx.load(str(path))
-    onnx.checker.check_model(model)
+    path = Path(path)
+    size_mb = path.stat().st_size / (1024 * 1024)
+
+    # Large models (>2GB) can't be serialized for full check due to protobuf limits.
+    if size_mb > 1900:
+        log(f"  Model is {size_mb:.0f} MB (>2GB protobuf limit), using path-based check.")
+        onnx.checker.check_model(str(path))
+    else:
+        model = onnx.load(str(path))
+        onnx.checker.check_model(model)
+
+    # Load with external data support for input/output inspection.
+    model = onnx.load(str(path), load_external_data=False)
     print(f"  ONNX check passed: {path}")
     print("  Inputs:")
     for inp in model.graph.input:

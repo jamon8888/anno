@@ -7,17 +7,20 @@
 //!
 //! ## ONNX Model Format
 //!
-//! The ONNX model is exported by a companion Python script. Expected inputs follow the
-//! standard GLiNER prompt format:
+//! The ONNX model is exported by a companion Python script. Inputs:
 //!
 //! - `input_ids`: `[batch, seq_len]` (i64)
 //! - `attention_mask`: `[batch, seq_len]` (i64)
 //! - `words_mask`: `[batch, seq_len]` (i64) -- maps subword tokens to word indices
 //! - `text_lengths`: `[batch, 1]` (i64) -- number of words in each text
+//! - `span_idx`: `[batch, num_spans, 2]` (i64) -- start/end word indices per span
+//! - `span_mask`: `[batch, num_spans]` (bool) -- which spans are valid
+//! - `labels_input_ids`: `[num_labels, label_seq_len]` (i64) -- tokenized entity labels
+//! - `labels_attention_mask`: `[num_labels, label_seq_len]` (i64)
 //!
-//! Expected outputs:
+//! Output:
 //!
-//! - `logits`: `[batch, num_words, max_width, num_entity_types]` (f32) -- span logits
+//! - `logits`: `[batch, seq_len, num_spans, num_classes]` (f32) -- span logits
 //!
 //! ## Usage
 //!
@@ -294,6 +297,10 @@ impl ZeroShotNER for GLiNERPoly {
         Err(Error::FeatureNotAvailable(
             "GLiNERPoly requires the 'onnx' feature".to_string(),
         ))
+    }
+
+    fn default_types(&self) -> &[&'static str] {
+        DEFAULT_POLY_LABELS
     }
 }
 
