@@ -25,7 +25,7 @@
 //! use anno::backends::gliner_poly::GLiNERPoly;
 //! use anno::backends::inference::ZeroShotNER;
 //!
-//! let model = GLiNERPoly::new("knowledgator/modern-gliner-poly-large-v1.0")?;
+//! let model = GLiNERPoly::new("knowledgator/gliner-bi-large-v1.0")?;
 //! let entities = model.extract_with_types(
 //!     "John works at Apple in Cupertino",
 //!     &["person", "organization", "location"],
@@ -329,7 +329,7 @@ mod tests {
     #[test]
     #[cfg(not(feature = "onnx"))]
     fn test_gliner_poly_creation_no_onnx() {
-        let err = GLiNERPoly::new("knowledgator/modern-gliner-poly-large-v1.0").unwrap_err();
+        let err = GLiNERPoly::new("knowledgator/gliner-bi-large-v1.0").unwrap_err();
         assert!(
             matches!(err, Error::FeatureNotAvailable(_)),
             "expected FeatureNotAvailable, got: {err:?}"

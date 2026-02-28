@@ -27,13 +27,17 @@ them across many texts (the main inference advantage of the poly-encoder design)
 
 Usage:
     uv run scripts/export_gliner_poly_onnx.py
-    uv run scripts/export_gliner_poly_onnx.py --model knowledgator/gliner-poly-small-v1.0
+    uv run scripts/export_gliner_poly_onnx.py --model knowledgator/gliner-bi-large-v1.0
     uv run scripts/export_gliner_poly_onnx.py --output ~/.cache/anno/models/gliner-poly/
     uv run scripts/export_gliner_poly_onnx.py --quantize
 
-Models tested:
-    knowledgator/gliner-poly-base-v1.0  (DeBERTa-v3-base + BGE-small-en)
-    knowledgator/gliner-poly-small-v1.0 (DeBERTa-v3-small + BGE-small-en)
+Compatible models (bi-encoder / poly-encoder with label encoder):
+    knowledgator/gliner-bi-large-v1.0       (DeBERTa-v3-large + BGE-small-en)
+    knowledgator/gliner-bi-small-v1.0       (DeBERTa-v3-small + BGE-small-en)
+    knowledgator/modern-gliner-bi-large-v1.0 (ModernBERT-large + BGE-base-en)
+    knowledgator/modern-gliner-bi-base-v1.0  (ModernBERT-base + BGE-base-en)
+
+Note: knowledgator/gliner-poly-{base,small}-v1.0 are model cards only (no weights).
 """
 
 from __future__ import annotations
@@ -49,7 +53,7 @@ from pathlib import Path
 # so that `python script.py --help` works without them installed.
 # When run via `uv run`, the PEP 723 dependencies are installed first.
 
-DEFAULT_MODEL = "knowledgator/gliner-poly-base-v1.0"
+DEFAULT_MODEL = "knowledgator/gliner-bi-large-v1.0"
 
 DEFAULT_ENTITY_TYPES = [
     "person",

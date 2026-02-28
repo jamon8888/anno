@@ -27,7 +27,7 @@ impl GLiNERPoly {
     /// # Arguments
     ///
     /// * `model_name` - HuggingFace model ID
-    ///   (e.g., `"knowledgator/modern-gliner-poly-large-v1.0"`)
+    ///   (e.g., `"knowledgator/gliner-bi-large-v1.0"`)
     pub fn new(model_name: &str) -> Result<Self> {
         Self::with_options(model_name, true, 3, 4)
     }
