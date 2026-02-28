@@ -379,3 +379,352 @@ impl Default for GraphCorefConfig {
 // =============================================================================
 // Main Implementation
 // =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =========================================================================
+    // Construction and basic properties
+    // =========================================================================
+
+    #[test]
+    fn new_graph_is_empty() {
+        let g = CorefGraph::new(5);
+        assert_eq!(g.num_mentions(), 5);
+        assert_eq!(g.edge_count(), 0);
+        assert!(g.is_empty());
+    }
+
+    #[test]
+    fn zero_node_graph() {
+        let g = CorefGraph::new(0);
+        assert_eq!(g.num_mentions(), 0);
+        assert!(g.is_empty());
+        assert_eq!(g.extract_clusters(), Vec::<Vec<usize>>::new());
+    }
+
+    // =========================================================================
+    // add_edge / has_edge / remove_edge
+    // =========================================================================
+
+    #[test]
+    fn add_and_query_edge() {
+        let mut g = CorefGraph::new(4);
+        g.add_edge(1, 3);
+
+        assert!(g.has_edge(1, 3));
+        assert!(g.has_edge(3, 1), "undirected: reversed query must work");
+        assert!(!g.has_edge(0, 1));
+        assert_eq!(g.edge_count(), 1);
+    }
+
+    #[test]
+    fn add_edge_canonical_order() {
+        // Both orderings should produce the same single edge.
+        let mut g = CorefGraph::new(3);
+        g.add_edge(2, 0);
+        g.add_edge(0, 2);
+        assert_eq!(g.edge_count(), 1, "duplicate edge should not increase count");
+    }
+
+    #[test]
+    fn remove_edge_both_orderings() {
+        let mut g = CorefGraph::new(3);
+        g.add_edge(0, 2);
+        assert!(g.has_edge(0, 2));
+
+        // Remove using reversed order.
+        g.remove_edge(2, 0);
+        assert!(!g.has_edge(0, 2));
+        assert!(!g.has_edge(2, 0));
+        assert_eq!(g.edge_count(), 0);
+    }
+
+    #[test]
+    fn remove_nonexistent_edge_is_noop() {
+        let mut g = CorefGraph::new(3);
+        g.remove_edge(0, 1); // nothing to remove
+        assert_eq!(g.edge_count(), 0);
+    }
+
+    // =========================================================================
+    // Self-loops
+    // =========================================================================
+
+    #[test]
+    fn self_loop_ignored_by_add() {
+        let mut g = CorefGraph::new(3);
+        g.add_edge(1, 1);
+        assert!(!g.has_edge(1, 1));
+        assert_eq!(g.edge_count(), 0);
+    }
+
+    #[test]
+    fn has_edge_self_returns_false() {
+        let g = CorefGraph::new(3);
+        assert!(!g.has_edge(0, 0));
+    }
+
+    // =========================================================================
+    // Out-of-bounds
+    // =========================================================================
+
+    #[test]
+    fn add_edge_out_of_bounds_ignored() {
+        let mut g = CorefGraph::new(3);
+        g.add_edge(0, 5);
+        g.add_edge(5, 0);
+        g.add_edge(10, 20);
+        assert_eq!(g.edge_count(), 0);
+    }
+
+    // =========================================================================
+    // Neighbors
+    // =========================================================================
+
+    #[test]
+    fn neighbors_of_isolated_node() {
+        let g = CorefGraph::new(3);
+        assert!(g.neighbors(0).is_empty());
+    }
+
+    #[test]
+    fn neighbors_returns_all_adjacent() {
+        let mut g = CorefGraph::new(5);
+        g.add_edge(2, 0);
+        g.add_edge(2, 3);
+        g.add_edge(2, 4);
+
+        let mut nbrs = g.neighbors(2);
+        nbrs.sort_unstable();
+        assert_eq!(nbrs, vec![0, 3, 4]);
+    }
+
+    // =========================================================================
+    // Shared neighbors
+    // =========================================================================
+
+    #[test]
+    fn shared_neighbors_none() {
+        let mut g = CorefGraph::new(4);
+        g.add_edge(0, 1);
+        g.add_edge(2, 3);
+        assert_eq!(g.shared_neighbors(0, 2), 0);
+    }
+
+    #[test]
+    fn shared_neighbors_one_common() {
+        let mut g = CorefGraph::new(4);
+        // 0--2, 1--2  =>  shared(0,1) = {2}
+        g.add_edge(0, 2);
+        g.add_edge(1, 2);
+        assert_eq!(g.shared_neighbors(0, 1), 1);
+    }
+
+    #[test]
+    fn shared_neighbors_multiple() {
+        let mut g = CorefGraph::new(5);
+        // 0--2, 0--3, 1--2, 1--3  =>  shared(0,1) = {2,3}
+        g.add_edge(0, 2);
+        g.add_edge(0, 3);
+        g.add_edge(1, 2);
+        g.add_edge(1, 3);
+        assert_eq!(g.shared_neighbors(0, 1), 2);
+    }
+
+    // =========================================================================
+    // Transitive connectivity
+    // =========================================================================
+
+    #[test]
+    fn transitively_connected_same_node() {
+        let g = CorefGraph::new(3);
+        assert!(g.transitively_connected(1, 1));
+    }
+
+    #[test]
+    fn transitively_connected_direct_edge() {
+        let mut g = CorefGraph::new(3);
+        g.add_edge(0, 2);
+        assert!(g.transitively_connected(0, 2));
+        assert!(g.transitively_connected(2, 0));
+    }
+
+    #[test]
+    fn transitively_connected_via_chain() {
+        // 0--1--2--3
+        let mut g = CorefGraph::new(4);
+        g.add_edge(0, 1);
+        g.add_edge(1, 2);
+        g.add_edge(2, 3);
+        assert!(g.transitively_connected(0, 3));
+        assert!(g.transitively_connected(3, 0));
+    }
+
+    #[test]
+    fn not_transitively_connected_disjoint() {
+        let mut g = CorefGraph::new(4);
+        g.add_edge(0, 1);
+        g.add_edge(2, 3);
+        assert!(!g.transitively_connected(0, 2));
+        assert!(!g.transitively_connected(1, 3));
+    }
+
+    #[test]
+    fn transitively_connected_empty_graph() {
+        let g = CorefGraph::new(3);
+        assert!(!g.transitively_connected(0, 1));
+    }
+
+    // =========================================================================
+    // Cluster extraction (connected components)
+    // =========================================================================
+
+    #[test]
+    fn clusters_all_singletons() {
+        let g = CorefGraph::new(3);
+        let clusters = g.extract_clusters();
+        assert_eq!(clusters.len(), 3);
+        for c in &clusters {
+            assert_eq!(c.len(), 1);
+        }
+    }
+
+    #[test]
+    fn clusters_single_component() {
+        // Fully connected triangle: 0--1, 1--2, 0--2
+        let mut g = CorefGraph::new(3);
+        g.add_edge(0, 1);
+        g.add_edge(1, 2);
+        g.add_edge(0, 2);
+
+        let clusters = g.extract_clusters();
+        assert_eq!(clusters.len(), 1);
+        assert_eq!(clusters[0], vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn clusters_two_components() {
+        let mut g = CorefGraph::new(5);
+        // Component A: {0, 1, 2}
+        g.add_edge(0, 1);
+        g.add_edge(1, 2);
+        // Component B: {3, 4}
+        g.add_edge(3, 4);
+
+        let clusters = g.extract_clusters();
+        assert_eq!(clusters.len(), 2);
+
+        let sizes: Vec<usize> = {
+            let mut s: Vec<usize> = clusters.iter().map(|c| c.len()).collect();
+            s.sort_unstable();
+            s
+        };
+        assert_eq!(sizes, vec![2, 3]);
+    }
+
+    #[test]
+    fn clusters_are_sorted() {
+        // Chain: 3--1--0--2
+        let mut g = CorefGraph::new(4);
+        g.add_edge(3, 1);
+        g.add_edge(1, 0);
+        g.add_edge(0, 2);
+
+        let clusters = g.extract_clusters();
+        assert_eq!(clusters.len(), 1);
+        assert_eq!(clusters[0], vec![0, 1, 2, 3], "cluster members must be sorted");
+    }
+
+    // =========================================================================
+    // Seed co-occurrence edges
+    // =========================================================================
+
+    #[test]
+    fn seed_cooccurrence_within_window() {
+        let mut g = CorefGraph::new(3);
+        let positions = vec![0, 30, 200];
+        g.seed_cooccurrence_edges(&positions, 50, None::<fn(usize, usize) -> bool>);
+
+        assert!(g.has_edge(0, 1), "distance 30 <= 50");
+        assert!(!g.has_edge(0, 2), "distance 200 > 50");
+        assert!(!g.has_edge(1, 2), "distance 170 > 50");
+    }
+
+    #[test]
+    fn seed_cooccurrence_scorer_filters() {
+        let mut g = CorefGraph::new(3);
+        let positions = vec![0, 10, 20];
+        // Scorer rejects all pairs.
+        g.seed_cooccurrence_edges(&positions, 100, Some(|_i: usize, _j: usize| false));
+        assert!(g.is_empty());
+    }
+
+    #[test]
+    fn seed_cooccurrence_positions_shorter_than_mentions() {
+        // positions has fewer entries than num_mentions -- should not panic.
+        let mut g = CorefGraph::new(5);
+        let positions = vec![0, 10];
+        g.seed_cooccurrence_edges(&positions, 100, None::<fn(usize, usize) -> bool>);
+        // Only pair (0,1) is within range of positions; rest are skipped.
+        assert!(g.has_edge(0, 1));
+        assert_eq!(g.edge_count(), 1);
+    }
+
+    // =========================================================================
+    // Equality (derives PartialEq, Eq)
+    // =========================================================================
+
+    #[test]
+    fn graph_equality() {
+        let mut a = CorefGraph::new(3);
+        a.add_edge(0, 1);
+        a.add_edge(1, 2);
+
+        let mut b = CorefGraph::new(3);
+        b.add_edge(1, 2);
+        b.add_edge(0, 1);
+
+        assert_eq!(a, b, "insertion order should not affect equality");
+    }
+
+    #[test]
+    fn graph_inequality_different_edges() {
+        let mut a = CorefGraph::new(3);
+        a.add_edge(0, 1);
+
+        let mut b = CorefGraph::new(3);
+        b.add_edge(0, 2);
+
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn graph_inequality_different_size() {
+        let a = CorefGraph::new(3);
+        let b = CorefGraph::new(4);
+        assert_ne!(a, b);
+    }
+
+    // =========================================================================
+    // Config defaults
+    // =========================================================================
+
+    #[test]
+    fn config_default_values() {
+        let cfg = GraphCorefConfig::default();
+        assert_eq!(cfg.max_iterations, 4);
+        assert!((cfg.link_threshold - 0.5).abs() < f64::EPSILON);
+        assert!(!cfg.include_singletons);
+        assert!(cfg.early_stop.is_none());
+    }
+
+    #[test]
+    fn early_stop_config_defaults() {
+        let cfg = GraphCorefEarlyStopConfig::default();
+        assert!(cfg.detect_cycles);
+        assert_eq!(cfg.cycle_history, 8);
+        assert_eq!(cfg.stagnation_patience, 2);
+    }
+}
