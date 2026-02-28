@@ -127,8 +127,6 @@ pub mod coref;
 /// Bidirectional LSTM with Conditional Random Field output layer.
 /// The dominant neural NER architecture before BERT/transformers.
 pub mod bilstm_crf;
-/// Box embeddings for geometric coreference resolution.
-pub mod box_embeddings;
 pub mod catalog;
 pub mod crf;
 pub mod encoder;
@@ -238,7 +236,6 @@ pub mod session_pool;
 // Model warmup for cold-start mitigation
 pub mod warmup;
 
-
 // Re-exports (always available)
 pub use bilstm_crf::BiLstmCrfNER;
 pub use crf::CrfNER;
@@ -335,12 +332,6 @@ pub use onnx::BertNERConfig;
 // Warmup utilities (always available)
 pub use warmup::{warmup_model, warmup_with_callback, WarmupConfig, WarmupResult};
 
-// Box embeddings for geometric coreference
-pub use box_embeddings::{
-    acquisition_roles, interaction_strength, BoxCorefConfig, BoxEmbedding, BoxVelocity, Conflict,
-    GumbelBox, TemporalBox, UncertainBox,
-};
-
 // Coreference resolution trait (from anno-core, always available)
 pub use anno_core::CoreferenceResolver;
 
@@ -363,8 +354,8 @@ pub use middleware::{
 #[cfg(feature = "burn")]
 pub use burn::{BurnConfig, BurnNER};
 
-// Simple rule-based and box-embedding coreference resolvers.
-#[cfg(any(feature = "analysis", feature = "eval"))]
-pub use coref::simple::{BoxCorefResolver, CorefConfig, SimpleCorefResolver};
+// Simple rule-based coreference resolvers.
 #[cfg(all(feature = "eval", feature = "discourse"))]
 pub use crate::eval::coref_resolver::{DiscourseAwareResolver, DiscourseCorefConfig};
+#[cfg(any(feature = "analysis", feature = "eval"))]
+pub use coref::simple::{CorefConfig, SimpleCorefResolver};

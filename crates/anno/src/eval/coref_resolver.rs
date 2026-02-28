@@ -1,15 +1,12 @@
 //! Coreference resolvers for analysis/evaluation pipelines.
 //!
-//! The core types ([`SimpleCorefResolver`], [`CorefConfig`], [`BoxCorefResolver`]) are defined in
+//! The core types ([`SimpleCorefResolver`], [`CorefConfig`]) are defined in
 //! [`crate::backends::coref::simple`] and re-exported here for backward compatibility.
 //!
 //! This module additionally defines the discourse-aware resolver (feature-gated on `discourse`).
 
 // Re-export canonical definitions from backends/.
-pub use crate::backends::coref::simple::{
-    resolve_with_box_embeddings, vectors_to_boxes, BoxCorefResolver, CorefConfig,
-    SimpleCorefResolver,
-};
+pub use crate::backends::coref::simple::{CorefConfig, SimpleCorefResolver};
 
 // Re-export the canonical trait from `anno-core`.
 pub use anno_core::CoreferenceResolver;
@@ -19,8 +16,7 @@ use crate::Entity;
 #[cfg(feature = "discourse")]
 use anno_core::CanonicalId;
 
-// NOTE: CorefConfig, SimpleCorefResolver, BoxCorefResolver, gender_from_name,
-// vectors_to_boxes, and resolve_with_box_embeddings have been moved to
+// NOTE: CorefConfig, SimpleCorefResolver, and gender_from_name have been moved to
 // crate::backends::coref::simple and are re-exported above.
 
 // =============================================================================
@@ -337,12 +333,11 @@ impl CoreferenceResolver for DiscourseAwareResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backends::box_embeddings::{BoxCorefConfig, BoxEmbedding};
-    use crate::{Entity, EntityType};
     use crate::eval::coref::{entities_to_chains, CorefChain, Mention};
     use crate::eval::coref_metrics::{
         b_cubed_score, ceaf_e_score, conll_f1, lea_score, muc_score, CorefEvaluation, CorefScores,
     };
+    use crate::{Entity, EntityType};
     use anno_core::CanonicalId;
 
     // ---- helpers ----
@@ -418,6 +413,9 @@ mod tests {
         let resolver = SimpleCorefResolver::new(CorefConfig {
             fuzzy_matching: false,
             proper_containment: false,
+            strict_head_match: false,
+            proper_head_word_match: false,
+            relaxed_head_match: false,
             ..CorefConfig::default()
         });
         let entities = vec![person("John Smith", 0, 10), person("Smith", 20, 25)];
@@ -699,104 +697,6 @@ mod tests {
         assert!((eval.ceaf_e.f1 - 1.0).abs() < 1e-9);
     }
 
-    // ---- BoxCorefResolver ----
-
-    #[test]
-    fn box_resolver_empty_entities() {
-        let resolver = BoxCorefResolver::new(BoxCorefConfig::default());
-        let result = resolver.resolve_with_boxes(&[], &[]);
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn box_resolver_identical_boxes_cluster_together() {
-        let config = BoxCorefConfig {
-            coreference_threshold: 0.5,
-            enforce_syntactic_constraints: false,
-            ..BoxCorefConfig::default()
-        };
-        let resolver = BoxCorefResolver::new(config);
-
-        let entities = vec![person("Alice", 0, 5), person("she", 100, 103)];
-        // Identical boxes should have coreference_score = 1.0.
-        let box_a = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
-        let box_b = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
-        let boxes = vec![box_a, box_b];
-
-        let resolved = resolver.resolve_with_boxes(&entities, &boxes);
-        let id0 = resolved[0].canonical_id.unwrap();
-        let id1 = resolved[1].canonical_id.unwrap();
-        assert_eq!(id0, id1, "identical boxes should cluster together");
-    }
-
-    #[test]
-    fn box_resolver_distant_boxes_stay_separate() {
-        let config = BoxCorefConfig {
-            coreference_threshold: 0.5,
-            enforce_syntactic_constraints: false,
-            ..BoxCorefConfig::default()
-        };
-        let resolver = BoxCorefResolver::new(config);
-
-        let entities = vec![person("Alice", 0, 5), person("Bob", 100, 103)];
-        // Very different vectors => low coreference score.
-        let box_a = BoxEmbedding::from_vector(&[0.0, 0.0, 0.0], 0.01);
-        let box_b = BoxEmbedding::from_vector(&[100.0, 100.0, 100.0], 0.01);
-        let boxes = vec![box_a, box_b];
-
-        let resolved = resolver.resolve_with_boxes(&entities, &boxes);
-        let id0 = resolved[0].canonical_id.unwrap();
-        let id1 = resolved[1].canonical_id.unwrap();
-        assert_ne!(id0, id1, "distant boxes should remain separate");
-    }
-
-    #[test]
-    fn box_resolver_type_mismatch_prevents_merge() {
-        let config = BoxCorefConfig {
-            coreference_threshold: 0.5,
-            enforce_syntactic_constraints: false,
-            ..BoxCorefConfig::default()
-        };
-        let resolver = BoxCorefResolver::new(config);
-
-        // Same box coordinates but different entity types.
-        let entities = vec![person("Apple", 0, 5), org("Apple", 100, 105)];
-        let box_a = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
-        let box_b = BoxEmbedding::from_vector(&[1.0, 2.0, 3.0], 0.1);
-        let boxes = vec![box_a, box_b];
-
-        let resolved = resolver.resolve_with_boxes(&entities, &boxes);
-        let id0 = resolved[0].canonical_id.unwrap();
-        let id1 = resolved[1].canonical_id.unwrap();
-        assert_ne!(
-            id0, id1,
-            "different entity types must not merge even with identical boxes"
-        );
-    }
-
-    // ---- vectors_to_boxes ----
-
-    #[test]
-    fn vectors_to_boxes_correct_count() {
-        let embeddings = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]; // 2 entities, dim=3
-        let boxes = super::vectors_to_boxes(&embeddings, 3, Some(0.1));
-        assert_eq!(boxes.len(), 2);
-        assert_eq!(boxes[0].min.len(), 3);
-        assert_eq!(boxes[1].min.len(), 3);
-    }
-
-    #[test]
-    fn vectors_to_boxes_radius_applied() {
-        let embeddings = vec![5.0, 10.0];
-        let boxes = super::vectors_to_boxes(&embeddings, 2, Some(0.5));
-        assert_eq!(boxes.len(), 1);
-        // min should be center - radius, max should be center + radius.
-        assert!((boxes[0].min[0] - 4.5).abs() < 1e-6);
-        assert!((boxes[0].max[0] - 5.5).abs() < 1e-6);
-        assert!((boxes[0].min[1] - 9.5).abs() < 1e-6);
-        assert!((boxes[0].max[1] - 10.5).abs() < 1e-6);
-    }
-
     // ---- entities_to_chains round-trip ----
 
     #[test]
@@ -831,12 +731,6 @@ mod tests {
     fn simple_resolver_trait_name() {
         let resolver = SimpleCorefResolver::default();
         assert_eq!(CoreferenceResolver::name(&resolver), "simple-rule-based");
-    }
-
-    #[test]
-    fn box_resolver_trait_name() {
-        let resolver = BoxCorefResolver::new(BoxCorefConfig::default());
-        assert_eq!(CoreferenceResolver::name(&resolver), "box-embedding");
     }
 
     #[test]
@@ -1171,9 +1065,12 @@ mod tests {
     #[test]
     fn relaxed_head_match_requires_two_words() {
         // Single-word mentions should NOT match via relaxed head match.
+        // Also disable strict_head_match which handles single-word mentions.
         let resolver = SimpleCorefResolver::new(CorefConfig {
             fuzzy_matching: false,
             proper_containment: false,
+            strict_head_match: false,
+            proper_head_word_match: false,
             ..CorefConfig::default()
         });
         let entities = vec![person("Obama", 0, 5), person("Barack Obama", 20, 32)];
@@ -1227,10 +1124,13 @@ mod tests {
 
     #[test]
     fn relaxed_head_match_disabled() {
+        // Disable all head-based sieves to isolate relaxed_head_match.
         let resolver = SimpleCorefResolver::new(CorefConfig {
             relaxed_head_match: false,
             fuzzy_matching: false,
             proper_containment: false,
+            strict_head_match: false,
+            proper_head_word_match: false,
             ..CorefConfig::default()
         });
         let entities = vec![
@@ -1299,10 +1199,13 @@ mod tests {
 
     #[test]
     fn proper_containment_disabled() {
+        // Disable all sieves that could match "Barack Obama" / "Obama".
         let resolver = SimpleCorefResolver::new(CorefConfig {
             proper_containment: false,
             fuzzy_matching: false,
             relaxed_head_match: false,
+            strict_head_match: false,
+            proper_head_word_match: false,
             ..CorefConfig::default()
         });
         let entities = vec![person("Barack Obama", 0, 12), person("Obama", 20, 25)];
@@ -1349,9 +1252,9 @@ mod tests {
     // ---- Missing coref features (negative tests documenting gaps) ----
 
     #[test]
-    fn no_apposition_handling() {
-        // Known gap: appositions require syntactic parse. "Obama" and "the president"
-        // are not clustered because SimpleCorefResolver has no apposition detection.
+    fn appositive_adjacent_entities_clustered() {
+        // Precise constructs sieve: adjacent entities (gap <= 2) with same type are merged.
+        // "Obama" [0,5) and "the president" [7,20) have gap=2, matching the appositive pattern.
         let resolver = SimpleCorefResolver::default();
         let entities = vec![
             person("Obama", 0, 5),
@@ -1361,9 +1264,9 @@ mod tests {
         let resolved = resolver.resolve(&entities);
         let obama_id = resolved[0].canonical_id.unwrap();
         let president_id = resolved[1].canonical_id.unwrap();
-        assert_ne!(
+        assert_eq!(
             obama_id, president_id,
-            "Known gap: apposition 'Obama' / 'the president' not clustered (needs syntactic parse)"
+            "Appositive 'Obama, the president' should be clustered via precise constructs sieve"
         );
     }
 
@@ -1502,6 +1405,9 @@ mod tests {
         let resolver = SimpleCorefResolver::new(CorefConfig {
             fuzzy_matching: false,
             proper_containment: false,
+            strict_head_match: false,
+            proper_head_word_match: false,
+            relaxed_head_match: false,
             ..CorefConfig::default()
         });
         let entities = vec![person("John Smith", 0, 10), person("Smith", 20, 25)];

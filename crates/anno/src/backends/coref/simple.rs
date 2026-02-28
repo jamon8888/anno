@@ -1,25 +1,31 @@
 //! Simple coreference resolution backends.
 //!
-//! Provides rule-based and box-embedding resolvers to produce coreference chains from entities,
+//! Provides rule-based resolvers to produce coreference chains from entities,
 //! completing the loop between extraction and coreference metric computation.
 //!
 //! # Sieve pipeline
 //!
-//! [`SimpleCorefResolver`] applies six sieves in order, returning the first match:
+//! [`SimpleCorefResolver`] applies nine sieves in precision-ranked order, returning the first match:
 //!
 //! 1. **Pronoun resolution** -- links pronouns to a compatible antecedent within a lookback window,
 //!    using gender inference from a name gazetteer and pronoun-entity-type compatibility rules.
 //! 2. **Exact canonical match** -- matches entities with identical `type:lowercased_text` keys.
-//! 3. **Acronym match** -- links single-token acronyms to multi-word names whose initials match
+//! 3. **Precise constructs** -- merges entities in appositive constructions, detected via span
+//!    proximity (gap <= 2 chars for ", ") and compatible entity types.
+//! 4. **Acronym match** -- links single-token acronyms to multi-word names whose initials match
 //!    (e.g., "IBM" ~ "International Business Machines"), same entity type required.
-//! 4. **Relaxed head match** -- links multi-word mentions sharing a head word (last token) and
+//! 5. **Strict head match** -- links mentions sharing a head word (last word) with compatible
+//!    entity type and gender, guarded by an i-within-i constraint (nested spans in the same
+//!    sentence are excluded).
+//! 6. **Proper head word match** -- for named entities, links mentions where the head word of one
+//!    appears as a word in the other (e.g., "President Obama" ~ "Barack Hussein Obama").
+//! 7. **Relaxed head match** -- links multi-word mentions sharing a head word (last token) and
 //!    entity type (e.g., "President Obama" ~ "Barack Obama").
-//! 5. **Proper containment** -- links mentions where one is a contiguous word subsequence of the
+//! 8. **Proper containment** -- links mentions where one is a contiguous word subsequence of the
 //!    other in original text, same entity type required (e.g., "Obama" in "Barack Obama").
-//! 6. **Substring/fuzzy match** -- links mentions sharing a substring (>= 3 chars) or a matching
+//! 9. **Substring/fuzzy match** -- links mentions sharing a substring (>= 3 chars) or a matching
 //!    last word, same entity type required.
 
-use crate::backends::box_embeddings::{BoxCorefConfig, BoxEmbedding};
 use crate::{Entity, EntityType};
 use anno_core::{CanonicalId, CoreferenceResolver, Gender};
 use std::collections::HashMap;
@@ -87,16 +93,43 @@ pub struct CorefConfig {
     /// Default: `true`.
     pub relaxed_head_match: bool,
 
-    /// Enable proper noun containment (sieve 5).
+    /// Enable proper noun containment (sieve 8).
     ///
     /// One mention's original text must be a proper subsequence of the other, matching
-    /// at word boundaries, and both must share the same entity type. Unlike sieve 6
+    /// at word boundaries, and both must share the same entity type. Unlike sieve 9
     /// (fuzzy/substring), this operates on original text (not canonical lowercased form)
     /// and requires complete word-boundary alignment.
     /// Example: "Obama" is contained in "Barack Obama".
     ///
     /// Default: `true`.
     pub proper_containment: bool,
+
+    /// Enable precise constructs sieve (sieve 3).
+    ///
+    /// Detects appositive constructions where two entity mentions are immediately
+    /// adjacent (gap <= 2 characters, allowing for ", ") with compatible entity types.
+    /// E.g., "Barack Obama, the president" -- merges the two NPs.
+    ///
+    /// Default: `true`.
+    pub precise_constructs: bool,
+
+    /// Enable strict head matching (sieve 5).
+    ///
+    /// Two mentions match if they share the same head word (last word), have compatible
+    /// entity types and gender, and do not violate the i-within-i constraint (one mention's
+    /// span must not contain the other's span).
+    ///
+    /// Default: `true`.
+    pub strict_head_match: bool,
+
+    /// Enable proper head word matching (sieve 6).
+    ///
+    /// For named entity mentions: the head word (last word) of one mention appears as
+    /// any word in the other mention, with same entity type required.
+    /// E.g., "President Obama" matches "Barack Hussein Obama" (head "Obama" found in both).
+    ///
+    /// Default: `true`.
+    pub proper_head_word_match: bool,
 }
 
 #[allow(deprecated)]
@@ -111,13 +144,16 @@ impl Default for CorefConfig {
             acronym_matching: true,
             relaxed_head_match: true,
             proper_containment: true,
+            precise_constructs: true,
+            strict_head_match: true,
+            proper_head_word_match: true,
         }
     }
 }
 
 /// Simple rule-based coreference resolver.
 ///
-/// Applies the six-sieve pipeline described in the [module documentation](self) to assign
+/// Applies the nine-sieve pipeline described in the [module documentation](self) to assign
 /// [`CanonicalId`]s to a sequence of [`Entity`] values. Entities that corefer receive the
 /// same id; singletons receive a unique id.
 ///
@@ -232,7 +268,18 @@ impl SimpleCorefResolver {
             return Some(cluster_id);
         }
 
-        // Strategy 3: acronym matching (e.g., "IBM" ~ "International Business Machines").
+        // Strategy 3: precise constructs (appositives via span proximity).
+        if self.config.precise_constructs {
+            for prev in previous.iter().rev() {
+                if let Some(cluster_id) = prev.canonical_id {
+                    if self.is_precise_construct(entity, prev) {
+                        return Some(cluster_id);
+                    }
+                }
+            }
+        }
+
+        // Strategy 4: acronym matching (e.g., "IBM" ~ "International Business Machines").
         if self.config.acronym_matching {
             for (other_canonical, &cluster_id) in canonical_map {
                 if self.is_acronym_match(&canonical, other_canonical) {
@@ -241,7 +288,29 @@ impl SimpleCorefResolver {
             }
         }
 
-        // Strategy 4: relaxed head match (e.g., "President Obama" ~ "Barack Obama").
+        // Strategy 5: strict head match (head word + type + gender + i-within-i guard).
+        if self.config.strict_head_match {
+            for prev in previous.iter().rev() {
+                if let Some(cluster_id) = prev.canonical_id {
+                    if self.is_strict_head_match(entity, prev) {
+                        return Some(cluster_id);
+                    }
+                }
+            }
+        }
+
+        // Strategy 6: proper head word match (head word of one found in the other).
+        if self.config.proper_head_word_match {
+            for prev in previous.iter().rev() {
+                if let Some(cluster_id) = prev.canonical_id {
+                    if self.is_proper_head_word_match(entity, prev) {
+                        return Some(cluster_id);
+                    }
+                }
+            }
+        }
+
+        // Strategy 7: relaxed head match (e.g., "President Obama" ~ "Barack Obama").
         if self.config.relaxed_head_match {
             for prev in previous.iter().rev() {
                 if let Some(cluster_id) = prev.canonical_id {
@@ -252,7 +321,7 @@ impl SimpleCorefResolver {
             }
         }
 
-        // Strategy 5: proper noun containment (e.g., "Obama" in "Barack Obama").
+        // Strategy 8: proper noun containment (e.g., "Obama" in "Barack Obama").
         if self.config.proper_containment {
             for prev in previous.iter().rev() {
                 if let Some(cluster_id) = prev.canonical_id {
@@ -263,7 +332,7 @@ impl SimpleCorefResolver {
             }
         }
 
-        // Strategy 6: substring/fuzzy matching.
+        // Strategy 9: substring/fuzzy matching.
         if self.config.fuzzy_matching {
             for (other_canonical, &cluster_id) in canonical_map {
                 if self.names_match(&canonical, other_canonical) {
@@ -442,6 +511,107 @@ impl SimpleCorefResolver {
             .all(|(&ac, word)| word.starts_with(ac))
     }
 
+    /// Detect appositive constructions via span proximity.
+    ///
+    /// Two mentions form an appositive when one immediately follows the other
+    /// (gap <= 2 characters, allowing for ", " between them) and they share the
+    /// same entity type. This is a high-precision signal: "Barack Obama, the president"
+    /// produces entities "Barack Obama" [0,12) and "the president" [14,27), with a
+    /// gap of 2 characters for ", ".
+    ///
+    /// Guards:
+    /// - Same entity type required.
+    /// - Neither mention is a pronoun.
+    /// - Gap must be 0-2 characters (covers adjacency, comma, comma+space).
+    fn is_precise_construct(&self, a: &Entity, b: &Entity) -> bool {
+        if a.entity_type != b.entity_type {
+            return false;
+        }
+        if self.is_pronoun(&a.text) || self.is_pronoun(&b.text) {
+            return false;
+        }
+        // Order-independent gap check: one must immediately follow the other.
+        let gap = if a.start >= b.end {
+            a.start - b.end
+        } else if b.start >= a.end {
+            b.start - a.end
+        } else {
+            // Overlapping spans -- not an appositive.
+            return false;
+        };
+        gap <= 2
+    }
+
+    /// Strict head matching: head word + entity type + gender compatibility + i-within-i guard.
+    ///
+    /// Two mentions match if:
+    /// 1. Same entity type.
+    /// 2. Same head word (last word, case-insensitive).
+    /// 3. Compatible gender (inferred from mention text via gazetteer/pronoun rules).
+    /// 4. No i-within-i violation: one mention's span must not contain the other's span.
+    ///    Nested mentions in the same clause are likely distinct referents
+    ///    (e.g., "the president of [the company]" -- "the company" is not the president).
+    ///
+    /// Unlike `is_relaxed_head_match`, this sieve:
+    /// - Applies to single-word mentions too (head = the word itself).
+    /// - Requires gender compatibility.
+    /// - Enforces i-within-i.
+    fn is_strict_head_match(&self, a: &Entity, b: &Entity) -> bool {
+        if a.entity_type != b.entity_type {
+            return false;
+        }
+        // I-within-i: reject if one span is nested inside the other.
+        if (a.start >= b.start && a.end <= b.end) || (b.start >= a.start && b.end <= a.end) {
+            return false;
+        }
+        let head_a = Self::head_word(&a.text);
+        let head_b = Self::head_word(&b.text);
+        if !head_a.eq_ignore_ascii_case(head_b) {
+            return false;
+        }
+        // Gender compatibility check.
+        let gender_a = self.infer_gender(&a.text);
+        let gender_b = self.infer_gender(&b.text);
+        match (gender_a, gender_b) {
+            (Some(ga), Some(gb)) => ga.is_compatible(&gb),
+            _ => true, // unknown gender is permissive
+        }
+    }
+
+    /// Proper head word match for named entities.
+    ///
+    /// The head word (last word) of one mention appears as any word in the other mention,
+    /// with same entity type required. Both mentions must have 2+ words to avoid
+    /// degenerate single-word matches (those are handled by exact/containment sieves).
+    ///
+    /// Example: "President Obama" (head "Obama") matches "Barack Hussein Obama"
+    /// because "Obama" appears as a word in the other mention.
+    fn is_proper_head_word_match(&self, a: &Entity, b: &Entity) -> bool {
+        if a.entity_type != b.entity_type {
+            return false;
+        }
+        let words_a: Vec<&str> = a.text.split_whitespace().collect();
+        let words_b: Vec<&str> = b.text.split_whitespace().collect();
+        // Both must be multi-word to avoid trivial matches.
+        if words_a.len() < 2 || words_b.len() < 2 {
+            return false;
+        }
+        let head_a = Self::head_word(&a.text);
+        let head_b = Self::head_word(&b.text);
+        // Head of A found in B's words, or head of B found in A's words.
+        let head_a_in_b = words_b.iter().any(|w| w.eq_ignore_ascii_case(head_a));
+        let head_b_in_a = words_a.iter().any(|w| w.eq_ignore_ascii_case(head_b));
+        head_a_in_b || head_b_in_a
+    }
+
+    /// Extract the head word from a mention (last whitespace-delimited token).
+    ///
+    /// For NPs, the head is typically the rightmost noun. Without a full parse,
+    /// the last word is a reasonable approximation for English named entities.
+    fn head_word(text: &str) -> &str {
+        text.split_whitespace().next_back().unwrap_or(text)
+    }
+
     /// Check if two mentions share a head word (last word) and entity type.
     ///
     /// Only applies when both mentions have 2+ words, so single-word mentions
@@ -593,157 +763,227 @@ impl CoreferenceResolver for SimpleCorefResolver {
     }
 }
 
-/// Box-based coreference resolver.
-pub struct BoxCorefResolver {
-    config: BoxCorefConfig,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl BoxCorefResolver {
-    /// Create a new box-based coreference resolver.
-    #[must_use]
-    pub fn new(config: BoxCorefConfig) -> Self {
-        Self { config }
+    fn resolver() -> SimpleCorefResolver {
+        SimpleCorefResolver::new(CorefConfig::default())
     }
 
-    /// Resolve coreference using provided box embeddings.
-    ///
-    /// # Panics
-    /// Panics if `boxes.len() != entities.len()`.
-    #[must_use]
-    pub fn resolve_with_boxes(&self, entities: &[Entity], boxes: &[BoxEmbedding]) -> Vec<Entity> {
+    // =========================================================================
+    // Precise constructs sieve
+    // =========================================================================
+
+    #[test]
+    fn precise_construct_appositive_adjacent() {
+        // "Barack Obama, the president" -- two entities separated by ", " (gap=2).
+        let r = resolver();
+        let entities = vec![
+            Entity::new("Barack Obama", EntityType::Person, 0, 12, 0.9),
+            Entity::new("the president", EntityType::Person, 14, 27, 0.85),
+        ];
+        let resolved = r.resolve(&entities);
         assert_eq!(
-            entities.len(),
-            boxes.len(),
-            "entities and boxes must have same length"
+            resolved[0].canonical_id, resolved[1].canonical_id,
+            "appositive entities should corefer"
         );
-
-        if entities.is_empty() {
-            return vec![];
-        }
-
-        let mut resolved = entities.to_vec();
-        let mut next_cluster_id = CanonicalId::ZERO;
-
-        // Union-find clustering.
-        let mut parent: Vec<usize> = (0..entities.len()).collect();
-
-        fn find(parent: &mut [usize], i: usize) -> usize {
-            if parent[i] != i {
-                parent[i] = find(parent, parent[i]);
-            }
-            parent[i]
-        }
-
-        fn union(parent: &mut [usize], i: usize, j: usize) {
-            let pi = find(parent, i);
-            let pj = find(parent, j);
-            if pi != pj {
-                parent[pi] = pj;
-            }
-        }
-
-        // Pairwise scoring.
-        for i in 0..entities.len() {
-            for j in (i + 1)..entities.len() {
-                let score = boxes[i].coreference_score(&boxes[j]);
-
-                if score >= self.config.coreference_threshold
-                    && entities[i].entity_type == entities[j].entity_type
-                    && (!self.config.enforce_syntactic_constraints
-                        || self.check_syntactic_constraints(&entities[i], &entities[j]))
-                {
-                    union(&mut parent, i, j);
-                }
-            }
-        }
-
-        // Assign cluster IDs.
-        let mut cluster_map: HashMap<usize, CanonicalId> = HashMap::new();
-        for (i, resolved_entity) in resolved.iter_mut().enumerate().take(entities.len()) {
-            let root = find(&mut parent, i);
-            let cluster_id = *cluster_map.entry(root).or_insert_with(|| {
-                let id = next_cluster_id;
-                next_cluster_id += 1;
-                id
-            });
-            resolved_entity.canonical_id = Some(cluster_id);
-        }
-
-        resolved
     }
 
-    fn check_syntactic_constraints(&self, entity_a: &Entity, entity_b: &Entity) -> bool {
-        let distance = if entity_a.end <= entity_b.start {
-            entity_b.start - entity_a.end
-        } else {
-            entity_a.start.saturating_sub(entity_b.end)
-        };
-
-        if self.is_simple_pronoun(&entity_a.text) && distance <= self.config.max_local_distance {
-            return distance > 50;
-        }
-
-        if self.is_rexpression(&entity_a.text) && distance <= self.config.max_local_distance {
-            return distance > 20;
-        }
-
-        true
+    #[test]
+    fn precise_construct_rejects_distant_entities() {
+        // Two Person entities far apart should not match via precise constructs.
+        let r = resolver();
+        let entities = vec![
+            Entity::new("Barack Obama", EntityType::Person, 0, 12, 0.9),
+            Entity::new("the president", EntityType::Person, 50, 63, 0.85),
+        ];
+        // They may still match via other sieves, but not via precise constructs.
+        // Disable other sieves to isolate.
+        let mut cfg = CorefConfig::default();
+        cfg.fuzzy_matching = false;
+        cfg.relaxed_head_match = false;
+        cfg.proper_containment = false;
+        cfg.strict_head_match = false;
+        cfg.proper_head_word_match = false;
+        cfg.acronym_matching = false;
+        let r = SimpleCorefResolver::new(cfg);
+        let resolved = r.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id, resolved[1].canonical_id,
+            "distant entities should not match via precise constructs"
+        );
     }
 
-    fn is_simple_pronoun(&self, text: &str) -> bool {
-        matches!(
-            text.to_lowercase().as_str(),
-            "he" | "she" | "they" | "him" | "her" | "them" | "it" | "this" | "that"
-        )
+    #[test]
+    fn precise_construct_rejects_different_types() {
+        // Adjacent but different entity types should not match.
+        let a = Entity::new("Acme Corp", EntityType::Organization, 0, 9, 0.9);
+        let b = Entity::new("New York", EntityType::Location, 11, 19, 0.85);
+        assert!(
+            !resolver().is_precise_construct(&a, &b),
+            "different entity types should not match"
+        );
     }
 
-    fn is_rexpression(&self, text: &str) -> bool {
-        text.chars().next().is_some_and(|c| c.is_uppercase()) && text.len() > 1
-    }
-}
+    // =========================================================================
+    // Strict head matching sieve
+    // =========================================================================
 
-impl CoreferenceResolver for BoxCorefResolver {
-    fn resolve(&self, entities: &[Entity]) -> Vec<Entity> {
-        // Boxes are provided out-of-band; default is identity.
-        entities.to_vec()
-    }
-
-    fn name(&self) -> &'static str {
-        "box-embedding"
-    }
-}
-
-/// Convert vector embeddings to box embeddings for coreference resolution.
-#[must_use]
-pub fn vectors_to_boxes(
-    embeddings: &[f32],
-    hidden_dim: usize,
-    radius: Option<f32>,
-) -> Vec<BoxEmbedding> {
-    let radius = radius.unwrap_or(0.1);
-    let num_entities = embeddings.len() / hidden_dim;
-    let mut boxes = Vec::with_capacity(num_entities);
-
-    for i in 0..num_entities {
-        let start = i * hidden_dim;
-        let end = start + hidden_dim;
-        let vector = &embeddings[start..end];
-        boxes.push(BoxEmbedding::from_vector(vector, radius));
+    #[test]
+    fn strict_head_match_same_head_compatible_gender() {
+        let r = resolver();
+        // "John Smith" and "Robert Smith" -- same head "Smith", both Person.
+        let a = Entity::new("John Smith", EntityType::Person, 0, 10, 0.9);
+        let b = Entity::new("Robert Smith", EntityType::Person, 50, 62, 0.9);
+        assert!(
+            r.is_strict_head_match(&a, &b),
+            "same head word + compatible gender should match"
+        );
     }
 
-    boxes
-}
+    #[test]
+    fn strict_head_match_i_within_i_rejection() {
+        let r = resolver();
+        // "the company" [15,26) is nested inside "the president of the company" [0,30).
+        let outer = Entity::new(
+            "the president of the company",
+            EntityType::Person,
+            0,
+            30,
+            0.9,
+        );
+        let inner = Entity::new("the company", EntityType::Person, 15, 26, 0.9);
+        assert!(
+            !r.is_strict_head_match(&outer, &inner),
+            "nested spans (i-within-i) should be rejected"
+        );
+    }
 
-/// Resolve coreference using box embeddings derived from vector embeddings.
-#[must_use]
-pub fn resolve_with_box_embeddings(
-    entities: &[Entity],
-    embeddings: &[f32],
-    hidden_dim: usize,
-    config: BoxCorefConfig,
-) -> Vec<Entity> {
-    let radius = config.vector_to_box_radius;
-    let boxes = vectors_to_boxes(embeddings, hidden_dim, radius);
-    let resolver = BoxCorefResolver::new(config);
-    resolver.resolve_with_boxes(entities, &boxes)
+    #[test]
+    fn strict_head_match_gender_incompatible() {
+        let r = resolver();
+        // "John Smith" (masculine via gazetteer) vs "Mary Smith" (feminine).
+        // Same head "Smith" but incompatible gender.
+        let a = Entity::new("John Smith", EntityType::Person, 0, 10, 0.9);
+        let b = Entity::new("Mary Smith", EntityType::Person, 50, 60, 0.9);
+        assert!(
+            !r.is_strict_head_match(&a, &b),
+            "gender-incompatible mentions should not match"
+        );
+    }
+
+    #[test]
+    fn strict_head_match_single_word() {
+        let r = resolver();
+        // Single-word mentions with the same text should match (head = the word itself).
+        let a = Entity::new("Obama", EntityType::Person, 0, 5, 0.9);
+        let b = Entity::new("Obama", EntityType::Person, 50, 55, 0.9);
+        assert!(
+            r.is_strict_head_match(&a, &b),
+            "identical single-word mentions should match via strict head"
+        );
+    }
+
+    // =========================================================================
+    // Proper head word match sieve
+    // =========================================================================
+
+    #[test]
+    fn proper_head_word_match_cross_reference() {
+        let r = resolver();
+        // "President Obama" (head "Obama") and "Barack Obama" (head "Obama").
+        // Head of each is found in the other.
+        let a = Entity::new("President Obama", EntityType::Person, 0, 15, 0.9);
+        let b = Entity::new("Barack Obama", EntityType::Person, 50, 62, 0.9);
+        assert!(
+            r.is_proper_head_word_match(&a, &b),
+            "head 'Obama' found in both mentions"
+        );
+    }
+
+    #[test]
+    fn proper_head_word_match_head_in_longer() {
+        let r = resolver();
+        // "President Obama" (head "Obama") matches "Barack Hussein Obama"
+        // because "Obama" appears as a word in both.
+        let a = Entity::new("President Obama", EntityType::Person, 0, 15, 0.9);
+        let b = Entity::new("Barack Hussein Obama", EntityType::Person, 50, 70, 0.9);
+        assert!(
+            r.is_proper_head_word_match(&a, &b),
+            "head 'Obama' from A found in B"
+        );
+    }
+
+    #[test]
+    fn proper_head_word_rejects_single_word() {
+        let r = resolver();
+        // Single-word mentions are excluded (handled by other sieves).
+        let a = Entity::new("Obama", EntityType::Person, 0, 5, 0.9);
+        let b = Entity::new("Barack Obama", EntityType::Person, 50, 62, 0.9);
+        assert!(
+            !r.is_proper_head_word_match(&a, &b),
+            "single-word mention should not match via proper head word sieve"
+        );
+    }
+
+    #[test]
+    fn proper_head_word_rejects_different_types() {
+        let r = resolver();
+        let a = Entity::new("New York Times", EntityType::Organization, 0, 14, 0.9);
+        let b = Entity::new("New York", EntityType::Location, 50, 58, 0.9);
+        assert!(
+            !r.is_proper_head_word_match(&a, &b),
+            "different entity types should not match"
+        );
+    }
+
+    // =========================================================================
+    // Integration: end-to-end resolve with new sieves
+    // =========================================================================
+
+    #[test]
+    fn integration_strict_head_clusters_smiths() {
+        let r = resolver();
+        let entities = vec![
+            Entity::new("Acme Corp", EntityType::Organization, 0, 9, 0.9),
+            Entity::new("Acme Corporation", EntityType::Organization, 50, 66, 0.9),
+        ];
+        let resolved = r.resolve(&entities);
+        // "Acme Corp" and "Acme Corporation" don't share a head word (Corp vs Corporation),
+        // but they should still match via substring/fuzzy sieve.
+        assert_eq!(
+            resolved[0].canonical_id, resolved[1].canonical_id,
+            "should corefer via fuzzy matching"
+        );
+    }
+
+    #[test]
+    fn integration_new_sieves_do_not_break_existing() {
+        // Existing exact-match and pronoun resolution still work.
+        let r = resolver();
+        let entities = vec![
+            Entity::new("John Smith", EntityType::Person, 0, 10, 0.9),
+            Entity::new("he", EntityType::Person, 15, 17, 0.8),
+            Entity::new("John Smith", EntityType::Person, 30, 40, 0.9),
+        ];
+        let resolved = r.resolve(&entities);
+        assert_eq!(resolved[0].canonical_id, resolved[1].canonical_id);
+        assert_eq!(resolved[0].canonical_id, resolved[2].canonical_id);
+    }
+
+    // =========================================================================
+    // head_word helper
+    // =========================================================================
+
+    #[test]
+    fn head_word_extraction() {
+        assert_eq!(SimpleCorefResolver::head_word("President Obama"), "Obama");
+        assert_eq!(SimpleCorefResolver::head_word("Obama"), "Obama");
+        assert_eq!(
+            SimpleCorefResolver::head_word("the United States"),
+            "States"
+        );
+        assert_eq!(SimpleCorefResolver::head_word(""), "");
+    }
 }
