@@ -457,7 +457,6 @@ pub fn backend_tasks(backend_name: &str) -> &'static [Task] {
             Task::AbstractAnaphora,
         ],
         "mention_ranking" | "MentionRankingCoref" => &[Task::IntraDocCoref, Task::InterDocCoref],
-        "box" | "box_coref" | "BoxCorefResolver" => &[Task::IntraDocCoref, Task::InterDocCoref],
 
         _ => &[],
     }
@@ -537,7 +536,6 @@ pub fn get_task_backends(task: Task) -> Vec<&'static str> {
         // Special backends
         "coref_resolver",
         "mention_ranking",
-        "box",
     ] {
         if backend_tasks(backend).contains(&task) {
             backends.push(backend);

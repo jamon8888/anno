@@ -435,7 +435,7 @@ impl BackendFactory {
     /// [`Self::available_backends`]. They are used by `TaskEvaluator` for coref-family tasks.
     #[must_use]
     pub fn available_coref_resolvers() -> Vec<&'static str> {
-        vec!["coref_resolver", "mention_ranking", "box"]
+        vec!["coref_resolver", "mention_ranking"]
     }
 
     /// Check if a backend is available (feature-enabled).
@@ -460,13 +460,8 @@ pub fn create_coref_resolver(
             use anno::backends::coref::mention_ranking::MentionRankingCoref;
             Ok(Box::new(MentionRankingCoref::new()))
         }
-        "box" | "box_coref" | "boxcorefresolver" => {
-            use crate::eval::coref_resolver::BoxCorefResolver;
-            use anno::backends::box_embeddings::BoxCorefConfig;
-            Ok(Box::new(BoxCorefResolver::new(BoxCorefConfig::default())))
-        }
         _ => Err(crate::Error::InvalidInput(format!(
-            "Unknown coreference resolver: '{}'. Available: coref_resolver, mention_ranking, box",
+            "Unknown coreference resolver: '{}'. Available: coref_resolver, mention_ranking",
             name
         ))),
     }

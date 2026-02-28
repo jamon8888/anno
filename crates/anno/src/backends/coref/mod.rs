@@ -2,7 +2,7 @@
 //!
 //! This module groups all within-document coreference resolvers:
 //! - [`resolve`] — Unified `CorefBackend` trait
-//! - [`simple`] — Rule-based and box-embedding resolvers
+//! - [`simple`] — Rule-based resolvers
 //! - [`e2e`] — End-to-end neural coreference (Lee et al. 2017/2018)
 //! - [`graph`] — Graph-based iterative refinement
 //! - [`mention_ranking`] — Mention-ranking coreference (Bourgois & Poibeau 2025)
@@ -31,7 +31,7 @@ pub mod t5;
 #[cfg(feature = "onnx")]
 pub mod fcoref;
 
-// Simple rule-based and box-embedding coreference resolvers.
+// Simple rule-based coreference resolvers.
 #[cfg(any(feature = "analysis", feature = "eval"))]
 pub mod simple;
 
@@ -45,4 +45,4 @@ pub use t5::{CorefCluster, T5Coref, T5CorefConfig};
 pub use fcoref::{FCoref, FCorefConfig};
 
 #[cfg(any(feature = "analysis", feature = "eval"))]
-pub use simple::{BoxCorefResolver, CorefConfig, SimpleCorefResolver};
+pub use simple::{CorefConfig, SimpleCorefResolver};

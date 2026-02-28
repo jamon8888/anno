@@ -5,7 +5,6 @@
 
 use std::sync::Arc;
 
-use crate::backends::box_embeddings::BoxEmbedding;
 use crate::linking::candidate::CandidateGenerator;
 use crate::linking::linker::{EntityLinker, Mention};
 use anno_core::EntityType;
@@ -92,74 +91,6 @@ impl LinkScoreProvider for EntityLinkerProvider {
         candidates.push(("NIL".to_string(), (-2.0_f64).ln())); // ~0.13 prior for NIL
 
         candidates
-    }
-}
-
-// =============================================================================
-// Box embedding based Coref Score Provider
-// =============================================================================
-
-/// A lightweight `CorefScoreProvider` that scores antecedents using box
-/// embeddings' mutual overlap (`coreference_score`). Boxes are derived
-/// deterministically from mention text to avoid needing a trained encoder.
-///
-/// This is a stopgap adapter to let the joint model consume box-based
-/// coreference cues without wiring a full box-training pipeline.
-#[allow(dead_code)] // Future: wire up box-based coref in joint model
-pub struct BoxCorefProvider {
-    /// Half-width of the constructed boxes in each dimension.
-    pub radius: f32,
-}
-
-impl Default for BoxCorefProvider {
-    fn default() -> Self {
-        Self { radius: 0.1 }
-    }
-}
-
-impl BoxCorefProvider {
-    /// Convert a mention into a deterministic 2D box embedding.
-    ///
-    /// The hash is mapped into [0,1]² and expanded by `radius` in each dim.
-    #[allow(dead_code)] // struct is currently not wired into main joint path
-    fn mention_to_box(&self, mention: &JointMention) -> BoxEmbedding {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        mention.text.hash(&mut hasher);
-        mention.start.hash(&mut hasher);
-        let h = hasher.finish();
-        let v1 = ((h & 0xFFFF) as f32) / 65535.0;
-        let v2 = (((h >> 16) & 0xFFFF) as f32) / 65535.0;
-        let radius = self.radius.max(1e-3);
-        BoxEmbedding::new(
-            vec![v1 - radius, v2 - radius],
-            vec![v1 + radius, v2 + radius],
-        )
-    }
-}
-
-impl CorefScoreProvider for BoxCorefProvider {
-    fn antecedent_scores(
-        &self,
-        mention: &JointMention,
-        candidates: &[&JointMention],
-        _text: &str,
-    ) -> Vec<(AntecedentValue, f64)> {
-        let m_box = self.mention_to_box(mention);
-
-        // Score each candidate via box overlap and convert to log-score
-        let mut scores: Vec<(AntecedentValue, f64)> = candidates
-            .iter()
-            .map(|cand| {
-                let c_box = self.mention_to_box(cand);
-                let s = m_box.coreference_score(&c_box).max(1e-6);
-                (AntecedentValue::Mention(cand.idx), s.ln() as f64)
-            })
-            .collect();
-
-        // NEW cluster prior (mild)
-        scores.push((AntecedentValue::NewCluster, (-1.0_f64).ln()));
-        scores
     }
 }
 

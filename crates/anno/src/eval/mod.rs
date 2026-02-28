@@ -40,4 +40,4 @@ pub use coref_metrics::{
     CorefEvaluation, CorefScores, ZeroAnaphorEvaluation,
 };
 
-pub use coref_resolver::{BoxCorefResolver, CorefConfig, SimpleCorefResolver};
+pub use coref_resolver::{CorefConfig, SimpleCorefResolver};

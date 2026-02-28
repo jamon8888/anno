@@ -182,10 +182,6 @@ impl CorefBackend for super::mention_ranking::MentionRankingCoref {
 // model into the trait call, which defeats the purpose of a simple unified interface.
 // Callers needing SimpleCorefResolver should use it directly via its inherent API.
 
-// BoxCorefResolver (eval/analysis): NOT implemented.
-//
-// Similar to SimpleCorefResolver, it operates on pre-extracted entities + box embeddings,
-// not raw text. Incompatible signature.
 
 // =============================================================================
 // Tests
