@@ -296,3 +296,159 @@ impl SemanticRegistryBuilder {
 }
 
 // =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =========================================================================
+    // SemanticRegistry::standard_ner
+    // =========================================================================
+
+    #[test]
+    fn standard_ner_has_five_labels() {
+        let reg = SemanticRegistry::standard_ner(4);
+        assert_eq!(reg.len(), 5);
+        assert!(!reg.is_empty());
+    }
+
+    #[test]
+    fn standard_ner_label_index_consistent() {
+        let reg = SemanticRegistry::standard_ner(8);
+        for (i, label) in reg.labels.iter().enumerate() {
+            assert_eq!(
+                reg.label_index.get(&label.slug),
+                Some(&i),
+                "label_index[{slug}] should map to {i}",
+                slug = label.slug,
+            );
+        }
+    }
+
+    #[test]
+    fn standard_ner_embedding_dimensions() {
+        let dim = 16;
+        let reg = SemanticRegistry::standard_ner(dim);
+        assert_eq!(reg.hidden_dim, dim);
+        assert_eq!(reg.embeddings.len(), reg.len() * dim);
+    }
+
+    #[test]
+    fn standard_ner_all_entity_category() {
+        let reg = SemanticRegistry::standard_ner(4);
+        for label in &reg.labels {
+            assert_eq!(label.category, LabelCategory::Entity);
+        }
+    }
+
+    // =========================================================================
+    // Embedding retrieval
+    // =========================================================================
+
+    #[test]
+    fn get_embedding_returns_correct_slice() {
+        let dim = 3;
+        let mut reg = SemanticRegistry::standard_ner(dim);
+        // Write recognizable values into the "organization" slot (index 1).
+        let idx = reg.label_index["organization"];
+        let start = idx * dim;
+        reg.embeddings[start] = 1.0;
+        reg.embeddings[start + 1] = 2.0;
+        reg.embeddings[start + 2] = 3.0;
+
+        let emb = reg.get_embedding("organization").unwrap();
+        assert_eq!(emb, &[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn get_embedding_returns_none_for_unknown() {
+        let reg = SemanticRegistry::standard_ner(4);
+        assert!(reg.get_embedding("nonexistent").is_none());
+    }
+
+    // =========================================================================
+    // Filtered iterators
+    // =========================================================================
+
+    #[test]
+    fn entity_and_relation_iterators() {
+        let reg = SemanticRegistry::builder()
+            .add_entity("person", "a human")
+            .add_relation("CEO_OF", "chief executive of")
+            .add_entity("org", "an organization")
+            .build_placeholder(4);
+
+        let entities: Vec<_> = reg.entity_labels().collect();
+        let relations: Vec<_> = reg.relation_labels().collect();
+
+        assert_eq!(entities.len(), 2);
+        assert_eq!(relations.len(), 1);
+        assert_eq!(relations[0].slug, "CEO_OF");
+    }
+
+    // =========================================================================
+    // Builder
+    // =========================================================================
+
+    #[test]
+    fn builder_empty_produces_empty_registry() {
+        let reg = SemanticRegistryBuilder::new().build_placeholder(8);
+        assert!(reg.is_empty());
+        assert_eq!(reg.len(), 0);
+        assert_eq!(reg.embeddings.len(), 0);
+    }
+
+    #[test]
+    fn builder_add_label_custom() {
+        let label = LabelDefinition {
+            slug: "drug".into(),
+            description: "a pharmaceutical compound".into(),
+            category: LabelCategory::Entity,
+            modality: ModalityHint::Any,
+            threshold: 0.3,
+        };
+        let reg = SemanticRegistry::builder()
+            .add_label(label)
+            .build_placeholder(2);
+        assert_eq!(reg.len(), 1);
+        assert_eq!(reg.labels[0].modality, ModalityHint::Any);
+        assert!((reg.labels[0].threshold - 0.3).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn builder_embeddings_are_zeroed() {
+        let reg = SemanticRegistry::builder()
+            .add_entity("a", "desc a")
+            .add_entity("b", "desc b")
+            .build_placeholder(4);
+        assert!(reg.embeddings.iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn builder_preserves_insertion_order() {
+        let reg = SemanticRegistry::builder()
+            .add_entity("alpha", "first")
+            .add_relation("BETA", "second")
+            .add_entity("gamma", "third")
+            .build_placeholder(2);
+
+        let slugs: Vec<&str> = reg.labels.iter().map(|l| l.slug.as_str()).collect();
+        assert_eq!(slugs, vec!["alpha", "BETA", "gamma"]);
+    }
+
+    // =========================================================================
+    // LabelCategory / ModalityHint
+    // =========================================================================
+
+    #[test]
+    fn modality_hint_default_is_text_only() {
+        assert_eq!(ModalityHint::default(), ModalityHint::TextOnly);
+    }
+
+    #[test]
+    fn label_category_equality() {
+        assert_eq!(LabelCategory::Entity, LabelCategory::Entity);
+        assert_ne!(LabelCategory::Entity, LabelCategory::Relation);
+        assert_ne!(LabelCategory::Relation, LabelCategory::Attribute);
+    }
+}
