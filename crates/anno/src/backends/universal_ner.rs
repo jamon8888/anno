@@ -456,6 +456,171 @@ mod tests {
     }
 
     #[test]
+    fn test_universal_ner_supported_types() {
+        let model = UniversalNER::new().unwrap();
+        let types = model.supported_types();
+        assert!(types.contains(&EntityType::Person));
+        assert!(types.contains(&EntityType::Organization));
+        assert!(types.contains(&EntityType::Location));
+        assert_eq!(types.len(), 3);
+    }
+
+    #[test]
+    fn test_universal_ner_description() {
+        let model = UniversalNER::new().unwrap();
+        let desc = model.description();
+        assert!(!desc.is_empty());
+        assert!(
+            desc.contains("UniversalNER"),
+            "description should mention UniversalNER, got: {desc}"
+        );
+    }
+
+    #[test]
+    fn test_universal_ner_capabilities() {
+        let model = UniversalNER::new().unwrap();
+        let caps = model.capabilities();
+        assert!(caps.dynamic_labels, "UniversalNER should have dynamic_labels capability");
+    }
+
+    #[test]
+    fn test_parse_llm_response_malformed_json() {
+        let model = UniversalNER::new().unwrap();
+        let text = "Hello world";
+
+        // Completely invalid JSON.
+        let result = model.parse_llm_response("this is not json", text);
+        assert!(result.is_err(), "malformed JSON should return an error");
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("Parse"), "error should be a Parse variant: {msg}");
+
+        // JSON object instead of array.
+        let result = model.parse_llm_response(r#"{"text": "Hello"}"#, text);
+        assert!(result.is_err(), "JSON object (not array) should return an error");
+
+        // Incomplete array (no closing bracket).
+        let result = model.parse_llm_response(r#"[{"text": "Hello""#, text);
+        assert!(result.is_err(), "incomplete JSON array should return an error");
+    }
+
+    #[test]
+    fn test_parse_llm_response_empty_entity_list() {
+        let model = UniversalNER::new().unwrap();
+        let text = "No entities here at all.";
+        let entities = model.parse_llm_response("[]", text).unwrap();
+        assert!(entities.is_empty(), "empty JSON array should produce no entities");
+    }
+
+    #[test]
+    fn test_parse_llm_response_code_fence_variants() {
+        let model = UniversalNER::new().unwrap();
+        let text = "Alice met Bob.";
+
+        // ```json ... ``` wrapping
+        let fenced = "```json\n[{\"text\":\"Alice\",\"type\":\"person\",\"start\":0,\"end\":5}]\n```";
+        let ents = model.parse_llm_response(fenced, text).unwrap();
+        assert_eq!(ents.len(), 1);
+        assert_eq!(ents[0].text, "Alice");
+
+        // ```JSON ... ``` wrapping (uppercase)
+        let fenced_upper = "```JSON\n[{\"text\":\"Bob\",\"type\":\"person\",\"start\":10,\"end\":13}]\n```";
+        let ents = model.parse_llm_response(fenced_upper, text).unwrap();
+        assert_eq!(ents.len(), 1);
+        assert_eq!(ents[0].text, "Bob");
+
+        // Plain ``` ... ``` wrapping
+        let plain_fence = "```\n[{\"text\":\"Alice\",\"type\":\"person\",\"start\":0,\"end\":5}]\n```";
+        let ents = model.parse_llm_response(plain_fence, text).unwrap();
+        assert_eq!(ents.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_llm_response_with_preamble_text() {
+        // Some LLMs add explanatory text before the JSON.
+        let model = UniversalNER::new().unwrap();
+        let text = "Alice met Bob in Paris.";
+        let response = "Here are the entities I found:\n[{\"text\":\"Alice\",\"type\":\"person\",\"start\":0,\"end\":5},{\"text\":\"Paris\",\"type\":\"location\",\"start\":17,\"end\":22}]";
+        let ents = model.parse_llm_response(response, text).unwrap();
+        assert_eq!(ents.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_llm_response_offset_validation() {
+        let model = UniversalNER::new().unwrap();
+        let text = "Hello World";
+
+        // Entity with end <= start should be skipped.
+        let response = r#"[{"text":"Hello","type":"person","start":5,"end":3}]"#;
+        let ents = model.parse_llm_response(response, text).unwrap();
+        assert!(ents.is_empty(), "entity with end <= start should be filtered out");
+
+        // Entity with empty text should be skipped.
+        let response = r#"[{"text":"","type":"person","start":0,"end":5}]"#;
+        let ents = model.parse_llm_response(response, text).unwrap();
+        assert!(ents.is_empty(), "entity with empty text should be filtered out");
+    }
+
+    #[test]
+    fn test_parse_llm_response_out_of_bounds_offsets() {
+        let model = UniversalNER::new().unwrap();
+        let text = "Short"; // 5 chars
+
+        // Hint offsets way beyond text length, and entity text not found in original.
+        let response = r#"[{"text":"Nonexistent","type":"person","start":100,"end":111}]"#;
+        let ents = model.parse_llm_response(response, text).unwrap();
+        assert!(ents.is_empty(), "out-of-bounds entity not found in text should be skipped");
+    }
+
+    #[test]
+    fn test_parse_llm_response_entity_type_mapping() {
+        let model = UniversalNER::new().unwrap();
+        let text = "Alice Bob Paris $100 Monday Acme";
+
+        let response = r#"[
+            {"text":"Alice","type":"PER","start":0,"end":5},
+            {"text":"Bob","type":"person","start":6,"end":9},
+            {"text":"Paris","type":"LOC","start":10,"end":15},
+            {"text":"$100","type":"money","start":16,"end":20},
+            {"text":"Monday","type":"date","start":21,"end":27},
+            {"text":"Acme","type":"ORG","start":28,"end":32}
+        ]"#;
+        let ents = model.parse_llm_response(response, text).unwrap();
+
+        let types: Vec<_> = ents.iter().map(|e| &e.entity_type).collect();
+        // PER -> Person, person -> Person
+        assert!(matches!(types[0], EntityType::Person));
+        assert!(matches!(types[1], EntityType::Person));
+        // LOC -> Location
+        assert!(matches!(types[2], EntityType::Location));
+        // money -> Money
+        assert!(matches!(types[3], EntityType::Money));
+        // date -> Date
+        assert!(matches!(types[4], EntityType::Date));
+        // ORG -> Organization
+        assert!(matches!(types[5], EntityType::Organization));
+    }
+
+    #[test]
+    fn test_parse_llm_response_provenance_is_ml() {
+        let model = UniversalNER::new().unwrap();
+        let text = "Alice met Bob.";
+        let response = r#"[{"text":"Alice","type":"person","start":0,"end":5}]"#;
+        let ents = model.parse_llm_response(response, text).unwrap();
+        assert_eq!(ents.len(), 1);
+
+        let prov = ents[0]
+            .provenance
+            .as_ref()
+            .expect("universal_ner entities should have provenance");
+        assert_eq!(prov.source, "universal_ner");
+        assert!(
+            matches!(prov.method, crate::ExtractionMethod::Neural),
+            "provenance method should be Neural (ML), got: {:?}",
+            prov.method
+        );
+    }
+
+    #[test]
     fn test_parse_llm_response_repeated_surface_form_uses_hint_offsets() {
         let model = UniversalNER::new().unwrap();
         let text = "Apple met Apple in Apple Park.";

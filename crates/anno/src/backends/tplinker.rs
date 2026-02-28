@@ -369,6 +369,180 @@ mod tests {
     }
 
     #[test]
+    fn test_tplinker_name_and_description() {
+        let tp = TPLinker::new().unwrap();
+        assert_eq!(tp.name(), "tplinker");
+        let desc = tp.description();
+        assert!(desc.contains("TPLinker"), "description should mention TPLinker, got: {desc}");
+    }
+
+    #[test]
+    fn test_tplinker_supported_types_complete() {
+        let tp = TPLinker::new().unwrap();
+        let types = tp.supported_types();
+        assert!(types.contains(&EntityType::Person));
+        assert!(types.contains(&EntityType::Organization));
+        assert!(types.contains(&EntityType::Location));
+        assert!(types.contains(&EntityType::Date));
+        assert!(types.contains(&EntityType::Time));
+        assert!(types.contains(&EntityType::Money));
+        assert_eq!(types.len(), 6);
+    }
+
+    #[test]
+    fn test_tplinker_empty_text() {
+        let tp = TPLinker::with_thresholds(0.15, 0.55);
+        let entities = tp.extract_entities("", None).unwrap();
+        assert!(entities.is_empty(), "empty text should produce no entities");
+
+        let out = tp
+            .extract_with_relations("", &["person"], &["founded"], 0.5)
+            .unwrap();
+        assert!(out.entities.is_empty());
+        assert!(out.relations.is_empty());
+    }
+
+    #[test]
+    fn test_tplinker_entities_only_no_relations() {
+        // Text with entities but no relation triggers.
+        let tp = TPLinker::with_thresholds(0.15, 0.55);
+        let out = tp
+            .extract_with_relations(
+                "Tokyo is a city.",
+                &["location"],
+                &[], // no relation types requested
+                0.5,
+            )
+            .unwrap();
+        // Should still extract entities even without relation types.
+        // Relations should be empty when no relation types are requested AND
+        // no default triggers match.
+        // (Default relations may kick in; the key invariant is no crash.)
+        // Key invariant: no crash, entities may or may not be present.
+        let _ = out.entities.len();
+    }
+
+    #[test]
+    fn test_tplinker_provenance_metadata() {
+        let tp = TPLinker::with_thresholds(0.0, 0.0); // low thresholds to keep all
+        let out = tp
+            .extract_with_relations(
+                "Steve Jobs founded Apple in 1976.",
+                &["person", "organization"],
+                &["founded"],
+                0.0,
+            )
+            .unwrap();
+
+        for entity in &out.entities {
+            let prov = entity
+                .provenance
+                .as_ref()
+                .expect("every tplinker entity should have provenance");
+            assert_eq!(
+                prov.source, "tplinker",
+                "provenance source should be 'tplinker'"
+            );
+            assert!(
+                matches!(prov.method, crate::ExtractionMethod::Heuristic),
+                "provenance method should be Heuristic, got: {:?}",
+                prov.method
+            );
+            assert_eq!(
+                prov.model_version.as_deref(),
+                Some("heuristic"),
+                "model_version should be 'heuristic'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tplinker_multiple_relations_same_entity_types() {
+        let tp = TPLinker::with_thresholds(0.0, 0.0);
+        // Two person-org pairs that could yield multiple relation instances.
+        let text = "Tim Cook leads Apple. Satya Nadella leads Microsoft.";
+        let out = tp
+            .extract_with_relations(
+                text,
+                &["person", "organization"],
+                &["CEO_OF", "WORKS_FOR", "MANAGES"],
+                0.0,
+            )
+            .unwrap();
+        // At minimum we should get entities; relations depend on heuristic triggers.
+        assert!(
+            out.entities.len() >= 2,
+            "should find at least 2 entities, got: {}",
+            out.entities.len()
+        );
+        // All relation indices must be in bounds.
+        for r in &out.relations {
+            assert!(r.head_idx < out.entities.len());
+            assert!(r.tail_idx < out.entities.len());
+        }
+    }
+
+    #[test]
+    fn test_tplinker_capabilities() {
+        let tp = TPLinker::new().unwrap();
+        let caps = tp.capabilities();
+        assert!(caps.batch_capable);
+        assert!(caps.streaming_capable);
+        assert!(caps.relation_capable);
+        assert_eq!(caps.recommended_chunk_size, Some(10_000));
+    }
+
+    #[test]
+    fn test_tplinker_batch_extraction() {
+        let tp = TPLinker::with_thresholds(0.15, 0.55);
+        let texts = &["Steve Jobs founded Apple.", "Berlin is in Germany."];
+        let batch = crate::BatchCapable::extract_entities_batch(&tp, texts, None).unwrap();
+        assert_eq!(batch.len(), 2);
+        // Each text should produce at least one entity.
+        for (i, entities) in batch.iter().enumerate() {
+            assert!(
+                !entities.is_empty(),
+                "text[{i}] should produce at least one entity"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tplinker_streaming_offset() {
+        let tp = TPLinker::with_thresholds(0.15, 0.55);
+        let offset = 100;
+        let entities =
+            crate::StreamingCapable::extract_entities_streaming(&tp, "Steve Jobs", offset)
+                .unwrap();
+        for e in &entities {
+            assert!(
+                e.start >= offset,
+                "streaming offset should be applied: start={}, offset={offset}",
+                e.start
+            );
+        }
+    }
+
+    #[test]
+    fn test_tplinker_custom_thresholds() {
+        // Very high entity threshold should filter out most entities.
+        let tp_strict = TPLinker::with_thresholds(0.99, 0.99);
+        let entities = tp_strict
+            .extract_entities("Steve Jobs founded Apple.", None)
+            .unwrap();
+        // Strict threshold likely filters everything (heuristic confidences are usually < 0.99).
+        // The key invariant: no crash, and count <= lenient version.
+        let tp_lenient = TPLinker::with_thresholds(0.0, 0.0);
+        let entities_lenient = tp_lenient
+            .extract_entities("Steve Jobs founded Apple.", None)
+            .unwrap();
+        assert!(
+            entities.len() <= entities_lenient.len(),
+            "strict thresholds should produce fewer or equal entities"
+        );
+    }
+
+    #[test]
     fn test_tplinker_unicode_offsets_invariants() {
         // Diverse scripts + emoji (multi-byte). Offsets must be character-based and valid.
         let tplinker = TPLinker::with_thresholds(0.15, 0.55);

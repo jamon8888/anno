@@ -158,4 +158,86 @@ mod tests {
         }
         // If model creation fails (e.g., feature not enabled), test is skipped
     }
+
+    /// Without the `onnx` feature, `new` must return `FeatureNotAvailable`.
+    /// With the feature but no model file, should still fail with a clear error.
+    #[test]
+    fn test_deberta_new_error_without_model() {
+        let result = DeBERTaV3NER::new("nonexistent-model-id-12345");
+        match result {
+            Ok(_) => {}
+            Err(e) => {
+                let msg = e.to_string();
+                assert!(!msg.is_empty(), "error message should be non-empty");
+                assert!(
+                    msg.contains("onnx")
+                        || msg.contains("feature")
+                        || msg.contains("Feature")
+                        || msg.contains("model")
+                        || msg.contains("Model")
+                        || msg.contains("Retrieval")
+                        || msg.contains("not found"),
+                    "error should indicate missing feature or model, got: {msg}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_deberta_supported_types() {
+        if let Ok(model) = DeBERTaV3NER::new("microsoft/deberta-v3-base") {
+            let types = model.supported_types();
+            assert!(types.contains(&EntityType::Person));
+            assert!(types.contains(&EntityType::Organization));
+            assert!(types.contains(&EntityType::Location));
+            assert_eq!(types.len(), 3);
+        }
+    }
+
+    #[test]
+    fn test_deberta_description_is_nonempty() {
+        if let Ok(model) = DeBERTaV3NER::new("microsoft/deberta-v3-base") {
+            let desc = model.description();
+            assert!(!desc.is_empty());
+            assert!(
+                desc.contains("DeBERTa"),
+                "description should mention DeBERTa, got: {desc}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_deberta_is_available_false_without_model() {
+        match DeBERTaV3NER::new("nonexistent-model-id-12345") {
+            Ok(model) => {
+                assert!(
+                    !model.is_available(),
+                    "model with nonexistent ID should not be available"
+                );
+            }
+            Err(_) => {
+                // Expected path without onnx feature or missing model.
+            }
+        }
+    }
+
+    #[test]
+    fn test_deberta_capabilities() {
+        if let Ok(model) = DeBERTaV3NER::new("microsoft/deberta-v3-base") {
+            let caps = model.capabilities();
+            assert!(caps.batch_capable);
+            assert!(caps.streaming_capable);
+        }
+    }
+
+    #[test]
+    fn test_deberta_extract_entities_error_without_model() {
+        if let Ok(model) = DeBERTaV3NER::new("nonexistent-model-id-12345") {
+            let result = model.extract_entities("Hello world", None);
+            assert!(
+                result.is_err(),
+                "extract_entities should error without a real model"
+            );
+        }
+    }
 }
