@@ -76,14 +76,14 @@
 //! - **Token-level granularity**: G2GT operates on tokens; we operate on mentions.
 //!
 //! For production use with high accuracy requirements, consider a full neural
-//! implementation or the T5-based coreference in `crate::backends::coref_t5`.
+//! implementation or the T5-based coreference in `crate::backends::coref::t5`.
 //!
 //! # Usage with MentionType
 //!
 //! For best results, provide mentions with `mention_type` set:
 //!
 //! ```rust,ignore
-//! use anno::backends::graph_coref::GraphCoref;
+//! use anno::backends::coref::graph::GraphCoref;
 //! use anno::eval::coref::{Mention, MentionType};
 //!
 //! // Properly annotated mentions work better
@@ -169,7 +169,7 @@ pub enum EdgeType {
 /// # Example
 ///
 /// ```rust
-/// use anno::backends::graph_coref::CorefGraph;
+/// use anno::backends::coref::graph::CorefGraph;
 ///
 /// let mut graph = CorefGraph::new(3);
 /// graph.add_edge(0, 1);
@@ -244,7 +244,7 @@ impl GraphCoref {
     /// # Example
     ///
     /// ```rust
-    /// use anno::backends::graph_coref::GraphCoref;
+    /// use anno::backends::coref::graph::GraphCoref;
     /// use anno::{Mention, MentionType};
     ///
     /// let coref = GraphCoref::new();
@@ -641,7 +641,7 @@ impl GraphCoref {
     /// # Example
     ///
     /// ```rust
-    /// use anno::backends::graph_coref::GraphCoref;
+    /// use anno::backends::coref::graph::GraphCoref;
     /// use anno::Mention;
     ///
     /// let coref = GraphCoref::new();
@@ -753,7 +753,7 @@ impl GraphCoref {
 /// # Example
 ///
 /// ```rust
-/// use anno::backends::graph_coref::{GraphCoref, chains_to_document};
+/// use anno::backends::coref::graph::{GraphCoref, chains_to_document};
 /// use anno::Mention;
 ///
 /// let coref = GraphCoref::new();

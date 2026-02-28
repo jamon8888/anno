@@ -118,10 +118,8 @@
 //! }
 //! ```
 
-/// Unified trait for coreference resolution backends.
-///
-/// Open trait (not sealed) -- external coref backends can implement it.
-pub mod coref_trait;
+/// Coreference resolution backends (trait, neural, heuristic).
+pub mod coref;
 
 // Always available (zero deps beyond std)
 /// BiLSTM + CRF NER - neural baseline from 2015-2018.
@@ -240,22 +238,6 @@ pub mod session_pool;
 // Model warmup for cold-start mitigation
 pub mod warmup;
 
-// T5-based coreference resolution
-#[cfg(feature = "onnx")]
-pub mod coref_t5;
-
-// F-coref: fast neural coreference (ONNX encoder + safetensors scorer heads)
-#[cfg(feature = "onnx")]
-pub mod fcoref;
-
-// Graph-based coreference (iterative refinement)
-pub mod graph_coref;
-
-// End-to-end coreference resolution (Lee et al. 2017/2018)
-pub mod e2e_coref;
-
-// Mention-ranking coreference (Bourgois & Poibeau 2025 inspired)
-pub mod mention_ranking;
 
 // Re-exports (always available)
 pub use bilstm_crf::BiLstmCrfNER;
@@ -337,11 +319,11 @@ pub use session_pool::{GLiNERPool, PoolConfig, SessionPool};
 
 // T5 coreference
 #[cfg(feature = "onnx")]
-pub use coref_t5::{CorefCluster, T5Coref, T5CorefConfig};
+pub use coref::t5::{CorefCluster, T5Coref, T5CorefConfig};
 
 // F-coref neural coreference
 #[cfg(feature = "onnx")]
-pub use fcoref::{FCoref, FCorefConfig};
+pub use coref::fcoref::{FCoref, FCorefConfig};
 
 // Config re-exports (for quantization control)
 #[cfg(feature = "onnx")]
@@ -363,7 +345,7 @@ pub use box_embeddings::{
 pub use anno_core::CoreferenceResolver;
 
 // Unified coref backend trait
-pub use coref_trait::CorefBackend;
+pub use coref::resolve::CorefBackend;
 
 // Classical HMM NER (zero deps)
 pub use hmm::{HmmConfig, HmmNER};
@@ -383,9 +365,6 @@ pub use burn::{BurnConfig, BurnNER};
 
 // Simple rule-based and box-embedding coreference resolvers.
 #[cfg(any(feature = "analysis", feature = "eval"))]
-pub mod simple_coref;
-
-#[cfg(any(feature = "analysis", feature = "eval"))]
-pub use simple_coref::{BoxCorefResolver, CorefConfig, SimpleCorefResolver};
+pub use coref::simple::{BoxCorefResolver, CorefConfig, SimpleCorefResolver};
 #[cfg(all(feature = "eval", feature = "discourse"))]
 pub use crate::eval::coref_resolver::{DiscourseAwareResolver, DiscourseCorefConfig};

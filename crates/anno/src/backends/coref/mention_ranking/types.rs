@@ -49,7 +49,7 @@ pub enum ClusteringStrategy {
 /// # Example
 ///
 /// ```rust
-/// use anno::backends::mention_ranking::{MentionRankingConfig, ClusteringStrategy};
+/// use anno::backends::coref::mention_ranking::{MentionRankingConfig, ClusteringStrategy};
 ///
 /// // Book-scale configuration
 /// let config = MentionRankingConfig {
@@ -338,7 +338,7 @@ impl MentionRankingConfig {
     /// # Example
     ///
     /// ```rust
-    /// use anno::backends::mention_ranking::MentionRankingConfig;
+    /// use anno::backends::coref::mention_ranking::MentionRankingConfig;
     ///
     /// let config = MentionRankingConfig::clinical();
     /// assert!(config.enable_be_phrase_detection);

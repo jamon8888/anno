@@ -37,7 +37,7 @@
 //!
 //! ```rust,no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use anno::backends::fcoref::FCoref;
+//! use anno::backends::coref::fcoref::FCoref;
 //!
 //! let coref = FCoref::from_path("fcoref_onnx")?;
 //! let clusters = coref.resolve("John went to the store. He bought milk.")?;
@@ -56,7 +56,7 @@ use ndarray::Array2;
 use ort::{session::builder::GraphOptimizationLevel, session::Session};
 use tokenizers::Tokenizer;
 
-use super::coref_t5::CorefCluster;
+use super::t5::CorefCluster;
 use crate::offset::SpanConverter;
 use crate::{Error, Result};
 use clustering::MentionSpan;
@@ -422,9 +422,9 @@ impl FCoref {
         let mask_arr = Array2::<i64>::from_shape_vec((1, seq_len), attention_mask.to_vec())
             .map_err(|e| Error::Parse(format!("mask shape: {}", e)))?;
 
-        let ids_t = super::ort_compat::tensor_from_ndarray(ids_arr)
+        let ids_t = super::super::ort_compat::tensor_from_ndarray(ids_arr)
             .map_err(|e| Error::Parse(format!("ids tensor: {}", e)))?;
-        let mask_t = super::ort_compat::tensor_from_ndarray(mask_arr)
+        let mask_t = super::super::ort_compat::tensor_from_ndarray(mask_arr)
             .map_err(|e| Error::Parse(format!("mask tensor: {}", e)))?;
 
         let hidden_flat = {

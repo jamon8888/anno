@@ -55,7 +55,7 @@
 //! Use [`MentionRankingConfig::clinical()`] for clinical/biomedical text:
 //!
 //! ```rust
-//! use anno::backends::mention_ranking::{MentionRankingConfig, MentionRankingCoref};
+//! use anno::backends::coref::mention_ranking::{MentionRankingConfig, MentionRankingCoref};
 //!
 //! let config = MentionRankingConfig::clinical();
 //! let coref = MentionRankingCoref::with_config(config);
@@ -161,7 +161,7 @@
 //!
 //! ```rust,ignore
 //! use anno::salience::{EntityRanker, TextRankSalience};
-//! use anno::backends::mention_ranking::MentionRankingCoref;
+//! use anno::backends::coref::mention_ranking::MentionRankingCoref;
 //!
 //! let ranker = TextRankSalience::default();
 //! let ranked = ranker.rank(text, &entities);
@@ -177,7 +177,7 @@
 //!
 //! ```rust,ignore
 //! use anno::salience::features_to_salience_scores;
-//! use anno::backends::mention_ranking::MentionRankingCoref;
+//! use anno::backends::coref::mention_ranking::MentionRankingCoref;
 //!
 //! let salience_scores = features_to_salience_scores(text, &entities);
 //! let coref = MentionRankingCoref::new()

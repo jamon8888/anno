@@ -744,7 +744,7 @@ impl EntityRanker for ChainFeatureSalience {
 ///
 /// ```rust,ignore
 /// use anno::salience::features_to_salience_scores;
-/// use anno::backends::mention_ranking::MentionRankingCoref;
+/// use anno::backends::coref::mention_ranking::MentionRankingCoref;
 ///
 /// let entities = ner.extract_entities(text, None)?;
 /// let salience_scores = features_to_salience_scores(text, &entities);

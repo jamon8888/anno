@@ -1,0 +1,48 @@
+//! Coreference resolution backends.
+//!
+//! This module groups all within-document coreference resolvers:
+//! - [`resolve`] — Unified `CorefBackend` trait
+//! - [`simple`] — Rule-based and box-embedding resolvers
+//! - [`e2e`] — End-to-end neural coreference (Lee et al. 2017/2018)
+//! - [`graph`] — Graph-based iterative refinement
+//! - [`mention_ranking`] — Mention-ranking coreference (Bourgois & Poibeau 2025)
+//! - [`fcoref`] — Fast neural coreference (ONNX encoder + safetensors scorer)
+//! - [`t5`] — T5-based seq2seq coreference
+
+/// Unified trait for coreference resolution backends.
+///
+/// Open trait (not sealed) -- external coref backends can implement it.
+pub mod resolve;
+
+// End-to-end coreference resolution (Lee et al. 2017/2018)
+pub mod e2e;
+
+// Graph-based coreference (iterative refinement)
+pub mod graph;
+
+// Mention-ranking coreference (Bourgois & Poibeau 2025 inspired)
+pub mod mention_ranking;
+
+// T5-based coreference resolution
+#[cfg(feature = "onnx")]
+pub mod t5;
+
+// F-coref: fast neural coreference (ONNX encoder + safetensors scorer heads)
+#[cfg(feature = "onnx")]
+pub mod fcoref;
+
+// Simple rule-based and box-embedding coreference resolvers.
+#[cfg(any(feature = "analysis", feature = "eval"))]
+pub mod simple;
+
+// Re-exports: keep everything accessible at the coref:: level
+pub use resolve::CorefBackend;
+
+#[cfg(feature = "onnx")]
+pub use t5::{CorefCluster, T5Coref, T5CorefConfig};
+
+#[cfg(feature = "onnx")]
+pub use fcoref::{FCoref, FCorefConfig};
+
+#[cfg(any(feature = "analysis", feature = "eval"))]
+pub use simple::{BoxCorefResolver, CorefConfig, SimpleCorefResolver};

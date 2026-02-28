@@ -457,7 +457,7 @@ pub fn create_coref_resolver(
             Ok(Box::new(SimpleCorefResolver::new(CorefConfig::default())))
         }
         "mention_ranking" | "mention-ranking" | "mentionranking" => {
-            use anno::backends::mention_ranking::MentionRankingCoref;
+            use anno::backends::coref::mention_ranking::MentionRankingCoref;
             Ok(Box::new(MentionRankingCoref::new()))
         }
         "box" | "box_coref" | "boxcorefresolver" => {

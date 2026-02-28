@@ -180,7 +180,7 @@ impl CorefGraph {
     /// # Example
     ///
     /// ```rust
-    /// use anno::backends::graph_coref::CorefGraph;
+    /// use anno::backends::coref::graph::CorefGraph;
     ///
     /// let mut graph = CorefGraph::new(3);
     /// let positions = vec![0, 50, 200];  // Character offsets

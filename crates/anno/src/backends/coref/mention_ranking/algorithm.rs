@@ -1866,7 +1866,7 @@ impl MentionRankingCoref {
     /// # Example
     ///
     /// ```rust,ignore
-    /// use anno::backends::mention_ranking::MentionRankingCoref;
+    /// use anno::backends::coref::mention_ranking::MentionRankingCoref;
     /// use anno_core::GroundedDocument;
     ///
     /// let coref = MentionRankingCoref::new();

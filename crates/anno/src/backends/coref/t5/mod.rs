@@ -59,7 +59,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use anno::backends::coref_t5::{T5Coref, T5CorefConfig};
+//! use anno::backends::coref::t5::{T5Coref, T5CorefConfig};
 //!
 //! let coref = T5Coref::from_path("path/to/t5_coref_onnx", T5CorefConfig::default())?
 //!     .with_heuristic_fallback();
@@ -375,9 +375,9 @@ impl T5Coref {
         let mask_arr = Array2::<i64>::from_shape_vec((batch, seq_len), attention_mask.to_vec())
             .map_err(|e| Error::Parse(format!("encoder mask shape: {e}")))?;
 
-        let ids_t = super::ort_compat::tensor_from_ndarray(ids_arr)
+        let ids_t = super::super::ort_compat::tensor_from_ndarray(ids_arr)
             .map_err(|e| Error::Parse(format!("encoder ids tensor: {e}")))?;
-        let mask_t = super::ort_compat::tensor_from_ndarray(mask_arr)
+        let mask_t = super::super::ort_compat::tensor_from_ndarray(mask_arr)
             .map_err(|e| Error::Parse(format!("encoder mask tensor: {e}")))?;
 
         // Scope the mutex guard: `outputs` borrows from the session; extract owned
@@ -434,11 +434,11 @@ impl T5Coref {
         let dec_ids = Array2::<i64>::from_shape_vec((batch, dec_len), decoder_input_ids.to_vec())
             .map_err(|e| Error::Parse(format!("decoder_ids shape: {e}")))?;
 
-        let enc_h_t = super::ort_compat::tensor_from_ndarray(enc_h)
+        let enc_h_t = super::super::ort_compat::tensor_from_ndarray(enc_h)
             .map_err(|e| Error::Parse(format!("enc_h tensor: {e}")))?;
-        let attn_t = super::ort_compat::tensor_from_ndarray(attn)
+        let attn_t = super::super::ort_compat::tensor_from_ndarray(attn)
             .map_err(|e| Error::Parse(format!("attn tensor: {e}")))?;
-        let dec_ids_t = super::ort_compat::tensor_from_ndarray(dec_ids)
+        let dec_ids_t = super::super::ort_compat::tensor_from_ndarray(dec_ids)
             .map_err(|e| Error::Parse(format!("dec_ids tensor: {e}")))?;
 
         // Scope the mutex guard: extract owned data before the guard drops.

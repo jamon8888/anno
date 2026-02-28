@@ -10,7 +10,7 @@
 //! | Backend | Feature gate | Notes |
 //! |---------|-------------|-------|
 //! | [`FCoref`](super::fcoref::FCoref) | `onnx` | Neural, exact signature match |
-//! | [`T5Coref`](super::coref_t5::T5Coref) | `onnx` | Seq2seq, exact signature match |
+//! | [`T5Coref`](super::t5::T5Coref) | `onnx` | Seq2seq, exact signature match |
 //! | [`MentionRankingCoref`](super::mention_ranking::MentionRankingCoref) | - | Heuristic, adapter converts MentionCluster |
 //! | `SimpleCorefResolver` | `analysis` | Takes `&[Entity]` not `&str`; incompatible (no impl) |
 
@@ -35,8 +35,8 @@ pub struct CorefCluster {
 
 // Bidirectional conversion with coref_t5::CorefCluster when onnx is enabled.
 #[cfg(feature = "onnx")]
-impl From<super::coref_t5::CorefCluster> for CorefCluster {
-    fn from(c: super::coref_t5::CorefCluster) -> Self {
+impl From<super::t5::CorefCluster> for CorefCluster {
+    fn from(c: super::t5::CorefCluster) -> Self {
         Self {
             id: c.id,
             mentions: c.mentions,
@@ -47,7 +47,7 @@ impl From<super::coref_t5::CorefCluster> for CorefCluster {
 }
 
 #[cfg(feature = "onnx")]
-impl From<CorefCluster> for super::coref_t5::CorefCluster {
+impl From<CorefCluster> for super::t5::CorefCluster {
     fn from(c: CorefCluster) -> Self {
         Self {
             id: c.id,
@@ -70,7 +70,7 @@ impl From<CorefCluster> for super::coref_t5::CorefCluster {
 /// # Example
 ///
 /// ```rust,ignore
-/// use anno::backends::coref_trait::CorefBackend;
+/// use anno::backends::coref::resolve::CorefBackend;
 ///
 /// fn run_coref(backend: &dyn CorefBackend, text: &str) {
 ///     if !backend.is_available() {
@@ -123,7 +123,7 @@ impl CorefBackend for super::fcoref::FCoref {
 
 // T5Coref: exact signature match -- resolve(&self, text: &str) -> Result<Vec<coref_t5::CorefCluster>>
 #[cfg(feature = "onnx")]
-impl CorefBackend for super::coref_t5::T5Coref {
+impl CorefBackend for super::t5::T5Coref {
     fn resolve(&self, text: &str) -> Result<Vec<CorefCluster>> {
         self.resolve(text)
             .map(|v| v.into_iter().map(CorefCluster::from).collect())

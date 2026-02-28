@@ -731,7 +731,7 @@ pub use backends::{
 };
 
 // Mention-ranking coreference (Bourgois & Poibeau 2025)
-pub use backends::mention_ranking::{
+pub use backends::coref::mention_ranking::{
     ClusteringStrategy, MentionCluster, MentionRankingConfig, MentionRankingCoref, RankedMention,
 };
 

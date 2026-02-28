@@ -367,7 +367,7 @@ pub fn resolve_for_rag(
 /// # Example
 ///
 /// ```rust,ignore
-/// use anno::backends::fcoref::FCoref;
+/// use anno::backends::coref::fcoref::FCoref;
 /// use anno::rag::resolve_for_rag_neural;
 ///
 /// let coref = FCoref::from_path("fcoref_onnx")?;
@@ -378,7 +378,7 @@ pub fn resolve_for_rag(
 #[cfg(feature = "onnx")]
 pub fn resolve_for_rag_neural(
     text: &str,
-    clusters: &[crate::backends::coref_t5::CorefCluster],
+    clusters: &[crate::backends::coref::t5::CorefCluster],
     language: Option<Language>,
 ) -> RagCorefResult {
     if clusters.is_empty() {
@@ -1937,7 +1937,7 @@ mod tests {
 
     #[cfg(feature = "onnx")]
     mod neural_tests {
-        use crate::backends::coref_t5::CorefCluster;
+        use crate::backends::coref::t5::CorefCluster;
         use crate::rag::*;
 
         #[test]

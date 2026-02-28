@@ -256,7 +256,7 @@ pub fn detect_quantifier(text: &str, entity_start: usize) -> Option<Quantifier> 
 ///
 /// The CLI delegates to the library implementation to keep semantics centralized.
 pub fn resolve_coreference(doc: &mut GroundedDocument, text: &str, _signal_ids: &[SignalId]) {
-    let coref = anno::backends::mention_ranking::MentionRankingCoref::new();
+    let coref = anno::backends::coref::mention_ranking::MentionRankingCoref::new();
     if let Err(e) = coref.resolve_into_document(text, doc) {
         use super::output::color;
         eprintln!("{} coref failed: {}", color("33", "warning:"), e);

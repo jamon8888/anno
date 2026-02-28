@@ -126,7 +126,7 @@ impl Default for CorefConfig {
 /// ```rust,no_run
 /// use anno::Entity;
 /// use anno::EntityType;
-/// use anno::backends::simple_coref::{SimpleCorefResolver, CorefConfig};
+/// use anno::backends::coref::simple::{SimpleCorefResolver, CorefConfig};
 ///
 /// let resolver = SimpleCorefResolver::new(CorefConfig::default());
 ///

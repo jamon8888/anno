@@ -60,7 +60,7 @@
 //!
 //! 2022  G2GT (Miculicich & Henderson): Graph refinement, global decisions
 //!       OntoNotes: 80.5 CoNLL F1 (+0.9 over SpanBERT)
-//!       See: [`graph_coref`](super::graph_coref) for anno's implementation
+//!       See: [`graph_coref`](super::graph) for anno's implementation
 //!
 //! 2024  Maverick (ACL 2024): Efficient architecture, 500M params
 //!       OntoNotes: 83.6 CoNLL F1 (approaches 13B model performance)
@@ -86,7 +86,7 @@
 //! | Triads | Score mention triples jointly | Meng & Rumshisky 2018 |
 //! | Graph Refinement | Condition on full graph structure | Miculicich & Henderson 2022 |
 //!
-//! See [`graph_coref`](super::graph_coref) for an implementation that addresses this.
+//! See [`graph_coref`](super::graph) for an implementation that addresses this.
 //!
 //! # Complexity
 //!
@@ -95,7 +95,7 @@
 //! - O(N²) antecedent pairs for each mention
 //!
 //! Pruning reduces this in practice, but the quadratic-in-quadratic structure remains.
-//! Compare to [`GraphCoref`](super::graph_coref::GraphCoref) at O(N² × T) where T ≈ 4.
+//! Compare to [`GraphCoref`](super::graph::GraphCoref) at O(N² × T) where T ≈ 4.
 //!
 //! **Critical insight** (Thalken et al. 2024): A single CoNLL F1 score is
 //! "uninformative, or even misleading"—models excel on long chains but

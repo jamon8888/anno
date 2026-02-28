@@ -1,12 +1,12 @@
 //! Coreference resolvers for analysis/evaluation pipelines.
 //!
 //! The core types ([`SimpleCorefResolver`], [`CorefConfig`], [`BoxCorefResolver`]) are defined in
-//! [`crate::backends::simple_coref`] and re-exported here for backward compatibility.
+//! [`crate::backends::coref::simple`] and re-exported here for backward compatibility.
 //!
 //! This module additionally defines the discourse-aware resolver (feature-gated on `discourse`).
 
 // Re-export canonical definitions from backends/.
-pub use crate::backends::simple_coref::{
+pub use crate::backends::coref::simple::{
     resolve_with_box_embeddings, vectors_to_boxes, BoxCorefResolver, CorefConfig,
     SimpleCorefResolver,
 };
@@ -21,7 +21,7 @@ use anno_core::CanonicalId;
 
 // NOTE: CorefConfig, SimpleCorefResolver, BoxCorefResolver, gender_from_name,
 // vectors_to_boxes, and resolve_with_box_embeddings have been moved to
-// crate::backends::simple_coref and are re-exported above.
+// crate::backends::coref::simple and are re-exported above.
 
 // =============================================================================
 // Discourse-aware coreference (optional)
