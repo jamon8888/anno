@@ -156,4 +156,13 @@ REVIEW_ISSUES.md
 reports/
 
 .env
-fcoref_onnx/
+
+# MCP config (may contain API keys)
+.mcp.json*
+
+# fcoref ONNX symlinks (any depth; no trailing / — they're symlinks not dirs)
+**/fcoref_onnx
+
+# ONNX model artifacts (large, download on demand)
+*.onnx
+*.onnx_data
