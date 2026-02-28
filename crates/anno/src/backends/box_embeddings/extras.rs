@@ -658,3 +658,217 @@ impl subsume::GumbelBox for GumbelBox {
 
 // Note: BoxCorefResolver is implemented in src/eval/coref_resolver.rs
 // to be alongside other coreference resolvers.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =========================================================================
+    // BoxCorefConfig
+    // =========================================================================
+
+    #[test]
+    fn config_defaults() {
+        let cfg = BoxCorefConfig::default();
+        assert!((cfg.coreference_threshold - 0.7).abs() < f32::EPSILON);
+        assert!(cfg.enforce_syntactic_constraints);
+        assert_eq!(cfg.max_local_distance, 5);
+        assert_eq!(cfg.vector_to_box_radius, Some(0.1));
+    }
+
+    #[test]
+    fn config_custom_values() {
+        let cfg = BoxCorefConfig {
+            coreference_threshold: 0.5,
+            enforce_syntactic_constraints: false,
+            max_local_distance: 10,
+            vector_to_box_radius: None,
+        };
+        assert!((cfg.coreference_threshold - 0.5).abs() < f32::EPSILON);
+        assert!(!cfg.enforce_syntactic_constraints);
+        assert_eq!(cfg.max_local_distance, 10);
+        assert_eq!(cfg.vector_to_box_radius, None);
+    }
+
+    // =========================================================================
+    // BoxVelocity
+    // =========================================================================
+
+    #[test]
+    fn velocity_static_is_zero() {
+        let v = BoxVelocity::static_velocity(3);
+        assert_eq!(v.min_delta, vec![0.0; 3]);
+        assert_eq!(v.max_delta, vec![0.0; 3]);
+    }
+
+    #[test]
+    fn velocity_new_stores_deltas() {
+        let v = BoxVelocity::new(vec![0.1, -0.2], vec![0.3, 0.4]);
+        assert_eq!(v.min_delta, vec![0.1, -0.2]);
+        assert_eq!(v.max_delta, vec![0.3, 0.4]);
+    }
+
+    // =========================================================================
+    // TemporalBox
+    // =========================================================================
+
+    #[test]
+    fn temporal_at_time_outside_range_returns_none() {
+        let base = BoxEmbedding::new(vec![0.0], vec![1.0]);
+        let tb = TemporalBox::new(base, BoxVelocity::static_velocity(1), (0.0, 10.0));
+        assert!(tb.at_time(-1.0).is_none());
+        assert!(tb.at_time(10.0).is_none()); // half-open: [start, end)
+        assert!(tb.at_time(15.0).is_none());
+    }
+
+    #[test]
+    fn temporal_at_time_start_boundary_is_valid() {
+        let base = BoxEmbedding::new(vec![0.0], vec![1.0]);
+        let tb = TemporalBox::new(base, BoxVelocity::static_velocity(1), (5.0, 10.0));
+        assert!(tb.at_time(5.0).is_some());
+        assert!(tb.is_valid_at(5.0));
+    }
+
+    #[test]
+    fn temporal_velocity_applied_correctly() {
+        // Velocity must keep min <= max at all queried times.
+        let base = BoxEmbedding::new(vec![0.0, 0.0], vec![10.0, 10.0]);
+        let velocity = BoxVelocity::new(vec![0.1, 0.0], vec![0.2, 0.1]);
+        let tb = TemporalBox::new(base, velocity, (0.0, 20.0));
+
+        let at_5 = tb.at_time(5.0).unwrap();
+        // min: [0.0 + 0.1*5, 0.0 + 0.0*5] = [0.5, 0.0]
+        // max: [10.0 + 0.2*5, 10.0 + 0.1*5] = [11.0, 10.5]
+        assert!((at_5.min[0] - 0.5).abs() < 1e-5);
+        assert!((at_5.min[1] - 0.0).abs() < 1e-5);
+        assert!((at_5.max[0] - 11.0).abs() < 1e-5);
+        assert!((at_5.max[1] - 10.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn temporal_coreference_zero_when_no_overlap_in_time() {
+        let a = TemporalBox::new(
+            BoxEmbedding::new(vec![0.0], vec![1.0]),
+            BoxVelocity::static_velocity(1),
+            (0.0, 5.0),
+        );
+        let b = TemporalBox::new(
+            BoxEmbedding::new(vec![0.0], vec![1.0]),
+            BoxVelocity::static_velocity(1),
+            (10.0, 15.0),
+        );
+        // Same spatial box but non-overlapping time ranges.
+        assert_eq!(a.coreference_at_time(&b, 3.0), 0.0);
+        assert_eq!(a.coreference_at_time(&b, 12.0), 0.0);
+    }
+
+    #[test]
+    fn temporal_coreference_positive_when_same_box_same_time() {
+        let a = TemporalBox::new(
+            BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]),
+            BoxVelocity::static_velocity(2),
+            (0.0, 10.0),
+        );
+        let b = TemporalBox::new(
+            BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]),
+            BoxVelocity::static_velocity(2),
+            (0.0, 10.0),
+        );
+        let score = a.coreference_at_time(&b, 5.0);
+        assert!((score - 1.0).abs() < 1e-6, "identical boxes should score 1.0");
+    }
+
+    #[test]
+    #[should_panic(expected = "base and velocity must have same dimension")]
+    fn temporal_new_panics_on_dimension_mismatch() {
+        let base = BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]);
+        let velocity = BoxVelocity::new(vec![0.1], vec![0.1]); // dim 1 vs 2
+        let _ = TemporalBox::new(base, velocity, (0.0, 1.0));
+    }
+
+    // =========================================================================
+    // UncertainBox
+    // =========================================================================
+
+    #[test]
+    fn uncertain_confidence_inversely_related_to_volume() {
+        let small = UncertainBox::new(BoxEmbedding::new(vec![0.0], vec![0.01]), 0.9);
+        let large = UncertainBox::new(BoxEmbedding::new(vec![0.0], vec![100.0]), 0.9);
+        assert!(small.confidence() > large.confidence());
+    }
+
+    #[test]
+    fn uncertain_zero_volume_gives_max_confidence() {
+        let point = UncertainBox::new(BoxEmbedding::new(vec![1.0], vec![1.0]), 0.5);
+        assert!((point.confidence() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    #[should_panic(expected = "source_trust must be in [0.0, 1.0]")]
+    fn uncertain_rejects_trust_above_one() {
+        let _ = UncertainBox::new(BoxEmbedding::new(vec![0.0], vec![1.0]), 1.5);
+    }
+
+    #[test]
+    fn conflict_none_for_low_confidence_disjoint() {
+        // Large boxes (low confidence) that are disjoint should NOT conflict.
+        let a = UncertainBox::new(BoxEmbedding::new(vec![0.0, 0.0], vec![10.0, 10.0]), 0.9);
+        let b = UncertainBox::new(BoxEmbedding::new(vec![50.0, 50.0], vec![60.0, 60.0]), 0.9);
+        assert!(a.detect_conflict(&b).is_none());
+    }
+
+    // =========================================================================
+    // GumbelBox
+    // =========================================================================
+
+    #[test]
+    fn gumbel_center_has_highest_membership() {
+        let gb = GumbelBox::new(BoxEmbedding::new(vec![0.0, 0.0], vec![2.0, 2.0]), 0.1);
+        let center = vec![1.0, 1.0];
+        let edge = vec![0.0, 0.0];
+        assert!(gb.membership_probability(&center) > gb.membership_probability(&edge));
+    }
+
+    #[test]
+    #[should_panic(expected = "temperature must be positive")]
+    fn gumbel_rejects_non_positive_temperature() {
+        let _ = GumbelBox::new(BoxEmbedding::new(vec![0.0], vec![1.0]), 0.0);
+    }
+
+    #[test]
+    fn gumbel_robust_coreference_identical_boxes_high() {
+        let b = BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]);
+        let g1 = GumbelBox::new(b.clone(), 0.1);
+        let g2 = GumbelBox::new(b, 0.1);
+        let score = g1.robust_coreference(&g2, 25);
+        assert!(score > 0.5, "identical Gumbel boxes should score high, got {score}");
+    }
+
+    // =========================================================================
+    // Interaction / Acquisition helpers
+    // =========================================================================
+
+    #[test]
+    fn interaction_strength_zero_for_disjoint() {
+        let actor = BoxEmbedding::new(vec![0.0], vec![1.0]);
+        let action = BoxEmbedding::new(vec![5.0], vec![6.0]);
+        let target = BoxEmbedding::new(vec![10.0], vec![11.0]);
+        assert_eq!(interaction_strength(&actor, &action, &target), 0.0);
+    }
+
+    #[test]
+    fn interaction_strength_zero_for_zero_volume_actor() {
+        let actor = BoxEmbedding::new(vec![1.0], vec![1.0]); // zero volume
+        let action = BoxEmbedding::new(vec![0.0], vec![2.0]);
+        let target = BoxEmbedding::new(vec![0.0], vec![2.0]);
+        assert_eq!(interaction_strength(&actor, &action, &target), 0.0);
+    }
+
+    #[test]
+    fn acquisition_roles_symmetric_for_identical_entities() {
+        let e = BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]);
+        let acq = BoxEmbedding::new(vec![0.0, 0.0], vec![1.0, 1.0]);
+        let (buyer, seller) = acquisition_roles(&e, &e, &acq);
+        assert!((buyer - seller).abs() < 1e-6, "identical entities should have symmetric roles");
+    }
+}
