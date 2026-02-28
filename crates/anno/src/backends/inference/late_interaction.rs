@@ -159,3 +159,97 @@ impl LateInteraction for MaxSimInteraction {
 // =============================================================================
 // Span Representation
 // =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: assert two f32 slices are approximately equal.
+    fn assert_approx_eq(actual: &[f32], expected: &[f32], tol: f32) {
+        assert_eq!(actual.len(), expected.len(), "length mismatch");
+        for (i, (a, e)) in actual.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (a - e).abs() < tol,
+                "index {i}: actual={a}, expected={e}, diff={}",
+                (a - e).abs()
+            );
+        }
+    }
+
+    #[test]
+    fn dot_product_identity_vectors() {
+        // 2 spans x 3 dim, 2 labels x 3 dim
+        // span0 = [1, 0, 0], span1 = [0, 1, 0]
+        // label0 = [1, 0, 0], label1 = [0, 0, 1]
+        let spans = vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
+        let labels = vec![1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+        let interaction = DotProductInteraction::new();
+        let scores = interaction.compute_similarity(&spans, 2, &labels, 2, 3);
+        // span0 . label0 = 1, span0 . label1 = 0
+        // span1 . label0 = 0, span1 . label1 = 0
+        assert_approx_eq(&scores, &[1.0, 0.0, 0.0, 0.0], 1e-6);
+    }
+
+    #[test]
+    fn dot_product_with_temperature() {
+        let spans = vec![1.0, 2.0, 3.0];
+        let labels = vec![4.0, 5.0, 6.0];
+        let interaction = DotProductInteraction::with_temperature(2.0);
+        let scores = interaction.compute_similarity(&spans, 1, &labels, 1, 3);
+        // dot = 1*4 + 2*5 + 3*6 = 32, then * 2.0 = 64
+        assert_approx_eq(&scores, &[64.0], 1e-6);
+    }
+
+    #[test]
+    fn dot_product_multiple_spans_labels() {
+        // 2 spans x 2 dim, 3 labels x 2 dim
+        let spans = vec![1.0, 0.0, 0.0, 1.0];
+        let labels = vec![1.0, 1.0, 2.0, 0.0, 0.0, 3.0];
+        let interaction = DotProductInteraction::new();
+        let scores = interaction.compute_similarity(&spans, 2, &labels, 3, 2);
+        // span0=[1,0]: dot with [1,1]=1, [2,0]=2, [0,3]=0
+        // span1=[0,1]: dot with [1,1]=1, [2,0]=0, [0,3]=3
+        assert_approx_eq(&scores, &[1.0, 2.0, 0.0, 1.0, 0.0, 3.0], 1e-6);
+    }
+
+    #[test]
+    fn maxsim_delegates_to_dot_product() {
+        let spans = vec![1.0, 2.0, 0.5, 0.5];
+        let labels = vec![1.0, 0.0, 0.0, 1.0];
+        let dot = DotProductInteraction::new();
+        let maxsim = MaxSimInteraction::new();
+        let dot_scores = dot.compute_similarity(&spans, 2, &labels, 2, 2);
+        let max_scores = maxsim.compute_similarity(&spans, 2, &labels, 2, 2);
+        assert_approx_eq(&max_scores, &dot_scores, 1e-6);
+    }
+
+    #[test]
+    fn apply_sigmoid_known_values() {
+        let interaction = DotProductInteraction::new();
+        let mut scores = vec![0.0, 1.0, -1.0, 100.0, -100.0];
+        interaction.apply_sigmoid(&mut scores);
+        // sigmoid(0) = 0.5
+        assert!((scores[0] - 0.5).abs() < 1e-6);
+        // sigmoid(1) ~ 0.7310586
+        assert!((scores[1] - 0.7310586).abs() < 1e-5);
+        // sigmoid(-1) ~ 0.2689414
+        assert!((scores[2] - 0.2689414).abs() < 1e-5);
+        // sigmoid(100) ~ 1.0
+        assert!((scores[3] - 1.0).abs() < 1e-6);
+        // sigmoid(-100) ~ 0.0
+        assert!(scores[4].abs() < 1e-6);
+    }
+
+    #[test]
+    fn dot_product_default_temperature_is_one() {
+        let d = DotProductInteraction::default();
+        assert!((d.temperature - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn empty_inputs() {
+        let interaction = DotProductInteraction::new();
+        let scores = interaction.compute_similarity(&[], 0, &[], 0, 4);
+        assert!(scores.is_empty());
+    }
+}
