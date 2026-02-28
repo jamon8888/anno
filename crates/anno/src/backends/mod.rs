@@ -381,10 +381,11 @@ pub use middleware::{
 #[cfg(feature = "burn")]
 pub use burn::{BurnConfig, BurnNER};
 
-// Simple resolvers for evaluation pipelines (eval feature only)
-// NOTE: These live in eval/ and are for evaluation, not production.
-// For production coreference, use `MentionRankingCoref` above.
+// Simple rule-based and box-embedding coreference resolvers.
 #[cfg(any(feature = "analysis", feature = "eval"))]
-pub use crate::eval::coref_resolver::{BoxCorefResolver, CorefConfig, SimpleCorefResolver};
+pub mod simple_coref;
+
+#[cfg(any(feature = "analysis", feature = "eval"))]
+pub use simple_coref::{BoxCorefResolver, CorefConfig, SimpleCorefResolver};
 #[cfg(all(feature = "eval", feature = "discourse"))]
 pub use crate::eval::coref_resolver::{DiscourseAwareResolver, DiscourseCorefConfig};
