@@ -400,15 +400,17 @@ Check whether these previously-identified issues are still present. Update this 
 - [x] ~~European decimal comma~~: MONEY patterns accept comma decimal (EUR 3,2 Mrd, €3,50). Added Mrd/Mio/Bn/Mn magnitude abbreviations.
 - [x] ~~German word-boundary slicing~~: same fix as BERT span truncation (word-boundary healing in onnx.rs).
 
+- [x] ~~Stacked misses lowercase names~~: decoupled NuNER loading from BERT success gate in stacked/mod.rs. NuNER now loads independently even if BERT fails.
+- [x] ~~Enhance coref signal_to_track empty~~: replaced `doc.tracks.insert()` with `doc.add_track()` in algorithm.rs to populate the signal_to_track index.
+- [x] ~~URL ingestion noise~~: added `form` and `select` to semantic skip tags in url_resolver.rs.
+- [x] ~~bert-onnx fragmentation on long text~~: added 512-token chunking in onnx.rs. Texts exceeding BERT's max sequence length are split at sentence boundaries and merged.
+- [x] ~~"Phone" tagged as PERSON~~: expanded SKIP_WORDS in heuristic backend with common field labels (phone, fax, mobile, address, etc.).
+- [x] ~~IBAN double detection~~: changed exact-match dedup to overlap-based dedup in privacy.rs. NER entities covered by a regex-detected span are suppressed.
+- [x] ~~info display~~: ONNX model backends now show `~` (yellow) with "(needs model download)" note instead of green checkmark.
+
 #### Open (as of 2026-03-01)
 
-- [ ] Stacked misses lowercase names: "tim cook", "apple inc." unrecognized without NuNER. NuNER is the only backend that handles these but is ~5x slower.
-- [ ] Enhance coref nonfunctional: creates 1 track but `signal_to_track` is empty.
-- [ ] URL ingestion noise: `--url` on news sites returns >90% nav/chrome junk as entity candidates.
-- [ ] bert-onnx fragmentation on long text: produces nonsense spans ("Lin", "Tor") on multi-paragraph input.
-- [ ] "Phone" tagged as PERSON by privacy: capitalized common word caught by heuristic backend.
-- [ ] IBAN double detection: pre-NER scan and NER both fire, producing redundant entries.
-- [ ] info display: ONNX backends show as available without "(requires model download)" note.
+(none currently known -- run /qa to find new issues)
 
 ### 7. Compare against previous runs
 
