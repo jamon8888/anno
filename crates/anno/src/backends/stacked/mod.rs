@@ -60,6 +60,19 @@ impl ConflictStrategy {
     /// When confidence/length are equal, we prefer `existing` to respect
     /// layer priority (earlier layers have higher priority).
     fn resolve(&self, existing: &Entity, candidate: &Entity) -> Resolution {
+        // Subsumption rule: if the candidate fully contains the existing entity
+        // and has a more specific structured type (Money, Date, Phone, etc.)
+        // while existing is generic (Other/misc), prefer the candidate.
+        // Example: "EUR 3.2 billion" (MONEY) subsumes "EUR" (misc).
+        if candidate.start <= existing.start
+            && candidate.end >= existing.end
+            && candidate.end > candidate.start
+            && is_structured_type(&candidate.entity_type)
+            && is_generic_type(&existing.entity_type)
+        {
+            return Resolution::Replace;
+        }
+
         match self {
             ConflictStrategy::Priority => Resolution::KeepExisting,
 
@@ -91,6 +104,26 @@ impl ConflictStrategy {
             ConflictStrategy::Union => Resolution::KeepBoth,
         }
     }
+}
+
+/// Pattern-detectable structured types that should subsume generic/misc entities.
+fn is_structured_type(t: &EntityType) -> bool {
+    matches!(
+        t,
+        EntityType::Money
+            | EntityType::Date
+            | EntityType::Time
+            | EntityType::Percent
+            | EntityType::Email
+            | EntityType::Url
+            | EntityType::Phone
+            | EntityType::Quantity
+    )
+}
+
+/// Generic/misc types that can be subsumed by more specific structured types.
+fn is_generic_type(t: &EntityType) -> bool {
+    matches!(t, EntityType::Other(_))
 }
 
 #[derive(Debug)]
@@ -787,6 +820,7 @@ impl Model for StackedNER {
         // "Bundeskanzler" split into "Bundes" + "kanzler", or "U.S. District Court"
         // split into fragments).
         heal_adjacent_spans(text, &mut entities);
+        extend_person_spans(text, &mut entities);
 
         // Validate final entities (defensive programming)
         // This catches bugs in individual backends that might produce invalid spans
@@ -899,6 +933,106 @@ fn heal_adjacent_spans(text: &str, entities: &mut Vec<Entity>) {
     merged.push(current);
 
     *entities = merged;
+}
+
+/// Extend PER entities rightward into adjacent untagged capitalized words.
+///
+/// When a multi-word person name like "Kishida Fumio" is only partially tagged
+/// (e.g., "Kishida" is PER but "Fumio" gets no tag), this extends the PER span
+/// to cover the following capitalized word(s) that are likely part of the name.
+/// Only extends PER entities, not ORG/LOC, and only into words that are not
+/// common sentence starters or role/title words.
+fn extend_person_spans(text: &str, entities: &mut Vec<Entity>) {
+    // Words that commonly appear capitalized but are not part of person names.
+    // This is a focused subset of the heuristic backend's COMMON_SENTENCE_STARTERS
+    // and SKIP_WORDS lists, covering the most frequent false-positive triggers.
+    const NON_NAME_WORDS: &[&str] = &[
+        // Sentence starters / determiners
+        "the", "a", "an", "this", "that", "these", "those", "it", "he", "she", "we", "they",
+        "in", "on", "at", "to", "for", "from", "by", "with", "and", "but", "or", "so", "if",
+        "is", "are", "was", "were", "be", "been", "have", "has", "had",
+        "what", "where", "when", "who", "why", "how",
+        "here", "about", "more", "next", "back", "home",
+        "however", "meanwhile", "furthermore", "moreover", "therefore", "although",
+        "indeed", "perhaps", "certainly", "no", "yes",
+        "some", "many", "each", "every", "both", "all", "few", "several", "other", "another",
+        // Day/month names
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        "january", "february", "march", "april", "may", "june", "july", "august",
+        "september", "october", "november", "december",
+        // Job titles / role words
+        "ceo", "cto", "cfo", "coo", "vp", "president", "chairman", "director", "manager",
+        "secretary", "minister", "kanzler", "bundeskanzler",
+        // Form/field labels
+        "phone", "fax", "mobile", "address", "website", "name", "company", "contact",
+    ];
+
+    let text_chars: Vec<char> = text.chars().collect();
+    let text_len = text_chars.len();
+
+    // Build a set of char-offset ranges that are already covered by entities,
+    // so we only extend into truly untagged territory.
+    let occupied: Vec<(usize, usize)> = entities.iter().map(|e| (e.start, e.end)).collect();
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for i in 0..entities.len() {
+            if entities[i].entity_type != EntityType::Person {
+                continue;
+            }
+
+            let end = entities[i].end;
+            if end >= text_len {
+                continue;
+            }
+
+            // Skip whitespace after the entity
+            let mut pos = end;
+            while pos < text_len && text_chars[pos].is_whitespace() {
+                pos += 1;
+            }
+            if pos >= text_len || pos == end {
+                // No whitespace gap (adjacent punctuation etc.) or end of text
+                continue;
+            }
+
+            // The next char must be uppercase (Latin-script capitalization signal)
+            if !text_chars[pos].is_uppercase() {
+                continue;
+            }
+
+            // Collect the next word
+            let word_start = pos;
+            while pos < text_len && !text_chars[pos].is_whitespace() && text_chars[pos] != ',' && text_chars[pos] != '.' && text_chars[pos] != ';' && text_chars[pos] != ':' && text_chars[pos] != '(' && text_chars[pos] != ')' {
+                pos += 1;
+            }
+            let word_end = pos;
+
+            // Check this word region isn't already occupied by another entity
+            let overlaps_existing = occupied.iter().any(|&(s, e)| {
+                // Overlap if not disjoint
+                word_start < e && word_end > s
+            });
+            if overlaps_existing {
+                continue;
+            }
+
+            // Extract the word text and check it's not a non-name word
+            let word: String = text_chars[word_start..word_end].iter().collect();
+            let word_lower = word
+                .trim_end_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase();
+            if NON_NAME_WORDS.contains(&word_lower.as_str()) {
+                continue;
+            }
+
+            // Extend the entity span
+            entities[i].end = word_end;
+            entities[i].text = text_chars[entities[i].start..word_end].iter().collect();
+            changed = true;
+        }
+    }
 }
 
 /// Check whether text may contain lowercase entity names that need NuNER.
