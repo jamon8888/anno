@@ -144,6 +144,11 @@ impl NuNER {
     #[cfg(feature = "onnx")]
     const MAX_WORDS: usize = 2048;
 
+    /// Extract entities with custom labels, chunking large inputs at sentence boundaries.
+    ///
+    /// Unlike the `Model` trait which uses default labels, this method allows specifying
+    /// arbitrary entity types at runtime. Inputs exceeding `MAX_WORDS` (2048) are
+    /// automatically split at sentence boundaries and results merged.
     #[cfg(feature = "onnx")]
     pub fn extract(
         &self,
