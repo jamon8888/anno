@@ -1664,7 +1664,7 @@ mod tests {
                 .original
                 .chars()
                 .next()
-                .map_or(false, |c| c.is_uppercase())
+                .is_some_and(|c| c.is_uppercase())
             {
                 if let Some(first) = replacement.first_mut() {
                     *first = first.to_uppercase().next().unwrap_or(*first);
@@ -1757,12 +1757,12 @@ mod tests {
                     let mut v = Vec::new();
                     let mut pos = 0;
                     let names = ["Alice", "He", "Bob", "She", "it"];
-                    for (i, name) in names.iter().enumerate() {
+                    for name in names.iter() {
                         let name_len = name.chars().count();
                         if pos + name_len > char_len { break; }
                         v.push(Entity::new(
                             *name,
-                            if i % 2 == 0 { EntityType::Person } else { EntityType::Person },
+                            EntityType::Person,
                             pos,
                             pos + name_len,
                             0.9,

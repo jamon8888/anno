@@ -985,8 +985,14 @@ pub fn compute_chain_length_stratified(
 
     let singleton_f1 = if !singleton_pred.is_empty() || !singleton_gold.is_empty() {
         let (_, _, f1) = lea_score(
-            &singleton_pred.iter().map(|c| (*c).clone()).collect::<Vec<_>>(),
-            &singleton_gold.iter().map(|c| (*c).clone()).collect::<Vec<_>>(),
+            &singleton_pred
+                .iter()
+                .map(|c| (*c).clone())
+                .collect::<Vec<_>>(),
+            &singleton_gold
+                .iter()
+                .map(|c| (*c).clone())
+                .collect::<Vec<_>>(),
         );
         f1
     } else {
@@ -1726,10 +1732,7 @@ mod tests {
 
     #[test]
     fn ceaf_e_perfect_prediction() {
-        let gold = chains(vec![
-            vec![("A", 0, 1), ("B", 2, 3)],
-            vec![("C", 4, 5)],
-        ]);
+        let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3)], vec![("C", 4, 5)]]);
         let pred = gold.clone();
         let (p, r, f1) = ceaf_e_score(&pred, &gold);
         assert!(approx_eq(p, 1.0), "p={p}");
@@ -1786,10 +1789,7 @@ mod tests {
     #[test]
     fn lea_partial_overlap() {
         let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5)]]);
-        let pred = chains(vec![
-            vec![("A", 0, 1), ("B", 2, 3)],
-            vec![("C", 4, 5)],
-        ]);
+        let pred = chains(vec![vec![("A", 0, 1), ("B", 2, 3)], vec![("C", 4, 5)]]);
         let (_p, r, f1) = lea_score(&pred, &gold);
         assert!(r < 1.0 && r > 0.0, "r={r}");
         assert!(f1 < 1.0 && f1 > 0.0, "f1={f1}");
@@ -1832,7 +1832,10 @@ mod tests {
         let (_, _, b3_f) = b_cubed_score(&pred, &gold);
         let (_, _, ceafe_f) = ceaf_e_score(&pred, &gold);
         let expected = (muc_f + b3_f + ceafe_f) / 3.0;
-        assert!(approx_eq(score, expected), "conll_f1={score}, expected={expected}");
+        assert!(
+            approx_eq(score, expected),
+            "conll_f1={score}, expected={expected}"
+        );
     }
 
     // =========================================================================
@@ -1849,7 +1852,11 @@ mod tests {
         let eval = CorefEvaluation::compute(&pred, &gold);
         assert!(approx_eq(eval.muc.f1, 1.0), "muc.f1={}", eval.muc.f1);
         assert!(approx_eq(eval.b_cubed.f1, 1.0), "b3.f1={}", eval.b_cubed.f1);
-        assert!(approx_eq(eval.ceaf_e.f1, 1.0), "ceafe.f1={}", eval.ceaf_e.f1);
+        assert!(
+            approx_eq(eval.ceaf_e.f1, 1.0),
+            "ceafe.f1={}",
+            eval.ceaf_e.f1
+        );
         assert!(approx_eq(eval.lea.f1, 1.0), "lea.f1={}", eval.lea.f1);
         assert!(approx_eq(eval.conll_f1, 1.0), "conll_f1={}", eval.conll_f1);
         assert!(eval.chain_stats.is_some());
@@ -1858,10 +1865,7 @@ mod tests {
     #[test]
     fn coref_evaluation_compute_populates_all_metrics() {
         let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3), ("C", 4, 5)]]);
-        let pred = chains(vec![
-            vec![("A", 0, 1), ("B", 2, 3)],
-            vec![("C", 4, 5)],
-        ]);
+        let pred = chains(vec![vec![("A", 0, 1), ("B", 2, 3)], vec![("C", 4, 5)]]);
         let eval = CorefEvaluation::compute(&pred, &gold);
         // All metrics should be populated (may not be perfect)
         // Just verify they are finite numbers
@@ -1885,16 +1889,23 @@ mod tests {
         let gold2 = chains(vec![vec![("X", 0, 1), ("Y", 2, 3), ("Z", 4, 5)]]);
         let pred2 = gold2.clone();
 
-        let pairs: Vec<(&[CorefChain], &[CorefChain])> =
-            vec![(&pred1, &gold1), (&pred2, &gold2)];
+        let pairs: Vec<(&[CorefChain], &[CorefChain])> = vec![(&pred1, &gold1), (&pred2, &gold2)];
         let agg = AggregateCorefEvaluation::compute(&pairs);
 
         assert_eq!(agg.num_documents, 2);
         assert_eq!(agg.per_document.len(), 2);
         // Both perfect -> mean should be perfect
-        assert!(approx_eq(agg.mean.conll_f1, 1.0), "mean conll={}", agg.mean.conll_f1);
+        assert!(
+            approx_eq(agg.mean.conll_f1, 1.0),
+            "mean conll={}",
+            agg.mean.conll_f1
+        );
         // Std dev should be 0 for identical scores
-        assert!(approx_eq(agg.std_dev.conll, 0.0), "std_dev conll={}", agg.std_dev.conll);
+        assert!(
+            approx_eq(agg.std_dev.conll, 0.0),
+            "std_dev conll={}",
+            agg.std_dev.conll
+        );
     }
 
     #[test]
@@ -1913,7 +1924,11 @@ mod tests {
     fn edge_overlapping_mention_spans() {
         // Mentions with overlapping spans (unusual but possible)
         // "John Smith" (0,10) and "Smith" (5,10) in the same chain
-        let gold = chains(vec![vec![("John Smith", 0, 10), ("Smith", 5, 10), ("he", 15, 17)]]);
+        let gold = chains(vec![vec![
+            ("John Smith", 0, 10),
+            ("Smith", 5, 10),
+            ("he", 15, 17),
+        ]]);
         let pred = gold.clone();
         let (p, r, f1) = b_cubed_score(&pred, &gold);
         assert!(approx_eq(p, 1.0), "p={p}");
@@ -2026,23 +2041,29 @@ mod tests {
 
         // CEAF-e: Dice similarity / #entities = (2/3 + 1/2) / 2 = 7/12
         let expected_e = 7.0 / 12.0;
-        assert!(approx_eq(pe, expected_e), "ceaf_e P={pe} expected {expected_e}");
-        assert!(approx_eq(re, expected_e), "ceaf_e R={re} expected {expected_e}");
+        assert!(
+            approx_eq(pe, expected_e),
+            "ceaf_e P={pe} expected {expected_e}"
+        );
+        assert!(
+            approx_eq(re, expected_e),
+            "ceaf_e R={re} expected {expected_e}"
+        );
 
         // CEAF-m: raw count / #mentions = 3/5 = 0.6
         assert!(approx_eq(pm, 0.6), "ceaf_m P={pm} expected 0.6");
         assert!(approx_eq(rm, 0.6), "ceaf_m R={rm} expected 0.6");
 
         // They give different values (the whole point of having two variants)
-        assert!((pe - pm).abs() > 0.01, "ceaf_e and ceaf_m should differ: e={pe}, m={pm}");
+        assert!(
+            (pe - pm).abs() > 0.01,
+            "ceaf_e and ceaf_m should differ: e={pe}, m={pm}"
+        );
     }
 
     #[test]
     fn ceaf_m_perfect() {
-        let gold = chains(vec![
-            vec![("A", 0, 1), ("B", 2, 3)],
-            vec![("C", 4, 5)],
-        ]);
+        let gold = chains(vec![vec![("A", 0, 1), ("B", 2, 3)], vec![("C", 4, 5)]]);
         let pred = gold.clone();
         let (p, r, f1) = ceaf_m_score(&pred, &gold);
         assert!(approx_eq(p, 1.0), "p={p}");
@@ -2280,19 +2301,19 @@ mod tests {
                     })
                     .collect();
 
-                let (b3_p, b3_r, b3_f1) = b_cubed_score(&singletons, &singletons);
+                let (_b3_p, _b3_r, b3_f1) = b_cubed_score(&singletons, &singletons);
                 prop_assert!(
                     (b3_f1 - 1.0).abs() < 1e-9,
                     "B3 F1 should be 1.0 for identical singletons, got {b3_f1}"
                 );
 
-                let (ce_p, ce_r, ce_f1) = ceaf_e_score(&singletons, &singletons);
+                let (_ce_p, _ce_r, ce_f1) = ceaf_e_score(&singletons, &singletons);
                 prop_assert!(
                     (ce_f1 - 1.0).abs() < 1e-9,
                     "CEAF-e F1 should be 1.0 for identical singletons, got {ce_f1}"
                 );
 
-                let (cm_p, cm_r, cm_f1) = ceaf_m_score(&singletons, &singletons);
+                let (_cm_p, _cm_r, cm_f1) = ceaf_m_score(&singletons, &singletons);
                 prop_assert!(
                     (cm_f1 - 1.0).abs() < 1e-9,
                     "CEAF-m F1 should be 1.0 for identical singletons, got {cm_f1}"
@@ -2300,7 +2321,7 @@ mod tests {
 
                 // LEA: singletons have 0 choose 2 = 0 links, so link resolution
                 // is trivially 0/0. Implementation should handle this gracefully.
-                let (lea_p, lea_r, lea_f1) = lea_score(&singletons, &singletons);
+                let (_lea_p, _lea_r, lea_f1) = lea_score(&singletons, &singletons);
                 prop_assert!(
                     lea_f1.is_finite(),
                     "LEA F1 should be finite for identical singletons, got {lea_f1}"

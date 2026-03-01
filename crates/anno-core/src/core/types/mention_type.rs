@@ -625,13 +625,38 @@ mod tests {
     fn test_is_pronoun_completeness() {
         let standard_pronouns = [
             // Personal: subject, object, possessive det, possessive pro, reflexive
-            "i", "me", "my", "mine", "myself",
-            "you", "your", "yours", "yourself", "yourselves",
-            "he", "him", "his", "himself",
-            "she", "her", "hers", "herself",
-            "it", "its", "itself",
-            "we", "us", "our", "ours", "ourselves",
-            "they", "them", "their", "theirs", "themselves", "themself",
+            "i",
+            "me",
+            "my",
+            "mine",
+            "myself",
+            "you",
+            "your",
+            "yours",
+            "yourself",
+            "yourselves",
+            "he",
+            "him",
+            "his",
+            "himself",
+            "she",
+            "her",
+            "hers",
+            "herself",
+            "it",
+            "its",
+            "itself",
+            "we",
+            "us",
+            "our",
+            "ours",
+            "ourselves",
+            "they",
+            "them",
+            "their",
+            "theirs",
+            "themselves",
+            "themself",
         ];
         for pronoun in standard_pronouns {
             assert_eq!(
@@ -648,12 +673,10 @@ mod tests {
     fn test_is_pronoun_neopronouns() {
         let neopronoun_sets = [
             // xe/xem set
-            "xe", "xem", "xyr", "xyrs", "xemself",
-            // ze/hir/zir set
+            "xe", "xem", "xyr", "xyrs", "xemself", // ze/hir/zir set
             "ze", "hir", "zir", "hirs", "zirs", "hirself", "zirself",
             // ey/em set (Spivak)
-            "ey", "em", "eir", "eirs", "emself",
-            // fae/faer set
+            "ey", "em", "eir", "eirs", "emself", // fae/faer set
             "fae", "faer", "faers", "faeself", "faerself",
         ];
         for pronoun in neopronoun_sets {

@@ -516,7 +516,11 @@ mod tests {
         }
     }
 
-    fn make_cluster(id: usize, context_id: usize, mentions: Vec<(&str, usize, usize)>) -> LocalCluster {
+    fn make_cluster(
+        id: usize,
+        context_id: usize,
+        mentions: Vec<(&str, usize, usize)>,
+    ) -> LocalCluster {
         let mut cluster = LocalCluster::new(id, context_id);
         for (text, start, end) in mentions {
             cluster.add_mention(make_mention(text, start, end, context_id));
@@ -728,12 +732,26 @@ mod tests {
 
         let mut local_clusters: HashMap<usize, Vec<LocalCluster>> = HashMap::new();
         // Two clusters in different contexts with completely different text
-        local_clusters.insert(0, vec![make_cluster(0, 0, vec![("alpha beta gamma", 0, 16)])]);
-        local_clusters.insert(1, vec![make_cluster(0, 1, vec![("xyz completely different", 0, 23)])]);
+        local_clusters.insert(
+            0,
+            vec![make_cluster(0, 0, vec![("alpha beta gamma", 0, 16)])],
+        );
+        local_clusters.insert(
+            1,
+            vec![make_cluster(
+                0,
+                1,
+                vec![("xyz completely different", 0, 23)],
+            )],
+        );
 
         let merged = resolver.resolve(&local_clusters, None);
         // With a very high threshold and very different text, they should not merge
-        assert!(merged.len() >= 2, "expected >=2 clusters, got {}", merged.len());
+        assert!(
+            merged.len() >= 2,
+            "expected >=2 clusters, got {}",
+            merged.len()
+        );
     }
 
     #[test]
@@ -754,7 +772,12 @@ mod tests {
 
         let merged = resolver.resolve(&local_clusters, None);
         // Should merge into a single cluster (same text -> cosine = 1.0 > 0.5 threshold)
-        assert_eq!(merged.len(), 1, "expected 1 merged cluster, got {}", merged.len());
+        assert_eq!(
+            merged.len(),
+            1,
+            "expected 1 merged cluster, got {}",
+            merged.len()
+        );
         assert_eq!(merged[0].mentions.len(), 2);
     }
 
@@ -764,21 +787,18 @@ mod tests {
 
     #[test]
     fn local_cluster_compute_canonical() {
-        let mut cluster = make_cluster(0, 0, vec![
-            ("he", 10, 12),
-            ("John Smith", 0, 10),
-            ("him", 20, 23),
-        ]);
+        let mut cluster = make_cluster(
+            0,
+            0,
+            vec![("he", 10, 12), ("John Smith", 0, 10), ("him", 20, 23)],
+        );
         cluster.compute_canonical();
         assert_eq!(cluster.canonical.as_deref(), Some("John Smith"));
     }
 
     #[test]
     fn local_cluster_compute_canonical_all_pronouns() {
-        let mut cluster = make_cluster(0, 0, vec![
-            ("he", 0, 2),
-            ("him", 5, 8),
-        ]);
+        let mut cluster = make_cluster(0, 0, vec![("he", 0, 2), ("him", 5, 8)]);
         cluster.compute_canonical();
         // Falls back to first mention
         assert_eq!(cluster.canonical.as_deref(), Some("he"));

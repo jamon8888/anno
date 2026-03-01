@@ -30,14 +30,7 @@ impl GLiNERPoly {
     ///   (e.g., `"knowledgator/gliner-bi-large-v1.0"`)
     pub fn new(model_name: &str) -> Result<Self> {
         // Check local caches first (exported ONNX models live here).
-        // The export script writes to ~/.cache/anno/models/gliner-poly/ by default.
-        let candidates = [
-            crate::env::cache_dir().join("models/gliner-poly"),
-            dirs::home_dir()
-                .unwrap_or_default()
-                .join(".cache/anno/models/gliner-poly"),
-        ];
-        for dir in &candidates {
+        for dir in &super::local_model_cache_candidates() {
             if dir.join("model.onnx").exists() && dir.join("tokenizer.json").exists() {
                 log::info!("[GLiNERPoly] Found local model in {}", dir.display());
                 return Self::from_dir(dir);
@@ -109,7 +102,7 @@ impl GLiNERPoly {
 
         let is_quantized = model_path
             .file_name()
-            .map_or(false, |n| n.to_string_lossy().contains("quantized"));
+            .is_some_and(|n| n.to_string_lossy().contains("quantized"));
 
         log::info!(
             "[GLiNERPoly] Loaded from {} (quantized={})",

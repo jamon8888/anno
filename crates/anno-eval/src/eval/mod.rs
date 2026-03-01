@@ -274,8 +274,8 @@ pub mod coref_resolver {
 }
 pub mod dataset;
 pub mod dataset_metadata;
-pub mod dataset_spec;
 pub mod dataset_registry;
+pub mod dataset_spec;
 pub mod datasets;
 pub mod discontinuous;
 #[cfg(feature = "discourse")]

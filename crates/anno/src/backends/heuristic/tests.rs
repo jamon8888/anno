@@ -823,7 +823,7 @@ fn test_common_acronym_in_two_word_span_no_acronym_signal() {
     if let Some(span) = usb_span {
         let prov = span.provenance.as_ref().and_then(|p| p.pattern.as_ref());
         assert!(
-            prov.map_or(true, |p| p.as_ref() != "acronym_in_span"),
+            prov.is_none_or(|p| p.as_ref() != "acronym_in_span"),
             "Common acronym USB should not trigger acronym_in_span rule: {:?}",
             span
         );

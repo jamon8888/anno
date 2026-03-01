@@ -1303,7 +1303,12 @@ mod tests {
     /// Person::Unknown is compatible with First, Second, Third, and Unknown.
     #[test]
     fn test_person_unknown_compatible_with_all() {
-        for p in [Person::First, Person::Second, Person::Third, Person::Unknown] {
+        for p in [
+            Person::First,
+            Person::Second,
+            Person::Third,
+            Person::Unknown,
+        ] {
             assert!(
                 Person::Unknown.is_compatible(&p),
                 "Person::Unknown should be compatible with {:?}",
@@ -1315,7 +1320,12 @@ mod tests {
     /// Unknown.is_compatible(x) == x.is_compatible(Unknown) for all Person values.
     #[test]
     fn test_person_unknown_wildcard_symmetric() {
-        for p in [Person::First, Person::Second, Person::Third, Person::Unknown] {
+        for p in [
+            Person::First,
+            Person::Second,
+            Person::Third,
+            Person::Unknown,
+        ] {
             assert_eq!(
                 Person::Unknown.is_compatible(&p),
                 p.is_compatible(&Person::Unknown),
@@ -1355,7 +1365,11 @@ mod tests {
     fn test_parse_3fem_defaults_singular() {
         let phi = PhiFeatures::parse("3fem").expect("should parse '3fem'");
         assert_eq!(phi.person, Person::Third);
-        assert_eq!(phi.number, Number::Singular, "no number marker -> default Singular");
+        assert_eq!(
+            phi.number,
+            Number::Singular,
+            "no number marker -> default Singular"
+        );
         assert_eq!(phi.gender, Gender::Feminine);
     }
 
@@ -1380,8 +1394,8 @@ mod tests {
             ("3pl", Person::Third, Number::Plural, Gender::Unknown),
         ];
         for (input, exp_p, exp_n, exp_g) in cases {
-            let phi = PhiFeatures::parse(input)
-                .unwrap_or_else(|| panic!("should parse '{}'", input));
+            let phi =
+                PhiFeatures::parse(input).unwrap_or_else(|| panic!("should parse '{}'", input));
             assert_eq!(phi.person, exp_p, "Person for {}", input);
             assert_eq!(phi.number, exp_n, "Number for {}", input);
             assert_eq!(phi.gender, exp_g, "Gender for {}", input);
@@ -1395,9 +1409,18 @@ mod tests {
         for animacy in [Animacy::Animate, Animacy::Inanimate, Animacy::Unknown] {
             let displayed = format!("{}", animacy);
             let parsed: Animacy = displayed.parse().unwrap_or_else(|e| {
-                panic!("Animacy::{}  display='{}' failed to parse: {}", format!("{:?}", animacy), displayed, e)
+                panic!(
+                    "Animacy::{:?}  display='{}' failed to parse: {}",
+                    animacy,
+                    displayed,
+                    e
+                )
             });
-            assert_eq!(animacy, parsed, "Animacy roundtrip failed for {:?}", animacy);
+            assert_eq!(
+                animacy, parsed,
+                "Animacy roundtrip failed for {:?}",
+                animacy
+            );
         }
     }
 
@@ -1430,7 +1453,10 @@ mod tests {
 
         assert!(masc.is_compatible(&unknown_gender), "masc ~ unknown");
         assert!(unknown_gender.is_compatible(&fem), "unknown ~ fem");
-        assert!(!masc.is_compatible(&fem), "masc NOT ~ fem (transitivity must not hold)");
+        assert!(
+            !masc.is_compatible(&fem),
+            "masc NOT ~ fem (transitivity must not hold)"
+        );
     }
 
     /// Dual is compatible with Plural (Arabic linguistics).

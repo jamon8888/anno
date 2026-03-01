@@ -30,7 +30,7 @@ mod bert_subword {
             .collect();
 
         assert!(
-            per_texts.iter().any(|t| *t == "Christine Lagarde"),
+            per_texts.contains(&"Christine Lagarde"),
             "Expected full 'Christine Lagarde', got: {:?}",
             per_texts,
         );
@@ -77,7 +77,7 @@ mod bert_subword {
             .collect();
 
         assert!(
-            loc_texts.iter().any(|t| *t == "Strasbourg"),
+            loc_texts.contains(&"Strasbourg"),
             "Expected 'Strasbourg', got: {:?}",
             loc_texts,
         );
@@ -105,7 +105,7 @@ mod pattern_percent {
             .collect();
 
         assert!(
-            pct.iter().any(|t| *t == "3,75%"),
+            pct.contains(&"3,75%"),
             "Expected '3,75%' as single PERCENT entity, got: {:?}",
             pct,
         );
@@ -125,7 +125,7 @@ mod pattern_percent {
             .collect();
 
         assert!(
-            pct.iter().any(|t| *t == "0.25%"),
+            pct.contains(&"0.25%"),
             "Expected '0.25%' as single PERCENT entity, got: {:?}",
             pct,
         );
@@ -145,7 +145,7 @@ mod pattern_percent {
             .collect();
 
         assert!(
-            pct.iter().any(|t| *t == "5%"),
+            pct.contains(&"5%"),
             "Expected '5%', got: {:?}",
             pct,
         );

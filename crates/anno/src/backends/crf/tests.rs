@@ -86,6 +86,7 @@ fn test_weights_for_common_words() {
         return;
     }
 
+    #[allow(unreachable_code)]
     let ner = CrfNER::new();
 
     // Check that weights exist for common stop words

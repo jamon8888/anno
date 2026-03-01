@@ -59,6 +59,20 @@ const DEFAULT_POLY_LABELS: &[&str] = &[
     "facility",
 ];
 
+/// Local cache directories where exported ONNX models may reside.
+///
+/// The export script writes to `~/.cache/anno/models/gliner-poly/` by default;
+/// `cache_dir()` may resolve to a platform-specific location (e.g. `~/Library/Caches/anno`
+/// on macOS).
+fn local_model_cache_candidates() -> [std::path::PathBuf; 2] {
+    [
+        crate::env::cache_dir().join("models/gliner-poly"),
+        dirs::home_dir()
+            .unwrap_or_default()
+            .join(".cache/anno/models/gliner-poly"),
+    ]
+}
+
 // =============================================================================
 // ONNX-enabled implementation
 // =============================================================================
@@ -412,9 +426,15 @@ mod tests {
     #[test]
     #[cfg(feature = "onnx")]
     fn test_gliner_poly_name_onnx() {
-        // We cannot construct a real model without downloading weights, but we can
-        // verify the name via the trait impl on a constructed instance.
-        // Here we just verify that GLiNERPoly::new fails gracefully with a bad model name.
+        // Verify that GLiNERPoly::new fails gracefully with a bad model name.
+        // Skip if a local cache exists, because new() finds the cached model
+        // before ever consulting the model_name argument.
+        for cache in &local_model_cache_candidates() {
+            if cache.join("model.onnx").exists() && cache.join("tokenizer.json").exists() {
+                eprintln!("skipping: local gliner-poly cache exists at {}", cache.display());
+                return;
+            }
+        }
         let err = GLiNERPoly::new("nonexistent/model-that-does-not-exist").unwrap_err();
         assert!(
             matches!(err, Error::Retrieval(_)),

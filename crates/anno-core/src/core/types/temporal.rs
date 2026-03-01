@@ -631,9 +631,9 @@ mod tests {
         ];
         for date in cases {
             let displayed = date.to_string();
-            let parsed: HistoricalDate = displayed.parse().unwrap_or_else(|e| {
-                panic!("Failed to parse '{}': {}", displayed, e)
-            });
+            let parsed: HistoricalDate = displayed
+                .parse()
+                .unwrap_or_else(|e| panic!("Failed to parse '{}': {}", displayed, e));
             assert_eq!(date, parsed, "Round-trip failed for '{}'", displayed);
         }
     }
@@ -684,6 +684,7 @@ mod tests {
         assert!(!TemporalValidity::new(
             Some(HistoricalDate::year_only(2000)),
             Some(HistoricalDate::year_only(2020)),
-        ).is_current());
+        )
+        .is_current());
     }
 }

@@ -221,7 +221,11 @@ mod tests {
         let invalid = BoxEmbedding::new(vec![2.0, 0.0], vec![1.0, 1.0]);
         assert!(!invalid.is_valid());
         // Mismatched dimensions
-        let mismatched = BoxEmbedding { min: vec![0.0], max: vec![1.0, 2.0], temperature: None };
+        let mismatched = BoxEmbedding {
+            min: vec![0.0],
+            max: vec![1.0, 2.0],
+            temperature: None,
+        };
         assert!(!mismatched.is_valid());
     }
 

@@ -1035,40 +1035,40 @@ mod tests {
     #[test]
     fn bool_features_capitalized() {
         let f = HmmNER::bool_features("Google");
-        assert_eq!(f["is_capitalized"], true);
-        assert_eq!(f["is_all_caps"], false);
-        assert_eq!(f["is_digit"], false);
-        assert_eq!(f["has_digit"], false);
-        assert_eq!(f["has_hyphen"], false);
-        assert_eq!(f["has_dot"], false);
+        assert!(f["is_capitalized"]);
+        assert!(!f["is_all_caps"]);
+        assert!(!f["is_digit"]);
+        assert!(!f["has_digit"]);
+        assert!(!f["has_hyphen"]);
+        assert!(!f["has_dot"]);
     }
 
     #[test]
     fn bool_features_all_caps_acronym() {
         let f = HmmNER::bool_features("NASA");
-        assert_eq!(f["is_capitalized"], true);
-        assert_eq!(f["is_all_caps"], true);
+        assert!(f["is_capitalized"]);
+        assert!(f["is_all_caps"]);
     }
 
     #[test]
     fn bool_features_digit_and_hyphen() {
         let f = HmmNER::bool_features("F-16");
-        assert_eq!(f["has_digit"], true);
-        assert_eq!(f["has_hyphen"], true);
-        assert_eq!(f["is_digit"], false);
+        assert!(f["has_digit"]);
+        assert!(f["has_hyphen"]);
+        assert!(!f["is_digit"]);
     }
 
     #[test]
     fn bool_features_pure_number() {
         let f = HmmNER::bool_features("2024");
-        assert_eq!(f["is_digit"], true);
-        assert_eq!(f["has_digit"], true);
+        assert!(f["is_digit"]);
+        assert!(f["has_digit"]);
     }
 
     #[test]
     fn bool_features_dotted() {
         let f = HmmNER::bool_features("U.S.");
-        assert_eq!(f["has_dot"], true);
+        assert!(f["has_dot"]);
     }
 
     // ── emission_prob (heuristic path) ──────────────────────────────

@@ -757,7 +757,7 @@ mod tests {
 
         // 3 tokens, 1 label. Dense layout: [seq_len * seq_len * num_labels]
         // We want (0,1) to have a high score (entity spanning tokens 0..2)
-        let mut scores = vec![0.0f32; 3 * 3 * 1];
+        let mut scores = vec![0.0f32; 3 * 3];
         // Cell (0,1) = tokens 0 to 1 -> index = 0*3*1 + 1*1 + 0 = 1
         scores[1] = 0.9;
 
@@ -801,7 +801,7 @@ mod tests {
 
         // 4 tokens, 1 label. Cell (i=0, j=0) -> span [0, 1), cell (i=0, j=1) -> span [1, 1)
         // cell (i=1, j=1) -> span [1, 2). The spans [0,1) and [1,2) are adjacent, not overlapping.
-        let mut scores = vec![0.0f32; 4 * 4 * 1];
+        let mut scores = vec![0.0f32; 4 * 4];
         // Cell (i=0, j=0): idx = 0*4*1 + 0*1 + 0 = 0 -> span [0, 1)
         scores[0] = 0.9;
         // Cell (i=1, j=1): idx = 1*4*1 + 1*1 + 0 = 5 -> span [1, 2)

@@ -3,9 +3,7 @@
 //! Run: `cargo run -p anno-metrics --example scoring_demo`
 
 use anno_metrics::coref::{CorefChain, Mention};
-use anno_metrics::coref_metrics::{
-    b_cubed_score, ceaf_e_score, conll_f1, muc_score, CorefScores,
-};
+use anno_metrics::coref_metrics::{b_cubed_score, ceaf_e_score, conll_f1, muc_score, CorefScores};
 
 fn main() {
     // Gold: three entities
@@ -15,10 +13,7 @@ fn main() {
             Mention::new("she", 20, 23),
             Mention::new("her", 40, 43),
         ]),
-        CorefChain::new(vec![
-            Mention::new("Bob", 6, 9),
-            Mention::new("he", 30, 32),
-        ]),
+        CorefChain::new(vec![Mention::new("Bob", 6, 9), Mention::new("he", 30, 32)]),
         CorefChain::new(vec![
             Mention::new("the cat", 50, 57),
             Mention::new("it", 60, 62),
@@ -32,10 +27,7 @@ fn main() {
             Mention::new("she", 20, 23),
         ]),
         CorefChain::new(vec![Mention::new("her", 40, 43)]),
-        CorefChain::new(vec![
-            Mention::new("Bob", 6, 9),
-            Mention::new("he", 30, 32),
-        ]),
+        CorefChain::new(vec![Mention::new("Bob", 6, 9), Mention::new("he", 30, 32)]),
         CorefChain::new(vec![
             Mention::new("the cat", 50, 57),
             Mention::new("it", 60, 62),
@@ -45,7 +37,10 @@ fn main() {
     let metrics: Vec<(&str, CorefScores)> = vec![
         ("MUC", CorefScores::from_tuple(muc_score(&pred, &gold))),
         ("B3", CorefScores::from_tuple(b_cubed_score(&pred, &gold))),
-        ("CEAF-e", CorefScores::from_tuple(ceaf_e_score(&pred, &gold))),
+        (
+            "CEAF-e",
+            CorefScores::from_tuple(ceaf_e_score(&pred, &gold)),
+        ),
     ];
 
     println!("Metric     P       R       F1");

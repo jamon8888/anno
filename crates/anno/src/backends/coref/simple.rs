@@ -796,20 +796,21 @@ mod tests {
     #[test]
     fn precise_construct_rejects_distant_entities() {
         // Two Person entities far apart should not match via precise constructs.
-        let r = resolver();
         let entities = vec![
             Entity::new("Barack Obama", EntityType::Person, 0, 12, 0.9),
             Entity::new("the president", EntityType::Person, 50, 63, 0.85),
         ];
         // They may still match via other sieves, but not via precise constructs.
         // Disable other sieves to isolate.
-        let mut cfg = CorefConfig::default();
-        cfg.fuzzy_matching = false;
-        cfg.relaxed_head_match = false;
-        cfg.proper_containment = false;
-        cfg.strict_head_match = false;
-        cfg.proper_head_word_match = false;
-        cfg.acronym_matching = false;
+        let cfg = CorefConfig {
+            fuzzy_matching: false,
+            relaxed_head_match: false,
+            proper_containment: false,
+            strict_head_match: false,
+            proper_head_word_match: false,
+            acronym_matching: false,
+            ..Default::default()
+        };
         let r = SimpleCorefResolver::new(cfg);
         let resolved = r.resolve(&entities);
         assert_ne!(
@@ -1122,13 +1123,15 @@ mod tests {
     #[test]
     fn integration_no_spurious_merge_short_names() {
         // Disable all sieves except fuzzy to isolate the fix
-        let mut cfg = CorefConfig::default();
-        cfg.relaxed_head_match = false;
-        cfg.proper_containment = false;
-        cfg.strict_head_match = false;
-        cfg.proper_head_word_match = false;
-        cfg.precise_constructs = false;
-        cfg.acronym_matching = false;
+        let cfg = CorefConfig {
+            relaxed_head_match: false,
+            proper_containment: false,
+            strict_head_match: false,
+            proper_head_word_match: false,
+            precise_constructs: false,
+            acronym_matching: false,
+            ..Default::default()
+        };
         let r = SimpleCorefResolver::new(cfg);
 
         let entities = vec![
