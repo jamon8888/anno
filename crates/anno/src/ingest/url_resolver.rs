@@ -47,6 +47,8 @@ impl HttpResolver {
         let mut in_tag = false;
         let mut in_script = false;
         let mut in_style = false;
+        // Nesting depth for semantic tags whose content should be skipped.
+        let mut skip_depth: u32 = 0;
         let mut chars = html.chars().peekable();
 
         while let Some(ch) = chars.next() {
@@ -73,6 +75,20 @@ impl HttpResolver {
                             } else if tag_lower == "/style" || tag_lower.starts_with("/style ") {
                                 in_style = false;
                             }
+                            // Semantic HTML tags: skip nav, header, footer,
+                            // aside, menu, noscript content.
+                            let skip_tags: &[&str] =
+                                &["nav", "header", "footer", "aside", "menu", "noscript"];
+                            for &stag in skip_tags {
+                                if tag_lower == stag || tag_lower.starts_with(&format!("{} ", stag))
+                                {
+                                    skip_depth += 1;
+                                } else if tag_lower == format!("/{}", stag)
+                                    || tag_lower.starts_with(&format!("/{} ", stag))
+                                {
+                                    skip_depth = skip_depth.saturating_sub(1);
+                                }
+                            }
                             in_tag = false;
                             break;
                         } else if next_ch.is_whitespace() {
@@ -96,8 +112,8 @@ impl HttpResolver {
                             );
                         }
                     }
-                    // Don't add script/style content
-                    if !in_script && !in_style {
+                    // Don't add script/style/skipped-semantic content
+                    if !in_script && !in_style && skip_depth == 0 {
                         // Add space after block elements for readability
                         if matches!(
                             tag_name.to_lowercase().as_str(),
@@ -112,8 +128,8 @@ impl HttpResolver {
                 '>' if in_tag => {
                     in_tag = false;
                 }
-                _ if in_tag || in_script || in_style => {
-                    // Skip content inside tags, scripts, styles
+                _ if in_tag || in_script || in_style || skip_depth > 0 => {
+                    // Skip content inside tags, scripts, styles, and semantic skip tags
                 }
                 '&' => {
                     // Decode common HTML entities
@@ -170,7 +186,7 @@ impl HttpResolver {
                         text.push_str(&entity[1..]);
                     }
                 }
-                ch if !in_tag && !in_script && !in_style => {
+                ch if !in_tag && !in_script && !in_style && skip_depth == 0 => {
                     text.push(ch);
                 }
                 _ => {}
@@ -499,5 +515,125 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("No resolver available"));
+    }
+
+    // =========================================================================
+    // Semantic HTML tag filtering
+    // =========================================================================
+
+    #[test]
+    fn test_nav_content_stripped() {
+        let resolver = HttpResolver::new();
+        let html = r#"<html><body>
+            <nav><a href="/">Home</a><a href="/about">About</a></nav>
+            <main><p>Main content here.</p></main>
+        </body></html>"#;
+        let text = resolver.extract_text_from_html(html);
+        assert!(text.contains("Main content here"));
+        assert!(!text.contains("Home"), "nav content should be stripped");
+        assert!(!text.contains("About"), "nav content should be stripped");
+    }
+
+    #[test]
+    fn test_footer_content_stripped() {
+        let resolver = HttpResolver::new();
+        let html = r#"<html><body>
+            <article><p>Article body.</p></article>
+            <footer><p>Copyright 2024 Example Corp.</p></footer>
+        </body></html>"#;
+        let text = resolver.extract_text_from_html(html);
+        assert!(text.contains("Article body"));
+        assert!(
+            !text.contains("Copyright"),
+            "footer content should be stripped"
+        );
+    }
+
+    #[test]
+    fn test_header_content_stripped() {
+        let resolver = HttpResolver::new();
+        let html = r#"<html><body>
+            <header><h1>Site Title</h1><nav>Menu</nav></header>
+            <main><p>Page content.</p></main>
+            <footer><p>Footer text</p></footer>
+        </body></html>"#;
+        let text = resolver.extract_text_from_html(html);
+        assert!(text.contains("Page content"));
+        assert!(
+            !text.contains("Site Title"),
+            "header content should be stripped"
+        );
+        assert!(
+            !text.contains("Footer text"),
+            "footer content should be stripped"
+        );
+    }
+
+    #[test]
+    fn test_aside_content_stripped() {
+        let resolver = HttpResolver::new();
+        let html = r#"<html><body>
+            <main><p>Main text.</p></main>
+            <aside><p>Sidebar widget.</p></aside>
+        </body></html>"#;
+        let text = resolver.extract_text_from_html(html);
+        assert!(text.contains("Main text"));
+        assert!(
+            !text.contains("Sidebar widget"),
+            "aside content should be stripped"
+        );
+    }
+
+    #[test]
+    fn test_article_content_preserved() {
+        let resolver = HttpResolver::new();
+        let html = r#"<html><body>
+            <article>
+                <h2>Article Title</h2>
+                <p>First paragraph.</p>
+                <p>Second paragraph.</p>
+            </article>
+        </body></html>"#;
+        let text = resolver.extract_text_from_html(html);
+        assert!(text.contains("Article Title"));
+        assert!(text.contains("First paragraph"));
+        assert!(text.contains("Second paragraph"));
+    }
+
+    #[test]
+    fn test_nested_semantic_tags() {
+        let resolver = HttpResolver::new();
+        let html = r#"<html><body>
+            <header>
+                <nav><ul><li>Link1</li></ul></nav>
+                <p>Header text</p>
+            </header>
+            <main><p>Real content.</p></main>
+        </body></html>"#;
+        let text = resolver.extract_text_from_html(html);
+        assert!(text.contains("Real content"));
+        assert!(
+            !text.contains("Link1"),
+            "nested nav inside header should be stripped"
+        );
+        assert!(
+            !text.contains("Header text"),
+            "header content should be stripped"
+        );
+    }
+
+    #[test]
+    fn test_noscript_stripped() {
+        let resolver = HttpResolver::new();
+        let html = r#"<html><body>
+            <noscript><p>Enable JavaScript to view this page.</p></noscript>
+            <main><p>App content.</p></main>
+        </body></html>"#;
+        let text = resolver.extract_text_from_html(html);
+        assert!(text.contains("App content"));
+        assert!(
+            !text.contains("Enable JavaScript"),
+            "noscript content should be stripped"
+        );
     }
 }

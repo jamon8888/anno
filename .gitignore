@@ -151,9 +151,13 @@ REVIEW_ISSUES.md
 !CONTRIBUTING.md
 !SECURITY.md
 !docs/**/*.md
+!.claude/**/*.md
 
 # Reports directory (generated; do not track)
 reports/
+
+# QA critique reports (generated; do not track)
+qa/reports/
 
 .env
 

@@ -352,8 +352,7 @@ impl GLiNERPoly {
         let num_spans = num_text_words * MAX_SPAN_WIDTH;
 
         // Tokenize entity type labels for the label encoder.
-        let (labels_input_ids, labels_attention_mask) =
-            self.encode_labels(entity_types)?;
+        let (labels_input_ids, labels_attention_mask) = self.encode_labels(entity_types)?;
         let num_labels = entity_types.len();
         let label_seq_len = labels_input_ids.len() / num_labels;
 
@@ -368,30 +367,26 @@ impl GLiNERPoly {
             .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
         let words_mask_arr = Array2::from_shape_vec((1, seq_len), words_mask)
             .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
-        let text_lengths_arr =
-            Array2::from_shape_vec((1, 1), vec![num_text_words as i64])
-                .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
+        let text_lengths_arr = Array2::from_shape_vec((1, 1), vec![num_text_words as i64])
+            .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
         let span_idx_arr = Array3::from_shape_vec((1, num_spans, 2), span_idx)
             .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
         let span_mask_arr = Array2::from_shape_vec((1, num_spans), span_mask)
             .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
-        let labels_ids_arr =
-            Array2::from_shape_vec((num_labels, label_seq_len), labels_input_ids)
-                .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
+        let labels_ids_arr = Array2::from_shape_vec((num_labels, label_seq_len), labels_input_ids)
+            .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
         let labels_mask_arr =
             Array2::from_shape_vec((num_labels, label_seq_len), labels_attention_mask)
                 .map_err(|e| Error::Parse(format!("Array: {}", e)))?;
 
         let input_ids_t = crate::backends::ort_compat::tensor_from_ndarray(input_ids_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let attention_mask_t =
-            crate::backends::ort_compat::tensor_from_ndarray(attention_mask_arr)
-                .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+        let attention_mask_t = crate::backends::ort_compat::tensor_from_ndarray(attention_mask_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
         let words_mask_t = crate::backends::ort_compat::tensor_from_ndarray(words_mask_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
-        let text_lengths_t =
-            crate::backends::ort_compat::tensor_from_ndarray(text_lengths_arr)
-                .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
+        let text_lengths_t = crate::backends::ort_compat::tensor_from_ndarray(text_lengths_arr)
+            .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
         let span_idx_t = crate::backends::ort_compat::tensor_from_ndarray(span_idx_arr)
             .map_err(|e| Error::Parse(format!("Tensor: {}", e)))?;
         let span_mask_t = crate::backends::ort_compat::tensor_from_ndarray(span_mask_arr)
@@ -418,8 +413,7 @@ impl GLiNERPoly {
             .map_err(|e| Error::Inference(format!("ONNX inference failed: {}", e)))?;
 
         // Decode output.
-        let entities =
-            self.decode_output(&outputs, text, &text_words, entity_types, threshold)?;
+        let entities = self.decode_output(&outputs, text, &text_words, entity_types, threshold)?;
         drop(outputs);
         drop(session);
 
@@ -619,8 +613,9 @@ impl GLiNERPoly {
                             let score = 1.0 / (1.0 + (-logit).exp());
 
                             if score >= threshold {
-                                let (char_start, char_end) =
-                                    Self::word_span_to_char_offsets(text, text_words, word_idx, end_word);
+                                let (char_start, char_end) = Self::word_span_to_char_offsets(
+                                    text, text_words, word_idx, end_word,
+                                );
 
                                 if char_start == 0 && char_end == 0 && word_idx > 0 {
                                     // Offset lookup failed; skip this span.
@@ -682,7 +677,9 @@ impl GLiNERPoly {
                         if let Some((start_word, avg_score)) = current_start.take() {
                             let end_word = word_idx.saturating_sub(1);
                             let label = entity_types.get(class_idx).unwrap_or(&"OTHER");
-                            if let Some(e) = Self::build_bio_entity(text, text_words, label, start_word, end_word, avg_score) {
+                            if let Some(e) = Self::build_bio_entity(
+                                text, text_words, label, start_word, end_word, avg_score,
+                            ) {
                                 entities.push(e);
                             }
                         }
@@ -694,7 +691,9 @@ impl GLiNERPoly {
                     } else if let Some((start_word, avg_score)) = current_start.take() {
                         let end_word = word_idx.saturating_sub(1);
                         let label = entity_types.get(class_idx).unwrap_or(&"OTHER");
-                        if let Some(e) = Self::build_bio_entity(text, text_words, label, start_word, end_word, avg_score) {
+                        if let Some(e) = Self::build_bio_entity(
+                            text, text_words, label, start_word, end_word, avg_score,
+                        ) {
                             entities.push(e);
                         }
                     }
@@ -704,7 +703,9 @@ impl GLiNERPoly {
                 if let Some((start_word, avg_score)) = current_start.take() {
                     let end_word = out_num_words.min(num_words).saturating_sub(1);
                     let label = entity_types.get(class_idx).unwrap_or(&"OTHER");
-                    if let Some(e) = Self::build_bio_entity(text, text_words, label, start_word, end_word, avg_score) {
+                    if let Some(e) = Self::build_bio_entity(
+                        text, text_words, label, start_word, end_word, avg_score,
+                    ) {
                         entities.push(e);
                     }
                 }
@@ -769,15 +770,32 @@ impl GLiNERPoly {
             return None;
         }
 
-        let span_text = text_words[start_word..=end_word].join(" ");
+        let raw_span = text_words[start_word..=end_word].join(" ");
         let (start, end) = Self::word_span_to_char_offsets(text, text_words, start_word, end_word);
 
         if start == 0 && end == 0 && start_word > 0 {
             return None; // Offset lookup failed.
         }
 
+        // Trim trailing punctuation that leaks from word-boundary tokenization.
+        let span_text = raw_span
+            .trim_end_matches(['.', ',', ';', ':', '!', '?'])
+            .trim_end_matches("'s")
+            .trim_end_matches("\u{2019}s");
+        if span_text.is_empty() {
+            return None;
+        }
+        let trimmed_chars = raw_span.chars().count() - span_text.chars().count();
+        let adj_end = end - trimmed_chars;
+
         let entity_type = crate::schema::map_to_canonical(entity_type_str, None);
-        Some(Entity::new(span_text, entity_type, start, end, score as f64))
+        Some(Entity::new(
+            span_text,
+            entity_type,
+            start,
+            adj_end,
+            score as f64,
+        ))
     }
 
     /// Convert word indices to character offsets.

@@ -72,20 +72,15 @@ All backends produce the same output type: variable-length spans with character 
 
 | Backend | Architecture | Labels | Zero-shot | Relations | Weights | Reference |
 |---|---|---|---|---|---|---|
-| `stacked` (default) | Selector/fallback | GLiNER > BERT > heuristic+pattern | — | — | HuggingFace (when ML enabled) | -- |
-| `gliner` | Bi-encoder span classifier | Custom | Yes | — | [gliner_small-v2.1](https://huggingface.co/onnx-community/gliner_small-v2.1) | Zaratiana et al. [5] |
+| `stacked` (default) | Selector/fallback | GLiNER > BERT > heuristic+pattern | -- | -- | HuggingFace (when ML enabled) | -- |
+| `gliner` | Bi-encoder span classifier | Custom | Yes | -- | [gliner_small-v2.1](https://huggingface.co/onnx-community/gliner_small-v2.1) | Zaratiana et al. [5] |
 | `gliner2` | Multi-task span classifier | Custom | Yes | Heuristic | [gliner-multitask-large-v0.5](https://huggingface.co/onnx-community/gliner-multitask-large-v0.5) | [11] |
-| `nuner` | Token classifier (BIO) | Custom | Yes | — | [NuNerZero_onnx](https://huggingface.co/deepanwa/NuNerZero_onnx) | Bogdanov et al. [6] |
-| `w2ner` | Word-word relation grids | Trained (nested) | No | — | [w2ner-bert-base](https://huggingface.co/ljynlp/w2ner-bert-base) | Li et al. [7] |
-| `bert-onnx` | Sequence labeling (BERT) | PER/ORG/LOC/MISC | No | — | [bert-base-NER-onnx](https://huggingface.co/protectai/bert-base-NER-onnx) | Devlin et al. [8] |
-| `tplinker` | Joint entity-relation (heuristic) | Custom | — | Heuristic | None | [10] |
-| `crf` | Conditional Random Field | Trained | No | — | Bundled (`bundled-crf-weights`) | Lafferty et al. [9] |
-| `hmm` | Hidden Markov Model | Trained | No | — | Bundled (`bundled-hmm-params`) | Rabiner [12] |
-| `pattern` | Regex grammars | DATE/MONEY/EMAIL/URL/PHONE | N/A | — | None | -- |
-| `heuristic` | Capitalization + context | PER/ORG/LOC | N/A | — | None | -- |
-| `ensemble` | Weighted voting combiner | Mixed | Varies | — | Varies | -- |
+| `nuner` | Token classifier (BIO) | Custom | Yes | -- | [NuNerZero_onnx](https://huggingface.co/deepanwa/NuNerZero_onnx) | Bogdanov et al. [6] |
+| `bert-onnx` | Sequence labeling (BERT) | PER/ORG/LOC/MISC | No | -- | [bert-base-NER-onnx](https://huggingface.co/protectai/bert-base-NER-onnx) | Devlin et al. [8] |
+| `pattern` | Regex grammars | DATE/MONEY/EMAIL/URL/PHONE/PERCENT | N/A | -- | None | -- |
+| `tplinker` | Joint entity-relation (heuristic) | Custom | -- | Heuristic | None | [10] |
 
-ML backends are feature-gated (`onnx` or `candle`). Weights download from HuggingFace on first use. All backends expose `model.capabilities()` for runtime discovery. See [BACKENDS.md](docs/BACKENDS.md) for selection guidance and feature-flag details.
+ML backends are feature-gated (`onnx` or `candle`). Weights download from HuggingFace on first use. See [BACKENDS.md](docs/BACKENDS.md) for the full list (including experimental backends) and feature-flag details.
 
 ## CLI
 
@@ -105,18 +100,10 @@ ORG:2 "IBM" "Xerox PARC"
 LOC:1 "California"
 ```
 
-JSON output (schema-stable; uses `pattern` for offline reproducibility):
+JSON output (`--format json`):
 
 ```sh
 anno extract --model pattern --format json --text "Contact jobs@acme.com by March 15 for the \$50K role."
-```
-
-```json
-[
-  {"text": "jobs@acme.com", "entity_type": "EMAIL", "start": 8, "end": 21, "confidence": 0.98},
-  {"text": "March 15", "entity_type": "DATE", "start": 25, "end": 33, "confidence": 0.95},
-  {"text": "$50K", "entity_type": "MONEY", "start": 42, "end": 46, "confidence": 0.95}
-]
 ```
 
 Zero-shot custom entity types (via GLiNER [5]):

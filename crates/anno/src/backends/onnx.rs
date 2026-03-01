@@ -426,9 +426,30 @@ impl BertNEROnnx {
                 .cloned()
                 .unwrap_or_else(|| format!("LABEL_{}", max_idx));
 
-            // Skip "O" (outside) labels
+            // Skip "O" (outside) labels -- but if this token is a subword
+            // continuation (no whitespace gap AND starts with an alphanumeric
+            // character), extend the current entity span rather than closing it.
+            // This is the "first-token aggregation" strategy: the label of
+            // the first subword token determines the entity boundary, and
+            // subsequent subwords always extend it.  We require alphanumeric
+            // to avoid absorbing trailing punctuation (e.g. "Strasbourg.").
             if label == "O" {
-                if let Some((start, end, entity_type, conf)) = current_entity.take() {
+                let starts_alnum = text
+                    .get(byte_start..)
+                    .and_then(|s| s.chars().next())
+                    .is_some_and(|c| c.is_alphanumeric());
+                let is_continuation = starts_alnum
+                    && current_entity
+                        .as_ref()
+                        .map(|(_, prev_end, _, _)| byte_start == *prev_end)
+                        .unwrap_or(false);
+
+                if is_continuation {
+                    // Extend: keep the entity open with the new byte_end.
+                    if let Some((start, _, etype, conf)) = current_entity.take() {
+                        current_entity = Some((start, byte_end, etype, conf));
+                    }
+                } else if let Some((start, end, entity_type, conf)) = current_entity.take() {
                     if start < end && end <= text.len() {
                         if let Some(entity_text) = text.get(start..end) {
                             let entity_text = entity_text.trim();
@@ -465,14 +486,26 @@ impl BertNEROnnx {
 
             match bio {
                 "B" => {
-                    // Check if this B- tag should merge with previous entity
-                    // This handles subword tokenization where "Biden" becomes ["B", "##iden"]
-                    // and both tokens get B-PER labels
+                    // Check if this B- tag should merge with previous entity.
+                    // Two reasons to merge:
+                    //   1. Same type AND adjacent (subword tokenization, e.g. "Biden" -> ["B", "##iden"])
+                    //   2. Subword continuation: byte_start == prev_end AND alphanumeric start.
+                    let starts_alnum = text
+                        .get(byte_start..)
+                        .and_then(|s| s.chars().next())
+                        .is_some_and(|c| c.is_alphanumeric());
+                    let is_continuation = starts_alnum
+                        && current_entity
+                            .as_ref()
+                            .map(|(_, prev_end, _, _)| byte_start == *prev_end)
+                            .unwrap_or(false);
+
                     let should_merge = if let Some((_, prev_end, ref prev_type, _)) = current_entity
                     {
-                        // Merge if: same type AND adjacent (no gap or only whitespace)
-                        std::mem::discriminant(prev_type) == std::mem::discriminant(&entity_type)
-                            && byte_start <= prev_end + 1 // Adjacent or overlapping
+                        is_continuation
+                            || (std::mem::discriminant(prev_type)
+                                == std::mem::discriminant(&entity_type)
+                                && byte_start <= prev_end + 1)
                     } else {
                         false
                     };

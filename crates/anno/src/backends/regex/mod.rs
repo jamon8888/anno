@@ -192,8 +192,9 @@ static MONEY_MAGNITUDE: Lazy<Regex> = Lazy::new(|| {
 });
 
 static PERCENT: Lazy<Regex> = Lazy::new(|| {
-    // Note: No trailing \b because % is not a word character
-    Regex::new(r"\b\d+(?:\.\d+)?\s*(?:%|percent\b|pct\b)").expect("valid regex")
+    // Note: No trailing \b because % is not a word character.
+    // Supports both period and comma as decimal separator (European format).
+    Regex::new(r"\b\d+(?:[.,]\d+)?\s*(?:%|percent\b|pct\b)").expect("valid regex")
 });
 
 static EMAIL: Lazy<Regex> = Lazy::new(|| {
@@ -1040,12 +1041,7 @@ mod tests {
 
     #[test]
     fn money_code_prefix_with_magnitude() {
-        let cases = [
-            "EUR 1.2 million",
-            "GBP 500 billion",
-            "USD 3.5M",
-            "JPY 100K",
-        ];
+        let cases = ["EUR 1.2 million", "GBP 500 billion", "USD 3.5M", "JPY 100K"];
         for case in cases {
             let e = extract(case);
             assert!(

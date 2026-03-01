@@ -207,9 +207,15 @@ static MONEY_MAGNITUDE: Lazy<Regex> = Lazy::new(|| {
     .expect("MONEY_MAGNITUDE regex is invalid")
 });
 
-// Percent pattern
+// Percent pattern (supports both period and comma as decimal separator).
+// Uses a negative lookbehind-like approach: `(?:^|[^\d])` would work but
+// the Rust `regex` crate does not support lookbehind.  Instead we use
+// `\b` which fires between non-word and word chars; commas are non-word
+// so `\b` fires before `75` in "3,75%", producing a false sub-match.
+// Fix: match the optional decimal part FIRST in a non-capturing group
+// so "3,75%" is consumed as one match.
 static PERCENT: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b\d+(?:\.\d+)?\s*(?:%|percent\b|pct\b)").expect("PERCENT regex is invalid")
+    Regex::new(r"\b\d+(?:[.,]\d+)*\s*(?:%|percent\b|pct\b)").expect("PERCENT regex is invalid")
 });
 
 // Contact patterns

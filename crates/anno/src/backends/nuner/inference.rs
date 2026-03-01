@@ -865,12 +865,25 @@ impl NuNER {
         let start_pos = word_positions.get(start_word)?.0;
         let end_pos = word_positions.get(end_word.saturating_sub(1))?.1;
 
-        let entity_text = text.get(start_pos..end_pos)?;
+        let raw_text = text.get(start_pos..end_pos)?;
         let label = entity_types.get(type_idx)?;
         let entity_type = Self::map_label_to_entity_type(label);
 
+        // Trim trailing punctuation that leaks from word-boundary tokenization
+        // (e.g. "thrive capital." -> "thrive capital",
+        //        "elon musk's"   -> "elon musk").
+        let entity_text = raw_text
+            .trim_end_matches(['.', ',', ';', ':', '!', '?'])
+            .trim_end_matches("'s")
+            .trim_end_matches("'s");
+        if entity_text.is_empty() {
+            return None;
+        }
+        let trimmed_bytes = raw_text.len() - entity_text.len();
+        let adj_end_pos = end_pos - trimmed_bytes;
+
         let char_start = span_converter.byte_to_char(start_pos);
-        let char_end = span_converter.byte_to_char(end_pos);
+        let char_end = span_converter.byte_to_char(adj_end_pos);
 
         Some(Entity::new(
             entity_text,
