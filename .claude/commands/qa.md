@@ -394,21 +394,21 @@ Check whether these previously-identified issues are still present. Update this 
 - [x] ~~Bare "in"/"on" triggers false LOCATED_IN relations~~: entity-type compatibility guard added
 - [x] ~~Month-year dates not recognized~~: "April 2018" and "Oktober 2024" now extracted as DATE
 - [x] ~~"Chemistry" flagged as ID number~~: MRN heuristic now requires at least one digit
+- [x] ~~BERT span truncation~~: word-boundary healing in onnx.rs finalize_entity extends entities to enclosing word boundaries. "Angela Merkel" and "Bundeskanzler" now correct.
+- [x] ~~Coreference spurious merges~~: raised link_threshold to 0.45, halved substring weight to 0.15, added pronoun-specific threshold (0.5x), required multi-word or >4 char proper nouns for global merge.
+- [x] ~~Joint produces 0 coref chains~~: added exact-string-match + last-name fallback when BP produces only singletons. "Elon Musk" + "Musk" now cluster.
+- [x] ~~European decimal comma~~: MONEY patterns accept comma decimal (EUR 3,2 Mrd, €3,50). Added Mrd/Mio/Bn/Mn magnitude abbreviations.
+- [x] ~~German word-boundary slicing~~: same fix as BERT span truncation (word-boundary healing in onnx.rs).
 
 #### Open (as of 2026-03-01)
 
-- [ ] BERT span truncation: BPE-to-char alignment cutting 1-3 trailing chars ("Angela Merk", "eskanzler", "Kishida" without "Fumio"). Root cause: `byte_to_char` offset rounding in ONNX decoder. Affects all ONNX backends.
 - [ ] Stacked misses lowercase names: "tim cook", "apple inc." unrecognized without NuNER. NuNER is the only backend that handles these but is ~5x slower.
-- [ ] Coreference spurious merges: "Nobel" merged with "Marie Curie", "Curie" merged with "Paris". Rule-based resolver improved but still unreliable.
-- [ ] Joint produces 0 coref chains: "He" -> "Elon Musk" not linked. Pronoun resolution nonfunctional in joint subcommand.
 - [ ] Enhance coref nonfunctional: creates 1 track but `signal_to_track` is empty.
 - [ ] URL ingestion noise: `--url` on news sites returns >90% nav/chrome junk as entity candidates.
 - [ ] bert-onnx fragmentation on long text: produces nonsense spans ("Lin", "Tor") on multi-paragraph input.
-- [ ] European decimal comma parsing: "EUR 3,2 Mrd." not recognized as MONEY.
-- [ ] German word-boundary slicing: "Bundeskanzler" -> "eskanzler" (first chars dropped by BERT tokenizer misalignment).
 - [ ] "Phone" tagged as PERSON by privacy: capitalized common word caught by heuristic backend.
 - [ ] IBAN double detection: pre-NER scan and NER both fire, producing redundant entries.
-- [ ] info display: ONNX backends show as available without "(requires model download)" note (backend names in `available_backends()` don't match the display check).
+- [ ] info display: ONNX backends show as available without "(requires model download)" note.
 
 ### 7. Compare against previous runs
 

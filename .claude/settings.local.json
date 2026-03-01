@@ -36,7 +36,12 @@
       "Bash(./target/release/anno export:*)",
       "Bash(git status:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(GITHUB_TOKEN= git push:*)",
+      "Bash(git:*)",
+      "Bash(echo exit: $?:*)",
+      "Bash(./target/release/anno:*)"
     ]
   }
 }
