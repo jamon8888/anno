@@ -53,6 +53,9 @@ crates/anno/target/
 *.swo
 .cursor/
 
+# Claude Code local settings (machine-specific permission grants)
+.claude/settings.local.json
+
 # Cargo crates.io packaging (local scratch)
 crates/*/README.md
 

@@ -516,8 +516,18 @@ impl Model for StackedNER {
         // ROI: High - called once per extract_entities, saves O(n) per entity in loop
         let text_char_count = text.chars().count();
 
+        // Adaptive NuNER: skip NuNER for well-capitalized text where BERT alone suffices.
+        // NuNER adds ~2s latency and mainly helps with lowercase entity names.
+        let skip_nuner = !text_may_need_nuner(text);
+
         for layer in &self.layers {
             let layer_name = layer.name();
+
+            // Skip NuNER when text is well-capitalized (saves ~2s latency)
+            if skip_nuner && layer_name.to_lowercase().contains("nuner") {
+                log::debug!("StackedNER: skipping NuNER (text appears well-capitalized)");
+                continue;
+            }
 
             // Try to extract from this layer, but continue on error if other layers succeeded
             let layer_entities = match layer.extract_entities(text, language) {
@@ -889,6 +899,56 @@ fn heal_adjacent_spans(text: &str, entities: &mut Vec<Entity>) {
     merged.push(current);
 
     *entities = merged;
+}
+
+/// Check whether text may contain lowercase entity names that need NuNER.
+///
+/// NuNER's main value over BERT is detecting lowercase entities ("tim cook", "apple inc.").
+/// For well-capitalized text (news, formal docs), BERT alone handles NER well and NuNER
+/// adds ~2s latency without meaningful recall improvement.
+///
+/// Heuristic: scan for sequences of 2+ consecutive lowercase words (>2 chars each,
+/// excluding common English stopwords) -- these suggest informal/untitled entity names.
+fn text_may_need_nuner(text: &str) -> bool {
+    // Very short texts (under ~30 chars) are cheap to process even with NuNER.
+    // Above that, only run NuNER when lowercase entity patterns are detected.
+    if text.len() < 30 {
+        return true;
+    }
+
+    const STOPWORDS: &[&str] = &[
+        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
+        "by", "from", "is", "are", "was", "were", "be", "been", "has", "have", "had",
+        "that", "this", "it", "he", "she", "we", "they", "not", "would", "could", "should",
+        "will", "can", "may", "also", "its", "his", "her", "our", "their", "who", "which",
+        "what", "when", "where", "how", "than", "then", "into", "over", "about", "after",
+        "before", "between", "under", "up", "out", "new", "said", "told", "expects",
+    ];
+
+    let mut consecutive_lc = 0u32;
+    for word in text.split_whitespace() {
+        let clean = word.trim_matches(|c: char| !c.is_alphanumeric());
+        if clean.len() <= 2 {
+            consecutive_lc = 0;
+            continue;
+        }
+        let first = match clean.chars().next() {
+            Some(c) if c.is_alphabetic() => c,
+            _ => {
+                consecutive_lc = 0;
+                continue;
+            }
+        };
+        if first.is_lowercase() && !STOPWORDS.contains(&clean.to_lowercase().as_str()) {
+            consecutive_lc += 1;
+            if consecutive_lc >= 2 {
+                return true;
+            }
+        } else {
+            consecutive_lc = 0;
+        }
+    }
+    false
 }
 
 // =============================================================================

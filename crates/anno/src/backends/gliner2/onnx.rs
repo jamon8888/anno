@@ -501,6 +501,22 @@ impl GLiNER2Onnx {
         entities.sort_by(|a, b| a.start.cmp(&b.start).then_with(|| b.end.cmp(&a.end)));
         entities.dedup_by(|a, b| a.start == b.start && a.end == b.end);
 
+        // Trim trailing punctuation from entity spans (e.g., "Seattle." -> "Seattle")
+        for entity in &mut entities {
+            let trimmed = entity.text
+                .trim_end_matches(['.', ',', ';', ':', '!', '?', ')', ']'])
+                .trim_end_matches("'s")
+                .trim_end_matches("\u{2019}s");
+            if trimmed.len() < entity.text.len() {
+                let removed = entity.text.len() - trimmed.len();
+                // Adjust end offset: count chars removed
+                let chars_removed = entity.text.chars().count() - trimmed.chars().count();
+                entity.end = entity.end.saturating_sub(chars_removed);
+                let _ = removed; // suppress unused warning
+                entity.text = trimmed.to_string();
+            }
+        }
+
         Ok(entities)
     }
 
