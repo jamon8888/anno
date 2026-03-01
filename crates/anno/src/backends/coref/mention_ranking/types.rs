@@ -487,6 +487,16 @@ pub struct RankedMention {
     /// For "the former president", head = "president".
     /// Used for head matching in coreference scoring.
     pub head: String,
+
+    /// NER entity type (if available from an NER model).
+    ///
+    /// Used for pronoun-antecedent preference:
+    /// - `he/she/him/her/his/hers` prefer `Person` antecedents
+    /// - `it/its` prefer `Organization` antecedents
+    /// - `they/them/their` are neutral (compatible with any type)
+    ///
+    /// `None` when entity type is unknown or mention was detected heuristically.
+    pub entity_type: Option<anno_core::EntityType>,
 }
 
 impl RankedMention {
@@ -533,6 +543,7 @@ impl From<&crate::Entity> for RankedMention {
             gender: None,
             number: None,
             head: extract_head(&entity.text),
+            entity_type: Some(entity.entity_type.clone()),
         }
     }
 }
@@ -691,6 +702,7 @@ mod tests {
             gender: None,
             number: None,
             head: extract_head(text),
+            entity_type: None,
         }
     }
 

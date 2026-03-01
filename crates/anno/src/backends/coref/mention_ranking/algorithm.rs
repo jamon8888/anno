@@ -831,6 +831,7 @@ impl MentionRankingCoref {
                     gender: None,
                     number: None,
                     head: self.get_head(&entity.text),
+                    entity_type: Some(entity.entity_type.clone()),
                 });
             }
         }
@@ -1005,6 +1006,7 @@ impl MentionRankingCoref {
                         gender: Some(gender),
                         number: Some(number),
                         head: pronoun.to_string(),
+                        entity_type: None,
                     });
                 }
 
@@ -1044,6 +1046,7 @@ impl MentionRankingCoref {
                         gender: None,
                         number: Some(Number::Singular),
                         head: word.to_string(),
+                        entity_type: None,
                     });
                 }
             }
@@ -1304,6 +1307,7 @@ impl MentionRankingCoref {
                                 gender: Some(Gender::Unknown), // Groups are gender-neutral
                                 number: Some(Number::Plural),  // Grammatically plural
                                 head: adj.to_string(),         // Head is the adjective
+                                entity_type: None,
                             });
                         }
 
@@ -1890,6 +1894,52 @@ impl MentionRankingCoref {
         score -= self.config.distance_weight * (distance as f64).ln().max(0.0);
 
         // =========================================================================
+        // Pronoun-specific: recency boost + entity-type preference
+        //
+        // For pronoun mentions, favor the most recent compatible antecedent.
+        // Recency is the primary signal for pronoun resolution (Hobbs 1978).
+        // Additionally, apply entity-type preferences:
+        //   - he/him/his/she/her/hers -> prefer Person antecedents
+        //   - it/its -> prefer Organization (or non-Person) antecedents
+        //   - they/them/their -> neutral (no preference)
+        // =========================================================================
+        if mention.mention_type == MentionType::Pronominal {
+            // Recency boost: closer antecedents get a stronger bonus.
+            // Uses inverse distance (in characters) to reward proximity.
+            // The boost decays as 1/(1 + distance/50), giving ~0.3 for adjacent
+            // mentions and tapering off for distant ones.
+            let recency_boost = self.config.type_compat_weight * 0.3 / (1.0 + distance as f64 / 50.0);
+            score += recency_boost;
+
+            // Entity-type preference: when the antecedent has a known entity type
+            // from NER, apply a bonus or penalty based on pronoun gender.
+            if let Some(ref ant_type) = antecedent.entity_type {
+                let m_lower = mention.text.to_lowercase();
+                let is_person_pronoun = matches!(
+                    m_lower.as_str(),
+                    "he" | "him" | "his" | "she" | "her" | "hers"
+                        | "himself" | "herself"
+                );
+                let is_it_pronoun = matches!(m_lower.as_str(), "it" | "its" | "itself");
+
+                if is_person_pronoun {
+                    if matches!(ant_type, anno_core::EntityType::Person) {
+                        score += self.config.type_compat_weight * 0.4;
+                    } else {
+                        score -= self.config.type_compat_weight * 0.3;
+                    }
+                } else if is_it_pronoun {
+                    if matches!(ant_type, anno_core::EntityType::Organization) {
+                        score += self.config.type_compat_weight * 0.3;
+                    } else if matches!(ant_type, anno_core::EntityType::Person) {
+                        score -= self.config.type_compat_weight * 0.3;
+                    }
+                }
+                // they/them/their: no entity-type preference (neutral)
+            }
+        }
+
+        // =========================================================================
         // External score (e.g., box containment)
         // =========================================================================
         if let Some(ref ext) = self.config.external_scores {
@@ -2049,6 +2099,7 @@ impl CoreferenceResolver for MentionRankingCoref {
                     gender,
                     number,
                     head: self.get_head(&e.text),
+                    entity_type: Some(e.entity_type.clone()),
                 }
             })
             .collect();
@@ -2163,6 +2214,7 @@ mod tests {
             gender: Some(Gender::Masculine),
             number: Some(Number::Singular),
             head: "John".to_string(),
+        entity_type: None,
         };
 
         let m2 = RankedMention {
@@ -2173,6 +2225,7 @@ mod tests {
             gender: Some(Gender::Masculine),
             number: Some(Number::Singular),
             head: "He".to_string(),
+        entity_type: None,
         };
 
         let score = coref.score_pair(&m2, &m1, 6, None);
@@ -2191,6 +2244,7 @@ mod tests {
             gender: Some(Gender::Feminine),
             number: Some(Number::Singular),
             head: "Mary".to_string(),
+        entity_type: None,
         };
 
         let m2 = RankedMention {
@@ -2201,6 +2255,7 @@ mod tests {
             gender: Some(Gender::Masculine),
             number: Some(Number::Singular),
             head: "He".to_string(),
+        entity_type: None,
         };
 
         let score = coref.score_pair(&m2, &m1, 6, None);
@@ -2531,6 +2586,7 @@ mod tests {
             gender: Some(Gender::Masculine),
             number: Some(Number::Singular),
             head: "He".to_string(),
+        entity_type: None,
         };
 
         let john = RankedMention {
@@ -2541,6 +2597,7 @@ mod tests {
             gender: Some(Gender::Masculine),
             number: Some(Number::Singular),
             head: "John".to_string(),
+        entity_type: None,
         };
 
         let bob = RankedMention {
@@ -2551,6 +2608,7 @@ mod tests {
             gender: Some(Gender::Masculine),
             number: Some(Number::Singular),
             head: "Bob".to_string(),
+        entity_type: None,
         };
 
         let score_john = coref.score_pair(&mention, &john, 16, None);
@@ -2587,6 +2645,7 @@ mod tests {
             gender: Some(Gender::Masculine),
             number: Some(Number::Singular),
             head: "He".to_string(),
+        entity_type: None,
         };
 
         let antecedent = RankedMention {
@@ -2597,6 +2656,7 @@ mod tests {
             gender: Some(Gender::Masculine),
             number: Some(Number::Singular),
             head: "John".to_string(),
+        entity_type: None,
         };
 
         // Without salience scores
@@ -2676,6 +2736,7 @@ mod tests {
                     gender: Some(Gender::Masculine),
                     number: Some(Number::Singular),
                     head: "John".to_string(),
+                entity_type: None,
                 },
                 RankedMention {
                     start: 15,
@@ -2685,6 +2746,7 @@ mod tests {
                     gender: Some(Gender::Masculine),
                     number: Some(Number::Singular),
                     head: "He".to_string(),
+                entity_type: None,
                 },
             ],
         };
@@ -2719,6 +2781,7 @@ mod tests {
                     gender: Some(Gender::Masculine),
                     number: Some(Number::Singular),
                     head: "John".to_string(),
+                entity_type: None,
                 },
                 RankedMention {
                     start: 15,
@@ -2728,6 +2791,7 @@ mod tests {
                     gender: Some(Gender::Masculine),
                     number: Some(Number::Singular),
                     head: "He".to_string(),
+                entity_type: None,
                 },
             ],
         };
@@ -2759,6 +2823,7 @@ mod tests {
                     gender: Some(Gender::Masculine),
                     number: Some(Number::Singular),
                     head: "He".to_string(),
+                entity_type: None,
                 },
                 RankedMention {
                     start: 10,
@@ -2768,6 +2833,7 @@ mod tests {
                     gender: Some(Gender::Masculine),
                     number: Some(Number::Singular),
                     head: "John".to_string(),
+                entity_type: None,
                 },
             ],
         };
@@ -2831,6 +2897,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "company".to_string(),
+        entity_type: None,
         };
 
         let signal = mention.to_signal(anno_core::SignalId::new(999));
@@ -2890,6 +2957,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "patient".to_string(),
+        entity_type: None,
         };
 
         let m2 = RankedMention {
@@ -2900,6 +2968,7 @@ mod tests {
             gender: Some(Gender::Masculine),
             number: Some(Number::Singular),
             head: "Smith".to_string(),
+        entity_type: None,
         };
 
         // Should detect be-phrase link
@@ -2927,6 +2996,7 @@ mod tests {
             gender: Some(Gender::Masculine),
             number: Some(Number::Singular),
             head: "John".to_string(),
+        entity_type: None,
         };
 
         let m2 = RankedMention {
@@ -2937,6 +3007,7 @@ mod tests {
             gender: Some(Gender::Feminine),
             number: Some(Number::Singular),
             head: "Mary".to_string(),
+        entity_type: None,
         };
 
         // "saw" is not a be-phrase
@@ -2958,6 +3029,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "MRSA".to_string(),
+        entity_type: None,
         };
 
         let full = RankedMention {
@@ -2968,6 +3040,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "aureus".to_string(),
+        entity_type: None,
         };
 
         assert!(
@@ -2988,6 +3061,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "WHO".to_string(),
+        entity_type: None,
         };
 
         let full = RankedMention {
@@ -2998,6 +3072,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "Organization".to_string(),
+        entity_type: None,
         };
 
         assert!(
@@ -3018,6 +3093,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "IBM".to_string(),
+        entity_type: None,
         };
 
         let apple = RankedMention {
@@ -3028,6 +3104,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "Apple".to_string(),
+        entity_type: None,
         };
 
         assert!(
@@ -3052,6 +3129,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "patient".to_string(),
+        entity_type: None,
         };
 
         let m2 = RankedMention {
@@ -3062,6 +3140,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "patient".to_string(),
+        entity_type: None,
         };
 
         // Should filter due to different dates (different visits = potentially different patients)
@@ -3091,6 +3170,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "diabetic".to_string(),
+        entity_type: None,
         };
 
         // Second "diabetic" at position 50-58 (far enough that context won't include "not")
@@ -3102,6 +3182,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "diabetic".to_string(),
+        entity_type: None,
         };
 
         // Verify context windows include the right context
@@ -3150,6 +3231,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "Obama".to_string(),
+        entity_type: None,
         };
 
         let obama_lower = RankedMention {
@@ -3160,6 +3242,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "obama".to_string(),
+        entity_type: None,
         };
 
         // Case-insensitive match should work
@@ -3184,6 +3267,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "heart".to_string(),
+        entity_type: None,
         };
 
         let cardiac = RankedMention {
@@ -3194,6 +3278,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "cardiac".to_string(),
+        entity_type: None,
         };
 
         // Without a domain-specific SynonymSource, these won't match
@@ -3262,6 +3347,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "organism".to_string(),
+        entity_type: None,
         };
 
         let m2 = RankedMention {
@@ -3272,6 +3358,7 @@ mod tests {
             gender: None,
             number: Some(Number::Singular),
             head: "MRSA".to_string(),
+        entity_type: None,
         };
 
         // Score should be high due to be-phrase
@@ -3606,6 +3693,7 @@ mod tests {
             gender: Some(Gender::Unknown),
             number: Some(Number::Singular),
             head: "patient".to_string(),
+        entity_type: None,
         };
 
         let coref_mention: anno_core::Mention = (&mention).into();
@@ -3626,6 +3714,7 @@ mod tests {
             gender: None,
             number: None,
             head: "test".to_string(),
+        entity_type: None,
         };
 
         assert_eq!(mention.span(), (5, 15));
@@ -3848,6 +3937,7 @@ mod tests {
             gender: Some(Gender::Neutral),
             number: Some(Number::Dual),
             head: "كتابان".to_string(),
+        entity_type: None,
         };
 
         let plural_mention = RankedMention {
@@ -3858,6 +3948,7 @@ mod tests {
             gender: Some(Gender::Unknown),
             number: Some(Number::Plural),
             head: "هم".to_string(),
+        entity_type: None,
         };
 
         let singular_mention = RankedMention {
@@ -3868,6 +3959,7 @@ mod tests {
             gender: Some(Gender::Masculine),
             number: Some(Number::Singular),
             head: "هو".to_string(),
+        entity_type: None,
         };
 
         // Test Number::is_compatible directly
@@ -3912,6 +4004,7 @@ mod tests {
             gender: Some(Gender::Unknown),
             number: Some(Number::Unknown), // Singular or plural
             head: "They".to_string(),
+        entity_type: None,
         };
 
         let singular_mention = RankedMention {
@@ -3922,6 +4015,7 @@ mod tests {
             gender: Some(Gender::Unknown),
             number: Some(Number::Singular),
             head: "Alex".to_string(),
+        entity_type: None,
         };
 
         let plural_mention = RankedMention {
@@ -3932,6 +4026,7 @@ mod tests {
             gender: Some(Gender::Unknown),
             number: Some(Number::Plural),
             head: "students".to_string(),
+        entity_type: None,
         };
 
         // Both should get non-negative scores (Unknown is compatible with both)
