@@ -139,6 +139,11 @@ impl NuNER {
     /// * `text` - Text to extract from
     /// * `entity_types` - Entity type labels (e.g., ["person", "company"])
     /// * `threshold` - Confidence threshold (0.0-1.0)
+    /// Maximum words per NuNER chunk.  NuNER uses word-level tokens (not BPE),
+    /// so 2048 words is a safe limit that avoids excessive memory / latency.
+    #[cfg(feature = "onnx")]
+    const MAX_WORDS: usize = 2048;
+
     #[cfg(feature = "onnx")]
     pub fn extract(
         &self,
@@ -159,6 +164,72 @@ impl NuNER {
             );
         }
 
+        // Check word count; chunk at sentence boundaries if over limit.
+        let word_count = text.split_whitespace().count();
+        if word_count > Self::MAX_WORDS {
+            return self.extract_chunked(text, entity_types, threshold);
+        }
+
+        self.extract_single(text, entity_types, threshold)
+    }
+
+    /// Split long text into sentence-boundary chunks that fit within
+    /// `MAX_WORDS`, run each chunk through `extract_single`, and merge
+    /// entity results with shifted character offsets.
+    #[cfg(feature = "onnx")]
+    fn extract_chunked(
+        &self,
+        text: &str,
+        entity_types: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<Entity>> {
+        let mut chunks: Vec<(usize, &str)> = Vec::new(); // (byte_offset, slice)
+        let mut start = 0;
+        let mut current_end = 0;
+
+        for (i, c) in text.char_indices() {
+            if matches!(c, '.' | '!' | '?' | '\n') {
+                let boundary = i + c.len_utf8();
+                let candidate = &text[start..boundary];
+                if candidate.split_whitespace().count() > Self::MAX_WORDS && current_end > start {
+                    chunks.push((start, &text[start..current_end]));
+                    start = current_end;
+                }
+                current_end = boundary;
+            }
+        }
+        // Flush remaining
+        if start < text.len() {
+            chunks.push((start, &text[start..]));
+        }
+        if chunks.is_empty() {
+            // Degenerate: single sentence > MAX_WORDS. Pass through anyway.
+            chunks.push((0, text));
+        }
+
+        let mut all_entities = Vec::new();
+        for (byte_offset, chunk) in &chunks {
+            let mut chunk_entities = self.extract_single(chunk, entity_types, threshold)?;
+            if *byte_offset > 0 {
+                let char_offset = text[..*byte_offset].chars().count();
+                for e in &mut chunk_entities {
+                    e.start += char_offset;
+                    e.end += char_offset;
+                }
+            }
+            all_entities.extend(chunk_entities);
+        }
+        Ok(all_entities)
+    }
+
+    /// Run NuNER inference on a single (non-chunked) piece of text.
+    #[cfg(feature = "onnx")]
+    fn extract_single(
+        &self,
+        text: &str,
+        entity_types: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<Entity>> {
         let session = self.session.as_ref().ok_or_else(|| {
             Error::Retrieval("Model not loaded. Call from_pretrained() first.".to_string())
         })?;
