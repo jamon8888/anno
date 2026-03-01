@@ -61,7 +61,8 @@ default = []
 parallel = ["dep:rayon"]
 discourse = ["anno/discourse"]
 # Muxer-backed evaluation harnesses + sampling tooling.
-eval = ["dep:muxer"]
+# Pulls in bundled trained weights so classical backends use real parameters, not heuristics.
+eval = ["dep:muxer", "bundled-crf-weights", "bundled-hmm-params"]
 eval-profiling = []
 eval-bias = []
 eval-parallel = ["parallel"]
