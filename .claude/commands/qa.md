@@ -2,9 +2,17 @@
 
 Evaluate anno's extraction quality by running it on real web content and critiquing the results. This is not a pass/fail test -- it produces a written assessment of what anno does well and where it falls short.
 
+## Execution strategy
+
+- **Parallelize independent commands**: launch baselines, backend comparisons, format checks, and error-path tests concurrently where they don't share output files. ONNX backends share a model cache and don't conflict.
+- **Capture exact output**: save command output to temp files (`> /tmp/anno-qa-baseline1.txt 2>&1`) so diffs against previous runs are reliable. Don't eyeball scrollback.
+- **Time everything**: use `time` or note wall-clock for each command. Speed regressions matter as much as correctness regressions. See section 3h for expected ranges.
+- **Stop early on build failure**: if `cargo build` fails, the entire QA is blocked. Report the build error and stop.
+- **Read previous reports first**: step 7 requires comparison. Read them before running tests so you know what to watch for.
+
 ## Report convention
 
-Reports go in `qa/reports/qa-YYYY-MM-DD.md`. Read any existing reports before starting -- step 7 requires comparing against them.
+Reports go in `qa/reports/qa-YYYY-MM-DD.md` (gitignored). Append a `-suffix` when multiple reports exist for the same date (e.g., `qa-2026-03-01-post-fixes.md`).
 
 ## Procedure
 
@@ -15,7 +23,7 @@ cd <repo-root>
 cargo build --release -p anno-cli --features "eval onnx"
 ```
 
-If the build fails, stop and report.
+If the build fails, stop and report. Expected build time: 20-40s (incremental), 2-5min (clean).
 
 ### 2. Check backends and prefetch models
 
@@ -32,6 +40,8 @@ Note which backends are available. Then prefetch ONNX models so download time do
 
 At minimum `heuristic`, `pattern`, `crf`, `hmm`, and `stacked` (in non-ML mode) work without any downloads.
 
+**Known issue**: w2ner model may 404 on HuggingFace. If download fails, note it and continue -- w2ner is not required for the core audit.
+
 ### 3. Run on diverse real content
 
 Test breadth and depth. Vary content sources, input methods, backends, formats, and languages. Don't just test one URL -- test several, and don't just test `--url` -- test files, stdin, inline text, batch, and directories.
@@ -46,10 +56,17 @@ These provide a regression baseline. Test all of them, every time, so results ar
 ANNO=./target/release/anno
 
 # Baseline 1: known-hard inline text (lowercase names, ambiguous entities, nested orgs)
+# Expected: stacked misses lowercase names (tim cook, apple inc., cologne)
+# NuNER is the only backend that handles these -- test both
 $ANNO extract -t "tim cook announced that apple inc. would acquire the german startup deepl, \
   founded by jaroslaw kutylowski in cologne. the deal, worth EUR 3.2 billion, \
   closes on march 15, 2026. cook told reuters he expects 500 new hires." \
   --model stacked --format inline
+
+$ANNO extract -t "tim cook announced that apple inc. would acquire the german startup deepl, \
+  founded by jaroslaw kutylowski in cologne. the deal, worth EUR 3.2 billion, \
+  closes on march 15, 2026. cook told reuters he expects 500 new hires." \
+  --model nuner --format inline
 
 # Baseline 2: structured data (dates, money, emails, phones, URLs)
 $ANNO extract -t "Contact: jane.doe@example.com or +1-555-867-5309. \
@@ -58,9 +75,17 @@ $ANNO extract -t "Contact: jane.doe@example.com or +1-555-867-5309. \
   --model pattern --format json
 
 # Baseline 3: multilingual (one sentence each)
+# Watch for BERT span truncation: "Angela Merk" (missing "el"), "eskanzler" (missing "Bund")
 $ANNO extract -t "Le president Emmanuel Macron a rencontre Angela Merkel a Berlin." --format inline
 $ANNO extract -t "Bundeskanzler Olaf Scholz besuchte das Rote Kreuz in Muenchen." --format inline
 $ANNO extract -t "Kishida Fumio wa Tokyo de kaigi o hiraita." --format inline
+
+# Baseline 4: privacy/PII detection (SSN, credit card, IBAN, address)
+$ANNO privacy -t "Patient SSN: 123-45-6789. Card: 4111-1111-1111-1111. IBAN: DE89370400440532013000."
+$ANNO privacy -t "Ship to 1234 Elm Street, Springfield, IL 62704. Email: jane@example.com. Phone: 555-0100."
+
+# Baseline 5: title-word entity detection (CEO, President patterns)
+$ANNO extract -t "Apple CEO Tim Cook met Google CEO Sundar Pichai in Seattle." --model stacked --format inline
 ```
 
 Record exact output for each baseline. When comparing against previous runs, diff these first.
@@ -122,14 +147,24 @@ echo '{"id":"1","text":"Marie Curie won the Nobel Prize in 1903."}
 
 # Require ONNX feature + model download
 --model bert-onnx      # BERT transformer NER (PER/ORG/LOC/MISC)
---model nuner          # zero-shot; handles lowercase text well
---model gliner --extract-types "person,organization,location,date,money,product"  # zero-shot; use full words, not abbreviations (PER/ORG/LOC produce empty output)
+--model nuner          # zero-shot; handles lowercase text well (~2s per sentence)
+--model gliner --extract-types "person,organization,location,date,money,product"  # zero-shot; full words recommended (abbreviations like PER also work after label expansion)
 --model gliner2 --extract-types "PER,ORG,LOC"   # multitask (NER + relations)
---model w2ner          # nested entity recognition
+--model w2ner          # nested entity recognition (model may not be available)
 --model tplinker       # joint entity-relation extraction (heuristic)
 ```
 
 GLiNER and NuNER are zero-shot backends: they accept arbitrary type labels via `--extract-types`. GLiNER produces empty output without `--extract-types` (it has no default label set). NuNER has defaults but benefits from explicit types.
+
+**Cross-backend comparison**: run the same sentence through multiple backends to check agreement:
+
+```bash
+for model in stacked bert-onnx nuner gliner ensemble; do
+  echo "=== $model ==="
+  $ANNO extract -t "Apple CEO Tim Cook met Google CEO Sundar Pichai in Seattle." \
+    --model $model --format inline $([ "$model" = "gliner" ] && echo "--extract-types person,organization,location")
+done
+```
 
 #### 3e. Output format diversity (test at least 4 formats)
 
@@ -143,30 +178,38 @@ GLiNER and NuNER are zero-shot backends: they accept arbitrary type labels via `
 --format grounded  # full GroundedDocument JSON (pipeline integration format)
 ```
 
-Check: does `--format json` parse cleanly? Does `--format tsv` have correct column count? Does `--format human` degrade gracefully on non-TTY (no ANSI)?
+Check: does `--format json` parse cleanly (`| python3 -m json.tool`)? Does `--format tsv` have correct column count? Does `--format human` suppress ANSI when piped to a file (`| cat -v` -- should show no `^[` escapes)?
 
 #### 3f. Subcommand diversity (test beyond just `extract`)
 
+Test high-value subcommands first, then the rest:
+
+**Tier 1 (always test)**:
+
 ```bash
+# Privacy/PII detection and redaction
+$ANNO privacy -t "John Smith's SSN is 123-45-6789. Email: john@example.com. Phone: 555-0100."
+$ANNO privacy -t "John Smith's SSN is 123-45-6789." --action redact
+$ANNO privacy -t "John Smith's SSN is 123-45-6789." --action pseudonymize
+
 # Coreference
 $ANNO debug --coref -t "Marie Curie discovered radium. She won the Nobel Prize. Curie later moved to Paris." --model stacked
 
 # Relation extraction (only tplinker and gliner2 produce typed relations)
 $ANNO extract -t "Tim Cook is the CEO of Apple Inc., headquartered in Cupertino." \
   --model tplinker --extract-relations --format json
-$ANNO extract -t "Tim Cook is the CEO of Apple Inc., headquartered in Cupertino." \
-  --model gliner2 --extract-types "PER,ORG,LOC" --extract-relations --format json
 
-# Privacy/PII detection and redaction
-$ANNO privacy -t "John Smith's SSN is 123-45-6789. Email: john@example.com. Phone: 555-0100."
-$ANNO privacy -t "John Smith's SSN is 123-45-6789." --action redact
-$ANNO privacy -t "John Smith's SSN is 123-45-6789." --action pseudonymize
+# Export to annotation formats
+$ANNO extract -t "Apple CEO Tim Cook met Google CEO Sundar Pichai." --format grounded > /tmp/anno-gd.json
+$ANNO export -i /tmp/anno-gd.json -o /tmp/anno-export/ --format brat
+$ANNO export -i /tmp/anno-gd.json -o /tmp/anno-export/ --format conll --overwrite
+```
 
+**Tier 2 (test when time allows)**:
+
+```bash
 # Joint NER + coreference + linking
 $ANNO joint -t "Elon Musk founded SpaceX. He also leads Tesla. Musk tweeted about Mars." --model stacked
-
-# Singleton analysis (entities with no coreference links)
-$ANNO singleton -t "Apple announced earnings. Google released a new phone. Tim Cook spoke." --model stacked
 
 # Domain shift detection
 $ANNO domain -t "The patient presented with acute myocardial infarction." --model stacked
@@ -174,42 +217,20 @@ $ANNO domain -t "The patient presented with acute myocardial infarction." --mode
 # Explain (feature attribution for a specific entity)
 $ANNO explain -t "Barack Obama visited the White House." --model stacked
 
-# Multi-backend analysis (hidden command, still functional)
-$ANNO analyze -t "The European Central Bank raised interest rates."
-
-# Compare backends on same input
-$ANNO compare -t "Angela Merkel met Emmanuel Macron in Berlin." --models --model-list "stacked,bert-onnx,gliner"
-
-# Pipeline (unified multi-doc processing)
-echo "Doc one about Apple." > /tmp/anno-pipe-1.txt
-echo "Doc two about Google." > /tmp/anno-pipe-2.txt
-$ANNO pipeline --files /tmp/anno-pipe-1.txt,/tmp/anno-pipe-2.txt --model stacked --format json
-
 # Query (filter entities from GroundedDocument)
-$ANNO extract -t "Apple CEO Tim Cook met Google CEO Sundar Pichai." --format grounded > /tmp/anno-gd.json
 $ANNO query /tmp/anno-gd.json --type PER
 $ANNO query /tmp/anno-gd.json --min-confidence 0.8
 
 # Enhance (add coreference to existing GroundedDocument)
 $ANNO enhance /tmp/anno-gd.json --coref --format json
 
-# Export to annotation formats
-$ANNO export -i /tmp/anno-gd.json -o /tmp/anno-export/ --format brat
-$ANNO export -i /tmp/anno-gd.json -o /tmp/anno-export/ --format conll
-$ANNO export -i /tmp/anno-gd.json -o /tmp/anno-export/ --format jsonld
+# Batch processing
+$ANNO batch --dir /tmp/anno-test-dir/ --model stacked --format json --output /tmp/anno-out/
 
-# Context (entities with surrounding text)
-$ANNO extract -t "Apple CEO Tim Cook met Google CEO Sundar Pichai in Seattle." --format grounded > /tmp/anno-ctx.json
-# (context command if available, or use query with context flags)
+# Compare backends on same input
+$ANNO compare -t "Angela Merkel met Emmanuel Macron in Berlin." --models --model-list "stacked,bert-onnx,gliner"
 
-# Watch (directory watcher -- start, add a file, observe processing, then Ctrl-C)
-$ANNO watch /tmp/anno-watch-dir/ --output /tmp/anno-watch-out/ --model stacked --initial &
-WATCH_PID=$!
-sleep 2
-echo "New document about Amazon and Jeff Bezos." > /tmp/anno-watch-dir/new.txt
-sleep 5
-kill $WATCH_PID
-cat /tmp/anno-watch-out/*.json 2>/dev/null
+# Singleton, analyze, pipeline, watch (if time permits)
 ```
 
 #### 3g. Error-path testing
@@ -239,11 +260,30 @@ $ANNO extract --url "https://httpstat.us/404"
 # Malformed JSONL for batch
 echo '{"bad json' | $ANNO batch --stdin --model stacked --format json
 
-# Enormous single line (stress test)
+# Enormous single line (stress test -- expect 5-30s for stacked)
 python3 -c "print('Angela Merkel ' * 10000)" | $ANNO extract --model stacked --format inline
 ```
 
 Read the full output of each command. Do not truncate or pipe through head/tail.
+
+#### 3h. Timing reference (expected ranges)
+
+Compare wall-clock times against these baselines (single sentence, macOS, M-series):
+
+| Backend | Expected | Red flag |
+|---------|----------|----------|
+| pattern | <20ms | >50ms |
+| heuristic | <20ms | >50ms |
+| crf | <20ms | >50ms |
+| hmm | <10ms | >50ms |
+| stacked | 300-500ms | >800ms |
+| bert-onnx | 300-400ms | >800ms |
+| gliner | 350-450ms | >1s |
+| tplinker | 400-500ms | >1s |
+| nuner | 1.5-2.5s | >5s |
+| ensemble | 350-450ms | >1s |
+
+Significant deviations suggest model loading issues, ONNX session creation overhead, or a regression.
 
 ### 4. Critique the output
 
@@ -252,24 +292,38 @@ For each piece of content, check:
 **Span correctness** (use `--format inline` -- truncated spans are immediately visible)
 - Are entity boundaries correct? Look for names cut mid-word ("Lagard" instead of "Lagarde").
 - Are multi-word names captured fully? ("Dr. Jennifer Doudna" not just "Jennifer")
-- Known recurring bug: BPE-to-char alignment can truncate 1-3 trailing characters.
+- Known recurring bug: BPE-to-char alignment can truncate 1-3 trailing characters on ONNX backends.
 
 **Type accuracy**
 - PER vs ORG vs LOC assignments correct?
 - Month names tagged as LOC? Weekdays as PER? Common misclassification patterns?
+- Capitalized common words falsely tagged? ("Phone" as PER, "Chemistry" as LOC)
 
 **Recall**
 - What obvious entities were missed entirely?
 - Two-word person names? Organization acronyms? Monetary amounts?
-- Lowercase names (test with NuNER -- stacked often misses these)?
+- Lowercase names (test with NuNER -- stacked systematically misses these)?
 
 **Precision**
 - False positives? Navigation text tagged as entities? Common nouns tagged as proper?
+- Fiscal quarters (Q1-Q4) should NOT be entities.
+- Invoice numbers (#2024-0042) should NOT be hashtags.
 
-**Structured extraction**
-- Dates, monetary amounts, emails, URLs -- correctly parsed?
+**Structured extraction (pattern backend)**
+- Dates: ISO (2025-12-31), US (March 15, 2026), EU (15. Januar 2024), month-year (April 2018)?
+- Money: USD ($14,999.00), EUR (EUR 3.2 billion)?
+- Contact: emails, phone numbers (+1-555-867-5309)?
+- URLs correctly extracted?
 - European decimal commas (EUR 3,2 Mrd.) handled?
 - Trailing whitespace in spans?
+
+**Privacy/PII detection**
+- SSN (123-45-6789) detected as ID_NUMBER?
+- Credit card (4111-1111-1111-1111) detected?
+- IBAN (DE89370400440532013000) detected?
+- Addresses with ZIP + state abbreviation detected?
+- Redact and pseudonymize produce clean output?
+- Watch for false positives: "Phone", "Chemistry" etc.
 
 **Coreference** (debug --coref and joint)
 - Pronoun chains correct? "She" -> right antecedent?
@@ -278,6 +332,7 @@ For each piece of content, check:
 
 **Relations** (tplinker and gliner2 only)
 - Are extracted relations semantically correct?
+- Bare "in" / "on" should NOT trigger LOCATED_IN / OCCURRED_ON with semantically incompatible types.
 - Does `--model stacked --extract-relations` silently produce zero relations? (Expected -- only tplinker/gliner2 emit typed relations.)
 
 **URL ingestion quality**
@@ -291,8 +346,8 @@ For each piece of content, check:
 - Does `--format grounded` round-trip through `query` and `enhance`?
 
 **Export format correctness**
-- Do brat `.ann` files validate against brat conventions?
-- Does CoNLL output have correct IOB tags?
+- Do brat `.ann` files have valid T-annotation format?
+- Does CoNLL output have correct BIO tags, one token per line?
 - Does JSON-LD have valid `@context`?
 
 **Error behavior**
@@ -310,7 +365,7 @@ For each piece of content, check:
 
 Save to `qa/reports/qa-YYYY-MM-DD.md`. Produce a structured critique covering:
 
-1. **Test conditions**: date, URLs tested, backends used, anno version (`anno info`), wall-clock timings
+1. **Test conditions**: date, commit SHA, URLs tested, backends used, anno version (`anno info`), wall-clock timings
 2. **Baseline results**: exact output for each stable baseline (section 3a), diffed against previous run if available
 3. **Per-source findings**: what worked, what failed, with specific entity spans quoted
 4. **Bug table**: concrete bugs found (span truncation, misclassification, etc.) with reproduction commands
@@ -324,21 +379,36 @@ Be concrete. Quote entity spans, show expected vs actual types, include the comm
 
 ### 6. Regression check on known bugs
 
-Check whether these previously-identified issues are still present (update this list as bugs are fixed or new ones found):
+Check whether these previously-identified issues are still present. Update this checklist in the QA command itself (not just the report) when bugs are confirmed fixed or new ones found.
 
-- [ ] Span truncation: BPE-to-char alignment cutting 1-3 trailing chars ("Furukawa" -> "Furuk", "Merkel" -> "Merk", "Charpentier" -> "Charpent")
-- [ ] Stacked drops PER after title words: "CEO Tim Cook" -> Tim Cook missed; bert-onnx and NuNER find it
-- [ ] GLiNER zero output with short type labels: `--extract-types "PER,ORG,LOC"` -> 0 entities; "PERSON,ORGANIZATION,LOCATION" works
-- [ ] Export command broken on GroundedDocument: `anno export -i grounded.json` re-runs extraction instead of reading signals
-- [ ] URL ingestion noise: `--url` on news sites returns >90% nav/chrome junk
-- [ ] Coreference spurious merges: distinct people collapsed into one cluster
-- [ ] Enhance coref creates nonsensical clusters: merges unrelated proper nouns into one track
-- [ ] Stacked misses lowercase names: "tim cook" unrecognized without NuNER
-- [ ] bert-onnx fragmentation on long text: produces nonsense spans ("Lin", "Tor")
-- [ ] European decimal comma parsing: "EUR 3,2 Mrd." not recognized as MONEY
-- [ ] German word-boundary slicing: "Bundeskanzler" -> "eskanzler" (first chars dropped)
-- [ ] Hashtag false positive on invoice numbers: "#2024-0042" triggers "#2024" as Hashtag
-- [ ] Joint produces 0 coref chains despite clear pronouns
+#### Fixed (verified 2026-03-01)
+
+- [x] ~~Stacked drops PER after title words~~: "CEO Tim Cook" now detected correctly
+- [x] ~~GLiNER zero output with short type labels~~: "PER,ORG,LOC" now works via label expansion
+- [x] ~~Export command broken on GroundedDocument~~: brat and conll produce valid output
+- [x] ~~Hashtag false positive on invoice numbers~~: "#2024-0042" no longer triggers Hashtag
+- [x] ~~SSN/credit card/IBAN not detected by privacy~~: pre-NER scan catches structured PII
+- [x] ~~Q1-Q4 tagged as PER~~: fiscal quarter filter in heuristic backend
+- [x] ~~CRF spans cross sentence boundaries~~: sentence boundary enforcement added
+- [x] ~~HTML hex entities (&#x27;) not decoded~~: hex path added to entity decoder
+- [x] ~~Bare "in"/"on" triggers false LOCATED_IN relations~~: entity-type compatibility guard added
+- [x] ~~Month-year dates not recognized~~: "April 2018" and "Oktober 2024" now extracted as DATE
+- [x] ~~"Chemistry" flagged as ID number~~: MRN heuristic now requires at least one digit
+
+#### Open (as of 2026-03-01)
+
+- [ ] BERT span truncation: BPE-to-char alignment cutting 1-3 trailing chars ("Angela Merk", "eskanzler", "Kishida" without "Fumio"). Root cause: `byte_to_char` offset rounding in ONNX decoder. Affects all ONNX backends.
+- [ ] Stacked misses lowercase names: "tim cook", "apple inc." unrecognized without NuNER. NuNER is the only backend that handles these but is ~5x slower.
+- [ ] Coreference spurious merges: "Nobel" merged with "Marie Curie", "Curie" merged with "Paris". Rule-based resolver improved but still unreliable.
+- [ ] Joint produces 0 coref chains: "He" -> "Elon Musk" not linked. Pronoun resolution nonfunctional in joint subcommand.
+- [ ] Enhance coref nonfunctional: creates 1 track but `signal_to_track` is empty.
+- [ ] URL ingestion noise: `--url` on news sites returns >90% nav/chrome junk as entity candidates.
+- [ ] bert-onnx fragmentation on long text: produces nonsense spans ("Lin", "Tor") on multi-paragraph input.
+- [ ] European decimal comma parsing: "EUR 3,2 Mrd." not recognized as MONEY.
+- [ ] German word-boundary slicing: "Bundeskanzler" -> "eskanzler" (first chars dropped by BERT tokenizer misalignment).
+- [ ] "Phone" tagged as PERSON by privacy: capitalized common word caught by heuristic backend.
+- [ ] IBAN double detection: pre-NER scan and NER both fire, producing redundant entries.
+- [ ] info display: ONNX backends show as available without "(requires model download)" note (backend names in `available_backends()` don't match the display check).
 
 ### 7. Compare against previous runs
 
@@ -346,7 +416,8 @@ Read previous reports from `qa/reports/`. For each:
 - Are baseline results (section 3a) identical, improved, or regressed?
 - Are bugs from section 6 still present?
 - Any new bugs not seen before?
-- Any previous bugs now fixed (update the checklist)?
+- Any previous bugs now fixed (update the checklist in THIS file, section 6)?
+- Any timing regressions?
 
 ## What this is NOT
 
