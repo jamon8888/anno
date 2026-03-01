@@ -16,16 +16,22 @@ pub fn run() -> Result<(), String> {
 
     // Use the actual available_backends() function to show real availability
     let backends = available_backends();
+    // ONNX-based backends (w2ner, bert) need a model download even when the
+    // feature flag is compiled in.  Distinguish "feature enabled" from "ready
+    // to use" so users aren't surprised by a missing-model error at runtime.
+    let onnx_backends = ["w2ner", "bert"];
     for (name, available) in backends {
         let status = if available {
             color("32", "✓")
         } else {
             color("90", "✗")
         };
-        let note = if available {
-            ""
-        } else {
+        let note = if !available {
             " (requires feature flag)"
+        } else if onnx_backends.contains(&name) {
+            " (requires model download)"
+        } else {
+            ""
         };
         println!("  {} {} {}", status, name, note);
     }

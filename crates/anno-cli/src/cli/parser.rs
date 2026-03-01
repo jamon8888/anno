@@ -175,6 +175,11 @@ pub enum Commands {
     #[command(hide = true)]
     Singleton(commands::SingletonArgs),
 
+    /// Export annotations to different formats (brat, CoNLL, JSONL, etc.)
+    #[command(visible_alias = "ex")]
+    #[command(hide = true)]
+    Export(commands::ExportArgs),
+
     /// Generate shell completions
     Completions {
         /// Shell to generate completions for

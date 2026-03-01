@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 
 use super::super::output::color;
 use super::super::parser::ModelBackend;
+use super::super::utils::parse_grounded_document;
 
 /// Export annotations to different formats
 #[derive(Parser, Debug)]
@@ -136,12 +137,16 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
             .map_err(|e| format!("Failed to read directory: {}", e))?
             .filter_map(|e| e.ok())
             .map(|e| e.path())
-            .filter(|p| p.is_file() && p.extension().is_some_and(|e| e == "txt"))
+            .filter(|p| {
+                p.is_file()
+                    && p.extension()
+                        .is_some_and(|e| e == "txt" || e == "json" || e == "jsonl")
+            })
             .collect()
     };
 
     if files.is_empty() {
-        return Err("No .txt files found in input".into());
+        return Err("No .txt/.json/.jsonl files found in input".into());
     }
 
     if !args.quiet {
@@ -163,8 +168,31 @@ pub fn run(args: ExportArgs) -> Result<(), String> {
     let mut error_count = 0;
 
     for file in &files {
-        // Extract — relation model takes priority; plain model is the fallback.
-        let extracted = if let Some(ref rm) = relation_model {
+        let is_json = file
+            .extension()
+            .is_some_and(|e| e == "json" || e == "jsonl");
+
+        // Extract — JSON files are parsed as GroundedDocument; text files run extraction.
+        let extracted = if is_json {
+            let json_content =
+                fs::read_to_string(file).map_err(|e| format!("Failed to read file: {}", e))?;
+            let doc = parse_grounded_document(&json_content)?;
+            let entities: Vec<anno_core::Entity> = doc
+                .signals
+                .iter()
+                .filter_map(|s| {
+                    let (start, end) = s.text_offsets()?;
+                    Some(anno_core::Entity::new(
+                        s.surface(),
+                        s.label.to_entity_type(),
+                        start,
+                        end,
+                        s.confidence as f64,
+                    ))
+                })
+                .collect();
+            Ok((doc.text, Extracted::entities_only(entities)))
+        } else if let Some(ref rm) = relation_model {
             let content =
                 fs::read_to_string(file).map_err(|e| format!("Failed to read file: {}", e))?;
             let (entities, relations) = rm

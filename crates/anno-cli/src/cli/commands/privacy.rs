@@ -114,10 +114,30 @@ pub fn run(args: PrivacyArgs) -> Result<(), String> {
         .extract_entities(&text, None)
         .map_err(|e| format!("Extraction failed: {}", e))?;
 
-    // Classify entities as PII
-    let pii_entities: Vec<PIIEntity> = entities
-        .iter()
-        .filter_map(classify_pii)
+    // Pre-NER pattern scan: detect structured PII directly via regex,
+    // independent of the NER backend. This catches SSN, credit card, phone,
+    // and IBAN patterns even when no NER entity covers them.
+    let mut pii_entities: Vec<PIIEntity> = scan_structured_pii(&text);
+
+    // Classify NER entities as PII
+    let ner_pii: Vec<PIIEntity> = entities.iter().filter_map(classify_pii).collect();
+
+    // Merge, avoiding duplicates (same span)
+    for pii in ner_pii {
+        let dominated = pii_entities
+            .iter()
+            .any(|existing| existing.start == pii.start && existing.end == pii.end);
+        if !dominated {
+            pii_entities.push(pii);
+        }
+    }
+
+    // Sort by position
+    pii_entities.sort_by_key(|e| e.start);
+
+    // Filter by requested types
+    let pii_entities: Vec<PIIEntity> = pii_entities
+        .into_iter()
         .filter(|pii| {
             args.types.is_empty()
                 || args
@@ -261,10 +281,24 @@ fn looks_like_address(text: &str) -> bool {
     // Contains number + street indicator
     let has_number = text.chars().any(|c| c.is_numeric());
     let street_indicators = [
-        "St", "Street", "Ave", "Avenue", "Rd", "Road", "Blvd", "Dr", "Lane", "Ln",
+        "St", "Street", "Ave", "Avenue", "Rd", "Road", "Blvd", "Dr", "Lane", "Ln", "Way", "Drive",
+        "Court", "Ct", "Place", "Pl", "Circle", "Cir",
     ];
     let has_street = street_indicators.iter().any(|ind| text.contains(ind));
-    has_number && has_street
+
+    // Also match ZIP code patterns (US 5-digit or 5+4) with state abbreviation
+    let has_zip = Regex::new(r"\b\d{5}(?:-\d{4})?\b")
+        .map(|re| re.is_match(text))
+        .unwrap_or(false);
+    let us_states = [
+        "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA",
+        "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+        "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT",
+        "VA", "WA", "WV", "WI", "WY", "DC",
+    ];
+    let has_state = us_states.iter().any(|s| text.contains(s));
+
+    (has_number && has_street) || (has_zip && has_state)
 }
 
 fn looks_like_id_number(text: &str) -> bool {
@@ -274,11 +308,89 @@ fn looks_like_id_number(text: &str) -> bool {
             return true;
         }
     }
-    // MRN pattern: alphanumeric 6-10 chars
-    if text.len() >= 6 && text.len() <= 10 && text.chars().all(|c| c.is_alphanumeric()) {
+    // Credit card pattern: 4 groups of 4 digits
+    if let Ok(cc_pattern) = Regex::new(r"\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}") {
+        if cc_pattern.is_match(text) {
+            return true;
+        }
+    }
+    // IBAN pattern
+    if let Ok(iban_pattern) = Regex::new(r"[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}([A-Z0-9]{0,16})?") {
+        if iban_pattern.is_match(text) {
+            return true;
+        }
+    }
+    // MRN pattern: alphanumeric 6-10 chars, must contain at least one digit
+    if text.len() >= 6
+        && text.len() <= 10
+        && text.chars().all(|c| c.is_alphanumeric())
+        && text.chars().any(|c| c.is_ascii_digit())
+    {
         return true;
     }
     false
+}
+
+/// Pre-NER scan for structured PII patterns directly on input text.
+///
+/// Catches SSN, credit card, phone, and IBAN even when no NER entity covers them.
+fn scan_structured_pii(text: &str) -> Vec<PIIEntity> {
+    let mut results = Vec::new();
+
+    let patterns: &[(&str, &str, &str)] = &[
+        (r"\b\d{3}-\d{2}-\d{4}\b", "ID_NUMBER", "CRITICAL"),
+        (
+            r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b",
+            "ID_NUMBER",
+            "CRITICAL",
+        ),
+        (
+            r"\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}([A-Z0-9]{0,16})?\b",
+            "ID_NUMBER",
+            "CRITICAL",
+        ),
+        (
+            r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b",
+            "CONTACT",
+            "HIGH",
+        ),
+        (
+            r"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b",
+            "CONTACT",
+            "HIGH",
+        ),
+        // US street address: house number + street name + suffix, optionally
+        // followed by city, state abbreviation, and ZIP code.
+        (
+            r"\b\d{1,5}\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\s+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Place|Pl|Circle|Cir|Terrace|Ter)\.?(?:,\s*[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?)?\b",
+            "ADDRESS",
+            "HIGH",
+        ),
+    ];
+
+    for &(pat, pii_type, risk) in patterns {
+        if let Ok(re) = Regex::new(pat) {
+            for m in re.find_iter(text) {
+                // Avoid overlaps with already-found PII
+                let start = m.start();
+                let end = m.end();
+                let overlaps = results
+                    .iter()
+                    .any(|e: &PIIEntity| !(end <= e.start || start >= e.end));
+                if !overlaps {
+                    results.push(PIIEntity {
+                        text: m.as_str().to_string(),
+                        pii_type: pii_type.to_string(),
+                        start,
+                        end,
+                        risk_level: risk.to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    results
 }
 
 fn generate_pii_report(entities: &[PIIEntity]) -> PIIReport {
@@ -468,4 +580,90 @@ fn pseudonymize_text(text: &str, entities: &[PIIEntity]) -> (String, HashMap<Str
     }
 
     (result, mapping)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ssn_detected_by_pre_scan() {
+        let pii = scan_structured_pii("My SSN is 123-45-6789 and that's it.");
+        assert!(
+            pii.iter().any(|p| p.text == "123-45-6789"),
+            "SSN should be detected: {:?}",
+            pii
+        );
+    }
+
+    #[test]
+    fn credit_card_detected_by_pre_scan() {
+        let pii = scan_structured_pii("Card: 4111-1111-1111-1111 on file.");
+        assert!(
+            pii.iter().any(|p| p.text == "4111-1111-1111-1111"),
+            "Credit card should be detected: {:?}",
+            pii
+        );
+    }
+
+    #[test]
+    fn credit_card_no_separators() {
+        let pii = scan_structured_pii("Card: 4111111111111111 on file.");
+        assert!(
+            pii.iter()
+                .any(|p| p.pii_type == "ID_NUMBER" && p.text.contains("4111")),
+            "Credit card without separators should be detected: {:?}",
+            pii
+        );
+    }
+
+    #[test]
+    fn common_word_not_id_number() {
+        assert!(
+            !looks_like_id_number("Chemistry"),
+            "Chemistry should NOT be flagged as ID number"
+        );
+    }
+
+    #[test]
+    fn mrn_with_digit_detected() {
+        assert!(
+            looks_like_id_number("ABC123"),
+            "ABC123 should be detected as MRN"
+        );
+    }
+
+    #[test]
+    fn email_detected_by_pre_scan() {
+        let pii = scan_structured_pii("Contact me at bob@example.com please.");
+        assert!(
+            pii.iter().any(|p| p.pii_type == "CONTACT"),
+            "Email should be detected as CONTACT: {:?}",
+            pii
+        );
+    }
+
+    #[test]
+    fn address_with_zip_detected() {
+        assert!(
+            looks_like_address("1234 Elm Street, Springfield, IL 62704"),
+            "Address with street and ZIP should be detected"
+        );
+    }
+
+    #[test]
+    fn address_zip_and_state_only() {
+        assert!(
+            looks_like_address("Springfield, IL 62704"),
+            "ZIP + state abbreviation should be detected as address"
+        );
+    }
+
+    #[test]
+    fn iban_detected() {
+        assert!(
+            looks_like_id_number("DE89370400440532013000"),
+            "IBAN should be detected as ID number"
+        );
+    }
 }

@@ -92,6 +92,7 @@ fn main() -> ExitCode {
         Some(Commands::Domain(args)) => domain::run(args).map_err(CliError::from),
         Some(Commands::Explain(args)) => explain::run(args).map_err(CliError::from),
         Some(Commands::Singleton(args)) => singleton::run(args).map_err(CliError::from),
+        Some(Commands::Export(args)) => export::run(args).map_err(CliError::from),
         Some(Commands::Completions { shell }) => {
             generate(shell, &mut Cli::command(), "anno", &mut io::stdout());
             Ok(())
