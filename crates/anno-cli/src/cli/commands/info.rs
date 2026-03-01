@@ -14,24 +14,23 @@ pub fn run() -> Result<(), String> {
     println!();
     println!("{}:", color("1;33", "Available Models (this build)"));
 
-    // Use the actual available_backends() function to show real availability
+    // Use the actual available_backends() function to show real availability.
+    // Backends can be: (1) feature not compiled in, (2) feature compiled but
+    // model not yet downloaded, or (3) fully ready.
     let backends = available_backends();
-    // ONNX-based backends (w2ner, bert) need a model download even when the
-    // feature flag is compiled in.  Distinguish "feature enabled" from "ready
-    // to use" so users aren't surprised by a missing-model error at runtime.
-    let onnx_backends = ["w2ner", "bert"];
+    let onnx_model_backends = ["W2NER", "BertNEROnnx", "NuNER", "GLiNEROnnx", "CandleNER"];
     for (name, available) in backends {
-        let status = if available {
-            color("32", "✓")
+        let (status, note) = if !available {
+            (color("90", "✗"), " (requires feature flag)")
+        } else if onnx_model_backends.contains(&name) {
+            // Feature is enabled but these backends need a downloaded model.
+            // We can't cheaply check if the model exists, so note the requirement.
+            (
+                color("33", "~"),
+                " (needs model download -- run: anno models download)",
+            )
         } else {
-            color("90", "✗")
-        };
-        let note = if !available {
-            " (requires feature flag)"
-        } else if onnx_backends.contains(&name) {
-            " (requires model download)"
-        } else {
-            ""
+            (color("32", "✓"), "")
         };
         println!("  {} {} {}", status, name, note);
     }

@@ -122,11 +122,13 @@ pub fn run(args: PrivacyArgs) -> Result<(), String> {
     // Classify NER entities as PII
     let ner_pii: Vec<PIIEntity> = entities.iter().filter_map(classify_pii).collect();
 
-    // Merge, avoiding duplicates (same span)
+    // Merge, avoiding duplicates (overlapping spans -- not just exact match).
+    // An NER entity is "dominated" if any existing regex-detected PII covers
+    // the same or a superset of its span.
     for pii in ner_pii {
         let dominated = pii_entities
             .iter()
-            .any(|existing| existing.start == pii.start && existing.end == pii.end);
+            .any(|existing| existing.start <= pii.start && existing.end >= pii.end);
         if !dominated {
             pii_entities.push(pii);
         }
