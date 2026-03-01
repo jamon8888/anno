@@ -507,13 +507,9 @@ impl Model for StackedNER {
             let layer_entities = match layer.extract_entities(text, language) {
                 Ok(ents) => ents,
                 Err(e) => {
-                    // Log error but continue with other layers (partial results)
-                    layer_errors.push((layer_name.to_string(), format!("{}", e)));
-                    if entities.is_empty() {
-                        // If no entities found yet, fail fast
-                        return Err(e);
-                    }
-                    // Otherwise, continue with partial results
+                    // Log error but continue with remaining layers.
+                    // Only fail after all layers have been tried (see below).
+                    layer_errors.push((layer_name.to_string(), e));
                     continue;
                 }
             };
@@ -743,11 +739,17 @@ impl Model for StackedNER {
             });
         }
 
-        // If we had errors but got partial results, log them but return success
+        // If every layer errored out and we have no entities, surface the last error.
+        if entities.is_empty() && layer_errors.len() == self.layers.len() {
+            if let Some((_, last_err)) = layer_errors.pop() {
+                return Err(last_err);
+            }
+        }
+        // If we had errors but got partial results, log them but return success.
         if !layer_errors.is_empty() && !entities.is_empty() {
             log::warn!(
                 "StackedNER: Some layers failed but returning partial results. Errors: {:?}",
-                layer_errors
+                layer_errors.iter().map(|(n, e)| format!("{n}: {e}")).collect::<Vec<_>>()
             );
         }
 
