@@ -1,6 +1,6 @@
 # anno
 
-[![crates.io](https://img.shields.io/crates/v/anno-lib.svg)](https://crates.io/crates/anno-lib)
+[![crates.io](https://img.shields.io/crates/v/anno.svg)](https://crates.io/crates/anno)
 [![Documentation](https://docs.rs/anno/badge.svg)](https://docs.rs/anno)
 [![CI](https://github.com/arclabs561/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/anno/actions/workflows/ci.yml)
 
@@ -10,11 +10,11 @@ Dual-licensed under MIT or Apache-2.0. MSRV: 1.85.
 
 ## Library
 
-The crate is published as **`anno-lib`** on crates.io; the Rust import name is **`anno`**. (The name `anno` was taken on crates.io, so the package is `anno-lib` but `lib.rs` uses `extern crate self as anno`.)
+The crate is published as **`anno`** on crates.io.
 
 ```toml
 [dependencies]
-anno-lib = "0.3"
+anno = "0.3"
 ```
 
 The default feature (`onnx`) pulls in `ort` (ONNX Runtime C++ bindings). For builds without a C++ runtime, use `default-features = false`.
@@ -177,6 +177,8 @@ cat corpus.jsonl | anno batch --stdin --parallel 4 --cache --output results/
 
 ### Knowledge Graph (RDF)
 
+> The following export commands require `--features graph` at install time (add `graph` to the features list in the `cargo install` command above).
+
 `anno export` emits standard **N-Triples** or **JSON-LD** -- loadable into any RDF store (Oxigraph, Jena, Blazegraph, etc.). `--base-uri` sets the IRI namespace:
 
 ```sh
@@ -230,8 +232,8 @@ Each file produces `{stem}-nodes.csv` + `{stem}-edges.csv` with columns:
 
 | Crate | Published | Purpose |
 |---|---|---|
-| `anno-lib` | Yes | Backends, `Model` trait, extraction pipeline, coref resolvers. Import as `anno`. |
-| `anno-core` | Yes | Data model (`Entity`, `Relation`, `Mention`, `CorefChain`, `Signal`, `Track`). No ML deps. |
+| `anno` (root) | Yes | Backends, `Model` trait, extraction pipeline, coref resolvers. |
+| `anno-core` | No (yanked) | Data model (`Entity`, `Relation`, `Mention`, `CorefChain`, `Signal`, `Track`). Re-exported by `anno`. |
 | `anno-graph` | No | Graph/KG export adapters (N-Triples, JSON-LD, CSV) |
 | `anno-eval` | No | Evaluation harnesses, dataset loaders, matrix sampling |
 | `anno-cli` | No | CLI binary |
