@@ -1068,8 +1068,8 @@ impl JointModel {
         let all_singletons = clusters.values().all(|m| m.len() == 1);
         if all_singletons && n_mentions > 1 {
             let mut text_to_root: HashMap<String, usize> = HashMap::new();
-            for i in 0..n_mentions {
-                let key = mentions[i].text.to_lowercase();
+            for (i, mention) in mentions.iter().enumerate().take(n_mentions) {
+                let key = mention.text.to_lowercase();
                 if let Some(&existing) = text_to_root.get(&key) {
                     union(&mut parent, i, existing);
                 } else {
@@ -1077,8 +1077,8 @@ impl JointModel {
                 }
             }
             // Also merge last-name matches: "Elon Musk" and "Musk"
-            for i in 0..n_mentions {
-                let words: Vec<&str> = mentions[i].text.split_whitespace().collect();
+            for (i, mention) in mentions.iter().enumerate().take(n_mentions) {
+                let words: Vec<&str> = mention.text.split_whitespace().collect();
                 if words.len() > 1 {
                     let last = words.last().unwrap().to_lowercase();
                     if let Some(&existing) = text_to_root.get(&last) {

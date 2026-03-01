@@ -90,13 +90,28 @@ const LOC_PREPOSITION: &[&str] = &[
 // Common words that look like entities but aren't (all caps acronyms, titles)
 #[allow(dead_code)] // Used in classify_minimal
 const SKIP_WORDS: &[&str] = &[
+    // Job titles
     "ceo",
     "cto",
     "cfo",
+    "coo",
     "vp",
     "president",
     "chairman",
     "director",
+    "manager",
+    "secretary",
+    "treasurer",
+    // Form field labels (capitalized in forms/UIs, not entities)
+    "phone",
+    "fax",
+    "mobile",
+    "telephone",
+    "address",
+    "website",
+    "name",
+    "occupation",
+    "company",
 ];
 
 // Common acronyms/abbreviations that are not entities.

@@ -1667,9 +1667,9 @@ impl MentionRankingCoref {
                 // specific enough to be reliable identifiers.  Short single
                 // tokens ("CEO", "Dr", "US") cause spurious merges.
                 let has_reliable_overlap = propers.iter().any(|p| {
-                    other_propers.iter().any(|op| {
-                        p == op && (p.contains(' ') || p.chars().count() > 4)
-                    })
+                    other_propers
+                        .iter()
+                        .any(|op| p == op && (p.contains(' ') || p.chars().count() > 4))
                 });
                 if has_reliable_overlap {
                     merged[other_idx] = true;
@@ -1945,10 +1945,10 @@ impl MentionRankingCoref {
             doc.signals.push(signal);
         }
 
-        // Add tracks to document
+        // Add tracks to document (use add_track to populate signal_to_track index)
         for track in tracks {
-            track_ids.push(track.id);
-            doc.tracks.insert(track.id, track);
+            let new_id = doc.add_track(track);
+            track_ids.push(new_id);
         }
 
         Ok(track_ids)

@@ -458,19 +458,25 @@ impl Default for StackedNER {
             // GLiNER/BERT loaders use `hf_hub`, which honors `HF_HUB_OFFLINE=1`.
             let _offline = no_downloads().then(|| EnvVarGuard::set("HF_HUB_OFFLINE", "1"));
 
+            // Try ML backends independently: each is useful on its own.
+            // BERT handles standard NER; NuNER handles lowercase/informal text;
+            // GLiNER provides zero-shot coverage. Any combination works.
             use crate::backends::onnx::BertNEROnnx;
             use crate::DEFAULT_BERT_ONNX_MODEL;
-            if let Ok(bert) = BertNEROnnx::new(DEFAULT_BERT_ONNX_MODEL) {
+            let bert = BertNEROnnx::new(DEFAULT_BERT_ONNX_MODEL).ok();
+            // NuNER threshold is higher (0.9) when stacked with other ML
+            // backends to avoid false positives on common nouns.
+            let nuner = crate::backends::nuner::NuNER::from_pretrained(crate::DEFAULT_NUNER_MODEL)
+                .map(|n| n.with_threshold(0.9))
+                .ok();
+
+            if bert.is_some() || nuner.is_some() {
                 let mut builder = Self::builder();
-                builder = builder.layer_boxed(Box::new(bert));
-                // NuNER complements BERT: it handles lowercase/informal text
-                // that BERT misses. Higher threshold (0.9) than standalone NuNER
-                // to avoid false positives on common nouns.
-                if let Ok(nuner) =
-                    crate::backends::nuner::NuNER::from_pretrained(crate::DEFAULT_NUNER_MODEL)
-                        .map(|n| n.with_threshold(0.9))
-                {
-                    builder = builder.layer_boxed(Box::new(nuner));
+                if let Some(b) = bert {
+                    builder = builder.layer_boxed(Box::new(b));
+                }
+                if let Some(n) = nuner {
+                    builder = builder.layer_boxed(Box::new(n));
                 }
                 return builder
                     .layer(RegexNER::new())
@@ -759,7 +765,10 @@ impl Model for StackedNER {
         if !layer_errors.is_empty() && !entities.is_empty() {
             log::warn!(
                 "StackedNER: Some layers failed but returning partial results. Errors: {:?}",
-                layer_errors.iter().map(|(n, e)| format!("{n}: {e}")).collect::<Vec<_>>()
+                layer_errors
+                    .iter()
+                    .map(|(n, e)| format!("{n}: {e}"))
+                    .collect::<Vec<_>>()
             );
         }
 

@@ -76,9 +76,14 @@ impl HttpResolver {
                                 in_style = false;
                             }
                             // Semantic HTML tags: skip nav, header, footer,
-                            // aside, menu, noscript content.
-                            let skip_tags: &[&str] =
-                                &["nav", "header", "footer", "aside", "menu", "noscript"];
+                            // aside, menu, form, select, noscript content.
+                            // Also skip <div> with role="navigation"/role="banner"/
+                            // role="contentinfo" (ARIA landmark roles common on
+                            // news sites).
+                            let skip_tags: &[&str] = &[
+                                "nav", "header", "footer", "aside", "menu", "noscript", "form",
+                                "select",
+                            ];
                             for &stag in skip_tags {
                                 if tag_lower == stag || tag_lower.starts_with(&format!("{} ", stag))
                                 {

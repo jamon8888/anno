@@ -263,17 +263,86 @@ impl BertNEROnnx {
     ///
     /// # Returns
     /// Vector of NER entities with positions, types, and confidence scores
+    /// Maximum tokens per BERT chunk (512 model limit minus [CLS] and [SEP]).
+    const MAX_TOKENS: usize = 510;
+
     pub fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
         if text.is_empty() {
             return Ok(vec![]);
         }
 
-        // Tokenize input text
-        let encoding = self
+        // Check if text exceeds BERT's 512 token limit; if so, split into
+        // sentence-boundary chunks and merge results.
+        let probe = self
             .tokenizer
             .encode(text, true)
             .map_err(|e| Error::Parse(format!("Failed to tokenize input: {}", e)))?;
+        if probe.get_ids().len() > Self::MAX_TOKENS + 2 {
+            return self.extract_entities_chunked(text);
+        }
 
+        self.extract_entities_single(text, &probe)
+    }
+
+    /// Split long text into sentence-boundary chunks that fit within BERT's
+    /// 512-token window, run each chunk, and merge entity results.
+    fn extract_entities_chunked(&self, text: &str) -> Result<Vec<Entity>> {
+        // Split at sentence boundaries (period/question/exclamation followed by space).
+        let mut chunks: Vec<(usize, &str)> = Vec::new(); // (byte_offset, slice)
+        let mut start = 0;
+        let mut current_end = 0;
+
+        for (i, c) in text.char_indices() {
+            if matches!(c, '.' | '!' | '?' | '\n') {
+                let boundary = i + c.len_utf8();
+                // Check if adding up to this boundary still fits
+                let candidate = &text[start..boundary];
+                let tok = self
+                    .tokenizer
+                    .encode(candidate, true)
+                    .map_err(|e| Error::Parse(format!("Chunking tokenization failed: {}", e)))?;
+                if tok.get_ids().len() > Self::MAX_TOKENS + 2 && current_end > start {
+                    // Flush current chunk
+                    chunks.push((start, &text[start..current_end]));
+                    start = current_end;
+                }
+                current_end = boundary;
+            }
+        }
+        // Flush remaining
+        if start < text.len() {
+            chunks.push((start, &text[start..]));
+        }
+        if chunks.is_empty() {
+            // Degenerate: single sentence > 512 tokens. Truncate gracefully.
+            chunks.push((0, text));
+        }
+
+        let mut all_entities = Vec::new();
+        for (byte_offset, chunk) in &chunks {
+            let encoding = self
+                .tokenizer
+                .encode(*chunk, true)
+                .map_err(|e| Error::Parse(format!("Chunk tokenization failed: {}", e)))?;
+            let mut chunk_entities = self.extract_entities_single(chunk, &encoding)?;
+            // Shift character offsets by the chunk's position in the full text
+            if *byte_offset > 0 {
+                let char_offset = text[..*byte_offset].chars().count();
+                for e in &mut chunk_entities {
+                    e.start += char_offset;
+                    e.end += char_offset;
+                }
+            }
+            all_entities.extend(chunk_entities);
+        }
+        Ok(all_entities)
+    }
+
+    fn extract_entities_single(
+        &self,
+        text: &str,
+        encoding: &tokenizers::Encoding,
+    ) -> Result<Vec<Entity>> {
         let input_ids: Vec<i64> = encoding.get_ids().iter().map(|&id| id as i64).collect();
         let attention_mask: Vec<i64> = encoding
             .get_attention_mask()
@@ -328,7 +397,7 @@ impl BertNEROnnx {
         })?;
 
         // Decode logits to entities
-        self.decode_output(logits, text, &encoding)
+        self.decode_output(logits, text, encoding)
     }
 
     /// Decode model output logits to NER entities.
@@ -412,10 +481,7 @@ impl BertNEROnnx {
                         .and_then(|s| s.chars().next())
                         .is_some_and(|c| c.is_alphanumeric())
                 {
-                    adj_end += text[adj_end..]
-                        .chars()
-                        .next()
-                        .map_or(1, |c| c.len_utf8());
+                    adj_end += text[adj_end..].chars().next().map_or(1, |c| c.len_utf8());
                 }
                 let healed = text.get(adj_start..adj_end).unwrap_or(trimmed).trim();
                 if healed.is_empty() {
