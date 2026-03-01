@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(./target/release/anno info:*)",
+      "Bash(curl:*)",
+      "Bash(./target/release/anno extract:*)",
+      "Bash(./target/release/anno debug:*)",
+      "Bash(./target/release/anno privacy:*)",
+      "Bash(./target/release/anno analyze:*)",
+      "Bash(./target/release/anno explain:*)",
+      "Bash(/tmp/anno-test.txt:*)",
+      "Bash(# Batch via stdin JSONL\necho '{\"id\":\"hard1\",\"text\":\"john smith and mary jones met at mcdonald'\\\\''s in downtown seattle. they discussed the quarterly earnings report for amazon.com inc., noting revenue of $143.3 billion for Q1 2023.\"}\n{\"id\":\"hard2\",\"text\":\"i spoke with dr. elena rodriguez from MIT about the $2.5M NSF grant. she works in building 32, room 456.\"}' | ./target/release/anno batch --stdin --model stacked --format json 2>&1)",
+      "Bash(mkdir:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(xargs cat:*)",
+      "Bash(wc:*)",
+      "Bash(./target/release/anno models:*)",
+      "Bash(__NEW_LINE_7113917068c00814__ echo:*)",
+      "Bash(__NEW_LINE_e73a07a136aa7c51__ echo:*)",
+      "Bash(__NEW_LINE_cb0b2189ac818132__ echo:*)",
+      "Bash(__NEW_LINE_0bfe5f7bb43b0fb5__ echo:*)",
+      "Bash(__NEW_LINE_2213fb5a7fcdc72e__ echo:*)",
+      "Bash(__NEW_LINE_5e9b28d97a08e3ee__ echo:*)",
+      "Bash(__NEW_LINE_08a1a744118b2708__ echo:*)",
+      "Bash(printf {\"\"bad json\\\\n:*)",
+      "Bash(python3:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo test:*)",
+      "Bash($ANNO extract:*)",
+      "Bash(git stash:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(rm:*)",
+      "Bash(./target/release/anno export:*)",
+      "Bash(git status:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

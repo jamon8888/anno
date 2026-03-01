@@ -1387,6 +1387,7 @@ name = "graphops"
 version = "0.1.0"
 dependencies = [
  "ordered-float",
+ "petgraph",
  "rand",
  "rand_chacha",
  "rand_distr",
@@ -1924,18 +1925,10 @@ dependencies = [
 
 [[package]]
 name = "lattix"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c83a7e66edd9c1a3d776515c513ad6a86d059063daf6823d28faf955eb0eecf"
-dependencies = [
- "lattix-core",
-]
-
-[[package]]
-name = "lattix-core"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "csv",
+ "graphops",
  "oxiri",
  "petgraph",
  "rand",
@@ -4672,5 +4665,5 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 
 [[patch.unused]]
-name = "lattix"
-version = "0.2.0"
+name = "lattix-core"
+version = "0.1.3"

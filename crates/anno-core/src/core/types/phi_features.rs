@@ -1411,9 +1411,7 @@ mod tests {
             let parsed: Animacy = displayed.parse().unwrap_or_else(|e| {
                 panic!(
                     "Animacy::{:?}  display='{}' failed to parse: {}",
-                    animacy,
-                    displayed,
-                    e
+                    animacy, displayed, e
                 )
             });
             assert_eq!(
