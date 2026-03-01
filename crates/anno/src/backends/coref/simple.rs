@@ -683,20 +683,23 @@ impl SimpleCorefResolver {
             return true;
         }
 
-        // Substring containment -- guarded against short-name false positives.
-        // "Li" must not match "political" just because "li" is a substring.
-        // Rule: the shorter string must be >= 3 chars, OR it must match a
-        // complete word in the longer string (word-boundary check).
+        // Substring containment -- guarded against false positives.
+        // Require >= 5 chars AND a minimum length ratio to prevent spurious merges
+        // (e.g., "CEO" matching "CEOVILLE", or 3-char substrings causing transitive chains).
+        // For shorter substrings, require exact word-boundary match.
         let (shorter, longer) = if text1.len() <= text2.len() {
             (text1, text2)
         } else {
             (text2, text1)
         };
         if longer.contains(shorter) {
-            if shorter.chars().count() >= 3 {
+            let shorter_char_count = shorter.chars().count();
+            let longer_char_count = longer.chars().count();
+            let ratio = shorter_char_count as f64 / longer_char_count as f64;
+            if shorter_char_count >= 5 && ratio > 0.3 {
                 return true;
             }
-            // For very short names (< 3 chars), only match at word boundaries.
+            // For shorter strings, require exact word-boundary match.
             if longer.split_whitespace().any(|word| word == shorter) {
                 return true;
             }

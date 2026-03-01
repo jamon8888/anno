@@ -99,6 +99,17 @@ const SKIP_WORDS: &[&str] = &[
     "director",
 ];
 
+// Common acronyms/abbreviations that are not entities
+const COMMON_ACRONYMS: &[&str] = &[
+    "lcd", "led", "html", "css", "http", "https", "api", "url", "dna", "rna",
+    "cpu", "gpu", "ram", "rom", "usb", "pdf", "sql", "xml", "json", "csv",
+    "mph", "rpm", "gmt", "utc", "etc", "aka", "asap", "faq", "rsvp", "diy",
+    "atm", "gps", "wifi", "lan", "wan", "vpn", "ssl", "tls", "ssh", "ftp",
+    "iso", "jpg", "png", "gif", "svg", "mp3", "mp4", "avi", "hd", "uhd",
+    "ac", "dc", "am", "pm", "tv", "pc", "os", "ui", "ux", "ai", "ml",
+    "id", "ip", "io", "rip", "eta", "tba", "tbd", "tbc", "idk", "fyi",
+];
+
 // Words that commonly start sentences but are not entities
 const COMMON_SENTENCE_STARTERS: &[&str] = &[
     "the",
@@ -140,6 +151,27 @@ const COMMON_SENTENCE_STARTERS: &[&str] = &[
     "tomorrow",
     "now",
     "then",
+    // Day names (capitalized but not entities)
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    // Month names (capitalized but not entities)
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
     "what",
     "where",
     "when",
@@ -535,10 +567,9 @@ impl Model for HeuristicNER {
             if should_include_prefix {
                 let prefix_word = &words[start_idx - 1];
                 entity_text = format!("{} {}", prefix_word, entity_text);
-                // Adjust start position to include prefix
-                let prefix_char_start = words_with_pos[start_idx - 1].1;
-                let char_start = prefix_char_start;
-                let char_end = char_start + entity_text.chars().count();
+                // Use original text positions instead of joined text length
+                let char_start = words_with_pos[start_idx - 1].1;
+                let char_end = words_with_pos[end_idx - 1].2;
 
                 // Classify based on minimal rules
                 let clean_span_words: Vec<&str> = entity_text.split_whitespace().collect();
@@ -566,17 +597,26 @@ impl Model for HeuristicNER {
                 continue; // Skip the normal processing below
             }
 
-            // Clean leading punctuation from first word (but not person prefixes)
-            let leading_punct_len = entity_text.len()
-                - entity_text
-                    .trim_start_matches(|c: char| !c.is_alphanumeric())
-                    .len();
-            if leading_punct_len > 0 {
-                entity_text = entity_text[leading_punct_len..].to_string();
+            // Compute offsets from original text positions
+            let raw_char_start = words_with_pos[start_idx].1;
+            let raw_char_end = words_with_pos[end_idx - 1].2;
+
+            // Clean leading punctuation (count chars, not bytes)
+            let leading_punct_chars = entity_text
+                .chars()
+                .take_while(|c| !c.is_alphanumeric())
+                .count();
+            if leading_punct_chars > 0 {
+                entity_text = entity_text.chars().skip(leading_punct_chars).collect();
             }
 
-            // Clean trailing punctuation from the last word
-            while entity_text.ends_with(|c: char| !c.is_alphanumeric()) {
+            // Clean trailing punctuation
+            let trailing_punct_chars = entity_text
+                .chars()
+                .rev()
+                .take_while(|c| !c.is_alphanumeric())
+                .count();
+            for _ in 0..trailing_punct_chars {
                 entity_text.pop();
             }
 
@@ -585,16 +625,8 @@ impl Model for HeuristicNER {
                 continue;
             }
 
-            // Get character offsets from our position tracking
-            // Correct start offset by adding leading punctuation length
-            let char_start = words_with_pos[start_idx].1 + leading_punct_len;
-            // Performance: Use entity_text.len() for ASCII, fallback to chars().count() for Unicode
-            let char_end = char_start
-                + if entity_text.is_ascii() {
-                    entity_text.len()
-                } else {
-                    entity_text.chars().count()
-                };
+            let char_start = raw_char_start + leading_punct_chars;
+            let char_end = raw_char_end - trailing_punct_chars;
 
             // Classify based on minimal rules
             // Use cleaned span for classification to avoid punctuation noise
@@ -745,7 +777,8 @@ fn classify_minimal(
         let has_real_acronym = span.iter().any(|w| {
             is_acronym_word(w) && {
                 let lc = w.to_lowercase();
-                !SKIP_WORDS.contains(&lc.trim_matches(|c: char| !c.is_alphanumeric()))
+                let clean = lc.trim_matches(|c: char| !c.is_alphanumeric());
+                !SKIP_WORDS.contains(&clean) && !COMMON_ACRONYMS.contains(&clean)
             }
         });
         if has_real_acronym {
@@ -787,9 +820,10 @@ fn classify_minimal(
         }
         if is_acronym_word(word) {
             let lc = word.to_lowercase();
-            if !SKIP_WORDS.contains(&lc.as_str()) {
-                return (EntityType::Organization, 0.55, "single_acronym");
+            if SKIP_WORDS.contains(&lc.as_str()) || COMMON_ACRONYMS.contains(&lc.as_str()) {
+                return (EntityType::Other("skip".into()), 0.0, "skip_acronym");
             }
+            return (EntityType::Organization, 0.55, "single_acronym");
         }
     }
 

@@ -177,9 +177,16 @@ static MONEY_WRITTEN: Lazy<Regex> = Lazy::new(|| {
     .expect("valid regex")
 });
 
+static MONEY_CODE_PREFIX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"(?i)\b(?:USD|EUR|GBP|JPY|CHF|CAD|AUD)\s*\d+(?:[,\.]\d+)*(?:\s*(?:billion|million|thousand|B|M|K|bn|mn))?\b",
+    )
+    .expect("valid regex")
+});
+
 static MONEY_MAGNITUDE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
-        r"(?i)\b\d+(?:\.\d+)?\s*(?:billion|million|trillion)\s*(?:dollars?|euros?|pounds?)?\b",
+        r"(?i)\b\d+(?:\.\d+)?\s*(?:billion|million|trillion)(?:\s+(?:dollars?|euros?|pounds?))?\b",
     )
     .expect("valid regex")
 });
@@ -296,6 +303,7 @@ impl Model for RegexNER {
         // Money (high confidence)
         let money_patterns: &[(&Lazy<Regex>, &'static str)] = &[
             (&MONEY_SYMBOL, "MONEY_SYMBOL"),
+            (&MONEY_CODE_PREFIX, "MONEY_CODE_PREFIX"),
             (&MONEY_WRITTEN, "MONEY_WRITTEN"),
             (&MONEY_MAGNITUDE, "MONEY_MAGNITUDE"),
         ];

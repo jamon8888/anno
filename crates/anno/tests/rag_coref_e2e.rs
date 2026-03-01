@@ -279,6 +279,9 @@ fn coref_resolver_with_custom_config() {
         acronym_matching: true,
         relaxed_head_match: true,
         proper_containment: true,
+        precise_constructs: true,
+        strict_head_match: true,
+        proper_head_word_match: true,
     };
 
     let resolver = SimpleCorefResolver::new(config);
