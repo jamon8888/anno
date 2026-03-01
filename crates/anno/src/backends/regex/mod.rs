@@ -85,6 +85,17 @@ static DATE_WRITTEN_EU: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?(?:\s+\d{4})?\b").expect("valid regex")
 });
 
+// Month-year only (English): "April 2018", "December 2024"
+// Must come AFTER full date patterns so "April 15, 2018" matches the longer pattern first.
+static DATE_MONTH_YEAR_EN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b").expect("valid regex")
+});
+
+// Month-year only (German): "Oktober 2024", "Januar 2023"
+static DATE_MONTH_YEAR_DE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)\b(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+\d{4}\b").expect("valid regex")
+});
+
 // =============================================================================
 // Japanese Date Format: YYYY年MM月DD日
 // =============================================================================
@@ -289,6 +300,19 @@ impl Model for RegexNER {
             }
         }
 
+        // Month-year only patterns (English and German).
+        // These come AFTER both English full dates AND i18n full dates so longer
+        // patterns like "15. Januar 2024" or "April 15, 2018" are preferred.
+        let date_month_year: &[(&Lazy<Regex>, &'static str)] = &[
+            (&DATE_MONTH_YEAR_EN, "DATE_MONTH_YEAR_EN"),
+            (&DATE_MONTH_YEAR_DE, "DATE_MONTH_YEAR_DE"),
+        ];
+        for (pattern, name) in date_month_year {
+            for m in pattern.find_iter(text) {
+                add_entity(m, EntityType::Date, 0.90, name);
+            }
+        }
+
         // Times
         let time_patterns: &[(&Lazy<Regex>, &'static str)] = &[
             (&TIME_12H, "TIME_12H"),
@@ -358,6 +382,11 @@ impl Model for RegexNER {
         }
 
         for m in HASHTAG.find_iter(text) {
+            // Skip matches followed by a hyphen: these are typically invoice/reference
+            // numbers (e.g. "#2024-0042"), not hashtags.
+            if text.as_bytes().get(m.end()) == Some(&b'-') {
+                continue;
+            }
             let char_start = converter.byte_to_char(m.start());
             let char_end = converter.byte_to_char(m.end());
             if !overlaps(&entities, char_start, char_end) {
@@ -950,6 +979,45 @@ mod tests {
         assert!(has_type(&e, &EntityType::Date));
     }
 
+    // ========================================================================
+    // Month-year only patterns
+    // ========================================================================
+
+    #[test]
+    fn month_year_only_english() {
+        let cases = ["April 2018", "December 2024", "May 2022"];
+        for case in cases {
+            let e = extract(case);
+            assert!(has_type(&e, &EntityType::Date), "Failed: {}", case);
+        }
+    }
+
+    #[test]
+    fn month_year_only_german() {
+        let cases = ["Oktober 2024", "Januar 2023", "März 2025"];
+        for case in cases {
+            let e = extract(case);
+            assert!(has_type(&e, &EntityType::Date), "Failed: {}", case);
+        }
+    }
+
+    #[test]
+    fn full_date_preferred_over_month_year() {
+        // "April 15, 2018" should match as a full date, not just "April 2018"
+        let text = "The event on April 15, 2018 was great.";
+        let e = extract(text);
+        let dates: Vec<_> = e
+            .iter()
+            .filter(|e| e.entity_type == EntityType::Date)
+            .collect();
+        assert_eq!(dates.len(), 1, "Expected 1 date, got {:?}", dates);
+        assert!(
+            dates[0].text.contains("15"),
+            "Should match full date with day, got: {}",
+            dates[0].text
+        );
+    }
+
     #[test]
     fn multilingual_dates_with_context() {
         // Test that multilingual dates work in context with other text
@@ -1117,6 +1185,36 @@ mod tests {
                 e
             );
         }
+    }
+
+    // ========================================================================
+    // Hashtag false-positive regression: invoice/reference numbers
+    // ========================================================================
+
+    #[test]
+    fn hashtag_not_triggered_by_invoice_numbers() {
+        let text = "Invoice #2024-0042 is due";
+        let e = extract(text);
+        let hashtags: Vec<_> = e
+            .iter()
+            .filter(|e| e.entity_type == EntityType::Other("Hashtag".to_string()))
+            .collect();
+        assert!(
+            hashtags.is_empty(),
+            "Invoice number '#2024-0042' should not be tagged as Hashtag, got: {:?}",
+            hashtags
+        );
+    }
+
+    #[test]
+    fn hashtag_still_matches_normal_tags() {
+        let text = "Trending #rust today";
+        let e = extract(text);
+        assert!(
+            has_type(&e, &EntityType::Other("Hashtag".to_string())),
+            "Normal hashtag '#rust' should still match, got: {:?}",
+            e
+        );
     }
 }
 

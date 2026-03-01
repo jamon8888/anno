@@ -357,6 +357,11 @@ impl BertNEROnnx {
         // Get token offsets for mapping back to character positions
         let offsets = encoding.get_offsets();
 
+        // Use word_ids for robust subword continuation detection.
+        // Tokens belonging to the same word share a word_id; this is far more
+        // reliable than checking byte_start == prev_end for subword grouping.
+        let word_ids = encoding.get_word_ids();
+
         // `tokenizers::Encoding::get_offsets()` uses byte offsets in Rust. `Entity` uses character
         // offsets, so convert via SpanConverter when constructing entities.
         let span_converter = crate::offset::SpanConverter::new(text);
@@ -365,6 +370,40 @@ impl BertNEROnnx {
         let get_logit = |token_idx: usize, label_idx: usize| -> f32 {
             logits_data[token_idx * num_labels + label_idx]
         };
+
+        // Helper: finalize an entity from byte offsets, trimming whitespace and
+        // adjusting character offsets to match the trimmed text.
+        let finalize_entity = |start: usize,
+                               end: usize,
+                               entity_type: EntityType,
+                               conf: f64,
+                               entities: &mut Vec<Entity>| {
+            if start >= end || end > text.len() {
+                return;
+            }
+            if let Some(slice) = text.get(start..end) {
+                let trimmed = slice.trim();
+                if trimmed.is_empty() {
+                    return;
+                }
+                // Adjust byte offsets to account for trimmed whitespace.
+                let leading = slice.len() - slice.trim_start().len();
+                let trailing = slice.len() - slice.trim_end().len();
+                let adj_start = start + leading;
+                let adj_end = end - trailing;
+                entities.push(Entity::new(
+                    trimmed.to_string(),
+                    entity_type,
+                    span_converter.byte_to_char(adj_start),
+                    span_converter.byte_to_char_ceil(adj_end),
+                    conf,
+                ));
+            }
+        };
+
+        // Track the word_id of the last token added to the current entity,
+        // so we can detect subword continuation even when labels disagree.
+        let mut last_entity_word_id: Option<u32> = None;
 
         // Performance: Pre-allocate entities vec with estimated capacity
         // Most texts have 0-20 entities, but we'll start with a reasonable default
@@ -377,23 +416,12 @@ impl BertNEROnnx {
                 continue;
             }
             let (byte_start, byte_end) = offsets[token_idx];
+            let cur_word_id = word_ids.get(token_idx).copied().flatten();
             if byte_start == byte_end {
                 // Special token, finalize current entity
                 if let Some((start, end, entity_type, conf)) = current_entity.take() {
-                    if start < end && end <= text.len() {
-                        if let Some(entity_text) = text.get(start..end) {
-                            let entity_text = entity_text.trim();
-                            if !entity_text.is_empty() {
-                                entities.push(Entity::new(
-                                    entity_text.to_string(),
-                                    entity_type,
-                                    span_converter.byte_to_char(start),
-                                    span_converter.byte_to_char(end),
-                                    conf,
-                                ));
-                            }
-                        }
-                    }
+                    finalize_entity(start, end, entity_type, conf, &mut entities);
+                    last_entity_word_id = None;
                 }
                 continue;
             }
@@ -426,44 +454,39 @@ impl BertNEROnnx {
                 .cloned()
                 .unwrap_or_else(|| format!("LABEL_{}", max_idx));
 
-            // Skip "O" (outside) labels -- but if this token is a subword
-            // continuation (no whitespace gap AND starts with an alphanumeric
-            // character), extend the current entity span rather than closing it.
-            // This is the "first-token aggregation" strategy: the label of
-            // the first subword token determines the entity boundary, and
-            // subsequent subwords always extend it.  We require alphanumeric
-            // to avoid absorbing trailing punctuation (e.g. "Strasbourg.").
-            if label == "O" {
-                let starts_alnum = text
-                    .get(byte_start..)
-                    .and_then(|s| s.chars().next())
-                    .is_some_and(|c| c.is_alphanumeric());
-                let is_continuation = starts_alnum
-                    && current_entity
-                        .as_ref()
-                        .map(|(_, prev_end, _, _)| byte_start == *prev_end)
-                        .unwrap_or(false);
+            // Detect subword continuation: either same word_id as the previous
+            // entity token, or byte-adjacent and starting with alphanumeric.
+            let starts_alnum = text
+                .get(byte_start..)
+                .and_then(|s| s.chars().next())
+                .is_some_and(|c| c.is_alphanumeric());
+            let same_word =
+                starts_alnum && cur_word_id.is_some() && cur_word_id == last_entity_word_id;
+            let byte_adjacent = starts_alnum
+                && current_entity
+                    .as_ref()
+                    .map(|(_, prev_end, _, _)| byte_start == *prev_end)
+                    .unwrap_or(false);
+            let is_subword_continuation = current_entity.is_some() && (same_word || byte_adjacent);
 
-                if is_continuation {
+            // Skip "O" (outside) labels -- but if this token is a subword
+            // continuation (same word_id OR no whitespace gap AND starts with
+            // an alphanumeric character), extend the current entity span rather
+            // than closing it.  This is the "first-token aggregation" strategy:
+            // the label of the first subword token determines the entity
+            // boundary, and subsequent subwords always extend it.  We require
+            // alphanumeric to avoid absorbing trailing punctuation (e.g.
+            // "Strasbourg.").
+            if label == "O" {
+                if is_subword_continuation {
                     // Extend: keep the entity open with the new byte_end.
                     if let Some((start, _, etype, conf)) = current_entity.take() {
                         current_entity = Some((start, byte_end, etype, conf));
+                        last_entity_word_id = cur_word_id;
                     }
                 } else if let Some((start, end, entity_type, conf)) = current_entity.take() {
-                    if start < end && end <= text.len() {
-                        if let Some(entity_text) = text.get(start..end) {
-                            let entity_text = entity_text.trim();
-                            if !entity_text.is_empty() {
-                                entities.push(Entity::new(
-                                    entity_text.to_string(),
-                                    entity_type,
-                                    span_converter.byte_to_char(start),
-                                    span_converter.byte_to_char(end),
-                                    conf,
-                                ));
-                            }
-                        }
-                    }
+                    finalize_entity(start, end, entity_type, conf, &mut entities);
+                    last_entity_word_id = None;
                 }
                 continue;
             }
@@ -487,22 +510,13 @@ impl BertNEROnnx {
             match bio {
                 "B" => {
                     // Check if this B- tag should merge with previous entity.
-                    // Two reasons to merge:
-                    //   1. Same type AND adjacent (subword tokenization, e.g. "Biden" -> ["B", "##iden"])
-                    //   2. Subword continuation: byte_start == prev_end AND alphanumeric start.
-                    let starts_alnum = text
-                        .get(byte_start..)
-                        .and_then(|s| s.chars().next())
-                        .is_some_and(|c| c.is_alphanumeric());
-                    let is_continuation = starts_alnum
-                        && current_entity
-                            .as_ref()
-                            .map(|(_, prev_end, _, _)| byte_start == *prev_end)
-                            .unwrap_or(false);
-
+                    // Three reasons to merge:
+                    //   1. Same word_id (subword of same word).
+                    //   2. Byte-adjacent AND alphanumeric start (subword tokenization).
+                    //   3. Same type AND within 1 byte gap (adjacent words in same entity).
                     let should_merge = if let Some((_, prev_end, ref prev_type, _)) = current_entity
                     {
-                        is_continuation
+                        is_subword_continuation
                             || (std::mem::discriminant(prev_type)
                                 == std::mem::discriminant(&entity_type)
                                 && byte_start <= prev_end + 1)
@@ -514,27 +528,16 @@ impl BertNEROnnx {
                         // Extend the current entity instead of starting new
                         if let Some((start, _, prev_type, conf)) = current_entity.take() {
                             current_entity = Some((start, byte_end, prev_type, conf));
+                            last_entity_word_id = cur_word_id;
                         }
                     } else {
                         // Finalize previous entity and start new
                         if let Some((start, end, prev_type, conf)) = current_entity.take() {
-                            if start < end && end <= text.len() {
-                                if let Some(entity_text) = text.get(start..end) {
-                                    let entity_text = entity_text.trim();
-                                    if !entity_text.is_empty() {
-                                        entities.push(Entity::new(
-                                            entity_text.to_string(),
-                                            prev_type,
-                                            span_converter.byte_to_char(start),
-                                            span_converter.byte_to_char(end),
-                                            conf,
-                                        ));
-                                    }
-                                }
-                            }
+                            finalize_entity(start, end, prev_type, conf, &mut entities);
                         }
                         // Start new entity
                         current_entity = Some((byte_start, byte_end, entity_type, confidence));
+                        last_entity_word_id = cur_word_id;
                     }
                 }
                 "I" => {
@@ -543,27 +546,20 @@ impl BertNEROnnx {
                         if std::mem::discriminant(prev_type) == std::mem::discriminant(&entity_type)
                         {
                             current_entity = Some((start, byte_end, entity_type, conf));
+                            last_entity_word_id = cur_word_id;
                         } else {
                             // Different type - finalize and start new
-                            if start < _end && _end <= text.len() {
-                                if let Some(entity_text) = text.get(start.._end) {
-                                    let entity_text = entity_text.trim();
-                                    if !entity_text.is_empty() {
-                                        entities.push(Entity::new(
-                                            entity_text.to_string(),
-                                            prev_type.clone(),
-                                            span_converter.byte_to_char(start),
-                                            span_converter.byte_to_char(_end),
-                                            conf,
-                                        ));
-                                    }
-                                }
-                            }
+                            let prev_type = prev_type.clone();
+                            let (start, end) = (start, _end);
+                            current_entity.take();
+                            finalize_entity(start, end, prev_type, conf, &mut entities);
                             current_entity = Some((byte_start, byte_end, entity_type, confidence));
+                            last_entity_word_id = cur_word_id;
                         }
                     } else {
                         // No current entity, treat I- as B-
                         current_entity = Some((byte_start, byte_end, entity_type, confidence));
+                        last_entity_word_id = cur_word_id;
                     }
                 }
                 _ => {}
@@ -572,20 +568,7 @@ impl BertNEROnnx {
 
         // Finalize last entity
         if let Some((start, end, entity_type, conf)) = current_entity {
-            if start < end && end <= text.len() {
-                if let Some(entity_text) = text.get(start..end) {
-                    let entity_text = entity_text.trim();
-                    if !entity_text.is_empty() {
-                        entities.push(Entity::new(
-                            entity_text.to_string(),
-                            entity_type,
-                            span_converter.byte_to_char(start),
-                            span_converter.byte_to_char(end),
-                            conf,
-                        ));
-                    }
-                }
-            }
+            finalize_entity(start, end, entity_type, conf, &mut entities);
         }
 
         Ok(entities)

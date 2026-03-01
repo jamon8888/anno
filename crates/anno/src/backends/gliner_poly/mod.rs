@@ -431,7 +431,10 @@ mod tests {
         // before ever consulting the model_name argument.
         for cache in &local_model_cache_candidates() {
             if cache.join("model.onnx").exists() && cache.join("tokenizer.json").exists() {
-                eprintln!("skipping: local gliner-poly cache exists at {}", cache.display());
+                eprintln!(
+                    "skipping: local gliner-poly cache exists at {}",
+                    cache.display()
+                );
                 return;
             }
         }

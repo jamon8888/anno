@@ -1660,12 +1660,7 @@ mod tests {
         for rw in result.rewrites.iter().rev() {
             let mut replacement: Vec<char> = rw.replacement.chars().collect();
             // Mimic the case adjustment from resolve_for_rag
-            if rw
-                .original
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_uppercase())
-            {
+            if rw.original.chars().next().is_some_and(|c| c.is_uppercase()) {
                 if let Some(first) = replacement.first_mut() {
                     *first = first.to_uppercase().next().unwrap_or(*first);
                 }

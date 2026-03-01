@@ -382,11 +382,14 @@ impl GLiNEROnnx {
             input_ids.push(TOKEN_ENT as i64);
             word_mask.push(0);
 
+            // Expand common NER abbreviations to full words the model was trained on
+            let expanded = expand_ner_label(entity_type);
+
             // Encode entity type word(s)
             // Note: tokenizers::Tokenizer::encode requires String, not &str
             let encoding = self
                 .tokenizer
-                .encode(entity_type.to_string(), false)
+                .encode(expanded, false)
                 .map_err(|e| Error::Parse(format!("Tokenizer error: {}", e)))?;
             for token_id in encoding.get_ids() {
                 input_ids.push(*token_id as i64);
@@ -865,6 +868,28 @@ pub(crate) fn looks_like_company_name(text: &str) -> bool {
     }
 
     false
+}
+
+/// Expand common NER label abbreviations to the full-word form GLiNER was trained on.
+///
+/// GLiNER's ONNX model was trained with lowercase full-word labels in its prompt
+/// (e.g. "person", "organization"). Users often pass uppercase abbreviations like
+/// "PER", "ORG", "LOC" which the tokenizer encodes differently, producing zero
+/// entities. This function maps known abbreviations to their training-time forms
+/// and lowercases unknown labels.
+pub(crate) fn expand_ner_label(label: &str) -> String {
+    match label.to_uppercase().as_str() {
+        "PER" | "PERSON" => "person".to_string(),
+        "ORG" | "ORGANIZATION" => "organization".to_string(),
+        "LOC" | "LOCATION" | "GPE" => "location".to_string(),
+        "MISC" | "MISCELLANEOUS" => "miscellaneous".to_string(),
+        "DATE" => "date".to_string(),
+        "MONEY" => "money".to_string(),
+        "TIME" => "time".to_string(),
+        "PRODUCT" => "product".to_string(),
+        "EVENT" => "event".to_string(),
+        _ => label.to_lowercase(),
+    }
 }
 
 /// Extract a substring by character offsets (not byte offsets).

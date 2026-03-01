@@ -1319,3 +1319,49 @@ mod proptests {
         }
     }
 }
+
+// =========================================================================
+// Span healing tests
+// =========================================================================
+
+#[test]
+fn span_healing_merges_adjacent_same_type() {
+    let text = "Bundeskanzler Olaf Scholz met the press.";
+    let mut entities = vec![
+        Entity::new("Bundes", EntityType::Person, 0, 6, 0.8),
+        Entity::new("kanzler", EntityType::Person, 6, 13, 0.8),
+    ];
+    super::heal_adjacent_spans(text, &mut entities);
+    assert_eq!(entities.len(), 1, "should merge: {:?}", entities);
+    assert_eq!(entities[0].text, "Bundeskanzler");
+    assert_eq!(entities[0].start, 0);
+    assert_eq!(entities[0].end, 13);
+}
+
+#[test]
+fn span_healing_does_not_merge_different_types() {
+    let text = "Alice visited Berlin yesterday.";
+    let mut entities = vec![
+        Entity::new("Alice", EntityType::Person, 0, 5, 0.8),
+        Entity::new("Berlin", EntityType::Location, 14, 20, 0.8),
+    ];
+    super::heal_adjacent_spans(text, &mut entities);
+    assert_eq!(entities.len(), 2, "different types should not merge");
+}
+
+#[test]
+fn span_healing_merges_with_single_char_gap() {
+    let text = "U.S. District Court ruled today.";
+    let mut entities = vec![
+        Entity::new("U.S.", EntityType::Organization, 0, 4, 0.8),
+        Entity::new("District", EntityType::Organization, 5, 13, 0.8),
+    ];
+    super::heal_adjacent_spans(text, &mut entities);
+    assert_eq!(
+        entities.len(),
+        1,
+        "gap=1 with space should merge: {:?}",
+        entities
+    );
+    assert_eq!(entities[0].text, "U.S. District");
+}

@@ -64,6 +64,7 @@ pub struct GLiNEROnnx {
 
 #[cfg(feature = "onnx")]
 mod inference;
+pub(crate) use inference::expand_ner_label;
 #[cfg(feature = "onnx")]
 pub(crate) use inference::looks_like_company_name;
 use inference::DEFAULT_GLINER_LABELS;

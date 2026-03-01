@@ -187,6 +187,54 @@ impl Default for CrfNER {
 }
 
 mod algorithm;
+
+/// Find sentence boundary character offsets in text.
+///
+/// A sentence boundary is `. `, `! `, or `? ` followed by an uppercase letter.
+/// Returns the character offset of the punctuation mark (the split point).
+fn sentence_boundary_offsets(text: &str) -> Vec<usize> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut boundaries = Vec::new();
+    for i in 0..chars.len().saturating_sub(2) {
+        if matches!(chars[i], '.' | '!' | '?')
+            && chars[i + 1].is_whitespace()
+            && chars.get(i + 2).is_some_and(|c| c.is_uppercase())
+        {
+            boundaries.push(i);
+        }
+    }
+    boundaries
+}
+
+/// Clip entities that cross sentence boundaries.
+///
+/// If an entity span contains a sentence boundary (`.` + whitespace + uppercase),
+/// truncate the entity to end before the boundary. Removes entities that become
+/// empty after clipping.
+fn clip_entities_at_sentence_boundaries(text: &str, entities: &mut Vec<Entity>) {
+    let boundaries = sentence_boundary_offsets(text);
+    if boundaries.is_empty() {
+        return;
+    }
+
+    entities.retain_mut(|e| {
+        for &b in &boundaries {
+            // Boundary is inside the entity span
+            if b > e.start && b < e.end {
+                // Truncate entity to end at the boundary
+                e.end = b;
+                // Rebuild entity text from the truncated span
+                let new_text: String = text.chars().skip(e.start).take(e.end - e.start).collect();
+                e.text = new_text.trim_end().to_string();
+                if e.text.is_empty() || e.start >= e.end {
+                    return false; // remove empty entity
+                }
+            }
+        }
+        true
+    });
+}
+
 // CRF algorithm: feature extraction, Viterbi decoding, weight loading (see algorithm.rs).
 impl Model for CrfNER {
     fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
@@ -200,7 +248,12 @@ impl Model for CrfNER {
         }
 
         let labels = self.viterbi_decode(&tokens);
-        let entities = self.labels_to_entities(text, &tokens, &labels);
+        let mut entities = self.labels_to_entities(text, &tokens, &labels);
+
+        // Post-process: truncate entities that cross sentence boundaries.
+        // Sentence boundaries are detected as ". " followed by an uppercase letter,
+        // or "! " / "? " followed by an uppercase letter.
+        clip_entities_at_sentence_boundaries(text, &mut entities);
 
         Ok(entities)
     }

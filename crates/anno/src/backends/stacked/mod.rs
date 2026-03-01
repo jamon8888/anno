@@ -751,6 +751,12 @@ impl Model for StackedNER {
             );
         }
 
+        // Span healing: merge adjacent same-type entities separated by 0-1 chars.
+        // This fixes split entities from BERT tokenization misalignment (e.g.,
+        // "Bundeskanzler" split into "Bundes" + "kanzler", or "U.S. District Court"
+        // split into fragments).
+        heal_adjacent_spans(text, &mut entities);
+
         // Validate final entities (defensive programming)
         // This catches bugs in individual backends that might produce invalid spans
         for entity in &entities {
@@ -801,6 +807,60 @@ impl Model for StackedNER {
             ..Default::default()
         }
     }
+}
+
+/// Merge adjacent same-type entities separated by 0-1 characters.
+///
+/// BERT subword tokenization can split compound words or multi-word entities
+/// when subword boundaries don't align with word boundaries. This post-process
+/// heals those splits by merging adjacent entities of the same type when the
+/// gap between them is at most 1 character.
+fn heal_adjacent_spans(text: &str, entities: &mut Vec<Entity>) {
+    if entities.len() < 2 {
+        return;
+    }
+
+    // Entities are already sorted by (start, end).
+    let mut merged = Vec::with_capacity(entities.len());
+    let mut current = entities[0].clone();
+
+    for next in entities.iter().skip(1) {
+        // Check: same type, adjacent (gap 0 or 1 char), and gap char (if any)
+        // is alphanumeric or whitespace (not a sentence-ending punctuation).
+        // Only heal truly adjacent spans (next starts at or just after current ends).
+        // Skip overlapping or identical spans (e.g. from Union strategy keeping duplicates).
+        let gap = next.start.saturating_sub(current.end);
+        let truly_adjacent = next.start >= current.end && next.start > current.start;
+        let same_type = current.entity_type == next.entity_type;
+        let gap_ok = truly_adjacent
+            && gap <= 1
+            && (gap == 0
+                || text
+                    .chars()
+                    .nth(current.end)
+                    .is_some_and(|c| c.is_alphanumeric() || c == ' '));
+
+        if same_type && gap_ok {
+            // Merge: extend current to cover next
+            current.end = next.end;
+            // Rebuild text from the merged span
+            current.text = text
+                .chars()
+                .skip(current.start)
+                .take(current.end - current.start)
+                .collect();
+            // Keep higher confidence
+            if next.confidence > current.confidence {
+                current.confidence = next.confidence;
+            }
+        } else {
+            merged.push(current);
+            current = next.clone();
+        }
+    }
+    merged.push(current);
+
+    *entities = merged;
 }
 
 // =============================================================================

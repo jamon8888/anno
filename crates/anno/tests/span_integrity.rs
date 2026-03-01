@@ -144,11 +144,7 @@ mod pattern_percent {
             .map(|e| e.text.as_str())
             .collect();
 
-        assert!(
-            pct.contains(&"5%"),
-            "Expected '5%', got: {:?}",
-            pct,
-        );
+        assert!(pct.contains(&"5%"), "Expected '5%', got: {:?}", pct,);
     }
 }
 

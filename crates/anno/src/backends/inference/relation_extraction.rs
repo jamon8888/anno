@@ -334,16 +334,17 @@ fn detect_relation_type<'a>(
             confidence: 0.7,
         },
         // Location relations
+        // NOTE: bare "in" / "at" removed -- they match nearly any between-text and
+        // produce nonsensical relations like LOCATED_IN(Doudna, Chemistry).
         RelPattern {
             slug: "LOCATED_IN",
             triggers: &[
-                "in",
-                "at",
                 "based in",
                 "located in",
                 "headquartered in",
                 "situated in",
                 "found in",
+                "offices in",
             ],
             confidence: 0.6,
         },
@@ -371,7 +372,7 @@ fn detect_relation_type<'a>(
         // Temporal relations
         RelPattern {
             slug: "OCCURRED_ON",
-            triggers: &["on", "occurred on", "happened on", "took place on", "dated"],
+            triggers: &["occurred on", "happened on", "took place on", "dated"],
             confidence: 0.6,
         },
         RelPattern {
@@ -542,12 +543,18 @@ fn detect_relation_type<'a>(
         },
         RelPattern {
             slug: "PHYSICAL",
-            triggers: &["located in", "based in", "headquartered in", "at "],
+            triggers: &["located in", "based in", "headquartered in", "situated at"],
             confidence: 0.55,
         },
         RelPattern {
             slug: "TOPIC",
-            triggers: &["topic", "about", "on", "regarding", "focused on"],
+            triggers: &[
+                "topic",
+                "about",
+                "regarding",
+                "focused on",
+                "on the topic of",
+            ],
             confidence: 0.5,
         },
         RelPattern {
@@ -700,17 +707,17 @@ fn detect_relation_type<'a>(
         RelPattern {
             slug: "LOCATED_IN",
             triggers: &[
-                "en",
                 "ubicado en",
                 "situado en",
                 "basado en",
                 "localizado en",
+                "sede en",
             ],
             confidence: 0.6,
         },
         RelPattern {
             slug: "BORN_IN",
-            triggers: &["nació en", "nacido en", "originario de", "de"],
+            triggers: &["nació en", "nacido en", "originario de", "natural de"],
             confidence: 0.7,
         },
         RelPattern {
@@ -741,12 +748,19 @@ fn detect_relation_type<'a>(
         },
         RelPattern {
             slug: "LOCATED_IN",
-            triggers: &["dans", "à", "situé en", "basé en", "localisé en"],
+            triggers: &[
+                "situé en",
+                "situé à",
+                "basé en",
+                "basé à",
+                "localisé en",
+                "siège à",
+            ],
             confidence: 0.6,
         },
         RelPattern {
             slug: "BORN_IN",
-            triggers: &["né en", "née en", "originaire de", "de"],
+            triggers: &["né en", "née en", "originaire de", "natif de"],
             confidence: 0.7,
         },
         RelPattern {
@@ -783,12 +797,18 @@ fn detect_relation_type<'a>(
         },
         RelPattern {
             slug: "LOCATED_IN",
-            triggers: &["in", "bei", "situiert in", "basiert in", "befindet sich in"],
+            triggers: &[
+                "situiert in",
+                "basiert in",
+                "befindet sich in",
+                "ansässig in",
+                "sitz in",
+            ],
             confidence: 0.6,
         },
         RelPattern {
             slug: "BORN_IN",
-            triggers: &["geboren in", "geboren am", "stammt aus", "aus"],
+            triggers: &["geboren in", "geboren am", "stammt aus", "gebürtig aus"],
             confidence: 0.7,
         },
         RelPattern {
@@ -1763,5 +1783,58 @@ mod tests {
         assert_eq!(rels.len(), 1);
         assert_eq!(rels[0].relation_type, "WORKS_FOR");
         assert_eq!(rels[0].head.text, "Ren\u{00e9}");
+    }
+
+    // =======================================================================
+    // QA regression: bare trigger removal
+    // =======================================================================
+
+    fn misc(text: &str, start: usize, end: usize) -> Entity {
+        Entity::new(text, EntityType::Other("MISC".to_string()), start, end, 0.9)
+    }
+
+    #[test]
+    fn no_nonsensical_located_in() {
+        // "Doudna won the Nobel Prize in Chemistry" -- bare "in" between
+        // "Nobel Prize" and "Chemistry" should NOT trigger LOCATED_IN.
+        let text = "Doudna won the Nobel Prize in Chemistry for her work.";
+        let entities = vec![person("Doudna", 0, 6), misc("Chemistry", 30, 39)];
+        let reg = registry_with_relations(&["LOCATED_IN"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert!(
+            rels.is_empty(),
+            "bare 'in' should not produce LOCATED_IN(Doudna, Chemistry): {:?}",
+            rels
+        );
+    }
+
+    #[test]
+    fn valid_located_in_with_full_trigger() {
+        let text = "Apple headquartered in Cupertino today.";
+        let entities = vec![org("Apple", 0, 5), loc("Cupertino", 23, 32)];
+        let reg = registry_with_relations(&["LOCATED_IN"]);
+        // Use a low threshold so the distance penalty doesn't mask the trigger match.
+        let config = RelationExtractionConfig {
+            threshold: 0.3,
+            ..default_config()
+        };
+        let rels = extract_relations(&entities, text, &reg, &config);
+        assert_eq!(rels.len(), 1, "headquartered in should still match");
+        assert_eq!(rels[0].relation_type, "LOCATED_IN");
+    }
+
+    #[test]
+    fn type_guard_blocks_located_in_to_person() {
+        // LOCATED_IN requires tail to be Location (or Other/Custom).
+        // A Person tail should be blocked.
+        let text = "Doudna based in Charpentier for the experiment.";
+        let entities = vec![person("Doudna", 0, 6), person("Charpentier", 16, 27)];
+        let reg = registry_with_relations(&["LOCATED_IN"]);
+        let rels = extract_relations(&entities, text, &reg, &default_config());
+        assert!(
+            rels.is_empty(),
+            "LOCATED_IN with PER tail should be blocked: {:?}",
+            rels
+        );
     }
 }

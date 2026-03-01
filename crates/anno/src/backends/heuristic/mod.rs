@@ -199,6 +199,31 @@ const COMMON_SENTENCE_STARTERS: &[&str] = &[
     "have",
     "has",
     "had",
+    // Common title-cased words in headlines/UI (not entities).
+    // NOTE: avoid words that commonly START multi-word entity names
+    // (e.g., "new" -> "New York", "commission" -> "European Commission").
+    "here",
+    "found",
+    "listen",
+    "switch",
+    "download",
+    "submit",
+    "apply",
+    "search",
+    "about",
+    "subscribe",
+    "read",
+    "more",
+    "show",
+    "hide",
+    "next",
+    "previous",
+    "back",
+    "home",
+    "old",
+    "update",
+    "updated",
+    "published",
 ];
 
 // Minimal lexical knowledge (50 items each - high ROI)
@@ -501,6 +526,17 @@ impl Model for HeuristicNER {
                     .map(|c| c.is_uppercase())
                     .unwrap_or(false);
 
+                // Break span at title words (CEO, President, etc.) when mid-span.
+                // Prevents "Apple CEO Tim Cook" from being bundled as one ORG span;
+                // instead produces "Apple" and "CEO Tim Cook" which classify independently.
+                if i > start_idx && first_char_upper {
+                    let w_lower = w_clean.to_lowercase();
+                    let w_trimmed = w_lower.trim_end_matches(|c: char| !c.is_alphanumeric());
+                    if SKIP_WORDS.contains(&w_trimmed) {
+                        break;
+                    }
+                }
+
                 // Only "of" and "the" connect entity names (e.g., "Bank of America", "The New York Times")
                 // "and" separates entities (e.g., "Paris and London" are two entities)
                 let is_connector = matches!(w.to_lowercase().as_str(), "of" | "the");
@@ -739,6 +775,17 @@ fn classify_minimal(
     if span.len() == 1 && skip_pronouns.contains(&first_word.as_str()) {
         return (EntityType::Other("skip".into()), 0.0, "skip_pronoun");
     }
+    // Filter: Skip fiscal quarter abbreviations (Q1-Q4) -- not entities
+    if span.len() == 1 {
+        let trimmed = first_word.trim_matches(|c: char| !c.is_alphanumeric());
+        if trimmed.len() == 2 {
+            let bytes = trimmed.as_bytes();
+            if (bytes[0] == b'Q' || bytes[0] == b'q') && (bytes[1] >= b'1' && bytes[1] <= b'4') {
+                return (EntityType::Other("skip".into()), 0.0, "skip_fiscal_quarter");
+            }
+        }
+    }
+
     // Filter: Skip job titles and common non-entity nouns
     let first_clean_lc = first_word
         .trim_end_matches(|c: char| !c.is_alphanumeric())

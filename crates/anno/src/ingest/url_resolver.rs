@@ -164,14 +164,20 @@ impl HttpResolver {
                             "&#8220;" => "\"",
                             "&#8221;" => "\"",
                             _ => {
-                                // Try numeric entity
+                                // Try numeric entity (decimal &#N; or hex &#xN;)
                                 if entity.starts_with("&#") && entity.len() > 2 {
                                     let num_str = &entity[2..entity.len() - 1];
-                                    if let Ok(num) = num_str.parse::<u32>() {
-                                        if let Some(ch) = char::from_u32(num) {
-                                            text.push(ch);
-                                            continue;
-                                        }
+                                    let parsed = if let Some(hex) = num_str
+                                        .strip_prefix('x')
+                                        .or_else(|| num_str.strip_prefix('X'))
+                                    {
+                                        u32::from_str_radix(hex, 16).ok()
+                                    } else {
+                                        num_str.parse::<u32>().ok()
+                                    };
+                                    if let Some(ch) = parsed.and_then(char::from_u32) {
+                                        text.push(ch);
+                                        continue;
                                     }
                                 }
                                 // Unknown entity, keep as-is
@@ -476,6 +482,55 @@ mod tests {
 
         // No double spaces (collapsed).
         assert!(!text.contains("  "));
+    }
+
+    // =========================================================================
+    // HTML entity decoding
+    // =========================================================================
+
+    #[test]
+    fn hex_entity_decoded() {
+        let resolver = HttpResolver::new();
+        let html = "<p>It&#x27;s a test</p>";
+        let text = resolver.extract_text_from_html(html);
+        assert!(
+            text.contains("It's"),
+            "&#x27; should decode to apostrophe, got: {}",
+            text
+        );
+    }
+
+    #[test]
+    fn hex_entity_uppercase_x() {
+        let resolver = HttpResolver::new();
+        let html = "<p>It&#X27;s a test</p>";
+        let text = resolver.extract_text_from_html(html);
+        assert!(
+            text.contains("It's"),
+            "&#X27; should decode to apostrophe, got: {}",
+            text
+        );
+    }
+
+    #[test]
+    fn decimal_entity_decoded() {
+        let resolver = HttpResolver::new();
+        let html = "<p>It&#39;s a test</p>";
+        let text = resolver.extract_text_from_html(html);
+        assert!(
+            text.contains("It's"),
+            "&#39; should decode to apostrophe, got: {}",
+            text
+        );
+    }
+
+    #[test]
+    fn named_entity_decoded() {
+        let resolver = HttpResolver::new();
+        let html = "<p>A &amp; B &lt; C</p>";
+        let text = resolver.extract_text_from_html(html);
+        assert!(text.contains("A & B"), "should decode &amp;, got: {}", text);
+        assert!(text.contains("< C"), "should decode &lt;, got: {}", text);
     }
 
     #[test]

@@ -977,3 +977,19 @@ fn test_standalone_person_prefixes_skipped() {
         );
     }
 }
+
+#[test]
+fn fiscal_quarter_not_tagged_as_entity() {
+    let ner = HeuristicNER::new();
+    for q in &["Q1", "Q2", "Q3", "Q4"] {
+        let text = format!("{} revenue increased by 10%.", q);
+        let entities = ner.extract_entities(&text, None).unwrap();
+        let has_q = entities.iter().any(|e| e.text == *q);
+        assert!(
+            !has_q,
+            "'{}' should not be tagged as an entity, got: {:?}",
+            q,
+            entities.iter().map(|e| &e.text).collect::<Vec<_>>()
+        );
+    }
+}

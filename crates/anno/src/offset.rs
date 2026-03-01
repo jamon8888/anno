@@ -916,6 +916,46 @@ impl SpanConverter {
         }
     }
 
+    /// Like [`byte_to_char`](Self::byte_to_char) but rounds up when `byte_idx`
+    /// falls inside a multi-byte character.  Use this for **exclusive end
+    /// offsets** so the span includes the full final character rather than
+    /// silently truncating it.
+    #[must_use]
+    pub fn byte_to_char_ceil(&self, byte_idx: usize) -> usize {
+        if self.is_ascii {
+            return byte_idx;
+        }
+        let floor = self.byte_to_char(byte_idx);
+        // If byte_idx is exactly on a character boundary, floor is correct.
+        // Otherwise, the next character boundary is floor + 1 (unless we're
+        // already at the end of the string).
+        if byte_idx < self.byte_to_char.len() {
+            // Check if this byte is the first byte of its character.
+            // If map[byte_idx] == map[byte_idx-1] (and byte_idx > 0), we're
+            // mid-character and should round up.
+            if byte_idx > 0
+                && self
+                    .byte_to_char
+                    .get(byte_idx.wrapping_sub(1))
+                    .copied()
+                    .unwrap_or(0)
+                    == floor
+                && (self.byte_to_char.get(byte_idx).copied() == Some(floor))
+            {
+                // Mid-character: check if the previous byte starts the same char.
+                // We need to confirm we're not at the start of a char.
+                // A byte is at the start of a char if it's the first byte with
+                // this char_idx value.
+                let at_char_start = byte_idx == 0
+                    || self.byte_to_char.get(byte_idx - 1).copied().unwrap_or(0) != floor;
+                if !at_char_start {
+                    return floor + 1;
+                }
+            }
+        }
+        floor
+    }
+
     /// Convert char offset to byte offset.
     ///
     /// # Arguments

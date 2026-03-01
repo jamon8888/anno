@@ -299,44 +299,55 @@ impl SimpleCorefResolver {
             }
         }
 
-        // Strategy 6: proper head word match (head word of one found in the other).
-        if self.config.proper_head_word_match {
-            for prev in previous.iter().rev() {
-                if let Some(cluster_id) = prev.canonical_id {
-                    if self.is_proper_head_word_match(entity, prev) {
-                        return Some(cluster_id);
+        // Guard: For wildcard entity types (Other/Custom), skip fuzzy sieves 6-9.
+        // These catch-all types defeat the entity-type guard in the matching functions,
+        // causing spurious merges (e.g., "Nobel" clustered with "Emmanuelle" because
+        // both are type "proper" and fuzzy containment matches on short substrings).
+        let is_wildcard_type = matches!(
+            entity.entity_type,
+            EntityType::Other(_) | EntityType::Custom { .. }
+        );
+
+        if !is_wildcard_type {
+            // Strategy 6: proper head word match (head word of one found in the other).
+            if self.config.proper_head_word_match {
+                for prev in previous.iter().rev() {
+                    if let Some(cluster_id) = prev.canonical_id {
+                        if self.is_proper_head_word_match(entity, prev) {
+                            return Some(cluster_id);
+                        }
                     }
                 }
             }
-        }
 
-        // Strategy 7: relaxed head match (e.g., "President Obama" ~ "Barack Obama").
-        if self.config.relaxed_head_match {
-            for prev in previous.iter().rev() {
-                if let Some(cluster_id) = prev.canonical_id {
-                    if self.is_relaxed_head_match(entity, prev) {
-                        return Some(cluster_id);
+            // Strategy 7: relaxed head match (e.g., "President Obama" ~ "Barack Obama").
+            if self.config.relaxed_head_match {
+                for prev in previous.iter().rev() {
+                    if let Some(cluster_id) = prev.canonical_id {
+                        if self.is_relaxed_head_match(entity, prev) {
+                            return Some(cluster_id);
+                        }
                     }
                 }
             }
-        }
 
-        // Strategy 8: proper noun containment (e.g., "Obama" in "Barack Obama").
-        if self.config.proper_containment {
-            for prev in previous.iter().rev() {
-                if let Some(cluster_id) = prev.canonical_id {
-                    if self.is_proper_containment(entity, prev) {
-                        return Some(cluster_id);
+            // Strategy 8: proper noun containment (e.g., "Obama" in "Barack Obama").
+            if self.config.proper_containment {
+                for prev in previous.iter().rev() {
+                    if let Some(cluster_id) = prev.canonical_id {
+                        if self.is_proper_containment(entity, prev) {
+                            return Some(cluster_id);
+                        }
                     }
                 }
             }
-        }
 
-        // Strategy 9: substring/fuzzy matching.
-        if self.config.fuzzy_matching {
-            for (other_canonical, &cluster_id) in canonical_map {
-                if self.names_match(&canonical, other_canonical) {
-                    return Some(cluster_id);
+            // Strategy 9: substring/fuzzy matching.
+            if self.config.fuzzy_matching {
+                for (other_canonical, &cluster_id) in canonical_map {
+                    if self.names_match(&canonical, other_canonical) {
+                        return Some(cluster_id);
+                    }
                 }
             }
         }
@@ -1142,6 +1153,63 @@ mod tests {
         assert_ne!(
             resolved[0].canonical_id, resolved[1].canonical_id,
             "CEO and Furukawa should NOT be in the same cluster via fuzzy matching"
+        );
+    }
+
+    // =========================================================================
+    // Wildcard type guard (QA regression)
+    // =========================================================================
+
+    #[test]
+    fn proper_entities_not_spuriously_merged() {
+        // Two unrelated proper-noun entities with wildcard type should NOT be
+        // clustered together by fuzzy sieves.
+        let r = resolver();
+        let entities = vec![
+            Entity::new("Nobel", EntityType::Other("proper".into()), 0, 5, 0.8),
+            Entity::new(
+                "Emmanuelle",
+                EntityType::Other("proper".into()),
+                20,
+                30,
+                0.8,
+            ),
+        ];
+        let resolved = r.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id, resolved[1].canonical_id,
+            "wildcard-type entities 'Nobel' and 'Emmanuelle' should NOT be merged"
+        );
+    }
+
+    #[test]
+    fn coref_does_not_merge_distinct_people() {
+        // Two different PER entities should not be merged just because they
+        // share words or are close together.
+        let r = resolver();
+        let entities = vec![
+            Entity::new("Jennifer Doudna", EntityType::Person, 0, 15, 0.9),
+            Entity::new("Emmanuelle Charpentier", EntityType::Person, 20, 42, 0.9),
+        ];
+        let resolved = r.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id, resolved[1].canonical_id,
+            "Doudna and Charpentier should NOT be in the same cluster"
+        );
+    }
+
+    #[test]
+    fn coref_exact_match_still_works_for_wildcard() {
+        // Exact canonical match (sieve 2) should still work for wildcard types.
+        let r = resolver();
+        let entities = vec![
+            Entity::new("Nobel", EntityType::Other("proper".into()), 0, 5, 0.8),
+            Entity::new("Nobel", EntityType::Other("proper".into()), 20, 25, 0.8),
+        ];
+        let resolved = r.resolve(&entities);
+        assert_eq!(
+            resolved[0].canonical_id, resolved[1].canonical_id,
+            "identical wildcard-type entities should still be merged via exact match"
         );
     }
 }

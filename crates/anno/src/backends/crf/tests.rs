@@ -922,3 +922,45 @@ fn test_new_heuristic_uses_default_weights() {
         );
     }
 }
+
+// =========================================================================
+// Sentence boundary clipping
+// =========================================================================
+
+#[test]
+fn sentence_boundary_detection() {
+    let text = "Max Planck Institute respectively. Doudna said something.";
+    let boundaries = super::sentence_boundary_offsets(text);
+    assert!(
+        !boundaries.is_empty(),
+        "Should detect boundary at period before 'Doudna'"
+    );
+}
+
+#[test]
+fn crf_no_cross_sentence_span() {
+    // If CRF produces an entity spanning "respectively. Doudna", the post-processor
+    // should clip it at the sentence boundary.
+    let mut entities = vec![Entity::new(
+        "Institute respectively. Doudna",
+        EntityType::Person,
+        10,
+        40,
+        0.7,
+    )];
+    let text = "Max Planck Institute respectively. Doudna said something else here.";
+    super::clip_entities_at_sentence_boundaries(text, &mut entities);
+    // Entity should be clipped to end before "Doudna"
+    for e in &entities {
+        assert!(
+            e.end <= 34,
+            "Entity should not cross sentence boundary: {:?}",
+            e
+        );
+        assert!(
+            !e.text.contains("Doudna"),
+            "Entity text should not contain 'Doudna': {:?}",
+            e
+        );
+    }
+}
