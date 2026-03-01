@@ -227,7 +227,7 @@ pub struct MentionRankingConfig {
 impl Default for MentionRankingConfig {
     fn default() -> Self {
         Self {
-            link_threshold: 0.3,
+            link_threshold: 0.45,
 
             // Type-specific limits (Bourgois & Poibeau 2025)
             pronoun_max_antecedents: 30,  // 95% within 7 mentions
@@ -286,7 +286,7 @@ impl MentionRankingConfig {
     #[must_use]
     pub fn book_scale() -> Self {
         Self {
-            link_threshold: 0.3,
+            link_threshold: 0.45,
 
             // Type-specific limits
             pronoun_max_antecedents: 30,
@@ -347,7 +347,7 @@ impl MentionRankingConfig {
     #[must_use]
     pub fn clinical() -> Self {
         Self {
-            link_threshold: 0.3,
+            link_threshold: 0.45,
 
             // Clinical documents are typically shorter than books
             pronoun_max_antecedents: 30,
@@ -730,7 +730,7 @@ mod tests {
     #[test]
     fn config_default_values() {
         let cfg = MentionRankingConfig::default();
-        assert!((cfg.link_threshold - 0.3).abs() < f64::EPSILON);
+        assert!((cfg.link_threshold - 0.45).abs() < f64::EPSILON);
         assert_eq!(cfg.pronoun_max_antecedents, 30);
         assert_eq!(cfg.proper_max_antecedents, 300);
         assert_eq!(cfg.nominal_max_antecedents, 300);

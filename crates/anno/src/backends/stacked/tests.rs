@@ -57,17 +57,17 @@ fn test_default_includes_ml_backend_when_available() {
     let ner = StackedNER::default();
     let stats = ner.stats();
 
-    // With onnx AND model available: 3 layers (ML + regex + heuristic)
+    // With onnx AND models available: 3-4 layers (BERT [+ NuNER] + regex + heuristic)
     // With onnx but no model: 2 layers (regex + heuristic)
-    if stats.layer_count == 3 {
+    if stats.layer_count >= 3 {
         let has_ml = stats.layer_names.iter().any(|name| {
             let n = name.to_lowercase();
             n.contains("bert") || n.contains("gliner")
         });
         assert!(
             has_ml,
-            "StackedNER with 3 layers should include an ML backend. Got layers: {:?}",
-            stats.layer_names
+            "StackedNER with {} layers should include an ML backend. Got layers: {:?}",
+            stats.layer_count, stats.layer_names
         );
     } else {
         assert_eq!(stats.layer_count, 2);
@@ -437,11 +437,11 @@ fn test_stats() {
     let ner = StackedNER::default();
     let stats = ner.stats();
 
-    // When ONNX is enabled and GLiNER model is available, default has 3 layers
-    // Otherwise, it has 2 layers (RegexNER + HeuristicNER)
+    // With ONNX + models: 3-4 layers (BERT [+ NuNER] + regex + heuristic)
+    // Without models: 2 layers (regex + heuristic)
     assert!(
-        stats.layer_count == 2 || stats.layer_count == 3,
-        "Expected 2 or 3 layers, got {}",
+        (2..=4).contains(&stats.layer_count),
+        "Expected 2-4 layers, got {}",
         stats.layer_count
     );
     assert_eq!(stats.strategy, ConflictStrategy::Priority);
@@ -589,17 +589,30 @@ fn test_layer_error_handling() {
         }
     }
 
-    // Test 1: Working layer after failing layer - fail-fast behavior
-    // When first layer fails with no prior entities, we fail fast
+    // Test 1: Working layer after failing layer - graceful degradation
+    // When first layer fails, remaining layers still run.
     let ner_fail_first = StackedNER::builder()
         .layer(FailingModel { name: "fail" }) // Failing layer first
         .layer(crate::HeuristicNER::new())
         .strategy(ConflictStrategy::Priority)
         .build();
 
-    // This should fail because first layer fails with no prior entities
-    let result = ner_fail_first.extract_entities("John Smith at Apple", None);
-    assert!(result.is_err(), "Should fail when first layer fails");
+    // Should succeed: first layer fails, but heuristic still runs.
+    let result = ner_fail_first.extract_entities("Dr. John Smith at Apple", None);
+    assert!(
+        result.is_ok(),
+        "Should succeed with partial results from later layers: {:?}",
+        result,
+    );
+
+    // Test 1b: All layers fail => error
+    let ner_all_fail = StackedNER::builder()
+        .layer(FailingModel { name: "fail1" })
+        .layer(FailingModel { name: "fail2" })
+        .strategy(ConflictStrategy::Priority)
+        .build();
+    let result = ner_all_fail.extract_entities("anything", None);
+    assert!(result.is_err(), "Should fail when ALL layers fail");
 
     // Test 2: Failing layer AFTER working layer that produces entities
     // - partial results are returned when subsequent layers fail

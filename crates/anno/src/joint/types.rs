@@ -1061,6 +1061,39 @@ impl JointModel {
             clusters.entry(root).or_default().push(i);
         }
 
+        // Fallback: if belief propagation produced only singletons (all
+        // mentions are NewCluster), merge mentions with identical normalized
+        // text.  This gives joint at least basic name-variant coreference
+        // even when unary coref factors are weak/untrained.
+        let all_singletons = clusters.values().all(|m| m.len() == 1);
+        if all_singletons && n_mentions > 1 {
+            let mut text_to_root: HashMap<String, usize> = HashMap::new();
+            for i in 0..n_mentions {
+                let key = mentions[i].text.to_lowercase();
+                if let Some(&existing) = text_to_root.get(&key) {
+                    union(&mut parent, i, existing);
+                } else {
+                    text_to_root.insert(key, i);
+                }
+            }
+            // Also merge last-name matches: "Elon Musk" and "Musk"
+            for i in 0..n_mentions {
+                let words: Vec<&str> = mentions[i].text.split_whitespace().collect();
+                if words.len() > 1 {
+                    let last = words.last().unwrap().to_lowercase();
+                    if let Some(&existing) = text_to_root.get(&last) {
+                        union(&mut parent, i, existing);
+                    }
+                }
+            }
+            // Rebuild clusters after fallback merges
+            clusters.clear();
+            for i in 0..n_mentions {
+                let root = find(&mut parent, i);
+                clusters.entry(root).or_default().push(i);
+            }
+        }
+
         // Convert to CorefChain
         clusters
             .into_iter()

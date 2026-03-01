@@ -177,27 +177,27 @@ static TIME_SIMPLE: Lazy<Regex> = Lazy::new(|| {
 });
 
 static MONEY_SYMBOL: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"[$€£¥][\d,]+(?:\.\d{1,2})?(?:\s*(?:billion|million|thousand|B|M|K|bn|mn))?")
+    Regex::new(r"[$€£¥][\d,]+(?:[.,]\d{1,2})?(?:\s*(?:billion|million|thousand|B|M|K|bn|mn))?")
         .expect("valid regex")
 });
 
 static MONEY_WRITTEN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
-        r"(?i)\b\d+(?:,\d{3})*(?:\.\d{1,2})?\s*(?:dollars?|USD|euros?|EUR|pounds?|GBP|yen|JPY)\b",
+        r"(?i)\b\d+(?:,\d{3})*(?:[.,]\d{1,2})?\s*(?:dollars?|USD|euros?|EUR|pounds?|GBP|yen|JPY)\b",
     )
     .expect("valid regex")
 });
 
 static MONEY_CODE_PREFIX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
-        r"(?i)\b(?:USD|EUR|GBP|JPY|CHF|CAD|AUD)\s*\d+(?:[,\.]\d+)*(?:\s*(?:billion|million|thousand|B|M|K|bn|mn))?\b",
+        r"(?i)\b(?:USD|EUR|GBP|JPY|CHF|CAD|AUD)\s*\d+(?:[,\.]\d+)*(?:\s*(?:billion|million|trillion|thousand|Mrd|Mio|Bn|Mn|B|M|K|bn|mn))?\b",
     )
     .expect("valid regex")
 });
 
 static MONEY_MAGNITUDE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
-        r"(?i)\b\d+(?:\.\d+)?\s*(?:billion|million|trillion)(?:\s+(?:dollars?|euros?|pounds?))?\b",
+        r"(?i)\b\d+(?:[.,]\d+)?\s*(?:billion|million|trillion|Mrd|Mio|Bn|Mn)(?:\s+(?:dollars?|euros?|pounds?))?\b",
     )
     .expect("valid regex")
 });
@@ -1181,6 +1181,51 @@ mod tests {
             assert!(
                 has_type(&e, &EntityType::Money),
                 "Suffix-style '{}' should still match, got: {:?}",
+                case,
+                e
+            );
+        }
+    }
+
+    #[test]
+    fn money_european_decimal_comma() {
+        // European decimal comma: €3,50 means 3 euros 50 cents
+        let cases = ["€3,50", "€12,99", "£7,50"];
+        for case in cases {
+            let e = extract(case);
+            assert!(
+                has_type(&e, &EntityType::Money),
+                "European decimal '{}' should be MONEY, got: {:?}",
+                case,
+                e
+            );
+        }
+    }
+
+    #[test]
+    fn money_european_magnitude_abbreviations() {
+        // German/European magnitude abbreviations via MONEY_CODE_PREFIX
+        let cases = ["EUR 3,2 Mrd", "EUR 3.2 billion", "EUR 5,7 Mio"];
+        for case in cases {
+            let e = extract(case);
+            assert!(
+                has_type(&e, &EntityType::Money),
+                "European magnitude '{}' should be MONEY, got: {:?}",
+                case,
+                e
+            );
+        }
+    }
+
+    #[test]
+    fn money_us_format_unchanged() {
+        // Existing US formats must still work
+        let cases = ["$14,999.00", "$1,000,000", "$3.50"];
+        for case in cases {
+            let e = extract(case);
+            assert!(
+                has_type(&e, &EntityType::Money),
+                "US format '{}' should still be MONEY, got: {:?}",
                 case,
                 e
             );

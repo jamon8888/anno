@@ -558,7 +558,7 @@ impl GLiNERCandle {
                                     entity_text,
                                     entity_type,
                                     span_converter.byte_to_char(start_pos),
-                                    span_converter.byte_to_char(end_pos),
+                                    span_converter.byte_to_char_ceil(end_pos),
                                     best_score as f64,
                                 ));
                             }

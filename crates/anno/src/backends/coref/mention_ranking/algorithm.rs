@@ -1356,7 +1356,15 @@ impl MentionRankingCoref {
 
         for (i, mention) in mentions.iter().enumerate() {
             let mut best_antecedent: Option<usize> = None;
-            let mut best_score = self.config.link_threshold;
+            // Pronouns get a lower threshold: they rely on type-compat +
+            // gender/number agreement rather than string matching, so their
+            // total scores are inherently lower.
+            let effective_threshold = if mention.mention_type == MentionType::Pronominal {
+                self.config.link_threshold * 0.5
+            } else {
+                self.config.link_threshold
+            };
+            let mut best_score = effective_threshold;
 
             // Type-specific antecedent limit
             let max_antecedents = self.config.max_antecedents_for_type(mention.mention_type);
@@ -1426,6 +1434,11 @@ impl MentionRankingCoref {
 
         for (i, mention) in mentions.iter().enumerate() {
             let max_antecedents = self.config.max_antecedents_for_type(mention.mention_type);
+            let effective_threshold = if mention.mention_type == MentionType::Pronominal {
+                self.config.link_threshold * 0.5
+            } else {
+                self.config.link_threshold
+            };
 
             for j in (0..i).rev().take(max_antecedents) {
                 let antecedent = &mentions[j];
@@ -1444,7 +1457,7 @@ impl MentionRankingCoref {
                     non_coref_pairs.insert((j.min(i), j.max(i)));
                 }
 
-                if score > self.config.link_threshold {
+                if score > effective_threshold {
                     scored_pairs.push(ScoredPair {
                         mention_idx: i,
                         antecedent_idx: j,
@@ -1650,8 +1663,15 @@ impl MentionRankingCoref {
                     })
                     .collect();
 
-                // Check for overlap
-                if propers.iter().any(|p| other_propers.contains(p)) {
+                // Check for overlap -- only merge on proper nouns that are
+                // specific enough to be reliable identifiers.  Short single
+                // tokens ("CEO", "Dr", "US") cause spurious merges.
+                let has_reliable_overlap = propers.iter().any(|p| {
+                    other_propers.iter().any(|op| {
+                        p == op && (p.contains(' ') || p.chars().count() > 4)
+                    })
+                });
+                if has_reliable_overlap {
                     merged[other_idx] = true;
                     merge_map.insert(other_idx, idx);
                 }
@@ -1729,9 +1749,10 @@ impl MentionRankingCoref {
         else if mention.head.to_lowercase() == antecedent.head.to_lowercase() {
             score += self.config.string_match_weight * 0.6;
         }
-        // Substring
+        // Substring (partial match -- weight low enough that substring alone
+        // cannot cross the default link_threshold of 0.45)
         else if m_lower.contains(&a_lower) || a_lower.contains(&m_lower) {
-            score += self.config.string_match_weight * 0.3;
+            score += self.config.string_match_weight * 0.15;
         }
 
         // =========================================================================

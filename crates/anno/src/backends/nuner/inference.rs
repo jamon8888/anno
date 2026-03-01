@@ -883,7 +883,7 @@ impl NuNER {
         let adj_end_pos = end_pos - trimmed_bytes;
 
         let char_start = span_converter.byte_to_char(start_pos);
-        let char_end = span_converter.byte_to_char(adj_end_pos);
+        let char_end = span_converter.byte_to_char_ceil(adj_end_pos);
 
         Some(Entity::new(
             entity_text,

@@ -389,10 +389,40 @@ impl BertNEROnnx {
                 // Adjust byte offsets to account for trimmed whitespace.
                 let leading = slice.len() - slice.trim_start().len();
                 let trailing = slice.len() - slice.trim_end().len();
-                let adj_start = start + leading;
-                let adj_end = end - trailing;
+                let mut adj_start = start + leading;
+                let mut adj_end = end - trailing;
+
+                // Heal word-boundary misalignment from BPE subword
+                // mislabeling: extend to the enclosing word boundary when the
+                // entity starts or ends mid-word.
+                while adj_start > 0
+                    && text
+                        .get(adj_start.saturating_sub(1)..adj_start)
+                        .and_then(|s| s.chars().next())
+                        .is_some_and(|c| c.is_alphanumeric())
+                {
+                    adj_start -= text[..adj_start]
+                        .chars()
+                        .next_back()
+                        .map_or(1, |c| c.len_utf8());
+                }
+                while adj_end < text.len()
+                    && text
+                        .get(adj_end..adj_end + 1)
+                        .and_then(|s| s.chars().next())
+                        .is_some_and(|c| c.is_alphanumeric())
+                {
+                    adj_end += text[adj_end..]
+                        .chars()
+                        .next()
+                        .map_or(1, |c| c.len_utf8());
+                }
+                let healed = text.get(adj_start..adj_end).unwrap_or(trimmed).trim();
+                if healed.is_empty() {
+                    return;
+                }
                 entities.push(Entity::new(
-                    trimmed.to_string(),
+                    healed.to_string(),
                     entity_type,
                     span_converter.byte_to_char(adj_start),
                     span_converter.byte_to_char_ceil(adj_end),

@@ -634,7 +634,7 @@ impl W2NER {
                             entity_text,
                             decode::map_label_to_entity_type(label),
                             span_converter.byte_to_char(start_pos),
-                            span_converter.byte_to_char(end_pos),
+                            span_converter.byte_to_char_ceil(end_pos),
                             score,
                         ));
                     }
@@ -747,7 +747,7 @@ impl W2NER {
                 {
                     char_spans.push((
                         span_converter.byte_to_char(byte_start),
-                        span_converter.byte_to_char(byte_end),
+                        span_converter.byte_to_char_ceil(byte_end),
                     ));
                 } else {
                     valid = false;

@@ -461,8 +461,18 @@ impl Default for StackedNER {
             use crate::backends::onnx::BertNEROnnx;
             use crate::DEFAULT_BERT_ONNX_MODEL;
             if let Ok(bert) = BertNEROnnx::new(DEFAULT_BERT_ONNX_MODEL) {
-                return Self::builder()
-                    .layer_boxed(Box::new(bert))
+                let mut builder = Self::builder();
+                builder = builder.layer_boxed(Box::new(bert));
+                // NuNER complements BERT: it handles lowercase/informal text
+                // that BERT misses. Higher threshold (0.9) than standalone NuNER
+                // to avoid false positives on common nouns.
+                if let Ok(nuner) =
+                    crate::backends::nuner::NuNER::from_pretrained(crate::DEFAULT_NUNER_MODEL)
+                        .map(|n| n.with_threshold(0.9))
+                {
+                    builder = builder.layer_boxed(Box::new(nuner));
+                }
+                return builder
                     .layer(RegexNER::new())
                     .layer(HeuristicNER::new())
                     .build();
@@ -842,7 +852,14 @@ fn heal_adjacent_spans(text: &str, entities: &mut Vec<Entity>) {
                     .nth(current.end)
                     .is_some_and(|c| c.is_alphanumeric() || c == ' '));
 
-        if same_type && gap_ok {
+        // A very short adjacent fragment (1-3 chars, gap=0) from ONNX
+        // subword mislabeling should be absorbed into the preceding entity
+        // regardless of type.  Example: "Merkel" tokenized as
+        // [PER: "Merk"] + [LOC: "el"] -- the "el" is not a real LOC.
+        let next_len = next.end.saturating_sub(next.start);
+        let is_fragment = truly_adjacent && gap == 0 && next_len <= 3;
+
+        if (same_type && gap_ok) || is_fragment {
             // Merge: extend current to cover next
             current.end = next.end;
             // Rebuild text from the merged span
