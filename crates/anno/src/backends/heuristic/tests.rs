@@ -542,3 +542,324 @@ fn test_trailing_punctuation_stripped() {
         );
     }
 }
+
+// =========================================================================
+// Fix 2: Span computation -- offsets use original text positions
+// =========================================================================
+
+/// Span offsets must match original text, even with multi-space gaps.
+#[test]
+fn test_span_offsets_with_multiple_spaces() {
+    let ner = HeuristicNER::new();
+    // Two spaces between words -- joined text would have single space
+    let text = "Meeting with  Barack  Obama in Washington.";
+    let entities = ner.extract_entities(text, None).unwrap();
+
+    for entity in &entities {
+        let extracted: String = text
+            .chars()
+            .skip(entity.start)
+            .take(entity.end - entity.start)
+            .collect();
+        // The entity text is joined with single spaces, so it won't match the original
+        // multi-space text. But the span boundaries must still be valid character offsets.
+        assert!(entity.start < entity.end, "start < end");
+        assert!(
+            entity.end <= text.chars().count(),
+            "end ({}) within text len ({})",
+            entity.end,
+            text.chars().count()
+        );
+        // The extracted span must start and end with the entity's first/last word
+        let first_word = entity.text.split_whitespace().next().unwrap();
+        let last_word = entity.text.split_whitespace().last().unwrap();
+        assert!(
+            extracted.starts_with(first_word),
+            "Span '{}' should start with '{}' (entity: '{}')",
+            extracted,
+            first_word,
+            entity.text
+        );
+        assert!(
+            extracted.ends_with(last_word),
+            "Span '{}' should end with '{}' (entity: '{}')",
+            extracted,
+            last_word,
+            entity.text
+        );
+    }
+}
+
+/// Long multi-word names should not be truncated.
+#[test]
+fn test_long_names_not_truncated() {
+    let ner = HeuristicNER::new();
+    let text = "Dr. Emmanuelle Charpentier won the prize.";
+    let entities = ner.extract_entities(text, None).unwrap();
+
+    let charpentier = entities
+        .iter()
+        .find(|e| e.text.contains("Charpentier"));
+    assert!(
+        charpentier.is_some(),
+        "Should find Charpentier: {:?}",
+        entities
+    );
+    assert!(
+        charpentier.unwrap().text.contains("Charpentier"),
+        "Name should not be truncated: '{}'",
+        charpentier.unwrap().text
+    );
+}
+
+/// Unicode names should have correct char offsets (not byte offsets).
+#[test]
+fn test_unicode_name_offsets_correct() {
+    let ner = HeuristicNER::new();
+    let text = "François Müller presented the results.";
+    let entities = ner.extract_entities(text, None).unwrap();
+
+    for entity in &entities {
+        let extracted: String = text
+            .chars()
+            .skip(entity.start)
+            .take(entity.end - entity.start)
+            .collect();
+        assert_eq!(
+            extracted, entity.text,
+            "Unicode char offsets must match entity text"
+        );
+    }
+}
+
+/// Leading punctuation trimming uses char count, not byte count.
+#[test]
+fn test_leading_punct_char_count_not_bytes() {
+    let ner = HeuristicNER::new();
+    // Opening quote followed by a name
+    let text = "She said, \"Alice was there.\"";
+    let entities = ner.extract_entities(text, None).unwrap();
+
+    for entity in &entities {
+        assert!(
+            !entity.text.starts_with('"'),
+            "Entity '{}' should not start with quote",
+            entity.text
+        );
+        let extracted: String = text
+            .chars()
+            .skip(entity.start)
+            .take(entity.end - entity.start)
+            .collect();
+        assert_eq!(
+            extracted, entity.text,
+            "Offsets should match after leading punct trim"
+        );
+    }
+}
+
+// =========================================================================
+// Fix 3: Day and month names are not entities
+// =========================================================================
+
+/// Day names should not be classified as entities.
+#[test]
+fn test_day_names_not_entities() {
+    let ner = HeuristicNER::new();
+    let days = [
+        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+    ];
+    for day in &days {
+        let text = format!("{} was a busy day at the office.", day);
+        let entities = ner.extract_entities(&text, None).unwrap();
+        let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+        assert!(
+            !texts.contains(day),
+            "'{}' should not be extracted as entity in: '{}' (got: {:?})",
+            day,
+            text,
+            texts
+        );
+    }
+}
+
+/// Month names should not be classified as entities.
+#[test]
+fn test_month_names_not_entities() {
+    let ner = HeuristicNER::new();
+    let months = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    for month in &months {
+        let text = format!("{} earnings exceeded expectations.", month);
+        let entities = ner.extract_entities(&text, None).unwrap();
+        let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+        assert!(
+            !texts.contains(month),
+            "'{}' should not be extracted as entity (got: {:?})",
+            month,
+            texts
+        );
+    }
+}
+
+/// Month names mid-sentence after a location preposition should NOT become LOC.
+#[test]
+fn test_month_after_preposition_not_loc() {
+    let ner = HeuristicNER::new();
+    let text = "Sales peaked in March and declined in December.";
+    let entities = ner.extract_entities(text, None).unwrap();
+    let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+    assert!(
+        !texts.iter().any(|t| *t == "March" || *t == "December"),
+        "Month names should not be LOC even after 'in': {:?}",
+        texts
+    );
+}
+
+// =========================================================================
+// Fix 4: Common acronyms are not entities
+// =========================================================================
+
+/// Common tech/science acronyms should not be classified as ORG.
+#[test]
+fn test_common_acronyms_not_entities() {
+    let ner = HeuristicNER::new();
+    let acronyms = ["LCD", "LED", "USB", "DNA", "RNA", "CPU", "GPU", "HTML", "PDF"];
+    for acr in &acronyms {
+        let text = format!("The {} technology was revolutionary.", acr);
+        let entities = ner.extract_entities(&text, None).unwrap();
+        let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+        assert!(
+            !texts.contains(acr),
+            "'{}' should be filtered as common acronym, got: {:?}",
+            acr,
+            texts
+        );
+    }
+}
+
+/// Currency code acronyms should not be classified as entities.
+#[test]
+fn test_currency_codes_not_entities() {
+    let ner = HeuristicNER::new();
+    let codes = ["EUR", "GBP", "USD", "JPY", "CHF"];
+    for code in &codes {
+        let text = format!("The {} exchange rate dropped.", code);
+        let entities = ner.extract_entities(&text, None).unwrap();
+        let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+        assert!(
+            !texts.contains(code),
+            "'{}' should be filtered as currency code acronym, got: {:?}",
+            code,
+            texts
+        );
+    }
+}
+
+/// Real entity acronyms (not in common list) should still be detected.
+#[test]
+fn test_real_acronyms_still_detected() {
+    let ner = HeuristicNER::new();
+    let entities = ner
+        .extract_entities("She joined DARPA and later CERN.", None)
+        .unwrap();
+    let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+    assert!(texts.contains(&"DARPA"), "DARPA should still be detected");
+    assert!(texts.contains(&"CERN"), "CERN should still be detected");
+}
+
+/// Hyphenated compounds with common acronym prefix should not be entities.
+#[test]
+fn test_hyphenated_acronym_compounds_not_entities() {
+    let ner = HeuristicNER::new();
+    let compounds = ["DNA-based", "LCD-equipped", "USB-powered", "GPU-accelerated"];
+    for compound in &compounds {
+        let text = format!("The {} system performed well.", compound);
+        let entities = ner.extract_entities(&text, None).unwrap();
+        let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+        assert!(
+            !texts.contains(compound),
+            "'{}' should be filtered (acronym prefix), got: {:?}",
+            compound,
+            texts
+        );
+    }
+}
+
+/// Common acronyms in two-word spans should not trigger ORG via acronym_in_span rule.
+#[test]
+fn test_common_acronym_in_two_word_span_no_acronym_signal() {
+    let ner = HeuristicNER::new();
+    // "Advanced USB" -- USB is a common acronym. Without the acronym filter,
+    // Rule 5.5 would fire and classify as ORG via "acronym_in_span".
+    // With the filter, it falls through to Rule 7 (two_word_name -> PER).
+    let entities = ner
+        .extract_entities("She bought an Advanced USB yesterday.", None)
+        .unwrap();
+    let usb_span = entities
+        .iter()
+        .find(|e| e.text.contains("USB"));
+    if let Some(span) = usb_span {
+        let prov = span.provenance.as_ref().and_then(|p| p.pattern.as_ref());
+        assert!(
+            prov.map_or(true, |p| p.as_ref() != "acronym_in_span"),
+            "Common acronym USB should not trigger acronym_in_span rule: {:?}",
+            span
+        );
+    }
+}
+
+// =========================================================================
+// Regression: entity offset validity across all inputs
+// =========================================================================
+
+/// All extracted entity offsets must be valid character spans in the original text.
+#[test]
+fn test_offset_validity_comprehensive() {
+    let ner = HeuristicNER::new();
+    let texts = [
+        "Barack Obama visited Berlin yesterday.",
+        "Dr. Emmanuelle Charpentier and Dr. Jennifer Doudna won the Nobel Prize.",
+        "Nintendo reported EUR 1.2 million in revenue on Thursday.",
+        "The LCD screens use LED backlighting with USB-C connectors.",
+        "François Müller from München met José García in São Paulo.",
+        "Google, Microsoft, and Tesla announced partnerships.",
+        "She said, \"Alice was there.\"",
+        "Bank of America reported (Q3) earnings for Apple Inc.",
+    ];
+
+    for text in &texts {
+        let entities = ner.extract_entities(text, None).unwrap();
+        let char_count = text.chars().count();
+        for entity in &entities {
+            assert!(
+                entity.start < entity.end,
+                "start ({}) < end ({}) for '{}' in '{}'",
+                entity.start,
+                entity.end,
+                entity.text,
+                text
+            );
+            assert!(
+                entity.end <= char_count,
+                "end ({}) <= text len ({}) for '{}' in '{}'",
+                entity.end,
+                char_count,
+                entity.text,
+                text
+            );
+        }
+    }
+}

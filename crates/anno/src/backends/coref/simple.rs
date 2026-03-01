@@ -989,4 +989,162 @@ mod tests {
         );
         assert_eq!(SimpleCorefResolver::head_word(""), "");
     }
+
+    // =========================================================================
+    // Fix 7: Tightened fuzzy matching (names_match)
+    // =========================================================================
+
+    /// Short substrings (< 5 chars) should NOT cause substring matches.
+    #[test]
+    fn fuzzy_rejects_short_substrings() {
+        let r = resolver();
+        // "CEO" (3 chars) should not match "CEOVILLE" via substring
+        assert!(
+            !r.names_match("ORG:ceo", "ORG:ceoville"),
+            "3-char substring 'ceo' should not match 'ceoville'"
+        );
+        // "the" should not match "other"
+        assert!(
+            !r.names_match("PER:the", "PER:other"),
+            "'the' should not match 'other' via substring"
+        );
+        // "art" should not match "article"
+        assert!(
+            !r.names_match("ORG:art", "ORG:article"),
+            "'art' should not match 'article'"
+        );
+    }
+
+    /// Substrings >= 5 chars with sufficient ratio should match.
+    #[test]
+    fn fuzzy_accepts_long_substrings() {
+        let r = resolver();
+        // "obama" (5 chars) in "barack obama" -- ratio 5/12 = 0.41 > 0.3
+        assert!(
+            r.names_match("PER:obama", "PER:barack obama"),
+            "'obama' should match 'barack obama'"
+        );
+        // "smith" (5 chars) in "john smith" -- ratio 5/10 = 0.5 > 0.3
+        assert!(
+            r.names_match("PER:smith", "PER:john smith"),
+            "'smith' should match 'john smith'"
+        );
+    }
+
+    /// Substrings >= 5 chars but with low ratio should NOT match (unless word boundary).
+    #[test]
+    fn fuzzy_rejects_low_ratio_non_word_substrings() {
+        let r = resolver();
+        // "angel" (5 chars) appears as a substring of "los angeles international airport"
+        // but NOT as a complete word. ratio 5/32 = 0.15 < 0.3.
+        assert!(
+            !r.names_match(
+                "ORG:angel",
+                "ORG:los angeles international airport"
+            ),
+            "Low-ratio non-word substring should not match"
+        );
+    }
+
+    /// Substrings >= 5 chars that ARE complete words still match via word-boundary fallback.
+    #[test]
+    fn fuzzy_accepts_word_boundary_even_low_ratio() {
+        let r = resolver();
+        // "march" appears as a complete word in the longer string, so it matches
+        // via word-boundary even though the ratio is low.
+        assert!(
+            r.names_match(
+                "ORG:march",
+                "ORG:march of the penguins documentary film"
+            ),
+            "Word-boundary match should still work for complete words"
+        );
+    }
+
+    /// Word-boundary matching should still work for short strings.
+    #[test]
+    fn fuzzy_accepts_word_boundary_match() {
+        let r = resolver();
+        // "ceo" as a complete word in "ceo john" should match
+        assert!(
+            r.names_match("PER:ceo", "PER:ceo john"),
+            "'ceo' should match 'ceo john' at word boundary"
+        );
+    }
+
+    /// Last-word matching should still work.
+    #[test]
+    fn fuzzy_last_word_match() {
+        let r = resolver();
+        assert!(
+            r.names_match("PER:obama", "PER:barack obama"),
+            "Last word 'obama' should match multi-word"
+        );
+        assert!(
+            r.names_match("PER:barack obama", "PER:obama"),
+            "Last word match should be symmetric"
+        );
+    }
+
+    /// Different entity types should never match.
+    #[test]
+    fn fuzzy_rejects_different_types() {
+        let r = resolver();
+        assert!(
+            !r.names_match("PER:obama", "ORG:obama"),
+            "Different entity types should not match"
+        );
+    }
+
+    /// Exact match still works.
+    #[test]
+    fn fuzzy_exact_match() {
+        let r = resolver();
+        assert!(r.names_match("PER:john", "PER:john"));
+    }
+
+    /// Transitive chain prevention: short substrings should not create
+    /// chains like "CEO" -> "Thursday" -> "Shuntaro Furukawa".
+    #[test]
+    fn fuzzy_no_transitive_chain_via_short_substrings() {
+        let r = resolver();
+        // Each pair individually should NOT match via substring
+        assert!(
+            !r.names_match("PER:ceo", "PER:thursday"),
+            "CEO should not match Thursday"
+        );
+        assert!(
+            !r.names_match("PER:thursday", "PER:shuntaro furukawa"),
+            "Thursday should not match Shuntaro Furukawa"
+        );
+        // And the endpoints definitely should not
+        assert!(
+            !r.names_match("PER:ceo", "PER:shuntaro furukawa"),
+            "CEO should not match Shuntaro Furukawa"
+        );
+    }
+
+    /// Integration: tightened fuzzy matching with full resolve pipeline.
+    #[test]
+    fn integration_no_spurious_merge_short_names() {
+        // Disable all sieves except fuzzy to isolate the fix
+        let mut cfg = CorefConfig::default();
+        cfg.relaxed_head_match = false;
+        cfg.proper_containment = false;
+        cfg.strict_head_match = false;
+        cfg.proper_head_word_match = false;
+        cfg.precise_constructs = false;
+        cfg.acronym_matching = false;
+        let r = SimpleCorefResolver::new(cfg);
+
+        let entities = vec![
+            Entity::new("CEO", EntityType::Person, 0, 3, 0.9),
+            Entity::new("Furukawa", EntityType::Person, 20, 28, 0.9),
+        ];
+        let resolved = r.resolve(&entities);
+        assert_ne!(
+            resolved[0].canonical_id, resolved[1].canonical_id,
+            "CEO and Furukawa should NOT be in the same cluster via fuzzy matching"
+        );
+    }
 }

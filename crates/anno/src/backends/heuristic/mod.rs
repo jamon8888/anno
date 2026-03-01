@@ -99,18 +99,32 @@ const SKIP_WORDS: &[&str] = &[
     "director",
 ];
 
-// Common acronyms/abbreviations that are not entities
+// Common acronyms/abbreviations that are not entities.
+// All entries are lowercase (compared against lowercased input).
+// Only checked against all-caps tokens (via is_acronym_word), so mixed-case names
+// like "Ai" or "Id" are NOT affected. Entries are intentionally limited to
+// international standards (ISO, tech protocols, currency codes) to avoid
+// language/domain bias.
 const COMMON_ACRONYMS: &[&str] = &[
+    // Tech
     "lcd", "led", "html", "css", "http", "https", "api", "url", "dna", "rna",
     "cpu", "gpu", "ram", "rom", "usb", "pdf", "sql", "xml", "json", "csv",
-    "mph", "rpm", "gmt", "utc", "etc", "aka", "asap", "faq", "rsvp", "diy",
     "atm", "gps", "wifi", "lan", "wan", "vpn", "ssl", "tls", "ssh", "ftp",
     "iso", "jpg", "png", "gif", "svg", "mp3", "mp4", "avi", "hd", "uhd",
-    "ac", "dc", "am", "pm", "tv", "pc", "os", "ui", "ux", "ai", "ml",
-    "id", "ip", "io", "rip", "eta", "tba", "tbd", "tbc", "idk", "fyi",
+    "ac", "dc", "tv", "pc", "os", "ui", "ux", "ai", "ml",
+    "id", "ip", "io",
+    // Units / time
+    "mph", "rpm", "gmt", "utc", "am", "pm",
+    // International abbreviations (used across languages)
+    "etc", "aka", "eta",
+    // Currency codes (not entities -- handled by regex/pattern backend)
+    "usd", "eur", "gbp", "jpy", "chf", "cad", "aud", "nzd", "cny", "krw",
+    "inr", "brl", "mxn", "sgd", "hkd", "sek", "nok", "dkk", "pln", "czk",
 ];
 
-// Words that commonly start sentences but are not entities
+// Words that commonly start sentences but are not entities.
+// English-only: this filter exploits capitalization, which is a Latin-script signal.
+// CJK and other caseless scripts use a separate extraction path above.
 const COMMON_SENTENCE_STARTERS: &[&str] = &[
     "the",
     "a",
@@ -824,6 +838,17 @@ fn classify_minimal(
                 return (EntityType::Other("skip".into()), 0.0, "skip_acronym");
             }
             return (EntityType::Organization, 0.55, "single_acronym");
+        }
+    }
+
+    // Rule 9.5: Hyphenated compounds with a non-entity prefix (e.g., "DNA-based", "LCD-equipped")
+    if span.len() == 1 {
+        let word = span[0].trim_matches(|c: char| !c.is_alphanumeric());
+        if let Some(prefix) = word.split('-').next() {
+            let prefix_lc = prefix.to_lowercase();
+            if COMMON_ACRONYMS.contains(&prefix_lc.as_str()) {
+                return (EntityType::Other("skip".into()), 0.0, "skip_hyphenated_acronym");
+            }
         }
     }
 

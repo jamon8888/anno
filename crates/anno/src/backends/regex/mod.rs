@@ -960,6 +960,168 @@ mod tests {
             .collect();
         assert_eq!(dates.len(), 2, "Expected 2 dates, got {:?}", dates);
     }
+
+    // ========================================================================
+    // Fix 5: Money magnitude -- no trailing whitespace
+    // ========================================================================
+
+    #[test]
+    fn money_magnitude_no_trailing_whitespace() {
+        let cases = [
+            "5 billion in revenue",
+            "1.5 trillion was allocated",
+            "100 million for research",
+        ];
+        for case in cases {
+            let e = extract(case);
+            for entity in &e {
+                assert_eq!(
+                    entity.text,
+                    entity.text.trim(),
+                    "Money entity '{}' should have no trailing whitespace in: '{}'",
+                    entity.text,
+                    case
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn money_magnitude_with_currency_still_works() {
+        let cases = [
+            ("5 billion dollars", "5 billion dollars"),
+            ("1.5 million euros", "1.5 million euros"),
+            ("100 trillion pounds", "100 trillion pounds"),
+        ];
+        for (text, expected) in cases {
+            let e = extract(text);
+            assert!(
+                find_text(&e, expected).is_some(),
+                "Should match '{}' in '{}', got: {:?}",
+                expected,
+                text,
+                e
+            );
+        }
+    }
+
+    // ========================================================================
+    // Fix 6: Currency code prefix patterns
+    // ========================================================================
+
+    #[test]
+    fn money_code_prefix_basic() {
+        let cases = [
+            ("EUR 500", "EUR 500"),
+            ("GBP 100", "GBP 100"),
+            ("USD 1,000", "USD 1,000"),
+            ("JPY 50000", "JPY 50000"),
+            ("CHF 200", "CHF 200"),
+            ("CAD 750", "CAD 750"),
+            ("AUD 300", "AUD 300"),
+        ];
+        for (text, expected) in cases {
+            let e = extract(text);
+            assert!(
+                find_text(&e, expected).is_some(),
+                "Should detect '{}' as money, got: {:?}",
+                expected,
+                e
+            );
+            let money = find_text(&e, expected).unwrap();
+            assert_eq!(
+                money.entity_type,
+                EntityType::Money,
+                "'{}' should be MONEY type",
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn money_code_prefix_with_magnitude() {
+        let cases = [
+            "EUR 1.2 million",
+            "GBP 500 billion",
+            "USD 3.5M",
+            "JPY 100K",
+        ];
+        for case in cases {
+            let e = extract(case);
+            assert!(
+                has_type(&e, &EntityType::Money),
+                "Should detect money in '{}', got: {:?}",
+                case,
+                e
+            );
+        }
+    }
+
+    #[test]
+    fn money_code_prefix_case_insensitive() {
+        let cases = ["eur 500", "Eur 1000", "gbp 250"];
+        for case in cases {
+            let e = extract(case);
+            assert!(
+                has_type(&e, &EntityType::Money),
+                "Case-insensitive currency code '{}' should match, got: {:?}",
+                case,
+                e
+            );
+        }
+    }
+
+    #[test]
+    fn money_code_prefix_in_context() {
+        let text = "The budget allocated EUR 1.2 million for research and GBP 500 for travel.";
+        let e = extract(text);
+        let money: Vec<_> = e
+            .iter()
+            .filter(|e| e.entity_type == EntityType::Money)
+            .collect();
+        assert!(
+            money.len() >= 2,
+            "Should detect at least 2 money entities, got: {:?}",
+            money
+        );
+    }
+
+    #[test]
+    fn money_code_prefix_offsets_correct() {
+        let text = "Price: EUR 500 then USD 1000";
+        let e = extract(text);
+        for entity in &e {
+            if entity.entity_type == EntityType::Money {
+                let extracted: String = text
+                    .chars()
+                    .skip(entity.start)
+                    .take(entity.end - entity.start)
+                    .collect();
+                assert_eq!(
+                    extracted, entity.text,
+                    "Char offsets must match entity text"
+                );
+            }
+        }
+    }
+
+    // ========================================================================
+    // Existing pattern regression: suffix-style currency codes still work
+    // ========================================================================
+
+    #[test]
+    fn money_code_suffix_still_works() {
+        let cases = ["100 USD", "500 EUR", "200 GBP", "1000 JPY"];
+        for case in cases {
+            let e = extract(case);
+            assert!(
+                has_type(&e, &EntityType::Money),
+                "Suffix-style '{}' should still match, got: {:?}",
+                case,
+                e
+            );
+        }
+    }
 }
 
 // =============================================================================
