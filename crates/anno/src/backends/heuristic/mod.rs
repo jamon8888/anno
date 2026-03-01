@@ -594,6 +594,13 @@ impl Model for HeuristicNER {
                 continue;
             }
 
+            // Skip title/role words at span start (e.g., "Bundeskanzler", "CEO").
+            // They're not entities themselves, and the following name will form its own span.
+            if SKIP_WORDS.contains(&first_word_clean) {
+                i += 1;
+                continue;
+            }
+
             while i < words.len() {
                 let w = words[i];
                 let w_clean = w.trim_start_matches(|c: char| !c.is_alphanumeric());
