@@ -1038,10 +1038,7 @@ mod tests {
         // "angel" (5 chars) appears as a substring of "los angeles international airport"
         // but NOT as a complete word. ratio 5/32 = 0.15 < 0.3.
         assert!(
-            !r.names_match(
-                "ORG:angel",
-                "ORG:los angeles international airport"
-            ),
+            !r.names_match("ORG:angel", "ORG:los angeles international airport"),
             "Low-ratio non-word substring should not match"
         );
     }
@@ -1053,10 +1050,7 @@ mod tests {
         // "march" appears as a complete word in the longer string, so it matches
         // via word-boundary even though the ratio is low.
         assert!(
-            r.names_match(
-                "ORG:march",
-                "ORG:march of the penguins documentary film"
-            ),
+            r.names_match("ORG:march", "ORG:march of the penguins documentary film"),
             "Word-boundary match should still work for complete words"
         );
     }

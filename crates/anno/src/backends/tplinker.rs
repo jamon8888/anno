@@ -373,7 +373,10 @@ mod tests {
         let tp = TPLinker::new().unwrap();
         assert_eq!(tp.name(), "tplinker");
         let desc = tp.description();
-        assert!(desc.contains("TPLinker"), "description should mention TPLinker, got: {desc}");
+        assert!(
+            desc.contains("TPLinker"),
+            "description should mention TPLinker, got: {desc}"
+        );
     }
 
     #[test]
@@ -512,8 +515,7 @@ mod tests {
         let tp = TPLinker::with_thresholds(0.15, 0.55);
         let offset = 100;
         let entities =
-            crate::StreamingCapable::extract_entities_streaming(&tp, "Steve Jobs", offset)
-                .unwrap();
+            crate::StreamingCapable::extract_entities_streaming(&tp, "Steve Jobs", offset).unwrap();
         for e in &entities {
             assert!(
                 e.start >= offset,

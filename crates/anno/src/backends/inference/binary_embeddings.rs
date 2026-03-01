@@ -512,8 +512,8 @@ mod tests {
     fn two_stage_retrieval_basic() {
         let query = vec![1.0; 8];
         let candidates = vec![
-            vec![1.0; 8],   // identical → should rank first
-            vec![-1.0; 8],  // opposite → should be filtered or rank last
+            vec![1.0; 8],                                     // identical → should rank first
+            vec![-1.0; 8], // opposite → should be filtered or rank last
             vec![1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0], // partial match
         ];
         let results = two_stage_retrieval(&query, &candidates, 8, 3);

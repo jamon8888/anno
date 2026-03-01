@@ -403,9 +403,7 @@ mod tests {
     fn test_gliner_poly_batch_error() {
         use crate::BatchCapable;
         let model = GLiNERPoly { _private: () };
-        let err = model
-            .extract_entities_batch(&["hello"], None)
-            .unwrap_err();
+        let err = model.extract_entities_batch(&["hello"], None).unwrap_err();
         assert!(matches!(err, Error::FeatureNotAvailable(_)));
     }
 

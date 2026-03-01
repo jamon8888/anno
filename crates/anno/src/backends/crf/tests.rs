@@ -643,8 +643,14 @@ fn test_extract_features_no_prefix_suffix_for_short_word() {
 
     let has_prefix = feats.iter().any(|f| f.starts_with("prefix"));
     let has_suffix = feats.iter().any(|f| f.starts_with("suffix"));
-    assert!(!has_prefix, "Single-char word should have no prefix feature");
-    assert!(!has_suffix, "Single-char word should have no suffix feature");
+    assert!(
+        !has_prefix,
+        "Single-char word should have no prefix feature"
+    );
+    assert!(
+        !has_suffix,
+        "Single-char word should have no suffix feature"
+    );
 }
 
 /// extract_features includes context features for previous and next words.
@@ -742,7 +748,10 @@ fn test_extract_features_no_gazetteer_match() {
 /// tokenize: multiple spaces and leading/trailing whitespace.
 #[test]
 fn test_tokenize_whitespace_variants() {
-    assert_eq!(CrfNER::tokenize("  Hello   world  "), vec!["Hello", "world"]);
+    assert_eq!(
+        CrfNER::tokenize("  Hello   world  "),
+        vec!["Hello", "world"]
+    );
     assert!(CrfNER::tokenize("").is_empty());
     assert!(CrfNER::tokenize("   ").is_empty());
     assert_eq!(CrfNER::tokenize("single"), vec!["single"]);
@@ -763,14 +772,14 @@ fn test_labels_to_entities_consecutive_b_tags() {
     let ner = minimal_crf(HashMap::new());
     let text = "John Mary works";
     let tokens: Vec<&str> = text.split_whitespace().collect();
-    let labels = vec![
-        "B-PER".to_string(),
-        "B-PER".to_string(),
-        "O".to_string(),
-    ];
+    let labels = vec!["B-PER".to_string(), "B-PER".to_string(), "O".to_string()];
 
     let entities = ner.labels_to_entities(text, &tokens, &labels);
-    assert_eq!(entities.len(), 2, "Two consecutive B-PER should yield 2 entities");
+    assert_eq!(
+        entities.len(),
+        2,
+        "Two consecutive B-PER should yield 2 entities"
+    );
     assert_eq!(entities[0].text, "John");
     assert_eq!(entities[1].text, "Mary");
 }
@@ -786,7 +795,10 @@ fn test_labels_to_entities_misc_type() {
     let entities = ner.labels_to_entities(text, &tokens, &labels);
     assert_eq!(entities.len(), 1);
     assert_eq!(entities[0].text, "World Cup");
-    assert_eq!(entities[0].entity_type, EntityType::Other("MISC".to_string()));
+    assert_eq!(
+        entities[0].entity_type,
+        EntityType::Other("MISC".to_string())
+    );
 }
 
 /// labels_to_entities: empty tokens and labels produces no entities.
@@ -884,11 +896,7 @@ fn test_score_label_both_keys_present() {
     let features = vec!["myfeat".to_string()];
     let score = ner.score_label(&features, "O");
     // 3.0 (label-specific) + 2.0 * 0.5 (type-independent) + 0.5 (O bias) = 4.5
-    assert!(
-        (score - 4.5).abs() < 1e-9,
-        "Expected 4.5, got {}",
-        score
-    );
+    assert!((score - 4.5).abs() < 1e-9, "Expected 4.5, got {}", score);
 }
 
 /// new_heuristic produces a model that does not use shipped/trained weights.

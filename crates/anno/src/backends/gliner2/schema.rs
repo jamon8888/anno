@@ -352,8 +352,8 @@ mod tests {
 
     #[test]
     fn task_schema_with_classification() {
-        let schema = TaskSchema::new()
-            .with_classification("sentiment", &["positive", "negative"], true);
+        let schema =
+            TaskSchema::new().with_classification("sentiment", &["positive", "negative"], true);
         assert_eq!(schema.classifications.len(), 1);
         let cls = &schema.classifications[0];
         assert_eq!(cls.name, "sentiment");
@@ -396,8 +396,11 @@ mod tests {
 
     #[test]
     fn structure_task_with_field_described() {
-        let st = StructureTask::new("t")
-            .with_field_described("amount", FieldType::String, "total amount");
+        let st = StructureTask::new("t").with_field_described(
+            "amount",
+            FieldType::String,
+            "total amount",
+        );
         assert_eq!(st.fields.len(), 1);
         assert_eq!(st.fields[0].name, "amount");
         assert_eq!(st.fields[0].description.as_deref(), Some("total amount"));

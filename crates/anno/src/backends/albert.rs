@@ -183,10 +183,7 @@ mod tests {
             Err(e) => {
                 let msg = e.to_string();
                 // Should be a meaningful error, not empty.
-                assert!(
-                    !msg.is_empty(),
-                    "error message should be non-empty"
-                );
+                assert!(!msg.is_empty(), "error message should be non-empty");
                 // Should mention feature or model-related issue.
                 assert!(
                     msg.contains("onnx")

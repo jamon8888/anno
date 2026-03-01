@@ -348,7 +348,11 @@ mod tests {
         };
 
         let clusters = resolve_coreferences(&entities, &embeddings, 4, &config);
-        assert_eq!(clusters.len(), 1, "no distance limit should allow clustering");
+        assert_eq!(
+            clusters.len(),
+            1,
+            "no distance limit should allow clustering"
+        );
     }
 
     #[test]

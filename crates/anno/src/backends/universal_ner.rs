@@ -480,7 +480,10 @@ mod tests {
     fn test_universal_ner_capabilities() {
         let model = UniversalNER::new().unwrap();
         let caps = model.capabilities();
-        assert!(caps.dynamic_labels, "UniversalNER should have dynamic_labels capability");
+        assert!(
+            caps.dynamic_labels,
+            "UniversalNER should have dynamic_labels capability"
+        );
     }
 
     #[test]
@@ -492,15 +495,24 @@ mod tests {
         let result = model.parse_llm_response("this is not json", text);
         assert!(result.is_err(), "malformed JSON should return an error");
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("Parse"), "error should be a Parse variant: {msg}");
+        assert!(
+            msg.contains("Parse"),
+            "error should be a Parse variant: {msg}"
+        );
 
         // JSON object instead of array.
         let result = model.parse_llm_response(r#"{"text": "Hello"}"#, text);
-        assert!(result.is_err(), "JSON object (not array) should return an error");
+        assert!(
+            result.is_err(),
+            "JSON object (not array) should return an error"
+        );
 
         // Incomplete array (no closing bracket).
         let result = model.parse_llm_response(r#"[{"text": "Hello""#, text);
-        assert!(result.is_err(), "incomplete JSON array should return an error");
+        assert!(
+            result.is_err(),
+            "incomplete JSON array should return an error"
+        );
     }
 
     #[test]
@@ -508,7 +520,10 @@ mod tests {
         let model = UniversalNER::new().unwrap();
         let text = "No entities here at all.";
         let entities = model.parse_llm_response("[]", text).unwrap();
-        assert!(entities.is_empty(), "empty JSON array should produce no entities");
+        assert!(
+            entities.is_empty(),
+            "empty JSON array should produce no entities"
+        );
     }
 
     #[test]
@@ -517,19 +532,22 @@ mod tests {
         let text = "Alice met Bob.";
 
         // ```json ... ``` wrapping
-        let fenced = "```json\n[{\"text\":\"Alice\",\"type\":\"person\",\"start\":0,\"end\":5}]\n```";
+        let fenced =
+            "```json\n[{\"text\":\"Alice\",\"type\":\"person\",\"start\":0,\"end\":5}]\n```";
         let ents = model.parse_llm_response(fenced, text).unwrap();
         assert_eq!(ents.len(), 1);
         assert_eq!(ents[0].text, "Alice");
 
         // ```JSON ... ``` wrapping (uppercase)
-        let fenced_upper = "```JSON\n[{\"text\":\"Bob\",\"type\":\"person\",\"start\":10,\"end\":13}]\n```";
+        let fenced_upper =
+            "```JSON\n[{\"text\":\"Bob\",\"type\":\"person\",\"start\":10,\"end\":13}]\n```";
         let ents = model.parse_llm_response(fenced_upper, text).unwrap();
         assert_eq!(ents.len(), 1);
         assert_eq!(ents[0].text, "Bob");
 
         // Plain ``` ... ``` wrapping
-        let plain_fence = "```\n[{\"text\":\"Alice\",\"type\":\"person\",\"start\":0,\"end\":5}]\n```";
+        let plain_fence =
+            "```\n[{\"text\":\"Alice\",\"type\":\"person\",\"start\":0,\"end\":5}]\n```";
         let ents = model.parse_llm_response(plain_fence, text).unwrap();
         assert_eq!(ents.len(), 1);
     }
@@ -552,12 +570,18 @@ mod tests {
         // Entity with end <= start should be skipped.
         let response = r#"[{"text":"Hello","type":"person","start":5,"end":3}]"#;
         let ents = model.parse_llm_response(response, text).unwrap();
-        assert!(ents.is_empty(), "entity with end <= start should be filtered out");
+        assert!(
+            ents.is_empty(),
+            "entity with end <= start should be filtered out"
+        );
 
         // Entity with empty text should be skipped.
         let response = r#"[{"text":"","type":"person","start":0,"end":5}]"#;
         let ents = model.parse_llm_response(response, text).unwrap();
-        assert!(ents.is_empty(), "entity with empty text should be filtered out");
+        assert!(
+            ents.is_empty(),
+            "entity with empty text should be filtered out"
+        );
     }
 
     #[test]
@@ -568,7 +592,10 @@ mod tests {
         // Hint offsets way beyond text length, and entity text not found in original.
         let response = r#"[{"text":"Nonexistent","type":"person","start":100,"end":111}]"#;
         let ents = model.parse_llm_response(response, text).unwrap();
-        assert!(ents.is_empty(), "out-of-bounds entity not found in text should be skipped");
+        assert!(
+            ents.is_empty(),
+            "out-of-bounds entity not found in text should be skipped"
+        );
     }
 
     #[test]

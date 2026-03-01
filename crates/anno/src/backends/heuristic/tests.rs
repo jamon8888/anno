@@ -882,8 +882,14 @@ fn test_offset_validity_comprehensive() {
 fn test_title_prefixed_name_is_person() {
     let ner = HeuristicNER::new();
     let cases = [
-        ("CEO Shuntaro Furukawa announced the partnership.", "CEO Shuntaro Furukawa"),
-        ("President Barack Obama signed the bill.", "President Barack Obama"),
+        (
+            "CEO Shuntaro Furukawa announced the partnership.",
+            "CEO Shuntaro Furukawa",
+        ),
+        (
+            "President Barack Obama signed the bill.",
+            "President Barack Obama",
+        ),
         ("Chairman Li Wei addressed shareholders.", "Chairman Li Wei"),
     ];
     for (text, expected_fragment) in &cases {
@@ -916,9 +922,7 @@ fn test_of_pattern_still_org() {
     let entities = ner
         .extract_entities("Bank of America reported earnings.", None)
         .unwrap();
-    let boa = entities
-        .iter()
-        .find(|e| e.text.contains("Bank of America"));
+    let boa = entities.iter().find(|e| e.text.contains("Bank of America"));
     assert!(boa.is_some(), "Should detect Bank of America");
     assert!(
         matches!(boa.unwrap().entity_type, EntityType::Organization),
@@ -946,7 +950,9 @@ fn test_standalone_prefix_skipped() {
     );
     // The full name should be present
     assert!(
-        texts.iter().any(|t| t.contains("Jennifer") || t.contains("Doudna")),
+        texts
+            .iter()
+            .any(|t| t.contains("Jennifer") || t.contains("Doudna")),
         "Should detect the full name, got: {:?}",
         texts
     );
@@ -960,9 +966,9 @@ fn test_standalone_person_prefixes_skipped() {
     for prefix in &prefixes {
         let text = format!("{} went home.", prefix);
         let entities = ner.extract_entities(&text, None).unwrap();
-        let has_prefix_entity = entities.iter().any(|e| {
-            e.text.trim_end_matches('.') == *prefix
-        });
+        let has_prefix_entity = entities
+            .iter()
+            .any(|e| e.text.trim_end_matches('.') == *prefix);
         assert!(
             !has_prefix_entity,
             "Standalone '{}' should be skipped, got: {:?}",

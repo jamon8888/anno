@@ -18,7 +18,10 @@ fn test_stacked_ner_default_loads() {
     // and load the BERT ONNX model. This test verifies it completes without panic.
     let ner = StackedNER::default();
     assert!(ner.is_available());
-    assert!(ner.num_layers() >= 2, "expected at least 2 layers (ML + regex/heuristic)");
+    assert!(
+        ner.num_layers() >= 2,
+        "expected at least 2 layers (ML + regex/heuristic)"
+    );
 }
 
 #[test]
@@ -37,9 +40,9 @@ fn test_stacked_ner_predict_basic() {
     // Check that we got some recognizable entity texts
     let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
     // At minimum, a decent NER model should find at least one of these
-    let found_any_expected = texts.iter().any(|t| {
-        t.contains("Alice") || t.contains("Google") || t.contains("London")
-    });
+    let found_any_expected = texts
+        .iter()
+        .any(|t| t.contains("Alice") || t.contains("Google") || t.contains("London"));
     assert!(
         found_any_expected,
         "expected at least one of Alice/Google/London in entity texts, got: {:?}",

@@ -182,7 +182,6 @@ impl CorefBackend for super::mention_ranking::MentionRankingCoref {
 // model into the trait call, which defeats the purpose of a simple unified interface.
 // Callers needing SimpleCorefResolver should use it directly via its inherent API.
 
-
 // =============================================================================
 // Tests
 // =============================================================================

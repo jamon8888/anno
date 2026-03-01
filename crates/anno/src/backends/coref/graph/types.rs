@@ -425,7 +425,11 @@ mod tests {
         let mut g = CorefGraph::new(3);
         g.add_edge(2, 0);
         g.add_edge(0, 2);
-        assert_eq!(g.edge_count(), 1, "duplicate edge should not increase count");
+        assert_eq!(
+            g.edge_count(),
+            1,
+            "duplicate edge should not increase count"
+        );
     }
 
     #[test]
@@ -634,7 +638,11 @@ mod tests {
 
         let clusters = g.extract_clusters();
         assert_eq!(clusters.len(), 1);
-        assert_eq!(clusters[0], vec![0, 1, 2, 3], "cluster members must be sorted");
+        assert_eq!(
+            clusters[0],
+            vec![0, 1, 2, 3],
+            "cluster members must be sorted"
+        );
     }
 
     // =========================================================================
