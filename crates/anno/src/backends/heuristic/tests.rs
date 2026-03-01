@@ -597,9 +597,7 @@ fn test_long_names_not_truncated() {
     let text = "Dr. Emmanuelle Charpentier won the prize.";
     let entities = ner.extract_entities(text, None).unwrap();
 
-    let charpentier = entities
-        .iter()
-        .find(|e| e.text.contains("Charpentier"));
+    let charpentier = entities.iter().find(|e| e.text.contains("Charpentier"));
     assert!(
         charpentier.is_some(),
         "Should find Charpentier: {:?}",
@@ -667,7 +665,13 @@ fn test_leading_punct_char_count_not_bytes() {
 fn test_day_names_not_entities() {
     let ner = HeuristicNER::new();
     let days = [
-        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
     ];
     for day in &days {
         let text = format!("{} was a busy day at the office.", day);
@@ -736,7 +740,9 @@ fn test_month_after_preposition_not_loc() {
 #[test]
 fn test_common_acronyms_not_entities() {
     let ner = HeuristicNER::new();
-    let acronyms = ["LCD", "LED", "USB", "DNA", "RNA", "CPU", "GPU", "HTML", "PDF"];
+    let acronyms = [
+        "LCD", "LED", "USB", "DNA", "RNA", "CPU", "GPU", "HTML", "PDF",
+    ];
     for acr in &acronyms {
         let text = format!("The {} technology was revolutionary.", acr);
         let entities = ner.extract_entities(&text, None).unwrap();
@@ -784,7 +790,12 @@ fn test_real_acronyms_still_detected() {
 #[test]
 fn test_hyphenated_acronym_compounds_not_entities() {
     let ner = HeuristicNER::new();
-    let compounds = ["DNA-based", "LCD-equipped", "USB-powered", "GPU-accelerated"];
+    let compounds = [
+        "DNA-based",
+        "LCD-equipped",
+        "USB-powered",
+        "GPU-accelerated",
+    ];
     for compound in &compounds {
         let text = format!("The {} system performed well.", compound);
         let entities = ner.extract_entities(&text, None).unwrap();
@@ -808,9 +819,7 @@ fn test_common_acronym_in_two_word_span_no_acronym_signal() {
     let entities = ner
         .extract_entities("She bought an Advanced USB yesterday.", None)
         .unwrap();
-    let usb_span = entities
-        .iter()
-        .find(|e| e.text.contains("USB"));
+    let usb_span = entities.iter().find(|e| e.text.contains("USB"));
     if let Some(span) = usb_span {
         let prov = span.provenance.as_ref().and_then(|p| p.pattern.as_ref());
         assert!(
@@ -861,5 +870,104 @@ fn test_offset_validity_comprehensive() {
                 text
             );
         }
+    }
+}
+
+// =============================================================================
+// Title-prefixed name classification (Fix: "CEO X Y" -> PER, not ORG)
+// =============================================================================
+
+/// Job title followed by a name should classify as PER, not ORG.
+#[test]
+fn test_title_prefixed_name_is_person() {
+    let ner = HeuristicNER::new();
+    let cases = [
+        ("CEO Shuntaro Furukawa announced the partnership.", "CEO Shuntaro Furukawa"),
+        ("President Barack Obama signed the bill.", "President Barack Obama"),
+        ("Chairman Li Wei addressed shareholders.", "Chairman Li Wei"),
+    ];
+    for (text, expected_fragment) in &cases {
+        let entities = ner.extract_entities(text, None).unwrap();
+        let match_entity = entities
+            .iter()
+            .find(|e| e.text.contains(expected_fragment) || expected_fragment.contains(&*e.text));
+        assert!(
+            match_entity.is_some(),
+            "Should detect '{}' in '{}', got: {:?}",
+            expected_fragment,
+            text,
+            entities.iter().map(|e| &e.text).collect::<Vec<_>>()
+        );
+        if let Some(entity) = match_entity {
+            assert!(
+                matches!(entity.entity_type, EntityType::Person),
+                "'{}' should be PER, got {:?}",
+                entity.text,
+                entity.entity_type
+            );
+        }
+    }
+}
+
+/// "Bank of America" (X of Y) should still be ORG, not affected by title rule.
+#[test]
+fn test_of_pattern_still_org() {
+    let ner = HeuristicNER::new();
+    let entities = ner
+        .extract_entities("Bank of America reported earnings.", None)
+        .unwrap();
+    let boa = entities
+        .iter()
+        .find(|e| e.text.contains("Bank of America"));
+    assert!(boa.is_some(), "Should detect Bank of America");
+    assert!(
+        matches!(boa.unwrap().entity_type, EntityType::Organization),
+        "Bank of America should be ORG"
+    );
+}
+
+// =============================================================================
+// Standalone person-prefix skip (Fix: "Dr" alone doesn't create duplicate entity)
+// =============================================================================
+
+/// Standalone "Dr" should be skipped when "Dr. X" is also extracted.
+#[test]
+fn test_standalone_prefix_skipped() {
+    let ner = HeuristicNER::new();
+    let entities = ner
+        .extract_entities("Dr. Jennifer Doudna won the Nobel Prize.", None)
+        .unwrap();
+    let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+    // Should have "Dr. Jennifer Doudna" (or similar), but NOT a standalone "Dr"
+    assert!(
+        !texts.iter().any(|t| *t == "Dr" || *t == "Dr."),
+        "Standalone 'Dr' should be skipped, got: {:?}",
+        texts
+    );
+    // The full name should be present
+    assert!(
+        texts.iter().any(|t| t.contains("Jennifer") || t.contains("Doudna")),
+        "Should detect the full name, got: {:?}",
+        texts
+    );
+}
+
+/// Person prefixes as standalone words should not become entities.
+#[test]
+fn test_standalone_person_prefixes_skipped() {
+    let ner = HeuristicNER::new();
+    let prefixes = ["Dr", "Mr", "Mrs", "Prof"];
+    for prefix in &prefixes {
+        let text = format!("{} went home.", prefix);
+        let entities = ner.extract_entities(&text, None).unwrap();
+        let has_prefix_entity = entities.iter().any(|e| {
+            e.text.trim_end_matches('.') == *prefix
+        });
+        assert!(
+            !has_prefix_entity,
+            "Standalone '{}' should be skipped, got: {:?}",
+            prefix,
+            entities.iter().map(|e| &e.text).collect::<Vec<_>>()
+        );
     }
 }

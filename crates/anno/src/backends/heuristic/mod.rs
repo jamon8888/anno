@@ -107,19 +107,17 @@ const SKIP_WORDS: &[&str] = &[
 // language/domain bias.
 const COMMON_ACRONYMS: &[&str] = &[
     // Tech
-    "lcd", "led", "html", "css", "http", "https", "api", "url", "dna", "rna",
-    "cpu", "gpu", "ram", "rom", "usb", "pdf", "sql", "xml", "json", "csv",
-    "atm", "gps", "wifi", "lan", "wan", "vpn", "ssl", "tls", "ssh", "ftp",
-    "iso", "jpg", "png", "gif", "svg", "mp3", "mp4", "avi", "hd", "uhd",
-    "ac", "dc", "tv", "pc", "os", "ui", "ux", "ai", "ml",
-    "id", "ip", "io",
+    "lcd", "led", "html", "css", "http", "https", "api", "url", "dna", "rna", "cpu", "gpu", "ram",
+    "rom", "usb", "pdf", "sql", "xml", "json", "csv", "atm", "gps", "wifi", "lan", "wan", "vpn",
+    "ssl", "tls", "ssh", "ftp", "iso", "jpg", "png", "gif", "svg", "mp3", "mp4", "avi", "hd",
+    "uhd", "ac", "dc", "tv", "pc", "os", "ui", "ux", "ai", "ml", "id", "ip", "io",
     // Units / time
     "mph", "rpm", "gmt", "utc", "am", "pm",
     // International abbreviations (used across languages)
     "etc", "aka", "eta",
     // Currency codes (not entities -- handled by regex/pattern backend)
-    "usd", "eur", "gbp", "jpy", "chf", "cad", "aud", "nzd", "cny", "krw",
-    "inr", "brl", "mxn", "sgd", "hkd", "sek", "nok", "dkk", "pln", "czk",
+    "usd", "eur", "gbp", "jpy", "chf", "cad", "aud", "nzd", "cny", "krw", "inr", "brl", "mxn",
+    "sgd", "hkd", "sek", "nok", "dkk", "pln", "czk",
 ];
 
 // Words that commonly start sentences but are not entities.
@@ -748,6 +746,11 @@ fn classify_minimal(
     if span.len() == 1 && SKIP_WORDS.contains(&first_clean_lc.as_str()) {
         return (EntityType::Other("skip".into()), 0.0, "skip_word");
     }
+    // Filter: Skip standalone person prefixes (Dr, Mr, Prof) -- they'll be
+    // absorbed into the next span via the prefix-inclusion logic.
+    if span.len() == 1 && PERSON_PREFIX.contains(&first_clean_lc.as_str()) {
+        return (EntityType::Other("skip".into()), 0.0, "skip_prefix");
+    }
 
     // Rule 1: ORG suffix (highest precision)
     let last_clean: &str = last_word.trim_end_matches(|c: char| !c.is_alphanumeric());
@@ -820,8 +823,16 @@ fn classify_minimal(
     // Rule 8: Three+ words -> likely ORG or LOC, not PER
     if span.len() >= 3 {
         // "Bank of X" pattern -> ORG
-        if span.len() >= 2 && span[1].to_lowercase() == "of" {
+        if span[1].to_lowercase() == "of" {
             return (EntityType::Organization, 0.65, "org_of_pattern");
+        }
+        // Title-prefixed name: "CEO Shuntaro Furukawa", "President Barack Obama"
+        // First word is a job title -> rest is likely a person name
+        let first_clean_lower = first_word
+            .trim_end_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase();
+        if SKIP_WORDS.contains(&first_clean_lower.as_str()) {
+            return (EntityType::Person, 0.65, "title_prefixed_name");
         }
         return (EntityType::Organization, 0.50, "long_span_org");
     }
@@ -847,7 +858,11 @@ fn classify_minimal(
         if let Some(prefix) = word.split('-').next() {
             let prefix_lc = prefix.to_lowercase();
             if COMMON_ACRONYMS.contains(&prefix_lc.as_str()) {
-                return (EntityType::Other("skip".into()), 0.0, "skip_hyphenated_acronym");
+                return (
+                    EntityType::Other("skip".into()),
+                    0.0,
+                    "skip_hyphenated_acronym",
+                );
             }
         }
     }
