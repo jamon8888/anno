@@ -5,6 +5,47 @@ use super::types::*;
 #[allow(unused_imports)]
 use super::*;
 
+/// Non-person indicator words. If one mention contains one of these and the
+/// other does not, they are semantically incompatible for coreference.
+const NON_PERSON_INDICATORS: &[&str] = &[
+    "prize",
+    "award",
+    "medal",
+    "cup",
+    "trophy",
+    "championship",
+    "committee",
+    "foundation",
+    "institute",
+    "university",
+    "academy",
+    "council",
+    "board",
+    "conference",
+    "summit",
+    "treaty",
+    "agreement",
+    "act",
+    "law",
+];
+
+/// Returns `true` when two mention texts have incompatible semantic types
+/// (e.g. one is a prize/award/institution and the other is not).
+fn is_type_incompatible(mention_a: &str, mention_b: &str) -> bool {
+    let a_lower = mention_a.to_lowercase();
+    let b_lower = mention_b.to_lowercase();
+
+    let a_has = NON_PERSON_INDICATORS
+        .iter()
+        .any(|w| a_lower.split_whitespace().any(|tok| tok == *w));
+    let b_has = NON_PERSON_INDICATORS
+        .iter()
+        .any(|w| b_lower.split_whitespace().any(|tok| tok == *w));
+
+    // Incompatible only when exactly one side has an indicator
+    a_has != b_has
+}
+
 /// Mention-ranking coreference resolver.
 pub struct MentionRankingCoref {
     /// Configuration.
@@ -1733,6 +1774,14 @@ impl MentionRankingCoref {
                     return -1.0; // Strong negative signal to reject this pair
                 }
             }
+        }
+
+        // =========================================================================
+        // Semantic type incompatibility filter
+        // Prevents merging e.g. "Nobel Prize" with "Marie Curie"
+        // =========================================================================
+        if is_type_incompatible(&mention.text, &antecedent.text) {
+            return -1.0;
         }
 
         // =========================================================================
