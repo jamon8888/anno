@@ -90,6 +90,21 @@
 //! - Bikel, Schwartz, Weischedel (1999): "An Algorithm that Learns What's
 //!   in a Name" (Machine Learning)
 //!
+//! # Trained Parameters
+//!
+//! Bundled parameters in `hmm_params.json` are trained on WikiANN EN (20k sentences)
+//! via `scripts/train_hmm_params.py`. The training produces initial probabilities,
+//! transition probabilities, and a compact emission backoff table (word features, no
+//! word identity) with Laplace smoothing. Labels: PER, ORG, LOC (no MISC in WikiANN).
+//!
+//! To retrain on a different dataset:
+//! ```sh
+//! uv run scripts/train_hmm_params.py --dataset <hf_dataset> --config <config>
+//! ```
+//!
+//! Requires the `bundled-hmm-params` feature to use trained parameters; otherwise
+//! falls back to hand-tuned heuristic weights.
+//!
 //! # See Also
 //!
 //! - CRF-style sequence models (`backends/crf.rs`)

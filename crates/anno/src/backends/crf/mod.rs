@@ -71,6 +71,21 @@
 //! - BOS/EOS        : Sentence boundary markers
 //! ```
 //!
+//! # Trained Parameters
+//!
+//! Bundled weights in `crf_weights.json` (28k features) are trained via `python-crfsuite`
+//! on WikiANN EN (15k sentences, L1=0.1, L2=0.1, 100 iterations). Includes shape, affix,
+//! casing, context features, and transition weights. Word identity features are limited
+//! to a top-2000 vocab to keep the file shippable. Labels: PER, ORG, LOC.
+//!
+//! To retrain on a different dataset:
+//! ```sh
+//! uv run scripts/train_crf_weights.py --dataset <hf_dataset> --config <config>
+//! ```
+//!
+//! Requires the `bundled-crf-weights` feature to use trained weights; otherwise
+//! falls back to hand-tuned heuristic weights.
+//!
 //! # Performance
 //!
 //! Performance depends on weights, tokenization, and dataset; use the eval harness
