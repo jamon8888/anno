@@ -54,6 +54,13 @@ pub static PATTERNS: Lazy<Vec<PatternDef>> = Lazy::new(|| {
         // High confidence: Format-based detection
         // =====================================================================
 
+        // Money with currency code + magnitude (e.g., "EUR 3.2 billion")
+        PatternDef {
+            regex: &MONEY_CODE_MAGNITUDE,
+            entity_type: EntityType::Money,
+            confidence: 0.90,
+            name: "MONEY_CODE_MAGNITUDE",
+        },
         // Money with symbols
         PatternDef {
             regex: &MONEY_SYMBOL,
@@ -147,6 +154,13 @@ pub static PATTERNS: Lazy<Vec<PatternDef>> = Lazy::new(|| {
             confidence: 0.85,
             name: "PHONE_INTL",
         },
+        // Local 7-digit phone numbers (lower confidence due to ambiguity)
+        PatternDef {
+            regex: &PHONE_LOCAL,
+            entity_type: EntityType::Phone,
+            confidence: 0.65,
+            name: "PHONE_LOCAL",
+        },
     ]
 });
 
@@ -190,6 +204,12 @@ static TIME_SIMPLE: Lazy<Regex> = Lazy::new(|| {
 });
 
 // Money patterns
+static MONEY_CODE_MAGNITUDE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"(?i)\b(?:EUR|USD|GBP|JPY|CHF|CAD|AUD|CNY|NZD|SEK|NOK|DKK|SGD|HKD|KRW|INR|BRL|ZAR|MXN)\s+\d+(?:[.,]\d+)?\s*(?:billion|million|trillion|thousand|hundred|bn|mn|m|k|B|M|T)\b",
+    )
+    .expect("MONEY_CODE_MAGNITUDE regex is invalid")
+});
 static MONEY_SYMBOL: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"[$€£¥][\d,]+(?:\.\d{1,2})?(?:\s*(?:billion|million|thousand|B|M|K|bn|mn))?")
         .expect("MONEY_SYMBOL regex is invalid")
@@ -233,6 +253,9 @@ static PHONE_US: Lazy<Regex> = Lazy::new(|| {
 static PHONE_INTL: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\+\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}\b")
         .expect("PHONE_INTL regex is invalid")
+});
+static PHONE_LOCAL: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\b\d{3}[-.\s]?\d{4}\b").expect("PHONE_LOCAL regex is invalid")
 });
 
 /// Get all supported entity types (for Model trait).

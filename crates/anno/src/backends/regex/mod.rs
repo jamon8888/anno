@@ -223,6 +223,16 @@ static PHONE_INTL: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\+\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}\b").expect("valid regex")
 });
 
+static PHONE_LOCAL: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\b\d{3}[-.\s]?\d{4}\b").expect("valid regex")
+});
+
+/// Words that signal the following number is a phone number (for PHONE_LOCAL context filter).
+static PHONE_CONTEXT: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)\b(?:call|tel|telephone|phone|fax|dial|ring|mobile|cell|contact)\b[:\s]*$")
+        .expect("valid regex")
+});
+
 static MENTION: Lazy<Regex> = Lazy::new(|| {
     // @username - supports letters, numbers, underscore, dot (but not starting/ending with dot)
     Regex::new(r"\B@[\w](?:[\w.]*[\w])?").expect("valid regex")
@@ -359,6 +369,14 @@ impl Model for RegexNER {
         for (pattern, name) in phone_patterns {
             for m in pattern.find_iter(text) {
                 add_entity(m, EntityType::Phone, 0.85, name);
+            }
+        }
+        // Local 7-digit phone numbers -- only when preceded by phone-context words
+        // to avoid matching page numbers, codes, zip codes, etc.
+        for m in PHONE_LOCAL.find_iter(text) {
+            let prefix = &text[..m.start()];
+            if PHONE_CONTEXT.is_match(prefix) {
+                add_entity(m, EntityType::Phone, 0.65, "PHONE_LOCAL");
             }
         }
 
