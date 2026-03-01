@@ -369,6 +369,18 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
         }
     }
 
+    // GLiNER UX: hint when zero entities returned without custom types
+    if entities.is_empty()
+        && extract_types.is_none()
+        && matches!(args.model, ModelBackend::Gliner | ModelBackend::Gliner2)
+        && !args.quiet
+    {
+        eprintln!(
+            "{} GLiNER returned no entities. Try --extract-types \"person,organization,location\" for zero-shot extraction.",
+            color("33", "hint:")
+        );
+    }
+
     // Warn about missing expected types (best-effort, non-fatal)
     if let Some(csv) = &args.expected_types {
         let mut expected: Vec<String> = Vec::new();
