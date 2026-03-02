@@ -1432,6 +1432,37 @@ impl Identity {
 // GroundedDocument: The Container
 // =============================================================================
 
+/// Wire format for [`GroundedDocument`] — contains only the persisted fields.
+/// Internal indexes are rebuilt automatically via [`GroundedDocument::rebuild_indexes`]
+/// during deserialization.
+#[derive(Deserialize)]
+struct GroundedDocumentWire {
+    id: String,
+    text: String,
+    signals: Vec<Signal<Location>>,
+    tracks: HashMap<TrackId, Track>,
+    identities: HashMap<IdentityId, Identity>,
+}
+
+impl From<GroundedDocumentWire> for GroundedDocument {
+    fn from(wire: GroundedDocumentWire) -> Self {
+        let mut doc = Self {
+            id: wire.id,
+            text: wire.text,
+            signals: wire.signals,
+            tracks: wire.tracks,
+            identities: wire.identities,
+            signal_to_track: HashMap::new(),
+            track_to_identity: HashMap::new(),
+            next_signal_id: SignalId::ZERO,
+            next_track_id: TrackId::ZERO,
+            next_identity_id: IdentityId::ZERO,
+        };
+        doc.rebuild_indexes();
+        doc
+    }
+}
+
 /// A document with grounded entity annotations using the three-level hierarchy.
 ///
 /// # Entity-Centric Design
@@ -1490,7 +1521,13 @@ impl Identity {
 ///
 /// Use [`validate_invariants()`](Self::validate_invariants) to check structural consistency
 /// after external modifications.
+///
+/// ## Serialization
+///
+/// Internal indexes (`signal_to_track`, `track_to_identity`, counter fields) are **not**
+/// serialized. They are rebuilt automatically on deserialization via [`rebuild_indexes`](Self::rebuild_indexes).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "GroundedDocumentWire")]
 pub struct GroundedDocument {
     /// Document identifier
     pub id: String,
@@ -1502,15 +1539,25 @@ pub struct GroundedDocument {
     pub tracks: HashMap<TrackId, Track>,
     /// Level 3: Global identities (KB-linked entities)
     pub identities: HashMap<IdentityId, Identity>,
-    /// Index: signal_id → track_id (for efficient lookup)
+    /// Index: signal_id → track_id (for efficient lookup).
+    /// Not serialized; rebuilt on deserialization.
+    #[serde(skip)]
     signal_to_track: HashMap<SignalId, TrackId>,
-    /// Index: track_id → identity_id (for efficient lookup)
+    /// Index: track_id → identity_id (for efficient lookup).
+    /// Not serialized; rebuilt on deserialization.
+    #[serde(skip)]
     track_to_identity: HashMap<TrackId, IdentityId>,
-    /// Next signal ID (for auto-incrementing)
+    /// Next signal ID (for auto-incrementing).
+    /// Not serialized; rebuilt on deserialization.
+    #[serde(skip)]
     next_signal_id: SignalId,
-    /// Next track ID
+    /// Next track ID.
+    /// Not serialized; rebuilt on deserialization.
+    #[serde(skip)]
     next_track_id: TrackId,
-    /// Next identity ID
+    /// Next identity ID.
+    /// Not serialized; rebuilt on deserialization.
+    #[serde(skip)]
     next_identity_id: IdentityId,
 }
 
@@ -1530,6 +1577,46 @@ impl GroundedDocument {
             next_track_id: TrackId::ZERO,
             next_identity_id: IdentityId::ZERO,
         }
+    }
+
+    /// Rebuild all internal indexes from the public data fields.
+    ///
+    /// Call this after deserializing a `GroundedDocument` or after directly mutating the
+    /// `signals`, `tracks`, or `identities` fields. The method recomputes:
+    /// - `signal_to_track` from each track's signal list
+    /// - `track_to_identity` from each track's `identity_id`
+    /// - `next_signal_id`, `next_track_id`, `next_identity_id` counters
+    pub fn rebuild_indexes(&mut self) {
+        self.signal_to_track.clear();
+        self.track_to_identity.clear();
+
+        for (&track_id, track) in &self.tracks {
+            for sig_ref in &track.signals {
+                self.signal_to_track.insert(sig_ref.signal_id, track_id);
+            }
+            if let Some(identity_id) = track.identity_id {
+                self.track_to_identity.insert(track_id, identity_id);
+            }
+        }
+
+        self.next_signal_id = self
+            .signals
+            .iter()
+            .map(|s| s.id)
+            .max()
+            .map_or(SignalId::ZERO, |id| id + 1);
+        self.next_track_id = self
+            .tracks
+            .keys()
+            .copied()
+            .max()
+            .map_or(TrackId::ZERO, |id| id + 1);
+        self.next_identity_id = self
+            .identities
+            .keys()
+            .copied()
+            .max()
+            .map_or(IdentityId::ZERO, |id| id + 1);
     }
 
     // -------------------------------------------------------------------------
