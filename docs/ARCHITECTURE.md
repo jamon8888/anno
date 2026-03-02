@@ -4,9 +4,11 @@ This repo is **pre-1.0** and prioritizes long-term maintainability over API stab
 
 ## Crate layout (dependency boundaries)
 
-- `crates/anno-core` (**core invariants + data model**)
-  - Owns: entity/coref/grounded types, dataset/spec metadata, coalescing primitives.
-  - Must not depend on: CLI, evaluation harnesses, heavy ML backends, or OS-specific glue.
+- `crates/anno-core` (**core invariants + data model + algorithms**)
+  - Owns: entity/coref/grounded types, dataset/spec metadata, coalescing primitives,
+    span candidate generation, similarity/clustering algorithms (`innr`, `sketchir`, `clump`).
+  - Must not depend on: CLI, evaluation harnesses, heavy ML backends (`ort`, `tokenizers`,
+    `candle-*`, `hf-hub`), or OS-specific glue.
 
 - `crates/anno-metrics` (**shared analysis primitives**)
   - Owns: dependency-light metrics + cross-context clustering primitives shared by `anno` and
