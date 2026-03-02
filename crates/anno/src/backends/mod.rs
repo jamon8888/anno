@@ -146,14 +146,14 @@ pub mod inference;
 pub mod label_prompt;
 pub mod lexicon;
 pub mod nuner;
-pub mod ort_compat;
-pub mod pattern_config;
+pub(crate) mod ort_compat;
+pub(crate) mod pattern_config;
 pub mod regex;
 /// Language-aware routing for automatic backend selection.
-pub mod router;
+pub(crate) mod router;
 pub mod rule;
 /// Shared span-tensor utilities for span-based NER backends (GLiNER/NuNER family).
-pub mod span_utils;
+pub(crate) mod span_utils;
 pub mod stacked;
 pub mod tplinker;
 pub mod w2ner;
@@ -343,10 +343,10 @@ pub mod universal_ner;
 pub mod llm_client;
 
 // LLM-based NER prompting (CodeNER-style)
-pub mod llm_prompt;
+pub(crate) mod llm_prompt;
 
 // Demonstration selection for few-shot NER (CMAS-inspired)
-pub mod demonstration;
+pub(crate) mod demonstration;
 
 // GLiNER via ONNX (uses same feature as other ONNX models)
 
