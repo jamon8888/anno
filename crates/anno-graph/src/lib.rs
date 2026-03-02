@@ -226,20 +226,21 @@ pub fn entities_to_knowledge_graph(
         ));
     }
 
+    // Build entity lookup by (text, start, end) for robust relation matching.
+    let entity_lookup: std::collections::HashMap<(&str, usize, usize), usize> = entities
+        .iter()
+        .enumerate()
+        .map(|(i, e)| ((e.text.as_str(), e.start, e.end), i))
+        .collect();
+
     // Semantic relation triples from RelationCapable backends.
     for rel in relations {
-        let head_iri = entity_iris
-            .iter()
-            .zip(entities.iter())
-            .find_map(|(iri, e)| {
-                (e.text == rel.head.text && e.start == rel.head.start).then_some(iri.as_str())
-            });
-        let tail_iri = entity_iris
-            .iter()
-            .zip(entities.iter())
-            .find_map(|(iri, e)| {
-                (e.text == rel.tail.text && e.start == rel.tail.start).then_some(iri.as_str())
-            });
+        let head_iri = entity_lookup
+            .get(&(rel.head.text.as_str(), rel.head.start, rel.head.end))
+            .map(|&i| entity_iris[i].as_str());
+        let tail_iri = entity_lookup
+            .get(&(rel.tail.text.as_str(), rel.tail.start, rel.tail.end))
+            .map(|&i| entity_iris[i].as_str());
         if let (Some(h), Some(t)) = (head_iri, tail_iri) {
             let pred = format!("{}/rel/{}", base, uri_safe(&rel.relation_type));
             let mut triple = Triple::new(h, pred.as_str(), t);
