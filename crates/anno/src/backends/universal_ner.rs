@@ -50,14 +50,12 @@
 //! - `UNIVERSAL_NER_API_KEY` - Dedicated UniversalNER key
 
 use std::collections::HashMap;
-#[cfg(feature = "llm")]
-use std::collections::HashSet;
 use std::sync::Mutex;
 
 use crate::backends::inference::ZeroShotNER;
 use crate::backends::llm_prompt::{BIOSchema, CodeNERPrompt};
 #[cfg(feature = "llm")]
-use crate::backends::streaming::{chunk_text, ChunkConfig};
+use crate::backends::streaming::{extract_chunked_parallel, ChunkConfig};
 use crate::offset::TextSpan;
 use crate::{Entity, EntityType, Model, Result};
 
@@ -366,54 +364,19 @@ Output:"#
             return self.extract_chunk(text, 0, entity_types);
         }
 
-        // Split into chunks at sentence boundaries with overlap.
+        // Use the shared parallel chunking infrastructure from streaming.rs.
+        // Splits at sentence boundaries, processes chunks in parallel,
+        // coalesces with exact-span + same-type overlap dedup.
         let config = ChunkConfig {
             chunk_size: self.max_chunk_chars,
             overlap: 200, // 200-char overlap to catch boundary entities
             respect_sentences: true,
             buffer_size: 1000,
         };
-        let chunks = chunk_text(text, &config);
 
-        if chunks.len() == 1 {
-            return self.extract_chunk(text, 0, entity_types);
-        }
-
-        // Process all chunks in parallel.
-        let results: Vec<Result<Vec<Entity>>> = std::thread::scope(|s| {
-            let handles: Vec<_> = chunks
-                .iter()
-                .map(|chunk| {
-                    s.spawn(|| self.extract_chunk(&chunk.text, chunk.char_offset, entity_types))
-                })
-                .collect();
-
-            handles.into_iter().map(|h| h.join().unwrap()).collect()
-        });
-
-        // Coalesce: collect all entities, dedup overlapping spans.
-        //
-        // Two levels of dedup (consistent with stacked/ensemble patterns):
-        // 1. Exact span dedup: identical (start, end) -> keep first seen
-        // 2. Overlap dedup: overlapping spans with same type -> keep longer span
-        //    (matches ConflictStrategy::LongestSpan from stacked NER)
-        let mut all_entities = Vec::new();
-        let mut seen_exact = HashSet::new();
-
-        for result in results {
-            let entities = result?;
-            for entity in entities {
-                if seen_exact.insert((entity.start, entity.end)) {
-                    all_entities.push(entity);
-                }
-            }
-        }
-
-        // Sort by position, then resolve overlapping spans of the same type.
-        all_entities.sort_by_key(|e| (e.start, e.end));
-        let all_entities = dedup_overlapping_same_type(all_entities);
-
-        Ok(all_entities)
+        extract_chunked_parallel(text, &config, |chunk_text, char_offset| {
+            self.extract_chunk(chunk_text, char_offset, entity_types)
+        })
     }
 
     /// Extract entities from a single chunk of text.
@@ -1039,48 +1002,6 @@ impl ZeroShotNER for UniversalNER {
     }
 }
 
-/// Dedup overlapping entities of the same type, keeping the longer span.
-///
-/// Consistent with `ConflictStrategy::LongestSpan` in stacked NER: when two
-/// entities overlap and share the same type (common in chunk overlap regions
-/// where the LLM extracts the same entity with slightly different boundaries),
-/// keep the longer span. Different types are kept (Union behavior).
-///
-/// Input must be sorted by (start, end).
-#[cfg(feature = "llm")]
-fn dedup_overlapping_same_type(entities: Vec<Entity>) -> Vec<Entity> {
-    if entities.len() <= 1 {
-        return entities;
-    }
-
-    let mut result: Vec<Entity> = Vec::with_capacity(entities.len());
-
-    for entity in entities {
-        let dominated = result.last().map_or(false, |prev: &Entity| {
-            // Overlaps?
-            entity.start < prev.end
-                && prev.start < entity.end
-                // Same type?
-                && prev.entity_type == entity.entity_type
-        });
-
-        if dominated {
-            // Replace if candidate is longer (LongestSpan strategy).
-            let prev = result.last().unwrap();
-            let prev_len = prev.end - prev.start;
-            let cand_len = entity.end - entity.start;
-            if cand_len > prev_len {
-                *result.last_mut().unwrap() = entity;
-            }
-            // Otherwise keep existing (earlier chunk has priority).
-        } else {
-            result.push(entity);
-        }
-    }
-
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1534,49 +1455,5 @@ mod tests {
         assert_eq!(ents[0].text, "Short");
     }
 
-    // ---- Overlap-aware dedup (chunk coalescing) ----
-
-    #[cfg(feature = "llm")]
-    #[test]
-    fn test_dedup_overlapping_same_type_keeps_longer() {
-        // Two overlapping Person entities -> keep longer
-        let entities = vec![
-            Entity::new("New York", EntityType::Location, 10, 18, 0.9),
-            Entity::new("New York City", EntityType::Location, 10, 23, 0.9),
-        ];
-        let result = dedup_overlapping_same_type(entities);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].text, "New York City");
-    }
-
-    #[cfg(feature = "llm")]
-    #[test]
-    fn test_dedup_overlapping_different_type_keeps_both() {
-        // Overlapping but different types -> keep both (Union)
-        let entities = vec![
-            Entity::new("Apple", EntityType::Organization, 0, 5, 0.9),
-            Entity::new("Apple Park", EntityType::Location, 0, 10, 0.9),
-        ];
-        let result = dedup_overlapping_same_type(entities);
-        assert_eq!(result.len(), 2);
-    }
-
-    #[cfg(feature = "llm")]
-    #[test]
-    fn test_dedup_non_overlapping_keeps_all() {
-        let entities = vec![
-            Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
-            Entity::new("Bob", EntityType::Person, 10, 13, 0.9),
-        ];
-        let result = dedup_overlapping_same_type(entities);
-        assert_eq!(result.len(), 2);
-    }
-
-    #[cfg(feature = "llm")]
-    #[test]
-    fn test_dedup_empty_and_single() {
-        assert!(dedup_overlapping_same_type(vec![]).is_empty());
-        let single = vec![Entity::new("X", EntityType::Person, 0, 1, 0.9)];
-        assert_eq!(dedup_overlapping_same_type(single).len(), 1);
-    }
+    // Overlap-aware dedup tests are in streaming::tests (shared infra).
 }

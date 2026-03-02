@@ -530,6 +530,112 @@ impl PipelineStage for DeduplicateOverlapping {
     }
 }
 
+/// Deduplicate overlapping entities of the same type, keeping the longer span.
+///
+/// Unlike `DeduplicateOverlapping` (which drops any overlapping entity regardless
+/// of type), this stage only merges when two entities overlap AND share the same
+/// `entity_type`. Different-type overlaps are preserved (Union behavior).
+///
+/// Consistent with `ConflictStrategy::LongestSpan` in stacked NER.
+/// Primary use case: coalescing entities from overlapping chunks where the same
+/// entity gets extracted with slightly different boundaries.
+pub struct DeduplicateOverlappingSameType;
+
+impl PipelineStage for DeduplicateOverlappingSameType {
+    fn process(&self, mut entities: Vec<Entity>, _text: &str) -> Vec<Entity> {
+        if entities.len() <= 1 {
+            return entities;
+        }
+
+        entities.sort_by_key(|e| (e.start, e.end));
+
+        let mut result: Vec<Entity> = Vec::with_capacity(entities.len());
+
+        for entity in entities {
+            let dominated = result.last().map_or(false, |prev: &Entity| {
+                entity.start < prev.end
+                    && prev.start < entity.end
+                    && prev.entity_type == entity.entity_type
+            });
+
+            if dominated {
+                let prev = result.last().unwrap();
+                let prev_len = prev.end - prev.start;
+                let cand_len = entity.end - entity.start;
+                if cand_len > prev_len {
+                    *result.last_mut().unwrap() = entity;
+                }
+            } else {
+                result.push(entity);
+            }
+        }
+
+        result
+    }
+
+    fn name(&self) -> &'static str {
+        "DeduplicateOverlappingSameType"
+    }
+}
+
+/// Extract entities from a large document using parallel chunked processing.
+///
+/// Splits `text` into overlapping chunks via `chunk_text()`, processes each
+/// chunk through `extract_fn` in parallel threads, and coalesces results with
+/// exact-span + same-type overlap dedup.
+///
+/// This is the generic parallel chunking primitive. Backend-specific wrappers
+/// (e.g., UniversalNER) call this with their own extraction closure.
+///
+/// Returns entities sorted by position with no duplicate spans.
+pub fn extract_chunked_parallel<F>(
+    text: &str,
+    config: &ChunkConfig,
+    extract_fn: F,
+) -> Result<Vec<Entity>>
+where
+    F: Fn(&str, usize) -> Result<Vec<Entity>> + Send + Sync,
+{
+    let chunks = chunk_text(text, config);
+
+    if chunks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    if chunks.len() == 1 {
+        return extract_fn(&chunks[0].text, chunks[0].char_offset);
+    }
+
+    // Process all chunks in parallel.
+    let results: Vec<Result<Vec<Entity>>> = std::thread::scope(|s| {
+        let extract_fn = &extract_fn;
+        let handles: Vec<_> = chunks
+            .iter()
+            .map(|chunk| s.spawn(move || extract_fn(&chunk.text, chunk.char_offset)))
+            .collect();
+
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+
+    // Coalesce: exact-span dedup + same-type overlap dedup.
+    let mut seen = std::collections::HashSet::new();
+    let mut all_entities = Vec::new();
+
+    for result in results {
+        let entities = result?;
+        for entity in entities {
+            if seen.insert((entity.start, entity.end)) {
+                all_entities.push(entity);
+            }
+        }
+    }
+
+    all_entities.sort_by_key(|e| (e.start, e.end));
+
+    let dedup = DeduplicateOverlappingSameType;
+    Ok(dedup.process(all_entities, text))
+}
+
 /// Normalize entity text (trim whitespace, normalize case, etc.).
 pub struct NormalizeText {
     lowercase: bool,
