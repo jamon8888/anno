@@ -13,18 +13,7 @@ use itertools::Itertools;
 use std::borrow::Cow;
 use std::sync::Arc;
 
-fn method_for_layer_name(layer_name: &str) -> anno_core::ExtractionMethod {
-    match layer_name {
-        // Our built-in IDs are lowercase and stable.
-        "regex" => anno_core::ExtractionMethod::Pattern,
-        "heuristic" => anno_core::ExtractionMethod::Heuristic,
-        // Legacy backend id (deprecated, but still used in tests/compositions).
-        "rule" => anno_core::ExtractionMethod::Heuristic,
-        // For everything else, this is the least-wrong default.
-        // (E.g. ONNX/Candle transformer backends, CRF, etc.)
-        _ => anno_core::ExtractionMethod::Neural,
-    }
-}
+use crate::backends::method_for_backend_name;
 
 // =============================================================================
 // Conflict Resolution
@@ -614,7 +603,7 @@ impl Model for StackedNER {
                 if candidate.provenance.is_none() {
                     candidate.provenance = Some(anno_core::Provenance {
                         source: Cow::Borrowed(layer_name),
-                        method: method_for_layer_name(layer_name),
+                        method: method_for_backend_name(layer_name),
                         pattern: None,
                         raw_confidence: Some(candidate.confidence),
                         model_version: None,

@@ -753,18 +753,18 @@ fn test_longest_span_with_ties() {
 // =========================================================================
 
 #[test]
-fn test_method_for_layer_name_all_branches() {
+fn test_method_for_backend_name_all_branches() {
     use anno_core::ExtractionMethod;
-    assert_eq!(method_for_layer_name("regex"), ExtractionMethod::Pattern);
+    assert_eq!(method_for_backend_name("regex"), ExtractionMethod::Pattern);
     assert_eq!(
-        method_for_layer_name("heuristic"),
+        method_for_backend_name("heuristic"),
         ExtractionMethod::Heuristic
     );
-    assert_eq!(method_for_layer_name("rule"), ExtractionMethod::Heuristic);
+    assert_eq!(method_for_backend_name("rule"), ExtractionMethod::Heuristic);
     // Anything else maps to Neural (onnx, candle, custom names, etc.)
-    assert_eq!(method_for_layer_name("onnx-bert"), ExtractionMethod::Neural);
-    assert_eq!(method_for_layer_name("candle"), ExtractionMethod::Neural);
-    assert_eq!(method_for_layer_name(""), ExtractionMethod::Neural);
+    assert_eq!(method_for_backend_name("onnx-bert"), ExtractionMethod::Neural);
+    assert_eq!(method_for_backend_name("candle"), ExtractionMethod::Neural);
+    assert_eq!(method_for_backend_name(""), ExtractionMethod::Neural);
 }
 
 #[test]

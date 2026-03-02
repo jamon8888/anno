@@ -91,11 +91,7 @@ use ndarray::{Array2, Array3};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use hf_hub::api::sync::Api;
-use ort::{
-    execution_providers::CPUExecutionProvider, session::builder::GraphOptimizationLevel,
-    session::Session,
-};
+use ort::session::Session;
 use tokenizers::Tokenizer;
 
 /// A coreference cluster (group of mentions referring to the same entity).

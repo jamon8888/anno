@@ -25,9 +25,8 @@ use anno_core::EntityType;
 #[cfg(feature = "onnx")]
 use {
     crate::sync::lock,
-    hf_hub::api::sync::Api,
     ndarray::Array2,
-    ort::{session::builder::GraphOptimizationLevel, session::Session},
+    ort::session::Session,
     std::collections::HashMap,
     tokenizers::Tokenizer,
 };

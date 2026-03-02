@@ -112,19 +112,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::backends::method_for_backend_name;
 use crate::{Entity, EntityType, Model, Result};
-
-fn method_for_backend_id(backend_id: &str) -> anno_core::ExtractionMethod {
-    match backend_id {
-        // Stable IDs used by `EnsembleNER::new()`.
-        "regex" => anno_core::ExtractionMethod::Pattern,
-        "heuristic" => anno_core::ExtractionMethod::Heuristic,
-        // Legacy backend id (deprecated, but still used in tests/compositions).
-        "rule" => anno_core::ExtractionMethod::Heuristic,
-        // Everything else: treat as neural by default.
-        _ => anno_core::ExtractionMethod::Neural,
-    }
-}
 
 pub mod weights;
 pub use weights::*;
@@ -295,7 +284,7 @@ impl EnsembleNER {
                 method: original_prov
                     .as_ref()
                     .map(|p| p.method)
-                    .unwrap_or_else(|| method_for_backend_id(&candidate.source)),
+                    .unwrap_or_else(|| method_for_backend_name(&candidate.source)),
                 pattern: original_prov.as_ref().and_then(|p| p.pattern.clone()),
                 raw_confidence: original_prov
                     .as_ref()
@@ -449,17 +438,35 @@ impl Model for EnsembleNER {
             return Ok(Vec::new());
         }
 
-        // Phase 1: Collect candidates from all backends
+        // Phase 1: Collect candidates from all backends (parallel)
+        let backend_results: Vec<(String, std::result::Result<Vec<Entity>, _>)> =
+            std::thread::scope(|s| {
+                let handles: Vec<_> = self
+                    .backends
+                    .iter()
+                    .enumerate()
+                    .map(|(i, backend)| {
+                        let backend_id = self
+                            .backend_ids
+                            .get(i)
+                            .cloned()
+                            .unwrap_or_else(|| backend.name().to_string());
+                        s.spawn(move || {
+                            let result = backend.extract_entities(text, language);
+                            (backend_id, result)
+                        })
+                    })
+                    .collect();
+
+                handles
+                    .into_iter()
+                    .map(|h| h.join().expect("backend thread panicked"))
+                    .collect()
+            });
+
         let mut all_candidates: Vec<Candidate> = Vec::new();
-
-        for (i, backend) in self.backends.iter().enumerate() {
-            let backend_id = self
-                .backend_ids
-                .get(i)
-                .cloned()
-                .unwrap_or_else(|| backend.name().to_string());
-
-            match backend.extract_entities(text, language) {
+        for (backend_id, result) in backend_results {
+            match result {
                 Ok(entities) => {
                     for entity in entities {
                         let weight = self.get_weight(&backend_id, &entity.entity_type);
@@ -471,10 +478,8 @@ impl Model for EnsembleNER {
                     }
                 }
                 Err(e) => {
-                    // Log but continue (opportunistic)
                     log::debug!(
-                        "EnsembleNER: Backend {} (id={}) failed: {}",
-                        backend.name(),
+                        "EnsembleNER: Backend id={} failed: {}",
                         backend_id,
                         e
                     );

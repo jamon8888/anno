@@ -51,9 +51,8 @@ pub(crate) mod scoring;
 
 use std::sync::Arc;
 
-use hf_hub::api::sync::Api;
 use ndarray::Array2;
-use ort::{session::builder::GraphOptimizationLevel, session::Session};
+use ort::session::Session;
 use tokenizers::Tokenizer;
 
 use super::t5::CorefCluster;
