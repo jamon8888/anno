@@ -32,7 +32,7 @@
 //! # Implementation Status
 //!
 //! This backend is LLM-backed and requires:
-//! - A supported API provider (OpenRouter recommended, or OpenAI / Anthropic / Gemini / Ollama)
+//! - A supported API provider (OpenRouter recommended, or Anthropic / Groq / Gemini / Ollama)
 //! - An API key in the environment (loaded from `.env` if present), or a local Ollama instance
 //! - The `llm` feature for HTTP calls (`ureq`)
 //!
@@ -43,17 +43,21 @@
 //!
 //! Automatically loads from `.env` if present. Supported keys (checked in order):
 //! - `OPENROUTER_API_KEY` - OpenRouter API (recommended: unified gateway for all models)
-//! - `OPENAI_API_KEY` - OpenAI API
+//! - `GROQ_API_KEY` - Groq API (ultra-fast inference for open models)
 //! - `ANTHROPIC_API_KEY` - Anthropic API
 //! - `GEMINI_API_KEY` - Google Gemini API
 //! - `OLLAMA_HOST` - Ollama server URL (default: `http://localhost:11434`; no key needed)
 //! - `UNIVERSAL_NER_API_KEY` - Dedicated UniversalNER key
 
 use std::collections::HashMap;
+#[cfg(feature = "llm")]
+use std::collections::HashSet;
 use std::sync::Mutex;
 
 use crate::backends::inference::ZeroShotNER;
 use crate::backends::llm_prompt::{BIOSchema, CodeNERPrompt};
+#[cfg(feature = "llm")]
+use crate::backends::streaming::{chunk_text, ChunkConfig};
 use crate::offset::TextSpan;
 use crate::{Entity, EntityType, Model, Result};
 
@@ -112,6 +116,10 @@ pub enum PromptStrategy {
     /// Simple JSON extraction prompt (default, reliable across models).
     #[default]
     Simple,
+    /// Compact output format using offset tuples and single-char type keys.
+    /// Saves ~60% output tokens vs Simple: `[[0,12,"P"],[16,21,"L"]]` instead
+    /// of verbose JSON objects with repeated field names and full text strings.
+    Compact,
     /// CodeNER-style prompt that frames NER as a coding task with BIO schema.
     /// Can yield higher F1 on models with strong code understanding.
     CodeNER {
@@ -145,6 +153,11 @@ pub struct UniversalNER {
     /// Per GPT-NER (NAACL 2025), reduces hallucination at the cost of 2x latency.
     #[cfg_attr(not(feature = "llm"), allow(dead_code))]
     self_verify: bool,
+    /// Maximum characters per LLM chunk. Texts exceeding this are split at
+    /// sentence boundaries, processed in parallel, and entities coalesced.
+    /// Default 4000 (safe for most LLM context windows with prompt overhead).
+    #[cfg_attr(not(feature = "llm"), allow(dead_code))]
+    max_chunk_chars: usize,
 }
 
 impl UniversalNER {
@@ -172,6 +185,7 @@ impl UniversalNER {
             domain_context: None,
             cache: Mutex::new(ResponseCache::new(256)),
             self_verify: false,
+            max_chunk_chars: 4000,
         })
     }
 
@@ -190,6 +204,7 @@ impl UniversalNER {
             domain_context: None,
             cache: Mutex::new(ResponseCache::new(256)),
             self_verify: false,
+            max_chunk_chars: 4000,
         })
     }
 
@@ -214,6 +229,16 @@ impl UniversalNER {
     /// over-confidently label null inputs as entities. Doubles latency/cost.
     pub fn self_verify(mut self, enabled: bool) -> Self {
         self.self_verify = enabled;
+        self
+    }
+
+    /// Set max characters per chunk for large documents.
+    ///
+    /// Texts exceeding this limit are split at sentence boundaries, processed
+    /// in parallel threads, and entities coalesced with overlap dedup.
+    /// Default: 4000 chars (safe for most LLM context windows).
+    pub fn max_chunk_chars(mut self, chars: usize) -> Self {
+        self.max_chunk_chars = chars;
         self
     }
 
@@ -249,6 +274,51 @@ Return ONLY the JSON array:"#
                 );
                 (system, user)
             }
+            PromptStrategy::Compact => {
+                // Build type legend: single-char keys to minimize output tokens
+                let legend: Vec<(String, &str)> = entity_types
+                    .iter()
+                    .map(|t| {
+                        let key = t.chars().next().unwrap_or('X').to_uppercase().to_string();
+                        (key, *t)
+                    })
+                    .collect();
+
+                // Deduplicate keys by appending index if collision
+                let mut seen = std::collections::HashSet::new();
+                let legend: Vec<(String, &str)> = legend
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, (mut k, t))| {
+                        if !seen.insert(k.clone()) {
+                            k = format!("{}{}", k, i);
+                        }
+                        (k, t)
+                    })
+                    .collect();
+
+                let legend_str = legend
+                    .iter()
+                    .map(|(k, t)| format!("{}={}", k, t))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let mut system = "NER. Return JSON array of [start,end,key] tuples where start/end are 0-based character offsets (not byte or word). No text field, no explanation.".to_string();
+
+                if let Some(ctx) = &self.domain_context {
+                    system.push_str("\nDomain: ");
+                    system.push_str(ctx);
+                }
+
+                // Show a worked example with exact character counting
+                let user = format!(
+                    r#"Legend: {legend_str}
+Text: "{text}"
+Example for "John met Ada in Rome.": [[0,4,"P"],[9,12,"P"],[16,20,"L"]]
+Output:"#
+                );
+                (system, user)
+            }
             PromptStrategy::CodeNER { chain_of_thought } => {
                 let et_list: Vec<EntityType> = entity_types
                     .iter()
@@ -281,13 +351,79 @@ Return ONLY the JSON array:"#
     /// Extract entities using LLM-based prompt engineering.
     ///
     /// Calls OpenAI-compatible API with structured NER prompt.
-    /// Supports OpenRouter (recommended), OpenAI, Anthropic, Gemini, and Ollama providers.
+    /// Supports OpenRouter (recommended), Anthropic, Groq, Gemini, and Ollama providers.
     /// Requires `llm` feature for HTTP client (ureq).
+    ///
+    /// For texts exceeding `max_chunk_chars`, splits at sentence boundaries,
+    /// processes chunks in parallel threads, and coalesces entities with
+    /// overlap dedup.
     #[cfg(feature = "llm")]
     fn extract_with_llm(&self, text: &str, entity_types: &[&str]) -> Result<Vec<Entity>> {
+        let char_count = text.chars().count();
+
+        // If text fits in one chunk, process directly.
+        if char_count <= self.max_chunk_chars {
+            return self.extract_chunk(text, 0, entity_types);
+        }
+
+        // Split into chunks at sentence boundaries with overlap.
+        let config = ChunkConfig {
+            chunk_size: self.max_chunk_chars,
+            overlap: 200, // 200-char overlap to catch boundary entities
+            respect_sentences: true,
+            buffer_size: 1000,
+        };
+        let chunks = chunk_text(text, &config);
+
+        if chunks.len() == 1 {
+            return self.extract_chunk(text, 0, entity_types);
+        }
+
+        // Process all chunks in parallel.
+        let results: Vec<Result<Vec<Entity>>> = std::thread::scope(|s| {
+            let handles: Vec<_> = chunks
+                .iter()
+                .map(|chunk| {
+                    s.spawn(|| self.extract_chunk(&chunk.text, chunk.char_offset, entity_types))
+                })
+                .collect();
+
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+
+        // Coalesce: collect all entities, dedup by (start, end) from overlap regions.
+        let mut seen = HashSet::new();
+        let mut all_entities = Vec::new();
+
+        for result in results {
+            let entities = result?;
+            for entity in entities {
+                if seen.insert((entity.start, entity.end)) {
+                    all_entities.push(entity);
+                }
+            }
+        }
+
+        // Sort by position for deterministic output.
+        all_entities.sort_by_key(|e| (e.start, e.end));
+
+        Ok(all_entities)
+    }
+
+    /// Extract entities from a single chunk of text.
+    ///
+    /// `char_offset` is the chunk's starting character offset in the original
+    /// document; entity offsets in the response are adjusted accordingly.
+    #[cfg(feature = "llm")]
+    fn extract_chunk(
+        &self,
+        chunk_text: &str,
+        char_offset: usize,
+        entity_types: &[&str],
+    ) -> Result<Vec<Entity>> {
         let (api_key, provider) = crate::env::llm_api_key().ok_or_else(|| {
             crate::Error::FeatureNotAvailable(
-                "No LLM API key found. Set OPENROUTER_API_KEY (recommended), OPENAI_API_KEY, ANTHROPIC_API_KEY, or run Ollama locally.".into(),
+                "No LLM API key found. Set OPENROUTER_API_KEY (recommended), GROQ_API_KEY, ANTHROPIC_API_KEY, or run Ollama locally.".into(),
             )
         })?;
 
@@ -299,29 +435,41 @@ Return ONLY the JSON array:"#
 
         // Determine model name for cache key
         let model_for_cache = match provider {
-            "openrouter" => default_model("google/gemini-2.5-flash"),
-            "openai" => default_model("gpt-4.1-nano"),
+            "openrouter" => default_model("google/gemini-2.5-flash-lite"),
             "anthropic" => default_model("claude-haiku-4-5-20251001"),
+            "groq" => default_model("llama-3.3-70b-versatile"),
             "ollama" => default_model("llama3.2:3b"),
-            _ => default_model("google/gemini-2.5-flash"),
+            _ => default_model("google/gemini-2.5-flash-lite"),
         };
 
-        // Check cache first
-        let key = cache_key(text, entity_types, &model_for_cache);
+        // Check cache first (keyed on chunk text, not full document)
+        let key = cache_key(chunk_text, entity_types, &model_for_cache);
         if let Ok(cache) = self.cache.lock() {
             if let Some(cached) = cache.get(key) {
-                return Ok(cached.clone());
+                // Adjust offsets from chunk-local to document-global
+                let adjusted: Vec<Entity> = cached
+                    .iter()
+                    .map(|e| {
+                        let mut e = e.clone();
+                        if char_offset > 0 {
+                            e.start += char_offset;
+                            e.end += char_offset;
+                        }
+                        e
+                    })
+                    .collect();
+                return Ok(adjusted);
             }
         }
 
-        let (system_msg, user_msg) = self.build_prompt(text, entity_types);
+        let (system_msg, user_msg) = self.build_prompt(chunk_text, entity_types);
 
         let max_tokens = self.config.as_ref().map_or(1024, |c| c.max_tokens);
 
         let (url, model, headers): (String, String, Vec<(&str, String)>) = match provider {
             "openrouter" => (
                 "https://openrouter.ai/api/v1/chat/completions".to_string(),
-                default_model("google/gemini-2.5-flash"),
+                default_model("google/gemini-2.5-flash-lite"),
                 vec![
                     ("Authorization", format!("Bearer {}", api_key)),
                     (
@@ -331,11 +479,6 @@ Return ONLY the JSON array:"#
                     ("X-Title", "Anno NER".to_string()),
                 ],
             ),
-            "openai" => (
-                "https://api.openai.com/v1/chat/completions".to_string(),
-                default_model("gpt-4.1-nano"),
-                vec![("Authorization", format!("Bearer {}", api_key))],
-            ),
             "anthropic" => (
                 "https://api.anthropic.com/v1/messages".to_string(),
                 default_model("claude-haiku-4-5-20251001"),
@@ -343,6 +486,11 @@ Return ONLY the JSON array:"#
                     ("x-api-key", api_key.clone()),
                     ("anthropic-version", "2023-06-01".to_string()),
                 ],
+            ),
+            "groq" => (
+                "https://api.groq.com/openai/v1/chat/completions".to_string(),
+                default_model("llama-3.3-70b-versatile"),
+                vec![("Authorization", format!("Bearer {}", api_key))],
             ),
             "ollama" => {
                 let host = std::env::var("OLLAMA_HOST")
@@ -356,7 +504,7 @@ Return ONLY the JSON array:"#
             "gemini" => (
                 // Route Gemini through OpenRouter-compatible format
                 "https://openrouter.ai/api/v1/chat/completions".to_string(),
-                "google/gemini-2.5-flash".to_string(),
+                "google/gemini-2.5-flash-lite".to_string(),
                 vec![("Authorization", format!("Bearer {}", api_key))],
             ),
             other => {
@@ -411,17 +559,30 @@ Return ONLY the JSON array:"#
                 .unwrap_or("[]")
         };
 
-        let mut entities = self.parse_llm_response(content, text)?;
+        let mut entities = if matches!(self.prompt_strategy, PromptStrategy::Compact) {
+            self.parse_compact_response(content, chunk_text, entity_types)?
+        } else {
+            self.parse_llm_response(content, chunk_text)?
+        };
 
         // Self-verification: re-query LLM to confirm each entity (GPT-NER strategy).
         // Reduces hallucination at the cost of additional API calls.
         if self.self_verify && !entities.is_empty() {
-            entities = self.verify_entities(&url, &model, &headers, provider, text, entities)?;
+            entities =
+                self.verify_entities(&url, &model, &headers, provider, chunk_text, entities)?;
         }
 
-        // Cache the result
+        // Cache the chunk-local result (before offset adjustment)
         if let Ok(mut cache) = self.cache.lock() {
             cache.insert(key, entities.clone());
+        }
+
+        // Adjust offsets from chunk-local to document-global
+        if char_offset > 0 {
+            for entity in &mut entities {
+                entity.start += char_offset;
+                entity.end += char_offset;
+            }
         }
 
         Ok(entities)
@@ -534,6 +695,144 @@ Return ONLY the JSON array:"#,
             "UniversalNER requires the 'llm' feature to make HTTP requests (ureq). Rebuild with --features llm and set OPENROUTER_API_KEY (or run Ollama locally)."
                 .into(),
         ))
+    }
+
+    /// Parse LLM response into entities.
+    ///
+    /// Parse compact format: `[[start, end, "key"], ...]`.
+    ///
+    /// No text field -- we extract from original_text using offsets.
+    /// Type key is mapped back via the entity_types legend.
+    #[allow(dead_code)]
+    fn parse_compact_response(
+        &self,
+        content: &str,
+        original_text: &str,
+        entity_types: &[&str],
+    ) -> Result<Vec<Entity>> {
+        // Build key -> type mapping (same logic as build_prompt Compact)
+        let mut key_to_type: Vec<(String, &str)> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for (i, t) in entity_types.iter().enumerate() {
+            let mut k = t.chars().next().unwrap_or('X').to_uppercase().to_string();
+            if !seen.insert(k.clone()) {
+                k = format!("{}{}", k, i);
+            }
+            key_to_type.push((k, t));
+        }
+
+        let json_str = content.trim();
+        let json_str = json_str
+            .strip_prefix("```json")
+            .or_else(|| json_str.strip_prefix("```JSON"))
+            .or_else(|| json_str.strip_prefix("```"))
+            .unwrap_or(json_str)
+            .trim();
+        let json_str = json_str.strip_suffix("```").unwrap_or(json_str).trim();
+
+        // Find the array
+        let json_str = if json_str.starts_with('[') {
+            json_str.to_string()
+        } else if let Some(start) = json_str.find('[') {
+            if let Some(end) = json_str.rfind(']') {
+                json_str[start..=end].to_string()
+            } else {
+                return Ok(Vec::new());
+            }
+        } else {
+            return Ok(Vec::new());
+        };
+
+        let items: Vec<serde_json::Value> =
+            serde_json::from_str(&json_str).map_err(|e| {
+                crate::Error::Parse(format!("Compact NER parse error: {}", e))
+            })?;
+
+        let char_count = original_text.chars().count();
+        let mut entities = Vec::new();
+
+        for item in &items {
+            let arr = match item.as_array() {
+                Some(a) if a.len() >= 3 => a,
+                _ => continue,
+            };
+
+            let start = match arr[0].as_u64() {
+                Some(v) => v as usize,
+                None => continue,
+            };
+            let end = match arr[1].as_u64() {
+                Some(v) => v as usize,
+                None => continue,
+            };
+            let key = match arr[2].as_str() {
+                Some(k) => k,
+                None => continue,
+            };
+
+            if start >= end || end > char_count {
+                continue;
+            }
+
+            // Snap offsets to word boundaries if they land mid-word.
+            // LLMs often get offsets slightly wrong; snapping recovers valid entities.
+            let chars: Vec<char> = original_text.chars().collect();
+            let mut adj_start = start;
+            let mut adj_end = end;
+
+            // Snap start leftward to word boundary (max 3 chars)
+            while adj_start > 0
+                && adj_start > start.saturating_sub(3)
+                && !chars[adj_start.saturating_sub(1)].is_whitespace()
+                && !chars[adj_start.saturating_sub(1)].is_ascii_punctuation()
+            {
+                adj_start -= 1;
+            }
+            // Snap end rightward to word boundary (max 3 chars)
+            while adj_end < chars.len()
+                && adj_end < end + 3
+                && !chars[adj_end].is_whitespace()
+                && !chars[adj_end].is_ascii_punctuation()
+            {
+                adj_end += 1;
+            }
+
+            let text_span: String = chars[adj_start..adj_end].iter().collect();
+            let (start, end) = (adj_start, adj_end);
+
+            if text_span.trim().is_empty() {
+                continue;
+            }
+
+            // Map key back to entity type
+            let type_str = key_to_type
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, t)| *t)
+                .unwrap_or("misc");
+
+            let entity_type = match type_str.to_lowercase().as_str() {
+                "person" | "per" => EntityType::Person,
+                "organization" | "org" => EntityType::Organization,
+                "location" | "loc" | "gpe" => EntityType::Location,
+                "date" | "time" => EntityType::Date,
+                "money" | "currency" => EntityType::Money,
+                other => EntityType::Other(other.to_string()),
+            };
+
+            let mut entity = Entity::new(
+                text_span,
+                entity_type,
+                start,
+                end,
+                0.9,
+            );
+            entity.provenance =
+                Some(crate::Provenance::ml("universal_ner", entity.confidence));
+            entities.push(entity);
+        }
+
+        Ok(entities)
     }
 
     /// Parse LLM response into entities.
@@ -653,7 +952,7 @@ impl Model for UniversalNER {
     fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
         if !self.llm_available {
             return Err(crate::Error::FeatureNotAvailable(
-                "UniversalNER requires an LLM provider. Set OPENROUTER_API_KEY (recommended), OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, UNIVERSAL_NER_API_KEY, or run Ollama locally."
+                "UniversalNER requires an LLM provider. Set OPENROUTER_API_KEY (recommended), GROQ_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, UNIVERSAL_NER_API_KEY, or run Ollama locally."
                     .into(),
             ));
         }
@@ -716,7 +1015,7 @@ impl ZeroShotNER for UniversalNER {
     ) -> Result<Vec<Entity>> {
         if !self.llm_available {
             return Err(crate::Error::FeatureNotAvailable(
-                "UniversalNER requires an LLM provider. Set OPENROUTER_API_KEY (recommended), OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, UNIVERSAL_NER_API_KEY, or run Ollama locally."
+                "UniversalNER requires an LLM provider. Set OPENROUTER_API_KEY (recommended), GROQ_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, UNIVERSAL_NER_API_KEY, or run Ollama locally."
                     .into(),
             ));
         }
@@ -760,6 +1059,7 @@ mod tests {
             "ANTHROPIC_API_KEY",
             "OPENROUTER_API_KEY",
             "GEMINI_API_KEY",
+            "GROQ_API_KEY",
             "UNIVERSAL_NER_API_KEY",
         ] {
             std::env::set_var(k, "");
@@ -1115,5 +1415,74 @@ mod tests {
             system.contains("Biomedical research"),
             "domain context should appear in CodeNER system message"
         );
+    }
+
+    // ---- Compact prompt strategy tests ----
+
+    #[test]
+    fn test_build_prompt_compact() {
+        let model = UniversalNER::new()
+            .unwrap()
+            .prompt_strategy(PromptStrategy::Compact);
+        let (system, user) = model.build_prompt("Alice met Bob.", &["person", "location"]);
+        assert!(system.contains("NER"));
+        assert!(user.contains("Legend:"));
+        assert!(user.contains("P=person"));
+        assert!(user.contains("L=location"));
+        // Compact prompt should be shorter than Simple
+        assert!(user.len() < 200, "compact prompt should be concise: {} chars", user.len());
+    }
+
+    #[test]
+    fn test_parse_compact_response() {
+        let model = UniversalNER::new().unwrap();
+        let text = "Alice met Bob in Paris.";
+        let response = r#"[[0,5,"P"],[10,13,"P"],[17,22,"L"]]"#;
+        let ents = model
+            .parse_compact_response(response, text, &["person", "location"])
+            .expect("parse compact");
+        assert_eq!(ents.len(), 3);
+        assert_eq!(ents[0].text, "Alice");
+        assert!(matches!(ents[0].entity_type, EntityType::Person));
+        assert_eq!(ents[1].text, "Bob");
+        assert!(matches!(ents[1].entity_type, EntityType::Person));
+        assert_eq!(ents[2].text, "Paris");
+        assert!(matches!(ents[2].entity_type, EntityType::Location));
+    }
+
+    #[test]
+    fn test_parse_compact_response_with_fences() {
+        let model = UniversalNER::new().unwrap();
+        let text = "Alice in Zurich.";
+        let response = "```json\n[[0,5,\"P\"],[9,15,\"L\"]]\n```";
+        let ents = model
+            .parse_compact_response(response, text, &["person", "location"])
+            .expect("parse compact with fences");
+        assert_eq!(ents.len(), 2);
+    }
+
+    #[test]
+    fn test_max_chunk_chars_builder() {
+        let model = UniversalNER::new().unwrap().max_chunk_chars(2000);
+        assert_eq!(model.max_chunk_chars, 2000);
+    }
+
+    #[test]
+    fn test_default_max_chunk_chars() {
+        let model = UniversalNER::new().unwrap();
+        assert_eq!(model.max_chunk_chars, 4000);
+    }
+
+    #[test]
+    fn test_parse_compact_response_filters_invalid() {
+        let model = UniversalNER::new().unwrap();
+        let text = "Short"; // 5 chars
+        let response = r#"[[0,5,"P"],[10,20,"L"],[3,2,"P"]]"#;
+        let ents = model
+            .parse_compact_response(response, text, &["person", "location"])
+            .expect("parse compact filters");
+        // Only first is valid (second out of bounds, third start>=end)
+        assert_eq!(ents.len(), 1);
+        assert_eq!(ents[0].text, "Short");
     }
 }

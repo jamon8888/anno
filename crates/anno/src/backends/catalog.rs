@@ -149,12 +149,12 @@ pub static BACKEND_CATALOG: &[BackendInfo] = &[
         status: BackendStatus::Beta,
         zero_shot: true,
         gpu_support: true,
-        description: "UniversalNER (LLM-backed zero-shot via OpenRouter/OpenAI/Anthropic/Ollama; configurable model)",
+        description: "UniversalNER (LLM-backed zero-shot via OpenRouter/Anthropic/Groq/Ollama; configurable model)",
         recommended_models: &[
-            "google/gemini-2.5-flash",
+            "google/gemini-2.5-flash-lite",
             "anthropic/claude-haiku-4.5",
-            "openai/gpt-4.1-nano",
-            "deepseek/deepseek-chat",
+            "deepseek/deepseek-v3.2",
+            "llama-3.3-70b-versatile",
         ],
     },
     BackendInfo {

@@ -23,9 +23,9 @@
 //! | `HF_TOKEN` | HuggingFace API token for gated models |
 //! | `HF_API_TOKEN` | Alias for `HF_TOKEN` (HuggingFace API token) |
 //! | `OPENROUTER_API_KEY` | OpenRouter API key (recommended: unified gateway for all LLM models) |
-//! | `OPENAI_API_KEY` | OpenAI API key for LLM backends |
 //! | `ANTHROPIC_API_KEY` | Anthropic API key for Claude LLM backends |
 //! | `GEMINI_API_KEY` | Google Gemini API key |
+//! | `GROQ_API_KEY` | Groq API key (ultra-fast inference for open models) |
 //! | `OLLAMA_HOST` | Ollama server URL (default: `http://localhost:11434`) |
 //! | `ANNO_CACHE_DIR` | Custom cache directory for models/datasets |
 //! | `ANNO_CI_SEED` | Fixed seed for reproducible CI testing |
@@ -206,9 +206,9 @@ pub fn has_llm_api_key() -> bool {
     }
 
     nonempty("OPENROUTER_API_KEY")
-        || nonempty("OPENAI_API_KEY")
         || nonempty("ANTHROPIC_API_KEY")
         || nonempty("GEMINI_API_KEY")
+        || nonempty("GROQ_API_KEY")
         || nonempty("OLLAMA_HOST")
         || std::net::TcpStream::connect("127.0.0.1:11434").is_ok()
 }
@@ -216,7 +216,7 @@ pub fn has_llm_api_key() -> bool {
 /// Get the best available LLM API key and provider.
 /// Returns (key, provider) tuple.
 ///
-/// Priority: OpenRouter (unified gateway) > OpenAI > Anthropic > Gemini > Ollama (local).
+/// Priority: OpenRouter (unified gateway) > Anthropic > Gemini > Groq > Ollama (local).
 #[must_use]
 pub fn llm_api_key() -> Option<(String, &'static str)> {
     let nonempty = |name: &str| -> Option<String> {
@@ -227,14 +227,14 @@ pub fn llm_api_key() -> Option<(String, &'static str)> {
     if let Some(key) = nonempty("OPENROUTER_API_KEY") {
         return Some((key, "openrouter"));
     }
-    if let Some(key) = nonempty("OPENAI_API_KEY") {
-        return Some((key, "openai"));
-    }
     if let Some(key) = nonempty("ANTHROPIC_API_KEY") {
         return Some((key, "anthropic"));
     }
     if let Some(key) = nonempty("GEMINI_API_KEY") {
         return Some((key, "gemini"));
+    }
+    if let Some(key) = nonempty("GROQ_API_KEY") {
+        return Some((key, "groq"));
     }
     // Check if Ollama is available locally (no key needed)
     if nonempty("OLLAMA_HOST").is_some() || std::net::TcpStream::connect("127.0.0.1:11434").is_ok()

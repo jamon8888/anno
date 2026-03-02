@@ -37,7 +37,7 @@ use serde::{Deserialize, Serialize};
 /// Configuration for LLM inference.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
-    /// Model identifier (e.g., "google/gemini-2.5-flash", "anthropic/claude-haiku-4.5", "openai/gpt-4.1-nano")
+    /// Model identifier (e.g., "google/gemini-2.5-flash-lite", "anthropic/claude-haiku-4.5", "deepseek/deepseek-v3.2")
     pub model: String,
     /// Maximum tokens to generate
     pub max_tokens: usize,
@@ -57,7 +57,7 @@ pub struct LlmConfig {
 impl Default for LlmConfig {
     fn default() -> Self {
         Self {
-            model: "google/gemini-2.5-flash".to_string(),
+            model: "google/gemini-2.5-flash-lite".to_string(),
             max_tokens: 1024,
             temperature: 0.0,
             system_prompt: None,
@@ -68,7 +68,21 @@ impl Default for LlmConfig {
 }
 
 impl LlmConfig {
-    /// Preset: Google Gemini 2.5 Flash via OpenRouter (cheapest good option).
+    /// Preset: Google Gemini 2.5 Flash Lite via OpenRouter ($0.10/$0.40 per M tokens).
+    /// Fast and cheap, good for bulk NER. Default model.
+    pub fn gemini_flash_lite() -> Self {
+        Self {
+            model: "google/gemini-2.5-flash-lite".to_string(),
+            max_tokens: 1024,
+            temperature: 0.0,
+            system_prompt: None,
+            endpoint: None,
+            api_key: None,
+        }
+    }
+
+    /// Preset: Google Gemini 2.5 Flash via OpenRouter ($0.30/$2.50 per M tokens).
+    /// Strong quality, higher cost than lite variant.
     pub fn gemini_flash() -> Self {
         Self {
             model: "google/gemini-2.5-flash".to_string(),
@@ -80,7 +94,8 @@ impl LlmConfig {
         }
     }
 
-    /// Preset: Anthropic Claude Haiku 4.5 via OpenRouter (highest structured output quality).
+    /// Preset: Anthropic Claude Haiku 4.5 via OpenRouter ($1.00/$5.00 per M tokens).
+    /// Highest structured output quality for NER.
     pub fn haiku() -> Self {
         Self {
             model: "anthropic/claude-haiku-4.5".to_string(),
@@ -92,10 +107,11 @@ impl LlmConfig {
         }
     }
 
-    /// Preset: OpenAI GPT-4.1 Nano via OpenRouter (fast, cheap).
-    pub fn gpt4_nano() -> Self {
+    /// Preset: DeepSeek V3.2 via OpenRouter ($0.25/$0.40 per M tokens).
+    /// Best open-source quality, cheapest output tokens.
+    pub fn deepseek() -> Self {
         Self {
-            model: "openai/gpt-4.1-nano".to_string(),
+            model: "deepseek/deepseek-v3.2".to_string(),
             max_tokens: 1024,
             temperature: 0.0,
             system_prompt: None,
@@ -104,14 +120,41 @@ impl LlmConfig {
         }
     }
 
-    /// Preset: DeepSeek V3 via OpenRouter (cheapest output tokens).
-    pub fn deepseek() -> Self {
+    /// Preset: Llama 3.3 70B via OpenRouter ($0.10/$0.32 per M tokens).
+    /// Also available via Groq for ultra-fast inference (set GROQ_API_KEY).
+    pub fn llama3() -> Self {
         Self {
-            model: "deepseek/deepseek-chat".to_string(),
+            model: "meta-llama/llama-3.3-70b-instruct".to_string(),
             max_tokens: 1024,
             temperature: 0.0,
             system_prompt: None,
             endpoint: None,
+            api_key: None,
+        }
+    }
+
+    /// Preset: Llama 4 Scout via OpenRouter ($0.08/$0.30 per M tokens).
+    /// Newest Llama, strong quality for the price.
+    pub fn llama4() -> Self {
+        Self {
+            model: "meta-llama/llama-4-scout".to_string(),
+            max_tokens: 1024,
+            temperature: 0.0,
+            system_prompt: None,
+            endpoint: None,
+            api_key: None,
+        }
+    }
+
+    /// Preset: Groq direct API (ultra-fast inference for open models).
+    /// Uses GROQ_API_KEY. Model should be a Groq-hosted model ID.
+    pub fn groq(model: &str) -> Self {
+        Self {
+            model: model.to_string(),
+            max_tokens: 1024,
+            temperature: 0.0,
+            system_prompt: None,
+            endpoint: Some("https://api.groq.com/openai/v1/chat/completions".to_string()),
             api_key: None,
         }
     }
@@ -292,15 +335,9 @@ mod tests {
     }
 
     #[test]
-    fn test_preset_gpt4_nano() {
-        let config = LlmConfig::gpt4_nano();
-        assert_eq!(config.model, "openai/gpt-4.1-nano");
-    }
-
-    #[test]
     fn test_preset_deepseek() {
         let config = LlmConfig::deepseek();
-        assert_eq!(config.model, "deepseek/deepseek-chat");
+        assert_eq!(config.model, "deepseek/deepseek-v3.2");
     }
 
     #[test]
@@ -312,9 +349,15 @@ mod tests {
     }
 
     #[test]
-    fn test_default_is_gemini_flash() {
+    fn test_default_is_gemini_flash_lite() {
         let config = LlmConfig::default();
-        assert_eq!(config.model, "google/gemini-2.5-flash");
+        assert_eq!(config.model, "google/gemini-2.5-flash-lite");
         assert_eq!(config.max_tokens, 1024);
+    }
+
+    #[test]
+    fn test_preset_gemini_flash_lite() {
+        let config = LlmConfig::gemini_flash_lite();
+        assert_eq!(config.model, "google/gemini-2.5-flash-lite");
     }
 }
