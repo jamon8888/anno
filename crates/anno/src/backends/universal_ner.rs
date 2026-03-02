@@ -32,8 +32,8 @@
 //! # Implementation Status
 //!
 //! This backend is LLM-backed and requires:
-//! - A supported API provider (OpenAI / Anthropic / OpenRouter)
-//! - An API key in the environment (loaded from `.env` if present)
+//! - A supported API provider (OpenRouter recommended, or OpenAI / Anthropic / Gemini / Ollama)
+//! - An API key in the environment (loaded from `.env` if present), or a local Ollama instance
 //! - The `llm` feature for HTTP calls (`ureq`)
 //!
 //! Behavior is **explicit**:
@@ -41,16 +41,84 @@
 //!
 //! # Environment Variables
 //!
-//! Automatically loads from `.env` if present. Supported keys:
+//! Automatically loads from `.env` if present. Supported keys (checked in order):
+//! - `OPENROUTER_API_KEY` - OpenRouter API (recommended: unified gateway for all models)
 //! - `OPENAI_API_KEY` - OpenAI API
-//! - `OPENROUTER_API_KEY` - OpenRouter API  
-//! - `GEMINI_API_KEY` - Google Gemini API
 //! - `ANTHROPIC_API_KEY` - Anthropic API
+//! - `GEMINI_API_KEY` - Google Gemini API
+//! - `OLLAMA_HOST` - Ollama server URL (default: `http://localhost:11434`; no key needed)
 //! - `UNIVERSAL_NER_API_KEY` - Dedicated UniversalNER key
 
+use std::collections::HashMap;
+use std::sync::Mutex;
+
 use crate::backends::inference::ZeroShotNER;
+use crate::backends::llm_prompt::{BIOSchema, CodeNERPrompt};
 use crate::offset::TextSpan;
 use crate::{Entity, EntityType, Model, Result};
+
+/// Simple LRU-ish response cache keyed on (text_hash, types_hash, model).
+/// Avoids duplicate API calls for the same input.
+#[derive(Debug, Default)]
+#[cfg_attr(not(feature = "llm"), allow(dead_code))]
+struct ResponseCache {
+    entries: HashMap<u64, Vec<Entity>>,
+    /// Insertion order for eviction (oldest first).
+    order: Vec<u64>,
+    capacity: usize,
+}
+
+#[cfg_attr(not(feature = "llm"), allow(dead_code))]
+impl ResponseCache {
+    fn new(capacity: usize) -> Self {
+        Self {
+            entries: HashMap::new(),
+            order: Vec::new(),
+            capacity,
+        }
+    }
+
+    fn get(&self, key: u64) -> Option<&Vec<Entity>> {
+        self.entries.get(&key)
+    }
+
+    fn insert(&mut self, key: u64, entities: Vec<Entity>) {
+        if self.entries.len() >= self.capacity {
+            // Evict oldest
+            if let Some(oldest) = self.order.first().copied() {
+                self.entries.remove(&oldest);
+                self.order.remove(0);
+            }
+        }
+        self.entries.insert(key, entities);
+        self.order.push(key);
+    }
+}
+
+/// Compute a simple hash for cache keys.
+#[cfg(feature = "llm")]
+fn cache_key(text: &str, types: &[&str], model: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    types.hash(&mut hasher);
+    model.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Prompting strategy for LLM-based NER.
+#[derive(Debug, Clone, Default)]
+pub enum PromptStrategy {
+    /// Simple JSON extraction prompt (default, reliable across models).
+    #[default]
+    Simple,
+    /// CodeNER-style prompt that frames NER as a coding task with BIO schema.
+    /// Can yield higher F1 on models with strong code understanding.
+    CodeNER {
+        /// Enable chain-of-thought reasoning (slower but sometimes more accurate).
+        chain_of_thought: bool,
+    },
+}
 
 /// UniversalNER backend for LLM-based zero-shot NER.
 ///
@@ -59,6 +127,24 @@ use crate::{Entity, EntityType, Model, Result};
 pub struct UniversalNER {
     /// Whether LLM backend is available
     llm_available: bool,
+    /// Optional LLM configuration (model, endpoint, etc.).
+    /// Only read when `llm` feature is enabled (for HTTP calls).
+    #[cfg_attr(not(feature = "llm"), allow(dead_code))]
+    config: Option<crate::backends::llm_client::LlmConfig>,
+    /// Prompting strategy.
+    #[cfg_attr(not(feature = "llm"), allow(dead_code))]
+    prompt_strategy: PromptStrategy,
+    /// Optional domain context to improve NER quality.
+    /// Per NER4all findings, domain context yields +5% recall over generic prompts.
+    #[cfg_attr(not(feature = "llm"), allow(dead_code))]
+    domain_context: Option<String>,
+    /// Response cache to avoid duplicate API calls.
+    #[cfg_attr(not(feature = "llm"), allow(dead_code))]
+    cache: Mutex<ResponseCache>,
+    /// Whether to run self-verification (re-query LLM to confirm entities).
+    /// Per GPT-NER (NAACL 2025), reduces hallucination at the cost of 2x latency.
+    #[cfg_attr(not(feature = "llm"), allow(dead_code))]
+    self_verify: bool,
 }
 
 impl UniversalNER {
@@ -72,92 +158,246 @@ impl UniversalNER {
 
         // LLM availability depends on:
         // - compile-time feature (`llm`) for HTTP support
-        // - runtime configuration (API key)
+        // - runtime configuration (API key or local Ollama)
         let universal_key = std::env::var("UNIVERSAL_NER_API_KEY")
             .ok()
             .is_some_and(|v| !v.trim().is_empty());
         let llm_available =
             cfg!(feature = "llm") && (crate::env::has_llm_api_key() || universal_key);
 
-        Ok(Self { llm_available })
+        Ok(Self {
+            llm_available,
+            config: None,
+            prompt_strategy: PromptStrategy::default(),
+            domain_context: None,
+            cache: Mutex::new(ResponseCache::new(256)),
+            self_verify: false,
+        })
+    }
+
+    /// Create with a specific LLM configuration.
+    pub fn with_config(config: crate::backends::llm_client::LlmConfig) -> Result<Self> {
+        crate::env::load_dotenv();
+        let universal_key = std::env::var("UNIVERSAL_NER_API_KEY")
+            .ok()
+            .is_some_and(|v| !v.trim().is_empty());
+        let llm_available =
+            cfg!(feature = "llm") && (crate::env::has_llm_api_key() || universal_key);
+        Ok(Self {
+            llm_available,
+            config: Some(config),
+            prompt_strategy: PromptStrategy::default(),
+            domain_context: None,
+            cache: Mutex::new(ResponseCache::new(256)),
+            self_verify: false,
+        })
+    }
+
+    /// Set the prompting strategy.
+    pub fn prompt_strategy(mut self, strategy: PromptStrategy) -> Self {
+        self.prompt_strategy = strategy;
+        self
+    }
+
+    /// Set domain context to improve NER quality.
+    ///
+    /// Per NER4all (arXiv:2502.04351), providing specific domain context
+    /// improves recall by ~5% over generic prompts in zero-shot settings.
+    pub fn domain_context(mut self, context: &str) -> Self {
+        self.domain_context = Some(context.to_string());
+        self
+    }
+
+    /// Enable self-verification: re-query the LLM to confirm extracted entities.
+    ///
+    /// Per GPT-NER (NAACL 2025 Findings), this reduces hallucination where models
+    /// over-confidently label null inputs as entities. Doubles latency/cost.
+    pub fn self_verify(mut self, enabled: bool) -> Self {
+        self.self_verify = enabled;
+        self
+    }
+
+    /// Build system + user messages based on the current prompt strategy.
+    #[cfg_attr(not(feature = "llm"), allow(dead_code))]
+    fn build_prompt(&self, text: &str, entity_types: &[&str]) -> (String, String) {
+        match &self.prompt_strategy {
+            PromptStrategy::Simple => {
+                let types_str = entity_types.join(", ");
+                let mut system = "You are a precise named entity recognition system. Extract entities and return ONLY a JSON array. No explanation.".to_string();
+
+                if let Some(ctx) = &self.domain_context {
+                    system.push_str("\n\n## Domain context\n");
+                    system.push_str(ctx);
+                }
+
+                let user = format!(
+                    r#"Extract named entities from the following text.
+
+## Entity types to extract
+{types_str}
+
+## Output format
+Return a JSON array of objects, each with "text", "type", "start" (character offset), "end" (character offset) fields.
+
+## Text
+"{text}"
+
+## Example
+[{{"text": "John Smith", "type": "person", "start": 0, "end": 10}}]
+
+Return ONLY the JSON array:"#
+                );
+                (system, user)
+            }
+            PromptStrategy::CodeNER { chain_of_thought } => {
+                let et_list: Vec<EntityType> = entity_types
+                    .iter()
+                    .map(|t| match t.to_lowercase().as_str() {
+                        "person" | "per" => EntityType::Person,
+                        "organization" | "org" => EntityType::Organization,
+                        "location" | "loc" | "gpe" => EntityType::Location,
+                        "date" | "time" => EntityType::Date,
+                        "money" | "currency" => EntityType::Money,
+                        other => EntityType::Other(other.to_string()),
+                    })
+                    .collect();
+
+                let schema = BIOSchema::new(&et_list);
+                let mut prompt = CodeNERPrompt::new(schema)
+                    .with_chain_of_thought(*chain_of_thought);
+
+                if let Some(ctx) = &self.domain_context {
+                    prompt = prompt.with_system_prefix(&format!(
+                        "You are an expert NER system. Extract entities precisely using BIO tagging.\n\n## Domain context\n{}",
+                        ctx
+                    ));
+                }
+
+                (prompt.render_system(), prompt.render(text))
+            }
+        }
     }
 
     /// Extract entities using LLM-based prompt engineering.
     ///
     /// Calls OpenAI-compatible API with structured NER prompt.
+    /// Supports OpenRouter (recommended), OpenAI, Anthropic, Gemini, and Ollama providers.
     /// Requires `llm` feature for HTTP client (ureq).
     #[cfg(feature = "llm")]
     fn extract_with_llm(&self, text: &str, entity_types: &[&str]) -> Result<Vec<Entity>> {
         let (api_key, provider) = crate::env::llm_api_key().ok_or_else(|| {
             crate::Error::FeatureNotAvailable(
-                "No LLM API key found. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or similar.".into(),
+                "No LLM API key found. Set OPENROUTER_API_KEY (recommended), OPENAI_API_KEY, ANTHROPIC_API_KEY, or run Ollama locally.".into(),
             )
         })?;
 
-        let types_str = entity_types.join(", ");
-        let prompt = format!(
-            r#"Extract named entities from the following text. Return ONLY a JSON array of objects with "text", "type", "start", "end" fields.
+        let default_model = |fallback: &str| -> String {
+            self.config
+                .as_ref()
+                .map_or_else(|| fallback.to_string(), |c| c.model.clone())
+        };
 
-Entity types to extract: {types_str}
+        // Determine model name for cache key
+        let model_for_cache = match provider {
+            "openrouter" => default_model("google/gemini-2.5-flash"),
+            "openai" => default_model("gpt-4.1-nano"),
+            "anthropic" => default_model("claude-haiku-4-5-20251001"),
+            "ollama" => default_model("llama3.2:3b"),
+            _ => default_model("google/gemini-2.5-flash"),
+        };
 
-Text: "{text}"
+        // Check cache first
+        let key = cache_key(text, entity_types, &model_for_cache);
+        if let Ok(cache) = self.cache.lock() {
+            if let Some(cached) = cache.get(key) {
+                return Ok(cached.clone());
+            }
+        }
 
-Example output: [{{"text": "John Smith", "type": "person", "start": 0, "end": 10}}]
+        let (system_msg, user_msg) = self.build_prompt(text, entity_types);
 
-Return ONLY the JSON array, no other text:"#
-        );
+        let max_tokens = self.config.as_ref().map_or(1024, |c| c.max_tokens);
 
-        let (url, model, auth_header) = match provider {
+        let (url, model, headers): (String, String, Vec<(&str, String)>) = match provider {
+            "openrouter" => (
+                "https://openrouter.ai/api/v1/chat/completions".to_string(),
+                default_model("google/gemini-2.5-flash"),
+                vec![
+                    ("Authorization", format!("Bearer {}", api_key)),
+                    (
+                        "HTTP-Referer",
+                        "https://github.com/anno-rs/anno".to_string(),
+                    ),
+                    ("X-Title", "Anno NER".to_string()),
+                ],
+            ),
             "openai" => (
-                "https://api.openai.com/v1/chat/completions",
-                "gpt-4o-mini",
-                format!("Bearer {}", api_key),
+                "https://api.openai.com/v1/chat/completions".to_string(),
+                default_model("gpt-4.1-nano"),
+                vec![("Authorization", format!("Bearer {}", api_key))],
             ),
             "anthropic" => (
-                "https://api.anthropic.com/v1/messages",
-                "claude-3-haiku-20240307",
-                api_key.clone(),
+                "https://api.anthropic.com/v1/messages".to_string(),
+                default_model("claude-haiku-4-5-20251001"),
+                vec![
+                    ("x-api-key", api_key.clone()),
+                    ("anthropic-version", "2023-06-01".to_string()),
+                ],
             ),
-            "openrouter" => (
-                "https://openrouter.ai/api/v1/chat/completions",
-                "openai/gpt-4o-mini",
-                format!("Bearer {}", api_key),
+            "ollama" => {
+                let host = std::env::var("OLLAMA_HOST")
+                    .unwrap_or_else(|_| "http://localhost:11434".to_string());
+                (
+                    format!("{}/v1/chat/completions", host),
+                    default_model("llama3.2:3b"),
+                    vec![("Authorization", "Bearer ollama".to_string())],
+                )
+            }
+            "gemini" => (
+                // Route Gemini through OpenRouter-compatible format
+                "https://openrouter.ai/api/v1/chat/completions".to_string(),
+                "google/gemini-2.5-flash".to_string(),
+                vec![("Authorization", format!("Bearer {}", api_key))],
             ),
             other => {
                 return Err(crate::Error::FeatureNotAvailable(format!(
-                    "UniversalNER provider '{}' is not supported by this build. Supported: openai, anthropic, openrouter.",
+                    "LLM provider '{}' is not supported. Use OPENROUTER_API_KEY for access to all models.",
                     other
                 )));
             }
         };
 
-        let response = if provider == "anthropic" {
-            // Anthropic uses different API format
-            let body = serde_json::json!({
+        // All providers use OpenAI-compatible format except direct Anthropic API
+        let body = if provider == "anthropic" {
+            serde_json::json!({
                 "model": model,
-                "max_tokens": 1024,
-                "messages": [{"role": "user", "content": prompt}]
-            });
-            ureq::post(url)
-                .set("x-api-key", &auth_header)
-                .set("anthropic-version", "2023-06-01")
-                .set("content-type", "application/json")
-                .send_json(body)
+                "max_tokens": max_tokens,
+                "messages": [
+                    {"role": "user", "content": format!("{}\n\n{}", system_msg, user_msg)}
+                ]
+            })
         } else {
-            // OpenAI-compatible format
-            let body = serde_json::json!({
+            serde_json::json!({
                 "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.0
-            });
-            ureq::post(url)
-                .set("Authorization", &auth_header)
-                .set("content-type", "application/json")
-                .send_json(body)
+                "messages": [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg}
+                ],
+                "temperature": 0.0,
+                "max_tokens": max_tokens
+            })
         };
 
-        let response =
-            response.map_err(|e| crate::Error::Inference(format!("LLM API error: {}", e)))?;
+        let mut req = ureq::post(&url);
+        req = req.set("content-type", "application/json");
+        for (key, value) in &headers {
+            req = req.set(key, value);
+        }
+
+        let response = req
+            .send_json(body)
+            .map_err(|e| crate::Error::Inference(format!("LLM API error: {}", e)))?;
+
         let json: serde_json::Value = response
             .into_json()
             .map_err(|e| crate::Error::Parse(format!("LLM response parse error: {}", e)))?;
@@ -171,15 +411,127 @@ Return ONLY the JSON array, no other text:"#
                 .unwrap_or("[]")
         };
 
-        // Parse JSON array of entities
-        self.parse_llm_response(content, text)
+        let mut entities = self.parse_llm_response(content, text)?;
+
+        // Self-verification: re-query LLM to confirm each entity (GPT-NER strategy).
+        // Reduces hallucination at the cost of additional API calls.
+        if self.self_verify && !entities.is_empty() {
+            entities = self.verify_entities(&url, &model, &headers, provider, text, entities)?;
+        }
+
+        // Cache the result
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.insert(key, entities.clone());
+        }
+
+        Ok(entities)
+    }
+
+    /// Self-verification: ask the LLM to confirm each extracted entity.
+    ///
+    /// Per GPT-NER (NAACL 2025 Findings), LLMs tend to over-confidently
+    /// label null inputs as entities. Verification filters hallucinations.
+    #[cfg(feature = "llm")]
+    fn verify_entities(
+        &self,
+        url: &str,
+        model: &str,
+        headers: &[(&str, String)],
+        provider: &str,
+        text: &str,
+        entities: Vec<Entity>,
+    ) -> Result<Vec<Entity>> {
+        let entity_list: Vec<String> = entities
+            .iter()
+            .map(|e| format!("- \"{}\" ({})", e.text, e.entity_type.as_label()))
+            .collect();
+
+        let verify_prompt = format!(
+            r#"Verify these named entities extracted from the text below.
+For each entity, respond with "yes" if it is a valid entity of the stated type, or "no" if it is not.
+
+## Text
+"{text}"
+
+## Entities to verify
+{entities}
+
+Respond with a JSON array of booleans in the same order. Example: [true, false, true]
+Return ONLY the JSON array:"#,
+            text = text,
+            entities = entity_list.join("\n"),
+        );
+
+        let max_tokens = self.config.as_ref().map_or(256, |c| c.max_tokens.min(256));
+
+        let body = if provider == "anthropic" {
+            serde_json::json!({
+                "model": model,
+                "max_tokens": max_tokens,
+                "messages": [{"role": "user", "content": verify_prompt}]
+            })
+        } else {
+            serde_json::json!({
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "You are an entity verification system. Respond ONLY with a JSON boolean array."},
+                    {"role": "user", "content": verify_prompt}
+                ],
+                "temperature": 0.0,
+                "max_tokens": max_tokens
+            })
+        };
+
+        let mut req = ureq::post(url);
+        req = req.set("content-type", "application/json");
+        for (key, value) in headers {
+            req = req.set(key, value);
+        }
+
+        let response = match req.send_json(body) {
+            Ok(r) => r,
+            Err(_) => return Ok(entities), // Verification failure -> keep originals
+        };
+
+        let json: serde_json::Value = match response.into_json() {
+            Ok(j) => j,
+            Err(_) => return Ok(entities),
+        };
+
+        let content = if provider == "anthropic" {
+            json["content"][0]["text"].as_str().unwrap_or("[]")
+        } else {
+            json["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap_or("[]")
+        };
+
+        // Parse boolean array
+        let trimmed = content.trim();
+        let trimmed = trimmed
+            .strip_prefix("```json")
+            .or_else(|| trimmed.strip_prefix("```"))
+            .unwrap_or(trimmed)
+            .trim();
+        let trimmed = trimmed.strip_suffix("```").unwrap_or(trimmed).trim();
+
+        if let Ok(verdicts) = serde_json::from_str::<Vec<bool>>(trimmed) {
+            Ok(entities
+                .into_iter()
+                .zip(verdicts)
+                .filter_map(|(e, keep)| if keep { Some(e) } else { None })
+                .collect())
+        } else {
+            // Could not parse verification response -> keep all entities
+            Ok(entities)
+        }
     }
 
     /// Fallback when `llm` feature is not enabled.
     #[cfg(not(feature = "llm"))]
     fn extract_with_llm(&self, _text: &str, _entity_types: &[&str]) -> Result<Vec<Entity>> {
         Err(crate::Error::FeatureNotAvailable(
-            "UniversalNER requires the 'llm' feature to make HTTP requests (ureq). Rebuild with --features llm and provide an API key via .env."
+            "UniversalNER requires the 'llm' feature to make HTTP requests (ureq). Rebuild with --features llm and set OPENROUTER_API_KEY (or run Ollama locally)."
                 .into(),
         ))
     }
@@ -301,7 +653,7 @@ impl Model for UniversalNER {
     fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
         if !self.llm_available {
             return Err(crate::Error::FeatureNotAvailable(
-                "UniversalNER requires an LLM API key. Set one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY, or UNIVERSAL_NER_API_KEY (loaded from .env if present)."
+                "UniversalNER requires an LLM provider. Set OPENROUTER_API_KEY (recommended), OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, UNIVERSAL_NER_API_KEY, or run Ollama locally."
                     .into(),
             ));
         }
@@ -364,7 +716,7 @@ impl ZeroShotNER for UniversalNER {
     ) -> Result<Vec<Entity>> {
         if !self.llm_available {
             return Err(crate::Error::FeatureNotAvailable(
-                "UniversalNER requires an LLM API key. Set one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY, or UNIVERSAL_NER_API_KEY (loaded from .env if present)."
+                "UniversalNER requires an LLM provider. Set OPENROUTER_API_KEY (recommended), OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, UNIVERSAL_NER_API_KEY, or run Ollama locally."
                     .into(),
             ));
         }
@@ -664,6 +1016,104 @@ mod tests {
             starts.len(),
             3,
             "each Apple should map to a distinct occurrence"
+        );
+    }
+
+    // ---- New tests for configurable model, prompt strategy, domain context ----
+
+    #[test]
+    fn test_with_config_sets_model() {
+        let config = crate::backends::llm_client::LlmConfig::haiku();
+        let model = UniversalNER::with_config(config).unwrap();
+        assert_eq!(model.name(), "universal_ner");
+        assert!(model.config.is_some());
+        assert_eq!(
+            model.config.as_ref().unwrap().model,
+            "anthropic/claude-haiku-4.5"
+        );
+    }
+
+    #[test]
+    fn test_prompt_strategy_default_is_simple() {
+        let model = UniversalNER::new().unwrap();
+        assert!(matches!(model.prompt_strategy, PromptStrategy::Simple));
+    }
+
+    #[test]
+    fn test_prompt_strategy_codener() {
+        let model = UniversalNER::new()
+            .unwrap()
+            .prompt_strategy(PromptStrategy::CodeNER {
+                chain_of_thought: true,
+            });
+        assert!(matches!(
+            model.prompt_strategy,
+            PromptStrategy::CodeNER {
+                chain_of_thought: true
+            }
+        ));
+    }
+
+    #[test]
+    fn test_build_prompt_simple() {
+        let model = UniversalNER::new().unwrap();
+        let (system, user) = model.build_prompt("Alice met Bob.", &["person", "location"]);
+        assert!(system.contains("named entity recognition"));
+        assert!(user.contains("person, location"));
+        assert!(user.contains("Alice met Bob."));
+        // Simple strategy should not contain BIO schema code
+        assert!(!user.contains("extract_entities"));
+    }
+
+    #[test]
+    fn test_build_prompt_codener() {
+        let model = UniversalNER::new()
+            .unwrap()
+            .prompt_strategy(PromptStrategy::CodeNER {
+                chain_of_thought: false,
+            });
+        let (system, user) = model.build_prompt("Alice met Bob.", &["person", "location"]);
+        assert!(system.contains("NER"));
+        // CodeNER strategy renders a Python-style code prompt
+        assert!(user.contains("extract_entities"));
+        assert!(user.contains("BIO Schema"));
+    }
+
+    #[test]
+    fn test_build_prompt_codener_with_cot() {
+        let model = UniversalNER::new()
+            .unwrap()
+            .prompt_strategy(PromptStrategy::CodeNER {
+                chain_of_thought: true,
+            });
+        let (_system, user) = model.build_prompt("Test.", &["person"]);
+        assert!(user.contains("identify potential entity spans"));
+    }
+
+    #[test]
+    fn test_domain_context_injected_simple() {
+        let model = UniversalNER::new()
+            .unwrap()
+            .domain_context("This is 19th-century German diplomatic correspondence.");
+        let (system, _user) = model.build_prompt("Bismarck met Kaiser.", &["person"]);
+        assert!(
+            system.contains("19th-century German diplomatic"),
+            "domain context should appear in system message"
+        );
+    }
+
+    #[test]
+    fn test_domain_context_injected_codener() {
+        let model = UniversalNER::new()
+            .unwrap()
+            .prompt_strategy(PromptStrategy::CodeNER {
+                chain_of_thought: false,
+            })
+            .domain_context("Biomedical research papers.");
+        let (system, _user) = model.build_prompt("BRCA1 inhibits p53.", &["gene", "protein"]);
+        assert!(
+            system.contains("Biomedical research"),
+            "domain context should appear in CodeNER system message"
         );
     }
 }

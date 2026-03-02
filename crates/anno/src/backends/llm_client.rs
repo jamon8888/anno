@@ -29,18 +29,15 @@
 //! # Feature Flags
 //!
 //! This module is always available but specific provider implementations
-//! may require feature flags:
-//!
-//! - `llm-openai`: OpenAI API client
-//! - `llm-ollama`: Local Ollama client
-//! - `llm-anthropic`: Anthropic Claude client
+//! require the `llm` feature flag. All models accessed via OpenRouter
+//! (openrouter.ai) or local Ollama.
 
 use serde::{Deserialize, Serialize};
 
 /// Configuration for LLM inference.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
-    /// Model identifier (e.g., "gpt-4", "qwen2.5:7b", "claude-3-sonnet")
+    /// Model identifier (e.g., "google/gemini-2.5-flash", "anthropic/claude-haiku-4.5", "openai/gpt-4.1-nano")
     pub model: String,
     /// Maximum tokens to generate
     pub max_tokens: usize,
@@ -60,8 +57,8 @@ pub struct LlmConfig {
 impl Default for LlmConfig {
     fn default() -> Self {
         Self {
-            model: "gpt-4o-mini".to_string(),
-            max_tokens: 100,
+            model: "google/gemini-2.5-flash".to_string(),
+            max_tokens: 1024,
             temperature: 0.0,
             system_prompt: None,
             endpoint: None,
@@ -71,6 +68,66 @@ impl Default for LlmConfig {
 }
 
 impl LlmConfig {
+    /// Preset: Google Gemini 2.5 Flash via OpenRouter (cheapest good option).
+    pub fn gemini_flash() -> Self {
+        Self {
+            model: "google/gemini-2.5-flash".to_string(),
+            max_tokens: 1024,
+            temperature: 0.0,
+            system_prompt: None,
+            endpoint: None,
+            api_key: None,
+        }
+    }
+
+    /// Preset: Anthropic Claude Haiku 4.5 via OpenRouter (highest structured output quality).
+    pub fn haiku() -> Self {
+        Self {
+            model: "anthropic/claude-haiku-4.5".to_string(),
+            max_tokens: 1024,
+            temperature: 0.0,
+            system_prompt: None,
+            endpoint: None,
+            api_key: None,
+        }
+    }
+
+    /// Preset: OpenAI GPT-4.1 Nano via OpenRouter (fast, cheap).
+    pub fn gpt4_nano() -> Self {
+        Self {
+            model: "openai/gpt-4.1-nano".to_string(),
+            max_tokens: 1024,
+            temperature: 0.0,
+            system_prompt: None,
+            endpoint: None,
+            api_key: None,
+        }
+    }
+
+    /// Preset: DeepSeek V3 via OpenRouter (cheapest output tokens).
+    pub fn deepseek() -> Self {
+        Self {
+            model: "deepseek/deepseek-chat".to_string(),
+            max_tokens: 1024,
+            temperature: 0.0,
+            system_prompt: None,
+            endpoint: None,
+            api_key: None,
+        }
+    }
+
+    /// Preset: Local Ollama model.
+    pub fn ollama(model: &str) -> Self {
+        Self {
+            model: model.to_string(),
+            max_tokens: 1024,
+            temperature: 0.0,
+            system_prompt: None,
+            endpoint: Some("http://localhost:11434/v1/chat/completions".to_string()),
+            api_key: Some("ollama".to_string()),
+        }
+    }
+
     /// Create config for a specific model.
     pub fn with_model(model: &str) -> Self {
         Self {
@@ -206,17 +263,58 @@ mod tests {
 
     #[test]
     fn test_llm_config_builder() {
-        let config = LlmConfig::with_model("qwen2.5:7b")
+        let config = LlmConfig::with_model("google/gemini-2.5-flash")
             .max_tokens(10)
             .temperature(0.0)
             .system_prompt("You are an NER assistant.");
 
-        assert_eq!(config.model, "qwen2.5:7b");
+        assert_eq!(config.model, "google/gemini-2.5-flash");
         assert_eq!(config.max_tokens, 10);
         assert_eq!(config.temperature, 0.0);
         assert_eq!(
             config.system_prompt,
             Some("You are an NER assistant.".to_string())
         );
+    }
+
+    #[test]
+    fn test_preset_gemini_flash() {
+        let config = LlmConfig::gemini_flash();
+        assert_eq!(config.model, "google/gemini-2.5-flash");
+        assert_eq!(config.max_tokens, 1024);
+        assert_eq!(config.temperature, 0.0);
+    }
+
+    #[test]
+    fn test_preset_haiku() {
+        let config = LlmConfig::haiku();
+        assert_eq!(config.model, "anthropic/claude-haiku-4.5");
+    }
+
+    #[test]
+    fn test_preset_gpt4_nano() {
+        let config = LlmConfig::gpt4_nano();
+        assert_eq!(config.model, "openai/gpt-4.1-nano");
+    }
+
+    #[test]
+    fn test_preset_deepseek() {
+        let config = LlmConfig::deepseek();
+        assert_eq!(config.model, "deepseek/deepseek-chat");
+    }
+
+    #[test]
+    fn test_preset_ollama() {
+        let config = LlmConfig::ollama("llama3.2:3b");
+        assert_eq!(config.model, "llama3.2:3b");
+        assert!(config.endpoint.as_ref().unwrap().contains("localhost"));
+        assert_eq!(config.api_key.as_deref(), Some("ollama"));
+    }
+
+    #[test]
+    fn test_default_is_gemini_flash() {
+        let config = LlmConfig::default();
+        assert_eq!(config.model, "google/gemini-2.5-flash");
+        assert_eq!(config.max_tokens, 1024);
     }
 }

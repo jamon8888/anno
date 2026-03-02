@@ -193,6 +193,9 @@ pub mod deberta_v3;
 pub mod gliner_poly;
 pub mod universal_ner;
 
+// LLM client abstraction (config, providers, mock)
+pub mod llm_client;
+
 // LLM-based NER prompting (CodeNER-style)
 pub mod llm_prompt;
 

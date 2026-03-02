@@ -22,10 +22,11 @@
 //! |----------|---------|
 //! | `HF_TOKEN` | HuggingFace API token for gated models |
 //! | `HF_API_TOKEN` | Alias for `HF_TOKEN` (HuggingFace API token) |
+//! | `OPENROUTER_API_KEY` | OpenRouter API key (recommended: unified gateway for all LLM models) |
 //! | `OPENAI_API_KEY` | OpenAI API key for LLM backends |
 //! | `ANTHROPIC_API_KEY` | Anthropic API key for Claude LLM backends |
-//! | `OPENROUTER_API_KEY` | OpenRouter API key for LLM backends |
 //! | `GEMINI_API_KEY` | Google Gemini API key |
+//! | `OLLAMA_HOST` | Ollama server URL (default: `http://localhost:11434`) |
 //! | `ANNO_CACHE_DIR` | Custom cache directory for models/datasets |
 //! | `ANNO_CI_SEED` | Fixed seed for reproducible CI testing |
 //! | `ANNO_SAMPLE_STRATEGY` | Backend sampling strategy (random, ml-only, worst-first) |
@@ -195,7 +196,7 @@ pub fn hf_token() -> Option<String> {
         .or_else(|| std::env::var("HF_API_TOKEN").ok())
 }
 
-/// Check if any LLM API key is available.
+/// Check if any LLM API key is available (including local Ollama).
 #[must_use]
 pub fn has_llm_api_key() -> bool {
     fn nonempty(name: &str) -> bool {
@@ -204,31 +205,41 @@ pub fn has_llm_api_key() -> bool {
             .is_some_and(|v| !v.trim().is_empty())
     }
 
-    nonempty("OPENAI_API_KEY")
+    nonempty("OPENROUTER_API_KEY")
+        || nonempty("OPENAI_API_KEY")
         || nonempty("ANTHROPIC_API_KEY")
-        || nonempty("OPENROUTER_API_KEY")
         || nonempty("GEMINI_API_KEY")
+        || nonempty("OLLAMA_HOST")
+        || std::net::TcpStream::connect("127.0.0.1:11434").is_ok()
 }
 
 /// Get the best available LLM API key and provider.
 /// Returns (key, provider) tuple.
+///
+/// Priority: OpenRouter (unified gateway) > OpenAI > Anthropic > Gemini > Ollama (local).
 #[must_use]
 pub fn llm_api_key() -> Option<(String, &'static str)> {
     let nonempty = |name: &str| -> Option<String> {
         std::env::var(name).ok().filter(|v| !v.trim().is_empty())
     };
 
+    // OpenRouter first: unified gateway for all models
+    if let Some(key) = nonempty("OPENROUTER_API_KEY") {
+        return Some((key, "openrouter"));
+    }
     if let Some(key) = nonempty("OPENAI_API_KEY") {
         return Some((key, "openai"));
     }
     if let Some(key) = nonempty("ANTHROPIC_API_KEY") {
         return Some((key, "anthropic"));
     }
-    if let Some(key) = nonempty("OPENROUTER_API_KEY") {
-        return Some((key, "openrouter"));
-    }
     if let Some(key) = nonempty("GEMINI_API_KEY") {
         return Some((key, "gemini"));
+    }
+    // Check if Ollama is available locally (no key needed)
+    if nonempty("OLLAMA_HOST").is_some() || std::net::TcpStream::connect("127.0.0.1:11434").is_ok()
+    {
+        return Some(("ollama".to_string(), "ollama"));
     }
     None
 }

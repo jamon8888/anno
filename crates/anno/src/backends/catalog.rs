@@ -149,8 +149,13 @@ pub static BACKEND_CATALOG: &[BackendInfo] = &[
         status: BackendStatus::Beta,
         zero_shot: true,
         gpu_support: true,
-        description: "UniversalNER (LLM-backed zero-shot; requires API key)",
-        recommended_models: &[],
+        description: "UniversalNER (LLM-backed zero-shot via OpenRouter/OpenAI/Anthropic/Ollama; configurable model)",
+        recommended_models: &[
+            "google/gemini-2.5-flash",
+            "anthropic/claude-haiku-4.5",
+            "openai/gpt-4.1-nano",
+            "deepseek/deepseek-chat",
+        ],
     },
     BackendInfo {
         name: "gliner",
