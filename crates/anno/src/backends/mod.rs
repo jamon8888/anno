@@ -189,6 +189,22 @@ pub mod streaming;
 /// With the `semantic-chunking` feature enabled, adds a sentence-similarity chunker (no embeddings).
 pub mod semantic_chunking;
 
+/// Map a backend name (stable ID used in stacked/ensemble compositions) to an
+/// [`ExtractionMethod`](anno_core::ExtractionMethod).
+///
+/// Shared by `StackedNER` and `EnsembleNER` so the mapping stays consistent.
+pub(crate) fn method_for_backend_name(name: &str) -> anno_core::ExtractionMethod {
+    match name {
+        // Stable IDs used by built-in compositions.
+        "regex" => anno_core::ExtractionMethod::Pattern,
+        "heuristic" => anno_core::ExtractionMethod::Heuristic,
+        // Legacy backend id (deprecated, but still used in tests/compositions).
+        "rule" => anno_core::ExtractionMethod::Heuristic,
+        // Everything else: treat as neural by default.
+        _ => anno_core::ExtractionMethod::Neural,
+    }
+}
+
 // Burn ML framework (training + inference)
 #[cfg(feature = "burn")]
 pub mod burn;
@@ -358,7 +374,7 @@ pub use streaming::{
 // Middleware pipeline
 pub use middleware::{
     FilterByConfidence, FilterByType, HookedPipeline, Middleware, MiddlewareContext,
-    NormalizeWhitespace, Pipeline as MiddlewarePipeline, RemoveOverlaps,
+    NormalizeWhitespace, Pipeline as MiddlewarePipeline, PipelineStageAdapter, RemoveOverlaps,
 };
 
 // Burn ML framework (trainable)

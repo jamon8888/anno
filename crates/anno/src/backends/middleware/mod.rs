@@ -65,6 +65,7 @@
 //! }
 //! ```
 
+use crate::backends::streaming::PipelineStage;
 use crate::{Entity, EntityType, Model, Result};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -168,6 +169,31 @@ pub trait Middleware: Send + Sync {
 }
 
 // =============================================================================
+// PipelineStage → Middleware Adapter
+// =============================================================================
+
+/// Adapter: wraps a [`PipelineStage`] as [`Middleware`].
+///
+/// This bridges the simpler `PipelineStage` trait (process-only, no context)
+/// into the richer `Middleware` system, allowing existing stages to be used
+/// in middleware pipelines without modification.
+pub struct PipelineStageAdapter<S: PipelineStage>(pub S);
+
+impl<S: PipelineStage + 'static> Middleware for PipelineStageAdapter<S> {
+    fn post_process(
+        &self,
+        ctx: &mut MiddlewareContext,
+        entities: Vec<Entity>,
+    ) -> Result<Vec<Entity>> {
+        Ok(self.0.process(entities, &ctx.current_text))
+    }
+
+    fn name(&self) -> &'static str {
+        self.0.name()
+    }
+}
+
+// =============================================================================
 // Pipeline
 // =============================================================================
 
@@ -211,6 +237,12 @@ impl Pipeline {
     pub fn with<M: Middleware + 'static>(mut self, middleware: M) -> Self {
         self.middleware.push(Box::new(middleware));
         self
+    }
+
+    /// Add a [`PipelineStage`] as middleware.
+    #[must_use]
+    pub fn with_stage<S: PipelineStage + 'static>(self, stage: S) -> Self {
+        self.with(PipelineStageAdapter(stage))
     }
 
     /// Add middleware conditionally.
@@ -654,6 +686,12 @@ impl HookedPipeline {
     pub fn with<M: Middleware + 'static>(mut self, middleware: M) -> Self {
         self.middleware.push(Box::new(middleware));
         self
+    }
+
+    /// Add a [`PipelineStage`] as middleware.
+    #[must_use]
+    pub fn with_stage<S: PipelineStage + 'static>(self, stage: S) -> Self {
+        self.with(PipelineStageAdapter(stage))
     }
 
     /// Register a hook for an event.

@@ -130,3 +130,67 @@ fn test_hooked_pipeline_hook_count() {
 
     assert_eq!(pipeline.hook_count(), 3);
 }
+
+#[test]
+fn test_pipeline_stage_adapter() {
+    use crate::backends::streaming::PipelineStage;
+
+    /// A simple PipelineStage that filters entities below a confidence threshold.
+    struct MinConfidenceStage(f64);
+
+    impl PipelineStage for MinConfidenceStage {
+        fn process(&self, entities: Vec<Entity>, _text: &str) -> Vec<Entity> {
+            entities
+                .into_iter()
+                .filter(|e| e.confidence >= self.0)
+                .collect()
+        }
+
+        fn name(&self) -> &'static str {
+            "min_confidence_stage"
+        }
+    }
+
+    // Use with_stage on Pipeline
+    let pipeline = Pipeline::new(Box::new(HeuristicNER::new()))
+        .with_stage(MinConfidenceStage(0.5));
+
+    assert_eq!(pipeline.middleware_names(), vec!["min_confidence_stage"]);
+
+    let _entities = pipeline
+        .extract("John Smith")
+        .expect("extraction through adapted stage should succeed");
+}
+
+#[test]
+fn test_pipeline_stage_adapter_on_hooked_pipeline() {
+    use crate::backends::streaming::PipelineStage;
+
+    struct UpperCaseText;
+
+    impl PipelineStage for UpperCaseText {
+        fn process(&self, mut entities: Vec<Entity>, _text: &str) -> Vec<Entity> {
+            for e in &mut entities {
+                e.text = e.text.to_uppercase();
+            }
+            entities
+        }
+
+        fn name(&self) -> &'static str {
+            "uppercase_text"
+        }
+    }
+
+    let pipeline = HookedPipeline::new(Box::new(HeuristicNER::new()))
+        .with_stage(UpperCaseText);
+
+    assert_eq!(pipeline.middleware_names(), vec!["uppercase_text"]);
+
+    let entities = pipeline
+        .extract("John Smith")
+        .expect("extraction should succeed");
+
+    for e in &entities {
+        assert_eq!(e.text, e.text.to_uppercase(), "entity text should be uppercased");
+    }
+}
