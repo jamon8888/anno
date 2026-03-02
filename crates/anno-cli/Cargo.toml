@@ -45,6 +45,8 @@ rayon = { workspace = true }
 default = ["onnx"]
 # Evaluation + muxer tooling.
 eval = ["dep:muxer", "anno/eval", "anno-eval/eval"]
+# Alias for `eval` (matches anno-lib's `analysis` feature name).
+analysis = ["eval"]
 eval-bias = ["eval", "anno-eval/eval-bias"]
 instrument = []
 onnx = ["anno/onnx", "anno-eval/onnx"]

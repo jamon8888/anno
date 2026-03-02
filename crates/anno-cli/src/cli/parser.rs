@@ -333,7 +333,7 @@ Use `--model bert-onnx`, `--model gliner`, or `--model candle-ner` instead."
                 Self::Burn => "burn", // rejected above; kept for exhaustiveness
             };
             BackendFactory::create(factory_name)
-                .map_err(|e| format!("Failed to create model '{}': {}", self.name(), e))
+                .map_err(|e| format!("Failed to create model '{}': {}\n  Tip: Run 'anno models list' to see available backends.", self.name(), e))
         }
         #[cfg(not(feature = "eval"))]
         {
@@ -351,10 +351,10 @@ Use `--model bert-onnx`, `--model gliner`, or `--model candle-ner` instead."
                 Self::BiLstmCrf => Ok(Box::new(anno::backends::bilstm_crf::BiLstmCrfNER::new())),
                 Self::Tplinker => anno::backends::tplinker::TPLinker::new()
                     .map(|m| Box::new(m) as Box<dyn anno::Model>)
-                    .map_err(|e| format!("Failed to create TPLinker: {}", e)),
+                    .map_err(|e| format!("Failed to create TPLinker: {}\n  Tip: Use 'anno models info tplinker' to check model status.", e)),
                 Self::UniversalNer => anno::backends::universal_ner::UniversalNER::new()
                     .map(|m| Box::new(m) as Box<dyn anno::Model>)
-                    .map_err(|e| format!("Failed to create UniversalNER: {}", e)),
+                    .map_err(|e| format!("Failed to create UniversalNER: {}\n  Tip: Check API key with OPENROUTER_API_KEY or use --model gliner for offline NER.", e)),
                 // ONNX
                 #[cfg(feature = "onnx")]
                 Self::Gliner => anno::GLiNEROnnx::new(anno::DEFAULT_GLINER_MODEL)
@@ -390,7 +390,7 @@ Use `--model bert-onnx`, `--model gliner`, or `--model candle-ner` instead."
                 #[cfg(feature = "onnx")]
                 Self::BertOnnx => anno::backends::onnx::BertNEROnnx::new(anno::DEFAULT_BERT_ONNX_MODEL)
                     .map(|m| Box::new(m) as Box<dyn anno::Model>)
-                    .map_err(|e| format!("Failed to load BERT ONNX: {}", e)),
+                    .map_err(|e| format!("Failed to load BERT ONNX: {}\n  Tip: Use 'anno models info bert-onnx' to check model status.", e)),
                 #[cfg(feature = "onnx")]
                 Self::DebertaV3 => {
                     // Support custom export via environment variable

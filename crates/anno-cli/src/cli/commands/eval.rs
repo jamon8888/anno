@@ -112,13 +112,9 @@ pub fn run(args: EvalArgs) -> Result<(), String> {
         .iter()
         .enumerate()
         .map(|(i, e)| {
-            Signal::new(
-                SignalId::new(i as u64),
-                Location::text(e.start, e.end),
-                &e.text,
-                e.entity_type.as_label(),
-                e.confidence as f32,
-            )
+            let mut s = Signal::from(e);
+            s.id = SignalId::new(i as u64);
+            s
         })
         .collect();
 
