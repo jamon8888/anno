@@ -2707,11 +2707,13 @@ impl EntityBuilder {
     /// Create a new builder.
     #[must_use]
     pub fn new(text: impl Into<String>, entity_type: EntityType) -> Self {
+        let text = text.into();
+        let end = text.chars().count();
         Self {
-            text: text.into(),
+            text,
             entity_type,
             start: 0,
-            end: 0,
+            end,
             confidence: 1.0,
             normalized: None,
             provenance: None,
