@@ -13,6 +13,11 @@
 use lattix::{GraphDocument, GraphEdge, GraphNode, KnowledgeGraph, Triple};
 
 /// Convert a `GroundedDocument` into a `lattix::exchange::GraphDocument`.
+///
+/// **Note**: Relations are not currently stored in `GroundedDocument`, so this
+/// conversion only produces entity nodes and track-based edges. To include
+/// extraction-time relations, use [`entities_to_graph_document`] directly with
+/// the `Relation` slice from the extraction backend.
 #[must_use]
 pub fn grounded_to_graph_document(doc: &anno_core::GroundedDocument) -> GraphDocument {
     let entities = doc.to_entities();
