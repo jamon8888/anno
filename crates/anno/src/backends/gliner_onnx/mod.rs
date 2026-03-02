@@ -68,10 +68,35 @@ pub(crate) use inference::expand_ner_label;
 #[cfg(feature = "onnx")]
 pub(crate) use inference::looks_like_company_name;
 use inference::DEFAULT_GLINER_LABELS;
+/// Approximate max input chars for GLiNER before chunking kicks in.
+/// 512 tokens ~ 2000 chars for typical English text.
+#[cfg(feature = "onnx")]
+const MAX_INPUT_CHARS: usize = 2000;
+
 impl crate::Model for GLiNEROnnx {
     fn extract_entities(&self, text: &str, _language: Option<&str>) -> crate::Result<Vec<Entity>> {
         // Use default labels for the Model trait interface
         // For custom labels, use the extract(text, labels, threshold) method directly
+        #[cfg(feature = "onnx")]
+        {
+            if text.chars().count() > MAX_INPUT_CHARS {
+                use crate::backends::streaming::{extract_chunked_parallel, ChunkConfig};
+                let config = ChunkConfig {
+                    chunk_size: MAX_INPUT_CHARS,
+                    overlap: 200,
+                    respect_sentences: true,
+                    buffer_size: 1000,
+                };
+                return extract_chunked_parallel(text, &config, |chunk_text, char_offset| {
+                    let mut entities = self.extract(chunk_text, DEFAULT_GLINER_LABELS, 0.5)?;
+                    for e in &mut entities {
+                        e.start += char_offset;
+                        e.end += char_offset;
+                    }
+                    Ok(entities)
+                });
+            }
+        }
         self.extract(text, DEFAULT_GLINER_LABELS, 0.5)
     }
 

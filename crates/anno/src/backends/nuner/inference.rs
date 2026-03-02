@@ -140,62 +140,30 @@ impl NuNER {
             );
         }
 
-        // Check word count; chunk at sentence boundaries if over limit.
-        let word_count = text.split_whitespace().count();
-        if word_count > Self::MAX_WORDS {
-            return self.extract_chunked(text, entity_types, threshold);
-        }
-
-        self.extract_single(text, entity_types, threshold)
-    }
-
-    /// Split long text into sentence-boundary chunks that fit within
-    /// `MAX_WORDS`, run each chunk through `extract_single`, and merge
-    /// entity results with shifted character offsets.
-    #[cfg(feature = "onnx")]
-    fn extract_chunked(
-        &self,
-        text: &str,
-        entity_types: &[&str],
-        threshold: f32,
-    ) -> Result<Vec<Entity>> {
-        let mut chunks: Vec<(usize, &str)> = Vec::new(); // (byte_offset, slice)
-        let mut start = 0;
-        let mut current_end = 0;
-
-        for (i, c) in text.char_indices() {
-            if matches!(c, '.' | '!' | '?' | '\n') {
-                let boundary = i + c.len_utf8();
-                let candidate = &text[start..boundary];
-                if candidate.split_whitespace().count() > Self::MAX_WORDS && current_end > start {
-                    chunks.push((start, &text[start..current_end]));
-                    start = current_end;
-                }
-                current_end = boundary;
-            }
-        }
-        // Flush remaining
-        if start < text.len() {
-            chunks.push((start, &text[start..]));
-        }
-        if chunks.is_empty() {
-            // Degenerate: single sentence > MAX_WORDS. Pass through anyway.
-            chunks.push((0, text));
-        }
-
-        let mut all_entities = Vec::new();
-        for (byte_offset, chunk) in &chunks {
-            let mut chunk_entities = self.extract_single(chunk, entity_types, threshold)?;
-            if *byte_offset > 0 {
-                let char_offset = text[..*byte_offset].chars().count();
-                for e in &mut chunk_entities {
+        // Check word count; chunk via shared parallel infrastructure if over limit.
+        // ~5 chars per word on average, so MAX_WORDS * 5 gives a char-based threshold.
+        let char_count = text.chars().count();
+        const CHARS_PER_WORD: usize = 5;
+        let max_input_chars = Self::MAX_WORDS * CHARS_PER_WORD;
+        if char_count > max_input_chars {
+            use crate::backends::streaming::{extract_chunked_parallel, ChunkConfig};
+            let config = ChunkConfig {
+                chunk_size: max_input_chars,
+                overlap: 200,
+                respect_sentences: true,
+                buffer_size: 1000,
+            };
+            return extract_chunked_parallel(text, &config, |chunk_text, char_offset| {
+                let mut entities = self.extract_single(chunk_text, entity_types, threshold)?;
+                for e in &mut entities {
                     e.start += char_offset;
                     e.end += char_offset;
                 }
-            }
-            all_entities.extend(chunk_entities);
+                Ok(entities)
+            });
         }
-        Ok(all_entities)
+
+        self.extract_single(text, entity_types, threshold)
     }
 
     /// Run NuNER inference on a single (non-chunked) piece of text.
