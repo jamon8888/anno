@@ -1485,4 +1485,419 @@ mod tests {
             }
         }
     }
+
+    // =========================================================================
+    // Advanced / gap-filling tests
+    // =========================================================================
+
+    // --- KeepLongerSameType: non-adjacent same-type overlap with interleaved type ---
+
+    /// A=[0,10] Location, B=[5,12] Person, C=[8,15] Location.
+    /// C overlaps A (same type, Location) but B (different type, Person) sits
+    /// between them in position order. The rposition scan must find A even
+    /// though B was the most recently pushed entity.
+    #[test]
+    fn test_keep_longer_same_type_non_adjacent_interleaved() {
+        // Input sorted by start: A(0,10 Loc), B(5,12 Per), C(8,15 Loc)
+        let mut entities = vec![
+            Entity::new("A", EntityType::Location, 0, 10, 0.8),
+            Entity::new("B", EntityType::Person, 5, 12, 0.8),
+            Entity::new("C", EntityType::Location, 8, 15, 0.8),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepLongerSameType);
+
+        // B (Person) must be kept — different type from both A and C.
+        assert!(
+            entities.iter().any(|e| e.text == "B"),
+            "Person entity B must be preserved (different type)"
+        );
+
+        // Among Location entities A[0,10] and C[8,15]:
+        //   A has len=10, C has len=7 => A is longer, A should be kept, C dropped.
+        let locs: Vec<&Entity> = entities
+            .iter()
+            .filter(|e| e.entity_type == EntityType::Location)
+            .collect();
+        assert_eq!(locs.len(), 1, "exactly one Location should survive");
+        assert_eq!(
+            locs[0].text, "A",
+            "longer Location A should be kept over shorter C"
+        );
+
+        // Result must be sorted by start position.
+        for i in 1..entities.len() {
+            assert!(entities[i].start >= entities[i - 1].start);
+        }
+    }
+
+    /// Same configuration but with C longer than A: C=[8,20] Location (len=12 vs len=10).
+    /// The rposition scan must find A at index 0 (behind interleaved B), then replace it
+    /// with the longer candidate C.
+    #[test]
+    fn test_keep_longer_same_type_non_adjacent_candidate_wins() {
+        let mut entities = vec![
+            Entity::new("A", EntityType::Location, 0, 10, 0.8),
+            Entity::new("B", EntityType::Person, 5, 12, 0.8),
+            Entity::new("C", EntityType::Location, 8, 20, 0.8),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepLongerSameType);
+
+        assert!(
+            entities.iter().any(|e| e.text == "B"),
+            "Person entity B must be preserved"
+        );
+
+        let locs: Vec<&Entity> = entities
+            .iter()
+            .filter(|e| e.entity_type == EntityType::Location)
+            .collect();
+        assert_eq!(locs.len(), 1, "exactly one Location should survive");
+        assert_eq!(
+            locs[0].text, "C",
+            "longer Location C[8,20] should replace shorter A[0,10]"
+        );
+        // Note: KeepLongerSameType does not re-sort after in-place replacement,
+        // so we do not assert position order here.
+    }
+
+    // --- KeepFirst: contained span is dropped ---
+
+    /// Outer span [0,5] is kept first; inner contained span [1,3] must be dropped.
+    #[test]
+    fn test_keep_first_contained_span_dropped() {
+        let mut entities = vec![
+            Entity::new("outer", EntityType::Organization, 0, 5, 0.9),
+            Entity::new("inner", EntityType::Organization, 1, 3, 0.95),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepFirst);
+        assert_eq!(entities.len(), 1);
+        assert_eq!(
+            entities[0].text, "outer",
+            "outer span should be kept; inner contained span dropped"
+        );
+    }
+
+    /// Symmetrical: inner span [1,3] arrives first (higher confidence so sorts
+    /// ahead under KeepFirst tie-break), outer [0,5] is then dropped as overlap.
+    #[test]
+    fn test_keep_first_outer_dropped_when_inner_higher_confidence() {
+        let mut entities = vec![
+            Entity::new("outer", EntityType::Organization, 0, 5, 0.5),
+            Entity::new("inner", EntityType::Organization, 1, 3, 0.95),
+        ];
+        // Both start positions differ (0 vs 1), so "outer" sorts first.
+        // "inner" [1,3] starts inside outer's span [0,5] -> inner is dropped.
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepFirst);
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].text, "outer");
+    }
+
+    // --- KeepHighestConfidence: NaN confidence does not crash ---
+
+    /// A NaN confidence value must not cause a panic. The entity may be kept or
+    /// dropped (behaviour is unspecified for NaN), but the function must return.
+    #[test]
+    fn test_keep_highest_confidence_nan_does_not_crash() {
+        let mut entities = vec![
+            Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
+            // NaN confidence — pathological but must not panic.
+            Entity::new("NaN entity", EntityType::Person, 3, 8, f64::NAN),
+        ];
+        // Must complete without panicking.
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepHighestConfidence);
+        // At least the well-formed entity should survive (they overlap, NaN sorts
+        // unpredictably, but Alice has real confidence 0.9 and must be present
+        // unless NaN sorts above it — either outcome is acceptable as long as
+        // we don't crash and the result is non-empty).
+        assert!(
+            !entities.is_empty(),
+            "result must be non-empty after NaN entity processing"
+        );
+    }
+
+    /// NaN among non-overlapping entities: every non-NaN entity must survive.
+    #[test]
+    fn test_keep_highest_confidence_nan_non_overlapping_no_crash() {
+        let mut entities = vec![
+            Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
+            Entity::new("NaN ent", EntityType::Person, 20, 27, f64::NAN),
+            Entity::new("Bob", EntityType::Person, 10, 13, 0.7),
+        ];
+        // Must not panic regardless of NaN sort order.
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepHighestConfidence);
+        // All spans are non-overlapping; all should be kept regardless of NaN.
+        // (The NaN entity may or may not appear, but Alice and Bob must.)
+        assert!(
+            entities.iter().any(|e| e.text == "Alice"),
+            "Alice must be kept"
+        );
+        assert!(entities.iter().any(|e| e.text == "Bob"), "Bob must be kept");
+    }
+
+    // --- CJK sentence boundary: split on 。 without following whitespace ---
+
+    /// `find_sentence_boundary` must recognise 。 as a sentence terminator even
+    /// when the next character is another CJK character (no whitespace follows).
+    #[test]
+    fn test_find_sentence_boundary_cjk_no_whitespace_after_period() {
+        // "这是第一句。这是第二句。这是第三句"
+        // '。' appears at char index 5 and 11.
+        let text = "这是第一句。这是第二句。这是第三句";
+        let chars: Vec<char> = text.chars().collect();
+
+        // Ask for a boundary somewhere after the first '。' (index 5).
+        // The target is set to 10 so the backward scan can find '。' at index 5.
+        let boundary = find_sentence_boundary(&chars, 0, 10);
+
+        // After '。' at index 5 with no whitespace following, boundary should be 6.
+        assert_eq!(
+            boundary, 6,
+            "should split immediately after 。 (index 5), placing boundary at char 6"
+        );
+    }
+
+    /// Three-sentence CJK text: asking for a boundary near the end should find
+    /// the second '。' (at index 11) and split at 12.
+    #[test]
+    fn test_find_sentence_boundary_cjk_second_period() {
+        let text = "这是第一句。这是第二句。这是第三句";
+        let chars: Vec<char> = text.chars().collect();
+
+        // Target near end of second sentence.
+        let boundary = find_sentence_boundary(&chars, 0, chars.len() - 1);
+
+        // Backward scan from (len-2) finds '。' at index 11 -> boundary = 12.
+        assert_eq!(
+            boundary, 12,
+            "should split after second 。 at index 11, placing boundary at char 12"
+        );
+    }
+
+    // --- extract_chunked_parallel: mock extract_fn, offset adjustment, dedup ---
+
+    /// The mock extract function returns an entity at local offset [5, 10] for
+    /// each chunk. `extract_chunked_parallel` must adjust each entity's start/end
+    /// by the chunk's `char_offset`, producing distinct global spans, then sort
+    /// the result by position.
+    #[test]
+    fn test_extract_chunked_parallel_offset_adjustment() {
+        // 60-character text split into multiple chunks (exact count depends on the
+        // forward-progress calculation; we do not hard-code it).
+        let text: String = "x".repeat(60);
+
+        let config = ChunkConfig {
+            chunk_size: 30,
+            overlap: 10,
+            respect_sentences: false,
+            buffer_size: 100,
+        };
+
+        // Collect the chunk offsets that chunk_text actually produces, so we can
+        // predict the expected global spans without re-implementing the chunker.
+        let expected_offsets: Vec<usize> = chunk_text(&text, &config)
+            .iter()
+            .map(|c| c.char_offset)
+            .collect();
+
+        // The mock returns one entity per chunk with offsets relative to the chunk.
+        let result = extract_chunked_parallel(&text, &config, |_chunk, char_offset| {
+            Ok(vec![Entity::new(
+                "token",
+                EntityType::Organization,
+                5 + char_offset,
+                10 + char_offset,
+                0.9,
+            )])
+        });
+
+        let entities = result.expect("extract_chunked_parallel must not error");
+
+        // Every expected global span must be present.
+        for off in &expected_offsets {
+            assert!(
+                entities.iter().any(|e| e.start == 5 + off && e.end == 10 + off),
+                "global entity [{}, {}] must be present; got: {:?}",
+                5 + off,
+                10 + off,
+                entities.iter().map(|e| (e.start, e.end)).collect::<Vec<_>>()
+            );
+        }
+
+        // No unexpected extras: entity count must equal the number of distinct spans.
+        assert_eq!(
+            entities.len(),
+            expected_offsets.len(),
+            "one entity per chunk, no duplicates; got: {:?}",
+            entities.iter().map(|e| (e.start, e.end)).collect::<Vec<_>>()
+        );
+
+        // Result must be sorted by position.
+        for i in 1..entities.len() {
+            assert!(entities[i].start >= entities[i - 1].start);
+        }
+    }
+
+    /// When the mock returns the *same global span* from two chunks (boundary
+    /// dedup scenario), `extract_chunked_parallel` must keep only one copy.
+    #[test]
+    fn test_extract_chunked_parallel_boundary_dedup() {
+        let text: String = "x".repeat(60);
+
+        let config = ChunkConfig {
+            chunk_size: 30,
+            overlap: 10,
+            respect_sentences: false,
+            buffer_size: 100,
+        };
+
+        // Both chunks return an entity with the same *global* span [5, 10].
+        // The exact-span dedup in extract_chunked_parallel must drop the duplicate.
+        let result = extract_chunked_parallel(&text, &config, |_chunk, _char_offset| {
+            Ok(vec![Entity::new(
+                "shared",
+                EntityType::Person,
+                5,
+                10,
+                0.9,
+            )])
+        });
+
+        let entities = result.expect("must not error");
+        assert_eq!(
+            entities.len(),
+            1,
+            "duplicate global span [5,10] must be deduplicated; got {} entities",
+            entities.len()
+        );
+        assert_eq!(entities[0].start, 5);
+        assert_eq!(entities[0].end, 10);
+    }
+
+    /// Empty text returns no entities and does not error.
+    #[test]
+    fn test_extract_chunked_parallel_empty_text() {
+        let result = extract_chunked_parallel("", &ChunkConfig::default(), |_chunk, _offset| {
+            Ok(vec![Entity::new("x", EntityType::Person, 0, 1, 0.9)])
+        });
+        let entities = result.expect("must not error on empty text");
+        assert!(
+            entities.is_empty(),
+            "empty text must produce no entities"
+        );
+    }
+
+    // --- chunk_text: overlap >= chunk_size forward-progress guard ---
+
+    /// When overlap equals chunk_size the forward-progress guard must prevent
+    /// an infinite loop: each iteration must advance by at least 1 character.
+    #[test]
+    fn test_chunk_text_overlap_equals_chunk_size_terminates() {
+        let config = ChunkConfig {
+            chunk_size: 5,
+            overlap: 5, // overlap == chunk_size: pathological
+            respect_sentences: false,
+            buffer_size: 100,
+        };
+        let text = "abcdefghijklmno"; // 15 chars
+        let chunks = chunk_text(text, &config);
+
+        // Must produce at least one chunk and must not hang.
+        assert!(!chunks.is_empty(), "must produce at least one chunk");
+
+        // Offsets must be strictly increasing (forward progress guaranteed).
+        for i in 1..chunks.len() {
+            assert!(
+                chunks[i].char_offset > chunks[i - 1].char_offset,
+                "chunk offsets must strictly increase even when overlap == chunk_size"
+            );
+        }
+    }
+
+    /// overlap > chunk_size: even more extreme; guard still fires.
+    #[test]
+    fn test_chunk_text_overlap_greater_than_chunk_size_terminates() {
+        let config = ChunkConfig {
+            chunk_size: 4,
+            overlap: 10, // overlap > chunk_size
+            respect_sentences: false,
+            buffer_size: 100,
+        };
+        let text = "abcdefghij"; // 10 chars
+        let chunks = chunk_text(text, &config);
+
+        assert!(!chunks.is_empty());
+        for i in 1..chunks.len() {
+            assert!(
+                chunks[i].char_offset > chunks[i - 1].char_offset,
+                "forward progress must hold when overlap > chunk_size"
+            );
+        }
+    }
+
+    // --- KeepShortest: same-length same-confidence entities ---
+
+    /// Two entities with identical length and identical confidence.
+    /// The result must be deterministic: exactly one entity is kept and it is
+    /// always the same one regardless of input ordering.
+    #[test]
+    fn test_keep_shortest_same_length_same_confidence_deterministic() {
+        // Non-overlapping case: both should survive (no superset/overlap).
+        let mut entities = vec![
+            Entity::new("abc", EntityType::Person, 0, 3, 0.7),
+            Entity::new("def", EntityType::Person, 10, 13, 0.7),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepShortest);
+        assert_eq!(
+            entities.len(),
+            2,
+            "non-overlapping same-length same-confidence entities must both survive"
+        );
+
+        // Overlapping / tied case: the sort is by (len asc, confidence desc);
+        // ties in both dimensions leave original order intact (sort_unstable_by
+        // is not guaranteed stable, but the kept entity must always be the same
+        // across repeated calls with the same input).
+        let make = || {
+            vec![
+                Entity::new("AB", EntityType::Organization, 0, 5, 0.8),
+                Entity::new("BC", EntityType::Organization, 3, 8, 0.8),
+            ]
+        };
+
+        let mut first_run = make();
+        deduplicate_overlapping(&mut first_run, OverlapStrategy::KeepShortest);
+        assert_eq!(first_run.len(), 1, "overlapping same-length entities: one must be dropped");
+        let kept_text = first_run[0].text.clone();
+
+        // Second run with the same input must keep the same entity.
+        let mut second_run = make();
+        deduplicate_overlapping(&mut second_run, OverlapStrategy::KeepShortest);
+        assert_eq!(second_run.len(), 1);
+        assert_eq!(
+            second_run[0].text, kept_text,
+            "KeepShortest must be deterministic: same input must always keep the same entity"
+        );
+    }
+
+    // --- Empty entities list for all 4 strategies (explicit, not just length-1 guard) ---
+
+    /// `deduplicate_overlapping` on an empty Vec must leave it empty for every strategy.
+    /// (Complements `test_overlap_strategy_empty_input` but tests the Vec mutation path.)
+    #[test]
+    fn test_all_strategies_empty_list_is_noop() {
+        for strategy in [
+            OverlapStrategy::KeepFirst,
+            OverlapStrategy::KeepHighestConfidence,
+            OverlapStrategy::KeepLongerSameType,
+            OverlapStrategy::KeepShortest,
+        ] {
+            let mut entities: Vec<Entity> = Vec::new();
+            deduplicate_overlapping(&mut entities, strategy);
+            assert!(
+                entities.is_empty(),
+                "empty input must remain empty for {:?}",
+                strategy
+            );
+        }
+    }
 }

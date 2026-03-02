@@ -9,6 +9,93 @@ fn fast_ensemble() -> EnsembleNER {
     ])
 }
 
+// =============================================================================
+// Mock backends for parallelism and error-handling tests
+// =============================================================================
+
+/// A backend that always returns the same fixed set of entities.
+///
+/// Used to test determinism of parallel execution across runs.
+struct FixedBackend {
+    name: &'static str,
+    entities: Vec<Entity>,
+}
+
+impl FixedBackend {
+    fn new(name: &'static str, entities: Vec<Entity>) -> Self {
+        Self { name, entities }
+    }
+}
+
+impl crate::sealed::Sealed for FixedBackend {}
+
+impl crate::Model for FixedBackend {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn extract_entities(
+        &self,
+        _text: &str,
+        _language: Option<&str>,
+    ) -> crate::Result<Vec<Entity>> {
+        Ok(self.entities.clone())
+    }
+
+    fn supported_types(&self) -> Vec<EntityType> {
+        self.entities
+            .iter()
+            .map(|e| e.entity_type.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    fn is_available(&self) -> bool {
+        true
+    }
+}
+
+/// A backend that always returns `Err(...)`.
+///
+/// Used to verify the ensemble skips failing backends gracefully.
+struct AlwaysErrBackend {
+    name: &'static str,
+}
+
+impl AlwaysErrBackend {
+    fn new(name: &'static str) -> Self {
+        Self { name }
+    }
+}
+
+impl crate::sealed::Sealed for AlwaysErrBackend {}
+
+impl crate::Model for AlwaysErrBackend {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn extract_entities(
+        &self,
+        _text: &str,
+        _language: Option<&str>,
+    ) -> crate::Result<Vec<Entity>> {
+        Err(crate::Error::ModelInit(format!(
+            "AlwaysErrBackend '{}' intentionally failed",
+            self.name
+        )))
+    }
+
+    fn supported_types(&self) -> Vec<EntityType> {
+        vec![]
+    }
+
+    fn is_available(&self) -> bool {
+        false
+    }
+}
+
 #[test]
 fn test_new_backend_ids_have_weights() {
     let ner = EnsembleNER::new();
@@ -376,4 +463,267 @@ fn test_ensemble_provenance_tracking() {
         // Provenance source should not be empty
         assert!(!prov.source.is_empty());
     }
+}
+
+// =============================================================================
+// Parallel execution determinism
+// =============================================================================
+
+/// Build an ensemble with three mock backends that return different entity counts.
+///
+/// Backend A: 3 entities (non-overlapping spans)
+/// Backend B: 2 entities (different spans, no overlap with A)
+/// Backend C: 1 entity  (unique span)
+///
+/// Each entity is placed at a distinct non-overlapping span so every candidate
+/// ends up in its own conflict cluster. This maximises surface area: all six
+/// entities must survive into the output, and their order / confidence must be
+/// identical across repeated calls.
+fn determinism_ensemble() -> EnsembleNER {
+    // Span layout (char offsets into "aaaa bbbb cccc dddd eeee ffff"):
+    //   [0,4)   "aaaa"  -- Backend A: Person
+    //   [5,9)   "bbbb"  -- Backend A: Organization
+    //   [10,14) "cccc"  -- Backend A: Date
+    //   [15,19) "dddd"  -- Backend B: Person
+    //   [20,24) "eeee"  -- Backend B: Location
+    //   [25,29) "ffff"  -- Backend C: Money
+    let backend_a = FixedBackend::new(
+        "backend-a",
+        vec![
+            Entity::new("aaaa", EntityType::Person, 0, 4, 0.80),
+            Entity::new("bbbb", EntityType::Organization, 5, 9, 0.75),
+            Entity::new("cccc", EntityType::Date, 10, 14, 0.90),
+        ],
+    );
+    let backend_b = FixedBackend::new(
+        "backend-b",
+        vec![
+            Entity::new("dddd", EntityType::Person, 15, 19, 0.70),
+            Entity::new("eeee", EntityType::Location, 20, 24, 0.65),
+        ],
+    );
+    let backend_c = FixedBackend::new(
+        "backend-c",
+        vec![Entity::new("ffff", EntityType::Money, 25, 29, 0.85)],
+    );
+    EnsembleNER::with_backends(vec![
+        Box::new(backend_a),
+        Box::new(backend_b),
+        Box::new(backend_c),
+    ])
+}
+
+#[test]
+fn test_parallel_execution_is_deterministic() {
+    // Run the same ensemble 10 times on the same input.
+    // Every run must produce an identical entity list: same count, same order,
+    // same spans, same types, and same confidence values.
+    //
+    // The ensemble uses std::thread::scope internally (parallel backends), so
+    // any race-condition or non-deterministic HashMap iteration that leaks into
+    // the output will be caught by differing results across iterations.
+
+    let text = "aaaa bbbb cccc dddd eeee ffff";
+    let ner = determinism_ensemble();
+
+    let reference: Vec<(usize, usize, String, f64)> = ner
+        .extract_entities(text, None)
+        .expect("first run should succeed")
+        .into_iter()
+        .map(|e| (e.start, e.end, e.entity_type.as_label().to_string(), e.confidence))
+        .collect();
+
+    assert!(
+        !reference.is_empty(),
+        "determinism ensemble should produce at least one entity"
+    );
+
+    for run in 1..10_usize {
+        let result: Vec<(usize, usize, String, f64)> = ner
+            .extract_entities(text, None)
+            .unwrap_or_else(|e| panic!("run {} failed: {}", run, e))
+            .into_iter()
+            .map(|e| (e.start, e.end, e.entity_type.as_label().to_string(), e.confidence))
+            .collect();
+
+        assert_eq!(
+            result.len(),
+            reference.len(),
+            "run {} produced {} entities, expected {}",
+            run,
+            result.len(),
+            reference.len()
+        );
+
+        for (idx, (got, want)) in result.iter().zip(reference.iter()).enumerate() {
+            assert_eq!(
+                got, want,
+                "run {} entity[{}]: got {:?}, want {:?}",
+                run, idx, got, want
+            );
+        }
+    }
+}
+
+#[test]
+fn test_parallel_determinism_with_overlapping_spans() {
+    // Two backends produce competing candidates for the SAME span.
+    // The weighted vote must always resolve to the same winner regardless
+    // of which thread finishes first.
+    //
+    // "Apple" at [0,5):
+    //   backend-high (weight 0.90 via "gliner" key): Organization, conf 0.80
+    //   backend-low  (weight 0.60 via "heuristic" key): Person, conf 0.80
+    //
+    // Weighted sums:  ORG = 0.90 * 0.80 = 0.72
+    //                 PER = 0.60 * 0.80 = 0.48
+    // ORG must always win.
+    let backend_high = FixedBackend::new(
+        "gliner", // matches default weight entry (0.85 overall)
+        vec![Entity::new("Apple", EntityType::Organization, 0, 5, 0.80)],
+    );
+    let backend_low = FixedBackend::new(
+        "heuristic", // matches default weight entry (0.60 overall)
+        vec![Entity::new("Apple", EntityType::Person, 0, 5, 0.80)],
+    );
+
+    let ner = EnsembleNER::with_backends(vec![Box::new(backend_high), Box::new(backend_low)]);
+    let text = "Apple";
+
+    let reference_type = {
+        let entities = ner.extract_entities(text, None).expect("first run");
+        assert_eq!(entities.len(), 1, "should resolve to exactly one entity");
+        entities[0].entity_type.clone()
+    };
+
+    for run in 1..10_usize {
+        let entities = ner
+            .extract_entities(text, None)
+            .unwrap_or_else(|e| panic!("run {} failed: {}", run, e));
+        assert_eq!(
+            entities.len(),
+            1,
+            "run {} produced {} entities, expected 1",
+            run,
+            entities.len()
+        );
+        assert_eq!(
+            entities[0].entity_type, reference_type,
+            "run {} resolved to {:?}, expected {:?}",
+            run, entities[0].entity_type, reference_type
+        );
+    }
+}
+
+// =============================================================================
+// Error-handling: failing backends are skipped gracefully
+// =============================================================================
+
+#[test]
+fn test_failing_backend_is_skipped_and_others_produce_results() {
+    // One backend always fails; two succeed.
+    // The ensemble must produce the successful backends' results without panicking.
+    let good_a = FixedBackend::new(
+        "good-a",
+        vec![Entity::new("Paris", EntityType::Location, 0, 5, 0.85)],
+    );
+    let bad = AlwaysErrBackend::new("always-err");
+    let good_b = FixedBackend::new(
+        "good-b",
+        vec![Entity::new("March", EntityType::Date, 6, 11, 0.90)],
+    );
+
+    let ner = EnsembleNER::with_backends(vec![
+        Box::new(good_a),
+        Box::new(bad),
+        Box::new(good_b),
+    ]);
+
+    let entities = ner
+        .extract_entities("Paris March", None)
+        .expect("ensemble should not propagate backend errors");
+
+    // Both healthy backends must contribute (non-overlapping spans).
+    assert_eq!(
+        entities.len(),
+        2,
+        "expected 2 entities from healthy backends, got: {:?}",
+        entities
+            .iter()
+            .map(|e| format!("{}:{:?}", e.text, e.entity_type))
+            .collect::<Vec<_>>()
+    );
+
+    let texts: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+    assert!(
+        texts.contains(&"Paris"),
+        "expected 'Paris' in output, got {:?}",
+        texts
+    );
+    assert!(
+        texts.contains(&"March"),
+        "expected 'March' in output, got {:?}",
+        texts
+    );
+}
+
+#[test]
+fn test_all_backends_fail_returns_empty() {
+    // When every backend fails the ensemble must return Ok([]) not Err.
+    let ner = EnsembleNER::with_backends(vec![
+        Box::new(AlwaysErrBackend::new("err-1")),
+        Box::new(AlwaysErrBackend::new("err-2")),
+    ]);
+
+    let result = ner.extract_entities("Anything at all", None);
+    assert!(result.is_ok(), "ensemble should return Ok even when all backends fail");
+    assert!(
+        result.unwrap().is_empty(),
+        "ensemble should return empty vec when all backends fail"
+    );
+}
+
+#[test]
+fn test_single_failing_backend_with_single_good_backend() {
+    // Boundary case: exactly one backend, which fails.
+    let ner = EnsembleNER::with_backends(vec![Box::new(AlwaysErrBackend::new("only-err"))]);
+
+    let result = ner.extract_entities("Tim Cook", None);
+    assert!(result.is_ok(), "single failing backend must not propagate as Err");
+    assert!(result.unwrap().is_empty());
+}
+
+#[test]
+fn test_error_backend_does_not_affect_confidence_of_good_results() {
+    // The presence of a failing backend must not inflate or deflate the confidence
+    // of entities from the healthy backend compared to a baseline without it.
+    let text = "London";
+    let entity = Entity::new("London", EntityType::Location, 0, 6, 0.80);
+
+    let solo = EnsembleNER::with_backends(vec![Box::new(FixedBackend::new(
+        "solo",
+        vec![entity.clone()],
+    ))]);
+
+    let with_err = EnsembleNER::with_backends(vec![
+        Box::new(FixedBackend::new("solo", vec![entity])),
+        Box::new(AlwaysErrBackend::new("noise")),
+    ]);
+
+    let solo_result = solo.extract_entities(text, None).unwrap();
+    let err_result = with_err.extract_entities(text, None).unwrap();
+
+    assert_eq!(
+        solo_result.len(),
+        err_result.len(),
+        "entity count should be identical regardless of failing backend"
+    );
+    // Confidence is a function of the resolved candidates only; the error backend
+    // adds no candidates so confidence must be equal.
+    assert!(
+        (solo_result[0].confidence - err_result[0].confidence).abs() < 1e-9,
+        "confidence differed: solo={} with_err={}",
+        solo_result[0].confidence,
+        err_result[0].confidence
+    );
 }

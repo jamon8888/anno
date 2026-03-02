@@ -931,7 +931,7 @@ fn heal_adjacent_spans(text: &str, entities: &mut Vec<Entity>) {
 /// to cover the following capitalized word(s) that are likely part of the name.
 /// Only extends PER entities, not ORG/LOC, and only into words that are not
 /// common sentence starters or role/title words.
-fn extend_person_spans(text: &str, entities: &mut Vec<Entity>) {
+fn extend_person_spans(text: &str, entities: &mut [Entity]) {
     // Words that commonly appear capitalized but are not part of person names.
     // This is a focused subset of the heuristic backend's COMMON_SENTENCE_STARTERS
     // and SKIP_WORDS lists, covering the most frequent false-positive triggers.

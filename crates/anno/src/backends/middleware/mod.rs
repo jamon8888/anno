@@ -139,6 +139,14 @@ impl MiddlewareContext {
 /// - Preprocess text before extraction
 /// - Postprocess entities after extraction
 /// - Add metadata or enrich entities
+///
+/// # Offset contract
+///
+/// If `pre_process` changes the **length** of the text (e.g. whitespace normalization,
+/// Unicode NFKD), entity offsets produced by the backend will be relative to the
+/// **transformed** text, not the original. The pipeline does **not** remap offsets
+/// back automatically. Post-processing-only middleware (filtering, merging,
+/// enrichment) is unaffected because it does not alter the text.
 pub trait Middleware: Send + Sync {
     /// Preprocess text before entity extraction.
     ///
@@ -632,6 +640,11 @@ impl std::fmt::Debug for HookRegistry {
 use std::cell::RefCell;
 
 /// A pipeline with hook support using interior mutability.
+///
+/// **Note**: `HookedPipeline` is `Send` but **not `Sync`** because it uses
+/// `RefCell<HookRegistry>` for interior mutability. It cannot be shared across
+/// threads via `&HookedPipeline`. Use a per-thread instance or wrap in a `Mutex`
+/// if concurrent access is needed.
 ///
 /// This addresses the borrow checker issues with the standard `HookRegistry` by:
 /// 1. Using `RefCell` for interior mutability of hook-related state

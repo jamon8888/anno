@@ -205,6 +205,128 @@ pub(crate) fn method_for_backend_name(name: &str) -> anno_core::ExtractionMethod
     }
 }
 
+// =============================================================================
+// Tests for shared utilities
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::method_for_backend_name;
+    use anno_core::ExtractionMethod;
+
+    // -------------------------------------------------------------------------
+    // method_for_backend_name: exact stable IDs
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn regex_maps_to_pattern() {
+        assert_eq!(
+            method_for_backend_name("regex"),
+            ExtractionMethod::Pattern,
+            "\"regex\" must map to Pattern"
+        );
+    }
+
+    #[test]
+    fn heuristic_maps_to_heuristic() {
+        assert_eq!(
+            method_for_backend_name("heuristic"),
+            ExtractionMethod::Heuristic,
+            "\"heuristic\" must map to Heuristic"
+        );
+    }
+
+    #[test]
+    fn rule_legacy_maps_to_heuristic() {
+        // "rule" is the deprecated legacy ID for the old RuleBasedNER.
+        // It must map to Heuristic so provenance stays consistent with
+        // compositions that still use the old ID.
+        assert_eq!(
+            method_for_backend_name("rule"),
+            ExtractionMethod::Heuristic,
+            "\"rule\" (deprecated) must map to Heuristic for backwards compatibility"
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // method_for_backend_name: wildcard / unknown IDs -> Neural
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn unknown_ids_map_to_neural() {
+        // Any backend name that is not one of the three stable IDs must fall
+        // back to Neural.  This covers ML backends (gliner, bert, nuner, candle)
+        // as well as completely arbitrary strings.
+        let neural_names = [
+            "gliner",
+            "gliner-candle",
+            "GLiNER-ONNX",
+            "bert-ner-onnx",
+            "bert-onnx",
+            "nuner",
+            "NuNER",
+            "w2ner",
+            "llm",
+            "custom-backend",
+            "",
+            "REGEX",      // case-sensitive: must NOT match "regex"
+            "Heuristic",  // case-sensitive: must NOT match "heuristic"
+            "Rule",       // case-sensitive: must NOT match "rule"
+        ];
+        for name in neural_names {
+            assert_eq!(
+                method_for_backend_name(name),
+                ExtractionMethod::Neural,
+                "\"{}\" should map to Neural (unknown/wildcard ID)",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn ensemble_nested_id_maps_to_neural() {
+        // An EnsembleNER's transparent name looks like "ensemble(regex|heuristic)".
+        // The composite string is not one of the stable keys, so it must map to
+        // Neural — the caller is responsible for extracting inner provenance.
+        let name = "ensemble(regex|heuristic)";
+        assert_eq!(
+            method_for_backend_name(name),
+            ExtractionMethod::Neural,
+            "composite ensemble ID '{}' should map to Neural",
+            name
+        );
+    }
+
+    #[test]
+    fn stacked_id_maps_to_neural() {
+        let name = "stacked(regex|heuristic)";
+        assert_eq!(
+            method_for_backend_name(name),
+            ExtractionMethod::Neural,
+            "composite stacked ID '{}' should map to Neural",
+            name
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Stability: the three exact matches remain stable under whitespace
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn match_is_exact_no_trimming() {
+        // Whitespace-padded variants are NOT trimmed; they should fall through
+        // to Neural, confirming the match is exact byte-equality.
+        for padded in &[" regex", "regex ", " heuristic", "heuristic\n", "\trule"] {
+            assert_eq!(
+                method_for_backend_name(padded),
+                ExtractionMethod::Neural,
+                "whitespace-padded name '{}' should not match a stable ID",
+                padded
+            );
+        }
+    }
+}
+
 // Burn ML framework (training + inference)
 #[cfg(feature = "burn")]
 pub mod burn;

@@ -557,28 +557,12 @@ impl GLiNERCandle {
             }
         }
 
-        // Performance: Use unstable sort (we don't need stable sort here)
-        // Remove overlapping (keep highest scoring)
-        entities.sort_unstable_by(|a, b| {
-            b.confidence
-                .partial_cmp(&a.confidence)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        // Performance: Pre-allocate filtered vec with estimated capacity
-        let mut filtered = Vec::with_capacity(entities.len().min(32));
-        for entity in entities {
-            let overlaps = filtered
-                .iter()
-                .any(|e: &Entity| !(entity.end <= e.start || entity.start >= e.end));
-            if !overlaps {
-                filtered.push(entity);
-            }
-        }
-
-        // Performance: Use unstable sort (we don't need stable sort here)
-        filtered.sort_unstable_by_key(|e| e.start);
-        Ok(filtered)
+        // Remove overlapping spans, keeping highest confidence
+        crate::backends::streaming::deduplicate_overlapping(
+            &mut entities,
+            crate::backends::streaming::OverlapStrategy::KeepHighestConfidence,
+        );
+        Ok(entities)
     }
 
     pub(super) fn map_label(label: &str) -> EntityType {
