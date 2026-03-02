@@ -588,22 +588,16 @@ impl MentionCluster {
         self.mentions
             .iter()
             .enumerate()
-            .map(|(idx, mention)| anno_core::Signal {
-                id: signal_id_base + idx as u64,
-                location: anno_core::Location::Text {
+            .map(|(idx, mention)| anno_core::Signal::new(
+                signal_id_base + idx as u64,
+                anno_core::Location::Text {
                     start: mention.start,
                     end: mention.end,
                 },
-                surface: mention.text.clone(),
-                label: anno_core::TypeLabel::from(mention.mention_type.as_label()),
-                confidence: 1.0,
-                hierarchical: None,
-                provenance: None,
-                modality: anno_core::Modality::Symbolic,
-                normalized: None,
-                negated: false,
-                quantifier: None,
-            })
+                mention.text.clone(),
+                anno_core::TypeLabel::from(mention.mention_type.as_label()),
+                1.0,
+            ))
             .collect()
     }
 
@@ -666,22 +660,16 @@ impl RankedMention {
         &self,
         signal_id: anno_core::SignalId,
     ) -> anno_core::Signal<anno_core::Location> {
-        anno_core::Signal {
-            id: signal_id,
-            location: anno_core::Location::Text {
+        anno_core::Signal::new(
+            signal_id,
+            anno_core::Location::Text {
                 start: self.start,
                 end: self.end,
             },
-            surface: self.text.clone(),
-            label: anno_core::TypeLabel::from(self.mention_type.as_label()),
-            confidence: 1.0,
-            hierarchical: None,
-            provenance: None,
-            modality: anno_core::Modality::Symbolic,
-            normalized: None,
-            negated: false,
-            quantifier: None,
-        }
+            self.text.clone(),
+            anno_core::TypeLabel::from(self.mention_type.as_label()),
+            1.0,
+        )
     }
 }
 

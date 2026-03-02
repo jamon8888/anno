@@ -15,7 +15,7 @@ use crate::{Entity, EntityType, Error, Result};
 use anno_core::EntityCategory;
 use std::collections::HashMap;
 #[cfg(feature = "candle")]
-use std::sync::RwLock;
+use crate::sync::RwLock;
 
 // Candle Backend
 // =============================================================================

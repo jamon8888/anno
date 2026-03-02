@@ -8,7 +8,7 @@ use anno_core::EntityCategory;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 #[cfg(feature = "candle")]
-use std::sync::RwLock;
+use crate::sync::RwLock;
 
 use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, ZeroShotNER};
 
@@ -59,13 +59,11 @@ impl LabelCache {
     }
 
     pub(super) fn get(&self, label: &str) -> Option<Vec<f32>> {
-        self.cache.read().ok()?.get(label).cloned()
+        crate::sync::read_lock(&self.cache).get(label).cloned()
     }
 
     pub(super) fn insert(&self, label: String, embedding: Vec<f32>) {
-        if let Ok(mut cache) = self.cache.write() {
-            cache.insert(label, embedding);
-        }
+        crate::sync::write_lock(&self.cache).insert(label, embedding);
     }
 }
 
