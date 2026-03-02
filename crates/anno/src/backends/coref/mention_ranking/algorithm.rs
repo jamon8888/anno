@@ -2039,13 +2039,19 @@ impl MentionRankingCoref {
         let (signals, tracks) = self.resolve_to_grounded(text)?;
         let mut track_ids = Vec::new();
 
-        // Add signals to document
-        for signal in signals {
-            doc.signals.push(signal);
-        }
+        // Build old→new signal ID map (add_signal reassigns IDs)
+        let old_ids: Vec<anno_core::SignalId> = signals.iter().map(|s| s.id).collect();
+        let new_ids = doc.add_signals(signals);
+        let id_map: std::collections::HashMap<anno_core::SignalId, anno_core::SignalId> =
+            old_ids.into_iter().zip(new_ids).collect();
 
-        // Add tracks to document (use add_track to populate signal_to_track index)
-        for track in tracks {
+        // Remap signal refs in tracks, then add via add_track
+        for mut track in tracks {
+            for sig_ref in &mut track.signals {
+                if let Some(&new_id) = id_map.get(&sig_ref.signal_id) {
+                    sig_ref.signal_id = new_id;
+                }
+            }
             let new_id = doc.add_track(track);
             track_ids.push(new_id);
         }

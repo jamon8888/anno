@@ -717,7 +717,7 @@ impl Model for HeuristicNER {
                     classify_minimal(&clean_span_words, &words, start_idx - 1);
 
                 // Skip low-confidence and filtered entities
-                if confidence >= self.threshold && !matches!(entity_type, EntityType::Other(_)) {
+                if confidence >= self.threshold && confidence > 0.0 {
                     entities.push(Entity::with_provenance(
                         entity_text,
                         entity_type,
@@ -775,7 +775,7 @@ impl Model for HeuristicNER {
                 classify_minimal(&clean_span_words, &words, start_idx);
 
             // Skip low-confidence and filtered entities
-            if confidence >= self.threshold && !matches!(entity_type, EntityType::Other(_)) {
+            if confidence >= self.threshold && confidence > 0.0 {
                 entities.push(Entity::with_provenance(
                     entity_text,
                     entity_type,

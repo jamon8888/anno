@@ -50,7 +50,10 @@
 //! - `UNIVERSAL_NER_API_KEY` - Dedicated UniversalNER key
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+
+use crate::sync::Mutex;
+#[cfg(any(feature = "llm", test))]
+use crate::sync::lock;
 
 use crate::backends::inference::ZeroShotNER;
 use crate::backends::llm_prompt::{BIOSchema, CodeNERPrompt};
@@ -413,7 +416,8 @@ Output:"#
 
         // Check cache first (keyed on chunk text, not full document)
         let key = cache_key(chunk_text, entity_types, &model_for_cache);
-        if let Ok(cache) = self.cache.lock() {
+        {
+            let cache = lock(&self.cache);
             if let Some(cached) = cache.get(key) {
                 // Adjust offsets from chunk-local to document-global
                 let adjusted: Vec<Entity> = cached
@@ -542,9 +546,7 @@ Output:"#
         }
 
         // Cache the chunk-local result (before offset adjustment)
-        if let Ok(mut cache) = self.cache.lock() {
-            cache.insert(key, entities.clone());
-        }
+        lock(&self.cache).insert(key, entities.clone());
 
         // Adjust offsets from chunk-local to document-global
         if char_offset > 0 {
@@ -1005,7 +1007,7 @@ impl ZeroShotNER for UniversalNER {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::OnceLock;
 
     #[test]
     fn test_universal_ner_creation() {
@@ -1017,10 +1019,7 @@ mod tests {
     fn test_universal_ner_availability_reflects_api_key() {
         // Env vars are global; serialize to avoid interference with other tests.
         static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        let _guard = ENV_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let _guard = lock(ENV_LOCK.get_or_init(|| Mutex::new(())));
 
         // Override any `.env` values (dotenv only sets if unset).
         for k in [

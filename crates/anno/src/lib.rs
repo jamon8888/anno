@@ -124,8 +124,8 @@ pub use error::{Error, Result};
 
 // Re-export core types at the crate root (the `anno` public API surface).
 pub use anno_core::{
-    generate_span_candidates, CorefChain, CorefDocument, CoreferenceResolver, Corpus,
-    DiscontinuousSpan, Entity, EntityBuilder, EntityCategory, EntityType, EntityViewport,
+    generate_span_candidates, Animacy, CanonicalId, CorefChain, CorefDocument, CoreferenceResolver,
+    Corpus, DiscontinuousSpan, Entity, EntityBuilder, EntityCategory, EntityType, EntityViewport,
     ExtractionMethod, Gender, GroundedDocument, HashMapLexicon, HierarchicalConfidence, Identity,
     IdentityId, IdentitySource, Lexicon, Location, Mention, MentionType, Modality, Number, Person,
     PhiFeatures, Provenance, Quantifier, RaggedBatch, Relation, Signal, SignalId, SignalRef, Span,
