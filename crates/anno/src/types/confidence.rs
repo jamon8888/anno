@@ -112,6 +112,13 @@ use std::fmt;
 /// `Confidence` is `#[repr(transparent)]`, meaning it has the exact same
 /// memory layout as `f64`. There is no runtime overhead.
 ///
+/// # Why core structs use raw `f64`/`f32`
+///
+/// [`Entity::confidence`](anno_core::Entity) uses raw `f64` and
+/// [`Signal::confidence`](anno_core::Signal) uses raw `f32` because `anno-core`
+/// (L0) cannot depend on `anno` (L2) where this type lives. This is an accepted
+/// layering trade-off. Use `Confidence` at construction/validation boundaries.
+///
 /// # Example
 ///
 /// ```rust

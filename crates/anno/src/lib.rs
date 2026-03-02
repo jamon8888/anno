@@ -349,6 +349,14 @@ type AnyModelRelationExtractor =
     dyn Fn(&str, Option<&str>) -> Result<(Vec<Entity>, Vec<Relation>)> + Send + Sync;
 
 /// A wrapper that turns an extractor closure into a `Model`.
+///
+/// `AnyModel` supports [`DynamicLabels`] and [`RelationCapable`] via closures
+/// (see [`with_dynamic_labels`](Self::with_dynamic_labels) and
+/// [`with_relations`](Self::with_relations)). `BatchCapable`, `GpuCapable`, and
+/// `StreamingCapable` are **not** supported -- these capability traits require
+/// typed method signatures that cannot be expressed through closures. For
+/// backends needing those capabilities, implement the sealed `Model` trait
+/// directly within this crate.
 pub struct AnyModel {
     name: &'static str,
     description: &'static str,
