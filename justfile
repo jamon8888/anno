@@ -48,11 +48,11 @@ check-feature-matrix:
 
 # Format all code
 fmt:
-    cargo fmt --manifest-path Cargo.toml -p anno
+    cargo fmt --all
 
 # Check formatting without modifying
 fmt-check:
-    cargo fmt --manifest-path Cargo.toml -p anno -- --check
+    cargo fmt --all -- --check
 
 # Run all unit tests (prefers nextest)
 test:
@@ -367,11 +367,11 @@ typecheck-python:
 
 # Run NER benchmark (no execution, just compile)
 bench-check:
-    cargo bench -p anno --no-run
+    cargo bench -p anno-lib --no-run
 
 # Run benchmarks
 bench:
-    cargo bench -p anno
+    cargo bench -p anno-lib
 
 # === Utilities ===
 
@@ -396,7 +396,7 @@ proptest:
 # Example:
 #   ANNO_WARM_PER_TASK=2 ANNO_WARM_SEED=42 cargo run --example cache_warm --features "eval"
 cache-warm:
-    cargo run -p anno --example cache_warm --features "eval"
+    cargo run -p anno-lib --example cache_warm --features "eval"
 
 # === Release ===
 
@@ -412,7 +412,7 @@ clippy-strict:
 
 # Count lines of code
 loc:
-    @tokei src/ tests/ examples/ benches/ --compact
+    @tokei crates/ --compact
 
 # Check for TODO/FIXME comments
 todos:
@@ -426,7 +426,7 @@ test-count:
 
 # Run quickstart example (no deps)
 example-minimal:
-    cargo run -p anno --example minimal
+    cargo run -p anno-lib --example minimal
 
 # Run deterministic offline muxer decision-loop example
 example-muxer:
@@ -569,12 +569,12 @@ static-analysis:
 # Run tests with cargo-nextest (better output)
 test-nextest:
     @which cargo-nextest > /dev/null || (echo "Install: cargo install cargo-nextest" && exit 1)
-    cargo nextest run --all-features
+    cargo nextest run --workspace --features "eval discourse"
 
 # Generate code coverage report
 coverage:
     @which cargo-llvm-cov > /dev/null || (echo "Install: cargo install cargo-llvm-cov" && exit 1)
-    cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+    cargo llvm-cov --features "eval discourse" --workspace --lcov --output-path lcov.info
     @echo "Coverage report generated: lcov.info"
     @echo "View with: genhtml lcov.info -o coverage-html && open coverage-html/index.html"
 
