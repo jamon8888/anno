@@ -843,6 +843,28 @@ impl std::fmt::Display for SignalValidationError {
 
 impl std::error::Error for SignalValidationError {}
 
+/// Convert an [`Entity`] to a [`Signal<Location>`], mapping Entity's `f64` confidence
+/// to Signal's `f32` (clamped to `[0,1]`).
+///
+/// Uses `Location::Text` for the span and preserves `normalized`, `provenance`,
+/// and `hierarchical_confidence` fields. Discontinuous and visual spans are not
+/// handled; use [`GroundedDocument::from_entities`] for full fidelity.
+impl From<&Entity> for Signal<Location> {
+    fn from(e: &Entity) -> Self {
+        let mut signal = Signal::new(
+            SignalId::ZERO,
+            Location::text(e.start, e.end),
+            &e.text,
+            e.entity_type.as_label(),
+            e.confidence as f32,
+        );
+        signal.normalized = e.normalized.clone();
+        signal.provenance = e.provenance.clone();
+        signal.hierarchical = e.hierarchical_confidence;
+        signal
+    }
+}
+
 // =============================================================================
 // Track (Level 2): Within-Document Coreference
 // =============================================================================
