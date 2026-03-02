@@ -271,8 +271,77 @@ impl<'m, 't, M: Model> Iterator for EntityIterator<'m, 't, M> {
     }
 }
 
+/// A text chunk with its character offset in the original text.
+#[derive(Debug, Clone)]
+pub struct TextChunk {
+    /// The chunk text.
+    pub text: String,
+    /// Character offset of this chunk's start in the original text.
+    pub char_offset: usize,
+}
+
+/// Split text into chunks suitable for independent NER processing.
+///
+/// Each chunk respects sentence/word boundaries and includes overlap
+/// for entity recovery at boundaries. Returns chunks with their
+/// character offsets so entities can be mapped back to the original text.
+///
+/// This is the shared chunking primitive used by both `StreamingExtractor`
+/// and LLM backends like UniversalNER.
+pub fn chunk_text(text: &str, config: &ChunkConfig) -> Vec<TextChunk> {
+    let chars: Vec<char> = text.chars().collect();
+    let text_len = chars.len();
+
+    if text_len == 0 {
+        return Vec::new();
+    }
+
+    // If text fits in one chunk, return it directly.
+    if text_len <= config.chunk_size {
+        return vec![TextChunk {
+            text: text.to_string(),
+            char_offset: 0,
+        }];
+    }
+
+    let mut chunks = Vec::new();
+    let mut position = 0;
+
+    while position < text_len {
+        let chunk_end = (position + config.chunk_size).min(text_len);
+
+        let actual_end = if chunk_end >= text_len {
+            text_len
+        } else if config.respect_sentences {
+            find_sentence_boundary(&chars, position, chunk_end)
+        } else {
+            find_word_boundary(&chars, chunk_end)
+        };
+
+        let chunk_str: String = chars[position..actual_end].iter().collect();
+        chunks.push(TextChunk {
+            text: chunk_str,
+            char_offset: position,
+        });
+
+        if actual_end >= text_len {
+            break;
+        }
+
+        // Advance with overlap, ensuring forward progress.
+        let overlap_position = actual_end.saturating_sub(config.overlap);
+        position = if overlap_position <= position {
+            position + 1
+        } else {
+            overlap_position
+        };
+    }
+
+    chunks
+}
+
 /// Find a sentence boundary near the target position.
-fn find_sentence_boundary(chars: &[char], start: usize, target: usize) -> usize {
+pub fn find_sentence_boundary(chars: &[char], start: usize, target: usize) -> usize {
     // Look backwards from target for sentence-ending punctuation
     let search_start = target.saturating_sub(200);
     for i in (search_start..target).rev() {
@@ -299,7 +368,7 @@ fn find_sentence_boundary(chars: &[char], start: usize, target: usize) -> usize 
 }
 
 /// Find a word boundary near the target position.
-fn find_word_boundary(chars: &[char], target: usize) -> usize {
+pub fn find_word_boundary(chars: &[char], target: usize) -> usize {
     let target = target.min(chars.len());
 
     // If we're already at end, return it
@@ -892,5 +961,121 @@ mod tests {
         assert_eq!(ConfidenceFilter::new(0.5).name(), "ConfidenceFilter");
         assert_eq!(DeduplicateOverlapping.name(), "DeduplicateOverlapping");
         assert_eq!(NormalizeText::new(false).name(), "NormalizeText");
+    }
+
+    // =========================================================================
+    // chunk_text() shared utility
+    // =========================================================================
+
+    #[test]
+    fn test_chunk_text_small_text_single_chunk() {
+        let config = ChunkConfig::default(); // 10k chars
+        let chunks = chunk_text("Hello world.", &config);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].text, "Hello world.");
+        assert_eq!(chunks[0].char_offset, 0);
+    }
+
+    #[test]
+    fn test_chunk_text_empty() {
+        let config = ChunkConfig::default();
+        let chunks = chunk_text("", &config);
+        assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn test_chunk_text_splits_large_text() {
+        let config = ChunkConfig {
+            chunk_size: 20,
+            overlap: 5,
+            respect_sentences: false,
+            buffer_size: 100,
+        };
+        let text = "Alice met Bob in Paris. Charlie visited London yesterday. Dave works in Tokyo today.";
+        let chunks = chunk_text(text, &config);
+        assert!(chunks.len() > 1, "should split into multiple chunks");
+
+        // Verify offsets are monotonically increasing
+        for i in 1..chunks.len() {
+            assert!(
+                chunks[i].char_offset > chunks[i - 1].char_offset,
+                "chunk offsets must increase"
+            );
+        }
+
+        // Verify all text is covered (last chunk offset + last chunk len >= original len)
+        let last = &chunks[chunks.len() - 1];
+        let total_covered = last.char_offset + last.text.chars().count();
+        assert!(
+            total_covered >= text.chars().count(),
+            "chunks must cover all text"
+        );
+    }
+
+    #[test]
+    fn test_chunk_text_respects_sentences() {
+        let config = ChunkConfig {
+            chunk_size: 30,
+            overlap: 5,
+            respect_sentences: true,
+            buffer_size: 100,
+        };
+        let text = "First sentence here. Second sentence here. Third sentence here.";
+        let chunks = chunk_text(text, &config);
+        assert!(chunks.len() >= 2);
+        // First chunk should end at a sentence boundary
+        assert!(
+            chunks[0].text.ends_with(". ") || chunks[0].text.ends_with('.'),
+            "first chunk should end near sentence boundary: {:?}",
+            chunks[0].text
+        );
+    }
+
+    #[test]
+    fn test_chunk_text_overlap_creates_redundancy() {
+        let config = ChunkConfig {
+            chunk_size: 20,
+            overlap: 10,
+            respect_sentences: false,
+            buffer_size: 100,
+        };
+        let text = "0123456789 abcdefghij klmnopqrst uvwxyz";
+        let chunks = chunk_text(text, &config);
+        assert!(chunks.len() >= 2);
+
+        // With overlap, chunk N+1's start should be before chunk N's end
+        if chunks.len() >= 2 {
+            let c0_end = chunks[0].char_offset + chunks[0].text.chars().count();
+            let c1_start = chunks[1].char_offset;
+            assert!(
+                c1_start < c0_end,
+                "overlap should cause chunk start ({}) < prev chunk end ({})",
+                c1_start,
+                c0_end
+            );
+        }
+    }
+
+    #[test]
+    fn test_chunk_text_unicode() {
+        let config = ChunkConfig {
+            chunk_size: 10,
+            overlap: 3,
+            respect_sentences: false,
+            buffer_size: 100,
+        };
+        let text = "東京は日本の首都です。パリはフランスの首都です。";
+        let chunks = chunk_text(text, &config);
+        assert!(chunks.len() >= 2);
+
+        // Verify char offsets are correct
+        let chars: Vec<char> = text.chars().collect();
+        for chunk in &chunks {
+            let expected: String = chars
+                [chunk.char_offset..chunk.char_offset + chunk.text.chars().count()]
+                .iter()
+                .collect();
+            assert_eq!(chunk.text, expected, "chunk text must match offset slice");
+        }
     }
 }
