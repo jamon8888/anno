@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use super::super::output::color;
 use super::super::parser::ModelBackend;
-use anno_core::Entity;
+use anno::Entity;
 
 /// Privacy analysis and redaction
 #[derive(Parser, Debug)]

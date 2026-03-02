@@ -6,7 +6,7 @@ use std::io::{self, Read};
 
 use super::super::parser::OutputFormat;
 use super::super::utils::{format_error, parse_grounded_document, read_input_file};
-use anno_core::{Location, Signal};
+use anno::{Location, Signal};
 
 /// Query and filter entities/clusters
 #[derive(Parser, Debug)]

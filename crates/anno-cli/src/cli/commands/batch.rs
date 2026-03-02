@@ -121,9 +121,9 @@ fn process_document(
     doc_id: &str,
     text: &str,
     opts: &DocOpts<'_>,
-) -> Result<anno_core::GroundedDocument, String> {
+) -> Result<anno::GroundedDocument, String> {
     use super::super::utils::{link_tracks_to_kb, resolve_coreference};
-    use anno_core::{GroundedDocument, Location, Signal, SignalId};
+    use anno::{GroundedDocument, Location, Signal, SignalId};
 
     // Cache hit: return early without running extraction
     if let Some(ref path) = opts.cache_path {

@@ -7,8 +7,8 @@ use super::super::output::{color, print_signals};
 use super::super::parser::{ModelBackend, OutputFormat};
 use super::super::utils::{link_tracks_to_kb, resolve_coreference};
 #[cfg(feature = "eval")]
-use anno_core::{Entity, EntityType};
-use anno_core::{GroundedDocument, Location, Signal, SignalId};
+use anno::{Entity, EntityType};
+use anno::{GroundedDocument, Location, Signal, SignalId};
 
 /// Unified pipeline command
 #[derive(Parser, Debug)]

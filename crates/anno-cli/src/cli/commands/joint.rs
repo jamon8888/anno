@@ -27,7 +27,7 @@ use super::super::parser::{ModelBackend, OutputFormat};
 use super::super::utils::get_input_text;
 use anno::joint::{JointConfig, JointModel};
 use anno::Model;
-use anno_core::Entity;
+use anno::Entity;
 use clap::Parser;
 use std::time::Instant;
 

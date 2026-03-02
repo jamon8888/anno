@@ -15,7 +15,7 @@ use anno::backends::inference::{
 #[cfg(feature = "eval")]
 use anno::ingest::url_resolver::CompositeResolver;
 use anno::ingest::DocumentPreprocessor;
-use anno_core::core::grounded::{
+use anno::core::grounded::{
     GroundedDocument, Location, Modality, Signal, SignalId, SignalValidationError,
 };
 #[cfg(feature = "graph")]

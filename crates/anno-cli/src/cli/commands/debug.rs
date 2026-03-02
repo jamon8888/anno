@@ -10,7 +10,7 @@ use super::super::utils::{get_input_text, link_tracks_to_kb, resolve_coreference
 #[cfg(feature = "eval")]
 use anno::ingest::url_resolver::{CompositeResolver, UrlResolver};
 use anno::ingest::DocumentPreprocessor;
-use anno_core::core::grounded::{
+use anno::core::grounded::{
     render_document_html, GroundedDocument, Location, Signal, SignalId,
 };
 #[cfg(feature = "graph")]

@@ -5,7 +5,7 @@ use std::fs;
 
 use super::super::parser::ModelBackend;
 use anno::Entity;
-use anno_core::GroundedDocument;
+use anno::GroundedDocument;
 
 use serde::{Deserialize, Serialize};
 

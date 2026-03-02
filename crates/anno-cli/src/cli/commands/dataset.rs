@@ -22,12 +22,12 @@ use super::super::parser::{EvalTask, ModelBackend};
 use anno_eval::eval::relation::create_entity_pair_relations;
 
 #[cfg(feature = "eval")]
-use anno_core::core::grounded::{
+use anno::core::grounded::{
     render_eval_html_with_title, EvalComparison, EvalMatch, Location, Signal, SignalId,
 };
 
 #[cfg(feature = "eval")]
-use anno_core::core::grounded::{render_document_html, GroundedDocument};
+use anno::core::grounded::{render_document_html, GroundedDocument};
 
 #[cfg(feature = "eval")]
 use anno_eval::eval::loader::DatasetId;
@@ -35,7 +35,7 @@ use anno_eval::eval::loader::DatasetId;
 use anno_eval::eval::loader::LoadableDatasetId;
 
 #[cfg(feature = "eval")]
-use anno_core::CoreferenceResolver;
+use anno::CoreferenceResolver;
 
 #[cfg(feature = "eval")]
 #[derive(Debug)]
@@ -1355,7 +1355,7 @@ fn preview_text(s: &str, max_chars: usize) -> String {
 
 #[cfg(feature = "eval")]
 fn synthetic_ner_test_cases() -> Vec<(String, Vec<anno_eval::eval::GoldEntity>)> {
-    use anno_core::EntityType;
+    use anno::EntityType;
 
     fn find_char_span(text: &str, needle: &str) -> (usize, usize) {
         let start_byte = text.find(needle).unwrap_or_else(|| {
@@ -1635,11 +1635,11 @@ code{color:var(--code)}
 #[cfg(feature = "eval")]
 fn coref_doc_to_gold_entities(
     doc: &anno_eval::eval::coref::CorefDocument,
-) -> Vec<anno_core::Entity> {
-    use anno_core::{Entity, EntityType};
+) -> Vec<anno::Entity> {
+    use anno::{Entity, EntityType};
 
     let mut entities: Vec<Entity> = Vec::new();
-    let mut next_cluster = anno_core::CanonicalId::ZERO;
+    let mut next_cluster = anno::CanonicalId::ZERO;
 
     for chain in &doc.chains {
         let cid = chain.cluster_id.unwrap_or_else(|| {
@@ -1677,8 +1677,8 @@ fn coref_doc_to_gold_entities(
 #[cfg(feature = "eval")]
 fn coref_doc_to_oracle_mentions(
     doc: &anno_eval::eval::coref::CorefDocument,
-) -> Vec<anno_core::Entity> {
-    use anno_core::{Entity, EntityType};
+) -> Vec<anno::Entity> {
+    use anno::{Entity, EntityType};
 
     let mut entities: Vec<Entity> = Vec::new();
 

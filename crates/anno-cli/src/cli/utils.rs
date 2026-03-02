@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{self, IsTerminal, Read};
 
-use anno_core::{GroundedDocument, Identity, IdentityId, Quantifier, SignalId, TrackId};
+use anno::{GroundedDocument, Identity, IdentityId, Quantifier, SignalId, TrackId};
 
 /// Get input text from various sources (text arg, file, or stdin)
 ///
@@ -453,7 +453,7 @@ pub fn get_config_dir() -> Result<std::path::PathBuf, String> {
 mod tests {
     use super::*;
     #[cfg(feature = "eval")]
-    use anno_core::{Entity, EntityType};
+    use anno::{Entity, EntityType};
 
     // -------------------------------------------------------------------------
     // is_negated tests

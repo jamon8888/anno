@@ -7,8 +7,7 @@ use std::io::{self, Read};
 use super::super::output::{color, print_signals};
 use super::super::parser::OutputFormat;
 use super::super::utils::{link_tracks_to_kb, log_success, resolve_coreference};
-use anno_core::GroundedDocument;
-use anno_core::SignalId;
+use anno::{GroundedDocument, SignalId};
 #[cfg(feature = "graph")]
 use lattix::{GraphDocument, GraphExportFormat};
 

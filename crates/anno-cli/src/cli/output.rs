@@ -3,11 +3,10 @@
 use std::collections::HashMap;
 use std::io::{self, IsTerminal, Write};
 
-use anno_core::Entity;
-use anno_core::{GroundedDocument, Location, Signal};
+use anno::{Entity, GroundedDocument, Location, Signal};
 
 #[cfg(feature = "eval")]
-use anno_core::core::grounded::{EvalComparison, EvalMatch};
+use anno::core::grounded::{EvalComparison, EvalMatch};
 
 /// Log info message (respects quiet flag)
 pub fn log_info(msg: &str, quiet: bool) {

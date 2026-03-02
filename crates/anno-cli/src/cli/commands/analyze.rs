@@ -3,7 +3,7 @@
 use super::super::output::{color, print_annotated_entities};
 use super::super::parser::ModelBackend;
 use super::super::utils::get_input_text;
-use anno_core::Entity;
+use anno::Entity;
 use clap::Parser;
 use std::collections::HashMap;
 use std::time::Instant;
