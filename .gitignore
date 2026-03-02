@@ -53,8 +53,8 @@ crates/anno/target/
 *.swo
 .cursor/
 
-# Claude Code local settings (machine-specific permission grants)
-.claude/settings.local.json
+# Claude Code (local settings, commands, artifacts)
+.claude/
 
 # Cargo crates.io packaging (local scratch)
 crates/*/README.md
@@ -154,13 +154,12 @@ REVIEW_ISSUES.md
 !CONTRIBUTING.md
 !SECURITY.md
 !docs/**/*.md
-!.claude/**/*.md
 
 # Reports directory (generated; do not track)
 reports/
 
-# QA critique reports (generated; do not track)
-qa/reports/
+# QA artifacts (generated; do not track)
+qa/
 
 .env
 
