@@ -142,6 +142,11 @@ impl Default for NuNER {
     }
 }
 
+/// Approximate max input chars for NuNER before chunking kicks in.
+/// 512 tokens ~ 2000 chars for typical English text.
+#[cfg(feature = "onnx")]
+const MAX_INPUT_CHARS: usize = 2000;
+
 impl Model for NuNER {
     fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
         if text.trim().is_empty() {
@@ -152,7 +157,27 @@ impl Model for NuNER {
         {
             if self.session.is_some() {
                 let labels: Vec<&str> = self.default_labels.iter().map(|s| s.as_str()).collect();
-                return self.extract(text, &labels, self.threshold as f32);
+                let threshold = self.threshold as f32;
+
+                if text.chars().count() > MAX_INPUT_CHARS {
+                    use crate::backends::streaming::{extract_chunked_parallel, ChunkConfig};
+                    let config = ChunkConfig {
+                        chunk_size: MAX_INPUT_CHARS,
+                        overlap: 200,
+                        respect_sentences: true,
+                        buffer_size: 1000,
+                    };
+                    return extract_chunked_parallel(text, &config, |chunk_text, char_offset| {
+                        let mut entities = self.extract(chunk_text, &labels, threshold)?;
+                        for e in &mut entities {
+                            e.start += char_offset;
+                            e.end += char_offset;
+                        }
+                        Ok(entities)
+                    });
+                }
+
+                return self.extract(text, &labels, threshold);
             }
 
             Err(Error::ModelInit(
