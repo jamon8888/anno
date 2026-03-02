@@ -373,8 +373,9 @@ pub use streaming::{
 
 // Middleware pipeline
 pub use middleware::{
-    FilterByConfidence, FilterByType, HookedPipeline, Middleware, MiddlewareContext,
-    NormalizeWhitespace, Pipeline as MiddlewarePipeline, PipelineStageAdapter, RemoveOverlaps,
+    AddProvenance, Callback, FilterByConfidence, FilterByType, HookEvent, HookedPipeline,
+    MergeAdjacent, Middleware, MiddlewareContext, NormalizeWhitespace,
+    Pipeline as MiddlewarePipeline, PipelineStageAdapter, RemoveOverlaps,
 };
 
 // Burn ML framework (trainable)

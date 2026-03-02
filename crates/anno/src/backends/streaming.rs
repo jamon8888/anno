@@ -350,8 +350,10 @@ pub fn find_sentence_boundary(chars: &[char], start: usize, target: usize) -> us
         }
         let c = chars[i];
         // Sentence boundaries: . ! ? followed by whitespace or end
-        if (c == '.' || c == '!' || c == '?' || c == '。' || c == '！' || c == '？')
-            && (i + 1 >= chars.len() || chars[i + 1].is_whitespace())
+        let is_cjk_punct = c == '。' || c == '！' || c == '？';
+        let is_latin_punct = c == '.' || c == '!' || c == '?';
+        if is_cjk_punct
+            || (is_latin_punct && (i + 1 >= chars.len() || chars[i + 1].is_whitespace()))
         {
             // Return position after the punctuation and whitespace
             let mut end = i + 1;
@@ -579,18 +581,19 @@ pub fn deduplicate_overlapping(entities: &mut Vec<Entity>, strategy: OverlapStra
             let mut out: Vec<Entity> = Vec::with_capacity(entities.len());
 
             for entity in entities.drain(..) {
-                let dominated = out.last().map_or(false, |prev: &Entity| {
+                // Check ALL kept entities for same-type overlap, not just the last one.
+                // This handles interleaved different-type entities correctly.
+                let overlapping_idx = out.iter().rposition(|prev: &Entity| {
                     entity.start < prev.end
                         && prev.start < entity.end
                         && prev.entity_type == entity.entity_type
                 });
 
-                if dominated {
-                    let prev = out.last().unwrap();
-                    let prev_len = prev.end - prev.start;
+                if let Some(idx) = overlapping_idx {
+                    let prev_len = out[idx].end - out[idx].start;
                     let cand_len = entity.end - entity.start;
                     if cand_len > prev_len {
-                        *out.last_mut().unwrap() = entity;
+                        out[idx] = entity;
                     }
                 } else {
                     out.push(entity);
@@ -638,7 +641,10 @@ pub fn deduplicate_overlapping(entities: &mut Vec<Entity>, strategy: OverlapStra
     *entities = result;
 }
 
-/// Deduplicate overlapping entities, keeping highest confidence.
+/// Deduplicate overlapping entities, keeping the first by position.
+///
+/// Entities are sorted by start position (ties broken by highest confidence),
+/// then a greedy sweep keeps the first non-overlapping entity at each position.
 pub struct DeduplicateOverlapping;
 
 impl PipelineStage for DeduplicateOverlapping {

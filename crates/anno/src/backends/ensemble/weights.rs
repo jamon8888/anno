@@ -109,7 +109,7 @@ pub(super) fn default_backend_weights() -> HashMap<&'static str, BackendWeight> 
         },
     );
 
-    // GLiNER Candle
+    // GLiNER Candle (stable ID + backend name() alias)
     weights.insert(
         "gliner-candle",
         BackendWeight {
@@ -117,10 +117,24 @@ pub(super) fn default_backend_weights() -> HashMap<&'static str, BackendWeight> 
             per_type: None,
         },
     );
+    weights.insert(
+        "GLiNER-Candle",
+        BackendWeight {
+            overall: 0.85,
+            per_type: None,
+        },
+    );
 
-    // BERT NER
+    // BERT NER (stable ID + backend name() alias)
     weights.insert(
         "bert-ner-onnx",
+        BackendWeight {
+            overall: 0.80,
+            per_type: None,
+        },
+    );
+    weights.insert(
+        "bert-onnx",
         BackendWeight {
             overall: 0.80,
             per_type: None,

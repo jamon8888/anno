@@ -702,14 +702,6 @@ crate::backends::macros::define_feature_stub! {
     description = "BERT-based NER using ONNX Runtime - requires 'onnx' feature";
     error_msg = "BERT NER ONNX requires the 'onnx' feature";
     methods {
-        pub fn extract_entities(&self, _text: &str, _language: Option<&str>)
-            -> crate::Result<Vec<crate::Entity>>
-        {
-            Err(crate::Error::FeatureNotAvailable(
-                "BERT NER ONNX requires the 'onnx' feature".to_string(),
-            ))
-        }
-
         pub fn model_name(&self) -> &str {
             "onnx-not-enabled"
         }

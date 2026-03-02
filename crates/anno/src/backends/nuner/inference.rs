@@ -107,19 +107,17 @@ impl NuNER {
     /// allows specifying arbitrary entity types at runtime.
     ///
     /// # Arguments
-    /// * `text` - Text to extract from
-    /// * `entity_types` - Entity type labels (e.g., ["person", "company"])
-    /// * `threshold` - Confidence threshold (0.0-1.0)
-    /// Maximum words per NuNER chunk.  NuNER uses word-level tokens (not BPE),
-    /// so 2048 words is a safe limit that avoids excessive memory / latency.
-    #[cfg(feature = "onnx")]
-    const MAX_WORDS: usize = 2048;
-
-    /// Extract entities with custom labels, chunking large inputs at sentence boundaries.
+    /// Extract entities with custom labels.
     ///
     /// Unlike the `Model` trait which uses default labels, this method allows specifying
-    /// arbitrary entity types at runtime. Inputs exceeding `MAX_WORDS` (2048) are
-    /// automatically split at sentence boundaries and results merged.
+    /// arbitrary entity types at runtime. Chunking for long inputs is handled by
+    /// `Model::extract_entities` in `mod.rs`.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - Text to extract from
+    /// * `entity_types` - Entity type labels (e.g., `["person", "company"]`)
+    /// * `threshold` - Confidence threshold (0.0-1.0)
     #[cfg(feature = "onnx")]
     pub fn extract(
         &self,
@@ -140,29 +138,8 @@ impl NuNER {
             );
         }
 
-        // Check word count; chunk via shared parallel infrastructure if over limit.
-        // ~5 chars per word on average, so MAX_WORDS * 5 gives a char-based threshold.
-        let char_count = text.chars().count();
-        const CHARS_PER_WORD: usize = 5;
-        let max_input_chars = Self::MAX_WORDS * CHARS_PER_WORD;
-        if char_count > max_input_chars {
-            use crate::backends::streaming::{extract_chunked_parallel, ChunkConfig};
-            let config = ChunkConfig {
-                chunk_size: max_input_chars,
-                overlap: 200,
-                respect_sentences: true,
-                buffer_size: 1000,
-            };
-            return extract_chunked_parallel(text, &config, |chunk_text, char_offset| {
-                let mut entities = self.extract_single(chunk_text, entity_types, threshold)?;
-                for e in &mut entities {
-                    e.start += char_offset;
-                    e.end += char_offset;
-                }
-                Ok(entities)
-            });
-        }
-
+        // Chunking is handled by Model::extract_entities in mod.rs.
+        // This method processes a single (already-chunked) piece of text.
         self.extract_single(text, entity_types, threshold)
     }
 

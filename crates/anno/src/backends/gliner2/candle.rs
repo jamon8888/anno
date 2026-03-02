@@ -230,9 +230,8 @@ impl GLiNER2Candle {
     /// Load model from HuggingFace Hub.
     pub fn from_pretrained(model_id: &str) -> Result<Self> {
         use crate::backends::encoder_candle::CandleEncoder;
-        use hf_hub::api::sync::Api;
 
-        let api = Api::new().map_err(|e| Error::Retrieval(format!("HF API: {}", e)))?;
+        let api = crate::backends::hf_loader::hf_api()?;
         let repo = api.model(model_id.to_string());
 
         // Load config

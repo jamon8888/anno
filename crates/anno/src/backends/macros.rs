@@ -135,6 +135,10 @@ macro_rules! _impl_stub_traits {
             ) -> $crate::Result<Vec<$crate::Entity>> {
                 Err($crate::Error::FeatureNotAvailable($err.to_string()))
             }
+
+            fn default_types(&self) -> &[&'static str] {
+                &[]
+            }
         }
 
         $crate::backends::macros::_impl_stub_traits!($Name, $feature, $err; $( $rest )*);

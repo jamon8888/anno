@@ -177,8 +177,7 @@ impl SessionPool {
     /// * `model_name` - HuggingFace model ID (e.g., "onnx-community/gliner_small-v2.1")
     /// * `config` - Pool configuration
     pub fn new(model_name: &str, config: PoolConfig) -> Result<Self> {
-        let api = Api::new()
-            .map_err(|e| Error::Retrieval(format!("HuggingFace API init failed: {}", e)))?;
+        let api = crate::backends::hf_loader::hf_api()?;
 
         let repo = api.model(model_name.to_string());
 

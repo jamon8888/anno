@@ -531,9 +531,7 @@ pub mod candle_impl {
 
         /// Load encoder from HuggingFace model (safetensors).
         pub fn from_pretrained(model_id: &str) -> Result<Self> {
-            use hf_hub::api::sync::Api;
-
-            let api = Api::new().map_err(|e| Error::Retrieval(format!("HF API: {}", e)))?;
+            let api = crate::backends::hf_loader::hf_api()?;
 
             let repo = api.model(model_id.to_string());
 

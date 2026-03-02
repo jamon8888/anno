@@ -62,7 +62,9 @@ pub fn download_model_file(
     repo: &hf_hub::api::sync::ApiRepo,
     candidates: &[&str],
 ) -> Result<std::path::PathBuf> {
-    assert!(!candidates.is_empty(), "candidates must not be empty");
+    if candidates.is_empty() {
+        return Err(Error::Retrieval("download_model_file: candidates must not be empty".to_string()));
+    }
 
     let mut last_err = None;
     for candidate in candidates {

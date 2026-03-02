@@ -139,22 +139,9 @@ impl GLiNERCandle {
     /// # Arguments
     /// * `model_id` - HuggingFace model ID (e.g., "urchade/gliner_small-v2.1")
     pub fn from_pretrained(model_id: &str) -> Result<Self> {
-        use hf_hub::api::sync::{Api, ApiBuilder};
-
-        // Load .env if present (for HF_TOKEN)
-        crate::env::load_dotenv();
-
         let device = best_device()?;
 
-        let api = if let Some(token) = crate::env::hf_token() {
-            ApiBuilder::new()
-                .with_token(Some(token))
-                .build()
-                .map_err(|e| Error::Retrieval(format!("HuggingFace API with token: {}", e)))?
-        } else {
-            Api::new().map_err(|e| Error::Retrieval(format!("HuggingFace API: {}", e)))?
-        };
-
+        let api = crate::backends::hf_loader::hf_api()?;
         let repo = api.model(model_id.to_string());
 
         // Download files
