@@ -155,23 +155,10 @@ impl GLiNERPoly {
             labels_encoder_name
         );
 
-        crate::env::load_dotenv();
-        let api = if let Some(token) = crate::env::hf_token() {
-            ApiBuilder::new()
-                .with_token(Some(token))
-                .build()
-                .map_err(|e| Error::Retrieval(format!("HF API: {}", e)))?
-        } else {
-            Api::new().map_err(|e| Error::Retrieval(format!("HF API: {}", e)))?
-        };
-
+        let api = crate::backends::hf_loader::hf_api()?;
         let repo = api.model(labels_encoder_name);
-        let tok_path = repo
-            .get("tokenizer.json")
-            .map_err(|e| Error::Retrieval(format!("Download label tokenizer: {}", e)))?;
-
-        tokenizers::Tokenizer::from_file(&tok_path)
-            .map_err(|e| Error::Retrieval(format!("Label tokenizer load: {}", e)))
+        let tok_path = crate::backends::hf_loader::download_model_file(&repo, &["tokenizer.json"])?;
+        crate::backends::hf_loader::load_tokenizer(&tok_path)
     }
 
     /// Create a new poly-encoder GLiNER model with explicit options.
@@ -188,102 +175,41 @@ impl GLiNERPoly {
         optimization_level: u8,
         num_threads: usize,
     ) -> Result<Self> {
-        use hf_hub::api::sync::{Api, ApiBuilder};
-        use ort::execution_providers::CPUExecutionProvider;
-        use ort::session::builder::GraphOptimizationLevel;
-        use ort::session::Session;
+        use crate::backends::hf_loader;
 
-        // Load .env if present (for HF_TOKEN).
-        crate::env::load_dotenv();
-
-        let api = if let Some(token) = crate::env::hf_token() {
-            ApiBuilder::new()
-                .with_token(Some(token))
-                .build()
-                .map_err(|e| Error::Retrieval(format!("HuggingFace API with token: {}", e)))?
-        } else {
-            Api::new().map_err(|e| {
-                Error::Retrieval(format!("Failed to initialize HuggingFace API: {}", e))
-            })?
-        };
-
+        let api = hf_loader::hf_api()?;
         let repo = api.model(model_name.to_string());
 
         // Download model -- try quantized variants first if preferred.
-        let (model_path, is_quantized) = if prefer_quantized {
-            if let Ok(path) = repo.get("onnx/model_quantized.onnx") {
-                log::info!("[GLiNERPoly] Using quantized model (INT8)");
-                (path, true)
-            } else if let Ok(path) = repo.get("model_quantized.onnx") {
-                log::info!("[GLiNERPoly] Using quantized model (INT8)");
-                (path, true)
-            } else {
-                let path = repo
-                    .get("onnx/model.onnx")
-                    .or_else(|_| repo.get("model.onnx"))
-                    .map_err(|e| {
-                        Error::Retrieval(format!("Failed to download model.onnx: {}", e))
-                    })?;
-                log::info!("[GLiNERPoly] Using FP32 model (quantized not available)");
-                (path, false)
-            }
-        } else {
-            let path = repo
-                .get("onnx/model.onnx")
-                .or_else(|_| repo.get("model.onnx"))
-                .map_err(|e| Error::Retrieval(format!("Failed to download model.onnx: {}", e)))?;
-            (path, false)
-        };
+        let (model_path, is_quantized) = hf_loader::download_onnx_model(&repo, prefer_quantized)?;
 
-        let tokenizer_path = repo
-            .get("tokenizer.json")
-            .map_err(|e| Error::Retrieval(format!("Failed to download tokenizer.json: {}", e)))?;
+        // Download tokenizer.
+        let tokenizer_path = hf_loader::download_model_file(&repo, &["tokenizer.json"])?;
 
         // Build ONNX session.
-        let opt_level = match optimization_level {
-            1 => GraphOptimizationLevel::Level1,
-            2 => GraphOptimizationLevel::Level2,
-            _ => GraphOptimizationLevel::Level3,
-        };
+        let session = hf_loader::create_onnx_session(
+            &model_path,
+            hf_loader::OnnxSessionConfig {
+                optimization_level,
+                num_threads,
+                use_cpu_provider: true,
+            },
+        )?;
 
-        let mut builder = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("ONNX session builder: {}", e)))?
-            .with_optimization_level(opt_level)
-            .map_err(|e| Error::Retrieval(format!("ONNX optimization level: {}", e)))?
-            .with_execution_providers([CPUExecutionProvider::default().build()])
-            .map_err(|e| Error::Retrieval(format!("ONNX execution providers: {}", e)))?;
-
-        if num_threads > 0 {
-            builder = builder
-                .with_intra_threads(num_threads)
-                .map_err(|e| Error::Retrieval(format!("ONNX thread config: {}", e)))?;
-        }
-
-        let session = builder
-            .commit_from_file(&model_path)
-            .map_err(|e| Error::Retrieval(format!("ONNX model load: {}", e)))?;
-
-        let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| Error::Retrieval(format!("Tokenizer load: {}", e)))?;
+        let tokenizer = hf_loader::load_tokenizer(&tokenizer_path)?;
 
         // Download label encoder tokenizer from gliner_config.json.
         let config_path = repo.get("gliner_config.json").ok();
         let labels_encoder_name = config_path
             .as_ref()
             .and_then(|p| std::fs::read_to_string(p).ok())
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|c| c.get("labels_encoder")?.as_str().map(|s| s.to_string()))
+            .and_then(|s: String| serde_json::from_str::<serde_json::Value>(&s).ok())
+            .and_then(|c: serde_json::Value| c.get("labels_encoder").and_then(|v| v.as_str().map(|s| s.to_string())))
             .unwrap_or_else(|| "BAAI/bge-base-en-v1.5".to_string());
 
         let label_repo = api.model(labels_encoder_name.clone());
-        let label_tok_path = label_repo.get("tokenizer.json").map_err(|e| {
-            Error::Retrieval(format!(
-                "Download label tokenizer from {}: {}",
-                labels_encoder_name, e
-            ))
-        })?;
-        let label_tokenizer = tokenizers::Tokenizer::from_file(&label_tok_path)
-            .map_err(|e| Error::Retrieval(format!("Label tokenizer load: {}", e)))?;
+        let label_tok_path = hf_loader::download_model_file(&label_repo, &["tokenizer.json"])?;
+        let label_tokenizer = hf_loader::load_tokenizer(&label_tok_path)?;
 
         log::info!(
             "[GLiNERPoly] Loaded {} (quantized={}, labels_encoder={})",

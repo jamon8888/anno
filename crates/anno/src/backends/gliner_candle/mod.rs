@@ -219,85 +219,28 @@ impl crate::backends::inference::ZeroShotNER for GLiNERCandle {
 }
 
 // =============================================================================
-// Non-candle stub
+// Non-candle stub (struct + Model + ZeroShotNER + BatchCapable + StreamingCapable + GpuCapable)
 // =============================================================================
 
-#[cfg(not(feature = "candle"))]
-#[derive(Debug)]
-pub struct GLiNERCandle {
-    _private: (),
-}
-
-#[cfg(not(feature = "candle"))]
-impl GLiNERCandle {
-    /// Create GLiNER (requires candle feature).
-    pub fn new(_model_name: &str) -> Result<Self> {
-        Err(Error::FeatureNotAvailable(
-            "GLiNER-Candle requires the 'candle' feature. \
-             Build with: cargo build --features candle\n\
-             Alternative: Use GLiNEROnnx with the 'onnx' feature for similar functionality."
-                .to_string(),
-        ))
+crate::backends::macros::define_feature_stub! {
+    struct GLiNERCandle;
+    feature = "candle";
+    name = "GLiNER-Candle (unavailable)";
+    description = "Zero-shot NER with Candle - requires 'candle' feature";
+    error_msg = "GLiNER-Candle requires the 'candle' feature";
+    methods {
+        /// Load from pretrained (requires candle feature).
+        pub fn from_pretrained(_model_id: &str) -> crate::Result<Self> {
+            Self::new("")
+        }
     }
-
-    /// Load from pretrained (requires candle feature).
-    pub fn from_pretrained(_model_id: &str) -> Result<Self> {
-        Self::new("")
-    }
-}
-
-#[cfg(not(feature = "candle"))]
-impl crate::Model for GLiNERCandle {
-    fn extract_entities(&self, _text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
-        Err(Error::FeatureNotAvailable(
-            "GLiNER-Candle requires the 'candle' feature".to_string(),
-        ))
-    }
-
-    fn supported_types(&self) -> Vec<EntityType> {
-        vec![]
-    }
-
-    fn is_available(&self) -> bool {
-        false
-    }
-
-    fn name(&self) -> &'static str {
-        "GLiNER-Candle (unavailable)"
-    }
-
-    fn description(&self) -> &'static str {
-        "Zero-shot NER with Candle - requires 'candle' feature"
-    }
-}
-
-#[cfg(not(feature = "candle"))]
-impl crate::backends::inference::ZeroShotNER for GLiNERCandle {
-    fn extract_with_types(
-        &self,
-        _text: &str,
-        _entity_types: &[&str],
-        _threshold: f32,
-    ) -> Result<Vec<Entity>> {
-        Err(Error::FeatureNotAvailable(
-            "GLiNER-Candle requires the 'candle' feature".to_string(),
-        ))
-    }
-
-    fn extract_with_descriptions(
-        &self,
-        _text: &str,
-        _descriptions: &[&str],
-        _threshold: f32,
-    ) -> Result<Vec<Entity>> {
-        Err(Error::FeatureNotAvailable(
-            "GLiNER-Candle requires the 'candle' feature".to_string(),
-        ))
+    impls {
+        ZeroShotNER, BatchCapable, StreamingCapable(4096), GpuCapable,
     }
 }
 
 // =============================================================================
-// BatchCapable Trait Implementation
+// BatchCapable Trait Implementation (feature enabled)
 // =============================================================================
 
 #[cfg(feature = "candle")]
@@ -326,25 +269,8 @@ impl crate::BatchCapable for GLiNERCandle {
     }
 }
 
-#[cfg(not(feature = "candle"))]
-impl crate::BatchCapable for GLiNERCandle {
-    fn extract_entities_batch(
-        &self,
-        _texts: &[&str],
-        _language: Option<&str>,
-    ) -> Result<Vec<Vec<Entity>>> {
-        Err(Error::FeatureNotAvailable(
-            "GLiNER-Candle requires the 'candle' feature".to_string(),
-        ))
-    }
-
-    fn optimal_batch_size(&self) -> Option<usize> {
-        None
-    }
-}
-
 // =============================================================================
-// StreamingCapable Trait Implementation
+// StreamingCapable Trait Implementation (feature enabled)
 // =============================================================================
 
 #[cfg(feature = "candle")]
@@ -354,15 +280,8 @@ impl crate::StreamingCapable for GLiNERCandle {
     }
 }
 
-#[cfg(not(feature = "candle"))]
-impl crate::StreamingCapable for GLiNERCandle {
-    fn recommended_chunk_size(&self) -> usize {
-        4096
-    }
-}
-
 // =============================================================================
-// GpuCapable Trait Implementation
+// GpuCapable Trait Implementation (feature enabled)
 // =============================================================================
 
 #[cfg(feature = "candle")]
@@ -372,24 +291,11 @@ impl crate::GpuCapable for GLiNERCandle {
     }
 
     fn device(&self) -> &str {
-        // Use the existing device() method but return &str
-        // We'll need to store this as a static or use a different approach
         match &self.device {
             Device::Cpu => "cpu",
             Device::Metal(_) => "metal",
             Device::Cuda(_) => "cuda",
         }
-    }
-}
-
-#[cfg(not(feature = "candle"))]
-impl crate::GpuCapable for GLiNERCandle {
-    fn is_gpu_active(&self) -> bool {
-        false
-    }
-
-    fn device(&self) -> &str {
-        "cpu"
     }
 }
 

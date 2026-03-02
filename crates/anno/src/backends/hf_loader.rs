@@ -1,0 +1,194 @@
+//! Shared HuggingFace model loading utilities.
+//!
+//! Centralizes the duplicated pattern of:
+//! 1. Initializing the HF API (with optional token from `.env`)
+//! 2. Downloading model files from a HuggingFace repo
+//! 3. Creating ONNX Runtime sessions with standard configuration
+//!
+//! # Usage
+//!
+//! ```rust,ignore
+//! use anno::backends::hf_loader::{hf_api, download_model_file, create_onnx_session, OnnxSessionConfig};
+//!
+//! let api = hf_api()?;
+//! let repo = api.model("protectai/bert-base-NER-onnx".to_string());
+//! let model_path = download_model_file(&repo, &["onnx/model.onnx", "model.onnx"])?;
+//! let tokenizer_path = download_model_file(&repo, &["tokenizer.json"])?;
+//! let session = create_onnx_session(&model_path, OnnxSessionConfig::default())?;
+//! ```
+
+use crate::{Error, Result};
+
+/// Initialize the HuggingFace API client, loading `.env` and using `HF_TOKEN` if available.
+///
+/// This replaces the duplicated pattern:
+/// ```rust,ignore
+/// crate::env::load_dotenv();
+/// let api = if let Some(token) = crate::env::hf_token() {
+///     ApiBuilder::new().with_token(Some(token)).build()?
+/// } else {
+///     Api::new()?
+/// };
+/// ```
+pub fn hf_api() -> Result<hf_hub::api::sync::Api> {
+    use hf_hub::api::sync::{Api, ApiBuilder};
+
+    crate::env::load_dotenv();
+
+    if let Some(token) = crate::env::hf_token() {
+        ApiBuilder::new()
+            .with_token(Some(token))
+            .build()
+            .map_err(|e| Error::Retrieval(format!("HuggingFace API init with token: {}", e)))
+    } else {
+        Api::new().map_err(|e| Error::Retrieval(format!("HuggingFace API init: {}", e)))
+    }
+}
+
+/// Download a file from a HuggingFace repo, trying multiple candidate paths in order.
+///
+/// Returns the local path to the downloaded file. Tries each candidate path in order
+/// and returns the first successful download.
+///
+/// # Arguments
+///
+/// * `repo` - HuggingFace repo handle from `api.model()`
+/// * `candidates` - File paths to try in order (e.g., `&["onnx/model.onnx", "model.onnx"]`)
+///
+/// # Errors
+///
+/// Returns `Error::Retrieval` if none of the candidates can be downloaded.
+pub fn download_model_file(
+    repo: &hf_hub::api::sync::ApiRepo,
+    candidates: &[&str],
+) -> Result<std::path::PathBuf> {
+    assert!(!candidates.is_empty(), "candidates must not be empty");
+
+    let mut last_err = None;
+    for candidate in candidates {
+        match repo.get(candidate) {
+            Ok(path) => return Ok(path),
+            Err(e) => last_err = Some(e),
+        }
+    }
+
+    Err(Error::Retrieval(format!(
+        "Failed to download any of [{}]: {}",
+        candidates.join(", "),
+        last_err
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    )))
+}
+
+/// Try to download a quantized ONNX model, falling back to FP32.
+///
+/// Tries quantized variants first (if `prefer_quantized` is true), then falls back
+/// to the standard model path. Returns `(local_path, is_quantized)`.
+///
+/// # Arguments
+///
+/// * `repo` - HuggingFace repo handle
+/// * `prefer_quantized` - Whether to try quantized variants first
+pub fn download_onnx_model(
+    repo: &hf_hub::api::sync::ApiRepo,
+    prefer_quantized: bool,
+) -> Result<(std::path::PathBuf, bool)> {
+    if prefer_quantized {
+        // Try quantized variants first
+        let quantized_candidates = [
+            "onnx/model_quantized.onnx",
+            "model_quantized.onnx",
+            "onnx/model_int8.onnx",
+            "model_int8.onnx",
+        ];
+        for candidate in &quantized_candidates {
+            if let Ok(path) = repo.get(candidate) {
+                log::info!("[hf_loader] Using quantized model: {}", candidate);
+                return Ok((path, true));
+            }
+        }
+    }
+
+    // Fall back to FP32
+    let path = download_model_file(repo, &["onnx/model.onnx", "model.onnx"])?;
+    if prefer_quantized {
+        log::info!("[hf_loader] Using FP32 model (quantized not available)");
+    }
+    Ok((path, false))
+}
+
+/// Configuration for creating an ONNX Runtime session.
+#[cfg(feature = "onnx")]
+#[derive(Debug, Clone)]
+pub struct OnnxSessionConfig {
+    /// ONNX graph optimization level (1-3, default 3).
+    pub optimization_level: u8,
+    /// Number of intra-op threads (0 = auto/default).
+    pub num_threads: usize,
+    /// Whether to use CPU execution provider explicitly.
+    pub use_cpu_provider: bool,
+}
+
+#[cfg(feature = "onnx")]
+impl Default for OnnxSessionConfig {
+    fn default() -> Self {
+        Self {
+            optimization_level: 3,
+            num_threads: 0,
+            use_cpu_provider: true,
+        }
+    }
+}
+
+/// Create an ONNX Runtime session from a model file with the given configuration.
+///
+/// This replaces the duplicated pattern:
+/// ```rust,ignore
+/// Session::builder()?
+///     .with_optimization_level(GraphOptimizationLevel::Level3)?
+///     .with_execution_providers([CPUExecutionProvider::default().build()])?
+///     .commit_from_file(&model_path)?
+/// ```
+#[cfg(feature = "onnx")]
+pub fn create_onnx_session(
+    model_path: &std::path::Path,
+    config: OnnxSessionConfig,
+) -> Result<ort::session::Session> {
+    use ort::session::builder::GraphOptimizationLevel;
+    use ort::session::Session;
+
+    let opt_level = match config.optimization_level {
+        1 => GraphOptimizationLevel::Level1,
+        2 => GraphOptimizationLevel::Level2,
+        _ => GraphOptimizationLevel::Level3,
+    };
+
+    let mut builder = Session::builder()
+        .map_err(|e| Error::Retrieval(format!("ONNX session builder: {}", e)))?
+        .with_optimization_level(opt_level)
+        .map_err(|e| Error::Retrieval(format!("ONNX optimization level: {}", e)))?;
+
+    if config.use_cpu_provider {
+        use ort::execution_providers::CPUExecutionProvider;
+        builder = builder
+            .with_execution_providers([CPUExecutionProvider::default().build()])
+            .map_err(|e| Error::Retrieval(format!("ONNX execution providers: {}", e)))?;
+    }
+
+    if config.num_threads > 0 {
+        builder = builder
+            .with_intra_threads(config.num_threads)
+            .map_err(|e| Error::Retrieval(format!("ONNX thread config: {}", e)))?;
+    }
+
+    builder
+        .commit_from_file(model_path)
+        .map_err(|e| Error::Retrieval(format!("ONNX model load: {}", e)))
+}
+
+/// Load a HuggingFace tokenizer from a file path.
+pub fn load_tokenizer(path: &std::path::Path) -> Result<tokenizers::Tokenizer> {
+    tokenizers::Tokenizer::from_file(path)
+        .map_err(|e| Error::Retrieval(format!("Tokenizer load: {}", e)))
+}

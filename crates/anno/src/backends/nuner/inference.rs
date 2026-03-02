@@ -42,45 +42,16 @@ impl NuNER {
     /// ```
     #[cfg(feature = "onnx")]
     pub fn from_pretrained(model_id: &str) -> Result<Self> {
-        use hf_hub::api::sync::{Api, ApiBuilder};
-        use ort::execution_providers::CPUExecutionProvider;
-        use ort::session::Session;
+        use crate::backends::hf_loader;
 
-        // Load .env if present (for HF_TOKEN)
-        crate::env::load_dotenv();
-
-        let api = if let Some(token) = crate::env::hf_token() {
-            ApiBuilder::new()
-                .with_token(Some(token))
-                .build()
-                .map_err(|e| Error::Retrieval(format!("HuggingFace API with token: {}", e)))?
-        } else {
-            Api::new().map_err(|e| {
-                Error::Retrieval(format!("Failed to initialize HuggingFace API: {}", e))
-            })?
-        };
-
+        let api = hf_loader::hf_api()?;
         let repo = api.model(model_id.to_string());
 
-        // Download model and tokenizer
-        let model_path = repo
-            .get("onnx/model.onnx")
-            .or_else(|_| repo.get("model.onnx"))
-            .map_err(|e| Error::Retrieval(format!("Failed to download model.onnx: {}", e)))?;
+        let model_path = hf_loader::download_model_file(&repo, &["onnx/model.onnx", "model.onnx"])?;
+        let tokenizer_path = hf_loader::download_model_file(&repo, &["tokenizer.json"])?;
 
-        let tokenizer_path = repo
-            .get("tokenizer.json")
-            .map_err(|e| Error::Retrieval(format!("Failed to download tokenizer.json: {}", e)))?;
-
-        let session = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("Failed to create ONNX session: {}", e)))?
-            .with_execution_providers([CPUExecutionProvider::default().build()])
-            .map_err(|e| Error::Retrieval(format!("Failed to set execution providers: {}", e)))?
-            .commit_from_file(&model_path)
-            .map_err(|e| Error::Retrieval(format!("Failed to load ONNX model: {}", e)))?;
-
-        let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| Error::Retrieval(format!("Failed to load tokenizer: {}", e)))?;
+        let session = hf_loader::create_onnx_session(&model_path, hf_loader::OnnxSessionConfig::default())?;
+        let tokenizer = hf_loader::load_tokenizer(&tokenizer_path)?;
 
         Ok(Self {
             model_id: model_id.to_string(),

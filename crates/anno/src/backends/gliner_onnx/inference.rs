@@ -30,88 +30,26 @@ impl GLiNEROnnx {
     ///
     /// Automatically loads `.env` for HF_TOKEN if present.
     pub fn with_config(model_name: &str, config: GLiNERConfig) -> Result<Self> {
-        use hf_hub::api::sync::{Api, ApiBuilder};
-        use ort::execution_providers::CPUExecutionProvider;
-        use ort::session::builder::GraphOptimizationLevel;
-        use ort::session::Session;
+        use crate::backends::hf_loader;
 
-        // Load .env if present (for HF_TOKEN)
-        crate::env::load_dotenv();
-
-        let api = if let Some(token) = crate::env::hf_token() {
-            ApiBuilder::new()
-                .with_token(Some(token))
-                .build()
-                .map_err(|e| Error::Retrieval(format!("HuggingFace API with token: {}", e)))?
-        } else {
-            Api::new().map_err(|e| {
-                Error::Retrieval(format!("Failed to initialize HuggingFace API: {}", e))
-            })?
-        };
-
+        let api = hf_loader::hf_api()?;
         let repo = api.model(model_name.to_string());
 
         // Download model - try quantized first if preferred
-        let (model_path, is_quantized) = if config.prefer_quantized {
-            // Try quantized variants first
-            if let Ok(path) = repo.get("onnx/model_quantized.onnx") {
-                log::info!("[GLiNER] Using quantized model (INT8)");
-                (path, true)
-            } else if let Ok(path) = repo.get("model_quantized.onnx") {
-                log::info!("[GLiNER] Using quantized model (INT8)");
-                (path, true)
-            } else if let Ok(path) = repo.get("onnx/model_int8.onnx") {
-                log::info!("[GLiNER] Using INT8 quantized model");
-                (path, true)
-            } else {
-                // Fall back to FP32
-                let path = repo
-                    .get("onnx/model.onnx")
-                    .or_else(|_| repo.get("model.onnx"))
-                    .map_err(|e| {
-                        Error::Retrieval(format!("Failed to download model.onnx: {}", e))
-                    })?;
-                log::info!("[GLiNER] Using FP32 model (quantized not available)");
-                (path, false)
-            }
-        } else {
-            let path = repo
-                .get("onnx/model.onnx")
-                .or_else(|_| repo.get("model.onnx"))
-                .map_err(|e| Error::Retrieval(format!("Failed to download model.onnx: {}", e)))?;
-            (path, false)
-        };
+        let (model_path, is_quantized) = hf_loader::download_onnx_model(&repo, config.prefer_quantized)?;
 
-        let tokenizer_path = repo
-            .get("tokenizer.json")
-            .map_err(|e| Error::Retrieval(format!("Failed to download tokenizer.json: {}", e)))?;
+        let tokenizer_path = hf_loader::download_model_file(&repo, &["tokenizer.json"])?;
 
-        // Build session with optimization settings
-        let opt_level = match config.optimization_level {
-            1 => GraphOptimizationLevel::Level1,
-            2 => GraphOptimizationLevel::Level2,
-            _ => GraphOptimizationLevel::Level3,
-        };
+        let session = hf_loader::create_onnx_session(
+            &model_path,
+            hf_loader::OnnxSessionConfig {
+                optimization_level: config.optimization_level,
+                num_threads: config.num_threads,
+                use_cpu_provider: true,
+            },
+        )?;
 
-        let mut builder = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("Failed to create ONNX session builder: {}", e)))?
-            .with_optimization_level(opt_level)
-            .map_err(|e| Error::Retrieval(format!("Failed to set optimization level: {}", e)))?
-            .with_execution_providers([CPUExecutionProvider::default().build()])
-            .map_err(|e| Error::Retrieval(format!("Failed to set execution providers: {}", e)))?;
-
-        if config.num_threads > 0 {
-            builder = builder
-                .with_intra_threads(config.num_threads)
-                .map_err(|e| Error::Retrieval(format!("Failed to set threads: {}", e)))?;
-        }
-
-        let session = builder
-            .commit_from_file(&model_path)
-            .map_err(|e| Error::Retrieval(format!("Failed to load ONNX model: {}", e)))?;
-
-        let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| Error::Retrieval(format!("Failed to load tokenizer: {}", e)))?;
+        let tokenizer = hf_loader::load_tokenizer(&tokenizer_path)?;
 
         log::debug!("[GLiNER] Model loaded");
 

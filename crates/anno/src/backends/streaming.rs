@@ -497,32 +497,154 @@ impl PipelineStage for ConfidenceFilter {
     }
 }
 
+// =============================================================================
+// Unified overlap removal
+// =============================================================================
+
+/// Strategy for resolving overlapping entity spans.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OverlapStrategy {
+    /// Keep first entity by position (sorted by start, then confidence desc).
+    /// Any later entity whose span overlaps a kept entity is dropped.
+    KeepFirst,
+    /// Sort by confidence descending, greedily keep the highest-confidence
+    /// entity, drop anything that overlaps it. Result is re-sorted by position.
+    KeepHighestConfidence,
+    /// Only resolve overlaps between entities of the **same** type;
+    /// when two same-type entities overlap, keep the longer span.
+    /// Different-type overlaps are preserved (union behavior).
+    KeepLongerSameType,
+    /// Prefer shorter / contained spans over supersets (GLiNER-style).
+    /// Sorted shortest-first; supersets of already-kept entities are dropped,
+    /// and partially-overlapping entities are also dropped.
+    KeepShortest,
+}
+
+/// Remove overlapping entities from `entities` according to `strategy`.
+///
+/// The result is always sorted by start position.
+pub fn deduplicate_overlapping(entities: &mut Vec<Entity>, strategy: OverlapStrategy) {
+    if entities.len() <= 1 {
+        return;
+    }
+
+    let result = match strategy {
+        OverlapStrategy::KeepFirst => {
+            // Sort by start, then by confidence (desc)
+            entities.sort_by(|a, b| {
+                a.start.cmp(&b.start).then(
+                    b.confidence
+                        .partial_cmp(&a.confidence)
+                        .expect("confidence values should be comparable"),
+                )
+            });
+
+            let mut out = Vec::new();
+            let mut last_end = 0;
+
+            for entity in entities.drain(..) {
+                if entity.start >= last_end {
+                    last_end = entity.end;
+                    out.push(entity);
+                }
+            }
+            out
+        }
+
+        OverlapStrategy::KeepHighestConfidence => {
+            // Sort by confidence descending
+            entities.sort_by(|a, b| {
+                b.confidence
+                    .partial_cmp(&a.confidence)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            let mut out = Vec::with_capacity(entities.len());
+            for entity in entities.drain(..) {
+                let overlaps = out
+                    .iter()
+                    .any(|e: &Entity| entity.start < e.end && entity.end > e.start);
+                if !overlaps {
+                    out.push(entity);
+                }
+            }
+            // Re-sort by position
+            out.sort_by_key(|e| e.start);
+            out
+        }
+
+        OverlapStrategy::KeepLongerSameType => {
+            entities.sort_by_key(|e| (e.start, e.end));
+
+            let mut out: Vec<Entity> = Vec::with_capacity(entities.len());
+
+            for entity in entities.drain(..) {
+                let dominated = out.last().map_or(false, |prev: &Entity| {
+                    entity.start < prev.end
+                        && prev.start < entity.end
+                        && prev.entity_type == entity.entity_type
+                });
+
+                if dominated {
+                    let prev = out.last().unwrap();
+                    let prev_len = prev.end - prev.start;
+                    let cand_len = entity.end - entity.start;
+                    if cand_len > prev_len {
+                        *out.last_mut().unwrap() = entity;
+                    }
+                } else {
+                    out.push(entity);
+                }
+            }
+            out
+        }
+
+        OverlapStrategy::KeepShortest => {
+            // Sort by span length (shorter first), then confidence desc
+            entities.sort_unstable_by(|a, b| {
+                let len_a = a.end - a.start;
+                let len_b = b.end - b.start;
+                len_a.cmp(&len_b).then_with(|| {
+                    b.confidence
+                        .partial_cmp(&a.confidence)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+            });
+
+            let mut out: Vec<Entity> = Vec::with_capacity(entities.len());
+
+            for entity in entities.drain(..) {
+                let is_superset_of_existing = out.iter().any(|kept| {
+                    entity.start <= kept.start && entity.end >= kept.end
+                });
+
+                if is_superset_of_existing {
+                    continue;
+                }
+
+                let overlaps_existing = out.iter().any(|kept| {
+                    entity.start < kept.end && kept.start < entity.end
+                });
+
+                if !overlaps_existing {
+                    out.push(entity);
+                }
+            }
+            out.sort_unstable_by_key(|e| e.start);
+            out
+        }
+    };
+
+    *entities = result;
+}
+
 /// Deduplicate overlapping entities, keeping highest confidence.
 pub struct DeduplicateOverlapping;
 
 impl PipelineStage for DeduplicateOverlapping {
     fn process(&self, mut entities: Vec<Entity>, _text: &str) -> Vec<Entity> {
-        // Sort by start, then by confidence (desc)
-        entities.sort_by(|a, b| {
-            a.start.cmp(&b.start).then(
-                b.confidence
-                    .partial_cmp(&a.confidence)
-                    .expect("confidence values should be comparable"),
-            )
-        });
-
-        let mut result = Vec::new();
-        let mut last_end = 0;
-
-        for entity in entities {
-            if entity.start >= last_end {
-                last_end = entity.end;
-                result.push(entity);
-            }
-            // Skip overlapping entities (we already have a higher-confidence one)
-        }
-
-        result
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepFirst);
+        entities
     }
 
     fn name(&self) -> &'static str {
@@ -543,34 +665,8 @@ pub struct DeduplicateOverlappingSameType;
 
 impl PipelineStage for DeduplicateOverlappingSameType {
     fn process(&self, mut entities: Vec<Entity>, _text: &str) -> Vec<Entity> {
-        if entities.len() <= 1 {
-            return entities;
-        }
-
-        entities.sort_by_key(|e| (e.start, e.end));
-
-        let mut result: Vec<Entity> = Vec::with_capacity(entities.len());
-
-        for entity in entities {
-            let dominated = result.last().map_or(false, |prev: &Entity| {
-                entity.start < prev.end
-                    && prev.start < entity.end
-                    && prev.entity_type == entity.entity_type
-            });
-
-            if dominated {
-                let prev = result.last().unwrap();
-                let prev_len = prev.end - prev.start;
-                let cand_len = entity.end - entity.start;
-                if cand_len > prev_len {
-                    *result.last_mut().unwrap() = entity;
-                }
-            } else {
-                result.push(entity);
-            }
-        }
-
-        result
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepLongerSameType);
+        entities
     }
 
     fn name(&self) -> &'static str {
@@ -1182,6 +1278,205 @@ mod tests {
                 .iter()
                 .collect();
             assert_eq!(chunk.text, expected, "chunk text must match offset slice");
+        }
+    }
+
+    // =========================================================================
+    // OverlapStrategy tests
+    // =========================================================================
+
+    #[test]
+    fn test_overlap_strategy_keep_first_basic() {
+        let mut entities = vec![
+            Entity::new("New York", EntityType::Location, 0, 8, 0.7),
+            Entity::new("New York City", EntityType::Location, 0, 13, 0.9),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepFirst);
+        // Both start at 0; higher-confidence "New York City" sorts first, gets kept
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].text, "New York City");
+    }
+
+    #[test]
+    fn test_overlap_strategy_keep_first_non_overlapping() {
+        let mut entities = vec![
+            Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
+            Entity::new("Bob", EntityType::Person, 10, 13, 0.8),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepFirst);
+        assert_eq!(entities.len(), 2);
+    }
+
+    #[test]
+    fn test_overlap_strategy_keep_first_chain() {
+        // A overlaps B, B overlaps C, but A does not overlap C
+        let mut entities = vec![
+            Entity::new("AB", EntityType::Person, 0, 5, 0.9),
+            Entity::new("BC", EntityType::Person, 3, 8, 0.8),
+            Entity::new("CD", EntityType::Person, 6, 10, 0.7),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepFirst);
+        // AB kept (start=0), BC skipped (overlaps AB), CD kept (start=6 >= AB.end=5)
+        assert_eq!(entities.len(), 2);
+        assert_eq!(entities[0].text, "AB");
+        assert_eq!(entities[1].text, "CD");
+    }
+
+    #[test]
+    fn test_overlap_strategy_keep_highest_confidence() {
+        let mut entities = vec![
+            Entity::new("New York", EntityType::Location, 0, 8, 0.9),
+            Entity::new("York City", EntityType::Location, 4, 13, 0.7),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepHighestConfidence);
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].text, "New York");
+    }
+
+    #[test]
+    fn test_overlap_strategy_keep_highest_confidence_preserves_position_order() {
+        let mut entities = vec![
+            Entity::new("Alice", EntityType::Person, 20, 25, 0.95),
+            Entity::new("Bob", EntityType::Person, 0, 3, 0.5),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepHighestConfidence);
+        assert_eq!(entities.len(), 2);
+        // Should be sorted by position regardless of confidence order
+        assert_eq!(entities[0].text, "Bob");
+        assert_eq!(entities[1].text, "Alice");
+    }
+
+    #[test]
+    fn test_overlap_strategy_keep_highest_confidence_three_way() {
+        let mut entities = vec![
+            Entity::new("A", EntityType::Person, 0, 5, 0.5),
+            Entity::new("B", EntityType::Person, 3, 8, 0.9),
+            Entity::new("C", EntityType::Person, 6, 10, 0.7),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepHighestConfidence);
+        // B has highest confidence, kept; A and C both overlap B, dropped
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].text, "B");
+    }
+
+    #[test]
+    fn test_overlap_strategy_keep_longer_same_type_basic() {
+        let mut entities = vec![
+            Entity::new("New York", EntityType::Location, 0, 8, 0.7),
+            Entity::new("New York City", EntityType::Location, 0, 13, 0.6),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepLongerSameType);
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].text, "New York City");
+    }
+
+    #[test]
+    fn test_overlap_strategy_keep_longer_same_type_different_types_preserved() {
+        let mut entities = vec![
+            Entity::new("New York", EntityType::Location, 0, 8, 0.7),
+            Entity::new("New York Times", EntityType::Organization, 0, 14, 0.6),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepLongerSameType);
+        // Different types: both preserved
+        assert_eq!(entities.len(), 2);
+    }
+
+    #[test]
+    fn test_overlap_strategy_keep_longer_same_type_shorter_kept_when_different_type() {
+        let mut entities = vec![
+            Entity::new("Paris", EntityType::Location, 0, 5, 0.9),
+            Entity::new("Paris Hilton", EntityType::Person, 0, 12, 0.8),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepLongerSameType);
+        assert_eq!(entities.len(), 2);
+        assert_eq!(entities[0].text, "Paris");
+        assert_eq!(entities[1].text, "Paris Hilton");
+    }
+
+    #[test]
+    fn test_overlap_strategy_keep_shortest_drops_supersets() {
+        let mut entities = vec![
+            Entity::new("Department of Defense", EntityType::Organization, 4, 25, 0.8),
+            Entity::new("The Department of Defense", EntityType::Organization, 0, 25, 0.7),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepShortest);
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].text, "Department of Defense");
+    }
+
+    #[test]
+    fn test_overlap_strategy_keep_shortest_no_overlap() {
+        let mut entities = vec![
+            Entity::new("IBM", EntityType::Organization, 0, 3, 0.9),
+            Entity::new("NASA", EntityType::Organization, 10, 14, 0.8),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepShortest);
+        assert_eq!(entities.len(), 2);
+    }
+
+    #[test]
+    fn test_overlap_strategy_keep_shortest_partial_overlap_dropped() {
+        let mut entities = vec![
+            Entity::new("AB", EntityType::Person, 0, 5, 0.9),
+            Entity::new("BC", EntityType::Person, 3, 8, 0.8),
+        ];
+        deduplicate_overlapping(&mut entities, OverlapStrategy::KeepShortest);
+        // Same length, AB has higher confidence so sorted first and kept; BC overlaps, dropped
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].text, "AB");
+    }
+
+    #[test]
+    fn test_overlap_strategy_empty_input() {
+        for strategy in [
+            OverlapStrategy::KeepFirst,
+            OverlapStrategy::KeepHighestConfidence,
+            OverlapStrategy::KeepLongerSameType,
+            OverlapStrategy::KeepShortest,
+        ] {
+            let mut entities: Vec<Entity> = vec![];
+            deduplicate_overlapping(&mut entities, strategy);
+            assert!(entities.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_overlap_strategy_single_entity() {
+        for strategy in [
+            OverlapStrategy::KeepFirst,
+            OverlapStrategy::KeepHighestConfidence,
+            OverlapStrategy::KeepLongerSameType,
+            OverlapStrategy::KeepShortest,
+        ] {
+            let mut entities = vec![Entity::new("Alice", EntityType::Person, 0, 5, 0.9)];
+            deduplicate_overlapping(&mut entities, strategy);
+            assert_eq!(entities.len(), 1);
+            assert_eq!(entities[0].text, "Alice");
+        }
+    }
+
+    #[test]
+    fn test_overlap_strategy_result_sorted_by_position() {
+        for strategy in [
+            OverlapStrategy::KeepFirst,
+            OverlapStrategy::KeepHighestConfidence,
+            OverlapStrategy::KeepLongerSameType,
+            OverlapStrategy::KeepShortest,
+        ] {
+            let mut entities = vec![
+                Entity::new("C", EntityType::Person, 20, 25, 0.5),
+                Entity::new("A", EntityType::Person, 0, 3, 0.9),
+                Entity::new("B", EntityType::Person, 10, 15, 0.7),
+            ];
+            deduplicate_overlapping(&mut entities, strategy);
+            // Non-overlapping, so all kept; verify sorted by start
+            for i in 1..entities.len() {
+                assert!(
+                    entities[i].start >= entities[i - 1].start,
+                    "result must be sorted by position for {:?}",
+                    strategy
+                );
+            }
         }
     }
 }

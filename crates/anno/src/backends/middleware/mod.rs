@@ -359,26 +359,11 @@ impl Middleware for RemoveOverlaps {
         _ctx: &mut MiddlewareContext,
         mut entities: Vec<Entity>,
     ) -> Result<Vec<Entity>> {
-        // Sort by confidence descending
-        entities.sort_by(|a, b| {
-            b.confidence
-                .partial_cmp(&a.confidence)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        let mut result = Vec::with_capacity(entities.len());
-        for entity in entities {
-            let overlaps = result
-                .iter()
-                .any(|e: &Entity| entity.start < e.end && entity.end > e.start);
-            if !overlaps {
-                result.push(entity);
-            }
-        }
-
-        // Sort back by position
-        result.sort_by_key(|e| e.start);
-        Ok(result)
+        super::streaming::deduplicate_overlapping(
+            &mut entities,
+            super::streaming::OverlapStrategy::KeepHighestConfidence,
+        );
+        Ok(entities)
     }
 
     fn name(&self) -> &'static str {

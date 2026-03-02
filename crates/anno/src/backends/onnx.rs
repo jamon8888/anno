@@ -104,55 +104,18 @@ impl BertNEROnnx {
     /// let model = BertNEROnnx::with_config("protectai/bert-base-NER-onnx", config)?;
     /// ```
     pub fn with_config(model_name: &str, config: BertNERConfig) -> Result<Self> {
-        let api = Api::new().map_err(|e| {
-            Error::Retrieval(format!("Failed to initialize HuggingFace API: {}", e))
-        })?;
+        use crate::backends::hf_loader;
 
+        let api = hf_loader::hf_api()?;
         let repo = api.model(model_name.to_string());
 
         // Download model - try quantized first if preferred
-        let (model_path, is_quantized) = if config.prefer_quantized {
-            if let Ok(path) = repo.get("model_quantized.onnx") {
-                log::info!("[BERT-NER] Using quantized model (INT8)");
-                (path, true)
-            } else if let Ok(path) = repo.get("onnx/model_quantized.onnx") {
-                log::info!("[BERT-NER] Using quantized model (INT8)");
-                (path, true)
-            } else if let Ok(path) = repo.get("model_int8.onnx") {
-                log::info!("[BERT-NER] Using INT8 quantized model");
-                (path, true)
-            } else {
-                // Fall back to FP32
-                let path = repo
-                    .get("model.onnx")
-                    .or_else(|_| repo.get("onnx/model.onnx"))
-                    .map_err(|e| {
-                        Error::Retrieval(format!("Failed to download model.onnx: {}", e))
-                    })?;
-                log::info!("[BERT-NER] Using FP32 model (quantized not available)");
-                (path, false)
-            }
-        } else {
-            let path = repo
-                .get("model.onnx")
-                .or_else(|_| repo.get("onnx/model.onnx"))
-                .map_err(|e| Error::Retrieval(format!("Failed to download model.onnx: {}", e)))?;
-            (path, false)
-        };
+        let (model_path, is_quantized) = hf_loader::download_onnx_model(&repo, config.prefer_quantized)?;
 
-        // Download tokenizer.json
-        let tokenizer_path = repo
-            .get("tokenizer.json")
-            .map_err(|e| Error::Retrieval(format!("Failed to download tokenizer.json: {}", e)))?;
+        let tokenizer_path = hf_loader::download_model_file(&repo, &["tokenizer.json"])?;
+        let config_path = hf_loader::download_model_file(&repo, &["config.json"])?;
 
-        // Download config.json for label mapping
-        let config_path = repo
-            .get("config.json")
-            .map_err(|e| Error::Retrieval(format!("Failed to download config.json: {}", e)))?;
-
-        // Load tokenizer
-        let tokenizer = Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| Error::Retrieval(format!("Failed to load tokenizer: {}", e)))?;
+        let tokenizer = hf_loader::load_tokenizer(&tokenizer_path)?;
 
         // Load config and extract id2label mapping
         let config_str = std::fs::read_to_string(&config_path)
@@ -164,27 +127,14 @@ impl BertNEROnnx {
         let id_to_label = Self::build_id_to_label(&config_json);
         let label_to_entity_type = Self::build_label_to_entity_type();
 
-        // Build session with optimization settings
-        let opt_level = match config.optimization_level {
-            1 => GraphOptimizationLevel::Level1,
-            2 => GraphOptimizationLevel::Level2,
-            _ => GraphOptimizationLevel::Level3,
-        };
-
-        let mut builder = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("Failed to create session builder: {}", e)))?
-            .with_optimization_level(opt_level)
-            .map_err(|e| Error::Retrieval(format!("Failed to set optimization level: {}", e)))?;
-
-        if config.num_threads > 0 {
-            builder = builder
-                .with_intra_threads(config.num_threads)
-                .map_err(|e| Error::Retrieval(format!("Failed to set threads: {}", e)))?;
-        }
-
-        let session = builder
-            .commit_from_file(&model_path)
-            .map_err(|e| Error::Retrieval(format!("Failed to load ONNX model: {}", e)))?;
+        let session = hf_loader::create_onnx_session(
+            &model_path,
+            hf_loader::OnnxSessionConfig {
+                optimization_level: config.optimization_level,
+                num_threads: config.num_threads,
+                use_cpu_provider: false,
+            },
+        )?;
 
         Ok(Self {
             session: crate::sync::Mutex::new(session),
@@ -746,41 +696,23 @@ impl crate::StreamingCapable for BertNEROnnx {
 }
 
 // Stub implementation when feature is disabled
-#[cfg(not(feature = "onnx"))]
-pub struct BertNEROnnx;
+crate::backends::macros::define_feature_stub! {
+    struct BertNEROnnx;
+    feature = "onnx";
+    name = "bert-onnx (unavailable)";
+    description = "BERT-based NER using ONNX Runtime - requires 'onnx' feature";
+    error_msg = "BERT NER ONNX requires the 'onnx' feature";
+    methods {
+        pub fn extract_entities(&self, _text: &str, _language: Option<&str>)
+            -> crate::Result<Vec<crate::Entity>>
+        {
+            Err(crate::Error::FeatureNotAvailable(
+                "BERT NER ONNX requires the 'onnx' feature".to_string(),
+            ))
+        }
 
-#[cfg(not(feature = "onnx"))]
-impl BertNEROnnx {
-    pub fn new(_model_name: &str) -> Result<Self> {
-        Err(Error::Parse(
-            "BERT NER ONNX support requires 'onnx' feature".to_string(),
-        ))
-    }
-
-    pub fn extract_entities(&self, _text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
-        Err(Error::Parse(
-            "BERT NER ONNX support requires 'onnx' feature".to_string(),
-        ))
-    }
-
-    pub fn model_name(&self) -> &str {
-        "onnx-not-enabled"
-    }
-}
-
-#[cfg(not(feature = "onnx"))]
-impl crate::Model for BertNEROnnx {
-    fn extract_entities(&self, _text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
-        Err(Error::Parse(
-            "BERT NER ONNX support requires 'onnx' feature".to_string(),
-        ))
-    }
-
-    fn supported_types(&self) -> Vec<anno_core::EntityType> {
-        vec![]
-    }
-
-    fn is_available(&self) -> bool {
-        false
+        pub fn model_name(&self) -> &str {
+            "onnx-not-enabled"
+        }
     }
 }

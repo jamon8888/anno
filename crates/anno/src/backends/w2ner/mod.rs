@@ -206,14 +206,9 @@ impl W2NER {
     /// * `model_path` - Local path or HuggingFace model ID
     #[cfg(feature = "onnx")]
     pub fn from_pretrained(model_path: &str) -> Result<Self> {
-        use hf_hub::api::sync::{Api, ApiBuilder};
-        use ort::execution_providers::CPUExecutionProvider;
-        use ort::session::Session;
+        use crate::backends::hf_loader;
         use std::path::Path;
         use std::process::Command;
-
-        // Load .env if present (for HF_TOKEN)
-        crate::env::load_dotenv();
 
         let (model_file, tokenizer_file) = if Path::new(model_path).exists() {
             // Local path
@@ -221,22 +216,8 @@ impl W2NER {
             let tokenizer_file = Path::new(model_path).join("tokenizer.json");
             (model_file, tokenizer_file)
         } else {
-            // HuggingFace download - explicitly use token if available
-            let api = if let Some(token) = crate::env::hf_token() {
-                ApiBuilder::new()
-                    .with_token(Some(token))
-                    .build()
-                    .map_err(|e| {
-                        Error::Retrieval(format!(
-                            "Failed to initialize HuggingFace API with token: {}",
-                            e
-                        ))
-                    })?
-            } else {
-                Api::new().map_err(|e| {
-                    Error::Retrieval(format!("Failed to initialize HuggingFace API: {}", e))
-                })?
-            };
+            // HuggingFace download
+            let api = hf_loader::hf_api()?;
             let repo = api.model(model_path.to_string());
 
             let (model_file, tokenizer_file) = match repo
@@ -398,15 +379,8 @@ impl W2NER {
             (model_file, tokenizer_file)
         };
 
-        let session = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("Failed to create session: {}", e)))?
-            .with_execution_providers([CPUExecutionProvider::default().build()])
-            .map_err(|e| Error::Retrieval(format!("Failed to set providers: {}", e)))?
-            .commit_from_file(&model_file)
-            .map_err(|e| Error::Retrieval(format!("Failed to load model: {}", e)))?;
-
-        let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_file)
-            .map_err(|e| Error::Retrieval(format!("Failed to load tokenizer: {}", e)))?;
+        let session = hf_loader::create_onnx_session(&model_file, hf_loader::OnnxSessionConfig::default())?;
+        let tokenizer = hf_loader::load_tokenizer(&tokenizer_file)?;
 
         log::debug!("[W2NER] Loaded model");
 

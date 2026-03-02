@@ -153,31 +153,19 @@ impl FCoref {
             )));
         }
 
-        let opt_level = match config.optimization_level {
-            1 => GraphOptimizationLevel::Level1,
-            2 => GraphOptimizationLevel::Level2,
-            _ => GraphOptimizationLevel::Level3,
-        };
+        use crate::backends::hf_loader;
 
-        let mut builder = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("Session builder: {}", e)))?
-            .with_optimization_level(opt_level)
-            .map_err(|e| Error::Retrieval(format!("Opt level: {}", e)))?;
+        let session = hf_loader::create_onnx_session(
+            &encoder_path,
+            hf_loader::OnnxSessionConfig {
+                optimization_level: config.optimization_level,
+                num_threads: config.num_threads,
+                use_cpu_provider: false,
+            },
+        )?;
 
-        if config.num_threads > 0 {
-            builder = builder
-                .with_intra_threads(config.num_threads)
-                .map_err(|e| Error::Retrieval(format!("Threads: {}", e)))?;
-        }
-
-        let session = builder
-            .commit_from_file(&encoder_path)
-            .map_err(|e| Error::Retrieval(format!("Encoder load: {}", e)))?;
-
-        // Load tokenizer
         let tokenizer_path = base.join("tokenizer.json");
-        let tokenizer = Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| Error::Retrieval(format!("Tokenizer: {}", e)))?;
+        let tokenizer = hf_loader::load_tokenizer(&tokenizer_path)?;
 
         // Load scorer weights
         let weights_path = base.join("scorer_weights.safetensors");
@@ -205,7 +193,9 @@ impl FCoref {
 
     /// Load from HuggingFace with custom config.
     pub fn from_pretrained_with_config(model_id: &str, mut config: FCorefConfig) -> Result<Self> {
-        let api = Api::new().map_err(|e| Error::Retrieval(format!("HuggingFace API: {}", e)))?;
+        use crate::backends::hf_loader;
+
+        let api = hf_loader::hf_api()?;
         let repo = api.model(model_id.to_string());
 
         // Helper to download a file, returning Ok(None) if not found
@@ -253,30 +243,16 @@ impl FCoref {
         }
 
         // Load encoder session
-        let opt_level = match config.optimization_level {
-            1 => GraphOptimizationLevel::Level1,
-            2 => GraphOptimizationLevel::Level2,
-            _ => GraphOptimizationLevel::Level3,
-        };
+        let session = hf_loader::create_onnx_session(
+            &encoder_path,
+            hf_loader::OnnxSessionConfig {
+                optimization_level: config.optimization_level,
+                num_threads: config.num_threads,
+                use_cpu_provider: false,
+            },
+        )?;
 
-        let mut builder = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("Session builder: {}", e)))?
-            .with_optimization_level(opt_level)
-            .map_err(|e| Error::Retrieval(format!("Opt level: {}", e)))?;
-
-        if config.num_threads > 0 {
-            builder = builder
-                .with_intra_threads(config.num_threads)
-                .map_err(|e| Error::Retrieval(format!("Threads: {}", e)))?;
-        }
-
-        let session = builder
-            .commit_from_file(&encoder_path)
-            .map_err(|e| Error::Retrieval(format!("Encoder load: {}", e)))?;
-
-        // Load tokenizer
-        let tokenizer = Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| Error::Retrieval(format!("Tokenizer: {}", e)))?;
+        let tokenizer = hf_loader::load_tokenizer(&tokenizer_path)?;
 
         // Load scorer weights
         let scorer = ScorerWeights::from_safetensors(&weights_path)?;

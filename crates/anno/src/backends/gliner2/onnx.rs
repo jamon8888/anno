@@ -36,30 +36,16 @@ pub struct GLiNER2Onnx {
 impl GLiNER2Onnx {
     /// Load model from HuggingFace Hub.
     pub fn from_pretrained(model_id: &str) -> Result<Self> {
-        use hf_hub::api::sync::Api;
-        use ort::execution_providers::CPUExecutionProvider;
-        use ort::session::Session;
+        use crate::backends::hf_loader;
 
-        let api = Api::new().map_err(|e| Error::Retrieval(format!("HF API: {}", e)))?;
+        let api = hf_loader::hf_api()?;
         let repo = api.model(model_id.to_string());
 
-        // Try different model file names
-        let model_path = repo
-            .get("onnx/model.onnx")
-            .or_else(|_| repo.get("model.onnx"))
-            .map_err(|e| Error::Retrieval(format!("model.onnx: {}", e)))?;
+        let model_path = hf_loader::download_model_file(&repo, &["onnx/model.onnx", "model.onnx"])?;
+        let tokenizer_path = hf_loader::download_model_file(&repo, &["tokenizer.json"])?;
+        let config_path = hf_loader::download_model_file(&repo, &["config.json"])?;
 
-        let tokenizer_path = repo
-            .get("tokenizer.json")
-            .map_err(|e| Error::Retrieval(format!("tokenizer.json: {}", e)))?;
-
-        let config_path = repo
-            .get("config.json")
-            .map_err(|e| Error::Retrieval(format!("config.json: {}", e)))?;
-
-        // Load tokenizer
-        let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| Error::Retrieval(format!("tokenizer: {}", e)))?;
+        let tokenizer = hf_loader::load_tokenizer(&tokenizer_path)?;
 
         // Parse config
         let config_str = std::fs::read_to_string(&config_path)
@@ -68,13 +54,7 @@ impl GLiNER2Onnx {
             .map_err(|e| Error::Parse(format!("config parse: {}", e)))?;
         let hidden_size = config["hidden_size"].as_u64().unwrap_or(768) as usize;
 
-        // Create ONNX session
-        let session = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("ONNX builder: {}", e)))?
-            .with_execution_providers([CPUExecutionProvider::default().build()])
-            .map_err(|e| Error::Retrieval(format!("ONNX providers: {}", e)))?
-            .commit_from_file(&model_path)
-            .map_err(|e| Error::Retrieval(format!("ONNX load: {}", e)))?;
+        let session = hf_loader::create_onnx_session(&model_path, hf_loader::OnnxSessionConfig::default())?;
 
         log::info!(
             "[GLiNER2-ONNX] Loaded {} (hidden={})",

@@ -178,40 +178,17 @@ impl T5Coref {
             )));
         }
 
-        // Helper to create opt level
-        let get_opt_level = || match config.optimization_level {
-            1 => GraphOptimizationLevel::Level1,
-            2 => GraphOptimizationLevel::Level2,
-            _ => GraphOptimizationLevel::Level3,
+        use crate::backends::hf_loader;
+
+        let sess_config = hf_loader::OnnxSessionConfig {
+            optimization_level: config.optimization_level,
+            num_threads: config.num_threads,
+            use_cpu_provider: true,
         };
 
-        // Load encoder
-        let encoder = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("Encoder builder: {}", e)))?
-            .with_optimization_level(get_opt_level())
-            .map_err(|e| Error::Retrieval(format!("Encoder opt: {}", e)))?
-            .with_execution_providers([CPUExecutionProvider::default().build()])
-            .map_err(|e| Error::Retrieval(format!("Encoder provider: {}", e)))?
-            .with_intra_threads(config.num_threads)
-            .map_err(|e| Error::Retrieval(format!("Encoder threads: {}", e)))?
-            .commit_from_file(&encoder_path)
-            .map_err(|e| Error::Retrieval(format!("Encoder load: {}", e)))?;
-
-        // Load decoder
-        let decoder = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("Decoder builder: {}", e)))?
-            .with_optimization_level(get_opt_level())
-            .map_err(|e| Error::Retrieval(format!("Decoder opt: {}", e)))?
-            .with_execution_providers([CPUExecutionProvider::default().build()])
-            .map_err(|e| Error::Retrieval(format!("Decoder provider: {}", e)))?
-            .with_intra_threads(config.num_threads)
-            .map_err(|e| Error::Retrieval(format!("Decoder threads: {}", e)))?
-            .commit_from_file(&decoder_path)
-            .map_err(|e| Error::Retrieval(format!("Decoder load: {}", e)))?;
-
-        // Load tokenizer
-        let tokenizer = Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| Error::Retrieval(format!("Tokenizer: {}", e)))?;
+        let encoder = hf_loader::create_onnx_session(std::path::Path::new(&encoder_path), sess_config.clone())?;
+        let decoder = hf_loader::create_onnx_session(std::path::Path::new(&decoder_path), sess_config)?;
+        let tokenizer = hf_loader::load_tokenizer(std::path::Path::new(&tokenizer_path))?;
 
         log::info!("[T5-Coref] Loaded model from {}", model_path);
 
@@ -233,56 +210,24 @@ impl T5Coref {
 
     /// Create from HuggingFace with custom config.
     pub fn from_pretrained_with_config(model_id: &str, config: T5CorefConfig) -> Result<Self> {
-        let api = Api::new().map_err(|e| Error::Retrieval(format!("HuggingFace API: {}", e)))?;
+        use crate::backends::hf_loader;
 
+        let api = hf_loader::hf_api()?;
         let repo = api.model(model_id.to_string());
 
-        // Download ONNX files
-        let encoder_path = repo
-            .get("encoder_model.onnx")
-            .or_else(|_| repo.get("onnx/encoder_model.onnx"))
-            .map_err(|e| Error::Retrieval(format!("Encoder download: {}", e)))?;
+        let encoder_path = hf_loader::download_model_file(&repo, &["encoder_model.onnx", "onnx/encoder_model.onnx"])?;
+        let decoder_path = hf_loader::download_model_file(&repo, &["decoder_model.onnx", "onnx/decoder_model.onnx", "decoder_with_past_model.onnx"])?;
+        let tokenizer_path = hf_loader::download_model_file(&repo, &["tokenizer.json"])?;
 
-        let decoder_path = repo
-            .get("decoder_model.onnx")
-            .or_else(|_| repo.get("onnx/decoder_model.onnx"))
-            .or_else(|_| repo.get("decoder_with_past_model.onnx"))
-            .map_err(|e| Error::Retrieval(format!("Decoder download: {}", e)))?;
-
-        let tokenizer_path = repo
-            .get("tokenizer.json")
-            .map_err(|e| Error::Retrieval(format!("Tokenizer download: {}", e)))?;
-
-        // Helper to create opt level
-        let get_opt_level = || match config.optimization_level {
-            1 => GraphOptimizationLevel::Level1,
-            2 => GraphOptimizationLevel::Level2,
-            _ => GraphOptimizationLevel::Level3,
+        let sess_config = hf_loader::OnnxSessionConfig {
+            optimization_level: config.optimization_level,
+            num_threads: config.num_threads,
+            use_cpu_provider: true,
         };
 
-        // Load encoder
-        let encoder = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("Encoder builder: {}", e)))?
-            .with_optimization_level(get_opt_level())
-            .map_err(|e| Error::Retrieval(format!("Encoder opt: {}", e)))?
-            .with_execution_providers([CPUExecutionProvider::default().build()])
-            .map_err(|e| Error::Retrieval(format!("Encoder provider: {}", e)))?
-            .commit_from_file(&encoder_path)
-            .map_err(|e| Error::Retrieval(format!("Encoder load: {}", e)))?;
-
-        // Load decoder
-        let decoder = Session::builder()
-            .map_err(|e| Error::Retrieval(format!("Decoder builder: {}", e)))?
-            .with_optimization_level(get_opt_level())
-            .map_err(|e| Error::Retrieval(format!("Decoder opt: {}", e)))?
-            .with_execution_providers([CPUExecutionProvider::default().build()])
-            .map_err(|e| Error::Retrieval(format!("Decoder provider: {}", e)))?
-            .commit_from_file(&decoder_path)
-            .map_err(|e| Error::Retrieval(format!("Decoder load: {}", e)))?;
-
-        // Load tokenizer
-        let tokenizer = Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| Error::Retrieval(format!("Tokenizer: {}", e)))?;
+        let encoder = hf_loader::create_onnx_session(&encoder_path, sess_config.clone())?;
+        let decoder = hf_loader::create_onnx_session(&decoder_path, sess_config)?;
+        let tokenizer = hf_loader::load_tokenizer(&tokenizer_path)?;
 
         log::info!("[T5-Coref] Loaded model from {}", model_id);
 

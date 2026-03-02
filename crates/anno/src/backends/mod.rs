@@ -118,6 +118,14 @@
 //! }
 //! ```
 
+/// Macros for generating feature-gated backend stubs.
+#[macro_use]
+pub(crate) mod macros;
+
+/// Shared HuggingFace model loading and ONNX session construction utilities.
+#[cfg(any(feature = "onnx", feature = "candle"))]
+pub(crate) mod hf_loader;
+
 /// Coreference resolution backends (trait, neural, heuristic).
 pub mod coref;
 
@@ -343,7 +351,9 @@ pub use coref::resolve::CorefBackend;
 pub use hmm::{HmmConfig, HmmNER};
 
 // Streaming NER utilities
-pub use streaming::{ChunkConfig, EntityIterator, StreamingExtractor};
+pub use streaming::{
+    deduplicate_overlapping, ChunkConfig, EntityIterator, OverlapStrategy, StreamingExtractor,
+};
 
 // Middleware pipeline
 pub use middleware::{
