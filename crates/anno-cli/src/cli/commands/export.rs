@@ -432,20 +432,34 @@ fn export_conll(text: &str, entities: &[anno_core::Entity]) -> String {
             .unwrap_or(char_idx);
         let word_end = word_start + word.len();
         char_idx = word_end;
-        let entity = entities
-            .iter()
-            .find(|e| word_start < e.end && word_end > e.start);
-        let tag = match entity {
-            Some(e) => {
-                if word_start <= e.start {
-                    format!("B-{}", e.entity_type.as_label())
-                } else {
-                    format!("I-{}", e.entity_type.as_label())
+
+        // Split trailing punctuation into a separate O-tagged token
+        let trimmed = word.trim_end_matches(|c: char| {
+            matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']')
+        });
+        let punct = &word[trimmed.len()..];
+        let trimmed_end = word_start + trimmed.len();
+
+        if !trimmed.is_empty() {
+            let entity = entities
+                .iter()
+                .find(|e| word_start < e.end && trimmed_end > e.start);
+            let tag = match entity {
+                Some(e) => {
+                    if word_start <= e.start {
+                        format!("B-{}", e.entity_type.as_label())
+                    } else {
+                        format!("I-{}", e.entity_type.as_label())
+                    }
                 }
-            }
-            None => "O".to_string(),
-        };
-        lines.push(format!("{}\t{}", word, tag));
+                None => "O".to_string(),
+            };
+            lines.push(format!("{}\t{}", trimmed, tag));
+        }
+
+        if !punct.is_empty() {
+            lines.push(format!("{}\tO", punct));
+        }
     }
     lines.join("\n")
 }
@@ -823,5 +837,63 @@ fn csv_escape(s: &str) -> String {
         format!("\"{}\"", s.replace('"', "\"\""))
     } else {
         s.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn conll_splits_trailing_period_from_entity() {
+        let text = "Apple CEO Tim Cook.";
+        let entities = vec![
+            anno_core::Entity::new("Apple", anno_core::EntityType::Organization, 0, 5, 0.9),
+            anno_core::Entity::new("Tim Cook", anno_core::EntityType::Person, 10, 18, 0.9),
+        ];
+        let output = export_conll(text, &entities);
+        let lines: Vec<&str> = output.lines().collect();
+
+        // "Apple" -> B-ORG
+        assert_eq!(lines[0], "Apple\tB-ORG");
+        // "CEO" -> O
+        assert_eq!(lines[1], "CEO\tO");
+        // "Tim" -> B-PER
+        assert_eq!(lines[2], "Tim\tB-PER");
+        // "Cook" (without period) -> I-PER
+        assert_eq!(lines[3], "Cook\tI-PER");
+        // "." -> O (separate token)
+        assert_eq!(lines[4], ".\tO");
+        assert_eq!(lines.len(), 5);
+    }
+
+    #[test]
+    fn conll_no_trailing_punct_unchanged() {
+        let text = "Tim Cook spoke";
+        let entities = vec![anno_core::Entity::new(
+            "Tim Cook",
+            anno_core::EntityType::Person,
+            0,
+            8,
+            0.9,
+        )];
+        let output = export_conll(text, &entities);
+        let lines: Vec<&str> = output.lines().collect();
+
+        assert_eq!(lines[0], "Tim\tB-PER");
+        assert_eq!(lines[1], "Cook\tI-PER");
+        assert_eq!(lines[2], "spoke\tO");
+        assert_eq!(lines.len(), 3);
+    }
+
+    #[test]
+    fn conll_multiple_punct_chars() {
+        let text = "Really?!";
+        let entities: Vec<anno_core::Entity> = vec![];
+        let output = export_conll(text, &entities);
+        let lines: Vec<&str> = output.lines().collect();
+
+        assert_eq!(lines[0], "Really\tO");
+        assert_eq!(lines[1], "?!\tO");
     }
 }

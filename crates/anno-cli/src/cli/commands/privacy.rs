@@ -570,7 +570,14 @@ fn pseudonymize_text(text: &str, entities: &[PIIEntity]) -> (String, HashMap<Str
                     addr_counter += 1;
                     format!("{} Main St", 100 + addr_counter)
                 }
-                "CONTACT" => "contact@example.com".to_string(),
+                "CONTACT" => {
+                    if entity.text.contains('@') {
+                        "contact@example.com".to_string()
+                    } else {
+                        // Phone-like replacement: deterministic per-entity
+                        format!("555-000-{:04}", (entity.start % 9000) + 1000)
+                    }
+                }
                 "ID_NUMBER" => "XXX-XX-XXXX".to_string(),
                 _ => "[REDACTED]".to_string(),
             };
@@ -658,6 +665,54 @@ mod tests {
         assert!(
             looks_like_address("Springfield, IL 62704"),
             "ZIP + state abbreviation should be detected as address"
+        );
+    }
+
+    #[test]
+    fn pseudonymize_phone_gets_phone_replacement() {
+        let entities = vec![
+            PIIEntity {
+                text: "bob@example.com".to_string(),
+                pii_type: "CONTACT".to_string(),
+                start: 0,
+                end: 15,
+                risk_level: "HIGH".to_string(),
+            },
+            PIIEntity {
+                text: "555-867-5309".to_string(),
+                pii_type: "CONTACT".to_string(),
+                start: 20,
+                end: 32,
+                risk_level: "HIGH".to_string(),
+            },
+        ];
+        let text = "bob@example.com --- 555-867-5309";
+        let (result, mapping) = pseudonymize_text(text, &entities);
+
+        // Email should get email-like replacement
+        let email_replacement = mapping.get("bob@example.com").unwrap();
+        assert!(
+            email_replacement.contains('@'),
+            "Email should get email-like replacement, got: {}",
+            email_replacement
+        );
+
+        // Phone should get phone-like replacement (555-000-XXXX)
+        let phone_replacement = mapping.get("555-867-5309").unwrap();
+        assert!(
+            phone_replacement.starts_with("555-000-"),
+            "Phone should get phone-like replacement, got: {}",
+            phone_replacement
+        );
+        assert!(
+            !phone_replacement.contains('@'),
+            "Phone replacement should not look like email, got: {}",
+            phone_replacement
+        );
+        // Verify the replacement actually appears in the output
+        assert!(
+            result.contains(phone_replacement),
+            "Output should contain phone replacement"
         );
     }
 
