@@ -810,6 +810,7 @@ impl Model for StackedNER {
         // split into fragments).
         heal_adjacent_spans(text, &mut entities);
         extend_person_spans(text, &mut entities);
+        filter_title_words(&mut entities);
 
         // Validate final entities (defensive programming)
         // This catches bugs in individual backends that might produce invalid spans
@@ -1026,6 +1027,55 @@ fn extend_person_spans(text: &str, entities: &mut [Entity]) {
 
 /// Check whether text may contain lowercase entity names that need NuNER.
 ///
+/// Remove single-word entities that are known title/role words misclassified as ORG by BERT.
+///
+/// BERT frequently tags German political titles ("Bundeskanzler") and similar role words
+/// as ORG because they appear in organizational contexts in training data. The heuristic
+/// backend already filters these via SKIP_WORDS, but BERT's entities bypass that check.
+/// This post-processing step catches the ones that slip through.
+fn filter_title_words(entities: &mut Vec<Entity>) {
+    const TITLE_WORDS: &[&str] = &[
+        // German political titles
+        "bundeskanzler",
+        "bundeskanzlerin",
+        "kanzler",
+        "kanzlerin",
+        "bundespraesident",
+        "bundespraesidentin",
+        "buergermeister",
+        "buergermeisterin",
+        // English role words
+        "president",
+        "chairman",
+        "chairwoman",
+        "director",
+        "secretary",
+        "minister",
+        "chancellor",
+        "governor",
+        "senator",
+        "congressman",
+        "congresswoman",
+        "mayor",
+    ];
+
+    entities.retain(|e| {
+        // Only filter single-word entities tagged as ORG or MISC
+        if !matches!(
+            e.entity_type,
+            EntityType::Organization | EntityType::Other(_)
+        ) {
+            return true;
+        }
+        // Multi-word entities are likely real organizations
+        if e.text.contains(' ') {
+            return true;
+        }
+        let lower = e.text.to_lowercase();
+        !TITLE_WORDS.contains(&lower.as_str())
+    });
+}
+
 /// NuNER's main value over BERT is detecting lowercase entities ("tim cook", "apple inc.").
 /// For well-capitalized text (news, formal docs), BERT alone handles NER well and NuNER
 /// adds ~2s latency without meaningful recall improvement.

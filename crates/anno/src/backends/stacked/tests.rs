@@ -1378,3 +1378,41 @@ fn span_healing_merges_with_single_char_gap() {
     );
     assert_eq!(entities[0].text, "U.S. District");
 }
+
+/// N8: filter_title_words should remove single-word title entities tagged as ORG.
+#[test]
+fn filter_title_words_removes_bundeskanzler() {
+    let mut entities = vec![
+        Entity::new("Bundeskanzler", EntityType::Organization, 0, 13, 0.85),
+        Entity::new("Germany", EntityType::Location, 25, 32, 0.9),
+        Entity::new("Chancellor", EntityType::Organization, 40, 50, 0.8),
+    ];
+    super::filter_title_words(&mut entities);
+    let names: Vec<&str> = entities.iter().map(|e| e.text.as_str()).collect();
+    assert!(
+        !names.contains(&"Bundeskanzler"),
+        "Bundeskanzler should be filtered, got: {:?}",
+        names
+    );
+    assert!(
+        !names.contains(&"Chancellor"),
+        "Chancellor should be filtered, got: {:?}",
+        names
+    );
+    assert!(
+        names.contains(&"Germany"),
+        "Germany should be kept, got: {:?}",
+        names
+    );
+}
+
+/// filter_title_words should keep multi-word ORG entities even if they contain title words.
+#[test]
+fn filter_title_words_keeps_multi_word_orgs() {
+    let mut entities = vec![
+        Entity::new("Federal Chancellor Office", EntityType::Organization, 0, 25, 0.9),
+        Entity::new("President Hotel", EntityType::Organization, 30, 45, 0.85),
+    ];
+    super::filter_title_words(&mut entities);
+    assert_eq!(entities.len(), 2, "Multi-word ORGs should be kept");
+}

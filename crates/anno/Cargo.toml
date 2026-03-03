@@ -125,6 +125,18 @@ production = [
 bundled-crf-weights = []
 bundled-hmm-params = []
 
+[[bench]]
+name = "similarity"
+harness = false
+
+[[bench]]
+name = "backends"
+harness = false
+
+[[bench]]
+name = "coref"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

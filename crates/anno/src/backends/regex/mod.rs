@@ -197,7 +197,7 @@ static MONEY_CODE_PREFIX: Lazy<Regex> = Lazy::new(|| {
 
 static MONEY_MAGNITUDE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
-        r"(?i)\b\d+(?:[.,]\d+)?\s*(?:billion|million|trillion|Mrd|Mio|Bn|Mn)(?:\s+(?:dollars?|euros?|pounds?))?\b",
+        r"(?i)\b\d+(?:[.,]\d+)?\s*(?:billion|million|trillion|Mrd|Mio|Bn|Mn)(?:\s+(?:dollars?|euros?|pounds?|USD|EUR|GBP|JPY|CHF|CAD|AUD))?\b",
     )
     .expect("valid regex")
 });
@@ -1278,6 +1278,29 @@ mod tests {
             "Normal hashtag '#rust' should still match, got: {:?}",
             e
         );
+    }
+
+    /// N6: MONEY_MAGNITUDE should capture trailing currency codes like USD/EUR.
+    #[test]
+    fn money_magnitude_with_trailing_currency_code() {
+        for case in &["22.1 billion USD", "3.5 million EUR", "1 trillion GBP"] {
+            let e = extract(case);
+            let money: Vec<_> = e.iter().filter(|e| e.entity_type == EntityType::Money).collect();
+            assert!(
+                !money.is_empty(),
+                "'{}' should be tagged as MONEY, got: {:?}",
+                case,
+                e
+            );
+            // The full string including currency code should be captured
+            let full_match = money.iter().any(|m| m.text.contains("USD") || m.text.contains("EUR") || m.text.contains("GBP"));
+            assert!(
+                full_match,
+                "'{}' should include the currency code in the span, got: {:?}",
+                case,
+                money.iter().map(|m| &m.text).collect::<Vec<_>>()
+            );
+        }
     }
 }
 

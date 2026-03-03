@@ -1014,7 +1014,14 @@ impl MentionRankingCoref {
             }
         }
 
-        // Detect proper nouns (capitalized words not at sentence start)
+        // Detect proper nouns (capitalized words not at sentence start).
+        // Known pronouns are excluded so the pronoun detector (above) takes priority
+        // in the overlap dedup -- otherwise "He" gets typed as Proper and misses
+        // the lower pronoun linking threshold.
+        const PRONOUN_WORDS: &[&str] = &[
+            "he", "she", "it", "they", "him", "her", "them", "his", "hers", "its", "their",
+            "himself", "herself", "itself", "themselves", "we", "us", "our", "ours",
+        ];
         let words: Vec<_> = text.split_whitespace().collect();
         let mut search_byte_pos = 0; // Byte position for searching
 
@@ -1029,23 +1036,30 @@ impl MentionRankingCoref {
             if !at_sentence_start
                 && word.chars().next().is_some_and(|c| c.is_uppercase())
                 && word.chars().count() > 1
-            // Use chars().count() for Unicode
+                && !PRONOUN_WORDS.contains(&word.trim_end_matches(|c: char| c.is_ascii_punctuation()).to_lowercase().as_str())
             {
+                // Strip trailing punctuation from proper noun text
+                let clean_word = word.trim_end_matches(|c: char| c.is_ascii_punctuation());
+                if clean_word.is_empty() {
+                    search_byte_pos += word.len() + 1;
+                    continue;
+                }
+
                 // Find byte position of word
                 if let Some(rel_byte_pos) = text[search_byte_pos..].find(word) {
                     let abs_byte_pos = search_byte_pos + rel_byte_pos;
                     // Convert byte offset to character offset for Entity
                     let char_start = text[..abs_byte_pos].chars().count();
-                    let char_end = char_start + word.chars().count();
+                    let char_end = char_start + clean_word.chars().count();
 
                     mentions.push(RankedMention {
                         start: char_start,
                         end: char_end,
-                        text: word.to_string(),
+                        text: clean_word.to_string(),
                         mention_type: MentionType::Proper,
                         gender: None,
                         number: Some(Number::Singular),
-                        head: word.to_string(),
+                        head: clean_word.to_string(),
                         entity_type: None,
                     });
                 }
@@ -2852,11 +2866,14 @@ mod tests {
     #[test]
     fn test_resolve_to_grounded() {
         let coref = MentionRankingCoref::new();
+        // Use text where pronoun matches antecedent gender:
+        // "Mary" is Feminine, "She" is Feminine → gender agreement → link
+        let text = "John saw Mary. She waved.";
         let (signals, tracks) = coref
-            .resolve_to_grounded("John saw Mary. He waved.")
+            .resolve_to_grounded(text)
             .unwrap();
 
-        // Should have signals
+        // Should have signals (Mary + She linked into a cluster)
         assert!(!signals.is_empty());
 
         // All signals should have valid locations
@@ -4506,6 +4523,58 @@ mod tests {
         // Clinical should default to English
         let clinical_config = MentionRankingConfig::clinical();
         assert_eq!(clinical_config.language, "en");
+    }
+
+    /// N2-coref: proper noun mentions must not include trailing punctuation.
+    #[test]
+    fn test_proper_noun_no_trailing_punct() {
+        let coref = MentionRankingCoref::new();
+        let text = "John met Obama. They shook hands.";
+        let mentions = coref.detect_mentions(text).unwrap();
+        for m in &mentions {
+            if m.mention_type == MentionType::Proper {
+                assert!(
+                    !m.text.ends_with('.') && !m.text.ends_with(','),
+                    "Proper noun mention '{}' should not have trailing punctuation",
+                    m.text
+                );
+            }
+        }
+    }
+
+    /// Pronouns must not be detected as Proper mentions (would miss the lower
+    /// pronoun linking threshold).
+    #[test]
+    fn test_pronouns_not_detected_as_proper() {
+        let coref = MentionRankingCoref::new();
+        let text = "Alice met Bob. He waved. She smiled.";
+        let mentions = coref.detect_mentions(text).unwrap();
+        let pronoun_words = ["he", "she", "it", "they", "him", "her", "them"];
+        for m in &mentions {
+            let lower = m.text.to_lowercase();
+            if pronoun_words.contains(&lower.as_str()) {
+                assert_eq!(
+                    m.mention_type,
+                    MentionType::Pronominal,
+                    "'{}' should be Pronominal, not {:?}",
+                    m.text,
+                    m.mention_type
+                );
+            }
+        }
+    }
+
+    /// Gender-matched pronoun resolution should form a coreference cluster.
+    #[test]
+    fn test_gender_matched_pronoun_links() {
+        let coref = MentionRankingCoref::new();
+        // "Mary" is detected as Feminine, "She" is Feminine → should link
+        let clusters = coref.resolve("John saw Mary. She waved.").unwrap();
+        let has_mary_she = clusters.iter().any(|c| {
+            let texts: Vec<_> = c.mentions.iter().map(|m| m.text.to_lowercase()).collect();
+            texts.contains(&"mary".to_string()) && texts.contains(&"she".to_string())
+        });
+        assert!(has_mary_she, "Mary and She should be in the same cluster");
     }
 
     proptest! {

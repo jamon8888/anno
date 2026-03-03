@@ -321,9 +321,16 @@ pub(crate) fn extract_relations_heuristic(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    // Keep only top relation per entity pair
+    // Keep only top relation per entity pair (deduplicate both directions)
     let mut seen_pairs = std::collections::HashSet::new();
-    relations.retain(|r| seen_pairs.insert((r.head_idx, r.tail_idx)));
+    relations.retain(|r| {
+        let canonical = if r.head_idx <= r.tail_idx {
+            (r.head_idx, r.tail_idx)
+        } else {
+            (r.tail_idx, r.head_idx)
+        };
+        seen_pairs.insert(canonical)
+    });
 
     relations
 }
@@ -461,5 +468,35 @@ mod tests {
             pair_count <= 1,
             "expected at most 1 relation per directed pair, got {pair_count}"
         );
+    }
+
+    /// N7: Reverse-duplicate relations (A→B and B→A) should be deduplicated.
+    #[test]
+    fn no_reverse_duplicate_relations() {
+        // Two entities that could trigger relations in both directions
+        let text = "Tim Cook works at Apple Inc. in Cupertino";
+        let entities = vec![
+            entity("Tim Cook", crate::EntityType::Person, 0, 8),
+            entity("Apple Inc.", crate::EntityType::Organization, 18, 28),
+            entity("Cupertino", crate::EntityType::Location, 32, 41),
+        ];
+        let rels = extract_relations_heuristic(&entities, text, &[], 0.0);
+
+        // For each undirected pair, there should be at most one relation
+        let mut seen_undirected = std::collections::HashSet::new();
+        for r in &rels {
+            let canonical = if r.head_idx <= r.tail_idx {
+                (r.head_idx, r.tail_idx)
+            } else {
+                (r.tail_idx, r.head_idx)
+            };
+            assert!(
+                seen_undirected.insert(canonical),
+                "Found duplicate relation for pair ({}, {}): {:?}",
+                r.head_idx,
+                r.tail_idx,
+                r.relation_type
+            );
+        }
     }
 }

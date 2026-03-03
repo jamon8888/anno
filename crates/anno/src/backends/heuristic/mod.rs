@@ -78,6 +78,24 @@ const ORG_SUFFIX: &[&str] = &[
     "company",
     "holding",
     "holdings",
+    // Multi-word entity suffixes (services, technologies, etc.)
+    "services",
+    "technologies",
+    "systems",
+    "partners",
+    "solutions",
+    "industries",
+    "enterprises",
+    "laboratories",
+    "labs",
+    "association",
+    "council",
+    "commission",
+    "committee",
+    "authority",
+    "bureau",
+    "department",
+    "ministry",
 ];
 const PERSON_PREFIX: &[&str] = &[
     "mr.", "mr", "ms.", "ms", "mrs.", "mrs", "dr.", "dr", "prof.", "prof",
@@ -150,6 +168,8 @@ const COMMON_ACRONYMS: &[&str] = &[
     "uhd", "ac", "dc", "tv", "pc", "os", "ui", "ux", "ai", "ml", "id", "ip", "io",
     // Units / time
     "mph", "rpm", "gmt", "utc", "am", "pm",
+    // Economics / finance (not entities)
+    "gdp", "gnp", "cpi", "roi", "ebitda", "ipo", "etf", "apy", "apr",
     // International abbreviations (used across languages)
     "etc", "aka", "eta",
     // Currency codes (not entities -- handled by regex/pattern backend)
@@ -867,13 +887,28 @@ fn classify_minimal(
     if span.len() == 1 && skip_pronouns.contains(&first_word.as_str()) {
         return (EntityType::Other("skip".into()), 0.0, "skip_pronoun");
     }
-    // Filter: Skip fiscal quarter abbreviations (Q1-Q4) -- not entities
-    if span.len() == 1 {
+    // Filter: Skip fiscal quarter abbreviations (Q1-Q4) and multi-word fiscal
+    // patterns like "Q3 FY2025", "Q1 2024" -- not entities
+    {
         let trimmed = first_word.trim_matches(|c: char| !c.is_alphanumeric());
         if trimmed.len() == 2 {
             let bytes = trimmed.as_bytes();
             if (bytes[0] == b'Q' || bytes[0] == b'q') && (bytes[1] >= b'1' && bytes[1] <= b'4') {
-                return (EntityType::Other("skip".into()), 0.0, "skip_fiscal_quarter");
+                // Single "Q3" or multi-word "Q3 FY2025", "Q3 2024"
+                if span.len() == 1 {
+                    return (EntityType::Other("skip".into()), 0.0, "skip_fiscal_quarter");
+                }
+                // Check if remaining words are fiscal year indicators
+                let rest_is_fiscal = span[1..].iter().all(|w| {
+                    let wl = w.to_lowercase();
+                    wl.starts_with("fy")
+                        || wl.chars().all(|c| c.is_ascii_digit())
+                        || wl == "h1"
+                        || wl == "h2"
+                });
+                if rest_is_fiscal {
+                    return (EntityType::Other("skip".into()), 0.0, "skip_fiscal_quarter");
+                }
             }
         }
     }

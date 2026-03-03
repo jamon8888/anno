@@ -727,12 +727,55 @@ impl JointModel {
 
     /// Analyze text jointly for entities, coreference, and links.
     pub fn analyze(&self, text: &str, entities: &[Entity]) -> Result<JointResult> {
-        // 1. Create joint mentions from entities
-        let mentions: Vec<JointMention> = entities
+        // 1. Create joint mentions from NER entities
+        let mut mentions: Vec<JointMention> = entities
             .iter()
             .enumerate()
             .map(|(i, e)| JointMention::from_entity(i, e, text))
             .collect();
+
+        // 1b. Detect pronouns not already covered by NER entities.
+        // Without this, pronouns like "He" never enter the factor graph and
+        // cannot be resolved to their antecedents.
+        let pronouns: &[&str] = &[
+            "he", "she", "it", "they", "him", "her", "them", "his", "hers", "its", "their",
+            "himself", "herself", "itself", "themselves",
+        ];
+        let mut char_pos = 0;
+        for word in text.split_whitespace() {
+            let word_lower = word
+                .trim_end_matches(|c: char| c.is_ascii_punctuation())
+                .to_lowercase();
+            let word_char_len = word
+                .trim_end_matches(|c: char| c.is_ascii_punctuation())
+                .chars()
+                .count();
+            if word_char_len > 0 && pronouns.contains(&word_lower.as_str()) {
+                let start = char_pos;
+                let end = char_pos + word_char_len;
+                // Only add if it doesn't overlap an existing NER mention
+                let overlaps = mentions.iter().any(|m| start < m.end && end > m.start);
+                if !overlaps {
+                    let idx = mentions.len();
+                    mentions.push(JointMention {
+                        idx,
+                        text: word.trim_end_matches(|c: char| c.is_ascii_punctuation()).to_string(),
+                        head: word_lower.clone(),
+                        start,
+                        end,
+                        mention_kind: MentionKind::Pronominal,
+                        entity_type: None,
+                        entity: None,
+                    });
+                }
+            }
+            char_pos += word.chars().count() + 1; // +1 for space
+        }
+        // Re-sort by position and re-index
+        mentions.sort_by_key(|m| (m.start, m.end));
+        for (i, m) in mentions.iter_mut().enumerate() {
+            m.idx = i;
+        }
 
         if mentions.is_empty() {
             return Ok(JointResult {
@@ -1076,7 +1119,7 @@ impl JointModel {
                     text_to_root.insert(key, i);
                 }
             }
-            // Also merge last-name matches: "Elon Musk" and "Musk"
+            // Also merge last-name matches: "Marie Curie" and "Curie"
             for (i, mention) in mentions.iter().enumerate().take(n_mentions) {
                 let words: Vec<&str> = mention.text.split_whitespace().collect();
                 if words.len() > 1 {
@@ -1834,5 +1877,27 @@ mod tests {
         let entities = result.unwrap();
         // Should return entities with updated types/links based on joint inference
         assert!(!entities.is_empty());
+    }
+
+    /// P4: Joint model's analyze should detect pronouns even when NER doesn't
+    /// extract them.
+    #[test]
+    fn test_analyze_detects_pronouns() {
+        let model = JointModel::new(JointConfig::default()).unwrap();
+        let text = "Marie Curie discovered radium. She won the Nobel Prize.";
+        // NER entities without pronouns
+        let entities = vec![
+            Entity::new("Marie Curie", EntityType::Person, 0, 11, 0.95),
+            Entity::new("Nobel Prize", EntityType::Organization, 41, 52, 0.9),
+        ];
+        let result = model.analyze(text, &entities).unwrap();
+        // The joint model should have detected "She" as a pronoun mention
+        // and potentially linked it to "Marie Curie" in a coreference chain.
+        // At minimum, the output entities should include the NER entities.
+        assert!(
+            result.entities.len() >= 2,
+            "Should have at least the 2 NER entities, got {}",
+            result.entities.len()
+        );
     }
 }

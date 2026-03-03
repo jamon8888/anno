@@ -76,13 +76,13 @@ fn extract_mentions_basic() {
 
 #[test]
 fn extract_mentions_two_spans() {
-    let marked = "<m> Elon </m> founded <m> Tesla </m>.";
+    let marked = "<m> Ada </m> founded <m> Lovelace Labs </m>.";
     let (plain, spans) = extract_t5_mentions(marked).unwrap();
     assert_eq!(spans.len(), 2);
-    assert_eq!(spans[0].0, "Elon");
-    assert_eq!(spans[1].0, "Tesla");
-    assert!(plain.contains("Elon"));
-    assert!(plain.contains("Tesla"));
+    assert_eq!(spans[0].0, "Ada");
+    assert_eq!(spans[1].0, "Lovelace Labs");
+    assert!(plain.contains("Ada"));
+    assert!(plain.contains("Lovelace Labs"));
     assert!(plain.contains("founded"));
 }
 
@@ -119,15 +119,15 @@ fn extract_mentions_span_offsets_are_consistent() {
 
 #[test]
 fn parse_output_basic_two_mentions() {
-    // "Elon | 1 founded Tesla | 2. He | 1 led SpaceX."
-    let decoded = "Elon | 1 founded Tesla | 2. He | 1 led SpaceX.";
+    // "Ada | 1 founded Lovelace Labs | 2. She | 1 led ENIAC."
+    let decoded = "Ada | 1 founded Lovelace Labs | 2. She | 1 led ENIAC.";
     let clusters = parse_t5_coref_output(decoded);
     let cluster1 = clusters.iter().find(|c| c.id == 1);
-    assert!(cluster1.is_some(), "cluster 1 (Elon/He) should be parsed");
+    assert!(cluster1.is_some(), "cluster 1 (Ada/She) should be parsed");
     let c = cluster1.unwrap();
     assert!(c.mentions.len() >= 2, "cluster 1 should have ≥2 members");
-    assert!(c.mentions.contains(&"Elon".to_string()));
-    assert!(c.mentions.contains(&"He".to_string()));
+    assert!(c.mentions.contains(&"Ada".to_string()));
+    assert!(c.mentions.contains(&"She".to_string()));
 }
 
 #[test]

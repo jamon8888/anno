@@ -993,3 +993,62 @@ fn fiscal_quarter_not_tagged_as_entity() {
         );
     }
 }
+
+/// N3: Multi-word fiscal quarter patterns like "Q3 FY2025" should not be entities.
+#[test]
+fn fiscal_quarter_multi_word_not_entity() {
+    let ner = super::HeuristicNER::new();
+    for pattern in &["Q3 FY2025", "Q1 2024", "Q4 FY2023", "Q2 H1"] {
+        let text = format!("The company reported {} earnings grew.", pattern);
+        let entities = ner.extract_entities(&text, None).unwrap();
+        let has_fiscal = entities
+            .iter()
+            .any(|e| e.text.starts_with('Q') && e.text.contains(pattern));
+        assert!(
+            !has_fiscal,
+            "'{}' should not be tagged as an entity in: {:?}",
+            pattern,
+            entities.iter().map(|e| &e.text).collect::<Vec<_>>()
+        );
+    }
+}
+
+/// N4: Common economic acronyms like GDP should not be tagged as ORG.
+#[test]
+fn economic_acronyms_not_entities() {
+    let ner = super::HeuristicNER::new();
+    for acronym in &["GDP", "GNP", "CPI", "ROI", "EBITDA", "IPO", "ETF"] {
+        let text = format!("The {} grew by 3% this quarter.", acronym);
+        let entities = ner.extract_entities(&text, None).unwrap();
+        let has_acronym = entities.iter().any(|e| e.text == *acronym);
+        assert!(
+            !has_acronym,
+            "'{}' should not be tagged as an entity, got: {:?}",
+            acronym,
+            entities.iter().map(|e| &e.text).collect::<Vec<_>>()
+        );
+    }
+}
+
+/// N5: Organization suffixes like "Services", "Technologies" should trigger ORG detection.
+#[test]
+fn org_suffix_services_technologies() {
+    let ner = super::HeuristicNER::new();
+    for name in &[
+        "Amazon Web Services",
+        "Palantir Technologies",
+        "General Dynamics Systems",
+    ] {
+        let text = format!("{} announced a new product.", name);
+        let entities = ner.extract_entities(&text, None).unwrap();
+        let found = entities
+            .iter()
+            .any(|e| e.text.contains(name.split_whitespace().last().unwrap()));
+        assert!(
+            found,
+            "Should detect org suffix in '{}', got: {:?}",
+            name,
+            entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>()
+        );
+    }
+}
