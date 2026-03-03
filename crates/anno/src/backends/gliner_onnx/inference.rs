@@ -650,22 +650,17 @@ impl GLiNEROnnx {
         // "The Department of Defense" and "Department of Defense"
         let entities = remove_overlapping_spans(entities);
 
-        // Post-process: strip trailing punctuation from entity spans
+        // Post-process: strip trailing/leading punctuation from entity spans
         let entities = entities
             .into_iter()
-            .map(|mut e| {
-                // Strip trailing punctuation that shouldn't be part of entities
-                while e.text.ends_with(['.', ',', ';', ':', '!', '?']) {
-                    e.text.pop();
-                    if e.end > e.start {
-                        e.end -= 1;
-                    }
+            .filter_map(|mut e| {
+                let (cleaned, head, tail) = textprep::spans::clean_span_boundary(&e.text);
+                if cleaned.is_empty() {
+                    return None;
                 }
-                // Also strip leading punctuation
-                while e.text.starts_with(['.', ',', ';', ':', '!', '?']) {
-                    e.text.remove(0);
-                    e.start += 1;
-                }
+                e.start += head;
+                e.end -= tail;
+                e.text = cleaned.to_string();
 
                 // Post-process: GLiNER sometimes tags obvious companies as PRODUCT.
                 // If the surface form has strong company markers, remap PRODUCT → ORG.
@@ -678,9 +673,8 @@ impl GLiNEROnnx {
                     e.entity_type = EntityType::Organization;
                 }
 
-                e
+                (e.start < e.end).then_some(e)
             })
-            .filter(|e| !e.text.is_empty() && e.start < e.end)
             .collect();
 
         Ok(entities)

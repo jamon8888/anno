@@ -655,20 +655,16 @@ impl GLiNERPoly {
         // Strip trailing/leading punctuation.
         let entities: Vec<Entity> = entities
             .into_iter()
-            .map(|mut e| {
-                while e.text.ends_with(['.', ',', ';', ':', '!', '?']) {
-                    e.text.pop();
-                    if e.end > e.start {
-                        e.end -= 1;
-                    }
+            .filter_map(|mut e| {
+                let (cleaned, head, tail) = textprep::spans::clean_span_boundary(&e.text);
+                if cleaned.is_empty() {
+                    return None;
                 }
-                while e.text.starts_with(['.', ',', ';', ':', '!', '?']) {
-                    e.text.remove(0);
-                    e.start += 1;
-                }
-                e
+                e.start += head;
+                e.end -= tail;
+                e.text = cleaned.to_string();
+                (e.start < e.end).then_some(e)
             })
-            .filter(|e| !e.text.is_empty() && e.start < e.end)
             .collect();
 
         Ok(entities)
@@ -697,14 +693,10 @@ impl GLiNERPoly {
         }
 
         // Trim trailing punctuation that leaks from word-boundary tokenization.
-        let span_text = raw_span
-            .trim_end_matches(['.', ',', ';', ':', '!', '?'])
-            .trim_end_matches("'s")
-            .trim_end_matches("\u{2019}s");
+        let (span_text, trimmed_chars) = textprep::spans::clean_span_tail(&raw_span);
         if span_text.is_empty() {
             return None;
         }
-        let trimmed_chars = raw_span.chars().count() - span_text.chars().count();
         let adj_end = end - trimmed_chars;
 
         let entity_type = crate::schema::map_to_canonical(entity_type_str, None);

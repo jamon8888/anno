@@ -65,18 +65,15 @@ impl DocumentPreprocessor {
         // Note: For now, we do basic normalization without external crate
         // Full NFC normalization would require unicode-normalization crate
         if self.normalize_unicode {
-            // Basic normalization: remove zero-width characters, normalize line breaks
-            processed = processed
-                .chars()
-                .filter(|c| !matches!(c, '\u{200b}' | '\u{200c}' | '\u{200d}' | '\u{feff}'))
-                .collect();
+            // Remove zero-width characters (ZWSP, ZWNJ, ZWJ, BOM, Word Joiner).
+            processed = textprep::unicode::remove_zero_width(&processed);
             metadata.insert("unicode_normalized".to_string(), "basic".to_string());
         }
 
         // Whitespace cleaning
         if self.clean_whitespace {
             // Normalize line breaks to \n
-            processed = processed.replace("\r\n", "\n").replace('\r', "\n");
+            processed = textprep::unicode::normalize_newlines(&processed);
 
             // Collapse multiple spaces (but preserve single spaces)
             let mut cleaned = String::with_capacity(processed.len());

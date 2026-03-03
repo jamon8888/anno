@@ -483,16 +483,9 @@ impl GLiNER2Onnx {
 
         // Trim trailing punctuation from entity spans (e.g., "Seattle." -> "Seattle")
         for entity in &mut entities {
-            let trimmed = entity.text
-                .trim_end_matches(['.', ',', ';', ':', '!', '?', ')', ']'])
-                .trim_end_matches("'s")
-                .trim_end_matches("\u{2019}s");
-            if trimmed.len() < entity.text.len() {
-                let removed = entity.text.len() - trimmed.len();
-                // Adjust end offset: count chars removed
-                let chars_removed = entity.text.chars().count() - trimmed.chars().count();
+            let (trimmed, chars_removed) = textprep::spans::clean_span_tail(&entity.text);
+            if chars_removed > 0 {
                 entity.end = entity.end.saturating_sub(chars_removed);
-                let _ = removed; // suppress unused warning
                 entity.text = trimmed.to_string();
             }
         }
