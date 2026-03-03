@@ -268,6 +268,8 @@ pub mod book_scale;
 pub mod cdcr;
 pub mod coref;
 pub mod coref_loader;
+pub mod cross_context_eval;
+
 /// Coreference resolvers (shared via `anno::eval`).
 pub mod coref_resolver {
     pub use anno::eval::coref_resolver::*;
@@ -285,6 +287,7 @@ pub mod harness;
 pub mod history;
 pub mod incremental_coref;
 pub mod inter_doc_coref;
+pub mod neural_cluster_encoder;
 pub mod loader;
 pub mod metrics;
 pub mod modes;

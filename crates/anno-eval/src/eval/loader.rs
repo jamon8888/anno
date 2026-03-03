@@ -5327,8 +5327,10 @@ impl DatasetLoader {
                 // LitBank coreference - parse .ann format for chains
                 self.parse_litbank_coref(&content)
             }
-            DatasetId::ECBPlus
-            | DatasetId::WikiCoref
+            DatasetId::ECBPlus => {
+                super::coref_loader::parse_ecb_plus_coref(&content)
+            }
+            DatasetId::WikiCoref
             | DatasetId::GUM
             | DatasetId::WinoBias
             | DatasetId::TwiConv

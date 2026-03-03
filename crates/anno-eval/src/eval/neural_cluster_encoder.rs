@@ -716,8 +716,8 @@ impl IncrementalCorefAdapter {
                         head_end: None,
                         entity_type: None,
                         mention_type: Some(MentionType::Proper),
-                        phi_features: None,
-                        grammatical_role: None,
+
+
                     })
                     .collect();
 
@@ -872,8 +872,8 @@ mod tests {
                 head_end: None,
                 entity_type: None,
                 mention_type: Some(mt),
-                phi_features: None,
-                grammatical_role: None,
+
+
             }
         }
 
@@ -904,8 +904,8 @@ mod tests {
                 head_end: None,
                 entity_type: None,
                 mention_type: Some(mt),
-                phi_features: None,
-                grammatical_role: None,
+
+
             }
         }
 
@@ -949,8 +949,8 @@ mod tests {
                 head_end: None,
                 entity_type: None,
                 mention_type: Some(mt),
-                phi_features: None,
-                grammatical_role: None,
+
+
             }
         }
 

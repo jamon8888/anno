@@ -992,7 +992,7 @@ impl TaskEvaluator {
             Task::IntraDocCoref | Task::InterDocCoref | Task::AbstractAnaphora => {
                 // Coref tasks use create_coref_resolver, not BackendFactory
                 // Skip BackendFactory::create() to avoid "Unknown backend" error
-                let metrics = self.evaluate_coref_task(backend_name, dataset_data, config)?;
+                let metrics = self.evaluate_coref_task(task, backend_name, dataset_data, config)?;
                 Ok(BackendEvalOk {
                     metrics,
                     backend_display: None,
@@ -1924,8 +1924,12 @@ impl TaskEvaluator {
     }
 
     /// Evaluate coreference task.
+    ///
+    /// For `IntraDocCoref` and `AbstractAnaphora`, runs per-document coreference.
+    /// For `InterDocCoref`, groups documents by topic and runs cross-document clustering.
     fn evaluate_coref_task(
         &self,
+        task: Task,
         backend_name: &str,
         dataset_data: &LoadedDataset,
         config: &TaskEvalConfig,
@@ -2028,6 +2032,13 @@ impl TaskEvaluator {
         } else {
             gold_docs
         };
+
+        // ---- InterDocCoref: cross-document clustering path ----
+        if task == Task::InterDocCoref {
+            return self.evaluate_inter_doc_coref(&gold_docs, backend_name, config);
+        }
+
+        // ---- IntraDocCoref / AbstractAnaphora: per-document path (unchanged) ----
 
         // Create coreference resolver (not a Model backend)
         // Use custom resolver if provided, otherwise create from backend_name
@@ -2264,6 +2275,155 @@ impl TaskEvaluator {
             "num_predicted_chains".to_string(),
             all_predicted_chains.len() as f64,
         );
+
+        Ok(metrics)
+    }
+
+    /// Evaluate inter-document (cross-document) coreference.
+    ///
+    /// Groups `CorefDocument`s by topic (from metadata), builds `Topic` objects with
+    /// gold `CrossDocCluster`s, and runs `evaluate_cross_document()`.
+    fn evaluate_inter_doc_coref(
+        &self,
+        gold_docs: &[crate::eval::coref::CorefDocument],
+        _backend_name: &str,
+        _config: &TaskEvalConfig,
+    ) -> Result<HashMap<String, f64>> {
+        use crate::eval::cdcr::{CrossDocCluster, Document};
+        use crate::eval::cluster_encoder::{CosineMergeScorer, HeuristicClusterEncoder};
+        use crate::eval::cross_context_eval::{
+            evaluate_cross_document, CrossContextEvalConfig, Topic,
+        };
+
+        // Group docs by topic (from metadata, or treat each doc as its own topic)
+        let mut topics_map: HashMap<String, Vec<&crate::eval::coref::CorefDocument>> =
+            HashMap::new();
+
+        for doc in gold_docs {
+            // Extract topic from doc_id (format: "topicN_fileM" from ECB+ parser)
+            let topic_key = doc
+                .doc_id
+                .as_deref()
+                .and_then(|id| id.split('_').next())
+                .unwrap_or("default")
+                .to_string();
+            topics_map.entry(topic_key).or_default().push(doc);
+        }
+
+        // Build Topic objects
+        let mut topics: Vec<Topic> = Vec::new();
+        let mut topic_keys: Vec<_> = topics_map.keys().cloned().collect();
+        topic_keys.sort();
+
+        for topic_key in &topic_keys {
+            let coref_docs = &topics_map[topic_key];
+            let mut topic = Topic::new(topic_key);
+
+            // Convert CorefDocuments to cdcr::Documents and build gold clusters
+            // Each CorefChain in each doc that shares a chain across docs becomes a cross-doc cluster.
+            // For ECB+, the chain IDs encode cross-doc identity.
+            let mut chain_to_mentions: HashMap<String, Vec<(String, usize)>> = HashMap::new();
+
+            for coref_doc in coref_docs {
+                let doc_id = coref_doc
+                    .doc_id
+                    .clone()
+                    .unwrap_or_else(|| format!("doc_{}", topic.documents.len()));
+
+                // Build cdcr::Document with entities from gold mentions
+                let mut entities: Vec<anno::Entity> = Vec::new();
+                for (chain_idx, chain) in coref_doc.chains.iter().enumerate() {
+                    for mention in &chain.mentions {
+                        let et = mention
+                            .entity_type
+                            .as_deref()
+                            .map(|t| {
+                                let tl = t.to_lowercase();
+                                if tl.contains("person") {
+                                    anno::EntityType::Person
+                                } else if tl.contains("loc") || tl.contains("place") {
+                                    anno::EntityType::Location
+                                } else if tl.contains("org") {
+                                    anno::EntityType::Organization
+                                } else {
+                                    anno::EntityType::Other(t.to_string())
+                                }
+                            })
+                            .unwrap_or(anno::EntityType::Other("mention".to_string()));
+
+                        let entity_idx = entities.len();
+                        entities.push(anno::Entity::new(
+                            &mention.text,
+                            et,
+                            mention.start,
+                            mention.end,
+                            1.0,
+                        ));
+
+                        // Track chain membership for cross-doc clustering
+                        let chain_key = format!("{}_{}", topic_key, chain_idx);
+                        chain_to_mentions
+                            .entry(chain_key)
+                            .or_default()
+                            .push((doc_id.clone(), entity_idx));
+                    }
+                }
+
+                let cdcr_doc = Document::new(&doc_id, &coref_doc.text).with_entities(entities);
+                topic.add_document(cdcr_doc);
+            }
+
+            // Build gold CrossDocClusters from chain_to_mentions
+            for (_chain_key, mentions) in &chain_to_mentions {
+                if mentions.len() < 2 {
+                    continue; // Skip singletons for cross-doc
+                }
+                let mut cluster = CrossDocCluster::new(
+                    topic.gold_clusters.len() as u64,
+                    "",
+                );
+                cluster.mentions = mentions.clone();
+                topic.add_gold_cluster(cluster);
+            }
+
+            topics.push(topic);
+        }
+
+        // Run cross-document evaluation
+        let encoder = HeuristicClusterEncoder::new(64);
+        let scorer = CosineMergeScorer::new(0.5);
+        let config = CrossContextEvalConfig::default();
+
+        let results = evaluate_cross_document(&topics, encoder, scorer, &config)?;
+
+        // Convert to flat metrics HashMap
+        let mut metrics = HashMap::new();
+        metrics.insert("conll_f1".to_string(), results.conll_f1);
+        metrics.insert("muc_f1".to_string(), results.muc.f1);
+        metrics.insert("muc_precision".to_string(), results.muc.precision);
+        metrics.insert("muc_recall".to_string(), results.muc.recall);
+        metrics.insert("b3_f1".to_string(), results.b_cubed.f1);
+        metrics.insert("b3_precision".to_string(), results.b_cubed.precision);
+        metrics.insert("b3_recall".to_string(), results.b_cubed.recall);
+        metrics.insert("ceaf_e_f1".to_string(), results.ceaf_e.f1);
+        metrics.insert("ceaf_e_precision".to_string(), results.ceaf_e.precision);
+        metrics.insert("ceaf_e_recall".to_string(), results.ceaf_e.recall);
+        metrics.insert("lea_f1".to_string(), results.lea.f1);
+        metrics.insert("lea_precision".to_string(), results.lea.precision);
+        metrics.insert("lea_recall".to_string(), results.lea.recall);
+        metrics.insert("num_topics".to_string(), topics.len() as f64);
+        metrics.insert("num_documents".to_string(), results.num_contexts as f64);
+        metrics.insert(
+            "num_gold_clusters".to_string(),
+            results.num_gold_clusters as f64,
+        );
+        metrics.insert(
+            "num_pred_clusters".to_string(),
+            results.num_pred_clusters as f64,
+        );
+        metrics.insert("purity".to_string(), results.avg_cluster_size);
+        metrics.insert("time_ms".to_string(), results.time_ms);
+        metrics.insert("is_cross_doc".to_string(), 1.0);
 
         Ok(metrics)
     }
@@ -3095,7 +3255,7 @@ impl ComprehensiveEvalResults {
                     md.push_str("|---------|---------|----|----|----|---|----|\n");
                     true
                 }
-                Task::IntraDocCoref | Task::AbstractAnaphora => {
+                Task::IntraDocCoref | Task::InterDocCoref | Task::AbstractAnaphora => {
                     md.push_str("| Dataset | Backend | CoNLL | MUC | B³ | N | ms |\n");
                     md.push_str("|---------|---------|-------|-----|----|---|----|\n");
                     true
@@ -3272,7 +3432,7 @@ impl ComprehensiveEvalResults {
                                 ));
                             }
                         }
-                        Task::IntraDocCoref | Task::AbstractAnaphora => {
+                        Task::IntraDocCoref | Task::InterDocCoref | Task::AbstractAnaphora => {
                             let conll = result
                                 .metrics
                                 .get("conll_f1")

@@ -1280,6 +1280,159 @@ fn parse_bookcoref_item(item: &serde_json::Value) -> Result<Option<CorefDocument
 }
 
 // =============================================================================
+// ECB+ Coreference Parser
+// =============================================================================
+
+/// Parse ECB+ coreference CSV into `CorefDocument`s.
+///
+/// The ECB+ CSV (`ECBplus_coreference_sentences.csv`) has rows per token with columns:
+/// `Topic,File,Sentence Number,Token Number,Token,Lemma,Event Mention,Coreference Chain`
+///
+/// Documents are identified by `(topic, file)` pairs. Tokens are grouped into
+/// sentences, and coreference chains are built from the `Coreference Chain` column.
+/// A non-empty chain value indicates the token belongs to that coref chain.
+///
+/// Returns one `CorefDocument` per (topic, file).
+pub fn parse_ecb_plus_coref(content: &str) -> Result<Vec<CorefDocument>> {
+    // (topic, file) -> DocAcc
+    let mut docs: HashMap<(String, String), ecb_plus_acc::DocAcc> = HashMap::new();
+
+    let mut lines = content.lines();
+
+    // Skip header line
+    if let Some(header) = lines.next() {
+        // Validate it looks like an ECB+ header
+        let lower = header.to_lowercase();
+        if !lower.contains("token") && !lower.contains("topic") {
+            // Not a header -- could be data; we'll be lenient and try parsing it below
+            // by not consuming it (but we already called next(), so re-parse this line)
+            parse_ecb_plus_line(header, &mut docs);
+        }
+    }
+
+    for line in lines {
+        parse_ecb_plus_line(line, &mut docs);
+    }
+
+    if docs.is_empty() {
+        return Err(Error::InvalidInput(
+            "ECB+ CSV contains no valid token rows".to_string(),
+        ));
+    }
+
+    // Convert accumulated data into CorefDocuments
+    let mut result: Vec<CorefDocument> = Vec::new();
+
+    // Sort by key for deterministic order
+    let mut doc_keys: Vec<_> = docs.keys().cloned().collect();
+    doc_keys.sort();
+
+    for key in doc_keys {
+        let acc = docs.remove(&key).unwrap();
+        let (topic, file) = &key;
+
+        // Reconstruct text from tokens in order
+        let mut text = String::new();
+        let mut token_char_offsets: HashMap<(u32, u32), (usize, usize)> = HashMap::new();
+
+        for (&(sent, tok), token_text) in &acc.tokens {
+            let start = text.chars().count();
+            text.push_str(token_text);
+            let end = text.chars().count();
+            token_char_offsets.insert((sent, tok), (start, end));
+            text.push(' ');
+        }
+
+        // Build coref chains from chain mappings
+        let mut coref_chains: Vec<CorefChain> = Vec::new();
+        let mut chain_ids: Vec<_> = acc.chains.keys().cloned().collect();
+        chain_ids.sort();
+
+        for chain_id in chain_ids {
+            let token_positions = &acc.chains[&chain_id];
+            let mentions: Vec<Mention> = token_positions
+                .iter()
+                .filter_map(|pos| {
+                    let (start, end) = token_char_offsets.get(pos)?;
+                    let token_text = acc.tokens.get(pos)?;
+                    Some(Mention {
+                        text: token_text.clone(),
+                        start: *start,
+                        end: *end,
+                        head_start: None,
+                        head_end: None,
+                        entity_type: Some("EVENT".to_string()),
+                        mention_type: Some(MentionType::Proper),
+                    })
+                })
+                .collect();
+
+            if !mentions.is_empty() {
+                coref_chains.push(CorefChain::new(mentions));
+            }
+        }
+
+        // Encode topic in doc_id so downstream can extract it via split('_')
+        let doc = CorefDocument::with_id(&text, format!("{}_{}", topic, file), coref_chains);
+        result.push(doc);
+    }
+
+    Ok(result)
+}
+
+/// Parse a single ECB+ CSV line into the document accumulators.
+fn parse_ecb_plus_line(line: &str, docs: &mut HashMap<(String, String), ecb_plus_acc::DocAcc>) {
+    let line = line.trim();
+    if line.is_empty() {
+        return;
+    }
+
+    // CSV split (simple: ECB+ doesn't have quoted fields with commas)
+    let parts: Vec<&str> = line.split(',').collect();
+    if parts.len() < 5 {
+        return;
+    }
+
+    let topic = parts[0].trim().to_string();
+    let file = parts[1].trim().to_string();
+    let sent_num: u32 = match parts[2].trim().parse() {
+        Ok(n) => n,
+        Err(_) => return, // Skip non-numeric (e.g. malformed rows)
+    };
+    let tok_num: u32 = match parts[3].trim().parse() {
+        Ok(n) => n,
+        Err(_) => return,
+    };
+    let token = parts[4].trim().to_string();
+
+    // Coreference chain is typically the last column (index 7), but may vary.
+    // Look for a non-empty chain value in columns after the token.
+    let chain_id = parts
+        .get(7)
+        .or_else(|| parts.get(6))
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty() && *s != "-" && *s != "_")
+        .map(|s| s.to_string());
+
+    let acc = docs.entry((topic, file)).or_default();
+    acc.tokens.insert((sent_num, tok_num), token);
+    if let Some(cid) = chain_id {
+        acc.chains.entry(cid).or_default().push((sent_num, tok_num));
+    }
+}
+
+/// Internal types for ECB+ accumulation (avoids polluting module namespace).
+mod ecb_plus_acc {
+    use std::collections::{BTreeMap, HashMap};
+
+    #[derive(Default)]
+    pub struct DocAcc {
+        pub tokens: BTreeMap<(u32, u32), String>,
+        pub chains: HashMap<String, Vec<(u32, u32)>>,
+    }
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 
@@ -1535,5 +1688,50 @@ mod tests {
             "Arabic spacing should be Unicode-safe; got: {:?}",
             doc_ar.text
         );
+    }
+
+    #[test]
+    fn test_parse_ecb_plus_coref() {
+        let csv = "\
+Topic,File,Sentence Number,Token Number,Token,Lemma,Event Mention,Coreference Chain
+1,1ecb,0,0,The,the,,
+1,1ecb,0,1,earthquake,earthquake,ACT,1
+1,1ecb,0,2,struck,strike,ACT,2
+1,1ecb,0,3,at,at,,
+1,1ecb,0,4,dawn,dawn,,
+1,1ecb,1,0,A,a,,
+1,1ecb,1,1,tremor,tremor,ACT,2
+1,1ecb,1,2,was,be,,
+1,1ecb,1,3,felt,feel,ACT,
+1,2ecb,0,0,The,the,,
+1,2ecb,0,1,quake,quake,ACT,1
+1,2ecb,0,2,damaged,damage,ACT,3
+1,2ecb,0,3,buildings,building,,
+";
+        let docs = parse_ecb_plus_coref(csv).unwrap();
+
+        // Should produce 2 documents: (1, 1ecb) and (1, 2ecb)
+        assert_eq!(docs.len(), 2);
+
+        let doc1 = docs.iter().find(|d| d.doc_id.as_deref() == Some("1_1ecb")).unwrap();
+        let doc2 = docs.iter().find(|d| d.doc_id.as_deref() == Some("1_2ecb")).unwrap();
+
+        // doc1 has chains for chain IDs "1" and "2"
+        assert_eq!(doc1.chains.len(), 2);
+        // doc2 has chains for chain IDs "1" and "3"
+        assert_eq!(doc2.chains.len(), 2);
+
+        // Chain "1" in doc1 should contain "earthquake"
+        let chain1 = doc1.chains.iter().find(|c| c.mentions.iter().any(|m| m.text == "earthquake"));
+        assert!(chain1.is_some());
+
+        // Chain "2" in doc1 should contain "struck" and "tremor"
+        let chain2 = doc1.chains.iter().find(|c| c.mentions.iter().any(|m| m.text == "struck"));
+        assert!(chain2.is_some());
+        assert!(chain2.unwrap().mentions.iter().any(|m| m.text == "tremor"));
+
+        // Chain "1" in doc2 should contain "quake" (cross-doc coreferent with "earthquake")
+        let chain1_doc2 = doc2.chains.iter().find(|c| c.mentions.iter().any(|m| m.text == "quake"));
+        assert!(chain1_doc2.is_some());
     }
 }
