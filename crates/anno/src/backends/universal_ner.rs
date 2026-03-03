@@ -871,6 +871,7 @@ Return ONLY the JSON array:"#,
             }
 
             let (actual_start, actual_end) = if !occurrences.is_empty() {
+                // SAFETY: guarded by !is_empty() above
                 *occurrences
                     .iter()
                     .min_by_key(|(s, e)| {
@@ -878,7 +879,7 @@ Return ONLY the JSON array:"#,
                         let de = (*e as isize - hint_end as isize).unsigned_abs();
                         (ds + de, *s, *e)
                     })
-                    .expect("non-empty occurrences")
+                    .unwrap()
             } else {
                 // Fallback: accept hint offsets only if they round-trip to the claimed text.
                 let char_count = original_text.chars().count();

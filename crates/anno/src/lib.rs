@@ -186,6 +186,7 @@ mod sealed {
     #[cfg(feature = "onnx")]
     impl Sealed for super::backends::deberta_v3::DeBERTaV3NER {}
 
+    #[cfg(feature = "onnx")]
     impl Sealed for super::backends::gliner_poly::GLiNERPoly {}
 
     #[cfg(feature = "onnx")]
