@@ -154,14 +154,7 @@ pub fn run(args: DebugArgs) -> Result<(), String> {
     let mut signal_ids: Vec<SignalId> = Vec::new();
 
     for e in &entities {
-        let signal = Signal::new(
-            SignalId::ZERO,
-            Location::text(e.start, e.end),
-            &e.text,
-            e.entity_type.as_label(),
-            e.confidence as f32,
-        );
-        let id = doc.add_signal(signal);
+        let id = doc.add_signal(Signal::from(e));
         signal_ids.push(id);
     }
 

@@ -444,14 +444,7 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
     let mut validation_errors: Vec<SignalValidationError> = Vec::new();
 
     for e in &entities {
-        let mut signal = Signal::new(
-            SignalId::ZERO,
-            Location::text(e.start, e.end),
-            &e.text,
-            e.entity_type.as_label(),
-            e.confidence as f32,
-        )
-        .with_modality(Modality::Symbolic);
+        let mut signal = Signal::from(e).with_modality(Modality::Symbolic);
 
         // Detect negation
         if args.negation && is_negated_en(&text, e.start) {

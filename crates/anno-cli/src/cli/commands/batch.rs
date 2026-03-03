@@ -123,7 +123,7 @@ fn process_document(
     opts: &DocOpts<'_>,
 ) -> Result<anno::GroundedDocument, String> {
     use super::super::utils::{link_tracks_to_kb, resolve_coreference};
-    use anno::{GroundedDocument, Location, Signal, SignalId};
+    use anno::{GroundedDocument, Signal, SignalId};
 
     // Cache hit: return early without running extraction
     if let Some(ref path) = opts.cache_path {
@@ -141,14 +141,7 @@ fn process_document(
     let mut signal_ids: Vec<SignalId> = Vec::with_capacity(entities.len());
 
     for e in &entities {
-        let signal = Signal::new(
-            SignalId::ZERO,
-            Location::text(e.start, e.end),
-            &e.text,
-            e.entity_type.as_label(),
-            e.confidence as f32,
-        );
-        let id = doc.add_signal(signal);
+        let id = doc.add_signal(Signal::from(e));
         signal_ids.push(id);
     }
 
