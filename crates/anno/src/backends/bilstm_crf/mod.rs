@@ -732,7 +732,6 @@ impl Model for BiLstmCrfNER {
     }
 }
 
-impl crate::sealed::Sealed for BiLstmCrfNER {}
 #[allow(deprecated)]
 impl crate::NamedEntityCapable for BiLstmCrfNER {}
 impl crate::BatchCapable for BiLstmCrfNER {

@@ -230,7 +230,6 @@ impl Model for HmmNER {
     }
 }
 
-impl crate::sealed::Sealed for HmmNER {}
 #[allow(deprecated)]
 impl crate::NamedEntityCapable for HmmNER {}
 

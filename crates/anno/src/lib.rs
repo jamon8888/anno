@@ -214,6 +214,10 @@ mod sealed {
     #[allow(deprecated)]
     impl Sealed for super::backends::rule::RuleBasedNER {}
 
+    impl Sealed for super::backends::hmm::HmmNER {}
+    impl Sealed for super::backends::bilstm_crf::BiLstmCrfNER {}
+    impl Sealed for super::backends::router::AutoNER {}
+
     impl Sealed for super::MockModel {}
     impl Sealed for super::joint::JointModel {}
 }

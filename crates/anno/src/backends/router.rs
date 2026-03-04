@@ -49,8 +49,6 @@ impl Model for AutoNER {
     }
 }
 
-impl crate::sealed::Sealed for AutoNER {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
