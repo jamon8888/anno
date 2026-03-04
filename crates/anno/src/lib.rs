@@ -1014,7 +1014,7 @@ mod any_model_tests {
                 .iter()
                 .enumerate()
                 .map(|(i, &lbl)| {
-                    Entity::new(lbl, EntityType::Other(lbl.to_string()), i, i + 1, 0.8)
+                    Entity::new(lbl, EntityType::custom(lbl, EntityCategory::Misc), i, i + 1, 0.8)
                 })
                 .collect())
         });

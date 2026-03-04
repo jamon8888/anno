@@ -775,7 +775,7 @@ pub fn features_to_salience_scores(text: &str, entities: &[Entity]) -> HashMap<S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::EntityType;
+    use crate::{EntityCategory, EntityType};
 
     fn sample_entities() -> Vec<Entity> {
         vec![
@@ -841,14 +841,14 @@ mod tests {
         let entities = vec![
             Entity::new(
                 "First Entity",
-                EntityType::Other("test".to_string()),
+                EntityType::custom("test", EntityCategory::Misc),
                 0,
                 12,
                 0.9,
             ),
             Entity::new(
                 "Later Entity",
-                EntityType::Other("test".to_string()),
+                EntityType::custom("test", EntityCategory::Misc),
                 27,
                 39,
                 0.9,
@@ -1130,7 +1130,7 @@ mod tests {
         let text = "Hi";
         let entities = vec![Entity::new(
             "Hi",
-            EntityType::Other("greeting".to_string()),
+            EntityType::custom("greeting", EntityCategory::Misc),
             0,
             2,
             0.9,

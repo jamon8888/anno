@@ -112,7 +112,7 @@ fn is_structured_type(t: &EntityType) -> bool {
 
 /// Generic/misc types that can be subsumed by more specific structured types.
 fn is_generic_type(t: &EntityType) -> bool {
-    matches!(t, EntityType::Other(_))
+    matches!(t, EntityType::Custom { .. } | EntityType::Other(_))
 }
 
 #[derive(Debug)]
@@ -1188,7 +1188,7 @@ fn filter_title_words(entities: &mut Vec<Entity>) {
         // Filter ORG/MISC: title words
         if matches!(
             e.entity_type,
-            EntityType::Organization | EntityType::Other(_)
+            EntityType::Organization | EntityType::Custom { .. } | EntityType::Other(_)
         ) && TITLE_WORDS.contains(&lower.as_str())
         {
             return false;

@@ -72,7 +72,7 @@ pub mod reference;
 
 // Re-export commonly used types
 pub use morphology::{
-    cherokee_syllable_inventory, navajo_prefix_inventory, quechua_boundary_chars, Morpheme,
+    Morpheme,
     MorphemeType, MorphologicalAnalyzer, MorphologicalPreprocessor, ProdropConfig,
     SegmentationResult, SegmentationStrategy,
 };

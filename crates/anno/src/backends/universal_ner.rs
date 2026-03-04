@@ -329,7 +329,7 @@ Output:"#
                         "location" | "loc" | "gpe" => EntityType::Location,
                         "date" | "time" => EntityType::Date,
                         "money" | "currency" => EntityType::Money,
-                        other => EntityType::Other(other.to_string()),
+                        other => EntityType::custom(other, anno_core::EntityCategory::Misc),
                     })
                     .collect();
 
@@ -786,7 +786,7 @@ Return ONLY the JSON array:"#,
                 "location" | "loc" | "gpe" => EntityType::Location,
                 "date" | "time" => EntityType::Date,
                 "money" | "currency" => EntityType::Money,
-                other => EntityType::Other(other.to_string()),
+                other => EntityType::custom(other, anno_core::EntityCategory::Misc),
             };
 
             let mut entity = Entity::new(text_span, entity_type, start, end, 0.9);
@@ -893,7 +893,7 @@ Return ONLY the JSON array:"#,
                 "location" | "loc" | "gpe" => EntityType::Location,
                 "date" | "time" => EntityType::Date,
                 "money" | "currency" => EntityType::Money,
-                _ => EntityType::Other(type_str.to_string()),
+                _ => EntityType::custom(type_str, anno_core::EntityCategory::Misc),
             };
 
             let mut entity = Entity::new(

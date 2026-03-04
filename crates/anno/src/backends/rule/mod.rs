@@ -332,7 +332,7 @@ impl Model for RuleBasedNER {
             EntityType::Date,
             EntityType::Money,
             EntityType::Percent,
-            EntityType::Other("unknown".to_string()),
+            EntityType::custom("unknown", anno_core::EntityCategory::Misc),
         ]
     }
 
@@ -413,15 +413,15 @@ fn infer_entity_type(text: &str) -> EntityType {
         || lower.contains("neural")
         || lower.contains("transformer")
     {
-        return EntityType::Other("concept".to_string());
+        return EntityType::custom("concept", anno_core::EntityCategory::Misc);
     }
 
     // Acronyms (all caps, 2-5 chars) are often organizations or technical terms
     if text.len() >= 2 && text.len() <= 5 && text.chars().all(|c| c.is_uppercase()) {
-        return EntityType::Other("acronym".to_string());
+        return EntityType::custom("acronym", anno_core::EntityCategory::Misc);
     }
 
-    EntityType::Other("unknown".to_string())
+    EntityType::custom("unknown", anno_core::EntityCategory::Misc)
 }
 
 /// Check if a word is a common surname (for person detection).

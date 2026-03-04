@@ -734,7 +734,7 @@ impl HmmNER {
                     "PER" => EntityType::Person,
                     "ORG" => EntityType::Organization,
                     "LOC" => EntityType::Location,
-                    other => EntityType::Other(other.to_string()),
+                    other => EntityType::custom(other, EntityCategory::Misc),
                 };
                 current = Some((i, i, entity_type, vec![word]));
             } else if label.starts_with("I-") && current.is_some() {

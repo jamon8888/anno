@@ -386,10 +386,10 @@ impl Model for RegexNER {
             let char_start = converter.byte_to_char(m.start());
             let char_end = converter.byte_to_char(m.end());
             if !overlaps(&entities, char_start, char_end) {
-                // We use EntityType::Other for now, but specific string "Mention"
+                // We use EntityType::custom for now, but specific string "Mention"
                 entities.push(Entity::with_provenance(
                     m.as_str(),
-                    EntityType::Other("Mention".to_string()),
+                    EntityType::custom("Mention", anno_core::EntityCategory::Misc),
                     char_start,
                     char_end,
                     0.95,
@@ -409,7 +409,7 @@ impl Model for RegexNER {
             if !overlaps(&entities, char_start, char_end) {
                 entities.push(Entity::with_provenance(
                     m.as_str(),
-                    EntityType::Other("Hashtag".to_string()),
+                    EntityType::custom("Hashtag", anno_core::EntityCategory::Misc),
                     char_start,
                     char_end,
                     0.95,
@@ -1259,7 +1259,7 @@ mod tests {
         let e = extract(text);
         let hashtags: Vec<_> = e
             .iter()
-            .filter(|e| e.entity_type == EntityType::Other("Hashtag".to_string()))
+            .filter(|e| e.entity_type == EntityType::custom("Hashtag", anno_core::EntityCategory::Misc))
             .collect();
         assert!(
             hashtags.is_empty(),
@@ -1273,7 +1273,7 @@ mod tests {
         let text = "Trending #rust today";
         let e = extract(text);
         assert!(
-            has_type(&e, &EntityType::Other("Hashtag".to_string())),
+            has_type(&e, &EntityType::custom("Hashtag", anno_core::EntityCategory::Misc)),
             "Normal hashtag '#rust' should still match, got: {:?}",
             e
         );

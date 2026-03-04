@@ -578,7 +578,7 @@ fn slug_to_entity_type(slug: &str) -> EntityType {
         "date" | "time" => EntityType::Date,
         "money" | "currency" | "amount" => EntityType::Money,
         "percent" | "percentage" => EntityType::Percent,
-        other => EntityType::Other(other.to_string()),
+        other => EntityType::custom(other, anno_core::EntityCategory::Misc),
     }
 }
 
@@ -747,7 +747,7 @@ mod tests {
             EntityType::Organization
         );
         assert_eq!(slug_to_entity_type("LOC"), EntityType::Location);
-        assert!(matches!(slug_to_entity_type("actor"), EntityType::Other(_)));
+        assert!(matches!(slug_to_entity_type("actor"), EntityType::Custom { .. } | EntityType::Other(_)));
     }
 
     #[test]

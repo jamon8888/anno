@@ -894,7 +894,7 @@ impl NuNER {
             "time" => EntityType::Time,
             "money" | "currency" => EntityType::Money,
             "percent" | "percentage" => EntityType::Percent,
-            _ => EntityType::Other(label.to_string()),
+            _ => EntityType::custom(label, EntityCategory::Misc),
         }
     }
 }

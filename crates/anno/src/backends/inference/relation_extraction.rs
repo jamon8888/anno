@@ -970,10 +970,10 @@ fn detect_relation_type<'a>(
                         // often use a richer schema than `EntityType`).
                         matches!(
                             head.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || matches!(
                             tail.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || (matches!(head.entity_type, EntityType::Person)
                             && matches!(tail.entity_type, EntityType::Organization))
                     }
@@ -981,24 +981,24 @@ fn detect_relation_type<'a>(
                     "LOCATED_IN" | "BORN_IN" | "LIVES_IN" | "DIED_IN" => {
                         matches!(
                             tail.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || matches!(tail.entity_type, EntityType::Location)
                     }
                     // Temporal relations (any entity can have temporal attributes)
                     "OCCURRED_ON" | "STARTED_ON" | "ENDED_ON" => {
                         matches!(
                             tail.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || matches!(tail.entity_type, EntityType::Date | EntityType::Time)
                     }
                     // Organizational relations
                     "PART_OF" | "ACQUIRED" | "MERGED_WITH" | "PARENT_OF" => {
                         matches!(
                             head.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || matches!(
                             tail.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || (matches!(head.entity_type, EntityType::Organization)
                             && matches!(tail.entity_type, EntityType::Organization))
                     }
@@ -1006,10 +1006,10 @@ fn detect_relation_type<'a>(
                     "MARRIED_TO" | "CHILD_OF" | "SIBLING_OF" => {
                         matches!(
                             head.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || matches!(
                             tail.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || (matches!(head.entity_type, EntityType::Person)
                             && matches!(tail.entity_type, EntityType::Person))
                     }
@@ -1017,10 +1017,10 @@ fn detect_relation_type<'a>(
                     "STUDIED_AT" | "TEACHES_AT" => {
                         matches!(
                             head.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || matches!(
                             tail.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || (matches!(head.entity_type, EntityType::Person)
                             && matches!(
                                 tail.entity_type,
@@ -1031,7 +1031,7 @@ fn detect_relation_type<'a>(
                     "DEVELOPS" | "USES" => {
                         matches!(
                             head.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || matches!(
                             head.entity_type,
                             EntityType::Organization | EntityType::Person
@@ -1041,10 +1041,10 @@ fn detect_relation_type<'a>(
                     "MET_WITH" | "SPOKE_WITH" => {
                         matches!(
                             head.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || matches!(
                             tail.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || (matches!(head.entity_type, EntityType::Person)
                             && matches!(
                                 tail.entity_type,
@@ -1055,7 +1055,7 @@ fn detect_relation_type<'a>(
                     "OWNS" => {
                         matches!(
                             head.entity_type,
-                            EntityType::Other(_) | EntityType::Custom { .. }
+                            EntityType::Custom { .. } | EntityType::Other(_)
                         ) || matches!(
                             head.entity_type,
                             EntityType::Person | EntityType::Organization
@@ -1081,7 +1081,7 @@ fn detect_relation_type<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Entity, EntityType};
+    use crate::{Entity, EntityCategory, EntityType};
 
     // -----------------------------------------------------------------------
     // Helpers
@@ -1546,8 +1546,8 @@ mod tests {
         // Both directions match since both entities are Other.
         let text = "FooEntity married to BarEntity now.";
         let entities = vec![
-            Entity::new("FooEntity", EntityType::Other("MISC".into()), 0, 9, 0.9),
-            Entity::new("BarEntity", EntityType::Other("MISC".into()), 21, 30, 0.9),
+            Entity::new("FooEntity", EntityType::custom("MISC", EntityCategory::Misc), 0, 9, 0.9),
+            Entity::new("BarEntity", EntityType::custom("MISC", EntityCategory::Misc), 21, 30, 0.9),
         ];
         let reg = registry_with_relations(&["MARRIED_TO"]);
         let rels = extract_relations(&entities, text, &reg, &default_config());
@@ -1790,7 +1790,7 @@ mod tests {
     // =======================================================================
 
     fn misc(text: &str, start: usize, end: usize) -> Entity {
-        Entity::new(text, EntityType::Other("MISC".to_string()), start, end, 0.9)
+        Entity::new(text, EntityType::custom("MISC", EntityCategory::Misc), start, end, 0.9)
     }
 
     #[test]

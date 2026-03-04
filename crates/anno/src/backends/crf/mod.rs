@@ -135,7 +135,7 @@
 //! - **Deterministic**: Same input always produces same output
 //! - **Small footprint**: Small weights file compared to ML model artifacts
 
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Model, Result};
 use std::collections::HashMap;
 #[cfg(feature = "bundled-crf-weights")]
 use std::sync::OnceLock;
@@ -263,7 +263,7 @@ impl Model for CrfNER {
             EntityType::Person,
             EntityType::Organization,
             EntityType::Location,
-            EntityType::Other("MISC".to_string()),
+            EntityType::custom("MISC", EntityCategory::Misc),
         ]
     }
 

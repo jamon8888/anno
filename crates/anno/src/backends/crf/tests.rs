@@ -798,7 +798,7 @@ fn test_labels_to_entities_misc_type() {
     assert_eq!(entities[0].text, "World Cup");
     assert_eq!(
         entities[0].entity_type,
-        EntityType::Other("MISC".to_string())
+        EntityType::custom("MISC", EntityCategory::Misc)
     );
 }
 

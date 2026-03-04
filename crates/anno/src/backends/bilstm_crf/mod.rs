@@ -101,7 +101,7 @@
 //! let ner = BiLstmCrfNER::from_onnx("path/to/model.onnx")?;
 //! ```
 
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Model, Result};
 use std::collections::HashMap;
 
 /// BiLSTM-CRF configuration.
@@ -587,7 +587,7 @@ impl BiLstmCrfNER {
                     "PER" => EntityType::Person,
                     "ORG" => EntityType::Organization,
                     "LOC" => EntityType::Location,
-                    other => EntityType::Other(other.to_string()),
+                    other => EntityType::custom(other, EntityCategory::Misc),
                 };
                 current_entity = Some((i, i, entity_type, vec![token]));
             } else if label.starts_with("I-") && current_entity.is_some() {
@@ -715,7 +715,7 @@ impl Model for BiLstmCrfNER {
             EntityType::Person,
             EntityType::Organization,
             EntityType::Location,
-            EntityType::Other("MISC".to_string()),
+            EntityType::custom("MISC", EntityCategory::Misc),
         ]
     }
 

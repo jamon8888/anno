@@ -31,7 +31,7 @@ fn test_label_mapping() {
     );
     assert_eq!(
         NuNER::map_label_to_entity_type("custom"),
-        EntityType::Other("custom".to_string())
+        EntityType::custom("custom", EntityCategory::Misc)
     );
 }
 

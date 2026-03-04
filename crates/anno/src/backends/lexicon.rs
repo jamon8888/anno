@@ -34,10 +34,10 @@
 //!
 //! ```rust
 //! use anno::{Model, StackedNER, RegexNER, LexiconNER};
-//! use anno::{HashMapLexicon, EntityType};
+//! use anno::{HashMapLexicon, EntityCategory, EntityType};
 //!
 //! let mut lexicon = HashMapLexicon::new("medical_codes");
-//! lexicon.insert("ICD-10", EntityType::Other("CODE".to_string()), 0.95);
+//! lexicon.insert("ICD-10", EntityType::custom("CODE", EntityCategory::Misc), 0.95);
 //!
 //! let ner = StackedNER::builder()
 //!     .layer(RegexNER::new())           // Structured entities

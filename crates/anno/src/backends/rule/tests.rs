@@ -135,28 +135,29 @@ fn test_infer_entity_type_persons() {
 
 #[test]
 fn test_infer_entity_type_concepts_and_acronyms() {
+    use anno_core::EntityCategory;
     // Technical/concept terms
     assert_eq!(
         infer_entity_type("Neural Network"),
-        EntityType::Other("concept".to_string())
+        EntityType::custom("concept", EntityCategory::Misc)
     );
     assert_eq!(
         infer_entity_type("Deep Learning"),
-        EntityType::Other("concept".to_string())
+        EntityType::custom("concept", EntityCategory::Misc)
     );
     // Short all-caps acronym
     assert_eq!(
         infer_entity_type("BERT"),
-        EntityType::Other("acronym".to_string())
+        EntityType::custom("acronym", EntityCategory::Misc)
     );
     assert_eq!(
         infer_entity_type("GPT"),
-        EntityType::Other("acronym".to_string())
+        EntityType::custom("acronym", EntityCategory::Misc)
     );
     // Too long for acronym heuristic (>5 chars)
     assert_ne!(
         infer_entity_type("ABCDEF"),
-        EntityType::Other("acronym".to_string())
+        EntityType::custom("acronym", EntityCategory::Misc)
     );
 }
 

@@ -218,7 +218,7 @@ impl CanonicalType {
             Self::Animal => EntityType::custom("ANIMAL", EntityCategory::Misc),
             Self::Plant => EntityType::custom("PLANT", EntityCategory::Misc),
             Self::Food => EntityType::custom("FOOD", EntityCategory::Misc),
-            Self::Misc => EntityType::Other("MISC".to_string()),
+            Self::Misc => EntityType::custom("MISC", EntityCategory::Misc),
         }
     }
 }
@@ -687,10 +687,10 @@ fn map_label_heuristic(label: &str) -> EntityType {
         "PHONE" | "TELEPHONE" => EntityType::Phone,
 
         // Misc fallback
-        "MISC" | "MISCELLANEOUS" | "O" | "OTHER" => EntityType::Other("MISC".to_string()),
+        "MISC" | "MISCELLANEOUS" | "O" | "OTHER" => EntityType::custom("MISC", EntityCategory::Misc),
 
         // Unknown - preserve original
-        other => EntityType::Other(other.to_string()),
+        other => EntityType::custom(other, EntityCategory::Misc),
     }
 }
 

@@ -9,7 +9,7 @@
 //!   Relation Classification", AAAI 2022)
 
 use crate::backends::inference::{HandshakingCell, HandshakingMatrix};
-use crate::EntityType;
+use crate::{EntityCategory, EntityType};
 
 /// Decoded row from the discontinuous entity algorithm:
 /// `(entity_type_label, word_spans, score)` where each span is
@@ -223,8 +223,8 @@ pub fn map_label_to_entity_type(label: &str) -> EntityType {
         "TIME" => EntityType::Time,
         "MONEY" => EntityType::Money,
         "PERCENT" => EntityType::Percent,
-        "MISC" => EntityType::Other("MISC".to_string()),
-        _ => EntityType::Other(label.to_string()),
+        "MISC" => EntityType::custom("MISC", EntityCategory::Misc),
+        _ => EntityType::custom(label, EntityCategory::Misc),
     }
 }
 
@@ -325,7 +325,7 @@ mod tests {
         assert_eq!(map_label_to_entity_type("GPE"), EntityType::Location);
         assert!(matches!(
             map_label_to_entity_type("CUSTOM"),
-            EntityType::Other(_)
+            EntityType::Custom { .. } | EntityType::Other(_)
         ));
     }
 }

@@ -1,5 +1,6 @@
 use super::*;
 use crate::backends::inference::HandshakingCell;
+use crate::EntityCategory;
 
 #[test]
 fn test_w2ner_relation_conversion() {
@@ -124,7 +125,7 @@ fn test_label_mapping() {
     );
     assert_eq!(
         decode::map_label_to_entity_type("CUSTOM"),
-        EntityType::Other("CUSTOM".to_string())
+        EntityType::custom("CUSTOM", EntityCategory::Misc)
     );
 }
 

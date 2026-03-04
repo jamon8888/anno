@@ -215,7 +215,7 @@ impl crate::Model for GLiNER2Onnx {
                 name: "product".to_string(),
                 category: EntityCategory::Creative,
             },
-            EntityType::Other("misc".to_string()),
+            EntityType::custom("misc", EntityCategory::Misc),
         ]
     }
 
@@ -291,7 +291,7 @@ impl crate::Model for GLiNER2Candle {
                 name: "product".to_string(),
                 category: EntityCategory::Creative,
             },
-            EntityType::Other("misc".to_string()),
+            EntityType::custom("misc", EntityCategory::Misc),
         ]
     }
 
@@ -794,9 +794,9 @@ mod tests {
             EntityType::Organization
         ));
         assert!(matches!(map_entity_type("loc"), EntityType::Location));
-        // Unknown types map to Other with the uppercase version (due to schema normalization)
+        // Unknown types map to Custom/Other with the uppercase version (due to schema normalization)
         assert!(
-            matches!(map_entity_type("custom_type"), EntityType::Other(ref s) if s == "CUSTOM_TYPE")
+            matches!(map_entity_type("custom_type"), EntityType::Custom { ref name, .. } | EntityType::Other(ref name) if name == "CUSTOM_TYPE")
         );
         // Known special types map to Custom
         assert!(matches!(
@@ -904,9 +904,9 @@ mod tests {
 
     #[test]
     fn test_map_entity_type_empty_string() {
-        // Empty string should not panic; falls through to Other
+        // Empty string should not panic; falls through to Custom/Other
         let ty = map_entity_type("");
-        assert!(matches!(ty, EntityType::Other(_)));
+        assert!(matches!(ty, EntityType::Custom { .. } | EntityType::Other(_)));
     }
 
     // =========================================================================

@@ -62,7 +62,7 @@
 //! For HuggingFace models, use `BurnNER::from_pretrained()` which handles
 //! the conversion automatically.
 
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Model, Result};
 
 // =============================================================================
 // Backend Configuration
@@ -310,7 +310,7 @@ If you want a zero-dependency baseline, use `HeuristicNER`/`StackedNER`."
             "TIME" => EntityType::Time,
             "MONEY" => EntityType::Money,
             "PERCENT" => EntityType::Percent,
-            other => EntityType::Other(other.to_string()),
+            other => EntityType::custom(other, EntityCategory::Misc),
         }
     }
 }
@@ -492,7 +492,7 @@ mod tests {
         assert_eq!(BurnNER::label_to_entity_type("B-LOC"), EntityType::Location);
         assert_eq!(
             BurnNER::label_to_entity_type("B-MISC"),
-            EntityType::Other("MISC".to_string())
+            EntityType::custom("MISC", EntityCategory::Misc)
         );
     }
 

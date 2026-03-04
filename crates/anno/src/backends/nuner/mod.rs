@@ -70,7 +70,7 @@
 //! - [NuNER ONNX](https://huggingface.co/deepanwa/NuNerZero_onnx)
 //! - GLiNER paper (for span-based prompting inspiration)
 
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Model, Result};
 
 use crate::Error;
 

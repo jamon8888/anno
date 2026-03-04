@@ -682,7 +682,7 @@ impl GLiNERPool {
             "date" | "time" => EntityType::Date,
             "money" | "currency" => EntityType::Money,
             "percent" | "percentage" => EntityType::Percent,
-            other => EntityType::Other(other.to_string()),
+            other => EntityType::custom(other, anno_core::EntityCategory::Misc),
         }
     }
 
@@ -1001,18 +1001,18 @@ mod tests {
 
     #[test]
     fn test_map_type_other_fallback() {
-        use anno_core::EntityType;
+        use anno_core::{EntityCategory, EntityType};
         assert_eq!(
             GLiNERPool::map_type("product"),
-            EntityType::Other("product".to_string())
+            EntityType::custom("product", EntityCategory::Misc)
         );
         assert_eq!(
             GLiNERPool::map_type("event"),
-            EntityType::Other("event".to_string())
+            EntityType::custom("event", EntityCategory::Misc)
         );
         assert_eq!(
             GLiNERPool::map_type("VEHICLE"),
-            EntityType::Other("vehicle".to_string())
+            EntityType::custom("vehicle", EntityCategory::Misc)
         );
     }
 

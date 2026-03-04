@@ -32,7 +32,7 @@ use crate::eval::coref_resolver::{CorefConfig, SimpleCorefResolver};
 use crate::lang::Language;
 use crate::Entity;
 #[cfg(test)]
-use crate::EntityType;
+use crate::{EntityCategory, EntityType};
 
 /// Configuration for RAG coreference preprocessing.
 #[derive(Debug, Clone)]
@@ -720,9 +720,9 @@ mod tests {
         let text = "Bob likes coffee. He drinks it daily.";
         let entities = vec![
             Entity::new("Bob", EntityType::Person, 0, 3, 0.9),
-            Entity::new("coffee", EntityType::Other("Product".into()), 10, 16, 0.8),
+            Entity::new("coffee", EntityType::custom("Product", EntityCategory::Misc), 10, 16, 0.8),
             Entity::new("He", EntityType::Person, 18, 20, 0.8),
-            Entity::new("it", EntityType::Other("Product".into()), 28, 30, 0.7),
+            Entity::new("it", EntityType::custom("Product", EntityCategory::Misc), 28, 30, 0.7),
         ];
         let result = resolve_for_rag(text, &entities, None);
         // "He" -> "Bob"
@@ -857,7 +857,7 @@ mod tests {
         // "It is raining in London." -- "It" is pleonastic (weather), not referential.
         let text = "It is raining in London.";
         let entities = vec![
-            Entity::new("It", EntityType::Other("Weather".into()), 0, 2, 0.7),
+            Entity::new("It", EntityType::custom("Weather", EntityCategory::Misc), 0, 2, 0.7),
             Entity::new("London", EntityType::Location, 17, 23, 0.9),
         ];
         let result = resolve_for_rag(text, &entities, None);
@@ -870,7 +870,7 @@ mod tests {
         // "It is clear that Alice won." -- extraposition, not referential.
         let text = "It is clear that Alice won.";
         let entities = vec![
-            Entity::new("It", EntityType::Other("Abstract".into()), 0, 2, 0.7),
+            Entity::new("It", EntityType::custom("Abstract", EntityCategory::Misc), 0, 2, 0.7),
             Entity::new("Alice", EntityType::Person, 17, 22, 0.9),
         ];
         let result = resolve_for_rag(text, &entities, None);
@@ -885,7 +885,7 @@ mod tests {
         let text = "It turns out the data was wrong.";
         let entities = vec![Entity::new(
             "It",
-            EntityType::Other("Abstract".into()),
+            EntityType::custom("Abstract", EntityCategory::Misc),
             0,
             2,
             0.7,
@@ -1414,7 +1414,7 @@ mod tests {
         let alice_start = "It was late when ".chars().count();
         let alice_end = alice_start + "Alice".chars().count();
         let entities = vec![
-            Entity::new("It", EntityType::Other("Time".into()), 0, 2, 0.7),
+            Entity::new("It", EntityType::custom("Time", EntityCategory::Misc), 0, 2, 0.7),
             Entity::new("Alice", EntityType::Person, alice_start, alice_end, 0.9),
         ];
         let result = resolve_for_rag(text, &entities, None);
@@ -1433,7 +1433,7 @@ mod tests {
         let bob_start = "It seems that ".chars().count();
         let bob_end = bob_start + "Bob".chars().count();
         let entities = vec![
-            Entity::new("It", EntityType::Other("Abstract".into()), 0, 2, 0.7),
+            Entity::new("It", EntityType::custom("Abstract", EntityCategory::Misc), 0, 2, 0.7),
             Entity::new("Bob", EntityType::Person, bob_start, bob_end, 0.9),
         ];
         let result = resolve_for_rag(text, &entities, None);
@@ -1455,14 +1455,14 @@ mod tests {
             Entity::new("Alice", EntityType::Person, 0, 5, 0.9),
             Entity::new(
                 "car",
-                EntityType::Other("Product".into()),
+                EntityType::custom("Product", EntityCategory::Misc),
                 car_start,
                 car_end,
                 0.8,
             ),
             Entity::new(
                 "It",
-                EntityType::Other("Product".into()),
+                EntityType::custom("Product", EntityCategory::Misc),
                 it_start,
                 it_end,
                 0.7,

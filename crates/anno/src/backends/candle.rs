@@ -39,7 +39,7 @@
 //! let entities = model.extract_entities("Steve Jobs founded Apple", None)?;
 //! ```
 
-use crate::{Entity, EntityType, Error, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Error, Model, Result};
 
 #[cfg(feature = "candle")]
 use {
@@ -421,8 +421,8 @@ impl CandleNER {
             "TIME" => EntityType::Time,
             "MONEY" => EntityType::Money,
             "PERCENT" => EntityType::Percent,
-            "MISC" => EntityType::Other("MISC".to_string()),
-            other => EntityType::Other(other.to_string()),
+            "MISC" => EntityType::custom("MISC", EntityCategory::Misc),
+            other => EntityType::custom(other, EntityCategory::Misc),
         };
 
         Some(Entity::new(
@@ -465,7 +465,7 @@ impl Model for CandleNER {
                     "PER" | "PERSON" => EntityType::Person,
                     "ORG" | "ORGANIZATION" => EntityType::Organization,
                     "LOC" | "LOCATION" | "GPE" => EntityType::Location,
-                    other => EntityType::Other(other.to_string()),
+                    other => EntityType::custom(other, EntityCategory::Misc),
                 }
             })
             .collect()

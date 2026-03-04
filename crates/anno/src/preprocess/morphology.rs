@@ -376,7 +376,7 @@ impl Default for MorphologicalPreprocessor {
 /// Cherokee syllabary inventory (85 syllables).
 ///
 /// Returns the Cherokee syllables sorted by length (longest first).
-pub fn cherokee_syllable_inventory() -> Vec<String> {
+pub(crate) fn cherokee_syllable_inventory() -> Vec<String> {
     // Cherokee syllabary characters (U+13A0 to U+13F4)
     let syllables: Vec<String> = (0x13A0..=0x13F4)
         .filter_map(char::from_u32)
@@ -386,7 +386,7 @@ pub fn cherokee_syllable_inventory() -> Vec<String> {
 }
 
 /// Common Quechua morpheme boundaries.
-pub fn quechua_boundary_chars() -> Vec<char> {
+pub(crate) fn quechua_boundary_chars() -> Vec<char> {
     vec!['-', '='] // Hyphen for morpheme, equals for clitic
 }
 
@@ -394,7 +394,7 @@ pub fn quechua_boundary_chars() -> Vec<char> {
 ///
 /// Navajo verbs have a complex template of prefix positions.
 /// This returns common prefix morphemes.
-pub fn navajo_prefix_inventory() -> Vec<String> {
+pub(crate) fn navajo_prefix_inventory() -> Vec<String> {
     vec![
         // Object markers
         "shi-".to_string(), // 1sg object

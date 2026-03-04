@@ -26,7 +26,7 @@
 //! 9. **Substring/fuzzy match** -- links mentions sharing a substring (>= 3 chars) or a matching
 //!    last word, same entity type required.
 
-use crate::{Entity, EntityType};
+use crate::{Entity, EntityCategory, EntityType};
 use anno_core::{CanonicalId, CoreferenceResolver, Gender};
 use std::collections::HashMap;
 
@@ -305,7 +305,7 @@ impl SimpleCorefResolver {
         // both are type "proper" and fuzzy containment matches on short substrings).
         let is_wildcard_type = matches!(
             entity.entity_type,
-            EntityType::Other(_) | EntityType::Custom { .. }
+            EntityType::Custom { .. } | EntityType::Other(_)
         );
 
         if !is_wildcard_type {
@@ -1166,10 +1166,10 @@ mod tests {
         // clustered together by fuzzy sieves.
         let r = resolver();
         let entities = vec![
-            Entity::new("Nobel", EntityType::Other("proper".into()), 0, 5, 0.8),
+            Entity::new("Nobel", EntityType::custom("proper", EntityCategory::Misc), 0, 5, 0.8),
             Entity::new(
                 "Emmanuelle",
-                EntityType::Other("proper".into()),
+                EntityType::custom("proper", EntityCategory::Misc),
                 20,
                 30,
                 0.8,
@@ -1203,8 +1203,8 @@ mod tests {
         // Exact canonical match (sieve 2) should still work for wildcard types.
         let r = resolver();
         let entities = vec![
-            Entity::new("Nobel", EntityType::Other("proper".into()), 0, 5, 0.8),
-            Entity::new("Nobel", EntityType::Other("proper".into()), 20, 25, 0.8),
+            Entity::new("Nobel", EntityType::custom("proper", EntityCategory::Misc), 0, 5, 0.8),
+            Entity::new("Nobel", EntityType::custom("proper", EntityCategory::Misc), 20, 25, 0.8),
         ];
         let resolved = r.resolve(&entities);
         assert_eq!(

@@ -722,7 +722,7 @@ impl CrfNER {
                     "B-PER" => EntityType::Person,
                     "B-ORG" => EntityType::Organization,
                     "B-LOC" => EntityType::Location,
-                    _ => EntityType::Other("MISC".to_string()),
+                    _ => EntityType::custom("MISC", EntityCategory::Misc),
                 };
                 current_entity = Some((i, i, entity_type, vec![token]));
             } else if label.starts_with("I-") {

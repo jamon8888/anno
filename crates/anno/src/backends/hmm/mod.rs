@@ -109,7 +109,7 @@
 //!
 //! - CRF-style sequence models (`backends/crf.rs`)
 
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Model, Result};
 use std::collections::HashMap;
 
 #[cfg(feature = "bundled-hmm-params")]
@@ -216,7 +216,7 @@ impl Model for HmmNER {
             EntityType::Person,
             EntityType::Organization,
             EntityType::Location,
-            EntityType::Other("MISC".to_string()),
+            EntityType::custom("MISC", EntityCategory::Misc),
         ]
     }
 

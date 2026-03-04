@@ -886,7 +886,7 @@ fn classify_minimal(
         "the", "a", "an", "he", "she", "it", "they", "we", "i", "you",
     ];
     if span.len() == 1 && skip_pronouns.contains(&first_word.as_str()) {
-        return (EntityType::Other("skip".into()), 0.0, "skip_pronoun");
+        return (EntityType::custom("skip", anno_core::EntityCategory::Misc), 0.0, "skip_pronoun");
     }
     // Filter: Skip fiscal quarter abbreviations (Q1-Q4) and multi-word fiscal
     // patterns like "Q3 FY2025", "Q1 2024" -- not entities
@@ -897,7 +897,7 @@ fn classify_minimal(
             if (bytes[0] == b'Q' || bytes[0] == b'q') && (bytes[1] >= b'1' && bytes[1] <= b'4') {
                 // Single "Q3" or multi-word "Q3 FY2025", "Q3 2024"
                 if span.len() == 1 {
-                    return (EntityType::Other("skip".into()), 0.0, "skip_fiscal_quarter");
+                    return (EntityType::custom("skip", anno_core::EntityCategory::Misc), 0.0, "skip_fiscal_quarter");
                 }
                 // Check if remaining words are fiscal year indicators
                 let rest_is_fiscal = span[1..].iter().all(|w| {
@@ -908,7 +908,7 @@ fn classify_minimal(
                         || wl == "h2"
                 });
                 if rest_is_fiscal {
-                    return (EntityType::Other("skip".into()), 0.0, "skip_fiscal_quarter");
+                    return (EntityType::custom("skip", anno_core::EntityCategory::Misc), 0.0, "skip_fiscal_quarter");
                 }
             }
         }
@@ -919,12 +919,12 @@ fn classify_minimal(
         .trim_end_matches(|c: char| !c.is_alphanumeric())
         .to_lowercase();
     if span.len() == 1 && SKIP_WORDS.contains(&first_clean_lc.as_str()) {
-        return (EntityType::Other("skip".into()), 0.0, "skip_word");
+        return (EntityType::custom("skip", anno_core::EntityCategory::Misc), 0.0, "skip_word");
     }
     // Filter: Skip standalone person prefixes (Dr, Mr, Prof) -- they'll be
     // absorbed into the next span via the prefix-inclusion logic.
     if span.len() == 1 && PERSON_PREFIX.contains(&first_clean_lc.as_str()) {
-        return (EntityType::Other("skip".into()), 0.0, "skip_prefix");
+        return (EntityType::custom("skip", anno_core::EntityCategory::Misc), 0.0, "skip_prefix");
     }
 
     // Rule 1: ORG suffix (highest precision)
@@ -1016,12 +1016,12 @@ fn classify_minimal(
     if span.len() == 1 {
         let word = span[0].trim_matches(|c: char| !c.is_alphanumeric());
         if word.len() == 1 {
-            return (EntityType::Other("skip".into()), 0.0, "single_letter");
+            return (EntityType::custom("skip", anno_core::EntityCategory::Misc), 0.0, "single_letter");
         }
         if is_acronym_word(word) {
             let lc = word.to_lowercase();
             if SKIP_WORDS.contains(&lc.as_str()) || COMMON_ACRONYMS.contains(&lc.as_str()) {
-                return (EntityType::Other("skip".into()), 0.0, "skip_acronym");
+                return (EntityType::custom("skip", anno_core::EntityCategory::Misc), 0.0, "skip_acronym");
             }
             return (EntityType::Organization, 0.55, "single_acronym");
         }
@@ -1034,7 +1034,7 @@ fn classify_minimal(
             let prefix_lc = prefix.to_lowercase();
             if COMMON_ACRONYMS.contains(&prefix_lc.as_str()) {
                 return (
-                    EntityType::Other("skip".into()),
+                    EntityType::custom("skip", anno_core::EntityCategory::Misc),
                     0.0,
                     "skip_hyphenated_acronym",
                 );

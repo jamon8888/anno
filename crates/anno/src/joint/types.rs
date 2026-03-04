@@ -46,7 +46,7 @@
 
 use crate::linking::candidate::CandidateSource;
 use crate::linking::linker::LinkedEntity;
-use crate::{Entity, EntityType, Result};
+use crate::{Entity, EntityCategory, EntityType, Result};
 use anno_core::{CorefChain, Mention as CorefMention};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -520,7 +520,7 @@ impl Default for JointConfig {
                 EntityType::Time,
                 EntityType::Money,
                 EntityType::Percent,
-                EntityType::Other("MISC".to_string()),
+                EntityType::custom("MISC", EntityCategory::Misc),
             ],
         }
     }
@@ -1486,7 +1486,7 @@ fn detect_mentions_heuristic(text: &str) -> Vec<Entity> {
                 if name_text.chars().count() > 1 {
                     entities.push(Entity::new(
                         &name_text,
-                        EntityType::Other("MENTION".to_string()),
+                        EntityType::custom("MENTION", EntityCategory::Misc),
                         name_start_char,
                         char_pos,
                         0.5,
@@ -1510,7 +1510,7 @@ fn detect_mentions_heuristic(text: &str) -> Vec<Entity> {
         if name_text.chars().count() > 1 {
             entities.push(Entity::new(
                 &name_text,
-                EntityType::Other("MENTION".to_string()),
+                EntityType::custom("MENTION", EntityCategory::Misc),
                 name_start_char,
                 char_pos,
                 0.5,

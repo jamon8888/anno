@@ -574,7 +574,7 @@ impl GLiNERCandle {
             "time" => EntityType::Time,
             "money" | "currency" => EntityType::Money,
             "percent" | "percentage" => EntityType::Percent,
-            other => EntityType::Other(other.to_string()),
+            other => EntityType::custom(other, anno_core::EntityCategory::Misc),
         }
     }
 

@@ -689,11 +689,11 @@ impl GLiNEROnnx {
             "location" | "loc" | "gpe" | "geo-loc" => EntityType::Location,
             "facility" | "fac" => EntityType::custom("FACILITY", anno_core::EntityCategory::Place),
             "product" | "prod" => EntityType::custom("PRODUCT", anno_core::EntityCategory::Misc),
-            "misc" | "other" => EntityType::Other("MISC".to_string()),
+            "misc" | "other" => EntityType::custom("MISC", anno_core::EntityCategory::Misc),
             "date" | "time" => EntityType::Date,
             "money" | "currency" => EntityType::Money,
             "percent" | "percentage" => EntityType::Percent,
-            other => EntityType::Other(other.to_string()),
+            other => EntityType::custom(other, anno_core::EntityCategory::Misc),
         }
     }
 

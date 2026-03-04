@@ -20,7 +20,7 @@
 
 use crate::{Entity, Error, Result};
 #[cfg(feature = "onnx")]
-use anno_core::EntityType;
+use anno_core::{EntityCategory, EntityType};
 
 #[cfg(feature = "onnx")]
 use {
@@ -192,13 +192,13 @@ impl BertNEROnnx {
         map.insert("I-ORG".to_string(), EntityType::Organization);
         map.insert("B-LOC".to_string(), EntityType::Location);
         map.insert("I-LOC".to_string(), EntityType::Location);
-        map.insert("B-MISC".to_string(), EntityType::Other("misc".to_string()));
-        map.insert("I-MISC".to_string(), EntityType::Other("misc".to_string()));
+        map.insert("B-MISC".to_string(), EntityType::custom("misc", EntityCategory::Misc));
+        map.insert("I-MISC".to_string(), EntityType::custom("misc", EntityCategory::Misc));
         // Alternative formats
         map.insert("PER".to_string(), EntityType::Person);
         map.insert("ORG".to_string(), EntityType::Organization);
         map.insert("LOC".to_string(), EntityType::Location);
-        map.insert("MISC".to_string(), EntityType::Other("misc".to_string()));
+        map.insert("MISC".to_string(), EntityType::custom("misc", EntityCategory::Misc));
         map
     }
 
@@ -637,7 +637,7 @@ impl BertNEROnnx {
                 .get(&format!("B-{}", entity_label))
                 .or_else(|| self.label_to_entity_type.get(&entity_label))
                 .cloned()
-                .unwrap_or_else(|| EntityType::Other(entity_label.clone()));
+                .unwrap_or_else(|| EntityType::custom(entity_label.clone(), EntityCategory::Misc));
 
             match bio {
                 "B" => {
@@ -723,7 +723,7 @@ impl crate::Model for BertNEROnnx {
             EntityType::Person,
             EntityType::Organization,
             EntityType::Location,
-            EntityType::Other("MISC".to_string()),
+            EntityType::custom("MISC", EntityCategory::Misc),
         ]
     }
 
