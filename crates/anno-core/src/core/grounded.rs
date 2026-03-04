@@ -87,7 +87,7 @@
 //! - Groma: Grounded multimodal assistant
 
 use super::entity::{
-    DiscontinuousSpan, Entity, EntityType, HierarchicalConfidence, Provenance, Span,
+    DiscontinuousSpan, Entity, EntityCategory, EntityType, HierarchicalConfidence, Provenance, Span,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -5072,7 +5072,7 @@ mod tests {
             Entity::new("Marie Curie", EntityType::Person, 0, 12, 0.95),
             Entity::new(
                 "Nobel Prize",
-                EntityType::Other("Award".to_string()),
+                EntityType::custom("Award", EntityCategory::Creative),
                 17,
                 29,
                 0.92,

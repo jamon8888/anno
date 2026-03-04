@@ -79,7 +79,7 @@ impl TypeLabel {
     pub fn custom(label: impl Into<String>) -> Self {
         let s = label.into();
         match EntityType::from_label(&s) {
-            EntityType::Other(_) => Self::Custom(s),
+            EntityType::Custom { .. } | EntityType::Other(_) => Self::Custom(s),
             et => Self::Core(et),
         }
     }
@@ -114,15 +114,14 @@ impl TypeLabel {
         }
     }
 
-    /// Convert to a core entity type, mapping customs to `EntityType::Other`.
+    /// Convert to a core entity type with Misc category for customs.
     ///
-    /// Note: Custom types become `EntityType::Other` since we don't have category info.
     /// Use [`Self::to_entity_type_with_category`] if you have category information.
     #[must_use]
     pub fn to_entity_type(&self) -> EntityType {
         match self {
             Self::Core(et) => et.clone(),
-            Self::Custom(s) => EntityType::Other(s.clone()),
+            Self::Custom(s) => EntityType::custom(s.clone(), EntityCategory::Misc),
         }
     }
 
@@ -156,10 +155,10 @@ impl From<EntityType> for TypeLabel {
 
 impl From<&str> for TypeLabel {
     fn from(s: &str) -> Self {
-        // `EntityType::from_str` is infallible (unknown labels become `Other`), so
-        // treat `Other(_)` as a *custom* label here to preserve the distinction.
+        // `EntityType::from_str` is infallible (unknown labels become `Custom`), so
+        // treat `Custom { .. }` as a custom label here to preserve the distinction.
         match EntityType::from_label(s) {
-            EntityType::Other(_) => Self::Custom(s.to_string()),
+            EntityType::Custom { .. } | EntityType::Other(_) => Self::Custom(s.to_string()),
             et => Self::Core(et),
         }
     }
@@ -169,7 +168,7 @@ impl From<String> for TypeLabel {
     fn from(s: String) -> Self {
         let et = EntityType::from_label(&s);
         match et {
-            EntityType::Other(_) => Self::Custom(s),
+            EntityType::Custom { .. } | EntityType::Other(_) => Self::Custom(s),
             _ => Self::Core(et),
         }
     }
@@ -275,9 +274,9 @@ mod tests {
         let core = TypeLabel::Core(EntityType::Location);
         assert_eq!(core.to_entity_type(), EntityType::Location);
 
-        // Custom types become Other(String), not EntityType::Custom
+        // Custom types become EntityType::Custom with Misc category
         let custom = TypeLabel::custom("UNKNOWN_TYPE_XYZ");
         let et = custom.to_entity_type();
-        assert!(matches!(et, EntityType::Other(ref s) if s == "UNKNOWN_TYPE_XYZ"));
+        assert!(matches!(et, EntityType::Custom { ref name, .. } if name == "UNKNOWN_TYPE_XYZ"));
     }
 }

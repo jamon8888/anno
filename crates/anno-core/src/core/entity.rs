@@ -321,7 +321,12 @@ pub enum EntityType {
         category: EntityCategory,
     },
 
-    /// Legacy catch-all for unknown types (prefer Custom for new code)
+    /// Legacy catch-all for unknown types.
+    ///
+    /// **Deprecated**: use `EntityType::custom(name, category)` instead.
+    /// Retained only for serde backward compatibility with existing data.
+    /// No code should construct this variant; all match arms should handle
+    /// both `Custom { .. }` and `Other(_)`.
     #[serde(rename = "Other")]
     Other(String),
 }
@@ -445,14 +450,14 @@ impl EntityType {
             "URL" | "URI" => EntityType::Url,
             "PHONE" | "TELEPHONE" => EntityType::Phone,
             // MISC variations
-            "MISC" | "MISCELLANEOUS" | "OTHER" => EntityType::Other("MISC".to_string()),
+            "MISC" | "MISCELLANEOUS" | "OTHER" => EntityType::custom("MISC", EntityCategory::Misc),
             // Biomedical types
             "DISEASE" | "DISORDER" => EntityType::custom("DISEASE", EntityCategory::Misc),
             "CHEMICAL" | "DRUG" => EntityType::custom("CHEMICAL", EntityCategory::Misc),
             "GENE" => EntityType::custom("GENE", EntityCategory::Misc),
             "PROTEIN" => EntityType::custom("PROTEIN", EntityCategory::Misc),
-            // Unknown -> Other
-            other => EntityType::Other(other.to_string()),
+            // Unknown -> Custom with Misc category
+            other => EntityType::custom(other, EntityCategory::Misc),
         }
     }
 
@@ -3560,8 +3565,9 @@ mod proptests {
         fn entity_type_roundtrip(label in "[A-Z]{3,10}") {
             let et = EntityType::from_label(&label);
             let back = EntityType::from_label(et.as_label());
-            // Other types may round-trip to themselves or normalize
-            prop_assert!(matches!(back, EntityType::Other(_)) || back == et);
+            // Custom types may round-trip to themselves or normalize
+            let is_custom_or_other = matches!(back, EntityType::Custom { .. } | EntityType::Other(_));
+            prop_assert!(is_custom_or_other || back == et);
         }
 
         #[test]
