@@ -94,26 +94,11 @@ impl LateInteraction for DotProductInteraction {
         let mut scores = vec![0.0f32; num_spans * num_labels];
 
         for s in 0..num_spans {
-            let span_start = s * hidden_dim;
-            let span_end = span_start + hidden_dim;
-            let span_vec = &span_embeddings[span_start..span_end];
+            let span_vec = &span_embeddings[s * hidden_dim..(s + 1) * hidden_dim];
 
             for l in 0..num_labels {
-                let label_start = l * hidden_dim;
-                let label_end = label_start + hidden_dim;
-                let label_vec = &label_embeddings[label_start..label_end];
-
-                // Dot product
-                let mut dot: f32 = span_vec
-                    .iter()
-                    .zip(label_vec.iter())
-                    .map(|(a, b)| a * b)
-                    .sum();
-
-                // Temperature scaling
-                dot *= self.temperature;
-
-                scores[s * num_labels + l] = dot;
+                let label_vec = &label_embeddings[l * hidden_dim..(l + 1) * hidden_dim];
+                scores[s * num_labels + l] = innr::dot(span_vec, label_vec) * self.temperature;
             }
         }
 
