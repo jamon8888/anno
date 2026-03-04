@@ -938,23 +938,116 @@ fn extend_person_spans(text: &str, entities: &mut [Entity]) {
     // and SKIP_WORDS lists, covering the most frequent false-positive triggers.
     const NON_NAME_WORDS: &[&str] = &[
         // Sentence starters / determiners
-        "the", "a", "an", "this", "that", "these", "those", "it", "he", "she", "we", "they",
-        "in", "on", "at", "to", "for", "from", "by", "with", "and", "but", "or", "so", "if",
-        "is", "are", "was", "were", "be", "been", "have", "has", "had",
-        "what", "where", "when", "who", "why", "how",
-        "here", "about", "more", "next", "back", "home",
-        "however", "meanwhile", "furthermore", "moreover", "therefore", "although",
-        "indeed", "perhaps", "certainly", "no", "yes",
-        "some", "many", "each", "every", "both", "all", "few", "several", "other", "another",
+        "the",
+        "a",
+        "an",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "he",
+        "she",
+        "we",
+        "they",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "from",
+        "by",
+        "with",
+        "and",
+        "but",
+        "or",
+        "so",
+        "if",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "have",
+        "has",
+        "had",
+        "what",
+        "where",
+        "when",
+        "who",
+        "why",
+        "how",
+        "here",
+        "about",
+        "more",
+        "next",
+        "back",
+        "home",
+        "however",
+        "meanwhile",
+        "furthermore",
+        "moreover",
+        "therefore",
+        "although",
+        "indeed",
+        "perhaps",
+        "certainly",
+        "no",
+        "yes",
+        "some",
+        "many",
+        "each",
+        "every",
+        "both",
+        "all",
+        "few",
+        "several",
+        "other",
+        "another",
         // Day/month names
-        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-        "january", "february", "march", "april", "may", "june", "july", "august",
-        "september", "october", "november", "december",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
         // Job titles / role words
-        "ceo", "cto", "cfo", "coo", "vp", "president", "chairman", "director", "manager",
-        "secretary", "minister", "kanzler", "bundeskanzler",
+        "ceo",
+        "cto",
+        "cfo",
+        "coo",
+        "vp",
+        "president",
+        "chairman",
+        "director",
+        "manager",
+        "secretary",
+        "minister",
+        "kanzler",
+        "bundeskanzler",
         // Form/field labels
-        "phone", "fax", "mobile", "address", "website", "name", "company", "contact",
+        "phone",
+        "fax",
+        "mobile",
+        "address",
+        "website",
+        "name",
+        "company",
+        "contact",
     ];
 
     let text_chars: Vec<char> = text.chars().collect();
@@ -994,7 +1087,15 @@ fn extend_person_spans(text: &str, entities: &mut [Entity]) {
 
             // Collect the next word
             let word_start = pos;
-            while pos < text_len && !text_chars[pos].is_whitespace() && text_chars[pos] != ',' && text_chars[pos] != '.' && text_chars[pos] != ';' && text_chars[pos] != ':' && text_chars[pos] != '(' && text_chars[pos] != ')' {
+            while pos < text_len
+                && !text_chars[pos].is_whitespace()
+                && text_chars[pos] != ','
+                && text_chars[pos] != '.'
+                && text_chars[pos] != ';'
+                && text_chars[pos] != ':'
+                && text_chars[pos] != '('
+                && text_chars[pos] != ')'
+            {
                 pos += 1;
             }
             let word_end = pos;
@@ -1027,12 +1128,12 @@ fn extend_person_spans(text: &str, entities: &mut [Entity]) {
 
 /// Check whether text may contain lowercase entity names that need NuNER.
 ///
-/// Remove single-word entities that are known title/role words misclassified as ORG by BERT.
+/// Remove single-word entities that are known title/role words or common nouns.
 ///
 /// BERT frequently tags German political titles ("Bundeskanzler") and similar role words
 /// as ORG because they appear in organizational contexts in training data. The heuristic
-/// backend already filters these via SKIP_WORDS, but BERT's entities bypass that check.
-/// This post-processing step catches the ones that slip through.
+/// backend also tags headline-capitalized common nouns ("Death", "Bus", "Christmas") as PER.
+/// This post-processing step catches both categories.
 fn filter_title_words(entities: &mut Vec<Entity>) {
     const TITLE_WORDS: &[&str] = &[
         // German political titles
@@ -1059,20 +1160,48 @@ fn filter_title_words(entities: &mut Vec<Entity>) {
         "mayor",
     ];
 
+    // Common nouns that BERT sometimes tags as PER due to headline capitalization.
+    // Kept small -- the primary defense is the heuristic's lowered confidence for
+    // single capitalized words (below threshold). This list catches the few that
+    // slip through when BERT agrees on a wrong PER classification.
+    const COMMON_NOUNS_NOT_PER: &[&str] = &[
+        "death",
+        "police",
+        "military",
+        "authorities",
+        "officials",
+        "analysts",
+        "scientists",
+        "researchers",
+        "experts",
+        "voters",
+        "residents",
+    ];
+
     entities.retain(|e| {
-        // Only filter single-word entities tagged as ORG or MISC
-        if !matches!(
-            e.entity_type,
-            EntityType::Organization | EntityType::Other(_)
-        ) {
-            return true;
-        }
-        // Multi-word entities are likely real organizations
+        // Multi-word entities are likely real (skip filtering)
         if e.text.contains(' ') {
             return true;
         }
         let lower = e.text.to_lowercase();
-        !TITLE_WORDS.contains(&lower.as_str())
+
+        // Filter ORG/MISC: title words
+        if matches!(
+            e.entity_type,
+            EntityType::Organization | EntityType::Other(_)
+        ) && TITLE_WORDS.contains(&lower.as_str())
+        {
+            return false;
+        }
+
+        // Filter PER: common nouns that are never person names
+        if matches!(e.entity_type, EntityType::Person)
+            && COMMON_NOUNS_NOT_PER.contains(&lower.as_str())
+        {
+            return false;
+        }
+
+        true
     });
 }
 
@@ -1090,12 +1219,12 @@ fn text_may_need_nuner(text: &str) -> bool {
     }
 
     const STOPWORDS: &[&str] = &[
-        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
-        "by", "from", "is", "are", "was", "were", "be", "been", "has", "have", "had",
-        "that", "this", "it", "he", "she", "we", "they", "not", "would", "could", "should",
-        "will", "can", "may", "also", "its", "his", "her", "our", "their", "who", "which",
-        "what", "when", "where", "how", "than", "then", "into", "over", "about", "after",
-        "before", "between", "under", "up", "out", "new", "said", "told", "expects",
+        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+        "from", "is", "are", "was", "were", "be", "been", "has", "have", "had", "that", "this",
+        "it", "he", "she", "we", "they", "not", "would", "could", "should", "will", "can", "may",
+        "also", "its", "his", "her", "our", "their", "who", "which", "what", "when", "where",
+        "how", "than", "then", "into", "over", "about", "after", "before", "between", "under",
+        "up", "out", "new", "said", "told", "expects",
     ];
 
     let mut consecutive_lc = 0u32;

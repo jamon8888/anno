@@ -152,8 +152,7 @@ fn test_pipeline_stage_adapter() {
     }
 
     // Use with_stage on Pipeline
-    let pipeline = Pipeline::new(Box::new(HeuristicNER::new()))
-        .with_stage(MinConfidenceStage(0.5));
+    let pipeline = Pipeline::new(Box::new(HeuristicNER::new())).with_stage(MinConfidenceStage(0.5));
 
     assert_eq!(pipeline.middleware_names(), vec!["min_confidence_stage"]);
 
@@ -181,8 +180,7 @@ fn test_pipeline_stage_adapter_on_hooked_pipeline() {
         }
     }
 
-    let pipeline = HookedPipeline::new(Box::new(HeuristicNER::new()))
-        .with_stage(UpperCaseText);
+    let pipeline = HookedPipeline::new(Box::new(HeuristicNER::new())).with_stage(UpperCaseText);
 
     assert_eq!(pipeline.middleware_names(), vec!["uppercase_text"]);
 
@@ -191,7 +189,11 @@ fn test_pipeline_stage_adapter_on_hooked_pipeline() {
         .expect("extraction should succeed");
 
     for e in &entities {
-        assert_eq!(e.text, e.text.to_uppercase(), "entity text should be uppercased");
+        assert_eq!(
+            e.text,
+            e.text.to_uppercase(),
+            "entity text should be uppercased"
+        );
     }
 }
 
@@ -231,9 +233,9 @@ fn test_filter_by_type_multiple_allowed() {
         .post_process(&mut ctx, entities)
         .expect("post_process should succeed");
     assert_eq!(result.len(), 2);
-    assert!(result.iter().all(|e| {
-        e.entity_type == EntityType::Person || e.entity_type == EntityType::Location
-    }));
+    assert!(result
+        .iter()
+        .all(|e| { e.entity_type == EntityType::Person || e.entity_type == EntityType::Location }));
 }
 
 #[test]
@@ -244,7 +246,10 @@ fn test_filter_by_type_empty_allowed_list_removes_all() {
     let result = mw
         .post_process(&mut ctx, entities)
         .expect("post_process should succeed");
-    assert!(result.is_empty(), "empty allowed list should remove all entities");
+    assert!(
+        result.is_empty(),
+        "empty allowed list should remove all entities"
+    );
 }
 
 // =============================================================================
@@ -264,7 +269,10 @@ fn test_add_provenance_sets_metadata() {
         .expect("post_process should succeed");
     assert_eq!(result.len(), 2);
     for entity in &result {
-        let prov = entity.provenance.as_ref().expect("provenance should be set");
+        let prov = entity
+            .provenance
+            .as_ref()
+            .expect("provenance should be set");
         assert_eq!(prov.source.as_ref(), "test-backend");
     }
 }
@@ -411,7 +419,11 @@ fn test_callback_in_pipeline() {
     let _entities = pipeline
         .extract("John Smith")
         .expect("extraction should succeed");
-    assert_eq!(call_count.load(Ordering::SeqCst), 1, "callback should be invoked once per extract call");
+    assert_eq!(
+        call_count.load(Ordering::SeqCst),
+        1,
+        "callback should be invoked once per extract call"
+    );
 }
 
 #[test]
@@ -436,8 +448,8 @@ fn test_callback_can_access_context_metadata() {
 
 #[test]
 fn test_pipeline_with_if_condition_true_adds_middleware() {
-    let pipeline = Pipeline::new(Box::new(HeuristicNER::new()))
-        .with_if(true, FilterByConfidence(0.99));
+    let pipeline =
+        Pipeline::new(Box::new(HeuristicNER::new())).with_if(true, FilterByConfidence(0.99));
     // FilterByConfidence(0.99) should filter out everything from HeuristicNER
     // (heuristic backend produces low confidence entities).
     let entities = pipeline
@@ -453,10 +465,10 @@ fn test_pipeline_with_if_condition_true_adds_middleware() {
 #[test]
 fn test_pipeline_with_if_condition_false_skips_middleware() {
     // Build two pipelines: one with the filter active, one without.
-    let pipeline_no_filter = Pipeline::new(Box::new(HeuristicNER::new()))
-        .with_if(false, FilterByConfidence(0.99));
-    let pipeline_with_filter = Pipeline::new(Box::new(HeuristicNER::new()))
-        .with_if(true, FilterByConfidence(0.99));
+    let pipeline_no_filter =
+        Pipeline::new(Box::new(HeuristicNER::new())).with_if(false, FilterByConfidence(0.99));
+    let pipeline_with_filter =
+        Pipeline::new(Box::new(HeuristicNER::new())).with_if(true, FilterByConfidence(0.99));
 
     let unfiltered = pipeline_no_filter
         .extract("John Smith")
@@ -477,17 +489,21 @@ fn test_pipeline_with_if_condition_false_skips_middleware() {
 
 #[test]
 fn test_pipeline_with_if_middleware_names() {
-    let pipeline_true = Pipeline::new(Box::new(HeuristicNER::new()))
-        .with_if(true, FilterByConfidence(0.5));
-    let pipeline_false = Pipeline::new(Box::new(HeuristicNER::new()))
-        .with_if(false, FilterByConfidence(0.5));
+    let pipeline_true =
+        Pipeline::new(Box::new(HeuristicNER::new())).with_if(true, FilterByConfidence(0.5));
+    let pipeline_false =
+        Pipeline::new(Box::new(HeuristicNER::new())).with_if(false, FilterByConfidence(0.5));
 
     assert!(
-        pipeline_true.middleware_names().contains(&"filter_by_confidence"),
+        pipeline_true
+            .middleware_names()
+            .contains(&"filter_by_confidence"),
         "middleware name should appear when condition is true"
     );
     assert!(
-        !pipeline_false.middleware_names().contains(&"filter_by_confidence"),
+        !pipeline_false
+            .middleware_names()
+            .contains(&"filter_by_confidence"),
         "middleware name must not appear when condition is false"
     );
 }
@@ -526,7 +542,11 @@ fn test_remove_overlaps_three_non_overlapping_all_preserved() {
     let result = mw
         .post_process(&mut ctx, entities)
         .expect("post_process should succeed");
-    assert_eq!(result.len(), 3, "all three non-overlapping entities must be preserved");
+    assert_eq!(
+        result.len(),
+        3,
+        "all three non-overlapping entities must be preserved"
+    );
 }
 
 // =============================================================================
@@ -552,7 +572,10 @@ fn test_remove_overlaps_three_way_keeps_highest_confidence() {
         1,
         "three-way overlap must leave exactly one entity"
     );
-    assert_eq!(result[0].text, "New York", "highest-confidence entity must be kept");
+    assert_eq!(
+        result[0].text, "New York",
+        "highest-confidence entity must be kept"
+    );
     assert!(
         (result[0].confidence - 0.95).abs() < 1e-9,
         "kept entity must have confidence 0.95"

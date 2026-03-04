@@ -259,12 +259,10 @@ pub trait LlmProvider: Send + Sync {
 /// // Or create with custom response
 /// let provider = MockProvider::new("Yes");
 /// ```
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct MockProvider {
     response: String,
 }
-
 
 impl MockProvider {
     /// Create a new mock provider with a fixed response.

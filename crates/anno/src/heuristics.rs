@@ -35,7 +35,7 @@ fn detect_language_near(text: &str, char_offset: usize) -> Language {
         }
     }
 
-    // Keep this fairly small: we want the local “surface” language.
+    // Keep this fairly small: we want the local "surface" language.
     //
     // Use an *asymmetric* window around the offset:
     // - a small prefix to catch short markers ("not", "kein", etc.)
@@ -204,10 +204,27 @@ pub mod lexicons {
     pub const EN_UNIVERSAL: &[&str] = &["every", "all", "each", "any"];
     /// English cue words suggesting existential quantification.
     pub const EN_EXISTENTIAL: &[&str] = &["some", "certain", "a", "an"];
-    /// English cue words suggesting “none / no” quantification.
+    /// English cue words suggesting "none / no" quantification.
     pub const EN_NONE: &[&str] = &["no", "none"];
     /// English cue words suggesting definiteness / demonstratives.
     pub const EN_DEFINITE: &[&str] = &["the", "this", "that", "these", "those"];
+    /// English cue phrases suggesting approximate quantification.
+    pub const EN_APPROXIMATE: &[&str] = &[
+        "approximately",
+        "about",
+        "roughly",
+        "nearly",
+        "around",
+        "at least",
+        "at most",
+        "no more than",
+        "no fewer than",
+        "up to",
+        "over",
+        "more than",
+        "fewer than",
+        "less than",
+    ];
 
     /// German cue words for negation detection.
     pub const DE_NEGATION_WORDS: &[&str] = &["nicht", "kein", "keine", "keinen", "nie", "ohne"];
@@ -226,7 +243,7 @@ pub mod lexicons {
     pub const DE_UNIVERSAL: &[&str] = &["alle", "jeder", "jede", "jedes"];
     /// German cue words suggesting existential quantification.
     pub const DE_EXISTENTIAL: &[&str] = &["ein", "eine", "einen", "einige", "manche"];
-    /// German cue words suggesting “none / no” quantification.
+    /// German cue words suggesting "none / no" quantification.
     pub const DE_NONE: &[&str] = &["kein", "keine", "keinen", "keinem", "keiner", "keins"];
     /// German cue words suggesting definiteness / demonstratives.
     pub const DE_DEFINITE: &[&str] = &[
@@ -237,7 +254,7 @@ pub mod lexicons {
     pub const FR_UNIVERSAL: &[&str] = &["tous", "toutes", "chaque"];
     /// French cue words suggesting existential quantification.
     pub const FR_EXISTENTIAL: &[&str] = &["un", "une", "des", "quelques", "certains", "certaines"];
-    /// French cue words suggesting “none / no” quantification.
+    /// French cue words suggesting "none / no" quantification.
     pub const FR_NONE: &[&str] = &["aucun", "aucune"];
     /// French cue words suggesting definiteness / demonstratives.
     pub const FR_DEFINITE: &[&str] = &["le", "la", "les", "ce", "cette", "ces", "cet"];
@@ -248,7 +265,7 @@ pub mod lexicons {
     pub const ES_EXISTENTIAL: &[&str] = &[
         "un", "una", "unos", "unas", "algún", "alguna", "algunos", "algunas",
     ];
-    /// Spanish cue words suggesting “none / no” quantification.
+    /// Spanish cue words suggesting "none / no" quantification.
     pub const ES_NONE: &[&str] = &[
         "ningún", "ninguna", "ninguno", "ningunos", "ningunas", "ningun",
     ];
@@ -263,7 +280,7 @@ pub mod lexicons {
     pub const IT_EXISTENTIAL: &[&str] = &[
         "un", "una", "uno", "alcuni", "alcune", "qualche", "certi", "certe",
     ];
-    /// Italian cue words suggesting “none / no” quantification.
+    /// Italian cue words suggesting "none / no" quantification.
     pub const IT_NONE: &[&str] = &["nessun", "nessuna", "nessuno"];
     /// Italian cue words suggesting definiteness / demonstratives.
     pub const IT_DEFINITE: &[&str] = &[
@@ -277,7 +294,7 @@ pub mod lexicons {
     pub const PT_EXISTENTIAL: &[&str] = &[
         "um", "uma", "uns", "umas", "algum", "alguma", "alguns", "algumas",
     ];
-    /// Portuguese cue words suggesting “none / no” quantification.
+    /// Portuguese cue words suggesting "none / no" quantification.
     pub const PT_NONE: &[&str] = &["nenhum", "nenhuma", "nenhuns", "nenhumas"];
     /// Portuguese cue words suggesting definiteness / demonstratives.
     pub const PT_DEFINITE: &[&str] = &[
@@ -288,7 +305,7 @@ pub mod lexicons {
     pub const RU_UNIVERSAL: &[&str] = &["все", "каждый", "каждая", "каждое"];
     /// Russian cue words suggesting existential quantification.
     pub const RU_EXISTENTIAL: &[&str] = &["некоторые", "один", "одна", "одно"];
-    /// Russian cue words suggesting “none / no” quantification.
+    /// Russian cue words suggesting "none / no" quantification.
     pub const RU_NONE: &[&str] = &["никакой", "никакая", "никакие", "нет"];
     /// Russian cue words suggesting definiteness / demonstratives.
     pub const RU_DEFINITE: &[&str] = &["этот", "эта", "это", "эти", "тот", "та", "то", "те"];
@@ -304,7 +321,7 @@ pub mod lexicons {
     pub const ZH_UNIVERSAL: &[&str] = &["每", "所有", "全部"];
     /// Chinese cues suggesting existential quantification.
     pub const ZH_EXISTENTIAL: &[&str] = &["一些", "某些", "有些"];
-    /// Chinese cues suggesting “none / no” quantification.
+    /// Chinese cues suggesting "none / no" quantification.
     pub const ZH_NONE: &[&str] = &["没有", "沒有", "无", "無", "没"];
     /// Chinese cues suggesting definiteness / demonstratives.
     pub const ZH_DEFINITE: &[&str] = &["这", "那", "这些", "那些", "该"];
@@ -313,7 +330,7 @@ pub mod lexicons {
     pub const JA_UNIVERSAL: &[&str] = &["全て", "すべて", "毎", "各"];
     /// Japanese cues suggesting existential quantification.
     pub const JA_EXISTENTIAL: &[&str] = &["いくつか", "ある"];
-    /// Japanese cues suggesting “none / no” quantification.
+    /// Japanese cues suggesting "none / no" quantification.
     pub const JA_NONE: &[&str] = &["無い", "無し", "ない"];
     /// Japanese cues suggesting definiteness / demonstratives.
     pub const JA_DEFINITE: &[&str] = &["この", "その", "あの"];
@@ -322,7 +339,7 @@ pub mod lexicons {
     pub const KO_UNIVERSAL: &[&str] = &["모든", "각", "매"];
     /// Korean cues suggesting existential quantification.
     pub const KO_EXISTENTIAL: &[&str] = &["몇몇", "일부", "어떤", "어느"];
-    /// Korean cues suggesting “none / no” quantification.
+    /// Korean cues suggesting "none / no" quantification.
     pub const KO_NONE: &[&str] = &["없", "아무도", "아무것도"];
     /// Korean cues suggesting definiteness / demonstratives.
     pub const KO_DEFINITE: &[&str] = &["이", "그", "저"];
@@ -331,7 +348,7 @@ pub mod lexicons {
     pub const AR_UNIVERSAL: &[&str] = &["كل"];
     /// Arabic cues suggesting existential quantification.
     pub const AR_EXISTENTIAL: &[&str] = &["بعض", "أحد", "احد"];
-    /// Arabic cues suggesting “none / no” quantification.
+    /// Arabic cues suggesting "none / no" quantification.
     pub const AR_NONE: &[&str] = &["لا", "ليس", "بدون"];
     /// Arabic cues suggesting definiteness / demonstratives.
     pub const AR_DEFINITE: &[&str] = &["هذا", "هذه", "ذلك", "تلك", "هؤلاء"];
@@ -340,7 +357,7 @@ pub mod lexicons {
     pub const HE_UNIVERSAL: &[&str] = &["כל"];
     /// Hebrew cues suggesting existential quantification.
     pub const HE_EXISTENTIAL: &[&str] = &["כמה"];
-    /// Hebrew cues suggesting “none / no” quantification.
+    /// Hebrew cues suggesting "none / no" quantification.
     pub const HE_NONE: &[&str] = &["אין", "לא"];
     /// Hebrew cues suggesting definiteness / demonstratives.
     pub const HE_DEFINITE: &[&str] = &["זה", "זאת", "אלה", "האלו"];
@@ -398,6 +415,7 @@ pub fn detect_quantifier_en(text: &str, entity_start: usize) -> Option<Quantifie
         lexicons::EN_NONE,
         lexicons::EN_DEFINITE,
     )
+    .or_else(|| detect_approximate_quantifier(text, entity_start))
 }
 
 /// Best-effort quantifier detection for a specific language.
@@ -542,10 +560,36 @@ pub fn detect_quantifier_lang(
     }
 }
 
+/// Detect approximate quantifiers by scanning the prefix for multi-word cue phrases.
+///
+/// Unlike the standard quantifier detection (which only checks the last word),
+/// approximate quantifiers like "at least", "more than", "approximately" often
+/// appear several words before the entity (e.g., "approximately 500 employees").
+#[must_use]
+pub fn detect_approximate_quantifier(text: &str, entity_start: usize) -> Option<Quantifier> {
+    const WINDOW_CHARS: usize = 40;
+    let window_start = entity_start.saturating_sub(WINDOW_CHARS);
+    let prefix: String = text
+        .chars()
+        .skip(window_start)
+        .take(entity_start.saturating_sub(window_start))
+        .collect();
+    let lower = prefix.to_lowercase();
+    if lexicons::EN_APPROXIMATE
+        .iter()
+        .any(|cue| lower.contains(cue))
+    {
+        Some(Quantifier::Approximate)
+    } else {
+        Option::None
+    }
+}
+
 /// Convenience wrapper: language detection + best-effort quantifier detection.
 #[must_use]
 pub fn detect_quantifier_auto(text: &str, entity_start: usize) -> Option<Quantifier> {
     detect_quantifier_lang(text, entity_start, detect_language_near(text, entity_start))
+        .or_else(|| detect_approximate_quantifier(text, entity_start))
 }
 
 #[cfg(test)]

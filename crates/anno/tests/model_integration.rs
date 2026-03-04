@@ -8,8 +8,8 @@
 
 #![cfg(all(feature = "onnx", feature = "analysis"))]
 
-use anno::{EntityType, Model, StackedNER};
 use anno::eval::coref_resolver::SimpleCorefResolver;
+use anno::{EntityType, Model, StackedNER};
 
 // =============================================================================
 // NER -> Coref Pipeline
@@ -24,7 +24,9 @@ fn stacked_ner_to_coref_pipeline() {
                 Curie was born in Poland.";
 
     let ner = StackedNER::default();
-    let entities = ner.extract_entities(text, None).expect("NER should succeed");
+    let entities = ner
+        .extract_entities(text, None)
+        .expect("NER should succeed");
 
     // Should find at least Marie Curie
     let person_entities: Vec<_> = entities
@@ -34,7 +36,10 @@ fn stacked_ner_to_coref_pipeline() {
     assert!(
         !person_entities.is_empty(),
         "Should find person entities, got: {:?}",
-        entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>()
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
     );
 
     // Feed into coref resolver
@@ -63,7 +68,11 @@ fn stacked_ner_to_coref_pipeline() {
         curie_chain.len() >= 2,
         "Curie chain should have >= 2 mentions, got {}: {:?}",
         curie_chain.len(),
-        curie_chain.mentions.iter().map(|m| &m.text).collect::<Vec<_>>()
+        curie_chain
+            .mentions
+            .iter()
+            .map(|m| &m.text)
+            .collect::<Vec<_>>()
     );
 }
 
@@ -75,7 +84,9 @@ fn multi_entity_coref_separation() {
                 Cook announced new products. Pichai presented AI features.";
 
     let ner = StackedNER::default();
-    let entities = ner.extract_entities(text, None).expect("NER should succeed");
+    let entities = ner
+        .extract_entities(text, None)
+        .expect("NER should succeed");
 
     let resolver = SimpleCorefResolver::default();
     let chains = resolver.resolve_to_chains(&entities);
@@ -125,28 +136,35 @@ fn stacked_ner_entity_offsets_are_char_based() {
 
     for text in &texts {
         let char_count = text.chars().count();
-        let entities = ner.extract_entities(text, None).expect("NER should succeed");
+        let entities = ner
+            .extract_entities(text, None)
+            .expect("NER should succeed");
 
         for entity in &entities {
             // start < end
             assert!(
                 entity.start < entity.end,
                 "Entity {:?}: start ({}) must be < end ({})",
-                entity.text, entity.start, entity.end
+                entity.text,
+                entity.start,
+                entity.end
             );
 
             // Within bounds (char count, not byte count)
             assert!(
                 entity.end <= char_count,
                 "Entity {:?}: end ({}) exceeds char count ({})",
-                entity.text, entity.end, char_count
+                entity.text,
+                entity.end,
+                char_count
             );
 
             // Confidence in [0, 1]
             assert!(
                 (0.0..=1.0).contains(&entity.confidence),
                 "Entity {:?}: confidence {} outside [0, 1]",
-                entity.text, entity.confidence
+                entity.text,
+                entity.confidence
             );
 
             // Extractable text matches
@@ -161,7 +179,10 @@ fn stacked_ner_entity_offsets_are_char_based() {
             assert!(
                 norm_extracted.contains(&norm_entity) || norm_entity.contains(&norm_extracted),
                 "Span [{},{}) = {:?} doesn't match entity text {:?}",
-                entity.start, entity.end, extracted, entity.text
+                entity.start,
+                entity.end,
+                extracted,
+                entity.text
             );
         }
     }
@@ -195,7 +216,9 @@ fn stacked_ner_edge_cases() {
 fn ensemble_with_gliner_produces_entities() {
     let ner = anno::EnsembleNER::new();
     let text = "Barack Obama spoke at Harvard University in Cambridge, Massachusetts.";
-    let entities = ner.extract_entities(text, None).expect("Ensemble should succeed");
+    let entities = ner
+        .extract_entities(text, None)
+        .expect("Ensemble should succeed");
 
     assert!(
         !entities.is_empty(),
@@ -240,7 +263,9 @@ fn coref_chain_structural_invariants() {
                 Smith joined the company in 2015. He leads the AI team.";
 
     let ner = StackedNER::default();
-    let entities = ner.extract_entities(text, None).expect("NER should succeed");
+    let entities = ner
+        .extract_entities(text, None)
+        .expect("NER should succeed");
 
     let resolver = SimpleCorefResolver::default();
     let chains = resolver.resolve_to_chains(&entities);
@@ -272,7 +297,9 @@ fn coref_type_separation() {
                 The company expects continued growth.";
 
     let ner = StackedNER::default();
-    let entities = ner.extract_entities(text, None).expect("NER should succeed");
+    let entities = ner
+        .extract_entities(text, None)
+        .expect("NER should succeed");
 
     let resolver = SimpleCorefResolver::default();
     let chains = resolver.resolve_to_chains(&entities);
@@ -280,14 +307,14 @@ fn coref_type_separation() {
     // Person entities (Tim Cook) should not be in same chain as Organization (Apple)
     for chain in &chains {
         let has_person = chain.mentions.iter().any(|m| {
-            entities.iter().any(|e| {
-                e.text == m.text && matches!(e.entity_type, EntityType::Person)
-            })
+            entities
+                .iter()
+                .any(|e| e.text == m.text && matches!(e.entity_type, EntityType::Person))
         });
         let has_org = chain.mentions.iter().any(|m| {
-            entities.iter().any(|e| {
-                e.text == m.text && matches!(e.entity_type, EntityType::Organization)
-            })
+            entities
+                .iter()
+                .any(|e| e.text == m.text && matches!(e.entity_type, EntityType::Organization))
         });
 
         // A chain should not mix persons and organizations
@@ -334,11 +361,15 @@ fn gliner_onnx_basic() {
 fn nuner_onnx_basic() {
     use anno::backends::NuNER;
 
-    let model = NuNER::from_pretrained("numind/NuNER_Zero").expect("NuNER model load should succeed");
+    let model =
+        NuNER::from_pretrained("numind/NuNER_Zero").expect("NuNER model load should succeed");
     assert!(model.is_available());
 
     let entities = model
-        .extract_entities("Angela Merkel visited the European Parliament in Strasbourg.", None)
+        .extract_entities(
+            "Angela Merkel visited the European Parliament in Strasbourg.",
+            None,
+        )
         .expect("NuNER extraction should succeed");
 
     // NuNER may or may not find entities depending on default labels
@@ -358,8 +389,8 @@ fn nuner_onnx_basic() {
 fn bert_ner_onnx_basic() {
     use anno::BertNEROnnx;
 
-    let model =
-        BertNEROnnx::new("protectai/bert-base-NER-onnx").expect("BERT NER model load should succeed");
+    let model = BertNEROnnx::new("protectai/bert-base-NER-onnx")
+        .expect("BERT NER model load should succeed");
     assert!(model.is_available());
 
     let entities = model

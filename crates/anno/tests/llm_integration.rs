@@ -25,14 +25,34 @@ fn ensure_api_key() -> bool {
 fn assert_entity_invariants(entities: &[Entity], text: &str) {
     let char_count = text.chars().count();
     for e in entities {
-        assert!(e.start < e.end, "start < end: {:?} ({},{})", e.text, e.start, e.end);
-        assert!(e.end <= char_count, "end <= char_count: {:?} end={} chars={}", e.text, e.end, char_count);
-        assert!((0.0..=1.0).contains(&e.confidence), "confidence in [0,1]: {}", e.confidence);
+        assert!(
+            e.start < e.end,
+            "start < end: {:?} ({},{})",
+            e.text,
+            e.start,
+            e.end
+        );
+        assert!(
+            e.end <= char_count,
+            "end <= char_count: {:?} end={} chars={}",
+            e.text,
+            e.end,
+            char_count
+        );
+        assert!(
+            (0.0..=1.0).contains(&e.confidence),
+            "confidence in [0,1]: {}",
+            e.confidence
+        );
         assert!(!e.text.is_empty(), "entity text must be non-empty");
 
         // Extracted text should match entity text
         let extracted: String = text.chars().skip(e.start).take(e.end - e.start).collect();
-        assert_eq!(extracted, e.text, "span [{},{}) = {:?} vs entity {:?}", e.start, e.end, extracted, e.text);
+        assert_eq!(
+            extracted, e.text,
+            "span [{},{}) = {:?} vs entity {:?}",
+            e.start, e.end, extracted, e.text
+        );
     }
 }
 
@@ -49,22 +69,44 @@ fn llm_basic_extraction_default_model() {
     }
 
     let model = UniversalNER::new().expect("create UniversalNER");
-    assert!(model.is_available(), "model should be available with API key");
+    assert!(
+        model.is_available(),
+        "model should be available with API key"
+    );
 
     let text = "Marie Curie discovered radium in Paris in 1898.";
-    let entities = model.extract_entities(text, None).expect("extraction should succeed");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("extraction should succeed");
 
-    eprintln!("Default model (GPT-5 Nano) entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    eprintln!(
+        "Default model (GPT-5 Nano) entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
     assert!(!entities.is_empty(), "should find at least one entity");
     assert_entity_invariants(&entities, text);
 
     // Should find Marie Curie as a person
-    let has_curie = entities.iter().any(|e| e.text.contains("Curie") && matches!(e.entity_type, EntityType::Person));
-    assert!(has_curie, "should find Marie Curie as Person, got: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    let has_curie = entities
+        .iter()
+        .any(|e| e.text.contains("Curie") && matches!(e.entity_type, EntityType::Person));
+    assert!(
+        has_curie,
+        "should find Marie Curie as Person, got: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
     // Should find Paris as a location
-    let has_paris = entities.iter().any(|e| e.text.contains("Paris") && matches!(e.entity_type, EntityType::Location));
+    let has_paris = entities
+        .iter()
+        .any(|e| e.text.contains("Paris") && matches!(e.entity_type, EntityType::Location));
     assert!(has_paris, "should find Paris as Location");
 }
 
@@ -80,11 +122,22 @@ fn llm_extraction_gemini_flash_lite() {
     let model = UniversalNER::with_config(config).expect("create with gemini flash lite config");
 
     let text = "Sundar Pichai leads Google from Mountain View, California.";
-    let entities = model.extract_entities(text, None).expect("gemini flash lite extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("gemini flash lite extraction");
 
-    eprintln!("Gemini Flash Lite entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    eprintln!(
+        "Gemini Flash Lite entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
-    assert!(!entities.is_empty(), "Gemini Flash Lite should find entities");
+    assert!(
+        !entities.is_empty(),
+        "Gemini Flash Lite should find entities"
+    );
     assert_entity_invariants(&entities, text);
 }
 
@@ -104,15 +157,27 @@ fn llm_extraction_haiku() {
     let model = UniversalNER::with_config(config).expect("create with haiku config");
 
     let text = "Tim Cook is the CEO of Apple Inc., headquartered in Cupertino.";
-    let entities = model.extract_entities(text, None).expect("haiku extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("haiku extraction");
 
-    eprintln!("Haiku entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    eprintln!(
+        "Haiku entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
     assert!(!entities.is_empty(), "Haiku should find entities");
     assert_entity_invariants(&entities, text);
 
-    let has_person = entities.iter().any(|e| matches!(e.entity_type, EntityType::Person));
-    let has_org = entities.iter().any(|e| matches!(e.entity_type, EntityType::Organization));
+    let has_person = entities
+        .iter()
+        .any(|e| matches!(e.entity_type, EntityType::Person));
+    let has_org = entities
+        .iter()
+        .any(|e| matches!(e.entity_type, EntityType::Organization));
     assert!(has_person, "should find Tim Cook as Person");
     assert!(has_org, "should find Apple Inc. as Organization");
 }
@@ -133,9 +198,17 @@ fn llm_extraction_llama3() {
     let model = UniversalNER::with_config(config).expect("create with llama3 config");
 
     let text = "Elon Musk founded SpaceX in Hawthorne, California.";
-    let entities = model.extract_entities(text, None).expect("llama3 extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("llama3 extraction");
 
-    eprintln!("Llama 3.3 70B entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    eprintln!(
+        "Llama 3.3 70B entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
     assert!(!entities.is_empty(), "Llama 3.3 should find entities");
     assert_entity_invariants(&entities, text);
@@ -157,9 +230,17 @@ fn llm_extraction_llama4() {
     let model = UniversalNER::with_config(config).expect("create with llama4 config");
 
     let text = "Satya Nadella leads Microsoft from Redmond, Washington.";
-    let entities = model.extract_entities(text, None).expect("llama4 extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("llama4 extraction");
 
-    eprintln!("Llama 4 Scout entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    eprintln!(
+        "Llama 4 Scout entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
     assert!(!entities.is_empty(), "Llama 4 should find entities");
     assert_entity_invariants(&entities, text);
@@ -181,9 +262,17 @@ fn llm_extraction_deepseek() {
     let model = UniversalNER::with_config(config).expect("create with deepseek config");
 
     let text = "Angela Merkel led Germany through the European debt crisis.";
-    let entities = model.extract_entities(text, None).expect("deepseek extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("deepseek extraction");
 
-    eprintln!("DeepSeek entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    eprintln!(
+        "DeepSeek entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
     assert!(!entities.is_empty(), "DeepSeek should find entities");
     assert_entity_invariants(&entities, text);
@@ -205,9 +294,17 @@ fn llm_extraction_gemini_flash() {
     let model = UniversalNER::with_config(config).expect("create with gemini flash config");
 
     let text = "Jeff Bezos founded Amazon in Seattle, Washington.";
-    let entities = model.extract_entities(text, None).expect("gemini flash extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("gemini flash extraction");
 
-    eprintln!("Gemini Flash entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    eprintln!(
+        "Gemini Flash entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
     assert!(!entities.is_empty(), "Gemini Flash should find entities");
     assert_entity_invariants(&entities, text);
@@ -231,19 +328,27 @@ fn llm_caching_avoids_duplicate_calls() {
 
     // First call: hits the API
     let t0 = std::time::Instant::now();
-    let entities1 = model.extract_entities(text, None).expect("first extraction");
+    let entities1 = model
+        .extract_entities(text, None)
+        .expect("first extraction");
     let elapsed1 = t0.elapsed();
 
     // Second call: should hit cache (much faster)
     let t1 = std::time::Instant::now();
-    let entities2 = model.extract_entities(text, None).expect("second extraction");
+    let entities2 = model
+        .extract_entities(text, None)
+        .expect("second extraction");
     let elapsed2 = t1.elapsed();
 
     eprintln!("First call: {:?} ({} entities)", elapsed1, entities1.len());
     eprintln!("Second call: {:?} ({} entities)", elapsed2, entities2.len());
 
     // Verify same results
-    assert_eq!(entities1.len(), entities2.len(), "cache should return same count");
+    assert_eq!(
+        entities1.len(),
+        entities2.len(),
+        "cache should return same count"
+    );
     for (a, b) in entities1.iter().zip(entities2.iter()) {
         assert_eq!(a.text, b.text, "cached entity text should match");
         assert_eq!(a.start, b.start, "cached entity start should match");
@@ -255,7 +360,8 @@ fn llm_caching_avoids_duplicate_calls() {
         assert!(
             elapsed2 < elapsed1 / 5,
             "cached call ({:?}) should be much faster than API call ({:?})",
-            elapsed2, elapsed1
+            elapsed2,
+            elapsed1
         );
     }
 }
@@ -274,12 +380,22 @@ fn llm_codener_prompt_strategy() {
 
     let model = UniversalNER::new()
         .expect("create UniversalNER")
-        .prompt_strategy(PromptStrategy::CodeNER { chain_of_thought: false });
+        .prompt_strategy(PromptStrategy::CodeNER {
+            chain_of_thought: false,
+        });
 
     let text = "Steve Jobs co-founded Apple with Steve Wozniak in Los Altos.";
-    let entities = model.extract_entities(text, None).expect("CodeNER extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("CodeNER extraction");
 
-    eprintln!("CodeNER entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    eprintln!(
+        "CodeNER entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
     // CodeNER returns BIO-tagged output; parse_llm_response should handle it.
     // Even if the CodeNER prompt produces different format, the fallback JSON parsing
@@ -304,11 +420,22 @@ fn llm_compact_prompt_strategy() {
         .prompt_strategy(PromptStrategy::Compact);
 
     let text = "Marie Curie discovered radium in Paris in 1898.";
-    let entities = model.extract_entities(text, None).expect("compact extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("compact extraction");
 
-    eprintln!("Compact entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type, e.start, e.end)).collect::<Vec<_>>());
+    eprintln!(
+        "Compact entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type, e.start, e.end))
+            .collect::<Vec<_>>()
+    );
 
-    assert!(!entities.is_empty(), "Compact strategy should find entities");
+    assert!(
+        !entities.is_empty(),
+        "Compact strategy should find entities"
+    );
     assert_entity_invariants(&entities, text);
 }
 
@@ -336,13 +463,27 @@ fn llm_domain_context_injection() {
     // With domain context
     let model_domain = UniversalNER::new()
         .expect("create domain model")
-        .domain_context("Biomedical research: gene and protein entity recognition in molecular biology literature.");
+        .domain_context(
+        "Biomedical research: gene and protein entity recognition in molecular biology literature.",
+    );
     let entities_domain = model_domain
         .extract_entities(text, None)
         .expect("domain extraction");
 
-    eprintln!("Without domain context: {:?}", entities_plain.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
-    eprintln!("With domain context: {:?}", entities_domain.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    eprintln!(
+        "Without domain context: {:?}",
+        entities_plain
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
+    eprintln!(
+        "With domain context: {:?}",
+        entities_domain
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
     assert_entity_invariants(&entities_domain, text);
 
@@ -376,9 +517,18 @@ fn llm_zero_shot_custom_types() {
         .extract_with_types(text, &["vehicle", "money", "measurement"], 0.3)
         .expect("zero-shot custom types");
 
-    eprintln!("Custom type entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    eprintln!(
+        "Custom type entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
-    assert!(!entities.is_empty(), "should find at least one entity with custom types");
+    assert!(
+        !entities.is_empty(),
+        "should find at least one entity with custom types"
+    );
     assert_entity_invariants(&entities, text);
 }
 
@@ -398,11 +548,22 @@ fn llm_multilingual_extraction() {
 
     // Mixed CJK + Latin + Arabic
     let text = "李明 met François Hollande in الرياض last Tuesday.";
-    let entities = model.extract_entities(text, None).expect("multilingual extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("multilingual extraction");
 
-    eprintln!("Multilingual entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type, e.start, e.end)).collect::<Vec<_>>());
+    eprintln!(
+        "Multilingual entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type, e.start, e.end))
+            .collect::<Vec<_>>()
+    );
 
-    assert!(!entities.is_empty(), "should find entities in multilingual text");
+    assert!(
+        !entities.is_empty(),
+        "should find entities in multilingual text"
+    );
     assert_entity_invariants(&entities, text);
 }
 
@@ -423,11 +584,22 @@ fn llm_self_verification() {
         .self_verify(true);
 
     let text = "Albert Einstein developed the theory of relativity at the ETH Zurich.";
-    let entities = model.extract_entities(text, None).expect("self-verified extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("self-verified extraction");
 
-    eprintln!("Self-verified entities: {:?}", entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>());
+    eprintln!(
+        "Self-verified entities: {:?}",
+        entities
+            .iter()
+            .map(|e| (&e.text, &e.entity_type))
+            .collect::<Vec<_>>()
+    );
 
-    assert!(!entities.is_empty(), "self-verification should still return valid entities");
+    assert!(
+        !entities.is_empty(),
+        "self-verification should still return valid entities"
+    );
     assert_entity_invariants(&entities, text);
 
     // Einstein should survive verification
@@ -451,9 +623,14 @@ fn llm_empty_and_short_inputs() {
 
     // Very short text with no entities
     let text = "Hello.";
-    let entities = model.extract_entities(text, None).expect("short text extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("short text extraction");
     assert_entity_invariants(&entities, text);
-    eprintln!("Short text entities: {:?}", entities.iter().map(|e| &e.text).collect::<Vec<_>>());
+    eprintln!(
+        "Short text entities: {:?}",
+        entities.iter().map(|e| &e.text).collect::<Vec<_>>()
+    );
 }
 
 // =============================================================================
@@ -517,7 +694,10 @@ fn llm_chunking_large_document() {
     }
     let char_count = text.chars().count();
     eprintln!("Document size: {} chars", char_count);
-    assert!(char_count > 4000, "test document should exceed chunk threshold");
+    assert!(
+        char_count > 4000,
+        "test document should exceed chunk threshold"
+    );
 
     // Use small chunk size to force multiple chunks + parallelism.
     let model = UniversalNER::new()
@@ -525,7 +705,9 @@ fn llm_chunking_large_document() {
         .max_chunk_chars(800);
 
     let start = std::time::Instant::now();
-    let entities = model.extract_entities(&text, None).expect("chunked extraction");
+    let entities = model
+        .extract_entities(&text, None)
+        .expect("chunked extraction");
     let elapsed = start.elapsed();
     eprintln!(
         "Chunked extraction: {} entities in {:.2}s",
@@ -548,7 +730,11 @@ fn llm_chunking_large_document() {
     let before = spans.len();
     spans.sort();
     spans.dedup();
-    assert_eq!(before, spans.len(), "no duplicate entity spans after coalescing");
+    assert_eq!(
+        before,
+        spans.len(),
+        "no duplicate entity spans after coalescing"
+    );
 
     // Verify entities are sorted by position
     for i in 1..entities.len() {
@@ -591,7 +777,9 @@ fn llm_chunking_small_document_passthrough() {
 
     let model = UniversalNER::new().expect("create UniversalNER");
 
-    let entities = model.extract_entities(text, None).expect("small doc extraction");
+    let entities = model
+        .extract_entities(text, None)
+        .expect("small doc extraction");
     assert_entity_invariants(&entities, text);
     assert!(
         !entities.is_empty(),

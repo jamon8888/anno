@@ -588,16 +588,18 @@ impl MentionCluster {
         self.mentions
             .iter()
             .enumerate()
-            .map(|(idx, mention)| anno_core::Signal::new(
-                signal_id_base + idx as u64,
-                anno_core::Location::Text {
-                    start: mention.start,
-                    end: mention.end,
-                },
-                mention.text.clone(),
-                anno_core::TypeLabel::from(mention.mention_type.as_label()),
-                1.0,
-            ))
+            .map(|(idx, mention)| {
+                anno_core::Signal::new(
+                    signal_id_base + idx as u64,
+                    anno_core::Location::Text {
+                        start: mention.start,
+                        end: mention.end,
+                    },
+                    mention.text.clone(),
+                    anno_core::TypeLabel::from(mention.mention_type.as_label()),
+                    1.0,
+                )
+            })
             .collect()
     }
 

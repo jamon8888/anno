@@ -36,7 +36,8 @@ impl GLiNEROnnx {
         let repo = api.model(model_name.to_string());
 
         // Download model - try quantized first if preferred
-        let (model_path, is_quantized) = hf_loader::download_onnx_model(&repo, config.prefer_quantized)?;
+        let (model_path, is_quantized) =
+            hf_loader::download_onnx_model(&repo, config.prefer_quantized)?;
 
         let tokenizer_path = hf_loader::download_model_file(&repo, &["tokenizer.json"])?;
 

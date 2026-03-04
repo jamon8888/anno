@@ -3,12 +3,12 @@
 //!
 //! These are feature-agnostic — imported by both the ONNX and Candle backends.
 
+#[cfg(feature = "candle")]
+use crate::sync::RwLock;
 use crate::{Entity, EntityType, Error, Result};
 use anno_core::EntityCategory;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-#[cfg(feature = "candle")]
-use crate::sync::RwLock;
 
 use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, ZeroShotNER};
 

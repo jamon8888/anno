@@ -478,11 +478,7 @@ impl Model for EnsembleNER {
                     }
                 }
                 Err(e) => {
-                    log::debug!(
-                        "EnsembleNER: Backend id={} failed: {}",
-                        backend_id,
-                        e
-                    );
+                    log::debug!("EnsembleNER: Backend id={} failed: {}", backend_id, e);
                 }
             }
         }

@@ -133,9 +133,13 @@ fn bench_scaling(c: &mut Criterion) {
 
     for n in [1, 5, 10, 50] {
         let text = base.repeat(n);
-        group.bench_with_input(BenchmarkId::from_parameter(format!("{n}x")), &text, |b, text| {
-            b.iter(|| model.extract_entities(black_box(text), None));
-        });
+        group.bench_with_input(
+            BenchmarkId::from_parameter(format!("{n}x")),
+            &text,
+            |b, text| {
+                b.iter(|| model.extract_entities(black_box(text), None));
+            },
+        );
     }
     group.finish();
 }

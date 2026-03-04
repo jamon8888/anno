@@ -234,7 +234,7 @@ macro_rules! _impl_stub_methods {
 }
 
 // Re-export macros so they can be used as `crate::backends::macros::define_feature_stub!`
-pub(crate) use define_feature_stub;
 #[allow(unused_imports)]
 pub(crate) use _impl_stub_methods;
 pub(crate) use _impl_stub_traits;
+pub(crate) use define_feature_stub;

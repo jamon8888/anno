@@ -54,7 +54,8 @@ impl GLiNER2Onnx {
             .map_err(|e| Error::Parse(format!("config parse: {}", e)))?;
         let hidden_size = config["hidden_size"].as_u64().unwrap_or(768) as usize;
 
-        let session = hf_loader::create_onnx_session(&model_path, hf_loader::OnnxSessionConfig::default())?;
+        let session =
+            hf_loader::create_onnx_session(&model_path, hf_loader::OnnxSessionConfig::default())?;
 
         log::info!(
             "[GLiNER2-ONNX] Loaded {} (hidden={})",

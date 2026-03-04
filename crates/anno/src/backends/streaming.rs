@@ -617,17 +617,17 @@ pub fn deduplicate_overlapping(entities: &mut Vec<Entity>, strategy: OverlapStra
             let mut out: Vec<Entity> = Vec::with_capacity(entities.len());
 
             for entity in entities.drain(..) {
-                let is_superset_of_existing = out.iter().any(|kept| {
-                    entity.start <= kept.start && entity.end >= kept.end
-                });
+                let is_superset_of_existing = out
+                    .iter()
+                    .any(|kept| entity.start <= kept.start && entity.end >= kept.end);
 
                 if is_superset_of_existing {
                     continue;
                 }
 
-                let overlaps_existing = out.iter().any(|kept| {
-                    entity.start < kept.end && kept.start < entity.end
-                });
+                let overlaps_existing = out
+                    .iter()
+                    .any(|kept| entity.start < kept.end && kept.start < entity.end);
 
                 if !overlaps_existing {
                     out.push(entity);
@@ -1199,7 +1199,8 @@ mod tests {
             respect_sentences: false,
             buffer_size: 100,
         };
-        let text = "Alice met Bob in Paris. Charlie visited London yesterday. Dave works in Tokyo today.";
+        let text =
+            "Alice met Bob in Paris. Charlie visited London yesterday. Dave works in Tokyo today.";
         let chunks = chunk_text(text, &config);
         assert!(chunks.len() > 1, "should split into multiple chunks");
 
@@ -1402,8 +1403,20 @@ mod tests {
     #[test]
     fn test_overlap_strategy_keep_shortest_drops_supersets() {
         let mut entities = vec![
-            Entity::new("Department of Defense", EntityType::Organization, 4, 25, 0.8),
-            Entity::new("The Department of Defense", EntityType::Organization, 0, 25, 0.7),
+            Entity::new(
+                "Department of Defense",
+                EntityType::Organization,
+                4,
+                25,
+                0.8,
+            ),
+            Entity::new(
+                "The Department of Defense",
+                EntityType::Organization,
+                0,
+                25,
+                0.7,
+            ),
         ];
         deduplicate_overlapping(&mut entities, OverlapStrategy::KeepShortest);
         assert_eq!(entities.len(), 1);
@@ -1715,11 +1728,16 @@ mod tests {
         // Every expected global span must be present.
         for off in &expected_offsets {
             assert!(
-                entities.iter().any(|e| e.start == 5 + off && e.end == 10 + off),
+                entities
+                    .iter()
+                    .any(|e| e.start == 5 + off && e.end == 10 + off),
                 "global entity [{}, {}] must be present; got: {:?}",
                 5 + off,
                 10 + off,
-                entities.iter().map(|e| (e.start, e.end)).collect::<Vec<_>>()
+                entities
+                    .iter()
+                    .map(|e| (e.start, e.end))
+                    .collect::<Vec<_>>()
             );
         }
 
@@ -1728,7 +1746,10 @@ mod tests {
             entities.len(),
             expected_offsets.len(),
             "one entity per chunk, no duplicates; got: {:?}",
-            entities.iter().map(|e| (e.start, e.end)).collect::<Vec<_>>()
+            entities
+                .iter()
+                .map(|e| (e.start, e.end))
+                .collect::<Vec<_>>()
         );
 
         // Result must be sorted by position.
@@ -1753,13 +1774,7 @@ mod tests {
         // Both chunks return an entity with the same *global* span [5, 10].
         // The exact-span dedup in extract_chunked_parallel must drop the duplicate.
         let result = extract_chunked_parallel(&text, &config, |_chunk, _char_offset| {
-            Ok(vec![Entity::new(
-                "shared",
-                EntityType::Person,
-                5,
-                10,
-                0.9,
-            )])
+            Ok(vec![Entity::new("shared", EntityType::Person, 5, 10, 0.9)])
         });
 
         let entities = result.expect("must not error");
@@ -1780,10 +1795,7 @@ mod tests {
             Ok(vec![Entity::new("x", EntityType::Person, 0, 1, 0.9)])
         });
         let entities = result.expect("must not error on empty text");
-        assert!(
-            entities.is_empty(),
-            "empty text must produce no entities"
-        );
+        assert!(entities.is_empty(), "empty text must produce no entities");
     }
 
     // --- chunk_text: overlap >= chunk_size forward-progress guard ---
@@ -1866,7 +1878,11 @@ mod tests {
 
         let mut first_run = make();
         deduplicate_overlapping(&mut first_run, OverlapStrategy::KeepShortest);
-        assert_eq!(first_run.len(), 1, "overlapping same-length entities: one must be dropped");
+        assert_eq!(
+            first_run.len(),
+            1,
+            "overlapping same-length entities: one must be dropped"
+        );
         let kept_text = first_run[0].text.clone();
 
         // Second run with the same input must keep the same entity.

@@ -204,7 +204,10 @@ impl GLiNERPoly {
             .as_ref()
             .and_then(|p| std::fs::read_to_string(p).ok())
             .and_then(|s: String| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|c: serde_json::Value| c.get("labels_encoder").and_then(|v| v.as_str().map(|s| s.to_string())))
+            .and_then(|c: serde_json::Value| {
+                c.get("labels_encoder")
+                    .and_then(|v| v.as_str().map(|s| s.to_string()))
+            })
             .unwrap_or_else(|| "BAAI/bge-base-en-v1.5".to_string());
 
         let label_repo = api.model(labels_encoder_name.clone());

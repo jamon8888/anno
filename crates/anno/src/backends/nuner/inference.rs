@@ -50,7 +50,8 @@ impl NuNER {
         let model_path = hf_loader::download_model_file(&repo, &["onnx/model.onnx", "model.onnx"])?;
         let tokenizer_path = hf_loader::download_model_file(&repo, &["tokenizer.json"])?;
 
-        let session = hf_loader::create_onnx_session(&model_path, hf_loader::OnnxSessionConfig::default())?;
+        let session =
+            hf_loader::create_onnx_session(&model_path, hf_loader::OnnxSessionConfig::default())?;
         let tokenizer = hf_loader::load_tokenizer(&tokenizer_path)?;
 
         Ok(Self {

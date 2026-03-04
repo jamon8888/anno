@@ -9,4 +9,6 @@ pub mod preprocessor;
 pub mod url_resolver;
 
 pub use preprocessor::{DocumentPreprocessor, PreparedDocument};
-pub use url_resolver::{CompositeResolver, ResolvedContent, UrlResolver};
+pub use url_resolver::{
+    looks_like_html, strip_html_to_text, CompositeResolver, ResolvedContent, UrlResolver,
+};

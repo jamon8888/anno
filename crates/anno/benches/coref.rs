@@ -43,9 +43,13 @@ fn bench_coref_scaling(c: &mut Criterion) {
 
     for n in [1, 3, 5, 10] {
         let text = base.repeat(n);
-        group.bench_with_input(BenchmarkId::from_parameter(format!("{n}x")), &text, |b, text| {
-            b.iter(|| coref.resolve(black_box(text)));
-        });
+        group.bench_with_input(
+            BenchmarkId::from_parameter(format!("{n}x")),
+            &text,
+            |b, text| {
+                b.iter(|| coref.resolve(black_box(text)));
+            },
+        );
     }
     group.finish();
 }
@@ -61,5 +65,10 @@ fn bench_coref_to_grounded(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_coref_resolve, bench_coref_scaling, bench_coref_to_grounded);
+criterion_group!(
+    benches,
+    bench_coref_resolve,
+    bench_coref_scaling,
+    bench_coref_to_grounded
+);
 criterion_main!(benches);

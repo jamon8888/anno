@@ -24,10 +24,7 @@ use anno_core::EntityType;
 
 #[cfg(feature = "onnx")]
 use {
-    crate::sync::lock,
-    ndarray::Array2,
-    ort::session::Session,
-    std::collections::HashMap,
+    crate::sync::lock, ndarray::Array2, ort::session::Session, std::collections::HashMap,
     tokenizers::Tokenizer,
 };
 
@@ -109,7 +106,8 @@ impl BertNEROnnx {
         let repo = api.model(model_name.to_string());
 
         // Download model - try quantized first if preferred
-        let (model_path, is_quantized) = hf_loader::download_onnx_model(&repo, config.prefer_quantized)?;
+        let (model_path, is_quantized) =
+            hf_loader::download_onnx_model(&repo, config.prefer_quantized)?;
 
         let tokenizer_path = hf_loader::download_model_file(&repo, &["tokenizer.json"])?;
         let config_path = hf_loader::download_model_file(&repo, &["config.json"])?;
@@ -235,48 +233,76 @@ impl BertNEROnnx {
 
     /// Split long text into sentence-boundary chunks that fit within BERT's
     /// 512-token window, run each chunk, and merge entity results.
+    ///
+    /// Uses 1-sentence overlap between consecutive chunks so entities near
+    /// chunk boundaries get a second chance with surrounding context. Entities
+    /// from the overlap region are deduplicated by (start, end, type).
     fn extract_entities_chunked(&self, text: &str) -> Result<Vec<Entity>> {
-        // Split at sentence boundaries (period/question/exclamation followed by space).
-        let mut chunks: Vec<(usize, &str)> = Vec::new(); // (byte_offset, slice)
-        let mut start = 0;
-        let mut current_end = 0;
-
+        // First, find all sentence boundaries (byte offsets after '.', '!', '?', '\n').
+        let mut sentence_ends: Vec<usize> = Vec::new();
         for (i, c) in text.char_indices() {
             if matches!(c, '.' | '!' | '?' | '\n') {
-                let boundary = i + c.len_utf8();
-                // Check if adding up to this boundary still fits
-                let candidate = &text[start..boundary];
-                let tok = self
-                    .tokenizer
-                    .encode(candidate, true)
-                    .map_err(|e| Error::Parse(format!("Chunking tokenization failed: {}", e)))?;
-                if tok.get_ids().len() > Self::MAX_TOKENS + 2 && current_end > start {
-                    // Flush current chunk
-                    chunks.push((start, &text[start..current_end]));
-                    start = current_end;
-                }
-                current_end = boundary;
+                sentence_ends.push(i + c.len_utf8());
             }
         }
-        // Flush remaining
-        if start < text.len() {
-            chunks.push((start, &text[start..]));
-        }
-        if chunks.is_empty() {
-            // Degenerate: single sentence > 512 tokens. Truncate gracefully.
-            chunks.push((0, text));
+        if sentence_ends.is_empty() || *sentence_ends.last().unwrap() < text.len() {
+            sentence_ends.push(text.len());
         }
 
+        // Build chunks: each chunk is (byte_start, byte_end). We greedily pack
+        // sentences until the next one would exceed MAX_TOKENS, then start a new
+        // chunk. The new chunk begins 1 sentence *before* the split point
+        // (overlap) so cross-boundary entities get full context on both sides.
+        let mut chunks: Vec<(usize, usize)> = Vec::new();
+        let mut chunk_start_byte = 0usize;
+        let mut prev_boundary_idx: Option<usize> = None; // index into sentence_ends
+
+        for (sent_idx, &sent_end) in sentence_ends.iter().enumerate() {
+            let candidate = &text[chunk_start_byte..sent_end];
+            let tok = self
+                .tokenizer
+                .encode(candidate, true)
+                .map_err(|e| Error::Parse(format!("Chunking tokenization failed: {}", e)))?;
+
+            if tok.get_ids().len() > Self::MAX_TOKENS + 2 {
+                // This sentence pushes over the limit. Flush up to the previous boundary.
+                if let Some(prev_idx) = prev_boundary_idx {
+                    let flush_end = sentence_ends[prev_idx];
+                    chunks.push((chunk_start_byte, flush_end));
+                    // Overlap: start new chunk 1 sentence back (if possible)
+                    chunk_start_byte = if prev_idx > 0 {
+                        sentence_ends[prev_idx - 1]
+                    } else {
+                        flush_end
+                    };
+                } else {
+                    // Single sentence exceeds limit -- flush it anyway
+                    chunks.push((chunk_start_byte, sent_end));
+                    chunk_start_byte = sent_end;
+                }
+            }
+            prev_boundary_idx = Some(sent_idx);
+        }
+        // Flush remaining text
+        if chunk_start_byte < text.len() {
+            chunks.push((chunk_start_byte, text.len()));
+        }
+        if chunks.is_empty() {
+            chunks.push((0, text.len()));
+        }
+
+        // Run each chunk and collect entities with global char offsets.
         let mut all_entities = Vec::new();
-        for (byte_offset, chunk) in &chunks {
+        for (byte_start, byte_end) in &chunks {
+            let chunk = &text[*byte_start..*byte_end];
             let encoding = self
                 .tokenizer
-                .encode(*chunk, true)
+                .encode(chunk, true)
                 .map_err(|e| Error::Parse(format!("Chunk tokenization failed: {}", e)))?;
             let mut chunk_entities = self.extract_entities_single(chunk, &encoding)?;
-            // Shift character offsets by the chunk's position in the full text
-            if *byte_offset > 0 {
-                let char_offset = text[..*byte_offset].chars().count();
+            // Shift character offsets to global positions
+            if *byte_start > 0 {
+                let char_offset = text[..*byte_start].chars().count();
                 for e in &mut chunk_entities {
                     e.start += char_offset;
                     e.end += char_offset;
@@ -284,6 +310,41 @@ impl BertNEROnnx {
             }
             all_entities.extend(chunk_entities);
         }
+
+        // Deduplicate entities from overlapping regions.
+        // Keep the higher-confidence version when (start, end, type) collide.
+        all_entities.sort_by(|a, b| {
+            a.start
+                .cmp(&b.start)
+                .then(a.end.cmp(&b.end))
+                .then(a.entity_type.to_string().cmp(&b.entity_type.to_string()))
+        });
+        all_entities.dedup_by(|b, a| {
+            a.start == b.start && a.end == b.end && a.entity_type == b.entity_type
+        });
+        // Also remove entities fully contained within a larger entity (from overlap)
+        let mut keep = vec![true; all_entities.len()];
+        for i in 0..all_entities.len() {
+            for j in 0..all_entities.len() {
+                if i != j
+                    && keep[j]
+                    && all_entities[i].start >= all_entities[j].start
+                    && all_entities[i].end <= all_entities[j].end
+                    && (all_entities[i].start != all_entities[j].start
+                        || all_entities[i].end != all_entities[j].end)
+                {
+                    keep[i] = false;
+                    break;
+                }
+            }
+        }
+        let all_entities: Vec<Entity> = all_entities
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| keep[*i])
+            .map(|(_, e)| e)
+            .collect();
+
         Ok(all_entities)
     }
 
@@ -525,6 +586,32 @@ impl BertNEROnnx {
             if label == "O" {
                 if is_subword_continuation {
                     // Extend: keep the entity open with the new byte_end.
+                    if let Some((start, _, etype, conf)) = current_entity.take() {
+                        current_entity = Some((start, byte_end, etype, conf));
+                        last_entity_word_id = cur_word_id;
+                    }
+                } else if current_entity.as_ref().is_some_and(
+                    |(_, prev_end, prev_type, _)| {
+                        // Name completion: BERT often tags surnames as O when
+                        // they follow a recognized given name.  Absorb adjacent
+                        // capitalized words (proper-noun pattern: Uppercase
+                        // followed by lowercase) into PER entities.
+                        matches!(prev_type, EntityType::Person)
+                            && byte_start <= *prev_end + 1
+                            && text
+                                .get(byte_start..)
+                                .map(|s| {
+                                    let mut chars = s.chars();
+                                    match (chars.next(), chars.next()) {
+                                        (Some(c1), Some(c2)) => {
+                                            c1.is_uppercase() && c2.is_lowercase()
+                                        }
+                                        _ => false,
+                                    }
+                                })
+                                .unwrap_or(false)
+                    },
+                ) {
                     if let Some((start, _, etype, conf)) = current_entity.take() {
                         current_entity = Some((start, byte_end, etype, conf));
                         last_entity_word_id = cur_word_id;

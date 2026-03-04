@@ -167,8 +167,7 @@ const COMMON_ACRONYMS: &[&str] = &[
     "ssl", "tls", "ssh", "ftp", "iso", "jpg", "png", "gif", "svg", "mp3", "mp4", "avi", "hd",
     "uhd", "ac", "dc", "tv", "pc", "os", "ui", "ux", "ai", "ml", "id", "ip", "io",
     // Units / time
-    "mph", "rpm", "gmt", "utc", "am", "pm",
-    // Economics / finance (not entities)
+    "mph", "rpm", "gmt", "utc", "am", "pm", // Economics / finance (not entities)
     "gdp", "gnp", "cpi", "roi", "ebitda", "ipo", "etf", "apy", "apr",
     // International abbreviations (used across languages)
     "etc", "aka", "eta",
@@ -329,6 +328,8 @@ const COMMON_SENTENCE_STARTERS: &[&str] = &[
     "other",
     "another",
     "any",
+    "after",
+    "almost",
 ];
 
 // Minimal lexical knowledge (50 items each - high ROI)
@@ -1041,8 +1042,17 @@ fn classify_minimal(
         }
     }
 
-    // Rule 10: Single word at sentence start with no context - very low confidence
-    if start_idx == 0 && prev_word.is_none() {
+    // Rule 10: Single word at sentence start -- low confidence.
+    // Sentence-initial capitalization is unreliable: headlines ("Death toll rises"),
+    // German grammar (all nouns capitalized), and section headers all produce false
+    // positives. Detect sentence start by: no prev_word, or prev_word ends with
+    // sentence-terminal punctuation.
+    let is_sentence_start = prev_word.is_none()
+        || prev_word
+            .as_ref()
+            .map(|w| w.ends_with('.') || w.ends_with('!') || w.ends_with('?'))
+            .unwrap_or(false);
+    if is_sentence_start {
         return (EntityType::Person, 0.30, "single_start_word");
     }
 

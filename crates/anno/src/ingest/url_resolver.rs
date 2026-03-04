@@ -38,197 +38,301 @@ impl HttpResolver {
         Self
     }
 
-    /// Extract text from HTML content (simple, no full HTML parser).
-    ///
-    /// Removes HTML tags and decodes common entities.
-    #[allow(dead_code)] // Part of trait interface, may be unused in some feature combinations
+    /// Extract text from HTML content. Delegates to the standalone function.
+    #[allow(dead_code)]
     fn extract_text_from_html(&self, html: &str) -> String {
-        let mut text = String::with_capacity(html.len());
-        let mut in_tag = false;
-        let mut in_script = false;
-        let mut in_style = false;
-        // Nesting depth for semantic tags whose content should be skipped.
-        let mut skip_depth: u32 = 0;
-        let mut chars = html.chars().peekable();
+        strip_html_to_text(html)
+    }
+}
 
-        while let Some(ch) = chars.next() {
-            match ch {
-                '<' => {
-                    in_tag = true;
-                    // Check for script/style tags
-                    let mut tag_buffer = String::new();
-                    tag_buffer.push('<');
-                    let mut tag_name = String::new();
-                    let mut in_tag_name = true;
+/// Strip HTML tags and decode entities, returning clean text suitable for NER.
+///
+/// Removes script/style/nav/header/footer/aside content. Also strips
+/// Wikipedia/MediaWiki-specific structural elements (TOC, references,
+/// citation lists, navigation boxes).
+///
+/// This is a public function so it can be reused from CLI (e.g., for `--file`
+/// on HTML files) without requiring an `HttpResolver` instance.
+pub fn strip_html_to_text(html: &str) -> String {
+    // Delegate to the internal implementation
+    _strip_html_to_text_impl(html)
+}
 
-                    while let Some(&next_ch) = chars.peek() {
-                        if next_ch == '>' {
-                            chars.next();
-                            tag_buffer.push('>');
-                            let tag_lower = tag_name.to_lowercase();
-                            if tag_lower == "script" || tag_lower.starts_with("script ") {
-                                in_script = true;
-                            } else if tag_lower == "/script" || tag_lower.starts_with("/script ") {
-                                in_script = false;
-                            } else if tag_lower == "style" || tag_lower.starts_with("style ") {
-                                in_style = true;
-                            } else if tag_lower == "/style" || tag_lower.starts_with("/style ") {
-                                in_style = false;
-                            }
-                            // Semantic HTML tags: skip nav, header, footer,
-                            // aside, menu, form, select, noscript content.
-                            // Also skip <div> with role="navigation"/role="banner"/
-                            // role="contentinfo" (ARIA landmark roles common on
-                            // news sites).
-                            let skip_tags: &[&str] = &[
-                                "nav", "header", "footer", "aside", "menu", "noscript", "form",
-                                "select",
-                            ];
-                            for &stag in skip_tags {
-                                if tag_lower == stag || tag_lower.starts_with(&format!("{} ", stag))
+/// Detect whether content looks like HTML (has tags near the start).
+pub fn looks_like_html(content: &str) -> bool {
+    let prefix = &content[..content.len().min(1024)];
+    let trimmed = prefix.trim_start();
+    trimmed.starts_with("<!")
+        || trimmed.starts_with("<html")
+        || trimmed.starts_with("<HTML")
+        || trimmed.starts_with("<?xml")
+        || (trimmed.contains("<head") && trimmed.contains("<body"))
+        || (trimmed.starts_with('<') && trimmed.contains("</"))
+}
+
+fn _strip_html_to_text_impl(html: &str) -> String {
+    let mut text = String::with_capacity(html.len());
+    let mut in_tag = false;
+    let mut in_script = false;
+    let mut in_style = false;
+    // Nesting depth for semantic tags whose content should be skipped.
+    let mut skip_depth: u32 = 0;
+    // Separate counter for wiki/MediaWiki-specific skip sections so their
+    // closing tags don't interfere with the semantic skip_tags depth.
+    let mut wiki_skip_depth: u32 = 0;
+    let mut chars = html.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '<' => {
+                in_tag = true;
+                // Check for script/style tags
+                let mut tag_buffer = String::new();
+                tag_buffer.push('<');
+                let mut tag_name = String::new();
+                let mut in_tag_name = true;
+
+                while let Some(&next_ch) = chars.peek() {
+                    if next_ch == '>' {
+                        chars.next();
+                        tag_buffer.push('>');
+                        let tag_lower = tag_name.to_lowercase();
+                        if tag_lower == "script" || tag_lower.starts_with("script ") {
+                            in_script = true;
+                        } else if tag_lower == "/script" || tag_lower.starts_with("/script ") {
+                            in_script = false;
+                        } else if tag_lower == "style" || tag_lower.starts_with("style ") {
+                            in_style = true;
+                        } else if tag_lower == "/style" || tag_lower.starts_with("/style ") {
+                            in_style = false;
+                        }
+                        // Semantic HTML tags: skip nav, header, footer,
+                        // aside, menu, form, select, noscript content.
+                        // Also skip <div> with role="navigation"/role="banner"/
+                        // role="contentinfo" (ARIA landmark roles common on
+                        // news sites).
+                        let skip_tags: &[&str] = &[
+                            "head",
+                            "nav",
+                            "header",
+                            "footer",
+                            "aside",
+                            "menu",
+                            "noscript",
+                            "form",
+                            "select",
+                            "figcaption",
+                        ];
+
+                        // Skip Wikipedia/MediaWiki-specific structural elements:
+                        // - div with id/class containing "toc", "references",
+                        //   "reflist", "catlinks", "mw-panel", "mw-navigation",
+                        //   "sidebar", "siteSub", "contentSub", "jump-to-nav",
+                        //   "external", "see-also", "further-reading", "navbox"
+                        // - ol/ul with class "references"
+                        // These carry navigation, citation metadata, and
+                        // boilerplate that overwhelm NER backends.
+                        let tag_lower_full = format!(
+                            "{} {}",
+                            tag_name.to_lowercase(),
+                            tag_buffer[1..].to_lowercase()
+                        );
+                        let wiki_skip_ids: &[&str] = &[
+                            "toc",
+                            "references",
+                            "reflist",
+                            "catlinks",
+                            "mw-panel",
+                            "mw-navigation",
+                            "sidebar",
+                            "sitesub",
+                            "contentsub",
+                            "jump-to-nav",
+                            "navbox",
+                            "external",
+                            "see-also",
+                            "further-reading",
+                            "mw-head",
+                            "mw-page-base",
+                            "mw-head-base",
+                            "footer",
+                            "printfooter",
+                        ];
+                        let is_wiki_skip = wiki_skip_ids.iter().any(|id| {
+                            tag_lower_full.contains(&format!("id=\"{}\"", id))
+                                || tag_lower_full.contains(&format!("id=\"{}\"", id))
+                                || tag_lower_full.contains(&format!("class=\"{}", id))
+                                || tag_lower_full.contains(id)
+                                    && (tag_lower_full.contains("class=")
+                                        || tag_lower_full.contains("id="))
+                        });
+                        if is_wiki_skip
+                            && matches!(
+                                tag_name.to_lowercase().as_str(),
+                                "div" | "ol" | "ul" | "table" | "span" | "section"
+                            )
+                        {
+                            // Track wiki-skip nesting separately so closing
+                            // tags don't underflow the semantic skip_tags depth.
+                            wiki_skip_depth += 1;
+                            skip_depth += 1;
+                        }
+                        // Handle closing tags for wiki-skip containers.
+                        if wiki_skip_depth > 0 {
+                            let wiki_close_tags: &[&str] =
+                                &["div", "ol", "ul", "table", "span", "section"];
+                            for &wtag in wiki_close_tags {
+                                if tag_lower == format!("/{}", wtag)
+                                    || tag_lower.starts_with(&format!("/{} ", wtag))
                                 {
-                                    skip_depth += 1;
-                                } else if tag_lower == format!("/{}", stag)
-                                    || tag_lower.starts_with(&format!("/{} ", stag))
-                                {
+                                    wiki_skip_depth = wiki_skip_depth.saturating_sub(1);
                                     skip_depth = skip_depth.saturating_sub(1);
                                 }
                             }
-                            in_tag = false;
-                            break;
-                        } else if next_ch.is_whitespace() {
-                            in_tag_name = false;
-                            tag_buffer.push(
-                                chars
-                                    .next()
-                                    .expect("chars.peek() returned Some, so next() should be Some"),
-                            );
-                        } else if in_tag_name {
-                            tag_name.push(
-                                chars
-                                    .next()
-                                    .expect("chars.peek() returned Some, so next() should be Some"),
-                            );
-                        } else {
-                            tag_buffer.push(
-                                chars
-                                    .next()
-                                    .expect("chars.peek() returned Some, so next() should be Some"),
-                            );
                         }
-                    }
-                    // Don't add script/style/skipped-semantic content
-                    if !in_script && !in_style && skip_depth == 0 {
-                        // Add space after block elements for readability
-                        if matches!(
-                            tag_name.to_lowercase().as_str(),
-                            "p" | "div" | "br" | "li" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
-                        ) && !text.ends_with(' ')
-                            && !text.is_empty()
-                        {
-                            text.push(' ');
+                        for &stag in skip_tags {
+                            if tag_lower == stag || tag_lower.starts_with(&format!("{} ", stag)) {
+                                skip_depth += 1;
+                            } else if tag_lower == format!("/{}", stag)
+                                || tag_lower.starts_with(&format!("/{} ", stag))
+                            {
+                                skip_depth = skip_depth.saturating_sub(1);
+                            }
                         }
-                    }
-                }
-                '>' if in_tag => {
-                    in_tag = false;
-                }
-                _ if in_tag || in_script || in_style || skip_depth > 0 => {
-                    // Skip content inside tags, scripts, styles, and semantic skip tags
-                }
-                '&' => {
-                    // Decode common HTML entities
-                    let mut entity = String::new();
-                    entity.push('&');
-                    let mut found_semicolon = false;
-                    while let Some(&next_ch) = chars.peek() {
-                        entity.push(
+                        in_tag = false;
+                        break;
+                    } else if next_ch.is_whitespace() {
+                        in_tag_name = false;
+                        tag_buffer.push(
                             chars
                                 .next()
                                 .expect("chars.peek() returned Some, so next() should be Some"),
                         );
-                        if next_ch == ';' {
-                            found_semicolon = true;
-                            break;
-                        }
-                        if next_ch.is_whitespace() || next_ch == '<' {
-                            break;
-                        }
-                    }
-
-                    if found_semicolon {
-                        let decoded = match entity.as_str() {
-                            "&amp;" => "&",
-                            "&lt;" => "<",
-                            "&gt;" => ">",
-                            "&quot;" => "\"",
-                            "&apos;" => "'",
-                            "&nbsp;" => " ",
-                            "&#39;" => "'",
-                            "&#8217;" => "'",
-                            "&#8220;" => "\"",
-                            "&#8221;" => "\"",
-                            _ => {
-                                // Try numeric entity (decimal &#N; or hex &#xN;)
-                                if entity.starts_with("&#") && entity.len() > 2 {
-                                    let num_str = &entity[2..entity.len() - 1];
-                                    let parsed = if let Some(hex) = num_str
-                                        .strip_prefix('x')
-                                        .or_else(|| num_str.strip_prefix('X'))
-                                    {
-                                        u32::from_str_radix(hex, 16).ok()
-                                    } else {
-                                        num_str.parse::<u32>().ok()
-                                    };
-                                    if let Some(ch) = parsed.and_then(char::from_u32) {
-                                        text.push(ch);
-                                        continue;
-                                    }
-                                }
-                                // Unknown entity, keep as-is
-                                text.push_str(&entity);
-                                continue;
-                            }
-                        };
-                        text.push_str(decoded);
+                    } else if in_tag_name {
+                        tag_name.push(
+                            chars
+                                .next()
+                                .expect("chars.peek() returned Some, so next() should be Some"),
+                        );
                     } else {
-                        // Not a valid entity, keep as-is
-                        text.push('&');
-                        text.push_str(&entity[1..]);
+                        tag_buffer.push(
+                            chars
+                                .next()
+                                .expect("chars.peek() returned Some, so next() should be Some"),
+                        );
                     }
                 }
-                ch if !in_tag && !in_script && !in_style && skip_depth == 0 => {
-                    text.push(ch);
+                // Don't add script/style/skipped-semantic content
+                if !in_script && !in_style && skip_depth == 0 {
+                    // Add space after block elements for readability
+                    if matches!(
+                        tag_name.to_lowercase().as_str(),
+                        "p" | "div" | "br" | "li" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+                    ) && !text.ends_with(' ')
+                        && !text.is_empty()
+                    {
+                        text.push(' ');
+                    }
                 }
-                _ => {}
             }
-        }
+            '>' if in_tag => {
+                in_tag = false;
+            }
+            _ if in_tag || in_script || in_style || skip_depth > 0 => {
+                // Skip content inside tags, scripts, styles, and semantic skip tags
+            }
+            '&' => {
+                // Decode common HTML entities
+                let mut entity = String::new();
+                entity.push('&');
+                let mut found_semicolon = false;
+                while let Some(&next_ch) = chars.peek() {
+                    entity.push(
+                        chars
+                            .next()
+                            .expect("chars.peek() returned Some, so next() should be Some"),
+                    );
+                    if next_ch == ';' {
+                        found_semicolon = true;
+                        break;
+                    }
+                    if next_ch.is_whitespace() || next_ch == '<' {
+                        break;
+                    }
+                }
 
-        // Clean up whitespace.
-        //
-        // HTML whitespace semantics are "collapsed": runs of whitespace render as a single space
-        // (outside of <pre>, which we don't handle here). If we preserve raw newlines/indentation
-        // from the HTML source, we end up with spans whose (start,end) point into `doc.text`,
-        // but whose extracted `surface` has spaces (many NER backends reconstruct surfaces by
-        // joining tokens with spaces). That mismatch creates a lot of validation noise on real
-        // pages and makes debug output harder to trust.
-        //
-        // So: collapse ALL whitespace to single spaces and trim.
-        let mut cleaned = String::with_capacity(text.len());
-        let mut last_was_space = true; // avoid leading spaces
-        for ch in text.chars() {
-            if ch.is_whitespace() {
-                if !last_was_space {
-                    cleaned.push(' ');
-                    last_was_space = true;
+                if found_semicolon {
+                    let decoded = match entity.as_str() {
+                        "&amp;" => "&",
+                        "&lt;" => "<",
+                        "&gt;" => ">",
+                        "&quot;" => "\"",
+                        "&apos;" => "'",
+                        "&nbsp;" => " ",
+                        "&#39;" => "'",
+                        "&#8217;" => "'",
+                        "&#8220;" => "\"",
+                        "&#8221;" => "\"",
+                        _ => {
+                            // Try numeric entity (decimal &#N; or hex &#xN;)
+                            if entity.starts_with("&#") && entity.len() > 2 {
+                                let num_str = &entity[2..entity.len() - 1];
+                                let parsed = if let Some(hex) = num_str
+                                    .strip_prefix('x')
+                                    .or_else(|| num_str.strip_prefix('X'))
+                                {
+                                    u32::from_str_radix(hex, 16).ok()
+                                } else {
+                                    num_str.parse::<u32>().ok()
+                                };
+                                if let Some(ch) = parsed.and_then(char::from_u32) {
+                                    text.push(ch);
+                                    continue;
+                                }
+                            }
+                            // Unknown entity, keep as-is
+                            text.push_str(&entity);
+                            continue;
+                        }
+                    };
+                    text.push_str(decoded);
+                } else {
+                    // Not a valid entity, keep as-is
+                    text.push('&');
+                    text.push_str(&entity[1..]);
                 }
-            } else {
-                cleaned.push(ch);
-                last_was_space = false;
             }
+            ch if !in_tag && !in_script && !in_style && skip_depth == 0 => {
+                text.push(ch);
+            }
+            _ => {}
         }
-        cleaned.trim().to_string()
     }
+
+    // Clean up whitespace.
+    //
+    // HTML whitespace semantics are "collapsed": runs of whitespace render as a single space
+    // (outside of <pre>, which we don't handle here). If we preserve raw newlines/indentation
+    // from the HTML source, we end up with spans whose (start,end) point into `doc.text`,
+    // but whose extracted `surface` has spaces (many NER backends reconstruct surfaces by
+    // joining tokens with spaces). That mismatch creates a lot of validation noise on real
+    // pages and makes debug output harder to trust.
+    //
+    // So: collapse ALL whitespace to single spaces and trim.
+    let mut cleaned = String::with_capacity(text.len());
+    let mut last_was_space = true; // avoid leading spaces
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !last_was_space {
+                cleaned.push(' ');
+                last_was_space = true;
+            }
+        } else {
+            cleaned.push(ch);
+            last_was_space = false;
+        }
+    }
+    cleaned.trim().to_string()
 }
 
 impl UrlResolver for HttpResolver {

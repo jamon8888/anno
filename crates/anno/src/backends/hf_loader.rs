@@ -63,7 +63,9 @@ pub fn download_model_file(
     candidates: &[&str],
 ) -> Result<std::path::PathBuf> {
     if candidates.is_empty() {
-        return Err(Error::Retrieval("download_model_file: candidates must not be empty".to_string()));
+        return Err(Error::Retrieval(
+            "download_model_file: candidates must not be empty".to_string(),
+        ));
     }
 
     let mut last_err = None;

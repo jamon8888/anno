@@ -379,7 +379,8 @@ impl W2NER {
             (model_file, tokenizer_file)
         };
 
-        let session = hf_loader::create_onnx_session(&model_file, hf_loader::OnnxSessionConfig::default())?;
+        let session =
+            hf_loader::create_onnx_session(&model_file, hf_loader::OnnxSessionConfig::default())?;
         let tokenizer = hf_loader::load_tokenizer(&tokenizer_file)?;
 
         log::debug!("[W2NER] Loaded model");

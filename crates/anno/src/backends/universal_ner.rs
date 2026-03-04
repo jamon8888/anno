@@ -51,9 +51,9 @@
 
 use std::collections::HashMap;
 
-use crate::sync::Mutex;
 #[cfg(any(feature = "llm", test))]
 use crate::sync::lock;
+use crate::sync::Mutex;
 
 use crate::backends::inference::ZeroShotNER;
 use crate::backends::llm_prompt::{BIOSchema, CodeNERPrompt};
@@ -334,8 +334,8 @@ Output:"#
                     .collect();
 
                 let schema = BIOSchema::new(&et_list);
-                let mut prompt = CodeNERPrompt::new(schema)
-                    .with_chain_of_thought(*chain_of_thought);
+                let mut prompt =
+                    CodeNERPrompt::new(schema).with_chain_of_thought(*chain_of_thought);
 
                 if let Some(ctx) = &self.domain_context {
                     prompt = prompt.with_system_prefix(&format!(
@@ -714,10 +714,8 @@ Return ONLY the JSON array:"#,
             return Ok(Vec::new());
         };
 
-        let items: Vec<serde_json::Value> =
-            serde_json::from_str(&json_str).map_err(|e| {
-                crate::Error::Parse(format!("Compact NER parse error: {}", e))
-            })?;
+        let items: Vec<serde_json::Value> = serde_json::from_str(&json_str)
+            .map_err(|e| crate::Error::Parse(format!("Compact NER parse error: {}", e)))?;
 
         let char_count = original_text.chars().count();
         let mut entities = Vec::new();
@@ -791,15 +789,8 @@ Return ONLY the JSON array:"#,
                 other => EntityType::Other(other.to_string()),
             };
 
-            let mut entity = Entity::new(
-                text_span,
-                entity_type,
-                start,
-                end,
-                0.9,
-            );
-            entity.provenance =
-                Some(crate::Provenance::ml("universal_ner", entity.confidence));
+            let mut entity = Entity::new(text_span, entity_type, start, end, 0.9);
+            entity.provenance = Some(crate::Provenance::ml("universal_ner", entity.confidence));
             entities.push(entity);
         }
 
@@ -1399,7 +1390,11 @@ mod tests {
         assert!(user.contains("P=person"));
         assert!(user.contains("L=location"));
         // Compact prompt should be shorter than Simple
-        assert!(user.len() < 200, "compact prompt should be concise: {} chars", user.len());
+        assert!(
+            user.len() < 200,
+            "compact prompt should be concise: {} chars",
+            user.len()
+        );
     }
 
     #[test]

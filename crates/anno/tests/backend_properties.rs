@@ -34,9 +34,12 @@ fn arb_ner_text() -> impl Strategy<Value = String> {
         // Numbers only
         Just("The rate is 5.25% per annum.".to_string()),
         // Long text
-        Just("Alice and Bob went to London. Charlie met them in Paris. \
+        Just(
+            "Alice and Bob went to London. Charlie met them in Paris. \
               David works at Microsoft. Eve works at Apple Inc. \
-              They all met on 2024-03-15 at the UN headquarters.".to_string()),
+              They all met on 2024-03-15 at the UN headquarters."
+                .to_string()
+        ),
         // Random printable ASCII
         "[A-Za-z .,;:!?0-9@#$%&*()-]{0,200}",
     ]
@@ -50,8 +53,7 @@ fn arb_fuzz_text() -> impl Strategy<Value = String> {
         // Random ASCII
         "[ -~]{0,300}",
         // Mixed with some Unicode
-        prop::string::string_regex("[A-Za-z0-9 \u{00C0}-\u{00FF}]{0,200}")
-            .expect("valid regex"),
+        prop::string::string_regex("[A-Za-z0-9 \u{00C0}-\u{00FF}]{0,200}").expect("valid regex"),
     ]
 }
 
@@ -112,7 +114,8 @@ fn check_entity_invariants(text: &str, backend_name: &str, backend: &dyn Model) 
             let norm_extracted = normalize_ws(&extracted);
             let norm_entity = normalize_ws(&entity.text);
             assert!(
-                norm_extracted.contains(&norm_entity) || norm_entity.contains(norm_extracted.trim()),
+                norm_extracted.contains(&norm_entity)
+                    || norm_entity.contains(norm_extracted.trim()),
                 "{}: span [{},{}) = {:?} doesn't match entity text {:?} (after ws normalization)",
                 backend_name,
                 entity.start,
@@ -307,10 +310,7 @@ fn cross_backend_person_detection() {
         .any(|e| matches!(e.entity_type, anno::EntityType::Person));
 
     assert!(h_has_person, "HeuristicNER should detect 'Tim Cook' as PER");
-    assert!(
-        e_has_person,
-        "EnsembleNER should detect 'Tim Cook' as PER"
-    );
+    assert!(e_has_person, "EnsembleNER should detect 'Tim Cook' as PER");
 }
 
 // =============================================================================

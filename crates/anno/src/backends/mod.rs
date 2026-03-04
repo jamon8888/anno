@@ -269,9 +269,9 @@ mod tests {
             "llm",
             "custom-backend",
             "",
-            "REGEX",      // case-sensitive: must NOT match "regex"
-            "Heuristic",  // case-sensitive: must NOT match "heuristic"
-            "Rule",       // case-sensitive: must NOT match "rule"
+            "REGEX",     // case-sensitive: must NOT match "regex"
+            "Heuristic", // case-sensitive: must NOT match "heuristic"
+            "Rule",      // case-sensitive: must NOT match "rule"
         ];
         for name in neural_names {
             assert_eq!(

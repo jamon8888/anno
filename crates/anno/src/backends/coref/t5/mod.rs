@@ -182,8 +182,12 @@ impl T5Coref {
             use_cpu_provider: true,
         };
 
-        let encoder = hf_loader::create_onnx_session(std::path::Path::new(&encoder_path), sess_config.clone())?;
-        let decoder = hf_loader::create_onnx_session(std::path::Path::new(&decoder_path), sess_config)?;
+        let encoder = hf_loader::create_onnx_session(
+            std::path::Path::new(&encoder_path),
+            sess_config.clone(),
+        )?;
+        let decoder =
+            hf_loader::create_onnx_session(std::path::Path::new(&decoder_path), sess_config)?;
         let tokenizer = hf_loader::load_tokenizer(std::path::Path::new(&tokenizer_path))?;
 
         log::info!("[T5-Coref] Loaded model from {}", model_path);
@@ -211,8 +215,18 @@ impl T5Coref {
         let api = hf_loader::hf_api()?;
         let repo = api.model(model_id.to_string());
 
-        let encoder_path = hf_loader::download_model_file(&repo, &["encoder_model.onnx", "onnx/encoder_model.onnx"])?;
-        let decoder_path = hf_loader::download_model_file(&repo, &["decoder_model.onnx", "onnx/decoder_model.onnx", "decoder_with_past_model.onnx"])?;
+        let encoder_path = hf_loader::download_model_file(
+            &repo,
+            &["encoder_model.onnx", "onnx/encoder_model.onnx"],
+        )?;
+        let decoder_path = hf_loader::download_model_file(
+            &repo,
+            &[
+                "decoder_model.onnx",
+                "onnx/decoder_model.onnx",
+                "decoder_with_past_model.onnx",
+            ],
+        )?;
         let tokenizer_path = hf_loader::download_model_file(&repo, &["tokenizer.json"])?;
 
         let sess_config = hf_loader::OnnxSessionConfig {

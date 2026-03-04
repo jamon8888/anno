@@ -254,9 +254,8 @@ static PHONE_INTL: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\+\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}\b")
         .expect("PHONE_INTL regex is invalid")
 });
-static PHONE_LOCAL: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b\d{3}[-.\s]?\d{4}\b").expect("PHONE_LOCAL regex is invalid")
-});
+static PHONE_LOCAL: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\b\d{3}[-.\s]?\d{4}\b").expect("PHONE_LOCAL regex is invalid"));
 
 /// Get all supported entity types (for Model trait).
 pub fn supported_types() -> Vec<EntityType> {

@@ -41,8 +41,8 @@
 //! - NuNER: Token-based variant using same span representation
 //! - Community GLiNER implementations (for span layout conventions)
 
-use anno_core::EntityCategory;
 use crate::{Entity, EntityType, Error, Result};
+use anno_core::EntityCategory;
 
 /// Default maximum span width (in words) for GLiNER-family models.
 ///
@@ -408,38 +408,131 @@ pub fn map_label_to_entity_type(label: &str) -> EntityType {
         "cardinal" => EntityType::Cardinal,
         "number" | "num" => EntityType::Cardinal,
         "ordinal" => EntityType::Ordinal,
-        "event" => EntityType::Custom { name: "EVENT".to_string(), category: EntityCategory::Creative },
-        "product" | "prod" => EntityType::Custom { name: "PRODUCT".to_string(), category: EntityCategory::Creative },
-        "work_of_art" | "work" => EntityType::Custom { name: "WORK_OF_ART".to_string(), category: EntityCategory::Creative },
-        "law" | "legal" => EntityType::Custom { name: "LAW".to_string(), category: EntityCategory::Creative },
-        "language" | "lang" => EntityType::Custom { name: "LANGUAGE".to_string(), category: EntityCategory::Creative },
-        "norp" => EntityType::Custom { name: "NORP".to_string(), category: EntityCategory::Agent }, // Nationalities, religions, political groups
-        "fac" | "facility" => EntityType::Custom { name: "FACILITY".to_string(), category: EntityCategory::Organization },
+        "event" => EntityType::Custom {
+            name: "EVENT".to_string(),
+            category: EntityCategory::Creative,
+        },
+        "product" | "prod" => EntityType::Custom {
+            name: "PRODUCT".to_string(),
+            category: EntityCategory::Creative,
+        },
+        "work_of_art" | "work" => EntityType::Custom {
+            name: "WORK_OF_ART".to_string(),
+            category: EntityCategory::Creative,
+        },
+        "law" | "legal" => EntityType::Custom {
+            name: "LAW".to_string(),
+            category: EntityCategory::Creative,
+        },
+        "language" | "lang" => EntityType::Custom {
+            name: "LANGUAGE".to_string(),
+            category: EntityCategory::Creative,
+        },
+        "norp" => EntityType::Custom {
+            name: "NORP".to_string(),
+            category: EntityCategory::Agent,
+        }, // Nationalities, religions, political groups
+        "fac" | "facility" => EntityType::Custom {
+            name: "FACILITY".to_string(),
+            category: EntityCategory::Organization,
+        },
         // Fine-grained / CNER-inspired labels
-        "animal" => EntityType::Custom { name: "ANIMAL".to_string(), category: EntityCategory::Misc },
-        "biology" => EntityType::Custom { name: "BIOLOGY".to_string(), category: EntityCategory::Misc },
-        "celestial" => EntityType::Custom { name: "CELESTIAL".to_string(), category: EntityCategory::Place },
-        "culture" => EntityType::Custom { name: "CULTURE".to_string(), category: EntityCategory::Creative },
-        "discipline" => EntityType::Custom { name: "DISCIPLINE".to_string(), category: EntityCategory::Creative },
-        "disease" => EntityType::Custom { name: "DISEASE".to_string(), category: EntityCategory::Misc },
-        "feeling" => EntityType::Custom { name: "FEELING".to_string(), category: EntityCategory::Misc },
-        "food" => EntityType::Custom { name: "FOOD".to_string(), category: EntityCategory::Misc },
-        "group" => EntityType::Custom { name: "GROUP".to_string(), category: EntityCategory::Agent },
-        "instrument" => EntityType::Custom { name: "INSTRUMENT".to_string(), category: EntityCategory::Misc },
-        "media" => EntityType::Custom { name: "MEDIA".to_string(), category: EntityCategory::Creative },
-        "asset" => EntityType::Custom { name: "ASSET".to_string(), category: EntityCategory::Misc },
-        "artifact" => EntityType::Custom { name: "ARTIFACT".to_string(), category: EntityCategory::Misc },
-        "part" => EntityType::Custom { name: "PART".to_string(), category: EntityCategory::Misc },
-        "physical_phenomenon" | "physical" => EntityType::Custom { name: "PHYSICAL_PHENOMENON".to_string(), category: EntityCategory::Misc },
-        "plant" => EntityType::Custom { name: "PLANT".to_string(), category: EntityCategory::Misc },
-        "property" => EntityType::Custom { name: "PROPERTY".to_string(), category: EntityCategory::Misc },
-        "psych" => EntityType::Custom { name: "PSYCH".to_string(), category: EntityCategory::Misc },
-        "relation" => EntityType::Custom { name: "RELATION".to_string(), category: EntityCategory::Relation },
-        "struct" => EntityType::Custom { name: "STRUCT".to_string(), category: EntityCategory::Misc },
-        "substance" => EntityType::Custom { name: "SUBSTANCE".to_string(), category: EntityCategory::Misc },
-        "super" | "supernatural" => EntityType::Custom { name: "SUPER".to_string(), category: EntityCategory::Misc },
-        "vehicle" | "vehi" => EntityType::Custom { name: "VEHICLE".to_string(), category: EntityCategory::Misc },
-        _ => EntityType::Custom { name: label.to_uppercase(), category: EntityCategory::Misc },
+        "animal" => EntityType::Custom {
+            name: "ANIMAL".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "biology" => EntityType::Custom {
+            name: "BIOLOGY".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "celestial" => EntityType::Custom {
+            name: "CELESTIAL".to_string(),
+            category: EntityCategory::Place,
+        },
+        "culture" => EntityType::Custom {
+            name: "CULTURE".to_string(),
+            category: EntityCategory::Creative,
+        },
+        "discipline" => EntityType::Custom {
+            name: "DISCIPLINE".to_string(),
+            category: EntityCategory::Creative,
+        },
+        "disease" => EntityType::Custom {
+            name: "DISEASE".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "feeling" => EntityType::Custom {
+            name: "FEELING".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "food" => EntityType::Custom {
+            name: "FOOD".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "group" => EntityType::Custom {
+            name: "GROUP".to_string(),
+            category: EntityCategory::Agent,
+        },
+        "instrument" => EntityType::Custom {
+            name: "INSTRUMENT".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "media" => EntityType::Custom {
+            name: "MEDIA".to_string(),
+            category: EntityCategory::Creative,
+        },
+        "asset" => EntityType::Custom {
+            name: "ASSET".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "artifact" => EntityType::Custom {
+            name: "ARTIFACT".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "part" => EntityType::Custom {
+            name: "PART".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "physical_phenomenon" | "physical" => EntityType::Custom {
+            name: "PHYSICAL_PHENOMENON".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "plant" => EntityType::Custom {
+            name: "PLANT".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "property" => EntityType::Custom {
+            name: "PROPERTY".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "psych" => EntityType::Custom {
+            name: "PSYCH".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "relation" => EntityType::Custom {
+            name: "RELATION".to_string(),
+            category: EntityCategory::Relation,
+        },
+        "struct" => EntityType::Custom {
+            name: "STRUCT".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "substance" => EntityType::Custom {
+            name: "SUBSTANCE".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "super" | "supernatural" => EntityType::Custom {
+            name: "SUPER".to_string(),
+            category: EntityCategory::Misc,
+        },
+        "vehicle" | "vehi" => EntityType::Custom {
+            name: "VEHICLE".to_string(),
+            category: EntityCategory::Misc,
+        },
+        _ => EntityType::Custom {
+            name: label.to_uppercase(),
+            category: EntityCategory::Misc,
+        },
     }
 }
 
@@ -523,7 +616,10 @@ mod tests {
         assert_eq!(map_label_to_entity_type("GPE"), EntityType::Location);
         assert_eq!(
             map_label_to_entity_type("custom_type"),
-            EntityType::Custom { name: "CUSTOM_TYPE".to_string(), category: EntityCategory::Misc }
+            EntityType::Custom {
+                name: "CUSTOM_TYPE".to_string(),
+                category: EntityCategory::Misc
+            }
         );
     }
 
@@ -722,19 +818,31 @@ mod tests {
         assert_eq!(map_label_to_entity_type("ordinal"), EntityType::Ordinal);
         assert_eq!(
             map_label_to_entity_type("event"),
-            EntityType::Custom { name: "EVENT".to_string(), category: EntityCategory::Creative }
+            EntityType::Custom {
+                name: "EVENT".to_string(),
+                category: EntityCategory::Creative
+            }
         );
         assert_eq!(
             map_label_to_entity_type("product"),
-            EntityType::Custom { name: "PRODUCT".to_string(), category: EntityCategory::Creative }
+            EntityType::Custom {
+                name: "PRODUCT".to_string(),
+                category: EntityCategory::Creative
+            }
         );
         assert_eq!(
             map_label_to_entity_type("norp"),
-            EntityType::Custom { name: "NORP".to_string(), category: EntityCategory::Agent }
+            EntityType::Custom {
+                name: "NORP".to_string(),
+                category: EntityCategory::Agent
+            }
         );
         assert_eq!(
             map_label_to_entity_type("facility"),
-            EntityType::Custom { name: "FACILITY".to_string(), category: EntityCategory::Organization }
+            EntityType::Custom {
+                name: "FACILITY".to_string(),
+                category: EntityCategory::Organization
+            }
         );
     }
 

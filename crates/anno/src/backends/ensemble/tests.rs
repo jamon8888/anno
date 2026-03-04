@@ -34,11 +34,7 @@ impl crate::Model for FixedBackend {
         self.name
     }
 
-    fn extract_entities(
-        &self,
-        _text: &str,
-        _language: Option<&str>,
-    ) -> crate::Result<Vec<Entity>> {
+    fn extract_entities(&self, _text: &str, _language: Option<&str>) -> crate::Result<Vec<Entity>> {
         Ok(self.entities.clone())
     }
 
@@ -76,11 +72,7 @@ impl crate::Model for AlwaysErrBackend {
         self.name
     }
 
-    fn extract_entities(
-        &self,
-        _text: &str,
-        _language: Option<&str>,
-    ) -> crate::Result<Vec<Entity>> {
+    fn extract_entities(&self, _text: &str, _language: Option<&str>) -> crate::Result<Vec<Entity>> {
         Err(crate::Error::ModelInit(format!(
             "AlwaysErrBackend '{}' intentionally failed",
             self.name
@@ -530,7 +522,14 @@ fn test_parallel_execution_is_deterministic() {
         .extract_entities(text, None)
         .expect("first run should succeed")
         .into_iter()
-        .map(|e| (e.start, e.end, e.entity_type.as_label().to_string(), e.confidence))
+        .map(|e| {
+            (
+                e.start,
+                e.end,
+                e.entity_type.as_label().to_string(),
+                e.confidence,
+            )
+        })
         .collect();
 
     assert!(
@@ -543,7 +542,14 @@ fn test_parallel_execution_is_deterministic() {
             .extract_entities(text, None)
             .unwrap_or_else(|e| panic!("run {} failed: {}", run, e))
             .into_iter()
-            .map(|e| (e.start, e.end, e.entity_type.as_label().to_string(), e.confidence))
+            .map(|e| {
+                (
+                    e.start,
+                    e.end,
+                    e.entity_type.as_label().to_string(),
+                    e.confidence,
+                )
+            })
             .collect();
 
         assert_eq!(
@@ -633,11 +639,7 @@ fn test_failing_backend_is_skipped_and_others_produce_results() {
         vec![Entity::new("March", EntityType::Date, 6, 11, 0.90)],
     );
 
-    let ner = EnsembleNER::with_backends(vec![
-        Box::new(good_a),
-        Box::new(bad),
-        Box::new(good_b),
-    ]);
+    let ner = EnsembleNER::with_backends(vec![Box::new(good_a), Box::new(bad), Box::new(good_b)]);
 
     let entities = ner
         .extract_entities("Paris March", None)
@@ -676,7 +678,10 @@ fn test_all_backends_fail_returns_empty() {
     ]);
 
     let result = ner.extract_entities("Anything at all", None);
-    assert!(result.is_ok(), "ensemble should return Ok even when all backends fail");
+    assert!(
+        result.is_ok(),
+        "ensemble should return Ok even when all backends fail"
+    );
     assert!(
         result.unwrap().is_empty(),
         "ensemble should return empty vec when all backends fail"
@@ -689,7 +694,10 @@ fn test_single_failing_backend_with_single_good_backend() {
     let ner = EnsembleNER::with_backends(vec![Box::new(AlwaysErrBackend::new("only-err"))]);
 
     let result = ner.extract_entities("Tim Cook", None);
-    assert!(result.is_ok(), "single failing backend must not propagate as Err");
+    assert!(
+        result.is_ok(),
+        "single failing backend must not propagate as Err"
+    );
     assert!(result.unwrap().is_empty());
 }
 

@@ -762,7 +762,10 @@ fn test_method_for_backend_name_all_branches() {
     );
     assert_eq!(method_for_backend_name("rule"), ExtractionMethod::Heuristic);
     // Anything else maps to Neural (onnx, candle, custom names, etc.)
-    assert_eq!(method_for_backend_name("onnx-bert"), ExtractionMethod::Neural);
+    assert_eq!(
+        method_for_backend_name("onnx-bert"),
+        ExtractionMethod::Neural
+    );
     assert_eq!(method_for_backend_name("candle"), ExtractionMethod::Neural);
     assert_eq!(method_for_backend_name(""), ExtractionMethod::Neural);
 }
@@ -1410,7 +1413,13 @@ fn filter_title_words_removes_bundeskanzler() {
 #[test]
 fn filter_title_words_keeps_multi_word_orgs() {
     let mut entities = vec![
-        Entity::new("Federal Chancellor Office", EntityType::Organization, 0, 25, 0.9),
+        Entity::new(
+            "Federal Chancellor Office",
+            EntityType::Organization,
+            0,
+            25,
+            0.9,
+        ),
         Entity::new("President Hotel", EntityType::Organization, 30, 45, 0.85),
     ];
     super::filter_title_words(&mut entities);

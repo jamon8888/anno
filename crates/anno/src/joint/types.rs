@@ -738,8 +738,21 @@ impl JointModel {
         // Without this, pronouns like "He" never enter the factor graph and
         // cannot be resolved to their antecedents.
         let pronouns: &[&str] = &[
-            "he", "she", "it", "they", "him", "her", "them", "his", "hers", "its", "their",
-            "himself", "herself", "itself", "themselves",
+            "he",
+            "she",
+            "it",
+            "they",
+            "him",
+            "her",
+            "them",
+            "his",
+            "hers",
+            "its",
+            "their",
+            "himself",
+            "herself",
+            "itself",
+            "themselves",
         ];
         let mut char_pos = 0;
         for word in text.split_whitespace() {
@@ -759,7 +772,9 @@ impl JointModel {
                     let idx = mentions.len();
                     mentions.push(JointMention {
                         idx,
-                        text: word.trim_end_matches(|c: char| c.is_ascii_punctuation()).to_string(),
+                        text: word
+                            .trim_end_matches(|c: char| c.is_ascii_punctuation())
+                            .to_string(),
                         head: word_lower.clone(),
                         start,
                         end,

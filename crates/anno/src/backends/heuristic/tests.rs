@@ -1048,7 +1048,10 @@ fn org_suffix_services_technologies() {
             found,
             "Should detect org suffix in '{}', got: {:?}",
             name,
-            entities.iter().map(|e| (&e.text, &e.entity_type)).collect::<Vec<_>>()
+            entities
+                .iter()
+                .map(|e| (&e.text, &e.entity_type))
+                .collect::<Vec<_>>()
         );
     }
 }

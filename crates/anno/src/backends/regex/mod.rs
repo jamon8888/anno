@@ -223,9 +223,8 @@ static PHONE_INTL: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\+\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}\b").expect("valid regex")
 });
 
-static PHONE_LOCAL: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b\d{3}[-.\s]?\d{4}\b").expect("valid regex")
-});
+static PHONE_LOCAL: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\b\d{3}[-.\s]?\d{4}\b").expect("valid regex"));
 
 /// Words that signal the following number is a phone number (for PHONE_LOCAL context filter).
 static PHONE_CONTEXT: Lazy<Regex> = Lazy::new(|| {
@@ -1285,7 +1284,10 @@ mod tests {
     fn money_magnitude_with_trailing_currency_code() {
         for case in &["22.1 billion USD", "3.5 million EUR", "1 trillion GBP"] {
             let e = extract(case);
-            let money: Vec<_> = e.iter().filter(|e| e.entity_type == EntityType::Money).collect();
+            let money: Vec<_> = e
+                .iter()
+                .filter(|e| e.entity_type == EntityType::Money)
+                .collect();
             assert!(
                 !money.is_empty(),
                 "'{}' should be tagged as MONEY, got: {:?}",
@@ -1293,7 +1295,9 @@ mod tests {
                 e
             );
             // The full string including currency code should be captured
-            let full_match = money.iter().any(|m| m.text.contains("USD") || m.text.contains("EUR") || m.text.contains("GBP"));
+            let full_match = money.iter().any(|m| {
+                m.text.contains("USD") || m.text.contains("EUR") || m.text.contains("GBP")
+            });
             assert!(
                 full_match,
                 "'{}' should include the currency code in the span, got: {:?}",
