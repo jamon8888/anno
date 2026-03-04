@@ -117,6 +117,33 @@ pub fn run(args: ValidateArgs) -> Result<(), String> {
 
                 doc.add_signal(signal);
             }
+
+            // Check for overlapping entity spans
+            let mut spans: Vec<(usize, usize, usize)> = Vec::new(); // (start, end, entity_index)
+            for (i, ent) in entities.iter().enumerate() {
+                let s = ent["start"].as_u64().unwrap_or(0) as usize;
+                let e = ent["end"].as_u64().unwrap_or(0) as usize;
+                if e > s {
+                    for &(ps, pe, pi) in &spans {
+                        if s < pe && e > ps {
+                            eprintln!(
+                                "{} {}:{}:entity[{}]: overlaps with entity[{}] ([{}..{}) vs [{}..{}))",
+                                color("33", "warn"),
+                                file,
+                                line_num + 1,
+                                i,
+                                pi,
+                                s,
+                                e,
+                                ps,
+                                pe,
+                            );
+                            total_warnings += 1;
+                        }
+                    }
+                    spans.push((s, e, i));
+                }
+            }
         }
     }
 

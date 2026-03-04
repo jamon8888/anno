@@ -74,7 +74,7 @@ pub fn run(args: ImportArgs) -> Result<(), String> {
             ExportFormat::JsonLd => "jsonld",
             #[cfg(feature = "graph")]
             ExportFormat::GraphNTriples => "nt",
-            ExportFormat::KuzuCsv => "csv",
+            ExportFormat::GraphCsv => "csv",
         };
         fs::read_dir(&args.input)
             .map_err(|e| format!("Failed to read directory: {}", e))?
@@ -181,8 +181,8 @@ fn import_file(
         ExportFormat::JsonLd => import_jsonld(input),
         #[cfg(feature = "graph")]
         ExportFormat::GraphNTriples => import_ntriples(input),
-        ExportFormat::KuzuCsv => {
-            Err("Import from `kuzu` CSV format is not yet supported. Use jsonl or brat.".into())
+        ExportFormat::GraphCsv => {
+            Err("Import from `graph-csv` format is not yet supported. Use jsonl or brat.".into())
         }
     }
 }

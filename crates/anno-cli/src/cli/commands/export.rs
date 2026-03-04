@@ -7,10 +7,10 @@
 //! - N-Triples (RDF triples for knowledge graphs)
 //! - JSON-LD (linked data for knowledge graphs)
 //! - graph-ntriples (N-Triples via the lattix graph substrate; stable triple rendering)
-//! - Kuzu CSV (node + co-occurrence edge tables for Kuzu graph DB import)
+//! - Graph CSV (node + co-occurrence edge tables for graph DB import)
 //!
 //! When the selected backend is `RelationCapable` (e.g. `tplinker`), graph-oriented formats
-//! (graph-ntriples, ntriples, jsonld, kuzu) emit typed semantic triples instead of falling
+//! (graph-ntriples, ntriples, jsonld, graph-csv) emit typed semantic triples instead of falling
 //! back to co-occurrence edges.
 
 use clap::{Parser, ValueEnum};
@@ -84,9 +84,9 @@ pub enum ExportFormat {
     #[cfg(feature = "graph")]
     #[value(name = "graph-ntriples")]
     GraphNTriples,
-    /// Kuzu CSV: node table + co-occurrence (or semantic) edge table for Kuzu graph DB import.
-    #[value(name = "kuzu")]
-    KuzuCsv,
+    /// Graph CSV: node table + co-occurrence (or semantic) edge table for graph DB import.
+    #[value(name = "graph-csv", alias = "kuzu")]
+    GraphCsv,
 }
 
 // =============================================================================
@@ -315,8 +315,8 @@ fn export_file(opts: ExportFileOpts<'_>) -> Result<(), String> {
     } = opts;
     let stem = input.file_stem().unwrap_or_default().to_string_lossy();
 
-    // Kuzu writes two CSVs (nodes + edges); handle before the single-path logic below.
-    if matches!(format, ExportFormat::KuzuCsv) {
+    // Graph CSV writes two CSVs (nodes + edges); handle before the single-path logic below.
+    if matches!(format, ExportFormat::GraphCsv) {
         let nodes_path = output_dir.join(format!("{}-nodes.csv", stem));
         let edges_path = output_dir.join(format!("{}-edges.csv", stem));
 
@@ -330,7 +330,7 @@ fn export_file(opts: ExportFileOpts<'_>) -> Result<(), String> {
         }
 
         let (nodes_csv, edges_csv) =
-            export_kuzu(&ext.entities, &ext.relations, input, include_confidence);
+            export_graph_csv(&ext.entities, &ext.relations, input, include_confidence);
         fs::write(&nodes_path, nodes_csv)
             .map_err(|e| format!("Failed to write nodes CSV: {}", e))?;
         fs::write(&edges_path, edges_csv)
@@ -348,7 +348,7 @@ fn export_file(opts: ExportFileOpts<'_>) -> Result<(), String> {
         ExportFormat::JsonLd => output_dir.join(format!("{}.jsonld", stem)),
         #[cfg(feature = "graph")]
         ExportFormat::GraphNTriples => output_dir.join(format!("{}.nt", stem)),
-        ExportFormat::KuzuCsv => unreachable!(),
+        ExportFormat::GraphCsv => unreachable!(),
     };
 
     if output_path.exists() && !overwrite {
@@ -374,7 +374,7 @@ fn export_file(opts: ExportFileOpts<'_>) -> Result<(), String> {
         ExportFormat::GraphNTriples => {
             export_graph_ntriples(&ext.entities, &ext.relations, input, base_uri)
         }
-        ExportFormat::KuzuCsv => unreachable!(),
+        ExportFormat::GraphCsv => unreachable!(),
     };
 
     fs::write(&output_path, output_content)
@@ -717,28 +717,16 @@ fn export_graph_ntriples(
 }
 
 // =============================================================================
-// Kuzu CSV
+// Graph CSV
 // =============================================================================
 
-/// Export entities as Kuzu-compatible CSV node and edge tables.
+/// Export entities as graph-compatible CSV node and edge tables.
 ///
 /// Returns `(nodes_csv, edges_csv)`.
 ///
-/// **Kuzu import**:
-/// ```cypher
-/// CREATE NODE TABLE Entity(
-///     id STRING, entity_type STRING, text STRING,
-///     start INT64, end INT64, source STRING,
-///     PRIMARY KEY(id)
-/// );
-/// CREATE REL TABLE Relation(FROM Entity TO Entity, rel_type STRING, confidence DOUBLE);
-/// COPY Entity FROM 'doc-nodes.csv' (HEADER=TRUE);
-/// COPY Relation FROM 'doc-edges.csv' (HEADER=TRUE);
-/// ```
-///
 /// When the backend is `RelationCapable` (e.g. `--model tplinker`), edges are extracted
 /// semantic triples. Otherwise they fall back to co-occurrence pairs (within 200 chars).
-fn export_kuzu(
+fn export_graph_csv(
     entities: &[anno_core::Entity],
     relations: &[anno_core::Relation],
     source: &Path,
