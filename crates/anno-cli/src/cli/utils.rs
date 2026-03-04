@@ -104,9 +104,25 @@ fn sanitize_input(input: &str) -> String {
     result.trim().to_string()
 }
 
-/// Read a file with consistent error handling
+/// Read a file with consistent error handling.
+///
+/// If the file looks like HTML (based on content sniffing or `.html`/`.htm` extension),
+/// automatically strips tags and extracts text -- same logic as `--url` uses.
 pub fn read_input_file(path: &str) -> Result<String, String> {
-    fs::read_to_string(path).map_err(|e| format_error("read file", &format!("{}: {}", path, e)))
+    let content = fs::read_to_string(path)
+        .map_err(|e| format_error("read file", &format!("{}: {}", path, e)))?;
+
+    // Detect HTML by extension or content
+    let is_html_ext = path.ends_with(".html") || path.ends_with(".htm") || path.ends_with(".xhtml");
+    if is_html_ext || anno::ingest::looks_like_html(&content) {
+        eprintln!(
+            "note: detected HTML content in '{}', stripping tags (use --url for richer extraction)",
+            path
+        );
+        Ok(anno::ingest::strip_html_to_text(&content))
+    } else {
+        Ok(content)
+    }
 }
 
 /// Parse a GroundedDocument from JSON with consistent error handling

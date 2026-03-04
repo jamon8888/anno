@@ -1,9 +1,7 @@
 //! Validate command - Validate JSONL annotation files
 
 use super::super::output::color;
-use anno::core::grounded::{
-    GroundedDocument, Location, Signal, SignalId, SignalValidationError,
-};
+use anno::core::grounded::{GroundedDocument, Location, Signal, SignalId, SignalValidationError};
 use clap::Parser;
 use std::fs;
 

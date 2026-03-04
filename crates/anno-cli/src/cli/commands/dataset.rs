@@ -1629,9 +1629,7 @@ code{color:var(--code)}
 }
 
 #[cfg(feature = "eval")]
-fn coref_doc_to_gold_entities(
-    doc: &anno_eval::eval::coref::CorefDocument,
-) -> Vec<anno::Entity> {
+fn coref_doc_to_gold_entities(doc: &anno_eval::eval::coref::CorefDocument) -> Vec<anno::Entity> {
     use anno::{Entity, EntityType};
 
     let mut entities: Vec<Entity> = Vec::new();
@@ -1671,9 +1669,7 @@ fn coref_doc_to_gold_entities(
 }
 
 #[cfg(feature = "eval")]
-fn coref_doc_to_oracle_mentions(
-    doc: &anno_eval::eval::coref::CorefDocument,
-) -> Vec<anno::Entity> {
+fn coref_doc_to_oracle_mentions(doc: &anno_eval::eval::coref::CorefDocument) -> Vec<anno::Entity> {
     use anno::{Entity, EntityType};
 
     let mut entities: Vec<Entity> = Vec::new();

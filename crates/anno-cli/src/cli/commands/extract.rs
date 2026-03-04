@@ -12,12 +12,12 @@ use anno::heuristics::{detect_quantifier_en, is_negated_en};
 use anno::backends::inference::{
     extract_relation_triples, RelationExtractionConfig, RelationExtractor, SemanticRegistry,
 };
-#[cfg(feature = "eval")]
-use anno::ingest::url_resolver::CompositeResolver;
-use anno::ingest::DocumentPreprocessor;
 use anno::core::grounded::{
     GroundedDocument, Location, Modality, Signal, SignalId, SignalValidationError,
 };
+#[cfg(feature = "eval")]
+use anno::ingest::url_resolver::CompositeResolver;
+use anno::ingest::DocumentPreprocessor;
 #[cfg(feature = "graph")]
 use lattix::{GraphDocument, GraphExportFormat};
 

@@ -26,8 +26,8 @@ use super::super::output::{color, print_annotated_entities};
 use super::super::parser::{ModelBackend, OutputFormat};
 use super::super::utils::get_input_text;
 use anno::joint::{JointConfig, JointModel};
-use anno::Model;
 use anno::Entity;
+use anno::Model;
 use clap::Parser;
 use std::time::Instant;
 
