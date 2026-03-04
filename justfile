@@ -394,9 +394,20 @@ proptest:
 
 # Warm local dataset cache (and optionally S3 mirror).
 # Example:
-#   ANNO_WARM_PER_TASK=2 ANNO_WARM_SEED=42 cargo run --example cache_warm --features "eval"
+#   ANNO_WARM_PER_TASK=2 ANNO_WARM_TASKS=coref cargo run -p anno-eval --example cache_warm --features "eval"
 cache-warm:
-    cargo run -p anno-lib --example cache_warm --features "eval"
+    cargo run -p anno-eval --example cache_warm --features "eval"
+
+# Warm cache and upload to S3.
+cache-warm-s3:
+    ANNO_S3_CACHE=1 cargo run -p anno-eval --example cache_warm --features "eval"
+    ./scripts/sync_datasets_s3.sh upload
+
+# Run CDCR evaluation on cached coref datasets.
+# Example:
+#   ANNO_CDCR_DATASETS=ECBPlus cargo run -p anno-eval --example cdcr_eval --features "eval"
+cdcr-eval:
+    cargo run -p anno-eval --example cdcr_eval --features "eval"
 
 # === Release ===
 
