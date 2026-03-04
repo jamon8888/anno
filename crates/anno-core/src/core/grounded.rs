@@ -555,6 +555,8 @@ pub enum Quantifier {
     None,
     /// Specific: definite reference ("the")
     Definite,
+    /// Approximate: "approximately", "about", "at least", "roughly"
+    Approximate,
     /// Bare: no explicit quantifier
     Bare,
 }
