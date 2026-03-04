@@ -89,7 +89,7 @@ pub use factors::{
 };
 
 // Inference types
-pub use inference::{BeliefPropagation, InferenceConfig, Marginals, MessageSchedule};
+pub use inference::{log_sum_exp, BeliefPropagation, InferenceConfig, Marginals, MessageSchedule};
 
 // Core types
 pub use types::{
