@@ -1351,7 +1351,7 @@ fn preview_text(s: &str, max_chars: usize) -> String {
 
 #[cfg(feature = "eval")]
 fn synthetic_ner_test_cases() -> Vec<(String, Vec<anno_eval::eval::GoldEntity>)> {
-    use anno::EntityType;
+    use anno::{EntityCategory, EntityType};
 
     fn find_char_span(text: &str, needle: &str) -> (usize, usize) {
         let start_byte = text.find(needle).unwrap_or_else(|| {
@@ -1368,7 +1368,7 @@ fn synthetic_ner_test_cases() -> Vec<(String, Vec<anno_eval::eval::GoldEntity>)>
             "PER" | "PERSON" => EntityType::Person,
             "ORG" | "ORGANIZATION" => EntityType::Organization,
             "LOC" | "LOCATION" | "GPE" => EntityType::Location,
-            other => EntityType::Other(other.to_string()),
+            other => EntityType::custom(other, EntityCategory::Misc),
         }
     }
 
@@ -1630,7 +1630,7 @@ code{color:var(--code)}
 
 #[cfg(feature = "eval")]
 fn coref_doc_to_gold_entities(doc: &anno_eval::eval::coref::CorefDocument) -> Vec<anno::Entity> {
-    use anno::{Entity, EntityType};
+    use anno::{Entity, EntityCategory, EntityType};
 
     let mut entities: Vec<Entity> = Vec::new();
     let mut next_cluster = anno::CanonicalId::ZERO;
@@ -1655,7 +1655,7 @@ fn coref_doc_to_gold_entities(doc: &anno_eval::eval::coref::CorefDocument) -> Ve
         for m in &chain.mentions {
             let mut e = Entity::new(
                 m.text.clone(),
-                EntityType::Other(label.to_string()),
+                EntityType::custom(label, EntityCategory::Misc),
                 m.start,
                 m.end,
                 1.0,
@@ -1670,7 +1670,7 @@ fn coref_doc_to_gold_entities(doc: &anno_eval::eval::coref::CorefDocument) -> Ve
 
 #[cfg(feature = "eval")]
 fn coref_doc_to_oracle_mentions(doc: &anno_eval::eval::coref::CorefDocument) -> Vec<anno::Entity> {
-    use anno::{Entity, EntityType};
+    use anno::{Entity, EntityCategory, EntityType};
 
     let mut entities: Vec<Entity> = Vec::new();
 
@@ -1689,7 +1689,7 @@ fn coref_doc_to_oracle_mentions(doc: &anno_eval::eval::coref::CorefDocument) -> 
         for m in &chain.mentions {
             let e = Entity::new(
                 m.text.clone(),
-                EntityType::Other(label.to_string()),
+                EntityType::custom(label, EntityCategory::Misc),
                 m.start,
                 m.end,
                 1.0,

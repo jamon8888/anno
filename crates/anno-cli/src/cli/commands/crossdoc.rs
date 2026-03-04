@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 use anno::offset::TextSpan;
 #[cfg(feature = "eval")]
 use anno::{
-    Corpus, Entity, EntityType, GroundedDocument, Identity, IdentitySource, Location, Signal,
-    SignalId,
+    Corpus, Entity, EntityCategory, EntityType, GroundedDocument, Identity, IdentitySource,
+    Location, Signal, SignalId,
 };
 #[cfg(feature = "eval")]
 use anno_core::coalesce::Resolver;
@@ -260,7 +260,7 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
                                     .entity_type
                                     .as_ref()
                                     .map(|t| t.to_entity_type())
-                                    .unwrap_or(EntityType::Other("UNKNOWN".into())),
+                                    .unwrap_or(EntityType::custom("UNKNOWN", EntityCategory::Misc)),
                                 0,
                                 0,
                                 track.cluster_confidence as f64,

@@ -123,7 +123,7 @@ pub fn run(args: EvalArgs) -> Result<(), String> {
     // Detailed analysis with eval feature
     #[cfg(feature = "eval")]
     let detailed_analysis = {
-        use anno::EntityType;
+        use anno::{EntityCategory, EntityType};
         use anno_eval::eval::analysis::ErrorAnalysis;
         use anno_eval::eval::GoldEntity;
 
@@ -131,7 +131,7 @@ pub fn run(args: EvalArgs) -> Result<(), String> {
             .iter()
             .map(|g| GoldEntity {
                 text: g.text.clone(),
-                entity_type: EntityType::Other(g.label.clone()),
+                entity_type: EntityType::custom(g.label.clone(), EntityCategory::Misc),
                 original_label: g.label.clone(),
                 start: g.start,
                 end: g.end,
