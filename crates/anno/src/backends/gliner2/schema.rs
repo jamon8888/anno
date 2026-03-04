@@ -175,9 +175,6 @@ pub struct ClassificationTask {
 pub struct StructureTask {
     /// Structure type name (parent entity)
     pub name: String,
-    /// Internal alias for compatibility
-    #[serde(skip)]
-    pub structure_type: String,
     /// Child fields to extract
     pub fields: Vec<StructureField>,
 }
@@ -187,9 +184,14 @@ impl StructureTask {
     pub fn new(name: &str) -> Self {
         Self {
             name: name.to_string(),
-            structure_type: name.to_string(),
             fields: Vec::new(),
         }
+    }
+
+    /// Structure type (always equal to `name`).
+    #[must_use]
+    pub fn structure_type(&self) -> &str {
+        &self.name
     }
 
     /// Add a field to extract.
@@ -388,7 +390,7 @@ mod tests {
     fn structure_task_new() {
         let st = StructureTask::new("invoice");
         assert_eq!(st.name, "invoice");
-        assert_eq!(st.structure_type, "invoice");
+        assert_eq!(st.structure_type(), "invoice");
         assert!(st.fields.is_empty());
     }
 

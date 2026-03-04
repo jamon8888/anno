@@ -226,14 +226,14 @@ impl Middleware for TemporalAnnotator {
                     if entity.valid_from.is_none() {
                         // Parse "YYYY-MM-DD" into DateTime<Utc>
                         if let Ok(naive) = NaiveDate::parse_from_str(start_date, "%Y-%m-%d") {
-                            entity.valid_from = Some(Utc.from_utc_datetime(&naive.and_hms_opt(0, 0, 0).unwrap()));
+                            entity.valid_from = naive.and_hms_opt(0, 0, 0).map(|dt| Utc.from_utc_datetime(&dt));
                         }
                     }
                 }
                 if let Some(end_date) = end {
                     if entity.valid_until.is_none() {
                         if let Ok(naive) = NaiveDate::parse_from_str(end_date, "%Y-%m-%d") {
-                            entity.valid_until = Some(Utc.from_utc_datetime(&naive.and_hms_opt(23, 59, 59).unwrap()));
+                            entity.valid_until = naive.and_hms_opt(23, 59, 59).map(|dt| Utc.from_utc_datetime(&dt));
                         }
                     }
                 }

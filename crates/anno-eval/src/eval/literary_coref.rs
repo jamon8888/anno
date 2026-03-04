@@ -158,12 +158,38 @@ pub enum CharacterRole {
 }
 
 /// List of characters in a literary work.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct CharacterList {
     characters: Vec<Character>,
     /// Index from lowercase name to character index
     #[serde(skip)]
     name_index: HashMap<String, usize>,
+}
+
+/// Wire type for deserialization -- rebuilds the name index after loading.
+#[derive(Deserialize)]
+struct CharacterListWire {
+    characters: Vec<Character>,
+}
+
+impl From<CharacterListWire> for CharacterList {
+    fn from(wire: CharacterListWire) -> Self {
+        let mut list = Self {
+            characters: wire.characters,
+            name_index: HashMap::new(),
+        };
+        list.rebuild_index();
+        list
+    }
+}
+
+impl<'de> Deserialize<'de> for CharacterList {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        CharacterListWire::deserialize(deserializer).map(Self::from)
+    }
 }
 
 impl CharacterList {
