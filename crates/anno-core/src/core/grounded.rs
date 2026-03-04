@@ -546,6 +546,7 @@ pub struct Signal<L = Location> {
 /// Only meaningful for text/symbolic modality where linguistic
 /// quantification is possible. Has no visual analogue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum Quantifier {
     /// Universal: "every", "all", "each"
     Universal,

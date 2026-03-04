@@ -60,7 +60,8 @@ pub fn strip_html_to_text(html: &str) -> String {
 
 /// Detect whether content looks like HTML (has tags near the start).
 pub fn looks_like_html(content: &str) -> bool {
-    let prefix = &content[..content.len().min(1024)];
+    let end = content.floor_char_boundary(1024);
+    let prefix = &content[..end];
     let trimmed = prefix.trim_start();
     trimmed.starts_with("<!")
         || trimmed.starts_with("<html")
