@@ -177,10 +177,10 @@ fn run_eval(
                             } else if tl.contains("org") {
                                 anno::EntityType::Organization
                             } else {
-                                anno::EntityType::Other(t.to_string())
+                                anno::EntityType::custom(t, anno::EntityCategory::Misc)
                             }
                         })
-                        .unwrap_or(anno::EntityType::Other("mention".to_string()));
+                        .unwrap_or(anno::EntityType::custom("mention", anno::EntityCategory::Misc));
 
                     let entity_idx = entities.len();
                     entities.push(anno::Entity::new(

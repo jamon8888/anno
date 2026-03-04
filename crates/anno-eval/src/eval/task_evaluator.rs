@@ -2128,10 +2128,10 @@ impl TaskEvaluator {
                                 } else if tl.contains("org") {
                                     crate::EntityType::Organization
                                 } else {
-                                    crate::EntityType::Other(t.to_string())
+                                    crate::EntityType::custom(t, crate::EntityCategory::Misc)
                                 }
                             })
-                            .unwrap_or_else(|| crate::EntityType::Other("mention".to_string()));
+                            .unwrap_or_else(|| crate::EntityType::custom("mention", crate::EntityCategory::Misc));
 
                         gold_entities.push(crate::Entity::new(&m.text, et, m.start, m.end, 1.0));
                     }
@@ -2346,10 +2346,10 @@ impl TaskEvaluator {
                                 } else if tl.contains("org") {
                                     anno::EntityType::Organization
                                 } else {
-                                    anno::EntityType::Other(t.to_string())
+                                    anno::EntityType::custom(t, anno::EntityCategory::Misc)
                                 }
                             })
-                            .unwrap_or(anno::EntityType::Other("mention".to_string()));
+                            .unwrap_or(anno::EntityType::custom("mention", anno::EntityCategory::Misc));
 
                         let entity_idx = entities.len();
                         entities.push(anno::Entity::new(

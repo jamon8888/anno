@@ -33,7 +33,7 @@ use super::coref::CorefChain;
 use super::coref_metrics::CorefEvaluation;
 use super::ner_metrics::evaluate_entities;
 use anno::joint::JointModel;
-use anno::{Entity, EntityType};
+use anno::{Entity, EntityCategory, EntityType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -243,7 +243,7 @@ impl JointEvaluator {
                     let entity_type = g
                         .entity_type
                         .parse()
-                        .unwrap_or_else(|_| EntityType::Other(g.entity_type.clone()));
+                        .unwrap_or_else(|_| EntityType::custom(g.entity_type.clone(), EntityCategory::Misc));
                     Entity::new(&g.text, entity_type, g.start, g.end, 1.0)
                 })
                 .collect();
@@ -259,7 +259,7 @@ impl JointEvaluator {
                 let entity_type = gold
                     .entity_type
                     .parse()
-                    .unwrap_or_else(|_| EntityType::Other(gold.entity_type.clone()));
+                    .unwrap_or_else(|_| EntityType::custom(gold.entity_type.clone(), EntityCategory::Misc));
                 all_gold_entities.push(Entity::new(
                     &gold.text,
                     entity_type,

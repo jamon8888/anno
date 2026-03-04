@@ -640,7 +640,7 @@ mod tests {
     fn make_example(text: &str, entities: Vec<(&str, &str)>) -> AnnotatedExample {
         use crate::eval::datasets::GoldEntity;
         use crate::eval::synthetic::{Difficulty, Domain};
-        use anno_core::EntityType;
+        use anno_core::{EntityCategory, EntityType};
 
         let mut gold_entities = Vec::new();
 
@@ -650,7 +650,7 @@ mod tests {
                     "PER" => EntityType::Person,
                     "ORG" => EntityType::Organization,
                     "LOC" => EntityType::Location,
-                    _ => EntityType::Other(entity_type_str.to_string()),
+                    _ => EntityType::custom(entity_type_str, EntityCategory::Misc),
                 };
                 gold_entities.push(GoldEntity::new(entity_text, entity_type, start));
             }

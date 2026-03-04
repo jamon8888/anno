@@ -7513,8 +7513,8 @@ mod tests {
         // GPE now preserves distinction (Custom, not Location)
         assert!(matches!(map_entity_type("GPE"), EntityType::Custom { .. }));
 
-        // MISC -> Other
-        assert!(matches!(map_entity_type("MISC"), EntityType::Other(_)));
+        // MISC -> Custom or Other
+        assert!(matches!(map_entity_type("MISC"), EntityType::Custom { .. } | EntityType::Other(_)));
 
         // OntoNotes types -> Custom (preserves semantics)
         assert!(matches!(

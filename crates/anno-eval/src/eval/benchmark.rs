@@ -21,7 +21,7 @@
 
 use super::datasets::GoldEntity;
 use super::synthetic::{AnnotatedExample, Difficulty, Domain};
-use anno_core::EntityType;
+use anno_core::{EntityCategory, EntityType};
 
 /// Types of edge cases to generate
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -260,7 +260,7 @@ fn generate_unicode_examples(count: usize) -> Vec<AnnotatedExample> {
             "Tim Berners-Lee invented the Web.",
             vec![
                 ("Tim Berners-Lee", EntityType::Person, 0),
-                ("Web", EntityType::Other("Technology".to_string()), 29),
+                ("Web", EntityType::custom("Technology", EntityCategory::Misc), 29),
             ],
         ),
         // Accented characters

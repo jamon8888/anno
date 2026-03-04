@@ -453,10 +453,10 @@ mod tests {
             EntityType::Location
         ));
 
-        // MISC -> Other
+        // MISC -> Custom or Other
         assert!(matches!(
             map_label_to_entity_type("MISC"),
-            EntityType::Other(_)
+            EntityType::Custom { .. } | EntityType::Other(_)
         ));
 
         // ANIM now preserves semantics as Custom type

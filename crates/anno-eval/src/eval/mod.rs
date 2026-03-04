@@ -110,7 +110,7 @@
 //! - Statistical significance testing (paired t-test)
 
 use anno::{Error, Model, Result};
-use anno_core::EntityType;
+use anno_core::{EntityCategory, EntityType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -817,7 +817,7 @@ pub fn load_conll2003<P: AsRef<Path>>(path: P) -> Result<Vec<(String, Vec<GoldEn
                 "PER" => EntityType::Person,
                 "ORG" => EntityType::Organization,
                 "LOC" => EntityType::Location,
-                "MISC" => EntityType::Other("misc".to_string()),
+                "MISC" => EntityType::custom("misc", EntityCategory::Misc),
                 "DATE" => EntityType::Date,
                 "MONEY" => EntityType::Money,
                 "PERCENT" => EntityType::Percent,

@@ -701,8 +701,7 @@ fn entity_type_string(entity_type: &EntityType) -> String {
         EntityType::Quantity => "Quantity".to_string(),
         EntityType::Cardinal => "Cardinal".to_string(),
         EntityType::Ordinal => "Ordinal".to_string(),
-        EntityType::Custom { name, .. } => format!("Custom({})", name),
-        EntityType::Other(s) => format!("Other({})", s),
+        EntityType::Custom { ref name, .. } | EntityType::Other(ref name) => format!("Custom({})", name),
         // `EntityType` is non-exhaustive.
         _ => "Entity".to_string(),
     }

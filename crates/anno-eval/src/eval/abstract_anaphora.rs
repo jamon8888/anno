@@ -60,7 +60,7 @@ use crate::eval::coref_metrics::{lea_score, CorefScores};
 use crate::eval::coref_resolver::{
     DiscourseAwareResolver, DiscourseCorefConfig, SimpleCorefResolver,
 };
-use crate::{Entity, EntityType};
+use crate::{Entity, EntityCategory, EntityType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -2441,7 +2441,7 @@ impl AbstractAnaphoraEvaluator {
             // Create an Entity from the anaphor span for the resolver
             let anaphor_entity = anno_core::Entity::new(
                 &case.anaphor.text,
-                anno_core::EntityType::Other("Anaphor".to_string()),
+                anno_core::EntityType::custom("Anaphor", anno_core::EntityCategory::Misc),
                 case.anaphor.start,
                 case.anaphor.end,
                 1.0,
@@ -2525,7 +2525,7 @@ impl AbstractAnaphoraEvaluator {
             // Add the anaphor (This/That/It)
             entities.push(Entity::new(
                 &case.anaphor.text,
-                EntityType::Other("abstract_anaphor".to_string()),
+                EntityType::custom("abstract_anaphor", EntityCategory::Misc),
                 case.anaphor.start,
                 case.anaphor.end,
                 0.8,
@@ -2630,7 +2630,7 @@ impl AbstractAnaphoraEvaluator {
             return EntityType::Person;
         }
 
-        EntityType::Other("unknown".to_string())
+        EntityType::custom("unknown", EntityCategory::Misc)
     }
 
     /// Check if texts match (case-insensitive, ignoring punctuation).

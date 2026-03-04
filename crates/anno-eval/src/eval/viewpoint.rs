@@ -774,9 +774,9 @@ mod tests {
 
     #[test]
     fn test_conflict_detection() {
-        use anno::EntityType;
+        use anno::{EntityCategory, EntityType};
 
-        let entity = Entity::new("Merger", EntityType::Other("EVENT".to_string()), 0, 6, 0.9);
+        let entity = Entity::new("Merger", EntityType::custom("EVENT", EntityCategory::Misc), 0, 6, 0.9);
 
         let attributions = vec![
             Attribution::new(entity.clone(), Source::author(), EpistemicStatus::Factual),

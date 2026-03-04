@@ -54,7 +54,7 @@
 //! ```
 
 use crate::eval::coref::CorefChain;
-use anno::{Entity, EntityType};
+use anno::{Entity, EntityCategory, EntityType};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -822,14 +822,14 @@ pub fn tech_news_dataset() -> Vec<Document> {
         Entity::new("Nvidia", EntityType::Organization, 11, 17, 0.9),
         Entity::new(
             "Blackwell",
-            EntityType::Other("Product".to_string()),
+            EntityType::custom("Product", EntityCategory::Misc),
             37,
             46,
             0.87,
         ),
         Entity::new(
             "CES 2025",
-            EntityType::Other("Event".to_string()),
+            EntityType::custom("Event", EntityCategory::Misc),
             60,
             68,
             0.88,
@@ -955,7 +955,7 @@ pub fn sports_news_dataset() -> Vec<Document> {
         Entity::new("Atlanta United", EntityType::Organization, 50, 64, 0.91),
         Entity::new(
             "Argentine",
-            EntityType::Other("Nationality".to_string()),
+            EntityType::custom("Nationality", EntityCategory::Misc),
             75,
             84,
             0.87,
@@ -1018,7 +1018,7 @@ pub fn financial_news_dataset() -> Vec<Document> {
         Entity::new("Tim Cook", EntityType::Person, 59, 67, 0.93),
         Entity::new(
             "iPhone",
-            EntityType::Other("Product".to_string()),
+            EntityType::custom("Product", EntityCategory::Misc),
             73,
             79,
             0.91,
@@ -1081,7 +1081,7 @@ pub fn science_news_dataset() -> Vec<Document> {
         Entity::new("NASA", EntityType::Organization, 0, 4, 0.95),
         Entity::new(
             "Perseverance",
-            EntityType::Other("Product".to_string()),
+            EntityType::custom("Product", EntityCategory::Misc),
             7,
             19,
             0.92,
@@ -1099,7 +1099,7 @@ pub fn science_news_dataset() -> Vec<Document> {
     doc2.entities = vec![
         Entity::new(
             "Mars rover",
-            EntityType::Other("Product".to_string()),
+            EntityType::custom("Product", EntityCategory::Misc),
             4,
             14,
             0.87,
@@ -1117,7 +1117,7 @@ pub fn science_news_dataset() -> Vec<Document> {
     doc3.entities = vec![
         Entity::new(
             "Perseverance",
-            EntityType::Other("Product".to_string()),
+            EntityType::custom("Product", EntityCategory::Misc),
             0,
             12,
             0.93,
@@ -1390,7 +1390,7 @@ mod tests {
         let mut doc2 = Document::new("doc2", "I ate an apple for lunch.");
         doc2.entities = vec![Entity::new(
             "apple",
-            EntityType::Other("Fruit".into()),
+            EntityType::custom("Fruit", EntityCategory::Misc),
             9,
             14,
             0.8,
@@ -1495,7 +1495,7 @@ mod tests {
     fn test_document_builder_pattern() {
         let doc = Document::new("test", "Sample text").with_entities(vec![Entity::new(
             "Sample",
-            EntityType::Other("Test".into()),
+            EntityType::custom("Test", EntityCategory::Misc),
             0,
             6,
             0.9,
@@ -1886,7 +1886,7 @@ mod tests {
         let mut doc2 = Document::new("doc2", "I ate an apple today.");
         doc2.entities = vec![Entity::new(
             "apple",
-            EntityType::Other("fruit".to_string()),
+            EntityType::custom("fruit", EntityCategory::Misc),
             9,
             14,
             0.9,
