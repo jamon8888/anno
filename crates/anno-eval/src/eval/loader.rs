@@ -2879,6 +2879,87 @@ impl DatasetLoader {
         )))
     }
 
+    /// Single download attempt returning raw bytes (for binary formats like ZIP).
+    ///
+    /// Same retry/backoff logic as `download_attempt` but reads response as bytes.
+    #[cfg(feature = "eval")]
+    fn download_attempt_bytes(&self, url: &str) -> Result<Vec<u8>> {
+        const MAX_RETRIES: usize = 3;
+        const INITIAL_TIMEOUT_SECS: u64 = 30;
+        const MAX_TIMEOUT_SECS: u64 = 120;
+        const MAX_BYTES: usize = 50 * 1024 * 1024; // 50 MB limit
+
+        let mut last_error = None;
+
+        for attempt in 0..=MAX_RETRIES {
+            let timeout_secs = (INITIAL_TIMEOUT_SECS * (1 << attempt.min(2))).min(MAX_TIMEOUT_SECS);
+
+            match ureq::get(url)
+                .timeout(std::time::Duration::from_secs(timeout_secs))
+                .call()
+            {
+                Ok(response) => {
+                    if response.status() == 200 {
+                        use std::io::Read as _;
+                        let mut bytes = Vec::new();
+                        response
+                            .into_reader()
+                            .take(MAX_BYTES as u64)
+                            .read_to_end(&mut bytes)
+                            .map_err(|e| {
+                                Error::InvalidInput(format!(
+                                    "Failed to read bytes from {}: {}",
+                                    url, e
+                                ))
+                            })?;
+                        return Ok(bytes);
+                    }
+
+                    let status = response.status();
+                    if (500..600).contains(&status) && attempt < MAX_RETRIES {
+                        let wait_ms = 1000 * (1 << attempt);
+                        std::thread::sleep(std::time::Duration::from_millis(wait_ms));
+                        last_error = Some(format!("HTTP {} from {}", status, url));
+                        continue;
+                    }
+
+                    return Err(Error::InvalidInput(format!(
+                        "HTTP {} downloading binary from {}",
+                        status, url
+                    )));
+                }
+                Err(ureq::Error::Transport(e)) => {
+                    let msg = format!("{}", e);
+                    if (msg.contains("timeout") || msg.contains("timed out"))
+                        && attempt < MAX_RETRIES
+                    {
+                        let wait_ms = 1000 * (1 << attempt);
+                        std::thread::sleep(std::time::Duration::from_millis(wait_ms));
+                        last_error = Some(msg);
+                        continue;
+                    }
+                    return Err(Error::InvalidInput(format!(
+                        "Network error downloading {}: {}",
+                        url, msg
+                    )));
+                }
+                Err(e) => {
+                    return Err(Error::InvalidInput(format!(
+                        "Error downloading {}: {}",
+                        url, e
+                    )));
+                }
+            }
+        }
+
+        Err(Error::InvalidInput(format!(
+            "Failed to download {} after {} attempts. Last error: {}",
+            url,
+            MAX_RETRIES + 1,
+            last_error.unwrap_or_else(|| "unknown".to_string())
+        )))
+    }
+
     /// Compute SHA256 checksum of content.
     #[cfg(feature = "eval")]
     fn compute_sha256(&self, content: &str) -> String {
@@ -5328,6 +5409,15 @@ impl DatasetLoader {
                 self.parse_litbank_coref(&content)
             }
             DatasetId::ECBPlus => {
+                // ECB+ may be cached as either:
+                // - ZIP binary (new: real XML annotations)
+                // - CSV text (legacy: sentence index)
+                let raw_bytes = std::fs::read(&cache_path)
+                    .map_err(|e| Error::InvalidInput(format!("Failed to read {:?}: {}", cache_path, e)))?;
+                if raw_bytes.starts_with(b"PK\x03\x04") {
+                    return super::coref_loader::parse_ecb_plus_zip(&raw_bytes);
+                }
+                // Fall back to CSV parser
                 super::coref_loader::parse_ecb_plus_coref(&content)
             }
             DatasetId::WikiCoref
@@ -5374,11 +5464,21 @@ impl DatasetLoader {
                     cache_path
                 )));
             }
-            let (content, _) = self.download_with_resolved_url(id)?;
+
             let cache_path = self.cache_path_for(id);
-            std::fs::write(&cache_path, &content).map_err(|e| {
-                Error::InvalidInput(format!("Failed to cache {:?}: {}", cache_path, e))
-            })?;
+            if matches!(id, DatasetId::ECBPlus) {
+                // ECB+ is a ZIP file -- download as raw bytes
+                let url = id.download_url();
+                let bytes = self.download_attempt_bytes(url)?;
+                std::fs::write(&cache_path, &bytes).map_err(|e| {
+                    Error::InvalidInput(format!("Failed to cache {:?}: {}", cache_path, e))
+                })?;
+            } else {
+                let (content, _) = self.download_with_resolved_url(id)?;
+                std::fs::write(&cache_path, &content).map_err(|e| {
+                    Error::InvalidInput(format!("Failed to cache {:?}: {}", cache_path, e))
+                })?;
+            }
         }
         self.load_coref(id)
     }

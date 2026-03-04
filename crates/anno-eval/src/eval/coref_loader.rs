@@ -1283,7 +1283,371 @@ fn parse_bookcoref_item(item: &serde_json::Value) -> Result<Option<CorefDocument
 // ECB+ Coreference Parser
 // =============================================================================
 
-/// Parse ECB+ coreference CSV into `CorefDocument`s.
+/// Parse ECB+ coreference from any supported format.
+///
+/// Dispatches to the XML zip parser if `raw_bytes` starts with ZIP magic bytes,
+/// otherwise falls back to the legacy CSV sentence-index parser.
+pub fn parse_ecb_plus_coref(content: &str) -> Result<Vec<CorefDocument>> {
+    // Check for ZIP magic bytes at the start
+    if content.as_bytes().starts_with(b"PK\x03\x04") {
+        return parse_ecb_plus_zip(content.as_bytes());
+    }
+    parse_ecb_plus_sentence_index(content)
+}
+
+/// Parse ECB+ from the real XML zip archive (`ECB+.zip`).
+///
+/// The zip contains files like `ECB+/{topic}/{topic}_{doc}.xml`.
+/// Each XML file has:
+/// - `<token t_id="N" sentence="S" number="P">text</token>` elements
+/// - `<Markables>` section with mention elements (ACTION_*, HUMAN_*, etc.)
+/// - `<Relations>` section with `CROSS_DOC_COREF` linking mentions to clusters
+pub fn parse_ecb_plus_zip(data: &[u8]) -> Result<Vec<CorefDocument>> {
+    use std::io::Cursor;
+
+    let cursor = Cursor::new(data);
+    let mut archive = zip::ZipArchive::new(cursor)
+        .map_err(|e| Error::InvalidInput(format!("Failed to open ECB+ zip: {}", e)))?;
+
+    let mut all_docs: Vec<CorefDocument> = Vec::new();
+
+    // Collect file names first (borrow checker)
+    let file_names: Vec<String> = (0..archive.len())
+        .filter_map(|i| {
+            let f = archive.by_index(i).ok()?;
+            let name = f.name().to_string();
+            if name.ends_with(".xml") {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for name in &file_names {
+        let mut file = archive
+            .by_name(name)
+            .map_err(|e| Error::InvalidInput(format!("Failed to read {} from zip: {}", name, e)))?;
+
+        let mut xml_content = String::new();
+        std::io::Read::read_to_string(&mut file, &mut xml_content)
+            .map_err(|e| Error::InvalidInput(format!("Failed to read XML {}: {}", name, e)))?;
+
+        // Extract topic and doc name from path like "ECB+/1/1_1ecb.xml"
+        let parts: Vec<&str> = name.split('/').collect();
+        let (topic, doc_name) = if parts.len() >= 3 {
+            (
+                parts[parts.len() - 2].to_string(),
+                parts[parts.len() - 1].trim_end_matches(".xml").to_string(),
+            )
+        } else if let Some(fname) = name.split('/').last() {
+            let base = fname.trim_end_matches(".xml");
+            // Try to extract topic from filename like "1_1ecb"
+            if let Some((t, _)) = base.split_once('_') {
+                (t.to_string(), base.to_string())
+            } else {
+                ("unknown".to_string(), base.to_string())
+            }
+        } else {
+            continue;
+        };
+
+        match parse_ecb_plus_xml(&xml_content, &topic, &doc_name) {
+            Ok(doc) => all_docs.push(doc),
+            Err(e) => {
+                log::debug!("Skipping {}: {}", name, e);
+            }
+        }
+    }
+
+    if all_docs.is_empty() {
+        return Err(Error::InvalidInput(
+            "ECB+ zip contains no parseable XML documents".to_string(),
+        ));
+    }
+
+    // Sort by (topic, doc) for deterministic order
+    all_docs.sort_by(|a, b| a.doc_id.cmp(&b.doc_id));
+    Ok(all_docs)
+}
+
+/// Parse a single ECB+ XML file into a `CorefDocument`.
+///
+/// ECB+ XML structure:
+/// ```xml
+/// <Document doc_name="1_1ecb" doc_id="1_1ecb.xml.xml">
+///   <token t_id="1" sentence="0" number="0">Token</token>
+///   ...
+///   <Markables>
+///     <ACTION_OCCURRENCE m_id="30" ...>
+///       <token_anchor t_id="5"/>
+///     </ACTION_OCCURRENCE>
+///   </Markables>
+///   <Relations>
+///     <CROSS_DOC_COREF r_id="1" note="30001">
+///       <source m_id="30"/>
+///       <target m_id="31"/>
+///     </CROSS_DOC_COREF>
+///   </Relations>
+/// </Document>
+/// ```
+fn parse_ecb_plus_xml(xml: &str, topic: &str, doc_name: &str) -> Result<CorefDocument> {
+    use quick_xml::events::Event;
+    use quick_xml::Reader;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    // Token: t_id -> (sentence, number, text)
+    let mut tokens: BTreeMap<u32, (u32, u32, String)> = BTreeMap::new();
+    // Mention: m_id -> vec of t_ids
+    let mut mentions: HashMap<u32, Vec<u32>> = HashMap::new();
+    // Cross-doc cluster: cluster_note -> set of m_ids
+    let mut clusters: HashMap<String, BTreeSet<u32>> = HashMap::new();
+
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+
+    let mut in_token = false;
+    let mut cur_t_id = 0u32;
+    let mut cur_sentence = 0u32;
+    let mut cur_number = 0u32;
+    let mut current_token_text = String::new();
+
+    let mut in_markable = false;
+    let mut cur_m_id = 0u32;
+    let mut current_mention_tokens: Vec<u32> = Vec::new();
+
+    let mut in_coref = false;
+    let mut cur_coref_note = String::new();
+    let mut current_coref_mentions: Vec<u32> = Vec::new();
+
+    fn get_attr(e: &quick_xml::events::BytesStart<'_>, name: &str) -> Option<String> {
+        e.attributes().flatten().find_map(|a| {
+            if a.key.as_ref() == name.as_bytes() {
+                Some(String::from_utf8_lossy(&a.value).to_string())
+            } else {
+                None
+            }
+        })
+    }
+
+    fn is_markable_tag(name: &[u8]) -> bool {
+        name.starts_with(b"ACTION_")
+            || name.starts_with(b"HUMAN_")
+            || name.starts_with(b"LOC_")
+            || name.starts_with(b"TIME_")
+            || name.starts_with(b"NEG_")
+    }
+
+    fn handle_start(
+        e: &quick_xml::events::BytesStart<'_>,
+        in_token: &mut bool,
+        cur_t_id: &mut u32,
+        cur_sentence: &mut u32,
+        cur_number: &mut u32,
+        current_token_text: &mut String,
+        in_markable: &mut bool,
+        cur_m_id: &mut u32,
+        current_mention_tokens: &mut Vec<u32>,
+        in_coref: &mut bool,
+        cur_coref_note: &mut String,
+        current_coref_mentions: &mut Vec<u32>,
+    ) {
+        let tag = e.name();
+        let tag_bytes = tag.as_ref();
+
+        if tag_bytes == b"token" {
+            *in_token = true;
+            *cur_t_id = get_attr(e, "t_id").and_then(|v| v.parse().ok()).unwrap_or(0);
+            *cur_sentence = get_attr(e, "sentence")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+            *cur_number = get_attr(e, "number")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+            current_token_text.clear();
+        } else if tag_bytes == b"token_anchor" {
+            if let Some(tid) = get_attr(e, "t_id").and_then(|v| v.parse::<u32>().ok()) {
+                current_mention_tokens.push(tid);
+            }
+        } else if tag_bytes == b"source" || tag_bytes == b"target" {
+            if let Some(mid) = get_attr(e, "m_id").and_then(|v| v.parse::<u32>().ok()) {
+                current_coref_mentions.push(mid);
+            }
+        } else if tag_bytes == b"CROSS_DOC_COREF" {
+            *in_coref = true;
+            *cur_coref_note = get_attr(e, "note").unwrap_or_default();
+            current_coref_mentions.clear();
+        } else if is_markable_tag(tag_bytes) {
+            *in_markable = true;
+            *cur_m_id = get_attr(e, "m_id").and_then(|v| v.parse().ok()).unwrap_or(0);
+            current_mention_tokens.clear();
+        }
+    }
+
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                handle_start(
+                    e,
+                    &mut in_token,
+                    &mut cur_t_id,
+                    &mut cur_sentence,
+                    &mut cur_number,
+                    &mut current_token_text,
+                    &mut in_markable,
+                    &mut cur_m_id,
+                    &mut current_mention_tokens,
+                    &mut in_coref,
+                    &mut cur_coref_note,
+                    &mut current_coref_mentions,
+                );
+            }
+            Ok(Event::Empty(ref e)) => {
+                // Self-closing tags like <token_anchor t_id="5"/>
+                handle_start(
+                    e,
+                    &mut in_token,
+                    &mut cur_t_id,
+                    &mut cur_sentence,
+                    &mut cur_number,
+                    &mut current_token_text,
+                    &mut in_markable,
+                    &mut cur_m_id,
+                    &mut current_mention_tokens,
+                    &mut in_coref,
+                    &mut cur_coref_note,
+                    &mut current_coref_mentions,
+                );
+                // For empty markable elements, flush immediately
+                let name = e.name();
+                let tag_bytes = name.as_ref();
+                if is_markable_tag(tag_bytes) && !current_mention_tokens.is_empty() {
+                    mentions.insert(cur_m_id, current_mention_tokens.clone());
+                    current_mention_tokens.clear();
+                    in_markable = false;
+                }
+                // Empty source/target already handled above
+            }
+            Ok(Event::Text(ref e)) => {
+                if in_token {
+                    current_token_text.push_str(&e.unescape().unwrap_or_default());
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                let name = e.name();
+                let tag_bytes = name.as_ref();
+                if tag_bytes == b"token" && in_token {
+                    tokens.insert(
+                        cur_t_id,
+                        (cur_sentence, cur_number, current_token_text.clone()),
+                    );
+                    in_token = false;
+                } else if tag_bytes == b"CROSS_DOC_COREF" && in_coref {
+                    if !cur_coref_note.is_empty() {
+                        let entry = clusters.entry(cur_coref_note.clone()).or_default();
+                        for mid in &current_coref_mentions {
+                            entry.insert(*mid);
+                        }
+                    }
+                    current_coref_mentions.clear();
+                    in_coref = false;
+                } else if is_markable_tag(tag_bytes) && in_markable {
+                    if !current_mention_tokens.is_empty() {
+                        mentions.insert(cur_m_id, current_mention_tokens.clone());
+                    }
+                    current_mention_tokens.clear();
+                    in_markable = false;
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => {
+                return Err(Error::InvalidInput(format!(
+                    "XML parse error in {}: {}",
+                    doc_name, e
+                )));
+            }
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    if tokens.is_empty() {
+        return Err(Error::InvalidInput(format!(
+            "ECB+ XML {} contains no tokens",
+            doc_name
+        )));
+    }
+
+    // Reconstruct text from tokens (sorted by t_id)
+    let mut text = String::new();
+    let mut token_char_starts: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut token_char_ends: BTreeMap<u32, usize> = BTreeMap::new();
+
+    for (&t_id, (_sent, _num, tok_text)) in &tokens {
+        if !text.is_empty() {
+            text.push(' ');
+        }
+        let start = text.chars().count();
+        text.push_str(tok_text);
+        let end = text.chars().count();
+        token_char_starts.insert(t_id, start);
+        token_char_ends.insert(t_id, end);
+    }
+
+    // Build coref chains from clusters
+    let mut coref_chains: Vec<CorefChain> = Vec::new();
+
+    let mut cluster_keys: Vec<_> = clusters.keys().cloned().collect();
+    cluster_keys.sort();
+
+    for cluster_key in cluster_keys {
+        let m_ids = &clusters[&cluster_key];
+        let mut chain_mentions: Vec<Mention> = Vec::new();
+
+        for &m_id in m_ids {
+            if let Some(t_ids) = mentions.get(&m_id) {
+                if t_ids.is_empty() {
+                    continue;
+                }
+                // Span = min token start to max token end
+                let start = t_ids
+                    .iter()
+                    .filter_map(|tid| token_char_starts.get(tid))
+                    .min()
+                    .copied();
+                let end = t_ids
+                    .iter()
+                    .filter_map(|tid| token_char_ends.get(tid))
+                    .max()
+                    .copied();
+
+                if let (Some(s), Some(e)) = (start, end) {
+                    let mention_text: String = text.chars().skip(s).take(e - s).collect();
+                    chain_mentions.push(Mention {
+                        text: mention_text,
+                        start: s,
+                        end: e,
+                        head_start: None,
+                        head_end: None,
+                        entity_type: Some("EVENT".to_string()),
+                        mention_type: Some(MentionType::Proper),
+                    });
+                }
+            }
+        }
+
+        if !chain_mentions.is_empty() {
+            let cid = cluster_key.parse::<u64>().unwrap_or(0);
+            coref_chains.push(CorefChain::with_id(chain_mentions, cid));
+        }
+    }
+
+    let doc_id = format!("{}_{}", topic, doc_name);
+    Ok(CorefDocument::with_id(&text, doc_id, coref_chains))
+}
+
+/// Parse ECB+ sentence-index CSV into `CorefDocument`s (legacy fallback).
 ///
 /// The ECB+ CSV (`ECBplus_coreference_sentences.csv`) has rows per token with columns:
 /// `Topic,File,Sentence Number,Token Number,Token,Lemma,Event Mention,Coreference Chain`
@@ -1293,7 +1657,7 @@ fn parse_bookcoref_item(item: &serde_json::Value) -> Result<Option<CorefDocument
 /// A non-empty chain value indicates the token belongs to that coref chain.
 ///
 /// Returns one `CorefDocument` per (topic, file).
-pub fn parse_ecb_plus_coref(content: &str) -> Result<Vec<CorefDocument>> {
+fn parse_ecb_plus_sentence_index(content: &str) -> Result<Vec<CorefDocument>> {
     // (topic, file) -> DocAcc
     let mut docs: HashMap<(String, String), ecb_plus_acc::DocAcc> = HashMap::new();
 
@@ -1733,5 +2097,59 @@ Topic,File,Sentence Number,Token Number,Token,Lemma,Event Mention,Coreference Ch
         // Chain "1" in doc2 should contain "quake" (cross-doc coreferent with "earthquake")
         let chain1_doc2 = doc2.chains.iter().find(|c| c.mentions.iter().any(|m| m.text == "quake"));
         assert!(chain1_doc2.is_some());
+    }
+
+    #[test]
+    fn test_parse_ecb_plus_xml() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Document doc_name="1_1ecb" doc_id="1_1ecb.xml.xml">
+  <token t_id="1" sentence="0" number="0">The</token>
+  <token t_id="2" sentence="0" number="1">earthquake</token>
+  <token t_id="3" sentence="0" number="2">struck</token>
+  <token t_id="4" sentence="0" number="3">at</token>
+  <token t_id="5" sentence="0" number="4">dawn</token>
+  <token t_id="6" sentence="1" number="0">A</token>
+  <token t_id="7" sentence="1" number="1">tremor</token>
+  <token t_id="8" sentence="1" number="2">was</token>
+  <token t_id="9" sentence="1" number="3">felt</token>
+  <Markables>
+    <ACTION_OCCURRENCE m_id="30">
+      <token_anchor t_id="2"/>
+    </ACTION_OCCURRENCE>
+    <ACTION_OCCURRENCE m_id="31">
+      <token_anchor t_id="3"/>
+    </ACTION_OCCURRENCE>
+    <ACTION_OCCURRENCE m_id="32">
+      <token_anchor t_id="7"/>
+    </ACTION_OCCURRENCE>
+  </Markables>
+  <Relations>
+    <CROSS_DOC_COREF r_id="1" note="30001">
+      <source m_id="30"/>
+      <target m_id="32"/>
+    </CROSS_DOC_COREF>
+    <CROSS_DOC_COREF r_id="2" note="30002">
+      <source m_id="31"/>
+    </CROSS_DOC_COREF>
+  </Relations>
+</Document>"#;
+
+        let doc = parse_ecb_plus_xml(xml, "1", "1_1ecb").unwrap();
+        assert_eq!(doc.doc_id.as_deref(), Some("1_1_1ecb"));
+        assert!(doc.text.contains("earthquake"));
+        assert!(doc.text.contains("tremor"));
+
+        // Cluster 30001 should have mentions for "earthquake" (t_id=2) and "tremor" (t_id=7)
+        let cluster_30001 = doc.chains.iter().find(|c| {
+            c.mentions.iter().any(|m| m.text == "earthquake")
+                && c.mentions.iter().any(|m| m.text == "tremor")
+        });
+        assert!(cluster_30001.is_some(), "Expected cross-doc cluster linking earthquake and tremor");
+
+        // Cluster 30002 should have "struck"
+        let cluster_30002 = doc.chains.iter().find(|c| {
+            c.mentions.iter().any(|m| m.text == "struck")
+        });
+        assert!(cluster_30002.is_some(), "Expected cluster for struck");
     }
 }

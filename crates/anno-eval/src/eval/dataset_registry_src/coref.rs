@@ -63,7 +63,7 @@
     ECBPlus {
         name: "ECB+",
         description: "Event Coreference Bank Plus. Standard benchmark for cross-document event coreference resolution.",
-        url: "https://raw.githubusercontent.com/cltl/ecbPlus/master/ECB%2B_LREC2014/ECBplus_coreference_sentences.csv",
+        url: "https://raw.githubusercontent.com/cltl/ecbPlus/master/ECB%2B_LREC2014/ECB%2B.zip",
         entity_types: ["EVENT", "TIME", "LOC", "PARTICIPANT"],
         language: "en",
         domain: "news",
@@ -71,7 +71,7 @@
         citation: "Cybulska & Vossen (2014)",
         paper_url: "https://aclanthology.org/L14-1646/",
         year: 2014,
-        format: "Custom",
+        format: "XML-ZIP",
         size_hint: "43 topics, 982 docs, ~7k events",
         example: "Doc1: 'The earthquake [struck] at 3am.' Doc2: 'The [tremor] caused damage.'\nEvents: struck_1, tremor_2 -> coreferent (same event)",
         notes: "De facto CDCR standard; topic-clustered structure may cause overfitting",
