@@ -90,8 +90,14 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
     levenshtein_chars(&a_chars, &b_chars)
 }
 
-/// Levenshtein distance on character slices (internal, reusable).
-fn levenshtein_chars(a: &[char], b: &[char]) -> usize {
+/// Levenshtein distance on pre-split character slices.
+///
+/// This is the inner kernel used by [`levenshtein`]. Useful when you already
+/// have `&[char]` (e.g., from coreference resolution pipelines that work on
+/// pre-tokenized character arrays).
+///
+/// Uses the single-row optimization for O(min(m,n)) space.
+pub fn levenshtein_chars(a: &[char], b: &[char]) -> usize {
     let m = a.len();
     let n = b.len();
 

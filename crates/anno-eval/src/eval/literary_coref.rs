@@ -489,25 +489,7 @@ impl CharacterLinker {
 
     /// Compute Levenshtein edit distance between two character sequences.
     fn levenshtein_distance(&self, a: &[char], b: &[char]) -> usize {
-        let m = a.len();
-        let n = b.len();
-        
-        // Use single-row optimization for memory efficiency
-        let mut prev_row: Vec<usize> = (0..=n).collect();
-        let mut curr_row: Vec<usize> = vec![0; n + 1];
-        
-        for i in 1..=m {
-            curr_row[0] = i;
-            for j in 1..=n {
-                let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
-                curr_row[j] = (prev_row[j] + 1)
-                    .min(curr_row[j - 1] + 1)
-                    .min(prev_row[j - 1] + cost);
-            }
-            std::mem::swap(&mut prev_row, &mut curr_row);
-        }
-        
-        prev_row[n]
+        anno::edit_distance::levenshtein_chars(a, b)
     }
 
     /// Remove overlapping mentions, keeping highest confidence.
