@@ -152,6 +152,7 @@ pub mod regex;
 pub(crate) mod router;
 pub mod rule;
 /// Shared span-tensor utilities for span-based NER backends (GLiNER/NuNER family).
+#[allow(dead_code)]
 pub(crate) mod span_utils;
 pub mod stacked;
 pub mod tplinker;
@@ -345,6 +346,7 @@ pub mod llm_client;
 pub(crate) mod llm_prompt;
 
 // Demonstration selection for few-shot NER (CMAS-inspired)
+#[allow(dead_code)]
 pub(crate) mod demonstration;
 
 // GLiNER via ONNX (uses same feature as other ONNX models)

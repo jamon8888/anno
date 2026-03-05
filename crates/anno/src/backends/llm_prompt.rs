@@ -46,9 +46,11 @@ use anno_core::EntityType;
 use std::collections::HashMap;
 
 /// Entity annotation for demonstrations: (text, entity_type, start, end).
+#[allow(dead_code)]
 pub type DemoEntity<'a> = (&'a str, &'a str, usize, usize);
 
 /// Full demonstration: (text, list of entity annotations).
+#[allow(dead_code)]
 pub type DemoExample<'a> = (&'a str, Vec<DemoEntity<'a>>);
 
 /// BIO tagging schema for NER.
@@ -99,6 +101,7 @@ impl BIOSchema {
 
     /// Set a custom description for an entity type.
     #[must_use]
+    #[allow(dead_code)]
     pub fn with_description(mut self, entity_type: EntityType, description: &str) -> Self {
         self.descriptions
             .insert(entity_type, description.to_string());
@@ -147,6 +150,7 @@ pub struct Demonstration {
 impl Demonstration {
     /// Create a new demonstration.
     #[must_use]
+    #[allow(dead_code)]
     pub fn new(text: &str, entities: Vec<(&str, &str, usize, usize)>) -> Self {
         Self {
             text: text.to_string(),
@@ -208,6 +212,7 @@ impl CodeNERPrompt {
 
     /// Add few-shot demonstrations.
     #[must_use]
+    #[allow(dead_code)]
     pub fn with_demonstrations(mut self, demos: Vec<DemoExample<'_>>) -> Self {
         self.demonstrations = demos
             .into_iter()
@@ -287,6 +292,7 @@ impl CodeNERPrompt {
 
     /// Get the expected JSON output format description.
     #[must_use]
+    #[allow(dead_code)]
     pub fn output_format(&self) -> &'static str {
         r#"[{"text": "entity_text", "type": "TYPE", "start": 0, "end": 10}, ...]"#
     }
@@ -296,6 +302,7 @@ impl CodeNERPrompt {
 ///
 /// Attempts to extract a JSON array of entities from the LLM output,
 /// handling common formatting issues.
+#[allow(dead_code)]
 pub fn parse_llm_response(response: &str) -> Result<Vec<ParsedEntity>, ParseError> {
     // Try to find JSON array in response
     let json_str = extract_json_array(response)?;
@@ -344,6 +351,7 @@ pub fn parse_llm_response(response: &str) -> Result<Vec<ParsedEntity>, ParseErro
 }
 
 /// Extract JSON array from potentially messy LLM output.
+#[allow(dead_code)]
 fn extract_json_array(text: &str) -> Result<String, ParseError> {
     // Try direct parse first
     if let (Some(start), Some(end)) = (text.find('['), text.rfind(']')) {
@@ -377,6 +385,7 @@ fn extract_json_array(text: &str) -> Result<String, ParseError> {
 
 /// Parsed entity from LLM response.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ParsedEntity {
     /// Entity text
     pub text: String,
@@ -392,6 +401,7 @@ pub struct ParsedEntity {
 
 impl ParsedEntity {
     /// Convert to `Entity` with the given entity type mapping.
+    #[allow(dead_code)]
     pub fn to_entity(&self, type_map: &HashMap<String, EntityType>) -> Option<anno_core::Entity> {
         let entity_type = type_map
             .get(&self.entity_type)
@@ -410,6 +420,7 @@ impl ParsedEntity {
 
 /// Error during LLM response parsing.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ParseError {
     /// No JSON array found in response
     NoJsonFound,

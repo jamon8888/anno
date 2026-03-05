@@ -825,21 +825,6 @@ pub(crate) fn expand_ner_label(label: &str) -> String {
     }
 }
 
-/// Extract a substring by character offsets (not byte offsets).
-///
-/// This handles Unicode text correctly by iterating over characters.
-///
-/// # Performance
-///
-/// For repeated calls on the same text, consider using `extract_char_slice_with_len`
-/// with a cached text length to avoid recalculating `text.chars().count()`.
-fn extract_char_slice(text: &str, char_start: usize, char_end: usize) -> String {
-    // Performance optimization: Use Entity's optimized method if we have cached length
-    // For single calls, this is fine. For batch operations, cache text.chars().count()
-    let text_char_count = text.chars().count();
-    extract_char_slice_with_len(text, char_start, char_end, text_char_count)
-}
-
 /// Extract a substring by character offsets with pre-computed text length.
 ///
 /// This is a performance optimization for batch operations where you've already

@@ -45,6 +45,7 @@ impl HttpResolver {
     }
 
     /// Extract text from HTML content. Delegates to the standalone function.
+    #[allow(dead_code)]
     fn extract_text_from_html(&self, html: &str) -> String {
         strip_html_to_text(html)
     }
