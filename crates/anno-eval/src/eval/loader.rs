@@ -1383,10 +1383,8 @@ impl DatasetLoader {
     //
     // Rationale: unset should be *usable* but *safe* by default. This cap is meant to prevent
     // accidental multi-GB downloads while still allowing many evaluation datasets.
-    #[allow(dead_code)]
     const DEFAULT_MAX_DOWNLOAD_BYTES: u64 = 50 * 1024 * 1024; // 50 MiB
 
-    #[allow(dead_code)]
     fn max_download_bytes() -> Option<u64> {
         match std::env::var("ANNO_MAX_DOWNLOAD_BYTES").ok() {
             Some(s) => {
@@ -1407,7 +1405,6 @@ impl DatasetLoader {
         }
     }
 
-    #[allow(dead_code)]
     fn enforce_max_download_bytes(content_len: usize, source: &str) -> Result<()> {
         let Some(limit) = Self::max_download_bytes() else {
             return Ok(());
@@ -1478,7 +1475,6 @@ impl DatasetLoader {
     }
 
     /// Update the cache manifest with a new entry and save it.
-    #[allow(dead_code)]
     fn update_manifest(&self, entry: CacheManifestEntry) -> Result<()> {
         let mut manifest = self
             .manifest
@@ -2228,7 +2224,6 @@ impl DatasetLoader {
     }
 
     /// Extract `<org>/<dataset>` from `https://huggingface.co/datasets/<org>/<dataset>(/...)`.
-    #[allow(dead_code)]
     fn extract_hf_dataset_name(url: &str) -> Option<String> {
         let marker = "huggingface.co/datasets/";
         let idx = url.find(marker)? + marker.len();
@@ -2241,14 +2236,12 @@ impl DatasetLoader {
         Some(format!("{}/{}", org, name))
     }
 
-    #[allow(dead_code)]
     fn url_encode_component(s: &str) -> String {
         // Minimal encoding for HF datasets-server query parameters.
         // In practice we mainly need `/` -> `%2F`.
         s.replace('/', "%2F").replace(' ', "%20")
     }
 
-    #[allow(dead_code)]
     fn hf_rows_url(dataset: &str, config: &str, split: &str) -> String {
         format!(
             "https://datasets-server.huggingface.co/rows?dataset={}&config={}&split={}&offset=0&length=100",
