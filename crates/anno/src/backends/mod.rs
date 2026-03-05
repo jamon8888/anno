@@ -147,7 +147,6 @@ pub mod label_prompt;
 pub mod lexicon;
 pub mod nuner;
 pub(crate) mod ort_compat;
-pub(crate) mod pattern_config;
 pub mod regex;
 /// Language-aware routing for automatic backend selection.
 pub(crate) mod router;
