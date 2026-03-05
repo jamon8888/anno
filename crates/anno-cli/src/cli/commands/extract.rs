@@ -13,7 +13,7 @@ use anno::backends::inference::{
     extract_relation_triples, RelationExtractionConfig, RelationExtractor, SemanticRegistry,
 };
 use anno::core::grounded::{
-    GroundedDocument, Location, Modality, Signal, SignalId, SignalValidationError,
+    GroundedDocument, Location, Modality, Quantifier, Signal, SignalId, SignalValidationError,
 };
 #[cfg(feature = "eval")]
 use anno::ingest::url_resolver::CompositeResolver;
@@ -176,6 +176,7 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
     };
 
     // Preprocess text if requested
+    let mut detected_language: Option<String> = None;
     if args.clean || args.normalize || args.detect_lang {
         let preprocessor = DocumentPreprocessor {
             clean_whitespace: args.clean,
@@ -184,6 +185,10 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
             chunk_size: None,
         };
         let prepared = preprocessor.prepare(&raw_text);
+        detected_language = prepared
+            .metadata
+            .get("detected_language")
+            .cloned();
         raw_text = prepared.text;
         if args.verbose >= 1 && !prepared.metadata.is_empty() {
             log_info(
@@ -439,30 +444,37 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
         relation_triples.retain(|r| r.confidence >= relation_threshold);
     }
 
+    // Build signals with negation/quantifier annotations, then add to doc.
+    let mut signals: Vec<Signal> = entities
+        .iter()
+        .map(|e| {
+            let mut signal = Signal::from(e).with_modality(Modality::Symbolic);
+            if args.negation && is_negated_en(&text, e.start) {
+                signal = signal.negated();
+            }
+            if args.quantifiers {
+                if let Some(q) = detect_quantifier_en(&text, e.start) {
+                    signal = signal.with_quantifier(q);
+                }
+            }
+            signal
+        })
+        .collect();
+
+    // N17: Propagate quantifiers across comma/and/or-separated entity lists.
+    // If entity A has a quantifier but nearby entity B in the same sentence
+    // doesn't, and they're connected by list connectors, propagate A's quantifier.
+    if args.quantifiers && signals.len() > 1 {
+        propagate_quantifiers_across_lists(&text, &mut signals);
+    }
+
     // Build grounded document with validation using library method
     let mut doc = GroundedDocument::new("extract", &text);
     let mut validation_errors: Vec<SignalValidationError> = Vec::new();
 
-    for e in &entities {
-        let mut signal = Signal::from(e).with_modality(Modality::Symbolic);
-
-        // Detect negation
-        if args.negation && is_negated_en(&text, e.start) {
-            signal = signal.negated();
-        }
-
-        // Detect quantification
-        if args.quantifiers {
-            if let Some(q) = detect_quantifier_en(&text, e.start) {
-                signal = signal.with_quantifier(q);
-            }
-        }
-
-        // Use library validation method for consistent error handling
+    for signal in signals {
         match doc.add_signal_validated(signal) {
-            Ok(_) => {
-                // Signal added successfully
-            }
+            Ok(_) => {}
             Err(err) => {
                 validation_errors.push(err);
             }
@@ -544,7 +556,7 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
                 })
                 .collect();
 
-            let provenance = build_provenance(&text, args.model.name(), &entities_out, elapsed);
+            let provenance = build_provenance(&text, args.model.name(), &entities_out, elapsed, detected_language.as_deref());
             let output = serde_json::json!({
                 "provenance": provenance,
                 "entities": entities_out,
@@ -587,7 +599,7 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
                 })
                 .collect();
 
-            let provenance = build_provenance(&text, args.model.name(), &entities_out, elapsed);
+            let provenance = build_provenance(&text, args.model.name(), &entities_out, elapsed, detected_language.as_deref());
             println!("{}", serde_json::json!({ "provenance": provenance }));
             for obj in entities_out {
                 println!("{}", obj);
@@ -981,6 +993,7 @@ fn build_provenance(
     model: &str,
     entities: &[serde_json::Value],
     elapsed: std::time::Duration,
+    language: Option<&str>,
 ) -> serde_json::Value {
     // Result hash mirrors eval/property_tests.rs: sorted, order-independent, deterministic.
     #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -1027,14 +1040,18 @@ fn build_provenance(
         .collect();
     let confidence_stats = compute_confidence_stats(&confs);
 
-    serde_json::json!({
+    let mut prov = serde_json::json!({
         "model": model,
         "text_chars": text.chars().count(),
         "entity_count": ents.len(),
         "elapsed_ms": (elapsed.as_secs_f64() * 1000.0),
         "result_hash": result_hash,
         "confidence_stats": confidence_stats,
-    })
+    });
+    if let Some(lang) = language {
+        prov["language"] = serde_json::Value::String(lang.to_string());
+    }
+    prov
 }
 
 fn compute_confidence_stats(confs: &[f64]) -> serde_json::Value {
@@ -1079,9 +1096,115 @@ fn compute_confidence_stats(confs: &[f64]) -> serde_json::Value {
     })
 }
 
+/// Propagate quantifiers across comma/and/or-separated entity lists.
+///
+/// If "At least three companies, including Apple and Microsoft" has a
+/// quantifier on "Apple" (from the lookback window) but not on "Microsoft"
+/// (too far away), propagate Apple's quantifier to Microsoft because they
+/// are connected by list connectors within the same sentence.
+fn propagate_quantifiers_across_lists(text: &str, signals: &mut [Signal]) {
+    let chars: Vec<char> = text.chars().collect();
+    let text_len = chars.len();
+
+    // Work with indices into the signals slice.
+    // Group signals by sentence: find sentence boundaries around each signal.
+    // Then within each sentence, propagate quantifiers across list-connected entities.
+
+    // For each signal pair (i, j) where i < j and both are in range:
+    for i in 0..signals.len() {
+        if signals[i].quantifier.is_none() {
+            continue;
+        }
+        let q = signals[i].quantifier.unwrap();
+        let (i_start, _i_end) = signals[i].text_offsets().unwrap_or((0, 0));
+
+        for j in (i + 1)..signals.len() {
+            if signals[j].quantifier.is_some() {
+                continue; // Already has a quantifier
+            }
+            let (j_start, j_end) = signals[j].text_offsets().unwrap_or((0, 0));
+
+            // Must be within 120 chars of each other
+            if j_start.saturating_sub(i_start) > 120 {
+                break; // Sorted by position, no point checking further
+            }
+
+            // Check no sentence boundary between them
+            let between_start = i_start.min(j_start);
+            let between_end = j_end.max(i_start).min(text_len);
+            let between: String = chars[between_start..between_end].iter().collect();
+            if between.contains(". ") || between.contains("! ") || between.contains("? ") {
+                break; // Different sentence
+            }
+
+            // Check for list connectors between the entities
+            let gap_start = signals[i].text_offsets().map(|(_, e)| e).unwrap_or(0);
+            let gap_end = j_start.min(text_len);
+            if gap_start < gap_end && gap_end <= text_len {
+                let gap: String = chars[gap_start..gap_end].iter().collect();
+                let gap_lower = gap.to_lowercase();
+                if gap_lower.contains(',')
+                    || gap_lower.contains(" and ")
+                    || gap_lower.contains(" or ")
+                {
+                    signals[j].quantifier = Some(q);
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_propagate_quantifiers_basic() {
+        use anno::core::grounded::{Location, Modality, Quantifier, Signal};
+        use anno::Entity;
+
+        let text = "At least three companies, including Apple and Microsoft, bid on the contract.";
+        // Apple at offset 36..41, Microsoft at 46..55
+        let apple = Entity::new("Apple", anno::EntityType::Organization, 36, 41, 0.9);
+        let msft = Entity::new("Microsoft", anno::EntityType::Organization, 46, 55, 0.9);
+
+        let mut signals = vec![
+            Signal::from(&apple)
+                .with_modality(Modality::Symbolic)
+                .with_quantifier(Quantifier::Approximate),
+            Signal::from(&msft).with_modality(Modality::Symbolic),
+        ];
+
+        propagate_quantifiers_across_lists(text, &mut signals);
+        assert_eq!(
+            signals[1].quantifier,
+            Some(Quantifier::Approximate),
+            "Microsoft should inherit Approximate from Apple"
+        );
+    }
+
+    #[test]
+    fn test_propagate_quantifiers_no_cross_sentence() {
+        use anno::core::grounded::{Location, Modality, Quantifier, Signal};
+        use anno::Entity;
+
+        let text = "Every employee attended. Bob was late.";
+        let employee = Entity::new("employee", anno::EntityType::Person, 6, 14, 0.9);
+        let bob = Entity::new("Bob", anno::EntityType::Person, 24, 27, 0.9);
+
+        let mut signals = vec![
+            Signal::from(&employee)
+                .with_modality(Modality::Symbolic)
+                .with_quantifier(Quantifier::Universal),
+            Signal::from(&bob).with_modality(Modality::Symbolic),
+        ];
+
+        propagate_quantifiers_across_lists(text, &mut signals);
+        assert_eq!(
+            signals[1].quantifier, None,
+            "Bob should not inherit quantifier across sentence boundary"
+        );
+    }
 
     #[test]
     fn test_get_context_window_basic() {
