@@ -87,7 +87,7 @@
 //! - Groma: Grounded multimodal assistant
 
 use super::entity::{
-    DiscontinuousSpan, Entity, EntityCategory, EntityType, HierarchicalConfidence, Provenance, Span,
+    DiscontinuousSpan, Entity, EntityType, HierarchicalConfidence, Provenance, Span,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -4775,6 +4775,7 @@ impl Default for Corpus {
 mod tests {
     #![allow(clippy::unwrap_used)] // unwrap() is acceptable in test code
     use super::*;
+    use crate::EntityCategory;
 
     #[test]
     fn test_render_eval_html_has_interactive_hooks_and_is_unicode_safe() {
