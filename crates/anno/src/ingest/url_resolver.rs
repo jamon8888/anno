@@ -3,7 +3,13 @@
 //! Provides a trait-based system for resolving different URL types to text content.
 
 use crate::Result;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use std::collections::HashMap;
+
+/// Matches Wikipedia-style reference markers: [1], [2], [edit], [citation needed], etc.
+static WIKI_REF_BRACKET: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\[(\d+|edit|citation needed)\]").unwrap());
 
 /// Resolved content from a URL.
 #[derive(Debug, Clone)]
@@ -39,7 +45,6 @@ impl HttpResolver {
     }
 
     /// Extract text from HTML content. Delegates to the standalone function.
-    #[allow(dead_code)]
     fn extract_text_from_html(&self, html: &str) -> String {
         strip_html_to_text(html)
     }
@@ -333,6 +338,9 @@ fn _strip_html_to_text_impl(html: &str) -> String {
             last_was_space = false;
         }
     }
+    // Strip Wikipedia-style reference markers ([1], [edit], etc.) that
+    // bleed into entity spans when extracting from wiki pages.
+    let cleaned = WIKI_REF_BRACKET.replace_all(cleaned.trim(), "");
     cleaned.trim().to_string()
 }
 
@@ -555,6 +563,52 @@ mod tests {
         let resolver = HttpResolver::new();
         let debug = format!("{:?}", resolver);
         assert!(debug.contains("HttpResolver"));
+    }
+
+    #[test]
+    fn test_wiki_reference_brackets_stripped() {
+        let resolver = HttpResolver::new();
+        let html = r#"<html><body>
+            <p>Albert Einstein[1] was a physicist.[2] He developed
+            the theory of relativity.[3][4] See also[edit] quantum mechanics.</p>
+        </body></html>"#;
+        let text = resolver.extract_text_from_html(html);
+        assert!(
+            !text.contains("[1]"),
+            "reference [1] should be stripped, got: {}",
+            text
+        );
+        assert!(
+            !text.contains("[2]"),
+            "reference [2] should be stripped, got: {}",
+            text
+        );
+        assert!(
+            !text.contains("[edit]"),
+            "[edit] should be stripped, got: {}",
+            text
+        );
+        assert!(
+            text.contains("Albert Einstein"),
+            "entity text should survive, got: {}",
+            text
+        );
+        assert!(
+            text.contains("quantum mechanics"),
+            "content should survive, got: {}",
+            text
+        );
+    }
+
+    #[test]
+    fn test_wiki_citation_needed_stripped() {
+        let text = strip_html_to_text("<p>Some claim[citation needed] is here.</p>");
+        assert!(
+            !text.contains("[citation needed]"),
+            "should strip [citation needed], got: {}",
+            text
+        );
+        assert!(text.contains("Some claim"));
     }
 
     #[test]
