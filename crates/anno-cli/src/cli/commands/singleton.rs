@@ -95,9 +95,6 @@ pub enum SingletonReason {
     },
     /// Part of a compound ("CEO of Apple" - singleton "CEO")
     PartOfCompound,
-    /// Unknown
-    #[allow(dead_code)]
-    Unknown,
 }
 
 /// Run the singleton analysis command.
@@ -347,7 +344,6 @@ fn print_human_report(report: &SingletonReport, _text: &str, verbose: bool, quie
                     SingletonReason::GenericReference => "generic_ref",
                     SingletonReason::LikelyMissed { .. } => "likely_missed",
                     SingletonReason::PartOfCompound => "compound_part",
-                    SingletonReason::Unknown => "unknown",
                 };
                 println!(
                     "  {} \"{}\" @{}:{} [{}]",
@@ -403,7 +399,6 @@ fn print_tsv_report(report: &SingletonReport) {
                     &format!("missed:{}", similar_to)
                 }
                 SingletonReason::PartOfCompound => "compound_part",
-                SingletonReason::Unknown => "unknown",
             };
             println!(
                 "{}\t{}\t{}\t{}\t{:.2}\t{}",

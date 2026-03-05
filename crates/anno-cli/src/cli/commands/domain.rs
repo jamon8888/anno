@@ -65,9 +65,6 @@ pub enum ShiftRisk {
     Medium,
     /// High risk - significant mismatch, consider domain-specific model
     High,
-    /// Unknown - insufficient signals to assess
-    #[allow(dead_code)]
-    Unknown,
 }
 
 /// Indicator of domain characteristics.
@@ -404,7 +401,6 @@ fn print_human_report(report: &DomainReport, quiet: bool) {
         ShiftRisk::High => "31",
         ShiftRisk::Medium => "33",
         ShiftRisk::Low => "32",
-        ShiftRisk::Unknown => "90",
     };
     println!(
         "{}: {}",

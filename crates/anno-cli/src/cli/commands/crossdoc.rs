@@ -1088,21 +1088,8 @@ pub fn run(args: CrossDocArgs) -> Result<(), String> {
             }
             output
         }
-        OutputFormat::Human
-        | OutputFormat::Tsv
-        | OutputFormat::Inline
-        | OutputFormat::Grounded
-        | OutputFormat::Html => {
-            return Err(format!("Format '{}' not supported for cross-doc command. Use: json, jsonl, tree, or summary.",
-                    match args.format {
-                        OutputFormat::Human => "human",
-                        OutputFormat::Tsv => "tsv",
-                        OutputFormat::Inline => "inline",
-                        OutputFormat::Grounded => "grounded",
-                        OutputFormat::Html => "html",
-                        _ => unreachable!(),
-                    }
-                ));
+        other => {
+            return Err(format!("Format '{:?}' not supported for cross-doc command. Use: json, jsonl, tree, or summary.", other));
         }
     };
 

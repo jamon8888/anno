@@ -5,7 +5,6 @@
 #![allow(unused_imports)]
 
 pub mod analyze;
-pub mod backends;
 pub mod batch;
 pub mod cache;
 pub mod compare;
@@ -21,9 +20,9 @@ pub mod export;
 pub mod extract;
 pub mod history;
 pub mod import;
-pub mod info; // Deprecated: use backends
+pub mod info;
 pub mod joint;
-pub mod models; // Deprecated: use backends
+pub mod models;
 #[cfg(feature = "eval")]
 pub mod muxer;
 pub mod pipeline;
@@ -41,7 +40,6 @@ pub mod crossdoc;
 
 // Re-export argument types for parser
 pub use analyze::AnalyzeArgs;
-pub use backends::BackendsArgs;
 pub use batch::BatchArgs;
 pub use cache::{CacheAction, CacheArgs};
 pub use compare::CompareArgs;
@@ -58,7 +56,7 @@ pub use extract::ExtractArgs;
 pub use history::HistoryArgs;
 pub use import::ImportArgs;
 pub use joint::JointArgs;
-pub use models::ModelsArgs; // Deprecated: use BackendsArgs
+pub use models::ModelsArgs;
 pub use pipeline::PipelineArgs;
 pub use privacy::PrivacyArgs;
 pub use query::QueryArgs;

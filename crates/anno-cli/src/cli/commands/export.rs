@@ -348,7 +348,8 @@ fn export_file(opts: ExportFileOpts<'_>) -> Result<(), String> {
         ExportFormat::JsonLd => output_dir.join(format!("{}.jsonld", stem)),
         #[cfg(feature = "graph")]
         ExportFormat::GraphNTriples => output_dir.join(format!("{}.nt", stem)),
-        ExportFormat::GraphCsv => unreachable!(),
+        // GraphCsv handled above (writes two files); guard against future variants.
+        _ => return Err(format!("Unsupported single-file export format: {:?}", format)),
     };
 
     if output_path.exists() && !overwrite {
@@ -374,7 +375,8 @@ fn export_file(opts: ExportFileOpts<'_>) -> Result<(), String> {
         ExportFormat::GraphNTriples => {
             export_graph_ntriples(&ext.entities, &ext.relations, input, base_uri)
         }
-        ExportFormat::GraphCsv => unreachable!(),
+        // GraphCsv handled above; guard against future variants.
+        _ => return Err(format!("Unsupported single-file export format: {:?}", format)),
     };
 
     fs::write(&output_path, output_content)

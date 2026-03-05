@@ -172,12 +172,6 @@ pub fn run(args: HistoryArgs) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(feature = "eval"))]
-/// Stub implementation when `eval` is disabled.
-pub fn run(_args: HistoryArgs) -> Result<(), String> {
-    Err("History command requires 'eval' feature".to_string())
-}
-
 #[cfg(feature = "eval")]
 fn print_stats(stats: &HistoryStats) {
     println!("=== Evaluation History Statistics ===\n");
