@@ -50,106 +50,97 @@ class Source:
     script: str    # Latin, Cyrillic, CJK, Arabic, Devanagari, etc.
 
 
-# Wikipedia Special:Random -- 45 languages
-WIKIPEDIA_SOURCES = [
-    Source("Wikipedia (en)", "https://en.wikipedia.org/wiki/Special:Random", "wikipedia", "en", "Latin"),
-    Source("Wikipedia (de)", "https://de.wikipedia.org/wiki/Spezial:Zuf%C3%A4llige_Seite", "wikipedia", "de", "Latin"),
-    Source("Wikipedia (fr)", "https://fr.wikipedia.org/wiki/Sp%C3%A9cial:Page_au_hasard", "wikipedia", "fr", "Latin"),
-    Source("Wikipedia (es)", "https://es.wikipedia.org/wiki/Especial:Aleatoria", "wikipedia", "es", "Latin"),
-    Source("Wikipedia (it)", "https://it.wikipedia.org/wiki/Speciale:PaginaCasuale", "wikipedia", "it", "Latin"),
-    Source("Wikipedia (pt)", "https://pt.wikipedia.org/wiki/Especial:Aleat%C3%B3ria", "wikipedia", "pt", "Latin"),
-    Source("Wikipedia (nl)", "https://nl.wikipedia.org/wiki/Speciaal:Willekeurig", "wikipedia", "nl", "Latin"),
-    Source("Wikipedia (pl)", "https://pl.wikipedia.org/wiki/Specjalna:Losowa_strona", "wikipedia", "pl", "Latin"),
-    Source("Wikipedia (sv)", "https://sv.wikipedia.org/wiki/Special:Slumpsida", "wikipedia", "sv", "Latin"),
-    Source("Wikipedia (da)", "https://da.wikipedia.org/wiki/Speciel:Tilf%C3%A6ldig_side", "wikipedia", "da", "Latin"),
-    Source("Wikipedia (no)", "https://no.wikipedia.org/wiki/Spesial:Tilfeldig_side", "wikipedia", "no", "Latin"),
-    Source("Wikipedia (fi)", "https://fi.wikipedia.org/wiki/Toiminnot:Satunnainen_sivu", "wikipedia", "fi", "Latin"),
-    Source("Wikipedia (cs)", "https://cs.wikipedia.org/wiki/Speci%C3%A1ln%C3%AD:N%C3%A1hodn%C3%A1_str%C3%A1nka", "wikipedia", "cs", "Latin"),
-    Source("Wikipedia (ro)", "https://ro.wikipedia.org/wiki/Special:Aleatoriu", "wikipedia", "ro", "Latin"),
-    Source("Wikipedia (hu)", "https://hu.wikipedia.org/wiki/Speci%C3%A1lis:Lap_tal%C3%A1lomra", "wikipedia", "hu", "Latin"),
-    Source("Wikipedia (ca)", "https://ca.wikipedia.org/wiki/Especial:P%C3%A0gina_a_l%27atzar", "wikipedia", "ca", "Latin"),
-    Source("Wikipedia (tr)", "https://tr.wikipedia.org/wiki/%C3%96zel:Rastgele", "wikipedia", "tr", "Latin"),
-    Source("Wikipedia (id)", "https://id.wikipedia.org/wiki/Istimewa:Halaman_sembarang", "wikipedia", "id", "Latin"),
-    Source("Wikipedia (ms)", "https://ms.wikipedia.org/wiki/Khas:Rawak", "wikipedia", "ms", "Latin"),
-    Source("Wikipedia (vi)", "https://vi.wikipedia.org/wiki/%C4%90%E1%BA%B7c_bi%E1%BB%87t:Ng%E1%BA%ABu_nhi%C3%AAn", "wikipedia", "vi", "Latin"),
-    Source("Wikipedia (tl)", "https://tl.wikipedia.org/wiki/Natatangi:Alinmang_pahina", "wikipedia", "tl", "Latin"),
-    Source("Wikipedia (sw)", "https://sw.wikipedia.org/wiki/Maalum:UkurasaWowote", "wikipedia", "sw", "Latin"),
-    Source("Wikipedia (eu)", "https://eu.wikipedia.org/wiki/Berezi:Ausaz", "wikipedia", "eu", "Latin"),
-    Source("Wikipedia (ru)", "https://ru.wikipedia.org/wiki/%D0%A1%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F:%D0%A1%D0%BB%D1%83%D1%87%D0%B0%D0%B9%D0%BD%D0%B0%D1%8F_%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0", "wikipedia", "ru", "Cyrillic"),
-    Source("Wikipedia (uk)", "https://uk.wikipedia.org/wiki/%D0%A1%D0%BF%D0%B5%D1%86%D1%96%D0%B0%D0%BB%D1%8C%D0%BD%D0%B0:%D0%92%D0%B8%D0%BF%D0%B0%D0%B4%D0%BA%D0%BE%D0%B2%D0%B0_%D1%81%D1%82%D0%BE%D1%80%D1%96%D0%BD%D0%BA%D0%B0", "wikipedia", "uk", "Cyrillic"),
-    Source("Wikipedia (sr)", "https://sr.wikipedia.org/wiki/%D0%9F%D0%BE%D1%81%D0%B5%D0%B1%D0%BD%D0%BE:%D0%A1%D0%BB%D1%83%D1%87%D0%B0%D1%98%D0%BD%D0%B0_%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B0", "wikipedia", "sr", "Cyrillic"),
-    Source("Wikipedia (bg)", "https://bg.wikipedia.org/wiki/%D0%A1%D0%BF%D0%B5%D1%86%D0%B8%D0%B0%D0%BB%D0%BD%D0%B8:%D0%A1%D0%BB%D1%83%D1%87%D0%B0%D0%B9%D0%BD%D0%B0_%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0", "wikipedia", "bg", "Cyrillic"),
-    Source("Wikipedia (ja)", "https://ja.wikipedia.org/wiki/%E7%89%B9%E5%88%A5:%E3%81%8A%E3%81%BE%E3%81%8B%E3%81%9B%E8%A1%A8%E7%A4%BA", "wikipedia", "ja", "CJK"),
-    Source("Wikipedia (zh)", "https://zh.wikipedia.org/wiki/Special:Random", "wikipedia", "zh", "CJK"),
-    Source("Wikipedia (ko)", "https://ko.wikipedia.org/wiki/%ED%8A%B9%EC%88%98:%EC%9E%84%EC%9D%98_%EB%AC%B8%EC%84%9C", "wikipedia", "ko", "CJK"),
-    Source("Wikipedia (ar)", "https://ar.wikipedia.org/wiki/%D8%AE%D8%A7%D8%B5:%D8%B9%D8%B4%D9%88%D8%A7%D8%A6%D9%8A", "wikipedia", "ar", "Arabic"),
-    Source("Wikipedia (fa)", "https://fa.wikipedia.org/wiki/%D9%88%DB%8C%DA%98%D9%87:%D8%B5%D9%81%D8%AD%D9%87%D9%94_%D8%AA%D8%B5%D8%A7%D8%AF%D9%81%DB%8C", "wikipedia", "fa", "Arabic"),
-    Source("Wikipedia (ur)", "https://ur.wikipedia.org/wiki/%D8%AE%D8%A7%D8%B5:%D8%A8%DB%92%D8%AA%D8%B1%D8%AA%DB%8C%D8%A8_%D8%B5%D9%81%D8%AD%DB%81", "wikipedia", "ur", "Arabic"),
-    Source("Wikipedia (hi)", "https://hi.wikipedia.org/wiki/%E0%A4%B5%E0%A4%BF%E0%A4%B6%E0%A5%87%E0%A4%B7:%E0%A4%AF%E0%A4%BE%E0%A4%A6%E0%A5%83%E0%A4%9A%E0%A5%8D%E0%A4%9B%E0%A4%BF%E0%A4%95_%E0%A4%AA%E0%A5%83%E0%A4%B7%E0%A5%8D%E0%A4%A0", "wikipedia", "hi", "Devanagari"),
-    Source("Wikipedia (mr)", "https://mr.wikipedia.org/wiki/%E0%A4%B5%E0%A4%BF%E0%A4%B6%E0%A5%87%E0%A4%B7:%E0%A4%AF%E0%A4%BE%E0%A4%A6%E0%A5%83%E0%A4%9A%E0%A5%8D%E0%A4%9B%E0%A4%BF%E0%A4%95_%E0%A4%AA%E0%A4%BE%E0%A4%A8", "wikipedia", "mr", "Devanagari"),
-    Source("Wikipedia (ne)", "https://ne.wikipedia.org/wiki/%E0%A4%B5%E0%A4%BF%E0%A4%B6%E0%A5%87%E0%A4%B7:%E0%A4%AF%E0%A4%BE%E0%A4%A6%E0%A5%83%E0%A4%9A%E0%A5%8D%E0%A4%9B%E0%A4%BF%E0%A4%95_%E0%A4%AA%E0%A5%83%E0%A4%B7%E0%A5%8D%E0%A4%A0", "wikipedia", "ne", "Devanagari"),
-    Source("Wikipedia (th)", "https://th.wikipedia.org/wiki/%E0%B8%9E%E0%B8%B4%E0%B9%80%E0%B8%A8%E0%B8%A9:%E0%B8%AA%E0%B8%B8%E0%B9%88%E0%B8%A1", "wikipedia", "th", "Thai"),
-    Source("Wikipedia (ka)", "https://ka.wikipedia.org/wiki/%E1%83%A1%E1%83%9E%E1%83%94%E1%83%AA%E1%83%98%E1%83%90%E1%83%9A%E1%83%A3%E1%83%A0%E1%83%98:%E1%83%A8%E1%83%94%E1%83%9B%E1%83%97%E1%83%AE%E1%83%95%E1%83%94%E1%83%95%E1%83%98%E1%83%97%E1%83%98", "wikipedia", "ka", "Georgian"),
-    Source("Wikipedia (hy)", "https://hy.wikipedia.org/wiki/%D5%8D%D5%BA%D5%A1%D5%BD%D5%A1%D6%80%D5%AF%D5%B8%D5%B2:%D5%8A%D5%A1%D5%BF%D5%A1%D5%B0%D5%A1%D5%AF%D5%A1%D5%B6_%D5%A7%D5%BB", "wikipedia", "hy", "Armenian"),
-    Source("Wikipedia (el)", "https://el.wikipedia.org/wiki/%CE%95%CE%B9%CE%B4%CE%B9%CE%BA%CF%8C:%CE%A4%CF%85%CF%87%CE%B1%CE%AF%CE%B1", "wikipedia", "el", "Greek"),
-    Source("Wikipedia (he)", "https://he.wikipedia.org/wiki/%D7%9E%D7%99%D7%95%D7%97%D7%93:%D7%90%D7%A7%D7%A8%D7%90%D7%99", "wikipedia", "he", "Hebrew"),
-    Source("Wikipedia (am)", "https://am.wikipedia.org/wiki/%E1%88%8D%E1%8B%A9:%E1%8B%A8%E1%8B%95%E1%8B%B3%E1%88%8D_%E1%8B%B0%E1%8B%B5%E1%89%A3", "wikipedia", "am", "Ethiopic"),
-    Source("Wikipedia (ta)", "https://ta.wikipedia.org/wiki/%E0%AE%9A%E0%AE%BF%E0%AE%B1%E0%AE%AA%E0%AF%8D%E0%AE%AA%E0%AF%81:%E0%AE%9A%E0%AF%86%E0%AE%B4%E0%AF%81%E0%AE%AE%E0%AF%8D%E0%AE%AA%E0%AE%BE%E0%AE%A9_%E0%AE%AA%E0%AE%95%E0%AF%8D%E0%AE%95%E0%AE%AE%E0%AF%8D", "wikipedia", "ta", "Tamil"),
-    Source("Wikipedia (bn)", "https://bn.wikipedia.org/wiki/%E0%A6%AC%E0%A6%BF%E0%A6%B6%E0%A7%87%E0%A6%B7:%E0%A6%85%E0%A6%AF%E0%A6%BE%E0%A6%9A%E0%A6%BF%E0%A6%A4", "wikipedia", "bn", "Bengali"),
-    Source("Wikipedia (te)", "https://te.wikipedia.org/wiki/%E0%B0%AA%E0%B1%8D%E0%B0%B0%E0%B0%A4%E0%B1%8D%E0%B0%AF%E0%B1%87%E0%B0%95:%E0%B0%AF%E0%B0%BE%E0%B0%A6%E0%B1%83%E0%B0%9A%E0%B1%8D%E0%B0%9B%E0%B0%BF%E0%B0%95%E0%B0%82", "wikipedia", "te", "Telugu"),
-]
+# Language -> script mapping for Wikipedia/Wikimedia sources
+_LANG_SCRIPT: dict[str, str] = {
+    "en": "Latin", "de": "Latin", "fr": "Latin", "es": "Latin", "it": "Latin",
+    "pt": "Latin", "nl": "Latin", "pl": "Latin", "sv": "Latin", "da": "Latin",
+    "no": "Latin", "fi": "Latin", "cs": "Latin", "ro": "Latin", "hu": "Latin",
+    "ca": "Latin", "tr": "Latin", "id": "Latin", "ms": "Latin", "vi": "Latin",
+    "tl": "Latin", "sw": "Latin", "eu": "Latin",
+    "ru": "Cyrillic", "uk": "Cyrillic", "sr": "Cyrillic", "bg": "Cyrillic",
+    "ja": "CJK", "zh": "CJK", "ko": "CJK",
+    "ar": "Arabic", "fa": "Arabic", "ur": "Arabic",
+    "hi": "Devanagari", "mr": "Devanagari", "ne": "Devanagari",
+    "th": "Thai", "ka": "Georgian", "hy": "Armenian", "el": "Greek",
+    "he": "Hebrew", "am": "Ethiopic", "ta": "Tamil", "bn": "Bengali", "te": "Telugu",
+}
 
-# Wikimedia siblings -- 35 sources
-WIKIMEDIA_SOURCES = [
-    # Wiktionary
-    Source("Wiktionary (en)", "https://en.wiktionary.org/wiki/Special:Random", "wikimedia", "en", "Latin"),
-    Source("Wiktionary (fr)", "https://fr.wiktionary.org/wiki/Sp%C3%A9cial:Page_au_hasard", "wikimedia", "fr", "Latin"),
-    Source("Wiktionary (de)", "https://de.wiktionary.org/wiki/Spezial:Zuf%C3%A4llige_Seite", "wikimedia", "de", "Latin"),
-    Source("Wiktionary (ja)", "https://ja.wiktionary.org/wiki/%E7%89%B9%E5%88%A5:%E3%81%8A%E3%81%BE%E3%81%8B%E3%81%9B%E8%A1%A8%E7%A4%BA", "wikimedia", "ja", "CJK"),
-    Source("Wiktionary (ru)", "https://ru.wiktionary.org/wiki/%D0%A1%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F:%D0%A1%D0%BB%D1%83%D1%87%D0%B0%D0%B9%D0%BD%D0%B0%D1%8F_%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0", "wikimedia", "ru", "Cyrillic"),
-    Source("Wiktionary (zh)", "https://zh.wiktionary.org/wiki/Special:Random", "wikimedia", "zh", "CJK"),
-    Source("Wiktionary (ko)", "https://ko.wiktionary.org/wiki/%ED%8A%B9%EC%88%98:%EC%9E%84%EC%9D%98_%EB%AC%B8%EC%84%9C", "wikimedia", "ko", "CJK"),
-    Source("Wiktionary (ar)", "https://ar.wiktionary.org/wiki/%D8%AE%D8%A7%D8%B5:%D8%B9%D8%B4%D9%88%D8%A7%D8%A6%D9%8A", "wikimedia", "ar", "Arabic"),
-    # Wikinews
-    Source("Wikinews (en)", "https://en.wikinews.org/wiki/Special:Random", "wikimedia", "en", "Latin"),
-    Source("Wikinews (fr)", "https://fr.wikinews.org/wiki/Sp%C3%A9cial:Page_au_hasard", "wikimedia", "fr", "Latin"),
-    Source("Wikinews (de)", "https://de.wikinews.org/wiki/Spezial:Zuf%C3%A4llige_Seite", "wikimedia", "de", "Latin"),
-    Source("Wikinews (ja)", "https://ja.wikinews.org/wiki/%E7%89%B9%E5%88%A5:%E3%81%8A%E3%81%BE%E3%81%8B%E3%81%9B%E8%A1%A8%E7%A4%BA", "wikimedia", "ja", "CJK"),
-    Source("Wikinews (ru)", "https://ru.wikinews.org/wiki/%D0%A1%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F:%D0%A1%D0%BB%D1%83%D1%87%D0%B0%D0%B9%D0%BD%D0%B0%D1%8F_%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0", "wikimedia", "ru", "Cyrillic"),
-    Source("Wikinews (ar)", "https://ar.wikinews.org/wiki/%D8%AE%D8%A7%D8%B5:%D8%B9%D8%B4%D9%88%D8%A7%D8%A6%D9%8A", "wikimedia", "ar", "Arabic"),
-    # Wikiquote
-    Source("Wikiquote (en)", "https://en.wikiquote.org/wiki/Special:Random", "wikimedia", "en", "Latin"),
-    Source("Wikiquote (fr)", "https://fr.wikiquote.org/wiki/Sp%C3%A9cial:Page_au_hasard", "wikimedia", "fr", "Latin"),
-    Source("Wikiquote (de)", "https://de.wikiquote.org/wiki/Spezial:Zuf%C3%A4llige_Seite", "wikimedia", "de", "Latin"),
-    Source("Wikiquote (ja)", "https://ja.wikiquote.org/wiki/%E7%89%B9%E5%88%A5:%E3%81%8A%E3%81%BE%E3%81%8B%E3%81%9B%E8%A1%A8%E7%A4%BA", "wikimedia", "ja", "CJK"),
-    Source("Wikiquote (ru)", "https://ru.wikiquote.org/wiki/%D0%A1%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F:%D0%A1%D0%BB%D1%83%D1%87%D0%B0%D0%B9%D0%BD%D0%B0%D1%8F_%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0", "wikimedia", "ru", "Cyrillic"),
-    # Wikivoyage
-    Source("Wikivoyage (en)", "https://en.wikivoyage.org/wiki/Special:Random", "wikimedia", "en", "Latin"),
-    Source("Wikivoyage (de)", "https://de.wikivoyage.org/wiki/Spezial:Zuf%C3%A4llige_Seite", "wikimedia", "de", "Latin"),
-    Source("Wikivoyage (fr)", "https://fr.wikivoyage.org/wiki/Sp%C3%A9cial:Page_au_hasard", "wikimedia", "fr", "Latin"),
-    Source("Wikivoyage (zh)", "https://zh.wikivoyage.org/wiki/Special:Random", "wikimedia", "zh", "CJK"),
-    Source("Wikivoyage (ru)", "https://ru.wikivoyage.org/wiki/%D0%A1%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F:%D0%A1%D0%BB%D1%83%D1%87%D0%B0%D0%B9%D0%BD%D0%B0%D1%8F_%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0", "wikimedia", "ru", "Cyrillic"),
-    # Wikisource
-    Source("Wikisource (en)", "https://en.wikisource.org/wiki/Special:Random", "wikimedia", "en", "Latin"),
-    Source("Wikisource (fr)", "https://fr.wikisource.org/wiki/Sp%C3%A9cial:Page_au_hasard", "wikimedia", "fr", "Latin"),
-    Source("Wikisource (de)", "https://de.wikisource.org/wiki/Spezial:Zuf%C3%A4llige_Seite", "wikimedia", "de", "Latin"),
-    Source("Wikisource (zh)", "https://zh.wikisource.org/wiki/Special:Random", "wikimedia", "zh", "CJK"),
-    Source("Wikisource (ru)", "https://ru.wikisource.org/wiki/%D0%A1%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F:%D0%A1%D0%BB%D1%83%D1%87%D0%B0%D0%B9%D0%BD%D0%B0%D1%8F_%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0", "wikimedia", "ru", "Cyrillic"),
-    Source("Wikisource (ar)", "https://ar.wikisource.org/wiki/%D8%AE%D8%A7%D8%B5:%D8%B9%D8%B4%D9%88%D8%A7%D8%A6%D9%8A", "wikimedia", "ar", "Arabic"),
-    Source("Wikisource (ja)", "https://ja.wikisource.org/wiki/%E7%89%B9%E5%88%A5:%E3%81%8A%E3%81%BE%E3%81%8B%E3%81%9B%E8%A1%A8%E7%A4%BA", "wikimedia", "ja", "CJK"),
-    # Wikibooks
-    Source("Wikibooks (en)", "https://en.wikibooks.org/wiki/Special:Random", "wikimedia", "en", "Latin"),
-    Source("Wikibooks (de)", "https://de.wikibooks.org/wiki/Spezial:Zuf%C3%A4llige_Seite", "wikimedia", "de", "Latin"),
-    Source("Wikibooks (ja)", "https://ja.wikibooks.org/wiki/%E7%89%B9%E5%88%A5:%E3%81%8A%E3%81%BE%E3%81%8B%E3%81%9B%E8%A1%A8%E7%A4%BA", "wikimedia", "ja", "CJK"),
-]
 
-# Non-wiki random endpoints
+def _wp(lang: str) -> Source:
+    """Wikipedia source shorthand."""
+    return Source(f"Wikipedia ({lang})", f"https://{lang}.wikipedia.org/wiki/Special:Random",
+                  "wikipedia", lang, _LANG_SCRIPT.get(lang, "Latin"))
+
+
+def _wm(project: str, label: str, lang: str) -> Source:
+    """Wikimedia sibling source shorthand."""
+    return Source(f"{label} ({lang})", f"https://{lang}.{project}.org/wiki/Special:Random",
+                  "wikimedia", lang, _LANG_SCRIPT.get(lang, "Latin"))
+
+
+# Wikipedia Special:Random -- 45 languages (all use universal Special:Random path)
+WIKIPEDIA_SOURCES = [_wp(lang) for lang in [
+    "en", "de", "fr", "es", "it", "pt", "nl", "pl", "sv", "da", "no", "fi",
+    "cs", "ro", "hu", "ca", "tr", "id", "ms", "vi", "tl", "sw", "eu",
+    "ru", "uk", "sr", "bg",
+    "ja", "zh", "ko",
+    "ar", "fa", "ur",
+    "hi", "mr", "ne",
+    "th", "ka", "hy", "el", "he", "am", "ta", "bn", "te",
+]]
+
+# Wikimedia siblings -- all use universal Special:Random path
+_WM_PROJECTS: list[tuple[str, str, list[str]]] = [
+    ("wiktionary", "Wiktionary", ["en", "fr", "de", "ja", "ru", "zh", "ko", "ar"]),
+    ("wikinews", "Wikinews", ["en", "fr", "de", "ja", "ru", "ar"]),
+    ("wikiquote", "Wikiquote", ["en", "fr", "de", "ja", "ru"]),
+    ("wikivoyage", "Wikivoyage", ["en", "de", "fr", "zh", "ru"]),
+    ("wikisource", "Wikisource", ["en", "fr", "de", "zh", "ru", "ar", "ja"]),
+    ("wikibooks", "Wikibooks", ["en", "de", "ja"]),
+]
+WIKIMEDIA_SOURCES = [_wm(proj, label, lang)
+                     for proj, label, langs in _WM_PROJECTS for lang in langs]
+
+# Conlang and classical language Wikipedia editions
+CONLANG_SOURCES = [
+    Source(f"Wikipedia ({lang})", f"https://{lang}.wikipedia.org/wiki/Special:Random",
+           "conlang", lang, _LANG_SCRIPT.get(lang, "Latin"))
+    for lang in [
+    "eo",   # Esperanto
+    "ia",   # Interlingua
+    "io",   # Ido
+    "vo",   # Volapuk
+    "jbo",  # Lojban
+    "la",   # Latin (classical)
+    "ang",  # Old English
+    "got",  # Gothic
+    "grc",  # Ancient Greek (if available, falls back gracefully)
+]]
+
+# Non-wiki random endpoints -- diverse domains, styles, eras
 OTHER_SOURCES = [
     Source("Simple English Wikipedia", "https://simple.wikipedia.org/wiki/Special:Random", "other", "en", "Latin"),
+    Source("Wikidata", "https://www.wikidata.org/wiki/Special:Random", "other", "multi", "Latin"),
+    Source("Wikimedia Commons", "https://commons.wikimedia.org/wiki/Special:Random", "other", "multi", "Latin"),
+    # Encyclopedias & knowledge bases
+    Source("Stanford Encyclopedia of Philosophy", "https://plato.stanford.edu/cgi-bin/encyclopedia/random", "other", "en", "Latin"),
     Source("RationalWiki", "https://rationalwiki.org/wiki/Special:Random", "other", "en", "Latin"),
+    Source("Citizendium", "https://en.citizendium.org/wiki/Special:Random", "other", "en", "Latin"),
+    Source("Scholarpedia", "http://www.scholarpedia.org/article/Special:Random", "other", "en", "Latin"),
+    Source("wikiHow", "https://www.wikihow.com/Special:Randomizer", "other", "en", "Latin"),
+    # Literary / historical
     Source("Project Gutenberg (random)", "https://www.gutenberg.org/ebooks/search/?sort_order=random", "other", "en", "Latin"),
     Source("OpenLibrary (random)", "https://openlibrary.org/random", "other", "en", "Latin"),
-    Source("Wikimedia Commons", "https://commons.wikimedia.org/wiki/Special:Random", "other", "multi", "Latin"),
+    # Places & travel
+    Source("Atlas Obscura (random)", "https://www.atlasobscura.com/random", "other", "en", "Latin"),
+    # Sports (tabular data, player bios, team stats)
+    Source("Baseball Reference (random)", "https://www.baseball-reference.com/rand.fcgi", "other", "en", "Latin"),
+    Source("Basketball Reference (random)", "https://www.basketball-reference.com/rand.fcgi", "other", "en", "Latin"),
+    Source("Hockey Reference (random)", "https://www.hockey-reference.com/rand.fcgi", "other", "en", "Latin"),
+    # Pop culture / fiction (different HTML, fictional entities)
+    Source("TVTropes (random)", "https://tvtropes.org/pmwiki/randomitem.php", "other", "en", "Latin"),
+    Source("Wookieepedia (Star Wars)", "https://starwars.fandom.com/wiki/Special:Random", "other", "en", "Latin"),
+    Source("Memory Alpha (Star Trek)", "https://memory-alpha.fandom.com/wiki/Special:Random", "other", "en", "Latin"),
 ]
 
 # RSS feed sources -- parsed at runtime
@@ -158,25 +149,45 @@ RSS_SOURCES = [
     Source("BBC News", "http://feeds.bbci.co.uk/news/rss.xml", "rss", "en", "Latin"),
     Source("BBC Science", "http://feeds.bbci.co.uk/news/science_and_environment/rss.xml", "rss", "en", "Latin"),
     Source("NPR News", "https://feeds.npr.org/1001/rss.xml", "rss", "en", "Latin"),
-    Source("Reuters World", "https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best", "rss", "en", "Latin"),
-    # Multilingual news
+    Source("Al Jazeera English", "https://www.aljazeera.com/xml/rss/all.xml", "rss", "en", "Latin"),
+    # Multilingual broadcasters
     Source("BBC Arabic", "http://feeds.bbci.co.uk/arabic/rss.xml", "rss", "ar", "Arabic"),
     Source("BBC Russian", "http://feeds.bbci.co.uk/russian/rss.xml", "rss", "ru", "Cyrillic"),
     Source("DW German", "https://rss.dw.com/rdf/rss-de-all", "rss", "de", "Latin"),
     Source("DW English", "https://rss.dw.com/rdf/rss-en-all", "rss", "en", "Latin"),
+    Source("DW Spanish", "https://rss.dw.com/rdf/rss-sp-all", "rss", "es", "Latin"),
     Source("France24 French", "https://www.france24.com/fr/rss", "rss", "fr", "Latin"),
     Source("France24 English", "https://www.france24.com/en/rss", "rss", "en", "Latin"),
     Source("France24 Arabic", "https://www.france24.com/ar/rss", "rss", "ar", "Arabic"),
-    Source("Al Jazeera English", "https://www.aljazeera.com/xml/rss/all.xml", "rss", "en", "Latin"),
     Source("NHK World", "https://www3.nhk.or.jp/rss/news/cat0.xml", "rss", "ja", "CJK"),
-    # Tech
+    # Global / multilingual
+    Source("Global Voices", "https://globalvoices.org/feed/", "rss", "en", "Latin"),
+    Source("UN News (peace)", "https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml", "rss", "en", "Latin"),
+    Source("UN News (health)", "https://news.un.org/feed/subscribe/en/news/topic/health/feed/rss.xml", "rss", "en", "Latin"),
+    # Tech / academic
     Source("ArXiv CS.CL", "https://rss.arxiv.org/rss/cs.CL", "rss", "en", "Latin"),
     Source("ArXiv CS.AI", "https://rss.arxiv.org/rss/cs.AI", "rss", "en", "Latin"),
     Source("Hacker News", "https://hnrss.org/frontpage", "rss", "en", "Latin"),
     Source("Lobsters", "https://lobste.rs/rss", "rss", "en", "Latin"),
 ]
 
-ALL_SOURCES = WIKIPEDIA_SOURCES + WIKIMEDIA_SOURCES + OTHER_SOURCES + RSS_SOURCES
+# Reference-hop sources -- these resolve via API at runtime, not direct URLs
+# Category "refhop" triggers Wikipedia reference extraction
+REFHOP_SOURCES = [
+    Source("Wiki refhop (en)", "https://en.wikipedia.org/", "refhop", "en", "Latin"),
+    Source("Wiki refhop (de)", "https://de.wikipedia.org/", "refhop", "de", "Latin"),
+    Source("Wiki refhop (fr)", "https://fr.wikipedia.org/", "refhop", "fr", "Latin"),
+    Source("Wiki refhop (es)", "https://es.wikipedia.org/", "refhop", "es", "Latin"),
+    Source("Wiki refhop (ja)", "https://ja.wikipedia.org/", "refhop", "ja", "CJK"),
+    Source("Wiki refhop (ru)", "https://ru.wikipedia.org/", "refhop", "ru", "Cyrillic"),
+    Source("Wiki refhop (zh)", "https://zh.wikipedia.org/", "refhop", "zh", "CJK"),
+    Source("Wiki refhop (ar)", "https://ar.wikipedia.org/", "refhop", "ar", "Arabic"),
+    Source("Wiki refhop (pt)", "https://pt.wikipedia.org/", "refhop", "pt", "Latin"),
+    Source("Wiki refhop (ko)", "https://ko.wikipedia.org/", "refhop", "ko", "CJK"),
+]
+
+ALL_SOURCES = (WIKIPEDIA_SOURCES + CONLANG_SOURCES + WIKIMEDIA_SOURCES
+               + OTHER_SOURCES + RSS_SOURCES + REFHOP_SOURCES)
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +237,48 @@ def fetch_random_rss_link(feed_url: str, timeout: int = 15) -> Optional[str]:
         return None
 
 
+def fetch_wiki_refhop(wiki_base: str, timeout: int = 15) -> Optional[str]:
+    """Get a random Wikipedia article, then pick one of its external references."""
+    try:
+        lang = wiki_base.rstrip("/").split("//")[1].split(".")[0]
+        api = f"https://{lang}.wikipedia.org/w/api.php"
+
+        # Step 1: get a random article title
+        req = urllib.request.Request(
+            f"{api}?action=query&list=random&rnlimit=1&rnnamespace=0&format=json",
+            headers={"User-Agent": "anno-qa/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read())
+        title = data["query"]["random"][0]["title"]
+
+        # Step 2: get external links from that article
+        encoded_title = urllib.request.quote(title)
+        req2 = urllib.request.Request(
+            f"{api}?action=query&titles={encoded_title}&prop=extlinks&ellimit=50&format=json",
+            headers={"User-Agent": "anno-qa/1.0"},
+        )
+        with urllib.request.urlopen(req2, timeout=timeout) as resp:
+            data2 = json.loads(resp.read())
+
+        pages = data2["query"]["pages"]
+        for page in pages.values():
+            extlinks = page.get("extlinks", [])
+            links = []
+            for el in extlinks:
+                url = el.get("*", el.get("url", ""))
+                if url.startswith("http"):
+                    links.append(url)
+            if links:
+                return random.choice(links)
+
+        # No external links -- fall back to the article itself
+        return f"https://{lang}.wikipedia.org/wiki/{encoded_title}"
+
+    except (HTTPError, URLError, KeyError, TimeoutError, OSError, json.JSONDecodeError):
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Anno runner
 # ---------------------------------------------------------------------------
@@ -243,9 +296,11 @@ class RunResult:
 
 
 def resolve_url(source: Source) -> Optional[str]:
-    """Resolve the actual URL to test. For RSS sources, fetch the feed first."""
+    """Resolve the actual URL to test."""
     if source.category == "rss":
         return fetch_random_rss_link(source.url)
+    if source.category == "refhop":
+        return fetch_wiki_refhop(source.url)
     return source.url
 
 
@@ -425,11 +480,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--backends", "-b", default="stacked", help="Comma-separated backends (default: stacked)")
     p.add_argument("--timeout", type=int, default=60, help="Per-URL timeout in seconds (default: 60)")
     p.add_argument("--output", "-o", help="Report file path (default: reports/qa-random-<timestamp>.md)")
-    p.add_argument("--category", "-c", default="all", choices=["wikipedia", "wikimedia", "rss", "other", "all"],
+    p.add_argument("--category", "-c", default="all",
+                   choices=["wikipedia", "conlang", "wikimedia", "rss", "other", "refhop", "all"],
                    help="Filter source category (default: all)")
     p.add_argument("--lang", help="Filter by language codes (comma-separated)")
     p.add_argument("--seed", "-s", type=int, help="Random seed for reproducibility")
-    p.add_argument("--no-rss", action="store_true", help="Skip RSS-based sources (faster)")
+    p.add_argument("--no-rss", action="store_true", help="Skip RSS and refhop sources (faster, no feed/API fetching)")
     p.add_argument("--verbose", "-v", action="store_true", help="Show full anno output")
     p.add_argument("--delay", type=float, default=1.0, help="Delay between requests in seconds (default: 1.0)")
     return p.parse_args()
@@ -448,7 +504,7 @@ def main() -> int:
     # Filter sources
     pool = list(ALL_SOURCES)
     if args.no_rss:
-        pool = [s for s in pool if s.category != "rss"]
+        pool = [s for s in pool if s.category not in ("rss", "refhop")]
     if args.category != "all":
         pool = [s for s in pool if s.category == args.category]
     if args.lang:
