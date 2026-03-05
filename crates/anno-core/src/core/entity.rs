@@ -275,7 +275,7 @@ impl std::fmt::Display for EntityViewport {
 /// let ty = EntityType::Person;
 /// assert!(ty.category().requires_ml());
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum EntityType {
     // === Named Entities (ML-required) ===
@@ -327,7 +327,6 @@ pub enum EntityType {
     /// Retained only for serde backward compatibility with existing data.
     /// No code should construct this variant; all match arms should handle
     /// both `Custom { .. }` and `Other(_)`.
-    #[serde(rename = "Other")]
     Other(String),
 }
 
@@ -495,6 +494,72 @@ impl std::str::FromStr for EntityType {
     /// Parse from standard label string. Never fails - unknown labels become `Other`.
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         Ok(Self::from_label(s))
+    }
+}
+
+// Flatten EntityType to its label string for JSON serialization.
+// `Custom { name: "MISC", .. }` -> `"MISC"`, `Person` -> `"PER"`, etc.
+// Deserialization accepts both the flat string (new format) and the
+// tagged-enum object (backward compat with existing serialized data).
+impl Serialize for EntityType {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_label())
+    }
+}
+
+impl<'de> Deserialize<'de> for EntityType {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct EntityTypeVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for EntityTypeVisitor {
+            type Value = EntityType;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a string label or a tagged enum object")
+            }
+
+            // New flat format: "PER", "ORG", "MISC", etc.
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<EntityType, E> {
+                Ok(EntityType::from_label(v))
+            }
+
+            // Backward-compat: {"Custom":{"name":"MISC","category":"Misc"}}
+            // or {"Other":"foo"} or "Person" (unit variant as map key)
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<EntityType, A::Error> {
+                let key: String = map
+                    .next_key()?
+                    .ok_or_else(|| serde::de::Error::custom("empty object"))?;
+                match key.as_str() {
+                    "Custom" => {
+                        #[derive(Deserialize)]
+                        struct CustomFields {
+                            name: String,
+                            category: EntityCategory,
+                        }
+                        let fields: CustomFields = map.next_value()?;
+                        Ok(EntityType::Custom {
+                            name: fields.name,
+                            category: fields.category,
+                        })
+                    }
+                    "Other" => {
+                        let val: String = map.next_value()?;
+                        Ok(EntityType::Other(val))
+                    }
+                    // Unit variants serialized as {"Person":null} etc.
+                    variant => {
+                        // Consume the value (null or unit)
+                        let _: serde::de::IgnoredAny = map.next_value()?;
+                        Ok(EntityType::from_label(variant))
+                    }
+                }
+            }
+        }
+
+        deserializer.deserialize_any(EntityTypeVisitor)
     }
 }
 
@@ -2240,12 +2305,6 @@ impl Entity {
     ///
     /// let (byte_start, byte_end) = char_to_byte_offsets(text, entity.start, entity.end);
     /// ```
-    #[allow(dead_code)]
-    #[doc(hidden)]
-    pub fn to_text_span(&self, _source_text: &str) -> serde_json::Value {
-        unimplemented!("Use anno::offset utilities directly - see method docs")
-    }
-
     /// Set visual span for multi-modal extraction.
     pub fn set_visual_span(&mut self, span: Span) {
         self.visual_span = Some(span);
@@ -4050,5 +4109,105 @@ mod proptests {
         assert_eq!(format!("{}", EntityCategory::Agent), "agent");
         assert_eq!(format!("{}", EntityCategory::Temporal), "temporal");
         assert_eq!(format!("{}", EntityCategory::Relation), "relation");
+    }
+
+    // ========================================================================
+    // EntityType serde tests (N20: flat string serialization)
+    // ========================================================================
+
+    #[test]
+    fn test_entity_type_serializes_to_flat_string() {
+        assert_eq!(
+            serde_json::to_string(&EntityType::Person).unwrap(),
+            r#""PER""#
+        );
+        assert_eq!(
+            serde_json::to_string(&EntityType::Organization).unwrap(),
+            r#""ORG""#
+        );
+        assert_eq!(
+            serde_json::to_string(&EntityType::Location).unwrap(),
+            r#""LOC""#
+        );
+        assert_eq!(
+            serde_json::to_string(&EntityType::Date).unwrap(),
+            r#""DATE""#
+        );
+        assert_eq!(
+            serde_json::to_string(&EntityType::Money).unwrap(),
+            r#""MONEY""#
+        );
+    }
+
+    #[test]
+    fn test_custom_entity_type_serializes_flat() {
+        let misc = EntityType::custom("MISC", EntityCategory::Misc);
+        assert_eq!(serde_json::to_string(&misc).unwrap(), r#""MISC""#);
+
+        let disease = EntityType::custom("DISEASE", EntityCategory::Agent);
+        assert_eq!(serde_json::to_string(&disease).unwrap(), r#""DISEASE""#);
+    }
+
+    #[test]
+    fn test_other_entity_type_serializes_flat() {
+        let other = EntityType::Other("foo".to_string());
+        assert_eq!(serde_json::to_string(&other).unwrap(), r#""foo""#);
+    }
+
+    #[test]
+    fn test_entity_type_deserializes_from_flat_string() {
+        let per: EntityType = serde_json::from_str(r#""PER""#).unwrap();
+        assert_eq!(per, EntityType::Person);
+
+        let org: EntityType = serde_json::from_str(r#""ORG""#).unwrap();
+        assert_eq!(org, EntityType::Organization);
+
+        let misc: EntityType = serde_json::from_str(r#""MISC""#).unwrap();
+        assert_eq!(misc, EntityType::custom("MISC", EntityCategory::Misc));
+    }
+
+    #[test]
+    fn test_entity_type_deserializes_backward_compat_custom() {
+        // Old format: {"Custom":{"name":"MISC","category":"Misc"}}
+        let json = r#"{"Custom":{"name":"MISC","category":"Misc"}}"#;
+        let et: EntityType = serde_json::from_str(json).unwrap();
+        assert_eq!(et, EntityType::custom("MISC", EntityCategory::Misc));
+    }
+
+    #[test]
+    fn test_entity_type_deserializes_backward_compat_other() {
+        // Old format: {"Other":"foo"}
+        let json = r#"{"Other":"foo"}"#;
+        let et: EntityType = serde_json::from_str(json).unwrap();
+        assert_eq!(et, EntityType::Other("foo".to_string()));
+    }
+
+    #[test]
+    fn test_entity_type_serde_roundtrip() {
+        let types = vec![
+            EntityType::Person,
+            EntityType::Organization,
+            EntityType::Location,
+            EntityType::Date,
+            EntityType::Time,
+            EntityType::Money,
+            EntityType::Percent,
+            EntityType::Quantity,
+            EntityType::Cardinal,
+            EntityType::Ordinal,
+            EntityType::Email,
+            EntityType::Url,
+            EntityType::Phone,
+            EntityType::custom("MISC", EntityCategory::Misc),
+            EntityType::custom("DISEASE", EntityCategory::Agent),
+        ];
+
+        for t in &types {
+            let json = serde_json::to_string(t).unwrap();
+            let back: EntityType = serde_json::from_str(&json).unwrap();
+            // All variants roundtrip through from_label, so Custom types
+            // survive as Custom (not as a built-in variant).
+            assert_eq!(t.as_label(), back.as_label(), "roundtrip failed for {:?}", t);
+        }
     }
 }
