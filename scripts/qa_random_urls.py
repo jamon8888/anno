@@ -39,6 +39,13 @@ from urllib.error import HTTPError, URLError
 
 # ---------------------------------------------------------------------------
 # Source pool
+#
+# Design: maximize diversity along 5 axes -- language, writing system, domain,
+# HTML structure, and content era/style.  Sources are bucketed into categories
+# so callers can --category filter for fast smoke tests (wikipedia only) or
+# full cross-domain runs (all).  All Wikimedia sources use the universal
+# Special:Random path, which works on every language edition (localized paths
+# like Spezial:Zufällige_Seite cause 404s with automated fetchers).
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -333,7 +340,8 @@ def fetch_wiki_refhop(wiki_base: str, timeout: int = 15) -> Optional[str]:
             if links:
                 return random.choice(links)
 
-        # No external links -- fall back to the article itself
+        # No external links -- fall back to the article itself.  This still
+        # exercises anno on a random Wikipedia page, just without the domain hop.
         return f"https://{lang}.wikipedia.org/wiki/{encoded_title}"
 
     except (HTTPError, URLError, KeyError, TimeoutError, OSError, json.JSONDecodeError):
@@ -550,6 +558,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--verbose", "-v", action="store_true", help="Show full anno output")
     p.add_argument("--delay", type=float, default=1.0, help="Delay between requests in seconds (default: 1.0)")
     p.add_argument("--self-test", action="store_true", help="Validate source pool integrity (no anno binary needed)")
+    p.add_argument("--dry-run", action="store_true", help="Show selected sources and resolved URLs without running anno")
     return p.parse_args()
 
 
@@ -618,6 +627,25 @@ def self_test() -> int:
         if categories.get(cat, 0) < 5:
             errors.append(f"Category {cat} has too few sources: {categories.get(cat, 0)} < 5")
 
+    # Regression: report generation doesn't crash with synthetic data
+    try:
+        synthetic = [
+            RunResult(source=ALL_SOURCES[0], url="https://example.com", status="OK",
+                      entity_count=5, type_counts={"PER": 3, "ORG": 2}, elapsed_secs=1.0),
+            RunResult(source=ALL_SOURCES[1], url="https://example.org", status="error",
+                      error_msg="test error", stderr_tail="stderr sample"),
+            RunResult(source=ALL_SOURCES[2], url="https://example.net", status="timeout",
+                      error_msg="timeout after 60s"),
+        ]
+        report = generate_report(synthetic, seed=42, backends=["stacked"],
+                                 start_time=datetime.now(timezone.utc))
+        assert "QA Random URL Report" in report, "report missing header"
+        assert "## Errors" in report, "report missing errors section"
+        assert "## Results" in report, "report missing results table"
+        print("Report generation: OK (synthetic data)")
+    except Exception as e:
+        errors.append(f"Report generation crashed: {e}")
+
     if errors:
         print(f"\nFAILED: {len(errors)} errors:")
         for e in errors:
@@ -664,10 +692,21 @@ def main() -> int:
     print(f"Source pool: {len(pool)} sources after filters")
     print()
 
+    # Dry-run: show selection and resolve URLs, but don't run anno
+    if args.dry_run:
+        for i, source in enumerate(selected, 1):
+            url = resolve_url(source)
+            resolved = url or "(resolve failed)"
+            print(f"  [{i}/{count}] {source.name} ({source.lang}/{source.script}) [{source.category}]")
+            if url != source.url:
+                print(f"           feed: {source.url}")
+            print(f"           url:  {resolved}")
+        return 0
+
     all_results: list[RunResult] = []
 
     for i, source in enumerate(selected, 1):
-        # Resolve URL (RSS needs feed fetch)
+        # Resolve URL (RSS/refhop sources need a network fetch to get the actual article URL)
         url = resolve_url(source)
         if url is None:
             print(f"  [{i}/{count}] {source.name}: RSS fetch failed, skipping")
