@@ -24,7 +24,6 @@
 //! Output shape: [batch, num_words, max_width, num_entity_types]
 
 #![allow(missing_docs)] // Stub implementation
-#![allow(dead_code)] // Placeholder constants
 #![allow(clippy::type_complexity)] // Complex return tuples
 #![allow(clippy::manual_contains)] // Shape check style
 #![allow(unused_variables)] // Feature-gated code

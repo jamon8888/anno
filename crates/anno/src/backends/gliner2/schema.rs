@@ -67,15 +67,7 @@ impl LabelCache {
     }
 }
 
-#[cfg(not(feature = "candle"))]
-impl LabelCache {
-    #[allow(dead_code)]
-    fn new() -> Self {
-        Self {
-            _phantom: std::marker::PhantomData,
-        }
-    }
-}
+
 
 // =============================================================================
 // Task Schema

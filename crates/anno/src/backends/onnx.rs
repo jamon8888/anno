@@ -15,7 +15,6 @@
 //! - MISC (Miscellaneous)
 
 #![allow(missing_docs)] // Stub implementation
-#![allow(dead_code)] // Placeholder constants
 #![allow(clippy::manual_strip)] // Complex BIO tag parsing
 
 use crate::{Entity, Error, Result};
@@ -27,9 +26,6 @@ use {
     crate::sync::lock, ndarray::Array2, ort::session::Session, std::collections::HashMap,
     tokenizers::Tokenizer,
 };
-
-/// Default BERT NER ONNX model (properly exported, reliable).
-pub const DEFAULT_BERT_NER_MODEL: &str = "protectai/bert-base-NER-onnx";
 
 /// Configuration for BERT NER model loading.
 #[cfg(feature = "onnx")]

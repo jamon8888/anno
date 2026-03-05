@@ -223,79 +223,6 @@ impl GLiNER2Onnx {
         Ok((input_ids, attention_mask, word_mask))
     }
 
-    /// Generate span tensors.
-    /// Generate span tensors for span-level models (not needed for token-level ONNX models)
-    #[allow(dead_code)]
-    fn make_span_tensors(&self, num_words: usize) -> (Vec<i64>, Vec<bool>) {
-        // Use checked_mul to prevent overflow (same pattern as line 2388)
-        let num_spans = num_words.checked_mul(MAX_SPAN_WIDTH).unwrap_or_else(|| {
-            log::warn!(
-                "Span count overflow: {} words * {} MAX_SPAN_WIDTH, using max",
-                num_words,
-                MAX_SPAN_WIDTH
-            );
-            usize::MAX
-        });
-        // Check for overflow in num_spans * 2
-        let span_idx_len = num_spans.checked_mul(2).unwrap_or_else(|| {
-            log::warn!(
-                "Span idx length overflow: {} spans * 2, using max",
-                num_spans
-            );
-            usize::MAX
-        });
-        let mut span_idx: Vec<i64> = vec![0; span_idx_len];
-        let mut span_mask: Vec<bool> = vec![false; num_spans];
-
-        for start in 0..num_words {
-            let remaining = num_words - start;
-            let max_width = MAX_SPAN_WIDTH.min(remaining);
-
-            for width in 0..max_width {
-                // Check for overflow in dim calculation (same pattern as nuner.rs:399)
-                let dim = match start.checked_mul(MAX_SPAN_WIDTH) {
-                    Some(v) => match v.checked_add(width) {
-                        Some(d) => d,
-                        None => {
-                            log::warn!(
-                                "Dim calculation overflow: {} * {} + {}, skipping span",
-                                start,
-                                MAX_SPAN_WIDTH,
-                                width
-                            );
-                            continue;
-                        }
-                    },
-                    None => {
-                        log::warn!(
-                            "Dim calculation overflow: {} * {}, skipping span",
-                            start,
-                            MAX_SPAN_WIDTH
-                        );
-                        continue;
-                    }
-                };
-                // Check bounds before array access (dim * 2 could overflow or exceed span_idx_len)
-                if let Some(dim2) = dim.checked_mul(2) {
-                    if dim2 + 1 < span_idx_len && dim < num_spans {
-                        span_idx[dim2] = start as i64;
-                        span_idx[dim2 + 1] = (start + width) as i64;
-                        span_mask[dim] = true;
-                    } else {
-                        log::warn!(
-                            "Span idx access out of bounds: dim={}, dim*2={}, span_idx_len={}, num_spans={}, skipping",
-                            dim, dim2, span_idx_len, num_spans
-                        );
-                    }
-                } else {
-                    log::warn!("Dim * 2 overflow: dim={}, skipping span", dim);
-                }
-            }
-        }
-
-        (span_idx, span_mask)
-    }
-
     /// Decode NER output.
     fn decode_ner_output(
         &self,
@@ -913,46 +840,6 @@ impl GLiNER2Onnx {
         Ok(structures)
     }
 
-    /// Build prompt string for logging.
-    #[allow(dead_code)]
-    fn build_prompt(&self, schema: &TaskSchema) -> String {
-        let mut parts = Vec::new();
-
-        if let Some(ref ent_task) = schema.entities {
-            let types: Vec<String> = ent_task
-                .types
-                .iter()
-                .map(|t| {
-                    if let Some(desc) = ent_task.descriptions.get(t) {
-                        format!("[E] {}: {}", t, desc)
-                    } else {
-                        format!("[E] {}", t)
-                    }
-                })
-                .collect();
-            parts.push(format!("[P] entities ({})", types.join(" ")));
-        }
-
-        for class_task in &schema.classifications {
-            let labels: Vec<String> = class_task
-                .labels
-                .iter()
-                .map(|l| format!("[L] {}", l))
-                .collect();
-            parts.push(format!("[P] {} ({})", class_task.name, labels.join(" ")));
-        }
-
-        for struct_task in &schema.structures {
-            let fields: Vec<String> = struct_task
-                .fields
-                .iter()
-                .map(|f| format!("[C] {}", f.name))
-                .collect();
-            parts.push(format!("[P] {} ({})", struct_task.name, fields.join(" ")));
-        }
-
-        parts.join(" [SEP] ")
-    }
 }
 
 // =============================================================================

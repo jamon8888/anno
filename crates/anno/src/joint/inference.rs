@@ -127,7 +127,6 @@ impl Message {
     }
 
     /// Pointwise multiply two messages (sum in log space).
-    #[allow(dead_code)]
     pub fn multiply(&self, other: &Message) -> Message {
         let log_probs: Vec<f64> = self
             .log_probs

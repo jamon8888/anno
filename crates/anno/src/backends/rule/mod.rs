@@ -67,7 +67,6 @@ impl RuleBasedNER {
     }
 
     /// Create without common word filtering (for debugging).
-    #[allow(dead_code)]
     pub fn without_filtering() -> Self {
         Self {
             min_confidence: 0.3,

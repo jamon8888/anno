@@ -106,7 +106,6 @@ const LOC_PREPOSITION: &[&str] = &[
     "en", "de", "à", "dans", "por", "sur",
 ];
 // Common words that look like entities but aren't (all caps acronyms, titles)
-#[allow(dead_code)] // Used in classify_minimal
 const SKIP_WORDS: &[&str] = &[
     // Job titles
     "ceo",
@@ -334,7 +333,6 @@ const COMMON_SENTENCE_STARTERS: &[&str] = &[
 
 // Minimal lexical knowledge (50 items each - high ROI)
 // These are the most common entities that are hard to distinguish structurally
-#[allow(dead_code)] // Used in classify_minimal but compiler sometimes misses it
 const KNOWN_ORGS: &[&str] = &[
     "google",
     "apple",
@@ -397,7 +395,6 @@ const KNOWN_ORGS: &[&str] = &[
     "小米",
 ];
 
-#[allow(dead_code)] // Used in classify_minimal but compiler sometimes misses it
 const KNOWN_LOCS: &[&str] = &[
     "paris",
     "london",
@@ -456,7 +453,6 @@ const KNOWN_LOCS: &[&str] = &[
     "ドイツ",
 ];
 
-#[allow(dead_code)] // Used in classify_minimal
 const KNOWN_PERSONS: &[&str] = &[
     "john", "jane", "mary", "james", "robert", "michael", "william", "david", "richard", "joseph",
     "thomas", "charles", "barack", "donald", "joe", "george", "bill", "vladimir", "emmanuel",

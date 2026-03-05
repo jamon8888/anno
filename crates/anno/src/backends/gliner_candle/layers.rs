@@ -12,8 +12,6 @@ pub struct SpanRepLayer {
     out_project_0: Linear,
     out_project_3: Linear,
     hidden_size: usize,
-    #[allow(dead_code)]
-    max_width: usize,
 }
 
 #[cfg(feature = "candle")]
@@ -24,7 +22,7 @@ impl SpanRepLayer {
     /// - project_start: Linear(D, 4D) -> ReLU -> Dropout -> Linear(4D, D)
     /// - project_end: Linear(D, 4D) -> ReLU -> Dropout -> Linear(4D, D)
     /// - out_project: Linear(2D, 4D) -> ReLU -> Dropout -> Linear(4D, D)
-    pub fn new(hidden_size: usize, max_width: usize, vb: VarBuilder) -> Result<Self> {
+    pub fn new(hidden_size: usize, _max_width: usize, vb: VarBuilder) -> Result<Self> {
         // Load project_start MLP (layers 0 and 3, indices match PyTorch Sequential)
         // Hidden multiplier is 4x for these models
         let project_start_0 = linear(hidden_size, hidden_size * 4, vb.pp("project_start").pp("0"))
@@ -56,7 +54,6 @@ impl SpanRepLayer {
             out_project_0,
             out_project_3,
             hidden_size,
-            max_width,
         })
     }
 
