@@ -52,17 +52,40 @@ class Source:
 
 # Language -> script mapping for Wikipedia/Wikimedia sources
 _LANG_SCRIPT: dict[str, str] = {
+    # Major languages (Latin script)
     "en": "Latin", "de": "Latin", "fr": "Latin", "es": "Latin", "it": "Latin",
     "pt": "Latin", "nl": "Latin", "pl": "Latin", "sv": "Latin", "da": "Latin",
     "no": "Latin", "fi": "Latin", "cs": "Latin", "ro": "Latin", "hu": "Latin",
     "ca": "Latin", "tr": "Latin", "id": "Latin", "ms": "Latin", "vi": "Latin",
     "tl": "Latin", "sw": "Latin", "eu": "Latin",
+    # Cyrillic
     "ru": "Cyrillic", "uk": "Cyrillic", "sr": "Cyrillic", "bg": "Cyrillic",
+    "kk": "Cyrillic", "ky": "Cyrillic", "tg": "Cyrillic", "tt": "Cyrillic",
+    "cv": "Cyrillic", "os": "Cyrillic", "ab": "Cyrillic", "cu": "Cyrillic",
+    # CJK
     "ja": "CJK", "zh": "CJK", "ko": "CJK",
-    "ar": "Arabic", "fa": "Arabic", "ur": "Arabic",
-    "hi": "Devanagari", "mr": "Devanagari", "ne": "Devanagari",
-    "th": "Thai", "ka": "Georgian", "hy": "Armenian", "el": "Greek",
-    "he": "Hebrew", "am": "Ethiopic", "ta": "Tamil", "bn": "Bengali", "te": "Telugu",
+    # Arabic script
+    "ar": "Arabic", "fa": "Arabic", "ur": "Arabic", "ug": "Arabic",
+    # Indic scripts
+    "hi": "Devanagari", "mr": "Devanagari", "ne": "Devanagari", "sa": "Devanagari",
+    "pi": "Devanagari",
+    "th": "Thai", "lo": "Lao", "my": "Myanmar", "km": "Khmer", "si": "Sinhala",
+    "ka": "Georgian", "hy": "Armenian", "el": "Greek", "he": "Hebrew",
+    "am": "Ethiopic", "ta": "Tamil", "bn": "Bengali", "te": "Telugu",
+    "bo": "Tibetan",
+    # Indigenous Americas (Latin-based orthographies)
+    "nah": "Latin", "qu": "Latin", "ay": "Latin", "gn": "Latin",
+    "chr": "Cherokee", "cr": "CanSyllabics", "iu": "CanSyllabics",
+    "cdo": "Latin",
+    # African (Latin-based orthographies)
+    "zu": "Latin", "xh": "Latin", "sn": "Latin", "yo": "Latin",
+    "ig": "Latin", "ha": "Latin", "rw": "Latin", "lg": "Latin",
+    # Pacific / Oceanian (Latin-based)
+    "mi": "Latin", "haw": "Latin", "ty": "Latin", "sm": "Latin", "fj": "Latin",
+    # Conlangs (Latin-based)
+    "eo": "Latin", "ia": "Latin", "io": "Latin", "vo": "Latin", "jbo": "Latin",
+    # Classical / dead (Latin-based orthographies or native script)
+    "la": "Latin", "ang": "Latin", "got": "Gothic", "arc": "Syriac",
 }
 
 
@@ -106,15 +129,53 @@ CONLANG_SOURCES = [
     Source(f"Wikipedia ({lang})", f"https://{lang}.wikipedia.org/wiki/Special:Random",
            "conlang", lang, _LANG_SCRIPT.get(lang, "Latin"))
     for lang in [
+    # Constructed languages
     "eo",   # Esperanto
     "ia",   # Interlingua
     "io",   # Ido
     "vo",   # Volapuk
     "jbo",  # Lojban
-    "la",   # Latin (classical)
+    # Classical / dead / liturgical
+    "la",   # Latin
     "ang",  # Old English
-    "got",  # Gothic
-    "grc",  # Ancient Greek (if available, falls back gracefully)
+    "cu",   # Old Church Slavonic
+    "sa",   # Sanskrit
+    "pi",   # Pali
+    # Indigenous Americas
+    "nah",  # Nahuatl
+    "qu",   # Quechua
+    "ay",   # Aymara
+    "gn",   # Guarani
+    "chr",  # Cherokee (Syllabary script)
+    "cr",   # Cree (Canadian Syllabics)
+    "iu",   # Inuktitut (Canadian Syllabics)
+    # African
+    "zu",   # Zulu
+    "xh",   # Xhosa
+    "sn",   # Shona
+    "yo",   # Yoruba
+    "ig",   # Igbo
+    "ha",   # Hausa
+    "rw",   # Kinyarwanda
+    "lg",   # Luganda
+    # Pacific / Oceanian
+    "mi",   # Maori
+    "haw",  # Hawaiian
+    "ty",   # Tahitian
+    "sm",   # Samoan
+    "fj",   # Fijian
+    # Central/South/SE Asian minority
+    "my",   # Burmese (Myanmar script)
+    "km",   # Khmer
+    "kk",   # Kazakh
+    "ky",   # Kyrgyz
+    "tg",   # Tajik
+    "tt",   # Tatar
+    "cv",   # Chuvash
+    "os",   # Ossetian (Caucasus)
+    "ab",   # Abkhaz (Caucasus)
+    # Chinese dialect
+    "cdo",  # Min Dong
 ]]
 
 # Non-wiki random endpoints -- diverse domains, styles, eras
