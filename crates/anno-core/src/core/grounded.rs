@@ -4538,19 +4538,6 @@ impl ProcessResult {
 /// let result = process_text("Marie Curie won the Nobel Prize.", None)?;
 /// println!("{}", result.to_html());
 /// ```
-#[allow(dead_code)]
-#[doc(hidden)]
-pub fn process_text(
-    _text: &str,
-    _model: Option<&dyn std::any::Any>,
-) -> super::Result<ProcessResult> {
-    unimplemented!("Use anno::process_text instead - this stub documents the API only")
-}
-
-// Implementation removed - will be in anno crate
-
-// Note: Methods that depend on anno::eval::coref types have been moved to anno crate
-// (to_coref_chain, to_coref_chains, from_coref_document, to_coref_document)
 
 // =============================================================================
 // Tests
