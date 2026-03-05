@@ -820,7 +820,7 @@ mod tests {
         use anno::{Entity, EntityType};
 
         let encoder = HeuristicClusterEncoder::new(64);
-        let scorer = CosineMergeScorer::new(0.3);
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextConfig::default();
 
         let resolver = UnifiedCrossContextResolver::new(encoder, scorer, config);
@@ -955,7 +955,7 @@ mod tests {
         }
 
         let encoder = HeuristicClusterEncoder::new(64);
-        let scorer = CosineMergeScorer::new(0.3);
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextConfig {
             merge_threshold: 0.3,
             ..Default::default()

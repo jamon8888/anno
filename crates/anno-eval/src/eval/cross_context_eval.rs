@@ -15,7 +15,7 @@
 //! use anno::eval::cluster_encoder::{HeuristicClusterEncoder, CosineMergeScorer};
 //!
 //! let encoder = HeuristicClusterEncoder::new(64);
-//! let scorer = CosineMergeScorer::new(0.5);
+//! let scorer = CosineMergeScorer::new();
 //!
 //! let results = evaluate_benchmark(
 //!     CrossContextBenchmark::ECBPlus,
@@ -738,7 +738,7 @@ mod tests {
     #[test]
     fn test_evaluate_cross_document_empty() {
         let encoder = HeuristicClusterEncoder::new(64);
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextEvalConfig::default();
 
         let topics: Vec<Topic> = vec![];
@@ -750,7 +750,7 @@ mod tests {
     #[test]
     fn test_evaluate_cross_document_single_topic() {
         let encoder = HeuristicClusterEncoder::new(64);
-        let scorer = CosineMergeScorer::new(0.3);
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextEvalConfig::default();
 
         let mut topic = Topic::new("topic_1");
@@ -811,7 +811,7 @@ mod tests {
     fn test_evaluate_cross_document_with_synthetic_data() {
         // 2 topics with 3 docs each, overlapping entity names across docs
         let encoder = HeuristicClusterEncoder::new(64);
-        let scorer = CosineMergeScorer::new(0.3);
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextEvalConfig::default();
 
         // Topic 1: Obama visits France
@@ -914,7 +914,7 @@ mod tests {
         use anno_core::MentionType;
 
         let encoder = HeuristicClusterEncoder::new(64);
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextEvalConfig {
             use_gold_mentions: true,
             ..CrossContextEvalConfig::default()

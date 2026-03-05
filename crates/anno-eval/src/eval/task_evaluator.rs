@@ -306,7 +306,6 @@ pub struct TaskEvaluator {
     mapping: TaskMapping,
     // Temporary storage for per-example scores (used during evaluation)
     // Cloned when needed to avoid borrow checker issues
-    #[allow(dead_code)] // Used internally
     per_example_scores_cache: Mutex<Option<PerExampleScores>>,
     /// Evaluation history tracker (optional, for persistent result storage)
     history: Option<super::history::EvalHistory>,
@@ -2391,7 +2390,7 @@ impl TaskEvaluator {
 
         // Run cross-document evaluation
         let encoder = HeuristicClusterEncoder::new(64);
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextEvalConfig::default();
 
         let results = evaluate_cross_document(&topics, encoder, scorer, &config)?;

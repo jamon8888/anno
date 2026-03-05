@@ -658,7 +658,7 @@ mod tests {
     #[test]
     fn test_cross_context_model_creation() {
         let encoder = HeuristicClusterEncoder::new(64);
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextJointConfig::default();
 
         let model = CrossContextJointModel::new(encoder, scorer, config);
@@ -668,7 +668,7 @@ mod tests {
     #[test]
     fn test_cross_context_analyze_empty() {
         let encoder = HeuristicClusterEncoder::new(64);
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextJointConfig::default();
 
         let model = CrossContextJointModel::new(encoder, scorer, config)
@@ -684,7 +684,7 @@ mod tests {
     #[test]
     fn test_cross_context_analyze_single_context() {
         let encoder = HeuristicClusterEncoder::new(64);
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextJointConfig::default();
 
         let model = CrossContextJointModel::new(encoder, scorer, config)
@@ -704,7 +704,7 @@ mod tests {
     #[test]
     fn test_cross_context_analyze_multiple_contexts() {
         let encoder = HeuristicClusterEncoder::new(64);
-        let scorer = CosineMergeScorer::new(0.3); // Lower threshold for test
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextJointConfig::default();
 
         let model = CrossContextJointModel::new(encoder, scorer, config)

@@ -223,7 +223,7 @@ fn run_eval(
     }
 
     let encoder = HeuristicClusterEncoder::new(64);
-    let scorer = CosineMergeScorer::new(threshold);
+    let scorer = CosineMergeScorer::new();
     let eval_config = CrossContextEvalConfig {
         merge_threshold: threshold,
         use_gold_mentions: config.use_gold_mentions,

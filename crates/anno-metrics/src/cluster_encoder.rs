@@ -288,17 +288,17 @@ pub trait MergeScorer: Send + Sync {
 }
 
 /// Simple cosine similarity scorer (CPU fallback).
-#[derive(Debug, Clone)]
-pub struct CosineMergeScorer {
-    #[allow(dead_code)]
-    threshold: f32,
-}
+///
+/// Returns raw cosine similarity in `[0, 1]`. Thresholding is handled
+/// externally (via [`MergeScorer::get_merges`] or call-site comparison).
+#[derive(Debug, Clone, Default)]
+pub struct CosineMergeScorer;
 
 impl CosineMergeScorer {
     /// Create a new cosine similarity scorer.
     #[must_use]
-    pub fn new(threshold: f32) -> Self {
-        Self { threshold }
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -603,7 +603,7 @@ mod tests {
 
     #[test]
     fn cosine_scorer_identical_embeddings() {
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let emb_a = ClusterEmbedding {
             embedding: vec![1.0, 0.0, 0.0],
             cluster_id: 0,
@@ -622,7 +622,7 @@ mod tests {
 
     #[test]
     fn cosine_scorer_orthogonal_embeddings() {
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let emb_a = ClusterEmbedding {
             embedding: vec![1.0, 0.0, 0.0],
             cluster_id: 0,
@@ -641,7 +641,7 @@ mod tests {
 
     #[test]
     fn cosine_scorer_mismatched_dims() {
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let emb_a = ClusterEmbedding {
             embedding: vec![1.0, 0.0],
             cluster_id: 0,
@@ -660,7 +660,7 @@ mod tests {
 
     #[test]
     fn cosine_scorer_zero_embedding() {
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let emb_a = ClusterEmbedding {
             embedding: vec![0.0, 0.0, 0.0],
             cluster_id: 0,
@@ -722,7 +722,7 @@ mod tests {
     #[test]
     fn cross_context_resolver_no_merge_below_threshold() {
         let encoder = HeuristicClusterEncoder::new(32);
-        let scorer = CosineMergeScorer::new(0.99); // very high threshold
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextConfig {
             threshold: 0.99,
             compare_same_context: false,
@@ -757,7 +757,7 @@ mod tests {
     #[test]
     fn cross_context_resolver_identical_text_merges() {
         let encoder = HeuristicClusterEncoder::new(32);
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let config = CrossContextConfig {
             threshold: 0.5,
             compare_same_context: false,
@@ -810,7 +810,7 @@ mod tests {
 
     #[test]
     fn cosine_scorer_get_merges() {
-        let scorer = CosineMergeScorer::new(0.5);
+        let scorer = CosineMergeScorer::new();
         let a = vec![ClusterEmbedding {
             embedding: vec![1.0, 0.0],
             cluster_id: 0,
