@@ -1,5 +1,4 @@
 //! anno - Information Extraction CLI
-#![allow(dead_code)]
 //!
 //! A small CLI for `anno` focused on:
 //! - NER (named entity recognition)
