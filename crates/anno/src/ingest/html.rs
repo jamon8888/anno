@@ -1,11 +1,11 @@
-//! URL resolution connectors for fetching content from URLs.
+//! HTML-to-text conversion utilities.
 //!
-//! Provides a trait-based system for resolving different URL types to text content.
+//! Pure `&str -> String` transforms with no I/O. These are text normalization
+//! functions, not format converters: they take an HTML string and return plain
+//! text suitable for NER extraction.
 
-use crate::Result;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::collections::HashMap;
 
 /// Matches Wikipedia-style reference markers: [1], [2], [edit], [citation needed], etc.
 /// Also matches bare `edit]` fragments (without opening bracket) that survive
@@ -13,56 +13,12 @@ use std::collections::HashMap;
 static WIKI_REF_BRACKET: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\[(\d+|edit|citation needed)\]|\bedit\]").unwrap());
 
-/// Resolved content from a URL.
-#[derive(Debug, Clone)]
-pub struct ResolvedContent {
-    /// The extracted text content
-    pub text: String,
-    /// Metadata about the source (title, content-type, etc.)
-    pub metadata: HashMap<String, String>,
-    /// The original URL
-    pub source_url: String,
-}
-
-/// Trait for URL resolvers that can fetch and extract text from URLs.
-pub trait UrlResolver: std::fmt::Debug {
-    /// Check if this resolver can handle the given URL.
-    fn can_resolve(&self, url: &str) -> bool;
-
-    /// Resolve the URL to text content.
-    fn resolve(&self, url: &str) -> Result<ResolvedContent>;
-}
-
-/// HTTP/HTTPS URL resolver.
-///
-/// Fetches content from HTTP/HTTPS URLs and extracts text from HTML if needed.
-#[derive(Debug, Default)]
-pub struct HttpResolver;
-
-impl HttpResolver {
-    /// Create a new HTTP resolver.
-    #[must_use]
-    pub fn new() -> Self {
-        Self
-    }
-
-    /// Extract text from HTML content. Delegates to the standalone function.
-    #[allow(dead_code)]
-    fn extract_text_from_html(&self, html: &str) -> String {
-        strip_html_to_text(html)
-    }
-}
-
 /// Strip HTML tags and decode entities, returning clean text suitable for NER.
 ///
 /// Removes script/style/nav/header/footer/aside content. Also strips
 /// Wikipedia/MediaWiki-specific structural elements (TOC, references,
 /// citation lists, navigation boxes).
-///
-/// This is a public function so it can be reused from CLI (e.g., for `--file`
-/// on HTML files) without requiring an `HttpResolver` instance.
 pub fn strip_html_to_text(html: &str) -> String {
-    // Delegate to the internal implementation
     _strip_html_to_text_impl(html)
 }
 
@@ -375,276 +331,33 @@ fn _strip_html_to_text_impl(html: &str) -> String {
     cleaned.trim().to_string()
 }
 
-impl UrlResolver for HttpResolver {
-    fn can_resolve(&self, url: &str) -> bool {
-        url.starts_with("http://") || url.starts_with("https://")
-    }
-
-    fn resolve(&self, url: &str) -> Result<ResolvedContent> {
-        #[cfg(feature = "eval")]
-        {
-            let _url = url; // Used in error messages below
-                            // Reuse the download infrastructure from eval/loader
-                            // Note: download_attempt is private, so we'll implement our own
-            let response = ureq::get(url)
-                .timeout(std::time::Duration::from_secs(60))
-                .call()
-                .map_err(|e| {
-                    let error_msg = format!("{}", e);
-                    crate::Error::InvalidInput(format!(
-                        "Network error fetching {}: {}. \
-                         Check your internet connection and try again.",
-                        url, error_msg
-                    ))
-                })?;
-
-            if response.status() != 200 {
-                return Err(crate::Error::InvalidInput(format!(
-                    "HTTP {} fetching {}. \
-                     Server returned error status. \
-                     URL may be temporarily unavailable or changed.",
-                    response.status(),
-                    url
-                )));
-            }
-
-            let content = response.into_string().map_err(|e| {
-                crate::Error::InvalidInput(format!(
-                    "Failed to read response from {}: {}. \
-                     Response may be too large or corrupted.",
-                    url, e
-                ))
-            })?;
-
-            let mut metadata = HashMap::new();
-            metadata.insert("content-type".to_string(), "text/html".to_string());
-            metadata.insert("source".to_string(), "http".to_string());
-
-            // Check if content looks like HTML
-            let text = if content.trim_start().starts_with('<') {
-                // HTML content - extract text
-                metadata.insert("content-type".to_string(), "text/html".to_string());
-                self.extract_text_from_html(&content)
-            } else {
-                // Plain text
-                metadata.insert("content-type".to_string(), "text/plain".to_string());
-                content
-            };
-
-            Ok(ResolvedContent {
-                text,
-                metadata,
-                source_url: url.to_string(),
-            })
-        }
-
-        #[cfg(not(feature = "eval"))]
-        {
-            #[allow(unused_variables)]
-            let _url = url;
-            Err(crate::Error::InvalidInput(
-                "URL resolution requires 'eval' feature. \
-                 Enable it with: cargo build -p anno-cli --features eval"
-                    .to_string(),
-            ))
-        }
-    }
-}
-
-/// Composite resolver that tries multiple resolvers in order.
-pub struct CompositeResolver {
-    resolvers: Vec<Box<dyn UrlResolver>>,
-}
-
-impl std::fmt::Debug for CompositeResolver {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CompositeResolver")
-            .field("resolver_count", &self.resolvers.len())
-            .finish()
-    }
-}
-
-impl CompositeResolver {
-    /// Create a new composite resolver with default resolvers.
-    #[must_use]
-    pub fn new() -> Self {
-        let resolvers = vec![Box::new(HttpResolver::new()) as Box<dyn UrlResolver>];
-        Self { resolvers }
-    }
-
-    /// Add a resolver to the chain.
-    pub fn add_resolver(&mut self, resolver: Box<dyn UrlResolver>) {
-        self.resolvers.push(resolver);
-    }
-}
-
-impl Default for CompositeResolver {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl UrlResolver for CompositeResolver {
-    fn can_resolve(&self, url: &str) -> bool {
-        self.resolvers.iter().any(|r| r.can_resolve(url))
-    }
-
-    fn resolve(&self, url: &str) -> Result<ResolvedContent> {
-        for resolver in &self.resolvers {
-            if resolver.can_resolve(url) {
-                return resolver.resolve(url);
-            }
-        }
-        Err(crate::Error::InvalidInput(format!(
-            "No resolver available for URL: {}",
-            url
-        )))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_http_resolver_can_resolve_http() {
-        let resolver = HttpResolver::new();
-        assert!(resolver.can_resolve("http://example.com"));
-        assert!(resolver.can_resolve("https://example.com"));
-        assert!(resolver.can_resolve("http://example.com/path?query=1"));
-        assert!(resolver.can_resolve("https://subdomain.example.com/path"));
-    }
-
-    #[test]
-    fn test_http_resolver_case_sensitive() {
-        // Note: Implementation is case-sensitive (lowercase only)
-        let resolver = HttpResolver::new();
-        assert!(!resolver.can_resolve("HTTP://example.com"));
-        assert!(!resolver.can_resolve("HTTPS://example.com"));
-    }
-
-    #[test]
-    fn test_http_resolver_cannot_resolve_other_schemes() {
-        let resolver = HttpResolver::new();
-        assert!(!resolver.can_resolve("ftp://example.com"));
-        assert!(!resolver.can_resolve("file:///path/to/file"));
-        assert!(!resolver.can_resolve("mailto:test@example.com"));
-        assert!(!resolver.can_resolve("not_a_url"));
-    }
-
-    #[test]
-    fn test_resolved_content_struct() {
-        let content = ResolvedContent {
-            text: "Hello world".to_string(),
-            metadata: HashMap::new(),
-            source_url: "https://example.com".to_string(),
-        };
-
-        assert_eq!(content.text, "Hello world");
-        assert!(content.metadata.is_empty());
-        assert_eq!(content.source_url, "https://example.com");
-    }
-
-    #[test]
-    fn test_resolved_content_with_metadata() {
-        let mut metadata = HashMap::new();
-        metadata.insert("content-type".to_string(), "text/html".to_string());
-
-        let content = ResolvedContent {
-            text: "Test".to_string(),
-            metadata,
-            source_url: "https://test.com".to_string(),
-        };
-
-        assert_eq!(
-            content.metadata.get("content-type"),
-            Some(&"text/html".to_string())
-        );
-    }
-
-    #[test]
-    fn test_composite_resolver_creation() {
-        let resolver = CompositeResolver::new();
-        assert!(resolver.can_resolve("https://example.com"));
-    }
-
-    #[test]
-    fn test_composite_resolver_default() {
-        let resolver = CompositeResolver::default();
-        // Should have at least one resolver (HttpResolver)
-        assert!(resolver.can_resolve("http://example.com"));
-    }
-
-    #[test]
-    fn test_composite_resolver_cannot_resolve_unknown() {
-        let resolver = CompositeResolver::new();
-        assert!(!resolver.can_resolve("custom://unknown"));
-    }
-
-    #[test]
-    fn test_composite_resolver_debug() {
-        let resolver = CompositeResolver::new();
-        let debug = format!("{:?}", resolver);
-        assert!(debug.contains("CompositeResolver"));
-        assert!(debug.contains("resolver_count"));
-    }
-
-    #[test]
-    fn test_http_resolver_debug() {
-        let resolver = HttpResolver::new();
-        let debug = format!("{:?}", resolver);
-        assert!(debug.contains("HttpResolver"));
-    }
-
-    #[test]
-    fn test_wiki_reference_brackets_stripped() {
-        let resolver = HttpResolver::new();
+    fn wiki_reference_brackets_stripped() {
         let html = r#"<html><body>
             <p>Albert Einstein[1] was a physicist.[2] He developed
             the theory of relativity.[3][4] See also[edit] quantum mechanics.</p>
         </body></html>"#;
-        let text = resolver.extract_text_from_html(html);
-        assert!(
-            !text.contains("[1]"),
-            "reference [1] should be stripped, got: {}",
-            text
-        );
-        assert!(
-            !text.contains("[2]"),
-            "reference [2] should be stripped, got: {}",
-            text
-        );
-        assert!(
-            !text.contains("[edit]"),
-            "[edit] should be stripped, got: {}",
-            text
-        );
-        assert!(
-            text.contains("Albert Einstein"),
-            "entity text should survive, got: {}",
-            text
-        );
-        assert!(
-            text.contains("quantum mechanics"),
-            "content should survive, got: {}",
-            text
-        );
+        let text = strip_html_to_text(html);
+        assert!(!text.contains("[1]"), "reference [1] should be stripped, got: {}", text);
+        assert!(!text.contains("[2]"), "reference [2] should be stripped, got: {}", text);
+        assert!(!text.contains("[edit]"), "[edit] should be stripped, got: {}", text);
+        assert!(text.contains("Albert Einstein"), "entity text should survive, got: {}", text);
+        assert!(text.contains("quantum mechanics"), "content should survive, got: {}", text);
     }
 
     #[test]
-    fn test_wiki_citation_needed_stripped() {
+    fn wiki_citation_needed_stripped() {
         let text = strip_html_to_text("<p>Some claim[citation needed] is here.</p>");
-        assert!(
-            !text.contains("[citation needed]"),
-            "should strip [citation needed], got: {}",
-            text
-        );
+        assert!(!text.contains("[citation needed]"), "should strip [citation needed], got: {}", text);
         assert!(text.contains("Some claim"));
     }
 
     #[test]
-    fn test_extract_text_from_html_collapses_whitespace() {
-        let resolver = HttpResolver::new();
+    fn collapses_whitespace() {
         let html = r#"
             <html>
               <head><title>t</title></head>
@@ -653,118 +366,53 @@ mod tests {
                     world</h1>
                 <p>Line1<br>Line2</p>
                 <div>Tabbed	text</div>
-                <p>習近平在北京會見了普京。</p>
-                <p>التقى محمد بن سلمان بالرئيس في الرياض</p>
-                <p>Путин встретился с Си Цзиньпином в Москве.</p>
-                <p>प्रधान मंत्री शर्मा आज आए।</p>
               </body>
             </html>
         "#;
-
-        let text = resolver.extract_text_from_html(html);
+        let text = strip_html_to_text(html);
         assert!(text.contains("Hello world"));
         assert!(text.contains("Line1 Line2"));
         assert!(text.contains("Tabbed text"));
-        // Multilingual smoke: make sure we don't drop/garble non-Latin scripts.
-        assert!(text.contains("習近平在北京會見了普京。"));
-        assert!(text.contains("التقى محمد بن سلمان بالرئيس في الرياض"));
-        assert!(text.contains("Путин встретился с Си Цзиньпином в Москве."));
-        assert!(text.contains("प्रधान मंत्री शर्मा आज आए।"));
-
-        // No raw newlines/tabs from HTML formatting should surcerno.
         assert!(!text.contains('\n'));
         assert!(!text.contains('\t'));
-
-        // No double spaces (collapsed).
         assert!(!text.contains("  "));
     }
 
-    // =========================================================================
-    // HTML entity decoding
-    // =========================================================================
+    #[test]
+    fn multilingual_preserved() {
+        let html = r#"<html><body>
+            <p>&#x4E60;&#x8FD1;&#x5E73;&#x5728;&#x5317;&#x4EAC;</p>
+            <p>Путин встретился с Си Цзиньпином в Москве.</p>
+            <p>प्रधान मंत्री शर्मा आज आए।</p>
+        </body></html>"#;
+        let text = strip_html_to_text(html);
+        assert!(text.contains("Путин встретился с Си Цзиньпином в Москве."));
+        assert!(text.contains("प्रधान मंत्री शर्मा आज आए।"));
+    }
 
     #[test]
     fn hex_entity_decoded() {
-        let resolver = HttpResolver::new();
-        let html = "<p>It&#x27;s a test</p>";
-        let text = resolver.extract_text_from_html(html);
-        assert!(
-            text.contains("It's"),
-            "&#x27; should decode to apostrophe, got: {}",
-            text
-        );
+        let text = strip_html_to_text("<p>It&#x27;s a test</p>");
+        assert!(text.contains("It's"), "&#x27; should decode to apostrophe, got: {}", text);
     }
 
     #[test]
     fn hex_entity_uppercase_x() {
-        let resolver = HttpResolver::new();
-        let html = "<p>It&#X27;s a test</p>";
-        let text = resolver.extract_text_from_html(html);
-        assert!(
-            text.contains("It's"),
-            "&#X27; should decode to apostrophe, got: {}",
-            text
-        );
+        let text = strip_html_to_text("<p>It&#X27;s a test</p>");
+        assert!(text.contains("It's"), "&#X27; should decode to apostrophe, got: {}", text);
     }
 
     #[test]
     fn decimal_entity_decoded() {
-        let resolver = HttpResolver::new();
-        let html = "<p>It&#39;s a test</p>";
-        let text = resolver.extract_text_from_html(html);
-        assert!(
-            text.contains("It's"),
-            "&#39; should decode to apostrophe, got: {}",
-            text
-        );
+        let text = strip_html_to_text("<p>It&#39;s a test</p>");
+        assert!(text.contains("It's"), "&#39; should decode to apostrophe, got: {}", text);
     }
 
     #[test]
     fn named_entity_decoded() {
-        let resolver = HttpResolver::new();
-        let html = "<p>A &amp; B &lt; C</p>";
-        let text = resolver.extract_text_from_html(html);
+        let text = strip_html_to_text("<p>A &amp; B &lt; C</p>");
         assert!(text.contains("A & B"), "should decode &amp;, got: {}", text);
         assert!(text.contains("< C"), "should decode &lt;, got: {}", text);
-    }
-
-    #[test]
-    fn test_resolved_content_clone() {
-        let mut metadata = HashMap::new();
-        metadata.insert("key".to_string(), "value".to_string());
-
-        let content = ResolvedContent {
-            text: "test".to_string(),
-            metadata,
-            source_url: "http://test.com".to_string(),
-        };
-
-        let cloned = content.clone();
-        assert_eq!(content.text, cloned.text);
-        assert_eq!(content.source_url, cloned.source_url);
-        assert_eq!(content.metadata, cloned.metadata);
-    }
-
-    #[test]
-    #[cfg(not(feature = "eval"))]
-    fn test_http_resolver_without_feature() {
-        let resolver = HttpResolver::new();
-        let result = resolver.resolve("https://example.com");
-        // Without eval feature, should return an error
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains("eval"));
-    }
-
-    #[test]
-    fn test_composite_resolver_no_matching_resolver() {
-        let resolver = CompositeResolver { resolvers: vec![] };
-        let result = resolver.resolve("any://url");
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No resolver available"));
     }
 
     // =========================================================================
@@ -772,71 +420,54 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_nav_content_stripped() {
-        let resolver = HttpResolver::new();
+    fn nav_content_stripped() {
         let html = r#"<html><body>
             <nav><a href="/">Home</a><a href="/about">About</a></nav>
             <main><p>Main content here.</p></main>
         </body></html>"#;
-        let text = resolver.extract_text_from_html(html);
+        let text = strip_html_to_text(html);
         assert!(text.contains("Main content here"));
         assert!(!text.contains("Home"), "nav content should be stripped");
         assert!(!text.contains("About"), "nav content should be stripped");
     }
 
     #[test]
-    fn test_footer_content_stripped() {
-        let resolver = HttpResolver::new();
+    fn footer_content_stripped() {
         let html = r#"<html><body>
             <article><p>Article body.</p></article>
             <footer><p>Copyright 2024 Example Corp.</p></footer>
         </body></html>"#;
-        let text = resolver.extract_text_from_html(html);
+        let text = strip_html_to_text(html);
         assert!(text.contains("Article body"));
-        assert!(
-            !text.contains("Copyright"),
-            "footer content should be stripped"
-        );
+        assert!(!text.contains("Copyright"), "footer content should be stripped");
     }
 
     #[test]
-    fn test_header_content_stripped() {
-        let resolver = HttpResolver::new();
+    fn header_content_stripped() {
         let html = r#"<html><body>
             <header><h1>Site Title</h1><nav>Menu</nav></header>
             <main><p>Page content.</p></main>
             <footer><p>Footer text</p></footer>
         </body></html>"#;
-        let text = resolver.extract_text_from_html(html);
+        let text = strip_html_to_text(html);
         assert!(text.contains("Page content"));
-        assert!(
-            !text.contains("Site Title"),
-            "header content should be stripped"
-        );
-        assert!(
-            !text.contains("Footer text"),
-            "footer content should be stripped"
-        );
+        assert!(!text.contains("Site Title"), "header content should be stripped");
+        assert!(!text.contains("Footer text"), "footer content should be stripped");
     }
 
     #[test]
-    fn test_aside_content_stripped() {
-        let resolver = HttpResolver::new();
+    fn aside_content_stripped() {
         let html = r#"<html><body>
             <main><p>Main text.</p></main>
             <aside><p>Sidebar widget.</p></aside>
         </body></html>"#;
-        let text = resolver.extract_text_from_html(html);
+        let text = strip_html_to_text(html);
         assert!(text.contains("Main text"));
-        assert!(
-            !text.contains("Sidebar widget"),
-            "aside content should be stripped"
-        );
+        assert!(!text.contains("Sidebar widget"), "aside content should be stripped");
     }
 
     #[test]
-    fn test_article_content_preserved() {
-        let resolver = HttpResolver::new();
+    fn article_content_preserved() {
         let html = r#"<html><body>
             <article>
                 <h2>Article Title</h2>
@@ -844,15 +475,14 @@ mod tests {
                 <p>Second paragraph.</p>
             </article>
         </body></html>"#;
-        let text = resolver.extract_text_from_html(html);
+        let text = strip_html_to_text(html);
         assert!(text.contains("Article Title"));
         assert!(text.contains("First paragraph"));
         assert!(text.contains("Second paragraph"));
     }
 
     #[test]
-    fn test_nested_semantic_tags() {
-        let resolver = HttpResolver::new();
+    fn nested_semantic_tags() {
         let html = r#"<html><body>
             <header>
                 <nav><ul><li>Link1</li></ul></nav>
@@ -860,30 +490,39 @@ mod tests {
             </header>
             <main><p>Real content.</p></main>
         </body></html>"#;
-        let text = resolver.extract_text_from_html(html);
+        let text = strip_html_to_text(html);
         assert!(text.contains("Real content"));
-        assert!(
-            !text.contains("Link1"),
-            "nested nav inside header should be stripped"
-        );
-        assert!(
-            !text.contains("Header text"),
-            "header content should be stripped"
-        );
+        assert!(!text.contains("Link1"), "nested nav inside header should be stripped");
+        assert!(!text.contains("Header text"), "header content should be stripped");
     }
 
     #[test]
-    fn test_noscript_stripped() {
-        let resolver = HttpResolver::new();
+    fn noscript_stripped() {
         let html = r#"<html><body>
             <noscript><p>Enable JavaScript to view this page.</p></noscript>
             <main><p>App content.</p></main>
         </body></html>"#;
-        let text = resolver.extract_text_from_html(html);
+        let text = strip_html_to_text(html);
         assert!(text.contains("App content"));
-        assert!(
-            !text.contains("Enable JavaScript"),
-            "noscript content should be stripped"
-        );
+        assert!(!text.contains("Enable JavaScript"), "noscript content should be stripped");
+    }
+
+    // =========================================================================
+    // looks_like_html
+    // =========================================================================
+
+    #[test]
+    fn detects_html() {
+        assert!(looks_like_html("<!DOCTYPE html><html><head>"));
+        assert!(looks_like_html("<html><head><body>"));
+        assert!(looks_like_html("  \n<!DOCTYPE html>\n<html>"));
+        assert!(looks_like_html("<?xml version=\"1.0\"?><html>"));
+    }
+
+    #[test]
+    fn rejects_non_html() {
+        assert!(!looks_like_html("Tim Cook announced new products today."));
+        assert!(!looks_like_html("The patient has no history of diabetes."));
+        assert!(!looks_like_html("# Markdown heading\n\nSome text."));
     }
 }

@@ -88,7 +88,7 @@ analysis = ["dep:anno-metrics"]
 # Evaluation-adjacent tooling (URL ingestion, cache helpers, etc.).
 #
 # This is intentionally an umbrella: it includes `analysis` and adds network support.
-eval = ["analysis", "dep:ureq"]
+eval = ["analysis"]
 graph = []
 gramdex = ["dep:gramdex"]
 schema = ["dep:schemars", "anno-core/schema"]

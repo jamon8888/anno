@@ -1,14 +1,11 @@
-//! Document ingestion and preparation.
+//! Document ingestion and text preparation.
 //!
-//! Handles fetching content from URLs, cleaning text, and preparing documents
-//! for entity extraction.
+//! Provides text-to-text utilities (HTML stripping, preprocessing).
+//! URL resolution and format conversion live in the CLI crate (`anno-cli`).
 
-/// Document format conversion (PDF, DOCX, HTML, etc.).
-pub mod converter;
+/// HTML-to-text conversion and detection utilities.
+pub mod html;
 pub mod preprocessor;
-pub mod url_resolver;
 
+pub use html::{looks_like_html, strip_html_to_text};
 pub use preprocessor::{DocumentPreprocessor, PreparedDocument};
-pub use url_resolver::{
-    looks_like_html, strip_html_to_text, CompositeResolver, ResolvedContent, UrlResolver,
-};
