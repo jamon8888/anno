@@ -66,6 +66,7 @@ pub enum ShiftRisk {
     /// High risk - significant mismatch, consider domain-specific model
     High,
     /// Unknown - insufficient signals to assess
+    #[allow(dead_code)]
     Unknown,
 }
 

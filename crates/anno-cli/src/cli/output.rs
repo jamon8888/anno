@@ -1,7 +1,7 @@
 //! Output formatting utilities for CLI commands
 
 use std::collections::HashMap;
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, IsTerminal};
 
 use anno::{Entity, GroundedDocument, Location, Signal};
 
@@ -13,19 +13,6 @@ pub fn log_info(msg: &str, quiet: bool) {
     if !quiet {
         eprintln!("{}", msg);
     }
-}
-
-/// Write output to file or stdout
-pub fn write_output(content: &str, path: Option<&str>) -> Result<(), String> {
-    if let Some(path) = path {
-        std::fs::write(path, content).map_err(|e| format!("Failed to write to {}: {}", path, e))?;
-    } else {
-        print!("{}", content);
-        io::stdout()
-            .flush()
-            .map_err(|e| format!("Failed to flush stdout: {}", e))?;
-    }
-    Ok(())
 }
 
 /// Format file size in human-readable format
@@ -80,25 +67,6 @@ pub fn metric_colored(value: f64) -> String {
         "1;31"
     };
     color(code, &format!("{:5.1}", value))
-}
-
-/// Create confidence bar visualization
-pub fn confidence_bar(conf: f32) -> String {
-    // Clamp to valid range to prevent underflow if conf > 1.0
-    let filled = ((conf * 10.0).round() as usize).min(10);
-    let empty = 10 - filled;
-    let code = if conf >= 0.9 {
-        "32"
-    } else if conf >= 0.7 {
-        "33"
-    } else {
-        "31"
-    };
-    format!(
-        "{}{}",
-        color(code, &"#".repeat(filled)),
-        color("90", &".".repeat(empty))
-    )
 }
 
 /// Print document extraction results with hierarchical verbose levels.
@@ -503,31 +471,6 @@ pub fn print_matches(cmp: &EvalComparison, _verbose: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_confidence_bar_normal() {
-        // Normal cases - function returns a visual bar
-        let bar = confidence_bar(0.5);
-        assert!(bar.contains('#')); // 50% should have some filled chars
-        assert!(bar.contains('.')); // and some empty chars
-
-        let bar = confidence_bar(1.0);
-        assert!(bar.contains('#')); // 100% should be fully filled
-
-        let bar = confidence_bar(0.0);
-        assert!(bar.contains('.')); // 0% should be mostly empty
-    }
-
-    #[test]
-    fn test_confidence_bar_clamping() {
-        // Edge case: confidence slightly over 1.0 should not panic
-        let bar = confidence_bar(1.01);
-        assert!(bar.contains('#')); // Should have filled chars
-
-        // Edge case: confidence at exactly 1.0
-        let bar = confidence_bar(1.0);
-        assert!(bar.contains('#')); // 100% should be fully filled
-    }
 
     #[test]
     fn test_type_color() {

@@ -450,20 +450,6 @@ Use `--model bert-onnx`, `--model gliner`, or `--model candle-ner` instead."
         }
     }
 
-    /// True if this backend implements `RelationCapable` (can produce typed head/rel/tail triples).
-    ///
-    /// - `tplinker`: heuristic baseline; no extra deps.
-    /// - `gliner2` (requires `--features onnx`): proximity + type-based heuristics over
-    ///   GLiNER2's zero-shot entity extraction.
-    pub fn is_relation_capable(self) -> bool {
-        match self {
-            Self::Tplinker => true,
-            #[cfg(feature = "onnx")]
-            Self::Gliner2 => true,
-            _ => false,
-        }
-    }
-
     /// Create a `RelationCapable` model instance, if this backend supports joint entity+relation
     /// extraction.  Returns `None` for all other backends (callers should fall back to
     /// `create_model()` + co-occurrence edges).

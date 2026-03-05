@@ -59,27 +59,6 @@ pub struct FeatureContribution {
     pub weight: f64,
 }
 
-/// Explanation for a single entity
-#[derive(Debug, Clone)]
-pub struct EntityExplanation {
-    /// Entity text
-    pub text: String,
-    /// Assigned entity type
-    pub entity_type: String,
-    /// Confidence score
-    pub confidence: f64,
-    /// Backend that produced this entity
-    pub source_backend: String,
-    /// Feature contributions to the decision
-    pub features: Vec<FeatureContribution>,
-    /// Alternative types considered (type, score)
-    pub competing_types: Vec<(String, f64)>,
-    /// Left context window
-    pub context_left: String,
-    /// Right context window
-    pub context_right: String,
-}
-
 /// Run the explain command.
 pub fn run(args: ExplainArgs) -> Result<(), String> {
     // Get text from args

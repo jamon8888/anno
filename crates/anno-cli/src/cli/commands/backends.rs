@@ -34,6 +34,7 @@ pub enum BackendsAction {
 }
 
 /// Run the backends command.
+#[allow(dead_code)]
 pub fn run(args: BackendsArgs) -> Result<(), String> {
     match args.action {
         None | Some(BackendsAction::List) => {

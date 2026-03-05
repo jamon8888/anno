@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{self, IsTerminal, Read};
 
-use anno::{GroundedDocument, Identity, IdentityId, Quantifier, SignalId, TrackId};
+use anno::{GroundedDocument, Identity, IdentityId, SignalId, TrackId};
 
 /// Get input text from various sources (text arg, file, or stdin)
 ///
@@ -136,13 +136,6 @@ pub fn format_error(operation: &str, details: &str) -> String {
     format!("Failed to {}: {}", operation, details)
 }
 
-/// Log verbose message (only if verbose enabled)
-pub fn log_verbose(msg: &str, verbose: bool) {
-    if verbose {
-        eprintln!("{}", msg);
-    }
-}
-
 /// Log success message with color (respects quiet flag)
 pub fn log_success(msg: &str, quiet: bool) {
     if !quiet {
@@ -256,16 +249,6 @@ pub fn load_gold_from_file(path: &str) -> Result<Vec<GoldSpec>, String> {
     }
 
     Ok(gold)
-}
-
-/// Best-effort multilingual negation heuristic used for CLI output enrichment.
-pub fn is_negated(text: &str, entity_start: usize) -> bool {
-    anno::heuristics::is_negated_auto(text, entity_start)
-}
-
-/// Best-effort multilingual quantifier heuristic used for CLI output enrichment.
-pub fn detect_quantifier(text: &str, entity_start: usize) -> Option<Quantifier> {
-    anno::heuristics::detect_quantifier_auto(text, entity_start)
 }
 
 /// Resolve coreference by grouping signals into tracks.
@@ -472,43 +455,6 @@ mod tests {
     use anno::{Entity, EntityType};
 
     // -------------------------------------------------------------------------
-    // is_negated tests
-    // -------------------------------------------------------------------------
-
-    #[test]
-    fn test_is_negated() {
-        assert!(is_negated("He is not a doctor", 12)); // "doctor" at 12
-        assert!(is_negated("I never saw John", 11)); // "John" at 11
-        assert!(!is_negated("He is a doctor", 8)); // "doctor" at 8
-        assert!(!is_negated("The quick brown fox", 4)); // "quick" at 4
-    }
-
-    // -------------------------------------------------------------------------
-    // detect_quantifier tests
-    // -------------------------------------------------------------------------
-
-    #[test]
-    fn test_detect_quantifier() {
-        assert_eq!(
-            detect_quantifier("Every student passed", 6),
-            Some(Quantifier::Universal)
-        );
-        assert_eq!(
-            detect_quantifier("Some students failed", 5),
-            Some(Quantifier::Existential)
-        );
-        assert_eq!(
-            detect_quantifier("No student failed", 3),
-            Some(Quantifier::None)
-        );
-        assert_eq!(
-            detect_quantifier("The student passed", 4),
-            Some(Quantifier::Definite)
-        );
-        assert_eq!(detect_quantifier("Students passed", 0), None);
-    }
-
-    // -------------------------------------------------------------------------
     // parse_gold_spec tests
     // -------------------------------------------------------------------------
 
@@ -636,28 +582,4 @@ mod tests {
         assert!(relations.is_empty());
     }
 
-    // -------------------------------------------------------------------------
-    // Unicode tests (character offsets, not byte offsets)
-    // -------------------------------------------------------------------------
-
-    #[test]
-    fn test_is_negated_unicode() {
-        // "café" has 4 chars but 5 bytes (é is 2 bytes in UTF-8)
-        assert!(!is_negated("café John", 5)); // "John" starts at char 5
-        assert!(is_negated("not café John", 9)); // "not" is in the prefix
-    }
-
-    #[test]
-    fn test_detect_quantifier_unicode() {
-        // "every café employee" - "employee" starts at char index 11
-        assert_eq!(
-            detect_quantifier("every café employee", 11),
-            None // "café" is not a quantifier
-        );
-        // "every employee" still works
-        assert_eq!(
-            detect_quantifier("every employee", 6),
-            Some(Quantifier::Universal)
-        );
-    }
 }

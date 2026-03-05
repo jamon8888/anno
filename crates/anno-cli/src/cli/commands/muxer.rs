@@ -279,12 +279,14 @@ struct TopCandidateLite {
     #[serde(default)]
     arm: String,
     #[serde(default)]
+    #[allow(dead_code)]
     score: f64,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct TopCandidatesLite {
     #[serde(default)]
+    #[allow(dead_code)]
     kind: String,
     #[serde(default)]
     rows: Vec<TopCandidateLite>,
@@ -293,16 +295,20 @@ struct TopCandidatesLite {
 #[derive(Debug, Clone, serde::Deserialize)]
 struct DecisionLogLite {
     #[serde(default)]
+    #[allow(dead_code)]
     schema_version: u32,
     #[serde(default)]
     run_id: String,
     #[serde(default)]
+    #[allow(dead_code)]
     strategy: String,
     #[serde(default)]
+    #[allow(dead_code)]
     slice: String,
     #[serde(default)]
     datasets: Vec<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     round: u32,
     #[serde(default)]
     chosen: Option<String>,
@@ -416,10 +422,6 @@ fn outcome_new_fail_kinds_from_tail_2n(
         }
     }
     recent.difference(&prev).cloned().collect()
-}
-
-fn decisions_aggregate_from_jsonl(s: &str) -> DecisionsAgg {
-    decisions_aggregate_grouped_by_run(s, None, 10).0
 }
 
 fn decisions_aggregate_grouped_by_run(
@@ -785,14 +787,6 @@ impl SummarySerde {
         }
     }
 
-    fn mean_cost_units(&self) -> f64 {
-        if self.calls == 0 {
-            0.0
-        } else {
-            (self.cost_units as f64) / (self.calls as f64)
-        }
-    }
-
     fn soft_junk_rate(&self) -> f64 {
         if self.calls == 0 {
             0.0
@@ -826,7 +820,6 @@ trait BackendHistoryCliExt {
         per_dataset: bool,
     ) -> BTreeMap<String, u64>;
 
-    fn failure_kind_counts_for_key_cli(&self, key: &str) -> BTreeMap<String, u64>;
     fn failure_kind_counts_recent_for_key_cli(
         &self,
         key: &str,
@@ -1039,17 +1032,6 @@ impl BackendHistoryCliExt for BackendHistory {
         counts
     }
 
-    fn failure_kind_counts_for_key_cli(&self, key: &str) -> BTreeMap<String, u64> {
-        let mut counts: BTreeMap<String, u64> = BTreeMap::new();
-        let Some(buf) = self.fail_kinds.get(key) else {
-            return counts;
-        };
-        for kind in buf.iter().flatten() {
-            *counts.entry(kind.clone()).or_insert(0) += 1;
-        }
-        counts
-    }
-
     fn failure_kind_counts_recent_for_key_cli(
         &self,
         key: &str,
@@ -1229,10 +1211,6 @@ mod fail_kinds_tests {
         q.push_back(Some("timeout".to_string()));
         h.fail_kinds.insert("a@@D1".to_string(), q);
 
-        let all = h.failure_kind_counts_for_key_cli("a@@D1");
-        assert_eq!(all.get("timeout").copied().unwrap_or(0), 2);
-        assert_eq!(all.get("dataset").copied().unwrap_or(0), 1);
-
         let rec2 = h.failure_kind_counts_recent_for_key_cli("a@@D1", 2);
         assert_eq!(rec2.get("timeout").copied().unwrap_or(0), 1);
         assert_eq!(rec2.get("dataset").copied().unwrap_or(0), 1);
@@ -1266,68 +1244,6 @@ mod fail_kinds_tests {
 #[cfg(test)]
 mod decisions_tests {
     use super::*;
-
-    #[test]
-    fn test_decisions_aggregate_counts_total_and_by_arm_and_by_dataset() {
-        let jsonl = r#"
-{"schema_version":6,"run_id":"r1","strategy":"worst-first","slice":"ner","datasets":["D1"],"round":1,"chosen":"a","top_candidates":{"kind":"worst_first","rows":[{"arm":"a","score":1.0},{"arm":"b","score":0.5}]},"chosen_fail_kinds_top":[{"kind":"timeout","count":2}],"constraints_fallback_used":false,"explore_first":false}
-{"schema_version":6,"run_id":"r1","strategy":"worst-first","slice":"ner","datasets":["D1","D2"],"round":2,"chosen":"b","top_candidates":{"kind":"worst_first","rows":[{"arm":"a","score":1.0},{"arm":"b","score":0.5}]},"chosen_fail_kinds_top":[{"kind":"low_signal","count":1}],"constraints_fallback_used":true,"explore_first":true,"control_arms":["a"]}
-{"schema_version":1,"record_type":"outcome","run_id":"r1","strategy":"worst-first","slice":"ner","dataset":"D2","backend":"b","ok":false,"junk":true,"hard_junk":false,"fail_kind":"low_signal"}
-"#;
-        let agg = decisions_aggregate_from_jsonl(jsonl);
-        assert_eq!(agg.total_rows, 3);
-        assert_eq!(agg.decision_rows, 2);
-        assert_eq!(agg.decision_rows_with_chosen, 2);
-        assert_eq!(agg.decision_rows_with_fail_kinds, 2);
-        assert_eq!(agg.decision_constraints_fallback_used, 1);
-        assert_eq!(agg.decision_explore_first, 1);
-        assert_eq!(agg.outcome_rows, 1);
-        assert_eq!(agg.outcome_rows_with_fail_kind, 1);
-        assert_eq!(agg.outcome_ok, 0);
-        assert_eq!(agg.outcome_junk, 1);
-        assert_eq!(agg.outcome_hard_junk, 0);
-        assert_eq!(agg.outcome_control_rows, 0);
-        assert_eq!(agg.chosen_rank_rows, 2);
-        assert_eq!(agg.chosen_rank_1, 1);
-        assert_eq!(agg.chosen_rank_sum, 3); // ranks: a=1, b=2
-        assert_eq!(
-            agg.decision_kinds_total
-                .get("timeout")
-                .copied()
-                .unwrap_or(0),
-            2
-        );
-        assert_eq!(
-            agg.decision_kinds_total
-                .get("low_signal")
-                .copied()
-                .unwrap_or(0),
-            1
-        );
-        assert_eq!(
-            agg.outcome_kinds_total
-                .get("low_signal")
-                .copied()
-                .unwrap_or(0),
-            1
-        );
-        assert_eq!(
-            agg.decision_by_arm
-                .get("a")
-                .and_then(|m| m.get("timeout"))
-                .copied()
-                .unwrap_or(0),
-            2
-        );
-        assert_eq!(
-            agg.outcome_by_dataset
-                .get("D2")
-                .and_then(|m| m.get("low_signal"))
-                .copied()
-                .unwrap_or(0),
-            1
-        );
-    }
 
     #[test]
     fn test_decisions_aggregate_grouped_by_run_applies_filter_and_counts() {
@@ -1434,11 +1350,6 @@ fn worst_first_config_from_env() -> WorstFirstConfig {
         hard_weight: mh::env_f64("ANNO_WORST_HARD_WEIGHT", 1.0).max(0.0),
         soft_weight,
     }
-}
-
-#[cfg(feature = "eval")]
-fn stable_hash64(seed: u64, s: &str) -> u64 {
-    mh::stable_hash64(seed, s)
 }
 
 #[cfg(feature = "eval")]

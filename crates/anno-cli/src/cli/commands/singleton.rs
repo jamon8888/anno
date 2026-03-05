@@ -96,6 +96,7 @@ pub enum SingletonReason {
     /// Part of a compound ("CEO of Apple" - singleton "CEO")
     PartOfCompound,
     /// Unknown
+    #[allow(dead_code)]
     Unknown,
 }
 
