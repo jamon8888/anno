@@ -55,9 +55,10 @@ This is the primary measurement. Criterion handles warmup, iteration count, and 
 cargo bench -p anno-lib 2>&1 | tee /tmp/anno-perf-criterion.txt
 
 # If time-constrained, run specific groups:
-cargo bench -p anno-lib -- backends    # NER backend benchmarks
+cargo bench -p anno-lib -- backends    # NER backend benchmarks (includes tplinker)
 cargo bench -p anno-lib -- coref       # Coreference benchmarks
 cargo bench -p anno-lib -- similarity  # Similarity metric benchmarks
+cargo bench -p anno-lib -- tplinker    # TPLinker entity-relation benchmarks
 ```
 
 **What to capture from criterion output**:
@@ -199,7 +200,7 @@ for i in range(100):
 " > /tmp/anno-perf-batch.jsonl
 
 # Measure batch throughput per backend
-for model in pattern bert-onnx stacked; do
+for model in pattern bert-onnx stacked tplinker; do
     echo "=== $model batch (100 docs) ==="
     time cat /tmp/anno-perf-batch.jsonl | $ANNO batch --stdin --model $model --format json > /dev/null 2>&1
 done
@@ -249,5 +250,4 @@ Save to `qa/reports/perf-YYYY-MM-DD.md`. Include:
 
 ### Open performance items
 
-- No known open regressions as of initial report creation.
-- Update this section as issues are found and resolved.
+Record findings in the report file (`qa/reports/perf-YYYY-MM-DD.md`), not here.
