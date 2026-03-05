@@ -315,6 +315,10 @@ qa-random count="10" backends="stacked" seed="":
         $seed_args \
         --output "reports/qa-random-$(date +%Y%m%d-%H%M%S).md"
 
+# Validate qa-random source pool integrity (no anno binary or network needed)
+qa-random-selftest:
+    uv run scripts/qa_random_urls.py --self-test
+
 # Quick QA smoke test (5 URLs, Wikipedia only, no RSS)
 qa-random-quick:
     #!/usr/bin/env bash

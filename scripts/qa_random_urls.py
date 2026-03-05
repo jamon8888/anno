@@ -549,11 +549,91 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-rss", action="store_true", help="Skip RSS and refhop sources (faster, no feed/API fetching)")
     p.add_argument("--verbose", "-v", action="store_true", help="Show full anno output")
     p.add_argument("--delay", type=float, default=1.0, help="Delay between requests in seconds (default: 1.0)")
+    p.add_argument("--self-test", action="store_true", help="Validate source pool integrity (no anno binary needed)")
     return p.parse_args()
+
+
+def self_test() -> int:
+    """Validate source pool integrity without running anno."""
+    errors: list[str] = []
+
+    # Check all sources have required fields
+    for s in ALL_SOURCES:
+        if not s.name:
+            errors.append(f"Source with url={s.url} has empty name")
+        if not s.url:
+            errors.append(f"Source {s.name} has empty url")
+        if s.category not in ("wikipedia", "conlang", "wikimedia", "rss", "other", "refhop"):
+            errors.append(f"Source {s.name} has unknown category: {s.category}")
+        if not s.lang:
+            errors.append(f"Source {s.name} has empty lang")
+        if not s.script:
+            errors.append(f"Source {s.name} has empty script")
+
+    # Check no duplicate URLs (within same category)
+    seen: dict[str, str] = {}
+    for s in ALL_SOURCES:
+        key = s.url
+        if key in seen:
+            errors.append(f"Duplicate URL: {s.name} and {seen[key]} share {key}")
+        seen[key] = s.name
+
+    # Check Wikipedia/conlang sources use Special:Random
+    for s in ALL_SOURCES:
+        if s.category in ("wikipedia", "conlang", "wikimedia"):
+            if "Special:Random" not in s.url:
+                errors.append(f"Source {s.name} should use Special:Random but has: {s.url}")
+
+    # Check RSS sources use http(s)
+    for s in ALL_SOURCES:
+        if s.category == "rss" and not s.url.startswith("http"):
+            errors.append(f"RSS source {s.name} has non-http URL: {s.url}")
+
+    # Check script mapping covers all languages
+    all_langs = {s.lang for s in ALL_SOURCES if s.lang != "multi"}
+    unmapped = all_langs - set(_LANG_SCRIPT.keys())
+    if unmapped:
+        errors.append(f"Languages without script mapping (defaulting to Latin): {sorted(unmapped)}")
+
+    # Summary stats
+    categories = Counter(s.category for s in ALL_SOURCES)
+    scripts = sorted(set(s.script for s in ALL_SOURCES))
+    langs = sorted(set(s.lang for s in ALL_SOURCES))
+
+    print(f"Source pool: {len(ALL_SOURCES)} total")
+    print(f"Categories: {dict(categories.most_common())}")
+    print(f"Languages ({len(langs)}): {', '.join(langs)}")
+    print(f"Scripts ({len(scripts)}): {', '.join(scripts)}")
+
+    # Check diversity invariants
+    if len(langs) < 40:
+        errors.append(f"Language diversity too low: {len(langs)} < 40")
+    if len(scripts) < 10:
+        errors.append(f"Script diversity too low: {len(scripts)} < 10")
+    if len(ALL_SOURCES) < 100:
+        errors.append(f"Source pool too small: {len(ALL_SOURCES)} < 100")
+
+    # Category balance: each non-refhop category should have >= 5 sources
+    for cat in ("wikipedia", "conlang", "wikimedia", "other", "rss"):
+        if categories.get(cat, 0) < 5:
+            errors.append(f"Category {cat} has too few sources: {categories.get(cat, 0)} < 5")
+
+    if errors:
+        print(f"\nFAILED: {len(errors)} errors:")
+        for e in errors:
+            print(f"  - {e}")
+        return 1
+
+    print("\nOK: All invariants pass")
+    return 0
 
 
 def main() -> int:
     args = parse_args()
+
+    if args.self_test:
+        return self_test()
+
     start_time = datetime.now(timezone.utc)
     anno_bin = os.environ.get("ANNO", "./target/release/anno")
     backends = [b.strip() for b in args.backends.split(",")]
