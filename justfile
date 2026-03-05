@@ -307,13 +307,13 @@ qa-random count="10" backends="stacked" seed="":
     #!/usr/bin/env bash
     set -euo pipefail
     cargo build --release -p anno-cli --features "eval onnx"
-    mkdir -p reports
+    mkdir -p qa/reports
     seed_args=""
     if [ -n "{{seed}}" ]; then seed_args="--seed {{seed}}"; fi
     ANNO="./target/release/anno" uv run scripts/qa_random_urls.py \
         --count {{count}} --backends {{backends}} \
         $seed_args \
-        --output "reports/qa-random-$(date +%Y%m%d-%H%M%S).md"
+        --output "qa/reports/qa-random-$(date +%Y%m%d-%H%M%S).md"
 
 # Validate qa-random source pool integrity (no anno binary or network needed)
 qa-random-selftest:
@@ -324,10 +324,10 @@ qa-random-quick:
     #!/usr/bin/env bash
     set -euo pipefail
     cargo build --release -p anno-cli --features "eval onnx"
-    mkdir -p reports
+    mkdir -p qa/reports
     ANNO="./target/release/anno" uv run scripts/qa_random_urls.py \
         --count 5 --no-rss --category wikipedia \
-        --output "reports/qa-random-quick-$(date +%Y%m%d-%H%M%S).md"
+        --output "qa/reports/qa-random-quick-$(date +%Y%m%d-%H%M%S).md"
 
 # === Backend Tests ===
 

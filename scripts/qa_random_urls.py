@@ -741,7 +741,7 @@ def main() -> int:
         out_path = Path(args.output)
     else:
         ts = start_time.strftime("%Y%m%d-%H%M%S")
-        out_path = Path("reports") / f"qa-random-{ts}.md"
+        out_path = Path("qa/reports") / f"qa-random-{ts}.md"
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(report, encoding="utf-8")
