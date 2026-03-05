@@ -147,40 +147,39 @@ impl Tokenizer for WhitespaceTokenizer {
     fn tokenize(&self, text: &str, _language: Option<&Language>) -> Vec<Token> {
         let mut tokens = Vec::new();
         let mut in_word = false;
-        let mut word_start = 0;
+        let mut word_start_char = 0;
+        let mut char_idx = 0;
 
-        for (i, c) in text.char_indices() {
+        for (_, c) in text.char_indices() {
             let is_word_char = c.is_alphanumeric() || c == '_';
 
             if is_word_char {
                 if !in_word {
-                    word_start = i;
+                    word_start_char = char_idx;
                     in_word = true;
                 }
             } else {
                 if in_word {
-                    // End of word
-                    let word: String = text[word_start..i].chars().collect();
+                    let word: String = text.chars().skip(word_start_char).take(char_idx - word_start_char).collect();
                     if !word.is_empty() {
-                        tokens.push(Token::new(word, word_start, i));
+                        tokens.push(Token::new(word, word_start_char, char_idx));
                     }
                     in_word = false;
                 }
 
                 if self.include_punctuation && !c.is_whitespace() {
-                    // Add punctuation as separate token
                     let punct: String = c.to_string();
-                    tokens.push(Token::new(punct, i, i + c.len_utf8()));
+                    tokens.push(Token::new(punct, char_idx, char_idx + 1));
                 }
             }
-            // Note: current_start was unused, removed assignment
+            char_idx += 1;
         }
 
         // Handle word at end of text
         if in_word {
-            let word: String = text[word_start..].chars().collect();
+            let word: String = text.chars().skip(word_start_char).collect();
             if !word.is_empty() {
-                tokens.push(Token::new(word, word_start, text.len()));
+                tokens.push(Token::new(word, word_start_char, char_idx));
             }
         }
 
@@ -213,29 +212,30 @@ impl Default for UnicodeSegmenter {
 
 impl Tokenizer for UnicodeSegmenter {
     fn tokenize(&self, text: &str, _language: Option<&Language>) -> Vec<Token> {
-        // For now, use character-based segmentation for CJK
-        // In production, use unicode-segmentation crate or language-specific tools
+        // Simple character-based segmentation (fallback for CJK and other languages).
+        // In production, use unicode-segmentation crate or language-specific tools.
         let mut tokens = Vec::new();
-        let mut start = 0;
+        let mut start_char = 0;
+        let mut char_idx = 0;
 
-        for (i, c) in text.char_indices() {
-            // Simple heuristic: split on whitespace and punctuation
+        for (_, c) in text.char_indices() {
             if c.is_whitespace() || c.is_ascii_punctuation() {
-                if start < i {
-                    let word: String = text[start..i].chars().collect();
+                if start_char < char_idx {
+                    let word: String = text.chars().skip(start_char).take(char_idx - start_char).collect();
                     if !word.trim().is_empty() {
-                        tokens.push(Token::new(word, start, i));
+                        tokens.push(Token::new(word, start_char, char_idx));
                     }
                 }
-                start = i + c.len_utf8();
+                start_char = char_idx + 1;
             }
+            char_idx += 1;
         }
 
         // Handle remaining text
-        if start < text.len() {
-            let word: String = text[start..].chars().collect();
+        if start_char < char_idx {
+            let word: String = text.chars().skip(start_char).collect();
             if !word.trim().is_empty() {
-                tokens.push(Token::new(word, start, text.len()));
+                tokens.push(Token::new(word, start_char, char_idx));
             }
         }
 

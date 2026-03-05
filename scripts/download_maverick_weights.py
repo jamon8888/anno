@@ -11,8 +11,8 @@
 """
 Download Maverick coreference model weights and convert to safetensors.
 
-Maverick (Martinelli et al. 2024) is a state-of-the-art coreference resolution
-model that achieves 83.6 CoNLL-F1 on OntoNotes using only 500M parameters.
+Maverick (Martinelli et al. 2024) is a coreference resolution model that
+achieves 83.6 CoNLL-F1 on OntoNotes using only 500M parameters.
 
 Available models:
     - maverick-mes-ontonotes: General coreference (news, web, etc.)

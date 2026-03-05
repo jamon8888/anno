@@ -2,7 +2,7 @@
 //!
 //! This module provides:
 //! - JSONL storage (primary, git-friendly, human-readable)
-//! - Optional SQLite index for powerful queries (time-series, comparisons, aggregations)
+//! - Optional SQLite index for queries (time-series, comparisons, aggregations)
 //!
 //! # Design Philosophy
 //!

@@ -1,7 +1,7 @@
 //! W2NER - Unified NER via Word-Word Relation Classification.
 //!
 //! W2NER (Word-to-Word NER) models NER as classifying relations between
-//! every pair of words in a sentence. This elegantly handles:
+//! every pair of words in a sentence. This handles:
 //!
 //! - **Nested entities**: "The \[University of \[California\]\]"
 //! - **Discontinuous entities**: "severe \[pain\] ... in \[abdomen\]" *(see limitation below)*
