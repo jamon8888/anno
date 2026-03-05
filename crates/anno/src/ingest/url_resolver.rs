@@ -8,8 +8,10 @@ use regex::Regex;
 use std::collections::HashMap;
 
 /// Matches Wikipedia-style reference markers: [1], [2], [edit], [citation needed], etc.
+/// Also matches bare `edit]` fragments (without opening bracket) that survive
+/// HTML `<span>` tag processing on some Wikipedia pages.
 static WIKI_REF_BRACKET: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\[(\d+|edit|citation needed)\]").unwrap());
+    Lazy::new(|| Regex::new(r"\[(\d+|edit|citation needed)\]|\bedit\]").unwrap());
 
 /// Resolved content from a URL.
 #[derive(Debug, Clone)]
@@ -231,10 +233,38 @@ fn _strip_html_to_text_impl(html: &str) -> String {
                 }
                 // Don't add script/style/skipped-semantic content
                 if !in_script && !in_style && skip_depth == 0 {
-                    // Add space after block elements for readability
+                    // Add space after block-level and sectioning elements for readability.
+                    // Covers: traditional blocks, table cells (infobox merging fix),
+                    // HTML5 semantic elements (section header merging fix).
                     if matches!(
                         tag_name.to_lowercase().as_str(),
-                        "p" | "div" | "br" | "li" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+                        "p" | "div"
+                            | "br"
+                            | "li"
+                            | "ul"
+                            | "ol"
+                            | "td"
+                            | "th"
+                            | "tr"
+                            | "dt"
+                            | "dd"
+                            | "h1"
+                            | "h2"
+                            | "h3"
+                            | "h4"
+                            | "h5"
+                            | "h6"
+                            | "section"
+                            | "article"
+                            | "header"
+                            | "footer"
+                            | "aside"
+                            | "main"
+                            | "blockquote"
+                            | "figcaption"
+                            | "figure"
+                            | "details"
+                            | "summary"
                     ) && !text.ends_with(' ')
                         && !text.is_empty()
                     {
