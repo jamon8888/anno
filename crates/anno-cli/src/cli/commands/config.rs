@@ -27,6 +27,10 @@ pub enum ConfigAction {
         #[arg(long, value_name = "MODEL")]
         model: Option<String>,
 
+        /// Output format to save in config
+        #[arg(long, value_name = "FORMAT")]
+        format: Option<String>,
+
         /// Include coreference in config
         #[arg(long)]
         coref: bool,
@@ -67,6 +71,7 @@ pub fn run(args: ConfigArgs) -> Result<(), String> {
         ConfigAction::Save {
             name,
             model,
+            format,
             coref,
             link_kb,
             threshold,
@@ -77,6 +82,9 @@ pub fn run(args: ConfigArgs) -> Result<(), String> {
 
             if let Some(ref m) = model {
                 config.insert("model".to_string(), Value::String(m.clone()));
+            }
+            if let Some(ref f) = format {
+                config.insert("format".to_string(), Value::String(f.clone()));
             }
             if coref {
                 config.insert("coref".to_string(), Value::Boolean(true));

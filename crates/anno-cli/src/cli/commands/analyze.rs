@@ -46,11 +46,16 @@ pub fn run(args: AnalyzeArgs) -> Result<(), String> {
     );
     println!();
 
-    let backends = [
+    let mut backends = vec![
         ModelBackend::Pattern,
         ModelBackend::Heuristic,
         ModelBackend::Stacked,
     ];
+    #[cfg(feature = "onnx")]
+    {
+        backends.push(ModelBackend::BertOnnx);
+        backends.push(ModelBackend::Nuner);
+    }
 
     let mut all_results: HashMap<String, Vec<Entity>> = HashMap::new();
 
@@ -83,55 +88,60 @@ pub fn run(args: AnalyzeArgs) -> Result<(), String> {
         all_results.insert(backend.name().to_string(), entities);
     }
 
-    // Find disagreements
+    // Find agreement/disagreement across all backends
     println!("{}:", color("1;33", "Model Agreement"));
 
+    // Use stacked as the reference model for comparison
     let stacked = all_results.get("stacked").cloned().unwrap_or_default();
-    let pattern = all_results.get("pattern").cloned().unwrap_or_default();
-    let heuristic = all_results.get("heuristic").cloned().unwrap_or_default();
 
-    let mut all_found: Vec<&Entity> = Vec::new();
-    let mut only_stacked: Vec<&Entity> = Vec::new();
-
+    // Count how many other backends agree with each stacked entity
+    let mut agreed = 0usize;
+    let mut stacked_only = 0usize;
     for e in &stacked {
-        let in_pattern = pattern.iter().any(|p| p.start == e.start && p.end == e.end);
-        let in_heuristic = heuristic
+        let confirming = all_results
             .iter()
-            .any(|s| s.start == e.start && s.end == e.end);
-
-        if in_pattern || in_heuristic {
-            all_found.push(e);
+            .filter(|(name, _)| name.as_str() != "stacked")
+            .filter(|(_, entities)| {
+                entities
+                    .iter()
+                    .any(|o| o.start == e.start && o.end == e.end)
+            })
+            .count();
+        if confirming > 0 {
+            agreed += 1;
         } else {
-            only_stacked.push(e);
+            stacked_only += 1;
         }
     }
 
-    // Count entities unique to each model
-    let pattern_only_count = pattern
-        .iter()
-        .filter(|p| !stacked.iter().any(|s| s.start == p.start && s.end == p.end))
-        .count();
-    let heuristic_only_count = heuristic
-        .iter()
-        .filter(|h| !stacked.iter().any(|s| s.start == h.start && s.end == h.end))
-        .count();
+    // Count entities unique to each non-stacked backend
+    for backend in &backends {
+        let name = backend.name();
+        if name == "stacked" {
+            continue;
+        }
+        let entities = match all_results.get(name) {
+            Some(e) => e,
+            None => continue,
+        };
+        let unique_count = entities
+            .iter()
+            .filter(|e| {
+                !stacked
+                    .iter()
+                    .any(|s| s.start == e.start && s.end == e.end)
+            })
+            .count();
+        if unique_count > 0 {
+            println!(
+                "  {}-only (not in stacked): {} entities",
+                name, unique_count
+            );
+        }
+    }
 
-    println!(
-        "  Agreed (in stacked from pattern/heuristic): {} entities",
-        all_found.len()
-    );
-    println!(
-        "  Pattern-only (not in stacked): {} entities",
-        pattern_only_count
-    );
-    println!(
-        "  Heuristic-only (not in stacked): {} entities",
-        heuristic_only_count
-    );
-    println!(
-        "  Stacked-only (novel combinations): {} entities",
-        only_stacked.len()
-    );
+    println!("  Confirmed by 2+ backends: {} entities", agreed);
+    println!("  Stacked-only: {} entities", stacked_only);
     println!();
 
     // Show annotated text
