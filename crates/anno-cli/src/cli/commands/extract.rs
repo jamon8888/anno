@@ -16,7 +16,7 @@ use anno::core::grounded::{
     GroundedDocument, Location, Modality, Quantifier, Signal, SignalId, SignalValidationError,
 };
 #[cfg(feature = "eval")]
-use anno::ingest::url_resolver::CompositeResolver;
+use crate::cli::ingest::CompositeResolver;
 use anno::ingest::DocumentPreprocessor;
 #[cfg(feature = "graph")]
 use lattix::{GraphDocument, GraphExportFormat};
@@ -155,7 +155,7 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
     let mut raw_text = if let Some(url) = &args.url {
         #[cfg(feature = "eval")]
         {
-            use anno::ingest::UrlResolver;
+            use crate::cli::ingest::UrlResolver;
             let resolver = CompositeResolver::new();
             let resolved = resolver
                 .resolve(url)

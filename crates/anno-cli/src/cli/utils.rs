@@ -106,9 +106,41 @@ fn sanitize_input(input: &str) -> String {
 
 /// Read a file with consistent error handling.
 ///
+/// If the file looks like a PDF (by extension or `%PDF` magic bytes), extracts text
+/// via `pdf-extract` (requires the `pdf` feature).
+///
 /// If the file looks like HTML (based on content sniffing or `.html`/`.htm` extension),
 /// automatically strips tags and extracts text -- same logic as `--url` uses.
 pub fn read_input_file(path: &str) -> Result<String, String> {
+    // --- PDF detection (before reading as UTF-8, since PDFs are binary) ---
+    let is_pdf_ext = path.ends_with(".pdf");
+    let is_pdf_magic = if !is_pdf_ext {
+        fs::read(path)
+            .ok()
+            .map(|bytes| bytes.starts_with(b"%PDF"))
+            .unwrap_or(false)
+    } else {
+        false
+    };
+
+    if is_pdf_ext || is_pdf_magic {
+        #[cfg(feature = "pdf")]
+        {
+            eprintln!("note: extracting text from PDF '{}'", path);
+            let text = pdf_extract::extract_text(path)
+                .map_err(|e| format_error("extract PDF text", &format!("{}: {}", path, e)))?;
+            return Ok(text);
+        }
+        #[cfg(not(feature = "pdf"))]
+        {
+            return Err(format!(
+                "File '{}' appears to be a PDF, but the `pdf` feature is not enabled. \
+                 Rebuild with `--features pdf` to enable PDF extraction.",
+                path
+            ));
+        }
+    }
+
     let content = fs::read_to_string(path)
         .map_err(|e| format_error("read file", &format!("{}: {}", path, e)))?;
 
@@ -116,10 +148,14 @@ pub fn read_input_file(path: &str) -> Result<String, String> {
     let is_html_ext = path.ends_with(".html") || path.ends_with(".htm") || path.ends_with(".xhtml");
     if is_html_ext || anno::ingest::looks_like_html(&content) {
         eprintln!(
-            "note: detected HTML content in '{}', stripping tags (use --url for richer extraction)",
+            "note: detected HTML content in '{}', converting to text",
             path
         );
-        Ok(anno::ingest::strip_html_to_text(&content))
+        // Use html2text for higher-quality conversion; fall back to anno's built-in stripper.
+        match html2text::from_read(content.as_bytes(), 10000) {
+            Ok(text) => Ok(text),
+            Err(_) => Ok(anno::ingest::strip_html_to_text(&content)),
+        }
     } else {
         Ok(content)
     }
@@ -582,4 +618,88 @@ mod tests {
         assert!(relations.is_empty());
     }
 
+    // -------------------------------------------------------------------------
+    // read_input_file tests (html2text + PDF detection)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn read_input_file_html_uses_html2text() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.html");
+        fs::write(
+            &path,
+            r#"<!DOCTYPE html>
+            <html><head><title>Test</title></head>
+            <body>
+                <nav>Menu</nav>
+                <p>Angela Merkel met Emmanuel Macron in Berlin.</p>
+                <footer>Copyright</footer>
+            </body></html>"#,
+        )
+        .unwrap();
+        let text = read_input_file(path.to_str().unwrap()).unwrap();
+        assert!(
+            text.contains("Angela Merkel"),
+            "should extract person names, got: {}",
+            text
+        );
+        assert!(
+            text.contains("Berlin"),
+            "should extract location, got: {}",
+            text
+        );
+    }
+
+    #[test]
+    fn read_input_file_plain_text_passthrough() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.txt");
+        fs::write(&path, "Tim Cook met Sundar Pichai in Seattle.").unwrap();
+        let text = read_input_file(path.to_str().unwrap()).unwrap();
+        assert_eq!(text, "Tim Cook met Sundar Pichai in Seattle.");
+    }
+
+    #[test]
+    fn read_input_file_html_detected_by_content() {
+        let dir = tempfile::tempdir().unwrap();
+        // No .html extension, but content looks like HTML
+        let path = dir.path().join("page.dat");
+        fs::write(&path, "<html><body><p>Hello World</p></body></html>").unwrap();
+        let text = read_input_file(path.to_str().unwrap()).unwrap();
+        assert!(text.contains("Hello World"));
+        // Should not contain raw HTML tags
+        assert!(!text.contains("<p>"));
+    }
+
+    #[test]
+    fn read_input_file_nonexistent_errors() {
+        let result = read_input_file("/tmp/anno-does-not-exist-12345.txt");
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn read_input_file_pdf_extension_detected() {
+        let dir = tempfile::tempdir().unwrap();
+        // Create a file with .pdf extension but not actually a PDF -- should error
+        let path = dir.path().join("fake.pdf");
+        fs::write(&path, "not a real pdf").unwrap();
+        let result = read_input_file(path.to_str().unwrap());
+        // Should attempt PDF extraction and fail (not valid PDF)
+        assert!(result.is_err());
+    }
+
+    #[cfg(not(feature = "pdf"))]
+    #[test]
+    fn read_input_file_pdf_without_feature_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.pdf");
+        fs::write(&path, "%PDF-1.4 fake").unwrap();
+        let result = read_input_file(path.to_str().unwrap());
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().contains("pdf"),
+            "should mention pdf feature"
+        );
+    }
 }

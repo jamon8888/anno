@@ -11,6 +11,8 @@ pub mod config;
 /// CLI error handling.
 pub mod error;
 pub mod exit_codes;
+/// Document ingestion: URL resolution, format conversion, file reading.
+pub mod ingest;
 pub mod output;
 pub mod parser;
 pub mod utils;
