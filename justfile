@@ -300,6 +300,31 @@ eval-resume MAX_EXAMPLES="50":
 eval-results:
     @cat reports/RESULTS.md 2>/dev/null || echo "No results yet. Run 'just eval-comprehensive' first."
 
+# === QA Random URL Testing ===
+
+# Run QA with random URLs from multilingual Wikipedia + diverse sites
+qa-random count="10" backends="stacked" seed="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p anno-cli --features "eval onnx"
+    mkdir -p reports
+    seed_args=""
+    if [ -n "{{seed}}" ]; then seed_args="--seed {{seed}}"; fi
+    ANNO="./target/release/anno" uv run scripts/qa_random_urls.py \
+        --count {{count}} --backends {{backends}} \
+        $seed_args \
+        --output "reports/qa-random-$(date +%Y%m%d-%H%M%S).md"
+
+# Quick QA smoke test (5 URLs, Wikipedia only, no RSS)
+qa-random-quick:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p anno-cli --features "eval onnx"
+    mkdir -p reports
+    ANNO="./target/release/anno" uv run scripts/qa_random_urls.py \
+        --count 5 --no-rss --category wikipedia \
+        --output "reports/qa-random-quick-$(date +%Y%m%d-%H%M%S).md"
+
 # === Backend Tests ===
 
 # Test ONNX backend (build only, no models)
