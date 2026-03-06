@@ -2,11 +2,28 @@
 
 use std::collections::HashMap;
 use std::io::{self, IsTerminal};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use anno::{Entity, GroundedDocument, Location, Signal};
 
 #[cfg(feature = "eval")]
 use anno::core::grounded::{EvalComparison, EvalMatch};
+
+/// Global color mode: 0 = auto, 1 = always, 2 = never.
+static COLOR_MODE: AtomicU8 = AtomicU8::new(0);
+
+/// Set the global color mode from CLI args. Call once at startup.
+pub fn set_color_mode(mode: crate::cli::parser::ColorMode) {
+    use crate::cli::parser::ColorMode;
+    COLOR_MODE.store(
+        match mode {
+            ColorMode::Auto => 0,
+            ColorMode::Always => 1,
+            ColorMode::Never => 2,
+        },
+        Ordering::Relaxed,
+    );
+}
 
 /// Log info message (respects quiet flag)
 pub fn log_info(msg: &str, quiet: bool) {
@@ -33,9 +50,14 @@ pub fn format_size(bytes: u64) -> String {
     }
 }
 
-/// Colorize text with ANSI escape codes (only if stdout is a terminal)
+/// Colorize text with ANSI escape codes, respecting `--color` flag.
 pub fn color(code: &str, text: &str) -> String {
-    if io::stdout().is_terminal() {
+    let use_color = match COLOR_MODE.load(Ordering::Relaxed) {
+        1 => true,  // always
+        2 => false, // never
+        _ => io::stdout().is_terminal(), // auto
+    };
+    if use_color {
         format!("\x1b[{}m{}\x1b[0m", code, text)
     } else {
         text.to_string()

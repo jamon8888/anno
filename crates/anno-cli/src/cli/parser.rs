@@ -53,9 +53,25 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
+    /// Color output mode
+    #[arg(long, global = true, default_value = "auto", value_name = "WHEN")]
+    pub color: ColorMode,
+
     /// Text to extract entities from (shorthand for `anno extract`)
     #[arg(trailing_var_arg = true)]
     pub text: Vec<String>,
+}
+
+/// When to colorize output.
+#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+pub enum ColorMode {
+    /// Colorize when stdout is a terminal
+    #[default]
+    Auto,
+    /// Always colorize
+    Always,
+    /// Never colorize
+    Never,
 }
 
 /// Available CLI commands.

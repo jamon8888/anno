@@ -21,8 +21,12 @@ pub enum CacheAction {
     #[command(visible_alias = "ls")]
     List,
 
-    /// Clear all cache
-    Clear,
+    /// Clear all cache (requires --confirm)
+    Clear {
+        /// Confirm deletion (required to prevent accidental data loss)
+        #[arg(long)]
+        confirm: bool,
+    },
 
     /// Show cache statistics
     Stats,
@@ -152,17 +156,25 @@ pub fn run(args: CacheArgs) -> Result<(), String> {
                 }
             }
         }
-        CacheAction::Clear => {
-            if cache_dir.exists() {
-                fs::remove_dir_all(&cache_dir)
-                    .map_err(|e| format!("Failed to clear cache: {}", e))?;
-                println!(
-                    "{} Cache cleared (model cache + result cache)",
-                    color("32", "✓")
-                );
-            } else {
+        CacheAction::Clear { confirm } => {
+            if !cache_dir.exists() {
                 println!("Cache directory does not exist");
+                return Ok(());
             }
+            if !confirm {
+                eprintln!(
+                    "This will delete all cached models and results in {}",
+                    cache_dir.display()
+                );
+                eprintln!("Run with --confirm to proceed: anno cache clear --confirm");
+                return Err("cache clear requires --confirm".into());
+            }
+            fs::remove_dir_all(&cache_dir)
+                .map_err(|e| format!("Failed to clear cache: {}", e))?;
+            println!(
+                "{} Cache cleared (model cache + result cache)",
+                color("32", "✓")
+            );
         }
         CacheAction::Stats => {
             if !cache_dir.exists() {

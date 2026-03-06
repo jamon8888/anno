@@ -60,6 +60,7 @@ fn main() -> ExitCode {
     use clap_complete::generate;
 
     let cli = Cli::parse();
+    crate::cli::output::set_color_mode(cli.color);
 
     let result: Result<(), CliError> = match cli.command {
         Some(Commands::Extract(args)) => extract::run(args),
