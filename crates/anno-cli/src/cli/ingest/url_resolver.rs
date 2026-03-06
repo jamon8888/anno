@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 /// Resolved content from a URL.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // metadata/source_url used by downstream consumers (dom_smoothie integration)
+#[allow(dead_code)] // metadata/source_url used by downstream consumers
 pub struct ResolvedContent {
     /// The extracted text content
     pub text: String,
@@ -82,7 +82,7 @@ impl UrlResolver for HttpResolver {
         let text = if content.trim_start().starts_with('<') {
             metadata.insert("content-type".to_string(), "text/html".to_string());
             // Try readability extraction first for better article text
-            match extract_with_readability(&content, url) {
+            match deformat::html::extract_with_readability(&content, url) {
                 Some((article_text, title, excerpt)) => {
                     if let Some(t) = title {
                         metadata.insert("title".to_string(), t);
@@ -95,7 +95,7 @@ impl UrlResolver for HttpResolver {
                 }
                 None => {
                     metadata.insert("extractor".to_string(), "strip_html".to_string());
-                    anno::ingest::strip_html_to_text(&content)
+                    deformat::html::strip_to_text(&content)
                 }
             }
         } else {
@@ -109,28 +109,6 @@ impl UrlResolver for HttpResolver {
             source_url: url.to_string(),
         })
     }
-}
-
-/// Try readability extraction. Returns `Some((text, title, excerpt))` on success,
-/// `None` if parsing fails or the extracted text is empty/trivial.
-fn extract_with_readability(
-    html: &str,
-    url: &str,
-) -> Option<(String, Option<String>, Option<String>)> {
-    let cfg = dom_smoothie::Config::default();
-    let mut r = dom_smoothie::Readability::new(html, Some(url), Some(cfg)).ok()?;
-    let article = r.parse().ok()?;
-    let text = article.text_content.trim().to_string();
-    // Fall back if readability produced nothing useful
-    if text.is_empty() || text.len() < 50 {
-        return None;
-    }
-    let title = if article.title.is_empty() {
-        None
-    } else {
-        Some(article.title)
-    };
-    Some((text, title, article.excerpt))
 }
 
 /// Composite resolver that tries multiple resolvers in order.
@@ -317,7 +295,7 @@ mod tests {
             <footer><p>Copyright 2026 News Corp. All rights reserved.</p></footer>
         </body></html>"#;
 
-        let result = extract_with_readability(html, "https://example.com/article");
+        let result = deformat::html::extract_with_readability(html, "https://example.com/article");
         assert!(result.is_some(), "readability should extract article text");
         let (text, title, _excerpt) = result.unwrap();
         assert!(text.contains("Dr. Sarah Chen"), "should contain person name, got: {}", text);
@@ -328,13 +306,13 @@ mod tests {
     #[test]
     fn readability_returns_none_for_minimal_html() {
         let html = "<html><body><p>Hi</p></body></html>";
-        let result = extract_with_readability(html, "https://example.com");
+        let result = deformat::html::extract_with_readability(html, "https://example.com");
         assert!(result.is_none(), "should return None for trivial HTML (<50 chars)");
     }
 
     #[test]
     fn readability_returns_none_for_empty_html() {
-        let result = extract_with_readability("", "https://example.com");
+        let result = deformat::html::extract_with_readability("", "https://example.com");
         assert!(result.is_none(), "should return None for empty HTML");
     }
 
@@ -343,7 +321,7 @@ mod tests {
         let html = r#"<html><body>
             <nav><a href="/">Home</a><a href="/about">About</a></nav>
         </body></html>"#;
-        let result = extract_with_readability(html, "https://example.com");
+        let result = deformat::html::extract_with_readability(html, "https://example.com");
         assert!(result.is_none(), "should return None for nav-only page");
     }
 }

@@ -1340,7 +1340,7 @@ pub fn parse_ecb_plus_zip(data: &[u8]) -> Result<Vec<CorefDocument>> {
                 parts[parts.len() - 2].to_string(),
                 parts[parts.len() - 1].trim_end_matches(".xml").to_string(),
             )
-        } else if let Some(fname) = name.split('/').last() {
+        } else if let Some(fname) = name.split('/').next_back() {
             let base = fname.trim_end_matches(".xml");
             // Try to extract topic from filename like "1_1ecb"
             if let Some((t, _)) = base.split_once('_') {
@@ -1438,6 +1438,7 @@ fn parse_ecb_plus_xml(xml: &str, topic: &str, doc_name: &str) -> Result<CorefDoc
             || name.starts_with(b"NEG_")
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn handle_start(
         e: &quick_xml::events::BytesStart<'_>,
         in_token: &mut bool,

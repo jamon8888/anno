@@ -2373,7 +2373,7 @@ impl TaskEvaluator {
             }
 
             // Build gold CrossDocClusters from chain_to_mentions
-            for (_chain_key, mentions) in &chain_to_mentions {
+            for mentions in chain_to_mentions.values() {
                 if mentions.len() < 2 {
                     continue; // Skip singletons for cross-doc
                 }

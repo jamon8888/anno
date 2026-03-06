@@ -10,4 +10,5 @@ textprep = { path = "../textprep" }
 logp = { path = "../logp" }
 pare = { path = "../pare" }
 muxer = { path = "../muxer" }
+deformat = { path = "../deformat" }
 

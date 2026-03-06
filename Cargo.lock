@@ -91,10 +91,9 @@ dependencies = [
  "chrono",
  "clap",
  "clap_complete",
+ "deformat",
  "dirs 5.0.1",
- "dom_smoothie",
  "glob",
- "html2text",
  "indicatif 0.17.11",
  "is-terminal",
  "itertools 0.14.0",
@@ -102,7 +101,6 @@ dependencies = [
  "log",
  "muxer",
  "once_cell",
- "pdf-extract",
  "rayon",
  "regex",
  "serde",
@@ -197,6 +195,7 @@ dependencies = [
  "criterion",
  "crossbeam-channel",
  "dashmap",
+ "deformat",
  "dirs 5.0.1",
  "futures",
  "gramdex",
@@ -909,6 +908,17 @@ dependencies = [
  "lock_api",
  "once_cell",
  "parking_lot_core",
+]
+
+[[package]]
+name = "deformat"
+version = "0.1.0"
+dependencies = [
+ "dom_smoothie",
+ "html2text",
+ "once_cell",
+ "pdf-extract",
+ "regex",
 ]
 
 [[package]]

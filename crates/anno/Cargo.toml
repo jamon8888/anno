@@ -76,6 +76,7 @@ jiff = { version = "0.2.21", optional = true }
 
 
 [dev-dependencies]
+deformat = { workspace = true }
 proptest = { workspace = true }
 tempfile = "3"
 criterion = { workspace = true }

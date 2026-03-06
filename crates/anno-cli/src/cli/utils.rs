@@ -127,9 +127,9 @@ pub fn read_input_file(path: &str) -> Result<String, String> {
         #[cfg(feature = "pdf")]
         {
             eprintln!("note: extracting text from PDF '{}'", path);
-            let text = pdf_extract::extract_text(path)
+            let result = deformat::pdf::extract_file(std::path::Path::new(path))
                 .map_err(|e| format_error("extract PDF text", &format!("{}: {}", path, e)))?;
-            return Ok(text);
+            return Ok(result.text);
         }
         #[cfg(not(feature = "pdf"))]
         {
@@ -146,16 +146,13 @@ pub fn read_input_file(path: &str) -> Result<String, String> {
 
     // Detect HTML by extension or content
     let is_html_ext = path.ends_with(".html") || path.ends_with(".htm") || path.ends_with(".xhtml");
-    if is_html_ext || anno::ingest::looks_like_html(&content) {
+    if is_html_ext || deformat::detect::is_html(&content) {
         eprintln!(
             "note: detected HTML content in '{}', converting to text",
             path
         );
-        // Use html2text for higher-quality conversion; fall back to anno's built-in stripper.
-        match html2text::from_read(content.as_bytes(), 10000) {
-            Ok(text) => Ok(text),
-            Err(_) => Ok(anno::ingest::strip_html_to_text(&content)),
-        }
+        let result = deformat::extract_html2text(&content, 10000);
+        Ok(result.text)
     } else {
         Ok(content)
     }

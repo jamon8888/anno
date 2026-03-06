@@ -144,7 +144,7 @@ fn qa_w3_known_persons_at_sentence_start() {
 
 #[test]
 fn qa_w5_wikipedia_toc_stripped() {
-    use anno::ingest::strip_html_to_text;
+    use deformat::html::strip_to_text;
 
     let html = r#"<html><body>
         <p>Real article content about CRISPR.</p>
@@ -154,7 +154,7 @@ fn qa_w5_wikipedia_toc_stripped() {
         <p>More real content about gene editing.</p>
     </body></html>"#;
 
-    let text = strip_html_to_text(html);
+    let text = strip_to_text(html);
     assert!(
         text.contains("CRISPR"),
         "article content should be preserved"
@@ -175,7 +175,7 @@ fn qa_w5_wikipedia_toc_stripped() {
 
 #[test]
 fn qa_w5_wikipedia_references_stripped() {
-    use anno::ingest::strip_html_to_text;
+    use deformat::html::strip_to_text;
 
     let html = r#"<html><body>
         <p>Jennifer Doudna developed CRISPR-Cas9.</p>
@@ -186,7 +186,7 @@ fn qa_w5_wikipedia_references_stripped() {
         <p>The technology won the Nobel Prize.</p>
     </body></html>"#;
 
-    let text = strip_html_to_text(html);
+    let text = strip_to_text(html);
     assert!(
         text.contains("Jennifer Doudna"),
         "article content preserved"
@@ -200,7 +200,7 @@ fn qa_w5_wikipedia_references_stripped() {
 
 #[test]
 fn qa_w5_wikipedia_nav_stripped() {
-    use anno::ingest::strip_html_to_text;
+    use deformat::html::strip_to_text;
 
     let html = r#"<html><body>
         <nav id="mw-navigation"><ul><li>Main page</li><li>Random article</li></ul></nav>
@@ -208,7 +208,7 @@ fn qa_w5_wikipedia_nav_stripped() {
         <footer id="footer"><p>Privacy policy</p></footer>
     </body></html>"#;
 
-    let text = strip_html_to_text(html);
+    let text = strip_to_text(html);
     assert!(text.contains("Actual article text"));
     assert!(!text.contains("Main page"), "navigation stripped");
     assert!(!text.contains("Random article"), "navigation stripped");
@@ -224,29 +224,29 @@ fn qa_w5_wikipedia_nav_stripped() {
 
 #[test]
 fn qa_w6_looks_like_html_detection() {
-    use anno::ingest::looks_like_html;
+    use deformat::detect::is_html;
 
-    assert!(looks_like_html(
+    assert!(is_html(
         "<!DOCTYPE html><html><body>text</body></html>"
     ));
-    assert!(looks_like_html(
+    assert!(is_html(
         "<html><head></head><body>text</body></html>"
     ));
-    assert!(looks_like_html("  \n<!DOCTYPE html>\n<html>"));
-    assert!(looks_like_html("<?xml version=\"1.0\"?><html>"));
+    assert!(is_html("  \n<!DOCTYPE html>\n<html>"));
+    assert!(is_html("<?xml version=\"1.0\"?><html>"));
 
     // Plain text should NOT be detected as HTML
-    assert!(!looks_like_html("Tim Cook announced new products today."));
-    assert!(!looks_like_html("The patient has no history of diabetes."));
-    assert!(!looks_like_html("# Markdown heading\n\nSome text."));
+    assert!(!is_html("Tim Cook announced new products today."));
+    assert!(!is_html("The patient has no history of diabetes."));
+    assert!(!is_html("# Markdown heading\n\nSome text."));
 }
 
 #[test]
 fn qa_w6_html_tags_not_in_entities() {
-    use anno::ingest::strip_html_to_text;
+    use deformat::html::strip_to_text;
 
     let html = "<html><body><p>Tim Cook leads Apple.</p></body></html>";
-    let text = strip_html_to_text(html);
+    let text = strip_to_text(html);
 
     // Extracted text should not contain HTML tags
     assert!(
@@ -448,20 +448,20 @@ mod stacked_filtering {
 
 #[test]
 fn qa_html_entity_decoding() {
-    use anno::ingest::strip_html_to_text;
+    use deformat::html::strip_to_text;
 
     let html = "<p>Nestl&eacute; &amp; Mars &mdash; leading brands</p>";
-    let text = strip_html_to_text(html);
+    let text = strip_to_text(html);
     assert!(text.contains('&'), "amp decoded: {text}");
     // eacute might not be decoded (only common entities handled), that's OK
 }
 
 #[test]
 fn qa_html_numeric_entity_decoding() {
-    use anno::ingest::strip_html_to_text;
+    use deformat::html::strip_to_text;
 
     let html = "<p>&#169; 2024 &#x2014; all rights</p>";
-    let text = strip_html_to_text(html);
+    let text = strip_to_text(html);
     // &#169; = copyright symbol, &#x2014; = em dash
     assert!(!text.contains("&#"), "numeric entities decoded: {text}");
 }
@@ -624,20 +624,20 @@ fn qa_fiscal_quarters_not_entities() {
 
 #[test]
 fn qa_strip_html_basic() {
-    use anno::ingest::strip_html_to_text;
+    use deformat::html::strip_to_text;
 
     let html = "<p>Hello <b>world</b>!</p>";
-    let text = strip_html_to_text(html);
+    let text = strip_to_text(html);
     assert_eq!(text, "Hello world!");
 }
 
 #[test]
 fn qa_strip_html_script_style_removed() {
-    use anno::ingest::strip_html_to_text;
+    use deformat::html::strip_to_text;
 
     let html = r#"<html><head><style>body{color:red}</style></head>
         <body><script>alert('hi')</script><p>Real text.</p></body></html>"#;
-    let text = strip_html_to_text(html);
+    let text = strip_to_text(html);
     assert!(text.contains("Real text"));
     assert!(!text.contains("alert"), "script content stripped");
     assert!(!text.contains("color"), "style content stripped");
@@ -645,10 +645,10 @@ fn qa_strip_html_script_style_removed() {
 
 #[test]
 fn qa_strip_html_preserves_whitespace_between_blocks() {
-    use anno::ingest::strip_html_to_text;
+    use deformat::html::strip_to_text;
 
     let html = "<h1>Title</h1><p>First paragraph.</p><p>Second paragraph.</p>";
-    let text = strip_html_to_text(html);
+    let text = strip_to_text(html);
     // Block elements should have spaces between them
     assert!(
         text.contains("Title") && text.contains("First") && text.contains("Second"),
@@ -665,10 +665,10 @@ fn qa_strip_html_preserves_whitespace_between_blocks() {
 
 #[test]
 fn qa_n9_html_title_not_in_body_text() {
-    use anno::ingest::strip_html_to_text;
+    use deformat::html::strip_to_text;
 
     let html = "<html><head><title>Page Title</title></head><body><p>Tim Cook is CEO.</p></body></html>";
-    let text = strip_html_to_text(html);
+    let text = strip_to_text(html);
     assert!(
         !text.contains("Page Title"),
         "title tag content should be stripped: {text}"
@@ -681,7 +681,7 @@ fn qa_n9_html_title_not_in_body_text() {
 
 #[test]
 fn qa_n9_html_head_metadata_stripped() {
-    use anno::ingest::strip_html_to_text;
+    use deformat::html::strip_to_text;
 
     let html = r#"<html>
         <head>
@@ -691,7 +691,7 @@ fn qa_n9_html_head_metadata_stripped() {
         </head>
         <body><p>Angela Merkel met Emmanuel Macron.</p></body>
     </html>"#;
-    let text = strip_html_to_text(html);
+    let text = strip_to_text(html);
     assert!(!text.contains("My Page"), "title stripped: {text}");
     assert!(
         text.contains("Angela Merkel"),

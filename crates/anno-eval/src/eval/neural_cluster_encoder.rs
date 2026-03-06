@@ -550,7 +550,7 @@ impl<E: ClusterEncoder, S: MergeScorer> UnifiedCrossContextResolver<E, S> {
     ) -> Vec<crate::eval::cluster_encoder::MergedCluster> {
         // Encode all clusters
         let mut embeddings: Vec<ClusterEmbedding> = Vec::new();
-        for (_ctx_id, clusters) in local_clusters {
+        for clusters in local_clusters.values() {
             for cluster in clusters {
                 let emb = self.encoder.encode_cluster(cluster, None);
                 embeddings.push(emb);

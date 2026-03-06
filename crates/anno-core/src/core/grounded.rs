@@ -4519,30 +4519,6 @@ impl ProcessResult {
     }
 }
 
-/// Process arbitrary text and extract entities.
-///
-/// This is a convenience function for ad-hoc debugging.
-/// For production use, use the full Model API.
-///
-/// # Note
-///
-/// This function is a stub - the actual implementation lives in the `anno` crate
-/// which has access to ML backends. This placeholder exists to document the
-/// intended API for `ProcessResult`.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// use anno::process_text;  // Note: anno crate, not anno_core
-///
-/// let result = process_text("Marie Curie won the Nobel Prize.", None)?;
-/// println!("{}", result.to_html());
-/// ```
-
-// =============================================================================
-// Tests
-// =============================================================================
-
 // =============================================================================
 // Corpus: Multi-Document Operations
 // =============================================================================

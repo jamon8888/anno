@@ -73,12 +73,8 @@ candle-nn = "0.9"
 candle-transformers = "0.9"
 safetensors = "0.4"
 
-# PDF extraction
-pdf-extract = "0.10"
-
-# HTML-to-text
-html2text = "0.16"
-dom_smoothie = "0.15"
+# Document-to-text extraction
+deformat = "0.1.0"
 
 # Burn ML framework (training + inference, WebGPU support)
 burn = "0.20.0"

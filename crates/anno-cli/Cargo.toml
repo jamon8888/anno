@@ -38,11 +38,8 @@ muxer = { version = "0.3.9", default-features = false, features = ["serde", "sto
 anno-graph = { path = "../anno-graph", version = "0.3.0", optional = true }
 lattix = { version = "0.5.1", optional = true }
 
-# Optional: PDF text extraction.
-pdf-extract = { workspace = true, optional = true }
-
-html2text = { workspace = true }
-dom_smoothie = { workspace = true }
+# Document-to-text extraction (HTML stripping, readability, PDF).
+deformat = { workspace = true, features = ["readability", "html2text"] }
 xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
 rayon = { workspace = true }
 
@@ -62,7 +59,7 @@ llm = ["anno/llm"]
 bundled-crf-weights = ["anno/bundled-crf-weights"]
 bundled-hmm-params = ["anno/bundled-hmm-params"]
 graph = ["anno/graph", "dep:anno-graph", "dep:lattix"]
-pdf = ["dep:pdf-extract"]
+pdf = ["deformat/pdf"]
 
 [dev-dependencies]
 tempfile = "3"
