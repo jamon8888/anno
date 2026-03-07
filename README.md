@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/anno/badge.svg)](https://docs.rs/anno)
 [![CI](https://github.com/arclabs561/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/anno/actions/workflows/ci.yml)
 
-Information extraction for unstructured text: named entity recognition (NER), within-document coreference resolution, and structured pattern extraction.
+Information extraction for unstructured text: named entity recognition (NER), coreference resolution, entity linking, event extraction, zero-shot entity types, and knowledge graph export.
 
 Dual-licensed under MIT or Apache-2.0. MSRV: 1.85.
 
