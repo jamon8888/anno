@@ -92,12 +92,12 @@ pub fn entities_to_graph_document(
             );
             if let Some(&idx) = seen_edges.get(&key) {
                 if let Some(existing) = doc.edges.get_mut(idx) {
-                    existing.confidence = existing.confidence.max(relation.confidence);
+                    existing.confidence = existing.confidence.max(relation.confidence.value());
                 }
             } else {
                 let edge =
                     GraphEdge::new(&source_node_id, &target_node_id, &relation.relation_type)
-                        .with_confidence(relation.confidence);
+                        .with_confidence(relation.confidence.value());
                 doc.edges.push(edge);
                 seen_edges.insert(key, doc.edges.len().saturating_sub(1));
             }
@@ -244,8 +244,8 @@ pub fn entities_to_knowledge_graph(
         if let (Some(h), Some(t)) = (head_iri, tail_iri) {
             let pred = format!("{}/rel/{}", base, uri_safe(&rel.relation_type));
             let mut triple = Triple::new(h, pred.as_str(), t);
-            if rel.confidence.is_finite() {
-                triple = triple.with_confidence(rel.confidence as f32);
+            if rel.confidence.value().is_finite() {
+                triple = triple.with_confidence(f32::from(rel.confidence));
             }
             kg.add_triple(triple);
         }

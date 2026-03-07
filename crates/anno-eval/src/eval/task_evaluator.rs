@@ -2607,8 +2607,7 @@ impl TaskEvaluator {
                             && !doc.relations.is_empty()
                         {
                             use anno::backends::inference::{
-                                extract_relation_triples, RelationExtractionConfig,
-                                SemanticRegistry,
+                                extract_relation_triples_simple, RelationExtractionConfig,
                             };
                             use anno::{Entity as PredEntity, EntityType};
                             use std::collections::BTreeMap;
@@ -2644,22 +2643,16 @@ impl TaskEvaluator {
                             }
                             let oracle_entities: Vec<PredEntity> = by_key.into_values().collect();
 
-                            // Registry over the dataset’s relation label space.
-                            let mut builder = SemanticRegistry::builder();
-                            for rt in &relation_types {
-                                builder = builder.add_relation(rt, rt);
-                            }
-                            let registry = builder.build_placeholder(1);
-
+                            let rel_strs: Vec<&str> = relation_types.iter().map(|s| &**s).collect();
                             let rel_cfg = RelationExtractionConfig {
                                 threshold: config.relation_threshold,
                                 max_span_distance: 120,
                                 extract_triggers: false,
                             };
-                            let triples = extract_relation_triples(
+                            let triples = extract_relation_triples_simple(
                                 &oracle_entities,
                                 text,
-                                &registry,
+                                &rel_strs,
                                 &rel_cfg,
                             );
                             for t in &triples {
@@ -2702,8 +2695,7 @@ impl TaskEvaluator {
                             && !doc.relations.is_empty()
                         {
                             use anno::backends::inference::{
-                                extract_relation_triples, RelationExtractionConfig,
-                                SemanticRegistry,
+                                extract_relation_triples_simple, RelationExtractionConfig,
                             };
                             use anno::{Entity as PredEntity, EntityType};
                             use std::collections::BTreeMap;
@@ -2739,22 +2731,16 @@ impl TaskEvaluator {
                             }
                             let oracle_entities: Vec<PredEntity> = by_key.into_values().collect();
 
-                            // Registry over the dataset’s relation label space.
-                            let mut builder = SemanticRegistry::builder();
-                            for rt in &relation_types {
-                                builder = builder.add_relation(rt, rt);
-                            }
-                            let registry = builder.build_placeholder(1);
-
+                            let rel_strs: Vec<&str> = relation_types.iter().map(|s| &**s).collect();
                             let rel_cfg = RelationExtractionConfig {
                                 threshold: config.relation_threshold,
                                 max_span_distance: 120,
                                 extract_triggers: false,
                             };
-                            let triples = extract_relation_triples(
+                            let triples = extract_relation_triples_simple(
                                 &oracle_entities,
                                 text,
-                                &registry,
+                                &rel_strs,
                                 &rel_cfg,
                             );
                             for t in &triples {

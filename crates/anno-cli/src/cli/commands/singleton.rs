@@ -148,7 +148,7 @@ fn analyze_singletons(entities: &[anno_core::Entity], text: &str) -> SingletonRe
             entity_type: entity_type.clone(),
             start: entity.start,
             end: entity.end,
-            confidence: entity.confidence as f32,
+            confidence: f32::from(entity.confidence),
             reason: reason.clone(),
         };
 

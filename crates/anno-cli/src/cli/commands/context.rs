@@ -190,7 +190,7 @@ fn build_context(
         entity_type: entity.entity_type.as_label().to_string(),
         start,
         end,
-        confidence: entity.confidence as f32,
+        confidence: f32::from(entity.confidence),
         left_context,
         right_context,
         sentence,

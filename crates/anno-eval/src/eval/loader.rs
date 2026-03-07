@@ -7514,7 +7514,7 @@ mod tests {
         assert!(matches!(map_entity_type("GPE"), EntityType::Custom { .. }));
 
         // MISC -> Custom or Other
-        assert!(matches!(map_entity_type("MISC"), EntityType::Custom { .. } | EntityType::Other(_)));
+        assert!(matches!(map_entity_type("MISC"), EntityType::Custom { .. }));
 
         // OntoNotes types -> Custom (preserves semantics)
         assert!(matches!(

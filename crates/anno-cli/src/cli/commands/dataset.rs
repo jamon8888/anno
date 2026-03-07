@@ -990,8 +990,8 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                                 && !doc.relations.is_empty()
                                             {
                                                 use anno::backends::inference::{
-                                                    extract_relation_triples,
-                                                    RelationExtractionConfig, SemanticRegistry,
+                                                    extract_relation_triples_simple,
+                                                    RelationExtractionConfig,
                                                 };
                                                 use anno::{Entity as PredEntity, EntityType};
                                                 use std::collections::BTreeMap;
@@ -1042,20 +1042,19 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                                 let oracle_entities: Vec<PredEntity> =
                                                     by_key.into_values().collect();
 
-                                                let mut builder = SemanticRegistry::builder();
-                                                for rt in &relation_types_vec {
-                                                    builder = builder.add_relation(rt, rt);
-                                                }
-                                                let registry = builder.build_placeholder(1);
+                                                let rel_strs: Vec<&str> = relation_types_vec
+                                                    .iter()
+                                                    .map(|s| s.as_str())
+                                                    .collect();
                                                 let rel_cfg = RelationExtractionConfig {
                                                     threshold: 0.5,
                                                     max_span_distance: 120,
                                                     extract_triggers: false,
                                                 };
-                                                let triples = extract_relation_triples(
+                                                let triples = extract_relation_triples_simple(
                                                     &oracle_entities,
                                                     text,
-                                                    &registry,
+                                                    &rel_strs,
                                                     &rel_cfg,
                                                 );
                                                 for t in &triples {

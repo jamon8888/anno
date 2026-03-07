@@ -8,15 +8,16 @@ use super::super::output::{color, log_info, print_annotated_signals, print_signa
 use super::super::parser::{ModelBackend, OutputFormat};
 use super::super::utils::get_input_text;
 use anno::heuristics::{detect_quantifier_en, is_negated_en};
+use anno::Language;
 
+#[cfg(feature = "eval")]
+use crate::cli::ingest::CompositeResolver;
 use anno::backends::inference::{
-    extract_relation_triples, RelationExtractionConfig, RelationExtractor, SemanticRegistry,
+    extract_relation_triples_simple, RelationExtractionConfig, RelationExtractor,
 };
 use anno::core::grounded::{
     GroundedDocument, Location, Modality, Quantifier, Signal, SignalId, SignalValidationError,
 };
-#[cfg(feature = "eval")]
-use crate::cli::ingest::CompositeResolver;
 use anno::ingest::DocumentPreprocessor;
 #[cfg(feature = "graph")]
 use lattix::{GraphDocument, GraphExportFormat};
@@ -185,10 +186,7 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
             chunk_size: None,
         };
         let prepared = preprocessor.prepare(&raw_text);
-        detected_language = prepared
-            .metadata
-            .get("detected_language")
-            .cloned();
+        detected_language = prepared.metadata.get("detected_language").cloned();
         raw_text = prepared.text;
         if args.verbose >= 1 && !prepared.metadata.is_empty() {
             log_info(
@@ -426,17 +424,13 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
     // If relations were requested but we didn't run a joint extractor, do heuristic relation
     // detection over the final entity list.
     if args.extract_relations && relation_triples.is_empty() {
-        let mut builder = SemanticRegistry::builder();
-        for r in &relation_types {
-            builder = builder.add_relation(r, r);
-        }
-        let registry = builder.build_placeholder(1);
+        let rel_strs: Vec<&str> = relation_types.iter().map(|s| s.as_str()).collect();
         let cfg = RelationExtractionConfig {
             threshold: relation_threshold,
             max_span_distance: args.relation_max_span_distance,
             extract_triggers: false,
         };
-        relation_triples = extract_relation_triples(&entities, &text, &registry, &cfg);
+        relation_triples = extract_relation_triples_simple(&entities, &text, &rel_strs, &cfg);
     }
 
     // Apply relation confidence threshold (best-effort; non-fatal).
@@ -556,7 +550,13 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
                 })
                 .collect();
 
-            let provenance = build_provenance(&text, args.model.name(), &entities_out, elapsed, detected_language.as_deref());
+            let provenance = build_provenance(
+                &text,
+                args.model.name(),
+                &entities_out,
+                elapsed,
+                detected_language.as_deref().and_then(Language::from_code),
+            );
             let output = serde_json::json!({
                 "provenance": provenance,
                 "entities": entities_out,
@@ -599,7 +599,13 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
                 })
                 .collect();
 
-            let provenance = build_provenance(&text, args.model.name(), &entities_out, elapsed, detected_language.as_deref());
+            let provenance = build_provenance(
+                &text,
+                args.model.name(),
+                &entities_out,
+                elapsed,
+                detected_language.as_deref().and_then(Language::from_code),
+            );
             println!("{}", serde_json::json!({ "provenance": provenance }));
             for obj in entities_out {
                 println!("{}", obj);
@@ -993,7 +999,7 @@ fn build_provenance(
     model: &str,
     entities: &[serde_json::Value],
     elapsed: std::time::Duration,
-    language: Option<&str>,
+    language: Option<Language>,
 ) -> serde_json::Value {
     // Result hash mirrors eval/property_tests.rs: sorted, order-independent, deterministic.
     #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
