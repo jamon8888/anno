@@ -79,7 +79,7 @@ impl TypeLabel {
     pub fn custom(label: impl Into<String>) -> Self {
         let s = label.into();
         match EntityType::from_label(&s) {
-            EntityType::Custom { .. } | EntityType::Other(_) => Self::Custom(s),
+            EntityType::Custom { .. } => Self::Custom(s),
             et => Self::Core(et),
         }
     }
@@ -158,7 +158,7 @@ impl From<&str> for TypeLabel {
         // `EntityType::from_str` is infallible (unknown labels become `Custom`), so
         // treat `Custom { .. }` as a custom label here to preserve the distinction.
         match EntityType::from_label(s) {
-            EntityType::Custom { .. } | EntityType::Other(_) => Self::Custom(s.to_string()),
+            EntityType::Custom { .. } => Self::Custom(s.to_string()),
             et => Self::Core(et),
         }
     }
@@ -168,7 +168,7 @@ impl From<String> for TypeLabel {
     fn from(s: String) -> Self {
         let et = EntityType::from_label(&s);
         match et {
-            EntityType::Custom { .. } | EntityType::Other(_) => Self::Custom(s),
+            EntityType::Custom { .. } => Self::Custom(s),
             _ => Self::Core(et),
         }
     }

@@ -71,6 +71,7 @@
 
 #[cfg(feature = "calibration")]
 pub mod calibration;
+pub mod confidence;
 pub mod coref;
 pub mod entity;
 pub mod error;
@@ -84,6 +85,7 @@ pub mod provisional;
 pub mod types;
 
 // Re-exports for convenience
+pub use confidence::Confidence;
 pub use entity::{
     generate_span_candidates, DiscontinuousSpan, Entity, EntityBuilder, EntityCategory, EntityType,
     EntityViewport, ExtractionMethod, HashMapLexicon, HierarchicalConfidence, Lexicon, Provenance,

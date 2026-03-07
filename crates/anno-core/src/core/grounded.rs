@@ -86,6 +86,7 @@
 //! - CDLKT: Cross-document Language-Knowledge Transfer
 //! - Groma: Grounded multimodal assistant
 
+use super::confidence::Confidence;
 use super::entity::{
     DiscontinuousSpan, Entity, EntityType, HierarchicalConfidence, Provenance, Span,
 };
@@ -859,7 +860,7 @@ impl From<&Entity> for Signal<Location> {
             Location::text(e.start, e.end),
             &e.text,
             e.entity_type.as_label(),
-            e.confidence as f32,
+            f32::from(e.confidence),
         );
         signal.normalized = e.normalized.clone();
         signal.provenance = e.provenance.clone();
@@ -1821,7 +1822,7 @@ impl GroundedDocument {
                     entity_type: EntityType::from_label(signal.label.as_str()),
                     start,
                     end,
-                    confidence: signal.confidence as f64,
+                    confidence: Confidence::from(signal.confidence),
                     normalized: signal.normalized.clone(),
                     provenance: signal.provenance.clone(),
                     kb_id: identity.and_then(|i| i.kb_id.clone()),
@@ -1918,7 +1919,7 @@ impl GroundedDocument {
                 location,
                 &entity.text,
                 entity.entity_type.as_label(),
-                entity.confidence as f32,
+                f32::from(entity.confidence),
             );
             signal.normalized = entity.normalized.clone();
             signal.provenance = entity.provenance.clone();

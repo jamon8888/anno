@@ -35,6 +35,7 @@
 //! 4. **Hierarchical confidence**: Coarse (linkage) + fine (type) scores
 //! 5. **Multi-modal ready**: Spans can be text offsets or visual bboxes
 
+use super::confidence::Confidence;
 use super::types::{MentionType, PhiFeatures};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -325,8 +326,8 @@ pub enum EntityType {
     ///
     /// **Deprecated**: use `EntityType::custom(name, category)` instead.
     /// Retained only for serde backward compatibility with existing data.
-    /// No code should construct this variant; all match arms should handle
-    /// both `Custom { .. }` and `Other(_)`.
+    /// Deserialization of `{"Other":"X"}` now routes to `Custom { name: "X", category: Misc }`.
+    #[deprecated(note = "use EntityType::custom(name, EntityCategory::Misc) instead")]
     Other(String),
 }
 
@@ -353,7 +354,8 @@ impl EntityType {
             EntityType::Email | EntityType::Url | EntityType::Phone => EntityCategory::Contact,
             // Custom with explicit category
             EntityType::Custom { category, .. } => *category,
-            // Legacy Other - assume misc
+            // Legacy Other -- kept for exhaustiveness (variant is #[deprecated])
+            #[allow(deprecated)]
             EntityType::Other(_) => EntityCategory::Misc,
         }
     }
@@ -395,6 +397,7 @@ impl EntityType {
             EntityType::Url => "URL",
             EntityType::Phone => "PHONE",
             EntityType::Custom { name, .. } => name.as_str(),
+            #[allow(deprecated)]
             EntityType::Other(s) => s.as_str(),
         }
     }
@@ -491,7 +494,7 @@ impl std::fmt::Display for EntityType {
 impl std::str::FromStr for EntityType {
     type Err = std::convert::Infallible;
 
-    /// Parse from standard label string. Never fails - unknown labels become `Other`.
+    /// Parse from standard label string. Never fails -- unknown labels become `Custom`.
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         Ok(Self::from_label(s))
     }
@@ -546,8 +549,9 @@ impl<'de> Deserialize<'de> for EntityType {
                         })
                     }
                     "Other" => {
+                        // Route legacy Other to Custom with Misc category
                         let val: String = map.next_value()?;
-                        Ok(EntityType::Other(val))
+                        Ok(EntityType::custom(val, EntityCategory::Misc))
                     }
                     // Unit variants serialized as {"Person":null} etc.
                     variant => {
@@ -988,7 +992,7 @@ pub trait Lexicon: Send + Sync {
     /// Lookup an exact string, returning entity type and confidence if found.
     ///
     /// Returns `None` if the text is not in the lexicon.
-    fn lookup(&self, text: &str) -> Option<(EntityType, f64)>;
+    fn lookup(&self, text: &str) -> Option<(EntityType, Confidence)>;
 
     /// Check if the lexicon contains this exact string.
     fn contains(&self, text: &str) -> bool {
@@ -1013,7 +1017,7 @@ pub trait Lexicon: Send + Sync {
 /// For larger lexicons, consider a trie-based or FST implementation.
 #[derive(Debug, Clone)]
 pub struct HashMapLexicon {
-    entries: std::collections::HashMap<String, (EntityType, f64)>,
+    entries: std::collections::HashMap<String, (EntityType, Confidence)>,
     source: String,
 }
 
@@ -1028,31 +1032,38 @@ impl HashMapLexicon {
     }
 
     /// Insert an entry into the lexicon.
-    pub fn insert(&mut self, text: impl Into<String>, entity_type: EntityType, confidence: f64) {
-        self.entries.insert(text.into(), (entity_type, confidence));
+    pub fn insert(
+        &mut self,
+        text: impl Into<String>,
+        entity_type: EntityType,
+        confidence: impl Into<Confidence>,
+    ) {
+        self.entries
+            .insert(text.into(), (entity_type, confidence.into()));
     }
 
     /// Create from an iterator of (text, type, confidence) tuples.
-    pub fn from_iter<I, S>(source: impl Into<String>, entries: I) -> Self
+    pub fn from_iter<I, S, C>(source: impl Into<String>, entries: I) -> Self
     where
-        I: IntoIterator<Item = (S, EntityType, f64)>,
+        I: IntoIterator<Item = (S, EntityType, C)>,
         S: Into<String>,
+        C: Into<Confidence>,
     {
         let mut lexicon = Self::new(source);
-        for (text, entity_type, confidence) in entries {
-            lexicon.insert(text, entity_type, confidence);
+        for (text, entity_type, conf) in entries {
+            lexicon.insert(text, entity_type, conf);
         }
         lexicon
     }
 
     /// Get all entries as an iterator (for debugging).
-    pub fn entries(&self) -> impl Iterator<Item = (&str, &EntityType, f64)> {
+    pub fn entries(&self) -> impl Iterator<Item = (&str, &EntityType, Confidence)> {
         self.entries.iter().map(|(k, (t, c))| (k.as_str(), t, *c))
     }
 }
 
 impl Lexicon for HashMapLexicon {
-    fn lookup(&self, text: &str) -> Option<(EntityType, f64)> {
+    fn lookup(&self, text: &str) -> Option<(EntityType, Confidence)> {
         self.entries.get(text).cloned()
     }
 
@@ -1078,7 +1089,7 @@ pub struct Provenance {
     /// Specific pattern/rule name (for pattern/rule-based extraction)
     pub pattern: Option<Cow<'static, str>>,
     /// Raw confidence from the source model (before any calibration)
-    pub raw_confidence: Option<f64>,
+    pub raw_confidence: Option<Confidence>,
     /// Model version for reproducibility (e.g., "gliner-v2.1", "bert-base-uncased-2024-01")
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_version: Option<Cow<'static, str>>,
@@ -1095,7 +1106,7 @@ impl Provenance {
             source: Cow::Borrowed("pattern"),
             method: ExtractionMethod::Pattern,
             pattern: Some(Cow::Borrowed(pattern_name)),
-            raw_confidence: Some(1.0), // Patterns are deterministic
+            raw_confidence: Some(Confidence::ONE), // Patterns are deterministic
             model_version: None,
             timestamp: None,
         }
@@ -1115,12 +1126,12 @@ impl Provenance {
     /// let p2 = Provenance::ml(model_name.to_string(), 0.95);
     /// ```
     #[must_use]
-    pub fn ml(model_name: impl Into<Cow<'static, str>>, confidence: f64) -> Self {
+    pub fn ml(model_name: impl Into<Cow<'static, str>>, confidence: impl Into<Confidence>) -> Self {
         Self {
             source: model_name.into(),
             method: ExtractionMethod::Neural,
             pattern: None,
-            raw_confidence: Some(confidence),
+            raw_confidence: Some(confidence.into()),
             model_version: None,
             timestamp: None,
         }
@@ -1132,7 +1143,7 @@ impl Provenance {
         note = "Use ml() instead, it now accepts owned strings"
     )]
     #[must_use]
-    pub fn ml_owned(model_name: impl Into<String>, confidence: f64) -> Self {
+    pub fn ml_owned(model_name: impl Into<String>, confidence: impl Into<Confidence>) -> Self {
         Self::ml(Cow::Owned(model_name.into()), confidence)
     }
 
@@ -1820,8 +1831,11 @@ pub struct Entity {
     /// For Unicode text, character offsets differ from byte offsets.
     /// Use `anno::offset::bytes_to_chars` to convert if needed.
     pub end: usize,
-    /// Confidence score (0.0-1.0, calibrated)
-    pub confidence: f64,
+    /// Confidence score (0.0-1.0, calibrated).
+    ///
+    /// Construction via [`Confidence::new`] clamps to `[0.0, 1.0]`.
+    /// Use `.value()` or `Into<f64>` to extract the raw score.
+    pub confidence: Confidence,
     /// Normalized/canonical form (e.g., "Jan 15" → "2024-01-15")
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub normalized: Option<String>,
@@ -1934,14 +1948,14 @@ impl Entity {
         entity_type: EntityType,
         start: usize,
         end: usize,
-        confidence: f64,
+        confidence: impl Into<Confidence>,
     ) -> Self {
         Self {
             text: text.into(),
             entity_type,
             start,
             end,
-            confidence: confidence.clamp(0.0, 1.0),
+            confidence: confidence.into(),
             normalized: None,
             provenance: None,
             kb_id: None,
@@ -1964,7 +1978,7 @@ impl Entity {
         entity_type: EntityType,
         start: usize,
         end: usize,
-        confidence: f64,
+        confidence: impl Into<Confidence>,
         provenance: Provenance,
     ) -> Self {
         Self {
@@ -1972,7 +1986,7 @@ impl Entity {
             entity_type,
             start,
             end,
-            confidence: confidence.clamp(0.0, 1.0),
+            confidence: confidence.into(),
             normalized: None,
             provenance: Some(provenance),
             kb_id: None,
@@ -2002,7 +2016,7 @@ impl Entity {
             entity_type,
             start,
             end,
-            confidence: confidence.as_f64(),
+            confidence: Confidence::new(confidence.as_f64()),
             normalized: None,
             provenance: None,
             kb_id: None,
@@ -2024,14 +2038,14 @@ impl Entity {
         text: impl Into<String>,
         entity_type: EntityType,
         bbox: Span,
-        confidence: f64,
+        confidence: impl Into<Confidence>,
     ) -> Self {
         Self {
             text: text.into(),
             entity_type,
             start: 0,
             end: 0,
-            confidence: confidence.clamp(0.0, 1.0),
+            confidence: confidence.into(),
             normalized: None,
             provenance: None,
             kb_id: None,
@@ -2239,7 +2253,7 @@ impl Entity {
 
     /// Set hierarchical confidence scores.
     pub fn set_hierarchical_confidence(&mut self, confidence: HierarchicalConfidence) {
-        self.confidence = confidence.as_f64();
+        self.confidence = Confidence::new(confidence.as_f64());
         self.hierarchical_confidence = Some(confidence);
     }
 
@@ -2247,21 +2261,21 @@ impl Entity {
     #[must_use]
     pub fn linkage_confidence(&self) -> f32 {
         self.hierarchical_confidence
-            .map_or(self.confidence as f32, |h| h.linkage)
+            .map_or(f32::from(self.confidence), |h| h.linkage)
     }
 
     /// Get the type classification confidence.
     #[must_use]
     pub fn type_confidence(&self) -> f32 {
         self.hierarchical_confidence
-            .map_or(self.confidence as f32, |h| h.type_score)
+            .map_or(f32::from(self.confidence), |h| h.type_score)
     }
 
     /// Get the boundary confidence.
     #[must_use]
     pub fn boundary_confidence(&self) -> f32 {
         self.hierarchical_confidence
-            .map_or(self.confidence as f32, |h| h.boundary)
+            .map_or(f32::from(self.confidence), |h| h.boundary)
     }
 
     /// Check if this entity has visual location (multi-modal).
@@ -2574,12 +2588,7 @@ impl Entity {
             }
         }
 
-        // 3. Confidence range
-        if !(0.0..=1.0).contains(&self.confidence) {
-            issues.push(ValidationIssue::InvalidConfidence {
-                value: self.confidence,
-            });
-        }
+        // 3. Confidence range (now enforced by the Confidence type, so this is a no-op)
 
         // 4. Type consistency
         if let EntityType::Custom { ref name, .. } = self.entity_type {
@@ -2752,7 +2761,7 @@ pub struct EntityBuilder {
     entity_type: EntityType,
     start: usize,
     end: usize,
-    confidence: f64,
+    confidence: Confidence,
     normalized: Option<String>,
     provenance: Option<Provenance>,
     kb_id: Option<String>,
@@ -2778,7 +2787,7 @@ impl EntityBuilder {
             entity_type,
             start: 0,
             end,
-            confidence: 1.0,
+            confidence: Confidence::ONE,
             normalized: None,
             provenance: None,
             kb_id: None,
@@ -2804,15 +2813,15 @@ impl EntityBuilder {
 
     /// Set confidence score.
     #[must_use]
-    pub fn confidence(mut self, confidence: f64) -> Self {
-        self.confidence = confidence.clamp(0.0, 1.0);
+    pub fn confidence(mut self, confidence: impl Into<Confidence>) -> Self {
+        self.confidence = confidence.into();
         self
     }
 
     /// Set hierarchical confidence.
     #[must_use]
     pub fn hierarchical_confidence(mut self, confidence: HierarchicalConfidence) -> Self {
-        self.confidence = confidence.as_f64();
+        self.confidence = Confidence::new(confidence.as_f64());
         self.hierarchical_confidence = Some(confidence);
         self
     }
@@ -2997,8 +3006,8 @@ pub struct Relation {
     /// Optional trigger span: the text that indicates this relation
     /// For "CEO of", this would be the span covering "CEO of"
     pub trigger_span: Option<(usize, usize)>,
-    /// Confidence score for this relation (0.0-1.0)
-    pub confidence: f64,
+    /// Confidence score for this relation (0.0-1.0).
+    pub confidence: Confidence,
 }
 
 impl Relation {
@@ -3008,14 +3017,14 @@ impl Relation {
         head: Entity,
         tail: Entity,
         relation_type: impl Into<String>,
-        confidence: f64,
+        confidence: impl Into<Confidence>,
     ) -> Self {
         Self {
             head,
             tail,
             relation_type: relation_type.into(),
             trigger_span: None,
-            confidence: confidence.clamp(0.0, 1.0),
+            confidence: confidence.into(),
         }
     }
 
@@ -3027,14 +3036,14 @@ impl Relation {
         relation_type: impl Into<String>,
         trigger_start: usize,
         trigger_end: usize,
-        confidence: f64,
+        confidence: impl Into<Confidence>,
     ) -> Self {
         Self {
             head,
             tail,
             relation_type: relation_type.into(),
             trigger_span: Some((trigger_start, trigger_end)),
-            confidence: confidence.clamp(0.0, 1.0),
+            confidence: confidence.into(),
         }
     }
 
@@ -3551,7 +3560,7 @@ mod tests {
         let prov = Provenance::pattern("EMAIL");
         assert_eq!(prov.method, ExtractionMethod::Pattern);
         assert_eq!(prov.pattern.as_deref(), Some("EMAIL"));
-        assert_eq!(prov.raw_confidence, Some(1.0)); // Patterns are deterministic
+        assert_eq!(prov.raw_confidence, Some(Confidence::new(1.0))); // Patterns are deterministic
     }
 
     #[test]
@@ -3559,7 +3568,7 @@ mod tests {
         let prov = Provenance::ml("bert-ner", 0.87);
         assert_eq!(prov.method, ExtractionMethod::Neural);
         assert_eq!(prov.source.as_ref(), "bert-ner");
-        assert_eq!(prov.raw_confidence, Some(0.87));
+        assert_eq!(prov.raw_confidence, Some(Confidence::new(0.87)));
     }
 
     #[test]
@@ -3585,7 +3594,7 @@ mod tests {
 
         assert_eq!(prov.method, ExtractionMethod::Neural);
         assert_eq!(prov.source.as_ref(), "modernbert-ner");
-        assert_eq!(prov.raw_confidence, Some(0.95));
+        assert_eq!(prov.raw_confidence, Some(Confidence::new(0.95)));
         assert_eq!(prov.model_version.as_deref(), Some("v1.0.0"));
         assert_eq!(prov.timestamp.as_deref(), Some("2024-11-27T12:00:00Z"));
     }
@@ -3625,8 +3634,8 @@ mod proptests {
             let et = EntityType::from_label(&label);
             let back = EntityType::from_label(et.as_label());
             // Custom types may round-trip to themselves or normalize
-            let is_custom_or_other = matches!(back, EntityType::Custom { .. } | EntityType::Other(_));
-            prop_assert!(is_custom_or_other || back == et);
+            let is_custom = matches!(back, EntityType::Custom { .. });
+            prop_assert!(is_custom || back == et);
         }
 
         #[test]
@@ -4149,12 +4158,6 @@ mod proptests {
     }
 
     #[test]
-    fn test_other_entity_type_serializes_flat() {
-        let other = EntityType::Other("foo".to_string());
-        assert_eq!(serde_json::to_string(&other).unwrap(), r#""foo""#);
-    }
-
-    #[test]
     fn test_entity_type_deserializes_from_flat_string() {
         let per: EntityType = serde_json::from_str(r#""PER""#).unwrap();
         assert_eq!(per, EntityType::Person);
@@ -4176,10 +4179,10 @@ mod proptests {
 
     #[test]
     fn test_entity_type_deserializes_backward_compat_other() {
-        // Old format: {"Other":"foo"}
+        // Old format: {"Other":"foo"} -- now routes to Custom with Misc category
         let json = r#"{"Other":"foo"}"#;
         let et: EntityType = serde_json::from_str(json).unwrap();
-        assert_eq!(et, EntityType::Other("foo".to_string()));
+        assert_eq!(et, EntityType::custom("foo", EntityCategory::Misc));
     }
 
     #[test]
@@ -4207,7 +4210,12 @@ mod proptests {
             let back: EntityType = serde_json::from_str(&json).unwrap();
             // All variants roundtrip through from_label, so Custom types
             // survive as Custom (not as a built-in variant).
-            assert_eq!(t.as_label(), back.as_label(), "roundtrip failed for {:?}", t);
+            assert_eq!(
+                t.as_label(),
+                back.as_label(),
+                "roundtrip failed for {:?}",
+                t
+            );
         }
     }
 }
