@@ -264,7 +264,7 @@ impl AttributionAnalyzer {
         EntityAttribution {
             entity_text,
             entity_type: entity_type.to_string(),
-            original_confidence: 0.85, // Placeholder
+            original_confidence: 0.85, // Default for heuristic attribution demo
             token_attributions: attributions,
             top_positive,
             top_negative,

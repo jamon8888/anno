@@ -31,13 +31,15 @@
 //! let results = evaluator.evaluate(&gold, &pred)?;
 //! ```
 
-use anno::{DiscontinuousEntity, Entity, Result};
+use anno::{DiscontinuousEntity, Entity, Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::coref_metrics::{b_cubed_score, ceaf_e_score, muc_score};
 use super::discontinuous::{
     evaluate_discontinuous_ner, DiscontinuousEvalConfig, DiscontinuousGold, DiscontinuousNERMetrics,
 };
+use super::ner_metrics::evaluate_entities;
 use super::relation::{
     evaluate_relations, RelationEvalConfig, RelationGold, RelationMetrics, RelationPrediction,
 };
@@ -305,15 +307,40 @@ impl TaskEvaluator for StandardNERTaskEvaluator {
 
     fn evaluate_generic(
         &self,
-        _gold: &dyn std::any::Any,
-        _pred: &dyn std::any::Any,
+        gold: &dyn std::any::Any,
+        pred: &dyn std::any::Any,
     ) -> Result<EvalResults> {
-        // Placeholder - actual implementation would use StandardNEREvaluator
+        let gold = gold
+            .downcast_ref::<Vec<Entity>>()
+            .ok_or_else(|| Error::InvalidInput("Expected Vec<Entity> for gold".into()))?;
+        let pred = pred
+            .downcast_ref::<Vec<Entity>>()
+            .ok_or_else(|| Error::InvalidInput("Expected Vec<Entity> for pred".into()))?;
+
+        let results = evaluate_entities(gold, pred);
+        let per_type = results
+            .by_type
+            .iter()
+            .map(|(label, counts)| {
+                (
+                    label.clone(),
+                    super::TypeMetrics {
+                        precision: counts.precision_exact(),
+                        recall: counts.recall_exact(),
+                        f1: counts.f1_exact(),
+                        found: counts.actual(),
+                        expected: counts.possible(),
+                        correct: counts.correct,
+                    },
+                )
+            })
+            .collect();
+
         Ok(EvalResults::NER {
-            precision: 0.0,
-            recall: 0.0,
-            f1: 0.0,
-            per_type: HashMap::new(),
+            precision: results.strict.precision_exact(),
+            recall: results.strict.recall_exact(),
+            f1: results.strict.f1_exact(),
+            per_type,
         })
     }
 }
@@ -429,15 +456,30 @@ impl TaskEvaluator for CorefTaskEvaluator {
 
     fn evaluate_generic(
         &self,
-        _gold: &dyn std::any::Any,
-        _pred: &dyn std::any::Any,
+        gold: &dyn std::any::Any,
+        pred: &dyn std::any::Any,
     ) -> Result<EvalResults> {
-        // Placeholder - use coref_metrics module
+        use super::coref::CorefChain;
+
+        let gold = gold
+            .downcast_ref::<Vec<CorefChain>>()
+            .ok_or_else(|| Error::InvalidInput("Expected Vec<CorefChain> for gold".into()))?;
+        let pred = pred
+            .downcast_ref::<Vec<CorefChain>>()
+            .ok_or_else(|| Error::InvalidInput("Expected Vec<CorefChain> for pred".into()))?;
+
+        let (muc_p, muc_r, muc_f) = muc_score(pred, gold);
+        let (b3_p, b3_r, b3_f) = b_cubed_score(pred, gold);
+        let (ceaf_p, ceaf_r, ceaf_f) = ceaf_e_score(pred, gold);
+        let _ = (muc_p, muc_r, b3_p, b3_r, ceaf_p, ceaf_r); // used only for F1
+
+        let conll_f1 = (muc_f + b3_f + ceaf_f) / 3.0;
+
         Ok(EvalResults::Coreference {
-            conll_f1: 0.0,
-            muc_f1: 0.0,
-            b3_f1: 0.0,
-            ceaf_f1: 0.0,
+            conll_f1,
+            muc_f1: muc_f,
+            b3_f1: b3_f,
+            ceaf_f1: ceaf_f,
         })
     }
 }
@@ -472,11 +514,9 @@ impl TaskEvaluator for EventTaskEvaluator {
         _gold: &dyn std::any::Any,
         _pred: &dyn std::any::Any,
     ) -> Result<EvalResults> {
-        // Placeholder - future implementation
-        Ok(EvalResults::Event {
-            trigger_f1: 0.0,
-            argument_f1: 0.0,
-        })
+        Err(Error::FeatureNotAvailable(
+            "Event extraction evaluation is not yet implemented".into(),
+        ))
     }
 }
 

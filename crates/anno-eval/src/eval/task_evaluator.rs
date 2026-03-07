@@ -33,7 +33,7 @@ type PerExampleScores = Vec<(Vec<anno_core::Entity>, Vec<anno_core::Entity>, Str
 // Constants for evaluation
 /// 95% confidence interval z-score (normal distribution)
 const DEFAULT_Z_SCORE_95: f64 = 1.96;
-/// Placeholder standard deviation when actual variance cannot be computed.
+/// Fallback standard deviation when actual variance cannot be computed.
 ///
 /// This value (0.05, or 5%) is used as a conservative estimate when we cannot compute
 /// actual variance from per-example scores. It represents a typical standard deviation
@@ -41,7 +41,7 @@ const DEFAULT_Z_SCORE_95: f64 = 1.96;
 ///
 /// Note: This is a fallback - prefer computing actual variance from per-example scores
 /// when available via `compute_confidence_intervals_from_scores()`.
-const DEFAULT_PLACEHOLDER_STD_DEV: f64 = 0.05;
+const DEFAULT_FALLBACK_STD_DEV: f64 = 0.05;
 /// Maximum sample size for confidence interval computation (to avoid expensive recomputation)
 const MAX_CI_SAMPLE_SIZE: usize = 100;
 /// Minimum sample size for confidence interval computation
@@ -230,7 +230,7 @@ pub struct TaskEvalResult {
     #[cfg(not(feature = "eval"))]
     /// Robustness testing results (only available with `eval` feature).
     #[cfg(not(feature = "eval"))]
-    pub robustness: Option<()>, // Placeholder when feature not enabled
+    pub robustness: Option<()>, // Stub when `eval` feature not enabled
     /// Stratified metrics by various dimensions
     pub stratified: Option<StratifiedMetrics>,
     /// Confidence intervals for key metrics (if computed)
@@ -1988,7 +1988,7 @@ impl TaskEvaluator {
                 }
             }
         } else {
-            // Not a coreference dataset - return placeholder
+            // Not a coreference dataset - return error metrics
             let mut metrics = HashMap::new();
             metrics.insert(
                 "num_sentences".to_string(),
@@ -2130,7 +2130,9 @@ impl TaskEvaluator {
                                     crate::EntityType::custom(t, crate::EntityCategory::Misc)
                                 }
                             })
-                            .unwrap_or_else(|| crate::EntityType::custom("mention", crate::EntityCategory::Misc));
+                            .unwrap_or_else(|| {
+                                crate::EntityType::custom("mention", crate::EntityCategory::Misc)
+                            });
 
                         gold_entities.push(crate::Entity::new(&m.text, et, m.start, m.end, 1.0));
                     }
@@ -2348,7 +2350,10 @@ impl TaskEvaluator {
                                     anno::EntityType::custom(t, anno::EntityCategory::Misc)
                                 }
                             })
-                            .unwrap_or(anno::EntityType::custom("mention", anno::EntityCategory::Misc));
+                            .unwrap_or(anno::EntityType::custom(
+                                "mention",
+                                anno::EntityCategory::Misc,
+                            ));
 
                         let entity_idx = entities.len();
                         entities.push(anno::Entity::new(
@@ -2377,10 +2382,7 @@ impl TaskEvaluator {
                 if mentions.len() < 2 {
                     continue; // Skip singletons for cross-doc
                 }
-                let mut cluster = CrossDocCluster::new(
-                    topic.gold_clusters.len() as u64,
-                    "",
-                );
+                let mut cluster = CrossDocCluster::new(topic.gold_clusters.len() as u64, "");
                 cluster.mentions = mentions.clone();
                 topic.add_gold_cluster(cluster);
             }
@@ -2533,10 +2535,12 @@ impl TaskEvaluator {
             }
             "tplinker" | "tplink" => {
                 use anno::backends::tplinker::TPLinker;
-                // TPLinker::new() returns Result, but for placeholder it always succeeds
                 match TPLinker::new() {
                     Ok(extractor) => Some(Box::new(extractor) as Box<dyn RelationExtractor>),
-                    Err(_) => None, // Should not happen for placeholder
+                    Err(e) => {
+                        eprintln!("Warning: Failed to create TPLinker: {e}");
+                        None
+                    }
                 }
             }
             _ => None,
@@ -2550,10 +2554,10 @@ impl TaskEvaluator {
                 v == "1" || v == "true" || v == "yes" || v == "y"
             })
             .unwrap_or(true);
-        // TPLinker is currently a placeholder that uses heuristic entities/relations.
-        // For relation datasets like DocRED/CHisIEC that provide gold entity spans/types,
-        // allow an optional “oracle entities” mode for TPLinker so the baseline is not
-        // dominated by mention detection mismatch.
+        // TPLinker uses ONNX neural inference when the `onnx` feature is enabled,
+        // with a heuristic fallback otherwise. For relation datasets like DocRED/CHisIEC
+        // that provide gold entity spans/types, allow an optional “oracle entities” mode
+        // so the eval is not dominated by mention detection mismatch.
         let tplinker_oracle_entities = std::env::var("ANNO_RELATION_TPLINKER_ORACLE_ENTITIES")
             .ok()
             .map(|v| {
@@ -2794,7 +2798,7 @@ impl TaskEvaluator {
                     }
                 }
             } else {
-                // Fallback: Extract entities and create placeholder relations
+                // Fallback: Extract entities and create proximity-based heuristic relations
                 let entities = match backend.extract_entities(text, None) {
                     Ok(ents) => ents,
                     Err(e) => {
@@ -2803,7 +2807,7 @@ impl TaskEvaluator {
                     }
                 };
 
-                // Create placeholder relations for nearby entity pairs
+                // Create proximity-based relations for nearby entity pairs
                 if entities.len() >= 2 {
                     for i in 0..entities.len() {
                         for j in (i + 1)..entities.len().min(i + 3) {
@@ -2815,7 +2819,7 @@ impl TaskEvaluator {
                                 head_type: head.entity_type.as_label().to_string(),
                                 tail_span: (tail.start, tail.end),
                                 tail_type: tail.entity_type.as_label().to_string(),
-                                relation_type: "RELATED".to_string(), // Placeholder
+                                relation_type: "RELATED".to_string(), // Proximity heuristic
                                 confidence: 0.5,
                             });
                         }
@@ -3689,32 +3693,21 @@ impl TaskEvaluator {
         ))
     }
 
-    /// Compute confidence intervals for key metrics.
-    ///
-    /// Uses normal approximation: CI = mean ± 1.96 * std_dev / sqrt(n)
-    ///
-    /// Note: This is a simplified version. For proper CI computation, we'd need
-    /// per-example scores to compute variance. This placeholder uses a fixed std_dev.
     /// Compute confidence intervals from aggregate metrics (fallback method).
     ///
-    /// This is a simplified version that uses aggregate metrics with placeholder
-    /// standard deviation. Prefer `compute_confidence_intervals_from_scores` when
-    /// per-example scores are available.
+    /// Uses normal approximation: CI = mean +/- 1.96 * std_dev.
+    /// Uses a fixed fallback std_dev since per-example variance is not available.
+    /// Prefer `compute_confidence_intervals_from_scores` when per-example scores
+    /// are available.
     fn compute_confidence_intervals_from_aggregate(
         &self,
         metrics: &HashMap<String, f64>,
     ) -> Option<ConfidenceIntervals> {
-        // For now, we compute CI from the metrics themselves
-        // In a full implementation, we'd need per-example scores to compute proper CIs
-        // This is a placeholder that uses the metric values as if they were means
-
         let f1 = metrics.get("f1")?;
         let precision = metrics.get("precision")?;
         let recall = metrics.get("recall")?;
 
-        // Placeholder: assume std_dev = DEFAULT_PLACEHOLDER_STD_DEV (would need actual variance computation)
-        // In practice, this should be computed from per-example scores
-        let std_dev = DEFAULT_PLACEHOLDER_STD_DEV;
+        let std_dev = DEFAULT_FALLBACK_STD_DEV;
         let z = DEFAULT_Z_SCORE_95; // 95% CI
         let margin = z * std_dev;
 
@@ -3752,7 +3745,7 @@ impl TaskEvaluator {
     ///
     /// This is the primary method for computing confidence intervals.
     /// For NER tasks, it samples sentences and re-runs inference to get per-example scores.
-    /// For other tasks, it falls back to aggregate metrics with placeholder variance.
+    /// For other tasks, it falls back to aggregate metrics with a fixed fallback std_dev.
     fn compute_confidence_intervals(
         &self,
         dataset_data: &LoadedDataset,
@@ -4359,7 +4352,7 @@ impl TaskEvaluator {
         for (type_str, count) in type_counts {
             // Fallback: all types get aggregate F1 (proper per-type metrics need per-example data)
             let mean = aggregate_f1;
-            let std_dev = DEFAULT_PLACEHOLDER_STD_DEV;
+            let std_dev = DEFAULT_FALLBACK_STD_DEV;
             let z = DEFAULT_Z_SCORE_95;
             let margin = z * std_dev;
             by_entity_type.insert(

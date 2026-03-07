@@ -147,23 +147,50 @@ impl MentionCategory {
     pub fn from_text(text: &str) -> Self {
         let lower = text.to_lowercase();
         let words: Vec<&str> = lower.split_whitespace().collect();
-        
+
         if words.is_empty() {
             return Self::All;
         }
 
         // Check for pronouns first
         const PRONOUNS: &[&str] = &[
-            "i", "me", "my", "mine", "myself",
-            "you", "your", "yours", "yourself",
-            "he", "him", "his", "himself",
-            "she", "her", "hers", "herself",
-            "it", "its", "itself",
-            "we", "us", "our", "ours", "ourselves",
-            "they", "them", "their", "theirs", "themselves",
-            "who", "whom", "whose", "which", "that",
+            "i",
+            "me",
+            "my",
+            "mine",
+            "myself",
+            "you",
+            "your",
+            "yours",
+            "yourself",
+            "he",
+            "him",
+            "his",
+            "himself",
+            "she",
+            "her",
+            "hers",
+            "herself",
+            "it",
+            "its",
+            "itself",
+            "we",
+            "us",
+            "our",
+            "ours",
+            "ourselves",
+            "they",
+            "them",
+            "their",
+            "theirs",
+            "themselves",
+            "who",
+            "whom",
+            "whose",
+            "which",
+            "that",
         ];
-        
+
         if words.len() == 1 && PRONOUNS.contains(&words[0]) {
             return Self::Pronoun;
         }
@@ -176,10 +203,10 @@ impl MentionCategory {
 
         // Check for nominal phrases (determiners)
         const DETERMINERS: &[&str] = &[
-            "the", "a", "an", "this", "that", "these", "those",
-            "my", "your", "his", "her", "its", "our", "their",
+            "the", "a", "an", "this", "that", "these", "those", "my", "your", "his", "her", "its",
+            "our", "their",
         ];
-        
+
         if DETERMINERS.contains(&words[0]) {
             return Self::Nominal;
         }
@@ -313,7 +340,10 @@ impl MaverickCpu {
         let clusters = if self.config.include_singletons {
             clusters
         } else {
-            clusters.into_iter().filter(|c| c.mentions.len() > 1).collect()
+            clusters
+                .into_iter()
+                .filter(|c| c.mentions.len() > 1)
+                .collect()
         };
 
         Ok(clusters)
@@ -348,9 +378,11 @@ impl MaverickCpu {
         };
 
         // Extract proper nouns (capitalized words)
-        for (i, (word, word_start_byte, _word_end_byte, char_start, char_end)) in words.iter().enumerate() {
+        for (i, (word, word_start_byte, _word_end_byte, char_start, char_end)) in
+            words.iter().enumerate()
+        {
             let first_char = word.chars().next().unwrap_or(' ');
-            
+
             // Skip sentence starters (first word after period)
             let is_sentence_start = i == 0 || {
                 let prev_end_byte = if i > 0 { words[i - 1].2 } else { 0 };
@@ -429,7 +461,9 @@ impl MaverickCpu {
                     if mentions[j].category == MentionCategory::Proper {
                         let other_lower = mentions[j].text.to_lowercase();
                         // Check if one contains the other (e.g., "Elizabeth" in "Miss Elizabeth")
-                        if mention_lower.contains(&other_lower) || other_lower.contains(&mention_lower) {
+                        if mention_lower.contains(&other_lower)
+                            || other_lower.contains(&mention_lower)
+                        {
                             if let Some(cluster_id) = mention_to_cluster[j] {
                                 mention_to_cluster[i] = Some(cluster_id);
                                 clusters[cluster_id].mentions.push(mention.clone());
@@ -528,32 +562,47 @@ impl MaverickCpu {
     /// - Names ending in "-a" often feminine (Maria, Anna) in many cultures
     fn infer_gender(&self, name: &str) -> Option<&'static str> {
         let lower = name.to_lowercase();
-        
+
         // Check titles
         if lower.starts_with("mr.") || lower.starts_with("mr ") {
             return Some("masculine");
         }
-        if lower.starts_with("mrs.") || lower.starts_with("mrs ") 
-            || lower.starts_with("miss ") || lower.starts_with("ms.") {
+        if lower.starts_with("mrs.")
+            || lower.starts_with("mrs ")
+            || lower.starts_with("miss ")
+            || lower.starts_with("ms.")
+        {
             return Some("feminine");
         }
-        
+
         // English names only -- titles like "Mr."/"Mrs." are English conventions.
         // For multilingual name-gender inference, use language-specific gazetteers.
-        let masculine_names = ["john", "james", "william", "henry", "charles",
-            "george", "edward", "thomas", "david", "michael", "robert"];
+        let masculine_names = [
+            "john", "james", "william", "henry", "charles", "george", "edward", "thomas", "david",
+            "michael", "robert",
+        ];
         let first_word: &str = lower.split_whitespace().next().unwrap_or("");
         if masculine_names.contains(&first_word) {
             return Some("masculine");
         }
-        
-        // Check common feminine names (English)  
-        let feminine_names = ["mary", "elizabeth", "jane", "anne", "sarah",
-            "catherine", "charlotte", "emily", "emma", "caroline"];
+
+        // Check common feminine names (English)
+        let feminine_names = [
+            "mary",
+            "elizabeth",
+            "jane",
+            "anne",
+            "sarah",
+            "catherine",
+            "charlotte",
+            "emily",
+            "emma",
+            "caroline",
+        ];
         if feminine_names.contains(&first_word) {
             return Some("feminine");
         }
-        
+
         // Can't determine
         None
     }
@@ -596,23 +645,23 @@ mod candle_impl {
     /// ] * category_mask_k(i,j)
     pub struct MultiExpertScorer {
         config: MaverickConfig,
-        
+
         // Start/end MLPs for each category
         start_mlps: Vec<Linear>,
         end_mlps: Vec<Linear>,
-        
+
         // Bilinear weights: [num_cats, hidden_dim, hidden_dim]
         s2s_weights: Tensor,
         e2e_weights: Tensor,
         s2e_weights: Tensor,
         e2s_weights: Tensor,
-        
+
         // Biases: [num_cats, hidden_dim]
         s2s_biases: Tensor,
         e2e_biases: Tensor,
         s2e_biases: Tensor,
         e2s_biases: Tensor,
-        
+
         device: Device,
     }
 
@@ -627,20 +676,16 @@ mod candle_impl {
             // Start MLPs
             let mut start_mlps = Vec::new();
             let mut end_mlps = Vec::new();
-            
+
             for i in 0..num_cats {
-                let start_mlp = candle_nn::linear(
-                    hidden,
-                    hidden,
-                    vb.pp(format!("coref_start_mlp_{}", i)),
-                ).map_err(|e| Error::Parse(format!("Start MLP {}: {}", i, e)))?;
-                
-                let end_mlp = candle_nn::linear(
-                    hidden,
-                    hidden,
-                    vb.pp(format!("coref_end_mlp_{}", i)),
-                ).map_err(|e| Error::Parse(format!("End MLP {}: {}", i, e)))?;
-                
+                let start_mlp =
+                    candle_nn::linear(hidden, hidden, vb.pp(format!("coref_start_mlp_{}", i)))
+                        .map_err(|e| Error::Parse(format!("Start MLP {}: {}", i, e)))?;
+
+                let end_mlp =
+                    candle_nn::linear(hidden, hidden, vb.pp(format!("coref_end_mlp_{}", i)))
+                        .map_err(|e| Error::Parse(format!("End MLP {}: {}", i, e)))?;
+
                 start_mlps.push(start_mlp);
                 end_mlps.push(end_mlp);
             }
@@ -700,7 +745,8 @@ mod candle_impl {
         /// # Returns
         /// * Scores: [batch, num_cats, num_mentions, num_mentions]
         pub fn forward(&self, start_states: &Tensor, end_states: &Tensor) -> Result<Tensor> {
-            let (batch_size, num_mentions, hidden_dim) = start_states.dims3()
+            let (batch_size, num_mentions, hidden_dim) = start_states
+                .dims3()
                 .map_err(|e| Error::Parse(format!("dims: {}", e)))?;
 
             // Project through category-specific MLPs
@@ -709,9 +755,11 @@ mod candle_impl {
             let mut all_ends = Vec::new();
 
             for (start_mlp, end_mlp) in self.start_mlps.iter().zip(self.end_mlps.iter()) {
-                let s = start_mlp.forward(start_states)
+                let s = start_mlp
+                    .forward(start_states)
                     .map_err(|e| Error::Parse(format!("start mlp: {}", e)))?;
-                let e = end_mlp.forward(end_states)
+                let e = end_mlp
+                    .forward(end_states)
                     .map_err(|e| Error::Parse(format!("end mlp: {}", e)))?;
                 all_starts.push(s);
                 all_ends.push(e);
@@ -728,7 +776,7 @@ mod candle_impl {
             // logits = s W s^T + e W e^T + s W e^T + e W s^T + biases
 
             // Simplified: compute per-category scores and sum
-            // This is a placeholder - full einsum implementation needed for accuracy
+            // Simplified: dot product scoring (full bilinear with learned weights not yet wired)
             let scores = self.compute_bilinear_scores(&all_starts, &all_ends)?;
 
             Ok(scores)
@@ -736,20 +784,24 @@ mod candle_impl {
 
         /// Compute bilinear scores.
         fn compute_bilinear_scores(&self, starts: &Tensor, ends: &Tensor) -> Result<Tensor> {
-            let (batch_size, num_cats, num_mentions, hidden_dim) = starts.dims4()
+            let (batch_size, num_cats, num_mentions, hidden_dim) = starts
+                .dims4()
                 .map_err(|e| Error::Parse(format!("dims4: {}", e)))?;
 
             // Simplified scoring: dot product between mentions
             // Full implementation would use the bilinear weights
-            let starts_flat = starts.reshape((batch_size * num_cats, num_mentions, hidden_dim))
+            let starts_flat = starts
+                .reshape((batch_size * num_cats, num_mentions, hidden_dim))
                 .map_err(|e| Error::Parse(format!("reshape starts: {}", e)))?;
-            
-            let ends_t = ends.transpose(2, 3)
+
+            let ends_t = ends
+                .transpose(2, 3)
                 .map_err(|e| Error::Parse(format!("transpose ends: {}", e)))?
                 .reshape((batch_size * num_cats, hidden_dim, num_mentions))
                 .map_err(|e| Error::Parse(format!("reshape ends_t: {}", e)))?;
 
-            let scores = starts_flat.matmul(&ends_t)
+            let scores = starts_flat
+                .matmul(&ends_t)
                 .map_err(|e| Error::Parse(format!("matmul: {}", e)))?
                 .reshape((batch_size, num_cats, num_mentions, num_mentions))
                 .map_err(|e| Error::Parse(format!("reshape scores: {}", e)))?;
@@ -774,14 +826,14 @@ mod candle_impl {
             device: Device,
         ) -> Result<Self> {
             use candle_core::safetensors::load;
-            
+
             let tensors = load(weights_path, &device)
                 .map_err(|e| Error::Parse(format!("Load safetensors: {}", e)))?;
-            
+
             let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
-            
+
             let scorer = MultiExpertScorer::load(vb, &config)?;
-            
+
             Ok(Self {
                 config,
                 scorer,
@@ -797,10 +849,9 @@ mod candle_impl {
             // 3. Extract mentions with start/end classifiers
             // 4. Score antecedents with MultiExpertScorer
             // 5. Cluster via transitivity
-            
-            // For now, return placeholder
+
             Err(Error::FeatureNotAvailable(
-                "Full MaverickCandle inference requires DeBERTa encoder integration".into()
+                "MaverickCandle inference requires DeBERTa encoder integration".into(),
             ))
         }
     }
@@ -822,8 +873,14 @@ mod tests {
         assert_eq!(MentionCategory::from_text("he"), MentionCategory::Pronoun);
         assert_eq!(MentionCategory::from_text("she"), MentionCategory::Pronoun);
         assert_eq!(MentionCategory::from_text("John"), MentionCategory::Proper);
-        assert_eq!(MentionCategory::from_text("the dog"), MentionCategory::Nominal);
-        assert_eq!(MentionCategory::from_text("a company"), MentionCategory::Nominal);
+        assert_eq!(
+            MentionCategory::from_text("the dog"),
+            MentionCategory::Nominal
+        );
+        assert_eq!(
+            MentionCategory::from_text("a company"),
+            MentionCategory::Nominal
+        );
     }
 
     #[test]
@@ -849,16 +906,19 @@ mod tests {
 
         // Should find separate clusters for John/he and Mary/she
         // At minimum, should not incorrectly link "he" to Mary
-        let john_cluster = clusters.iter().find(|c| 
-            c.mentions.iter().any(|m| m.text == "John")
-        );
-        let mary_cluster = clusters.iter().find(|c| 
-            c.mentions.iter().any(|m| m.text == "Mary")
-        );
+        let john_cluster = clusters
+            .iter()
+            .find(|c| c.mentions.iter().any(|m| m.text == "John"));
+        let mary_cluster = clusters
+            .iter()
+            .find(|c| c.mentions.iter().any(|m| m.text == "Mary"));
 
         // John and Mary should be in different clusters
         if let (Some(jc), Some(mc)) = (john_cluster, mary_cluster) {
-            assert_ne!(jc.id, mc.id, "John and Mary should be in different clusters");
+            assert_ne!(
+                jc.id, mc.id,
+                "John and Mary should be in different clusters"
+            );
         }
     }
 
@@ -872,11 +932,13 @@ mod tests {
         let clusters = maverick.resolve(text).unwrap();
 
         // Should separate masculine and feminine clusters
-        let he_mentions: Vec<_> = clusters.iter()
+        let he_mentions: Vec<_> = clusters
+            .iter()
             .flat_map(|c| &c.mentions)
             .filter(|m| m.text.to_lowercase() == "he")
             .collect();
-        let she_mentions: Vec<_> = clusters.iter()
+        let she_mentions: Vec<_> = clusters
+            .iter()
             .flat_map(|c| &c.mentions)
             .filter(|m| m.text.to_lowercase() == "she")
             .collect();
@@ -942,4 +1004,3 @@ mod tests {
         assert_eq!(chain.cluster_id, Some(0));
     }
 }
-

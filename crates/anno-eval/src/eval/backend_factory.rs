@@ -263,7 +263,7 @@ impl BackendFactory {
                 "GLiNER2Candle requires both 'candle' and 'onnx' features".to_string(),
             )),
 
-            // TPLinker (always available - placeholder implementation)
+            // TPLinker (ONNX neural with `onnx` feature, heuristic fallback otherwise)
             "tplinker" | "tplink" => {
                 use anno::backends::tplinker::TPLinker;
                 Ok(Box::new(TPLinker::new()?) as Box<dyn Model>)
@@ -341,7 +341,7 @@ impl BackendFactory {
                 "ALBERT NER requires 'onnx' feature".to_string(),
             )),
 
-            // UniversalNER (placeholder - LLM integration pending)
+            // UniversalNER (LLM-backed zero-shot, requires `llm` feature + API key)
             "universal_ner" | "universal-ner" | "universalner" => {
                 use anno::backends::universal_ner::UniversalNER;
                 let m = UniversalNER::new()?;
