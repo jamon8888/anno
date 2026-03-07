@@ -1241,7 +1241,7 @@ pub fn extract_relation_triples_simple(
                 confidence *= distance_penalty;
 
                 // Incorporate entity confidence.
-                confidence *= (head.confidence + tail.confidence) as f64 / 2.0;
+                confidence *= (head.confidence + tail.confidence) / 2.0;
 
                 if confidence < config.threshold as f64 {
                     continue;

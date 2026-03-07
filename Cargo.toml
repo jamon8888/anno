@@ -125,7 +125,7 @@ authors = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
 documentation = { workspace = true }
-description = "Information extraction for Rust: Named Entity Recognition (NER), coreference resolution, and structured extraction"
+description = "Information extraction in Rust: NER, coreference resolution, entity linking, event extraction, and zero-shot entity types"
 readme = "README.md"
 keywords = ["ner", "nlp", "extraction", "coreference", "rust"]
 categories = ["text-processing"]
@@ -137,6 +137,9 @@ include = [
     "/LICENSE-*",
     "/README.md",
 ]
+
+[lib]
+doc = false
 
 [dependencies]
 anno-lib = { path = "crates/anno", package = "anno-lib", version = "0.3.6", default-features = false }

@@ -317,7 +317,7 @@ impl GLiREL {
                 if head_idx == tail_idx {
                     continue;
                 }
-                for rel_idx in 0..num_relations {
+                for (rel_idx, rel_type) in relation_types.iter().enumerate() {
                     let flat_idx = head_idx * stride_head + tail_idx * num_relations + rel_idx;
                     let raw_score = scores_data[flat_idx];
                     let confidence = sigmoid(raw_score);
@@ -325,7 +325,7 @@ impl GLiREL {
                         relations.push(RelationTriple {
                             head_idx,
                             tail_idx,
-                            relation_type: relation_types[rel_idx].to_string(),
+                            relation_type: rel_type.to_string(),
                             confidence,
                         });
                     }

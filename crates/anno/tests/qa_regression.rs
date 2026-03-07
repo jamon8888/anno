@@ -226,12 +226,8 @@ fn qa_w5_wikipedia_nav_stripped() {
 fn qa_w6_looks_like_html_detection() {
     use deformat::detect::is_html;
 
-    assert!(is_html(
-        "<!DOCTYPE html><html><body>text</body></html>"
-    ));
-    assert!(is_html(
-        "<html><head></head><body>text</body></html>"
-    ));
+    assert!(is_html("<!DOCTYPE html><html><body>text</body></html>"));
+    assert!(is_html("<html><head></head><body>text</body></html>"));
     assert!(is_html("  \n<!DOCTYPE html>\n<html>"));
     assert!(is_html("<?xml version=\"1.0\"?><html>"));
 
@@ -582,11 +578,11 @@ fn qa_skip_words_not_entities() {
 
     // CEO and President should be skip words, not standalone entities
     assert!(
-        !all_texts.iter().any(|t| *t == "CEO"),
+        !all_texts.contains(&"CEO"),
         "CEO alone should be skip word: {all_texts:?}"
     );
     assert!(
-        !all_texts.iter().any(|t| *t == "President"),
+        !all_texts.contains(&"President"),
         "President alone should be skip word: {all_texts:?}"
     );
 }
@@ -667,7 +663,8 @@ fn qa_strip_html_preserves_whitespace_between_blocks() {
 fn qa_n9_html_title_not_in_body_text() {
     use deformat::html::strip_to_text;
 
-    let html = "<html><head><title>Page Title</title></head><body><p>Tim Cook is CEO.</p></body></html>";
+    let html =
+        "<html><head><title>Page Title</title></head><body><p>Tim Cook is CEO.</p></body></html>";
     let text = strip_to_text(html);
     assert!(
         !text.contains("Page Title"),
@@ -693,10 +690,7 @@ fn qa_n9_html_head_metadata_stripped() {
     </html>"#;
     let text = strip_to_text(html);
     assert!(!text.contains("My Page"), "title stripped: {text}");
-    assert!(
-        text.contains("Angela Merkel"),
-        "body preserved: {text}"
-    );
+    assert!(text.contains("Angela Merkel"), "body preserved: {text}");
 }
 
 // =============================================================================
@@ -713,7 +707,11 @@ fn qa_quantifier_approximately() {
     let text = "Approximately 500 employees at Google received options.";
     // entity "Google" starts at char 31
     let q = detect_quantifier_en(text, 31);
-    assert_eq!(q, Some(Quantifier::Approximate), "approximately should trigger Approximate");
+    assert_eq!(
+        q,
+        Some(Quantifier::Approximate),
+        "approximately should trigger Approximate"
+    );
 }
 
 #[test]
@@ -724,7 +722,11 @@ fn qa_quantifier_at_least() {
     let text = "At least three companies bid.";
     // entity "companies" starts at char 20 (approximate)
     let q = detect_quantifier_en(text, 20);
-    assert_eq!(q, Some(Quantifier::Approximate), "at least should trigger Approximate");
+    assert_eq!(
+        q,
+        Some(Quantifier::Approximate),
+        "at least should trigger Approximate"
+    );
 }
 
 #[test]
@@ -735,7 +737,11 @@ fn qa_quantifier_about() {
     let text = "About 2.5 million users signed up.";
     // entity "users" starts at char 22
     let q = detect_quantifier_en(text, 22);
-    assert_eq!(q, Some(Quantifier::Approximate), "about should trigger Approximate");
+    assert_eq!(
+        q,
+        Some(Quantifier::Approximate),
+        "about should trigger Approximate"
+    );
 }
 
 #[test]
@@ -745,7 +751,11 @@ fn qa_quantifier_definite_still_works() {
 
     let text = "The patient has no history.";
     let q = detect_quantifier_en(text, 4);
-    assert_eq!(q, Some(Quantifier::Definite), "the should still trigger Definite");
+    assert_eq!(
+        q,
+        Some(Quantifier::Definite),
+        "the should still trigger Definite"
+    );
 }
 
 #[test]
@@ -757,8 +767,11 @@ fn qa_quantifier_no_false_positive_far_away() {
     let text = "Approximately 50 students from MIT attended the conference in Boston.";
     // "Boston" starts at char 62
     let q = detect_quantifier_en(text, 62);
-    assert_ne!(q, Some(Quantifier::Approximate),
-        "approximately too far from Boston to trigger");
+    assert_ne!(
+        q,
+        Some(Quantifier::Approximate),
+        "approximately too far from Boston to trigger"
+    );
 }
 
 // =============================================================================
@@ -778,10 +791,7 @@ mod onnx_name_completion {
         // words into PER entities.
         let ner = StackedNER::default();
         let entities = ner
-            .extract_entities(
-                "Jennifer Doudna won the Nobel Prize in Chemistry.",
-                None,
-            )
+            .extract_entities("Jennifer Doudna won the Nobel Prize in Chemistry.", None)
             .expect("extraction");
 
         let per_texts: Vec<&str> = entities
@@ -792,7 +802,7 @@ mod onnx_name_completion {
 
         // Should find "Jennifer Doudna" as one entity, not just "Jennifer"
         let has_full_name = per_texts.iter().any(|t| t.contains("Doudna"));
-        let has_first_only = per_texts.iter().any(|t| *t == "Jennifer");
+        let has_first_only = per_texts.contains(&"Jennifer");
         assert!(
             has_full_name && !has_first_only,
             "Should find 'Jennifer Doudna' not just 'Jennifer': {per_texts:?}"
