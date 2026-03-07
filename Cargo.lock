@@ -912,13 +912,11 @@ dependencies = [
 
 [[package]]
 name = "deformat"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "dom_smoothie",
- "html2text",
- "once_cell",
+ "memchr",
  "pdf-extract",
- "regex",
 ]
 
 [[package]]
@@ -1066,11 +1064,11 @@ dependencies = [
  "bit-set",
  "cssparser",
  "foldhash 0.2.0",
- "html5ever 0.36.1",
+ "html5ever",
  "nom 8.0.0",
  "precomputed-hash",
  "selectors",
- "tendril 0.4.3",
+ "tendril",
 ]
 
 [[package]]
@@ -1086,7 +1084,7 @@ dependencies = [
  "html-escape",
  "once_cell",
  "phf",
- "tendril 0.4.3",
+ "tendril",
  "thiserror 2.0.18",
  "unicode-segmentation",
 ]
@@ -1741,35 +1739,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "html2text"
-version = "0.16.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12d23156ea4dbe6b37ad48fab2da56ff27b0f6192fb5db210c44eb07bfe6e787"
-dependencies = [
- "html5ever 0.38.0",
- "tendril 0.5.0",
- "thiserror 2.0.18",
- "unicode-width",
-]
-
-[[package]]
 name = "html5ever"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6452c4751a24e1b99c3260d505eaeee76a050573e61f30ac2c924ddc7236f01e"
 dependencies = [
  "log",
- "markup5ever 0.36.1",
-]
-
-[[package]]
-name = "html5ever"
-version = "0.38.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1054432bae2f14e0061e33d23402fbaa67a921d319d56adc6bcf887ddad1cbc2"
-dependencies = [
- "log",
- "markup5ever 0.38.0",
+ "markup5ever",
 ]
 
 [[package]]
@@ -2353,18 +2329,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c3294c4d74d0742910f8c7b466f44dda9eb2d5742c1e430138df290a1e8451c"
 dependencies = [
  "log",
- "tendril 0.4.3",
- "web_atoms",
-]
-
-[[package]]
-name = "markup5ever"
-version = "0.38.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8983d30f2915feeaaab2d6babdd6bc7e9ed1a00b66b5e6d74df19aa9c0e91862"
-dependencies = [
- "log",
- "tendril 0.5.0",
+ "tendril",
  "web_atoms",
 ]
 
@@ -3894,16 +3859,6 @@ checksum = "d24a120c5fc464a3458240ee02c299ebcb9d67b5249c8848b09d639dca8d7bb0"
 dependencies = [
  "futf",
  "mac",
- "utf-8",
-]
-
-[[package]]
-name = "tendril"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4790fc369d5a530f4b544b094e31388b9b3a37c0f4652ade4505945f5660d24"
-dependencies = [
- "new_debug_unreachable",
  "utf-8",
 ]
 

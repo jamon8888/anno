@@ -79,25 +79,12 @@ impl UrlResolver for HttpResolver {
         metadata.insert("source".to_string(), "http".to_string());
 
         // Check if content looks like HTML
-        let text = if content.trim_start().starts_with('<') {
+        let text = if deformat::detect::is_html(&content) {
             metadata.insert("content-type".to_string(), "text/html".to_string());
-            // Try readability extraction first for better article text
-            match deformat::html::extract_with_readability(&content, url) {
-                Some((article_text, title, excerpt)) => {
-                    if let Some(t) = title {
-                        metadata.insert("title".to_string(), t);
-                    }
-                    if let Some(e) = excerpt {
-                        metadata.insert("excerpt".to_string(), e);
-                    }
-                    metadata.insert("extractor".to_string(), "readability".to_string());
-                    article_text
-                }
-                None => {
-                    metadata.insert("extractor".to_string(), "strip_html".to_string());
-                    deformat::html::strip_to_text(&content)
-                }
-            }
+            // Readability extraction with strip_to_text fallback
+            let result = deformat::extract_readable(&content, Some(url));
+            metadata.extend(result.metadata);
+            result.text
         } else {
             metadata.insert("content-type".to_string(), "text/plain".to_string());
             content

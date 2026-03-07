@@ -74,7 +74,7 @@ candle-transformers = "0.9"
 safetensors = "0.4"
 
 # Document-to-text extraction
-deformat = "0.1.0"
+deformat = "0.4"
 
 # Burn ML framework (training + inference, WebGPU support)
 burn = "0.20.0"

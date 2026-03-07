@@ -151,8 +151,11 @@ pub fn read_input_file(path: &str) -> Result<String, String> {
             "note: detected HTML content in '{}', converting to text",
             path
         );
-        let result = deformat::extract_html2text(&content, 10000);
-        Ok(result.text)
+        // Use readability for article extraction, fall back to strip_to_text.
+        // Same strategy as --url path (url_resolver.rs).
+        let text = deformat::extract_readable(&content, None)
+            .text;
+        Ok(text)
     } else {
         Ok(content)
     }
@@ -616,11 +619,11 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // read_input_file tests (html2text + PDF detection)
+    // read_input_file tests (readability/strip + PDF detection)
     // -------------------------------------------------------------------------
 
     #[test]
-    fn read_input_file_html_uses_html2text() {
+    fn read_input_file_html_strips_nav_footer() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("test.html");
         fs::write(
@@ -643,6 +646,16 @@ mod tests {
         assert!(
             text.contains("Berlin"),
             "should extract location, got: {}",
+            text
+        );
+        assert!(
+            !text.contains("Menu"),
+            "nav content should be stripped, got: {}",
+            text
+        );
+        assert!(
+            !text.contains("Copyright"),
+            "footer content should be stripped, got: {}",
             text
         );
     }
