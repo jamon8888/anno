@@ -60,7 +60,7 @@ use crate::backends::llm_prompt::{BIOSchema, CodeNERPrompt};
 #[cfg(feature = "llm")]
 use crate::backends::streaming::{extract_chunked_parallel, ChunkConfig};
 use crate::offset::TextSpan;
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityType, Model, Result, Language};
 
 /// Simple LRU-ish response cache keyed on (text_hash, types_hash, model).
 /// Avoids duplicate API calls for the same input.
@@ -912,7 +912,7 @@ Return ONLY the JSON array:"#,
 }
 
 impl Model for UniversalNER {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         if !self.llm_available {
             return Err(crate::Error::FeatureNotAvailable(
                 "UniversalNER requires an LLM provider. Set OPENROUTER_API_KEY (recommended), GROQ_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, UNIVERSAL_NER_API_KEY, or run Ollama locally."
@@ -959,7 +959,7 @@ impl crate::DynamicLabels for UniversalNER {
         &self,
         text: &str,
         labels: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> crate::Result<Vec<Entity>> {
         <Self as ZeroShotNER>::extract_with_types(self, text, labels, 0.3)
     }

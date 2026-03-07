@@ -325,7 +325,7 @@ mod tests {
         assert_eq!(map_label_to_entity_type("GPE"), EntityType::Location);
         assert!(matches!(
             map_label_to_entity_type("CUSTOM"),
-            EntityType::Custom { .. } | EntityType::Other(_)
+            EntityType::Custom { .. }
         ));
     }
 }

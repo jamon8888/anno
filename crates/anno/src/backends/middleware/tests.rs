@@ -310,7 +310,7 @@ fn test_add_provenance_confidence_recorded() {
     let prov = result[0].provenance.as_ref().unwrap();
     assert_eq!(
         prov.raw_confidence,
-        Some(0.75),
+        Some(anno_core::Confidence::new(0.75)),
         "raw_confidence should mirror entity confidence"
     );
 }

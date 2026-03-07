@@ -76,7 +76,7 @@ macro_rules! define_feature_stub {
             fn extract_entities(
                 &self,
                 _text: &str,
-                _language: Option<&str>,
+                _language: Option<$crate::Language>,
             ) -> $crate::Result<Vec<$crate::Entity>> {
                 Err($crate::Error::FeatureNotAvailable($err.to_string()))
             }
@@ -151,7 +151,7 @@ macro_rules! _impl_stub_traits {
             fn extract_entities_batch(
                 &self,
                 _texts: &[&str],
-                _language: Option<&str>,
+                _language: Option<$crate::Language>,
             ) -> $crate::Result<Vec<Vec<$crate::Entity>>> {
                 Err($crate::Error::FeatureNotAvailable($err.to_string()))
             }

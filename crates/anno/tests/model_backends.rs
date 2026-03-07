@@ -79,7 +79,6 @@ fn test_stacked_ner_entity_types() {
             | EntityType::Organization
             | EntityType::Location
             | EntityType::Custom { .. }
-            | EntityType::Other(_)
             // Pattern-layer types (dates, money, etc.)
             | EntityType::Date
             | EntityType::Time

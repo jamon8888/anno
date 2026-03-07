@@ -91,6 +91,46 @@ impl Language {
     }
 }
 
+impl std::fmt::Display for Language {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.iso_code())
+    }
+}
+
+impl Language {
+    /// Parse from ISO 639-1/639-3 code or English name.
+    ///
+    /// Returns `None` for unrecognized codes (rather than silently defaulting).
+    ///
+    /// ```rust
+    /// use anno::Language;
+    ///
+    /// assert_eq!(Language::from_code("en"), Some(Language::English));
+    /// assert_eq!(Language::from_code("de"), Some(Language::German));
+    /// assert_eq!(Language::from_code("english"), Some(Language::English));
+    /// assert_eq!(Language::from_code("xyz"), None);
+    /// ```
+    #[must_use]
+    pub fn from_code(code: &str) -> Option<Self> {
+        match code.to_lowercase().as_str() {
+            "en" | "eng" | "english" => Some(Language::English),
+            "de" | "deu" | "german" => Some(Language::German),
+            "fr" | "fra" | "french" => Some(Language::French),
+            "es" | "spa" | "spanish" => Some(Language::Spanish),
+            "it" | "ita" | "italian" => Some(Language::Italian),
+            "pt" | "por" | "portuguese" => Some(Language::Portuguese),
+            "ru" | "rus" | "russian" => Some(Language::Russian),
+            "zh" | "zho" | "chinese" => Some(Language::Chinese),
+            "ja" | "jpn" | "japanese" => Some(Language::Japanese),
+            "ko" | "kor" | "korean" => Some(Language::Korean),
+            "ar" | "ara" | "arabic" => Some(Language::Arabic),
+            "he" | "heb" | "hebrew" => Some(Language::Hebrew),
+            "xx" | "other" | "unknown" => Some(Language::Other),
+            _ => None,
+        }
+    }
+}
+
 /// Simple heuristic language detection based on Unicode scripts.
 ///
 /// Returns the most likely language based on character counts.

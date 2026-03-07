@@ -90,7 +90,7 @@ pub struct MiddlewareContext {
     /// Requested entity types filter.
     pub entity_types: Option<Vec<EntityType>>,
     /// Language hint for the text.
-    pub language: Option<String>,
+    pub language: Option<crate::Language>,
     /// Arbitrary metadata (for custom middleware).
     pub metadata: HashMap<String, String>,
 }
@@ -111,8 +111,8 @@ impl MiddlewareContext {
 
     /// Set language hint.
     #[must_use]
-    pub fn with_language(mut self, lang: impl Into<String>) -> Self {
-        self.language = Some(lang.into());
+    pub fn with_language(mut self, lang: crate::Language) -> Self {
+        self.language = Some(lang);
         self
     }
 
@@ -284,7 +284,7 @@ impl Pipeline {
         // Extract entities from the backend
         let mut entities = self
             .backend
-            .extract_entities(&ctx.current_text, ctx.language.as_deref())?;
+            .extract_entities(&ctx.current_text, ctx.language)?;
 
         // Post-process: each middleware transforms entities (reverse order)
         for mw in self.middleware.iter().rev() {
@@ -764,7 +764,7 @@ impl HookedPipeline {
         // Extract entities from the backend
         let entities = match self
             .backend
-            .extract_entities(&ctx.current_text, ctx.language.as_deref())
+            .extract_entities(&ctx.current_text, ctx.language)
         {
             Ok(entities) => entities,
             Err(e) => {

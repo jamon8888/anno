@@ -1,5 +1,5 @@
 use crate::backends::stacked::StackedNER;
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityType, Model, Result, Language};
 
 /// Automatic model selection - routes to the default model.
 ///
@@ -26,7 +26,7 @@ impl Default for AutoNER {
 }
 
 impl Model for AutoNER {
-    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>> {
         // AutoNER just routes to the default model (StackedNER).
         // It does NOT combine multiple models - it picks one method.
         self.default_model.extract_entities(text, language)

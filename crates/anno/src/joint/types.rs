@@ -46,7 +46,7 @@
 
 use crate::linking::candidate::CandidateSource;
 use crate::linking::linker::LinkedEntity;
-use crate::{Entity, EntityCategory, EntityType, Result};
+use crate::{Confidence, Entity, EntityCategory, EntityType, Language, Result};
 use anno_core::{CorefChain, Mention as CorefMention};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -540,7 +540,7 @@ pub struct JointResult {
     /// Entity links
     pub links: Vec<LinkedEntity>,
     /// Confidence scores per mention (averaged over variables)
-    pub confidences: Vec<f64>,
+    pub confidences: Vec<Confidence>,
 }
 
 // =============================================================================
@@ -995,7 +995,12 @@ impl JointModel {
         mentions: &[JointMention],
         variables: &[JointVariable],
         marginals: &Marginals,
-    ) -> (Vec<Entity>, Vec<CorefChain>, Vec<LinkedEntity>, Vec<f64>) {
+    ) -> (
+        Vec<Entity>,
+        Vec<CorefChain>,
+        Vec<LinkedEntity>,
+        Vec<Confidence>,
+    ) {
         let mut entities = Vec::new();
         let mut links = Vec::new();
         let mut confidences = Vec::new();
@@ -1026,12 +1031,12 @@ impl JointModel {
                         let (entity_type, conf) = if let Some(inferred_type) = types.get(best_idx) {
                             // If prob is high, use inferred type
                             if prob > 0.3 {
-                                (inferred_type.clone(), prob)
+                                (inferred_type.clone(), Confidence::new(prob))
                             } else if let Some(original) = &m.entity {
                                 // Fall back to original NER type
                                 (original.entity_type.clone(), original.confidence)
                             } else {
-                                (inferred_type.clone(), prob)
+                                (inferred_type.clone(), Confidence::new(prob))
                             }
                         } else if let Some(original) = &m.entity {
                             // No inference available, use original
@@ -1213,7 +1218,7 @@ impl JointModel {
 /// Note: JointModel requires pre-extracted entities as input, so `extract_entities`
 /// uses an internal regex-based mention detector as a fallback.
 impl crate::Model for JointModel {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         // For raw text input, we need mention detection first.
         // Use a simple regex-based approach for common entity patterns.
         let initial_entities = detect_mentions_heuristic(text);

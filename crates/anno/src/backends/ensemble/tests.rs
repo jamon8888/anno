@@ -1,5 +1,5 @@
 use super::*;
-use anno_core::ExtractionMethod;
+use anno_core::{Confidence, ExtractionMethod};
 
 fn fast_ensemble() -> EnsembleNER {
     // Keep unit tests deterministic and fast: do not initialize model-loading backends here.
@@ -34,7 +34,11 @@ impl crate::Model for FixedBackend {
         self.name
     }
 
-    fn extract_entities(&self, _text: &str, _language: Option<&str>) -> crate::Result<Vec<Entity>> {
+    fn extract_entities(
+        &self,
+        _text: &str,
+        _language: Option<Language>,
+    ) -> crate::Result<Vec<Entity>> {
         Ok(self.entities.clone())
     }
 
@@ -72,7 +76,11 @@ impl crate::Model for AlwaysErrBackend {
         self.name
     }
 
-    fn extract_entities(&self, _text: &str, _language: Option<&str>) -> crate::Result<Vec<Entity>> {
+    fn extract_entities(
+        &self,
+        _text: &str,
+        _language: Option<Language>,
+    ) -> crate::Result<Vec<Entity>> {
         Err(crate::Error::ModelInit(format!(
             "AlwaysErrBackend '{}' intentionally failed",
             self.name
@@ -187,8 +195,16 @@ fn test_weight_learner_basic() {
         start: 0,
         end: 5,
         predictions: vec![
-            ("heuristic".to_string(), EntityType::Organization, 0.8),
-            ("gliner".to_string(), EntityType::Organization, 0.9),
+            (
+                "heuristic".to_string(),
+                EntityType::Organization,
+                Confidence::new(0.8),
+            ),
+            (
+                "gliner".to_string(),
+                EntityType::Organization,
+                Confidence::new(0.9),
+            ),
         ],
     });
 
@@ -198,8 +214,16 @@ fn test_weight_learner_basic() {
         start: 0,
         end: 5,
         predictions: vec![
-            ("heuristic".to_string(), EntityType::Person, 0.6), // Wrong!
-            ("gliner".to_string(), EntityType::Location, 0.85),
+            (
+                "heuristic".to_string(),
+                EntityType::Person,
+                Confidence::new(0.6),
+            ), // Wrong!
+            (
+                "gliner".to_string(),
+                EntityType::Location,
+                Confidence::new(0.85),
+            ),
         ],
     });
 
@@ -378,7 +402,7 @@ fn test_ensemble_with_language() {
 
     // Try with English language hint
     let entities = ner
-        .extract_entities("Tim Cook is the CEO of Apple.", Some("en"))
+        .extract_entities("Tim Cook is the CEO of Apple.", Some(Language::English))
         .unwrap();
 
     // Should find entities (language hint shouldn't break anything)
@@ -518,7 +542,7 @@ fn test_parallel_execution_is_deterministic() {
     let text = "aaaa bbbb cccc dddd eeee ffff";
     let ner = determinism_ensemble();
 
-    let reference: Vec<(usize, usize, String, f64)> = ner
+    let reference: Vec<(usize, usize, String, Confidence)> = ner
         .extract_entities(text, None)
         .expect("first run should succeed")
         .into_iter()
@@ -538,7 +562,7 @@ fn test_parallel_execution_is_deterministic() {
     );
 
     for run in 1..10_usize {
-        let result: Vec<(usize, usize, String, f64)> = ner
+        let result: Vec<(usize, usize, String, Confidence)> = ner
             .extract_entities(text, None)
             .unwrap_or_else(|e| panic!("run {} failed: {}", run, e))
             .into_iter()

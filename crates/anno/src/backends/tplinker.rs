@@ -54,7 +54,7 @@
 //! ```
 
 use crate::backends::inference::{ExtractionWithRelations, RelationExtractor};
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Language, Model, Result};
 use std::borrow::Cow;
 
 // =============================================================================
@@ -347,9 +347,13 @@ mod onnx_impl {
 
                             // Infer entity type from tag (SH2OH suggests Subject, etc.)
                             let entity_type = match best_tag {
-                                ENT_SH2OH | ENT_OH2ST => EntityType::Other("SUBJECT".to_string()),
-                                ENT_ST2OT | ENT_OT2ST => EntityType::Other("OBJECT".to_string()),
-                                _ => EntityType::Other("ENTITY".to_string()),
+                                ENT_SH2OH | ENT_OH2ST => {
+                                    EntityType::custom("SUBJECT", EntityCategory::Misc)
+                                }
+                                ENT_ST2OT | ENT_OT2ST => {
+                                    EntityType::custom("OBJECT", EntityCategory::Misc)
+                                }
+                                _ => EntityType::custom("ENTITY", EntityCategory::Misc),
                             };
 
                             let mut entity = Entity::new(
@@ -363,7 +367,7 @@ mod onnx_impl {
                                 source: Cow::Borrowed("tplinker"),
                                 method: crate::ExtractionMethod::Neural,
                                 pattern: None,
-                                raw_confidence: Some(confidence as f64),
+                                raw_confidence: Some(crate::Confidence::from(confidence)),
                                 model_version: Some(Cow::Borrowed("onnx")),
                                 timestamp: None,
                             });
@@ -550,9 +554,7 @@ mod onnx_impl {
 
 mod heuristic_impl {
     use super::*;
-    use crate::backends::inference::{
-        extract_relation_triples, RelationExtractionConfig, SemanticRegistry,
-    };
+    use crate::backends::inference::{extract_relation_triples_simple, RelationExtractionConfig};
     use std::collections::HashSet;
 
     /// TPLinker heuristic baseline for when ONNX is not available.
@@ -649,21 +651,13 @@ mod heuristic_impl {
                 relation_types.to_vec()
             };
 
-            let registry = {
-                let mut builder = SemanticRegistry::builder();
-                for rel in rels {
-                    builder = builder.add_relation(rel, rel);
-                }
-                builder.build_placeholder(1)
-            };
-
             let rel_config = RelationExtractionConfig {
                 threshold: rel_threshold,
                 max_span_distance: 120,
                 extract_triggers: false,
             };
 
-            let relations = extract_relation_triples(&entities, text, &registry, &rel_config);
+            let relations = extract_relation_triples_simple(&entities, text, &rels, &rel_config);
 
             Ok(ExtractionWithRelations {
                 entities,
@@ -756,7 +750,7 @@ impl TPLinker {
 }
 
 impl Model for TPLinker {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         #[cfg(feature = "onnx")]
         if let Some(ref onnx) = self.onnx {
             let result = onnx.extract_joint(text, &[], 0.0)?;
@@ -833,7 +827,7 @@ impl crate::RelationCapable for TPLinker {
     fn extract_with_relations(
         &self,
         text: &str,
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> Result<(Vec<Entity>, Vec<crate::Relation>)> {
         use crate::backends::inference::{DEFAULT_ENTITY_TYPES, DEFAULT_RELATION_TYPES};
         let result = <Self as RelationExtractor>::extract_with_relations(
@@ -851,7 +845,7 @@ impl crate::BatchCapable for TPLinker {
     fn extract_entities_batch(
         &self,
         texts: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> Result<Vec<Vec<Entity>>> {
         texts
             .iter()

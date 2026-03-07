@@ -45,7 +45,7 @@
 //!     .build();
 //! ```
 
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityType, Language, Model, Result};
 use anno_core::Lexicon;
 use std::sync::Arc;
 
@@ -96,7 +96,7 @@ impl LexiconNER {
 }
 
 impl Model for LexiconNER {
-    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>> {
         let mut entities = Vec::new();
 
         // For efficiency with large lexicons, we scan the text and check potential spans
@@ -107,10 +107,7 @@ impl Model for LexiconNER {
         let text_len = text_chars.len();
 
         // Detect if this is a CJK language (no word boundaries)
-        let lang_code = language.map(|l| l.split('-').next().unwrap_or(l).to_lowercase());
-        let is_cjk = lang_code
-            .as_deref()
-            .is_some_and(|l| matches!(l, "zh" | "ja" | "ko"));
+        let is_cjk = language.is_some_and(|l| l.is_cjk());
 
         // Helper to check if character is a word boundary marker
         // For CJK: punctuation and whitespace are boundaries
@@ -271,7 +268,7 @@ impl crate::BatchCapable for LexiconNER {
     fn extract_entities_batch(
         &self,
         texts: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> Result<Vec<Vec<Entity>>> {
         texts
             .iter()

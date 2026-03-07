@@ -99,7 +99,8 @@ pub use coref::*;
 
 pub mod relation_extraction;
 pub use relation_extraction::{
-    extract_relation_triples, extract_relations, RelationExtractionConfig,
+    extract_relation_triples, extract_relation_triples_simple, extract_relations,
+    RelationExtractionConfig,
 };
 
 pub mod binary_embeddings;

@@ -50,7 +50,7 @@ use crate::backends::inference::{
     DotProductInteraction, LateInteraction, SemanticRegistry, SpanRepConfig,
     SpanRepresentationLayer,
 };
-use crate::{Entity, EntityType, Result};
+use crate::{Entity, EntityType, Result, Language};
 use anno_core::{generate_span_candidates, RaggedBatch, SpanCandidate};
 
 #[cfg(feature = "candle")]
@@ -666,7 +666,7 @@ fn mean_pool_embeddings(embeddings: &[f32], seq_len: usize, hidden_dim: usize) -
 
 #[cfg(feature = "candle")]
 impl<E: TextEncoderWithOffsets + 'static> crate::Model for GLiNERPipeline<E> {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         self.extract(text)
     }
 
@@ -747,7 +747,7 @@ mod tests {
             EntityType::Organization
         );
         assert_eq!(slug_to_entity_type("LOC"), EntityType::Location);
-        assert!(matches!(slug_to_entity_type("actor"), EntityType::Custom { .. } | EntityType::Other(_)));
+        assert!(matches!(slug_to_entity_type("actor"), EntityType::Custom { .. }));
     }
 
     #[test]

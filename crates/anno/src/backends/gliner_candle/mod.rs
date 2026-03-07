@@ -139,7 +139,7 @@ const DEFAULT_GLINER_LABELS: &[&str] = &[
 
 #[cfg(feature = "candle")]
 impl crate::Model for GLiNERCandle {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         // Use lower threshold for smaller models (NeuML/gliner-bert-tiny)
         // The threshold may need tuning based on the specific model
         self.extract(text, DEFAULT_GLINER_LABELS, 0.3)
@@ -184,7 +184,7 @@ impl crate::DynamicLabels for GLiNERCandle {
         &self,
         text: &str,
         labels: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> crate::Result<Vec<Entity>> {
         <Self as crate::backends::inference::ZeroShotNER>::extract_with_types(
             self, text, labels, 0.3,
@@ -248,7 +248,7 @@ impl crate::BatchCapable for GLiNERCandle {
     fn extract_entities_batch(
         &self,
         texts: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> Result<Vec<Vec<Entity>>> {
         if texts.is_empty() {
             return Ok(Vec::new());

@@ -23,7 +23,7 @@
 //! }
 //! ```
 
-use crate::Result;
+use crate::{Language, Result};
 #[cfg(feature = "semantic-chunking")]
 use std::collections::BTreeSet;
 
@@ -104,7 +104,7 @@ pub trait SemanticChunker: Send + Sync {
     /// Chunk text based on semantic similarity.
     ///
     /// Returns chunks sorted by position in the original text.
-    fn chunk(&self, text: &str, language: Option<&str>) -> Result<Vec<SemanticChunk>>;
+    fn chunk(&self, text: &str, language: Option<Language>) -> Result<Vec<SemanticChunk>>;
 }
 
 /// Simple rule-based semantic chunker (fallback when embeddings unavailable).
@@ -200,7 +200,7 @@ fn paragraph_ranges(text: &str) -> Vec<(usize, usize)> {
 }
 
 impl SemanticChunker for RuleBasedSemanticChunker {
-    fn chunk(&self, text: &str, language: Option<&str>) -> Result<Vec<SemanticChunk>> {
+    fn chunk(&self, text: &str, language: Option<Language>) -> Result<Vec<SemanticChunk>> {
         let _ = language; // Acknowledge parameter for future use
 
         if text.is_empty() {
@@ -399,7 +399,7 @@ impl EmbeddingSemanticChunker {
 
 #[cfg(feature = "semantic-chunking")]
 impl SemanticChunker for EmbeddingSemanticChunker {
-    fn chunk(&self, text: &str, language: Option<&str>) -> Result<Vec<SemanticChunk>> {
+    fn chunk(&self, text: &str, language: Option<Language>) -> Result<Vec<SemanticChunk>> {
         let _ = language;
         let t = text.trim();
         if t.is_empty() {

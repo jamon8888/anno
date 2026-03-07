@@ -86,7 +86,6 @@ impl BIOSchema {
                 EntityType::Cardinal => "Cardinal numbers",
                 EntityType::Ordinal => "Ordinal numbers (1st, 2nd, etc.)",
                 EntityType::Custom { name, .. } => name.as_str(),
-                EntityType::Other(_) => "Miscellaneous named entities",
                 // `EntityType` is non-exhaustive; keep prompts resilient to future variants.
                 _ => "Named entities",
             };

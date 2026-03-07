@@ -276,7 +276,7 @@ impl TrainingExample {
         self.mentions[idx]
             .entity
             .as_ref()
-            .map(|e| e.confidence)
+            .map(|e| e.confidence.value())
             .unwrap_or(0.0)
     }
 

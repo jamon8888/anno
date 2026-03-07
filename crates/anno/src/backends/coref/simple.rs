@@ -305,7 +305,7 @@ impl SimpleCorefResolver {
         // both are type "proper" and fuzzy containment matches on short substrings).
         let is_wildcard_type = matches!(
             entity.entity_type,
-            EntityType::Custom { .. } | EntityType::Other(_)
+            EntityType::Custom { .. }
         );
 
         if !is_wildcard_type {

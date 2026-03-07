@@ -42,7 +42,7 @@
 mod inference;
 
 use crate::backends::inference::ZeroShotNER;
-use crate::{Entity, EntityType, Error, Result};
+use crate::{Entity, EntityType, Error, Result, Language};
 use anno_core::EntityCategory;
 
 /// Default entity types for zero-shot GLiNERPoly when used via the Model trait.
@@ -115,7 +115,7 @@ impl std::fmt::Debug for GLiNERPoly {
 
 #[cfg(feature = "onnx")]
 impl crate::Model for GLiNERPoly {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         self.extract(text, DEFAULT_POLY_LABELS, 0.5)
     }
 
@@ -203,7 +203,7 @@ impl crate::DynamicLabels for GLiNERPoly {
         &self,
         text: &str,
         labels: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> Result<Vec<Entity>> {
         self.extract(text, labels, 0.5)
     }
@@ -218,7 +218,7 @@ impl crate::BatchCapable for GLiNERPoly {
     fn extract_entities_batch(
         &self,
         texts: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> Result<Vec<Vec<Entity>>> {
         if texts.is_empty() {
             return Ok(Vec::new());
@@ -270,7 +270,7 @@ impl GLiNERPoly {
 
 #[cfg(not(feature = "onnx"))]
 impl crate::Model for GLiNERPoly {
-    fn extract_entities(&self, _text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, _text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         Err(Error::FeatureNotAvailable(
             "GLiNERPoly requires the 'onnx' feature".to_string(),
         ))
@@ -327,7 +327,7 @@ impl crate::BatchCapable for GLiNERPoly {
     fn extract_entities_batch(
         &self,
         _texts: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> Result<Vec<Vec<Entity>>> {
         Err(Error::FeatureNotAvailable(
             "GLiNERPoly requires the 'onnx' feature".to_string(),

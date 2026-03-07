@@ -4,7 +4,7 @@
 
 use super::registry::{LabelDefinition, SemanticRegistry};
 use super::RelationTriple;
-use crate::{Entity, EntityType};
+use crate::{Confidence, Entity, EntityType};
 use anno_core::Relation;
 
 /// Configuration for relation extraction.
@@ -126,7 +126,7 @@ pub fn extract_relations(
                     tail: tail.clone(),
                     relation_type: rel_type.to_string(),
                     trigger_span,
-                    confidence: confidence.clamp(0.0, 1.0), // Clamp to [0, 1]
+                    confidence: Confidence::new(confidence.clamp(0.0, 1.0)),
                 });
             }
         }
@@ -968,98 +968,70 @@ fn detect_relation_type<'a>(
                     "CEO_OF" | "WORKS_FOR" | "FOUNDED" | "MANAGES" | "REPORTS_TO" => {
                         // If either side is unknown/misc, don't reject on type alone (relation datasets
                         // often use a richer schema than `EntityType`).
-                        matches!(
-                            head.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || matches!(
-                            tail.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || (matches!(head.entity_type, EntityType::Person)
-                            && matches!(tail.entity_type, EntityType::Organization))
+                        matches!(head.entity_type, EntityType::Custom { .. })
+                            || matches!(tail.entity_type, EntityType::Custom { .. })
+                            || (matches!(head.entity_type, EntityType::Person)
+                                && matches!(tail.entity_type, EntityType::Organization))
                     }
                     // Location relations (any entity can be located in/born in a location)
                     "LOCATED_IN" | "BORN_IN" | "LIVES_IN" | "DIED_IN" => {
-                        matches!(
-                            tail.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || matches!(tail.entity_type, EntityType::Location)
+                        matches!(tail.entity_type, EntityType::Custom { .. })
+                            || matches!(tail.entity_type, EntityType::Location)
                     }
                     // Temporal relations (any entity can have temporal attributes)
                     "OCCURRED_ON" | "STARTED_ON" | "ENDED_ON" => {
-                        matches!(
-                            tail.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || matches!(tail.entity_type, EntityType::Date | EntityType::Time)
+                        matches!(tail.entity_type, EntityType::Custom { .. })
+                            || matches!(tail.entity_type, EntityType::Date | EntityType::Time)
                     }
                     // Organizational relations
                     "PART_OF" | "ACQUIRED" | "MERGED_WITH" | "PARENT_OF" => {
-                        matches!(
-                            head.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || matches!(
-                            tail.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || (matches!(head.entity_type, EntityType::Organization)
-                            && matches!(tail.entity_type, EntityType::Organization))
+                        matches!(head.entity_type, EntityType::Custom { .. })
+                            || matches!(tail.entity_type, EntityType::Custom { .. })
+                            || (matches!(head.entity_type, EntityType::Organization)
+                                && matches!(tail.entity_type, EntityType::Organization))
                     }
                     // Social relations
                     "MARRIED_TO" | "CHILD_OF" | "SIBLING_OF" => {
-                        matches!(
-                            head.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || matches!(
-                            tail.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || (matches!(head.entity_type, EntityType::Person)
-                            && matches!(tail.entity_type, EntityType::Person))
+                        matches!(head.entity_type, EntityType::Custom { .. })
+                            || matches!(tail.entity_type, EntityType::Custom { .. })
+                            || (matches!(head.entity_type, EntityType::Person)
+                                && matches!(tail.entity_type, EntityType::Person))
                     }
                     // Academic relations
                     "STUDIED_AT" | "TEACHES_AT" => {
-                        matches!(
-                            head.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || matches!(
-                            tail.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || (matches!(head.entity_type, EntityType::Person)
-                            && matches!(
-                                tail.entity_type,
-                                EntityType::Organization | EntityType::Location
-                            ))
+                        matches!(head.entity_type, EntityType::Custom { .. })
+                            || matches!(tail.entity_type, EntityType::Custom { .. })
+                            || (matches!(head.entity_type, EntityType::Person)
+                                && matches!(
+                                    tail.entity_type,
+                                    EntityType::Organization | EntityType::Location
+                                ))
                     }
                     // Product relations
                     "DEVELOPS" | "USES" => {
-                        matches!(
-                            head.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || matches!(
-                            head.entity_type,
-                            EntityType::Organization | EntityType::Person
-                        )
+                        matches!(head.entity_type, EntityType::Custom { .. })
+                            || matches!(
+                                head.entity_type,
+                                EntityType::Organization | EntityType::Person
+                            )
                     }
                     // Interaction relations
                     "MET_WITH" | "SPOKE_WITH" => {
-                        matches!(
-                            head.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || matches!(
-                            tail.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || (matches!(head.entity_type, EntityType::Person)
-                            && matches!(
-                                tail.entity_type,
-                                EntityType::Person | EntityType::Organization
-                            ))
+                        matches!(head.entity_type, EntityType::Custom { .. })
+                            || matches!(tail.entity_type, EntityType::Custom { .. })
+                            || (matches!(head.entity_type, EntityType::Person)
+                                && matches!(
+                                    tail.entity_type,
+                                    EntityType::Person | EntityType::Organization
+                                ))
                     }
                     // Ownership
                     "OWNS" => {
-                        matches!(
-                            head.entity_type,
-                            EntityType::Custom { .. } | EntityType::Other(_)
-                        ) || matches!(
-                            head.entity_type,
-                            EntityType::Person | EntityType::Organization
-                        )
+                        matches!(head.entity_type, EntityType::Custom { .. })
+                            || matches!(
+                                head.entity_type,
+                                EntityType::Person | EntityType::Organization
+                            )
                     }
                     _ => true, // Default: allow any combination
                 };
@@ -1076,6 +1048,265 @@ fn detect_relation_type<'a>(
     }
 
     None
+}
+
+// =============================================================================
+// Entity-type-based relation fallback
+// =============================================================================
+
+/// Maps (head_type, tail_type) -> likely relation types with base confidence.
+///
+/// Used as a fallback when no trigger pattern fires. Covers both CHisIEC-style
+/// and standard NER entity type pairs.
+fn get_likely_relations(head_type: &str, tail_type: &str) -> Vec<(&'static str, f32)> {
+    let head = head_type.to_uppercase();
+    let tail = tail_type.to_uppercase();
+
+    match (head.as_str(), tail.as_str()) {
+        // CHisIEC-style entity type codes
+        ("PER", "OFI") | ("PERSON", "OFI") => vec![("任職", 0.7)],
+        ("OFI", "PER") => vec![("上下級", 0.6)],
+        ("PER", "LOC") => vec![("到達", 0.55), ("出生於某地", 0.4)],
+        ("LOC", "PER") => vec![("到達", 0.5)],
+        ("PER", "PER") => vec![
+            ("上下級", 0.45),
+            ("同僚", 0.4),
+            ("父母", 0.3),
+            ("兄弟", 0.3),
+        ],
+        ("OFI", "LOC") | ("LOC", "OFI") => vec![("管理", 0.5)],
+        ("BOOK", "BOOK") | ("BOOK", "PER") | ("PER", "BOOK") => vec![("別名", 0.35)],
+        // Person-Organization relations
+        ("PERSON", "ORGANIZATION") | ("PER", "ORG") => vec![
+            ("WORKS_FOR", 0.7),
+            ("FOUNDED", 0.5),
+            ("CEO_OF", 0.4),
+            ("MEMBER_OF", 0.6),
+        ],
+        ("ORGANIZATION", "PERSON") | ("ORG", "PER") => {
+            vec![("EMPLOYS", 0.7), ("FOUNDED_BY", 0.5), ("LED_BY", 0.4)]
+        }
+        // Person-Location relations
+        ("PERSON", "LOCATION") | ("PERSON", "GPE") | ("PER", "GPE") => {
+            vec![("LIVES_IN", 0.6), ("BORN_IN", 0.5), ("VISITED", 0.4)]
+        }
+        // Organization-Location relations
+        ("ORGANIZATION", "LOCATION")
+        | ("ORG", "LOC")
+        | ("ORGANIZATION", "GPE")
+        | ("ORG", "GPE") => vec![
+            ("HEADQUARTERED_IN", 0.7),
+            ("LOCATED_IN", 0.8),
+            ("OPERATES_IN", 0.5),
+        ],
+        // Product-Organization relations
+        ("PRODUCT", "ORGANIZATION") | ("PRODUCT", "ORG") => {
+            vec![("MADE_BY", 0.8), ("PRODUCED_BY", 0.7)]
+        }
+        ("ORGANIZATION", "PRODUCT") | ("ORG", "PRODUCT") => {
+            vec![("MAKES", 0.8), ("PRODUCES", 0.7), ("ANNOUNCED", 0.5)]
+        }
+        // Date relations
+        (_, "DATE") | (_, "TIME") => vec![("OCCURRED_ON", 0.5), ("FOUNDED_ON", 0.4)],
+        // Default: no strong relation signal
+        _ => vec![],
+    }
+}
+
+// =============================================================================
+// Registry-free heuristic relation extraction
+// =============================================================================
+
+/// Extract relation triples using heuristics only -- no `SemanticRegistry` needed.
+///
+/// This is the backend-agnostic entry point for heuristic relation extraction.
+/// It combines:
+/// - Multilingual trigger-pattern matching (from the full `detect_relation_type` table)
+/// - Entity-type-based fallback (when no trigger fires)
+/// - Undirected pair deduplication (keeps highest-confidence per pair)
+/// - Entity confidence weighting
+///
+/// Use this instead of [`extract_relation_triples`] when you don't have (or need)
+/// a `SemanticRegistry`.
+#[must_use]
+pub fn extract_relation_triples_simple(
+    entities: &[Entity],
+    text: &str,
+    relation_types: &[&str],
+    config: &RelationExtractionConfig,
+) -> Vec<RelationTriple> {
+    if entities.len() < 2 {
+        return Vec::new();
+    }
+
+    // Build temporary LabelDefinitions from the string slices so we can reuse
+    // the existing `detect_relation_type` machinery.
+    let owned_labels: Vec<super::registry::LabelDefinition> = relation_types
+        .iter()
+        .map(|slug| super::registry::LabelDefinition {
+            slug: slug.to_string(),
+            description: String::new(),
+            category: super::registry::LabelCategory::Relation,
+            modality: super::registry::ModalityHint::Any,
+            threshold: config.threshold,
+        })
+        .collect();
+    let label_refs: Vec<&super::registry::LabelDefinition> = owned_labels.iter().collect();
+
+    // Normalize relation slugs for fuzzy matching (same logic as detect_relation_type).
+    fn norm_rel_slug(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut prev_underscore = false;
+        for ch in s.chars() {
+            if ch.is_alphanumeric() {
+                if ch.is_ascii_alphabetic() {
+                    out.push(ch.to_ascii_uppercase());
+                } else {
+                    out.push(ch);
+                }
+                prev_underscore = false;
+            } else if !prev_underscore {
+                out.push('_');
+                prev_underscore = true;
+            }
+        }
+        while out.starts_with('_') {
+            out.remove(0);
+        }
+        while out.ends_with('_') {
+            out.pop();
+        }
+        out
+    }
+
+    fn pick_relation_label(canonical: &str, relation_types: &[&str]) -> Option<String> {
+        if relation_types.is_empty() {
+            return None;
+        }
+        let want = norm_rel_slug(canonical);
+        relation_types
+            .iter()
+            .find(|r| norm_rel_slug(r) == want)
+            .map(|s| (*s).to_string())
+    }
+
+    let span_converter = crate::offset::SpanConverter::new(text);
+    let text_char_count = text.chars().count();
+    let text_char_len = text_char_count.max(1) as f32;
+
+    let mut triples = Vec::new();
+
+    for (i, head) in entities.iter().enumerate() {
+        for (j, tail) in entities.iter().enumerate() {
+            if i == j {
+                continue;
+            }
+
+            // Skip overlapping spans.
+            if head.start < tail.end && tail.start < head.end {
+                continue;
+            }
+
+            // Check distance (character offsets).
+            let distance = if head.end <= tail.start {
+                tail.start - head.end
+            } else {
+                head.start.saturating_sub(tail.end)
+            };
+            if distance > config.max_span_distance {
+                continue;
+            }
+
+            let (span_start, span_end) = if head.end <= tail.start {
+                (head.end, tail.start)
+            } else {
+                (tail.end, head.start)
+            };
+
+            let between_span = span_converter.from_chars(span_start, span_end);
+            let between_text = text
+                .get(between_span.byte_start..between_span.byte_end)
+                .unwrap_or("");
+
+            // Try trigger-based detection first (multilingual, entity-type validated).
+            if let Some((rel_type, mut confidence, _trigger)) =
+                detect_relation_type(head, tail, between_text, &label_refs)
+            {
+                // Distance penalty (linear decay).
+                let distance_penalty = if distance < config.max_span_distance {
+                    (1.0 - (distance as f64 / config.max_span_distance as f64) * 0.5).max(0.5)
+                } else {
+                    0.5
+                };
+                confidence *= distance_penalty;
+
+                // Incorporate entity confidence.
+                confidence *= (head.confidence + tail.confidence) as f64 / 2.0;
+
+                if confidence < config.threshold as f64 {
+                    continue;
+                }
+
+                triples.push(RelationTriple {
+                    head_idx: i,
+                    tail_idx: j,
+                    relation_type: rel_type.to_string(),
+                    confidence: confidence as f32,
+                });
+                continue;
+            }
+
+            // Type-based fallback: infer relation from entity type pair.
+            let head_center = (head.start + head.end) as f32 / 2.0;
+            let tail_center = (tail.start + tail.end) as f32 / 2.0;
+            let proximity = 1.0 - ((head_center - tail_center).abs() / text_char_len).min(1.0);
+
+            if proximity > 0.3 {
+                let head_type = head.entity_type.as_label();
+                let tail_type = tail.entity_type.as_label();
+                for (rel_type, base_score) in get_likely_relations(head_type, tail_type) {
+                    if !relation_types.is_empty()
+                        && pick_relation_label(rel_type, relation_types).is_none()
+                    {
+                        continue;
+                    }
+                    let out_label = pick_relation_label(rel_type, relation_types)
+                        .unwrap_or_else(|| rel_type.to_string());
+
+                    let confidence =
+                        proximity * base_score * (head.confidence + tail.confidence) as f32 / 2.0;
+                    if confidence >= config.threshold {
+                        triples.push(RelationTriple {
+                            head_idx: i,
+                            tail_idx: j,
+                            relation_type: out_label,
+                            confidence,
+                        });
+                        break; // One type-based relation per pair
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by confidence descending, then deduplicate per undirected pair.
+    triples.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut seen_pairs = std::collections::HashSet::new();
+    triples.retain(|r| {
+        let canonical = if r.head_idx <= r.tail_idx {
+            (r.head_idx, r.tail_idx)
+        } else {
+            (r.tail_idx, r.head_idx)
+        };
+        seen_pairs.insert(canonical)
+    });
+
+    triples
 }
 
 #[cfg(test)]
@@ -1542,12 +1773,24 @@ mod tests {
 
     #[test]
     fn test_other_entity_type_allows_any_relation() {
-        // EntityType::Other should bypass type constraints.
-        // Both directions match since both entities are Other.
+        // Custom entity types should bypass type constraints.
+        // Both directions match since both entities are Custom.
         let text = "FooEntity married to BarEntity now.";
         let entities = vec![
-            Entity::new("FooEntity", EntityType::custom("MISC", EntityCategory::Misc), 0, 9, 0.9),
-            Entity::new("BarEntity", EntityType::custom("MISC", EntityCategory::Misc), 21, 30, 0.9),
+            Entity::new(
+                "FooEntity",
+                EntityType::custom("MISC", EntityCategory::Misc),
+                0,
+                9,
+                0.9,
+            ),
+            Entity::new(
+                "BarEntity",
+                EntityType::custom("MISC", EntityCategory::Misc),
+                21,
+                30,
+                0.9,
+            ),
         ];
         let reg = registry_with_relations(&["MARRIED_TO"]);
         let rels = extract_relations(&entities, text, &reg, &default_config());
@@ -1790,7 +2033,13 @@ mod tests {
     // =======================================================================
 
     fn misc(text: &str, start: usize, end: usize) -> Entity {
-        Entity::new(text, EntityType::custom("MISC", EntityCategory::Misc), start, end, 0.9)
+        Entity::new(
+            text,
+            EntityType::custom("MISC", EntityCategory::Misc),
+            start,
+            end,
+            0.9,
+        )
     }
 
     #[test]

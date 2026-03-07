@@ -112,8 +112,10 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::Language;
+
 use crate::backends::method_for_backend_name;
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Confidence, Entity, EntityType, Model, Result};
 
 pub mod weights;
 pub use weights::*;
@@ -415,7 +417,7 @@ impl EnsembleNER {
         };
 
         let mut entity = best_candidate.entity.clone();
-        entity.confidence = final_confidence;
+        entity.confidence = Confidence::new(final_confidence);
         entity.hierarchical_confidence = Some(anno_core::HierarchicalConfidence::new(
             linkage, type_score, boundary,
         ));
@@ -423,7 +425,7 @@ impl EnsembleNER {
             source: Cow::Owned(format!("ensemble({})", sources.join("+"))),
             method: anno_core::ExtractionMethod::Consensus,
             pattern: None,
-            raw_confidence: Some(base_confidence),
+            raw_confidence: Some(Confidence::new(base_confidence)),
             model_version: None,
             timestamp: None,
         });
@@ -433,7 +435,7 @@ impl EnsembleNER {
 }
 
 impl Model for EnsembleNER {
-    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>> {
         if self.backends.is_empty() {
             return Ok(Vec::new());
         }
@@ -597,7 +599,7 @@ pub struct WeightTrainingExample {
     /// Span end
     pub end: usize,
     /// Predictions from each backend: (backend_name, predicted_type, confidence)
-    pub predictions: Vec<(String, EntityType, f64)>,
+    pub predictions: Vec<(String, EntityType, Confidence)>,
 }
 
 /// Statistics for weight learning.

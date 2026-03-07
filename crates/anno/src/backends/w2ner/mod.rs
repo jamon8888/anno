@@ -103,7 +103,7 @@ pub mod decode;
 pub use decode::{map_label_to_entity_type, DiscontinuousDecodeRow, W2NERRelation};
 
 use crate::backends::inference::{DiscontinuousEntity, DiscontinuousNER, HandshakingMatrix};
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityType, Language, Model, Result};
 
 #[cfg(feature = "onnx")]
 use crate::Error;
@@ -764,7 +764,7 @@ impl Default for W2NER {
 }
 
 impl Model for W2NER {
-    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>> {
         if text.trim().is_empty() {
             return Ok(vec![]);
         }
@@ -772,34 +772,10 @@ impl Model for W2NER {
         // Warn if the language hint suggests a non-whitespace-tokenized language.
         // W2NER uses `split_whitespace()`, which doesn't work for CJK/Thai/etc.
         if let Some(lang) = language {
-            let lang_lower = lang.to_lowercase();
-            let is_non_whitespace_lang = matches!(
-                lang_lower.as_str(),
-                "zh" | "zh-cn"
-                    | "zh-tw"
-                    | "chinese"
-                    | "mandarin"
-                    | "cantonese"
-                    | "ja"
-                    | "jp"
-                    | "japanese"
-                    | "ko"
-                    | "kr"
-                    | "korean"
-                    | "th"
-                    | "thai"
-                    | "km"
-                    | "khmer"
-                    | "lo"
-                    | "lao"
-                    | "my"
-                    | "burmese"
-                    | "myanmar"
-            );
-            if is_non_whitespace_lang {
+            if lang.is_cjk() {
                 log::warn!(
                     "[W2NER] Language '{}' detected, but W2NER uses whitespace tokenization \
-                     which does not work correctly for CJK/Thai/Khmer/Lao. \
+                     which does not work correctly for CJK languages. \
                      Consider pre-tokenizing or using a different backend (e.g., GLiNER).",
                     lang
                 );

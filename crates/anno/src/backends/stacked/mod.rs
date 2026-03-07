@@ -8,7 +8,7 @@
 
 use super::heuristic::HeuristicNER;
 use super::regex::RegexNER;
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityType, Language, Model, Result};
 use itertools::Itertools;
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -112,7 +112,7 @@ fn is_structured_type(t: &EntityType) -> bool {
 
 /// Generic/misc types that can be subsumed by more specific structured types.
 fn is_generic_type(t: &EntityType) -> bool {
-    matches!(t, EntityType::Custom { .. } | EntityType::Other(_))
+    matches!(t, EntityType::Custom { .. })
 }
 
 #[derive(Debug)]
@@ -527,7 +527,7 @@ impl Default for StackedNER {
 
 impl Model for StackedNER {
     #[cfg_attr(feature = "production", tracing::instrument(skip(self, text), fields(text_len = text.len(), num_layers = self.layers.len())))]
-    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>> {
         // Performance: Pre-allocate entities vec with estimated capacity
         // Most texts have 0-20 entities, but we'll start with a reasonable default
         let mut entities: Vec<Entity> = Vec::with_capacity(16);
@@ -1188,7 +1188,7 @@ fn filter_title_words(entities: &mut Vec<Entity>) {
         // Filter ORG/MISC: title words
         if matches!(
             e.entity_type,
-            EntityType::Organization | EntityType::Custom { .. } | EntityType::Other(_)
+            EntityType::Organization | EntityType::Custom { .. }
         ) && TITLE_WORDS.contains(&lower.as_str())
         {
             return false;
@@ -1283,7 +1283,7 @@ impl crate::BatchCapable for StackedNER {
     fn extract_entities_batch(
         &self,
         texts: &[&str],
-        language: Option<&str>,
+        language: Option<Language>,
     ) -> Result<Vec<Vec<Entity>>> {
         texts
             .iter()

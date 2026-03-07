@@ -462,19 +462,19 @@ impl LinkNerFactor {
             WikidataNERType::Organization => matches!(ner_type, EntityType::Organization),
             WikidataNERType::Location | WikidataNERType::GeopoliticalEntity => {
                 matches!(ner_type, EntityType::Location)
-                    || matches!(ner_type, EntityType::Custom { ref name, .. } | EntityType::Other(ref name) if name == "GPE")
+                    || matches!(ner_type, EntityType::Custom { ref name, .. } if name == "GPE")
             }
             WikidataNERType::Event => {
-                matches!(ner_type, EntityType::Custom { ref name, .. } | EntityType::Other(ref name) if name == "EVENT")
+                matches!(ner_type, EntityType::Custom { ref name, .. } if name == "EVENT")
             }
             WikidataNERType::WorkOfArt => {
-                matches!(ner_type, EntityType::Custom { ref name, .. } | EntityType::Other(ref name) if name == "WORK_OF_ART")
+                matches!(ner_type, EntityType::Custom { ref name, .. } if name == "WORK_OF_ART")
             }
             WikidataNERType::Product => {
-                matches!(ner_type, EntityType::Custom { ref name, .. } | EntityType::Other(ref name) if name == "PRODUCT")
+                matches!(ner_type, EntityType::Custom { ref name, .. } if name == "PRODUCT")
             }
             WikidataNERType::DateTime => {
-                matches!(ner_type, EntityType::Custom { ref name, .. } | EntityType::Other(ref name) if name == "DATE")
+                matches!(ner_type, EntityType::Custom { ref name, .. } if name == "DATE")
             }
             WikidataNERType::Miscellaneous => true, // MISC compatible with anything
         }
@@ -698,7 +698,7 @@ impl Factor for CorefNerFactor {
                 EntityType::Person => "Person",
                 EntityType::Organization => "Organization",
                 EntityType::Location => "Location",
-                EntityType::Custom { ref name, .. } | EntityType::Other(ref name) => name.as_str(),
+                EntityType::Custom { ref name, .. } => name.as_str(),
                 _ => "Unknown",
             };
             if let Some(&w) = self
@@ -722,7 +722,7 @@ impl Factor for CorefNerFactor {
                 EntityType::Person => "Person",
                 EntityType::Organization => "Organization",
                 EntityType::Location => "Location",
-                EntityType::Custom { ref name, .. } | EntityType::Other(ref name) => name.as_str(),
+                EntityType::Custom { ref name, .. } => name.as_str(),
                 _ => "Unknown",
             };
             if let Some(&w) = self

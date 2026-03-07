@@ -135,7 +135,7 @@
 //! - **Deterministic**: Same input always produces same output
 //! - **Small footprint**: Small weights file compared to ML model artifacts
 
-use crate::{Entity, EntityCategory, EntityType, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Model, Result, Language};
 use std::collections::HashMap;
 #[cfg(feature = "bundled-crf-weights")]
 use std::sync::OnceLock;
@@ -237,7 +237,7 @@ fn clip_entities_at_sentence_boundaries(text: &str, entities: &mut Vec<Entity>) 
 
 // CRF algorithm: feature extraction, Viterbi decoding, weight loading (see algorithm.rs).
 impl Model for CrfNER {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         if text.trim().is_empty() {
             return Ok(vec![]);
         }

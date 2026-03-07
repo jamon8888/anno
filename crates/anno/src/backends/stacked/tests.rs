@@ -1,4 +1,5 @@
 use super::*;
+use anno_core::Confidence;
 
 fn extract(text: &str) -> Vec<Entity> {
     StackedNER::default().extract_entities(text, None).unwrap()
@@ -181,7 +182,7 @@ fn mock_entity(text: &str, start: usize, ty: EntityType, conf: f64) -> Entity {
         entity_type: ty,
         start,
         end: start + text.len(),
-        confidence: conf,
+        confidence: Confidence::new(conf),
         provenance: None,
         kb_id: None,
         canonical_id: None,
@@ -568,7 +569,7 @@ fn test_layer_error_handling() {
         fn extract_entities(
             &self,
             _text: &str,
-            _language: Option<&str>,
+            _language: Option<Language>,
         ) -> crate::Result<Vec<anno_core::Entity>> {
             Err(crate::Error::Inference(format!(
                 "intentional failure from {}",
@@ -868,14 +869,14 @@ fn test_invalid_span_start_ge_end_skipped() {
         fn extract_entities(
             &self,
             _text: &str,
-            _language: Option<&str>,
+            _language: Option<Language>,
         ) -> crate::Result<Vec<Entity>> {
             Ok(vec![Entity {
                 text: "ghost".to_string(),
                 entity_type: EntityType::Person,
                 start: 5,
                 end: 5, // zero-width
-                confidence: 0.9,
+                confidence: Confidence::new(0.9),
                 provenance: None,
                 kb_id: None,
                 canonical_id: None,
@@ -921,7 +922,7 @@ fn test_provenance_not_overwritten_when_already_set() {
         source: Cow::Borrowed("custom-source"),
         method: ExtractionMethod::Pattern,
         pattern: Some("custom-pattern".into()),
-        raw_confidence: Some(0.5),
+        raw_confidence: Some(Confidence::new(0.5)),
         model_version: None,
         timestamp: None,
     });

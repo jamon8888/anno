@@ -62,7 +62,7 @@
 //! For HuggingFace models, use `BurnNER::from_pretrained()` which handles
 //! the conversion automatically.
 
-use crate::{Entity, EntityCategory, EntityType, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Model, Result, Language};
 
 // =============================================================================
 // Backend Configuration
@@ -316,7 +316,7 @@ If you want a zero-dependency baseline, use `HeuristicNER`/`StackedNER`."
 }
 
 impl Model for BurnNER {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         if text.trim().is_empty() {
             return Ok(vec![]);
         }
@@ -409,7 +409,7 @@ pub type BurnPoweredNER = BurnNER;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BatchCapable, GpuCapable, Model};
+    use crate::{BatchCapable, GpuCapable, Model, Language};
 
     #[test]
     fn test_burn_config_defaults() {

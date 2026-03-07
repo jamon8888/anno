@@ -19,7 +19,7 @@
 //! let entities = model.extract_entities("Steve Jobs founded Apple.", None)?;
 //! ```
 
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityType, Model, Result, Language};
 
 #[cfg(feature = "onnx")]
 use crate::backends::onnx::BertNEROnnx;
@@ -61,7 +61,7 @@ impl DeBERTaV3NER {
 }
 
 impl Model for DeBERTaV3NER {
-    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>> {
         #[cfg(feature = "onnx")]
         {
             self.inner.extract_entities(text, language)
@@ -117,7 +117,7 @@ impl crate::BatchCapable for DeBERTaV3NER {
     fn extract_entities_batch(
         &self,
         texts: &[&str],
-        language: Option<&str>,
+        language: Option<Language>,
     ) -> Result<Vec<Vec<Entity>>> {
         #[cfg(feature = "onnx")]
         {

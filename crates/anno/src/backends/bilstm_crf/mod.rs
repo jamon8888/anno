@@ -101,7 +101,7 @@
 //! let ner = BiLstmCrfNER::from_onnx("path/to/model.onnx")?;
 //! ```
 
-use crate::{Entity, EntityCategory, EntityType, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Model, Result, Language};
 use std::collections::HashMap;
 
 /// BiLSTM-CRF configuration.
@@ -688,7 +688,7 @@ impl Default for BiLstmCrfNER {
 }
 
 impl Model for BiLstmCrfNER {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         if text.trim().is_empty() {
             return Ok(vec![]);
         }

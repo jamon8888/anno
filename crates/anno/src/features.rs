@@ -328,7 +328,7 @@ impl ChainFeatures {
         };
 
         // Confidence stats
-        let confidences: Vec<f64> = mentions.iter().map(|m| m.confidence).collect();
+        let confidences: Vec<f64> = mentions.iter().map(|m| m.confidence.value()).collect();
         let mean_confidence = confidences.iter().sum::<f64>() / total as f64;
         let min_confidence = confidences.iter().cloned().fold(f64::INFINITY, f64::min);
         let max_confidence = confidences

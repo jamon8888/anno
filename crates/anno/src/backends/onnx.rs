@@ -17,7 +17,7 @@
 #![allow(missing_docs)] // BIO decoding internals; public API is documented
 #![allow(clippy::manual_strip)] // Complex BIO tag parsing
 
-use crate::{Entity, Error, Result};
+use crate::{Entity, Error, Result, Language};
 #[cfg(feature = "onnx")]
 use anno_core::{EntityCategory, EntityType};
 
@@ -218,7 +218,7 @@ impl BertNEROnnx {
     /// Maximum tokens per BERT chunk (512 model limit minus [CLS] and [SEP]).
     const MAX_TOKENS: usize = 510;
 
-    pub fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    pub fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         if text.is_empty() {
             return Ok(vec![]);
         }
@@ -720,7 +720,7 @@ impl BertNEROnnx {
 
 #[cfg(feature = "onnx")]
 impl crate::Model for BertNEROnnx {
-    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>> {
         self.extract_entities(text, language)
     }
 

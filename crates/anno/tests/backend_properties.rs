@@ -455,7 +455,7 @@ proptest! {
                 } else {
                     EntityType::Organization
                 };
-                (format!("backend_{}", i), pred_type, 0.8)
+                (format!("backend_{}", i), pred_type, anno_core::Confidence::new(0.8))
             }).collect(),
         });
 

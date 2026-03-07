@@ -109,7 +109,7 @@
 //!
 //! - CRF-style sequence models (`backends/crf.rs`)
 
-use crate::{Entity, EntityCategory, EntityType, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Model, Result, Language};
 use std::collections::HashMap;
 
 #[cfg(feature = "bundled-hmm-params")]
@@ -195,7 +195,7 @@ pub struct HmmNER {
 mod algorithm;
 // HMM Viterbi, forward-backward, and emission scoring: see algorithm.rs.
 impl Model for HmmNER {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         if text.trim().is_empty() {
             return Ok(vec![]);
         }

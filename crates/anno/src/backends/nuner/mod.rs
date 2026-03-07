@@ -70,7 +70,7 @@
 //! - [NuNER ONNX](https://huggingface.co/deepanwa/NuNerZero_onnx)
 //! - GLiNER paper (for span-based prompting inspiration)
 
-use crate::{Entity, EntityCategory, EntityType, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Model, Result, Language};
 
 use crate::Error;
 
@@ -148,7 +148,7 @@ impl Default for NuNER {
 const MAX_INPUT_CHARS: usize = 2000;
 
 impl Model for NuNER {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         if text.trim().is_empty() {
             return Ok(vec![]);
         }
@@ -243,7 +243,7 @@ impl crate::DynamicLabels for NuNER {
         &self,
         text: &str,
         labels: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> crate::Result<Vec<crate::Entity>> {
         self.extract(text, labels, self.threshold as f32)
     }

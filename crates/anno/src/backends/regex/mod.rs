@@ -13,7 +13,7 @@
 //!
 //! For Person/Organization/Location, use ML models (BERT ONNX, GLiNER).
 
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityType, Model, Result, Language};
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -243,7 +243,7 @@ static HASHTAG: Lazy<Regex> = Lazy::new(|| {
 });
 
 impl Model for RegexNER {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         use crate::offset::SpanConverter;
         use anno_core::Provenance;
         let mut entities = Vec::new();
@@ -1316,7 +1316,7 @@ impl crate::BatchCapable for RegexNER {
     fn extract_entities_batch(
         &self,
         texts: &[&str],
-        language: Option<&str>,
+        language: Option<Language>,
     ) -> Result<Vec<Vec<Entity>>> {
         texts
             .iter()

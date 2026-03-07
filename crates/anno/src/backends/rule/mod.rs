@@ -28,7 +28,7 @@
 //! But understand: it cannot generalize to unseen entities.
 
 use crate::offset::TextSpan;
-use crate::{Entity, EntityType, Model, Result};
+use crate::{Entity, EntityType, Model, Result, Language};
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -84,7 +84,7 @@ impl Default for RuleBasedNER {
 
 #[allow(deprecated)]
 impl Model for RuleBasedNER {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         let mut entities = Vec::new();
 
         // ========================================================================

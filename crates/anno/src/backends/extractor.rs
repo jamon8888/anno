@@ -18,7 +18,7 @@
 //! - **Hybrid mode**: Best of both worlds (ML for context, patterns for structure)
 //! - **Clean adapters**: Each backend wrapped to implement common trait
 
-use crate::{Entity, EntityType, Model, RegexNER, Result};
+use crate::{Entity, EntityType, Model, RegexNER, Result, Language};
 use std::sync::Arc;
 
 /// Default models for each backend.
@@ -302,7 +302,7 @@ impl NERExtractor {
     /// Extract entities with automatic fallback.
     ///
     /// Tries primary ML backend first, falls back to patterns if it fails.
-    pub fn extract(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+    pub fn extract(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>> {
         // Try primary backend first
         if let Some(ref primary) = self.primary {
             if primary.is_available() {
@@ -331,7 +331,7 @@ impl NERExtractor {
     /// This gets best of both worlds:
     /// - High F1 on ambiguous entities (via ML)
     /// - 100% precision on pattern entities (via patterns)
-    pub fn extract_hybrid(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+    pub fn extract_hybrid(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>> {
         // Performance: Pre-allocate entities vec with estimated capacity
         let mut entities = Vec::with_capacity(16);
 
@@ -402,7 +402,7 @@ impl NERExtractor {
 
 // Make NERExtractor implement Model for compatibility
 impl Model for NERExtractor {
-    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>> {
         self.extract(text, language)
     }
 

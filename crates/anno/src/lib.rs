@@ -124,12 +124,13 @@ pub use error::{Error, Result};
 
 // Re-export core types at the crate root (the `anno` public API surface).
 pub use anno_core::{
-    generate_span_candidates, Animacy, CanonicalId, CorefChain, CorefDocument, CoreferenceResolver,
-    Corpus, DiscontinuousSpan, Entity, EntityBuilder, EntityCategory, EntityType, EntityViewport,
-    ExtractionMethod, Gender, GroundedDocument, HashMapLexicon, HierarchicalConfidence, Identity,
-    IdentityId, IdentitySource, Lexicon, Location, Mention, MentionType, Modality, Number, Person,
-    PhiFeatures, Provenance, Quantifier, RaggedBatch, Relation, Signal, SignalId, SignalRef, Span,
-    SpanCandidate, Track, TrackId, TrackRef, TrackStats, TypeLabel, TypeMapper, ValidationIssue,
+    generate_span_candidates, Animacy, CanonicalId, Confidence, CorefChain, CorefDocument,
+    CoreferenceResolver, Corpus, DiscontinuousSpan, Entity, EntityBuilder, EntityCategory,
+    EntityType, EntityViewport, ExtractionMethod, Gender, GroundedDocument, HashMapLexicon,
+    HierarchicalConfidence, Identity, IdentityId, IdentitySource, Lexicon, Location, Mention,
+    MentionType, Modality, Number, Person, PhiFeatures, Provenance, Quantifier, RaggedBatch,
+    Relation, Signal, SignalId, SignalRef, Span, SpanCandidate, Track, TrackId, TrackRef,
+    TrackStats, TypeLabel, TypeMapper, ValidationIssue,
 };
 
 /// `anno-core`’s stable types under a namespaced module.
@@ -266,7 +267,7 @@ mod sealed {
 /// [`AnyModel`]: crate::AnyModel
 pub trait Model: sealed::Sealed + Send + Sync {
     /// Extract entities from text.
-    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>>;
+    fn extract_entities(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>>;
 
     /// Get supported entity types.
     fn supported_types(&self) -> Vec<EntityType>;
@@ -343,15 +344,15 @@ pub trait Model: sealed::Sealed + Send + Sync {
 /// The extractor closure must be `Send + Sync`. For interior mutability
 /// (e.g., caching, connection pooling), use `Arc<Mutex<...>>` or similar.
 /// Type alias for the `AnyModel` extractor closure.
-type AnyModelExtractor = dyn Fn(&str, Option<&str>) -> Result<Vec<Entity>> + Send + Sync;
+type AnyModelExtractor = dyn Fn(&str, Option<Language>) -> Result<Vec<Entity>> + Send + Sync;
 
 /// Type alias for the `AnyModel` label-extraction closure (`DynamicLabels`).
 type AnyModelLabelExtractor =
-    dyn Fn(&str, &[&str], Option<&str>) -> Result<Vec<Entity>> + Send + Sync;
+    dyn Fn(&str, &[&str], Option<Language>) -> Result<Vec<Entity>> + Send + Sync;
 
 /// Type alias for the `AnyModel` relation-extraction closure (`RelationCapable`).
 type AnyModelRelationExtractor =
-    dyn Fn(&str, Option<&str>) -> Result<(Vec<Entity>, Vec<Relation>)> + Send + Sync;
+    dyn Fn(&str, Option<Language>) -> Result<(Vec<Entity>, Vec<Relation>)> + Send + Sync;
 
 /// A wrapper that turns an extractor closure into a `Model`.
 ///
@@ -387,7 +388,7 @@ impl AnyModel {
         name: &'static str,
         description: &'static str,
         supported_types: Vec<EntityType>,
-        extractor: impl Fn(&str, Option<&str>) -> Result<Vec<Entity>> + Send + Sync + 'static,
+        extractor: impl Fn(&str, Option<Language>) -> Result<Vec<Entity>> + Send + Sync + 'static,
     ) -> Self {
         Self {
             name,
@@ -413,7 +414,7 @@ impl AnyModel {
     #[must_use]
     pub fn with_dynamic_labels(
         mut self,
-        f: impl Fn(&str, &[&str], Option<&str>) -> Result<Vec<Entity>> + Send + Sync + 'static,
+        f: impl Fn(&str, &[&str], Option<Language>) -> Result<Vec<Entity>> + Send + Sync + 'static,
     ) -> Self {
         self.label_extractor = Some(Box::new(f));
         self
@@ -426,7 +427,7 @@ impl AnyModel {
     #[must_use]
     pub fn with_relations(
         mut self,
-        f: impl Fn(&str, Option<&str>) -> Result<(Vec<Entity>, Vec<Relation>)> + Send + Sync + 'static,
+        f: impl Fn(&str, Option<Language>) -> Result<(Vec<Entity>, Vec<Relation>)> + Send + Sync + 'static,
     ) -> Self {
         self.relation_extractor = Some(Box::new(f));
         self
@@ -447,7 +448,7 @@ impl std::fmt::Debug for AnyModel {
 impl sealed::Sealed for AnyModel {}
 
 impl Model for AnyModel {
-    fn extract_entities(&self, text: &str, language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, language: Option<Language>) -> Result<Vec<Entity>> {
         (self.extractor)(text, language)
     }
 
@@ -485,7 +486,7 @@ impl DynamicLabels for AnyModel {
         &self,
         text: &str,
         labels: &[&str],
-        language: Option<&str>,
+        language: Option<Language>,
     ) -> Result<Vec<Entity>> {
         match &self.label_extractor {
             Some(f) => f(text, labels, language),
@@ -501,7 +502,7 @@ impl RelationCapable for AnyModel {
     fn extract_with_relations(
         &self,
         text: &str,
-        language: Option<&str>,
+        language: Option<Language>,
     ) -> Result<(Vec<Entity>, Vec<Relation>)> {
         match &self.relation_extractor {
             Some(f) => f(text, language),
@@ -536,7 +537,7 @@ pub trait BatchCapable: Model {
     fn extract_entities_batch(
         &self,
         texts: &[&str],
-        language: Option<&str>,
+        language: Option<Language>,
     ) -> Result<Vec<Vec<Entity>>> {
         texts
             .iter()
@@ -706,7 +707,7 @@ pub trait RelationCapable: Model {
     fn extract_with_relations(
         &self,
         text: &str,
-        language: Option<&str>,
+        language: Option<Language>,
     ) -> Result<(Vec<Entity>, Vec<Relation>)>;
 }
 
@@ -731,7 +732,7 @@ pub trait DynamicLabels: Model {
         &self,
         text: &str,
         labels: &[&str],
-        language: Option<&str>,
+        language: Option<Language>,
     ) -> Result<Vec<Entity>>;
 }
 
@@ -958,7 +959,7 @@ impl MockModel {
 }
 
 impl Model for MockModel {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         if self.validate && !self.entities.is_empty() {
             self.validate_entities(text)?;
         }

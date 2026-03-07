@@ -39,7 +39,7 @@
 //! let entities = model.extract_entities("Steve Jobs founded Apple", None)?;
 //! ```
 
-use crate::{Entity, EntityCategory, EntityType, Error, Model, Result};
+use crate::{Entity, EntityCategory, EntityType, Error, Model, Result, Language};
 
 #[cfg(feature = "candle")]
 use {
@@ -451,7 +451,7 @@ impl CandleNER {
 
 #[cfg(feature = "candle")]
 impl Model for CandleNER {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         self.extract(text)
     }
 

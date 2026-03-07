@@ -40,7 +40,7 @@
 //! - Personnel: start-position, end-position, nominate, elect
 //! - Justice: arrest-jail, release-parole, trial-hearing, charge-indict, etc.
 
-use crate::{Entity, Result};
+use crate::{Entity, Language, Result};
 
 /// Event with trigger and arguments following ACE schema.
 #[derive(Debug, Clone)]
@@ -110,7 +110,7 @@ pub trait EventExtractor: Send + Sync {
     /// # Returns
     ///
     /// Vector of events with triggers and arguments.
-    fn extract_events(&self, text: &str, language: Option<&str>) -> Result<Vec<Event>>;
+    fn extract_events(&self, text: &str, language: Option<Language>) -> Result<Vec<Event>>;
 
     /// Get the extractor name/identifier.
     fn name(&self) -> &'static str;
@@ -153,16 +153,15 @@ impl Default for RuleBasedEventExtractor {
 }
 
 impl EventExtractor for RuleBasedEventExtractor {
-    fn extract_events(&self, text: &str, language: Option<&str>) -> Result<Vec<Event>> {
+    fn extract_events(&self, text: &str, language: Option<Language>) -> Result<Vec<Event>> {
         let mut events = Vec::new();
 
         // Language-aware trigger patterns (ACE 2005 inspired)
         // In production, this would use a more sophisticated lexicon
-        let lang_code = language.map(|l| l.split('-').next().unwrap_or(l).to_lowercase());
 
         // Get language-specific patterns or fall back to English
-        let trigger_patterns: Vec<(&str, &str)> = match lang_code.as_deref() {
-            Some("es") => vec![
+        let trigger_patterns: Vec<(&str, &str)> = match language {
+            Some(Language::Spanish) => vec![
                 // Spanish conflict events
                 ("invadió", "conflict:attack"),
                 ("atacó", "conflict:attack"),
@@ -196,7 +195,7 @@ impl EventExtractor for RuleBasedEventExtractor {
                 ("condenó", "justice:convict"),
                 ("sentenció", "justice:sentence"),
             ],
-            Some("fr") => vec![
+            Some(Language::French) => vec![
                 // French conflict
                 ("envahi", "conflict:attack"),
                 ("attaqué", "conflict:attack"),
@@ -230,7 +229,7 @@ impl EventExtractor for RuleBasedEventExtractor {
                 ("condamné", "justice:convict"),
                 ("condamné", "justice:sentence"),
             ],
-            Some("de") => vec![
+            Some(Language::German) => vec![
                 // German conflict
                 ("invadiert", "conflict:attack"),
                 ("angegriffen", "conflict:attack"),
@@ -264,7 +263,13 @@ impl EventExtractor for RuleBasedEventExtractor {
                 ("verurteilt", "justice:convict"),
                 ("verurteilt", "justice:sentence"),
             ],
-            Some("zh") | Some("ja") | Some("ko") | Some("ar") | Some("ru") => {
+            Some(
+                Language::Chinese
+                | Language::Japanese
+                | Language::Korean
+                | Language::Arabic
+                | Language::Russian,
+            ) => {
                 // For CJK, Arabic, Russian: use English patterns as fallback
                 // In production, add language-specific patterns
                 vec![]
@@ -307,15 +312,13 @@ impl EventExtractor for RuleBasedEventExtractor {
         // For CJK languages, case doesn't apply, but this is safe
         let text_lower = text.to_lowercase();
         for (trigger_word, event_type) in trigger_patterns {
-            // For CJK and other languages without case, search in original text too
-            let search_text = if lang_code
-                .as_deref()
-                .is_some_and(|l| matches!(l, "zh" | "ja" | "ko" | "ar" | "ru"))
-            {
-                text // No lowercasing for languages where case doesn't apply
-            } else {
-                &text_lower
-            };
+            // For CJK and other caseless scripts, search in original text
+            let search_text =
+                if language.is_some_and(|l| l.is_cjk() || l.is_rtl() || l == Language::Russian) {
+                    text
+                } else {
+                    &text_lower
+                };
 
             if let Some(pos) = search_text.find(trigger_word) {
                 // Find character offset (not byte offset)
@@ -386,7 +389,9 @@ mod tests {
     fn test_event_unicode_offsets() {
         let extractor = RuleBasedEventExtractor::new();
         let text = "ロシアがウクライナを侵攻した。"; // "Russia invaded Ukraine" in Japanese
-        let events = extractor.extract_events(text, Some("ja")).unwrap();
+        let events = extractor
+            .extract_events(text, Some(Language::Japanese))
+            .unwrap();
 
         // Verify offsets are character-based
         for event in &events {
@@ -401,19 +406,25 @@ mod tests {
 
         // Spanish - "invadió" should match
         let events_es = extractor
-            .extract_events("Rusia invadió Ucrania en 2022.", Some("es"))
+            .extract_events("Rusia invadió Ucrania en 2022.", Some(Language::Spanish))
             .unwrap();
         assert!(!events_es.is_empty(), "Should extract Spanish events");
 
         // French - "envahi" should match
         let events_fr = extractor
-            .extract_events("La Russie a envahi l'Ukraine en 2022.", Some("fr"))
+            .extract_events(
+                "La Russie a envahi l'Ukraine en 2022.",
+                Some(Language::French),
+            )
             .unwrap();
         assert!(!events_fr.is_empty(), "Should extract French events");
 
         // German - "angegriffen" should match (past participle form)
         let events_de = extractor
-            .extract_events("Russland hat die Ukraine 2022 angegriffen.", Some("de"))
+            .extract_events(
+                "Russland hat die Ukraine 2022 angegriffen.",
+                Some(Language::German),
+            )
             .unwrap();
         assert!(!events_de.is_empty(), "Should extract German events");
     }

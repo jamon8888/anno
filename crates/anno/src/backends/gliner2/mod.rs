@@ -50,7 +50,7 @@
 
 #[cfg(feature = "onnx")]
 use crate::sync::lock;
-use crate::{Entity, EntityType, Error, Result};
+use crate::{Entity, EntityType, Error, Result, Language};
 use anno_core::EntityCategory;
 #[cfg(feature = "candle")]
 use candle_core::Device;
@@ -241,7 +241,7 @@ pub(super) fn map_entity_type(type_str: &str) -> EntityType {
 
 #[cfg(feature = "onnx")]
 impl crate::Model for GLiNER2Onnx {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         let schema = TaskSchema::new().with_entities(&[
             "person",
             "organization",
@@ -305,7 +305,7 @@ impl crate::DynamicLabels for GLiNER2Onnx {
         &self,
         text: &str,
         labels: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> crate::Result<Vec<crate::Entity>> {
         <Self as ZeroShotNER>::extract_with_types(self, text, labels, 0.3)
     }
@@ -317,7 +317,7 @@ impl crate::DynamicLabels for GLiNER2Onnx {
 
 #[cfg(feature = "candle")]
 impl crate::Model for GLiNER2Candle {
-    fn extract_entities(&self, text: &str, _language: Option<&str>) -> Result<Vec<Entity>> {
+    fn extract_entities(&self, text: &str, _language: Option<Language>) -> Result<Vec<Entity>> {
         let schema = TaskSchema::new().with_entities(&[
             "person",
             "organization",
@@ -382,7 +382,7 @@ impl crate::DynamicLabels for GLiNER2Candle {
         &self,
         text: &str,
         labels: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> crate::Result<Vec<crate::Entity>> {
         <Self as ZeroShotNER>::extract_with_types(self, text, labels, 0.3)
     }
@@ -500,7 +500,7 @@ impl crate::RelationCapable for GLiNER2Onnx {
     fn extract_with_relations(
         &self,
         text: &str,
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> Result<(Vec<Entity>, Vec<crate::Relation>)> {
         use crate::backends::inference::{DEFAULT_ENTITY_TYPES, DEFAULT_RELATION_TYPES};
         let result = <Self as RelationExtractor>::extract_with_relations(
@@ -519,7 +519,7 @@ impl crate::RelationCapable for GLiNER2Candle {
     fn extract_with_relations(
         &self,
         text: &str,
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> Result<(Vec<Entity>, Vec<crate::Relation>)> {
         use crate::backends::inference::{DEFAULT_ENTITY_TYPES, DEFAULT_RELATION_TYPES};
         let result = <Self as RelationExtractor>::extract_with_relations(
@@ -542,7 +542,7 @@ impl crate::BatchCapable for GLiNER2Onnx {
     fn extract_entities_batch(
         &self,
         texts: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> Result<Vec<Vec<Entity>>> {
         if texts.is_empty() {
             return Ok(Vec::new());
@@ -670,7 +670,7 @@ impl crate::BatchCapable for GLiNER2Candle {
     fn extract_entities_batch(
         &self,
         texts: &[&str],
-        _language: Option<&str>,
+        _language: Option<Language>,
     ) -> Result<Vec<Vec<Entity>>> {
         if texts.is_empty() {
             return Ok(Vec::new());
@@ -848,7 +848,7 @@ mod tests {
         assert!(matches!(map_entity_type("loc"), EntityType::Location));
         // Unknown types map to Custom/Other with the uppercase version (due to schema normalization)
         assert!(
-            matches!(map_entity_type("custom_type"), EntityType::Custom { ref name, .. } | EntityType::Other(ref name) if name == "CUSTOM_TYPE")
+            matches!(map_entity_type("custom_type"), EntityType::Custom { ref name, .. } if name == "CUSTOM_TYPE")
         );
         // Known special types map to Custom
         assert!(matches!(
@@ -960,7 +960,7 @@ mod tests {
         let ty = map_entity_type("");
         assert!(matches!(
             ty,
-            EntityType::Custom { .. } | EntityType::Other(_)
+            EntityType::Custom { .. }
         ));
     }
 
