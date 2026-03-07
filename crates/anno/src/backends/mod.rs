@@ -336,6 +336,11 @@ pub mod burn;
 pub mod albert;
 #[cfg(feature = "onnx")]
 pub mod deberta_v3;
+/// GLiREL: Zero-shot relation extraction via ONNX.
+///
+/// Uses a DeBERTa-v3 encoder with relation scoring head from the GLiREL family.
+/// Export models with `scripts/export_glirel_onnx.py`.
+pub mod glirel;
 pub mod gliner_poly;
 pub mod universal_ner;
 
@@ -416,6 +421,7 @@ pub use w2ner::{W2NERConfig, W2NERRelation, W2NER};
 pub use albert::ALBERTNER;
 #[cfg(feature = "onnx")]
 pub use deberta_v3::DeBERTaV3NER;
+pub use glirel::GLiREL;
 pub use gliner_poly::GLiNERPoly;
 pub use universal_ner::UniversalNER;
 

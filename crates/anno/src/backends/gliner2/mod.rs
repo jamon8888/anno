@@ -59,6 +59,59 @@ pub(crate) mod relations;
 
 use crate::backends::inference::{ExtractionWithRelations, RelationExtractor, ZeroShotNER};
 
+/// Extract relations, using GLiREL (ONNX) when available, falling back to heuristics.
+///
+/// GLiREL is loaded lazily on first call and cached via `OnceLock`.
+#[cfg(feature = "onnx")]
+fn extract_relations_neural_or_heuristic(
+    entities: &[Entity],
+    text: &str,
+    relation_types: &[&str],
+    threshold: f32,
+) -> Vec<crate::backends::inference::RelationTriple> {
+    use std::sync::OnceLock;
+
+    // Try to load GLiREL once. If it fails, fall back to heuristics permanently.
+    static GLIREL: OnceLock<Option<crate::backends::glirel::GLiREL>> = OnceLock::new();
+
+    let glirel = GLIREL.get_or_init(|| {
+        let default_dir = dirs::cache_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from(".cache"))
+            .join("anno")
+            .join("models")
+            .join("glirel");
+
+        match crate::backends::glirel::GLiREL::from_local(&default_dir) {
+            Ok(model) => {
+                log::info!("[GLiNER2] GLiREL model loaded for relation extraction");
+                Some(model)
+            }
+            Err(e) => {
+                log::debug!(
+                    "[GLiNER2] GLiREL not available ({}), using heuristic relations",
+                    e
+                );
+                None
+            }
+        }
+    });
+
+    if let Some(model) = glirel {
+        match model.extract_relations(text, entities, relation_types, threshold) {
+            Ok(rels) => return rels,
+            Err(e) => {
+                log::warn!(
+                    "[GLiNER2] GLiREL inference failed ({}), falling back to heuristic",
+                    e
+                );
+            }
+        }
+    }
+
+    // Heuristic fallback
+    relations::extract_relations_heuristic(entities, text, relation_types, threshold)
+}
+
 #[cfg(feature = "candle")]
 pub mod candle;
 #[cfg(feature = "onnx")]
@@ -402,12 +455,11 @@ impl RelationExtractor for GLiNER2Onnx {
         relation_types: &[&str],
         threshold: f32,
     ) -> Result<ExtractionWithRelations> {
-        // Extract entities first
         let entities = self.extract_ner(text, types, threshold)?;
 
-        // Extract relations using heuristics
+        // Use GLiREL (neural) when available, fall back to heuristics
         let relations =
-            relations::extract_relations_heuristic(&entities, text, relation_types, threshold);
+            extract_relations_neural_or_heuristic(&entities, text, relation_types, threshold);
 
         Ok(ExtractionWithRelations {
             entities,
@@ -428,7 +480,7 @@ impl RelationExtractor for GLiNER2Candle {
         let type_strings: Vec<String> = types.iter().map(|s| s.to_string()).collect();
         let entities = self.extract_entities(text, &type_strings, threshold)?;
 
-        // Extract relations using heuristics
+        // Use heuristic relations for Candle backend (GLiREL is ONNX-only)
         let relations =
             relations::extract_relations_heuristic(&entities, text, relation_types, threshold);
 
@@ -906,7 +958,10 @@ mod tests {
     fn test_map_entity_type_empty_string() {
         // Empty string should not panic; falls through to Custom/Other
         let ty = map_entity_type("");
-        assert!(matches!(ty, EntityType::Custom { .. } | EntityType::Other(_)));
+        assert!(matches!(
+            ty,
+            EntityType::Custom { .. } | EntityType::Other(_)
+        ));
     }
 
     // =========================================================================

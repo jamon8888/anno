@@ -64,7 +64,7 @@
 //! | `ANNO_WORST_EXPLORATION_C` | Worst-first exploration coefficient (default 0.8) |
 //! | `ANNO_WORST_HARD_WEIGHT` | Worst-first weight for hard failures (default 1.0) |
 //! | `ANNO_WORST_SOFT_WEIGHT` | Worst-first weight for soft junk (default 0.0) |
-//! | `ANNO_RELATION_TPLINKER_ORACLE_ENTITIES` | If true (default), TPLinker relation eval uses gold entity spans as candidates (keeps placeholder baseline non-degenerate) |
+//! | `ANNO_RELATION_TPLINKER_ORACLE_ENTITIES` | If true (default), TPLinker relation eval uses gold entity spans as candidates (avoids mention detection mismatch dominating results) |
 //!
 //! # Muxer presets (recommended)
 //!

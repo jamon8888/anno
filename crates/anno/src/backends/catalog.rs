@@ -139,8 +139,8 @@ pub static BACKEND_CATALOG: &[BackendInfo] = &[
         feature: None,
         status: BackendStatus::Beta,
         zero_shot: false,
-        gpu_support: false,
-        description: "Relation extraction baseline (heuristic today; TPLinker neural model TBD)",
+        gpu_support: true,
+        description: "Joint entity-relation extraction via handshaking tagging (Wang et al., COLING 2020; ONNX neural with onnx feature, heuristic fallback otherwise)",
         recommended_models: &[],
     },
     BackendInfo {
@@ -270,6 +270,15 @@ pub static BACKEND_CATALOG: &[BackendInfo] = &[
             "bert-base-NER",
             "dbmdz/bert-large-cased-finetuned-conll03-english",
         ],
+    },
+    BackendInfo {
+        name: "glirel",
+        feature: Some("onnx"),
+        status: BackendStatus::Beta,
+        zero_shot: true,
+        gpu_support: true,
+        description: "GLiREL zero-shot relation extraction (DeBERTa encoder + scoring head)",
+        recommended_models: &["jackboyla/glirel-large-v0"],
     },
     BackendInfo {
         name: "gliner_poly",

@@ -14,7 +14,7 @@
 //! - LOC (Location)
 //! - MISC (Miscellaneous)
 
-#![allow(missing_docs)] // Stub implementation
+#![allow(missing_docs)] // BIO decoding internals; public API is documented
 #![allow(clippy::manual_strip)] // Complex BIO tag parsing
 
 use crate::{Entity, Error, Result};
@@ -188,13 +188,22 @@ impl BertNEROnnx {
         map.insert("I-ORG".to_string(), EntityType::Organization);
         map.insert("B-LOC".to_string(), EntityType::Location);
         map.insert("I-LOC".to_string(), EntityType::Location);
-        map.insert("B-MISC".to_string(), EntityType::custom("misc", EntityCategory::Misc));
-        map.insert("I-MISC".to_string(), EntityType::custom("misc", EntityCategory::Misc));
+        map.insert(
+            "B-MISC".to_string(),
+            EntityType::custom("misc", EntityCategory::Misc),
+        );
+        map.insert(
+            "I-MISC".to_string(),
+            EntityType::custom("misc", EntityCategory::Misc),
+        );
         // Alternative formats
         map.insert("PER".to_string(), EntityType::Person);
         map.insert("ORG".to_string(), EntityType::Organization);
         map.insert("LOC".to_string(), EntityType::Location);
-        map.insert("MISC".to_string(), EntityType::custom("misc", EntityCategory::Misc));
+        map.insert(
+            "MISC".to_string(),
+            EntityType::custom("misc", EntityCategory::Misc),
+        );
         map
     }
 
@@ -586,8 +595,9 @@ impl BertNEROnnx {
                         current_entity = Some((start, byte_end, etype, conf));
                         last_entity_word_id = cur_word_id;
                     }
-                } else if current_entity.as_ref().is_some_and(
-                    |(_, prev_end, prev_type, _)| {
+                } else if current_entity
+                    .as_ref()
+                    .is_some_and(|(_, prev_end, prev_type, _)| {
                         // Name completion: BERT often tags surnames as O when
                         // they follow a recognized given name.  Absorb adjacent
                         // capitalized words (proper-noun pattern: Uppercase
@@ -606,8 +616,8 @@ impl BertNEROnnx {
                                     }
                                 })
                                 .unwrap_or(false)
-                    },
-                ) {
+                    })
+                {
                     if let Some((start, _, etype, conf)) = current_entity.take() {
                         current_entity = Some((start, byte_end, etype, conf));
                         last_entity_word_id = cur_word_id;

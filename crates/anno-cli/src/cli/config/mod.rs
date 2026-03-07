@@ -25,5 +25,5 @@
 //!
 //! See [`crate::cli::commands::config`] for the command implementation.
 
-// Configuration loading logic is currently inlined in commands.
-// This module is a placeholder for future refactoring to centralize config handling.
+// Configuration loading logic is currently inlined in individual command modules.
+// This module provides the doc-level overview; implementations live in commands.
