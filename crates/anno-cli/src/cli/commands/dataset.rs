@@ -1043,7 +1043,7 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                                     by_key.into_values().collect();
 
                                                 let rel_strs: Vec<&str> =
-                                                    relation_types_vec.iter().copied().collect();
+                                                    relation_types_vec.to_vec();
                                                 let rel_cfg = RelationExtractionConfig {
                                                     threshold: 0.5,
                                                     max_span_distance: 120,

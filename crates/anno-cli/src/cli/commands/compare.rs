@@ -241,65 +241,6 @@ fn parse_entities_from_any_json(content: &str) -> Result<Vec<ComparableEntity>, 
     Err("unrecognized input format: expected {entities:[...]} or GroundedDocument".to_string())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use clap::Parser;
-
-    /// Wrapper so we can test CompareArgs parsing in isolation.
-    #[derive(Parser)]
-    struct TestCli {
-        #[command(flatten)]
-        args: CompareArgs,
-    }
-
-    #[test]
-    fn model_list_accepts_all_always_available_backends() {
-        // These backends are always available (no feature gates).
-        let cli = TestCli::try_parse_from([
-            "test",
-            "--models",
-            "--model-list",
-            "stacked,pattern,heuristic,crf,hmm,ensemble,tplinker",
-            "input.txt",
-        ])
-        .expect("should parse valid model names");
-        assert_eq!(cli.args.model_list.len(), 7);
-        assert!(matches!(cli.args.model_list[0], ModelBackend::Stacked));
-        assert!(matches!(cli.args.model_list[1], ModelBackend::Pattern));
-    }
-
-    #[cfg(feature = "onnx")]
-    #[test]
-    fn model_list_accepts_onnx_backends() {
-        let cli = TestCli::try_parse_from([
-            "test",
-            "--models",
-            "--model-list",
-            "stacked,bert-onnx,gliner",
-            "input.txt",
-        ])
-        .expect("should parse bert-onnx and gliner with onnx feature");
-        assert_eq!(cli.args.model_list.len(), 3);
-        assert!(matches!(cli.args.model_list[1], ModelBackend::BertOnnx));
-    }
-
-    #[test]
-    fn model_list_rejects_unknown_backend() {
-        let result = TestCli::try_parse_from([
-            "test",
-            "--models",
-            "--model-list",
-            "nonexistent",
-            "input.txt",
-        ]);
-        assert!(
-            result.is_err(),
-            "Unknown backend should be rejected by clap"
-        );
-    }
-}
-
 fn compare_entities(
     a: &[ComparableEntity],
     b: &[ComparableEntity],
@@ -475,4 +416,63 @@ fn compare_entities(
     }
 
     (diffs, counts, jaccard)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    /// Wrapper so we can test CompareArgs parsing in isolation.
+    #[derive(Parser)]
+    struct TestCli {
+        #[command(flatten)]
+        args: CompareArgs,
+    }
+
+    #[test]
+    fn model_list_accepts_all_always_available_backends() {
+        // These backends are always available (no feature gates).
+        let cli = TestCli::try_parse_from([
+            "test",
+            "--models",
+            "--model-list",
+            "stacked,pattern,heuristic,crf,hmm,ensemble,tplinker",
+            "input.txt",
+        ])
+        .expect("should parse valid model names");
+        assert_eq!(cli.args.model_list.len(), 7);
+        assert!(matches!(cli.args.model_list[0], ModelBackend::Stacked));
+        assert!(matches!(cli.args.model_list[1], ModelBackend::Pattern));
+    }
+
+    #[cfg(feature = "onnx")]
+    #[test]
+    fn model_list_accepts_onnx_backends() {
+        let cli = TestCli::try_parse_from([
+            "test",
+            "--models",
+            "--model-list",
+            "stacked,bert-onnx,gliner",
+            "input.txt",
+        ])
+        .expect("should parse bert-onnx and gliner with onnx feature");
+        assert_eq!(cli.args.model_list.len(), 3);
+        assert!(matches!(cli.args.model_list[1], ModelBackend::BertOnnx));
+    }
+
+    #[test]
+    fn model_list_rejects_unknown_backend() {
+        let result = TestCli::try_parse_from([
+            "test",
+            "--models",
+            "--model-list",
+            "nonexistent",
+            "input.txt",
+        ]);
+        assert!(
+            result.is_err(),
+            "Unknown backend should be rejected by clap"
+        );
+    }
 }
