@@ -911,6 +911,17 @@ fn extract_with_custom_types(
                     .extract_with_types(text, &type_refs, threshold)
                     .map_err(|e| CliError::from(format!("Zero-shot extraction failed: {}", e)));
             }
+            ModelBackend::Nuner => {
+                use anno::DynamicLabels;
+                let model =
+                    anno::backends::nuner::NuNER::from_pretrained(anno::DEFAULT_NUNER_MODEL)
+                        .map_err(|e| {
+                            CliError::from(format!("Failed to create NuNER model: {}", e))
+                        })?;
+                return model
+                    .extract_with_labels(text, &type_refs, None)
+                    .map_err(|e| CliError::from(format!("Zero-shot extraction failed: {}", e)));
+            }
             _ => {}
         }
     }
@@ -918,7 +929,7 @@ fn extract_with_custom_types(
     // Fallback: warn and use standard extraction
     if !quiet {
         eprintln!(
-            "{} --extract-types requires --model gliner or --model gliner2. Ignoring custom types.",
+            "{} --extract-types requires --model gliner, --model gliner2, or --model nuner. Ignoring custom types.",
             color("33", "warning:")
         );
     }
