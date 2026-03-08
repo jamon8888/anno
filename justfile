@@ -45,6 +45,9 @@ check-feature-matrix:
         echo "==> cargo check -p anno-lib --no-default-features --features ${feature}"
         cargo check -p anno-lib --no-default-features --features "${feature}"
     done
+    # Cross-crate feature combos that have broken before
+    echo "==> cargo check -p anno-cli --features 'eval onnx pdf'"
+    cargo check -p anno-cli --features "eval onnx pdf"
 
 # Format all code
 fmt:
@@ -177,6 +180,7 @@ ci: fmt
     cargo build --workspace --features "eval discourse"
     cargo test --workspace --lib --features "eval discourse"
     cargo test --package anno --tests --features "eval discourse"
+    cargo build -p anno-cli --features "eval onnx pdf"
     cargo build --workspace --no-default-features
     cargo test --workspace --no-default-features --lib
     RUSTDOCFLAGS='-D warnings' cargo doc -p anno -p anno-core -p anno-eval --no-deps --features "eval discourse"
@@ -185,6 +189,13 @@ ci: fmt
 # Simulate CI with sanity evals (includes small random sample evals)
 ci-eval: ci
     just eval-sanity
+
+# Pre-tag validation: full CI + feature matrix + publish dry-run + docs.
+# Run this before `git tag`. Catches cross-feature build breaks that CI misses.
+pre-tag: ci
+    just check-feature-matrix
+    just validate-publish
+    @echo "Pre-tag checks passed. Safe to tag."
 
 # === Evaluation ===
 
