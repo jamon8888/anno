@@ -480,6 +480,11 @@ mod onnx_impl {
                 }
             }
 
+            // Filter self-relations where head and tail have identical text
+            // (e.g. Apple@19 ACQUIRED Apple@136 when the same entity name
+            // appears at multiple positions).
+            relations.retain(|r| entities[r.head_idx].text != entities[r.tail_idx].text);
+
             relations.sort_by(|a, b| {
                 b.confidence
                     .partial_cmp(&a.confidence)

@@ -1289,6 +1289,10 @@ pub fn extract_relation_triples_simple(
         }
     }
 
+    // Filter self-relations where head and tail have identical surface text
+    // (different mentions of the same entity name at different positions).
+    triples.retain(|r| entities[r.head_idx].text != entities[r.tail_idx].text);
+
     // Sort by confidence descending, then deduplicate per undirected pair.
     triples.sort_by(|a, b| {
         b.confidence
