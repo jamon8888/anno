@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/anno/badge.svg)](https://docs.rs/anno)
 [![CI](https://github.com/arclabs561/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/anno/actions/workflows/ci.yml)
 
-Information extraction for unstructured text: named entity recognition (NER), coreference resolution, entity linking, event extraction, zero-shot entity types, and knowledge graph export.
+Information extraction for unstructured text: named entity recognition (NER), coreference resolution, entity linking, and zero-shot entity types.
 
 Dual-licensed under MIT or Apache-2.0. MSRV: 1.85.
 
@@ -14,7 +14,7 @@ The crate is published as **`anno`** on crates.io.
 
 ```toml
 [dependencies]
-anno = "0.3.6"
+anno = "0.3.7"
 ```
 
 The default feature (`onnx`) pulls in `ort` (ONNX Runtime C++ bindings). For builds without a C++ runtime, use `default-features = false`.
