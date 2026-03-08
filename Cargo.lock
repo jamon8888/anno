@@ -74,7 +74,7 @@ checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
 name = "anno"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "anno-lib",
  "serde_json",
@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "anno-core"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "bitflags",
  "chrono",
@@ -177,7 +177,7 @@ dependencies = [
 
 [[package]]
 name = "anno-lib"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "anno-core",
  "anno-metrics",
@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "anno-metrics"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "anno-core",
  "proptest",
