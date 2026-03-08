@@ -602,8 +602,18 @@ impl BertNEROnnx {
                         // they follow a recognized given name.  Absorb adjacent
                         // capitalized words (proper-noun pattern: Uppercase
                         // followed by lowercase) into PER entities.
+                        //
+                        // Also absorb across hyphens (e.g. "Jean-Claude") where
+                        // the gap is exactly a '-' character.
                         matches!(prev_type, EntityType::Person)
-                            && byte_start <= *prev_end + 1
+                            && byte_start <= *prev_end + 2
+                            && {
+                                let gap_is_connector = byte_start == *prev_end + 1
+                                    || text
+                                        .get(*prev_end..byte_start)
+                                        .is_some_and(|g| g == " " || g == "-");
+                                gap_is_connector
+                            }
                             && text
                                 .get(byte_start..)
                                 .map(|s| {
@@ -622,6 +632,18 @@ impl BertNEROnnx {
                         current_entity = Some((start, byte_end, etype, conf));
                         last_entity_word_id = cur_word_id;
                     }
+                } else if current_entity
+                    .as_ref()
+                    .is_some_and(|(_, prev_end, prev_type, _)| {
+                        // Keep PER entity open across a hyphen token so the
+                        // next B-PER token can merge (e.g. "Jean-Claude").
+                        matches!(prev_type, EntityType::Person)
+                            && byte_start == *prev_end
+                            && text.get(byte_start..byte_end).is_some_and(|t| t == "-")
+                    })
+                {
+                    // Don't finalize -- leave current_entity as-is,
+                    // the next token's B-tag merge will pick it up.
                 } else if let Some((start, end, entity_type, conf)) = current_entity.take() {
                     finalize_entity(start, end, entity_type, conf, &mut entities);
                     last_entity_word_id = None;
@@ -657,7 +679,11 @@ impl BertNEROnnx {
                         is_subword_continuation
                             || (std::mem::discriminant(prev_type)
                                 == std::mem::discriminant(&entity_type)
-                                && byte_start <= prev_end + 1)
+                                && byte_start <= prev_end + 2
+                                && (byte_start == prev_end + 1
+                                    || text
+                                        .get(prev_end..byte_start)
+                                        .is_some_and(|g| g == " " || g == "-")))
                     } else {
                         false
                     };
