@@ -207,7 +207,7 @@ fn run_eval(
         }
 
         // Build gold CrossDocClusters
-        for (_chain_key, mentions) in &chain_to_mentions {
+        for mentions in chain_to_mentions.values() {
             if mentions.len() < 2 {
                 continue;
             }

@@ -922,8 +922,6 @@ mod tests {
 
     #[test]
     fn test_evaluate_long_document_with_gold_mentions() {
-        use anno_core::MentionType;
-
         let encoder = HeuristicClusterEncoder::new(64);
         let scorer = CosineMergeScorer::new();
         let config = CrossContextEvalConfig {
