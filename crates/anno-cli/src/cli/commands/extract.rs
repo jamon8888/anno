@@ -373,6 +373,7 @@ pub fn run(args: ExtractArgs) -> Result<(), CliError> {
     }
 
     // GLiNER UX: hint when zero entities returned without custom types
+    #[cfg(feature = "onnx")]
     if entities.is_empty()
         && extract_types.is_none()
         && matches!(args.model, ModelBackend::Gliner | ModelBackend::Gliner2)
