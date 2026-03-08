@@ -1042,10 +1042,8 @@ pub fn run(args: DatasetArgs) -> Result<(), String> {
                                                 let oracle_entities: Vec<PredEntity> =
                                                     by_key.into_values().collect();
 
-                                                let rel_strs: Vec<&str> = relation_types_vec
-                                                    .iter()
-                                                    .map(|s| s.as_str())
-                                                    .collect();
+                                                let rel_strs: Vec<&str> =
+                                                    relation_types_vec.iter().copied().collect();
                                                 let rel_cfg = RelationExtractionConfig {
                                                     threshold: 0.5,
                                                     max_span_distance: 120,

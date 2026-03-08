@@ -436,7 +436,7 @@ impl ReportBuilder {
                         && entity.entity_type.as_label() == gold.entity_type
                 });
 
-                predictions.push((entity.confidence, is_correct));
+                predictions.push((entity.confidence.into(), is_correct));
             }
         }
 

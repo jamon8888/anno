@@ -875,7 +875,7 @@ impl EvalSystem {
                 // Without gold labels, approximate correctness from confidence threshold
                 let is_correct = entity.confidence > 0.5;
 
-                predictions.push((entity.confidence, is_correct));
+                predictions.push((entity.confidence.into(), is_correct));
             }
         }
 

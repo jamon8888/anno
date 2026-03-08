@@ -89,7 +89,7 @@ impl PredictedEntity {
             entity_type: entity.entity_type.as_label().to_string(),
             start: entity.start,
             end: entity.end,
-            confidence: entity.confidence,
+            confidence: entity.confidence.into(),
         }
     }
 }
