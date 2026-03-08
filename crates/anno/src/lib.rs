@@ -318,10 +318,10 @@ pub trait Model: sealed::Sealed + Send + Sync {
 /// # Example
 ///
 /// ```rust
-/// use anno::{AnyModel, Entity, EntityType, Model, Result};
+/// use anno::{AnyModel, Entity, EntityType, Language, Model, Result};
 ///
 /// // Define extraction logic as a closure or function
-/// let my_extractor = |text: &str, _lang: Option<&str>| -> Result<Vec<Entity>> {
+/// let my_extractor = |text: &str, _lang: Option<Language>| -> Result<Vec<Entity>> {
 ///     // Your custom NER logic here
 ///     Ok(vec![])
 /// };

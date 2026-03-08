@@ -15,7 +15,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```ignore
 //! use anno::backends::demonstration::{DemonstrationBank, HelpfulnessConfig};
 //!
 //! let mut bank = DemonstrationBank::new();

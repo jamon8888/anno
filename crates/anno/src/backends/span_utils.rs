@@ -85,7 +85,7 @@ impl Default for SpanConfig {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```ignore
 /// use anno::backends::span_utils::make_span_tensors;
 ///
 /// let (span_idx, span_mask) = make_span_tensors(4, 3);

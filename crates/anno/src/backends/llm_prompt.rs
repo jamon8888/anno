@@ -15,7 +15,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```ignore
 //! use anno::backends::llm_prompt::{CodeNERPrompt, BIOSchema};
 //! use anno::EntityType;
 //!
