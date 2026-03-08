@@ -49,12 +49,12 @@
 //! | [`entity`] | `Entity`, `Span`, `Relation`, `EntityType` |
 //! | [`grounded`] | `GroundedDocument`, `Identity`, `Signal`, `Track` |
 //! | [`coref`] | `Mention`, `CorefChain`, `CorefDocument` |
-//! | [`graph`] | Export to Neo4j, GraphML, JSON-LD |
-//! | [`calibration`] | Confidence score calibration |
-//! | [`historical`] | Ancient language provenance (BCE dates, epigraphy) |
+//! | `graph` | Export to Neo4j, GraphML, JSON-LD |
+//! | `calibration` | Confidence score calibration |
+//! | `historical` | Ancient language provenance (BCE dates, epigraphy) |
 //! | [`provenance`] | Document origin tracking |
 //! | [`types`] | `Gender`, `MentionType`, `PhiFeatures`, `TypeLabel` |
-//! | [`provisional`] | Experimental types (`BoxEmbedding`) |
+//! | `provisional` | Experimental types (`BoxEmbedding`) |
 //!
 //! ## Design Philosophy
 //!

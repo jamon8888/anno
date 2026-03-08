@@ -53,7 +53,7 @@ pub struct NeuralClusterConfig {
     pub num_heads: usize,
     /// Dropout probability
     pub dropout: f32,
-    /// Use learned [CLS] token for pooling
+    /// Use learned \[CLS\] token for pooling
     pub use_cls_pooling: bool,
     /// Maximum mentions per cluster (truncate if exceeded)
     pub max_mentions: usize,
