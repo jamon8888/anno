@@ -32,11 +32,31 @@ Academic papers, datasets, and software cited across the anno codebase.
   [[arXiv:1810.04805]](https://arxiv.org/abs/1810.04805)
   — Underlying architecture for `bert-onnx`, `deberta-v3`, `albert`, and `candle-ner` backends.
 
+- P. He, X. Liu, J. Gao, and W. Chen. "DeBERTa: Decoding-enhanced BERT with Disentangled Attention." *ICLR*, 2021.
+  [[arXiv:2006.03654]](https://arxiv.org/abs/2006.03654)
+  — Architecture basis for the `deberta-v3` backend. Disentangled attention separately encodes content and position.
+
+- Z. Lan, M. Chen, S. Goodman, K. Gimpel, P. Sharma, and R. Soricut. "ALBERT: A Lite BERT for Self-supervised Learning of Language Representations." *ICLR*, 2020.
+  [[arXiv:1909.11942]](https://arxiv.org/abs/1909.11942)
+  — Architecture basis for the `albert` backend. Cross-layer parameter sharing and factorized embeddings.
+
 ## Classical Sequence Models
 
 - J. Lafferty, A. McCallum, and F. Pereira. "Conditional Random Fields: Probabilistic Models for Segmenting and Labeling Sequence Data." *ICML*, 2001.
   [[PDF]](https://repository.upenn.edu/cgi/viewcontent.cgi?article=1162&context=cis_papers)
   — Basis for the `crf` backend.
+
+- Z. Huang, W. Xu, and K. Yu. "Bidirectional LSTM-CRF Models for Sequence Tagging." 2015.
+  [[arXiv:1508.01991]](https://arxiv.org/abs/1508.01991)
+  — Foundational architecture for the `bilstm_crf` backend.
+
+- G. Lample, M. Ballesteros, S. Subramanian, K. Kawakami, and C. Dyer. "Neural Architectures for Named Entity Recognition." *NAACL-HLT*, 2016.
+  [[PDF]](https://aclanthology.org/N16-1030.pdf)
+  — BiLSTM-CRF with character-level embeddings; eliminates need for hand-crafted features.
+
+- X. Ma and E. Hovy. "End-to-end Sequence Labeling via Bi-directional LSTM-CNNs-CRF." *ACL*, 2016.
+  [[arXiv:1603.01354]](https://arxiv.org/abs/1603.01354)
+  — Combined character-level CNN + word-level BiLSTM + CRF pipeline for sequence labeling.
 
 - L. R. Rabiner. "A Tutorial on Hidden Markov Models and Selected Applications in Speech Recognition." *Proceedings of the IEEE* 77(2), 1989.
   [[PDF]](https://ieeexplore.ieee.org/document/18626)
@@ -51,12 +71,26 @@ Academic papers, datasets, and software cited across the anno codebase.
   [[arXiv:1707.07045]](https://arxiv.org/abs/1707.07045)
   — Inspiration for the mention-ranking coreference architecture.
 
+- K. Raghunathan, H. Lee, S. Rangarajan, N. Chambers, M. Surdeanu, D. Jurafsky, and C. Manning. "A Multi-Pass Sieve for Coreference Resolution." *EMNLP*, 2010.
+  [[PDF]](https://aclanthology.org/D10-1048.pdf)
+  — Basis for the rule-based sieve architecture in `SimpleCorefResolver`.
+
+- S. Otmazgin, A. Cattan, and Y. Goldberg. "F-COREF: Fast, Accurate and Easy to Use Coreference Resolution." *AACL-IJCNLP*, 2022.
+  [[arXiv:2209.04280]](https://arxiv.org/abs/2209.04280)
+  — Basis for the `FCoref` neural coreference backend. LingMess mention detection with DistilRoBERTa.
+
 - O. Bourgois and T. Poibeau. "Coreference Resolution for Machine Reading: A Survey." 2025.
   — Contemporary reference for the coreference approach in anno.
 
 - D. Jurafsky and J. H. Martin. *Speech and Language Processing*, Ch. 21 (Coreference Resolution), 3rd ed. draft, 2024.
   [[Online]](https://web.stanford.edu/~jurafsky/slp3/)
   — Textbook reference for coreference fundamentals.
+
+## Discourse Analysis
+
+- B. J. Grosz, A. K. Joshi, and S. Weinstein. "Centering: A Framework for Modeling the Local Coherence of Discourse." *Computational Linguistics* 21(2), 1995.
+  [[PDF]](https://aclanthology.org/J95-2003.pdf)
+  — Theoretical basis for the `discourse::centering` module. Defines Cb, Cf, Cp, and transition types.
 
 ## Relation Extraction
 
