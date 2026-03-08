@@ -50,7 +50,7 @@
 
 #[cfg(feature = "onnx")]
 use crate::sync::lock;
-use crate::{Entity, EntityType, Error, Result, Language};
+use crate::{Entity, EntityType, Error, Language, Result};
 use anno_core::EntityCategory;
 #[cfg(feature = "candle")]
 use candle_core::Device;
@@ -958,10 +958,7 @@ mod tests {
     fn test_map_entity_type_empty_string() {
         // Empty string should not panic; falls through to Custom/Other
         let ty = map_entity_type("");
-        assert!(matches!(
-            ty,
-            EntityType::Custom { .. }
-        ));
+        assert!(matches!(ty, EntityType::Custom { .. }));
     }
 
     // =========================================================================

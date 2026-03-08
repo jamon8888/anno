@@ -109,7 +109,7 @@
 //!
 //! - CRF-style sequence models (`backends/crf.rs`)
 
-use crate::{Entity, EntityCategory, EntityType, Model, Result, Language};
+use crate::{Entity, EntityCategory, EntityType, Language, Model, Result};
 use std::collections::HashMap;
 
 #[cfg(feature = "bundled-hmm-params")]

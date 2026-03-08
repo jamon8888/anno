@@ -147,9 +147,8 @@ impl<E: TextEncoder> CandleClusterEncoder<E> {
         // Stack into tensor [num_mentions, hidden_dim]
         let num_mentions = mention_embeddings.len();
         let flat: Vec<f32> = mention_embeddings.into_iter().flatten().collect();
-        let tensor =
-            Tensor::from_vec(flat, (num_mentions, self.config.hidden_dim), &self.device)
-                .map_err(|e| crate::Error::Inference(e.to_string()))?;
+        let tensor = Tensor::from_vec(flat, (num_mentions, self.config.hidden_dim), &self.device)
+            .map_err(|e| crate::Error::Inference(e.to_string()))?;
 
         // Apply pooling transformer
         let pooled = self.pooling_layer.forward(&tensor)?;
@@ -247,35 +246,48 @@ impl ClusterPoolingLayer {
 
     /// Forward pass: pool mentions into single cluster representation.
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let (seq_len, hidden_dim) = x.dims2()
+        let (seq_len, hidden_dim) = x
+            .dims2()
             .map_err(|e| crate::Error::Inference(format!("Dims: {}", e)))?;
 
         // Self-attention
-        let q = self.wq.forward(x)
+        let q = self
+            .wq
+            .forward(x)
             .map_err(|e| crate::Error::Inference(format!("Q: {}", e)))?;
-        let k = self.wk.forward(x)
+        let k = self
+            .wk
+            .forward(x)
             .map_err(|e| crate::Error::Inference(format!("K: {}", e)))?;
-        let v = self.wv.forward(x)
+        let v = self
+            .wv
+            .forward(x)
             .map_err(|e| crate::Error::Inference(format!("V: {}", e)))?;
 
         // Reshape for multi-head attention: [seq, heads, head_dim]
-        let q = q.reshape((seq_len, self.num_heads, self.head_dim))
+        let q = q
+            .reshape((seq_len, self.num_heads, self.head_dim))
             .map_err(|e| crate::Error::Inference(format!("Q reshape: {}", e)))?
             .transpose(0, 1)
             .map_err(|e| crate::Error::Inference(format!("Q transpose: {}", e)))?;
-        let k = k.reshape((seq_len, self.num_heads, self.head_dim))
+        let k = k
+            .reshape((seq_len, self.num_heads, self.head_dim))
             .map_err(|e| crate::Error::Inference(format!("K reshape: {}", e)))?
             .transpose(0, 1)
             .map_err(|e| crate::Error::Inference(format!("K transpose: {}", e)))?;
-        let v = v.reshape((seq_len, self.num_heads, self.head_dim))
+        let v = v
+            .reshape((seq_len, self.num_heads, self.head_dim))
             .map_err(|e| crate::Error::Inference(format!("V reshape: {}", e)))?
             .transpose(0, 1)
             .map_err(|e| crate::Error::Inference(format!("V transpose: {}", e)))?;
 
         // Attention scores
         let scale = (self.head_dim as f64).sqrt();
-        let scores = q.matmul(&k.transpose(1, 2)
-            .map_err(|e| crate::Error::Inference(format!("K^T: {}", e)))?)
+        let scores = q
+            .matmul(
+                &k.transpose(1, 2)
+                    .map_err(|e| crate::Error::Inference(format!("K^T: {}", e)))?,
+            )
             .map_err(|e| crate::Error::Inference(format!("QK^T: {}", e)))?
             .affine(1.0 / scale, 0.0)
             .map_err(|e| crate::Error::Inference(format!("Scale: {}", e)))?;
@@ -284,21 +296,26 @@ impl ClusterPoolingLayer {
             .map_err(|e| crate::Error::Inference(format!("Softmax: {}", e)))?;
 
         // Apply attention to values
-        let context = attn.matmul(&v)
+        let context = attn
+            .matmul(&v)
             .map_err(|e| crate::Error::Inference(format!("Attn*V: {}", e)))?;
 
         // Reshape back: [heads, seq, head_dim] -> [seq, hidden]
-        let context = context.transpose(0, 1)
+        let context = context
+            .transpose(0, 1)
             .map_err(|e| crate::Error::Inference(format!("Context transpose: {}", e)))?
             .reshape((seq_len, hidden_dim))
             .map_err(|e| crate::Error::Inference(format!("Context reshape: {}", e)))?;
 
         // Output projection + residual + layer norm
-        let out = self.wo.forward(&context)
+        let out = self
+            .wo
+            .forward(&context)
             .map_err(|e| crate::Error::Inference(format!("Wo: {}", e)))?;
-        let out = (x + &out)
-            .map_err(|e| crate::Error::Inference(format!("Residual: {}", e)))?;
-        let out = self.ln.forward(&out)
+        let out = (x + &out).map_err(|e| crate::Error::Inference(format!("Residual: {}", e)))?;
+        let out = self
+            .ln
+            .forward(&out)
             .map_err(|e| crate::Error::Inference(format!("LayerNorm: {}", e)))?;
 
         // Mean pool over mentions to get single cluster representation
@@ -358,18 +375,24 @@ impl NeuralMergeScorer {
             .map_err(|e| crate::Error::Inference(format!("Input tensor: {}", e)))?;
 
         // Forward through network
-        let hidden = self.bilinear.forward(&input)
+        let hidden = self
+            .bilinear
+            .forward(&input)
             .map_err(|e| crate::Error::Inference(format!("Bilinear forward: {}", e)))?;
-        let hidden = hidden.relu()
+        let hidden = hidden
+            .relu()
             .map_err(|e| crate::Error::Inference(format!("ReLU: {}", e)))?;
-        let logit = self.classifier.forward(&hidden)
+        let logit = self
+            .classifier
+            .forward(&hidden)
             .map_err(|e| crate::Error::Inference(format!("Classifier forward: {}", e)))?;
 
         // Sigmoid to get probability
         let prob = candle_nn::ops::sigmoid(&logit)
             .map_err(|e| crate::Error::Inference(format!("Sigmoid: {}", e)))?;
 
-        let score = prob.to_vec2::<f32>()
+        let score = prob
+            .to_vec2::<f32>()
             .map_err(|e| crate::Error::Inference(format!("To vec: {}", e)))?[0][0];
 
         Ok(score)
@@ -666,9 +689,7 @@ impl IncrementalCorefAdapter {
     /// Convert incremental resolver output to local clusters for merging.
     ///
     /// Each window is treated as a separate context.
-    pub fn windows_to_clusters(
-        windows: &[WindowOutput],
-    ) -> HashMap<usize, Vec<LocalCluster>> {
+    pub fn windows_to_clusters(windows: &[WindowOutput]) -> HashMap<usize, Vec<LocalCluster>> {
         let mut all_clusters = HashMap::new();
 
         for (window_idx, output) in windows.iter().enumerate() {
@@ -716,8 +737,6 @@ impl IncrementalCorefAdapter {
                         head_end: None,
                         entity_type: None,
                         mention_type: Some(MentionType::Proper),
-
-
                     })
                     .collect();
 
@@ -806,8 +825,13 @@ mod tests {
         use crate::eval::cdcr::Document;
         use anno::{Entity, EntityType};
 
-        let doc = Document::new("doc1", "Obama visited France.")
-            .with_entities(vec![Entity::new("Obama", EntityType::Person, 0, 5, 0.9)]);
+        let doc = Document::new("doc1", "Obama visited France.").with_entities(vec![Entity::new(
+            "Obama",
+            EntityType::Person,
+            0,
+            5,
+            0.9,
+        )]);
 
         let clusters = CDCRAdapter::documents_to_clusters(&[doc]);
         assert_eq!(clusters.len(), 1);
@@ -825,18 +849,19 @@ mod tests {
 
         let resolver = UnifiedCrossContextResolver::new(encoder, scorer, config);
 
-        let docs = vec![
-            Document::new("doc1", "Barack Obama gave a speech.").with_entities(vec![
-                Entity::new("Barack Obama", EntityType::Person, 0, 12, 0.9),
-            ]),
-            Document::new("doc2", "Obama met with leaders.").with_entities(vec![Entity::new(
-                "Obama",
-                EntityType::Person,
-                0,
-                5,
-                0.9,
-            )]),
-        ];
+        let docs =
+            vec![
+                Document::new("doc1", "Barack Obama gave a speech.").with_entities(vec![
+                    Entity::new("Barack Obama", EntityType::Person, 0, 12, 0.9),
+                ]),
+                Document::new("doc2", "Obama met with leaders.").with_entities(vec![Entity::new(
+                    "Obama",
+                    EntityType::Person,
+                    0,
+                    5,
+                    0.9,
+                )]),
+            ];
 
         let result = resolver.resolve_documents(&docs);
         // Should have clusters from both docs
@@ -872,8 +897,6 @@ mod tests {
                 head_end: None,
                 entity_type: None,
                 mention_type: Some(mt),
-
-
             }
         }
 
@@ -904,8 +927,6 @@ mod tests {
                 head_end: None,
                 entity_type: None,
                 mention_type: Some(mt),
-
-
             }
         }
 
@@ -913,7 +934,12 @@ mod tests {
             0,
             0,
             100,
-            vec![CorefChain::new(vec![new_mention("Obama", 0, 5, MentionType::Proper)])],
+            vec![CorefChain::new(vec![new_mention(
+                "Obama",
+                0,
+                5,
+                MentionType::Proper,
+            )])],
         );
 
         let window2 = WindowOutput::new(
@@ -949,8 +975,6 @@ mod tests {
                 head_end: None,
                 entity_type: None,
                 mention_type: Some(mt),
-
-
             }
         }
 
@@ -980,7 +1004,12 @@ mod tests {
             1,
             800,
             1800,
-            vec![CorefChain::new(vec![new_mention("Obama", 900, 905, MentionType::Proper)])],
+            vec![CorefChain::new(vec![new_mention(
+                "Obama",
+                900,
+                905,
+                MentionType::Proper,
+            )])],
         );
 
         let chains = resolver.resolve_long_document_windows(&[window1, window2]);
@@ -989,4 +1018,3 @@ mod tests {
         assert!(!chains.is_empty());
     }
 }
-

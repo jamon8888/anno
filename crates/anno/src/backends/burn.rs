@@ -62,7 +62,7 @@
 //! For HuggingFace models, use `BurnNER::from_pretrained()` which handles
 //! the conversion automatically.
 
-use crate::{Entity, EntityCategory, EntityType, Model, Result, Language};
+use crate::{Entity, EntityCategory, EntityType, Language, Model, Result};
 
 // =============================================================================
 // Backend Configuration
@@ -409,7 +409,7 @@ pub type BurnPoweredNER = BurnNER;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BatchCapable, GpuCapable, Model, Language};
+    use crate::{BatchCapable, GpuCapable, Language, Model};
 
     #[test]
     fn test_burn_config_defaults() {

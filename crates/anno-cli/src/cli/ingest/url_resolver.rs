@@ -285,8 +285,16 @@ mod tests {
         let result = deformat::html::extract_with_readability(html, "https://example.com/article");
         assert!(result.is_some(), "readability should extract article text");
         let (text, title, _excerpt) = result.unwrap();
-        assert!(text.contains("Dr. Sarah Chen"), "should contain person name, got: {}", text);
-        assert!(text.contains("University of Cambridge"), "should contain org, got: {}", text);
+        assert!(
+            text.contains("Dr. Sarah Chen"),
+            "should contain person name, got: {}",
+            text
+        );
+        assert!(
+            text.contains("University of Cambridge"),
+            "should contain org, got: {}",
+            text
+        );
         assert!(title.is_some(), "should extract title");
     }
 
@@ -294,7 +302,10 @@ mod tests {
     fn readability_returns_none_for_minimal_html() {
         let html = "<html><body><p>Hi</p></body></html>";
         let result = deformat::html::extract_with_readability(html, "https://example.com");
-        assert!(result.is_none(), "should return None for trivial HTML (<50 chars)");
+        assert!(
+            result.is_none(),
+            "should return None for trivial HTML (<50 chars)"
+        );
     }
 
     #[test]

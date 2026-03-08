@@ -13,7 +13,7 @@
 //!
 //! For Person/Organization/Location, use ML models (BERT ONNX, GLiNER).
 
-use crate::{Entity, EntityType, Model, Result, Language};
+use crate::{Entity, EntityType, Language, Model, Result};
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -1259,7 +1259,9 @@ mod tests {
         let e = extract(text);
         let hashtags: Vec<_> = e
             .iter()
-            .filter(|e| e.entity_type == EntityType::custom("Hashtag", anno_core::EntityCategory::Misc))
+            .filter(|e| {
+                e.entity_type == EntityType::custom("Hashtag", anno_core::EntityCategory::Misc)
+            })
             .collect();
         assert!(
             hashtags.is_empty(),
@@ -1273,7 +1275,10 @@ mod tests {
         let text = "Trending #rust today";
         let e = extract(text);
         assert!(
-            has_type(&e, &EntityType::custom("Hashtag", anno_core::EntityCategory::Misc)),
+            has_type(
+                &e,
+                &EntityType::custom("Hashtag", anno_core::EntityCategory::Misc)
+            ),
             "Normal hashtag '#rust' should still match, got: {:?}",
             e
         );

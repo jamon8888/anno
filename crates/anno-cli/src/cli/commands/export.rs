@@ -349,7 +349,12 @@ fn export_file(opts: ExportFileOpts<'_>) -> Result<(), String> {
         #[cfg(feature = "graph")]
         ExportFormat::GraphNTriples => output_dir.join(format!("{}.nt", stem)),
         // GraphCsv handled above (writes two files); guard against future variants.
-        _ => return Err(format!("Unsupported single-file export format: {:?}", format)),
+        _ => {
+            return Err(format!(
+                "Unsupported single-file export format: {:?}",
+                format
+            ))
+        }
     };
 
     if output_path.exists() && !overwrite {
@@ -376,7 +381,12 @@ fn export_file(opts: ExportFileOpts<'_>) -> Result<(), String> {
             export_graph_ntriples(&ext.entities, &ext.relations, input, base_uri)
         }
         // GraphCsv handled above; guard against future variants.
-        _ => return Err(format!("Unsupported single-file export format: {:?}", format)),
+        _ => {
+            return Err(format!(
+                "Unsupported single-file export format: {:?}",
+                format
+            ))
+        }
     };
 
     fs::write(&output_path, output_content)
@@ -436,8 +446,7 @@ fn export_conll(text: &str, entities: &[anno_core::Entity]) -> String {
         char_idx = word_end;
 
         // Split trailing punctuation into a separate O-tagged token
-        let trimmed = word
-            .trim_end_matches(['.', ',', ';', ':', '!', '?', ')', ']']);
+        let trimmed = word.trim_end_matches(['.', ',', ';', ':', '!', '?', ')', ']']);
         let punct = &word[trimmed.len()..];
         let trimmed_end = word_start + trimmed.len();
 

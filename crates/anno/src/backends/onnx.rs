@@ -17,7 +17,7 @@
 #![allow(missing_docs)] // BIO decoding internals; public API is documented
 #![allow(clippy::manual_strip)] // Complex BIO tag parsing
 
-use crate::{Entity, Error, Result, Language};
+use crate::{Entity, Error, Language, Result};
 #[cfg(feature = "onnx")]
 use anno_core::{EntityCategory, EntityType};
 

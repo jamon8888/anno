@@ -5412,8 +5412,9 @@ impl DatasetLoader {
                 // ECB+ may be cached as either:
                 // - ZIP binary (new: real XML annotations)
                 // - CSV text (legacy: sentence index)
-                let raw_bytes = std::fs::read(&cache_path)
-                    .map_err(|e| Error::InvalidInput(format!("Failed to read {:?}: {}", cache_path, e)))?;
+                let raw_bytes = std::fs::read(&cache_path).map_err(|e| {
+                    Error::InvalidInput(format!("Failed to read {:?}: {}", cache_path, e))
+                })?;
                 if raw_bytes.starts_with(b"PK\x03\x04") {
                     return super::coref_loader::parse_ecb_plus_zip(&raw_bytes);
                 }

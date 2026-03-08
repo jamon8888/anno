@@ -9,10 +9,8 @@
 use anno_eval::eval::cdcr::{CrossDocCluster, Document};
 use anno_eval::eval::cluster_encoder::{CosineMergeScorer, HeuristicClusterEncoder};
 use anno_eval::eval::coref::CorefDocument;
-use anno_eval::eval::cross_context_eval::{
-    evaluate_cross_document, CrossContextEvalConfig, Topic,
-};
-use anno_eval::eval::loader::{DatasetLoader, DatasetId};
+use anno_eval::eval::cross_context_eval::{evaluate_cross_document, CrossContextEvalConfig, Topic};
+use anno_eval::eval::loader::{DatasetId, DatasetLoader};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -51,9 +49,9 @@ fn main() {
             }
             if let Some(ref filter) = dataset_filter {
                 let name = format!("{:?}", id);
-                return filter.iter().any(|f| {
-                    name.eq_ignore_ascii_case(f) || id.name().eq_ignore_ascii_case(f)
-                });
+                return filter
+                    .iter()
+                    .any(|f| name.eq_ignore_ascii_case(f) || id.name().eq_ignore_ascii_case(f));
             }
             true
         })
@@ -115,10 +113,7 @@ fn main() {
                 match run_eval(id, &docs, config, threshold) {
                     Ok(row) => println!("{}", row),
                     Err(e) => {
-                        eprintln!(
-                            "  Error: {:?} / {} / {}: {}",
-                            id, config.name, threshold, e
-                        );
+                        eprintln!("  Error: {:?} / {} / {}: {}", id, config.name, threshold, e);
                     }
                 }
             }
@@ -180,7 +175,10 @@ fn run_eval(
                                 anno::EntityType::custom(t, anno::EntityCategory::Misc)
                             }
                         })
-                        .unwrap_or(anno::EntityType::custom("mention", anno::EntityCategory::Misc));
+                        .unwrap_or(anno::EntityType::custom(
+                            "mention",
+                            anno::EntityCategory::Misc,
+                        ));
 
                     let entity_idx = entities.len();
                     entities.push(anno::Entity::new(
@@ -213,8 +211,7 @@ fn run_eval(
             if mentions.len() < 2 {
                 continue;
             }
-            let mut cluster =
-                CrossDocCluster::new(topic.gold_clusters.len() as u64, "");
+            let mut cluster = CrossDocCluster::new(topic.gold_clusters.len() as u64, "");
             cluster.mentions = mentions.clone();
             topic.add_gold_cluster(cluster);
         }

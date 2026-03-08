@@ -91,11 +91,11 @@ impl CrossContextBenchmark {
     /// Get recommended window size for this benchmark.
     pub fn recommended_window_size(&self) -> usize {
         match self {
-            Self::ECBPlus => 512,      // Documents are short
-            Self::SciCo => 512,        // Paper sections
-            Self::LitBank => 2000,     // Limited to 2k tokens
-            Self::BookCoref => 4000,   // Full books
-            Self::AnimalFarm => 4000,  // Single long novel
+            Self::ECBPlus => 512,     // Documents are short
+            Self::SciCo => 512,       // Paper sections
+            Self::LitBank => 2000,    // Limited to 2k tokens
+            Self::BookCoref => 4000,  // Full books
+            Self::AnimalFarm => 4000, // Single long novel
         }
     }
 
@@ -382,7 +382,8 @@ pub fn evaluate_cross_document<E: ClusterEncoder + Clone, S: MergeScorer + Clone
 
     for topic in topics {
         // Convert gold clusters to chains for evaluation
-        let topic_gold_chains = cross_doc_clusters_to_chains(&topic.gold_clusters, &topic.documents);
+        let topic_gold_chains =
+            cross_doc_clusters_to_chains(&topic.gold_clusters, &topic.documents);
         total_gold_clusters += topic.gold_clusters.len();
 
         // Resolve across documents in this topic
@@ -410,10 +411,14 @@ pub fn evaluate_cross_document<E: ClusterEncoder + Clone, S: MergeScorer + Clone
     }
 
     // Compute aggregate metrics
-    let (muc_p, muc_r, muc_f1) = crate::eval::coref_metrics::muc_score(&all_pred_chains, &all_gold_chains);
-    let (b3_p, b3_r, b3_f1) = crate::eval::coref_metrics::b_cubed_score(&all_pred_chains, &all_gold_chains);
-    let (ceaf_p, ceaf_r, ceaf_f1) = crate::eval::coref_metrics::ceaf_e_score(&all_pred_chains, &all_gold_chains);
-    let (lea_p, lea_r, lea_f1) = crate::eval::coref_metrics::lea_score(&all_pred_chains, &all_gold_chains);
+    let (muc_p, muc_r, muc_f1) =
+        crate::eval::coref_metrics::muc_score(&all_pred_chains, &all_gold_chains);
+    let (b3_p, b3_r, b3_f1) =
+        crate::eval::coref_metrics::b_cubed_score(&all_pred_chains, &all_gold_chains);
+    let (ceaf_p, ceaf_r, ceaf_f1) =
+        crate::eval::coref_metrics::ceaf_e_score(&all_pred_chains, &all_gold_chains);
+    let (lea_p, lea_r, lea_f1) =
+        crate::eval::coref_metrics::lea_score(&all_pred_chains, &all_gold_chains);
     let conll = conll_f1(&all_gold_chains, &all_pred_chains);
 
     let num_contexts: usize = topics.iter().map(|t| t.documents.len()).sum();
@@ -526,10 +531,14 @@ pub fn evaluate_long_document<E: ClusterEncoder + Clone, S: MergeScorer + Clone>
     }
 
     // Compute aggregate metrics
-    let (muc_p, muc_r, muc_f1) = crate::eval::coref_metrics::muc_score(&all_pred_chains, &all_gold_chains);
-    let (b3_p, b3_r, b3_f1) = crate::eval::coref_metrics::b_cubed_score(&all_pred_chains, &all_gold_chains);
-    let (ceaf_p, ceaf_r, ceaf_f1) = crate::eval::coref_metrics::ceaf_e_score(&all_pred_chains, &all_gold_chains);
-    let (lea_p, lea_r, lea_f1) = crate::eval::coref_metrics::lea_score(&all_pred_chains, &all_gold_chains);
+    let (muc_p, muc_r, muc_f1) =
+        crate::eval::coref_metrics::muc_score(&all_pred_chains, &all_gold_chains);
+    let (b3_p, b3_r, b3_f1) =
+        crate::eval::coref_metrics::b_cubed_score(&all_pred_chains, &all_gold_chains);
+    let (ceaf_p, ceaf_r, ceaf_f1) =
+        crate::eval::coref_metrics::ceaf_e_score(&all_pred_chains, &all_gold_chains);
+    let (lea_p, lea_r, lea_f1) =
+        crate::eval::coref_metrics::lea_score(&all_pred_chains, &all_gold_chains);
     let conll = conll_f1(&all_gold_chains, &all_pred_chains);
 
     let total_mentions: usize = all_pred_chains.iter().map(|c| c.len()).sum();
@@ -591,7 +600,6 @@ fn cross_doc_clusters_to_chains(
         .filter(|c| !c.is_empty())
         .collect()
 }
-
 
 // =============================================================================
 // Stepwise Error Analysis (Table 5 from xCoRe paper)
@@ -729,7 +737,11 @@ mod tests {
             new_mention("he", 100, 102),
         ])];
 
-        let doc = LongDocument::new("book1", "Obama went to Paris. " .repeat(100).as_str(), chains);
+        let doc = LongDocument::new(
+            "book1",
+            "Obama went to Paris. ".repeat(100).as_str(),
+            chains,
+        );
 
         assert!(doc.approx_tokens() > 100);
         assert_eq!(doc.gold_chains.len(), 1);
@@ -755,15 +767,19 @@ mod tests {
 
         let mut topic = Topic::new("topic_1");
         topic.add_document(
-            Document::new("doc1", "Obama visited France.")
-                .with_entities(vec![Entity::new("Obama", EntityType::Person, 0, 5, 0.9)]),
+            Document::new("doc1", "Obama visited France.").with_entities(vec![Entity::new(
+                "Obama",
+                EntityType::Person,
+                0,
+                5,
+                0.9,
+            )]),
         );
         topic.add_document(
-            Document::new("doc2", "The president met Macron.")
-                .with_entities(vec![
-                    Entity::new("The president", EntityType::Person, 0, 13, 0.8),
-                    Entity::new("Macron", EntityType::Person, 18, 24, 0.9),
-                ]),
+            Document::new("doc2", "The president met Macron.").with_entities(vec![
+                Entity::new("The president", EntityType::Person, 0, 13, 0.8),
+                Entity::new("Macron", EntityType::Person, 18, 24, 0.9),
+            ]),
         );
 
         let results = evaluate_cross_document(&[topic], encoder, scorer, &config).unwrap();
@@ -817,26 +833,23 @@ mod tests {
         // Topic 1: Obama visits France
         let mut topic1 = Topic::new("politics");
         topic1.add_document(
-            Document::new("doc1", "Obama visited France yesterday.")
-                .with_entities(vec![
-                    Entity::new("Obama", EntityType::Person, 0, 5, 0.9),
-                    Entity::new("France", EntityType::Location, 14, 20, 0.9),
-                ]),
+            Document::new("doc1", "Obama visited France yesterday.").with_entities(vec![
+                Entity::new("Obama", EntityType::Person, 0, 5, 0.9),
+                Entity::new("France", EntityType::Location, 14, 20, 0.9),
+            ]),
         );
         topic1.add_document(
-            Document::new("doc2", "The president arrived in Paris.")
-                .with_entities(vec![
-                    Entity::new("The president", EntityType::Person, 0, 13, 0.8),
-                    Entity::new("Paris", EntityType::Location, 25, 30, 0.9),
-                ]),
+            Document::new("doc2", "The president arrived in Paris.").with_entities(vec![
+                Entity::new("The president", EntityType::Person, 0, 13, 0.8),
+                Entity::new("Paris", EntityType::Location, 25, 30, 0.9),
+            ]),
         );
         topic1.add_document(
-            Document::new("doc3", "Barack Obama met Macron in France.")
-                .with_entities(vec![
-                    Entity::new("Barack Obama", EntityType::Person, 0, 12, 0.95),
-                    Entity::new("Macron", EntityType::Person, 17, 23, 0.9),
-                    Entity::new("France", EntityType::Location, 27, 33, 0.9),
-                ]),
+            Document::new("doc3", "Barack Obama met Macron in France.").with_entities(vec![
+                Entity::new("Barack Obama", EntityType::Person, 0, 12, 0.95),
+                Entity::new("Macron", EntityType::Person, 17, 23, 0.9),
+                Entity::new("France", EntityType::Location, 27, 33, 0.9),
+            ]),
         );
         // Gold: Obama cluster across 3 docs, France/Paris cluster across 2 docs
         let mut obama_cluster = crate::eval::cdcr::CrossDocCluster::new(0u64, "Obama");
@@ -857,25 +870,24 @@ mod tests {
         // Topic 2: Tech companies
         let mut topic2 = Topic::new("tech");
         topic2.add_document(
-            Document::new("doc4", "Apple released new products.")
-                .with_entities(vec![Entity::new("Apple", EntityType::Organization, 0, 5, 0.9)]),
+            Document::new("doc4", "Apple released new products.").with_entities(vec![Entity::new(
+                "Apple",
+                EntityType::Organization,
+                0,
+                5,
+                0.9,
+            )]),
         );
         topic2.add_document(
-            Document::new("doc5", "The company expanded in Asia.")
-                .with_entities(vec![
-                    Entity::new("The company", EntityType::Organization, 0, 11, 0.8),
-                    Entity::new("Asia", EntityType::Location, 24, 28, 0.9),
-                ]),
+            Document::new("doc5", "The company expanded in Asia.").with_entities(vec![
+                Entity::new("The company", EntityType::Organization, 0, 11, 0.8),
+                Entity::new("Asia", EntityType::Location, 24, 28, 0.9),
+            ]),
         );
         topic2.add_document(
-            Document::new("doc6", "Apple Inc announced quarterly results.")
-                .with_entities(vec![Entity::new(
-                    "Apple Inc",
-                    EntityType::Organization,
-                    0,
-                    9,
-                    0.9,
-                )]),
+            Document::new("doc6", "Apple Inc announced quarterly results.").with_entities(vec![
+                Entity::new("Apple Inc", EntityType::Organization, 0, 9, 0.9),
+            ]),
         );
         let mut apple_cluster = crate::eval::cdcr::CrossDocCluster::new(0u64, "Apple");
         apple_cluster.mentions = vec![
@@ -885,8 +897,7 @@ mod tests {
         ];
         topic2.add_gold_cluster(apple_cluster);
 
-        let results =
-            evaluate_cross_document(&[topic1, topic2], encoder, scorer, &config).unwrap();
+        let results = evaluate_cross_document(&[topic1, topic2], encoder, scorer, &config).unwrap();
 
         // Basic sanity: metrics in valid ranges
         assert!(results.conll_f1 >= 0.0 && results.conll_f1 <= 1.0);
@@ -931,11 +942,7 @@ mod tests {
             ]),
         ];
 
-        let doc = LongDocument::new(
-            "long_doc",
-            &"Obama visited France. ".repeat(10),
-            chains,
-        );
+        let doc = LongDocument::new("long_doc", &"Obama visited France. ".repeat(10), chains);
 
         let results = evaluate_long_document(&[doc], encoder, scorer, &config).unwrap();
         assert_eq!(results.num_contexts, 1);
@@ -946,4 +953,3 @@ mod tests {
         assert!(per_doc.contains_key("long_doc"));
     }
 }
-

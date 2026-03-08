@@ -169,8 +169,7 @@ pub fn run(args: CacheArgs) -> Result<(), String> {
                 eprintln!("Run with --confirm to proceed: anno cache clear --confirm");
                 return Err("cache clear requires --confirm".into());
             }
-            fs::remove_dir_all(&cache_dir)
-                .map_err(|e| format!("Failed to clear cache: {}", e))?;
+            fs::remove_dir_all(&cache_dir).map_err(|e| format!("Failed to clear cache: {}", e))?;
             println!(
                 "{} Cache cleared (model cache + result cache)",
                 color("32", "✓")

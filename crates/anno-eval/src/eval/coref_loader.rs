@@ -1458,7 +1458,9 @@ fn parse_ecb_plus_xml(xml: &str, topic: &str, doc_name: &str) -> Result<CorefDoc
 
         if tag_bytes == b"token" {
             *in_token = true;
-            *cur_t_id = get_attr(e, "t_id").and_then(|v| v.parse().ok()).unwrap_or(0);
+            *cur_t_id = get_attr(e, "t_id")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
             *cur_sentence = get_attr(e, "sentence")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0);
@@ -1480,7 +1482,9 @@ fn parse_ecb_plus_xml(xml: &str, topic: &str, doc_name: &str) -> Result<CorefDoc
             current_coref_mentions.clear();
         } else if is_markable_tag(tag_bytes) {
             *in_markable = true;
-            *cur_m_id = get_attr(e, "m_id").and_then(|v| v.parse().ok()).unwrap_or(0);
+            *cur_m_id = get_attr(e, "m_id")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
             current_mention_tokens.clear();
         }
     }
@@ -2078,8 +2082,14 @@ Topic,File,Sentence Number,Token Number,Token,Lemma,Event Mention,Coreference Ch
         // Should produce 2 documents: (1, 1ecb) and (1, 2ecb)
         assert_eq!(docs.len(), 2);
 
-        let doc1 = docs.iter().find(|d| d.doc_id.as_deref() == Some("1_1ecb")).unwrap();
-        let doc2 = docs.iter().find(|d| d.doc_id.as_deref() == Some("1_2ecb")).unwrap();
+        let doc1 = docs
+            .iter()
+            .find(|d| d.doc_id.as_deref() == Some("1_1ecb"))
+            .unwrap();
+        let doc2 = docs
+            .iter()
+            .find(|d| d.doc_id.as_deref() == Some("1_2ecb"))
+            .unwrap();
 
         // doc1 has chains for chain IDs "1" and "2"
         assert_eq!(doc1.chains.len(), 2);
@@ -2087,16 +2097,25 @@ Topic,File,Sentence Number,Token Number,Token,Lemma,Event Mention,Coreference Ch
         assert_eq!(doc2.chains.len(), 2);
 
         // Chain "1" in doc1 should contain "earthquake"
-        let chain1 = doc1.chains.iter().find(|c| c.mentions.iter().any(|m| m.text == "earthquake"));
+        let chain1 = doc1
+            .chains
+            .iter()
+            .find(|c| c.mentions.iter().any(|m| m.text == "earthquake"));
         assert!(chain1.is_some());
 
         // Chain "2" in doc1 should contain "struck" and "tremor"
-        let chain2 = doc1.chains.iter().find(|c| c.mentions.iter().any(|m| m.text == "struck"));
+        let chain2 = doc1
+            .chains
+            .iter()
+            .find(|c| c.mentions.iter().any(|m| m.text == "struck"));
         assert!(chain2.is_some());
         assert!(chain2.unwrap().mentions.iter().any(|m| m.text == "tremor"));
 
         // Chain "1" in doc2 should contain "quake" (cross-doc coreferent with "earthquake")
-        let chain1_doc2 = doc2.chains.iter().find(|c| c.mentions.iter().any(|m| m.text == "quake"));
+        let chain1_doc2 = doc2
+            .chains
+            .iter()
+            .find(|c| c.mentions.iter().any(|m| m.text == "quake"));
         assert!(chain1_doc2.is_some());
     }
 
@@ -2145,12 +2164,16 @@ Topic,File,Sentence Number,Token Number,Token,Lemma,Event Mention,Coreference Ch
             c.mentions.iter().any(|m| m.text == "earthquake")
                 && c.mentions.iter().any(|m| m.text == "tremor")
         });
-        assert!(cluster_30001.is_some(), "Expected cross-doc cluster linking earthquake and tremor");
+        assert!(
+            cluster_30001.is_some(),
+            "Expected cross-doc cluster linking earthquake and tremor"
+        );
 
         // Cluster 30002 should have "struck"
-        let cluster_30002 = doc.chains.iter().find(|c| {
-            c.mentions.iter().any(|m| m.text == "struck")
-        });
+        let cluster_30002 = doc
+            .chains
+            .iter()
+            .find(|c| c.mentions.iter().any(|m| m.text == "struck"));
         assert!(cluster_30002.is_some(), "Expected cluster for struck");
     }
 }

@@ -7,9 +7,9 @@ use super::super::output::{color, print_signals};
 use super::super::parser::ModelBackend;
 use super::super::utils::{get_input_text, link_tracks_to_kb, resolve_coreference};
 
-use anno::core::grounded::{render_document_html, GroundedDocument, Location, Signal, SignalId};
 #[cfg(feature = "eval")]
 use crate::cli::ingest::{CompositeResolver, UrlResolver};
+use anno::core::grounded::{render_document_html, GroundedDocument, Location, Signal, SignalId};
 use anno::ingest::DocumentPreprocessor;
 #[cfg(feature = "graph")]
 use lattix::{GraphDocument, GraphExportFormat};

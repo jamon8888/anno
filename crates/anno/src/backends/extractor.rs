@@ -18,7 +18,7 @@
 //! - **Hybrid mode**: Best of both worlds (ML for context, patterns for structure)
 //! - **Clean adapters**: Each backend wrapped to implement common trait
 
-use crate::{Entity, EntityType, Model, RegexNER, Result, Language};
+use crate::{Entity, EntityType, Language, Model, RegexNER, Result};
 use std::sync::Arc;
 
 /// Default models for each backend.

@@ -749,9 +749,12 @@ fn llm_chunking_large_document() {
     let has_person = entities
         .iter()
         .any(|e| matches!(e.entity_type, EntityType::Person));
-    let has_location = entities
-        .iter()
-        .any(|e| matches!(e.entity_type, EntityType::Location | EntityType::Custom { .. }));
+    let has_location = entities.iter().any(|e| {
+        matches!(
+            e.entity_type,
+            EntityType::Location | EntityType::Custom { .. }
+        )
+    });
     eprintln!("Entity texts sample: {:?}", &texts[..texts.len().min(10)]);
     assert!(has_person, "should find at least one person entity");
     assert!(has_location, "should find at least one location/org entity");

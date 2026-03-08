@@ -687,7 +687,9 @@ fn map_label_heuristic(label: &str) -> EntityType {
         "PHONE" | "TELEPHONE" => EntityType::Phone,
 
         // Misc fallback
-        "MISC" | "MISCELLANEOUS" | "O" | "OTHER" => EntityType::custom("MISC", EntityCategory::Misc),
+        "MISC" | "MISCELLANEOUS" | "O" | "OTHER" => {
+            EntityType::custom("MISC", EntityCategory::Misc)
+        }
 
         // Unknown - preserve original
         other => EntityType::custom(other, EntityCategory::Misc),

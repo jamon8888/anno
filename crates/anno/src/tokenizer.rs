@@ -160,7 +160,11 @@ impl Tokenizer for WhitespaceTokenizer {
                 }
             } else {
                 if in_word {
-                    let word: String = text.chars().skip(word_start_char).take(char_idx - word_start_char).collect();
+                    let word: String = text
+                        .chars()
+                        .skip(word_start_char)
+                        .take(char_idx - word_start_char)
+                        .collect();
                     if !word.is_empty() {
                         tokens.push(Token::new(word, word_start_char, char_idx));
                     }
@@ -221,7 +225,11 @@ impl Tokenizer for UnicodeSegmenter {
         for (_, c) in text.char_indices() {
             if c.is_whitespace() || c.is_ascii_punctuation() {
                 if start_char < char_idx {
-                    let word: String = text.chars().skip(start_char).take(char_idx - start_char).collect();
+                    let word: String = text
+                        .chars()
+                        .skip(start_char)
+                        .take(char_idx - start_char)
+                        .collect();
                     if !word.trim().is_empty() {
                         tokens.push(Token::new(word, start_char, char_idx));
                     }

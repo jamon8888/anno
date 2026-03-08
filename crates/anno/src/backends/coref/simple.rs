@@ -303,10 +303,7 @@ impl SimpleCorefResolver {
         // These catch-all types defeat the entity-type guard in the matching functions,
         // causing spurious merges (e.g., "Nobel" clustered with "Emmanuelle" because
         // both are type "proper" and fuzzy containment matches on short substrings).
-        let is_wildcard_type = matches!(
-            entity.entity_type,
-            EntityType::Custom { .. }
-        );
+        let is_wildcard_type = matches!(entity.entity_type, EntityType::Custom { .. });
 
         if !is_wildcard_type {
             // Strategy 6: proper head word match (head word of one found in the other).
@@ -1167,7 +1164,13 @@ mod tests {
         // clustered together by fuzzy sieves.
         let r = resolver();
         let entities = vec![
-            Entity::new("Nobel", EntityType::custom("proper", EntityCategory::Misc), 0, 5, 0.8),
+            Entity::new(
+                "Nobel",
+                EntityType::custom("proper", EntityCategory::Misc),
+                0,
+                5,
+                0.8,
+            ),
             Entity::new(
                 "Emmanuelle",
                 EntityType::custom("proper", EntityCategory::Misc),
@@ -1204,8 +1207,20 @@ mod tests {
         // Exact canonical match (sieve 2) should still work for wildcard types.
         let r = resolver();
         let entities = vec![
-            Entity::new("Nobel", EntityType::custom("proper", EntityCategory::Misc), 0, 5, 0.8),
-            Entity::new("Nobel", EntityType::custom("proper", EntityCategory::Misc), 20, 25, 0.8),
+            Entity::new(
+                "Nobel",
+                EntityType::custom("proper", EntityCategory::Misc),
+                0,
+                5,
+                0.8,
+            ),
+            Entity::new(
+                "Nobel",
+                EntityType::custom("proper", EntityCategory::Misc),
+                20,
+                25,
+                0.8,
+            ),
         ];
         let resolved = r.resolve(&entities);
         assert_eq!(

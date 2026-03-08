@@ -1,5 +1,5 @@
 use crate::backends::stacked::StackedNER;
-use crate::{Entity, EntityType, Model, Result, Language};
+use crate::{Entity, EntityType, Language, Model, Result};
 
 /// Automatic model selection - routes to the default model.
 ///

@@ -153,8 +153,7 @@ pub fn read_input_file(path: &str) -> Result<String, String> {
         );
         // Use readability for article extraction, fall back to strip_to_text.
         // Same strategy as --url path (url_resolver.rs).
-        let text = deformat::extract_readable(&content, None)
-            .text;
+        let text = deformat::extract_readable(&content, None).text;
         Ok(text)
     } else {
         Ok(content)

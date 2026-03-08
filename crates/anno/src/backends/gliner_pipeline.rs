@@ -50,7 +50,7 @@ use crate::backends::inference::{
     DotProductInteraction, LateInteraction, SemanticRegistry, SpanRepConfig,
     SpanRepresentationLayer,
 };
-use crate::{Entity, EntityType, Result, Language};
+use crate::{Entity, EntityType, Language, Result};
 use anno_core::{generate_span_candidates, RaggedBatch, SpanCandidate};
 
 #[cfg(feature = "candle")]
@@ -747,7 +747,10 @@ mod tests {
             EntityType::Organization
         );
         assert_eq!(slug_to_entity_type("LOC"), EntityType::Location);
-        assert!(matches!(slug_to_entity_type("actor"), EntityType::Custom { .. }));
+        assert!(matches!(
+            slug_to_entity_type("actor"),
+            EntityType::Custom { .. }
+        ));
     }
 
     #[test]

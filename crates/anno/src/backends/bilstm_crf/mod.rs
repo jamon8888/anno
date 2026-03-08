@@ -101,7 +101,7 @@
 //! let ner = BiLstmCrfNER::from_onnx("path/to/model.onnx")?;
 //! ```
 
-use crate::{Entity, EntityCategory, EntityType, Model, Result, Language};
+use crate::{Entity, EntityCategory, EntityType, Language, Model, Result};
 use std::collections::HashMap;
 
 /// BiLSTM-CRF configuration.

@@ -39,7 +39,7 @@
 //! let entities = model.extract_entities("Steve Jobs founded Apple", None)?;
 //! ```
 
-use crate::{Entity, EntityCategory, EntityType, Error, Model, Result, Language};
+use crate::{Entity, EntityCategory, EntityType, Error, Language, Model, Result};
 
 #[cfg(feature = "candle")]
 use {

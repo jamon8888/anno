@@ -28,7 +28,7 @@
 //! But understand: it cannot generalize to unseen entities.
 
 use crate::offset::TextSpan;
-use crate::{Entity, EntityType, Model, Result, Language};
+use crate::{Entity, EntityType, Language, Model, Result};
 use once_cell::sync::Lazy;
 use regex::Regex;
 

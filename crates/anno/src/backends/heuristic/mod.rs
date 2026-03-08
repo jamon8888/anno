@@ -9,7 +9,7 @@
 //! 2. Use high-precision patterns (Inc., Dr., in/from) - small fixed cost
 //! 3. Avoid large lexicons - high description cost per marginal gain
 
-use crate::{Entity, EntityType, ExtractionMethod, Model, Provenance, Result, Language};
+use crate::{Entity, EntityType, ExtractionMethod, Language, Model, Provenance, Result};
 
 /// Heuristic NER model.
 ///

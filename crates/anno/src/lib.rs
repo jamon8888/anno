@@ -427,7 +427,10 @@ impl AnyModel {
     #[must_use]
     pub fn with_relations(
         mut self,
-        f: impl Fn(&str, Option<Language>) -> Result<(Vec<Entity>, Vec<Relation>)> + Send + Sync + 'static,
+        f: impl Fn(&str, Option<Language>) -> Result<(Vec<Entity>, Vec<Relation>)>
+            + Send
+            + Sync
+            + 'static,
     ) -> Self {
         self.relation_extractor = Some(Box::new(f));
         self
@@ -1019,7 +1022,13 @@ mod any_model_tests {
                 .iter()
                 .enumerate()
                 .map(|(i, &lbl)| {
-                    Entity::new(lbl, EntityType::custom(lbl, EntityCategory::Misc), i, i + 1, 0.8)
+                    Entity::new(
+                        lbl,
+                        EntityType::custom(lbl, EntityCategory::Misc),
+                        i,
+                        i + 1,
+                        0.8,
+                    )
                 })
                 .collect())
         });

@@ -53,8 +53,8 @@ pub fn format_size(bytes: u64) -> String {
 /// Colorize text with ANSI escape codes, respecting `--color` flag.
 pub fn color(code: &str, text: &str) -> String {
     let use_color = match COLOR_MODE.load(Ordering::Relaxed) {
-        1 => true,  // always
-        2 => false, // never
+        1 => true,                       // always
+        2 => false,                      // never
         _ => io::stdout().is_terminal(), // auto
     };
     if use_color {

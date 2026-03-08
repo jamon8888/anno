@@ -32,7 +32,7 @@
 
 #[cfg(feature = "onnx")]
 use crate::sync::{lock, try_lock, Mutex};
-use crate::{Entity, Error, Result, Language};
+use crate::{Entity, Error, Language, Result};
 use anno_core::{EntityCategory, EntityType};
 
 /// Special token IDs for GLiNER models
@@ -73,7 +73,11 @@ use inference::DEFAULT_GLINER_LABELS;
 const MAX_INPUT_CHARS: usize = 2000;
 
 impl crate::Model for GLiNEROnnx {
-    fn extract_entities(&self, text: &str, _language: Option<Language>) -> crate::Result<Vec<Entity>> {
+    fn extract_entities(
+        &self,
+        text: &str,
+        _language: Option<Language>,
+    ) -> crate::Result<Vec<Entity>> {
         // Use default labels for the Model trait interface
         // For custom labels, use the extract(text, labels, threshold) method directly
         #[cfg(feature = "onnx")]

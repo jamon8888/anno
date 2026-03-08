@@ -260,7 +260,11 @@ fn generate_unicode_examples(count: usize) -> Vec<AnnotatedExample> {
             "Tim Berners-Lee invented the Web.",
             vec![
                 ("Tim Berners-Lee", EntityType::Person, 0),
-                ("Web", EntityType::custom("Technology", EntityCategory::Misc), 29),
+                (
+                    "Web",
+                    EntityType::custom("Technology", EntityCategory::Misc),
+                    29,
+                ),
             ],
         ),
         // Accented characters

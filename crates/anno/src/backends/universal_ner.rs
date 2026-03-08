@@ -60,7 +60,7 @@ use crate::backends::llm_prompt::{BIOSchema, CodeNERPrompt};
 #[cfg(feature = "llm")]
 use crate::backends::streaming::{extract_chunked_parallel, ChunkConfig};
 use crate::offset::TextSpan;
-use crate::{Entity, EntityType, Model, Result, Language};
+use crate::{Entity, EntityType, Language, Model, Result};
 
 /// Simple LRU-ish response cache keyed on (text_hash, types_hash, model).
 /// Avoids duplicate API calls for the same input.

@@ -25,7 +25,7 @@
 //! let entities = model.extract_entities("Steve Jobs founded Apple.", None)?;
 //! ```
 
-use crate::{Entity, EntityType, Model, Result, Language};
+use crate::{Entity, EntityType, Language, Model, Result};
 
 #[cfg(feature = "onnx")]
 use crate::backends::onnx::BertNEROnnx;

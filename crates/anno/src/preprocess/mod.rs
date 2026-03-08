@@ -72,8 +72,7 @@ pub mod reference;
 
 // Re-export commonly used types
 pub use morphology::{
-    Morpheme,
-    MorphemeType, MorphologicalAnalyzer, MorphologicalPreprocessor, ProdropConfig,
+    Morpheme, MorphemeType, MorphologicalAnalyzer, MorphologicalPreprocessor, ProdropConfig,
     SegmentationResult, SegmentationStrategy,
 };
 

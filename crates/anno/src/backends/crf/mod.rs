@@ -135,7 +135,7 @@
 //! - **Deterministic**: Same input always produces same output
 //! - **Small footprint**: Small weights file compared to ML model artifacts
 
-use crate::{Entity, EntityCategory, EntityType, Model, Result, Language};
+use crate::{Entity, EntityCategory, EntityType, Language, Model, Result};
 use std::collections::HashMap;
 #[cfg(feature = "bundled-crf-weights")]
 use std::sync::OnceLock;
