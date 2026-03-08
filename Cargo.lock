@@ -119,10 +119,7 @@ version = "0.3.6"
 dependencies = [
  "bitflags",
  "chrono",
- "clump",
- "dashmap",
  "innr",
- "itertools 0.14.0",
  "log",
  "once_cell",
  "proptest",
@@ -131,10 +128,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sketchir",
- "smallvec 1.15.1",
  "textprep",
  "thiserror 2.0.18",
- "unicode-normalization",
 ]
 
 [[package]]
@@ -191,7 +186,6 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "chrono",
- "clump",
  "criterion",
  "crossbeam-channel",
  "dashmap",
@@ -217,7 +211,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "sketchir",
  "smallvec 1.15.1",
  "tempfile",
  "textprep",

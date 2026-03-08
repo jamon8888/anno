@@ -3,7 +3,7 @@
 # ======================
 #
 # Pipeline:
-#   Text → Extract → Coalesce → Knowledge Graph
+#   Text → Extract → Coalesce → Export
 #          (anno)   (coalesce)
 #
 members = [

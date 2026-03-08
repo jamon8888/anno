@@ -2,7 +2,7 @@
 name = "anno-lib"
 version = "0.3.6"
 edition = "2021"
-description = "Information extraction: NER, coreference resolution, entity linking, event extraction, zero-shot entity types, and knowledge graph export"
+description = "Information extraction: NER, coreference resolution, entity linking, zero-shot entity types"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/arclabs561/anno"
 homepage = "https://github.com/arclabs561/anno"
@@ -27,8 +27,6 @@ name = "anno"
 anno-core = { path = "../anno-core", version = "0.3.6" }
 anno-metrics = { path = "../anno-metrics", version = "0.3.6", optional = true }
 textprep = { workspace = true }
-sketchir = { workspace = true }
-clump = { workspace = true }
 graphops = { workspace = true }
 innr = { workspace = true }
 serde = { workspace = true }

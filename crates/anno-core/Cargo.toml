@@ -13,7 +13,6 @@ publish = true
 [dependencies]
 textprep = { workspace = true }
 sketchir = { workspace = true }
-clump = { workspace = true }
 innr = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -23,10 +22,6 @@ chrono = { workspace = true }
 log = { workspace = true }
 once_cell = { workspace = true }
 bitflags = { workspace = true }
-itertools = { workspace = true }
-smallvec = { workspace = true }
-dashmap = { workspace = true }
-unicode-normalization = { workspace = true }
 schemars = { version = "0.8", features = ["derive"], optional = true }
 
 [dev-dependencies]
