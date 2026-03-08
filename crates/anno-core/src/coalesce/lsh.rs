@@ -243,7 +243,6 @@ impl MinHashLSH {
             num_bands: config.num_bands,
             ngram_size: config.ngram_size,
             char_ngrams: config.char_ngrams,
-            similarity_threshold: config.similarity_threshold as f64,
         };
         let inner = MinHashTextLSH::new(inner_config)
             .expect("LSHConfig has invalid (band, row) parameters");
@@ -332,11 +331,6 @@ impl MinHashLSH {
     pub fn estimated_similarity(&self, i: usize, j: usize) -> Option<f32> {
         self.inner.estimated_similarity(i, j).map(|v| v as f32)
     }
-
-    /// Compute exact Jaccard similarity between two items.
-    pub fn exact_similarity(&self, i: usize, j: usize) -> Option<f32> {
-        self.inner.exact_similarity(i, j).map(|v| v as f32)
-    }
 }
 
 /// Compute exact Jaccard similarity between two sets.
@@ -380,7 +374,7 @@ impl SimHashLSH {
     }
 
     /// Insert an embedding vector.
-    pub fn insert(&mut self, id: impl Into<String>, embedding: Vec<f32>) {
+    pub fn insert(&mut self, id: impl Into<String>, embedding: &[f32]) {
         let _ = self
             .inner
             .insert(id, embedding)
@@ -392,9 +386,9 @@ impl SimHashLSH {
         self.inner.query(embedding).unwrap_or_default()
     }
 
-    /// Get item by index.
-    pub fn get(&self, idx: usize) -> Option<(&str, &[f32])> {
-        self.inner.get(idx)
+    /// Get the external ID for an item by index.
+    pub fn get_id(&self, idx: usize) -> Option<&str> {
+        self.inner.get_id(idx)
     }
 }
 
@@ -472,9 +466,9 @@ mod tests {
         // Different vector
         let v3: Vec<f32> = (0..384).map(|i| (i as f32).cos()).collect();
 
-        lsh.insert("1", v1.clone());
-        lsh.insert("2", v2);
-        lsh.insert("3", v3);
+        lsh.insert("1", &v1);
+        lsh.insert("2", &v2);
+        lsh.insert("3", &v3);
 
         let candidates = lsh.query(&v1);
         assert!(!candidates.is_empty());
@@ -550,16 +544,16 @@ mod proptests {
             }
         }
 
-        /// Property: Exact similarity equals estimated for identical strings
+        /// Property: Estimated similarity is 1.0 for identical strings
         #[test]
-        fn lsh_exact_vs_estimated_identity(text in "[A-Za-z]{5,20}") {
+        fn lsh_estimated_identity(text in "[A-Za-z]{5,20}") {
             let mut lsh = MinHashLSH::new(LSHConfig::default());
             lsh.insert_text("1", &text);
             lsh.insert_text("2", &text);
 
-            let exact = lsh.exact_similarity(0, 1).unwrap_or(0.0);
-            prop_assert!((exact - 1.0).abs() < 0.001,
-                "Identical strings should have exact similarity 1.0, got {}", exact);
+            let est = lsh.estimated_similarity(0, 1).unwrap_or(0.0);
+            prop_assert!((est - 1.0).abs() < 0.001,
+                "Identical strings should have estimated similarity 1.0, got {}", est);
         }
 
         /// Property: Candidate count bounded by n*(n-1)/2
