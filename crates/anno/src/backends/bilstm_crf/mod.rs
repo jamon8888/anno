@@ -1,8 +1,10 @@
-//! BiLSTM-CRF NER backend.
+//! CRF sequence labeler with heuristic emission features.
 //!
-//! Implements the dominant neural NER architecture from 2015-2018, before transformers.
-//! This architecture represents the pivotal transition from feature engineering to
-//! representation learning, while retaining the CRF layer's sequence modeling.
+//! Uses a real CRF layer (Viterbi decoding over learned transition scores) for
+//! structured sequence prediction. Emission scores come from heuristic features
+//! (gazetteers, word shape, capitalization) rather than a neural BiLSTM encoder.
+//! The architecture follows the BiLSTM-CRF pattern (Huang et al. 2015) but
+//! substitutes the BiLSTM with lightweight feature extraction.
 //!
 //! # Historical Context
 //!
@@ -33,27 +35,21 @@
 //! With CRF:     Viterbi finds   [B-PER, O,     O, B-LOC]  // valid sequence
 //! ```
 //!
-//! # Architecture
+//! # Architecture (this implementation)
 //!
 //! ```text
 //! Input: "John works at Google"
 //!    ↓
 //! ┌─────────────────────────────────────────┐
-//! │ Word Embeddings (GloVe/Word2Vec)        │
-//! │ + Character Embeddings (CNN/LSTM)       │
+//! │ Heuristic Feature Extraction            │
+//! │  - Gazetteer lookup (names, places)     │
+//! │  - Word shape (capitalization, digits)   │
+//! │  - Context window features              │
 //! └─────────────────────────────────────────┘
-//!    ↓
-//! ┌─────────────────────────────────────────┐
-//! │ Bidirectional LSTM                      │
-//! │  Forward:  h₁ → h₂ → h₃ → h₄           │
-//! │  Backward: h₁ ← h₂ ← h₃ ← h₄           │
-//! │  Concat:   [h→;h←] for each position    │
-//! └─────────────────────────────────────────┘
-//!    ↓
+//!    ↓  emission scores
 //! ┌─────────────────────────────────────────┐
 //! │ CRF Layer                               │
-//! │  - Emission scores from BiLSTM          │
-//! │  - Transition matrix learned            │
+//! │  - Transition matrix (learned)          │
 //! │  - Viterbi decoding for best sequence   │
 //! └─────────────────────────────────────────┘
 //!    ↓

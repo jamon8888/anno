@@ -423,7 +423,7 @@ impl DiscourseReferent {
             text: Some(entity.text.clone()),
             event: None,
             canonical_id: entity.canonical_id,
-            confidence: entity.confidence,
+            confidence: entity.confidence.into(),
             depth: 0,
         }
     }
