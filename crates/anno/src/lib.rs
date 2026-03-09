@@ -213,9 +213,6 @@ mod sealed {
     impl Sealed for super::backends::universal_ner::UniversalNER {}
     impl Sealed for super::backends::lexicon::LexiconNER {}
 
-    #[allow(deprecated)]
-    impl Sealed for super::backends::rule::RuleBasedNER {}
-
     impl Sealed for super::backends::hmm::HmmNER {}
     impl Sealed for super::backends::bilstm_crf::BiLstmCrfNER {}
     impl Sealed for super::backends::router::AutoNER {}

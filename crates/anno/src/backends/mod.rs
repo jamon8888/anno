@@ -150,7 +150,6 @@ pub(crate) mod ort_compat;
 pub mod regex;
 /// Language-aware routing for automatic backend selection.
 pub(crate) mod router;
-pub mod rule;
 /// Shared span-tensor utilities for span-based NER backends (GLiNER/NuNER family).
 #[allow(dead_code)]
 pub(crate) mod span_utils;
@@ -428,9 +427,6 @@ pub use universal_ner::UniversalNER;
 // Backwards compatibility
 #[allow(deprecated)]
 pub use stacked::{CompositeNER, LayeredNER, TieredNER};
-
-#[allow(deprecated)]
-pub use rule::RuleBasedNER;
 
 // Re-exports (feature-gated)
 #[cfg(feature = "onnx")]
