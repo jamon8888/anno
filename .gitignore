@@ -44,7 +44,7 @@ exports/
 crates/anno/target/
 
 # Proptest regressions (keep these in source control per proptest docs)
-# *.proptest-regressions
+**/proptest-regressions/
 
 # IDE
 .idea/
