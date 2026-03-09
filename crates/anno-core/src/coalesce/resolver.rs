@@ -1,7 +1,8 @@
 //! # Batch Entity Resolution with Union-Find
 //!
 //! This module provides the core batch entity resolution algorithm using the
-//! **disjoint-set (union-find)** data structure with path compression.
+//! **disjoint-set (union-find)** data structure with path compression and
+//! union-by-rank.
 //!
 //! ## Algorithm Overview
 //!
@@ -154,6 +155,7 @@ impl Resolver {
         // 2. Cluster tracks using string similarity or embeddings
         // Uses embeddings if available (from track.embedding), otherwise falls back to string similarity
         let mut union_find: Vec<usize> = (0..track_data.len()).collect();
+        let mut rank: Vec<usize> = vec![0; track_data.len()];
 
         fn find(parent: &mut [usize], i: usize) -> usize {
             if parent[i] != i {
@@ -162,11 +164,18 @@ impl Resolver {
             parent[i]
         }
 
-        fn union(parent: &mut [usize], i: usize, j: usize) {
+        fn union(parent: &mut [usize], rank: &mut [usize], i: usize, j: usize) {
             let pi = find(parent, i);
             let pj = find(parent, j);
             if pi != pj {
-                parent[pi] = pj;
+                match rank[pi].cmp(&rank[pj]) {
+                    std::cmp::Ordering::Less => parent[pi] = pj,
+                    std::cmp::Ordering::Greater => parent[pj] = pi,
+                    std::cmp::Ordering::Equal => {
+                        parent[pi] = pj;
+                        rank[pj] += 1;
+                    }
+                }
             }
         }
 
@@ -195,7 +204,7 @@ impl Resolver {
                     };
 
                 if similarity >= threshold {
-                    union(&mut union_find, i, j);
+                    union(&mut union_find, &mut rank, i, j);
                 }
             }
         }
