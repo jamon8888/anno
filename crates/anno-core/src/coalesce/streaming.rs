@@ -631,7 +631,7 @@ impl StreamingResolver {
     /// Compute similarity between a mention and a cluster.
     fn mention_cluster_similarity(&self, mention: &EntityMention, cluster: &EntityCluster) -> f32 {
         if let (Some(emb), Some(centroid)) = (&mention.embedding, &cluster.centroid) {
-            return cosine_similarity(emb, centroid);
+            return innr::cosine(emb, centroid);
         }
         trigram_similarity(&mention.canonical_surface, &cluster.canonical_name)
     }
@@ -639,7 +639,7 @@ impl StreamingResolver {
     /// Compute similarity between two clusters.
     fn cluster_similarity(&self, cluster_a: &EntityCluster, cluster_b: &EntityCluster) -> f32 {
         if let (Some(c1), Some(c2)) = (&cluster_a.centroid, &cluster_b.centroid) {
-            return cosine_similarity(c1, c2);
+            return innr::cosine(c1, c2);
         }
         trigram_similarity(&cluster_a.canonical_name, &cluster_b.canonical_name)
     }
@@ -654,14 +654,6 @@ impl Default for StreamingResolver {
 // =============================================================================
 // Similarity functions
 // =============================================================================
-
-/// Cosine similarity between two vectors.
-pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-    innr::cosine(a, b)
-}
 
 /// String similarity using Jaccard coefficient on character trigrams.
 ///
@@ -872,8 +864,8 @@ mod tests {
         let b = vec![1.0, 0.0, 0.0];
         let c = vec![0.0, 1.0, 0.0];
 
-        assert!((cosine_similarity(&a, &b) - 1.0).abs() < 0.001);
-        assert!((cosine_similarity(&a, &c) - 0.0).abs() < 0.001);
+        assert!((innr::cosine(&a, &b) - 1.0).abs() < 0.001);
+        assert!((innr::cosine(&a, &c) - 0.0).abs() < 0.001);
     }
 
     #[test]
@@ -1090,7 +1082,7 @@ mod proptests {
                 (rng % 1000) as f32 / 1000.0
             }).collect();
 
-            let sim = cosine_similarity(&a, &b);
+            let sim = innr::cosine(&a, &b);
             prop_assert!((-0.001..=1.001).contains(&sim),
                 "Cosine similarity {} out of bounds", sim);
         }

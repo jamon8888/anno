@@ -94,7 +94,7 @@ pub enum SourceInfo {
     },
     /// Raw text input (no external source)
     Raw {
-        /// Length of the raw text in characters.
+        /// Length of the raw text in characters (Unicode scalar values).
         length: usize,
         /// Checksum (e.g., SHA256) for integrity validation.
         checksum: Option<String>,
@@ -140,7 +140,7 @@ impl SourceInfo {
     #[must_use]
     pub fn raw(text: &str) -> Self {
         Self::Raw {
-            length: text.len(),
+            length: text.chars().count(),
             checksum: None,
         }
     }
@@ -564,7 +564,7 @@ mod proptests {
         fn prop_source_raw_length(text in ".*") {
             let source = SourceInfo::raw(&text);
             if let SourceInfo::Raw { length, .. } = source {
-                prop_assert_eq!(length, text.len());
+                prop_assert_eq!(length, text.chars().count());
             } else {
                 prop_assert!(false, "Expected Raw variant");
             }

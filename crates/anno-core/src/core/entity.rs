@@ -1486,30 +1486,37 @@ impl Default for Span {
 pub struct HierarchicalConfidence {
     /// Coarse: probability that this span contains ANY entity (0.0-1.0)
     /// Used for early filtering in the TPLinker "handshaking" matrix.
-    pub linkage: f32,
+    pub linkage: Confidence,
     /// Fine: probability that the type classification is correct (0.0-1.0)
-    pub type_score: f32,
+    pub type_score: Confidence,
     /// Boundary: confidence in the exact span boundaries (0.0-1.0)
     /// Low for entities with fuzzy boundaries (e.g., "the CEO" vs "CEO")
-    pub boundary: f32,
+    pub boundary: Confidence,
 }
 
 impl HierarchicalConfidence {
     /// Create hierarchical confidence with all scores.
+    ///
+    /// Accepts any type convertible to `Confidence` (f32, f64, Confidence).
+    /// Out-of-range values are clamped to [0.0, 1.0].
     #[must_use]
-    pub fn new(linkage: f32, type_score: f32, boundary: f32) -> Self {
+    pub fn new(
+        linkage: impl Into<Confidence>,
+        type_score: impl Into<Confidence>,
+        boundary: impl Into<Confidence>,
+    ) -> Self {
         Self {
-            linkage: linkage.clamp(0.0, 1.0),
-            type_score: type_score.clamp(0.0, 1.0),
-            boundary: boundary.clamp(0.0, 1.0),
+            linkage: linkage.into(),
+            type_score: type_score.into(),
+            boundary: boundary.into(),
         }
     }
 
     /// Create from a single confidence score (legacy compatibility).
     /// Assigns same score to all levels.
     #[must_use]
-    pub fn from_single(confidence: f32) -> Self {
-        let c = confidence.clamp(0.0, 1.0);
+    pub fn from_single(confidence: impl Into<Confidence>) -> Self {
+        let c = confidence.into();
         Self {
             linkage: c,
             type_score: c,
@@ -1520,19 +1527,20 @@ impl HierarchicalConfidence {
     /// Calculate combined confidence (geometric mean).
     /// Geometric mean penalizes low scores more than arithmetic mean.
     #[must_use]
-    pub fn combined(&self) -> f32 {
-        (self.linkage * self.type_score * self.boundary).powf(1.0 / 3.0)
+    pub fn combined(&self) -> Confidence {
+        let product = self.linkage.value() * self.type_score.value() * self.boundary.value();
+        Confidence::new(product.powf(1.0 / 3.0))
     }
 
     /// Calculate combined confidence as f64 for legacy compatibility.
     #[must_use]
     pub fn as_f64(&self) -> f64 {
-        self.combined() as f64
+        self.combined().value()
     }
 
     /// Check if passes minimum threshold at all levels.
     #[must_use]
-    pub fn passes_threshold(&self, linkage_min: f32, type_min: f32, boundary_min: f32) -> bool {
+    pub fn passes_threshold(&self, linkage_min: f64, type_min: f64, boundary_min: f64) -> bool {
         self.linkage >= linkage_min && self.type_score >= type_min && self.boundary >= boundary_min
     }
 }
@@ -1540,21 +1548,27 @@ impl HierarchicalConfidence {
 impl Default for HierarchicalConfidence {
     fn default() -> Self {
         Self {
-            linkage: 1.0,
-            type_score: 1.0,
-            boundary: 1.0,
+            linkage: Confidence::ONE,
+            type_score: Confidence::ONE,
+            boundary: Confidence::ONE,
         }
     }
 }
 
 impl From<f64> for HierarchicalConfidence {
     fn from(confidence: f64) -> Self {
-        Self::from_single(confidence as f32)
+        Self::from_single(confidence)
     }
 }
 
 impl From<f32> for HierarchicalConfidence {
     fn from(confidence: f32) -> Self {
+        Self::from_single(confidence)
+    }
+}
+
+impl From<Confidence> for HierarchicalConfidence {
+    fn from(confidence: Confidence) -> Self {
         Self::from_single(confidence)
     }
 }
@@ -2259,23 +2273,23 @@ impl Entity {
 
     /// Get the linkage confidence (coarse filter score).
     #[must_use]
-    pub fn linkage_confidence(&self) -> f32 {
+    pub fn linkage_confidence(&self) -> Confidence {
         self.hierarchical_confidence
-            .map_or(f32::from(self.confidence), |h| h.linkage)
+            .map_or(self.confidence, |h| h.linkage)
     }
 
     /// Get the type classification confidence.
     #[must_use]
-    pub fn type_confidence(&self) -> f32 {
+    pub fn type_confidence(&self) -> Confidence {
         self.hierarchical_confidence
-            .map_or(f32::from(self.confidence), |h| h.type_score)
+            .map_or(self.confidence, |h| h.type_score)
     }
 
     /// Get the boundary confidence.
     #[must_use]
-    pub fn boundary_confidence(&self) -> f32 {
+    pub fn boundary_confidence(&self) -> Confidence {
         self.hierarchical_confidence
-            .map_or(f32::from(self.confidence), |h| h.boundary)
+            .map_or(self.confidence, |h| h.boundary)
     }
 
     /// Check if this entity has visual location (multi-modal).
@@ -3303,34 +3317,34 @@ mod tests {
     #[test]
     fn test_hierarchical_confidence_new() {
         let hc = HierarchicalConfidence::new(0.9, 0.8, 0.7);
-        assert!((hc.linkage - 0.9).abs() < f32::EPSILON);
-        assert!((hc.type_score - 0.8).abs() < f32::EPSILON);
-        assert!((hc.boundary - 0.7).abs() < f32::EPSILON);
+        assert!((hc.linkage - 0.9).abs() < f64::EPSILON);
+        assert!((hc.type_score - 0.8).abs() < f64::EPSILON);
+        assert!((hc.boundary - 0.7).abs() < f64::EPSILON);
     }
 
     #[test]
     fn test_hierarchical_confidence_clamping() {
         let hc = HierarchicalConfidence::new(1.5, -0.5, 0.5);
-        assert!((hc.linkage - 1.0).abs() < f32::EPSILON);
-        assert!(hc.type_score.abs() < f32::EPSILON);
-        assert!((hc.boundary - 0.5).abs() < f32::EPSILON);
+        assert_eq!(hc.linkage, 1.0);
+        assert_eq!(hc.type_score, 0.0);
+        assert_eq!(hc.boundary, 0.5);
     }
 
     #[test]
     fn test_hierarchical_confidence_from_single() {
         let hc = HierarchicalConfidence::from_single(0.8);
-        assert!((hc.linkage - 0.8).abs() < f32::EPSILON);
-        assert!((hc.type_score - 0.8).abs() < f32::EPSILON);
-        assert!((hc.boundary - 0.8).abs() < f32::EPSILON);
+        assert!((hc.linkage - 0.8).abs() < f64::EPSILON);
+        assert!((hc.type_score - 0.8).abs() < f64::EPSILON);
+        assert!((hc.boundary - 0.8).abs() < f64::EPSILON);
     }
 
     #[test]
     fn test_hierarchical_confidence_combined() {
         let hc = HierarchicalConfidence::new(1.0, 1.0, 1.0);
-        assert!((hc.combined() - 1.0).abs() < f32::EPSILON);
+        assert!((hc.combined() - 1.0).abs() < f64::EPSILON);
 
         let hc2 = HierarchicalConfidence::new(0.8, 0.8, 0.8);
-        assert!((hc2.combined() - 0.8).abs() < f32::EPSILON);
+        assert!((hc2.combined() - 0.8).abs() < 0.001);
 
         // Geometric mean: (0.5 * 0.5 * 0.5)^(1/3) = 0.5
         let hc3 = HierarchicalConfidence::new(0.5, 0.5, 0.5);

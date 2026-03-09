@@ -349,10 +349,10 @@ impl LabelNormalizer {
 // Global Instance
 // =============================================================================
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 /// Global label normalizer with all core aliases pre-registered.
-pub static NORMALIZER: Lazy<LabelNormalizer> = Lazy::new(LabelNormalizer::default);
+pub static NORMALIZER: LazyLock<LabelNormalizer> = LazyLock::new(LabelNormalizer::default);
 
 /// Convenience function to normalize a label using the global normalizer.
 pub fn normalize(label: &str) -> Option<CoreType> {
