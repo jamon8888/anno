@@ -29,8 +29,8 @@
 
 use crate::offset::TextSpan;
 use crate::{Entity, EntityType, Language, Model, Result};
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 /// Rule-based NER (**DEPRECATED** - use `RegexNER` or ML backends).
 ///
@@ -94,7 +94,7 @@ impl Model for RuleBasedNER {
 
         // Pattern 0: Well-known organizations (acronyms and single words)
         // These are high-confidence matches that would otherwise be missed
-        static KNOWN_ORGS: Lazy<Regex> = Lazy::new(|| {
+        static KNOWN_ORGS: LazyLock<Regex> = LazyLock::new(|| {
             // Tech, Government, Academic, Conferences + Sports Leagues/Teams
             Regex::new(r"\b(?:NASA|FBI|CIA|NSA|NIH|FDA|CDC|EPA|WHO|NATO|UN|EU|IMF|WTO|CERN|MIT|UCLA|DARPA|OECD|OPEC|IEEE|ACM|AWS|GCP|IBM|HP|AMD|ARM|NVIDIA|Intel|Apple|Google|Microsoft|Amazon|Meta|OpenAI|Anthropic|DeepMind|Pfizer|Moderna|Rivian|BYD|Netflix|Uber|Airbnb|NeurIPS|ICML|ICLR|CVPR|ACL|EMNLP|NAACL|IPCC|SEC|FCC|DOJ|DOE|DOD|USDA|HUD|IRS|FEMA|OSHA|NOAA|NSF|USPTO|FTC|NIST|DOT|VA|SSA|SBA|FAA|TSA|ICE|CBP|USCIS|NFL|NBA|MLB|NHL|MLS|FIFA|UEFA|IOC|NCAA|PGA|ATP|WTA|UFC|WWE|ESPN|LEICESTERSHIRE|DERBYSHIRE|YORKSHIRE|SURREY|ESSEX|WARWICKSHIRE|SUSSEX|MIDDLESEX|HAMPSHIRE|SOMERSET|KENT|LANCASHIRE|GLOUCESTERSHIRE|NOTTINGHAMSHIRE|NORTHAMPTONSHIRE|WORCESTERSHIRE|DURHAM)\b")
                 .expect("Failed to compile known orgs pattern")
@@ -113,7 +113,7 @@ impl Model for RuleBasedNER {
 
         // Pattern 1: Organizations (Inc., Corp., Corporation, Ltd., University, etc.)
         // Run FIRST to avoid "Microsoft Corporation" being tagged as Person
-        static ORG_PATTERN: Lazy<Regex> = Lazy::new(|| {
+        static ORG_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r"\b[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)*\s+(?:Inc\.?|Corp\.?|Corporation|Ltd\.?|LLC|GmbH|University|Institute|Foundation|Laboratory|Labs?|Company|Technologies|Systems|Research|Group|Partners|Associates|Agency|Commission|Court|Council|Board|Committee|Organization|Organisation|Bank|Reserve|Museum)\b")
                 .expect("Failed to compile org pattern")
         });
@@ -140,7 +140,7 @@ impl Model for RuleBasedNER {
         }
 
         // Pattern 2: Locations (city, country patterns - expanded)
-        static LOCATION_PATTERN: Lazy<Regex> = Lazy::new(|| {
+        static LOCATION_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r"\b(?:New\s+York(?:\s+City)?|San\s+Francisco|Los\s+Angeles|Washington(?:\s+D\.?C\.?)?|Tokyo\s+Bay|United\s+States|United\s+Kingdom|European\s+Union|Asia-Pacific|North\s+America|South\s+America|Atlantic\s+Ocean|Pacific\s+Ocean|Amazon\s+River|Tokyo|Berlin|Paris|London|Beijing|Shanghai|Mumbai|Sydney|Moscow|Dubai|Seoul|Singapore|Hong\s+Kong|Brazil|Peru|Colombia|China|Japan|Germany|France|Italy|Spain|Canada|Australia|India|Russia|Mexico|Argentina|Chile|Ukraine|California|Texas|Florida|Illinois|Seattle|Chicago|Boston|Atlanta|Denver|Phoenix|Portland|Miami|Cupertino|Redmond|Wuhan|Geneva)\b")
                 .expect("Failed to compile location pattern")
         });
@@ -169,7 +169,7 @@ impl Model for RuleBasedNER {
         // Pattern 3: Person names (common first+last name patterns)
         // Look for patterns like "John Smith", "J. Smith", "Dr. Smith", "Chen et al."
         // Exclude patterns starting with "The "
-        static PERSON_PATTERN: Lazy<Regex> = Lazy::new(|| {
+        static PERSON_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r"(?:Dr\.|Mr\.|Mrs\.|Ms\.|Prof\.|Chairman|CEO|President|Director|Justice|General|Commissioner|Coach|Governor|Senator|Mayor)\s+[A-Z][a-z]+(?:\s+[a-z]+\s+[A-Z][a-z]+|\s+[A-Z][a-z]+)?|[A-Z][a-z]+\s+(?:et\s+al\.?)|[A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?")
                 .expect("Failed to compile person pattern")
         });
@@ -205,7 +205,7 @@ impl Model for RuleBasedNER {
         }
 
         // Pattern 4: Other capitalized phrases (less confident)
-        static CAPITALIZED_PATTERN: Lazy<Regex> = Lazy::new(|| {
+        static CAPITALIZED_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b")
                 .expect("Failed to compile capitalized pattern")
         });
@@ -245,7 +245,7 @@ impl Model for RuleBasedNER {
         }
 
         // Pattern 5: Dates - expanded to catch more formats
-        static DATE_PATTERN: Lazy<Regex> = Lazy::new(|| {
+        static DATE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,\s*\d{4})?|\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)(?:\s+\d{4})?|(?:Q[1-4]|(?:19|20)\d{2}))\b")
                 .expect("Failed to compile date pattern")
         });
@@ -269,7 +269,7 @@ impl Model for RuleBasedNER {
         }
 
         // Pattern 6: Money amounts (enhanced)
-        static MONEY_PATTERN: Lazy<Regex> = Lazy::new(|| {
+        static MONEY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r"\$[\d,]+\.?\d*\s*(?:billion|million|thousand|B|M|K)?|\d+\.?\d*\s*(?:dollars?|USD|EUR|GBP|billion|million)")
                 .expect("Failed to compile money pattern")
         });
@@ -293,8 +293,9 @@ impl Model for RuleBasedNER {
         }
 
         // Pattern 7: Percentages
-        static PERCENT_PATTERN: Lazy<Regex> =
-            Lazy::new(|| Regex::new(r"\d+\.?\d*\s*%").expect("Failed to compile percent pattern"));
+        static PERCENT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r"\d+\.?\d*\s*%").expect("Failed to compile percent pattern")
+        });
 
         for percent_match in PERCENT_PATTERN.find_iter(text) {
             let span = TextSpan::from_bytes(text, percent_match.start(), percent_match.end());

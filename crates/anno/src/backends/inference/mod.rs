@@ -80,22 +80,28 @@ pub struct VisualPosition {
 // =============================================================================
 
 pub mod registry;
-pub use registry::*;
+pub use registry::{
+    LabelCategory, LabelDefinition, ModalityHint, SemanticRegistry, SemanticRegistryBuilder,
+};
 
 pub mod encoder;
-pub use encoder::*;
+pub use encoder::{BiEncoder, EncoderOutput, LabelEncoder, SpanLabelScore, TextEncoder};
 
 pub mod traits;
-pub use traits::*;
+pub use traits::{
+    DiscontinuousEntity, DiscontinuousNER, ExtractionWithRelations, RelationExtractor,
+    RelationTriple, ZeroShotNER,
+};
+pub(crate) use traits::{DEFAULT_ENTITY_TYPES, DEFAULT_RELATION_TYPES};
 
 pub mod late_interaction;
-pub use late_interaction::*;
+pub use late_interaction::{DotProductInteraction, LateInteraction, MaxSimInteraction};
 
 pub mod span;
-pub use span::*;
+pub use span::{HandshakingCell, HandshakingMatrix, SpanRepConfig, SpanRepresentationLayer};
 
 pub mod coref;
-pub use coref::*;
+pub use coref::{resolve_coreferences, CoreferenceCluster, CoreferenceConfig};
 
 pub mod relation_extraction;
 pub use relation_extraction::{
@@ -104,7 +110,7 @@ pub use relation_extraction::{
 };
 
 pub mod binary_embeddings;
-pub use binary_embeddings::*;
+pub use binary_embeddings::{two_stage_retrieval, BinaryBlocker, BinaryHash};
 // Tests
 // =============================================================================
 
@@ -156,19 +162,6 @@ mod tests {
         assert_eq!(scores.len(), 6); // 2 * 3
         assert!((scores[0] - 1.0).abs() < 0.01); // span0 vs label0
         assert!((scores[4] - 1.0).abs() < 0.01); // span1 vs label1
-    }
-
-    #[test]
-    fn test_cosine_similarity() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![1.0, 0.0, 0.0];
-        assert!((cosine_similarity(&a, &b) - 1.0).abs() < 0.001);
-
-        let c = vec![0.0, 1.0, 0.0];
-        assert!(cosine_similarity(&a, &c).abs() < 0.001);
-
-        let d = vec![-1.0, 0.0, 0.0];
-        assert!((cosine_similarity(&a, &d) - (-1.0)).abs() < 0.001);
     }
 
     #[test]
@@ -636,42 +629,6 @@ mod tests {
         };
         // dim=0 should return 0.0 (avoid division by zero)
         assert!((hash.hamming_distance_normalized(&hash) - 0.0).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_f32_identical() {
-        let a = vec![1.0, 2.0, 3.0];
-        let sim = cosine_similarity_f32(&a, &a);
-        assert!((sim - 1.0).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_f32_orthogonal() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![0.0, 1.0, 0.0];
-        let sim = cosine_similarity_f32(&a, &b);
-        assert!(sim.abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_f32_zero_vector() {
-        let a = vec![1.0, 2.0, 3.0];
-        let zero = vec![0.0, 0.0, 0.0];
-        assert!((cosine_similarity_f32(&a, &zero)).abs() < 0.001);
-        assert!((cosine_similarity_f32(&zero, &a)).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_f32_empty() {
-        assert!((cosine_similarity_f32(&[], &[])).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_f32_length_mismatch() {
-        let a = vec![1.0, 2.0];
-        let b = vec![1.0, 2.0, 3.0];
-        // Mismatched lengths should return 0.0
-        assert!((cosine_similarity_f32(&a, &b)).abs() < 0.001);
     }
 
     #[test]

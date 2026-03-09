@@ -320,24 +320,17 @@ impl EventExtractor for RuleBasedEventExtractor {
                     &text_lower
                 };
 
-            if let Some(pos) = search_text.find(trigger_word) {
-                // Find character offset (not byte offset)
-                let char_start = text
-                    .char_indices()
-                    .nth(pos)
-                    .map(|(i, _)| i)
-                    .unwrap_or(text.len());
-                let char_end = text
-                    .char_indices()
-                    .nth(pos + trigger_word.chars().count())
-                    .map(|(i, _)| i)
-                    .unwrap_or(text.len());
+            if let Some(byte_pos) = search_text.find(trigger_word) {
+                // str::find returns a byte offset; convert to character count
+                let char_start = search_text[..byte_pos].chars().count();
+                let trigger_char_len = trigger_word.chars().count();
+                let char_end = char_start + trigger_char_len;
 
                 // Extract actual trigger text (preserving original case)
                 let trigger_text: String = text
                     .chars()
-                    .skip(pos)
-                    .take(trigger_word.chars().count())
+                    .skip(char_start)
+                    .take(trigger_char_len)
                     .collect();
 
                 let event = Event::new(trigger_text, char_start, char_end, event_type.to_string())

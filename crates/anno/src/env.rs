@@ -79,11 +79,11 @@
 //! - `ANNO_MUXER_LATENCY_GUARDRAIL_ALLOW_FEWER`
 //! - `ANNO_MUXER_LATENCY_GUARDRAIL_REQUIRE_MEASUREMENT`
 
-use once_cell::sync::OnceCell;
 use std::path::Path;
+use std::sync::OnceLock;
 
 /// Global flag to track if dotenv was loaded
-static DOTENV_LOADED: OnceCell<bool> = OnceCell::new();
+static DOTENV_LOADED: OnceLock<bool> = OnceLock::new();
 
 /// Load environment variables from .env file if present.
 ///

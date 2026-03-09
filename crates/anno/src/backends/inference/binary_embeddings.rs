@@ -255,7 +255,7 @@ pub fn two_stage_retrieval(
     // Performance: Pre-allocate scored vec with known size
     let mut scored: Vec<(usize, f32)> = Vec::with_capacity(candidates.len());
     scored.extend(candidates.into_iter().map(|idx| {
-        let sim = cosine_similarity_f32(query_embedding, &candidate_embeddings[idx]);
+        let sim = innr::cosine(query_embedding, &candidate_embeddings[idx]);
         (idx, sim)
     }));
 
@@ -264,15 +264,6 @@ pub fn two_stage_retrieval(
     scored.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     scored.truncate(top_k);
     scored
-}
-
-/// Compute cosine similarity between two f32 vectors.
-#[must_use]
-pub fn cosine_similarity_f32(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-    innr::cosine(a, b)
 }
 
 #[cfg(test)]
@@ -465,45 +456,6 @@ mod tests {
         assert_eq!(blocker.len(), 1);
         blocker.clear();
         assert!(blocker.is_empty());
-    }
-
-    // ── cosine_similarity_f32 ────────────────────────────────────────
-
-    #[test]
-    fn cosine_identical_vectors() {
-        let v = vec![1.0, 2.0, 3.0];
-        assert!((cosine_similarity_f32(&v, &v) - 1.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn cosine_opposite_vectors() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![-1.0, 0.0, 0.0];
-        assert!((cosine_similarity_f32(&a, &b) - (-1.0)).abs() < 1e-6);
-    }
-
-    #[test]
-    fn cosine_orthogonal_vectors() {
-        let a = vec![1.0, 0.0];
-        let b = vec![0.0, 1.0];
-        assert!(cosine_similarity_f32(&a, &b).abs() < 1e-6);
-    }
-
-    #[test]
-    fn cosine_zero_vector_returns_zero() {
-        let a = vec![0.0, 0.0];
-        let b = vec![1.0, 2.0];
-        assert_eq!(cosine_similarity_f32(&a, &b), 0.0);
-    }
-
-    #[test]
-    fn cosine_empty_returns_zero() {
-        assert_eq!(cosine_similarity_f32(&[], &[]), 0.0);
-    }
-
-    #[test]
-    fn cosine_mismatched_lengths_returns_zero() {
-        assert_eq!(cosine_similarity_f32(&[1.0, 2.0], &[1.0]), 0.0);
     }
 
     // ── two_stage_retrieval ──────────────────────────────────────────

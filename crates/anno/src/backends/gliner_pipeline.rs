@@ -43,9 +43,6 @@
 //! let entities = pipeline.extract("Steve Jobs founded Apple")?;
 //! ```
 
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 use crate::backends::inference::{
     DotProductInteraction, LateInteraction, SemanticRegistry, SpanRepConfig,
     SpanRepresentationLayer,
@@ -296,13 +293,6 @@ impl PipelineBuilder {
                 ..self.config
             },
         })
-    }
-
-    #[cfg(not(feature = "candle"))]
-    pub fn build(self) -> Result<GLiNERPipeline<()>> {
-        Err(Error::FeatureNotAvailable(
-            "GLiNERPipeline requires 'candle' feature".into(),
-        ))
     }
 }
 

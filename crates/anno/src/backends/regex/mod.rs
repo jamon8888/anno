@@ -14,8 +14,8 @@
 //! For Person/Organization/Location, use ML models (BERT ONNX, GLiNER).
 
 use crate::{Entity, EntityType, Language, Model, Result};
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 /// Regex-based NER - extracts entities with recognizable formats using regex patterns.
 ///
@@ -64,35 +64,35 @@ impl Default for RegexNER {
 }
 
 // Static regex patterns - compiled once, reused forever
-static DATE_ISO: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\b\d{4}-\d{2}-\d{2}\b").expect("valid regex"));
+static DATE_ISO: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\b\d{4}-\d{2}-\d{2}\b").expect("valid regex"));
 
-static DATE_US: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b").expect("valid regex"));
+static DATE_US: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b").expect("valid regex"));
 
-static DATE_EU: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\b\d{1,2}\.\d{1,2}\.\d{2,4}\b").expect("valid regex"));
+static DATE_EU: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\b\d{1,2}\.\d{1,2}\.\d{2,4}\b").expect("valid regex"));
 
-static DATE_WRITTEN_FULL: Lazy<Regex> = Lazy::new(|| {
+static DATE_WRITTEN_FULL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{4})?\b").expect("valid regex")
 });
 
-static DATE_WRITTEN_SHORT: Lazy<Regex> = Lazy::new(|| {
+static DATE_WRITTEN_SHORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{4})?\b").expect("valid regex")
 });
 
-static DATE_WRITTEN_EU: Lazy<Regex> = Lazy::new(|| {
+static DATE_WRITTEN_EU: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?(?:\s+\d{4})?\b").expect("valid regex")
 });
 
 // Month-year only (English): "April 2018", "December 2024"
 // Must come AFTER full date patterns so "April 15, 2018" matches the longer pattern first.
-static DATE_MONTH_YEAR_EN: Lazy<Regex> = Lazy::new(|| {
+static DATE_MONTH_YEAR_EN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b").expect("valid regex")
 });
 
 // Month-year only (German): "Oktober 2024", "Januar 2023"
-static DATE_MONTH_YEAR_DE: Lazy<Regex> = Lazy::new(|| {
+static DATE_MONTH_YEAR_DE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+\d{4}\b").expect("valid regex")
 });
 
@@ -100,7 +100,7 @@ static DATE_MONTH_YEAR_DE: Lazy<Regex> = Lazy::new(|| {
 // Japanese Date Format: YYYY年MM月DD日
 // =============================================================================
 
-static DATE_JAPANESE: Lazy<Regex> = Lazy::new(|| {
+static DATE_JAPANESE: LazyLock<Regex> = LazyLock::new(|| {
     // Matches: 2024年1月15日, 2024年01月15日, etc.
     Regex::new(r"\d{4}年\d{1,2}月\d{1,2}日").expect("valid regex")
 });
@@ -110,49 +110,49 @@ static DATE_JAPANESE: Lazy<Regex> = Lazy::new(|| {
 // =============================================================================
 
 // German months: Januar, Februar, März, April, Mai, Juni, Juli, August, September, Oktober, November, Dezember
-static DATE_GERMAN_FULL: Lazy<Regex> = Lazy::new(|| {
+static DATE_GERMAN_FULL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+\d{1,2}(?:\.)?(?:,?\s*\d{4})?\b").expect("valid regex")
 });
 
-static DATE_GERMAN_EU: Lazy<Regex> = Lazy::new(|| {
+static DATE_GERMAN_EU: LazyLock<Regex> = LazyLock::new(|| {
     // "15. Januar 2024" or "15 Januar"
     Regex::new(r"(?i)\b\d{1,2}\.?\s+(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)(?:\s+\d{4})?\b").expect("valid regex")
 });
 
 // French months: janvier, février, mars, avril, mai, juin, juillet, août, septembre, octobre, novembre, décembre
-static DATE_FRENCH_FULL: Lazy<Regex> = Lazy::new(|| {
+static DATE_FRENCH_FULL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre)\s+\d{1,2}(?:,?\s*\d{4})?\b").expect("valid regex")
 });
 
-static DATE_FRENCH_EU: Lazy<Regex> = Lazy::new(|| {
+static DATE_FRENCH_EU: LazyLock<Regex> = LazyLock::new(|| {
     // "15 janvier 2024" or "1er janvier"
     Regex::new(r"(?i)\b\d{1,2}(?:er)?\s+(?:janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre)(?:\s+\d{4})?\b").expect("valid regex")
 });
 
 // Spanish months: enero, febrero, marzo, abril, mayo, junio, julio, agosto, septiembre, octubre, noviembre, diciembre
-static DATE_SPANISH_EU: Lazy<Regex> = Lazy::new(|| {
+static DATE_SPANISH_EU: LazyLock<Regex> = LazyLock::new(|| {
     // "15 de enero de 2024" or "15 enero 2024"
     Regex::new(r"(?i)\b\d{1,2}\s+(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+(?:de\s+)?\d{4})?\b").expect("valid regex")
 });
 
 // Italian months: gennaio, febbraio, marzo, aprile, maggio, giugno, luglio, agosto, settembre, ottobre, novembre, dicembre
-static DATE_ITALIAN_EU: Lazy<Regex> = Lazy::new(|| {
+static DATE_ITALIAN_EU: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b\d{1,2}\s+(?:gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)(?:\s+\d{4})?\b").expect("valid regex")
 });
 
 // Portuguese months: janeiro, fevereiro, março, abril, maio, junho, julho, agosto, setembro, outubro, novembro, dezembro
-static DATE_PORTUGUESE_EU: Lazy<Regex> = Lazy::new(|| {
+static DATE_PORTUGUESE_EU: LazyLock<Regex> = LazyLock::new(|| {
     // "15 de janeiro de 2024"
     Regex::new(r"(?i)\b\d{1,2}\s+(?:de\s+)?(?:janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s+(?:de\s+)?\d{4})?\b").expect("valid regex")
 });
 
 // Dutch months: januari, februari, maart, april, mei, juni, juli, augustus, september, oktober, november, december
-static DATE_DUTCH_EU: Lazy<Regex> = Lazy::new(|| {
+static DATE_DUTCH_EU: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b\d{1,2}\s+(?:januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)(?:\s+\d{4})?\b").expect("valid regex")
 });
 
 // Russian months (Cyrillic): январь, февраль, март, апрель, май, июнь, июль, август, сентябрь, октябрь, ноябрь, декабрь
-static DATE_RUSSIAN_EU: Lazy<Regex> = Lazy::new(|| {
+static DATE_RUSSIAN_EU: LazyLock<Regex> = LazyLock::new(|| {
     // "15 января 2024" - uses genitive case forms
     Regex::new(r"\b\d{1,2}\s+(?:января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)(?:\s+\d{4})?\b").expect("valid regex")
 });
@@ -161,83 +161,85 @@ static DATE_RUSSIAN_EU: Lazy<Regex> = Lazy::new(|| {
 // Already covered by DATE_JAPANESE
 
 // Korean date format: YYYY년 MM월 DD일
-static DATE_KOREAN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\d{4}년\s*\d{1,2}월\s*\d{1,2}일").expect("valid regex"));
+static DATE_KOREAN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\d{4}년\s*\d{1,2}월\s*\d{1,2}일").expect("valid regex"));
 
-static TIME_12H: Lazy<Regex> = Lazy::new(|| {
+static TIME_12H: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)\b").expect("valid regex")
 });
 
-static TIME_24H: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\b").expect("valid regex"));
+static TIME_24H: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\b").expect("valid regex")
+});
 
-static TIME_SIMPLE: Lazy<Regex> = Lazy::new(|| {
+static TIME_SIMPLE: LazyLock<Regex> = LazyLock::new(|| {
     // Note: No trailing \b because a.m./p.m. end with .
     Regex::new(r"(?i)\b\d{1,2}\s*(?:am\b|pm\b|a\.m\.|p\.m\.)").expect("valid regex")
 });
 
-static MONEY_SYMBOL: Lazy<Regex> = Lazy::new(|| {
+static MONEY_SYMBOL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"[$€£¥][\d,]+(?:[.,]\d{1,2})?(?:\s*(?:billion|million|thousand|B|M|K|bn|mn))?")
         .expect("valid regex")
 });
 
-static MONEY_WRITTEN: Lazy<Regex> = Lazy::new(|| {
+static MONEY_WRITTEN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?i)\b\d+(?:,\d{3})*(?:[.,]\d{1,2})?\s*(?:dollars?|USD|euros?|EUR|pounds?|GBP|yen|JPY)\b",
     )
     .expect("valid regex")
 });
 
-static MONEY_CODE_PREFIX: Lazy<Regex> = Lazy::new(|| {
+static MONEY_CODE_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?i)\b(?:USD|EUR|GBP|JPY|CHF|CAD|AUD)\s*\d+(?:[,\.]\d+)*(?:\s*(?:billion|million|trillion|thousand|Mrd|Mio|Bn|Mn|B|M|K|bn|mn))?\b",
     )
     .expect("valid regex")
 });
 
-static MONEY_MAGNITUDE: Lazy<Regex> = Lazy::new(|| {
+static MONEY_MAGNITUDE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?i)\b\d+(?:[.,]\d+)?\s*(?:billion|million|trillion|Mrd|Mio|Bn|Mn)(?:\s+(?:dollars?|euros?|pounds?|USD|EUR|GBP|JPY|CHF|CAD|AUD))?\b",
     )
     .expect("valid regex")
 });
 
-static PERCENT: Lazy<Regex> = Lazy::new(|| {
+static PERCENT: LazyLock<Regex> = LazyLock::new(|| {
     // Note: No trailing \b because % is not a word character.
     // Supports both period and comma as decimal separator (European format).
     Regex::new(r"\b\d+(?:[.,]\d+)?\s*(?:%|percent\b|pct\b)").expect("valid regex")
 });
 
-static EMAIL: Lazy<Regex> = Lazy::new(|| {
+static EMAIL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b").expect("valid regex")
 });
 
-static URL: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\bhttps?://[^\s<>\[\]{}|\\^`\x00-\x1f]+").expect("valid regex"));
+static URL: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\bhttps?://[^\s<>\[\]{}|\\^`\x00-\x1f]+").expect("valid regex")
+});
 
-static PHONE_US: Lazy<Regex> = Lazy::new(|| {
+static PHONE_US: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b").expect("valid regex")
 });
 
-static PHONE_INTL: Lazy<Regex> = Lazy::new(|| {
+static PHONE_INTL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\+\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}\b").expect("valid regex")
 });
 
-static PHONE_LOCAL: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\b\d{3}[-.\s]?\d{4}\b").expect("valid regex"));
+static PHONE_LOCAL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\b\d{3}[-.\s]?\d{4}\b").expect("valid regex"));
 
 /// Words that signal the following number is a phone number (for PHONE_LOCAL context filter).
-static PHONE_CONTEXT: Lazy<Regex> = Lazy::new(|| {
+static PHONE_CONTEXT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:call|tel|telephone|phone|fax|dial|ring|mobile|cell|contact)\b[:\s]*$")
         .expect("valid regex")
 });
 
-static MENTION: Lazy<Regex> = Lazy::new(|| {
+static MENTION: LazyLock<Regex> = LazyLock::new(|| {
     // @username - supports letters, numbers, underscore, dot (but not starting/ending with dot)
     Regex::new(r"\B@[\w](?:[\w.]*[\w])?").expect("valid regex")
 });
 
-static HASHTAG: Lazy<Regex> = Lazy::new(|| {
+static HASHTAG: LazyLock<Regex> = LazyLock::new(|| {
     // #hashtag - supports letters, numbers, underscore
     Regex::new(r"\B#\w+").expect("valid regex")
 });
@@ -275,7 +277,7 @@ impl Model for RegexNER {
 
         // Dates (high confidence - very specific patterns)
         // English dates
-        let date_patterns_en: &[(&Lazy<Regex>, &'static str)] = &[
+        let date_patterns_en: &[(&LazyLock<Regex>, &'static str)] = &[
             (&DATE_ISO, "DATE_ISO"),
             (&DATE_US, "DATE_US"),
             (&DATE_EU, "DATE_EU"),
@@ -290,7 +292,7 @@ impl Model for RegexNER {
         }
 
         // Multilingual dates (Japanese, Korean, German, French, Spanish, etc.)
-        let date_patterns_i18n: &[(&Lazy<Regex>, &'static str)] = &[
+        let date_patterns_i18n: &[(&LazyLock<Regex>, &'static str)] = &[
             (&DATE_JAPANESE, "DATE_JAPANESE"),
             (&DATE_KOREAN, "DATE_KOREAN"),
             (&DATE_GERMAN_FULL, "DATE_GERMAN_FULL"),
@@ -312,7 +314,7 @@ impl Model for RegexNER {
         // Month-year only patterns (English and German).
         // These come AFTER both English full dates AND i18n full dates so longer
         // patterns like "15. Januar 2024" or "April 15, 2018" are preferred.
-        let date_month_year: &[(&Lazy<Regex>, &'static str)] = &[
+        let date_month_year: &[(&LazyLock<Regex>, &'static str)] = &[
             (&DATE_MONTH_YEAR_EN, "DATE_MONTH_YEAR_EN"),
             (&DATE_MONTH_YEAR_DE, "DATE_MONTH_YEAR_DE"),
         ];
@@ -323,7 +325,7 @@ impl Model for RegexNER {
         }
 
         // Times
-        let time_patterns: &[(&Lazy<Regex>, &'static str)] = &[
+        let time_patterns: &[(&LazyLock<Regex>, &'static str)] = &[
             (&TIME_12H, "TIME_12H"),
             (&TIME_24H, "TIME_24H"),
             (&TIME_SIMPLE, "TIME_SIMPLE"),
@@ -335,7 +337,7 @@ impl Model for RegexNER {
         }
 
         // Money (high confidence)
-        let money_patterns: &[(&Lazy<Regex>, &'static str)] = &[
+        let money_patterns: &[(&LazyLock<Regex>, &'static str)] = &[
             (&MONEY_SYMBOL, "MONEY_SYMBOL"),
             (&MONEY_CODE_PREFIX, "MONEY_CODE_PREFIX"),
             (&MONEY_WRITTEN, "MONEY_WRITTEN"),
@@ -363,7 +365,7 @@ impl Model for RegexNER {
         }
 
         // Phone numbers (medium confidence - can have false positives)
-        let phone_patterns: &[(&Lazy<Regex>, &'static str)] =
+        let phone_patterns: &[(&LazyLock<Regex>, &'static str)] =
             &[(&PHONE_US, "PHONE_US"), (&PHONE_INTL, "PHONE_INTL")];
         for (pattern, name) in phone_patterns {
             for m in pattern.find_iter(text) {

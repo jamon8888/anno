@@ -184,17 +184,9 @@ impl Model for LexiconNER {
                 };
 
                 if let Some((entity_type, confidence)) = matched {
-                    // Found a match - convert byte positions to character positions
-                    let char_start = text
-                        .char_indices()
-                        .nth(start)
-                        .map(|(i, _)| i)
-                        .unwrap_or(text.len());
-                    let char_end = text
-                        .char_indices()
-                        .nth(end)
-                        .map(|(i, _)| i)
-                        .unwrap_or(text.len());
+                    // start/end are already character indices (from text_chars: Vec<char>)
+                    let char_start = start;
+                    let char_end = end;
 
                     // Extract actual text span (preserving original case)
                     let actual_span: String = text.chars().skip(start).take(end - start).collect();

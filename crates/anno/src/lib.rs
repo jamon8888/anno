@@ -146,10 +146,12 @@ pub use lang::{detect_language, Language};
 pub use offset::{
     bytes_to_chars, chars_to_bytes, is_ascii, OffsetMapping, SpanConverter, TextSpan, TokenSpan,
 };
-pub use schema::*;
-pub use similarity::*;
-pub use sync::*;
-pub use types::*;
+pub use schema::{
+    map_to_canonical, CanonicalType, CoarseType, DatasetSchema, InformationLoss, SchemaMapper,
+};
+pub use similarity::{jaccard_word_similarity, jaccard_word_similarity_f32, string_similarity};
+pub use sync::{lock, read_lock, try_lock, write_lock, Mutex, RwLock};
+pub use types::{EntitySliceExt, Score};
 
 // =============================================================================
 // Sealed Trait Pattern
@@ -755,8 +757,15 @@ pub use backends::CorefBackend;
 
 // Re-export MockModel for testing
 
-// Re-export Model trait and related
-pub use backends::inference::*;
+// Re-export inference traits and types used at the crate root
+pub use backends::inference::{
+    extract_relation_triples, extract_relation_triples_simple, extract_relations, BiEncoder,
+    CoreferenceCluster, CoreferenceConfig, DiscontinuousEntity, DiscontinuousNER,
+    DotProductInteraction, EncoderOutput, ExtractionWithRelations, HandshakingCell,
+    HandshakingMatrix, LabelEncoder, LateInteraction, MaxSimInteraction, RelationExtractionConfig,
+    RelationExtractor, RelationTriple, SemanticRegistry, SemanticRegistryBuilder, SpanLabelScore,
+    SpanRepConfig, TextEncoder, ZeroShotNER,
+};
 
 #[cfg(feature = "onnx")]
 #[cfg_attr(docsrs, doc(cfg(feature = "onnx")))]

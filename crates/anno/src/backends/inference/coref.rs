@@ -115,7 +115,7 @@ pub fn resolve_coreferences(
                 let emb_i = &embeddings[i * hidden_dim..(i + 1) * hidden_dim];
                 let emb_j = &embeddings[j * hidden_dim..(j + 1) * hidden_dim];
 
-                let similarity = cosine_similarity(emb_i, emb_j);
+                let similarity = innr::cosine(emb_i, emb_j);
 
                 if similarity >= config.similarity_threshold {
                     // Same entity type required
@@ -159,16 +159,6 @@ pub fn resolve_coreferences(
     clusters
 }
 
-/// Compute cosine similarity between two vectors.
-///
-/// Returns a value in [-1.0, 1.0] where:
-/// - 1.0 = identical direction
-/// - 0.0 = orthogonal
-/// - -1.0 = opposite direction
-pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    innr::cosine(a, b)
-}
-
 // =============================================================================
 // Tests
 // =============================================================================
@@ -201,48 +191,6 @@ mod tests {
         assert!((cloned.similarity_threshold - 0.7).abs() < f32::EPSILON);
         assert!(cloned.max_distance.is_none());
         assert!(!cloned.use_string_match);
-    }
-
-    // =========================================================================
-    // cosine_similarity
-    // =========================================================================
-
-    #[test]
-    fn test_cosine_similarity_identical() {
-        let a = vec![1.0, 2.0, 3.0];
-        let sim = cosine_similarity(&a, &a);
-        assert!((sim - 1.0).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_orthogonal() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![0.0, 1.0, 0.0];
-        assert!(cosine_similarity(&a, &b).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_opposite() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![-1.0, 0.0, 0.0];
-        assert!((cosine_similarity(&a, &b) - (-1.0)).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_zero_vector() {
-        let a = vec![1.0, 2.0, 3.0];
-        let zero = vec![0.0, 0.0, 0.0];
-        assert!((cosine_similarity(&a, &zero)).abs() < 0.001);
-        assert!((cosine_similarity(&zero, &a)).abs() < 0.001);
-        assert!((cosine_similarity(&zero, &zero)).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_scaled_vectors() {
-        // Cosine similarity is scale-invariant
-        let a = vec![1.0, 2.0, 3.0];
-        let b = vec![10.0, 20.0, 30.0]; // same direction, 10x magnitude
-        assert!((cosine_similarity(&a, &b) - 1.0).abs() < 0.001);
     }
 
     // =========================================================================

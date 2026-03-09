@@ -1,6 +1,6 @@
 //! Witness type for f32 neural network output scores bounded to [0.0, 1.0].
 
-use super::Confidence;
+use anno_core::Confidence;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -109,7 +109,7 @@ impl Score {
     #[must_use]
     #[inline]
     pub fn to_confidence(self) -> Confidence {
-        Confidence::saturating(self.0 as f64)
+        Confidence::new(self.0 as f64)
     }
 
     /// Check if this is "high confidence" (>= 0.9).
@@ -212,7 +212,7 @@ mod tests {
     fn to_confidence_preserves_value() {
         let score = Score::new(0.85).expect("0.85 is valid");
         let conf = score.to_confidence();
-        assert!((conf.get() - 0.85).abs() < 0.001);
+        assert!((conf.value() - 0.85).abs() < 0.001);
     }
 
     #[test]
