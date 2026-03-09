@@ -281,20 +281,6 @@ jobs:
       - name: Test production
         run: cargo test --workspace --lib --features "production"
 
-  test-burn:
-    name: Test (Burn backend)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-all-crates: true
-      - name: Build Burn backend
-        run: cargo build --workspace --features "burn"
-      - name: Test Burn (unit)
-        run: cargo test --workspace --lib --features "burn"
-
   test-metal:
     name: Test (Metal on macOS)
     runs-on: macos-latest

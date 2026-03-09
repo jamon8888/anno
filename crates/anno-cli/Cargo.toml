@@ -26,7 +26,6 @@ chrono = { workspace = true }
 dirs = { workspace = true }
 regex = { workspace = true }
 thiserror = { workspace = true }
-once_cell = { workspace = true }
 glob = { workspace = true }
 itertools = { workspace = true }
 

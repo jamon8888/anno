@@ -46,7 +46,6 @@ bitflags = { workspace = true }
 textprep = { workspace = true }
 chrono = { workspace = true }
 log = { workspace = true }
-once_cell = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
 dirs = { workspace = true }
