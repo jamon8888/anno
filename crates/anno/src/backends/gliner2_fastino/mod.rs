@@ -46,19 +46,28 @@ pub(crate) mod session;
 /// fastino-ai GLiNER2 model.
 ///
 /// **Experimental.** API may change without semver bump.
-#[derive(Debug)]
 pub struct GLiNER2Fastino {
-    _private: (),
+    pub(crate) tokenizer: tokenizers::Tokenizer,
+    pub(crate) special: processor::SpecialTokenIds,
+    pub(crate) transformer: processor::SchemaTransformer,
+    pub(crate) config: config::FastinoConfig,
+    pub(crate) session: session::Session,
+    pub(crate) model_id: String,
+}
+
+impl std::fmt::Debug for GLiNER2Fastino {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GLiNER2Fastino")
+            .field("model_id", &self.model_id)
+            .field("hidden_size", &self.config.hidden_size)
+            .finish()
+    }
 }
 
 use std::path::Path;
 
 impl GLiNER2Fastino {
     /// Load a fastino GLiNER2 model from a local directory.
-    ///
-    /// **Phase 1 stub** — detects LoRA-adapter directories and returns a
-    /// typed error pointing at `scripts/gliner2_export_onnx.py`. Full
-    /// loading (tokenizer + config + ONNX) lands in Task 14.
     pub fn from_local(model_dir: &Path) -> crate::Result<Self> {
         if model_dir.join("adapter_config.json").exists() {
             return Err(errors::Error::LoraAdapterNotSupported {
@@ -66,10 +75,45 @@ impl GLiNER2Fastino {
             }
             .into());
         }
-        // Phase 1 stub — full loading lands in M3-M6 / T14.
-        Err(crate::Error::Backend(
-            "gliner2_fastino::from_local not yet fully implemented".to_string(),
-        ))
+
+        let tokenizer_path = model_dir.join("tokenizer.json");
+        if !tokenizer_path.exists() {
+            return Err(errors::Error::TokenizerMissing(tokenizer_path).into());
+        }
+        let tokenizer = crate::backends::hf_loader::load_tokenizer(&tokenizer_path)
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: tokenizer: {e}")))?;
+
+        let special = processor::SpecialTokenIds::resolve(&tokenizer)?;
+        let transformer = processor::SchemaTransformer::new(tokenizer.clone())?;
+        let config = config::FastinoConfig::from_path(&model_dir.join("config.json"))?;
+
+        // Try common ONNX filenames; fastino exports use `model.onnx` and
+        // SemplificaAI's pin uses the same. Phase 3 will add `_iobinding` variants.
+        let onnx_candidates = ["model.onnx", "onnx/model.onnx"];
+        let model_path = onnx_candidates
+            .iter()
+            .map(|f| model_dir.join(f))
+            .find(|p| p.exists())
+            .ok_or_else(|| {
+                crate::Error::Backend(format!(
+                    "gliner2_fastino: no ONNX model in {} (tried {:?})",
+                    model_dir.display(),
+                    onnx_candidates
+                ))
+            })?;
+        let session = session::Session::from_path(&model_path)?;
+
+        Ok(Self {
+            tokenizer,
+            special,
+            transformer,
+            config,
+            session,
+            model_id: model_dir
+                .file_name()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "gliner2_fastino_local".to_string()),
+        })
     }
 }
 
@@ -88,5 +132,13 @@ mod from_local_tests {
         let msg = err.to_string();
         assert!(msg.contains("scripts/gliner2_export_onnx.py"), "missing script path: {msg}");
         assert!(msg.contains("--lora-adapter"), "missing flag: {msg}");
+    }
+
+    #[test]
+    fn from_local_missing_tokenizer_returns_typed_error() {
+        let dir = tempdir().unwrap();
+        // Empty directory — no tokenizer.json, no adapter_config.json.
+        let err = GLiNER2Fastino::from_local(dir.path()).unwrap_err();
+        assert!(err.to_string().contains("tokenizer"), "got {err}");
     }
 }
