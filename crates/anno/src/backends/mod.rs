@@ -350,6 +350,10 @@ pub mod gliner_candle;
 #[cfg(any(feature = "onnx", feature = "candle"))]
 pub mod gliner_multitask;
 
+// GLiNER2 fastino-ai backend
+#[cfg(feature = "gliner2-fastino")]
+pub mod gliner2_fastino;
+
 // Re-exports (always available)
 pub use crf::CrfNER;
 pub use ensemble::EnsembleNER;
