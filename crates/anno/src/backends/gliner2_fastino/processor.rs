@@ -9,6 +9,7 @@
 
 use crate::backends::gliner2_fastino::errors::Error;
 use regex::Regex;
+use std::collections::HashMap;
 use tokenizers::Tokenizer;
 
 pub const P_TOKEN: &str = "[P]";
@@ -86,6 +87,270 @@ impl WhitespaceTokenSplitter {
             .find_iter(text)
             .map(|m| (m.as_str(), m.start(), m.end()))
             .collect()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SchemaTask, TaskMapping, ProcessedRecord, SchemaTransformer
+// Ported from SemplificaAI/gliner2-rs processor.rs (Apache-2.0).
+// Only the `Entities` arm is implemented in Phase 1.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub enum SchemaTask {
+    Entities(Vec<String>),
+    // TODO(Phase 2): port Relations arm from upstream
+    Relations(String, Vec<String>),
+    // TODO(Phase 2): port Classifications arm from upstream
+    Classifications(String, Vec<String>),
+}
+
+#[derive(Debug, Clone)]
+pub struct TaskMapping {
+    pub task_name: String,
+    pub task_type: String,
+    pub labels: Vec<String>,
+    pub prompt_tok_idx: usize,
+    pub field_tok_indices: Vec<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessedRecord {
+    pub input_ids: Vec<i64>,
+    pub attention_mask: Vec<i64>,
+    pub tasks: Vec<TaskMapping>,
+    pub text_start: usize,
+    pub text_end: usize,
+    pub word_to_token_maps: Vec<(usize, usize)>,
+    pub word_to_char_maps: Vec<(usize, usize)>,
+}
+
+pub struct SchemaTransformer {
+    tokenizer: Tokenizer,
+    word_splitter: WhitespaceTokenSplitter,
+}
+
+impl SchemaTransformer {
+    pub fn new(tokenizer: Tokenizer) -> Result<Self, Error> {
+        Ok(Self {
+            tokenizer,
+            word_splitter: WhitespaceTokenSplitter::new()?,
+        })
+    }
+
+    pub fn transform(&self, text: &str, schema_tasks: &[SchemaTask]) -> Result<ProcessedRecord, Error> {
+        let words_with_offsets = self.word_splitter.split_with_offsets(text);
+
+        let mut combined_tokens: Vec<&str> = Vec::new();
+        let mut task_mappings_temp = Vec::new();
+
+        for (i, task) in schema_tasks.iter().enumerate() {
+            let mut field_indices = Vec::new();
+            let mut labels = Vec::new();
+
+            match task {
+                SchemaTask::Entities(entity_labels) => {
+                    combined_tokens.push("(");
+                    let prompt_idx = combined_tokens.len();
+                    combined_tokens.push(P_TOKEN);
+                    combined_tokens.push("entities");
+                    combined_tokens.push("(");
+
+                    for label in entity_labels {
+                        combined_tokens.push(E_TOKEN);
+                        field_indices.push(combined_tokens.len());
+                        combined_tokens.push(label.as_str());
+                        labels.push(label.clone());
+                    }
+                    combined_tokens.push(")");
+                    combined_tokens.push(")");
+
+                    task_mappings_temp.push((
+                        "entities".to_string(),
+                        "entities".to_string(),
+                        labels,
+                        prompt_idx,
+                        field_indices,
+                    ));
+                }
+                // TODO(Phase 2): port Relations/Classifications arms from upstream
+                _ => {}
+            }
+
+            if i < schema_tasks.len() - 1 {
+                combined_tokens.push(SEP_STRUCT);
+            }
+        }
+
+        combined_tokens.push(SEP_TEXT);
+        let text_start_idx = combined_tokens.len();
+
+        let mut word_to_char_maps = Vec::new();
+        for (w, start_char, end_char) in &words_with_offsets {
+            combined_tokens.push(*w);
+            word_to_char_maps.push((*start_char, *end_char));
+        }
+        let text_end_idx = combined_tokens.len();
+
+        let mut final_input_ids = Vec::new();
+        let mut final_attention_mask = Vec::new();
+        let mut word_to_token_maps = Vec::new();
+
+        let mut combined_to_final_map: HashMap<usize, usize> = HashMap::new();
+
+        // Encode [CLS] at start.
+        let cls_id = self
+            .tokenizer
+            .encode("[CLS]", false)
+            .map_err(|e| Error::Tokenizer(format!("encode [CLS]: {e}")))?
+            .get_ids()[0] as i64;
+        final_input_ids.push(cls_id);
+        final_attention_mask.push(1);
+        let mut current_subword_idx = 1;
+
+        for (i, token) in combined_tokens.iter().enumerate() {
+            combined_to_final_map.insert(i, current_subword_idx);
+
+            let encoding = self
+                .tokenizer
+                .encode(*token, false)
+                .map_err(|e| Error::Tokenizer(format!("encode '{token}': {e}")))?;
+
+            let ids = encoding.get_ids();
+            let start_sub = current_subword_idx;
+            let end_sub = current_subword_idx + ids.len();
+
+            for &id in ids {
+                final_input_ids.push(id as i64);
+                final_attention_mask.push(1);
+                current_subword_idx += 1;
+            }
+
+            if i >= text_start_idx && i < text_end_idx {
+                word_to_token_maps.push((start_sub, end_sub));
+            }
+        }
+
+        let sep_id = self
+            .tokenizer
+            .encode("[SEP]", false)
+            .map_err(|e| Error::Tokenizer(format!("encode [SEP]: {e}")))?
+            .get_ids()[0] as i64;
+        final_input_ids.push(sep_id);
+        final_attention_mask.push(1);
+
+        let text_real_start = word_to_token_maps.first().map(|v| v.0).unwrap_or(0);
+        let text_real_end = word_to_token_maps.last().map(|v| v.1).unwrap_or(0);
+
+        let mut tasks = Vec::new();
+        for (task_name, task_type, labels, prompt_idx, field_indices) in task_mappings_temp {
+            let real_prompt_idx = *combined_to_final_map.get(&prompt_idx).unwrap();
+            let real_field_indices: Vec<usize> = field_indices
+                .iter()
+                .map(|idx| *combined_to_final_map.get(idx).unwrap())
+                .collect();
+
+            tasks.push(TaskMapping {
+                task_name,
+                task_type,
+                labels,
+                prompt_tok_idx: real_prompt_idx,
+                field_tok_indices: real_field_indices,
+            });
+        }
+
+        Ok(ProcessedRecord {
+            input_ids: final_input_ids,
+            attention_mask: final_attention_mask,
+            tasks,
+            text_start: text_real_start,
+            text_end: text_real_end,
+            word_to_token_maps,
+            word_to_char_maps,
+        })
+    }
+}
+
+#[cfg(test)]
+mod transformer_tests {
+    use super::*;
+    use tokenizers::Tokenizer;
+
+    fn stub() -> Tokenizer {
+        Tokenizer::from_file("testdata/gliner2_fastino/stub_tokenizer.json").unwrap()
+    }
+
+    #[test]
+    fn entities_arm_assembles_expected_prompt_shape() {
+        let tok = stub();
+        let xfm = SchemaTransformer::new(tok).expect("transformer build");
+
+        // Single Entities task, two labels, simple text.
+        let labels: Vec<String> = vec!["person".into(), "organization".into()];
+        let task = SchemaTask::Entities(labels);
+        let rec = xfm.transform("Acme Corp in Paris .", &[task]).unwrap();
+
+        let ids = &rec.input_ids;
+
+        // Stub tokenizer ids: [CLS]=17, [P]=2, [E]=3, [SEP_TEXT]=8, [SEP]=18,
+        //                     person=9, organization=10, Acme=12, Corp=13,
+        //                     Paris=14, in=15, .=16, (=19, )=20, entities=21
+        // Structural invariants (independent of exact subword splits):
+        //   1. Begins with [CLS] (id 17)
+        //   2. Contains [P] (id 2) somewhere
+        //   3. Contains exactly 2 [E] markers (id 3)
+        //   4. Contains [SEP_TEXT] (id 8) before the text tokens
+        //   5. Ends with [SEP] (id 18)
+        //   6. The labels (ids 9, 10) appear in the prompt area (BEFORE [SEP_TEXT])
+
+        assert_eq!(ids[0], 17, "prompt must start with [CLS], got ids={ids:?}");
+        assert_eq!(*ids.last().unwrap(), 18, "prompt must end with [SEP], got ids={ids:?}");
+        assert!(ids.contains(&2), "missing [P], got {ids:?}");
+        let e_count = ids.iter().filter(|&&i| i == 3).count();
+        assert_eq!(e_count, 2, "expected 2 [E] markers, got {e_count} in {ids:?}");
+        let sep_pos = ids.iter().position(|&i| i == 8).expect("missing [SEP_TEXT]");
+        // Acme (12) appears AFTER [SEP_TEXT]
+        assert!(
+            ids[sep_pos + 1..].iter().any(|&i| i == 12),
+            "Acme not after SEP_TEXT, ids={ids:?}"
+        );
+        // Labels person (9), organization (10) appear BEFORE [SEP_TEXT]
+        assert!(
+            ids[..sep_pos].iter().any(|&i| i == 9),
+            "person label not before SEP_TEXT"
+        );
+        assert!(
+            ids[..sep_pos].iter().any(|&i| i == 10),
+            "organization label not before SEP_TEXT"
+        );
+
+        // attention_mask matches input_ids length and is all-ones
+        assert_eq!(rec.attention_mask.len(), rec.input_ids.len());
+        assert!(rec.attention_mask.iter().all(|&m| m == 1));
+
+        // word_to_char_maps records ["Acme", "Corp", "in", "Paris", "."] = 5 words.
+        // The splitter regex treats "." as a single non-word match, so word count = 5.
+        assert_eq!(rec.word_to_char_maps.len(), 5);
+        // First word "Acme" starts at byte 0, ends at byte 4
+        assert_eq!(rec.word_to_char_maps[0], (0, 4));
+    }
+
+    #[test]
+    fn empty_labels_still_returns_well_formed_record() {
+        let tok = stub();
+        let xfm = SchemaTransformer::new(tok).unwrap();
+        let task = SchemaTask::Entities(vec![]);
+        let rec = xfm.transform("Acme Corp", &[task]).unwrap();
+        let ids = &rec.input_ids;
+
+        // No [E] markers when labels is empty
+        let e_count = ids.iter().filter(|&&i| i == 3).count();
+        assert_eq!(e_count, 0);
+        // Still wrapped in [CLS] / [SEP]
+        assert_eq!(ids[0], 17);
+        assert_eq!(*ids.last().unwrap(), 18);
+        // [SEP_TEXT] still present
+        assert!(ids.contains(&8));
     }
 }
 
