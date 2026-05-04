@@ -38,6 +38,8 @@
 
 #![cfg(feature = "gliner2-fastino")]
 
+pub mod errors;
+
 /// fastino-ai GLiNER2 model.
 ///
 /// **Experimental.** API may change without semver bump.
