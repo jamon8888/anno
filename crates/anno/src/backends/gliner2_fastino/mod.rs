@@ -41,6 +41,7 @@
 pub mod errors;
 pub(crate) mod config;
 pub(crate) mod processor;
+pub(crate) mod session;
 
 /// fastino-ai GLiNER2 model.
 ///
