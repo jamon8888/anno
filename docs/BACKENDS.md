@@ -10,6 +10,7 @@ This page avoids benchmark numbers and "working set" claims that drift. Use `ann
 |---------|--------------|-----------|--------|---------------|
 | `gliner` (canonical) / `gliner_onnx` (low-level) | Bi-encoder span classifier | Yes | stable | `onnx-community/gliner_small-v2.1` |
 | `gliner_multitask` | GLiNER v1 with task-conditioned label prompts (NER + classification + structure; Stepanov & Shtopko 2024) | Yes | beta | `onnx-community/gliner-multitask-large-v0.5` |
+| `gliner2_fastino` | fastino-ai GLiNER2 (NER + classification; Zaratiana 2025). Feature `gliner2-fastino`. Phase 1 supports merged ONNX exports only — runtime LoRA hot-swap is not implemented. See [docs/dev-notes/gliner2-fastino-export.md](dev-notes/gliner2-fastino-export.md) for the export workflow (including LoRA-merge tooling). Issue [#18](https://github.com/arclabs561/anno/issues/18). | Yes | WIP | `fastino/gliner2-multi-v1` (also: `gliner2-large-v1`, `gliner2-base-v1`) |
 | `nuner` | Token classifier (BIO) | Yes | stable | `numind/NuNER_Zero` (also: `NuNER_Zero-4k` 4096 ctx, `NuNER_Zero-span`) |
 | `bert_onnx` | BERT sequence labeling | No | beta | `protectai/bert-base-NER-onnx` |
 | `w2ner` | Word-word grids (nested) | No | beta | `ljynlp/w2ner-bert-base` |
@@ -180,6 +181,7 @@ manually for that one backend.
 |---------|---------------|--------|----------------|---------------|
 | `gliner` / `gliner_onnx` | yes | (auto-export on first load if no ONNX cached) | hf-hub cache | `--` |
 | `gliner_multitask` | yes | `--` | hf-hub cache | `--` |
+| `gliner2_fastino` | yes (SemplificaAI/gliner2-multi-v1-onnx pin) or self-export | `gliner2_export_onnx.py` (supports `--lora-adapter` for merged-LoRA) | hf-hub cache | `--` |
 | `bert_onnx` | yes | `--` | hf-hub cache | `--` |
 | `gliner_candle` / `candle_ner` | yes | `--` | hf-hub cache | `--` |
 | `gliner_pii` | yes | `--` | hf-hub cache | `--` |
