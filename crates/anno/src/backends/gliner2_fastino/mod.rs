@@ -117,6 +117,162 @@ impl GLiNER2Fastino {
         })
     }
 
+    /// Extract entities for the given labels at the given threshold.
+    ///
+    /// **Phase 1.** Internal helper called by the public `Model` /
+    /// `ZeroShotNER` impls in T18. Empty `types` slice short-circuits with
+    /// `Ok(vec![])` without invoking the model.
+    pub(crate) fn extract_ner(
+        &self,
+        text: &str,
+        types: &[&str],
+        threshold: f32,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        if types.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let labels: Vec<String> = types.iter().map(|s| s.to_string()).collect();
+        let task = processor::SchemaTask::Entities(labels.clone());
+        let record = self.transformer.transform(text, &[task])?;
+
+        // Build word_offsets table for the original text — used by the decoder
+        // to convert (start_word, end_word) to character offsets.
+        let splitter = processor::WhitespaceTokenSplitter::new()
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: splitter: {e}")))?;
+        let word_offsets: Vec<(usize, usize)> = splitter
+            .split_with_offsets(text)
+            .into_iter()
+            .map(|(_, s, e)| (s, e))
+            .collect();
+
+        // Build ndarray inputs.
+        let seq_len = record.input_ids.len();
+        let input_ids: ndarray::Array2<i64> =
+            ndarray::Array2::from_shape_vec((1, seq_len), record.input_ids.clone()).map_err(
+                |e| crate::Error::Backend(format!("gliner2_fastino: input_ids reshape: {e}")),
+            )?;
+        let attention_mask: ndarray::Array2<i64> =
+            ndarray::Array2::from_shape_vec((1, seq_len), record.attention_mask.clone())
+                .map_err(|e| {
+                    crate::Error::Backend(format!("gliner2_fastino: attn reshape: {e}"))
+                })?;
+
+        let input_ids_t = crate::backends::ort_compat::tensor_from_ndarray(input_ids)
+            .map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino: input_ids tensor: {e}"))
+            })?;
+        let attention_mask_t = crate::backends::ort_compat::tensor_from_ndarray(attention_mask)
+            .map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino: attn tensor: {e}"))
+            })?;
+
+        // VERIFY against a real fastino ONNX export — input names (`input_ids`,
+        // `attention_mask`) and output names (`scores`, `spans`) follow the
+        // SemplificaAI export convention. Run:
+        //   python -c "import onnx; m=onnx.load('model.onnx'); \
+        //              print([(i.name, [d.dim_value or d.dim_param \
+        //              for d in i.type.tensor_type.shape.dim]) \
+        //              for i in m.graph.input + m.graph.output])"
+        // and update names below if they differ.
+        //
+        // We run inference inside `with_session` and eagerly copy the output
+        // tensors into owned Vecs so the `SessionOutputs` borrow does not
+        // escape the closure (it borrows from the locked `Session`).
+        // Returned as ((score_shape, score_data), (span_shape, span_data)).
+        type OwnedTensors = (
+            (Vec<i64>, Vec<f32>),
+            (Vec<i64>, Vec<i64>),
+        );
+        let ((score_shape, scores_data), (span_shape, spans_data)): OwnedTensors = self
+            .session
+            .with_session(|s| -> crate::Result<OwnedTensors> {
+                let outputs = s
+                    .run(ort::inputs![
+                        "input_ids" => input_ids_t.into_dyn(),
+                        "attention_mask" => attention_mask_t.into_dyn(),
+                    ])
+                    .map_err(|e| {
+                        crate::Error::Backend(format!("gliner2_fastino: run: {e}"))
+                    })?;
+
+                // Extract score and span tensors. The expected shapes are:
+                //   scores: [batch=1, num_spans, num_labels] f32
+                //   spans:  [batch=1, num_spans, 2]          i64 (start_word, end_word)
+                // VERIFY shapes against a real export — see comment above.
+                let scores_val = outputs.get("scores").ok_or_else(|| {
+                    crate::Error::Backend(
+                        "gliner2_fastino: missing 'scores' output".into(),
+                    )
+                })?;
+                let spans_val = outputs.get("spans").ok_or_else(|| {
+                    crate::Error::Backend("gliner2_fastino: missing 'spans' output".into())
+                })?;
+
+                let (score_shape, scores_cow) = scores_val
+                    .try_extract_tensor::<f32>()
+                    .map_err(|e| {
+                        crate::Error::Backend(format!(
+                            "gliner2_fastino: scores extract: {e}"
+                        ))
+                    })?;
+                let (span_shape, spans_cow) = spans_val
+                    .try_extract_tensor::<i64>()
+                    .map_err(|e| {
+                        crate::Error::Backend(format!(
+                            "gliner2_fastino: spans extract: {e}"
+                        ))
+                    })?;
+
+                // Copy into owned Vecs before the SessionOutputs borrow ends.
+                Ok((
+                    (score_shape.to_vec(), scores_cow.to_vec()),
+                    (span_shape.to_vec(), spans_cow.to_vec()),
+                ))
+            })?;
+
+        // Validate shapes. score_shape / span_shape are Vec<i64>.
+        // Expected: scores [1, num_spans, num_labels], spans [1, num_spans, 2].
+        if score_shape.len() != 3 {
+            return Err(crate::Error::Backend(format!(
+                "gliner2_fastino: scores shape len {} (expected 3)",
+                score_shape.len()
+            )));
+        }
+        if span_shape.len() != 3 || span_shape[2] != 2 {
+            return Err(crate::Error::Backend(format!(
+                "gliner2_fastino: spans shape {:?} (expected [B, N, 2])",
+                span_shape
+            )));
+        }
+        let num_spans = score_shape[1] as usize;
+        let num_labels = score_shape[2] as usize;
+
+        // Build Vec<decoder::Span> from flat tensors.
+        // scores layout: [batch=0, span_idx, label_idx] → flat index = span_idx * num_labels + label_idx
+        // spans layout:  [batch=0, span_idx, col]       → flat index = span_idx * 2 + col
+        let mut decoded: Vec<decoder::Span> = Vec::new();
+        for span_idx in 0..num_spans {
+            let start_word = spans_data[span_idx * 2] as usize;
+            let end_word = spans_data[span_idx * 2 + 1] as usize;
+            for label_idx in 0..num_labels {
+                let score = scores_data[span_idx * num_labels + label_idx];
+                // Apply sigmoid here if the head produces logits — fastino's export
+                // is documented as already-sigmoided per the upstream paper Eq. 1.
+                // VERIFY: if entities come back saturated at 1.0, the head is logits
+                // and this should be `1.0 / (1.0 + (-score).exp())`.
+                decoded.push(decoder::Span {
+                    start_word,
+                    end_word,
+                    label_idx,
+                    score,
+                });
+            }
+        }
+
+        Ok(decoder::decode_spans(text, &word_offsets, &labels, &decoded, threshold))
+    }
+
     /// Load a fastino GLiNER2 model by Hugging Face model id.
     ///
     /// Downloads `tokenizer.json`, `config.json`, and the ONNX model file

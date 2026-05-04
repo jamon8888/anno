@@ -8,11 +8,11 @@
 use crate::backends::gliner2_fastino::errors::Error;
 use crate::backends::hf_loader;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 pub struct Session {
-    inner: Arc<ort::session::Session>,
+    inner: Arc<Mutex<ort::session::Session>>,
 }
 
 impl Session {
@@ -21,12 +21,21 @@ impl Session {
         let session = hf_loader::create_onnx_session(model_path, cfg)
             .map_err(|e| Error::Tokenizer(format!("session: {e}")))?;
         Ok(Self {
-            inner: Arc::new(session),
+            inner: Arc::new(Mutex::new(session)),
         })
     }
 
-    pub fn inner(&self) -> &ort::session::Session {
-        &self.inner
+    /// Run inference via a closure that receives a mutable session reference.
+    ///
+    /// The closure is responsible for calling `session.run(...)` and returning
+    /// the result. Using a closure avoids lifetime entanglement between the
+    /// `MutexGuard` and the returned `SessionOutputs`.
+    pub fn with_session<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut ort::session::Session) -> R,
+    {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        f(&mut guard)
     }
 }
 
