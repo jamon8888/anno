@@ -96,6 +96,10 @@ onnx-coreml = ["onnx", "ort/coreml"]
 # known ort failure mode when cudart.so is missing. Validate with
 # `examples/onnx_gpu_smoke.rs` on a real GPU host.
 onnx-cuda = ["onnx", "ort/cuda"]
+# fastino-ai GLiNER2 backend (issue #18). Loads `fastino/gliner2-*` models
+# via ONNX. WIP / experimental — no API stability guarantees. Implements
+# Model + ZeroShotNER and an internal classify() method.
+gliner2-fastino = ["onnx"]
 candle = [
   "dep:candle-core",
   "dep:candle-nn",
