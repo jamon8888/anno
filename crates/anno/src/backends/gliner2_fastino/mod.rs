@@ -313,6 +313,119 @@ impl GLiNER2Fastino {
     }
 }
 
+use crate::backends::inference::ZeroShotNER;
+use crate::{EntityCategory, EntityType, Language};
+
+impl crate::Model for GLiNER2Fastino {
+    fn extract_entities(
+        &self,
+        text: &str,
+        _language: Option<Language>,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        self.extract_ner(text, &["person", "organization", "location", "date"], 0.5)
+    }
+
+    fn supported_types(&self) -> Vec<EntityType> {
+        vec![
+            EntityType::Person,
+            EntityType::Organization,
+            EntityType::Location,
+            EntityType::Date,
+            EntityType::custom("misc", EntityCategory::Misc),
+        ]
+    }
+
+    fn is_available(&self) -> bool {
+        true
+    }
+
+    fn name(&self) -> &'static str {
+        "GLiNER2Fastino"
+    }
+
+    fn description(&self) -> &'static str {
+        "fastino-ai GLiNER2 (NER + classification, ONNX, experimental)"
+    }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            zero_shot: true,
+            ..Default::default()
+        }
+    }
+
+    fn as_zero_shot(&self) -> Option<&dyn ZeroShotNER> {
+        Some(self)
+    }
+}
+
+impl ZeroShotNER for GLiNER2Fastino {
+    fn default_types(&self) -> &[&'static str] {
+        &["person", "organization", "location", "date", "event"]
+    }
+
+    fn extract_with_types(
+        &self,
+        text: &str,
+        types: &[&str],
+        threshold: f32,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        self.extract_ner(text, types, threshold)
+    }
+
+    fn extract_with_descriptions(
+        &self,
+        text: &str,
+        descriptions: &[&str],
+        threshold: f32,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        // Phase 1: descriptions are treated as simple type labels
+        self.extract_ner(text, descriptions, threshold)
+    }
+}
+
+impl GLiNER2Fastino {
+    /// Internal classification.
+    ///
+    /// **Phase 1 caveat:** this implementation reuses the NER head over the
+    /// classification labels and collapses span-level scores to label-level
+    /// (max over spans). The fastino architecture's dedicated `[L]`-head MLP
+    /// is not yet wired (tracked as a Phase 1.5 follow-up). For coarse-grained
+    /// classification tasks the approximation is adequate; for fine-grained
+    /// or multi-label tasks expect lower fidelity than the Python reference.
+    ///
+    /// Not behind a public trait — see spec §3.
+    pub fn classify(
+        &self,
+        text: &str,
+        labels: &[&str],
+        threshold: f32,
+    ) -> crate::Result<Vec<(String, f32)>> {
+        if labels.is_empty() {
+            return Ok(vec![]);
+        }
+        let entities = self.extract_ner(text, labels, threshold)?;
+        let mut by_label: std::collections::HashMap<String, f32> = Default::default();
+        for e in entities {
+            // entity_type is a public field; format!("{:?}", ...) gives the
+            // variant name. Lowercase for label-string matching.
+            let label = format!("{:?}", e.entity_type).to_lowercase();
+            let prev = by_label.get(&label).copied().unwrap_or(0.0);
+            // Confidence has From<Confidence> for f32 impl
+            let score: f32 = f32::from(e.confidence);
+            by_label.insert(label, prev.max(score));
+        }
+        let mut out: Vec<(String, f32)> = labels
+            .iter()
+            .map(|&l| (l.to_string(), by_label.get(l).copied().unwrap_or(0.0)))
+            .collect();
+        out.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        Ok(out)
+    }
+}
+
 #[cfg(test)]
 mod from_local_tests {
     use super::*;
