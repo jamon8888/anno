@@ -39,6 +39,7 @@
 #![cfg(feature = "gliner2-fastino")]
 
 pub mod errors;
+pub(crate) mod processor;
 
 /// fastino-ai GLiNER2 model.
 ///
