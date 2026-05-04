@@ -115,6 +115,45 @@ impl GLiNER2Fastino {
                 .unwrap_or_else(|| "gliner2_fastino_local".to_string()),
         })
     }
+
+    /// Load a fastino GLiNER2 model by Hugging Face model id.
+    ///
+    /// Downloads `tokenizer.json`, `config.json`, and the ONNX model file
+    /// (trying `onnx/model.onnx` then `model.onnx`) into the standard HF
+    /// cache, then defers to `from_local` on the cache snapshot directory.
+    ///
+    /// **Phase 1 / experimental.** No retry/backoff on transient HF Hub
+    /// failures beyond what `hf-hub` itself provides.
+    pub fn from_pretrained(model_id: &str) -> crate::Result<Self> {
+        let api = crate::backends::hf_loader::hf_api()
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: hf_api: {e}")))?;
+        let repo = api.model(model_id.to_string());
+
+        let _model_path = crate::backends::hf_loader::download_model_file(
+            &repo,
+            &["onnx/model.onnx", "model.onnx"],
+        )
+        .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: download model: {e}")))?;
+        let tokenizer_path =
+            crate::backends::hf_loader::download_model_file(&repo, &["tokenizer.json"])
+                .map_err(|e| {
+                    crate::Error::Backend(format!("gliner2_fastino: download tokenizer: {e}"))
+                })?;
+        let _config_path =
+            crate::backends::hf_loader::download_model_file(&repo, &["config.json"])
+                .map_err(|e| {
+                    crate::Error::Backend(format!("gliner2_fastino: download config: {e}"))
+                })?;
+
+        // hf_loader::download_model_file returns paths in the HF cache. Their
+        // common parent is the snapshot dir.
+        let snapshot_dir = tokenizer_path.parent().ok_or_else(|| {
+            crate::Error::Backend("gliner2_fastino: tokenizer parent missing".into())
+        })?;
+        let mut model = Self::from_local(snapshot_dir)?;
+        model.model_id = model_id.to_string();
+        Ok(model)
+    }
 }
 
 #[cfg(test)]
