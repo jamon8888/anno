@@ -8,6 +8,7 @@
 // Error type translated from anyhow::Result to backend-local Error.
 
 use crate::backends::gliner2_fastino::errors::Error;
+use regex::Regex;
 use tokenizers::Tokenizer;
 
 pub const P_TOKEN: &str = "[P]";
@@ -50,6 +51,44 @@ impl SpecialTokenIds {
     }
 }
 
+/// Word-level splitter mirroring upstream `gliner2-rs::WhitespaceTokenSplitter`.
+/// Recognizes URLs, emails, @mentions, hyphenated words, and falls through to
+/// any non-whitespace single char. Returns byte offsets (NOT char offsets) —
+/// the decoder converts to char offsets via `crate::offset::bytes_to_chars`.
+#[derive(Clone, Debug)]
+pub struct WhitespaceTokenSplitter {
+    re: Regex,
+}
+
+impl WhitespaceTokenSplitter {
+    pub fn new() -> Result<Self, Error> {
+        let re = Regex::new(
+            r"(?xi)
+            (?:https?://[^\s]+|www\.[^\s]+)
+            |[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}
+            |@[a-z0-9_]+
+            |\w+(?:[-_]\w+)*
+            |\S
+        ",
+        )
+        .map_err(|e| Error::Tokenizer(format!("regex: {e}")))?;
+        Ok(Self { re })
+    }
+
+    /// Split into words. Returns borrowed slices into `text`.
+    pub fn split<'a>(&self, text: &'a str) -> Vec<&'a str> {
+        self.re.find_iter(text).map(|m| m.as_str()).collect()
+    }
+
+    /// Split into `(word, byte_start, byte_end)` triples.
+    pub fn split_with_offsets<'a>(&self, text: &'a str) -> Vec<(&'a str, usize, usize)> {
+        self.re
+            .find_iter(text)
+            .map(|m| (m.as_str(), m.start(), m.end()))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,5 +125,31 @@ mod tests {
             Error::SpecialTokenMissing { token } => assert_eq!(token, SEP_TEXT),
             other => panic!("expected SpecialTokenMissing, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn whitespace_splitter_basic() {
+        let s = WhitespaceTokenSplitter::new().expect("regex compile");
+        let words: Vec<&str> = s.split("Acme Corp signed in Paris.");
+        assert_eq!(words, vec!["Acme", "Corp", "signed", "in", "Paris", "."]);
+    }
+
+    #[test]
+    fn whitespace_splitter_offsets_are_byte_offsets() {
+        let s = WhitespaceTokenSplitter::new().unwrap();
+        let pairs = s.split_with_offsets("ab cd");
+        assert_eq!(pairs, vec![("ab", 0, 2), ("cd", 3, 5)]);
+    }
+
+    #[test]
+    fn whitespace_splitter_unicode_offsets() {
+        let s = WhitespaceTokenSplitter::new().unwrap();
+        let text = "田中 Paris";
+        let pairs = s.split_with_offsets(text);
+        // "田中" is 6 bytes; " " is 1 byte; "Paris" starts at byte 7.
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].0, "田中");
+        assert_eq!(pairs[1].0, "Paris");
+        assert_eq!(pairs[1].1, 7);
     }
 }
