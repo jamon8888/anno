@@ -428,16 +428,35 @@ pub(crate) fn run_scorer(
 
 /// Decode the scorer's [MAX_COUNT, num_words, MAX_WIDTH, M] tensor to
 /// `Vec<Entity>` (with character offsets in the original text), apply
-/// threshold, then NMS.
-pub(crate) fn decode_entities(
+/// per-label thresholds, then NMS.
+///
+/// Phase 1.5: a label not present in `label_thresholds` is dropped
+/// entirely (its threshold is treated as `+∞`). This allows callers to
+/// score for many labels but only keep a subset, without round-tripping
+/// the whole prompt+inference.
+pub(crate) fn decode_entities_with_thresholds(
     text: &str,
     record: &ProcessedRecord,
     task: &crate::backends::gliner2_fastino::processor::TaskMapping,
     scorer_out: &ScorerOutput,
     pred_count: usize,
-    threshold: f32,
+    label_thresholds: &[(&str, f32)],
     flat_ner: bool,
 ) -> Vec<crate::Entity> {
+    // Build a fast lookup keyed by label-index in `task.labels`. Any
+    // label not in the input list gets `+∞`, dropping every candidate.
+    let thresholds: Vec<f32> = task
+        .labels
+        .iter()
+        .map(|label| {
+            label_thresholds
+                .iter()
+                .find(|(l, _)| *l == label.as_str())
+                .map(|(_, t)| *t)
+                .unwrap_or(f32::INFINITY)
+        })
+        .collect();
+
     let num_words = record.word_to_char_maps.len();
     let num_labels = task.labels.len();
     let scores = &scorer_out.scores;
@@ -449,7 +468,7 @@ pub(crate) fn decode_entities(
                 let end_word = (start + width_idx + 1).min(num_words);
                 for m in 0..num_labels {
                     let prob = scores[[c_idx, start, width_idx, m]];
-                    if prob <= threshold {
+                    if prob <= thresholds[m] {
                         continue;
                     }
                     let (byte_start, _) = record.word_to_char_maps[start];
@@ -470,6 +489,28 @@ pub(crate) fn decode_entities(
         }
     }
     super::nms::greedy_nms(candidates, flat_ner)
+}
+
+/// Decode the scorer's [MAX_COUNT, num_words, MAX_WIDTH, M] tensor with
+/// a single global threshold applied to every label. Thin wrapper over
+/// [`decode_entities_with_thresholds`] (DRY).
+pub(crate) fn decode_entities(
+    text: &str,
+    record: &ProcessedRecord,
+    task: &crate::backends::gliner2_fastino::processor::TaskMapping,
+    scorer_out: &ScorerOutput,
+    pred_count: usize,
+    threshold: f32,
+    flat_ner: bool,
+) -> Vec<crate::Entity> {
+    let label_thresholds: Vec<(&str, f32)> = task
+        .labels
+        .iter()
+        .map(|l| (l.as_str(), threshold))
+        .collect();
+    decode_entities_with_thresholds(
+        text, record, task, scorer_out, pred_count, &label_thresholds, flat_ner,
+    )
 }
 
 /// Run the classifier head on a single task's field_embs.
@@ -546,6 +587,90 @@ mod tests {
     fn build_span_idx_basic_shape() {
         let arr = build_span_idx(3);
         assert_eq!(arr.shape(), &[1, 3 * MAX_WIDTH, 2]);
+    }
+
+    #[test]
+    fn decode_entities_respects_per_label_thresholds() {
+        use crate::backends::gliner2_fastino::processor::{ProcessedRecord, TaskMapping};
+        use ndarray::Array4;
+
+        // Build a synthetic ProcessedRecord with 2 words ("Acme Corp").
+        let record = ProcessedRecord {
+            input_ids: vec![],
+            attention_mask: vec![],
+            tasks: vec![],
+            text_start: 0,
+            text_end: 0,
+            word_to_token_maps: vec![(0, 1), (1, 2)],
+            word_to_char_maps: vec![(0, 4), (5, 9)],
+        };
+        let task = TaskMapping {
+            task_name: "entities".to_string(),
+            task_type: "entities".to_string(),
+            labels: vec!["organization".into(), "location".into()],
+            prompt_tok_idx: 0,
+            field_tok_indices: vec![0, 0],
+        };
+        // Scorer output: [MAX_COUNT=20, num_words=2, MAX_WIDTH=8, num_labels=2].
+        // Set scores so:
+        //   span (0,0) label=org      score=0.9
+        //   span (1,1) label=location score=0.6
+        let mut scores = Array4::<f32>::zeros((MAX_COUNT, 2, MAX_WIDTH, 2));
+        scores[[0, 0, 0, 0]] = 0.9; // org at word 0
+        scores[[0, 1, 0, 1]] = 0.6; // location at word 1
+        let scorer_out = ScorerOutput { scores };
+
+        let text = "Acme Corp";
+
+        // Both labels at threshold 0.5: both candidates pass.
+        let ents = decode_entities_with_thresholds(
+            text,
+            &record,
+            &task,
+            &scorer_out,
+            1,
+            &[("organization", 0.5), ("location", 0.5)],
+            false,
+        );
+        assert_eq!(ents.len(), 2, "expected 2 entities, got {ents:#?}");
+
+        // Tighten location threshold above 0.6: only org passes.
+        let ents = decode_entities_with_thresholds(
+            text,
+            &record,
+            &task,
+            &scorer_out,
+            1,
+            &[("organization", 0.5), ("location", 0.7)],
+            false,
+        );
+        assert_eq!(ents.len(), 1, "expected 1 entity (only org), got {ents:#?}");
+        assert!(
+            matches!(ents[0].entity_type, crate::EntityType::Organization),
+            "expected Organization, got {:?}",
+            ents[0].entity_type
+        );
+
+        // Omit a label entirely from the threshold list: it's dropped.
+        let ents = decode_entities_with_thresholds(
+            text,
+            &record,
+            &task,
+            &scorer_out,
+            1,
+            &[("organization", 0.5)],
+            false,
+        );
+        assert_eq!(
+            ents.len(),
+            1,
+            "expected 1 entity (location dropped via missing threshold), got {ents:#?}",
+        );
+
+        // Sanity: the original decode_entities (single threshold) still works
+        // and matches the all-labels-same-threshold case.
+        let ents_global = decode_entities(text, &record, &task, &scorer_out, 1, 0.5, false);
+        assert_eq!(ents_global.len(), 2);
     }
 
     #[test]
