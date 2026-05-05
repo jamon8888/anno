@@ -64,20 +64,26 @@ pub(crate) fn run_encoder(
 
             for name in ["hidden_states", "last_hidden_state", "output"] {
                 if let Some(v) = outputs.get(name) {
-                    let (_shape, cow) = v
+                    let (shape, cow) = v
                         .try_extract_tensor::<f32>()
                         .map_err(|e| Error::Tokenizer(format!("encoder extract: {e}")))?;
-                    return Ok(cow.into_owned());
+                    let data: Vec<f32> = cow.to_vec();
+                    let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+                    return Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                        .map_err(|e| Error::Tokenizer(format!("encoder array reshape: {e}")))?);
                 }
             }
             // Fallback: take the first output.
             let first = outputs.values().next().ok_or_else(|| {
                 Error::Tokenizer("encoder: no outputs".into())
             })?;
-            let (_shape, cow) = first
+            let (shape, cow) = first
                 .try_extract_tensor::<f32>()
                 .map_err(|e| Error::Tokenizer(format!("encoder extract first: {e}")))?;
-            Ok(cow.into_owned())
+            let data: Vec<f32> = cow.to_vec();
+            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                .map_err(|e| Error::Tokenizer(format!("encoder array reshape: {e}")))?)
         },
     )?;
 
@@ -93,4 +99,63 @@ pub(crate) fn run_encoder(
         .into_dimensionality::<ndarray::Ix3>()
         .map_err(|e| Error::Tokenizer(format!("encoder dim convert: {e}")))?;
     Ok(EncoderOutput { hidden_states })
+}
+
+/// Output of token_gather: word-level embeddings extracted from the
+/// encoder's hidden states using `word_to_token_maps`.
+pub(crate) struct TokenGatherOutput {
+    /// Shape: `[1, num_words, H]`
+    pub text_embs: Array3<f32>,
+}
+
+pub(crate) fn run_token_gather(
+    sessions: &Sessions,
+    encoder_out: &EncoderOutput,
+    record: &ProcessedRecord,
+) -> Result<TokenGatherOutput, Error> {
+    use ndarray::Array1;
+
+    let num_words = record.word_to_token_maps.len();
+    if num_words == 0 {
+        return Err(Error::Tokenizer("token_gather: 0 words in record".into()));
+    }
+    let word_starts: Vec<i64> = record
+        .word_to_token_maps
+        .iter()
+        .map(|&(start, _)| start as i64)
+        .collect();
+    let word_idx_arr: Array1<i64> = Array1::from_vec(word_starts);
+
+    let hs_t = crate::backends::ort_compat::tensor_from_ndarray(
+        encoder_out.hidden_states.clone(),
+    )
+    .map_err(|e| Error::Tokenizer(format!("token_gather hs tensor: {e}")))?;
+    let word_idx_t = crate::backends::ort_compat::tensor_from_ndarray(word_idx_arr)
+        .map_err(|e| Error::Tokenizer(format!("token_gather idx tensor: {e}")))?;
+
+    let result: ndarray::ArrayD<f32> = sessions.token_gather.with_session(
+        |s| -> Result<_, Error> {
+            let outputs = s
+                .run(ort::inputs![
+                    "last_hidden_state" => hs_t.into_dyn(),
+                    "word_indices"      => word_idx_t.into_dyn(),
+                ])
+                .map_err(|e| Error::Tokenizer(format!("token_gather run: {e}")))?;
+            let v = outputs.values().next().ok_or_else(|| {
+                Error::Tokenizer("token_gather: no outputs".into())
+            })?;
+            let (shape, cow) = v
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Tokenizer(format!("token_gather extract: {e}")))?;
+            let data: Vec<f32> = cow.to_vec();
+            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                .map_err(|e| Error::Tokenizer(format!("token_gather array reshape: {e}")))?)
+        },
+    )?;
+
+    let text_embs: Array3<f32> = result
+        .into_dimensionality::<ndarray::Ix3>()
+        .map_err(|e| Error::Tokenizer(format!("token_gather dim: {e}")))?;
+    Ok(TokenGatherOutput { text_embs })
 }
