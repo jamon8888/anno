@@ -43,6 +43,7 @@ pub(crate) mod config;
 pub(crate) mod decoder;
 pub(crate) mod processor;
 pub(crate) mod session;
+pub(crate) mod sessions;
 
 /// fastino-ai GLiNER2 model.
 ///
