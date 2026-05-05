@@ -101,13 +101,18 @@ impl GLiNER2Fastino {
         let special = processor::SpecialTokenIds::resolve(&tokenizer)?;
         let transformer = processor::SchemaTransformer::new(tokenizer.clone())?;
 
-        // Same fallback logic for config.json.
+        // config.json is optional — SemplificaAI's export doesn't ship one.
+        // Fall back to defaults appropriate for gliner2-multi-v1.
         let config_path = if subdir.join("config.json").exists() {
             subdir.join("config.json")
         } else {
             model_dir.join("config.json")
         };
-        let config = config::FastinoConfig::from_path(&config_path)?;
+        let config = if config_path.exists() {
+            config::FastinoConfig::from_path(&config_path)?
+        } else {
+            config::FastinoConfig::default()
+        };
 
         Ok(Self {
             tokenizer,
@@ -187,11 +192,13 @@ impl GLiNER2Fastino {
             &["fp32_v2/tokenizer.json", "fp16_v2/tokenizer.json", "tokenizer.json"],
         )
         .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: download tokenizer: {e}")))?;
-        let _config_path = crate::backends::hf_loader::download_model_file(
+        // config.json is optional — SemplificaAI's export doesn't include it.
+        // Try to download if present, but ignore 404s and fall back to defaults
+        // in from_local.
+        let _ = crate::backends::hf_loader::download_model_file(
             &repo,
             &["fp32_v2/config.json", "fp16_v2/config.json", "config.json"],
-        )
-        .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: download config: {e}")))?;
+        );
 
         // Download the 8 v2 ONNX files. Try fp32_v2 first (clearer dtype
         // semantics for debugging), then fp16_v2 as fallback.

@@ -42,6 +42,19 @@ impl FastinoConfig {
     }
 }
 
+impl Default for FastinoConfig {
+    /// Defaults appropriate for `fastino/gliner2-multi-v1`: 768-dim DeBERTa-v2
+    /// encoder, 512-token max, count_lstm_v2 head. Used when config.json is
+    /// not shipped (e.g., SemplificaAI's pre-export).
+    fn default() -> Self {
+        Self {
+            hidden_size: 768,
+            counting_layer: Some(CountingLayer::CountLstmV2),
+            max_seq_length: 512,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
