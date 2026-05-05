@@ -43,6 +43,7 @@ lru = { workspace = true, optional = true }
 candle-core = { workspace = true, optional = true }
 candle-nn = { workspace = true, optional = true }
 safetensors = { workspace = true, optional = true }
+half = { workspace = true, optional = true }
 
 # Semantic text chunking (optional). Uses the `text-splitter` crate, which
 # is the de-facto standard Rust chunker (>1M downloads vs the local `slabs`).
@@ -96,6 +97,12 @@ onnx-coreml = ["onnx", "ort/coreml"]
 # known ort failure mode when cudart.so is missing. Validate with
 # `examples/onnx_gpu_smoke.rs` on a real GPU host.
 onnx-cuda = ["onnx", "ort/cuda"]
+# fastino-ai GLiNER2 backend (issue #18). Loads `fastino/gliner2-*` models
+# via ONNX. WIP / experimental — no API stability guarantees. Implements
+# Model + ZeroShotNER and an internal classify() method.
+gliner2-fastino = ["onnx", "dep:half"]
+gliner2-fastino-cuda    = ["gliner2-fastino", "onnx-cuda"]
+gliner2-fastino-coreml  = ["gliner2-fastino", "onnx-coreml"]
 candle = [
   "dep:candle-core",
   "dep:candle-nn",

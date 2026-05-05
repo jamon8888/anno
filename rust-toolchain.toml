@@ -1,0 +1,12 @@
+# Pin the toolchain to a version that doesn't ICE in
+# `annotate_snippets::renderer::styled_buffer::StyledBuffer::replace`
+# while rendering lint diagnostics. rustc 1.94.0 (4a4ef493e 2026-03-02)
+# panics during early lint checks on the gliner2_fastino backend
+# (and likely any code with sufficient lint surface).
+#
+# 1.95 is the lowest version known to compile cleanly. Workaround for
+# hosts that can't upgrade: `RUSTFLAGS="--cap-lints allow"` caps lints
+# below the rendering threshold.
+[toolchain]
+channel = "1.95"
+profile = "default"

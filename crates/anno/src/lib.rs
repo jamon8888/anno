@@ -196,6 +196,10 @@ mod sealed {
 
     impl Sealed for super::backends::hmm::HmmNER {}
     impl Sealed for super::backends::heuristic_crf::HeuristicCrfNER {}
+
+    #[cfg(feature = "gliner2-fastino")]
+    impl Sealed for super::backends::gliner2_fastino::GLiNER2Fastino {}
+
     #[cfg(test)]
     impl Sealed for super::MockModel {}
 }
