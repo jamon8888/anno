@@ -4,13 +4,21 @@ Two paths to a usable ONNX model for the `gliner2_fastino` backend.
 
 ## Fast path: SemplificaAI pre-export
 
-Verified for `fastino/gliner2-multi-v1` only. Other variants must use the
-script path below.
+> **Phase 1 caveat (2026-05-05):** The `SemplificaAI/gliner2-multi-v1-onnx`
+> repo is a **5-graph pipeline** (separate `encoder_fp32.onnx`,
+> `span_rep_fp32.onnx`, `classifier_fp32.onnx`, `count_pred_fp32.onnx`,
+> `count_lstm_fp32.onnx`, plus `scorer_fp32.onnx` in `fp32_v2/`). Phase 1
+> of `gliner2_fastino` implements a **single-graph** load path and
+> rejects this layout with a typed error pointing at Phase 3. To use the
+> SemplificaAI pin end-to-end, wait for Phase 3 (multi-session IOBinding
+> chain, port from `SemplificaAI/gliner2-rs/lib_v2.rs`).
+>
+> Phase 1 is reachable today only with a unified single-graph export —
+> the script path below.
+
+Future (Phase 3+):
 
     let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")?;
-
-If this pin breaks (repo moved / re-exported with different I/O names),
-fall through to the script path.
 
 ## Script path: scripts/gliner2_export_onnx.py
 

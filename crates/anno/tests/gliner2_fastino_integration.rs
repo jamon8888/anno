@@ -1,12 +1,24 @@
-//! Tier-2 integration tests for `gliner2_fastino`. `#[ignore]`-gated since
-//! they require a model in the HF cache. Run locally with:
+//! Tier-2 integration tests for `gliner2_fastino`. `#[ignore]`-gated.
+//!
+//! **Status (2026-05-05): these tests will FAIL against the documented
+//! `SemplificaAI/gliner2-multi-v1-onnx` pin and against
+//! `fastino/gliner2-multi-v1` directly.** The fastino reference exports
+//! are 5-graph pipelines (encoder + span_rep + scorer + count_pred +
+//! classifier as separate ONNX files), but Phase 1 of the gliner2_fastino
+//! backend implements a single-graph load path. See the ARCHITECTURAL
+//! FINDING comment in `crates/anno/src/backends/gliner2_fastino/mod.rs`
+//! for the full discovery and the Phase 3 scope that delivers the
+//! multi-session IOBinding chain.
+//!
+//! Until Phase 3 lands (or someone produces a unified-graph fastino ONNX
+//! via `scripts/gliner2_export_onnx.py`), these tests are placeholders
+//! demonstrating the eventual API surface. Running them surfaces the
+//! "multi-graph fastino export" error from `from_pretrained`/`from_local`.
+//!
+//! Run locally with:
 //!
 //!     cargo test -p anno --features gliner2-fastino \
 //!         --test gliner2_fastino_integration -- --ignored
-//!
-//! These tests are NOT run on every PR. CI runs them on a nightly job
-//! (or a manual workflow_dispatch) once the Windows linker blocker has
-//! been resolved on the developer host. See spec §4 for tiers.
 
 #![cfg(feature = "gliner2-fastino")]
 

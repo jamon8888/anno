@@ -88,20 +88,47 @@ impl GLiNER2Fastino {
         let transformer = processor::SchemaTransformer::new(tokenizer.clone())?;
         let config = config::FastinoConfig::from_path(&model_dir.join("config.json"))?;
 
-        // Try common ONNX filenames; fastino exports use `model.onnx` and
-        // SemplificaAI's pin uses the same. Phase 3 will add `_iobinding` variants.
+        // Look for a unified single-graph ONNX export. The Phase 1 backend
+        // requires one combined model.onnx (input_ids+attention_mask -> scores+spans).
         let onnx_candidates = ["model.onnx", "onnx/model.onnx"];
         let model_path = onnx_candidates
             .iter()
             .map(|f| model_dir.join(f))
-            .find(|p| p.exists())
-            .ok_or_else(|| {
+            .find(|p| p.exists());
+
+        // Detect the SemplificaAI multi-graph layout (5 separate ONNX files
+        // including `encoder_fp32.onnx`, `span_rep_fp32.onnx`, etc.) so we
+        // can emit an actionable error rather than a cryptic load failure.
+        let is_multi_graph = ["fp32", "fp16", "fp32_v2", "fp16_v2"]
+            .iter()
+            .any(|sub| {
+                let p = model_dir.join(sub);
+                p.is_dir()
+                    && (p.join("encoder_fp32.onnx").exists()
+                        || p.join("encoder_fp16.onnx").exists())
+            });
+
+        let model_path = model_path.ok_or_else(|| {
+            if is_multi_graph {
+                crate::Error::Backend(format!(
+                    "gliner2_fastino: directory {} is a SemplificaAI-style \
+                     multi-graph fastino export (encoder/span_rep/scorer/... \
+                     in fp32/fp32_v2 subdirs). Phase 1 of this backend requires \
+                     a unified single-graph model.onnx; the multi-session \
+                     IOBinding pipeline lands in Phase 3 of the spec \
+                     (docs/superpowers/specs/2026-05-04-gliner2-fastino-design.md \
+                     §5). Use `scripts/gliner2_export_onnx.py` to produce a \
+                     unified export instead, or wait for Phase 3.",
+                    model_dir.display()
+                ))
+            } else {
                 crate::Error::Backend(format!(
                     "gliner2_fastino: no ONNX model in {} (tried {:?})",
                     model_dir.display(),
                     onnx_candidates
                 ))
-            })?;
+            }
+        })?;
         let session = session::Session::from_path(&model_path)?;
 
         Ok(Self {
@@ -167,19 +194,40 @@ impl GLiNER2Fastino {
                 crate::Error::Backend(format!("gliner2_fastino: attn tensor: {e}"))
             })?;
 
-        // VERIFY against a real fastino ONNX export — input names (`input_ids`,
-        // `attention_mask`) and output names (`scores`, `spans`) follow the
-        // SemplificaAI export convention. Run:
-        //   python -c "import onnx; m=onnx.load('model.onnx'); \
-        //              print([(i.name, [d.dim_value or d.dim_param \
-        //              for d in i.type.tensor_type.shape.dim]) \
-        //              for i in m.graph.input + m.graph.output])"
-        // and update names below if they differ.
+        // ARCHITECTURAL FINDING (2026-05-05, verified against
+        // SemplificaAI/gliner2-multi-v1-onnx commit 51d4a15c):
         //
-        // We run inference inside `with_session` and eagerly copy the output
+        // The fastino-ai GLiNER2 reference export is NOT a single combined
+        // ONNX graph. It's a 5-graph pipeline:
+        //   encoder_fp32.onnx     input_ids[B,L] i64 -> last_hidden_state[B,L,768] f32
+        //   span_rep_fp32.onnx    (last_hidden_state, span_idx[B,N,2] i64) ->
+        //                         span_embeddings[B,L,8,768] f32 (8 = max_span_width)
+        //   classifier_fp32.onnx  span_embeddings -> logits[B,L,8,1] f32
+        //                         (binary entity/non-entity per span)
+        //   count_pred_fp32.onnx  pc_emb[B,768] -> count_logits[B,20] f32
+        //   count_lstm_fp32.onnx  (pc_emb, gold_count_val) -> count_embeddings
+        //   plus fp32_v2/scorer_fp32.onnx for schema-driven entity scoring:
+        //       (span_embeddings, struct_proj[20,num_fields,768]) ->
+        //       entity_scores[20, num_words, 8, num_fields]
+        //
+        // Phase 1 of this backend implements the SINGLE-GRAPH path below
+        // (one combined `model.onnx` exporting `input_ids`+`attention_mask`
+        // -> `scores`+`spans`). That layout matches a hypothetical unified
+        // export but does NOT match the SemplificaAI pin or any export
+        // produced by the upstream `gliner2` Python package. To reach the
+        // actual SemplificaAI pipeline, Phase 3 of the spec ports the
+        // multi-session IOBinding chain from `SemplificaAI/gliner2-rs/lib_v2.rs`
+        // — that delivers true end-to-end inference against the SemplificaAI
+        // export.
+        //
+        // Until Phase 3 lands, this code path is reachable only with a
+        // unified ONNX export produced by `scripts/gliner2_export_onnx.py`
+        // (which itself depends on `gliner2.GLiNER2.export_onnx()` producing
+        // a single combined graph — verify per export).
+        //
+        // We run inference inside `with_session` and eagerly copy output
         // tensors into owned Vecs so the `SessionOutputs` borrow does not
         // escape the closure (it borrows from the locked `Session`).
-        // Returned as ((score_shape, score_data), (span_shape, span_data)).
         type OwnedTensors = (
             (Vec<i64>, Vec<f32>),
             (Vec<i64>, Vec<i64>),
@@ -199,7 +247,9 @@ impl GLiNER2Fastino {
                 // Extract score and span tensors. The expected shapes are:
                 //   scores: [batch=1, num_spans, num_labels] f32
                 //   spans:  [batch=1, num_spans, 2]          i64 (start_word, end_word)
-                // VERIFY shapes against a real export — see comment above.
+                // These match a hypothetical unified single-graph export.
+                // See ARCHITECTURAL FINDING above for the SemplificaAI pin's
+                // 5-graph layout (Phase 3).
                 let scores_val = outputs.get("scores").ok_or_else(|| {
                     crate::Error::Backend(
                         "gliner2_fastino: missing 'scores' output".into(),
@@ -257,10 +307,13 @@ impl GLiNER2Fastino {
             let end_word = spans_data[span_idx * 2 + 1] as usize;
             for label_idx in 0..num_labels {
                 let score = scores_data[span_idx * num_labels + label_idx];
-                // Apply sigmoid here if the head produces logits — fastino's export
-                // is documented as already-sigmoided per the upstream paper Eq. 1.
-                // VERIFY: if entities come back saturated at 1.0, the head is logits
-                // and this should be `1.0 / (1.0 + (-score).exp())`.
+                // Sigmoid handling: a unified single-graph export is expected
+                // to apply sigmoid in-graph per the GLiNER2 paper Eq. 1. If
+                // entities saturate at 1.0 (logits leaking through), wrap with
+                // `1.0 / (1.0 + (-score).exp())`. The SemplificaAI multi-graph
+                // export emits raw logits via `classifier_fp32.onnx` -> sigmoid
+                // is applied externally in `lib_v2.rs` — Phase 3 will mirror
+                // that.
                 decoded.push(decoder::Span {
                     start_word,
                     end_word,
