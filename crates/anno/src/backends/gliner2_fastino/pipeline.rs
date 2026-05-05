@@ -161,9 +161,11 @@ pub(crate) fn run_token_gather(
 }
 
 /// Output of span_rep: span-level embeddings.
+///
+/// Real shape per the SemplificaAI export: `[1, num_words, MAX_WIDTH, H]`.
+/// (4D, with the max-span-width dimension explicit.)
 pub(crate) struct SpanRepOutput {
-    /// Shape: `[1, num_spans, H]` where num_spans = num_words * MAX_WIDTH
-    pub span_embs: Array3<f32>,
+    pub span_embs: ndarray::Array4<f32>,
 }
 
 /// Build the span-index tensor used by span_rep.
@@ -225,8 +227,8 @@ pub(crate) fn run_span_rep(
         },
     )?;
 
-    let span_embs: Array3<f32> = result
-        .into_dimensionality::<ndarray::Ix3>()
+    let span_embs: ndarray::Array4<f32> = result
+        .into_dimensionality::<ndarray::Ix4>()
         .map_err(|e| Error::Tokenizer(format!("span_rep dim: {e}")))?;
     Ok(SpanRepOutput { span_embs })
 }
