@@ -487,6 +487,95 @@ impl GLiNER2Fastino {
         out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(out)
     }
+
+    /// Process a slice of texts in chunks, invoking `on_batch` after each
+    /// text in the just-completed chunk.
+    ///
+    /// Useful for large-document workloads where you want incremental
+    /// output instead of waiting for the entire batch to complete. The
+    /// callback receives `(text_index, entities_for_this_text)` for each
+    /// text as it lands.
+    ///
+    /// **Phase 1.5 / experimental.** Single-threaded — the "batch" in
+    /// the name refers to chunked progress reporting, not parallel batched
+    /// inference. Errors during any single text's extraction propagate
+    /// out of `batch_extract_streaming` immediately and abort the loop.
+    pub fn batch_extract_streaming<F>(
+        &self,
+        texts: &[&str],
+        types: &[&str],
+        threshold: f32,
+        batch_size: usize,
+        mut on_batch: F,
+    ) -> crate::Result<()>
+    where
+        F: FnMut(usize, &[crate::Entity]),
+    {
+        if batch_size == 0 {
+            return Err(crate::Error::Backend(
+                "gliner2_fastino: batch_size must be > 0".into(),
+            ));
+        }
+        let mut cursor = 0;
+        while cursor < texts.len() {
+            let end = (cursor + batch_size).min(texts.len());
+            for (offset, text) in texts[cursor..end].iter().enumerate() {
+                let idx = cursor + offset;
+                let ents = self.extract_ner(text, types, threshold)?;
+                on_batch(idx, &ents);
+            }
+            cursor = end;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod streaming_tests {
+    #[test]
+    fn streaming_chunking_indices_are_contiguous_and_complete() {
+        // The control flow that drives batch_extract_streaming's chunk
+        // boundaries is what we want to lock in: cover all indices, no gaps,
+        // last chunk handles a non-aligned tail. We can't easily run the
+        // method without a real model, so we verify the chunk-boundary
+        // logic directly with the same control structure.
+        let texts: Vec<&str> = (0..10).map(|i| match i {
+            0 => "zero", 1 => "one", 2 => "two", 3 => "three", 4 => "four",
+            5 => "five", 6 => "six", 7 => "seven", 8 => "eight", _ => "nine",
+        }).collect();
+
+        let mut chunks_seen: Vec<(usize, usize)> = Vec::new();
+        let batch_size = 3;
+        let mut cursor = 0;
+        while cursor < texts.len() {
+            let end = (cursor + batch_size).min(texts.len());
+            chunks_seen.push((cursor, end));
+            cursor = end;
+        }
+        assert_eq!(chunks_seen, vec![(0, 3), (3, 6), (6, 9), (9, 10)]);
+
+        // Exact-multiple case: no partial chunk.
+        let mut exact: Vec<(usize, usize)> = Vec::new();
+        let mut cursor = 0;
+        let n = 9;
+        while cursor < n {
+            let end = (cursor + batch_size).min(n);
+            exact.push((cursor, end));
+            cursor = end;
+        }
+        assert_eq!(exact, vec![(0, 3), (3, 6), (6, 9)]);
+
+        // Single text, batch_size > len: one chunk.
+        let mut single: Vec<(usize, usize)> = Vec::new();
+        let mut cursor = 0;
+        let n = 1;
+        while cursor < n {
+            let end = (cursor + batch_size).min(n);
+            single.push((cursor, end));
+            cursor = end;
+        }
+        assert_eq!(single, vec![(0, 1)]);
+    }
 }
 
 #[cfg(test)]
