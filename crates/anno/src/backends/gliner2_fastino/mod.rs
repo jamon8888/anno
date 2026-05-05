@@ -49,6 +49,18 @@ pub(crate) mod sessions;
 /// fastino-ai GLiNER2 model.
 ///
 /// **Experimental.** API may change without semver bump.
+/// How to apply labels across a batch.
+///
+/// Phase 1.5 polish — shapes the input to
+/// [`GLiNER2Fastino::batch_extract_with_schema_mode`].
+pub enum BatchSchemaMode<'a> {
+    /// All texts share the same label set.
+    Shared(&'a [&'a str]),
+    /// Each text has its own label set; outer slice indexed by text idx.
+    /// Length must match the texts slice.
+    PerSample(&'a [Vec<&'a str>]),
+}
+
 pub struct GLiNER2Fastino {
     pub(crate) tokenizer: tokenizers::Tokenizer,
     pub(crate) special: processor::SpecialTokenIds,
@@ -485,6 +497,47 @@ impl GLiNER2Fastino {
             .zip(probs.into_iter())
             .collect();
         out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(out)
+    }
+
+    /// Batch extract entities with either shared or per-sample label sets.
+    ///
+    /// - [`BatchSchemaMode::Shared`]: every text uses the same label slice.
+    ///   Equivalent to looping `extract_with_types(text, labels, threshold)`.
+    /// - [`BatchSchemaMode::PerSample`]: each text uses its own label set.
+    ///   Lengths must match. Returns a typed `crate::Error::Backend`
+    ///   error on length mismatch.
+    ///
+    /// **Phase 1.5 / experimental.** Single-threaded — the "batch" here
+    /// refers to API ergonomics, not parallel inference. For chunked
+    /// progress callbacks, see [`Self::batch_extract_streaming`].
+    pub fn batch_extract_with_schema_mode(
+        &self,
+        texts: &[&str],
+        schema: BatchSchemaMode<'_>,
+        threshold: f32,
+    ) -> crate::Result<Vec<Vec<crate::Entity>>> {
+        let mut out: Vec<Vec<crate::Entity>> = Vec::with_capacity(texts.len());
+        match schema {
+            BatchSchemaMode::Shared(labels) => {
+                for text in texts {
+                    out.push(self.extract_ner(text, labels, threshold)?);
+                }
+            }
+            BatchSchemaMode::PerSample(per_text_labels) => {
+                if per_text_labels.len() != texts.len() {
+                    return Err(crate::Error::Backend(format!(
+                        "gliner2_fastino: PerSample label count {} != texts count {}",
+                        per_text_labels.len(),
+                        texts.len()
+                    )));
+                }
+                for (text, labels_owned) in texts.iter().zip(per_text_labels.iter()) {
+                    let labels: Vec<&str> = labels_owned.iter().copied().collect();
+                    out.push(self.extract_ner(text, &labels, threshold)?);
+                }
+            }
+        }
         Ok(out)
     }
 
