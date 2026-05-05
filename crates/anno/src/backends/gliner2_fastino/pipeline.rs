@@ -424,6 +424,52 @@ pub(crate) fn run_scorer(
     Ok(ScorerOutput { scores })
 }
 
+/// Decode the scorer's [MAX_COUNT, num_words, MAX_WIDTH, M] tensor to
+/// `Vec<Entity>` (with character offsets in the original text), apply
+/// threshold, then NMS.
+pub(crate) fn decode_entities(
+    text: &str,
+    record: &ProcessedRecord,
+    task: &crate::backends::gliner2_fastino::processor::TaskMapping,
+    scorer_out: &ScorerOutput,
+    pred_count: usize,
+    threshold: f32,
+    flat_ner: bool,
+) -> Vec<crate::Entity> {
+    let num_words = record.word_to_char_maps.len();
+    let num_labels = task.labels.len();
+    let scores = &scorer_out.scores;
+
+    let mut candidates: Vec<crate::Entity> = Vec::new();
+    for c_idx in 0..pred_count.min(MAX_COUNT) {
+        for start in 0..num_words {
+            for width_idx in 0..MAX_WIDTH {
+                let end_word = (start + width_idx + 1).min(num_words);
+                for m in 0..num_labels {
+                    let prob = scores[[c_idx, start, width_idx, m]];
+                    if prob <= threshold {
+                        continue;
+                    }
+                    let (byte_start, _) = record.word_to_char_maps[start];
+                    let (_, byte_end) = record.word_to_char_maps[end_word - 1];
+                    if byte_end > text.len() || byte_start > byte_end {
+                        continue;
+                    }
+                    let surface = text[byte_start..byte_end].trim();
+                    if surface.is_empty() {
+                        continue;
+                    }
+                    let etype = crate::schema::map_to_canonical(&task.labels[m], None);
+                    // Convert byte offsets to char offsets (anno convention).
+                    let (cs, ce) = crate::offset::bytes_to_chars(text, byte_start, byte_end);
+                    candidates.push(crate::Entity::new(surface, etype, cs, ce, prob));
+                }
+            }
+        }
+    }
+    super::nms::greedy_nms(candidates, flat_ner)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
