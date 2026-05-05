@@ -334,6 +334,96 @@ pub(crate) fn run_count_pred_argmax(
     Ok(val.max(0) as usize)
 }
 
+/// Output of count_lstm_fixed: struct projection used by scorer.
+/// Shape: `[MAX_COUNT, M, H]`.
+pub(crate) struct CountLstmOutput {
+    pub struct_proj: Array3<f32>,
+}
+
+pub(crate) fn run_count_lstm_fixed(
+    sessions: &Sessions,
+    sg_out: &SchemaGatherOutput,
+) -> Result<CountLstmOutput, Error> {
+    let fields_t = crate::backends::ort_compat::tensor_from_ndarray(
+        sg_out.field_embs.clone(),
+    )
+    .map_err(|e| Error::Tokenizer(format!("count_lstm tensor: {e}")))?;
+
+    let proj: ndarray::ArrayD<f32> = sessions.count_lstm_fixed.with_session(
+        |s| -> Result<_, Error> {
+            let outputs = s
+                .run(ort::inputs![
+                    "field_embs" => fields_t.into_dyn(),
+                ])
+                .map_err(|e| Error::Tokenizer(format!("count_lstm run: {e}")))?;
+            let v = outputs.values().next().ok_or_else(|| {
+                Error::Tokenizer("count_lstm_fixed: no outputs".into())
+            })?;
+            let (shape, cow) = v
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Tokenizer(format!("count_lstm extract: {e}")))?;
+            let data: Vec<f32> = cow.to_vec();
+            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                .map_err(|e| Error::Tokenizer(format!("count_lstm reshape: {e}")))?)
+        },
+    )?;
+
+    let struct_proj: Array3<f32> = proj
+        .into_dimensionality::<ndarray::Ix3>()
+        .map_err(|e| Error::Tokenizer(format!("count_lstm dim: {e}")))?;
+    Ok(CountLstmOutput { struct_proj })
+}
+
+/// Output of scorer: per-instance per-span per-label entity scores.
+/// Shape: `[MAX_COUNT, num_words, MAX_WIDTH, M]`.
+/// Already-sigmoided per upstream (`extract_standard` line ~825 comment:
+/// "Scorer — restituisce probabilità sigmoid già calcolate").
+pub(crate) struct ScorerOutput {
+    pub scores: ndarray::Array4<f32>,
+}
+
+pub(crate) fn run_scorer(
+    sessions: &Sessions,
+    sr_out: &SpanRepOutput,
+    cl_out: &CountLstmOutput,
+) -> Result<ScorerOutput, Error> {
+    let span_t = crate::backends::ort_compat::tensor_from_ndarray(
+        sr_out.span_embs.clone(),
+    )
+    .map_err(|e| Error::Tokenizer(format!("scorer span tensor: {e}")))?;
+    let proj_t = crate::backends::ort_compat::tensor_from_ndarray(
+        cl_out.struct_proj.clone(),
+    )
+    .map_err(|e| Error::Tokenizer(format!("scorer proj tensor: {e}")))?;
+
+    let result: ndarray::ArrayD<f32> = sessions.scorer.with_session(
+        |s| -> Result<_, Error> {
+            let outputs = s
+                .run(ort::inputs![
+                    "span_embeddings" => span_t.into_dyn(),
+                    "struct_proj"     => proj_t.into_dyn(),
+                ])
+                .map_err(|e| Error::Tokenizer(format!("scorer run: {e}")))?;
+            let v = outputs.values().next().ok_or_else(|| {
+                Error::Tokenizer("scorer: no outputs".into())
+            })?;
+            let (shape, cow) = v
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Tokenizer(format!("scorer extract: {e}")))?;
+            let data: Vec<f32> = cow.to_vec();
+            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                .map_err(|e| Error::Tokenizer(format!("scorer reshape: {e}")))?)
+        },
+    )?;
+
+    let scores: ndarray::Array4<f32> = result
+        .into_dimensionality::<ndarray::Ix4>()
+        .map_err(|e| Error::Tokenizer(format!("scorer dim: {e}")))?;
+    Ok(ScorerOutput { scores })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
