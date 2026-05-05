@@ -115,6 +115,7 @@ pub enum SchemaTask {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // task_name, task_type reserved for Phase 2 (structure extraction).
 pub struct TaskMapping {
     pub task_name: String,
     pub task_type: String,
@@ -124,6 +125,7 @@ pub struct TaskMapping {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // tasks, text_start, text_end reserved for Phase 2.
 pub struct ProcessedRecord {
     pub input_ids: Vec<i64>,
     pub attention_mask: Vec<i64>,
