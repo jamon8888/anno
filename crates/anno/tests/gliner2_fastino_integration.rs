@@ -63,6 +63,77 @@ fn fastino_extract_with_label_descriptions() {
 
 #[test]
 #[ignore]
+fn fastino_batch_per_sample_labels() {
+    // Phase 1.5 M4.2: each text in the batch carries its own label set.
+    // Text 0 only looks for orgs; text 1 only looks for people + places.
+    use anno::backends::gliner2_fastino::BatchSchemaMode;
+
+    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+        .expect("load gliner2-multi-v1");
+    let texts: Vec<&str> = vec![
+        "Acme Corp signed a deal.",
+        "Marie Curie worked in France.",
+    ];
+    let labels_per_text: Vec<Vec<&str>> = vec![
+        vec!["organization"],
+        vec!["person", "location"],
+    ];
+
+    let results = model
+        .batch_extract_with_schema_mode(
+            &texts,
+            BatchSchemaMode::PerSample(&labels_per_text),
+            0.5,
+        )
+        .expect("batch extract");
+
+    assert_eq!(results.len(), 2);
+    // Text 0 should detect Acme as organization (or at least produce non-empty).
+    assert!(
+        results[0].iter().any(|e| matches!(
+            e.entity_type,
+            anno::EntityType::Organization
+        )),
+        "expected an Organization in results[0], got {:#?}", results[0],
+    );
+    // Text 1 should detect Marie as person OR France as location.
+    assert!(
+        results[1].iter().any(|e| matches!(
+            e.entity_type,
+            anno::EntityType::Person | anno::EntityType::Location
+        )),
+        "expected a Person or Location in results[1], got {:#?}", results[1],
+    );
+}
+
+#[test]
+#[ignore]
+fn fastino_batch_per_sample_length_mismatch_errors() {
+    // Defensive: PerSample with mismatched outer-slice length returns
+    // a typed Backend error, not a panic.
+    use anno::backends::gliner2_fastino::BatchSchemaMode;
+
+    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+        .expect("load");
+    let texts: Vec<&str> = vec!["one", "two"];
+    let labels_per_text: Vec<Vec<&str>> = vec![vec!["organization"]]; // 1 entry, not 2.
+
+    let err = model
+        .batch_extract_with_schema_mode(
+            &texts,
+            BatchSchemaMode::PerSample(&labels_per_text),
+            0.5,
+        )
+        .expect_err("expected length-mismatch error");
+    assert!(
+        err.to_string().contains("PerSample label count")
+            && err.to_string().contains("!= texts count"),
+        "got: {err}",
+    );
+}
+
+#[test]
+#[ignore]
 fn fastino_batch_extract_streaming_fires_callbacks_in_order() {
     // Phase 1.5 M3.2: drives 5 short texts through batch_extract_streaming
     // with batch_size = 2, so we get chunks (0..2), (2..4), (4..5). Each
