@@ -71,6 +71,7 @@ deformat = "0.15"
 rayon = "1"
 
 # Utilities
+half = "2"
 itertools = "0.14"
 unicode-normalization = "0.1.25"
 rusqlite = { version = "0.37", features = ["bundled"] }

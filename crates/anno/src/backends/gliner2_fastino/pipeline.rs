@@ -470,6 +470,72 @@ pub(crate) fn decode_entities(
     super::nms::greedy_nms(candidates, flat_ner)
 }
 
+/// Run the classifier head on a single task's field_embs.
+/// Returns label scores (softmax probabilities, sum to 1).
+///
+/// Internal mechanics: pad `field_embs` to `[1, num_labels, MAX_WIDTH,
+/// hidden_size]` with first-position-only set, convert to fp16, run,
+/// softmax over the label axis.
+pub(crate) fn run_classifier(
+    sessions: &Sessions,
+    sg_out: &SchemaGatherOutput,
+) -> Result<Vec<f32>, Error> {
+    use ndarray::Array4;
+
+    let num_labels = sg_out.field_embs.shape()[0];
+    let hidden_size = sg_out.field_embs.shape()[1];
+
+    // Pad to [1, num_labels, MAX_WIDTH, hidden_size] in fp16,
+    // then convert to f32 for ort.
+    let mut padded_fp16: Array4<half::f16> = Array4::from_elem(
+        (1, num_labels, MAX_WIDTH, hidden_size),
+        half::f16::from_f32(0.0),
+    );
+    for m in 0..num_labels {
+        for d in 0..hidden_size {
+            padded_fp16[[0, m, 0, d]] =
+                half::f16::from_f32(sg_out.field_embs[[m, d]]);
+        }
+    }
+    // Convert fp16 padding to f32 for ort tensor compatibility.
+    let padded: Array4<f32> = padded_fp16
+        .mapv(|v| v.to_f32());
+
+    let pad_t = crate::backends::ort_compat::tensor_from_ndarray(padded)
+        .map_err(|e| Error::Tokenizer(format!("classifier tensor: {e}")))?;
+
+    let logits: ndarray::ArrayD<f32> = sessions.classifier.with_session(
+        |s| -> Result<_, Error> {
+            let outputs = s
+                .run(ort::inputs![
+                    "span_embeddings" => pad_t.into_dyn(),
+                ])
+                .map_err(|e| Error::Tokenizer(format!("classifier run: {e}")))?;
+            let v = outputs.values().next().ok_or_else(|| {
+                Error::Tokenizer("classifier: no outputs".into())
+            })?;
+            let (shape, cow) = v
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Tokenizer(format!("classifier extract: {e}")))?;
+            let data: Vec<f32> = cow.to_vec();
+            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                .map_err(|e| Error::Tokenizer(format!("classifier reshape: {e}")))?)
+        },
+    )?;
+
+    // logits shape is [1, num_labels, MAX_WIDTH, 1]. Take position 0.
+    let mut exps = Vec::with_capacity(num_labels);
+    let mut exp_sum = 0.0f32;
+    for m in 0..num_labels {
+        let l = logits[[0, m, 0, 0]];
+        let e = l.exp();
+        exp_sum += e;
+        exps.push(e);
+    }
+    Ok(exps.into_iter().map(|e| e / exp_sum.max(1e-12)).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
