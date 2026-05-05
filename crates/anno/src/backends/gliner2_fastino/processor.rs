@@ -19,6 +19,11 @@ pub const L_TOKEN: &str = "[L]";
 pub const R_TOKEN: &str = "[R]";
 pub const SEP_STRUCT: &str = "[SEP_STRUCT]";
 pub const SEP_TEXT: &str = "[SEP_TEXT]";
+/// Phase 1.5: per-label description token. Emitted as
+/// `[E] <label> [DESCRIPTION] <description>` when callers use
+/// `SchemaTask::EntitiesDescribed`. Mirrors upstream
+/// `SemplificaAI/gliner2-rs/rust_component/src/processor.rs::DESC_TOKEN`.
+pub const DESC_TOKEN: &str = "[DESCRIPTION]";
 
 /// Integer IDs for the seven fastino special tokens, resolved at load time
 /// from the tokenizer's vocabulary. Never hardcoded.
@@ -99,6 +104,10 @@ impl WhitespaceTokenSplitter {
 #[derive(Debug, Clone)]
 pub enum SchemaTask {
     Entities(Vec<String>),
+    /// Phase 1.5: entities with per-label descriptions for accuracy boost.
+    /// Each tuple is (label, description). Emits
+    /// `[E] <label> [DESCRIPTION] <description>` per pair in the prompt.
+    EntitiesDescribed(Vec<(String, String)>),
     /// Phase 3: classification task. (task_name, labels). Uses [L] tokens.
     Classifications(String, Vec<String>),
     // TODO(Phase 2): port Relations arm from upstream
@@ -160,6 +169,32 @@ impl SchemaTransformer {
                         combined_tokens.push(E_TOKEN);
                         field_indices.push(combined_tokens.len());
                         combined_tokens.push(label.as_str());
+                        labels.push(label.clone());
+                    }
+                    combined_tokens.push(")");
+                    combined_tokens.push(")");
+
+                    task_mappings_temp.push((
+                        "entities".to_string(),
+                        "entities".to_string(),
+                        labels,
+                        prompt_idx,
+                        field_indices,
+                    ));
+                }
+                SchemaTask::EntitiesDescribed(labeled) => {
+                    combined_tokens.push("(");
+                    let prompt_idx = combined_tokens.len();
+                    combined_tokens.push(P_TOKEN);
+                    combined_tokens.push("entities");
+                    combined_tokens.push("(");
+
+                    for (label, description) in labeled {
+                        combined_tokens.push(E_TOKEN);
+                        field_indices.push(combined_tokens.len());
+                        combined_tokens.push(label.as_str());
+                        combined_tokens.push(DESC_TOKEN);
+                        combined_tokens.push(description.as_str());
                         labels.push(label.clone());
                     }
                     combined_tokens.push(")");
@@ -356,6 +391,28 @@ mod transformer_tests {
         assert_eq!(rec.word_to_char_maps.len(), 5);
         // First word "Acme" starts at byte 0, ends at byte 4
         assert_eq!(rec.word_to_char_maps[0], (0, 4));
+    }
+
+    #[test]
+    fn entities_described_arm_emits_desc_tokens() {
+        let tok = stub();
+        let xfm = SchemaTransformer::new(tok).expect("transformer build");
+
+        let labels: Vec<(String, String)> = vec![
+            ("person".into(), "a human being".into()),
+            ("organization".into(), "a company or institution".into()),
+        ];
+        let task = SchemaTask::EntitiesDescribed(labels);
+        let rec = xfm.transform("Acme Corp in Paris .", &[task]).unwrap();
+        let ids = &rec.input_ids;
+
+        // Should contain 2 [E] markers (one per label) AND 2 [DESCRIPTION] markers.
+        let e_count = ids.iter().filter(|&&i| i == 3).count();
+        let desc_count = ids.iter().filter(|&&i| i == 22).count();
+        assert_eq!(e_count, 2, "expected 2 [E] markers, got {e_count} in {ids:?}");
+        assert_eq!(desc_count, 2, "expected 2 [DESCRIPTION] markers, got {desc_count} in {ids:?}");
+        // [SEP_TEXT] still present (id 8); text words after it.
+        assert!(ids.contains(&8), "missing [SEP_TEXT] in {ids:?}");
     }
 
     #[test]

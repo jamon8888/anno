@@ -13,7 +13,8 @@
     {"id": 7, "content": "[SEP_STRUCT]", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true},
     {"id": 8, "content": "[SEP_TEXT]", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true},
     {"id": 17, "content": "[CLS]", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true},
-    {"id": 18, "content": "[SEP]", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true}
+    {"id": 18, "content": "[SEP]", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true},
+    {"id": 22, "content": "[DESCRIPTION]", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true}
   ],
   "normalizer": null,
   "pre_tokenizer": {"type": "Whitespace"},
@@ -43,7 +44,8 @@
       "[SEP]": 18,
       "(": 19,
       ")": 20,
-      "entities": 21
+      "entities": 21,
+      "[DESCRIPTION]": 22
     },
     "unk_token": "[UNK]"
   }
