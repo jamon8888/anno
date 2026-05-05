@@ -231,6 +231,109 @@ pub(crate) fn run_span_rep(
     Ok(SpanRepOutput { span_embs })
 }
 
+/// Output of schema_gather: per-task pc_emb + field_embs.
+pub(crate) struct SchemaGatherOutput {
+    /// Shape: `[1, H]` — the [P]-token embedding (prompt context).
+    pub pc_emb: Array2<f32>,
+    /// Shape: `[M, H]` where M = number of fields/labels for this task.
+    pub field_embs: Array2<f32>,
+}
+
+pub(crate) fn run_schema_gather(
+    sessions: &Sessions,
+    encoder_out: &EncoderOutput,
+    task: &crate::backends::gliner2_fastino::processor::TaskMapping,
+) -> Result<SchemaGatherOutput, Error> {
+    use ndarray::Array1;
+
+    let mut indices: Vec<i64> = Vec::with_capacity(1 + task.field_tok_indices.len());
+    indices.push(task.prompt_tok_idx as i64);
+    indices.extend(task.field_tok_indices.iter().map(|&i| i as i64));
+    let idx_arr: Array1<i64> = Array1::from_vec(indices);
+
+    let hs_t = crate::backends::ort_compat::tensor_from_ndarray(
+        encoder_out.hidden_states.clone(),
+    )
+    .map_err(|e| Error::Tokenizer(format!("schema_gather hs tensor: {e}")))?;
+    let idx_t = crate::backends::ort_compat::tensor_from_ndarray(idx_arr)
+        .map_err(|e| Error::Tokenizer(format!("schema_gather idx tensor: {e}")))?;
+
+    type SchemaResult = (ndarray::ArrayD<f32>, ndarray::ArrayD<f32>);
+    let (pc, fields): SchemaResult = sessions.schema_gather.with_session(
+        |s| -> Result<_, Error> {
+            let outputs = s
+                .run(ort::inputs![
+                    "last_hidden_state" => hs_t.into_dyn(),
+                    "schema_indices"    => idx_t.into_dyn(),
+                ])
+                .map_err(|e| Error::Tokenizer(format!("schema_gather run: {e}")))?;
+            let mut iter = outputs.values();
+            let pc_v = iter.next().ok_or_else(|| {
+                Error::Tokenizer("schema_gather: missing pc_emb".into())
+            })?;
+            let fields_v = iter.next().ok_or_else(|| {
+                Error::Tokenizer("schema_gather: missing field_embs".into())
+            })?;
+            let (pc_shape, pc_cow) = pc_v
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Tokenizer(format!("schema_gather pc extract: {e}")))?;
+            let (fields_shape, fields_cow) = fields_v
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Tokenizer(format!("schema_gather fields extract: {e}")))?;
+            let pc_data: Vec<f32> = pc_cow.to_vec();
+            let pc_shape_usize: Vec<usize> = pc_shape.iter().map(|&s| s as usize).collect();
+            let pc_arr = ndarray::ArrayD::from_shape_vec(pc_shape_usize, pc_data)
+                .map_err(|e| Error::Tokenizer(format!("schema_gather pc reshape: {e}")))?;
+            let fields_data: Vec<f32> = fields_cow.to_vec();
+            let fields_shape_usize: Vec<usize> = fields_shape.iter().map(|&s| s as usize).collect();
+            let fields_arr = ndarray::ArrayD::from_shape_vec(fields_shape_usize, fields_data)
+                .map_err(|e| Error::Tokenizer(format!("schema_gather fields reshape: {e}")))?;
+            Ok((pc_arr, fields_arr))
+        },
+    )?;
+
+    let pc_emb: Array2<f32> = pc
+        .into_dimensionality::<ndarray::Ix2>()
+        .map_err(|e| Error::Tokenizer(format!("schema_gather pc dim: {e}")))?;
+    let field_embs: Array2<f32> = fields
+        .into_dimensionality::<ndarray::Ix2>()
+        .map_err(|e| Error::Tokenizer(format!("schema_gather fields dim: {e}")))?;
+    Ok(SchemaGatherOutput { pc_emb, field_embs })
+}
+
+/// Run `count_pred_argmax`. Returns the predicted instance count
+/// (already argmaxed in-graph; the i64 output is a scalar).
+pub(crate) fn run_count_pred_argmax(
+    sessions: &Sessions,
+    sg_out: &SchemaGatherOutput,
+) -> Result<usize, Error> {
+    let pc_t = crate::backends::ort_compat::tensor_from_ndarray(sg_out.pc_emb.clone())
+        .map_err(|e| Error::Tokenizer(format!("count_pred pc tensor: {e}")))?;
+
+    let count: ndarray::ArrayD<i64> = sessions.count_pred_argmax.with_session(
+        |s| -> Result<_, Error> {
+            let outputs = s
+                .run(ort::inputs![
+                    "pc_emb" => pc_t.into_dyn(),
+                ])
+                .map_err(|e| Error::Tokenizer(format!("count_pred run: {e}")))?;
+            let v = outputs.values().next().ok_or_else(|| {
+                Error::Tokenizer("count_pred_argmax: no outputs".into())
+            })?;
+            let (shape, cow) = v
+                .try_extract_tensor::<i64>()
+                .map_err(|e| Error::Tokenizer(format!("count_pred extract: {e}")))?;
+            let data: Vec<i64> = cow.to_vec();
+            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                .map_err(|e| Error::Tokenizer(format!("count_pred reshape: {e}")))?)
+        },
+    )?;
+
+    let val = count.iter().next().copied().unwrap_or(0);
+    Ok(val.max(0) as usize)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
