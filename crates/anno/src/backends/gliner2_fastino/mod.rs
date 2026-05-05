@@ -387,6 +387,64 @@ impl GLiNER2Fastino {
         ))
     }
 
+    /// Extract entities with per-label thresholds.
+    ///
+    /// Each label has its own threshold; spans below their label's
+    /// threshold are dropped. Useful when different labels have different
+    /// score distributions (e.g., a domain-specific label that the model
+    /// over-predicts can use a stricter threshold while keeping a more
+    /// permissive bound on rarer labels).
+    ///
+    /// A label not present in the input list is **dropped entirely** —
+    /// the underlying [`pipeline::decode_entities_with_thresholds`]
+    /// treats unmapped labels as having threshold `+∞`. To mix
+    /// per-label thresholds with a default for the rest, just enumerate
+    /// every label.
+    ///
+    /// **Phase 1.5 / experimental.** Not behind a public trait.
+    pub fn extract_with_label_thresholds(
+        &self,
+        text: &str,
+        label_thresholds: &[(&str, f32)],
+    ) -> crate::Result<Vec<crate::Entity>> {
+        use pipeline::*;
+        if label_thresholds.is_empty() {
+            return Ok(vec![]);
+        }
+        let labels: Vec<String> =
+            label_thresholds.iter().map(|(l, _)| l.to_string()).collect();
+        let task = processor::SchemaTask::Entities(labels);
+        let record = self.transformer.transform(text, &[task])?;
+        let num_words = record.word_to_char_maps.len();
+        if num_words == 0 {
+            return Ok(vec![]);
+        }
+
+        let enc = run_encoder(&self.sessions, &record)?;
+        let tg  = run_token_gather(&self.sessions, &enc, &record)?;
+        let sr  = run_span_rep(&self.sessions, &tg, num_words)?;
+
+        let task_map = record.tasks.first().ok_or_else(|| {
+            crate::Error::Backend("gliner2_fastino: transformer produced no task mapping".into())
+        })?;
+        let sg = run_schema_gather(&self.sessions, &enc, task_map)?;
+        let pred_count = run_count_pred_argmax(&self.sessions, &sg)?;
+        if pred_count == 0 {
+            return Ok(vec![]);
+        }
+        let cl = run_count_lstm_fixed(&self.sessions, &sg)?;
+        let scorer_out = run_scorer(&self.sessions, &sr, &cl)?;
+        Ok(decode_entities_with_thresholds(
+            text,
+            &record,
+            task_map,
+            &scorer_out,
+            pred_count,
+            label_thresholds,
+            /* flat_ner = */ false,
+        ))
+    }
+
     /// Single-label classification using the dedicated `[L]`-head classifier.
     ///
     /// Returns labels sorted by descending probability (softmax). The
