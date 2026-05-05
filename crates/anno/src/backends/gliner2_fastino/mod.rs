@@ -124,35 +124,45 @@ impl GLiNER2Fastino {
 
     /// Load a fastino GLiNER2 model by Hugging Face model id.
     ///
-    /// Downloads `tokenizer.json`, `config.json`, and the ONNX model file
-    /// (trying `onnx/model.onnx` then `model.onnx`) into the standard HF
-    /// cache, then defers to `from_local` on the cache snapshot directory.
+    /// Downloads `tokenizer.json`, `config.json`, and the 8 v2 ONNX graphs
+    /// (encoder, token_gather, span_rep, schema_gather, count_pred_argmax,
+    /// count_lstm_fixed, scorer, classifier) from the repo. Tries fp32_v2/
+    /// first, falls back to fp16_v2/ per file. Then defers to `from_local`.
     ///
-    /// **Phase 1 / experimental.** No retry/backoff on transient HF Hub
+    /// **Phase 3 / experimental.** No retry/backoff on transient HF Hub
     /// failures beyond what `hf-hub` itself provides.
     pub fn from_pretrained(model_id: &str) -> crate::Result<Self> {
         let api = crate::backends::hf_loader::hf_api()
             .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: hf_api: {e}")))?;
         let repo = api.model(model_id.to_string());
 
-        let _model_path = crate::backends::hf_loader::download_model_file(
-            &repo,
-            &["onnx/model.onnx", "model.onnx"],
-        )
-        .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: download model: {e}")))?;
+        // Download tokenizer + config (anno's standard pattern).
         let tokenizer_path =
             crate::backends::hf_loader::download_model_file(&repo, &["tokenizer.json"])
-                .map_err(|e| {
-                    crate::Error::Backend(format!("gliner2_fastino: download tokenizer: {e}"))
-                })?;
+                .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: download tokenizer: {e}")))?;
         let _config_path =
             crate::backends::hf_loader::download_model_file(&repo, &["config.json"])
-                .map_err(|e| {
-                    crate::Error::Backend(format!("gliner2_fastino: download config: {e}"))
-                })?;
+                .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: download config: {e}")))?;
 
-        // hf_loader::download_model_file returns paths in the HF cache. Their
-        // common parent is the snapshot dir.
+        // Download the 8 v2 ONNX files. Try fp32_v2 first (clearer dtype
+        // semantics for debugging), then fp16_v2 as fallback.
+        let bases = [
+            "encoder", "token_gather", "span_rep", "schema_gather",
+            "count_pred_argmax", "count_lstm_fixed", "scorer", "classifier",
+        ];
+        for base in &bases {
+            let candidates = [
+                format!("fp32_v2/{base}_fp32.onnx"),
+                format!("fp16_v2/{base}_fp16.onnx"),
+            ];
+            let candidate_refs: Vec<&str> = candidates.iter().map(String::as_str).collect();
+            crate::backends::hf_loader::download_model_file(&repo, &candidate_refs)
+                .map_err(|e| crate::Error::Backend(
+                    format!("gliner2_fastino: download {base}: {e}")
+                ))?;
+        }
+
+        // Resolve to the snapshot dir and dispatch.
         let snapshot_dir = tokenizer_path.parent().ok_or_else(|| {
             crate::Error::Backend("gliner2_fastino: tokenizer parent missing".into())
         })?;
