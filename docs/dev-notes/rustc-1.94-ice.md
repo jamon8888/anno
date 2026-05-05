@@ -25,8 +25,27 @@ no useful "error in foo.rs:line N" output.
 ## Affected versions
 
 - `rustc 1.94.0 (4a4ef493e 2026-03-02)` — confirmed broken.
-- `rustc 1.95+` — pinned in `rust-toolchain.toml` at the workspace
-  root. Lowest version known to compile cleanly.
+- `rustc 1.95.0 (59807616e 2026-04-14)` — **also broken**, confirmed
+  2026-05-06 during Phase 1.5 work. The lib-test build for the
+  `gliner2_fastino` feature ICEs in `early_lint_checks` → `hir_crate`
+  with the same `slice index starts at 9 but ends at 8` panic. Pin
+  was supposed to fix this; the bug is in `annotate_snippets`
+  (a transitive rustc dep) and isn't bound to one rustc minor.
+- No clean rustc minor known as of 2026-05-06; latest stable is 1.95.0.
+
+## Project-level workaround (current)
+
+Each worktree where this bites should ship a gitignored
+`.cargo/config.toml` with:
+
+```toml
+[build]
+rustflags = ["--cap-lints", "allow"]
+```
+
+This applies the workaround automatically on every `cargo` invocation
+in the worktree without requiring per-command `RUSTFLAGS`. The Phase 1.5
+worktree at `feat/gliner2-fastino-phase1.5` ships such a file.
 
 ## Workaround for hosts on 1.94
 
