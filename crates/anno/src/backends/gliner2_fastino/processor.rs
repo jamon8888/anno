@@ -277,7 +277,9 @@ mod transformer_tests {
     use tokenizers::Tokenizer;
 
     fn stub() -> Tokenizer {
-        Tokenizer::from_file("testdata/gliner2_fastino/stub_tokenizer.json").unwrap()
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/gliner2_fastino/stub_tokenizer.json");
+        Tokenizer::from_file(path).unwrap()
     }
 
     #[test]
@@ -358,9 +360,15 @@ mod transformer_tests {
 mod tests {
     use super::*;
 
+    fn stub_path() -> std::path::PathBuf {
+        // CARGO_MANIFEST_DIR points at crates/anno/. The fixture lives at the
+        // workspace root's testdata/. Walk up two levels.
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/gliner2_fastino/stub_tokenizer.json")
+    }
+
     fn stub_tokenizer() -> Tokenizer {
-        Tokenizer::from_file("testdata/gliner2_fastino/stub_tokenizer.json")
-            .expect("stub fixture missing or invalid")
+        Tokenizer::from_file(stub_path()).expect("stub fixture missing or invalid")
     }
 
     #[test]
@@ -379,7 +387,7 @@ mod tests {
     #[test]
     fn missing_special_token_returns_typed_error() {
         // Build a tokenizer.json missing [SEP_TEXT]
-        let mut content = std::fs::read_to_string("testdata/gliner2_fastino/stub_tokenizer.json").unwrap();
+        let mut content = std::fs::read_to_string(stub_path()).unwrap();
         content = content.replace("\"[SEP_TEXT]\"", "\"[NOT_THE_TOKEN]\"");
         let tmp = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(tmp.path(), &content).unwrap();
