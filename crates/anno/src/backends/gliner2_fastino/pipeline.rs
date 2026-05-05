@@ -159,3 +159,104 @@ pub(crate) fn run_token_gather(
         .map_err(|e| Error::Tokenizer(format!("token_gather dim: {e}")))?;
     Ok(TokenGatherOutput { text_embs })
 }
+
+/// Output of span_rep: span-level embeddings.
+pub(crate) struct SpanRepOutput {
+    /// Shape: `[1, num_spans, H]` where num_spans = num_words * MAX_WIDTH
+    pub span_embs: Array3<f32>,
+}
+
+/// Build the span-index tensor used by span_rep.
+///
+/// For each (start_word, width_idx) pair where `width_idx` ∈ 0..MAX_WIDTH,
+/// emit (start, start + width_idx). If end exceeds `num_words`, emit
+/// `[0, 0]` as zero-padding (matches upstream's behavior — those spans
+/// are masked out by the model).
+pub(crate) fn build_span_idx(num_words: usize) -> Array3<i64> {
+    let num_spans = num_words * MAX_WIDTH;
+    let mut data = Vec::with_capacity(num_spans * 2);
+    for start in 0..num_words {
+        for width in 0..MAX_WIDTH {
+            let end = start + width;
+            if end >= num_words {
+                data.extend_from_slice(&[0_i64, 0_i64]);
+            } else {
+                data.push(start as i64);
+                data.push(end as i64);
+            }
+        }
+    }
+    Array3::from_shape_vec((1, num_spans, 2), data)
+        .expect("span_idx shape consistent by construction")
+}
+
+pub(crate) fn run_span_rep(
+    sessions: &Sessions,
+    tg_out: &TokenGatherOutput,
+    num_words: usize,
+) -> Result<SpanRepOutput, Error> {
+    let span_idx = build_span_idx(num_words);
+
+    let hs_t = crate::backends::ort_compat::tensor_from_ndarray(
+        tg_out.text_embs.clone(),
+    )
+    .map_err(|e| Error::Tokenizer(format!("span_rep hs tensor: {e}")))?;
+    let idx_t = crate::backends::ort_compat::tensor_from_ndarray(span_idx)
+        .map_err(|e| Error::Tokenizer(format!("span_rep idx tensor: {e}")))?;
+
+    let result: ndarray::ArrayD<f32> = sessions.span_rep.with_session(
+        |s| -> Result<_, Error> {
+            let outputs = s
+                .run(ort::inputs![
+                    "hidden_states" => hs_t.into_dyn(),
+                    "span_idx"      => idx_t.into_dyn(),
+                ])
+                .map_err(|e| Error::Tokenizer(format!("span_rep run: {e}")))?;
+            let v = outputs.values().next().ok_or_else(|| {
+                Error::Tokenizer("span_rep: no outputs".into())
+            })?;
+            let (shape, cow) = v
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Tokenizer(format!("span_rep extract: {e}")))?;
+            let data: Vec<f32> = cow.to_vec();
+            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                .map_err(|e| Error::Tokenizer(format!("span_rep array reshape: {e}")))?)
+        },
+    )?;
+
+    let span_embs: Array3<f32> = result
+        .into_dimensionality::<ndarray::Ix3>()
+        .map_err(|e| Error::Tokenizer(format!("span_rep dim: {e}")))?;
+    Ok(SpanRepOutput { span_embs })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_span_idx_basic_shape() {
+        let arr = build_span_idx(3);
+        assert_eq!(arr.shape(), &[1, 3 * MAX_WIDTH, 2]);
+    }
+
+    #[test]
+    fn build_span_idx_zero_pads_overflow() {
+        // 2 words, MAX_WIDTH=8.
+        let arr = build_span_idx(2);
+        // First row is start=0 width=0 → [0,0].
+        assert_eq!(arr[[0, 0, 0]], 0);
+        assert_eq!(arr[[0, 0, 1]], 0);
+        // Second row is start=0 width=1 → [0,1].
+        assert_eq!(arr[[0, 1, 0]], 0);
+        assert_eq!(arr[[0, 1, 1]], 1);
+        // 9th row (index MAX_WIDTH = 8) is start=1 width=0 → [1,1].
+        assert_eq!(arr[[0, MAX_WIDTH, 0]], 1);
+        assert_eq!(arr[[0, MAX_WIDTH, 1]], 1);
+        // 10th row is start=1 width=1 → would be (1,2) but 2 >= num_words=2,
+        // so padded to [0,0].
+        assert_eq!(arr[[0, MAX_WIDTH + 1, 0]], 0);
+        assert_eq!(arr[[0, MAX_WIDTH + 1, 1]], 0);
+    }
+}
