@@ -79,7 +79,19 @@ impl GLiNER2Fastino {
             .into());
         }
 
-        let tokenizer_path = model_dir.join("tokenizer.json");
+        // Sessions::from_dir resolves the dtype subdir (fp32_v2/, etc.) and
+        // loads all 8 ONNX graphs from it. We use the same subdir for
+        // tokenizer.json + config.json since SemplificaAI ships those
+        // co-located with the ONNX files.
+        let (sessions, subdir) = sessions::Sessions::from_dir(model_dir)?;
+
+        // Tokenizer: prefer subdir, fall back to root for layouts that ship
+        // tokenizer at the snapshot root.
+        let tokenizer_path = if subdir.join("tokenizer.json").exists() {
+            subdir.join("tokenizer.json")
+        } else {
+            model_dir.join("tokenizer.json")
+        };
         if !tokenizer_path.exists() {
             return Err(errors::Error::TokenizerMissing(tokenizer_path).into());
         }
@@ -88,9 +100,14 @@ impl GLiNER2Fastino {
 
         let special = processor::SpecialTokenIds::resolve(&tokenizer)?;
         let transformer = processor::SchemaTransformer::new(tokenizer.clone())?;
-        let config = config::FastinoConfig::from_path(&model_dir.join("config.json"))?;
 
-        let sessions = sessions::Sessions::from_dir(model_dir)?;
+        // Same fallback logic for config.json.
+        let config_path = if subdir.join("config.json").exists() {
+            subdir.join("config.json")
+        } else {
+            model_dir.join("config.json")
+        };
+        let config = config::FastinoConfig::from_path(&config_path)?;
 
         Ok(Self {
             tokenizer,
@@ -163,13 +180,18 @@ impl GLiNER2Fastino {
             .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: hf_api: {e}")))?;
         let repo = api.model(model_id.to_string());
 
-        // Download tokenizer + config (anno's standard pattern).
-        let tokenizer_path =
-            crate::backends::hf_loader::download_model_file(&repo, &["tokenizer.json"])
-                .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: download tokenizer: {e}")))?;
-        let _config_path =
-            crate::backends::hf_loader::download_model_file(&repo, &["config.json"])
-                .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: download config: {e}")))?;
+        // Tokenizer + config are co-located with the ONNX files in dtype subdirs.
+        // Try fp32_v2/ first, fall back to fp16_v2/, then root for backward compat.
+        let tokenizer_path = crate::backends::hf_loader::download_model_file(
+            &repo,
+            &["fp32_v2/tokenizer.json", "fp16_v2/tokenizer.json", "tokenizer.json"],
+        )
+        .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: download tokenizer: {e}")))?;
+        let _config_path = crate::backends::hf_loader::download_model_file(
+            &repo,
+            &["fp32_v2/config.json", "fp16_v2/config.json", "config.json"],
+        )
+        .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: download config: {e}")))?;
 
         // Download the 8 v2 ONNX files. Try fp32_v2 first (clearer dtype
         // semantics for debugging), then fp16_v2 as fallback.
@@ -190,9 +212,24 @@ impl GLiNER2Fastino {
         }
 
         // Resolve to the snapshot dir and dispatch.
-        let snapshot_dir = tokenizer_path.parent().ok_or_else(|| {
-            crate::Error::Backend("gliner2_fastino: tokenizer parent missing".into())
+        // tokenizer_path may be at <snapshot>/fp32_v2/tokenizer.json (subdir)
+        // or <snapshot>/tokenizer.json (legacy). Walk up until we find a parent
+        // containing one of the dtype subdirs.
+        let mut snapshot_dir = tokenizer_path.parent().ok_or_else(|| {
+            crate::Error::Backend("gliner2_fastino: tokenizer has no parent".into())
         })?;
+        loop {
+            let has_dtype_subdir = ["fp32_v2", "fp16_v2", "fp32", "fp16"]
+                .iter()
+                .any(|sub| snapshot_dir.join(sub).is_dir());
+            if has_dtype_subdir {
+                break;
+            }
+            match snapshot_dir.parent() {
+                Some(p) => snapshot_dir = p,
+                None => break, // reached filesystem root; from_local will surface an error
+            }
+        }
         let mut model = Self::from_local(snapshot_dir)?;
         model.model_id = model_id.to_string();
         Ok(model)
@@ -336,8 +373,16 @@ mod from_local_tests {
     fn from_local_missing_tokenizer_returns_typed_error() {
         let dir = tempdir().unwrap();
         // Empty directory — no tokenizer.json, no adapter_config.json.
+        // With the subdir-first loading order, Sessions::from_dir fires
+        // before tokenizer resolution and surfaces a "no complete v2 session
+        // set" error. Both session-set and tokenizer errors indicate a
+        // missing/incomplete model directory.
         let err = GLiNER2Fastino::from_local(dir.path()).unwrap_err();
-        assert!(err.to_string().contains("tokenizer"), "got {err}");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("tokenizer") || msg.contains("no complete v2 session set"),
+            "got {msg}"
+        );
     }
 
     #[test]

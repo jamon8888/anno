@@ -66,7 +66,7 @@ impl Sessions {
     ///
     /// Phase 3 standard mode does NOT use the `_iobinding.onnx` variants
     /// — those are reserved for Phase 3.5 IOBinding mode.
-    pub fn from_dir(model_dir: &Path) -> Result<Self, Error> {
+    pub fn from_dir(model_dir: &Path) -> Result<(Self, std::path::PathBuf), Error> {
         // The 8-session v2 layout lives in `_v2` subdirs only — `fp32/`
         // and `fp16/` are the legacy v1 layout (5 graphs, missing
         // token_gather/schema_gather/count_pred_argmax/count_lstm_fixed).
@@ -89,16 +89,19 @@ impl Sessions {
             if !all_present {
                 continue;
             }
-            return Ok(Self {
-                encoder:           SessionSlot::from_path(&candidate("encoder"))?,
-                token_gather:      SessionSlot::from_path(&candidate("token_gather"))?,
-                span_rep:          SessionSlot::from_path(&candidate("span_rep"))?,
-                schema_gather:     SessionSlot::from_path(&candidate("schema_gather"))?,
-                count_pred_argmax: SessionSlot::from_path(&candidate("count_pred_argmax"))?,
-                count_lstm_fixed:  SessionSlot::from_path(&candidate("count_lstm_fixed"))?,
-                scorer:            SessionSlot::from_path(&candidate("scorer"))?,
-                classifier:        SessionSlot::from_path(&candidate("classifier"))?,
-            });
+            return Ok((
+                Self {
+                    encoder:           SessionSlot::from_path(&candidate("encoder"))?,
+                    token_gather:      SessionSlot::from_path(&candidate("token_gather"))?,
+                    span_rep:          SessionSlot::from_path(&candidate("span_rep"))?,
+                    schema_gather:     SessionSlot::from_path(&candidate("schema_gather"))?,
+                    count_pred_argmax: SessionSlot::from_path(&candidate("count_pred_argmax"))?,
+                    count_lstm_fixed:  SessionSlot::from_path(&candidate("count_lstm_fixed"))?,
+                    scorer:            SessionSlot::from_path(&candidate("scorer"))?,
+                    classifier:        SessionSlot::from_path(&candidate("classifier"))?,
+                },
+                try_dir,
+            ));
         }
         Err(Error::Tokenizer(format!(
             "no complete v2 session set found under {} (looked in fp32_v2/, fp16_v2/, fp32/, fp16/)",
