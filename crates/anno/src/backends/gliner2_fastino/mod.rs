@@ -318,12 +318,75 @@ impl ZeroShotNER for GLiNER2Fastino {
         descriptions: &[&str],
         threshold: f32,
     ) -> crate::Result<Vec<crate::Entity>> {
-        // Phase 1: descriptions are treated as simple type labels
+        // The ZeroShotNER trait's `descriptions` are treated as
+        // self-describing labels (matches gliner_multitask's semantics —
+        // each description IS the label name in disguise). For per-label
+        // descriptions paired with separate label names, use
+        // [`GLiNER2Fastino::extract_with_label_descriptions`] which emits
+        // `[E] <label> [DESCRIPTION] <description>` in the prompt for an
+        // accuracy boost per the GLiNER paper.
         self.extract_ner(text, descriptions, threshold)
     }
 }
 
 impl GLiNER2Fastino {
+    /// Extract entities using per-label descriptions in the prompt.
+    ///
+    /// Each label has a separate description string emitted as
+    /// `[E] <label> [DESCRIPTION] <description>` in the prompt. Per the
+    /// GLiNER paper, descriptions provide a measurable accuracy boost
+    /// on most NER benchmarks.
+    ///
+    /// **Phase 1.5 / experimental.** Not behind a public trait — promote
+    /// when a second backend implements the same shape. The trait method
+    /// [`crate::backends::inference::ZeroShotNER::extract_with_descriptions`]
+    /// uses the older "descriptions are self-describing labels" convention
+    /// (single string per label); this method takes explicit
+    /// `(label, description)` pairs.
+    pub fn extract_with_label_descriptions(
+        &self,
+        text: &str,
+        labeled: &[(&str, &str)],
+        threshold: f32,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        use pipeline::*;
+        if labeled.is_empty() {
+            return Ok(vec![]);
+        }
+        let owned: Vec<(String, String)> =
+            labeled.iter().map(|(l, d)| (l.to_string(), d.to_string())).collect();
+        let task = processor::SchemaTask::EntitiesDescribed(owned);
+        let record = self.transformer.transform(text, &[task])?;
+        let num_words = record.word_to_char_maps.len();
+        if num_words == 0 {
+            return Ok(vec![]);
+        }
+
+        let enc = run_encoder(&self.sessions, &record)?;
+        let tg  = run_token_gather(&self.sessions, &enc, &record)?;
+        let sr  = run_span_rep(&self.sessions, &tg, num_words)?;
+
+        let task_map = record.tasks.first().ok_or_else(|| {
+            crate::Error::Backend("gliner2_fastino: transformer produced no task mapping".into())
+        })?;
+        let sg = run_schema_gather(&self.sessions, &enc, task_map)?;
+        let pred_count = run_count_pred_argmax(&self.sessions, &sg)?;
+        if pred_count == 0 {
+            return Ok(vec![]);
+        }
+        let cl = run_count_lstm_fixed(&self.sessions, &sg)?;
+        let scorer_out = run_scorer(&self.sessions, &sr, &cl)?;
+        Ok(decode_entities(
+            text,
+            &record,
+            task_map,
+            &scorer_out,
+            pred_count,
+            threshold,
+            /* flat_ner = */ false,
+        ))
+    }
+
     /// Single-label classification using the dedicated `[L]`-head classifier.
     ///
     /// Returns labels sorted by descending probability (softmax). The
