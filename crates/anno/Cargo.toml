@@ -101,6 +101,8 @@ onnx-cuda = ["onnx", "ort/cuda"]
 # via ONNX. WIP / experimental — no API stability guarantees. Implements
 # Model + ZeroShotNER and an internal classify() method.
 gliner2-fastino = ["onnx", "dep:half"]
+gliner2-fastino-cuda    = ["gliner2-fastino", "onnx-cuda"]
+gliner2-fastino-coreml  = ["gliner2-fastino", "onnx-coreml"]
 candle = [
   "dep:candle-core",
   "dep:candle-nn",

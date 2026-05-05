@@ -288,7 +288,7 @@ pub static BACKEND_CATALOG: &[BackendInfo] = &[
         feature: Some("gliner2-fastino"),
         status: BackendStatus::WIP,
         zero_shot: true,
-        gpu_support: false,
+        gpu_support: true,
         description: "fastino-ai GLiNER2 (NER + classification) — experimental, issue #18",
         recommended_models: &[
             "fastino/gliner2-multi-v1",

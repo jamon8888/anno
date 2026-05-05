@@ -35,13 +35,19 @@ pub struct SessionSlot {
 }
 
 impl SessionSlot {
-    pub fn from_path(model_path: &Path) -> Result<Self, Error> {
-        let cfg = hf_loader::OnnxSessionConfig::default();
+    pub fn from_path_with_cfg(
+        model_path: &Path,
+        cfg: hf_loader::OnnxSessionConfig,
+    ) -> Result<Self, Error> {
         let session = hf_loader::create_onnx_session(model_path, cfg)
             .map_err(|e| Error::Tokenizer(format!("session {}: {e}", model_path.display())))?;
         Ok(Self {
             inner: Arc::new(Mutex::new(session)),
         })
+    }
+
+    pub fn from_path(model_path: &Path) -> Result<Self, Error> {
+        Self::from_path_with_cfg(model_path, hf_loader::OnnxSessionConfig::default())
     }
 
     pub fn with_session<F, R>(&self, f: F) -> R
@@ -60,13 +66,16 @@ impl std::fmt::Debug for Sessions {
 }
 
 impl Sessions {
-    /// Load all 8 sessions from a directory. Tries the v2 8-graph layouts
-    /// (`fp32_v2/`, `fp16_v2/`) first, then v1 5-graph fallbacks (which
-    /// will fail the all_present check below — kept for future-proofing).
+    /// Load all 8 sessions from a directory with custom ONNX session configuration.
+    /// Tries the v2 8-graph layouts (`fp32_v2/`, `fp16_v2/`) first, then v1 5-graph
+    /// fallbacks (which will fail the all_present check below — kept for future-proofing).
     ///
     /// Phase 3 standard mode does NOT use the `_iobinding.onnx` variants
     /// — those are reserved for Phase 3.5 IOBinding mode.
-    pub fn from_dir(model_dir: &Path) -> Result<(Self, std::path::PathBuf), Error> {
+    pub fn from_dir_with_cfg(
+        model_dir: &Path,
+        cfg: hf_loader::OnnxSessionConfig,
+    ) -> Result<(Self, std::path::PathBuf), Error> {
         // The 8-session v2 layout lives in `_v2` subdirs only — `fp32/`
         // and `fp16/` are the legacy v1 layout (5 graphs, missing
         // token_gather/schema_gather/count_pred_argmax/count_lstm_fixed).
@@ -91,14 +100,14 @@ impl Sessions {
             }
             return Ok((
                 Self {
-                    encoder:           SessionSlot::from_path(&candidate("encoder"))?,
-                    token_gather:      SessionSlot::from_path(&candidate("token_gather"))?,
-                    span_rep:          SessionSlot::from_path(&candidate("span_rep"))?,
-                    schema_gather:     SessionSlot::from_path(&candidate("schema_gather"))?,
-                    count_pred_argmax: SessionSlot::from_path(&candidate("count_pred_argmax"))?,
-                    count_lstm_fixed:  SessionSlot::from_path(&candidate("count_lstm_fixed"))?,
-                    scorer:            SessionSlot::from_path(&candidate("scorer"))?,
-                    classifier:        SessionSlot::from_path(&candidate("classifier"))?,
+                    encoder:           SessionSlot::from_path_with_cfg(&candidate("encoder"), cfg.clone())?,
+                    token_gather:      SessionSlot::from_path_with_cfg(&candidate("token_gather"), cfg.clone())?,
+                    span_rep:          SessionSlot::from_path_with_cfg(&candidate("span_rep"), cfg.clone())?,
+                    schema_gather:     SessionSlot::from_path_with_cfg(&candidate("schema_gather"), cfg.clone())?,
+                    count_pred_argmax: SessionSlot::from_path_with_cfg(&candidate("count_pred_argmax"), cfg.clone())?,
+                    count_lstm_fixed:  SessionSlot::from_path_with_cfg(&candidate("count_lstm_fixed"), cfg.clone())?,
+                    scorer:            SessionSlot::from_path_with_cfg(&candidate("scorer"), cfg.clone())?,
+                    classifier:        SessionSlot::from_path_with_cfg(&candidate("classifier"), cfg.clone())?,
                 },
                 try_dir,
             ));
@@ -107,6 +116,16 @@ impl Sessions {
             "no complete v2 session set found under {} (looked in fp32_v2/, fp16_v2/, fp32/, fp16/)",
             model_dir.display()
         )))
+    }
+
+    /// Load all 8 sessions from a directory. Tries the v2 8-graph layouts
+    /// (`fp32_v2/`, `fp16_v2/`) first, then v1 5-graph fallbacks (which
+    /// will fail the all_present check below — kept for future-proofing).
+    ///
+    /// Phase 3 standard mode does NOT use the `_iobinding.onnx` variants
+    /// — those are reserved for Phase 3.5 IOBinding mode.
+    pub fn from_dir(model_dir: &Path) -> Result<(Self, std::path::PathBuf), Error> {
+        Self::from_dir_with_cfg(model_dir, hf_loader::OnnxSessionConfig::default())
     }
 }
 

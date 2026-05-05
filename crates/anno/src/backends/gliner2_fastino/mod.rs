@@ -70,8 +70,11 @@ impl std::fmt::Debug for GLiNER2Fastino {
 use std::path::Path;
 
 impl GLiNER2Fastino {
-    /// Load a fastino GLiNER2 model from a local directory.
-    pub fn from_local(model_dir: &Path) -> crate::Result<Self> {
+    /// Load a fastino GLiNER2 model from a local directory with custom ONNX session configuration.
+    pub fn from_local_with_options(
+        model_dir: &Path,
+        cfg: crate::backends::hf_loader::OnnxSessionConfig,
+    ) -> crate::Result<Self> {
         if model_dir.join("adapter_config.json").exists() {
             return Err(errors::Error::LoraAdapterNotSupported {
                 path: model_dir.to_path_buf(),
@@ -79,11 +82,9 @@ impl GLiNER2Fastino {
             .into());
         }
 
-        // Sessions::from_dir resolves the dtype subdir (fp32_v2/, etc.) and
-        // loads all 8 ONNX graphs from it. We use the same subdir for
-        // tokenizer.json + config.json since SemplificaAI ships those
-        // co-located with the ONNX files.
-        let (sessions, subdir) = sessions::Sessions::from_dir(model_dir)?;
+        // Sessions::from_dir_with_cfg resolves the dtype subdir (fp32_v2/, etc.) and
+        // loads all 8 ONNX graphs from it using the provided config.
+        let (sessions, subdir) = sessions::Sessions::from_dir_with_cfg(model_dir, cfg)?;
 
         // Tokenizer: prefer subdir, fall back to root for layouts that ship
         // tokenizer at the snapshot root.
@@ -125,6 +126,14 @@ impl GLiNER2Fastino {
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "gliner2_fastino_local".to_string()),
         })
+    }
+
+    /// Load a fastino GLiNER2 model from a local directory.
+    pub fn from_local(model_dir: &Path) -> crate::Result<Self> {
+        Self::from_local_with_options(
+            model_dir,
+            crate::backends::hf_loader::OnnxSessionConfig::default(),
+        )
     }
 
     pub(crate) fn extract_ner(
