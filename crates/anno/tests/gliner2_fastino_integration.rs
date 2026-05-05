@@ -63,6 +63,68 @@ fn fastino_extract_with_label_descriptions() {
 
 #[test]
 #[ignore]
+fn fastino_batch_extract_streaming_fires_callbacks_in_order() {
+    // Phase 1.5 M3.2: drives 5 short texts through batch_extract_streaming
+    // with batch_size = 2, so we get chunks (0..2), (2..4), (4..5). Each
+    // text's callback fires sequentially with the right index. Asserts:
+    //   1. All five indices are seen, in order.
+    //   2. Total entities >= number of texts (each one has at least one).
+    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+        .expect("load gliner2-multi-v1");
+    let texts: Vec<&str> = vec![
+        "Acme Corp signed a deal in Paris.",
+        "Globex acquired Hooli.",
+        "Marie Curie worked in France.",
+        "Apple is based in California.",
+        "Tokyo is the capital of Japan.",
+    ];
+
+    let mut indices_seen: Vec<usize> = Vec::new();
+    let mut total_entities = 0usize;
+
+    model
+        .batch_extract_streaming(
+            &texts,
+            &["organization", "location", "person"],
+            0.5,
+            2, // batch_size
+            |idx, ents| {
+                indices_seen.push(idx);
+                total_entities += ents.len();
+            },
+        )
+        .expect("batch_extract_streaming");
+
+    assert_eq!(indices_seen, vec![0, 1, 2, 3, 4]);
+    assert!(
+        total_entities >= 5,
+        "expected at least 5 total entities across 5 texts, got {total_entities}",
+    );
+}
+
+#[test]
+#[ignore]
+fn fastino_batch_extract_streaming_rejects_zero_batch_size() {
+    // Defensive: typed Backend error rather than silent loop / divide-by-zero.
+    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+        .expect("load");
+    let texts: &[&str] = &["irrelevant"];
+    let result = model.batch_extract_streaming(
+        texts,
+        &["organization"],
+        0.5,
+        0,
+        |_, _| panic!("callback should not fire when batch_size = 0"),
+    );
+    let err = result.expect_err("expected an error for batch_size = 0");
+    assert!(
+        err.to_string().contains("batch_size must be > 0"),
+        "got: {err}",
+    );
+}
+
+#[test]
+#[ignore]
 fn fastino_classify_smoke() {
     let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
         .expect("load");
