@@ -35,6 +35,34 @@ fn fastino_multi_v1_extracts_org_and_loc() {
 
 #[test]
 #[ignore]
+fn fastino_extract_with_label_descriptions() {
+    // Phase 1.5 M1.3: verify the [DESCRIPTION]-emitting prompt path runs
+    // end-to-end against the real model and returns expected entities.
+    // The actual accuracy boost vs labels-only isn't measured here —
+    // that's a benchmark concern. This just exercises the pipeline.
+    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+        .expect("load gliner2-multi-v1");
+    let labeled: Vec<(&str, &str)> = vec![
+        ("organization", "a company, corporation, or institution"),
+        ("location", "a geographic place, city, country, or region"),
+    ];
+    let ents = model
+        .extract_with_label_descriptions(FIXTURE, &labeled, 0.5)
+        .expect("extract_with_label_descriptions");
+
+    eprintln!("entities (with descriptions): {ents:#?}");
+    assert!(
+        ents.iter().any(|e| e.text.contains("Acme")),
+        "expected an Acme org entity, got {ents:#?}",
+    );
+    assert!(
+        ents.iter().any(|e| e.text == "Paris" || e.text.contains("Paris")),
+        "expected a Paris location entity, got {ents:#?}",
+    );
+}
+
+#[test]
+#[ignore]
 fn fastino_classify_smoke() {
     let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
         .expect("load");
