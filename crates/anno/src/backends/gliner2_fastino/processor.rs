@@ -93,16 +93,16 @@ impl WhitespaceTokenSplitter {
 // ---------------------------------------------------------------------------
 // SchemaTask, TaskMapping, ProcessedRecord, SchemaTransformer
 // Ported from SemplificaAI/gliner2-rs processor.rs (Apache-2.0).
-// Only the `Entities` arm is implemented in Phase 1.
+// Phase 3: Entities and Classifications arms are implemented.
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
 pub enum SchemaTask {
     Entities(Vec<String>),
+    /// Phase 3: classification task. (task_name, labels). Uses [L] tokens.
+    Classifications(String, Vec<String>),
     // TODO(Phase 2): port Relations arm from upstream
     Relations(String, Vec<String>),
-    // TODO(Phase 2): port Classifications arm from upstream
-    Classifications(String, Vec<String>),
 }
 
 #[derive(Debug, Clone)]
@@ -173,8 +173,29 @@ impl SchemaTransformer {
                         field_indices,
                     ));
                 }
-                // TODO(Phase 2): port Relations/Classifications arms from upstream
-                _ => {}
+                SchemaTask::Classifications(task_name, cls_labels) => {
+                    combined_tokens.push("(");
+                    let prompt_idx = combined_tokens.len();
+                    combined_tokens.push(P_TOKEN);
+                    combined_tokens.push(task_name.as_str());
+                    combined_tokens.push("(");
+                    for label in cls_labels {
+                        combined_tokens.push(L_TOKEN);
+                        field_indices.push(combined_tokens.len());
+                        combined_tokens.push(label.as_str());
+                        labels.push(label.clone());
+                    }
+                    combined_tokens.push(")");
+                    combined_tokens.push(")");
+                    task_mappings_temp.push((
+                        task_name.clone(),
+                        "classifications".to_string(),
+                        labels,
+                        prompt_idx,
+                        field_indices,
+                    ));
+                }
+                SchemaTask::Relations(..) => {}
             }
 
             if i < schema_tasks.len() - 1 {

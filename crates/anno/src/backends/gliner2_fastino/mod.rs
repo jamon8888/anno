@@ -105,23 +105,48 @@ impl GLiNER2Fastino {
         })
     }
 
-    /// Extract entities for the given labels at the given threshold.
-    ///
-    /// **Phase 3 stub.** Real pipeline implementation pending M5–M11.
     pub(crate) fn extract_ner(
         &self,
         text: &str,
         types: &[&str],
         threshold: f32,
     ) -> crate::Result<Vec<crate::Entity>> {
+        use pipeline::*;
         if types.is_empty() {
             return Ok(vec![]);
         }
-        let _ = (text, types, threshold, &self.sessions);
-        Err(crate::Error::Backend(
-            "gliner2_fastino: extract_ner is being rewritten in Phase 3 \
-             (multi-session pipeline) — not yet wired".into(),
-        ))
+        let labels: Vec<String> = types.iter().map(|s| s.to_string()).collect();
+        let task = processor::SchemaTask::Entities(labels.clone());
+        let record = self.transformer.transform(text, &[task])?;
+        let num_words = record.word_to_char_maps.len();
+        if num_words == 0 {
+            return Ok(vec![]);
+        }
+
+        let enc = run_encoder(&self.sessions, &record)?;
+        let tg  = run_token_gather(&self.sessions, &enc, &record)?;
+        let sr  = run_span_rep(&self.sessions, &tg, num_words)?;
+
+        let task_map = record.tasks.first().ok_or_else(|| {
+            crate::Error::Backend("gliner2_fastino: transformer produced no task mapping".into())
+        })?;
+        let sg = run_schema_gather(&self.sessions, &enc, task_map)?;
+        let pred_count = run_count_pred_argmax(&self.sessions, &sg)?;
+        if pred_count == 0 {
+            return Ok(vec![]);
+        }
+        let cl = run_count_lstm_fixed(&self.sessions, &sg)?;
+        let scorer_out = run_scorer(&self.sessions, &sr, &cl)?;
+        let entities = decode_entities(
+            text,
+            &record,
+            task_map,
+            &scorer_out,
+            pred_count,
+            threshold,
+            /* flat_ner = */ false,
+        );
+        Ok(entities)
     }
 
     /// Load a fastino GLiNER2 model by Hugging Face model id.
@@ -246,43 +271,46 @@ impl ZeroShotNER for GLiNER2Fastino {
 }
 
 impl GLiNER2Fastino {
-    /// Internal classification.
+    /// Single-label classification using the dedicated `[L]`-head classifier.
     ///
-    /// **Phase 1 caveat:** this implementation reuses the NER head over the
-    /// classification labels and collapses span-level scores to label-level
-    /// (max over spans). The fastino architecture's dedicated `[L]`-head MLP
-    /// is not yet wired (tracked as a Phase 1.5 follow-up). For coarse-grained
-    /// classification tasks the approximation is adequate; for fine-grained
-    /// or multi-label tasks expect lower fidelity than the Python reference.
+    /// Returns labels sorted by descending probability (softmax). The
+    /// `threshold` parameter is reserved for future multi-label use; in
+    /// Phase 3 single-label mode it's ignored.
     ///
     /// Not behind a public trait — see spec §3.
     pub fn classify(
         &self,
         text: &str,
         labels: &[&str],
-        threshold: f32,
+        _threshold: f32,
     ) -> crate::Result<Vec<(String, f32)>> {
+        use pipeline::*;
         if labels.is_empty() {
             return Ok(vec![]);
         }
-        let entities = self.extract_ner(text, labels, threshold)?;
-        let mut by_label: std::collections::HashMap<String, f32> = Default::default();
-        for e in entities {
-            // entity_type is a public field; format!("{:?}", ...) gives the
-            // variant name. Lowercase for label-string matching.
-            let label = format!("{:?}", e.entity_type).to_lowercase();
-            let prev = by_label.get(&label).copied().unwrap_or(0.0);
-            // Confidence has From<Confidence> for f32 impl
-            let score: f32 = f32::from(e.confidence);
-            by_label.insert(label, prev.max(score));
+        let label_strings: Vec<String> = labels.iter().map(|s| s.to_string()).collect();
+        let task = processor::SchemaTask::Classifications(
+            "classification".to_string(),
+            label_strings.clone(),
+        );
+        let record = self.transformer.transform(text, &[task])?;
+        let task_map = record.tasks.first().ok_or_else(|| {
+            crate::Error::Backend("gliner2_fastino: transformer produced no task mapping".into())
+        })?;
+
+        let enc = run_encoder(&self.sessions, &record)?;
+        let sg = run_schema_gather(&self.sessions, &enc, task_map)?;
+        let pred_count = run_count_pred_argmax(&self.sessions, &sg)?;
+        if pred_count == 0 {
+            return Ok(label_strings.into_iter().map(|l| (l, 0.0)).collect());
         }
-        let mut out: Vec<(String, f32)> = labels
-            .iter()
-            .map(|&l| (l.to_string(), by_label.get(l).copied().unwrap_or(0.0)))
+        let probs = run_classifier(&self.sessions, &sg)?;
+
+        let mut out: Vec<(String, f32)> = label_strings
+            .into_iter()
+            .zip(probs.into_iter())
             .collect();
-        out.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(out)
     }
 }
