@@ -299,4 +299,26 @@ mod from_local_tests {
         let err = GLiNER2Fastino::from_local(dir.path()).unwrap_err();
         assert!(err.to_string().contains("tokenizer"), "got {err}");
     }
+
+    #[test]
+    fn from_local_empty_dir_returns_session_set_error() {
+        let dir = tempdir().unwrap();
+        // Need at least tokenizer.json to bypass the early-return.
+        // Stub one out using the project's own fixture.
+        let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/gliner2_fastino/stub_tokenizer.json");
+        fs::copy(&fixture, dir.path().join("tokenizer.json")).unwrap();
+        // And a config.json with hidden_size.
+        fs::write(
+            dir.path().join("config.json"),
+            r#"{"hidden_size": 768, "counting_layer": "count_lstm_v2"}"#,
+        ).unwrap();
+
+        let err = GLiNER2Fastino::from_local(dir.path()).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("no complete v2 session set"),
+            "Phase 3 should report missing sessions, not 'Phase 3 needed'. Got: {msg}"
+        );
+    }
 }
