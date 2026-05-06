@@ -116,6 +116,24 @@ impl Default for GLiNER2FastinoConfig {
     }
 }
 
+impl GLiNER2FastinoConfig {
+    /// Override the execution mode. Returns the config for chaining
+    /// (`#[non_exhaustive]` blocks struct-literal construction outside
+    /// the crate; this builder pattern is the canonical workaround).
+    #[must_use]
+    pub fn with_execution_mode(mut self, mode: ExecutionMode) -> Self {
+        self.execution_mode = mode;
+        self
+    }
+
+    /// Override the ONNX session config (e.g., to enable CUDA).
+    #[must_use]
+    pub fn with_onnx(mut self, onnx: crate::backends::hf_loader::OnnxSessionConfig) -> Self {
+        self.onnx = onnx;
+        self
+    }
+}
+
 /// How to apply labels across a batch.
 ///
 /// Phase 1.5 polish — shapes the input to
@@ -299,6 +317,17 @@ impl GLiNER2Fastino {
     /// **Phase 3 / experimental.** No retry/backoff on transient HF Hub
     /// failures beyond what `hf-hub` itself provides.
     pub fn from_pretrained(model_id: &str) -> crate::Result<Self> {
+        Self::from_pretrained_with_config(model_id, GLiNER2FastinoConfig::default())
+    }
+
+    /// Phase 3.5: load from HF Hub with full configuration including
+    /// execution mode. Same download flow as [`Self::from_pretrained`];
+    /// dispatches to [`Self::from_local_with_config`] after the snapshot
+    /// is on disk.
+    pub fn from_pretrained_with_config(
+        model_id: &str,
+        cfg: GLiNER2FastinoConfig,
+    ) -> crate::Result<Self> {
         let api = crate::backends::hf_loader::hf_api()
             .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: hf_api: {e}")))?;
         let repo = api.model(model_id.to_string());
@@ -355,7 +384,7 @@ impl GLiNER2Fastino {
                 None => break, // reached filesystem root; from_local will surface an error
             }
         }
-        let mut model = Self::from_local(snapshot_dir)?;
+        let mut model = Self::from_local_with_config(snapshot_dir, cfg)?;
         model.model_id = model_id.to_string();
         Ok(model)
     }

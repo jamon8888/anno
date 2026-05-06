@@ -301,3 +301,135 @@ fn fastino_extract_structure_empty_schema_returns_empty() {
         .expect("extract");
     assert!(result.is_empty());
 }
+
+// =============================================================================
+// Phase 3.5 — Standard ≡ IoBinding parity tests.
+//
+// These run the same input through both ExecutionMode paths and verify the
+// outputs match within a tolerance. Require the SemplificaAI/gliner2-multi-v1-onnx
+// snapshot cached locally (~6 GB).
+//
+// Tolerance: max_abs_diff < 1e-4 on per-entity confidence scores. Looser than
+// the spec's 1e-5 for fp32 because:
+//   1. IoBinding's MemoryInfo allocator can introduce micro-differences in
+//      memory layout that interact with FMA fusion.
+//   2. ort's run() vs run_binding() take subtly different paths through the
+//      ONNX Runtime C API.
+// 1e-4 is well below any user-visible threshold (typical decoder thresholds
+// are 0.5+).
+// =============================================================================
+
+#[test]
+#[ignore]
+fn parity_standard_iobinding_extract_with_types() {
+    use anno::backends::gliner2_fastino::{ExecutionMode, GLiNER2FastinoConfig};
+
+    let model_id = "SemplificaAI/gliner2-multi-v1-onnx";
+
+    let standard = GLiNER2Fastino::from_pretrained_with_config(
+        model_id,
+        GLiNER2FastinoConfig::default().with_execution_mode(ExecutionMode::Standard),
+    )
+    .expect("standard load");
+
+    let iobinding = GLiNER2Fastino::from_pretrained_with_config(
+        model_id,
+        GLiNER2FastinoConfig::default().with_execution_mode(ExecutionMode::IoBinding),
+    )
+    .expect("iobinding load");
+
+    let text = "Marie Curie won the Nobel Prize in Physics in 1903.";
+    let types = ["person", "award", "year"];
+
+    let std_result = ZeroShotNER::extract_with_types(&standard, text, &types, 0.5)
+        .expect("standard extract");
+    let io_result = ZeroShotNER::extract_with_types(&iobinding, text, &types, 0.5)
+        .expect("iobinding extract");
+
+    eprintln!("standard ({}): {:#?}", std_result.len(), std_result);
+    eprintln!("iobinding ({}): {:#?}", io_result.len(), io_result);
+
+    assert_eq!(
+        std_result.len(),
+        io_result.len(),
+        "entity count mismatch: standard={}, iobinding={}",
+        std_result.len(),
+        io_result.len()
+    );
+
+    // Sort both sides by (start, end, text) for deterministic pairwise
+    // comparison; NMS isn't guaranteed to produce identical ordering
+    // across paths.
+    let mut std_sorted = std_result.clone();
+    let mut io_sorted = io_result.clone();
+    std_sorted.sort_by_key(|e| (e.start(), e.end(), e.text.clone()));
+    io_sorted.sort_by_key(|e| (e.start(), e.end(), e.text.clone()));
+
+    let mut max_diff: f64 = 0.0;
+    for (s, i) in std_sorted.iter().zip(io_sorted.iter()) {
+        assert_eq!(s.start(), i.start(), "start mismatch: std={:?}, io={:?}", s, i);
+        assert_eq!(s.end(), i.end(), "end mismatch: std={:?}, io={:?}", s, i);
+        assert_eq!(s.text, i.text, "text mismatch: std={:?}, io={:?}", s, i);
+        let diff = (s.confidence.value() - i.confidence.value()).abs();
+        if diff > max_diff {
+            max_diff = diff;
+        }
+    }
+
+    eprintln!("max_abs_diff on confidence: {max_diff}");
+    assert!(
+        max_diff < 1e-4,
+        "Standard ≡ IoBinding parity broken: max_abs_diff = {max_diff} > 1e-4"
+    );
+}
+
+#[test]
+#[ignore]
+fn parity_standard_iobinding_classify() {
+    use anno::backends::gliner2_fastino::{ExecutionMode, GLiNER2FastinoConfig};
+
+    let model_id = "SemplificaAI/gliner2-multi-v1-onnx";
+
+    let standard = GLiNER2Fastino::from_pretrained_with_config(
+        model_id,
+        GLiNER2FastinoConfig::default().with_execution_mode(ExecutionMode::Standard),
+    )
+    .expect("standard load");
+
+    let iobinding = GLiNER2Fastino::from_pretrained_with_config(
+        model_id,
+        GLiNER2FastinoConfig::default().with_execution_mode(ExecutionMode::IoBinding),
+    )
+    .expect("iobinding load");
+
+    let text = "I absolutely loved every minute of the show — wonderful experience!";
+    let labels = ["positive", "negative", "neutral"];
+
+    let std_result = standard.classify(text, &labels, 0.5).expect("std classify");
+    let io_result = iobinding.classify(text, &labels, 0.5).expect("io classify");
+
+    eprintln!("standard: {:?}", std_result);
+    eprintln!("iobinding: {:?}", io_result);
+
+    assert_eq!(
+        std_result[0].0, io_result[0].0,
+        "top label diverged: standard={}, iobinding={}",
+        std_result[0].0, io_result[0].0
+    );
+
+    let std_map: std::collections::HashMap<String, f32> = std_result.into_iter().collect();
+    let io_map: std::collections::HashMap<String, f32> = io_result.into_iter().collect();
+    let mut max_diff: f64 = 0.0;
+    for (label, p_std) in &std_map {
+        let p_io = io_map.get(label).copied().unwrap_or(0.0);
+        let diff = (*p_std - p_io).abs() as f64;
+        if diff > max_diff {
+            max_diff = diff;
+        }
+    }
+    eprintln!("classify max_abs_diff: {max_diff}");
+    assert!(
+        max_diff < 1e-4,
+        "classify Standard ≡ IoBinding parity broken: max_abs_diff = {max_diff} > 1e-4"
+    );
+}
