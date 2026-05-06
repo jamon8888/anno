@@ -176,6 +176,13 @@ pub(crate) struct SchemaGatherOutputIo {
     pub field_output_name: String,
 }
 
+/// Output of count_lstm_fixed: struct projection used by scorer.
+/// Shape: `[MAX_COUNT, M, H]`. Device-resident DynValue.
+pub(crate) struct CountLstmOutputIo {
+    pub struct_proj: DynValue,
+    pub output_name: String,
+}
+
 /// Run token_gather via IoBinding. Inputs:
 /// - `last_hidden_state` from [`EncoderOutputIo`] (device-resident).
 /// - `word_indices` built from `record.word_to_token_maps[*].0`.
@@ -355,6 +362,83 @@ pub(crate) fn run_schema_gather_io(
             pc_output_name,
             field_output_name,
         })
+    })
+}
+
+/// Run `count_pred_argmax` via IoBinding. Returns the predicted instance
+/// count (already argmaxed in-graph; the i64 output is a scalar).
+///
+/// Output is bound to **CPU memory** (not device) — we need the value
+/// on host immediately to drive control flow (e.g. early-return on
+/// pred_count == 0). This is the only host-bound output in the
+/// IoBinding chain; the cost (single i64 copy) is negligible.
+pub(crate) fn run_count_pred_argmax_io(
+    sessions: &Sessions,
+    sg_out: &SchemaGatherOutputIo,
+    cpu_out_mem: &MemoryInfo,
+) -> Result<usize, Error> {
+    sessions.count_pred_argmax.with_session(|s| -> Result<usize, Error> {
+        let output_name = resolve_output_name(s, &["count"]);
+        let mut binding = s
+            .create_binding()
+            .map_err(|e| Error::Tokenizer(format!("count_pred_io create_binding: {e}")))?;
+        binding
+            .bind_input("pc_emb", &sg_out.pc_emb)
+            .map_err(|e| Error::Tokenizer(format!("count_pred_io bind pc_emb: {e}")))?;
+        binding
+            .bind_output_to_device(&output_name, cpu_out_mem)
+            .map_err(|e| Error::Tokenizer(format!("count_pred_io bind_output: {e}")))?;
+        let outputs = s
+            .run_binding(&binding)
+            .map_err(|e| Error::Tokenizer(format!("count_pred_io run_binding: {e}")))?;
+
+        // Extract the scalar i64 from the bound output. The output is
+        // CPU-resident so try_extract_tensor returns a host slice
+        // without device-to-host copy.
+        let count_val = outputs
+            .into_iter()
+            .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
+            .ok_or_else(|| Error::Tokenizer(format!(
+                "count_pred_io: output '{output_name}' not present"
+            )))?;
+        let (_, cow) = count_val
+            .try_extract_tensor::<i64>()
+            .map_err(|e| Error::Tokenizer(format!("count_pred_io extract: {e}")))?;
+        let val = cow.iter().next().copied().unwrap_or(0);
+        Ok(val.max(0) as usize)
+    })
+}
+
+/// Run count_lstm_fixed via IoBinding. Input: device-resident
+/// `field_embs` from [`SchemaGatherOutputIo`]. Output: `struct_proj`
+/// of shape `[MAX_COUNT, M, H]`, device-resident, chained into M10's
+/// run_scorer_io as one of its two inputs.
+pub(crate) fn run_count_lstm_fixed_io(
+    sessions: &Sessions,
+    sg_out: &SchemaGatherOutputIo,
+    device_mem: &MemoryInfo,
+) -> Result<CountLstmOutputIo, Error> {
+    sessions.count_lstm_fixed.with_session(|s| -> Result<CountLstmOutputIo, Error> {
+        let output_name = resolve_output_name(s, &["struct_proj"]);
+        let mut binding = s
+            .create_binding()
+            .map_err(|e| Error::Tokenizer(format!("count_lstm_io create_binding: {e}")))?;
+        binding
+            .bind_input("field_embs", &sg_out.field_embs)
+            .map_err(|e| Error::Tokenizer(format!("count_lstm_io bind field_embs: {e}")))?;
+        binding
+            .bind_output_to_device(&output_name, device_mem)
+            .map_err(|e| Error::Tokenizer(format!("count_lstm_io bind_output: {e}")))?;
+        let outputs = s
+            .run_binding(&binding)
+            .map_err(|e| Error::Tokenizer(format!("count_lstm_io run_binding: {e}")))?;
+        let struct_proj = outputs
+            .into_iter()
+            .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
+            .ok_or_else(|| Error::Tokenizer(format!(
+                "count_lstm_io: output '{output_name}' not present"
+            )))?;
+        Ok(CountLstmOutputIo { struct_proj, output_name })
     })
 }
 
