@@ -513,6 +513,92 @@ pub(crate) fn decode_entities(
     )
 }
 
+/// Decode the scorer's `[MAX_COUNT, num_words, MAX_WIDTH, num_fields]`
+/// tensor as a structure-extraction result. Walks the `MAX_COUNT` axis
+/// as the instance axis: for each predicted instance `c_idx ∈ 0..pred_count`,
+/// pick the best span for each field and assemble one
+/// [`crate::backends::gliner2_fastino::schema::ExtractedStructure`].
+///
+/// Phase 2: ships `FieldType::String` only. `List` / `Choice` field types
+/// receive the same single-best-span treatment as `String` — see the
+/// `// TODO(Phase 2.5)` markers below for where they'd specialize.
+///
+/// Threshold semantics: a (instance, field) candidate is dropped only if
+/// its best score is `<= threshold`. An instance with all fields dropped
+/// becomes an empty `fields` map; the caller decides whether to keep
+/// such instances (this fn keeps them — see `extract_structure` for the
+/// emptiness filter).
+pub(crate) fn decode_structure(
+    text: &str,
+    record: &ProcessedRecord,
+    task: &crate::backends::gliner2_fastino::processor::TaskMapping,
+    scorer_out: &ScorerOutput,
+    pred_count: usize,
+    threshold: f32,
+    fields: &[(String, crate::backends::gliner2_fastino::schema::FieldType)],
+) -> Vec<crate::backends::gliner2_fastino::schema::ExtractedStructure> {
+    use crate::backends::gliner2_fastino::schema::{
+        ExtractedStructure, StructureValue,
+    };
+    use std::collections::HashMap;
+
+    let num_words = record.word_to_char_maps.len();
+    let num_fields = task.labels.len();
+    debug_assert_eq!(
+        num_fields, fields.len(),
+        "decode_structure: task.labels.len() = {} but fields.len() = {}",
+        num_fields, fields.len(),
+    );
+    let scores = &scorer_out.scores;
+
+    let mut out: Vec<ExtractedStructure> = Vec::with_capacity(pred_count);
+    for c_idx in 0..pred_count.min(MAX_COUNT) {
+        let mut field_values: HashMap<String, StructureValue> = HashMap::new();
+        for (m, (field_name, _ftype)) in fields.iter().enumerate().take(num_fields) {
+            // Find the best (start, width_idx) for this (instance, field).
+            let mut best: Option<(f32, usize, usize)> = None;
+            for start in 0..num_words {
+                for width_idx in 0..MAX_WIDTH {
+                    let prob = scores[[c_idx, start, width_idx, m]];
+                    if prob <= threshold {
+                        continue;
+                    }
+                    let end_word = (start + width_idx + 1).min(num_words);
+                    let (byte_start, _) = record.word_to_char_maps[start];
+                    let (_, byte_end) = record.word_to_char_maps[end_word - 1];
+                    if byte_end > text.len() || byte_start > byte_end {
+                        continue;
+                    }
+                    let surface = text[byte_start..byte_end].trim();
+                    if surface.is_empty() {
+                        continue;
+                    }
+                    match best {
+                        Some((b, _, _)) if b >= prob => {}
+                        _ => best = Some((prob, start, width_idx)),
+                    }
+                }
+            }
+            if let Some((_prob, start, width_idx)) = best {
+                let end_word = (start + width_idx + 1).min(num_words);
+                let (byte_start, _) = record.word_to_char_maps[start];
+                let (_, byte_end) = record.word_to_char_maps[end_word - 1];
+                let surface = text[byte_start..byte_end].trim().to_string();
+                // Phase 2: every field, regardless of FieldType, becomes
+                // StructureValue::Single. TODO(Phase 2.5): branch on
+                // _ftype here for List (collect top-K) / Choice (snap
+                // surface to nearest choice via edit distance).
+                field_values.insert(field_name.clone(), StructureValue::Single(surface));
+            }
+        }
+        out.push(ExtractedStructure {
+            structure_type: task.task_name.clone(),
+            fields: field_values,
+        });
+    }
+    out
+}
+
 /// Run the classifier head on a single task's field_embs.
 /// Returns label scores (softmax probabilities, sum to 1).
 ///
@@ -690,5 +776,174 @@ mod tests {
         // so padded to [0,0].
         assert_eq!(arr[[0, MAX_WIDTH + 1, 0]], 0);
         assert_eq!(arr[[0, MAX_WIDTH + 1, 1]], 0);
+    }
+
+    #[test]
+    fn decode_structure_single_instance_picks_best_span_per_field() {
+        use crate::backends::gliner2_fastino::processor::{ProcessedRecord, TaskMapping};
+        use crate::backends::gliner2_fastino::schema::{FieldType, StructureValue};
+        use ndarray::Array4;
+
+        // 3 words: "Acme Corp Paris" (indices 0, 1, 2 with byte ranges).
+        let record = ProcessedRecord {
+            input_ids: vec![],
+            attention_mask: vec![],
+            tasks: vec![],
+            text_start: 0,
+            text_end: 0,
+            word_to_token_maps: vec![(0, 1), (1, 2), (2, 3)],
+            word_to_char_maps: vec![(0, 4), (5, 9), (10, 15)],
+        };
+        let task = TaskMapping {
+            task_name: "company_loc".to_string(),
+            task_type: "structures".to_string(),
+            labels: vec!["vendor".into(), "city".into()],
+            prompt_tok_idx: 0,
+            field_tok_indices: vec![0, 0],
+        };
+        // Scorer: [MAX_COUNT, num_words=3, MAX_WIDTH, num_fields=2].
+        // Instance 0:
+        //   field 0 (vendor) best at start=0, width=1 ("Acme Corp"): 0.9
+        //   field 1 (city)   best at start=2, width=0 ("Paris"):     0.85
+        let mut scores = Array4::<f32>::zeros((MAX_COUNT, 3, MAX_WIDTH, 2));
+        scores[[0, 0, 1, 0]] = 0.9;
+        scores[[0, 2, 0, 1]] = 0.85;
+        let scorer_out = ScorerOutput { scores };
+
+        let fields = vec![
+            ("vendor".to_string(), FieldType::String),
+            ("city".to_string(), FieldType::String),
+        ];
+        let result = decode_structure(
+            "Acme Corp Paris",
+            &record,
+            &task,
+            &scorer_out,
+            /* pred_count = */ 1,
+            /* threshold  = */ 0.5,
+            &fields,
+        );
+
+        assert_eq!(result.len(), 1, "expected 1 instance, got {}", result.len());
+        let inst = &result[0];
+        assert_eq!(inst.structure_type, "company_loc");
+        match inst.fields.get("vendor") {
+            Some(StructureValue::Single(s)) => assert_eq!(s, "Acme Corp"),
+            other => panic!("expected vendor=Single(\"Acme Corp\"), got {other:?}"),
+        }
+        match inst.fields.get("city") {
+            Some(StructureValue::Single(s)) => assert_eq!(s, "Paris"),
+            other => panic!("expected city=Single(\"Paris\"), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn decode_structure_zero_pred_count_returns_empty() {
+        use crate::backends::gliner2_fastino::processor::{ProcessedRecord, TaskMapping};
+        use crate::backends::gliner2_fastino::schema::FieldType;
+        use ndarray::Array4;
+
+        let record = ProcessedRecord {
+            input_ids: vec![],
+            attention_mask: vec![],
+            tasks: vec![],
+            text_start: 0,
+            text_end: 0,
+            word_to_token_maps: vec![(0, 1)],
+            word_to_char_maps: vec![(0, 4)],
+        };
+        let task = TaskMapping {
+            task_name: "x".to_string(),
+            task_type: "structures".to_string(),
+            labels: vec!["a".into()],
+            prompt_tok_idx: 0,
+            field_tok_indices: vec![0],
+        };
+        let scorer_out = ScorerOutput {
+            scores: Array4::<f32>::zeros((MAX_COUNT, 1, MAX_WIDTH, 1)),
+        };
+        let fields = vec![("a".to_string(), FieldType::String)];
+
+        let result = decode_structure("Acme", &record, &task, &scorer_out, 0, 0.5, &fields);
+        assert!(result.is_empty(), "expected 0 instances when pred_count=0, got {result:?}");
+    }
+
+    #[test]
+    fn decode_structure_multi_instance_separates_by_c_idx() {
+        use crate::backends::gliner2_fastino::processor::{ProcessedRecord, TaskMapping};
+        use crate::backends::gliner2_fastino::schema::{FieldType, StructureValue};
+        use ndarray::Array4;
+
+        // 3 words: "Marie Albert physicist".
+        let record = ProcessedRecord {
+            input_ids: vec![],
+            attention_mask: vec![],
+            tasks: vec![],
+            text_start: 0,
+            text_end: 0,
+            word_to_token_maps: vec![(0, 1), (1, 2), (2, 3)],
+            word_to_char_maps: vec![(0, 5), (6, 12), (13, 22)],
+        };
+        let task = TaskMapping {
+            task_name: "person".to_string(),
+            task_type: "structures".to_string(),
+            labels: vec!["name".into()],
+            prompt_tok_idx: 0,
+            field_tok_indices: vec![0],
+        };
+        let mut scores = Array4::<f32>::zeros((MAX_COUNT, 3, MAX_WIDTH, 1));
+        scores[[0, 0, 0, 0]] = 0.9; // instance 0, name = "Marie"
+        scores[[1, 1, 0, 0]] = 0.8; // instance 1, name = "Albert"
+        let scorer_out = ScorerOutput { scores };
+        let fields = vec![("name".to_string(), FieldType::String)];
+
+        let result = decode_structure(
+            "Marie Albert physicist", &record, &task, &scorer_out, 2, 0.5, &fields,
+        );
+
+        assert_eq!(result.len(), 2, "expected 2 instances");
+        let names: Vec<&String> = result
+            .iter()
+            .filter_map(|s| match s.fields.get("name") {
+                Some(StructureValue::Single(n)) => Some(n),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(names, vec![&"Marie".to_string(), &"Albert".to_string()]);
+    }
+
+    #[test]
+    fn decode_structure_below_threshold_drops_field() {
+        use crate::backends::gliner2_fastino::processor::{ProcessedRecord, TaskMapping};
+        use crate::backends::gliner2_fastino::schema::FieldType;
+        use ndarray::Array4;
+
+        let record = ProcessedRecord {
+            input_ids: vec![],
+            attention_mask: vec![],
+            tasks: vec![],
+            text_start: 0,
+            text_end: 0,
+            word_to_token_maps: vec![(0, 1)],
+            word_to_char_maps: vec![(0, 4)],
+        };
+        let task = TaskMapping {
+            task_name: "t".to_string(),
+            task_type: "structures".to_string(),
+            labels: vec!["f".into()],
+            prompt_tok_idx: 0,
+            field_tok_indices: vec![0],
+        };
+        let mut scores = Array4::<f32>::zeros((MAX_COUNT, 1, MAX_WIDTH, 1));
+        scores[[0, 0, 0, 0]] = 0.4; // below threshold 0.5
+        let scorer_out = ScorerOutput { scores };
+        let fields = vec![("f".to_string(), FieldType::String)];
+
+        let result = decode_structure("Acme", &record, &task, &scorer_out, 1, 0.5, &fields);
+        assert_eq!(result.len(), 1, "instance is still emitted (with empty fields)");
+        assert!(
+            result[0].fields.is_empty(),
+            "field below threshold should be dropped, got {:?}", result[0].fields,
+        );
     }
 }
