@@ -919,4 +919,16 @@ mod from_local_tests {
         assert!(err1.to_string().contains("scripts/gliner2_export_onnx.py"));
         assert!(err2.to_string().contains("scripts/gliner2_export_onnx.py"));
     }
+
+    #[test]
+    fn engine_is_send_and_sync() {
+        // Phase 3.5 M4: future additions for IoBinding must not break the
+        // engine's Send + Sync — anno's threading model shares engines via
+        // Arc across worker threads (see crate::Model and ZeroShotNER trait
+        // bounds). Per-call MemoryInfo creation in pipeline_iobinding (M5+)
+        // keeps `ort::memory::MemoryInfo` (which is !Send + !Sync) off the
+        // engine struct.
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<GLiNER2Fastino>();
+    }
 }
