@@ -146,8 +146,7 @@ impl GLiNER2FastinoCandle {
         let tokenizer = crate::backends::hf_loader::load_tokenizer(&tokenizer_path)
             .map_err(|e| crate::Error::Backend(format!("tokenizer: {e}")))?;
         let encoder = encoder::Encoder::from_safetensors(&weights_path, &config_path, device)?;
-        // M5 will replace stub() with from_safetensors loading the heads.
-        let heads = heads::AllHeads::stub();
+        let heads = heads::AllHeads::from_safetensors(&weights_path, device)?;
         let model_id = model_dir
             .file_name()
             .map(|s| s.to_string_lossy().into_owned())
