@@ -41,11 +41,18 @@ Each worktree where this bites should ship a gitignored
 ```toml
 [build]
 rustflags = ["--cap-lints", "allow"]
+rustdocflags = ["--cap-lints", "allow"]
 ```
 
 This applies the workaround automatically on every `cargo` invocation
-in the worktree without requiring per-command `RUSTFLAGS`. The Phase 1.5
-worktree at `feat/gliner2-fastino-phase1.5` ships such a file.
+in the worktree without requiring per-command `RUSTFLAGS` /
+`RUSTDOCFLAGS`. The Phase 1.5 and Phase 2 worktrees both ship such a file.
+
+**`rustdocflags` is required for `cargo doc`.** Discovered 2026-05-06
+during Phase 2 work: rustdoc has its own lint-rendering path that hits
+the same `StyledBuffer::replace` ICE. Without `rustdocflags = ["--cap-lints",
+"allow"]`, `cargo doc` panics during HIR analysis even when `cargo check`
+and `cargo test` succeed cleanly.
 
 ## Workaround for hosts on 1.94
 
