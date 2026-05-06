@@ -505,6 +505,227 @@ pub(crate) fn run_scorer_io(
     Ok(super::pipeline::ScorerOutput { scores })
 }
 
+/// Run the classifier session via IoBinding for the `classify` path.
+///
+/// The classifier requires a padded `[1, num_labels, MAX_WIDTH, H]`
+/// tensor built from `field_embs` — that padding is host-side. So we
+/// extract `field_embs` from the device-resident DynValue, build the
+/// padded tensor on host, then run the classifier session via
+/// IoBinding. Matches upstream gliner2-rs's pattern (lib_v2.rs:229+).
+///
+/// Output: `Vec<f32>` of length `num_labels`, softmax-normalised.
+pub(crate) fn run_classifier_io(
+    sessions: &Sessions,
+    sg_out: &SchemaGatherOutputIo,
+    device_mem: &MemoryInfo,
+) -> Result<Vec<f32>, Error> {
+    use ndarray::Array4;
+    use super::pipeline::MAX_WIDTH;
+
+    // Extract field_embs to host (small tensor: [num_labels, H]).
+    let (fe_shape, fe_cow) = sg_out
+        .field_embs
+        .try_extract_tensor::<f32>()
+        .map_err(|e| Error::Tokenizer(format!("classifier_io extract field_embs: {e}")))?;
+    let fe_data: Vec<f32> = fe_cow.to_vec();
+    if fe_shape.len() != 2 {
+        return Err(Error::Tokenizer(format!(
+            "classifier_io: field_embs expected 2D, got shape {:?}",
+            fe_shape
+        )));
+    }
+    let num_labels = fe_shape[0] as usize;
+    let hidden_size = fe_shape[1] as usize;
+
+    // Pad to [1, num_labels, MAX_WIDTH, hidden_size]: only position 0
+    // along the MAX_WIDTH axis is filled with the field embedding.
+    let mut padded: Array4<f32> = Array4::zeros((1, num_labels, MAX_WIDTH, hidden_size));
+    for m in 0..num_labels {
+        for d in 0..hidden_size {
+            padded[[0, m, 0, d]] = fe_data[m * hidden_size + d];
+        }
+    }
+    let pad_t = crate::backends::ort_compat::tensor_from_ndarray(padded)
+        .map_err(|e| Error::Tokenizer(format!("classifier_io padded tensor: {e}")))?;
+
+    let logits: ndarray::ArrayD<f32> = sessions.classifier.with_session(|s| -> Result<_, Error> {
+        let output_name = resolve_output_name(s, &["cls_logits", "logits"]);
+        let mut binding = s
+            .create_binding()
+            .map_err(|e| Error::Tokenizer(format!("classifier_io create_binding: {e}")))?;
+        binding
+            .bind_input("span_embeddings", &pad_t)
+            .map_err(|e| Error::Tokenizer(format!("classifier_io bind span_embeddings: {e}")))?;
+        binding
+            .bind_output_to_device(&output_name, device_mem)
+            .map_err(|e| Error::Tokenizer(format!("classifier_io bind_output: {e}")))?;
+        let outputs = s
+            .run_binding(&binding)
+            .map_err(|e| Error::Tokenizer(format!("classifier_io run_binding: {e}")))?;
+        let logits_val = outputs
+            .into_iter()
+            .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
+            .ok_or_else(|| Error::Tokenizer(format!(
+                "classifier_io: output '{output_name}' not present"
+            )))?;
+        let (shape, cow) = logits_val
+            .try_extract_tensor::<f32>()
+            .map_err(|e| Error::Tokenizer(format!("classifier_io extract: {e}")))?;
+        let data: Vec<f32> = cow.to_vec();
+        let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+        ndarray::ArrayD::from_shape_vec(shape_usize, data)
+            .map_err(|e| Error::Tokenizer(format!("classifier_io reshape: {e}")))
+    })?;
+
+    // logits shape is [1, num_labels, MAX_WIDTH, 1]. Take position 0
+    // along MAX_WIDTH and softmax over the labels axis.
+    let mut exps = Vec::with_capacity(num_labels);
+    let mut exp_sum = 0.0f32;
+    for m in 0..num_labels {
+        let l = logits[[0, m, 0, 0]];
+        let e = l.exp();
+        exp_sum += e;
+        exps.push(e);
+    }
+    if exp_sum > 0.0 {
+        for e in &mut exps {
+            *e /= exp_sum;
+        }
+    }
+    Ok(exps)
+}
+
+/// Top-level orchestrator: run the 8-session IoBinding pipeline (encoder
+/// → token_gather → span_rep → schema_gather → count_pred_argmax →
+/// count_lstm_fixed → scorer) for entity-/structure-decoding callers
+/// (extract_ner, extract_with_label_descriptions,
+/// extract_with_label_thresholds, extract_structure).
+///
+/// Returns `(ScorerOutput, pred_count)`. On `pred_count == 0`, returns
+/// an empty ScorerOutput and skips the count_lstm + scorer steps —
+/// matches the standard pipeline's early-return optimization.
+pub(crate) fn run_pipeline_for_decoding(
+    sessions: &Sessions,
+    record: &ProcessedRecord,
+    task: &crate::backends::gliner2_fastino::processor::TaskMapping,
+) -> Result<(super::pipeline::ScorerOutput, usize), Error> {
+    let device_mem = device_memory_info()
+        .map_err(|e| Error::Tokenizer(format!("pipeline_io device_mem: {e}")))?;
+    let cpu_out_mem = cpu_output_memory_info()
+        .map_err(|e| Error::Tokenizer(format!("pipeline_io cpu_out_mem: {e}")))?;
+
+    let enc = run_encoder_io(sessions, record, &device_mem)?;
+    let tg = run_token_gather_io(sessions, &enc, record, &device_mem)?;
+    let num_words = record.word_to_token_maps.len();
+    let sr = run_span_rep_io(sessions, &tg, num_words, &device_mem)?;
+    let sg = run_schema_gather_io(sessions, &enc, task, &device_mem)?;
+    let pred_count = run_count_pred_argmax_io(sessions, &sg, &cpu_out_mem)?;
+    if pred_count == 0 {
+        // Empty 4D array — decoder loops over 0..pred_count so this is
+        // a no-op for every consumer.
+        return Ok((
+            super::pipeline::ScorerOutput {
+                scores: ndarray::Array4::zeros((0, 0, 0, 0)),
+            },
+            0,
+        ));
+    }
+    let cl = run_count_lstm_fixed_io(sessions, &sg, &device_mem)?;
+    let scorer_out = run_scorer_io(sessions, &sr, &cl, &device_mem)?;
+    Ok((scorer_out, pred_count))
+}
+
+/// Top-level orchestrator: run the 4-session IoBinding pipeline
+/// (encoder → schema_gather → count_pred_argmax → classifier) for the
+/// `classify` path. Returns `Vec<f32>` of length `num_labels`,
+/// softmax-normalised. Returns all-zeros on `pred_count == 0`.
+pub(crate) fn run_classify_pipeline(
+    sessions: &Sessions,
+    record: &ProcessedRecord,
+    task: &crate::backends::gliner2_fastino::processor::TaskMapping,
+) -> Result<Vec<f32>, Error> {
+    let device_mem = device_memory_info()
+        .map_err(|e| Error::Tokenizer(format!("classify_pipeline_io device_mem: {e}")))?;
+    let cpu_out_mem = cpu_output_memory_info()
+        .map_err(|e| Error::Tokenizer(format!("classify_pipeline_io cpu_out_mem: {e}")))?;
+
+    let enc = run_encoder_io(sessions, record, &device_mem)?;
+    let sg = run_schema_gather_io(sessions, &enc, task, &device_mem)?;
+    let pred_count = run_count_pred_argmax_io(sessions, &sg, &cpu_out_mem)?;
+    if pred_count == 0 {
+        return Ok(vec![0.0; task.labels.len()]);
+    }
+    run_classifier_io(sessions, &sg, &device_mem)
+}
+
+// =============================================================================
+// Mode dispatch wrappers
+//
+// These are the two entry points used by the public extract_*  methods on
+// GLiNER2Fastino. They route to the Standard chain (Phase 3) or the IoBinding
+// chain (Phase 3.5) depending on the engine's ExecutionMode.
+// =============================================================================
+
+/// Dispatch wrapper for the 8-session decoder pipeline. Used by every
+/// extract method that consumes a [`super::pipeline::ScorerOutput`]:
+/// extract_ner, extract_with_label_descriptions,
+/// extract_with_label_thresholds, extract_structure.
+pub(crate) fn run_pipeline_dispatch(
+    sessions: &Sessions,
+    record: &ProcessedRecord,
+    task: &crate::backends::gliner2_fastino::processor::TaskMapping,
+    mode: super::ExecutionMode,
+) -> Result<(super::pipeline::ScorerOutput, usize), Error> {
+    match mode {
+        super::ExecutionMode::Standard => {
+            let enc = super::pipeline::run_encoder(sessions, record)?;
+            let tg = super::pipeline::run_token_gather(sessions, &enc, record)?;
+            let num_words = record.word_to_token_maps.len();
+            let sr = super::pipeline::run_span_rep(sessions, &tg, num_words)?;
+            let sg = super::pipeline::run_schema_gather(sessions, &enc, task)?;
+            let pred_count = super::pipeline::run_count_pred_argmax(sessions, &sg)?;
+            if pred_count == 0 {
+                return Ok((
+                    super::pipeline::ScorerOutput {
+                        scores: ndarray::Array4::zeros((0, 0, 0, 0)),
+                    },
+                    0,
+                ));
+            }
+            let cl = super::pipeline::run_count_lstm_fixed(sessions, &sg)?;
+            let scorer_out = super::pipeline::run_scorer(sessions, &sr, &cl)?;
+            Ok((scorer_out, pred_count))
+        }
+        super::ExecutionMode::IoBinding => {
+            run_pipeline_for_decoding(sessions, record, task)
+        }
+    }
+}
+
+/// Dispatch wrapper for the 4-session classify pipeline. Used by the
+/// `classify` public method.
+pub(crate) fn run_classify_dispatch(
+    sessions: &Sessions,
+    record: &ProcessedRecord,
+    task: &crate::backends::gliner2_fastino::processor::TaskMapping,
+    mode: super::ExecutionMode,
+) -> Result<Vec<f32>, Error> {
+    match mode {
+        super::ExecutionMode::Standard => {
+            let enc = super::pipeline::run_encoder(sessions, record)?;
+            let sg = super::pipeline::run_schema_gather(sessions, &enc, task)?;
+            let pred_count = super::pipeline::run_count_pred_argmax(sessions, &sg)?;
+            if pred_count == 0 {
+                return Ok(vec![0.0; task.labels.len()]);
+            }
+            super::pipeline::run_classifier(sessions, &sg)
+        }
+        super::ExecutionMode::IoBinding => {
+            run_classify_pipeline(sessions, record, task)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

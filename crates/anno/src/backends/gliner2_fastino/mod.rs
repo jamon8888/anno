@@ -251,7 +251,6 @@ impl GLiNER2Fastino {
         types: &[&str],
         threshold: f32,
     ) -> crate::Result<Vec<crate::Entity>> {
-        use pipeline::*;
         if types.is_empty() {
             return Ok(vec![]);
         }
@@ -262,22 +261,23 @@ impl GLiNER2Fastino {
         if num_words == 0 {
             return Ok(vec![]);
         }
-
-        let enc = run_encoder(&self.sessions, &record)?;
-        let tg  = run_token_gather(&self.sessions, &enc, &record)?;
-        let sr  = run_span_rep(&self.sessions, &tg, num_words)?;
-
         let task_map = record.tasks.first().ok_or_else(|| {
             crate::Error::Backend("gliner2_fastino: transformer produced no task mapping".into())
         })?;
-        let sg = run_schema_gather(&self.sessions, &enc, task_map)?;
-        let pred_count = run_count_pred_argmax(&self.sessions, &sg)?;
+
+        // Phase 3.5: dispatch on execution_mode. Standard runs the
+        // existing 8-call chain inline; IoBinding routes through
+        // pipeline_iobinding's chained-DynValue chain.
+        let (scorer_out, pred_count) = pipeline_iobinding::run_pipeline_dispatch(
+            &self.sessions,
+            &record,
+            task_map,
+            self.execution_mode,
+        )?;
         if pred_count == 0 {
             return Ok(vec![]);
         }
-        let cl = run_count_lstm_fixed(&self.sessions, &sg)?;
-        let scorer_out = run_scorer(&self.sessions, &sr, &cl)?;
-        let entities = decode_entities(
+        let entities = pipeline::decode_entities(
             text,
             &record,
             task_map,
@@ -458,7 +458,6 @@ impl GLiNER2Fastino {
         labeled: &[(&str, &str)],
         threshold: f32,
     ) -> crate::Result<Vec<crate::Entity>> {
-        use pipeline::*;
         if labeled.is_empty() {
             return Ok(vec![]);
         }
@@ -470,22 +469,21 @@ impl GLiNER2Fastino {
         if num_words == 0 {
             return Ok(vec![]);
         }
-
-        let enc = run_encoder(&self.sessions, &record)?;
-        let tg  = run_token_gather(&self.sessions, &enc, &record)?;
-        let sr  = run_span_rep(&self.sessions, &tg, num_words)?;
-
         let task_map = record.tasks.first().ok_or_else(|| {
             crate::Error::Backend("gliner2_fastino: transformer produced no task mapping".into())
         })?;
-        let sg = run_schema_gather(&self.sessions, &enc, task_map)?;
-        let pred_count = run_count_pred_argmax(&self.sessions, &sg)?;
+
+        // Phase 3.5: dispatch on execution_mode.
+        let (scorer_out, pred_count) = pipeline_iobinding::run_pipeline_dispatch(
+            &self.sessions,
+            &record,
+            task_map,
+            self.execution_mode,
+        )?;
         if pred_count == 0 {
             return Ok(vec![]);
         }
-        let cl = run_count_lstm_fixed(&self.sessions, &sg)?;
-        let scorer_out = run_scorer(&self.sessions, &sr, &cl)?;
-        Ok(decode_entities(
+        Ok(pipeline::decode_entities(
             text,
             &record,
             task_map,
@@ -516,7 +514,6 @@ impl GLiNER2Fastino {
         text: &str,
         label_thresholds: &[(&str, f32)],
     ) -> crate::Result<Vec<crate::Entity>> {
-        use pipeline::*;
         if label_thresholds.is_empty() {
             return Ok(vec![]);
         }
@@ -528,22 +525,21 @@ impl GLiNER2Fastino {
         if num_words == 0 {
             return Ok(vec![]);
         }
-
-        let enc = run_encoder(&self.sessions, &record)?;
-        let tg  = run_token_gather(&self.sessions, &enc, &record)?;
-        let sr  = run_span_rep(&self.sessions, &tg, num_words)?;
-
         let task_map = record.tasks.first().ok_or_else(|| {
             crate::Error::Backend("gliner2_fastino: transformer produced no task mapping".into())
         })?;
-        let sg = run_schema_gather(&self.sessions, &enc, task_map)?;
-        let pred_count = run_count_pred_argmax(&self.sessions, &sg)?;
+
+        // Phase 3.5: dispatch on execution_mode.
+        let (scorer_out, pred_count) = pipeline_iobinding::run_pipeline_dispatch(
+            &self.sessions,
+            &record,
+            task_map,
+            self.execution_mode,
+        )?;
         if pred_count == 0 {
             return Ok(vec![]);
         }
-        let cl = run_count_lstm_fixed(&self.sessions, &sg)?;
-        let scorer_out = run_scorer(&self.sessions, &sr, &cl)?;
-        Ok(decode_entities_with_thresholds(
+        Ok(pipeline::decode_entities_with_thresholds(
             text,
             &record,
             task_map,
@@ -577,7 +573,6 @@ impl GLiNER2Fastino {
         schema: &schema::TaskSchema,
         threshold: f32,
     ) -> crate::Result<Vec<schema::ExtractedStructure>> {
-        use pipeline::*;
         if schema.structures.is_empty() {
             return Ok(vec![]);
         }
@@ -606,18 +601,19 @@ impl GLiNER2Fastino {
                 )
             })?;
 
-            let enc = run_encoder(&self.sessions, &record)?;
-            let tg = run_token_gather(&self.sessions, &enc, &record)?;
-            let sr = run_span_rep(&self.sessions, &tg, num_words)?;
-            let sg = run_schema_gather(&self.sessions, &enc, task_map)?;
-            let pred_count = run_count_pred_argmax(&self.sessions, &sg)?;
+            // Phase 3.5: dispatch on execution_mode (per inference pass —
+            // each structure task gets its own pipeline run).
+            let (scorer_out, pred_count) = pipeline_iobinding::run_pipeline_dispatch(
+                &self.sessions,
+                &record,
+                task_map,
+                self.execution_mode,
+            )?;
             if pred_count == 0 {
                 continue;
             }
-            let cl = run_count_lstm_fixed(&self.sessions, &sg)?;
-            let scorer_out = run_scorer(&self.sessions, &sr, &cl)?;
 
-            let task_results = decode_structure(
+            let task_results = pipeline::decode_structure(
                 text,
                 &record,
                 task_map,
@@ -644,7 +640,6 @@ impl GLiNER2Fastino {
         labels: &[&str],
         _threshold: f32,
     ) -> crate::Result<Vec<(String, f32)>> {
-        use pipeline::*;
         if labels.is_empty() {
             return Ok(vec![]);
         }
@@ -658,13 +653,16 @@ impl GLiNER2Fastino {
             crate::Error::Backend("gliner2_fastino: transformer produced no task mapping".into())
         })?;
 
-        let enc = run_encoder(&self.sessions, &record)?;
-        let sg = run_schema_gather(&self.sessions, &enc, task_map)?;
-        let pred_count = run_count_pred_argmax(&self.sessions, &sg)?;
-        if pred_count == 0 {
-            return Ok(label_strings.into_iter().map(|l| (l, 0.0)).collect());
-        }
-        let probs = run_classifier(&self.sessions, &sg)?;
+        // Phase 3.5: dispatch on execution_mode. Standard runs the
+        // existing 4-call chain (encoder → schema_gather →
+        // count_pred_argmax → classifier); IoBinding routes through
+        // run_classify_pipeline. Both return all-zeros on pred_count=0.
+        let probs = pipeline_iobinding::run_classify_dispatch(
+            &self.sessions,
+            &record,
+            task_map,
+            self.execution_mode,
+        )?;
 
         let mut out: Vec<(String, f32)> = label_strings
             .into_iter()
