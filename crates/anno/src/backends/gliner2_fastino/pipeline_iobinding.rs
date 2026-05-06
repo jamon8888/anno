@@ -158,6 +158,13 @@ pub(crate) struct TokenGatherOutputIo {
     pub output_name: String,
 }
 
+/// Output of span_rep: span-level embeddings.
+/// Shape: `[1, num_words, MAX_WIDTH, H]`. Device-resident DynValue.
+pub(crate) struct SpanRepOutputIo {
+    pub span_embs: DynValue,
+    pub output_name: String,
+}
+
 /// Run token_gather via IoBinding. Inputs:
 /// - `last_hidden_state` from [`EncoderOutputIo`] (device-resident).
 /// - `word_indices` built from `record.word_to_token_maps[*].0`.
@@ -209,6 +216,50 @@ pub(crate) fn run_token_gather_io(
                 "token_gather_io: output '{output_name}' not present"
             )))?;
         Ok(TokenGatherOutputIo { text_embs, output_name })
+    })
+}
+
+/// Run span_rep via IoBinding. Inputs:
+/// - `hidden_states`: device-resident text_embs from [`TokenGatherOutputIo`].
+/// - `span_idx`: i64 Array3 of shape `[1, num_words * MAX_WIDTH, 2]` built by
+///   [`super::pipeline::build_span_idx`] (shared with the standard pipeline).
+///
+/// Output: span_embs DynValue of shape `[1, num_words, MAX_WIDTH, H]`,
+/// device-resident, chained into M10's run_scorer_io.
+pub(crate) fn run_span_rep_io(
+    sessions: &Sessions,
+    tg_out: &TokenGatherOutputIo,
+    num_words: usize,
+    device_mem: &MemoryInfo,
+) -> Result<SpanRepOutputIo, Error> {
+    let span_idx = super::pipeline::build_span_idx(num_words);
+    let span_idx_t = crate::backends::ort_compat::tensor_from_ndarray(span_idx)
+        .map_err(|e| Error::Tokenizer(format!("span_rep_io span_idx tensor: {e}")))?;
+
+    sessions.span_rep.with_session(|s| -> Result<SpanRepOutputIo, Error> {
+        let output_name = resolve_output_name(s, &["span_embeddings", "span_embs"]);
+        let mut binding = s
+            .create_binding()
+            .map_err(|e| Error::Tokenizer(format!("span_rep_io create_binding: {e}")))?;
+        binding
+            .bind_input("hidden_states", &tg_out.text_embs)
+            .map_err(|e| Error::Tokenizer(format!("span_rep_io bind hidden_states: {e}")))?;
+        binding
+            .bind_input("span_idx", &span_idx_t)
+            .map_err(|e| Error::Tokenizer(format!("span_rep_io bind span_idx: {e}")))?;
+        binding
+            .bind_output_to_device(&output_name, device_mem)
+            .map_err(|e| Error::Tokenizer(format!("span_rep_io bind_output: {e}")))?;
+        let outputs = s
+            .run_binding(&binding)
+            .map_err(|e| Error::Tokenizer(format!("span_rep_io run_binding: {e}")))?;
+        let span_embs = outputs
+            .into_iter()
+            .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
+            .ok_or_else(|| Error::Tokenizer(format!(
+                "span_rep_io: output '{output_name}' not present"
+            )))?;
+        Ok(SpanRepOutputIo { span_embs, output_name })
     })
 }
 
