@@ -110,7 +110,14 @@ pub enum SchemaTask {
     EntitiesDescribed(Vec<(String, String)>),
     /// Phase 3: classification task. (task_name, labels). Uses [L] tokens.
     Classifications(String, Vec<String>),
-    // TODO(Phase 2): port Relations arm from upstream
+    /// Phase 2: structured-data extraction. (task_name, [(field_name,
+    /// field_type)]). Uses [C] tokens per field. The model treats each
+    /// field as an attribute that may appear 0..MAX_COUNT times in the
+    /// text; the scorer's `MAX_COUNT` axis decodes to per-instance
+    /// occurrences (see `super::pipeline::decode_structure`).
+    Structures(String, Vec<(String, super::schema::FieldType)>),
+    // TODO(Phase 2.5): port Relations arm from upstream when a workload
+    // requests it. Phase 2 ships Structures only.
     Relations(String, Vec<String>),
 }
 
@@ -227,6 +234,29 @@ impl SchemaTransformer {
                     task_mappings_temp.push((
                         task_name.clone(),
                         "classifications".to_string(),
+                        labels,
+                        prompt_idx,
+                        field_indices,
+                    ));
+                }
+                SchemaTask::Structures(task_name, fields) => {
+                    combined_tokens.push("(");
+                    let prompt_idx = combined_tokens.len();
+                    combined_tokens.push(P_TOKEN);
+                    combined_tokens.push(task_name.as_str());
+                    combined_tokens.push("(");
+                    for (field_name, _ftype) in fields {
+                        combined_tokens.push(C_TOKEN);
+                        field_indices.push(combined_tokens.len());
+                        combined_tokens.push(field_name.as_str());
+                        labels.push(field_name.clone());
+                    }
+                    combined_tokens.push(")");
+                    combined_tokens.push(")");
+
+                    task_mappings_temp.push((
+                        task_name.clone(),
+                        "structures".to_string(),
                         labels,
                         prompt_idx,
                         field_indices,
@@ -433,6 +463,90 @@ mod transformer_tests {
         assert_eq!(*ids.last().unwrap(), 18);
         // [SEP_TEXT] still present
         assert!(ids.contains(&8));
+    }
+
+    #[test]
+    fn structures_arm_emits_c_tokens_per_field() {
+        use crate::backends::gliner2_fastino::schema::FieldType;
+        let tok = stub();
+        let xfm = SchemaTransformer::new(tok).expect("transformer build");
+
+        let fields: Vec<(String, FieldType)> = vec![
+            ("name".into(), FieldType::String),
+            ("price".into(), FieldType::String),
+        ];
+        let task = SchemaTask::Structures("product".into(), fields);
+        let rec = xfm.transform("Acme Corp Paris .", &[task]).unwrap();
+        let ids = &rec.input_ids;
+
+        // [C] = id 4. Two fields → exactly 2 [C] markers.
+        let c_count = ids.iter().filter(|&&i| i == 4).count();
+        assert_eq!(c_count, 2, "expected 2 [C] markers, got {c_count} in {ids:?}");
+
+        // [P] = id 2 — exactly one (single task).
+        let p_count = ids.iter().filter(|&&i| i == 2).count();
+        assert_eq!(p_count, 1, "expected 1 [P] marker, got {p_count}");
+
+        // [SEP_TEXT] = id 8 — present.
+        assert!(ids.contains(&8), "missing [SEP_TEXT]");
+
+        // No [E] (entity, id 3) and no [L] (label, id 5) — this is a structure prompt.
+        assert!(!ids.contains(&3), "unexpected [E] in structures prompt: {ids:?}");
+        assert!(!ids.contains(&5), "unexpected [L] in structures prompt: {ids:?}");
+    }
+
+    #[test]
+    fn structures_task_mapping_records_field_count() {
+        use crate::backends::gliner2_fastino::schema::FieldType;
+        let tok = stub();
+        let xfm = SchemaTransformer::new(tok).expect("transformer build");
+        let fields: Vec<(String, FieldType)> = vec![
+            ("name".into(), FieldType::String),
+            ("price".into(), FieldType::String),
+            ("vendor".into(), FieldType::String),
+        ];
+        let task = SchemaTask::Structures("invoice".into(), fields);
+        let rec = xfm.transform("Acme Corp paid 100 dollars to Globex.", &[task]).unwrap();
+
+        // One task mapping, 3 labels, task_type = "structures".
+        assert_eq!(rec.tasks.len(), 1);
+        let t = &rec.tasks[0];
+        assert_eq!(t.task_name, "invoice");
+        assert_eq!(t.task_type, "structures");
+        assert_eq!(t.labels, vec!["name", "price", "vendor"]);
+        assert_eq!(t.field_tok_indices.len(), 3);
+    }
+
+    #[test]
+    fn mixed_entities_and_structures_separated_by_sep_struct() {
+        use crate::backends::gliner2_fastino::schema::FieldType;
+        let tok = stub();
+        let xfm = SchemaTransformer::new(tok).expect("transformer build");
+
+        let entities_task = SchemaTask::Entities(vec!["person".into()]);
+        let struct_task = SchemaTask::Structures(
+            "invoice".into(),
+            vec![("vendor".into(), FieldType::String)],
+        );
+        let rec = xfm.transform("Acme Corp paid Globex.", &[entities_task, struct_task]).unwrap();
+        let ids = &rec.input_ids;
+
+        // [SEP_STRUCT] = id 7, must appear between the two tasks.
+        let sep_struct_pos = ids.iter().position(|&i| i == 7);
+        assert!(sep_struct_pos.is_some(), "expected [SEP_STRUCT] between tasks, got {ids:?}");
+
+        // [E] = id 3 from Entities task — exactly one.
+        let e_count = ids.iter().filter(|&&i| i == 3).count();
+        assert_eq!(e_count, 1, "expected 1 [E] marker (one entity label)");
+
+        // [C] = id 4 from Structures task — exactly one.
+        let c_count = ids.iter().filter(|&&i| i == 4).count();
+        assert_eq!(c_count, 1, "expected 1 [C] marker (one field)");
+
+        // Two task mappings recorded.
+        assert_eq!(rec.tasks.len(), 2);
+        assert_eq!(rec.tasks[0].task_type, "entities");
+        assert_eq!(rec.tasks[1].task_type, "structures");
     }
 }
 
