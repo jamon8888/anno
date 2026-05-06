@@ -442,6 +442,69 @@ pub(crate) fn run_count_lstm_fixed_io(
     })
 }
 
+/// Run scorer via IoBinding. Inputs:
+/// - `span_embeddings`: device-resident from [`SpanRepOutputIo`].
+/// - `struct_proj`: device-resident from [`CountLstmOutputIo`].
+///
+/// **Reads back to host** as [`super::pipeline::ScorerOutput`]
+/// (`Array4<f32>` of shape `[MAX_COUNT, num_words, MAX_WIDTH, M]`) so
+/// the existing decoder family (`decode_entities`,
+/// `decode_entities_with_thresholds`, `decode_structure`) can consume
+/// it without a separate IoBinding-mode decoder fork.
+///
+/// This is the only device→host copy in the IoBinding chain. The cost
+/// (`O(MAX_COUNT × num_words × MAX_WIDTH × M)` f32s) is amortised over
+/// the 7 chained device-resident inter-session outputs that IoBinding
+/// eliminated.
+pub(crate) fn run_scorer_io(
+    sessions: &Sessions,
+    sr_out: &SpanRepOutputIo,
+    cl_out: &CountLstmOutputIo,
+    device_mem: &MemoryInfo,
+) -> Result<super::pipeline::ScorerOutput, Error> {
+    let result: ndarray::ArrayD<f32> = sessions.scorer.with_session(
+        |s| -> Result<_, Error> {
+            let output_name = resolve_output_name(s, &["entity_scores", "scores"]);
+            let mut binding = s
+                .create_binding()
+                .map_err(|e| Error::Tokenizer(format!("scorer_io create_binding: {e}")))?;
+            binding
+                .bind_input("span_embeddings", &sr_out.span_embs)
+                .map_err(|e| Error::Tokenizer(format!("scorer_io bind span_embeddings: {e}")))?;
+            binding
+                .bind_input("struct_proj", &cl_out.struct_proj)
+                .map_err(|e| Error::Tokenizer(format!("scorer_io bind struct_proj: {e}")))?;
+            binding
+                .bind_output_to_device(&output_name, device_mem)
+                .map_err(|e| Error::Tokenizer(format!("scorer_io bind_output: {e}")))?;
+            let outputs = s
+                .run_binding(&binding)
+                .map_err(|e| Error::Tokenizer(format!("scorer_io run_binding: {e}")))?;
+            let scores_val = outputs
+                .into_iter()
+                .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
+                .ok_or_else(|| Error::Tokenizer(format!(
+                    "scorer_io: output '{output_name}' not present"
+                )))?;
+            // Read back to host. CPU-allocated device_mem means this is
+            // already host-side; for a future GPU device_mem this would
+            // be the implicit device→host copy.
+            let (shape, cow) = scores_val
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Tokenizer(format!("scorer_io extract: {e}")))?;
+            let data: Vec<f32> = cow.to_vec();
+            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+            ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                .map_err(|e| Error::Tokenizer(format!("scorer_io reshape: {e}")))
+        },
+    )?;
+
+    let scores: ndarray::Array4<f32> = result
+        .into_dimensionality::<ndarray::Ix4>()
+        .map_err(|e| Error::Tokenizer(format!("scorer_io dim: {e}")))?;
+    Ok(super::pipeline::ScorerOutput { scores })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
