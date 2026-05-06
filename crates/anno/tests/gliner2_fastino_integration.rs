@@ -433,3 +433,44 @@ fn parity_standard_iobinding_classify() {
         "classify Standard ≡ IoBinding parity broken: max_abs_diff = {max_diff} > 1e-4"
     );
 }
+
+#[cfg(feature = "gliner2-fastino-cuda")]
+#[test]
+#[ignore]
+fn smoke_iobinding_cuda() {
+    // Phase 3.5 M13: CUDA + IoBinding smoke test. Verifies that the
+    // IoBinding chain works end-to-end with prefer_cuda=true. On a
+    // CPU-only host this fails at session load (no CUDA EP) — the
+    // `#[ignore]` gate means it only runs opt-in.
+    //
+    // GPU validation (parity vs CPU IoBinding, latency benchmark) is
+    // deferred — once a GPU host is available, extend this test to
+    // assert max_abs_diff < 1e-3 vs CPU IoBinding (looser tolerance
+    // because fused matmul kernels on CUDA differ from CPU).
+    use anno::backends::gliner2_fastino::{ExecutionMode, GLiNER2FastinoConfig};
+    use anno::OnnxSessionConfig;
+
+    // OnnxSessionConfig is #[non_exhaustive] — mutate fields on a
+    // default() instance rather than constructing with struct literal.
+    let mut onnx = OnnxSessionConfig::default();
+    onnx.prefer_cuda = true;
+    let cfg = GLiNER2FastinoConfig::default()
+        .with_execution_mode(ExecutionMode::IoBinding)
+        .with_onnx(onnx);
+
+    let model = GLiNER2Fastino::from_pretrained_with_config(
+        "SemplificaAI/gliner2-multi-v1-onnx",
+        cfg,
+    )
+    .expect("load with CUDA + IoBinding");
+
+    let text = "Marie Curie won the Nobel Prize in Physics in 1903.";
+    let result = ZeroShotNER::extract_with_types(&model, text, &["person", "award", "year"], 0.5)
+        .expect("CUDA IoBinding extract");
+
+    eprintln!("CUDA + IoBinding result ({}): {:#?}", result.len(), result);
+    assert!(
+        !result.is_empty(),
+        "CUDA + IoBinding produced no entities; expected at least one for {text:?}"
+    );
+}
