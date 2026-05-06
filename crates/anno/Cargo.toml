@@ -140,6 +140,11 @@ harness = false
 name = "coref"
 harness = false
 
+[[bench]]
+name = "gliner2_fastino_iobinding"
+harness = false
+required-features = ["gliner2-fastino"]
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
