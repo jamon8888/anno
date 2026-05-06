@@ -297,6 +297,19 @@ pub static BACKEND_CATALOG: &[BackendInfo] = &[
         ],
     },
     BackendInfo {
+        name: "gliner2_fastino_candle",
+        feature: Some("gliner2-fastino-candle"),
+        status: BackendStatus::WIP,
+        zero_shot: true,
+        gpu_support: true,
+        description: "fastino-ai GLiNER2 with PEFT LoRA adapter merge-at-load (Candle backend, multi-domain inference) — experimental, issue #18 / Phase 4",
+        recommended_models: &[
+            "fastino/gliner2-multi-v1",
+            "fastino/gliner2-large-v1",
+            "fastino/gliner2-base-v1",
+        ],
+    },
+    BackendInfo {
         name: "gliner_pii",
         feature: Some("onnx"),
         status: BackendStatus::Beta,
