@@ -42,6 +42,7 @@ ndarray = { workspace = true, optional = true }
 lru = { workspace = true, optional = true }
 candle-core = { workspace = true, optional = true }
 candle-nn = { workspace = true, optional = true }
+candle-transformers = { workspace = true, optional = true }
 safetensors = { workspace = true, optional = true }
 half = { workspace = true, optional = true }
 
@@ -103,6 +104,11 @@ onnx-cuda = ["onnx", "ort/cuda"]
 gliner2-fastino = ["onnx", "dep:half"]
 gliner2-fastino-cuda    = ["gliner2-fastino", "onnx-cuda"]
 gliner2-fastino-coreml  = ["gliner2-fastino", "onnx-coreml"]
+# Phase 4: Candle backend with PEFT LoRA adapter merge-at-load.
+# Uses candle-transformers::models::debertav2 for the encoder.
+gliner2-fastino-candle       = ["candle", "dep:candle-transformers"]
+gliner2-fastino-candle-cuda  = ["gliner2-fastino-candle", "candle-core/cuda", "candle-transformers/cuda"]
+gliner2-fastino-candle-metal = ["gliner2-fastino-candle", "candle-core/metal", "candle-transformers/metal"]
 candle = [
   "dep:candle-core",
   "dep:candle-nn",
