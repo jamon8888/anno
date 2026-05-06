@@ -106,7 +106,7 @@ gliner2-fastino-cuda    = ["gliner2-fastino", "onnx-cuda"]
 gliner2-fastino-coreml  = ["gliner2-fastino", "onnx-coreml"]
 # Phase 4: Candle backend with PEFT LoRA adapter merge-at-load.
 # Uses candle-transformers::models::debertav2 for the encoder.
-gliner2-fastino-candle       = ["candle", "dep:candle-transformers"]
+gliner2-fastino-candle       = ["gliner2-fastino", "candle", "dep:candle-transformers"]
 gliner2-fastino-candle-cuda  = ["gliner2-fastino-candle", "candle-core/cuda", "candle-transformers/cuda"]
 gliner2-fastino-candle-metal = ["gliner2-fastino-candle", "candle-core/metal", "candle-transformers/metal"]
 candle = [

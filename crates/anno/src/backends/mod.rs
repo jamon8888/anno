@@ -354,6 +354,10 @@ pub mod gliner_multitask;
 #[cfg(feature = "gliner2-fastino")]
 pub mod gliner2_fastino;
 
+// GLiNER2 fastino-ai backend — Candle path with PEFT LoRA merge-at-load (Phase 4)
+#[cfg(feature = "gliner2-fastino-candle")]
+pub mod gliner2_fastino_candle;
+
 // Re-exports (always available)
 pub use crf::CrfNER;
 pub use ensemble::EnsembleNER;
