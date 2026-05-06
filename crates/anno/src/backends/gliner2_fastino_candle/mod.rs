@@ -75,6 +75,82 @@ impl GLiNER2FastinoCandle {
         self.active_adapter.as_deref()
     }
 
+    /// Load a PEFT-format LoRA adapter and merge it into the base
+    /// weights. Replaces any previously-active adapter (the engine
+    /// reloads from the cached `base_model_dir` and re-applies the new
+    /// delta).
+    ///
+    /// Cost: ~100 ms per call (safetensors re-read + per-target-module
+    /// matmul + add). Subsequent inference is identical to running the
+    /// merged model — zero per-forward overhead.
+    ///
+    /// Returns an error if:
+    /// - `adapter_dir` is not a valid PEFT adapter (missing `adapter_config.json`
+    ///   or `adapter_model.safetensors`/`adapter_weights.safetensors`).
+    /// - The adapter targets modules that don't exist in the base.
+    /// - The adapter's `base_model_name_or_path` doesn't match this engine's
+    ///   `model_id` (defensive; prevents merging a "legal" adapter trained
+    ///   on `gliner2-base-v1` into a `gliner2-multi-v1` base).
+    pub fn load_adapter(&mut self, name: &str, adapter_dir: &Path) -> crate::Result<()> {
+        let adapter = lora::LoraAdapter::load(adapter_dir, &self.device)?;
+
+        // Defensive: reject mismatched base models if recorded in the adapter.
+        if let Some(adapter_base) = adapter.config.base_model_name_or_path.as_deref() {
+            if !self.model_id.contains(adapter_base) && !adapter_base.contains(&self.model_id) {
+                return Err(crate::Error::Backend(format!(
+                    "load_adapter: adapter trained on '{adapter_base}', current \
+                     model is '{}'. Refusing to merge — remove \
+                     base_model_name_or_path from adapter_config.json to bypass.",
+                    self.model_id
+                )));
+            }
+        }
+
+        // Merge the adapter into the base safetensors → in-memory tensor map.
+        let base_safetensors = self.base_model_dir.join("model.safetensors");
+        let merged = lora::merge_into_base(&base_safetensors, &adapter, &self.device)?;
+
+        // Build a VarBuilder from the merged tensor map and rebuild encoder + heads.
+        let vb = candle_nn::VarBuilder::from_tensors(
+            merged,
+            candle_core::DType::F32,
+            &self.device,
+        );
+        let new_encoder = encoder::Encoder::from_var_builder(
+            vb.pp("encoder"),
+            &self.encoder.config,
+        )?;
+        let new_heads = heads::AllHeads::from_var_builder(vb, &self.device)?;
+
+        self.encoder = new_encoder;
+        self.heads = new_heads;
+        self.active_adapter = Some(name.to_string());
+        Ok(())
+    }
+
+    /// Discard the active adapter and reload pure base weights from
+    /// `base_model_dir`. Idempotent — calling on an engine without an
+    /// active adapter is a no-op.
+    pub fn unload_adapter(&mut self) -> crate::Result<()> {
+        if self.active_adapter.is_none() {
+            return Ok(());
+        }
+        let weights_path = self.base_model_dir.join("model.safetensors");
+        let config_path = if self.base_model_dir.join("encoder_config/config.json").exists() {
+            self.base_model_dir.join("encoder_config/config.json")
+        } else {
+            self.base_model_dir.join("config.json")
+        };
+        self.encoder = encoder::Encoder::from_safetensors(
+            &weights_path,
+            &config_path,
+            &self.device,
+        )?;
+        self.heads = heads::AllHeads::from_safetensors(&weights_path, &self.device)?;
+        self.active_adapter = None;
+        Ok(())
+    }
+
     /// Load from a local directory containing the PyTorch artifacts:
     /// `tokenizer.json`, `config.json`, `model.safetensors`.
     ///

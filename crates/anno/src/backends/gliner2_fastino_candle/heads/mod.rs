@@ -90,4 +90,56 @@ impl AllHeads {
             classifier,
         })
     }
+
+    /// Load all four heads from an already-built [`VarBuilder`].
+    ///
+    /// Used by [`super::GLiNER2FastinoCandle::load_adapter`] after the
+    /// LoRA merge has produced a `HashMap<String, Tensor>` wrapped into
+    /// a `VarBuilder::from_tensors`. The VarBuilder must be rooted at
+    /// the model's top level (so that `vb.pp("span_rep").pp("span_rep_layer")`
+    /// resolves correctly).
+    pub fn from_var_builder(
+        vb: VarBuilder<'_>,
+        device: &Device,
+    ) -> crate::Result<Self> {
+        let span_rep = span_rep::SpanRep::from_var_builder(
+            &vb.pp("span_rep").pp("span_rep_layer"),
+        )
+        .map_err(|e| {
+            crate::Error::Backend(format!(
+                "gliner2_fastino_candle: span_rep load (vb): {e}"
+            ))
+        })?;
+
+        let count_lstm = count_lstm::CountLstmFixed::from_var_builder(
+            &vb.pp("count_embed"),
+            device,
+        )
+        .map_err(|e| {
+            crate::Error::Backend(format!(
+                "gliner2_fastino_candle: count_embed load (vb): {e}"
+            ))
+        })?;
+
+        let count_pred = count_pred::CountPred::from_var_builder(&vb.pp("count_pred"))
+            .map_err(|e| {
+                crate::Error::Backend(format!(
+                    "gliner2_fastino_candle: count_pred load (vb): {e}"
+                ))
+            })?;
+
+        let classifier = classifier::Classifier::from_var_builder(&vb.pp("classifier"))
+            .map_err(|e| {
+                crate::Error::Backend(format!(
+                    "gliner2_fastino_candle: classifier load (vb): {e}"
+                ))
+            })?;
+
+        Ok(Self {
+            span_rep,
+            count_lstm,
+            count_pred,
+            classifier,
+        })
+    }
 }

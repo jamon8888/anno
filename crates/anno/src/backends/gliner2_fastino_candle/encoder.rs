@@ -56,6 +56,26 @@ impl Encoder {
         Ok(Self { model, config })
     }
 
+    /// Load the encoder from an already-built [`VarBuilder`] + parsed config.
+    ///
+    /// Used by [`super::GLiNER2FastinoCandle::load_adapter`] after the LoRA
+    /// merge has produced a `HashMap<String, Tensor>` that's wrapped into a
+    /// `VarBuilder::from_tensors`. The caller is responsible for scoping
+    /// into the `encoder.` prefix; this constructor calls `DebertaV2Model::load`
+    /// directly on the provided VarBuilder.
+    pub fn from_var_builder(
+        vb: VarBuilder<'_>,
+        config: &DebertaV2Config,
+    ) -> crate::Result<Self> {
+        let model = DebertaV2Model::load(vb, config).map_err(|e| {
+            crate::Error::Backend(format!("encoder DebertaV2Model::load (vb): {e}"))
+        })?;
+        Ok(Self {
+            model,
+            config: config.clone(),
+        })
+    }
+
     /// Run the encoder forward pass. Returns hidden states of shape
     /// `[batch, seq_len, hidden_size]`.
     ///
