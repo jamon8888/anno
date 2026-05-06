@@ -211,3 +211,93 @@ fn fastino_classify_smoke() {
     // Top-ranked should be 'positive' for this clearly-positive text.
     assert_eq!(scores[0].0, "positive", "expected 'positive' top-ranked, got {scores:?}");
 }
+
+#[test]
+#[ignore]
+fn fastino_extract_structure_invoice_single_instance() {
+    // Phase 2 M5: single-instance structure extraction.
+    use anno::backends::gliner2_fastino::schema::{
+        FieldType, StructureTask, StructureValue, TaskSchema,
+    };
+
+    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+        .expect("load gliner2-multi-v1");
+    let schema = TaskSchema::new().with_structure(
+        StructureTask::new("invoice")
+            .with_field("vendor", FieldType::String)
+            .with_field("amount", FieldType::String),
+    );
+
+    let text = "Invoice from Acme Corp for $4,250.00 dated January 15, 2026.";
+    let result = model.extract_structure(text, &schema, 0.5).expect("extract");
+
+    eprintln!("invoice extraction: {result:#?}");
+
+    // Loose assertions: at least one instance returned, and "Acme" surfaces
+    // as the vendor (or somewhere in the result). We don't pin to exact
+    // count because the model's count predictor can return 1 or more
+    // depending on tokenization.
+    assert!(!result.is_empty(), "expected at least 1 instance, got {result:#?}");
+    let serialized = serde_json::to_string(&result).expect("serialize");
+    assert!(
+        serialized.contains("Acme"),
+        "expected 'Acme' somewhere in result, got {serialized}",
+    );
+
+    // structure_type is the task name.
+    assert_eq!(result[0].structure_type, "invoice");
+
+    // If vendor is present, it should be a Single value.
+    if let Some(v) = result[0].fields.get("vendor") {
+        assert!(
+            matches!(v, StructureValue::Single(_)),
+            "vendor should be Single, got {v:?}",
+        );
+    }
+}
+
+#[test]
+#[ignore]
+fn fastino_extract_structure_multi_instance_people() {
+    // Phase 2 M5: multi-instance structure extraction. Two clear people in
+    // the text → expect at least 2 instances.
+    use anno::backends::gliner2_fastino::schema::{FieldType, StructureTask, TaskSchema};
+
+    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+        .expect("load");
+    let schema = TaskSchema::new().with_structure(
+        StructureTask::new("person_record")
+            .with_field("name", FieldType::String)
+            .with_field("role", FieldType::String),
+    );
+
+    let text =
+        "Marie Curie was a physicist. Albert Einstein was also a physicist.";
+    let result = model.extract_structure(text, &schema, 0.3).expect("extract");
+
+    eprintln!("multi-instance: {result:#?}");
+    assert!(
+        result.len() >= 2,
+        "expected at least 2 person_record instances, got {result:#?}",
+    );
+
+    // Every result has structure_type == "person_record".
+    for r in &result {
+        assert_eq!(r.structure_type, "person_record");
+    }
+}
+
+#[test]
+#[ignore]
+fn fastino_extract_structure_empty_schema_returns_empty() {
+    // Phase 2 M5: defensive — empty schema → empty vec, no inference passes.
+    use anno::backends::gliner2_fastino::schema::TaskSchema;
+
+    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+        .expect("load");
+    let schema = TaskSchema::new(); // no structures
+    let result = model
+        .extract_structure("anything", &schema, 0.5)
+        .expect("extract");
+    assert!(result.is_empty());
+}
