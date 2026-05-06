@@ -165,6 +165,17 @@ pub(crate) struct SpanRepOutputIo {
     pub output_name: String,
 }
 
+/// Output of schema_gather: prompt + per-field embeddings.
+/// Both DynValues are device-resident.
+pub(crate) struct SchemaGatherOutputIo {
+    /// Shape: `[1, H]` — prompt-context embedding (the [P]-token's row).
+    pub pc_emb: DynValue,
+    /// Shape: `[M, H]` — per-field/per-label embeddings.
+    pub field_embs: DynValue,
+    pub pc_output_name: String,
+    pub field_output_name: String,
+}
+
 /// Run token_gather via IoBinding. Inputs:
 /// - `last_hidden_state` from [`EncoderOutputIo`] (device-resident).
 /// - `word_indices` built from `record.word_to_token_maps[*].0`.
@@ -260,6 +271,90 @@ pub(crate) fn run_span_rep_io(
                 "span_rep_io: output '{output_name}' not present"
             )))?;
         Ok(SpanRepOutputIo { span_embs, output_name })
+    })
+}
+
+/// Run schema_gather via IoBinding. Inputs:
+/// - `last_hidden_state`: device-resident from [`EncoderOutputIo`].
+/// - `schema_indices`: i64 Array1 built from
+///   `[task.prompt_tok_idx, task.field_tok_indices...]`.
+///
+/// Outputs (both bound to device):
+/// - `pc_emb`: `[1, H]` — prompt-context embedding.
+/// - `field_embs`: `[M, H]` — per-field/per-label embeddings.
+///
+/// Output names follow upstream's convention: the schema_gather export
+/// has its outputs in the order `pc_emb`, `field_embs` — we resolve by
+/// position rather than by name to be robust.
+pub(crate) fn run_schema_gather_io(
+    sessions: &Sessions,
+    encoder_out: &EncoderOutputIo,
+    task: &crate::backends::gliner2_fastino::processor::TaskMapping,
+    device_mem: &MemoryInfo,
+) -> Result<SchemaGatherOutputIo, Error> {
+    use ndarray::Array1;
+
+    let mut indices: Vec<i64> = Vec::with_capacity(1 + task.field_tok_indices.len());
+    indices.push(task.prompt_tok_idx as i64);
+    indices.extend(task.field_tok_indices.iter().map(|&i| i as i64));
+    let idx_arr: Array1<i64> = Array1::from_vec(indices);
+    let idx_t = crate::backends::ort_compat::tensor_from_ndarray(idx_arr)
+        .map_err(|e| Error::Tokenizer(format!("schema_gather_io idx tensor: {e}")))?;
+
+    sessions.schema_gather.with_session(|s| -> Result<SchemaGatherOutputIo, Error> {
+        // schema_gather has 2 outputs in fixed order: pc_emb (idx 0),
+        // field_embs (idx 1). Resolve by position via the session's
+        // outputs() metadata.
+        let outs: Vec<String> = s.outputs().iter().map(|o| o.name().to_string()).collect();
+        if outs.len() < 2 {
+            return Err(Error::Tokenizer(format!(
+                "schema_gather_io: expected 2 outputs, found {}",
+                outs.len()
+            )));
+        }
+        let pc_output_name = outs[0].clone();
+        let field_output_name = outs[1].clone();
+
+        let mut binding = s
+            .create_binding()
+            .map_err(|e| Error::Tokenizer(format!("schema_gather_io create_binding: {e}")))?;
+        binding
+            .bind_input("last_hidden_state", &encoder_out.hidden_states)
+            .map_err(|e| Error::Tokenizer(format!("schema_gather_io bind last_hidden_state: {e}")))?;
+        binding
+            .bind_input("schema_indices", &idx_t)
+            .map_err(|e| Error::Tokenizer(format!("schema_gather_io bind schema_indices: {e}")))?;
+        binding
+            .bind_output_to_device(&pc_output_name, device_mem)
+            .map_err(|e| Error::Tokenizer(format!("schema_gather_io bind pc_emb: {e}")))?;
+        binding
+            .bind_output_to_device(&field_output_name, device_mem)
+            .map_err(|e| Error::Tokenizer(format!("schema_gather_io bind field_embs: {e}")))?;
+        let outputs = s
+            .run_binding(&binding)
+            .map_err(|e| Error::Tokenizer(format!("schema_gather_io run_binding: {e}")))?;
+
+        // Drain both outputs by name. Order isn't guaranteed in
+        // SessionOutputs iteration, so collect into HashMap then take.
+        let mut by_name: std::collections::HashMap<String, DynValue> =
+            outputs.into_iter().map(|(n, v)| (n.to_string(), v)).collect();
+        let pc_emb = by_name.remove(&pc_output_name).ok_or_else(|| {
+            Error::Tokenizer(format!(
+                "schema_gather_io: pc_emb output '{pc_output_name}' missing from result"
+            ))
+        })?;
+        let field_embs = by_name.remove(&field_output_name).ok_or_else(|| {
+            Error::Tokenizer(format!(
+                "schema_gather_io: field_embs output '{field_output_name}' missing from result"
+            ))
+        })?;
+
+        Ok(SchemaGatherOutputIo {
+            pc_emb,
+            field_embs,
+            pc_output_name,
+            field_output_name,
+        })
     })
 }
 
