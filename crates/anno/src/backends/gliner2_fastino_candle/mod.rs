@@ -109,6 +109,14 @@ impl GLiNER2FastinoCandle {
             &["config.json"],
         )
         .map_err(|e| crate::Error::Backend(format!("download config: {e}")))?;
+        // GLiNER2 stores the encoder's HF config (with vocab_size,
+        // hidden_size, etc.) under encoder_config/config.json. The
+        // top-level config.json is the GLiNER2 wrapper config.
+        let _encoder_config = crate::backends::hf_loader::download_model_file(
+            &repo,
+            &["encoder_config/config.json"],
+        )
+        .map_err(|e| crate::Error::Backend(format!("download encoder_config: {e}")))?;
         let weights_path = crate::backends::hf_loader::download_model_file(
             &repo,
             &["model.safetensors", "pytorch_model.bin"],
@@ -132,7 +140,15 @@ impl GLiNER2FastinoCandle {
     ) -> crate::Result<Self> {
         let tokenizer_path = model_dir.join("tokenizer.json");
         let weights_path = model_dir.join("model.safetensors");
-        let config_path = model_dir.join("config.json");
+        // The encoder's HF config is under encoder_config/config.json
+        // for GLiNER2 repos (top-level config.json is the wrapper).
+        // Fall back to top-level config.json for direct DeBERTa snapshots.
+        let nested_encoder_config = model_dir.join("encoder_config").join("config.json");
+        let config_path = if nested_encoder_config.exists() {
+            nested_encoder_config
+        } else {
+            model_dir.join("config.json")
+        };
 
         if !weights_path.exists() {
             return Err(crate::Error::Backend(format!(

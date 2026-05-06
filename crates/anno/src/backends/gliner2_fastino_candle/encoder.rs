@@ -46,7 +46,10 @@ impl Encoder {
         }
         .map_err(|e| crate::Error::Backend(format!("encoder safetensors: {e}")))?;
 
-        let model = DebertaV2Model::load(vb, &config).map_err(|e| {
+        // GLiNER2 stores all encoder tensors under the `encoder.` prefix
+        // (e.g. `encoder.embeddings.word_embeddings.weight`). DebertaV2Model
+        // expects them at root, so scope into the prefix.
+        let model = DebertaV2Model::load(vb.pp("encoder"), &config).map_err(|e| {
             crate::Error::Backend(format!("encoder DebertaV2Model::load: {e}"))
         })?;
 
