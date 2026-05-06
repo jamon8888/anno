@@ -165,11 +165,15 @@ impl GLiNER2Fastino {
             .into());
         }
 
-        // Sessions::from_dir_with_cfg resolves the dtype subdir (fp32_v2/, etc.) and
-        // loads all 8 ONNX graphs from it using the provided config.
-        // M3 will extend this to also accept the execution_mode for
-        // _iobinding.onnx variant selection. For now, threading is in place.
-        let (sessions, subdir) = sessions::Sessions::from_dir_with_cfg(model_dir, cfg.onnx.clone())?;
+        // Sessions::from_dir_with_cfg_mode resolves the dtype subdir
+        // (fp32_v2/, etc.) and loads all 8 ONNX graphs. In IoBinding mode
+        // it prefers `*_iobinding{suffix}` variants and falls back to the
+        // standard filename when the iobinding-specific export isn't shipped.
+        let (sessions, subdir) = sessions::Sessions::from_dir_with_cfg_mode(
+            model_dir,
+            cfg.onnx.clone(),
+            cfg.execution_mode,
+        )?;
 
         // Tokenizer: prefer subdir, fall back to root for layouts that ship
         // tokenizer at the snapshot root.

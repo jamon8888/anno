@@ -76,6 +76,21 @@ impl Sessions {
         model_dir: &Path,
         cfg: hf_loader::OnnxSessionConfig,
     ) -> Result<(Self, std::path::PathBuf), Error> {
+        Self::from_dir_with_cfg_mode(model_dir, cfg, super::ExecutionMode::Standard)
+    }
+
+    /// Phase 3.5: load with explicit execution mode. When `mode` is
+    /// [`super::ExecutionMode::IoBinding`], prefers the `*_iobinding{suffix}`
+    /// variant (e.g. `encoder_iobinding_fp32.onnx`) per session and falls
+    /// back to the standard variant if the iobinding-specific export is
+    /// not shipped. IoBinding is purely a runtime API — both variants are
+    /// functionally usable; the suffix exists for upstream exports that
+    /// freeze dynamic shapes for better device-side allocation.
+    pub fn from_dir_with_cfg_mode(
+        model_dir: &Path,
+        cfg: hf_loader::OnnxSessionConfig,
+        mode: super::ExecutionMode,
+    ) -> Result<(Self, std::path::PathBuf), Error> {
         // The 8-session v2 layout lives in `_v2` subdirs only — `fp32/`
         // and `fp16/` are the legacy v1 layout (5 graphs, missing
         // token_gather/schema_gather/count_pred_argmax/count_lstm_fixed).
@@ -90,24 +105,36 @@ impl Sessions {
             if !try_dir.is_dir() {
                 continue;
             }
-            let candidate = |name: &str| try_dir.join(format!("{name}{suffix}"));
+            // Resolve a session's filename. In IoBinding mode, prefer the
+            // `_iobinding`-suffixed variant if it exists; fall back to the
+            // standard filename otherwise. In Standard mode, always pick
+            // the standard filename.
+            let resolve = |name: &str| -> std::path::PathBuf {
+                if matches!(mode, super::ExecutionMode::IoBinding) {
+                    let io = try_dir.join(format!("{name}_iobinding{suffix}"));
+                    if io.exists() {
+                        return io;
+                    }
+                }
+                try_dir.join(format!("{name}{suffix}"))
+            };
             let all_present = [
                 "encoder", "token_gather", "span_rep", "schema_gather",
                 "count_pred_argmax", "count_lstm_fixed", "scorer", "classifier",
-            ].iter().all(|n| candidate(n).exists());
+            ].iter().all(|n| resolve(n).exists());
             if !all_present {
                 continue;
             }
             return Ok((
                 Self {
-                    encoder:           SessionSlot::from_path_with_cfg(&candidate("encoder"), cfg.clone())?,
-                    token_gather:      SessionSlot::from_path_with_cfg(&candidate("token_gather"), cfg.clone())?,
-                    span_rep:          SessionSlot::from_path_with_cfg(&candidate("span_rep"), cfg.clone())?,
-                    schema_gather:     SessionSlot::from_path_with_cfg(&candidate("schema_gather"), cfg.clone())?,
-                    count_pred_argmax: SessionSlot::from_path_with_cfg(&candidate("count_pred_argmax"), cfg.clone())?,
-                    count_lstm_fixed:  SessionSlot::from_path_with_cfg(&candidate("count_lstm_fixed"), cfg.clone())?,
-                    scorer:            SessionSlot::from_path_with_cfg(&candidate("scorer"), cfg.clone())?,
-                    classifier:        SessionSlot::from_path_with_cfg(&candidate("classifier"), cfg.clone())?,
+                    encoder:           SessionSlot::from_path_with_cfg(&resolve("encoder"), cfg.clone())?,
+                    token_gather:      SessionSlot::from_path_with_cfg(&resolve("token_gather"), cfg.clone())?,
+                    span_rep:          SessionSlot::from_path_with_cfg(&resolve("span_rep"), cfg.clone())?,
+                    schema_gather:     SessionSlot::from_path_with_cfg(&resolve("schema_gather"), cfg.clone())?,
+                    count_pred_argmax: SessionSlot::from_path_with_cfg(&resolve("count_pred_argmax"), cfg.clone())?,
+                    count_lstm_fixed:  SessionSlot::from_path_with_cfg(&resolve("count_lstm_fixed"), cfg.clone())?,
+                    scorer:            SessionSlot::from_path_with_cfg(&resolve("scorer"), cfg.clone())?,
+                    classifier:        SessionSlot::from_path_with_cfg(&resolve("classifier"), cfg.clone())?,
                 },
                 try_dir,
             ));
@@ -151,5 +178,73 @@ mod tests {
         std::fs::write(dir.path().join("fp32_v2/encoder_fp32.onnx"), b"").unwrap();
         let err = Sessions::from_dir(dir.path()).unwrap_err();
         assert!(err.to_string().contains("no complete v2 session set"));
+    }
+
+    #[test]
+    fn iobinding_mode_prefers_iobinding_variant_when_present() {
+        // Phase 3.5 M3: when ExecutionMode::IoBinding is requested AND the
+        // `*_iobinding{suffix}` variants exist, they must be preferred over
+        // the standard variants. Verified via error-message divergence:
+        // Standard mode can't see iobinding-only files → "no complete v2
+        // session set"; IoBinding mode finds them, advances past resolution
+        // to ONNX load (which fails on parse with a different error).
+        let dir = tempdir().unwrap();
+        let v2 = dir.path().join("fp32_v2");
+        std::fs::create_dir_all(&v2).unwrap();
+        for n in ["encoder", "token_gather", "span_rep", "schema_gather",
+                  "count_pred_argmax", "count_lstm_fixed", "scorer", "classifier"] {
+            std::fs::write(v2.join(format!("{n}_iobinding_fp32.onnx")), b"").unwrap();
+        }
+
+        let err_std = Sessions::from_dir_with_cfg_mode(
+            dir.path(),
+            hf_loader::OnnxSessionConfig::default(),
+            super::super::ExecutionMode::Standard,
+        )
+        .unwrap_err();
+        assert!(
+            err_std.to_string().contains("no complete v2 session set"),
+            "Standard mode should not see iobinding-only variants. Got: {err_std}"
+        );
+
+        let err_io = Sessions::from_dir_with_cfg_mode(
+            dir.path(),
+            hf_loader::OnnxSessionConfig::default(),
+            super::super::ExecutionMode::IoBinding,
+        )
+        .unwrap_err();
+        let msg = err_io.to_string();
+        assert!(
+            !msg.contains("no complete v2 session set"),
+            "IoBinding mode should resolve iobinding variants and advance past 'no complete' check. Got: {msg}"
+        );
+    }
+
+    #[test]
+    fn iobinding_mode_falls_back_to_standard_when_iobinding_missing() {
+        // Phase 3.5 M3: IoBinding mode is non-fatal when the model export
+        // ships only standard variants. We fall back to `{name}{suffix}`.
+        // Verified via error-message divergence: both modes resolve files
+        // (all_present passes), then ONNX load fails on parse — neither
+        // hits "no complete v2 session set".
+        let dir = tempdir().unwrap();
+        let v2 = dir.path().join("fp32_v2");
+        std::fs::create_dir_all(&v2).unwrap();
+        for n in ["encoder", "token_gather", "span_rep", "schema_gather",
+                  "count_pred_argmax", "count_lstm_fixed", "scorer", "classifier"] {
+            std::fs::write(v2.join(format!("{n}_fp32.onnx")), b"").unwrap();
+        }
+
+        let err_io = Sessions::from_dir_with_cfg_mode(
+            dir.path(),
+            hf_loader::OnnxSessionConfig::default(),
+            super::super::ExecutionMode::IoBinding,
+        )
+        .unwrap_err();
+        let msg = err_io.to_string();
+        assert!(
+            !msg.contains("no complete v2 session set"),
+            "IoBinding mode should fall back to standard variants. Got: {msg}"
+        );
     }
 }
