@@ -78,9 +78,43 @@ pub(crate) mod pipeline;
 pub(crate) mod processor;
 pub(crate) mod sessions;
 
-/// fastino-ai GLiNER2 model.
+/// Inference execution mode.
 ///
-/// **Experimental.** API may change without semver bump.
+/// Phase 3 standard mode (`Standard`) round-trips tensors through Rust
+/// ndarrays at every session boundary — simple and CPU-friendly. Phase 3.5
+/// IoBinding mode (`IoBinding`) keeps tensors in a single ort allocator
+/// across the 8-session chain — required for efficient GPU inference and
+/// 2-3× faster on CPU. See spec
+/// `docs/superpowers/specs/2026-05-05-gliner2-fastino-phase3.5-iobinding.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExecutionMode {
+    /// Phase 3 path. Default.
+    #[default]
+    Standard,
+    /// Phase 3.5 path. Opt-in.
+    IoBinding,
+}
+
+/// Configuration for [`GLiNER2Fastino::from_local_with_config`].
+///
+/// Marked `#[non_exhaustive]` — extend via `..Default::default()` to remain
+/// forward-compatible with future fields.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct GLiNER2FastinoConfig {
+    pub onnx: crate::backends::hf_loader::OnnxSessionConfig,
+    pub execution_mode: ExecutionMode,
+}
+
+impl Default for GLiNER2FastinoConfig {
+    fn default() -> Self {
+        Self {
+            onnx: crate::backends::hf_loader::OnnxSessionConfig::default(),
+            execution_mode: ExecutionMode::Standard,
+        }
+    }
+}
+
 /// How to apply labels across a batch.
 ///
 /// Phase 1.5 polish — shapes the input to
@@ -100,6 +134,7 @@ pub struct GLiNER2Fastino {
     pub(crate) config: config::FastinoConfig,
     pub(crate) sessions: sessions::Sessions,
     pub(crate) model_id: String,
+    pub(crate) execution_mode: ExecutionMode,
 }
 
 impl std::fmt::Debug for GLiNER2Fastino {
@@ -114,10 +149,14 @@ impl std::fmt::Debug for GLiNER2Fastino {
 use std::path::Path;
 
 impl GLiNER2Fastino {
-    /// Load a fastino GLiNER2 model from a local directory with custom ONNX session configuration.
-    pub fn from_local_with_options(
+    /// Load with full configuration including execution mode.
+    ///
+    /// Use this when you need to opt into [`ExecutionMode::IoBinding`] or
+    /// configure GPU execution providers via
+    /// [`crate::backends::hf_loader::OnnxSessionConfig`].
+    pub fn from_local_with_config(
         model_dir: &Path,
-        cfg: crate::backends::hf_loader::OnnxSessionConfig,
+        cfg: GLiNER2FastinoConfig,
     ) -> crate::Result<Self> {
         if model_dir.join("adapter_config.json").exists() {
             return Err(errors::Error::LoraAdapterNotSupported {
@@ -128,7 +167,9 @@ impl GLiNER2Fastino {
 
         // Sessions::from_dir_with_cfg resolves the dtype subdir (fp32_v2/, etc.) and
         // loads all 8 ONNX graphs from it using the provided config.
-        let (sessions, subdir) = sessions::Sessions::from_dir_with_cfg(model_dir, cfg)?;
+        // M3 will extend this to also accept the execution_mode for
+        // _iobinding.onnx variant selection. For now, threading is in place.
+        let (sessions, subdir) = sessions::Sessions::from_dir_with_cfg(model_dir, cfg.onnx.clone())?;
 
         // Tokenizer: prefer subdir, fall back to root for layouts that ship
         // tokenizer at the snapshot root.
@@ -153,7 +194,7 @@ impl GLiNER2Fastino {
         } else {
             model_dir.join("config.json")
         };
-        let config = if config_path.exists() {
+        let model_config = if config_path.exists() {
             config::FastinoConfig::from_path(&config_path)?
         } else {
             config::FastinoConfig::default()
@@ -163,13 +204,32 @@ impl GLiNER2Fastino {
             tokenizer,
             special,
             transformer,
-            config,
+            config: model_config,
             sessions,
             model_id: model_dir
                 .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "gliner2_fastino_local".to_string()),
+            execution_mode: cfg.execution_mode,
         })
+    }
+
+    /// Load a fastino GLiNER2 model from a local directory with custom ONNX session configuration.
+    ///
+    /// Equivalent to [`Self::from_local_with_config`] with
+    /// `execution_mode = ExecutionMode::Standard`. Use the new method when
+    /// you need IoBinding mode.
+    pub fn from_local_with_options(
+        model_dir: &Path,
+        cfg: crate::backends::hf_loader::OnnxSessionConfig,
+    ) -> crate::Result<Self> {
+        Self::from_local_with_config(
+            model_dir,
+            GLiNER2FastinoConfig {
+                onnx: cfg,
+                execution_mode: ExecutionMode::Standard,
+            },
+        )
     }
 
     /// Load a fastino GLiNER2 model from a local directory.
@@ -813,5 +873,46 @@ mod from_local_tests {
             structure_type: "invoice".to_string(),
             fields: std::collections::HashMap::new(),
         };
+    }
+
+    #[test]
+    fn config_defaults_are_standard_mode() {
+        // Phase 3.5 M2: GLiNER2FastinoConfig::default() picks Standard mode
+        // and CPU-only ort defaults.
+        let cfg = GLiNER2FastinoConfig::default();
+        assert_eq!(cfg.execution_mode, ExecutionMode::Standard);
+        assert!(!cfg.onnx.prefer_cuda);
+        assert!(!cfg.onnx.prefer_coreml);
+    }
+
+    #[test]
+    fn execution_mode_default_is_standard() {
+        assert_eq!(ExecutionMode::default(), ExecutionMode::Standard);
+    }
+
+    #[test]
+    fn from_local_with_options_delegates_to_config_with_standard_mode() {
+        // The legacy from_local_with_options should now produce a Standard-mode engine.
+        // Since we can't load an actual model in unit tests, just verify the equivalence
+        // of the two paths via the LoRA-rejection error: it's hit AFTER the
+        // ExecutionMode-bearing config struct is constructed but BEFORE any session
+        // load. So calling either constructor on a LoRA dir yields the same error.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("adapter_config.json"), "{}").unwrap();
+
+        let err1 = GLiNER2Fastino::from_local_with_options(
+            dir.path(),
+            crate::backends::hf_loader::OnnxSessionConfig::default(),
+        )
+        .unwrap_err();
+        let err2 = GLiNER2Fastino::from_local_with_config(
+            dir.path(),
+            GLiNER2FastinoConfig::default(),
+        )
+        .unwrap_err();
+
+        // Both should be the LoraAdapterNotSupported error with the same path.
+        assert!(err1.to_string().contains("scripts/gliner2_export_onnx.py"));
+        assert!(err2.to_string().contains("scripts/gliner2_export_onnx.py"));
     }
 }
