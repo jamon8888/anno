@@ -162,4 +162,312 @@ impl GLiNER2FastinoCandle {
             model_id,
         })
     }
+
+    pub(crate) fn extract_ner(
+        &self,
+        text: &str,
+        types: &[&str],
+        threshold: f32,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        if types.is_empty() {
+            return Ok(vec![]);
+        }
+        let labels: Vec<String> = types.iter().map(|s| s.to_string()).collect();
+        let task = processor::SchemaTask::Entities(labels);
+        let transformer = processor::SchemaTransformer::new(self.tokenizer.clone())
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}")))?;
+        let record = transformer
+            .transform(text, &[task])
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}")))?;
+        let num_words = record.word_to_char_maps.len();
+        if num_words == 0 {
+            return Ok(vec![]);
+        }
+        let task_map = record.tasks.first().ok_or_else(|| {
+            crate::Error::Backend(
+                "gliner2_fastino_candle: transformer produced no task mapping".into(),
+            )
+        })?;
+
+        let (scorer_out, pred_count) =
+            pipeline::run_pipeline_candle(self, &record, task_map)?;
+        if pred_count == 0 {
+            return Ok(vec![]);
+        }
+        let entities = decoder::decode_entities(
+            text,
+            &record,
+            task_map,
+            &scorer_out,
+            pred_count,
+            threshold,
+            /* flat_ner = */ false,
+        );
+        Ok(entities)
+    }
+
+    /// Extract entities using per-label descriptions in the prompt.
+    ///
+    /// Mirrors
+    /// [`crate::backends::gliner2_fastino::GLiNER2Fastino::extract_with_label_descriptions`].
+    pub fn extract_with_label_descriptions(
+        &self,
+        text: &str,
+        labeled: &[(&str, &str)],
+        threshold: f32,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        if labeled.is_empty() {
+            return Ok(vec![]);
+        }
+        let owned: Vec<(String, String)> = labeled
+            .iter()
+            .map(|(l, d)| (l.to_string(), d.to_string()))
+            .collect();
+        let task = processor::SchemaTask::EntitiesDescribed(owned);
+        let transformer = processor::SchemaTransformer::new(self.tokenizer.clone())
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}")))?;
+        let record = transformer
+            .transform(text, &[task])
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}")))?;
+        let num_words = record.word_to_char_maps.len();
+        if num_words == 0 {
+            return Ok(vec![]);
+        }
+        let task_map = record.tasks.first().ok_or_else(|| {
+            crate::Error::Backend(
+                "gliner2_fastino_candle: transformer produced no task mapping".into(),
+            )
+        })?;
+
+        let (scorer_out, pred_count) =
+            pipeline::run_pipeline_candle(self, &record, task_map)?;
+        if pred_count == 0 {
+            return Ok(vec![]);
+        }
+        Ok(decoder::decode_entities(
+            text,
+            &record,
+            task_map,
+            &scorer_out,
+            pred_count,
+            threshold,
+            /* flat_ner = */ false,
+        ))
+    }
+
+    /// Extract entities with per-label thresholds.
+    ///
+    /// Mirrors
+    /// [`crate::backends::gliner2_fastino::GLiNER2Fastino::extract_with_label_thresholds`].
+    pub fn extract_with_label_thresholds(
+        &self,
+        text: &str,
+        label_thresholds: &[(&str, f32)],
+    ) -> crate::Result<Vec<crate::Entity>> {
+        if label_thresholds.is_empty() {
+            return Ok(vec![]);
+        }
+        let labels: Vec<String> = label_thresholds
+            .iter()
+            .map(|(l, _)| l.to_string())
+            .collect();
+        let task = processor::SchemaTask::Entities(labels);
+        let transformer = processor::SchemaTransformer::new(self.tokenizer.clone())
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}")))?;
+        let record = transformer
+            .transform(text, &[task])
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}")))?;
+        let num_words = record.word_to_char_maps.len();
+        if num_words == 0 {
+            return Ok(vec![]);
+        }
+        let task_map = record.tasks.first().ok_or_else(|| {
+            crate::Error::Backend(
+                "gliner2_fastino_candle: transformer produced no task mapping".into(),
+            )
+        })?;
+
+        let (scorer_out, pred_count) =
+            pipeline::run_pipeline_candle(self, &record, task_map)?;
+        if pred_count == 0 {
+            return Ok(vec![]);
+        }
+        Ok(decoder::decode_entities_with_thresholds(
+            text,
+            &record,
+            task_map,
+            &scorer_out,
+            pred_count,
+            label_thresholds,
+            /* flat_ner = */ false,
+        ))
+    }
+
+    /// Extract structured data per the given schema.
+    ///
+    /// Mirrors
+    /// [`crate::backends::gliner2_fastino::GLiNER2Fastino::extract_structure`].
+    pub fn extract_structure(
+        &self,
+        text: &str,
+        schema: &crate::backends::gliner2_fastino::schema::TaskSchema,
+        threshold: f32,
+    ) -> crate::Result<Vec<crate::backends::gliner2_fastino::schema::ExtractedStructure>> {
+        if schema.structures.is_empty() {
+            return Ok(vec![]);
+        }
+        let transformer = processor::SchemaTransformer::new(self.tokenizer.clone())
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}")))?;
+
+        let mut all_results: Vec<crate::backends::gliner2_fastino::schema::ExtractedStructure> =
+            Vec::new();
+        for st in &schema.structures {
+            if st.fields.is_empty() {
+                continue;
+            }
+            let fields_owned: Vec<(String, crate::backends::gliner2_fastino::schema::FieldType)> = st
+                .fields
+                .iter()
+                .map(|f| (f.name.clone(), f.field_type))
+                .collect();
+            let task = processor::SchemaTask::Structures(st.name.clone(), fields_owned.clone());
+            let record = transformer
+                .transform(text, &[task])
+                .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}")))?;
+            let num_words = record.word_to_char_maps.len();
+            if num_words == 0 {
+                continue;
+            }
+            let task_map = record.tasks.first().ok_or_else(|| {
+                crate::Error::Backend(
+                    "gliner2_fastino_candle: transformer produced no task mapping".into(),
+                )
+            })?;
+
+            let (scorer_out, pred_count) =
+                pipeline::run_pipeline_candle(self, &record, task_map)?;
+            if pred_count == 0 {
+                continue;
+            }
+            let task_results = decoder::decode_structure(
+                text,
+                &record,
+                task_map,
+                &scorer_out,
+                pred_count,
+                threshold,
+                &fields_owned,
+            );
+            all_results.extend(task_results);
+        }
+        Ok(all_results)
+    }
+
+    /// Single-label classification using the dedicated `[L]`-head classifier.
+    ///
+    /// Mirrors [`crate::backends::gliner2_fastino::GLiNER2Fastino::classify`].
+    pub fn classify(
+        &self,
+        text: &str,
+        labels: &[&str],
+        _threshold: f32,
+    ) -> crate::Result<Vec<(String, f32)>> {
+        if labels.is_empty() {
+            return Ok(vec![]);
+        }
+        let label_strings: Vec<String> = labels.iter().map(|s| s.to_string()).collect();
+        let task = processor::SchemaTask::Classifications(
+            "classification".to_string(),
+            label_strings.clone(),
+        );
+        let transformer = processor::SchemaTransformer::new(self.tokenizer.clone())
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}")))?;
+        let record = transformer
+            .transform(text, &[task])
+            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}")))?;
+        let task_map = record.tasks.first().ok_or_else(|| {
+            crate::Error::Backend(
+                "gliner2_fastino_candle: transformer produced no task mapping".into(),
+            )
+        })?;
+
+        let probs = pipeline::run_classify_pipeline_candle(self, &record, task_map)?;
+
+        let mut out: Vec<(String, f32)> = label_strings
+            .into_iter()
+            .zip(probs.into_iter())
+            .collect();
+        out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(out)
+    }
+}
+
+use crate::backends::inference::ZeroShotNER;
+use crate::{EntityCategory, EntityType, Language};
+
+impl crate::Model for GLiNER2FastinoCandle {
+    fn extract_entities(
+        &self,
+        text: &str,
+        _language: Option<Language>,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        self.extract_ner(text, &["person", "organization", "location", "date"], 0.5)
+    }
+
+    fn supported_types(&self) -> Vec<EntityType> {
+        vec![
+            EntityType::Person,
+            EntityType::Organization,
+            EntityType::Location,
+            EntityType::Date,
+            EntityType::custom("misc", EntityCategory::Misc),
+        ]
+    }
+
+    fn is_available(&self) -> bool {
+        true
+    }
+
+    fn name(&self) -> &'static str {
+        "GLiNER2FastinoCandle"
+    }
+
+    fn description(&self) -> &'static str {
+        "fastino-ai GLiNER2 (NER + classification, Candle, runtime LoRA)"
+    }
+
+    fn capabilities(&self) -> crate::ModelCapabilities {
+        crate::ModelCapabilities {
+            zero_shot: true,
+            ..Default::default()
+        }
+    }
+
+    fn as_zero_shot(&self) -> Option<&dyn ZeroShotNER> {
+        Some(self)
+    }
+}
+
+impl ZeroShotNER for GLiNER2FastinoCandle {
+    fn default_types(&self) -> &[&'static str] {
+        &["person", "organization", "location", "date", "event"]
+    }
+
+    fn extract_with_types(
+        &self,
+        text: &str,
+        types: &[&str],
+        threshold: f32,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        self.extract_ner(text, types, threshold)
+    }
+
+    fn extract_with_descriptions(
+        &self,
+        text: &str,
+        descriptions: &[&str],
+        threshold: f32,
+    ) -> crate::Result<Vec<crate::Entity>> {
+        self.extract_ner(text, descriptions, threshold)
+    }
 }
