@@ -31,6 +31,37 @@
 //! Pointing `from_local` at a directory containing `adapter_config.json`
 //! returns [`errors::Error::LoraAdapterNotSupported`].
 //!
+//! # Structure extraction (Phase 2)
+//!
+//! [`GLiNER2Fastino::extract_structure`] returns a `Vec<schema::ExtractedStructure>`
+//! given a [`schema::TaskSchema`]. Each `StructureTask` in the schema runs
+//! one inference pass through the 8-session pipeline; the scorer's
+//! `MAX_COUNT` axis is walked as the per-instance dimension.
+//!
+//! ```rust,no_run
+//! use anno::backends::gliner2_fastino::GLiNER2Fastino;
+//! use anno::backends::gliner2_fastino::schema::{
+//!     FieldType, StructureTask, TaskSchema,
+//! };
+//! use std::path::Path;
+//!
+//! let model = GLiNER2Fastino::from_local(Path::new("./model")).unwrap();
+//! let schema = TaskSchema::new().with_structure(
+//!     StructureTask::new("invoice")
+//!         .with_field("vendor", FieldType::String)
+//!         .with_field("amount", FieldType::String),
+//! );
+//! let result = model
+//!     .extract_structure("Invoice from Acme Corp for $4,250.", &schema, 0.5)
+//!     .unwrap();
+//! for instance in result {
+//!     println!("{}: {:?}", instance.structure_type, instance.fields);
+//! }
+//! ```
+//!
+//! Phase 2 ships [`schema::FieldType::String`] only. `List` and `Choice`
+//! field types decode with the same single-best-span treatment as `String`.
+//!
 //! # Source attribution
 //!
 //! `processor.rs` is adapted from SemplificaAI/gliner2-rs (Apache-2.0):

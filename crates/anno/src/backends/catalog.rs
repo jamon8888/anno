@@ -289,7 +289,7 @@ pub static BACKEND_CATALOG: &[BackendInfo] = &[
         status: BackendStatus::WIP,
         zero_shot: true,
         gpu_support: true,
-        description: "fastino-ai GLiNER2 (NER + classification, multi-session pipeline) — experimental, issue #18",
+        description: "fastino-ai GLiNER2 (NER + classification + structure extraction) — experimental, issue #18",
         recommended_models: &[
             "fastino/gliner2-multi-v1",
             "fastino/gliner2-large-v1",
