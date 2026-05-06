@@ -75,11 +75,58 @@ impl GLiNER2FastinoCandle {
         self.active_adapter.as_deref()
     }
 
-    // Constructors are added in M4; load_adapter / unload_adapter in M8.
-    // For now the only construction path is via `encoder::Encoder::from_safetensors`
-    // directly (used by M3.2's smoke test).
-    #[doc(hidden)]
-    pub fn _from_local_minimal(
+    /// Load from a local directory containing the PyTorch artifacts:
+    /// `tokenizer.json`, `config.json`, `model.safetensors`.
+    ///
+    /// **Phase 4 / experimental.** No GPU device override yet — uses
+    /// CPU. Phase 4.5 may add `from_local_with_config` analogous to
+    /// the ONNX backend's pattern.
+    pub fn from_local(model_dir: &Path) -> crate::Result<Self> {
+        Self::from_local_on_device(model_dir, &Device::Cpu)
+    }
+
+    /// Load from HuggingFace Hub. Downloads `tokenizer.json`,
+    /// `config.json`, and `model.safetensors` to the local HF cache,
+    /// then defers to [`Self::from_local`].
+    ///
+    /// **Important**: this loads the *PyTorch* repo (e.g.
+    /// `fastino/gliner2-multi-v1`), NOT the SemplificaAI ONNX export.
+    /// They're different artifacts.
+    pub fn from_pretrained(model_id: &str) -> crate::Result<Self> {
+        let api = crate::backends::hf_loader::hf_api()
+            .map_err(|e| crate::Error::Backend(format!("hf_api: {e}")))?;
+        let repo = api.model(model_id.to_string());
+
+        // Touch each required file so it's in the local cache. Order
+        // matters: weights last so we can use its parent as the snapshot dir.
+        let _tokenizer = crate::backends::hf_loader::download_model_file(
+            &repo,
+            &["tokenizer.json"],
+        )
+        .map_err(|e| crate::Error::Backend(format!("download tokenizer: {e}")))?;
+        let _config = crate::backends::hf_loader::download_model_file(
+            &repo,
+            &["config.json"],
+        )
+        .map_err(|e| crate::Error::Backend(format!("download config: {e}")))?;
+        let weights_path = crate::backends::hf_loader::download_model_file(
+            &repo,
+            &["model.safetensors", "pytorch_model.bin"],
+        )
+        .map_err(|e| crate::Error::Backend(format!("download weights: {e}")))?;
+
+        let snapshot_dir = weights_path
+            .parent()
+            .ok_or_else(|| crate::Error::Backend("snapshot dir resolution".into()))?;
+        let mut model = Self::from_local(snapshot_dir)?;
+        model.model_id = model_id.to_string();
+        Ok(model)
+    }
+
+    /// Internal: like [`Self::from_local`] but explicit about the
+    /// Candle device. Hot-swap on a different device requires re-
+    /// loading; not exposed publicly until Phase 4.5.
+    pub(crate) fn from_local_on_device(
         model_dir: &Path,
         device: &Device,
     ) -> crate::Result<Self> {
@@ -87,9 +134,19 @@ impl GLiNER2FastinoCandle {
         let weights_path = model_dir.join("model.safetensors");
         let config_path = model_dir.join("config.json");
 
+        if !weights_path.exists() {
+            return Err(crate::Error::Backend(format!(
+                "gliner2_fastino_candle: model.safetensors not found in {} \
+                 (PyTorch fastino/gliner2-* repo expected; SemplificaAI ONNX \
+                 export is a different artifact)",
+                model_dir.display()
+            )));
+        }
+
         let tokenizer = crate::backends::hf_loader::load_tokenizer(&tokenizer_path)
             .map_err(|e| crate::Error::Backend(format!("tokenizer: {e}")))?;
         let encoder = encoder::Encoder::from_safetensors(&weights_path, &config_path, device)?;
+        // M5 will replace stub() with from_safetensors loading the heads.
         let heads = heads::AllHeads::stub();
         let model_id = model_dir
             .file_name()

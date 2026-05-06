@@ -8,12 +8,19 @@
 //! cargo test -p anno --features gliner2-fastino-candle \
 //!     --test gliner2_fastino_candle_integration -- --ignored --nocapture
 //! ```
-//!
-//! The encoder smoke test (M3.2) is moved into the engine integration
-//! test landing in M4 — at this layer we can't call the private
-//! `anno::backends::hf_loader::hf_api`.
 
 #![cfg(feature = "gliner2-fastino-candle")]
 
-// M4 will re-add a `gliner2_fastino_candle_smoke` test once the
-// `GLiNER2FastinoCandle::from_pretrained` constructor exists.
+use anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle;
+
+#[test]
+#[ignore]
+fn from_pretrained_smoke() {
+    // Phase 4 M4 smoke test. Download fastino/gliner2-multi-v1 from HF
+    // Hub, instantiate the engine, verify the encoder loaded successfully.
+    // No inference — that's M5+M6's parity test.
+    let model = GLiNER2FastinoCandle::from_pretrained("fastino/gliner2-multi-v1")
+        .expect("load fastino/gliner2-multi-v1");
+    eprintln!("loaded: {model:?}");
+    assert_eq!(model.active_adapter(), None, "no adapter active on fresh load");
+}
