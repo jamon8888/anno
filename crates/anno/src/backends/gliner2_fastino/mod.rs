@@ -458,6 +458,83 @@ impl GLiNER2Fastino {
         ))
     }
 
+    /// Extract structured data per the given schema.
+    ///
+    /// Each [`schema::StructureTask`] in `schema.structures` triggers
+    /// one ONNX inference pass through the 8-session pipeline (encoder →
+    /// token_gather → span_rep → schema_gather → count_pred_argmax →
+    /// count_lstm_fixed → scorer). The scorer's `MAX_COUNT` axis is
+    /// walked as the instance axis: an `[ExtractedStructure; pred_count]`
+    /// is appended to the result for each task.
+    ///
+    /// **Phase 2 / experimental.** Returns instances even when all
+    /// fields drop below threshold (with empty `fields` map). Phase 2.5
+    /// may add an opt-in filter for empty instances.
+    ///
+    /// `FieldType::String` is the only fully-supported field type in
+    /// Phase 2. `FieldType::List` and `FieldType::Choice` decode the
+    /// same single-best-span treatment as `String` — see
+    /// [`pipeline::decode_structure`] for the TODO markers.
+    pub fn extract_structure(
+        &self,
+        text: &str,
+        schema: &schema::TaskSchema,
+        threshold: f32,
+    ) -> crate::Result<Vec<schema::ExtractedStructure>> {
+        use pipeline::*;
+        if schema.structures.is_empty() {
+            return Ok(vec![]);
+        }
+        let mut all_results: Vec<schema::ExtractedStructure> = Vec::new();
+        for st in &schema.structures {
+            if st.fields.is_empty() {
+                continue; // skip degenerate task
+            }
+            let fields_owned: Vec<(String, schema::FieldType)> = st
+                .fields
+                .iter()
+                .map(|f| (f.name.clone(), f.field_type))
+                .collect();
+            let task = processor::SchemaTask::Structures(
+                st.name.clone(),
+                fields_owned.clone(),
+            );
+            let record = self.transformer.transform(text, &[task])?;
+            let num_words = record.word_to_char_maps.len();
+            if num_words == 0 {
+                continue;
+            }
+            let task_map = record.tasks.first().ok_or_else(|| {
+                crate::Error::Backend(
+                    "gliner2_fastino: transformer produced no task mapping".into(),
+                )
+            })?;
+
+            let enc = run_encoder(&self.sessions, &record)?;
+            let tg = run_token_gather(&self.sessions, &enc, &record)?;
+            let sr = run_span_rep(&self.sessions, &tg, num_words)?;
+            let sg = run_schema_gather(&self.sessions, &enc, task_map)?;
+            let pred_count = run_count_pred_argmax(&self.sessions, &sg)?;
+            if pred_count == 0 {
+                continue;
+            }
+            let cl = run_count_lstm_fixed(&self.sessions, &sg)?;
+            let scorer_out = run_scorer(&self.sessions, &sr, &cl)?;
+
+            let task_results = decode_structure(
+                text,
+                &record,
+                task_map,
+                &scorer_out,
+                pred_count,
+                threshold,
+                &fields_owned,
+            );
+            all_results.extend(task_results);
+        }
+        Ok(all_results)
+    }
+
     /// Single-label classification using the dedicated `[L]`-head classifier.
     ///
     /// Returns labels sorted by descending probability (softmax). The
