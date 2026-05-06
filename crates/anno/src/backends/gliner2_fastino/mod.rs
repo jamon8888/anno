@@ -62,6 +62,38 @@
 //! Phase 2 ships [`schema::FieldType::String`] only. `List` and `Choice`
 //! field types decode with the same single-best-span treatment as `String`.
 //!
+//! # Execution mode (Phase 3.5)
+//!
+//! Two paths through the 8-session pipeline:
+//!
+//! - [`ExecutionMode::Standard`] (default): each session round-trips
+//!   tensors through Rust ndarrays at the boundary — simple and CPU-friendly.
+//! - [`ExecutionMode::IoBinding`]: tensors stay device-resident in a
+//!   single ort allocator across the chain. 1.5-3× faster on CPU,
+//!   required for efficient GPU inference.
+//!
+//! Opt in via [`GLiNER2FastinoConfig`]:
+//!
+//! ```rust,no_run
+//! use anno::backends::gliner2_fastino::{
+//!     ExecutionMode, GLiNER2Fastino, GLiNER2FastinoConfig,
+//! };
+//!
+//! let model = GLiNER2Fastino::from_pretrained_with_config(
+//!     "SemplificaAI/gliner2-multi-v1-onnx",
+//!     GLiNER2FastinoConfig::default()
+//!         .with_execution_mode(ExecutionMode::IoBinding),
+//! )
+//! .unwrap();
+//! ```
+//!
+//! Every public extract method (`extract_ner`,
+//! `extract_with_label_descriptions`, `extract_with_label_thresholds`,
+//! `extract_structure`, `classify`) dispatches on the configured mode.
+//! Standard ≡ IoBinding within a max-abs-diff tolerance of 1e-4 on
+//! per-entity confidence — see the
+//! `parity_standard_iobinding_*` integration tests.
+//!
 //! # Source attribution
 //!
 //! `processor.rs` is adapted from SemplificaAI/gliner2-rs (Apache-2.0):
