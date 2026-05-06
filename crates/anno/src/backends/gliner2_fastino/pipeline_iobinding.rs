@@ -151,6 +151,67 @@ fn resolve_output_name(
         .unwrap_or_else(|| candidates.first().copied().unwrap_or("output").to_string())
 }
 
+/// Output of token_gather: word-level embeddings.
+/// Shape: `[1, num_words, H]`. Device-resident DynValue.
+pub(crate) struct TokenGatherOutputIo {
+    pub text_embs: DynValue,
+    pub output_name: String,
+}
+
+/// Run token_gather via IoBinding. Inputs:
+/// - `last_hidden_state` from [`EncoderOutputIo`] (device-resident).
+/// - `word_indices` built from `record.word_to_token_maps[*].0`.
+///
+/// Output is bound to `device_mem` and returned as a device-resident
+/// DynValue for chaining into [`run_span_rep_io`] (M7).
+pub(crate) fn run_token_gather_io(
+    sessions: &Sessions,
+    encoder_out: &EncoderOutputIo,
+    record: &ProcessedRecord,
+    device_mem: &MemoryInfo,
+) -> Result<TokenGatherOutputIo, Error> {
+    use ndarray::Array1;
+
+    let num_words = record.word_to_token_maps.len();
+    if num_words == 0 {
+        return Err(Error::Tokenizer("token_gather_io: 0 words in record".into()));
+    }
+    let word_starts: Vec<i64> = record
+        .word_to_token_maps
+        .iter()
+        .map(|&(start, _)| start as i64)
+        .collect();
+    let word_idx_arr: Array1<i64> = Array1::from_vec(word_starts);
+    let word_idx_t = crate::backends::ort_compat::tensor_from_ndarray(word_idx_arr)
+        .map_err(|e| Error::Tokenizer(format!("token_gather_io word_idx tensor: {e}")))?;
+
+    sessions.token_gather.with_session(|s| -> Result<TokenGatherOutputIo, Error> {
+        let output_name = resolve_output_name(s, &["text_embs"]);
+        let mut binding = s
+            .create_binding()
+            .map_err(|e| Error::Tokenizer(format!("token_gather_io create_binding: {e}")))?;
+        binding
+            .bind_input("last_hidden_state", &encoder_out.hidden_states)
+            .map_err(|e| Error::Tokenizer(format!("token_gather_io bind last_hidden_state: {e}")))?;
+        binding
+            .bind_input("word_indices", &word_idx_t)
+            .map_err(|e| Error::Tokenizer(format!("token_gather_io bind word_indices: {e}")))?;
+        binding
+            .bind_output_to_device(&output_name, device_mem)
+            .map_err(|e| Error::Tokenizer(format!("token_gather_io bind_output: {e}")))?;
+        let outputs = s
+            .run_binding(&binding)
+            .map_err(|e| Error::Tokenizer(format!("token_gather_io run_binding: {e}")))?;
+        let text_embs = outputs
+            .into_iter()
+            .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
+            .ok_or_else(|| Error::Tokenizer(format!(
+                "token_gather_io: output '{output_name}' not present"
+            )))?;
+        Ok(TokenGatherOutputIo { text_embs, output_name })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
