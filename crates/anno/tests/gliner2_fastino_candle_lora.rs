@@ -41,10 +41,34 @@ use anno::backends::inference::ZeroShotNER;
 ///
 /// `r` = 4. Targets: layers 0-2 query/key/value projections (the
 /// classic LoRA target set).
+/// Build a minimal PEFT-format adapter with optional non-zero pattern.
+///
+/// `variant`: 0 = zero adapter (delta = 0); >0 picks a deterministic
+/// pseudo-random pattern keyed by the variant. Variant 1 and variant 2
+/// produce distinct deltas, useful for the multi-adapter swap test.
+fn write_synthetic_adapter_seeded(
+    dir: &Path,
+    base_model_name: &str,
+    variant: u32,
+) -> std::io::Result<()> {
+    let randomize = variant > 0;
+    let seed_offset = (variant as f32) * 1000.0;
+    write_synthetic_adapter_inner(dir, base_model_name, randomize, seed_offset)
+}
+
 fn write_synthetic_adapter(
     dir: &Path,
     base_model_name: &str,
     randomize: bool,
+) -> std::io::Result<()> {
+    write_synthetic_adapter_inner(dir, base_model_name, randomize, 0.0)
+}
+
+fn write_synthetic_adapter_inner(
+    dir: &Path,
+    base_model_name: &str,
+    randomize: bool,
+    seed_offset: f32,
 ) -> std::io::Result<()> {
     use std::io::Write;
 
@@ -83,16 +107,15 @@ fn write_synthetic_adapter(
             let key_b = format!("base_model.model.{base_path}.lora_B.weight");
 
             let a_data: Vec<f32> = if randomize {
-                // Simple deterministic non-zero pattern.
                 (0..(r * in_features))
-                    .map(|i| ((i as f32) * 0.0001).sin() * 0.01)
+                    .map(|i| ((i as f32 + seed_offset) * 0.0001).sin() * 0.01)
                     .collect()
             } else {
                 vec![0.0; r * in_features]
             };
             let b_data: Vec<f32> = if randomize {
                 (0..(out_features * r))
-                    .map(|i| ((i as f32) * 0.0001).cos() * 0.01)
+                    .map(|i| ((i as f32 + seed_offset) * 0.0001).cos() * 0.01)
                     .collect()
             } else {
                 vec![0.0; out_features * r]
@@ -313,4 +336,96 @@ fn real_adapter_changes_inference() {
         count_changed || sum_diff > 1e-3,
         "real adapter had no measurable effect"
     );
+}
+
+#[test]
+#[ignore]
+fn multi_adapter_sequential_swap() {
+    // Phase 4 validation: load adapter A, infer, swap to adapter B,
+    // verify B's behavior replaces A's (not stale A residue).
+    //
+    // Two distinct synthetic adapters with different deltas. After
+    // load_adapter("B"), inference should match B-merged (not
+    // A-merged, not base).
+    let mut model = GLiNER2FastinoCandle::from_pretrained("fastino/gliner2-multi-v1")
+        .expect("load base");
+
+    let text = "Marie Curie won the Nobel Prize in Physics in 1903.";
+    let types = ["person", "award", "year"];
+
+    let baseline = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
+        .expect("baseline extract");
+
+    let dir_a = tempfile::tempdir().expect("tempdir A");
+    let dir_b = tempfile::tempdir().expect("tempdir B");
+    write_synthetic_adapter_seeded(dir_a.path(), "fastino/gliner2-multi-v1", 1)
+        .expect("write adapter A");
+    write_synthetic_adapter_seeded(dir_b.path(), "fastino/gliner2-multi-v1", 2)
+        .expect("write adapter B");
+
+    // ── Step 1: load A, capture scores ─────────────────────────────
+    model.load_adapter("A", dir_a.path()).expect("load A");
+    assert_eq!(model.active_adapter(), Some("A"));
+    let after_a = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
+        .expect("infer with A");
+
+    // ── Step 2: swap to B (no unload first; load_adapter must replace A) ──
+    model.load_adapter("B", dir_b.path()).expect("load B");
+    assert_eq!(
+        model.active_adapter(),
+        Some("B"),
+        "active_adapter should be B after second load"
+    );
+    let after_b = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
+        .expect("infer with B");
+
+    // ── Step 3: A and B must produce different scores ───────────────
+    // If load_adapter("B") didn't actually replace A's merge, we'd see
+    // identical scores between after_a and after_b.
+    assert_eq!(
+        after_a.len(),
+        after_b.len(),
+        "entity count diverged between A and B (unexpected)"
+    );
+    let mut max_a_b_diff: f64 = 0.0;
+    for (a, b) in after_a.iter().zip(after_b.iter()) {
+        let d = (a.confidence.value() - b.confidence.value()).abs();
+        if d > max_a_b_diff {
+            max_a_b_diff = d;
+        }
+    }
+    eprintln!("A↔B max_score_diff: {max_a_b_diff}");
+    assert!(
+        max_a_b_diff > 1e-7,
+        "load_adapter('B') after load_adapter('A') produced identical \
+         scores — adapter swap may be broken (max_a_b_diff = {max_a_b_diff})"
+    );
+
+    // ── Step 4: also distinct from baseline ───────────────────────
+    let mut max_b_baseline: f64 = 0.0;
+    for (b, base) in after_b.iter().zip(baseline.iter()) {
+        let d = (b.confidence.value() - base.confidence.value()).abs();
+        if d > max_b_baseline {
+            max_b_baseline = d;
+        }
+    }
+    eprintln!("B↔baseline max_score_diff: {max_b_baseline}");
+    assert!(
+        max_b_baseline > 1e-7,
+        "B-merged inference matches baseline — adapter B isn't being merged"
+    );
+
+    // ── Step 5: unload restores baseline byte-identically ──────────
+    model.unload_adapter().expect("unload");
+    assert_eq!(model.active_adapter(), None);
+    let restored = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
+        .expect("restored");
+    assert_eq!(baseline.len(), restored.len());
+    for (b, r) in baseline.iter().zip(restored.iter()) {
+        let d = (b.confidence.value() - r.confidence.value()).abs();
+        assert!(
+            d < 1e-5,
+            "unload after multi-swap drift: {d} (b={b:?}, r={r:?})"
+        );
+    }
 }
