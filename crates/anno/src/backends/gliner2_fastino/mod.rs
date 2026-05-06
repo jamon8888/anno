@@ -75,6 +75,7 @@ pub(crate) mod config;
 pub(crate) mod decoder;
 pub(crate) mod nms;
 pub(crate) mod pipeline;
+pub(crate) mod pipeline_iobinding;
 pub(crate) mod processor;
 pub(crate) mod sessions;
 
