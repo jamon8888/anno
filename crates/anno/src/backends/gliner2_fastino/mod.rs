@@ -39,6 +39,7 @@
 #![cfg(feature = "gliner2-fastino")]
 
 pub mod errors;
+pub mod schema;
 pub(crate) mod config;
 pub(crate) mod decoder;
 pub(crate) mod nms;
@@ -684,5 +685,25 @@ mod from_local_tests {
             msg.contains("no complete v2 session set"),
             "Phase 3 should report missing sessions, not 'Phase 3 needed'. Got: {msg}"
         );
+    }
+
+    #[test]
+    fn schema_types_reachable_via_gliner2_fastino_path() {
+        // Phase 2 M1: confirm the schema submodule re-exports the
+        // structure-extraction types so callers don't have to depend on
+        // gliner_multitask. Compile-time check + minimal value construction.
+        use crate::backends::gliner2_fastino::schema::{
+            ExtractedStructure, FieldType, StructureTask, TaskSchema,
+        };
+        let _schema: TaskSchema = TaskSchema::new()
+            .with_structure(
+                StructureTask::new("invoice")
+                    .with_field("vendor", FieldType::String)
+                    .with_field("amount", FieldType::String),
+            );
+        let _es: ExtractedStructure = ExtractedStructure {
+            structure_type: "invoice".to_string(),
+            fields: std::collections::HashMap::new(),
+        };
     }
 }
