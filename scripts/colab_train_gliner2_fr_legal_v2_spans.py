@@ -116,121 +116,164 @@ else:
     print("WARNING: no GPU — V2 weak-labeling step will be VERY slow on CPU.")
 
 # %% [markdown]
-# # 2. Stream + sample French jurisprudence
+# # 2. Sample French jurisprudence (direct parquet, no HF streaming)
 #
 # `antoinejeannot/jurisprudence` is ~9.3 GB, 1.13M docs split by juridiction:
 #   - `tribunal_judiciaire` (1ère instance)
 #   - `cour_d_appel` (cours d'appel)
 #   - `cour_de_cassation` (Cour de cassation)
 #
-# We stream all three (no full download) round-robin so the training set
-# spans court levels. ~1000 docs per split → ~3000 total → enough raw text
-# for ~5-10k sentence-level training examples after weak labeling.
+# **Why not `load_dataset(..., streaming=True)` like the previous version?**
+# It OOMs on Colab free (12 GB RAM) — the streaming layer buffers more
+# than expected for multi-GB parquet datasets.
+#
+# **What this cell does instead:**
+#   1. Lists parquet shards via `huggingface_hub`
+#   2. Downloads ONE shard per court level (typically 100-500 MB each)
+#   3. Reads it via `pyarrow.ParquetFile.iter_batches` — chunked, never
+#      the full file in RAM
+#   4. Filters and collects ~500 docs per split → ~1500 total
 #
 # The dataset's full-text field is auto-detected from common candidates
 # (`texte_integral`, `texte`, `text`, `content`, `contenu`).
 
 # %%
+# Direct-parquet ingestion — bypasses the HF `datasets` streaming layer
+# which OOMs on multi-GB parquet datasets in Colab free (12 GB RAM).
+#
+# Approach:
+#   1. List the dataset's parquet files via huggingface_hub
+#   2. Download ONE shard per court level (typically 100-500 MB each)
+#   3. Read the shard with pyarrow `iter_batches` (chunked, never the whole
+#      file in memory)
+#   4. Filter and collect raw_docs
+#
+# Memory profile: peak ~1-2 GB per shard, GC'd between splits. Fits Colab
+# free with margin.
 import gc
+import os
 
-from datasets import load_dataset
+import pyarrow.parquet as pq
+from huggingface_hub import HfApi, hf_hub_download
 
+REPO_ID = "antoinejeannot/jurisprudence"
 JURISPRUDENCE_SPLITS = ["tribunal_judiciaire", "cour_d_appel", "cour_de_cassation"]
-print(f"Target splits: {JURISPRUDENCE_SPLITS}\n")
 
-# ── Step 1: probe a single record to find the text field ─────────────
-print("Probing first record to detect the text field...")
-probe = load_dataset(
-    "antoinejeannot/jurisprudence", split=JURISPRUDENCE_SPLITS[0], streaming=True
-)
-first = next(iter(probe))
-print(f"  Fields available: {sorted(first.keys())}")
+# ── Step 1: enumerate parquet shards, group by split ─────────────────
+api = HfApi()
+all_files = api.list_repo_files(REPO_ID, repo_type="dataset")
+parquet_files = [f for f in all_files if f.endswith(".parquet")]
+print(f"Total files: {len(all_files)}, parquet shards: {len(parquet_files)}")
+
+shards_per_split: dict[str, list[str]] = {}
+for split in JURISPRUDENCE_SPLITS:
+    matches = sorted(
+        f
+        for f in parquet_files
+        if f"/{split}/" in f or f.startswith(f"{split}/") or f.endswith(f"{split}.parquet")
+    )
+    if matches:
+        shards_per_split[split] = matches
+        print(f"  {split}: {len(matches)} shard(s)  (first: {matches[0]})")
+    else:
+        print(f"  {split}: NO SHARD FOUND — will skip")
+
+if not shards_per_split:
+    print(f"\n⚠️  No matching shards. Sample of parquet files: {parquet_files[:5]}")
+    raise RuntimeError("Could not locate any split shard. Inspect parquet_files above.")
+
+# ── Step 2: probe text field from the first shard ────────────────────
+first_split = next(iter(shards_per_split))
+first_shard = shards_per_split[first_split][0]
+print(f"\nProbing {first_shard} for text field...")
+probe_local = hf_hub_download(REPO_ID, first_shard, repo_type="dataset")
+
+probe_pf = pq.ParquetFile(probe_local)
+schema_names = probe_pf.schema_arrow.names
+print(f"  Schema columns: {schema_names}")
 TEXT_FIELD_CANDIDATES = ["texte_integral", "texte", "text", "content", "contenu"]
-TEXT_FIELD = next((f for f in TEXT_FIELD_CANDIDATES if f in first), None)
+TEXT_FIELD = next((f for f in TEXT_FIELD_CANDIDATES if f in schema_names), None)
 if TEXT_FIELD is None:
     raise RuntimeError(
-        f"No text field found. Available: {sorted(first.keys())}. "
+        f"No text field found in {first_shard}. Available: {schema_names}. "
         f"Add the matching name to TEXT_FIELD_CANDIDATES."
     )
-print(f"  Using text field: '{TEXT_FIELD}'")
-print(f"  Sample (first 200 chars): {str(first[TEXT_FIELD])[:200]}...")
+print(f"  Using TEXT_FIELD = '{TEXT_FIELD}'")
 
-# Free probe stream before opening fresh ones
-del probe, first
+# Show one sample to confirm content
+sample_batch = next(probe_pf.iter_batches(batch_size=1, columns=[TEXT_FIELD]))
+sample_text = sample_batch.column(TEXT_FIELD)[0].as_py()
+print(f"  Sample (first 200 chars): {str(sample_text)[:200]}...")
+del probe_pf, sample_batch, sample_text
 gc.collect()
 
-# ── Step 2: stream each split, with progress prints and bounded memory ─
-# Defaults tuned for Colab free (T4, 12 GB RAM). If you get a kernel
-# restart, drop NUM_DOCS to 600 and/or MAX_LEN to 30_000.
-#
-# Filter window MIN_LEN/MAX_LEN is wide because French case-law length
-# is bimodal — short ordonnances + long arrêts. Truncate-on-load
-# (rather than reject) keeps long arrêts usable.
+# ── Step 3: read each split's first shard in batches ─────────────────
 NUM_DOCS = 1500
-PER_SPLIT = NUM_DOCS // len(JURISPRUDENCE_SPLITS)
-MIN_LEN = 200            # accept short ordonnances too
-MAX_LEN = 80_000         # accept long arrêts (raised from 20_000)
-TRUNCATE_TO = 30_000     # if doc > MAX_LEN, truncate (don't reject)
-PROGRESS_EVERY = 500
+PER_SPLIT = NUM_DOCS // len(shards_per_split)
+MIN_LEN = 200
+MAX_LEN = 80_000
+TRUNCATE_TO = 30_000
+BATCH_SIZE = 100  # rows per pyarrow batch — keeps peak RAM low
 
 raw_docs: list[str] = []
-for split in JURISPRUDENCE_SPLITS:
+for split, shards in shards_per_split.items():
+    one_shard = shards[0]
     print(f"\n  Split '{split}' (target {PER_SPLIT} docs)")
-    stream = load_dataset(
-        "antoinejeannot/jurisprudence", split=split, streaming=True
-    )
-    # Diagnostic: track length distribution of first 100 records, BEFORE filter
-    lengths_seen: list[int] = []
+    print(f"    Downloading {one_shard}...")
+    local_path = hf_hub_download(REPO_ID, one_shard, repo_type="dataset")
+    print(f"    File: {local_path} ({os.path.getsize(local_path) / 1e6:.1f} MB)")
+
+    pf = pq.ParquetFile(local_path)
+    print(f"    Total rows in shard: {pf.metadata.num_rows:,}")
+
     kept = 0
     seen = 0
-    for row in stream:
-        seen += 1
-        text = row.get(TEXT_FIELD)
-        if isinstance(text, str) and len(lengths_seen) < 100:
-            lengths_seen.append(len(text))
-        if seen % PROGRESS_EVERY == 0:
-            print(f"    seen={seen}, kept={kept}")
-        if not text or not isinstance(text, str):
-            continue
-        n = len(text)
-        if n < MIN_LEN:
-            continue
-        if n > MAX_LEN:
-            # Truncate ultra-long docs instead of dropping them — keeps the
-            # opening 30k chars (header + main reasoning) which is the
-            # entity-rich part of any arrêt.
-            text = text[:TRUNCATE_TO]
-        raw_docs.append(text)
-        kept += 1
-        if kept >= PER_SPLIT:
+    lengths_seen: list[int] = []
+    done = False
+    for batch in pf.iter_batches(batch_size=BATCH_SIZE, columns=[TEXT_FIELD]):
+        if done:
             break
+        col = batch.column(TEXT_FIELD)
+        for i in range(len(col)):
+            seen += 1
+            v = col[i]
+            if not v.is_valid:
+                continue
+            text = v.as_py()
+            if not isinstance(text, str):
+                continue
+            if len(lengths_seen) < 100:
+                lengths_seen.append(len(text))
+            n = len(text)
+            if n < MIN_LEN:
+                continue
+            if n > MAX_LEN:
+                text = text[:TRUNCATE_TO]  # keep header + reasoning
+            raw_docs.append(text)
+            kept += 1
+            if kept >= PER_SPLIT:
+                done = True
+                break
 
-    # Print length-distribution diagnostic for this split
     if lengths_seen:
-        sorted_lens = sorted(lengths_seen)
-        p50 = sorted_lens[len(sorted_lens) // 2]
-        p10 = sorted_lens[len(sorted_lens) // 10]
-        p90 = sorted_lens[(9 * len(sorted_lens)) // 10]
+        sl = sorted(lengths_seen)
         print(
-            f"    [len distribution of first {len(lengths_seen)}] "
-            f"p10={p10}  p50={p50}  p90={p90}"
+            f"    [len distribution of first {len(sl)}] "
+            f"p10={sl[len(sl) // 10]}  p50={sl[len(sl) // 2]}  "
+            f"p90={sl[(9 * len(sl)) // 10]}"
         )
-    print(f"    [done] kept {kept} from {seen} records")
-    del stream
+    print(f"    [done] kept {kept} from {seen} rows scanned")
+    del pf
     gc.collect()
 
 mean_len = sum(len(d) for d in raw_docs) / max(len(raw_docs), 1)
 print(f"\n✅ Collected {len(raw_docs)} documents (mean {mean_len:.0f} chars)")
 
-# Hard floor: if streaming gave us almost nothing, skip the rest of the
-# notebook with a clear message instead of failing later in cryptic ways.
 if len(raw_docs) < 200:
     raise RuntimeError(
         f"Only collected {len(raw_docs)} docs — too few for training. "
-        "Either: (a) the dataset's text field is sparser than expected — "
-        "check the 'len distribution' lines above, or (b) the filter is "
-        "still too strict — try MIN_LEN=50, MAX_LEN=200_000. "
-        "Fallback: use v1 (wikiner_fr-based) script for stable training."
+        "Inspect the [len distribution] lines above and adjust MIN_LEN/MAX_LEN. "
+        "Fallback: switch to v1 (wikiner_fr-based) — stable, ~30 min on T4."
     )
 
 # %% [markdown]
