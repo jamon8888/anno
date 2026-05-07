@@ -118,23 +118,29 @@ else:
 # %% [markdown]
 # # 2. Stream + sample French jurisprudence
 #
-# `antoinejeannot/jurisprudence` is ~9.3 GB, 1.13M docs. We stream it (no
-# full download) and take the first ~3000 docs that match a length filter.
-# That's enough raw text to extract ~5-10k sentence-level training examples
-# after weak labeling.
+# `antoinejeannot/jurisprudence` is ~9.3 GB, 1.13M docs split by juridiction:
+#   - `tribunal_judiciaire` (1ère instance)
+#   - `cour_d_appel` (cours d'appel)
+#   - `cour_de_cassation` (Cour de cassation)
 #
-# The dataset's full text field is in `texte_integral` (verified against
-# the dataset card). If that field is missing in your snapshot, the
-# fallback below tries common alternatives.
+# We stream all three (no full download) round-robin so the training set
+# spans court levels. ~1000 docs per split → ~3000 total → enough raw text
+# for ~5-10k sentence-level training examples after weak labeling.
+#
+# The dataset's full-text field is auto-detected from common candidates
+# (`texte_integral`, `texte`, `text`, `content`, `contenu`).
 
 # %%
 from datasets import load_dataset
 
-print("Streaming antoinejeannot/jurisprudence (no full download)...")
-stream = load_dataset("antoinejeannot/jurisprudence", split="train", streaming=True)
+JURISPRUDENCE_SPLITS = ["tribunal_judiciaire", "cour_d_appel", "cour_de_cassation"]
+print(f"Streaming antoinejeannot/jurisprudence splits: {JURISPRUDENCE_SPLITS}")
 
-# Inspect the first record's available fields so we pick the right text key
-first = next(iter(stream))
+# Probe the first record of one split to discover the text field
+probe = load_dataset(
+    "antoinejeannot/jurisprudence", split=JURISPRUDENCE_SPLITS[0], streaming=True
+)
+first = next(iter(probe))
 print(f"\nFirst record fields: {sorted(first.keys())}")
 TEXT_FIELD_CANDIDATES = ["texte_integral", "texte", "text", "content", "contenu"]
 TEXT_FIELD = next((f for f in TEXT_FIELD_CANDIDATES if f in first), None)
@@ -146,25 +152,31 @@ if TEXT_FIELD is None:
 print(f"Using text field: '{TEXT_FIELD}'")
 print(f"Sample (first 200 chars): {str(first[TEXT_FIELD])[:200]}...")
 
-# Resume stream from start (we consumed first record)
-stream = load_dataset("antoinejeannot/jurisprudence", split="train", streaming=True)
-
 NUM_DOCS = 3000
+PER_SPLIT = NUM_DOCS // len(JURISPRUDENCE_SPLITS)
 MIN_LEN = 500       # skip very short docs (probably metadata-only)
 MAX_LEN = 50_000    # cap doc length to keep memory bounded
 
 raw_docs: list[str] = []
-for row in stream:
-    text = row.get(TEXT_FIELD)
-    if not text or not isinstance(text, str):
-        continue
-    if not (MIN_LEN <= len(text) <= MAX_LEN):
-        continue
-    raw_docs.append(text)
-    if len(raw_docs) >= NUM_DOCS:
-        break
+for split in JURISPRUDENCE_SPLITS:
+    print(f"\n  Streaming split '{split}' (target: {PER_SPLIT} docs)...")
+    stream = load_dataset(
+        "antoinejeannot/jurisprudence", split=split, streaming=True
+    )
+    kept_in_split = 0
+    for row in stream:
+        text = row.get(TEXT_FIELD)
+        if not text or not isinstance(text, str):
+            continue
+        if not (MIN_LEN <= len(text) <= MAX_LEN):
+            continue
+        raw_docs.append(text)
+        kept_in_split += 1
+        if kept_in_split >= PER_SPLIT:
+            break
+    print(f"    kept {kept_in_split} docs from '{split}'")
 
-print(f"\nCollected {len(raw_docs)} jurisprudence documents.")
+print(f"\nTotal: {len(raw_docs)} jurisprudence documents")
 print(f"Mean length: {sum(len(d) for d in raw_docs) / len(raw_docs):.0f} chars")
 
 # %% [markdown]
