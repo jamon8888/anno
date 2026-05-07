@@ -161,12 +161,17 @@ gc.collect()
 
 # ── Step 2: stream each split, with progress prints and bounded memory ─
 # Defaults tuned for Colab free (T4, 12 GB RAM). If you get a kernel
-# restart, drop NUM_DOCS to 600 and/or MAX_LEN to 10_000.
+# restart, drop NUM_DOCS to 600 and/or MAX_LEN to 30_000.
+#
+# Filter window MIN_LEN/MAX_LEN is wide because French case-law length
+# is bimodal — short ordonnances + long arrêts. Truncate-on-load
+# (rather than reject) keeps long arrêts usable.
 NUM_DOCS = 1500
 PER_SPLIT = NUM_DOCS // len(JURISPRUDENCE_SPLITS)
-MIN_LEN = 500        # skip very short docs (probably metadata-only)
-MAX_LEN = 20_000     # cap doc length — long arrêts can hit 100k chars
-PROGRESS_EVERY = 500 # print "seen=X, kept=Y" every N records
+MIN_LEN = 200            # accept short ordonnances too
+MAX_LEN = 80_000         # accept long arrêts (raised from 20_000)
+TRUNCATE_TO = 30_000     # if doc > MAX_LEN, truncate (don't reject)
+PROGRESS_EVERY = 500
 
 raw_docs: list[str] = []
 for split in JURISPRUDENCE_SPLITS:
@@ -174,28 +179,59 @@ for split in JURISPRUDENCE_SPLITS:
     stream = load_dataset(
         "antoinejeannot/jurisprudence", split=split, streaming=True
     )
+    # Diagnostic: track length distribution of first 100 records, BEFORE filter
+    lengths_seen: list[int] = []
     kept = 0
     seen = 0
     for row in stream:
         seen += 1
+        text = row.get(TEXT_FIELD)
+        if isinstance(text, str) and len(lengths_seen) < 100:
+            lengths_seen.append(len(text))
         if seen % PROGRESS_EVERY == 0:
             print(f"    seen={seen}, kept={kept}")
-        text = row.get(TEXT_FIELD)
         if not text or not isinstance(text, str):
             continue
-        if not (MIN_LEN <= len(text) <= MAX_LEN):
+        n = len(text)
+        if n < MIN_LEN:
             continue
+        if n > MAX_LEN:
+            # Truncate ultra-long docs instead of dropping them — keeps the
+            # opening 30k chars (header + main reasoning) which is the
+            # entity-rich part of any arrêt.
+            text = text[:TRUNCATE_TO]
         raw_docs.append(text)
         kept += 1
         if kept >= PER_SPLIT:
             break
+
+    # Print length-distribution diagnostic for this split
+    if lengths_seen:
+        sorted_lens = sorted(lengths_seen)
+        p50 = sorted_lens[len(sorted_lens) // 2]
+        p10 = sorted_lens[len(sorted_lens) // 10]
+        p90 = sorted_lens[(9 * len(sorted_lens)) // 10]
+        print(
+            f"    [len distribution of first {len(lengths_seen)}] "
+            f"p10={p10}  p50={p50}  p90={p90}"
+        )
     print(f"    [done] kept {kept} from {seen} records")
-    # Drop the stream + force GC so the next split starts with clean RAM
     del stream
     gc.collect()
 
 mean_len = sum(len(d) for d in raw_docs) / max(len(raw_docs), 1)
 print(f"\n✅ Collected {len(raw_docs)} documents (mean {mean_len:.0f} chars)")
+
+# Hard floor: if streaming gave us almost nothing, skip the rest of the
+# notebook with a clear message instead of failing later in cryptic ways.
+if len(raw_docs) < 200:
+    raise RuntimeError(
+        f"Only collected {len(raw_docs)} docs — too few for training. "
+        "Either: (a) the dataset's text field is sparser than expected — "
+        "check the 'len distribution' lines above, or (b) the filter is "
+        "still too strict — try MIN_LEN=50, MAX_LEN=200_000. "
+        "Fallback: use v1 (wikiner_fr-based) script for stable training."
+    )
 
 # %% [markdown]
 # # 3. Sentence segmentation
