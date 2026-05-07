@@ -131,53 +131,71 @@ else:
 # (`texte_integral`, `texte`, `text`, `content`, `contenu`).
 
 # %%
+import gc
+
 from datasets import load_dataset
 
 JURISPRUDENCE_SPLITS = ["tribunal_judiciaire", "cour_d_appel", "cour_de_cassation"]
-print(f"Streaming antoinejeannot/jurisprudence splits: {JURISPRUDENCE_SPLITS}")
+print(f"Target splits: {JURISPRUDENCE_SPLITS}\n")
 
-# Probe the first record of one split to discover the text field
+# ── Step 1: probe a single record to find the text field ─────────────
+print("Probing first record to detect the text field...")
 probe = load_dataset(
     "antoinejeannot/jurisprudence", split=JURISPRUDENCE_SPLITS[0], streaming=True
 )
 first = next(iter(probe))
-print(f"\nFirst record fields: {sorted(first.keys())}")
+print(f"  Fields available: {sorted(first.keys())}")
 TEXT_FIELD_CANDIDATES = ["texte_integral", "texte", "text", "content", "contenu"]
 TEXT_FIELD = next((f for f in TEXT_FIELD_CANDIDATES if f in first), None)
 if TEXT_FIELD is None:
     raise RuntimeError(
-        f"Could not find a text field in jurisprudence record. "
-        f"Available: {sorted(first.keys())}"
+        f"No text field found. Available: {sorted(first.keys())}. "
+        f"Add the matching name to TEXT_FIELD_CANDIDATES."
     )
-print(f"Using text field: '{TEXT_FIELD}'")
-print(f"Sample (first 200 chars): {str(first[TEXT_FIELD])[:200]}...")
+print(f"  Using text field: '{TEXT_FIELD}'")
+print(f"  Sample (first 200 chars): {str(first[TEXT_FIELD])[:200]}...")
 
-NUM_DOCS = 3000
+# Free probe stream before opening fresh ones
+del probe, first
+gc.collect()
+
+# ── Step 2: stream each split, with progress prints and bounded memory ─
+# Defaults tuned for Colab free (T4, 12 GB RAM). If you get a kernel
+# restart, drop NUM_DOCS to 600 and/or MAX_LEN to 10_000.
+NUM_DOCS = 1500
 PER_SPLIT = NUM_DOCS // len(JURISPRUDENCE_SPLITS)
-MIN_LEN = 500       # skip very short docs (probably metadata-only)
-MAX_LEN = 50_000    # cap doc length to keep memory bounded
+MIN_LEN = 500        # skip very short docs (probably metadata-only)
+MAX_LEN = 20_000     # cap doc length — long arrêts can hit 100k chars
+PROGRESS_EVERY = 500 # print "seen=X, kept=Y" every N records
 
 raw_docs: list[str] = []
 for split in JURISPRUDENCE_SPLITS:
-    print(f"\n  Streaming split '{split}' (target: {PER_SPLIT} docs)...")
+    print(f"\n  Split '{split}' (target {PER_SPLIT} docs)")
     stream = load_dataset(
         "antoinejeannot/jurisprudence", split=split, streaming=True
     )
-    kept_in_split = 0
+    kept = 0
+    seen = 0
     for row in stream:
+        seen += 1
+        if seen % PROGRESS_EVERY == 0:
+            print(f"    seen={seen}, kept={kept}")
         text = row.get(TEXT_FIELD)
         if not text or not isinstance(text, str):
             continue
         if not (MIN_LEN <= len(text) <= MAX_LEN):
             continue
         raw_docs.append(text)
-        kept_in_split += 1
-        if kept_in_split >= PER_SPLIT:
+        kept += 1
+        if kept >= PER_SPLIT:
             break
-    print(f"    kept {kept_in_split} docs from '{split}'")
+    print(f"    [done] kept {kept} from {seen} records")
+    # Drop the stream + force GC so the next split starts with clean RAM
+    del stream
+    gc.collect()
 
-print(f"\nTotal: {len(raw_docs)} jurisprudence documents")
-print(f"Mean length: {sum(len(d) for d in raw_docs) / len(raw_docs):.0f} chars")
+mean_len = sum(len(d) for d in raw_docs) / max(len(raw_docs), 1)
+print(f"\n✅ Collected {len(raw_docs)} documents (mean {mean_len:.0f} chars)")
 
 # %% [markdown]
 # # 3. Sentence segmentation
