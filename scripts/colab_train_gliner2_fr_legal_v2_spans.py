@@ -71,7 +71,40 @@ pip_install(
     "accelerate>=0.27.0",
     "safetensors>=0.4.0",
     "sentencepiece",  # camembert tokenizer needs this
+    "huggingface_hub>=0.20.0",
 )
+
+# ── HuggingFace authentication ───────────────────────────────────────
+# Required for stable model/dataset downloads (avoids anonymous rate
+# limits; mandatory if you ever pull a gated model).
+#
+# In Colab: left sidebar → 🔑 Secrets → "Add new secret"
+#   Name: HF_TOKEN
+#   Value: hf_xxx... (https://huggingface.co/settings/tokens, "read" scope)
+#   Notebook access: ON
+#
+# Locally: export HF_TOKEN=hf_xxx before running.
+HF_TOKEN = None
+try:
+    from google.colab import userdata
+
+    try:
+        HF_TOKEN = userdata.get("HF_TOKEN")
+    except Exception as e:
+        print(f"⚠️  Could not read HF_TOKEN secret: {e}")
+        print("    Sidebar → 🔑 Secrets → New secret → Name: HF_TOKEN, access: ON")
+except ImportError:
+    import os
+
+    HF_TOKEN = os.environ.get("HF_TOKEN")
+
+if HF_TOKEN:
+    from huggingface_hub import login
+
+    login(token=HF_TOKEN, add_to_git_credential=False)
+    print("✅ Logged in to HuggingFace")
+else:
+    print("ℹ️  No HF token detected. Public downloads still work but may hit rate limits.")
 
 import torch
 
