@@ -41,6 +41,7 @@ argon2               = { workspace = true }
 keyring              = { workspace = true }
 rand                 = { workspace = true }
 dirs                 = { workspace = true }
+chrono               = { workspace = true }
 
 [dev-dependencies]
 tempfile        = "3"
