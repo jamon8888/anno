@@ -7,6 +7,7 @@
 pub mod config;
 pub mod detect;
 pub mod error;
+pub mod ingest;
 pub mod vault;
 
 pub use config::AnnoRagConfig;
