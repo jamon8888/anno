@@ -21,6 +21,10 @@ use tokio::sync::Mutex;
 /// Async-safe handle to a cloakpipe file-based Vault.
 #[derive(Clone)]
 pub struct Vault {
+    // `Mutex` not `RwLock`: cloakpipe's `pseudonymize` takes `&mut Vault`
+    // (it mutates the token map for novel entities), so the hot path
+    // always needs an exclusive lock. Reads via `lookup` only happen at
+    // deanonymization time on the final answer — not a parallel hot path.
     inner: Arc<Mutex<CpVault>>,
 }
 
@@ -56,6 +60,7 @@ impl Vault {
 
     /// Reverse-lookup a pseudo-token to its original.
     /// Returns `None` if the token is unknown.
+    #[must_use = "lookup returns the original value — discard means you wanted lookup_exists"]
     pub async fn lookup(&self, token: &str) -> Option<String> {
         let v = self.inner.lock().await;
         v.lookup(token).map(|s| s.to_owned())
