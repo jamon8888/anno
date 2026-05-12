@@ -6,6 +6,7 @@
 
 pub mod config;
 pub mod detect;
+pub mod embed;
 pub mod error;
 pub mod ingest;
 pub mod vault;
