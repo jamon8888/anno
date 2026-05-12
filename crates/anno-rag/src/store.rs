@@ -109,8 +109,10 @@ pub struct SearchHit {
     pub char_start: u32,
     /// Char end offset.
     pub char_end: u32,
-    /// Lower is closer (L2 distance from LanceDB's `_distance` column).
-    pub score: f32,
+    /// L2 distance from LanceDB's `_distance` column — **lower is closer**.
+    /// `f32::INFINITY` means the underlying batch didn't carry the
+    /// `_distance` column (i.e. the query path was not nearest-neighbour).
+    pub distance: f32,
 }
 
 /// Handle to the `chunks` table.
@@ -336,7 +338,7 @@ fn batch_to_hit(b: &RecordBatch, i: usize) -> Result<SearchHit> {
     let cs_arr = get_col::<UInt32Array>(b, "char_start")?;
     let ce_arr = get_col::<UInt32Array>(b, "char_end")?;
 
-    let score = b
+    let distance = b
         .schema()
         .index_of("_distance")
         .ok()
@@ -344,7 +346,7 @@ fn batch_to_hit(b: &RecordBatch, i: usize) -> Result<SearchHit> {
             let col = b.column(idx);
             col.as_primitive_opt::<Float32Type>().map(|a| a.value(i))
         })
-        .unwrap_or(0.0);
+        .unwrap_or(f32::INFINITY);
 
     Ok(SearchHit {
         doc_id: uuid_from_fsb(doc_id_arr, i)?,
@@ -360,7 +362,7 @@ fn batch_to_hit(b: &RecordBatch, i: usize) -> Result<SearchHit> {
         },
         char_start: cs_arr.value(i),
         char_end: ce_arr.value(i),
-        score,
+        distance,
     })
 }
 
