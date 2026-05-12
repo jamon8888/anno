@@ -1,0 +1,10 @@
+[package]
+name = "cloakpipe-local"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Local-only RAG mode for CloakPipe — future scope"
+
+[dependencies]
+anyhow.workspace = true

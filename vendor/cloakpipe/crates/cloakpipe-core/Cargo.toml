@@ -1,0 +1,44 @@
+[package]
+name = "cloakpipe-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core detection, pseudonymization, and rehydration engine for CloakPipe"
+
+[dependencies]
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+aes-gcm.workspace = true
+zeroize.workspace = true
+rand.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+strsim.workspace = true
+rusqlite.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []
+ner = ["dep:ort", "dep:tokenizers"]
+gliner-pii = ["dep:ureq"]
+
+[dependencies.ort]
+workspace = true
+optional = true
+
+[dependencies.tokenizers]
+workspace = true
+optional = true
+
+[dependencies.ureq]
+version = "2"
+features = ["json"]
+optional = true

@@ -1,0 +1,80 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cloakpipe-core",
+    "crates/cloakpipe-tree",
+    "crates/cloakpipe-vector",
+    "crates/cloakpipe-proxy",
+    "crates/cloakpipe-local",
+    "crates/cloakpipe-audit",
+    "crates/cloakpipe-mcp",
+    "crates/cloakpipe-cli",
+]
+
+[workspace.package]
+version = "0.9.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/rohansx/cloakpipe"
+description = "Privacy middleware for LLM & RAG pipelines"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP / proxy
+axum = "0.7"
+hyper = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Crypto + security
+aes-gcm = "0.10"
+zeroize = { version = "1", features = ["derive"] }
+rand = "0.8"
+
+# String similarity
+strsim = "0.11"
+
+# Pattern matching + NER
+regex = "1"
+ort = "2.0.0-rc.12"
+tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
+
+# Logging + tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# SSE streaming
+futures = "0.3"
+async-stream = "0.3"
+bytes = "1"
+http-body-util = "0.1"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+dialoguer = "0.11"
+
+# MCP
+rmcp = { version = "1", features = ["server", "transport-io", "macros"] }
+schemars = "0.8"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Document parsing
+lopdf = "0.34"
+
+# Database
+rusqlite = { version = "0.37", features = ["bundled"] }
+
+# UUID + time
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }

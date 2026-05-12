@@ -1,0 +1,19 @@
+[package]
+name = "cloakpipe-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "MCP server for CloakPipe — expose privacy tools to AI agents"
+
+[dependencies]
+cloakpipe-core = { path = "../cloakpipe-core", version = "0.9.0" }
+rmcp = { workspace = true }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
