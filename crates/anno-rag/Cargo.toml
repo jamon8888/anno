@@ -45,3 +45,6 @@ dirs                 = { workspace = true }
 [dev-dependencies]
 tempfile        = "3"
 insta           = { version = "1", features = ["yaml"] }
+
+[lints]
+workspace = true
