@@ -37,8 +37,11 @@ impl FrPatterns {
                 .expect("nir regex is a literal"),
             // SIRET — 14 digits (Luhn checked in code, not regex).
             siret: Regex::new(r"\b\d{14}\b").expect("siret regex is a literal"),
-            // IBAN-FR — FR + 25-char IBAN (with optional spaces every 4 chars).
-            iban_fr: Regex::new(r"\bFR\d{2}\s?(?:\d{4}\s?){5}\d{3}\b")
+            // IBAN-FR — FR + 2 check digits + 23-char BBAN (5×4 + 3).
+            // ISO 13616 allows uppercase letters in BBAN positions, e.g.
+            // `FR14 2004 1010 0505 0001 3M02 606` (note `3M02`), so we
+            // accept `[A-Z0-9]` not just `\d` on the 23 BBAN chars.
+            iban_fr: Regex::new(r"\bFR\d{2}\s?(?:[A-Z0-9]{4}\s?){5}[A-Z0-9]{3}\b")
                 .expect("iban regex is a literal"),
             // FR phone — +33 / 0-prefix, 10-digit, optional separators.
             phone_fr: Regex::new(r"\b(?:\+33[\s\.\-]?|0)[1-9](?:[\s\.\-]?\d{2}){4}\b")
@@ -141,17 +144,31 @@ impl Detector {
             });
         }
 
-        // 2. anno NER. Note: anno `Entity` reports *character* offsets while regex
-        // reports *byte* offsets. For ASCII-only inputs these coincide; see module docs.
+        // 2. anno NER. anno reports *character* offsets; cloakpipe (and Rust
+        // string slicing) want *byte* offsets. Build a once-per-doc char→byte
+        // lookup, then translate every anno entity through it. Without this,
+        // any non-ASCII text (€, accents) triggers a "not a char boundary"
+        // panic inside Replacer::pseudonymize.
         let anno_entities = self
             .ner
             .extract_entities(text, Some(Language::French))
             .map_err(|e| Error::Detect(e.to_string()))?;
+
+        // char_idx → byte_idx table. The last sentinel is text.len() so a
+        // span ending past the last char still resolves to a valid byte.
+        let mut char_to_byte: Vec<usize> = text.char_indices().map(|(b, _)| b).collect();
+        char_to_byte.push(text.len());
+
         for e in anno_entities {
+            let s_char = e.start();
+            let n_char = e.end();
+            if s_char >= char_to_byte.len() || n_char > char_to_byte.len() || s_char >= n_char {
+                continue; // out of range — skip silently rather than panic
+            }
             all.push(DetectedEntity {
                 original: e.text.clone(),
-                start: e.start(),
-                end: e.end(),
+                start: char_to_byte[s_char],
+                end: char_to_byte[n_char],
                 category: map_anno_category(&e.entity_type),
                 confidence: f64::from(e.confidence),
                 source: DetectionSource::Ner,
