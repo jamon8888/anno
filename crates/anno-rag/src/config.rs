@@ -9,7 +9,7 @@ use std::path::PathBuf;
 /// Runtime configuration: data paths, model IDs, chunking defaults.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnnoRagConfig {
-    /// Root directory for `vault.db`, `index.lance`, and cached model weights.
+    /// Root directory for `vault.enc`, `index.lance`, and cached model weights.
     pub data_dir: PathBuf,
     /// HuggingFace model ID for the embedder.
     pub embed_model: String,
@@ -41,10 +41,10 @@ impl Default for AnnoRagConfig {
 }
 
 impl AnnoRagConfig {
-    /// Path to the encrypted SqliteVault file.
+    /// Path to the encrypted cloakpipe Vault file (AES-256-GCM single-file format).
     #[must_use]
     pub fn vault_path(&self) -> PathBuf {
-        self.data_dir.join("vault.db")
+        self.data_dir.join("vault.enc")
     }
 
     /// Path to the LanceDB index directory.
@@ -82,7 +82,7 @@ mod tests {
     fn paths_derive_from_data_dir() {
         let mut c = AnnoRagConfig::default();
         c.data_dir = PathBuf::from("/tmp/anno-rag");
-        assert_eq!(c.vault_path(), PathBuf::from("/tmp/anno-rag/vault.db"));
+        assert_eq!(c.vault_path(), PathBuf::from("/tmp/anno-rag/vault.enc"));
         assert_eq!(c.index_path(), PathBuf::from("/tmp/anno-rag/index.lance"));
         assert_eq!(c.models_cache(), PathBuf::from("/tmp/anno-rag/models"));
         assert_eq!(c.outputs_dir(), PathBuf::from("/tmp/anno-rag/outputs"));
