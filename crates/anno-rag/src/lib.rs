@@ -5,6 +5,7 @@
 #![warn(missing_docs)]
 
 pub mod config;
+pub mod detect;
 pub mod error;
 pub mod vault;
 
