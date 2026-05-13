@@ -3,8 +3,11 @@
 //! v0.3 owns the privacy boundary and composes with an upstream
 //! Anthropic-compatible sidecar such as `anthropic-proxy-rs`.
 
+pub mod anthropic;
+pub mod audit;
 pub mod config;
 pub mod error;
+pub mod policy;
 pub mod privacy;
 pub mod server;
 pub mod upstream;

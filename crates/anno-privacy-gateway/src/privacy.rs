@@ -1,6 +1,6 @@
 //! Anthropic request/response privacy transforms.
 
-use crate::{Error, Result};
+use crate::{Error, GatewayConfig, Result};
 use cloakpipe_core::{
     rehydrator::Rehydrator, replacer::Replacer, vault::Vault, DetectedEntity, DetectionSource,
     EntityCategory, PseudonymizedText,
@@ -17,6 +17,8 @@ pub struct PrivacyReport {
     pub entities: usize,
     /// Number of known tokens rehydrated in the response.
     pub rehydrated_tokens: usize,
+    /// Number of fresh cleartext PII entities redacted from a response.
+    pub fresh_pii_redacted: usize,
 }
 
 /// Stateful privacy engine. The vault owns cleartext mappings and never leaves
@@ -37,6 +39,23 @@ impl Default for PrivacyEngine {
 }
 
 impl PrivacyEngine {
+    /// Build from gateway config. Persistent vaults require both a path and a
+    /// 32-byte hex key; otherwise v0.3 uses an in-memory single-user vault.
+    pub fn from_config(config: &GatewayConfig) -> Result<Self> {
+        match (&config.vault_path, &config.vault_key_hex) {
+            (Some(path), Some(key_hex)) => {
+                let key = decode_hex_32(key_hex)?;
+                let vault = Vault::open(path, key).map_err(|e| Error::Config(e.to_string()))?;
+                Ok(Self::new(vault))
+            }
+            (None, None) => Ok(Self::default()),
+            _ => Err(Error::Config(
+                "ANNO_GATEWAY_VAULT_PATH and ANNO_GATEWAY_VAULT_KEY_HEX must be set together"
+                    .to_string(),
+            )),
+        }
+    }
+
     /// Build a privacy engine from a vault.
     #[must_use]
     pub fn new(vault: Vault) -> Self {
@@ -49,7 +68,7 @@ impl PrivacyEngine {
             iban_fr: Regex::new(r"\bFR\d{2}(?:\s?[0-9A-Z]{4}){5}\s?[0-9A-Z]{3}\b")
                 .expect("iban regex compiles"),
             siret: Regex::new(r"\b\d{14}\b").expect("siret regex compiles"),
-            person_fr: Regex::new(r"\b[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]+[- ][A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]+\b")
+            person_fr: Regex::new(r"\b[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]+(?:[- ][A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]+)+\b")
                 .expect("person regex compiles"),
         }
     }
@@ -173,6 +192,7 @@ impl PrivacyEngine {
     ) -> Result<()> {
         match content {
             Value::String(text) => {
+                report.fresh_pii_redacted += self.redact_fresh_pii(text);
                 let rehydrated = Rehydrator::rehydrate(text, &self.vault)
                     .map_err(|e| Error::Privacy(e.to_string()))?;
                 report.rehydrated_tokens += rehydrated.rehydrated_count;
@@ -243,7 +263,7 @@ impl PrivacyEngine {
             EntityCategory::Custom("SIRET".into()),
             &mut entities,
         );
-        self.push_matches(text, &self.person_fr, EntityCategory::Person, &mut entities);
+        self.push_person_matches(text, &mut entities);
 
         entities.sort_by_key(|e| e.start);
         let mut deduped: Vec<DetectedEntity> = Vec::new();
@@ -274,6 +294,72 @@ impl PrivacyEngine {
             });
         }
     }
+
+    fn push_person_matches(&self, text: &str, entities: &mut Vec<DetectedEntity>) {
+        for mat in self.person_fr.find_iter(text) {
+            let original = mat.as_str();
+            let (start, original) = strip_leading_title_or_greeting(mat.start(), original);
+            entities.push(DetectedEntity {
+                original: original.to_string(),
+                start,
+                end: start + original.len(),
+                category: EntityCategory::Person,
+                confidence: 1.0,
+                source: DetectionSource::Pattern,
+            });
+        }
+    }
+
+    fn redact_fresh_pii(&self, text: &mut String) -> usize {
+        let mut entities: Vec<_> = self
+            .detect(text)
+            .into_iter()
+            .filter(|entity| !self.vault.contains_original(&entity.original))
+            .collect();
+        entities.sort_by_key(|entity| std::cmp::Reverse(entity.start));
+
+        let count = entities.len();
+        for entity in entities {
+            text.replace_range(entity.start..entity.end, "[REDACTED]");
+        }
+        count
+    }
+}
+
+fn strip_leading_title_or_greeting(start: usize, original: &str) -> (usize, &str) {
+    const PREFIXES: &[&str] = &[
+        "Bonjour", "Madame", "Monsieur", "Maître", "Maitre", "Docteur",
+    ];
+
+    let Some(prefix) = PREFIXES
+        .iter()
+        .find(|prefix| original.starts_with(**prefix))
+    else {
+        return (start, original);
+    };
+
+    let rest = original[prefix.len()..].trim_start_matches([' ', '-']);
+    if rest.split([' ', '-']).count() < 2 {
+        return (start, original);
+    }
+    let offset = original.len() - rest.len();
+    (start + offset, rest)
+}
+
+fn decode_hex_32(hex: &str) -> Result<Vec<u8>> {
+    if hex.len() != 64 {
+        return Err(Error::Config(
+            "vault key must be 64 hex characters (32 bytes)".to_string(),
+        ));
+    }
+
+    let mut out = Vec::with_capacity(32);
+    for index in (0..hex.len()).step_by(2) {
+        let byte = u8::from_str_radix(&hex[index..index + 2], 16)
+            .map_err(|_| Error::Config("vault key must be valid hex".to_string()))?;
+        out.push(byte);
+    }
+    Ok(out)
 }
 
 fn reject_blocks(value: &Value) -> Result<()> {
@@ -374,6 +460,32 @@ mod tests {
     }
 
     #[test]
+    fn pseudonymizes_system_array_tool_result_and_message_strings() {
+        let mut engine = PrivacyEngine::default();
+        let mut request = json!({
+            "system": [{"type": "text", "text": "Contexte pour Jean Martin."}],
+            "messages": [
+                {"role": "user", "content": "Contact: claire@example.com"},
+                {
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "content": [{"type": "text", "text": "SIRET 12345678901234"}]
+                    }]
+                }
+            ]
+        });
+
+        let report = engine.pseudonymize_request(&mut request).unwrap();
+        let body = serde_json::to_string(&request).unwrap();
+
+        assert!(report.entities >= 3);
+        assert!(!body.contains("Jean Martin"));
+        assert!(!body.contains("claire@example.com"));
+        assert!(!body.contains("12345678901234"));
+    }
+
+    #[test]
     fn rehydrates_known_response_tokens() {
         let mut engine = PrivacyEngine::default();
         let mut request = json!({
@@ -397,5 +509,52 @@ mod tests {
 
         assert_eq!(report.rehydrated_tokens, 1);
         assert_eq!(response["content"][0]["text"], "Bonjour Marie Dupont");
+    }
+
+    #[test]
+    fn rehydrates_response_tool_use_json_string_leaves() {
+        let mut engine = PrivacyEngine::default();
+        let mut request = json!({
+            "messages": [{"role": "user", "content": "Marie Dupont"}]
+        });
+        engine.pseudonymize_request(&mut request).unwrap();
+        let pseudo = request["messages"][0]["content"].as_str().unwrap();
+        let token = pseudo
+            .split_whitespace()
+            .find(|part| part.starts_with("PERSON_"))
+            .expect("person token");
+        let mut response = json!({
+            "content": [{
+                "type": "tool_use",
+                "input": {"summary": format!("Synthèse pour {token}")}
+            }]
+        });
+
+        let report = engine.rehydrate_response(&mut response).unwrap();
+
+        assert_eq!(report.rehydrated_tokens, 1);
+        assert_eq!(
+            response["content"][0]["input"]["summary"],
+            "Synthèse pour Marie Dupont"
+        );
+    }
+
+    #[test]
+    fn redacts_fresh_pii_before_returning_response() {
+        let engine = PrivacyEngine::default();
+        let mut response = json!({
+            "content": [{
+                "type": "text",
+                "text": "Le modèle a inventé Jean Martin et jean.martin@example.com."
+            }]
+        });
+
+        let report = engine.rehydrate_response(&mut response).unwrap();
+        let text = response["content"][0]["text"].as_str().unwrap();
+
+        assert_eq!(report.fresh_pii_redacted, 2);
+        assert!(!text.contains("Jean Martin"));
+        assert!(!text.contains("jean.martin@example.com"));
+        assert!(text.contains("[REDACTED]"));
     }
 }

@@ -15,6 +15,11 @@ pub struct GatewayConfig {
     pub reject_images: bool,
     /// Provider profile label for audit/routing.
     pub provider_profile: String,
+    /// Optional local encrypted vault path. If absent, the gateway uses an
+    /// ephemeral vault.
+    pub vault_path: Option<String>,
+    /// Optional 32-byte vault key encoded as 64 lowercase/uppercase hex chars.
+    pub vault_key_hex: Option<String>,
 }
 
 impl Default for GatewayConfig {
@@ -25,6 +30,8 @@ impl Default for GatewayConfig {
             auto_rehydrate: true,
             reject_images: true,
             provider_profile: "global_anonymized".to_string(),
+            vault_path: None,
+            vault_key_hex: None,
         }
     }
 }
@@ -45,6 +52,24 @@ impl GatewayConfig {
         if let Ok(profile) = std::env::var("ANNO_GATEWAY_PROVIDER_PROFILE") {
             cfg.provider_profile = profile;
         }
+        if let Ok(path) = std::env::var("ANNO_GATEWAY_VAULT_PATH") {
+            cfg.vault_path = Some(path);
+        }
+        if let Ok(key) = std::env::var("ANNO_GATEWAY_VAULT_KEY_HEX") {
+            cfg.vault_key_hex = Some(key);
+        }
         cfg
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_has_no_persistent_vault() {
+        let cfg = GatewayConfig::default();
+        assert!(cfg.vault_path.is_none());
+        assert!(cfg.vault_key_hex.is_none());
     }
 }

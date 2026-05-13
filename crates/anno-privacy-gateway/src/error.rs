@@ -9,6 +9,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Gateway error.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Runtime configuration is invalid.
+    #[error("configuration error: {0}")]
+    Config(String),
     /// Request feature is intentionally unsupported in this release.
     #[error("unsupported feature: {0}")]
     UnsupportedFeature(String),
@@ -23,6 +26,7 @@ pub enum Error {
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
         let status = match self {
+            Self::Config(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::UnsupportedFeature(_) => StatusCode::BAD_REQUEST,
             Self::Privacy(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::Upstream(_) => StatusCode::BAD_GATEWAY,

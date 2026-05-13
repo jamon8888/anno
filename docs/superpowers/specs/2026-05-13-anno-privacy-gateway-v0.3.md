@@ -1,6 +1,6 @@
 # anno privacy gateway v0.3 — non-streaming Cowork privacy boundary
 
-**Status:** Draft spec  
+**Status:** Implemented for local gateway code/test scope
 **Date:** 2026-05-13  
 **Depends on:** `anno-rag v0.2` MCP minimum  
 **Research inputs:**
@@ -9,6 +9,25 @@
 - Anthropic Files API docs: `document`/`image` blocks can reference uploaded `file_id`s.
 - Anthropic PDF docs: PDF inputs can arrive as URL, base64 `document` blocks, or Files API references.
 - Claude/Cowork 3P docs: local MCPB desktop extensions and local MCP servers are supported user/admin extension surfaces.
+
+## Implementation status
+
+Delivered in `crates/anno-privacy-gateway`:
+
+- Axum gateway routes for `/health`, `/v1/messages`, `/v1/models`, and fail-closed `/v1/files` operations.
+- In-place Anthropic request pseudonymization before forwarding to the configured upstream Anthropic-compatible chain.
+- Automatic response rehydration for known pseudonym tokens.
+- Fresh cleartext PII scan/redaction before returning model responses.
+- Strict v0.3 rejection for `stream=true`, image blocks, native `document` blocks, and Files API routes.
+- Ephemeral local vault by default, with optional persistent vault configuration through `ANNO_GATEWAY_VAULT_PATH` plus `ANNO_GATEWAY_VAULT_KEY_HEX`.
+- Mock-upstream integration test proving raw PII does not leave the gateway and the final Cowork-facing response is rehydrated.
+
+Verified locally:
+
+- `cargo test -p anno-privacy-gateway`
+- `cargo check -p anno-privacy-gateway`
+
+Not verified in this implementation pass: live Cowork -> gateway -> `anthropic-proxy-rs` -> TensorZero -> provider smoke test. The mock-upstream test validates the privacy boundary at the gateway; the full sidecar chain remains an operational smoke step.
 
 ## Goal
 
