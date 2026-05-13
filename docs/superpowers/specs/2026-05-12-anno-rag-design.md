@@ -1181,7 +1181,50 @@ Each destination file gets a header:
 | 32 | Cherry-pick from hacienda | Surgical lifts with attribution, narrowed since kreuzberg + LanceDB native cover more | See §13 |
 | 33 | Hacienda anti-lifts | Plaintext SQLite doc store, double EntityCategory mapping, hardcoded FR descriptions, legacy VecStore, Python sidecar | Each conflicts with the design |
 
-## 16. Roadmap (post-MVP, informational)
+## 16. Provider privacy gateway roadmap
+
+The original Northstar assumed Cowork as the UI and remote LLM access through
+Cowork. The provider strategy is now more explicit: `anno` is the local trust
+boundary, while TensorZero is optional LLMOps infrastructure behind that
+boundary.
+
+The global target is:
+
+```text
+Cowork / Claude Code / app metier
+  -> anno privacy boundary
+  -> local, sovereign, or global-anonymized provider
+```
+
+TensorZero remains useful for routing, observability, fallback, A/B testing,
+and cost/latency tracking, but it must only receive pseudonymized payloads.
+
+**v0.2 — Cowork tool rail**
+- `anno-rag mcp` exposes local RAG tools to Cowork over stdio.
+- Cowork can search pseudonymized chunks and rehydrate through the local vault.
+- Spec: [2026-05-13-anno-rag-v0.2-cowork-minimum.md](./2026-05-13-anno-rag-v0.2-cowork-minimum.md)
+
+**v0.3 — Cowork LLM privacy boundary**
+- Add `anno-privacy-gateway` in front of Cowork's Anthropic-compatible LLM calls.
+- Pseudonymize every text-bearing prompt field before any upstream call.
+- Forward pseudonymized Anthropic requests to `anthropic-proxy-rs`, then TensorZero or another OpenAI-compatible provider.
+- Rehydrate the final non-streaming answer automatically before returning it to Cowork.
+- Reject streaming explicitly.
+- Spec: [2026-05-13-anno-privacy-gateway-v0.3.md](./2026-05-13-anno-privacy-gateway-v0.3.md)
+
+**v0.4 — Streaming and native provider adapter**
+- Add streaming/SSE rehydration without leaking partial pseudonym tokens.
+- Internalize the provider adapter path so `anthropic-proxy-rs` becomes a fallback, not a required sidecar.
+- Route directly to TensorZero, local OpenAI-compatible models, sovereign providers, or global providers.
+- Preserve the guarantee that TensorZero and external providers only see pseudonymized content unless an explicit local-cleartext policy is configured.
+- Spec: [2026-05-13-anno-privacy-gateway-v0.4.md](./2026-05-13-anno-privacy-gateway-v0.4.md)
+
+**v1.0 — Regulated-profession RAG product**
+- Combine the tool rail (`anno-rag mcp`) and LLM rail (`anno-privacy-gateway`) into one documented deployment profile.
+- Default deployment supports local, sovereign, and global-anonymized model choices.
+- All model observability is pseudonymized by construction.
+
+## 17. Roadmap (post-MVP, informational)
 
 **v1.1**
 - Watch mode (folder reindex on file change/delete)
@@ -1205,7 +1248,7 @@ Each destination file gets a header:
 - SaaS-mode (would require kreuzberg license decision)
 - TEE deployment option (Nitro Enclave) lifted from cloakpipe-tee scope
 
-## 17. Sources & references
+## 18. Sources & references
 
 **Kreuzberg:**
 - [kreuzberg on lib.rs](https://lib.rs/crates/kreuzberg) / [docs.rs](https://docs.rs/crate/kreuzberg/latest)
