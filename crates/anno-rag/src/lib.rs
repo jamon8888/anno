@@ -16,3 +16,4 @@ pub mod vault;
 
 pub use config::AnnoRagConfig;
 pub use error::{Error, Result};
+pub use pipeline::Pipeline;

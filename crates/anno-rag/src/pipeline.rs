@@ -8,34 +8,68 @@ use crate::ingest;
 use crate::store::{ChunkRecord, SearchHit, Store};
 use crate::vault::Vault;
 use std::path::Path;
+use std::sync::Arc;
+use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 /// End-to-end pipeline: detect → pseudonymize → embed → store.
 pub struct Pipeline {
-    detector: Detector,
+    detector: OnceCell<Arc<Detector>>,
     vault: Vault,
-    embedder: Embedder,
+    embedder: OnceCell<Arc<Embedder>>,
     store: Store,
     cfg: AnnoRagConfig,
 }
 
 impl Pipeline {
     /// Build a new pipeline. Creates the data directory if missing,
-    /// opens the vault (with the supplied 32-byte key), loads the
-    /// embedder weights (~470 MB on first call), opens the LanceDB store.
+    /// opens the vault (with the supplied 32-byte key), opens the LanceDB store.
+    ///
+    /// The embedder weights (~470 MB) and PII detector are NOT loaded here —
+    /// they initialize lazily on first call to [`Pipeline::ingest_one`],
+    /// [`Pipeline::search`], or [`Pipeline::detect`]. This keeps startup RSS
+    /// under ~200 MB for callers that only need vault stats or rehydration.
     pub async fn new(cfg: AnnoRagConfig, vault_key: [u8; 32]) -> Result<Self> {
         std::fs::create_dir_all(&cfg.data_dir).map_err(Error::from)?;
-        let detector = Detector::new()?;
         let vault = Vault::open(&cfg.vault_path(), vault_key)?;
-        let embedder = Embedder::load(&cfg).await?;
         let store = Store::open(&cfg).await?;
         Ok(Self {
-            detector,
+            detector: OnceCell::new(),
             vault,
-            embedder,
+            embedder: OnceCell::new(),
             store,
             cfg,
         })
+    }
+
+    /// Lazy-init the embedder. Loads ~470 MB of model weights on first call.
+    async fn embedder(&self) -> Result<&Arc<Embedder>> {
+        self.embedder
+            .get_or_try_init(|| async { Embedder::load(&self.cfg).await.map(Arc::new) })
+            .await
+    }
+
+    /// Lazy-init the detector. Synchronous because `Detector::new` is sync.
+    fn detector_get_or_init(&self) -> Result<&Arc<Detector>> {
+        if let Some(d) = self.detector.get() {
+            return Ok(d);
+        }
+        let d = Arc::new(Detector::new()?);
+        // OnceCell::set returns Err(value) if already set — ignore since we just checked.
+        let _ = self.detector.set(d);
+        Ok(self.detector.get().expect("just set"))
+    }
+
+    /// Returns `true` if the embedder has been initialized (model weights loaded).
+    #[must_use]
+    pub fn embedder_loaded(&self) -> bool {
+        self.embedder.initialized()
+    }
+
+    /// Returns `true` if the PII detector has been initialized.
+    #[must_use]
+    pub fn detector_loaded(&self) -> bool {
+        self.detector.initialized()
     }
 
     /// Ingest a single file end-to-end. Writes `<stem>.anon.md` to `output_dir`.
@@ -50,13 +84,13 @@ impl Pipeline {
         // Detect + pseudonymize per chunk.
         let mut pseudo_chunks: Vec<String> = Vec::with_capacity(extracted.chunks.len());
         for chunk in &extracted.chunks {
-            let entities = self.detector.detect(&chunk.text)?;
+            let entities = self.detector_get_or_init()?.detect(&chunk.text)?;
             let pseudo = self.vault.pseudonymize(&chunk.text, &entities).await?;
             pseudo_chunks.push(pseudo);
         }
 
         // Batch-embed all pseudonymized chunks at once for throughput.
-        let vectors = self.embedder.embed_batch(&pseudo_chunks)?;
+        let vectors = self.embedder().await?.embed_batch(&pseudo_chunks)?;
         if vectors.len() != pseudo_chunks.len() {
             return Err(Error::Embed(format!(
                 "vectors len {} != chunks len {}",
@@ -146,10 +180,11 @@ impl Pipeline {
 
     /// Search: pseudonymize query → embed → store.search.
     pub async fn search(&self, query: &str, top_k: usize) -> Result<Vec<SearchHit>> {
-        let entities = self.detector.detect(query)?;
+        let entities = self.detector_get_or_init()?.detect(query)?;
         let pseudo_q = self.vault.pseudonymize(query, &entities).await?;
         let qv = self
-            .embedder
+            .embedder()
+            .await?
             .embed_batch(&[pseudo_q.clone()])?
             .into_iter()
             .next()
@@ -180,7 +215,7 @@ impl Pipeline {
     ///
     /// Returns [`Error::Detect`] if any layer (FR regex / anno NER) fails.
     pub fn detect(&self, text: &str) -> Result<Vec<cloakpipe_core::DetectedEntity>> {
-        self.detector.detect(text)
+        self.detector_get_or_init()?.detect(text)
     }
 
     /// Snapshot of the vault: total mappings + per-category counts.
