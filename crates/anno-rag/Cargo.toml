@@ -48,6 +48,28 @@ chrono               = { workspace = true }
 [dev-dependencies]
 tempfile        = "3"
 insta           = { version = "1", features = ["yaml"] }
+criterion       = { version = "0.5", features = ["html_reports", "async_tokio"] }
+sysinfo         = "0.32"
+
+[[bench]]
+name = "bench_cold_start"
+harness = false
+
+[[bench]]
+name = "bench_idle_rss"
+harness = false
+
+[[bench]]
+name = "bench_search"
+harness = false
+
+[[bench]]
+name = "bench_ingest"
+harness = false
+
+[[bench]]
+name = "bench_recall"
+harness = false
 
 [lints]
 workspace = true
