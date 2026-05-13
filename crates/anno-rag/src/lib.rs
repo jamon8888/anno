@@ -9,6 +9,7 @@ pub mod detect;
 pub mod embed;
 pub mod error;
 pub mod ingest;
+pub mod mcp;
 pub mod pipeline;
 pub mod store;
 pub mod vault;
