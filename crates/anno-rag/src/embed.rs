@@ -58,10 +58,14 @@ impl Embedder {
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| Error::Embed(format!("tokenizer load: {e}")))?;
 
+        let dtype = match cfg.embedder_dtype.as_deref() {
+            Some("f32") => DType::F32,
+            _ => DType::F16,
+        };
         // SAFETY: hf-hub writes the safetensors file before returning the path
         // and we don't mutate it for the lifetime of the mmap.
         let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)
+            VarBuilder::from_mmaped_safetensors(&[weights_path], dtype, &device)
                 .map_err(|e| Error::Embed(format!("var builder: {e}")))?
         };
         let model = BertModel::load(vb, &config)
@@ -125,6 +129,9 @@ impl Embedder {
             .model
             .forward(&input_ids, &token_type, Some(&attn))
             .map_err(|e| Error::Embed(format!("forward: {e}")))?;
+        let out = out
+            .to_dtype(DType::F32)
+            .map_err(|e| Error::Embed(format!("output dtype cast: {e}")))?;
 
         let mask_f = attn
             .to_dtype(DType::F32)
@@ -174,5 +181,24 @@ mod tests {
         assert_eq!(v[0].len(), 384);
         let norm: f32 = v[0].iter().map(|x| x * x).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 0.01);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires HF cache populated"]
+    async fn loads_with_f16_default() {
+        let cfg = AnnoRagConfig::default();
+        let e = Embedder::load(&cfg).await.expect("f16 load");
+        let v = e.embed_batch(&["Bonjour".into()]).expect("embed");
+        assert_eq!(v[0].len(), 384);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires HF cache populated"]
+    async fn loads_with_f32_override() {
+        let mut cfg = AnnoRagConfig::default();
+        cfg.embedder_dtype = Some("f32".into());
+        let e = Embedder::load(&cfg).await.expect("f32 load");
+        let v = e.embed_batch(&["Bonjour".into()]).expect("embed");
+        assert_eq!(v[0].len(), 384);
     }
 }
