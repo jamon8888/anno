@@ -21,6 +21,29 @@ pub struct AnnoRagConfig {
     pub chunk_max_chars: usize,
     /// Chunk overlap in characters.
     pub chunk_overlap: usize,
+
+    /// Threshold (chunk count) at which `Store::maybe_build_index` will
+    /// build an IVF_HNSW_SQ index on the vector column. Below this, flat
+    /// scan suffices. Default: 1000.
+    #[serde(default = "default_vector_index_threshold")]
+    pub vector_index_threshold: usize,
+
+    /// HF Hub model ID for the NER model to pre-warm. `None` skips NER
+    /// warmup. Default: `None` (callers/warmup script pick the candidate).
+    #[serde(default)]
+    pub ner_warmup_model: Option<String>,
+
+    /// MCP server name advertised on `initialize`. Default: `"anno-rag"`.
+    #[serde(default = "default_mcp_server_name")]
+    pub mcp_server_name: String,
+}
+
+fn default_vector_index_threshold() -> usize {
+    1000
+}
+
+fn default_mcp_server_name() -> String {
+    "anno-rag".to_string()
 }
 
 impl Default for AnnoRagConfig {
@@ -36,6 +59,9 @@ impl Default for AnnoRagConfig {
             default_top_k: 10,
             chunk_max_chars: 2048,
             chunk_overlap: 256,
+            vector_index_threshold: default_vector_index_threshold(),
+            ner_warmup_model: None,
+            mcp_server_name: default_mcp_server_name(),
         }
     }
 }
@@ -86,6 +112,31 @@ mod tests {
         assert_eq!(c.index_path(), PathBuf::from("/tmp/anno-rag/index.lance"));
         assert_eq!(c.models_cache(), PathBuf::from("/tmp/anno-rag/models"));
         assert_eq!(c.outputs_dir(), PathBuf::from("/tmp/anno-rag/outputs"));
+    }
+
+    #[test]
+    fn deserializes_v0_1_config_without_new_fields() {
+        // Old v0.1 JSON had only the original 6 fields. Verify still parses.
+        let v01_json = r#"{
+            "data_dir": "/tmp/anno-rag",
+            "embed_model": "intfloat/multilingual-e5-small",
+            "embed_dim": 384,
+            "default_top_k": 10,
+            "chunk_max_chars": 2048,
+            "chunk_overlap": 256
+        }"#;
+        let c: AnnoRagConfig = serde_json::from_str(v01_json).expect("v0.1 config must parse");
+        assert_eq!(c.vector_index_threshold, 1000);
+        assert!(c.ner_warmup_model.is_none());
+        assert_eq!(c.mcp_server_name, "anno-rag");
+    }
+
+    #[test]
+    fn defaults_include_new_fields() {
+        let c = AnnoRagConfig::default();
+        assert_eq!(c.vector_index_threshold, 1000);
+        assert!(c.ner_warmup_model.is_none());
+        assert_eq!(c.mcp_server_name, "anno-rag");
     }
 
     #[test]
