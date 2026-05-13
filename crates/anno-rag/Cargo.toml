@@ -10,6 +10,13 @@ description  = "Local GDPR-compliant document anonymizer + RAG service (French l
 name = "anno-rag"
 path = "src/main.rs"
 
+[features]
+default = []
+# Enables the `--enable-ocr` fork-to-system-tesseract runtime path.
+# No effect on linked code — the OCR module always compiles (it's a thin
+# tokio::process wrapper); the flag is informational/feature-gated docs.
+ocr = []
+
 [dependencies]
 anno            = { path = "../anno" }
 cloakpipe-core  = { path = "../../vendor/cloakpipe/crates/cloakpipe-core" }

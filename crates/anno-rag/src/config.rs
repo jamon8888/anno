@@ -36,6 +36,20 @@ pub struct AnnoRagConfig {
     /// MCP server name advertised on `initialize`. Default: `"anno-rag"`.
     #[serde(default = "default_mcp_server_name")]
     pub mcp_server_name: String,
+
+    /// Enable OCR fallback when a PDF has no text layer. Default: false.
+    /// Requires system `tesseract` binary on PATH (or `tesseract_path` set).
+    #[serde(default)]
+    pub enable_ocr: bool,
+
+    /// Explicit path to the system `tesseract` binary. Default: PATH lookup.
+    #[serde(default)]
+    pub tesseract_path: Option<PathBuf>,
+
+    /// Embedder weight dtype. "f16" (default v0.5+) or "f32" (fallback).
+    /// Read by `Embedder::load`. None → "f16".
+    #[serde(default)]
+    pub embedder_dtype: Option<String>,
 }
 
 fn default_vector_index_threshold() -> usize {
@@ -62,6 +76,9 @@ impl Default for AnnoRagConfig {
             vector_index_threshold: default_vector_index_threshold(),
             ner_warmup_model: None,
             mcp_server_name: default_mcp_server_name(),
+            enable_ocr: false,
+            tesseract_path: None,
+            embedder_dtype: None,
         }
     }
 }
@@ -129,6 +146,9 @@ mod tests {
         assert_eq!(c.vector_index_threshold, 1000);
         assert!(c.ner_warmup_model.is_none());
         assert_eq!(c.mcp_server_name, "anno-rag");
+        assert!(!c.enable_ocr);
+        assert!(c.tesseract_path.is_none());
+        assert!(c.embedder_dtype.is_none());
     }
 
     #[test]
@@ -137,6 +157,9 @@ mod tests {
         assert_eq!(c.vector_index_threshold, 1000);
         assert!(c.ner_warmup_model.is_none());
         assert_eq!(c.mcp_server_name, "anno-rag");
+        assert!(!c.enable_ocr);
+        assert!(c.tesseract_path.is_none());
+        assert!(c.embedder_dtype.is_none());
     }
 
     #[test]
