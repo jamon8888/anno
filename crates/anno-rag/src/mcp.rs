@@ -145,13 +145,16 @@ impl AnnoRagServer {
         description = "Replace pseudo-tokens (PERSON_1, EMAIL_2, NIR_3, etc.) in text back with original PII from the local vault."
     )]
     async fn rehydrate(&self, Parameters(params): Parameters<RehydrateParams>) -> String {
-        // Placeholder body — Task 7 wires Pipeline::rehydrate.
-        let _ = &self.pipeline;
-        let result = RehydrateResult {
-            text: params.text,
-            tokens_rehydrated: 0,
-        };
-        serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
+        match self.pipeline.rehydrate(&params.text).await {
+            Ok(r) => {
+                let wire = RehydrateResult {
+                    text: r.text,
+                    tokens_rehydrated: r.tokens_rehydrated,
+                };
+                serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
     }
 
     /// Dry-run PII detection without replacement.
@@ -159,22 +162,35 @@ impl AnnoRagServer {
         description = "Dry-run scan: detect PII in text without replacing. Returns category, source, confidence, and char offsets for each entity."
     )]
     async fn detect(&self, Parameters(params): Parameters<DetectParams>) -> String {
-        // Placeholder body — Task 7 wires Pipeline::detect.
-        let _ = (&self.pipeline, params);
-        let result = DetectResult { entities: vec![] };
-        serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
+        match self.pipeline.detect(&params.text) {
+            Ok(entities) => {
+                let info: Vec<EntityInfo> = entities
+                    .into_iter()
+                    .map(|e| EntityInfo {
+                        original: e.original,
+                        category: format!("{:?}", e.category),
+                        confidence: e.confidence,
+                        source: format!("{:?}", e.source),
+                        start: e.start,
+                        end: e.end,
+                    })
+                    .collect();
+                serde_json::to_string_pretty(&DetectResult { entities: info })
+                    .unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
     }
 
     /// Vault diagnostics: total token mappings and per-category counts.
     #[tool(description = "Vault statistics: total token mappings and per-category counts.")]
     async fn vault_stats(&self) -> String {
-        // Placeholder body — Task 7 wires Pipeline::vault_stats.
-        let _ = &self.pipeline;
-        let result = VaultStatsResult {
-            total_mappings: 0,
-            categories: std::collections::HashMap::new(),
+        let s = self.pipeline.vault_stats().await;
+        let wire = VaultStatsResult {
+            total_mappings: s.total_mappings,
+            categories: s.categories,
         };
-        serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
+        serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
     }
 }
 

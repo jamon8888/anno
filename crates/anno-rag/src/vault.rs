@@ -65,6 +65,15 @@ impl Vault {
         let v = self.inner.lock().await;
         v.lookup(token).map(|s| s.to_owned())
     }
+
+    /// Internal: lock the underlying cloakpipe vault. Used by Pipeline to
+    /// call Rehydrator and stats. Held briefly — do NOT hold across `.await`
+    /// of unrelated work.
+    pub(crate) async fn lock_inner(
+        &self,
+    ) -> tokio::sync::MutexGuard<'_, cloakpipe_core::vault::Vault> {
+        self.inner.lock().await
+    }
 }
 
 /// Derive the 32-byte vault key.

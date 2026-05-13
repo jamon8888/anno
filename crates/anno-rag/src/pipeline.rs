@@ -156,4 +156,58 @@ impl Pipeline {
             .ok_or_else(|| Error::Embed("embedder returned empty result for query".into()))?;
         self.store.search(&pseudo_q, &qv, top_k).await
     }
+
+    /// Rehydrate pseudo-tokens in `text` back to originals using the vault.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Vault`] if the cloakpipe rehydrator fails (typically
+    /// only on malformed inputs — unknown tokens are silently left alone).
+    pub async fn rehydrate(&self, text: &str) -> Result<RehydratedText> {
+        use cloakpipe_core::rehydrator::Rehydrator;
+        let guard = self.vault.lock_inner().await;
+        let r = Rehydrator::rehydrate(text, &*guard)
+            .map_err(|e| Error::Vault(format!("rehydrator: {e}")))?;
+        Ok(RehydratedText {
+            text: r.text,
+            tokens_rehydrated: r.rehydrated_count,
+        })
+    }
+
+    /// Detect PII in `text` without replacing. Useful for UI previews.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Detect`] if any layer (FR regex / anno NER) fails.
+    pub fn detect(&self, text: &str) -> Result<Vec<cloakpipe_core::DetectedEntity>> {
+        self.detector.detect(text)
+    }
+
+    /// Snapshot of the vault: total mappings + per-category counts.
+    pub async fn vault_stats(&self) -> VaultStats {
+        let guard = self.vault.lock_inner().await;
+        let s = guard.stats();
+        VaultStats {
+            total_mappings: s.total_mappings,
+            categories: s.categories,
+        }
+    }
+}
+
+/// Output of [`Pipeline::rehydrate`].
+#[derive(Debug, Clone)]
+pub struct RehydratedText {
+    /// The text with all known tokens replaced by their originals.
+    pub text: String,
+    /// Count of tokens that were successfully looked up + replaced.
+    pub tokens_rehydrated: usize,
+}
+
+/// Output of [`Pipeline::vault_stats`].
+#[derive(Debug, Clone)]
+pub struct VaultStats {
+    /// Total number of token mappings in the vault.
+    pub total_mappings: usize,
+    /// Count per PII category (e.g. `"Email"`, `"PhoneNumber"`, `"Custom(NIR)"`).
+    pub categories: std::collections::HashMap<String, u32>,
 }
