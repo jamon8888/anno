@@ -89,6 +89,12 @@ impl Detector {
     /// anno backend at runtime (gliner_pii / nuner / bert) and falls back to
     /// pattern+heuristic when no model is cached.
     pub fn new() -> Result<Self> {
+        // TODO(v0.3 #1): replace StackedNER::default() with
+        // `GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")`.
+        // StackedNER's bert-base-NER-onnx / gliner_small-v2.1 fallbacks miss
+        // some French names in markdown-formatted contexts (see "Jean Martin"
+        // leak in e2e). Multi-v1 is multilingual + French-aware.
+        // See docs/dev-notes/gliner2-fastino-v0.3-research.md.
         Ok(Self {
             ner: StackedNER::default(),
         })
