@@ -1,8 +1,9 @@
 //! `anno-rag` CLI entrypoint.
 //!
-//! v0.1 walking skeleton: two subcommands.
+//! Subcommands (v0.2):
 //! - `anno-rag ingest <folder> [--recursive] [--output <dir>]`
 //! - `anno-rag search <query> [--top-k <N>]`
+//! - `anno-rag mcp` — run MCP server on stdio (used by Cowork plugin)
 
 use anno_rag::{config::AnnoRagConfig, pipeline::Pipeline, vault::derive_key};
 use clap::{Parser, Subcommand};
@@ -37,6 +38,9 @@ enum Cmd {
         #[arg(short = 'k', long, default_value_t = 10)]
         top_k: usize,
     },
+    /// Run the MCP server on stdio. Used by Cowork as a plugin transport.
+    /// Blocks until stdin closes.
+    Mcp,
 }
 
 #[tokio::main]
@@ -72,6 +76,9 @@ async fn main() -> anyhow::Result<()> {
                 println!("    text:   {}", truncate(&h.text_pseudo, 200));
                 println!();
             }
+        }
+        Cmd::Mcp => {
+            anno_rag::mcp::serve_stdio(pipeline, cfg).await?;
         }
     }
     Ok(())
