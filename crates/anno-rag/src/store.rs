@@ -201,6 +201,53 @@ impl Store {
         hits.truncate(k);
         Ok(hits)
     }
+
+    /// Build an `IVF_HNSW_SQ` index on the `vector` column if:
+    ///   1. The table currently has at least `threshold` rows
+    ///   2. The vector column does not already have an index
+    ///
+    /// Idempotent. Returns `Ok(true)` when an index was built this call,
+    /// `Ok(false)` when nothing was done (below threshold, or already
+    /// indexed). The index build is CPU-heavy (~30-60s for 10k rows at
+    /// 384-dim); callers should run it from `tokio::spawn_blocking` or
+    /// accept the latency.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Store`] if `count_rows`, `list_indices`, or
+    /// `create_index` fail.
+    pub async fn maybe_build_index(&self, threshold: usize) -> Result<bool> {
+        use lancedb::index::Index;
+        use lancedb::index::vector::IvfHnswSqIndexBuilder;
+
+        let count = self
+            .tbl
+            .count_rows(None)
+            .await
+            .map_err(|e| Error::Store(format!("count_rows: {e}")))?;
+        if count < threshold {
+            return Ok(false);
+        }
+
+        let existing = self
+            .tbl
+            .list_indices()
+            .await
+            .map_err(|e| Error::Store(format!("list_indices: {e}")))?;
+        let already_indexed = existing
+            .iter()
+            .any(|i| i.columns.iter().any(|c| c == "vector"));
+        if already_indexed {
+            return Ok(false);
+        }
+
+        self.tbl
+            .create_index(&["vector"], Index::IvfHnswSq(IvfHnswSqIndexBuilder::default()))
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("create_index: {e}")))?;
+        Ok(true)
+    }
 }
 
 /// Deterministic chunk id: UUID v5 (OID namespace) of `"{doc_id}::{chunk_idx}"`.
