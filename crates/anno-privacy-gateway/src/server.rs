@@ -3,6 +3,7 @@
 use crate::{upstream, Error, GatewayConfig, PrivacyEngine, Result};
 use axum::{
     extract::State,
+    http::{HeaderMap, HeaderValue},
     routing::{get, post},
     Json, Router,
 };
@@ -63,7 +64,7 @@ async fn health(State(state): State<AppState>) -> Json<Value> {
 async fn messages(
     State(state): State<AppState>,
     Json(mut body): Json<Value>,
-) -> Result<Json<Value>> {
+) -> Result<(HeaderMap, Json<Value>)> {
     {
         let mut privacy = state.privacy.lock().await;
         privacy.pseudonymize_request(&mut body)?;
@@ -73,12 +74,18 @@ async fn messages(
         upstream::forward_messages(&state.client, &state.config.upstream_anthropic_base, &body)
             .await?;
 
+    let mut headers = HeaderMap::new();
     if state.config.auto_rehydrate {
         let privacy = state.privacy.lock().await;
-        privacy.rehydrate_response(&mut response)?;
+        let report = privacy.rehydrate_response(&mut response)?;
+        if report.fresh_pii_redacted > 0 {
+            let count = HeaderValue::from_str(&report.fresh_pii_redacted.to_string())
+                .map_err(|e| Error::Privacy(e.to_string()))?;
+            headers.insert("x-anno-pii-leak-redacted", count);
+        }
     }
 
-    Ok(Json(response))
+    Ok((headers, Json(response)))
 }
 
 async fn models(State(state): State<AppState>) -> Result<Json<Value>> {
@@ -124,6 +131,19 @@ mod tests {
             .unwrap_or("PERSON_1");
         Json(json!({
             "content": [{"type": "text", "text": format!("Bonjour {token}")}]
+        }))
+    }
+
+    async fn mock_leaky_messages(
+        State(state): State<MockState>,
+        Json(body): Json<Value>,
+    ) -> Json<Value> {
+        *state.captured.lock().await = Some(body);
+        Json(json!({
+            "content": [{
+                "type": "text",
+                "text": "Le fournisseur a inventé Jean Martin et jean.martin@example.com."
+            }]
         }))
     }
 
@@ -185,5 +205,45 @@ mod tests {
             .status();
 
         assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn response_pii_leak_redaction_is_reported_in_header() {
+        let captured = Arc::new(Mutex::new(None));
+        let upstream = Router::new()
+            .route("/v1/messages", post(mock_leaky_messages))
+            .with_state(MockState {
+                captured: Arc::clone(&captured),
+            });
+        let upstream_addr = spawn(upstream).await;
+
+        let config = GatewayConfig {
+            upstream_anthropic_base: format!("http://{upstream_addr}"),
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+
+        let response = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/v1/messages"))
+            .json(&json!({
+                "model": "claude",
+                "messages": [{"role": "user", "content": "Bonjour"}]
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response
+                .headers()
+                .get("x-anno-pii-leak-redacted")
+                .and_then(|value| value.to_str().ok()),
+            Some("2")
+        );
+
+        let body: Value = response.json().await.unwrap();
+        let text = body["content"][0]["text"].as_str().unwrap();
+        assert!(!text.contains("Jean Martin"));
+        assert!(!text.contains("jean.martin@example.com"));
     }
 }

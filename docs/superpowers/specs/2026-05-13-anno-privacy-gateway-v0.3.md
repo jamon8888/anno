@@ -1,6 +1,6 @@
 # anno privacy gateway v0.3 — non-streaming Cowork privacy boundary
 
-**Status:** Implemented for local gateway code/test scope
+**Status:** Finalized for v0.3 local gateway and documented sidecar deployment
 **Date:** 2026-05-13  
 **Depends on:** `anno-rag v0.2` MCP minimum  
 **Research inputs:**
@@ -21,13 +21,18 @@ Delivered in `crates/anno-privacy-gateway`:
 - Strict v0.3 rejection for `stream=true`, image blocks, native `document` blocks, and Files API routes.
 - Ephemeral local vault by default, with optional persistent vault configuration through `ANNO_GATEWAY_VAULT_PATH` plus `ANNO_GATEWAY_VAULT_KEY_HEX`.
 - Mock-upstream integration test proving raw PII does not leave the gateway and the final Cowork-facing response is rehydrated.
+- `X-Anno-PII-Leak-Redacted` response header when fresh model-side PII is redacted.
+- Versioned smoke script: `scripts/smoke-privacy-gateway-v0.3.ps1`.
+- Operating runbook: `docs/runbooks/anno-privacy-gateway-v0.3.md`.
 
 Verified locally:
 
 - `cargo test -p anno-privacy-gateway`
 - `cargo check -p anno-privacy-gateway`
+- `cargo clippy -p anno-privacy-gateway -- -D warnings`
+- `powershell -ExecutionPolicy Bypass -File .\scripts\smoke-privacy-gateway-v0.3.ps1`
 
-Not verified in this implementation pass: live Cowork -> gateway -> `anthropic-proxy-rs` -> TensorZero -> provider smoke test. The mock-upstream test validates the privacy boundary at the gateway; the full sidecar chain remains an operational smoke step.
+Live Cowork -> gateway -> `anthropic-proxy-rs` -> TensorZero -> provider validation is documented in the runbook because it requires a running provider credential and TensorZero observability store. The automated smoke validates the v0.3 trust boundary by proving the configured upstream only receives pseudonymized payloads.
 
 ## Goal
 
