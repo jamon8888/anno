@@ -13,15 +13,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Lazy-init `Embedder` and `Detector`** via `tokio::sync::OnceCell`. `Pipeline::new` now constructs in <200 MB RSS; models load on first `ingest`/`search`/`detect` call. (#023)
 - **Embedder default dtype: `F16`** (was `F32`). Override with `embedder_dtype = "f32"` in `~/.anno-rag/config.toml` if recall regresses. (#026)
 - **Dropped bundled Tesseract** (~500 MB resident reduction). `kreuzberg` feature set no longer includes `ocr`. (#024)
+- **Single-backend NER**: `StackedNER` chain replaced with `GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")` (multi-v1 ONNX). Drops bert-base-NER + gliner_small + NuNER_Zero from RAM (~900 MB saved). E2e name-scrub coverage restored to 12/12 (was ≥50% in v0.2). (#025)
 
 ### Performance budget (8 GB / 4 cores laptop target)
 - Peak RSS goal: 3.95 GB → < 1.5 GB
 - Cold-start goal: ~3s → < 2s
 - Search p95 goal: < 200ms (warm path)
 - Recall@10 gate: ≥ 95% of v0.4 fp32 baseline (CI-enforced)
-
-### Deferred
-- **T4 — single-backend NER** (`StackedNER` → `GLiNER2Fastino` multi-v1). Blocked on v0.3 #001 landing on `main`. Will reduce peak RSS by an additional ~900 MB once integrated.
+- Peak RSS cumulative (T1+T2+T3+T4+T5+T6): 3.95 GB → ~850 MB estimated (-78%)
 
 ### Migration notes
 - Users who relied on auto-OCR for scanned PDFs must install system tesseract and pass `--enable-ocr`. See README.

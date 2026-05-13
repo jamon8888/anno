@@ -50,13 +50,10 @@ async fn ingest_then_search_french_fixtures() {
 
     // Structured PII (regex layer) MUST always be scrubbed — hard assertion.
     //
-    // Name PII (anno NER layer) is *best-effort* in v0.2: anno's
-    // StackedNER picks gliner_small-v2.1 / bert-base-NER-onnx as fallbacks,
-    // neither of which is French-tuned. Names like "Jean Martin" in
-    // markdown-formatted contexts leak. The proper fix is v0.3 priority #1:
-    // replace StackedNER with `GLiNER2Fastino::from_pretrained(
-    // "SemplificaAI/gliner2-multi-v1-onnx")` directly (multilingual, FR-aware).
-    // Until then we count name-scrub successes and require >= 2 out of 4.
+    // Name PII (anno NER layer): as of v0.5 #025 (T4), anno-rag uses
+    // GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+    // directly (multilingual, FR-aware). Coverage is now expected to be
+    // 100% (12/12) — every name in every anonymized fixture.
     let names = ["Marie Dupont", "Jean Martin", "Sophie Bernard", "Pierre Lefebvre"];
     let mut total_leaks: Vec<String> = Vec::new();
     for entry in &entries {
@@ -74,11 +71,11 @@ async fn ingest_then_search_french_fixtures() {
         "name-scrub coverage: {scrubbed}/{total_checks} (leaks: {:?})",
         total_leaks
     );
-    // Soft minimum: at least half the name-checks must succeed. v0.3 makes
-    // this 100%.
-    assert!(
-        scrubbed * 2 >= total_checks,
-        "less than half of name occurrences were scrubbed; warmup or NER model is broken"
+    // v0.5 #025 — hard 100% gate (was >=50% in v0.2 when StackedNER
+    // missed FR names in markdown contexts).
+    assert_eq!(
+        scrubbed, total_checks,
+        "expected full name-scrub coverage with GLiNER2Fastino multi-v1, leaked: {total_leaks:?}"
     );
 
     for entry in &entries {

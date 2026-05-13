@@ -18,7 +18,7 @@ default = []
 ocr = []
 
 [dependencies]
-anno            = { path = "../anno" }
+anno            = { path = "../anno", features = ["gliner2-fastino"] }
 cloakpipe-core  = { path = "../../vendor/cloakpipe/crates/cloakpipe-core" }
 
 kreuzberg            = { workspace = true }
