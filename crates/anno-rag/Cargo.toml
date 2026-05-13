@@ -51,12 +51,12 @@ keyring              = { workspace = true }
 rand                 = { workspace = true }
 dirs                 = { workspace = true }
 chrono               = { workspace = true }
+sysinfo              = "0.32"
+tempfile             = "3"
 
 [dev-dependencies]
-tempfile        = "3"
 insta           = { version = "1", features = ["yaml"] }
 criterion       = { version = "0.5", features = ["html_reports", "async_tokio"] }
-sysinfo         = "0.32"
 
 [[bench]]
 name = "bench_cold_start"

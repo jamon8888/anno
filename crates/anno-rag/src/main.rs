@@ -45,6 +45,12 @@ enum Cmd {
     /// Run the MCP server on stdio. Used by Cowork as a plugin transport.
     /// Blocks until stdin closes.
     Mcp,
+    /// Reproduce SLO measurements on a user corpus.
+    Bench {
+        /// Folder containing the documents to bench (PDF/DOCX/TXT/MD).
+        #[arg(long, value_name = "DIR")]
+        corpus: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -54,6 +60,13 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
+
+    // Bench builds its own Pipeline in a tempdir; short-circuit before keyring lookup.
+    if let Cmd::Bench { corpus } = &cli.cmd {
+        anno_rag::bench_cli::run(corpus).await?;
+        return Ok(());
+    }
+
     let mut cfg = AnnoRagConfig::default();
     if let Cmd::Ingest { enable_ocr, .. } = &cli.cmd {
         cfg.enable_ocr |= *enable_ocr;
@@ -87,6 +100,7 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Mcp => {
             anno_rag::mcp::serve_stdio(pipeline, cfg).await?;
         }
+        Cmd::Bench { .. } => unreachable!("handled above before Pipeline::new"),
     }
     Ok(())
 }

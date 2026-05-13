@@ -4,6 +4,7 @@
 
 #![warn(missing_docs)]
 
+pub mod bench_cli;
 pub mod config;
 pub mod detect;
 pub mod embed;
