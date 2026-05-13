@@ -48,14 +48,39 @@ async fn ingest_then_search_french_fixtures() {
         .collect();
     assert_eq!(entries.len(), 3, "should write 3 .anon.md files, got {}", entries.len());
 
-    // Structured-PII assertions (MUST always hold — these go through the
-    // regex layer in detect.rs, not anno NER).
+    // Structured PII (regex layer) MUST always be scrubbed — hard assertion.
     //
-    // Name detection is best-effort in v0.1: anno's `StackedNER::default()`
-    // falls back to pattern+heuristic when no ONNX model is cached, and
-    // those heuristics miss many French-name conventions. We don't gate the
-    // walking-skeleton on names. v0.2 will pre-warm anno's gliner_pii model
-    // alongside the embedder.
+    // Name PII (anno NER layer) is *best-effort* in v0.2: anno's
+    // StackedNER picks gliner_small-v2.1 / bert-base-NER-onnx as fallbacks,
+    // neither of which is French-tuned. Names like "Jean Martin" in
+    // markdown-formatted contexts leak. The proper fix is v0.3 priority #1:
+    // replace StackedNER with `GLiNER2Fastino::from_pretrained(
+    // "SemplificaAI/gliner2-multi-v1-onnx")` directly (multilingual, FR-aware).
+    // Until then we count name-scrub successes and require >= 2 out of 4.
+    let names = ["Marie Dupont", "Jean Martin", "Sophie Bernard", "Pierre Lefebvre"];
+    let mut total_leaks: Vec<String> = Vec::new();
+    for entry in &entries {
+        let content = std::fs::read_to_string(entry.path()).expect("read output");
+        let path_str = entry.path().display().to_string();
+        for name in names {
+            if content.contains(name) {
+                total_leaks.push(format!("{name} in {path_str}"));
+            }
+        }
+    }
+    let scrubbed = names.len() * entries.len() - total_leaks.len();
+    let total_checks = names.len() * entries.len();
+    eprintln!(
+        "name-scrub coverage: {scrubbed}/{total_checks} (leaks: {:?})",
+        total_leaks
+    );
+    // Soft minimum: at least half the name-checks must succeed. v0.3 makes
+    // this 100%.
+    assert!(
+        scrubbed * 2 >= total_checks,
+        "less than half of name occurrences were scrubbed; warmup or NER model is broken"
+    );
+
     for entry in &entries {
         let content = std::fs::read_to_string(entry.path()).expect("read output");
         let path_str = entry.path().display().to_string();
