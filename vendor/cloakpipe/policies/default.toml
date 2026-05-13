@@ -1,0 +1,58 @@
+# CloakPipe Default Detection Policy
+# This file defines the built-in detection rules applied when no custom config is provided.
+
+[proxy]
+listen = "127.0.0.1:8400"
+upstream = "https://api.openai.com"
+api_key_env = "OPENAI_API_KEY"
+timeout_seconds = 120
+max_concurrent = 256
+mode = "cloaktree"
+
+[vault]
+path = "./vault.enc"
+encryption = "aes-256-gcm"
+key_env = "CLOAKPIPE_VAULT_KEY"
+
+[tree]
+enabled = true
+storage_path = "./trees/"
+index_model = "gpt-4o"
+search_model = "gpt-4o"
+max_pages_per_node = 10
+max_tokens_per_node = 20000
+add_node_summaries = true
+pseudonymize_summaries = true
+
+[detection]
+secrets = true
+financial = true
+dates = true
+emails = true
+phone_numbers = true
+ip_addresses = true
+urls_internal = true
+
+[detection.ner]
+enabled = false
+# model = "./models/ner-english-base.onnx"
+confidence_threshold = 0.85
+entity_types = ["PERSON", "ORG", "LOC"]
+
+[detection.custom]
+patterns = []
+
+[detection.overrides]
+preserve = []
+force = []
+
+[vectors]
+encrypt = false
+
+[audit]
+enabled = true
+log_path = "./audit/"
+format = "jsonl"
+retention_days = 90
+log_entities = true
+log_mappings = false

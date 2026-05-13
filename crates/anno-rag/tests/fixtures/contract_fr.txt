@@ -1,0 +1,20 @@
+CONTRAT DE PRESTATION
+
+Entre les soussignés:
+- Marie Dupont, demeurant 12 rue de la Paix, 75002 Paris, joignable au 06 12 34 56 78,
+- La société ACME SAS, SIRET 73282932000074, siège social à Lyon,
+
+Article 1 - Objet
+La présente convention a pour objet la fourniture de services de conseil juridique.
+
+Article 2 - Durée
+Le contrat est conclu pour une durée de douze (12) mois à compter du 1er janvier 2026.
+
+Article 3 - Rémunération
+La rémunération sera versée sur le compte IBAN FR76 3000 6000 0112 3456 7890 189.
+
+Article 4 - Résiliation
+Chaque partie peut résilier la convention moyennant un préavis de trente (30) jours.
+
+Article 5 - Droit applicable
+La présente convention est régie par le droit français.

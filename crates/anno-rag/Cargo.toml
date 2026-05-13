@@ -1,0 +1,53 @@
+[package]
+name         = "anno-rag"
+version      = "0.2.0"
+edition.workspace      = true
+rust-version.workspace = true
+license      = "MIT OR Apache-2.0"
+description  = "Local GDPR-compliant document anonymizer + RAG service (French legal)"
+
+[[bin]]
+name = "anno-rag"
+path = "src/main.rs"
+
+[dependencies]
+anno            = { path = "../anno" }
+cloakpipe-core  = { path = "../../vendor/cloakpipe/crates/cloakpipe-core" }
+
+kreuzberg            = { workspace = true }
+lancedb              = { workspace = true }
+arrow                = { workspace = true }
+arrow-array          = { workspace = true }
+arrow-schema        = { workspace = true }
+candle-core          = { workspace = true }
+candle-nn            = { workspace = true }
+candle-transformers  = { workspace = true }
+hf-hub               = { workspace = true }
+tokenizers           = { workspace = true }
+tokio                = { workspace = true }
+clap                 = { workspace = true }
+serde                = { workspace = true }
+serde_json           = { workspace = true }
+schemars             = { workspace = true }
+tracing              = { workspace = true }
+tracing-subscriber   = { workspace = true }
+anyhow               = { workspace = true }
+thiserror            = { workspace = true }
+uuid                 = { workspace = true }
+regex                = { workspace = true }
+rmcp                 = { workspace = true }
+walkdir              = { workspace = true }
+sha2                 = { workspace = true }
+futures              = { workspace = true }
+argon2               = { workspace = true }
+keyring              = { workspace = true }
+rand                 = { workspace = true }
+dirs                 = { workspace = true }
+chrono               = { workspace = true }
+
+[dev-dependencies]
+tempfile        = "3"
+insta           = { version = "1", features = ["yaml"] }
+
+[lints]
+workspace = true
