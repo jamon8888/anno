@@ -1198,6 +1198,9 @@ Cowork / Claude Code / app metier
 
 TensorZero remains useful for routing, observability, fallback, A/B testing,
 and cost/latency tracking, but it must only receive pseudonymized payloads.
+The same rule applies to documents: native Claude/Cowork uploads must be
+processed locally or rejected until Anno can prove only sanitized derivatives
+cross the provider boundary.
 
 **v0.2 — Cowork tool rail**
 - `anno-rag mcp` exposes local RAG tools to Cowork over stdio.
@@ -1218,6 +1221,13 @@ and cost/latency tracking, but it must only receive pseudonymized payloads.
 - Route directly to TensorZero, local OpenAI-compatible models, sovereign providers, or global providers.
 - Preserve the guarantee that TensorZero and external providers only see pseudonymized content unless an explicit local-cleartext policy is configured.
 - Spec: [2026-05-13-anno-privacy-gateway-v0.4.md](./2026-05-13-anno-privacy-gateway-v0.4.md)
+
+**v0.5 — Claude/Cowork document ingress**
+- Keep v0.3/v0.4 fail-closed behavior for native `/v1/files` and `document` blocks until this is implemented.
+- Preferred first path: local MCP/MCPB document ingest into `anno-rag`, using `kreuzberg` extraction and local vault pseudonymization before retrieval.
+- Second path: intercept Anthropic-style `/v1/files` and `document` blocks, map local file IDs to sanitized derivatives, and forward only pseudonymized/sanitized content.
+- TensorZero may observe sanitized files or pseudonymized text, never original document bytes by default.
+- Spec: [2026-05-13-anno-document-ingress-v0.5.md](./2026-05-13-anno-document-ingress-v0.5.md)
 
 **v1.0 — Regulated-profession RAG product**
 - Combine the tool rail (`anno-rag mcp`) and LLM rail (`anno-privacy-gateway`) into one documented deployment profile.
@@ -1259,6 +1269,14 @@ and cost/latency tracking, but it must only receive pseudonymized payloads.
 **Cloakpipe:**
 - Local source at `vendor/cloakpipe/` (upstream `rohansx/cloakpipe`, Apache-2.0)
 - Agent survey output stored in design archive
+
+**Claude/Cowork provider integration:**
+- [Anthropic Files API](https://platform.claude.com/docs/en/build-with-claude/files)
+- [Anthropic PDF support](https://platform.claude.com/docs/en/build-with-claude/pdf-support)
+- [Build a desktop extension with MCPB](https://claude.com/docs/connectors/building/mcpb)
+- [Cowork 3P extensions](https://claude.com/docs/cowork/3p/extensions)
+- Local source: `C:\tmp\anno-research\anthropic-proxy-rs` (Files API unsupported; no `document` content block)
+- Local source: `C:\tmp\anno-research\tensorzero` (native file blocks and provider serialization behind Anno boundary)
 
 **LanceDB:**
 - [lancedb docs.rs](https://docs.rs/lancedb/latest/lancedb/)

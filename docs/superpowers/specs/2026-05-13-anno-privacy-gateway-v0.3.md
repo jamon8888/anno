@@ -6,6 +6,9 @@
 **Research inputs:**
 - TensorZero clone: `C:\tmp\anno-research\tensorzero` at `6ea911b8b697e50521b26e075b347f6b46d96539`
 - anthropic-proxy-rs clone: `C:\tmp\anno-research\anthropic-proxy-rs` at `596dfad5306ec6c88cfcc1f748e01ec9670347bf`
+- Anthropic Files API docs: `document`/`image` blocks can reference uploaded `file_id`s.
+- Anthropic PDF docs: PDF inputs can arrive as URL, base64 `document` blocks, or Files API references.
+- Claude/Cowork 3P docs: local MCPB desktop extensions and local MCP servers are supported user/admin extension surfaces.
 
 ## Goal
 
@@ -21,6 +24,7 @@ The user-facing answer is rehydrated automatically before it is returned to Cowo
 - No replacement for `anno-rag mcp`; the RAG MCP tool rail remains separate.
 - No multi-tenant auth model.
 - No cloud-side vault.
+- No native Claude/Cowork file upload processing. v0.3 fails closed on `/v1/files` and `document` blocks; use the local `anno-rag mcp` tool rail or CLI ingest path instead.
 
 ## Architecture
 
@@ -106,7 +110,11 @@ Accepts Anthropic-compatible requests with:
 Rejects or strips unsupported features explicitly:
 
 - `stream=true` returns `400` with a clear message: streaming is deferred to v0.4.
-- file APIs and batch APIs are out of scope.
+- `POST /v1/files`, `GET /v1/files`, `DELETE /v1/files/{id}`, and `GET /v1/files/{id}/content` return an explicit unsupported-feature error.
+- `document` blocks in `/v1/messages` return an explicit unsupported-feature error, whether their source is `file`, `url`, `base64`, or provider-specific unknown data.
+- batch APIs are out of scope.
+
+This is intentionally conservative. `anthropic-proxy-rs` currently lists Files API as unsupported and its Anthropic model only covers text, image, tool use/result, and thinking blocks. Passing a document through unchanged would bypass Anno's local extraction and pseudonymization boundary.
 
 ### `GET /v1/models`
 
@@ -128,6 +136,12 @@ Request pseudonymization must inspect every outbound text-bearing field:
 - JSON string leaves inside `tool_use.input`, because tools may carry user text or file snippets.
 
 Images are not transformed in v0.3. If an image block is present, the gateway should either pass it unchanged only when policy permits images, or reject it in strict mode. Default for regulated-profession mode: reject image blocks until OCR/image redaction is designed.
+
+Documents are stricter than images in v0.3. The gateway must not forward native Claude `document` blocks because they may contain cleartext PDF/text payloads or file handles whose content cannot be inspected by the gateway. The supported document path is:
+
+```text
+local file/folder -> anno-rag ingest or MCP ingest -> kreuzberg extraction -> pseudonymized chunks/copy -> Cowork search over pseudonymized corpus
+```
 
 Response rehydration must inspect:
 
@@ -212,6 +226,8 @@ Unit tests:
 - pseudonymizes `tool_result.content`.
 - pseudonymizes JSON string leaves inside `tool_use.input`.
 - rejects `stream=true`.
+- rejects native `document` content blocks.
+- rejects `/v1/files` operations.
 - rehydrates known pseudonyms in response text.
 - redacts fresh PII in model response.
 
@@ -246,5 +262,6 @@ TensorZero provider: NIM / local / sovereign
 - Streaming/SSE rehydration.
 - Internal Anthropic-to-OpenAI translation.
 - Provider routing without `anthropic-proxy-rs`.
+- Native document ingress (`/v1/files`, `document` blocks, sanitized upstream file mapping).
 - Policy UI.
 - Multi-tenant vault isolation.

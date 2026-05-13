@@ -19,6 +19,7 @@ Turn the v0.3 privacy boundary into a production-grade provider gateway:
 - No TensorZero embedded gateway unless a later benchmark proves it is worth the build and dependency cost.
 - No multi-tenant SaaS control plane.
 - No image redaction pipeline.
+- No native document upload/file lifecycle support. v0.4 keeps v0.3's fail-closed behavior for `/v1/files` and `document` blocks; document ingress is specified separately in v0.5.
 
 ## Architecture
 
@@ -101,6 +102,8 @@ Anthropic HTTP JSON
 
 The privacy transform still runs before provider translation.
 
+Native Claude `document` blocks are not part of the default `NormalizedChatRequest` in v0.4. The adapter may represent them as an explicit `UnsupportedDocument` variant so policy can reject them with a structured error, but it must not translate or forward them opaquely. Full document normalization belongs to v0.5 after local extraction, pseudonymization, and file lifecycle state are designed.
+
 ## Streaming/SSE design
 
 Streaming is the risky feature. A provider can split text arbitrarily:
@@ -182,6 +185,8 @@ Do not require TensorZero for:
 - air-gapped deployments,
 - minimal office installs.
 
+TensorZero file support is not a shortcut around Anno's document privacy boundary. If a later flow sends files through TensorZero, those files must already be sanitized or pseudonymized by Anno, and TensorZero object storage must be treated as provider-side observability storage, not as a cleartext document vault.
+
 ## Operational modes
 
 ### v0.4 default
@@ -220,6 +225,7 @@ Streaming tests:
 - stream ending with partial token does not leak or panic.
 - tool call stream remains valid.
 - provider stream error maps to Anthropic error event.
+- native `document` blocks and `/v1/files` still fail closed.
 
 Privacy tests:
 
@@ -249,3 +255,4 @@ Integration tests:
 - admin UI for policies.
 - customer-managed key vault integrations.
 - advanced legal privilege policy engine.
+- native document ingress and sanitized file lifecycle, covered by v0.5.
