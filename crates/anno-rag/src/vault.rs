@@ -11,9 +11,9 @@
 //!   stored on first run).
 
 use crate::error::{Error, Result};
-use cloakpipe_core::DetectedEntity;
 use cloakpipe_core::replacer::Replacer;
 use cloakpipe_core::vault::Vault as CpVault;
+use cloakpipe_core::DetectedEntity;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -53,7 +53,7 @@ impl Vault {
     /// sorted by start offset and non-overlapping (the detector guarantees this).
     pub async fn pseudonymize(&self, text: &str, entities: &[DetectedEntity]) -> Result<String> {
         let mut v = self.inner.lock().await;
-        let result = Replacer::pseudonymize(text, entities, &mut *v)
+        let result = Replacer::pseudonymize(text, entities, &mut v)
             .map_err(|e| Error::Vault(format!("replacer: {e}")))?;
         Ok(result.text)
     }
@@ -147,8 +147,8 @@ fn parse_hex_key(hex: &str) -> Result<[u8; 32]> {
     }
     let mut key = [0u8; 32];
     for (i, byte_pair) in hex.as_bytes().chunks(2).enumerate() {
-        let s = std::str::from_utf8(byte_pair)
-            .map_err(|e| Error::Vault(format!("hex utf8: {e}")))?;
+        let s =
+            std::str::from_utf8(byte_pair).map_err(|e| Error::Vault(format!("hex utf8: {e}")))?;
         key[i] = u8::from_str_radix(s, 16)
             .map_err(|e| Error::Vault(format!("hex parse at byte {i}: {e}")))?;
     }

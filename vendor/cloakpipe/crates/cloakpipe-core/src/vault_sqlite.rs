@@ -75,8 +75,7 @@ impl SqliteVault {
         let conn = Connection::open_in_memory().expect("Failed to open in-memory SQLite");
         Self::init_schema(&conn).expect("Failed to init schema");
 
-        let cipher = Aes256Gcm::new_from_slice(&key)
-            .expect("Invalid key");
+        let cipher = Aes256Gcm::new_from_slice(&key).expect("Invalid key");
 
         let _key_guard = SensitiveBytes(key);
 
@@ -107,16 +106,17 @@ impl SqliteVault {
                 user_id TEXT,
                 counter INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (category, user_id)
-            );"
-        ).context("Failed to initialize vault schema")?;
+            );",
+        )
+        .context("Failed to initialize vault schema")?;
         Ok(())
     }
 
     /// Load all mappings into the in-memory cache.
     fn load_cache(&mut self) -> Result<()> {
-        let mut stmt = self.conn.prepare(
-            "SELECT original_enc, token, category, token_id FROM mappings"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT original_enc, token, category, token_id FROM mappings")?;
 
         let rows = stmt.query_map([], |row| {
             let enc: Vec<u8> = row.get(0)?;
@@ -128,7 +128,8 @@ impl SqliteVault {
 
         for row in rows {
             let (enc, token, category_str, token_id) = row?;
-            let original = self.decrypt_value(&enc)
+            let original = self
+                .decrypt_value(&enc)
                 .unwrap_or_else(|_| "[decrypt_failed]".to_string());
             let category = Self::parse_category(&category_str);
 
@@ -166,17 +167,22 @@ impl SqliteVault {
         let user_key = user_id.unwrap_or("");
 
         // Increment counter
-        self.conn.execute(
-            "INSERT INTO counters (category, user_id, counter) VALUES (?1, ?2, 1)
+        self.conn
+            .execute(
+                "INSERT INTO counters (category, user_id, counter) VALUES (?1, ?2, 1)
              ON CONFLICT(category, user_id) DO UPDATE SET counter = counter + 1",
-            params![prefix, user_key],
-        ).expect("Failed to update counter");
+                params![prefix, user_key],
+            )
+            .expect("Failed to update counter");
 
-        let counter: u32 = self.conn.query_row(
-            "SELECT counter FROM counters WHERE category = ?1 AND user_id = ?2",
-            params![prefix, user_key],
-            |row| row.get(0),
-        ).expect("Failed to read counter");
+        let counter: u32 = self
+            .conn
+            .query_row(
+                "SELECT counter FROM counters WHERE category = ?1 AND user_id = ?2",
+                params![prefix, user_key],
+                |row| row.get(0),
+            )
+            .expect("Failed to read counter");
 
         // Include user_id in token to avoid collisions across users
         let token_str = if user_key.is_empty() {
@@ -192,7 +198,8 @@ impl SqliteVault {
         };
 
         // Encrypt and store
-        let encrypted = self.encrypt_value(original)
+        let encrypted = self
+            .encrypt_value(original)
             .expect("Failed to encrypt value");
 
         self.conn.execute(
@@ -201,8 +208,10 @@ impl SqliteVault {
         ).expect("Failed to insert mapping");
 
         // Update caches
-        self.forward_cache.insert(original.to_string(), token.clone());
-        self.reverse_cache.insert(token.token.clone(), original.to_string());
+        self.forward_cache
+            .insert(original.to_string(), token.clone());
+        self.reverse_cache
+            .insert(token.token.clone(), original.to_string());
 
         token
     }
@@ -226,15 +235,18 @@ impl SqliteVault {
     pub fn stats(&self) -> VaultStats {
         let mut categories = HashMap::new();
 
-        let mut stmt = self.conn.prepare(
-            "SELECT category, counter FROM counters WHERE user_id = ''"
-        ).expect("Failed to prepare stats query");
+        let mut stmt = self
+            .conn
+            .prepare("SELECT category, counter FROM counters WHERE user_id = ''")
+            .expect("Failed to prepare stats query");
 
-        let rows = stmt.query_map([], |row| {
-            let cat: String = row.get(0)?;
-            let count: u32 = row.get(1)?;
-            Ok((cat, count))
-        }).expect("Failed to query stats");
+        let rows = stmt
+            .query_map([], |row| {
+                let cat: String = row.get(0)?;
+                let count: u32 = row.get(1)?;
+                Ok((cat, count))
+            })
+            .expect("Failed to query stats");
 
         for (cat, count) in rows.flatten() {
             categories.insert(cat, count);
@@ -255,9 +267,9 @@ impl SqliteVault {
         )?;
 
         let mut categories = HashMap::new();
-        let mut stmt = self.conn.prepare(
-            "SELECT category, counter FROM counters WHERE user_id = ?1"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT category, counter FROM counters WHERE user_id = ?1")?;
 
         let rows = stmt.query_map(params![user_id], |row| {
             let cat: String = row.get(0)?;
@@ -280,7 +292,8 @@ impl SqliteVault {
         OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
-        let ciphertext = self.cipher
+        let ciphertext = self
+            .cipher
             .encrypt(nonce, plaintext.as_bytes())
             .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
@@ -297,7 +310,8 @@ impl SqliteVault {
         let nonce = Nonce::from_slice(&data[..12]);
         let ciphertext = &data[12..];
 
-        let plaintext = self.cipher
+        let plaintext = self
+            .cipher
             .decrypt(nonce, ciphertext)
             .map_err(|_| anyhow::anyhow!("Decryption failed — wrong key or corrupted data"))?;
 

@@ -6,22 +6,22 @@
 //! 3. Named Entity Recognition (ONNX) — persons, organizations, locations
 //! 4. Custom rules (TOML config) — project codenames, client tiers, etc.
 
-pub mod patterns;
-pub mod financial;
 pub mod custom;
+pub mod financial;
+pub mod patterns;
 
 #[cfg(feature = "ner")]
-pub mod ner;
+pub mod distilbert_pii;
 #[cfg(feature = "ner")]
 pub mod gliner;
 #[cfg(feature = "gliner-pii")]
 pub mod gliner_pii;
 #[cfg(feature = "ner")]
-pub mod distilbert_pii;
+pub mod ner;
 
 #[cfg(feature = "ner")]
 use crate::config::NerBackend;
-use crate::{DetectedEntity, config::DetectionConfig};
+use crate::{config::DetectionConfig, DetectedEntity};
 use anyhow::Result;
 
 /// The combined detection engine that runs all layers.
@@ -57,19 +57,25 @@ impl Detector {
                 None
             },
             #[cfg(feature = "ner")]
-            gliner_detector: if config.ner.enabled && matches!(config.ner.backend, NerBackend::Gliner) {
+            gliner_detector: if config.ner.enabled
+                && matches!(config.ner.backend, NerBackend::Gliner)
+            {
                 Some(gliner::GlinerDetector::new(&config.ner)?)
             } else {
                 None
             },
             #[cfg(feature = "ner")]
-            distilbert_pii_detector: if config.ner.enabled && matches!(config.ner.backend, NerBackend::DistilBertPii) {
+            distilbert_pii_detector: if config.ner.enabled
+                && matches!(config.ner.backend, NerBackend::DistilBertPii)
+            {
                 Some(distilbert_pii::DistilBertPiiDetector::new(&config.ner)?)
             } else {
                 None
             },
             #[cfg(feature = "gliner-pii")]
-            gliner_pii_detector: if config.ner.enabled && matches!(config.ner.backend, crate::config::NerBackend::GlinerPii) {
+            gliner_pii_detector: if config.ner.enabled
+                && matches!(config.ner.backend, crate::config::NerBackend::GlinerPii)
+            {
                 let pii_config = gliner_pii::GlinerPiiConfig {
                     url: config.ner.sidecar_url.clone(),
                     threshold: config.ner.confidence_threshold,

@@ -3,7 +3,7 @@
 //! Takes detected entities and replaces them with stable pseudo-tokens
 //! using the vault for consistency across documents, queries, and sessions.
 
-use crate::{DetectedEntity, MaskingStrategy, PseudonymizedText, vault::Vault};
+use crate::{vault::Vault, DetectedEntity, MaskingStrategy, PseudonymizedText};
 use anyhow::Result;
 use std::collections::HashMap;
 
@@ -98,9 +98,14 @@ impl Replacer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{DetectedEntity, EntityCategory, DetectionSource, MaskingStrategy};
+    use crate::{DetectedEntity, DetectionSource, EntityCategory, MaskingStrategy};
 
-    fn make_entity(original: &str, start: usize, end: usize, cat: EntityCategory) -> DetectedEntity {
+    fn make_entity(
+        original: &str,
+        start: usize,
+        end: usize,
+        cat: EntityCategory,
+    ) -> DetectedEntity {
         DetectedEntity {
             original: original.to_string(),
             start,
@@ -114,37 +119,81 @@ mod tests {
     #[test]
     fn test_pseudonymize_token_strategy() {
         let text = "Call +91 98765 43210 now";
-        let entities = vec![make_entity("+91 98765 43210", 5, 20, EntityCategory::PhoneNumber)];
+        let entities = vec![make_entity(
+            "+91 98765 43210",
+            5,
+            20,
+            EntityCategory::PhoneNumber,
+        )];
         let mut vault = Vault::ephemeral();
-        let result = Replacer::pseudonymize_with_strategy(text, &entities, &mut vault, MaskingStrategy::Token).unwrap();
-        assert!(result.text.contains("PHONE_"), "Token strategy should use PHONE_ prefix");
+        let result = Replacer::pseudonymize_with_strategy(
+            text,
+            &entities,
+            &mut vault,
+            MaskingStrategy::Token,
+        )
+        .unwrap();
+        assert!(
+            result.text.contains("PHONE_"),
+            "Token strategy should use PHONE_ prefix"
+        );
         assert!(!result.text.contains("+91"));
     }
 
     #[test]
     fn test_pseudonymize_format_preserving_strategy() {
         let text = "Call +91 98765 43210 now";
-        let entities = vec![make_entity("+91 98765 43210", 5, 20, EntityCategory::PhoneNumber)];
+        let entities = vec![make_entity(
+            "+91 98765 43210",
+            5,
+            20,
+            EntityCategory::PhoneNumber,
+        )];
         let mut vault = Vault::ephemeral();
-        let result = Replacer::pseudonymize_with_strategy(text, &entities, &mut vault, MaskingStrategy::FormatPreserving).unwrap();
-        assert!(result.text.contains("+91"), "FP phone should preserve +91 prefix");
-        assert!(!result.text.contains("98765 43210"), "Original digits should be replaced");
+        let result = Replacer::pseudonymize_with_strategy(
+            text,
+            &entities,
+            &mut vault,
+            MaskingStrategy::FormatPreserving,
+        )
+        .unwrap();
+        assert!(
+            result.text.contains("+91"),
+            "FP phone should preserve +91 prefix"
+        );
+        assert!(
+            !result.text.contains("98765 43210"),
+            "Original digits should be replaced"
+        );
     }
 
     #[test]
     fn test_pseudonymize_fp_email() {
         let text = "Email: priya@example.com";
-        let entities = vec![make_entity("priya@example.com", 7, 24, EntityCategory::Email)];
+        let entities = vec![make_entity(
+            "priya@example.com",
+            7,
+            24,
+            EntityCategory::Email,
+        )];
         let mut vault = Vault::ephemeral();
         let result = Replacer::pseudonymize_fp(text, &entities, &mut vault).unwrap();
         assert!(result.text.contains("@"), "FP email should contain @");
-        assert!(!result.text.contains("priya"), "Original name should be gone");
+        assert!(
+            !result.text.contains("priya"),
+            "Original name should be gone"
+        );
     }
 
     #[test]
     fn test_pseudonymize_fp_preserves_surrounding_text() {
         let text = "Hello priya@example.com goodbye";
-        let entities = vec![make_entity("priya@example.com", 6, 23, EntityCategory::Email)];
+        let entities = vec![make_entity(
+            "priya@example.com",
+            6,
+            23,
+            EntityCategory::Email,
+        )];
         let mut vault = Vault::ephemeral();
         let result = Replacer::pseudonymize_fp(text, &entities, &mut vault).unwrap();
         assert!(result.text.starts_with("Hello "), "Before text preserved");
@@ -155,8 +204,18 @@ mod tests {
     fn test_pseudonymize_fp_consistency() {
         let text1 = "Call +91 98765 43210";
         let text2 = "Call +91 98765 43210 again";
-        let entities1 = vec![make_entity("+91 98765 43210", 5, 20, EntityCategory::PhoneNumber)];
-        let entities2 = vec![make_entity("+91 98765 43210", 5, 20, EntityCategory::PhoneNumber)];
+        let entities1 = vec![make_entity(
+            "+91 98765 43210",
+            5,
+            20,
+            EntityCategory::PhoneNumber,
+        )];
+        let entities2 = vec![make_entity(
+            "+91 98765 43210",
+            5,
+            20,
+            EntityCategory::PhoneNumber,
+        )];
         let mut vault = Vault::ephemeral();
         let r1 = Replacer::pseudonymize_fp(text1, &entities1, &mut vault).unwrap();
         let r2 = Replacer::pseudonymize_fp(text2, &entities2, &mut vault).unwrap();

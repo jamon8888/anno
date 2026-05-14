@@ -1,7 +1,10 @@
 //! HTTP server setup and router configuration.
 
-use crate::{handlers, tree_handlers, state::AppState};
-use axum::{routing::{get, post}, Router};
+use crate::{handlers, state::AppState, tree_handlers};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -10,18 +13,30 @@ use tower_http::trace::TraceLayer;
 pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(handlers::health))
-        .route("/v1/chat/completions", post(handlers::proxy_chat_completions))
+        .route(
+            "/v1/chat/completions",
+            post(handlers::proxy_chat_completions),
+        )
         .route("/v1/embeddings", post(handlers::proxy_embeddings))
         // CloakTree endpoints
         .route("/tree/index", post(tree_handlers::tree_index_text))
         .route("/tree/index/file", post(tree_handlers::tree_index_file))
         .route("/tree/list", get(tree_handlers::tree_list))
         .route("/tree/query", post(tree_handlers::tree_query))
-        .route("/tree/{id}", get(tree_handlers::tree_get).delete(tree_handlers::tree_delete))
+        .route(
+            "/tree/{id}",
+            get(tree_handlers::tree_get).delete(tree_handlers::tree_delete),
+        )
         .route("/tree/{id}/search", post(tree_handlers::tree_search))
         // Session management endpoints
-        .route("/sessions", get(handlers::sessions_list).delete(handlers::sessions_flush_all))
-        .route("/sessions/{id}", get(handlers::session_inspect).delete(handlers::session_flush))
+        .route(
+            "/sessions",
+            get(handlers::sessions_list).delete(handlers::sessions_flush_all),
+        )
+        .route(
+            "/sessions/{id}",
+            get(handlers::session_inspect).delete(handlers::session_flush),
+        )
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state)

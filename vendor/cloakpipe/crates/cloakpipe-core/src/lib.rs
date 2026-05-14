@@ -6,16 +6,16 @@
 //! - Encrypted mapping vault (AES-256-GCM + zeroize)
 //! - Response rehydration (including SSE streaming support)
 
+pub mod config;
 pub mod detector;
 pub mod format_preserving;
+pub mod profiles;
+pub mod rehydrator;
 pub mod replacer;
 pub mod resolver;
 pub mod session;
 pub mod vault;
 pub mod vault_sqlite;
-pub mod rehydrator;
-pub mod config;
-pub mod profiles;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -49,21 +49,21 @@ pub enum EntityCategory {
     Email,
     PhoneNumber,
     IpAddress,
-    Secret,      // API keys, tokens, passwords
-    Url,         // Internal URLs
-    Project,     // Custom: project codenames
-    Business,    // Custom: client tiers, deal terms
-    Infra,       // Custom: internal infrastructure
+    Secret,   // API keys, tokens, passwords
+    Url,      // Internal URLs
+    Project,  // Custom: project codenames
+    Business, // Custom: client tiers, deal terms
+    Infra,    // Custom: internal infrastructure
     Custom(String),
 }
 
 /// Which detection layer identified the entity.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DetectionSource {
-    Pattern,     // Regex-based
-    Financial,   // Currency/percentage parser
-    Ner,         // ONNX NER model
-    Custom,      // User-defined TOML rules
+    Pattern,   // Regex-based
+    Financial, // Currency/percentage parser
+    Ner,       // ONNX NER model
+    Custom,    // User-defined TOML rules
 }
 
 /// A pseudonymized replacement token.

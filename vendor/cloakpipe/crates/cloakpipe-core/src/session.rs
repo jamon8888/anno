@@ -213,11 +213,7 @@ impl SessionContext {
 
     /// Record entities detected in the current message.
     /// Call this after pseudonymization to update session state.
-    pub fn record_entities(
-        &mut self,
-        entities: &[DetectedEntity],
-        tokens: &[PseudoToken],
-    ) {
+    pub fn record_entities(&mut self, entities: &[DetectedEntity], tokens: &[PseudoToken]) {
         self.message_count += 1;
         self.last_activity = Utc::now();
 
@@ -300,7 +296,8 @@ impl SessionContext {
                 // Find the most recent PERSON entity
                 if let Some(person) = self.most_recent_entity(&EntityCategory::Person) {
                     // Only resolve if there's exactly one recent person (avoid ambiguity)
-                    let recent_persons = self.recent_entities_of_category(&EntityCategory::Person, 3);
+                    let recent_persons =
+                        self.recent_entities_of_category(&EntityCategory::Person, 3);
                     if recent_persons.len() == 1 {
                         results.push((
                             DetectedEntity {
@@ -399,9 +396,16 @@ impl SessionContext {
             }
 
             // Build abbreviation from initials
-            let abbrev: String = words.iter().map(|w| {
-                w.chars().next().unwrap_or_default().to_uppercase().to_string()
-            }).collect();
+            let abbrev: String = words
+                .iter()
+                .map(|w| {
+                    w.chars()
+                        .next()
+                        .unwrap_or_default()
+                        .to_uppercase()
+                        .to_string()
+                })
+                .collect();
 
             if abbrev.len() < 2 {
                 continue;
@@ -515,7 +519,13 @@ impl SessionContext {
             }
             let abbrev: String = words
                 .iter()
-                .map(|w| w.chars().next().unwrap_or_default().to_uppercase().to_string())
+                .map(|w| {
+                    w.chars()
+                        .next()
+                        .unwrap_or_default()
+                        .to_uppercase()
+                        .to_string()
+                })
                 .collect();
             if abbrev.len() >= 2 {
                 new_corefs.push((
@@ -541,7 +551,9 @@ impl SessionContext {
     pub fn stats(&self) -> SessionStats {
         let mut categories = HashMap::new();
         for entity in self.entities.values() {
-            *categories.entry(format!("{:?}", entity.category)).or_insert(0u32) += 1;
+            *categories
+                .entry(format!("{:?}", entity.category))
+                .or_insert(0u32) += 1;
         }
 
         SessionStats {
@@ -683,11 +695,10 @@ fn find_word_boundary(text: &str, word: &str) -> Option<usize> {
     let mut start = 0;
     while let Some(pos) = text_lower[start..].find(&word_lower) {
         let abs_pos = start + pos;
-        let before_ok = abs_pos == 0
-            || !text.as_bytes()[abs_pos - 1].is_ascii_alphanumeric();
+        let before_ok = abs_pos == 0 || !text.as_bytes()[abs_pos - 1].is_ascii_alphanumeric();
         let after_pos = abs_pos + word_lower.len();
-        let after_ok = after_pos >= text.len()
-            || !text.as_bytes()[after_pos].is_ascii_alphanumeric();
+        let after_ok =
+            after_pos >= text.len() || !text.as_bytes()[after_pos].is_ascii_alphanumeric();
 
         if before_ok && after_ok {
             return Some(abs_pos);
@@ -779,7 +790,9 @@ mod tests {
         let corefs = ctx.resolve_coreferences("He approved the deal");
         assert!(!corefs.is_empty());
 
-        let he_coref = corefs.iter().find(|(e, _)| e.original.to_lowercase() == "he");
+        let he_coref = corefs
+            .iter()
+            .find(|(e, _)| e.original.to_lowercase() == "he");
         assert!(he_coref.is_some());
         assert_eq!(he_coref.unwrap().1.token, "PERSON_1");
     }
@@ -801,7 +814,9 @@ mod tests {
         );
 
         let corefs = ctx.resolve_coreferences("He approved the deal");
-        let he_coref = corefs.iter().find(|(e, _)| e.original.to_lowercase() == "he");
+        let he_coref = corefs
+            .iter()
+            .find(|(e, _)| e.original.to_lowercase() == "he");
         assert!(he_coref.is_none());
     }
 
@@ -847,9 +862,7 @@ mod tests {
         );
 
         let corefs = ctx.resolve_coreferences("Rahul's decision was final");
-        let poss = corefs
-            .iter()
-            .find(|(e, _)| e.original.contains("Rahul's"));
+        let poss = corefs.iter().find(|(e, _)| e.original.contains("Rahul's"));
         assert!(poss.is_some());
         assert_eq!(poss.unwrap().1.token, "PERSON_1");
     }
@@ -881,10 +894,13 @@ mod tests {
 
     #[test]
     fn test_session_ttl_expiry() {
-        let mut ctx = SessionContext::new("sess-1".into(), SessionConfig {
-            ttl_seconds: 0, // Immediately expire
-            ..test_config()
-        });
+        let mut ctx = SessionContext::new(
+            "sess-1".into(),
+            SessionConfig {
+                ttl_seconds: 0, // Immediately expire
+                ..test_config()
+            },
+        );
         ctx.last_activity = Utc::now() - chrono::Duration::seconds(1);
         assert!(ctx.is_expired());
     }
@@ -1017,12 +1033,16 @@ mod tests {
 
         // Message 3: Reference Rahul with pronoun — only 1 person so should resolve
         let corefs = ctx.resolve_coreferences("He was transferred to the office");
-        let he = corefs.iter().find(|(e, _)| e.original.to_lowercase() == "he");
+        let he = corefs
+            .iter()
+            .find(|(e, _)| e.original.to_lowercase() == "he");
         assert!(he.is_some());
         assert_eq!(he.unwrap().1.token, "PERSON_1");
 
         // "the office" should resolve to LOC_1
-        let office = corefs.iter().find(|(e, _)| e.original.to_lowercase() == "the office");
+        let office = corefs
+            .iter()
+            .find(|(e, _)| e.original.to_lowercase() == "the office");
         assert!(office.is_some());
         assert_eq!(office.unwrap().1.token, "LOC_1");
 
@@ -1033,7 +1053,9 @@ mod tests {
         );
 
         let corefs2 = ctx.resolve_coreferences("She approved the transfer");
-        let she = corefs2.iter().find(|(e, _)| e.original.to_lowercase() == "she");
+        let she = corefs2
+            .iter()
+            .find(|(e, _)| e.original.to_lowercase() == "she");
         assert!(she.is_none()); // Ambiguous — 2 persons
     }
 
@@ -1066,20 +1088,26 @@ mod tests {
 
     #[test]
     fn test_sensitivity_disabled() {
-        let mut ctx = SessionContext::new("s-1".into(), SessionConfig {
-            sensitivity_escalation: false,
-            ..test_config()
-        });
+        let mut ctx = SessionContext::new(
+            "s-1".into(),
+            SessionConfig {
+                sensitivity_escalation: false,
+                ..test_config()
+            },
+        );
         assert!(!ctx.check_sensitivity("approved the policy exception override waiver"));
         assert_eq!(ctx.sensitivity, SensitivityLevel::Normal);
     }
 
     #[test]
     fn test_coreference_disabled() {
-        let mut ctx = SessionContext::new("s-1".into(), SessionConfig {
-            coreference: false,
-            ..test_config()
-        });
+        let mut ctx = SessionContext::new(
+            "s-1".into(),
+            SessionConfig {
+                coreference: false,
+                ..test_config()
+            },
+        );
         ctx.record_entities(
             &[make_entity("Rahul Sharma", EntityCategory::Person)],
             &[make_token("PERSON_1", EntityCategory::Person, 1)],
@@ -1135,7 +1163,9 @@ mod tests {
 
         // Should NOT match "Johnson's" (last name possessive not implemented)
         let corefs2 = ctx.resolve_coreferences("Johnson's report was thorough");
-        let poss2 = corefs2.iter().find(|(e, _)| e.original.contains("Johnson's"));
+        let poss2 = corefs2
+            .iter()
+            .find(|(e, _)| e.original.contains("Johnson's"));
         assert!(poss2.is_none());
     }
 
@@ -1187,17 +1217,25 @@ mod tests {
 
         // Test various definite articles
         let org = ctx.resolve_coreferences("the firm announced profits");
-        assert!(org.iter().any(|(e, t)| e.original.to_lowercase() == "the firm" && t.token == "ORG_1"));
+        assert!(org
+            .iter()
+            .any(|(e, t)| e.original.to_lowercase() == "the firm" && t.token == "ORG_1"));
 
         let amt = ctx.resolve_coreferences("the deal was finalized");
-        assert!(amt.iter().any(|(e, t)| e.original.to_lowercase() == "the deal" && t.token == "AMOUNT_1"));
+        assert!(amt
+            .iter()
+            .any(|(e, t)| e.original.to_lowercase() == "the deal" && t.token == "AMOUNT_1"));
 
         let loc = ctx.resolve_coreferences("the city experienced growth");
-        assert!(loc.iter().any(|(e, t)| e.original.to_lowercase() == "the city" && t.token == "LOC_1"));
+        assert!(loc
+            .iter()
+            .any(|(e, t)| e.original.to_lowercase() == "the city" && t.token == "LOC_1"));
 
         // "the employee" → PERSON (only 1 person, so pronoun wouldn't block this)
         let person = ctx.resolve_coreferences("the employee was promoted");
-        assert!(person.iter().any(|(e, t)| e.original.to_lowercase() == "the employee" && t.token == "PERSON_1"));
+        assert!(person
+            .iter()
+            .any(|(e, t)| e.original.to_lowercase() == "the employee" && t.token == "PERSON_1"));
     }
 
     #[test]
@@ -1343,10 +1381,13 @@ mod tests {
         let ctx = SessionContext::new("s-1".into(), test_config());
         assert!((ctx.resolver_threshold() - 0.80).abs() < f64::EPSILON);
 
-        let ctx2 = SessionContext::new("s-2".into(), SessionConfig {
-            session_threshold: 0.70,
-            ..test_config()
-        });
+        let ctx2 = SessionContext::new(
+            "s-2".into(),
+            SessionConfig {
+                session_threshold: 0.70,
+                ..test_config()
+            },
+        );
         assert!((ctx2.resolver_threshold() - 0.70).abs() < f64::EPSILON);
     }
 

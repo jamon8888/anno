@@ -100,9 +100,7 @@ fn write_synthetic_adapter_inner(
     let mut tensors: HashMap<String, (Vec<usize>, Vec<f32>)> = HashMap::new();
     for layer in 0..3usize {
         for proj in &["query_proj", "key_proj", "value_proj"] {
-            let base_path = format!(
-                "encoder.encoder.layer.{layer}.attention.self.{proj}"
-            );
+            let base_path = format!("encoder.encoder.layer.{layer}.attention.self.{proj}");
             let key_a = format!("base_model.model.{base_path}.lora_A.weight");
             let key_b = format!("base_model.model.{base_path}.lora_B.weight");
 
@@ -142,18 +140,14 @@ fn write_synthetic_adapter_inner(
     let views: Vec<(&str, safetensors::tensor::TensorView<'_>)> = bytes_storage
         .iter()
         .map(|(k, shape, bytes)| {
-            let view = safetensors::tensor::TensorView::new(
-                safetensors::Dtype::F32,
-                shape.clone(),
-                bytes,
-            )
-            .expect("synthetic adapter view construction");
+            let view =
+                safetensors::tensor::TensorView::new(safetensors::Dtype::F32, shape.clone(), bytes)
+                    .expect("synthetic adapter view construction");
             (k.as_str(), view)
         })
         .collect();
 
-    let serialized = safetensors::serialize(views, &None)
-        .expect("synthetic adapter serialize");
+    let serialized = safetensors::serialize(views, &None).expect("synthetic adapter serialize");
     let mut sf = std::fs::File::create(dir.join("adapter_model.safetensors"))?;
     sf.write_all(&serialized)?;
     Ok(())
@@ -169,24 +163,30 @@ fn synthetic_zero_adapter_is_noop() {
     // Phase 4 M9: zero-valued LoRA delta (lora_A = lora_B = 0) should
     // produce inference identical to base model. This validates the
     // merge math and the load_adapter→inference path end-to-end.
-    let mut model = GLiNER2FastinoCandle::from_pretrained("fastino/gliner2-multi-v1")
-        .expect("load base");
+    let mut model =
+        GLiNER2FastinoCandle::from_pretrained("fastino/gliner2-multi-v1").expect("load base");
 
     let text = "Marie Curie won the Nobel Prize in Physics in 1903.";
     let types = ["person", "award", "year"];
 
-    let baseline = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("baseline extract");
+    let baseline =
+        ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("baseline extract");
 
     let tmp = tempfile::tempdir().expect("tempdir");
-    write_synthetic_adapter(tmp.path(), "fastino/gliner2-multi-v1", /* randomize = */ false)
-        .expect("write synthetic zero adapter");
+    write_synthetic_adapter(
+        tmp.path(),
+        "fastino/gliner2-multi-v1",
+        /* randomize = */ false,
+    )
+    .expect("write synthetic zero adapter");
 
-    model.load_adapter("zero", tmp.path()).expect("load_adapter");
+    model
+        .load_adapter("zero", tmp.path())
+        .expect("load_adapter");
     assert_eq!(model.active_adapter(), Some("zero"));
 
-    let merged = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("merged extract");
+    let merged =
+        ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("merged extract");
 
     // Zero adapter → identical entities + identical scores.
     assert_eq!(
@@ -215,8 +215,8 @@ fn synthetic_zero_adapter_is_noop() {
     // unload_adapter restores baseline.
     model.unload_adapter().expect("unload");
     assert_eq!(model.active_adapter(), None);
-    let restored = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("restored extract");
+    let restored =
+        ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("restored extract");
     assert_eq!(baseline.len(), restored.len());
     for (b, r) in baseline.iter().zip(restored.iter()) {
         assert_eq!(b.start(), r.start());
@@ -233,22 +233,28 @@ fn synthetic_random_adapter_changes_inference() {
     // Phase 4 M9: non-zero LoRA delta (small random values) MUST shift
     // inference output measurably — otherwise merge_into_base isn't
     // actually merging.
-    let mut model = GLiNER2FastinoCandle::from_pretrained("fastino/gliner2-multi-v1")
-        .expect("load base");
+    let mut model =
+        GLiNER2FastinoCandle::from_pretrained("fastino/gliner2-multi-v1").expect("load base");
 
     let text = "Marie Curie won the Nobel Prize in Physics in 1903.";
     let types = ["person", "award", "year"];
 
-    let baseline = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("baseline extract");
+    let baseline =
+        ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("baseline extract");
 
     let tmp = tempfile::tempdir().expect("tempdir");
-    write_synthetic_adapter(tmp.path(), "fastino/gliner2-multi-v1", /* randomize = */ true)
-        .expect("write synthetic random adapter");
+    write_synthetic_adapter(
+        tmp.path(),
+        "fastino/gliner2-multi-v1",
+        /* randomize = */ true,
+    )
+    .expect("write synthetic random adapter");
 
-    model.load_adapter("random", tmp.path()).expect("load_adapter");
-    let after = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("post-adapter extract");
+    model
+        .load_adapter("random", tmp.path())
+        .expect("load_adapter");
+    let after =
+        ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("post-adapter extract");
 
     eprintln!("baseline ({}): {:#?}", baseline.len(), baseline);
     eprintln!("after random adapter ({}): {:#?}", after.len(), after);
@@ -282,8 +288,7 @@ fn synthetic_random_adapter_changes_inference() {
 
     // unload_adapter must restore baseline exactly (no fp drift).
     model.unload_adapter().expect("unload");
-    let restored = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("restored");
+    let restored = ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("restored");
     assert_eq!(baseline.len(), restored.len());
     for (b, r) in baseline.iter().zip(restored.iter()) {
         let d = (b.confidence.value() - r.confidence.value()).abs();
@@ -312,17 +317,19 @@ fn real_adapter_changes_inference() {
         }
     };
 
-    let mut model = GLiNER2FastinoCandle::from_pretrained("fastino/gliner2-multi-v1")
-        .expect("load base");
+    let mut model =
+        GLiNER2FastinoCandle::from_pretrained("fastino/gliner2-multi-v1").expect("load base");
     let text = "The patient reports symptoms consistent with hypertension.";
     let types = ["disease", "symptom", "treatment"];
 
-    let baseline = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("baseline extract");
+    let baseline =
+        ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("baseline extract");
 
-    model.load_adapter("real", &adapter_dir).expect("load_adapter");
-    let after = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("post-adapter extract");
+    model
+        .load_adapter("real", &adapter_dir)
+        .expect("load_adapter");
+    let after =
+        ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("post-adapter extract");
 
     eprintln!("baseline ({}): {:#?}", baseline.len(), baseline);
     eprintln!("after real adapter ({}): {:#?}", after.len(), after);
@@ -347,14 +354,14 @@ fn multi_adapter_sequential_swap() {
     // Two distinct synthetic adapters with different deltas. After
     // load_adapter("B"), inference should match B-merged (not
     // A-merged, not base).
-    let mut model = GLiNER2FastinoCandle::from_pretrained("fastino/gliner2-multi-v1")
-        .expect("load base");
+    let mut model =
+        GLiNER2FastinoCandle::from_pretrained("fastino/gliner2-multi-v1").expect("load base");
 
     let text = "Marie Curie won the Nobel Prize in Physics in 1903.";
     let types = ["person", "award", "year"];
 
-    let baseline = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("baseline extract");
+    let baseline =
+        ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("baseline extract");
 
     let dir_a = tempfile::tempdir().expect("tempdir A");
     let dir_b = tempfile::tempdir().expect("tempdir B");
@@ -366,8 +373,7 @@ fn multi_adapter_sequential_swap() {
     // ── Step 1: load A, capture scores ─────────────────────────────
     model.load_adapter("A", dir_a.path()).expect("load A");
     assert_eq!(model.active_adapter(), Some("A"));
-    let after_a = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("infer with A");
+    let after_a = ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("infer with A");
 
     // ── Step 2: swap to B (no unload first; load_adapter must replace A) ──
     model.load_adapter("B", dir_b.path()).expect("load B");
@@ -376,8 +382,7 @@ fn multi_adapter_sequential_swap() {
         Some("B"),
         "active_adapter should be B after second load"
     );
-    let after_b = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("infer with B");
+    let after_b = ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("infer with B");
 
     // ── Step 3: A and B must produce different scores ───────────────
     // If load_adapter("B") didn't actually replace A's merge, we'd see
@@ -418,8 +423,7 @@ fn multi_adapter_sequential_swap() {
     // ── Step 5: unload restores baseline byte-identically ──────────
     model.unload_adapter().expect("unload");
     assert_eq!(model.active_adapter(), None);
-    let restored = ZeroShotNER::extract_with_types(&model, text, &types, 0.5)
-        .expect("restored");
+    let restored = ZeroShotNER::extract_with_types(&model, text, &types, 0.5).expect("restored");
     assert_eq!(baseline.len(), restored.len());
     for (b, r) in baseline.iter().zip(restored.iter()) {
         let d = (b.confidence.value() - r.confidence.value()).abs();

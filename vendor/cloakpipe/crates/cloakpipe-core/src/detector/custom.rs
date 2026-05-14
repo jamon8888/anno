@@ -1,6 +1,6 @@
 //! Layer 4: User-defined TOML pattern rules.
 
-use crate::{DetectedEntity, EntityCategory, DetectionSource, config::DetectionConfig};
+use crate::{config::DetectionConfig, DetectedEntity, DetectionSource, EntityCategory};
 use anyhow::Result;
 use regex::Regex;
 

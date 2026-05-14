@@ -2,7 +2,8 @@
 //!
 //! Combines:
 //! - Built-in FR regex (NIR, SIRET with Luhn check, IBAN-FR, FR phone)
-//! - [`anno::StackedNER`] with French language hint for names, organizations, locations.
+//! - [`anno::backends::gliner2_fastino::GLiNER2Fastino`] (multi-v1 ONNX,
+//!   FR-aware) for names, organizations, locations.
 //!
 //! Results are merged, sorted by `start`, and overlapping spans are
 //! deduplicated (longer span wins; on equal length, Pattern source beats Ner).
@@ -16,7 +17,9 @@
 //! plan a normalization pass via `anno::offset::bytes_to_chars` in v0.2.
 
 use crate::error::{Error, Result};
-use anno::{EntityType, Language, Model, StackedNER};
+use anno::backends::gliner2_fastino::GLiNER2Fastino;
+use anno::backends::inference::ZeroShotNER;
+use anno::EntityType;
 use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
 use regex::Regex;
 use std::sync::OnceLock;
@@ -76,28 +79,21 @@ fn luhn(s: &str) -> bool {
             }
         })
         .sum();
-    total % 10 == 0
+    total.is_multiple_of(10)
 }
 
 /// Aggregate PII detector: FR regex pack + anno NER.
 pub struct Detector {
-    ner: StackedNER,
+    ner: GLiNER2Fastino,
 }
 
 impl Detector {
-    /// Build a new detector. [`StackedNER::default`] picks the best available
-    /// anno backend at runtime (gliner_pii / nuner / bert) and falls back to
-    /// pattern+heuristic when no model is cached.
+    /// Build a new detector. Loads the GLiNER2Fastino multi-v1 ONNX model
+    /// (multilingual, FR-aware) from the HF Hub cache.
     pub fn new() -> Result<Self> {
-        // TODO(v0.3 #1): replace StackedNER::default() with
-        // `GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")`.
-        // StackedNER's bert-base-NER-onnx / gliner_small-v2.1 fallbacks miss
-        // some French names in markdown-formatted contexts (see "Jean Martin"
-        // leak in e2e). Multi-v1 is multilingual + French-aware.
-        // See docs/dev-notes/gliner2-fastino-v0.3-research.md.
-        Ok(Self {
-            ner: StackedNER::default(),
-        })
+        let ner = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+            .map_err(|e| Error::Detect(format!("gliner2_fastino load: {e}")))?;
+        Ok(Self { ner })
     }
 
     /// Detect entities in `text`. Returns spans sorted by start, deduplicated
@@ -157,7 +153,7 @@ impl Detector {
         // panic inside Replacer::pseudonymize.
         let anno_entities = self
             .ner
-            .extract_entities(text, Some(Language::French))
+            .extract_with_types(text, &["person", "organization", "location"], 0.5)
             .map_err(|e| Error::Detect(e.to_string()))?;
 
         // char_idx → byte_idx table. The last sentinel is text.len() so a
@@ -232,10 +228,11 @@ mod tests {
         assert!(!luhn("73282932000075"));
     }
 
-    // The following four tests instantiate Detector::new() which calls
-    // anno::StackedNER::default(). On a host without cached anno models,
-    // anno attempts a HuggingFace download that hangs/times out in our
-    // CI/WSL environment (the runner SIGKILLs after ~60s/test).
+    // The following four tests instantiate Detector::new() which loads
+    // GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx").
+    // On a host without the model cached, this triggers a HuggingFace
+    // download that hangs/times out in our CI/WSL environment (the runner
+    // SIGKILLs after ~60s/test).
     //
     // They are #[ignore]'d for the default cargo-test pass and can be run
     // with `cargo test -- --ignored` once anno models are warmed, OR with
@@ -268,7 +265,8 @@ mod tests {
         let text = "Appelez le 06 12 34 56 78 demain.";
         let ents = d.detect(text).expect("detect ok");
         assert!(
-            ents.iter().any(|e| matches!(e.category, EntityCategory::PhoneNumber)),
+            ents.iter()
+                .any(|e| matches!(e.category, EntityCategory::PhoneNumber)),
             "expected phone among {:?}",
             ents.iter().map(|e| &e.category).collect::<Vec<_>>()
         );
@@ -284,16 +282,12 @@ mod tests {
         let valid = d.detect(text_valid).expect("ok");
         let invalid = d.detect(text_invalid).expect("ok");
 
-        assert!(
-            valid
-                .iter()
-                .any(|e| matches!(e.category, EntityCategory::Custom(ref s) if s == "SIRET"))
-        );
-        assert!(
-            !invalid
-                .iter()
-                .any(|e| matches!(e.category, EntityCategory::Custom(ref s) if s == "SIRET"))
-        );
+        assert!(valid
+            .iter()
+            .any(|e| matches!(e.category, EntityCategory::Custom(ref s) if s == "SIRET")));
+        assert!(!invalid
+            .iter()
+            .any(|e| matches!(e.category, EntityCategory::Custom(ref s) if s == "SIRET")));
     }
 
     #[test]

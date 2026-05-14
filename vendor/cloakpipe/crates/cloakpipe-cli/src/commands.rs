@@ -3,10 +3,7 @@
 use anyhow::{bail, Context, Result};
 use cloakpipe_audit::AuditLogger;
 use cloakpipe_core::{
-    config::CloakPipeConfig,
-    detector::Detector,
-    replacer::Replacer,
-    vault::Vault,
+    config::CloakPipeConfig, detector::Detector, replacer::Replacer, vault::Vault,
 };
 use cloakpipe_proxy::{server, state::AppState};
 
@@ -96,8 +93,9 @@ pub async fn start(config_path: &str) -> Result<()> {
 pub async fn test(config_path: &str, text: Option<String>, file: Option<String>) -> Result<()> {
     let input = match (text, file) {
         (Some(t), _) => t,
-        (_, Some(f)) => std::fs::read_to_string(&f)
-            .with_context(|| format!("Cannot read file: {}", f))?,
+        (_, Some(f)) => {
+            std::fs::read_to_string(&f).with_context(|| format!("Cannot read file: {}", f))?
+        }
         (None, None) => {
             // Default sample text
             "Tata Motors reported revenue of $1.2M in Q3 2025. Contact: cfo@tatamotors.com. \
@@ -138,13 +136,13 @@ pub async fn test(config_path: &str, text: Option<String>, file: Option<String>)
     let rehydrated = cloakpipe_core::rehydrator::Rehydrator::rehydrate(&result.text, &vault)?;
     println!("\n--- Rehydrated ---");
     println!("{}", rehydrated.text);
-    println!(
-        "\n  Tokens rehydrated: {}",
-        rehydrated.rehydrated_count
-    );
+    println!("\n  Tokens rehydrated: {}", rehydrated.rehydrated_count);
 
     let roundtrip_ok = rehydrated.text == input;
-    println!("  Roundtrip match: {}", if roundtrip_ok { "YES" } else { "NO" });
+    println!(
+        "  Roundtrip match: {}",
+        if roundtrip_ok { "YES" } else { "NO" }
+    );
 
     Ok(())
 }
@@ -190,7 +188,7 @@ pub async fn init() -> Result<()> {
 /// Interactive guided setup.
 pub async fn setup() -> Result<()> {
     use cloakpipe_core::profiles::IndustryProfile;
-    use dialoguer::{Select, Confirm};
+    use dialoguer::{Confirm, Select};
 
     println!("CloakPipe Setup\n");
 
@@ -226,7 +224,10 @@ pub async fn setup() -> Result<()> {
         .interact()?;
     let (upstream, api_key_env) = match upstream_idx {
         0 => ("https://api.openai.com".to_string(), "OPENAI_API_KEY"),
-        1 => ("https://YOUR_RESOURCE.openai.azure.com".to_string(), "AZURE_OPENAI_API_KEY"),
+        1 => (
+            "https://YOUR_RESOURCE.openai.azure.com".to_string(),
+            "AZURE_OPENAI_API_KEY",
+        ),
         2 => ("https://api.anthropic.com".to_string(), "ANTHROPIC_API_KEY"),
         3 => ("http://localhost:11434".to_string(), "OLLAMA_API_KEY"),
         _ => {
@@ -317,17 +318,12 @@ pub async fn tree(config_path: &str, action: crate::TreeCommands) -> Result<()> 
                 tc.add_node_summaries = false;
             }
 
-            let indexer = cloakpipe_tree::TreeIndexer::new(
-                tc,
-                api_key,
-                config.proxy.upstream.clone(),
-            );
+            let indexer =
+                cloakpipe_tree::TreeIndexer::new(tc, api_key, config.proxy.upstream.clone());
 
             let tree_index = indexer.build_index(&file).await?;
-            let path = cloakpipe_tree::storage::TreeStorage::save(
-                &tree_index,
-                &tree_config.storage_path,
-            )?;
+            let path =
+                cloakpipe_tree::storage::TreeStorage::save(&tree_index, &tree_config.storage_path)?;
 
             println!("Tree index created:");
             println!("  ID:     {}", tree_index.id);
@@ -362,7 +358,10 @@ pub async fn tree(config_path: &str, action: crate::TreeCommands) -> Result<()> 
             println!("  Matching nodes:");
             for id in &result.node_ids {
                 if let Some(node) = tree_index.find_node(id) {
-                    println!("    [{}] {} (pages {}-{})", id, node.title, node.pages.0, node.pages.1);
+                    println!(
+                        "    [{}] {} (pages {}-{})",
+                        id, node.title, node.pages.0, node.pages.1
+                    );
                     if let Some(summary) = &node.summary {
                         println!("          {}", summary.text);
                     }
@@ -450,7 +449,10 @@ pub async fn tree(config_path: &str, action: crate::TreeCommands) -> Result<()> 
                 "temperature": 0.3
             });
 
-            let url = format!("{}/v1/chat/completions", config.proxy.upstream.trim_end_matches('/'));
+            let url = format!(
+                "{}/v1/chat/completions",
+                config.proxy.upstream.trim_end_matches('/')
+            );
             let client = reqwest::Client::new();
             let response = client
                 .post(&url)
@@ -468,7 +470,10 @@ pub async fn tree(config_path: &str, action: crate::TreeCommands) -> Result<()> 
             println!("Question: {}\n", question);
             println!("Sources ({}):", result.node_ids.len());
             for c in &content {
-                println!("  [{}] {} (pages {}-{})", c.node_id, c.title, c.pages.0, c.pages.1);
+                println!(
+                    "  [{}] {} (pages {}-{})",
+                    c.node_id, c.title, c.pages.0, c.pages.1
+                );
             }
             println!("\nAnswer:\n{}", answer);
         }
@@ -501,7 +506,10 @@ pub async fn vector(action: crate::VectorCommands) -> Result<()> {
     match action {
         crate::VectorCommands::Encrypt { input, output, dim } => {
             let key = resolve_vector_key()?;
-            let config = cloakpipe_vector::AdcpeConfig { dimensions: dim, noise_scale: 0.0 };
+            let config = cloakpipe_vector::AdcpeConfig {
+                dimensions: dim,
+                noise_scale: 0.0,
+            };
             let mut enc = cloakpipe_vector::AdcpeEncryptor::new(&key, &config)?;
 
             let data = std::fs::read_to_string(&input)
@@ -513,12 +521,20 @@ pub async fn vector(action: crate::VectorCommands) -> Result<()> {
             let json = serde_json::to_string_pretty(&encrypted)?;
             std::fs::write(&output, json)?;
 
-            println!("Encrypted {} vectors (dim={}) -> {}", vectors.len(), dim, output);
+            println!(
+                "Encrypted {} vectors (dim={}) -> {}",
+                vectors.len(),
+                dim,
+                output
+            );
         }
 
         crate::VectorCommands::Decrypt { input, output, dim } => {
             let key = resolve_vector_key()?;
-            let config = cloakpipe_vector::AdcpeConfig { dimensions: dim, noise_scale: 0.0 };
+            let config = cloakpipe_vector::AdcpeConfig {
+                dimensions: dim,
+                noise_scale: 0.0,
+            };
             let enc = cloakpipe_vector::AdcpeEncryptor::new(&key, &config)?;
 
             let data = std::fs::read_to_string(&input)
@@ -530,12 +546,20 @@ pub async fn vector(action: crate::VectorCommands) -> Result<()> {
             let json = serde_json::to_string_pretty(&decrypted)?;
             std::fs::write(&output, json)?;
 
-            println!("Decrypted {} vectors (dim={}) -> {}", encrypted.len(), dim, output);
+            println!(
+                "Decrypted {} vectors (dim={}) -> {}",
+                encrypted.len(),
+                dim,
+                output
+            );
         }
 
         crate::VectorCommands::Test { dim } => {
             let key = resolve_vector_key()?;
-            let config = cloakpipe_vector::AdcpeConfig { dimensions: dim, noise_scale: 0.0 };
+            let config = cloakpipe_vector::AdcpeConfig {
+                dimensions: dim,
+                noise_scale: 0.0,
+            };
             let mut enc = cloakpipe_vector::AdcpeEncryptor::new(&key, &config)?;
 
             // Generate sample vectors
@@ -551,16 +575,28 @@ pub async fn vector(action: crate::VectorCommands) -> Result<()> {
             let cos_enc = cloakpipe_vector::adcpe::cosine_similarity(&ea, &eb);
 
             let da = enc.decrypt(&ea)?;
-            let max_err: f64 = a.iter().zip(da.iter())
+            let max_err: f64 = a
+                .iter()
+                .zip(da.iter())
                 .map(|(x, y)| (x - y).abs())
                 .fold(0.0, f64::max);
 
             println!("ADCPE Test (dim={})", dim);
             println!("  Cosine similarity (original):  {:.6}", cos_orig);
             println!("  Cosine similarity (encrypted): {:.6}", cos_enc);
-            println!("  Distance preserved: {}", if (cos_orig - cos_enc).abs() < 1e-10 { "YES" } else { "NO" });
+            println!(
+                "  Distance preserved: {}",
+                if (cos_orig - cos_enc).abs() < 1e-10 {
+                    "YES"
+                } else {
+                    "NO"
+                }
+            );
             println!("  Roundtrip max error: {:.2e}", max_err);
-            println!("  Roundtrip exact: {}", if max_err < 1e-10 { "YES" } else { "NO" });
+            println!(
+                "  Roundtrip exact: {}",
+                if max_err < 1e-10 { "YES" } else { "NO" }
+            );
         }
     }
 
@@ -762,7 +798,9 @@ pub async fn scan(
 
 /// Collect scannable text files from a path (file or directory).
 fn collect_scannable_files(path: &std::path::Path) -> Result<Vec<std::path::PathBuf>> {
-    let extensions = ["txt", "md", "json", "csv", "toml", "yaml", "yml", "xml", "html"];
+    let extensions = [
+        "txt", "md", "json", "csv", "toml", "yaml", "yml", "xml", "html",
+    ];
 
     if path.is_file() {
         return Ok(vec![path.to_path_buf()]);
@@ -853,7 +891,10 @@ pub async fn sessions(config_path: &str, action: crate::SessionCommands) -> Resu
             println!("  Messages:      {}", stats["message_count"]);
             println!("  Entities:      {}", stats["entity_count"]);
             println!("  Coreferences:  {}", stats["coreference_count"]);
-            println!("  Sensitivity:   {}", stats["sensitivity"].as_str().unwrap_or("normal"));
+            println!(
+                "  Sensitivity:   {}",
+                stats["sensitivity"].as_str().unwrap_or("normal")
+            );
             if let Some(keywords) = stats["escalation_keywords"].as_array() {
                 if !keywords.is_empty() {
                     let kw: Vec<&str> = keywords.iter().filter_map(|k| k.as_str()).collect();
@@ -866,8 +907,14 @@ pub async fn sessions(config_path: &str, action: crate::SessionCommands) -> Resu
                     println!("    {}: {}", cat, count);
                 }
             }
-            println!("  Created:       {}", stats["created_at"].as_str().unwrap_or("?"));
-            println!("  Last activity: {}", stats["last_activity"].as_str().unwrap_or("?"));
+            println!(
+                "  Created:       {}",
+                stats["created_at"].as_str().unwrap_or("?")
+            );
+            println!(
+                "  Last activity: {}",
+                stats["last_activity"].as_str().unwrap_or("?")
+            );
         }
 
         crate::SessionCommands::Flush { session_id } => {

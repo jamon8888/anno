@@ -21,9 +21,7 @@
 
 #![cfg(feature = "gliner2-fastino")]
 
-use anno::backends::gliner2_fastino::{
-    ExecutionMode, GLiNER2Fastino, GLiNER2FastinoConfig,
-};
+use anno::backends::gliner2_fastino::{ExecutionMode, GLiNER2Fastino, GLiNER2FastinoConfig};
 use anno::backends::inference::ZeroShotNER;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
@@ -83,36 +81,28 @@ fn bench_extract_with_types(c: &mut Criterion) {
     group.sample_size(20);
 
     for (name, text) in inputs() {
-        group.bench_with_input(
-            BenchmarkId::new("standard", name),
-            text,
-            |b, t| {
-                b.iter(|| {
-                    let _ = ZeroShotNER::extract_with_types(
-                        black_box(&standard),
-                        black_box(t),
-                        black_box(TYPES),
-                        black_box(0.5),
-                    )
-                    .expect("standard extract");
-                });
-            },
-        );
-        group.bench_with_input(
-            BenchmarkId::new("iobinding", name),
-            text,
-            |b, t| {
-                b.iter(|| {
-                    let _ = ZeroShotNER::extract_with_types(
-                        black_box(&iobinding),
-                        black_box(t),
-                        black_box(TYPES),
-                        black_box(0.5),
-                    )
-                    .expect("iobinding extract");
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("standard", name), text, |b, t| {
+            b.iter(|| {
+                let _ = ZeroShotNER::extract_with_types(
+                    black_box(&standard),
+                    black_box(t),
+                    black_box(TYPES),
+                    black_box(0.5),
+                )
+                .expect("standard extract");
+            });
+        });
+        group.bench_with_input(BenchmarkId::new("iobinding", name), text, |b, t| {
+            b.iter(|| {
+                let _ = ZeroShotNER::extract_with_types(
+                    black_box(&iobinding),
+                    black_box(t),
+                    black_box(TYPES),
+                    black_box(0.5),
+                )
+                .expect("iobinding extract");
+            });
+        });
     }
     group.finish();
 }

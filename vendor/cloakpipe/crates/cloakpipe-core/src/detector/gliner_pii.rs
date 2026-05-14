@@ -91,9 +91,7 @@ impl GlinerPiiDetector {
             "threshold": self.config.threshold,
         });
 
-        let response = match agent.post(&url)
-            .send_json(&body)
-        {
+        let response = match agent.post(&url).send_json(&body) {
             Ok(resp) => resp,
             Err(e) => {
                 warn!("GLiNER-PII sidecar call failed: {}. Skipping NER layer.", e);
@@ -103,10 +101,7 @@ impl GlinerPiiDetector {
 
         let data: serde_json::Value = response.into_json()?;
 
-        let entities_arr = data["entities"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
+        let entities_arr = data["entities"].as_array().cloned().unwrap_or_default();
 
         let mut entities = Vec::with_capacity(entities_arr.len());
         for e in &entities_arr {
@@ -148,11 +143,20 @@ mod tests {
     fn test_label_to_category() {
         assert_eq!(label_to_category("person"), EntityCategory::Person);
         assert_eq!(label_to_category("first_name"), EntityCategory::Person);
-        assert_eq!(label_to_category("company_name"), EntityCategory::Organization);
-        assert_eq!(label_to_category("street_address"), EntityCategory::Location);
+        assert_eq!(
+            label_to_category("company_name"),
+            EntityCategory::Organization
+        );
+        assert_eq!(
+            label_to_category("street_address"),
+            EntityCategory::Location
+        );
         assert_eq!(label_to_category("city"), EntityCategory::Location);
         assert_eq!(label_to_category("date"), EntityCategory::Date);
-        assert_eq!(label_to_category("ssn"), EntityCategory::Custom("SSN".into()));
+        assert_eq!(
+            label_to_category("ssn"),
+            EntityCategory::Custom("SSN".into())
+        );
     }
 
     #[test]

@@ -101,14 +101,14 @@
 
 #![cfg(feature = "gliner2-fastino")]
 
-pub mod errors;
-pub mod schema;
 pub(crate) mod config;
 pub(crate) mod decoder;
+pub mod errors;
 pub(crate) mod nms;
 pub(crate) mod pipeline;
 pub(crate) mod pipeline_iobinding;
 pub(crate) mod processor;
+pub mod schema;
 pub(crate) mod sessions;
 
 /// Inference execution mode.
@@ -135,7 +135,9 @@ pub enum ExecutionMode {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct GLiNER2FastinoConfig {
+    /// ONNX session configuration (thread count, provider, etc.).
     pub onnx: crate::backends::hf_loader::OnnxSessionConfig,
+    /// Execution path: standard round-trip or IoBinding device-resident.
     pub execution_mode: ExecutionMode,
 }
 
@@ -178,8 +180,13 @@ pub enum BatchSchemaMode<'a> {
     PerSample(&'a [Vec<&'a str>]),
 }
 
+/// GLiNER2 fastino-ai NER model loaded from ONNX sessions.
+///
+/// Construct via [`Self::from_pretrained`] or [`Self::from_local`].
 pub struct GLiNER2Fastino {
+    #[allow(dead_code)] // retained for re-tokenization paths in later phases
     pub(crate) tokenizer: tokenizers::Tokenizer,
+    #[allow(dead_code)] // retained for re-tokenization paths in later phases
     pub(crate) special: processor::SpecialTokenIds,
     pub(crate) transformer: processor::SchemaTransformer,
     pub(crate) config: config::FastinoConfig,
@@ -368,7 +375,11 @@ impl GLiNER2Fastino {
         // Try fp32_v2/ first, fall back to fp16_v2/, then root for backward compat.
         let tokenizer_path = crate::backends::hf_loader::download_model_file(
             &repo,
-            &["fp32_v2/tokenizer.json", "fp16_v2/tokenizer.json", "tokenizer.json"],
+            &[
+                "fp32_v2/tokenizer.json",
+                "fp16_v2/tokenizer.json",
+                "tokenizer.json",
+            ],
         )
         .map_err(|e| crate::Error::Backend(format!("gliner2_fastino: download tokenizer: {e}")))?;
         // config.json is optional — SemplificaAI's export doesn't include it.
@@ -382,8 +393,14 @@ impl GLiNER2Fastino {
         // Download the 8 v2 ONNX files. Try fp32_v2 first (clearer dtype
         // semantics for debugging), then fp16_v2 as fallback.
         let bases = [
-            "encoder", "token_gather", "span_rep", "schema_gather",
-            "count_pred_argmax", "count_lstm_fixed", "scorer", "classifier",
+            "encoder",
+            "token_gather",
+            "span_rep",
+            "schema_gather",
+            "count_pred_argmax",
+            "count_lstm_fixed",
+            "scorer",
+            "classifier",
         ];
         for base in &bases {
             let candidates = [
@@ -391,10 +408,9 @@ impl GLiNER2Fastino {
                 format!("fp16_v2/{base}_fp16.onnx"),
             ];
             let candidate_refs: Vec<&str> = candidates.iter().map(String::as_str).collect();
-            crate::backends::hf_loader::download_model_file(&repo, &candidate_refs)
-                .map_err(|e| crate::Error::Backend(
-                    format!("gliner2_fastino: download {base}: {e}")
-                ))?;
+            crate::backends::hf_loader::download_model_file(&repo, &candidate_refs).map_err(
+                |e| crate::Error::Backend(format!("gliner2_fastino: download {base}: {e}")),
+            )?;
         }
 
         // Resolve to the snapshot dir and dispatch.
@@ -522,8 +538,10 @@ impl GLiNER2Fastino {
         if labeled.is_empty() {
             return Ok(vec![]);
         }
-        let owned: Vec<(String, String)> =
-            labeled.iter().map(|(l, d)| (l.to_string(), d.to_string())).collect();
+        let owned: Vec<(String, String)> = labeled
+            .iter()
+            .map(|(l, d)| (l.to_string(), d.to_string()))
+            .collect();
         let task = processor::SchemaTask::EntitiesDescribed(owned);
         let record = self.transformer.transform(text, &[task])?;
         let num_words = record.word_to_char_maps.len();
@@ -578,8 +596,10 @@ impl GLiNER2Fastino {
         if label_thresholds.is_empty() {
             return Ok(vec![]);
         }
-        let labels: Vec<String> =
-            label_thresholds.iter().map(|(l, _)| l.to_string()).collect();
+        let labels: Vec<String> = label_thresholds
+            .iter()
+            .map(|(l, _)| l.to_string())
+            .collect();
         let task = processor::SchemaTask::Entities(labels);
         let record = self.transformer.transform(text, &[task])?;
         let num_words = record.word_to_char_maps.len();
@@ -647,10 +667,7 @@ impl GLiNER2Fastino {
                 .iter()
                 .map(|f| (f.name.clone(), f.field_type))
                 .collect();
-            let task = processor::SchemaTask::Structures(
-                st.name.clone(),
-                fields_owned.clone(),
-            );
+            let task = processor::SchemaTask::Structures(st.name.clone(), fields_owned.clone());
             let record = self.transformer.transform(text, &[task])?;
             let num_words = record.word_to_char_maps.len();
             if num_words == 0 {
@@ -725,10 +742,7 @@ impl GLiNER2Fastino {
             self.execution_mode,
         )?;
 
-        let mut out: Vec<(String, f32)> = label_strings
-            .into_iter()
-            .zip(probs.into_iter())
-            .collect();
+        let mut out: Vec<(String, f32)> = label_strings.into_iter().zip(probs).collect();
         out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(out)
     }
@@ -766,7 +780,7 @@ impl GLiNER2Fastino {
                     )));
                 }
                 for (text, labels_owned) in texts.iter().zip(per_text_labels.iter()) {
-                    let labels: Vec<&str> = labels_owned.iter().copied().collect();
+                    let labels: Vec<&str> = labels_owned.to_vec();
                     out.push(self.extract_ner(text, &labels, threshold)?);
                 }
             }
@@ -825,10 +839,20 @@ mod streaming_tests {
         // last chunk handles a non-aligned tail. We can't easily run the
         // method without a real model, so we verify the chunk-boundary
         // logic directly with the same control structure.
-        let texts: Vec<&str> = (0..10).map(|i| match i {
-            0 => "zero", 1 => "one", 2 => "two", 3 => "three", 4 => "four",
-            5 => "five", 6 => "six", 7 => "seven", 8 => "eight", _ => "nine",
-        }).collect();
+        let texts: Vec<&str> = (0..10)
+            .map(|i| match i {
+                0 => "zero",
+                1 => "one",
+                2 => "two",
+                3 => "three",
+                4 => "four",
+                5 => "five",
+                6 => "six",
+                7 => "seven",
+                8 => "eight",
+                _ => "nine",
+            })
+            .collect();
 
         let mut chunks_seen: Vec<(usize, usize)> = Vec::new();
         let batch_size = 3;
@@ -877,7 +901,10 @@ mod from_local_tests {
 
         let err = GLiNER2Fastino::from_local(dir.path()).unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("scripts/gliner2_export_onnx.py"), "missing script path: {msg}");
+        assert!(
+            msg.contains("scripts/gliner2_export_onnx.py"),
+            "missing script path: {msg}"
+        );
         assert!(msg.contains("--lora-adapter"), "missing flag: {msg}");
     }
 
@@ -909,7 +936,8 @@ mod from_local_tests {
         fs::write(
             dir.path().join("config.json"),
             r#"{"hidden_size": 768, "counting_layer": "count_lstm_v2"}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let err = GLiNER2Fastino::from_local(dir.path()).unwrap_err();
         let msg = err.to_string();
@@ -927,12 +955,11 @@ mod from_local_tests {
         use crate::backends::gliner2_fastino::schema::{
             ExtractedStructure, FieldType, StructureTask, TaskSchema,
         };
-        let _schema: TaskSchema = TaskSchema::new()
-            .with_structure(
-                StructureTask::new("invoice")
-                    .with_field("vendor", FieldType::String)
-                    .with_field("amount", FieldType::String),
-            );
+        let _schema: TaskSchema = TaskSchema::new().with_structure(
+            StructureTask::new("invoice")
+                .with_field("vendor", FieldType::String)
+                .with_field("amount", FieldType::String),
+        );
         let _es: ExtractedStructure = ExtractedStructure {
             structure_type: "invoice".to_string(),
             fields: std::collections::HashMap::new(),
@@ -969,11 +996,9 @@ mod from_local_tests {
             crate::backends::hf_loader::OnnxSessionConfig::default(),
         )
         .unwrap_err();
-        let err2 = GLiNER2Fastino::from_local_with_config(
-            dir.path(),
-            GLiNER2FastinoConfig::default(),
-        )
-        .unwrap_err();
+        let err2 =
+            GLiNER2Fastino::from_local_with_config(dir.path(), GLiNER2FastinoConfig::default())
+                .unwrap_err();
 
         // Both should be the LoraAdapterNotSupported error with the same path.
         assert!(err1.to_string().contains("scripts/gliner2_export_onnx.py"));

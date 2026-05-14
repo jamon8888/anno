@@ -17,18 +17,17 @@
 
 use crate::config::AnnoRagConfig;
 use crate::error::{Error, Result};
-use arrow_array::{
-    Array, FixedSizeBinaryArray, FixedSizeListArray, Float32Array, RecordBatch,
-    RecordBatchIterator, StringArray, TimestampMicrosecondArray, UInt32Array,
-    builder::FixedSizeBinaryBuilder,
-};
 use arrow_array::cast::AsArray;
 use arrow_array::types::Float32Type;
+use arrow_array::{
+    builder::FixedSizeBinaryBuilder, Array, FixedSizeBinaryArray, FixedSizeListArray, Float32Array,
+    RecordBatch, RecordBatchIterator, StringArray, TimestampMicrosecondArray, UInt32Array,
+};
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use chrono::Utc;
 use futures::TryStreamExt;
-use lancedb::Table;
 use lancedb::query::{ExecutableQuery, QueryBase};
+use lancedb::Table;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -217,8 +216,8 @@ impl Store {
     /// Returns [`Error::Store`] if `count_rows`, `list_indices`, or
     /// `create_index` fail.
     pub async fn maybe_build_index(&self, threshold: usize) -> Result<bool> {
-        use lancedb::index::Index;
         use lancedb::index::vector::IvfHnswSqIndexBuilder;
+        use lancedb::index::Index;
 
         let count = self
             .tbl
@@ -242,7 +241,10 @@ impl Store {
         }
 
         self.tbl
-            .create_index(&["vector"], Index::IvfHnswSq(IvfHnswSqIndexBuilder::default()))
+            .create_index(
+                &["vector"],
+                Index::IvfHnswSq(IvfHnswSqIndexBuilder::default()),
+            )
             .execute()
             .await
             .map_err(|e| Error::Store(format!("create_index: {e}")))?;
@@ -302,7 +304,9 @@ fn records_to_batch(
             .map_err(Error::Arrow)?;
 
         let hash = Sha256::digest(r.text_pseudo.as_bytes());
-        text_hash_b.append_value(hash.as_slice()).map_err(Error::Arrow)?;
+        text_hash_b
+            .append_value(hash.as_slice())
+            .map_err(Error::Arrow)?;
 
         source_path.push(r.source_path.clone());
         folder_path.push(r.folder_path.clone());
@@ -420,9 +424,11 @@ mod tests {
 
     fn fresh_cfg(dim: usize) -> (TempDir, AnnoRagConfig) {
         let dir = TempDir::new().expect("tempdir");
-        let mut cfg = AnnoRagConfig::default();
-        cfg.data_dir = dir.path().to_path_buf();
-        cfg.embed_dim = dim;
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            embed_dim: dim,
+            ..Default::default()
+        };
         (dir, cfg)
     }
 

@@ -6,6 +6,7 @@
 // integration with anno::Entity / anno::backends::inference traits;
 // removal of Relations and Classifications schema arms (NER-only Phase 1).
 // Error type translated from anyhow::Result to backend-local Error.
+#![allow(missing_docs)] // implementation internals; public API is on GLiNER2Fastino in mod.rs
 
 use crate::backends::gliner2_fastino::errors::Error;
 use regex::Regex;
@@ -28,6 +29,7 @@ pub const DESC_TOKEN: &str = "[DESCRIPTION]";
 /// Integer IDs for the seven fastino special tokens, resolved at load time
 /// from the tokenizer's vocabulary. Never hardcoded.
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // several token IDs reserved for Phase 2 structure/relation prompts
 pub struct SpecialTokenIds {
     pub p: u32,
     pub e: u32,
@@ -82,6 +84,7 @@ impl WhitespaceTokenSplitter {
     }
 
     /// Split into words. Returns borrowed slices into `text`.
+    #[allow(dead_code)] // pipeline uses split_with_offsets; split kept for parity/tests
     pub fn split<'a>(&self, text: &'a str) -> Vec<&'a str> {
         self.re.find_iter(text).map(|m| m.as_str()).collect()
     }
@@ -118,6 +121,7 @@ pub enum SchemaTask {
     Structures(String, Vec<(String, super::schema::FieldType)>),
     // TODO(Phase 2.5): port Relations arm from upstream when a workload
     // requests it. Phase 2 ships Structures only.
+    #[allow(dead_code)]
     Relations(String, Vec<String>),
 }
 
@@ -156,7 +160,11 @@ impl SchemaTransformer {
         })
     }
 
-    pub fn transform(&self, text: &str, schema_tasks: &[SchemaTask]) -> Result<ProcessedRecord, Error> {
+    pub fn transform(
+        &self,
+        text: &str,
+        schema_tasks: &[SchemaTask],
+    ) -> Result<ProcessedRecord, Error> {
         let words_with_offsets = self.word_splitter.split_with_offsets(text);
 
         let mut combined_tokens: Vec<&str> = Vec::new();
@@ -394,23 +402,33 @@ mod transformer_tests {
         //   6. The labels (ids 9, 10) appear in the prompt area (BEFORE [SEP_TEXT])
 
         assert_eq!(ids[0], 17, "prompt must start with [CLS], got ids={ids:?}");
-        assert_eq!(*ids.last().unwrap(), 18, "prompt must end with [SEP], got ids={ids:?}");
+        assert_eq!(
+            *ids.last().unwrap(),
+            18,
+            "prompt must end with [SEP], got ids={ids:?}"
+        );
         assert!(ids.contains(&2), "missing [P], got {ids:?}");
         let e_count = ids.iter().filter(|&&i| i == 3).count();
-        assert_eq!(e_count, 2, "expected 2 [E] markers, got {e_count} in {ids:?}");
-        let sep_pos = ids.iter().position(|&i| i == 8).expect("missing [SEP_TEXT]");
+        assert_eq!(
+            e_count, 2,
+            "expected 2 [E] markers, got {e_count} in {ids:?}"
+        );
+        let sep_pos = ids
+            .iter()
+            .position(|&i| i == 8)
+            .expect("missing [SEP_TEXT]");
         // Acme (12) appears AFTER [SEP_TEXT]
         assert!(
-            ids[sep_pos + 1..].iter().any(|&i| i == 12),
+            ids[sep_pos + 1..].contains(&12),
             "Acme not after SEP_TEXT, ids={ids:?}"
         );
         // Labels person (9), organization (10) appear BEFORE [SEP_TEXT]
         assert!(
-            ids[..sep_pos].iter().any(|&i| i == 9),
+            ids[..sep_pos].contains(&9),
             "person label not before SEP_TEXT"
         );
         assert!(
-            ids[..sep_pos].iter().any(|&i| i == 10),
+            ids[..sep_pos].contains(&10),
             "organization label not before SEP_TEXT"
         );
 
@@ -441,8 +459,14 @@ mod transformer_tests {
         // Should contain 2 [E] markers (one per label) AND 2 [DESCRIPTION] markers.
         let e_count = ids.iter().filter(|&&i| i == 3).count();
         let desc_count = ids.iter().filter(|&&i| i == 22).count();
-        assert_eq!(e_count, 2, "expected 2 [E] markers, got {e_count} in {ids:?}");
-        assert_eq!(desc_count, 2, "expected 2 [DESCRIPTION] markers, got {desc_count} in {ids:?}");
+        assert_eq!(
+            e_count, 2,
+            "expected 2 [E] markers, got {e_count} in {ids:?}"
+        );
+        assert_eq!(
+            desc_count, 2,
+            "expected 2 [DESCRIPTION] markers, got {desc_count} in {ids:?}"
+        );
         // [SEP_TEXT] still present (id 8); text words after it.
         assert!(ids.contains(&8), "missing [SEP_TEXT] in {ids:?}");
     }
@@ -481,7 +505,10 @@ mod transformer_tests {
 
         // [C] = id 4. Two fields → exactly 2 [C] markers.
         let c_count = ids.iter().filter(|&&i| i == 4).count();
-        assert_eq!(c_count, 2, "expected 2 [C] markers, got {c_count} in {ids:?}");
+        assert_eq!(
+            c_count, 2,
+            "expected 2 [C] markers, got {c_count} in {ids:?}"
+        );
 
         // [P] = id 2 — exactly one (single task).
         let p_count = ids.iter().filter(|&&i| i == 2).count();
@@ -491,8 +518,14 @@ mod transformer_tests {
         assert!(ids.contains(&8), "missing [SEP_TEXT]");
 
         // No [E] (entity, id 3) and no [L] (label, id 5) — this is a structure prompt.
-        assert!(!ids.contains(&3), "unexpected [E] in structures prompt: {ids:?}");
-        assert!(!ids.contains(&5), "unexpected [L] in structures prompt: {ids:?}");
+        assert!(
+            !ids.contains(&3),
+            "unexpected [E] in structures prompt: {ids:?}"
+        );
+        assert!(
+            !ids.contains(&5),
+            "unexpected [L] in structures prompt: {ids:?}"
+        );
     }
 
     #[test]
@@ -506,7 +539,9 @@ mod transformer_tests {
             ("vendor".into(), FieldType::String),
         ];
         let task = SchemaTask::Structures("invoice".into(), fields);
-        let rec = xfm.transform("Acme Corp paid 100 dollars to Globex.", &[task]).unwrap();
+        let rec = xfm
+            .transform("Acme Corp paid 100 dollars to Globex.", &[task])
+            .unwrap();
 
         // One task mapping, 3 labels, task_type = "structures".
         assert_eq!(rec.tasks.len(), 1);
@@ -524,16 +559,19 @@ mod transformer_tests {
         let xfm = SchemaTransformer::new(tok).expect("transformer build");
 
         let entities_task = SchemaTask::Entities(vec!["person".into()]);
-        let struct_task = SchemaTask::Structures(
-            "invoice".into(),
-            vec![("vendor".into(), FieldType::String)],
-        );
-        let rec = xfm.transform("Acme Corp paid Globex.", &[entities_task, struct_task]).unwrap();
+        let struct_task =
+            SchemaTask::Structures("invoice".into(), vec![("vendor".into(), FieldType::String)]);
+        let rec = xfm
+            .transform("Acme Corp paid Globex.", &[entities_task, struct_task])
+            .unwrap();
         let ids = &rec.input_ids;
 
         // [SEP_STRUCT] = id 7, must appear between the two tasks.
         let sep_struct_pos = ids.iter().position(|&i| i == 7);
-        assert!(sep_struct_pos.is_some(), "expected [SEP_STRUCT] between tasks, got {ids:?}");
+        assert!(
+            sep_struct_pos.is_some(),
+            "expected [SEP_STRUCT] between tasks, got {ids:?}"
+        );
 
         // [E] = id 3 from Entities task — exactly one.
         let e_count = ids.iter().filter(|&&i| i == 3).count();

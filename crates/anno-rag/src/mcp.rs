@@ -24,6 +24,7 @@ use std::sync::Arc;
 pub struct AnnoRagServer {
     pipeline: Arc<Pipeline>,
     cfg: AnnoRagConfig,
+    #[allow(dead_code)] // populated + consumed by the rmcp #[tool_router] macro
     tool_router: ToolRouter<Self>,
 }
 

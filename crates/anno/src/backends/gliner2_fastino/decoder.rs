@@ -1,4 +1,5 @@
 //! Span-score → Entity decoder. Converts ONNX output to char-offset entities.
+#![allow(missing_docs)] // implementation internals; public API is on GLiNER2Fastino in mod.rs
 //!
 //! For each span (start_word, end_word) where score > threshold for label L,
 //! look up the byte offsets of `start_word` and `end_word` in the original
@@ -13,6 +14,7 @@ use crate::Entity;
 
 /// One candidate span emitted by the model.
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)] // standalone decoder path; pipeline.rs has its own span decode
 pub struct Span {
     pub start_word: usize,
     pub end_word: usize,
@@ -21,6 +23,7 @@ pub struct Span {
 }
 
 /// Decode spans into Entities with **character** offsets in the original text.
+#[allow(dead_code)] // standalone decoder path; pipeline.rs has its own span decode
 pub fn decode_spans(
     text: &str,
     word_offsets: &[(usize, usize)], // (byte_start, byte_end) per word
@@ -60,9 +63,24 @@ mod tests {
         let words = [(0, 4), (5, 9), (10, 12), (13, 18), (18, 19)];
         let labels = vec!["organization".into(), "location".into()];
         let spans = vec![
-            Span { start_word: 0, end_word: 1, label_idx: 0, score: 0.9 }, // "Acme Corp"
-            Span { start_word: 3, end_word: 3, label_idx: 1, score: 0.8 }, // "Paris"
-            Span { start_word: 0, end_word: 0, label_idx: 0, score: 0.1 }, // below threshold
+            Span {
+                start_word: 0,
+                end_word: 1,
+                label_idx: 0,
+                score: 0.9,
+            }, // "Acme Corp"
+            Span {
+                start_word: 3,
+                end_word: 3,
+                label_idx: 1,
+                score: 0.8,
+            }, // "Paris"
+            Span {
+                start_word: 0,
+                end_word: 0,
+                label_idx: 0,
+                score: 0.1,
+            }, // below threshold
         ];
 
         let ents = decode_spans(text, &words, &labels, &spans, 0.5);
@@ -84,8 +102,18 @@ mod tests {
         let words = [(0, 6), (7, 12)];
         let labels = vec!["person".into(), "location".into()];
         let spans = vec![
-            Span { start_word: 0, end_word: 0, label_idx: 0, score: 0.9 },
-            Span { start_word: 1, end_word: 1, label_idx: 1, score: 0.9 },
+            Span {
+                start_word: 0,
+                end_word: 0,
+                label_idx: 0,
+                score: 0.9,
+            },
+            Span {
+                start_word: 1,
+                end_word: 1,
+                label_idx: 1,
+                score: 0.9,
+            },
         ];
         let ents = decode_spans(text, &words, &labels, &spans, 0.5);
         assert_eq!(ents.len(), 2);
@@ -102,9 +130,24 @@ mod tests {
         let words = [(0, 1), (2, 3)];
         let labels = vec!["x".into()];
         let spans = vec![
-            Span { start_word: 0, end_word: 99, label_idx: 0, score: 0.9 },
-            Span { start_word: 0, end_word: 0, label_idx: 99, score: 0.9 },
-            Span { start_word: 1, end_word: 0, label_idx: 0, score: 0.9 }, // start > end
+            Span {
+                start_word: 0,
+                end_word: 99,
+                label_idx: 0,
+                score: 0.9,
+            },
+            Span {
+                start_word: 0,
+                end_word: 0,
+                label_idx: 99,
+                score: 0.9,
+            },
+            Span {
+                start_word: 1,
+                end_word: 0,
+                label_idx: 0,
+                score: 0.9,
+            }, // start > end
         ];
         let ents = decode_spans(text, &words, &labels, &spans, 0.0);
         assert_eq!(ents.len(), 0);
