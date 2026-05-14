@@ -108,7 +108,9 @@ pub struct NerConfig {
     pub sidecar_url: String,
 }
 
-fn default_sidecar_url() -> String { "http://127.0.0.1:9111".into() }
+fn default_sidecar_url() -> String {
+    "http://127.0.0.1:9111".into()
+}
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct CustomConfig {
@@ -189,24 +191,60 @@ pub struct AuditConfig {
 }
 
 // Default value functions
-fn default_true() -> bool { true }
-fn default_api_key_env() -> String { "OPENAI_API_KEY".into() }
-fn default_timeout() -> u64 { 120 }
-fn default_max_concurrent() -> usize { 256 }
-fn default_mode() -> String { "cloaktree".into() }
-fn default_encryption() -> String { "aes-256-gcm".into() }
-fn default_vault_backend() -> String { "file".into() }
-fn default_audit_backend() -> String { "jsonl".into() }
-fn default_confidence() -> f64 { 0.85 }
-fn default_tree_path() -> String { "./trees/".into() }
-fn default_tree_model() -> String { "gpt-4o".into() }
-fn default_max_pages() -> usize { 10 }
-fn default_max_tokens() -> usize { 20000 }
-fn default_adcpe() -> String { "adcpe".into() }
-fn default_vector_db() -> String { "lancedb".into() }
-fn default_audit_path() -> String { "./audit/".into() }
-fn default_jsonl() -> String { "jsonl".into() }
-fn default_retention() -> u32 { 90 }
+fn default_true() -> bool {
+    true
+}
+fn default_api_key_env() -> String {
+    "OPENAI_API_KEY".into()
+}
+fn default_timeout() -> u64 {
+    120
+}
+fn default_max_concurrent() -> usize {
+    256
+}
+fn default_mode() -> String {
+    "cloaktree".into()
+}
+fn default_encryption() -> String {
+    "aes-256-gcm".into()
+}
+fn default_vault_backend() -> String {
+    "file".into()
+}
+fn default_audit_backend() -> String {
+    "jsonl".into()
+}
+fn default_confidence() -> f64 {
+    0.85
+}
+fn default_tree_path() -> String {
+    "./trees/".into()
+}
+fn default_tree_model() -> String {
+    "gpt-4o".into()
+}
+fn default_max_pages() -> usize {
+    10
+}
+fn default_max_tokens() -> usize {
+    20000
+}
+fn default_adcpe() -> String {
+    "adcpe".into()
+}
+fn default_vector_db() -> String {
+    "lancedb".into()
+}
+fn default_audit_path() -> String {
+    "./audit/".into()
+}
+fn default_jsonl() -> String {
+    "jsonl".into()
+}
+fn default_retention() -> u32 {
+    90
+}
 
 impl Default for TreeConfig {
     fn default() -> Self {

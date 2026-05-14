@@ -4,8 +4,8 @@
 //! entities in prompts, forwards the sanitized request, then rehydrates
 //! the response before returning it to the caller.
 
-pub mod server;
 pub mod handlers;
+pub mod server;
 pub mod state;
 pub mod streaming;
 pub mod tree_handlers;

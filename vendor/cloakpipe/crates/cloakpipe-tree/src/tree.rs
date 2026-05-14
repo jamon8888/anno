@@ -144,13 +144,17 @@ impl TreeIndex {
     /// Get the maximum depth of the tree.
     pub fn max_depth(&self) -> usize {
         fn depth(nodes: &[TreeNode]) -> usize {
-            nodes.iter().map(|n| {
-                if n.children.is_empty() {
-                    n.depth
-                } else {
-                    depth(&n.children)
-                }
-            }).max().unwrap_or(0)
+            nodes
+                .iter()
+                .map(|n| {
+                    if n.children.is_empty() {
+                        n.depth
+                    } else {
+                        depth(&n.children)
+                    }
+                })
+                .max()
+                .unwrap_or(0)
         }
         depth(&self.children)
     }

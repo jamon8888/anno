@@ -277,7 +277,11 @@ struct Metrics {
 
 impl Metrics {
     fn new() -> Self {
-        Self { true_positives: 0, false_positives: 0, false_negatives: 0 }
+        Self {
+            true_positives: 0,
+            false_positives: 0,
+            false_negatives: 0,
+        }
     }
 
     fn precision(&self) -> f64 {
@@ -353,7 +357,10 @@ fn main() {
                     det_matched[di] = true;
 
                     overall.true_positives += 1;
-                    per_category.entry(ann_cat).or_insert_with(Metrics::new).true_positives += 1;
+                    per_category
+                        .entry(ann_cat)
+                        .or_insert_with(Metrics::new)
+                        .true_positives += 1;
                     break;
                 }
             }
@@ -364,7 +371,10 @@ fn main() {
             if !det_matched[di] {
                 let det_cat = normalize_category(&det.category);
                 overall.false_positives += 1;
-                per_category.entry(det_cat).or_insert_with(Metrics::new).false_positives += 1;
+                per_category
+                    .entry(det_cat)
+                    .or_insert_with(Metrics::new)
+                    .false_positives += 1;
                 false_positive_details.push(format!(
                     "  FP: {:?} '{}' [{}-{}] in \"{}...\"",
                     det.category,
@@ -381,7 +391,10 @@ fn main() {
             if !ann_matched[ai] {
                 let ann_cat = normalize_category(&ann.category);
                 overall.false_negatives += 1;
-                per_category.entry(ann_cat).or_insert_with(Metrics::new).false_negatives += 1;
+                per_category
+                    .entry(ann_cat)
+                    .or_insert_with(Metrics::new)
+                    .false_negatives += 1;
                 false_negative_details.push(format!(
                     "  FN: {:?} '{}' [{}-{}] in \"{}...\"",
                     ann.category,
@@ -398,31 +411,44 @@ fn main() {
     println!("╔══════════════════════════════════════════════════════════════╗");
     println!("║           CloakPipe PII Detection Benchmark                ║");
     println!("╠══════════════════════════════════════════════════════════════╣");
-    println!("║ Samples: {:>4}  |  Avg latency: {:>6.1} µs/sample           ║",
+    println!(
+        "║ Samples: {:>4}  |  Avg latency: {:>6.1} µs/sample           ║",
         total_samples,
         total_time_us as f64 / total_samples as f64
     );
     println!("╠══════════════════════════════════════════════════════════════╣");
-    println!("║ {:^12} │ {:>5} │ {:>5} │ {:>5} │ {:>4} {:>4} {:>4} ║",
-        "Category", "TP", "FP", "FN", "P", "R", "F1");
+    println!(
+        "║ {:^12} │ {:>5} │ {:>5} │ {:>5} │ {:>4} {:>4} {:>4} ║",
+        "Category", "TP", "FP", "FN", "P", "R", "F1"
+    );
     println!("╠══════════════════════════════════════════════════════════════╣");
 
     let mut cats: Vec<_> = per_category.keys().copied().collect();
     cats.sort();
     for cat in &cats {
         let m = &per_category[cat];
-        println!("║ {:>12} │ {:>5} │ {:>5} │ {:>5} │ {:.2} {:.2} {:.2} ║",
+        println!(
+            "║ {:>12} │ {:>5} │ {:>5} │ {:>5} │ {:.2} {:.2} {:.2} ║",
             cat,
-            m.true_positives, m.false_positives, m.false_negatives,
-            m.precision(), m.recall(), m.f1()
+            m.true_positives,
+            m.false_positives,
+            m.false_negatives,
+            m.precision(),
+            m.recall(),
+            m.f1()
         );
     }
 
     println!("╠══════════════════════════════════════════════════════════════╣");
-    println!("║ {:>12} │ {:>5} │ {:>5} │ {:>5} │ {:.2} {:.2} {:.2} ║",
+    println!(
+        "║ {:>12} │ {:>5} │ {:>5} │ {:>5} │ {:.2} {:.2} {:.2} ║",
         "OVERALL",
-        overall.true_positives, overall.false_positives, overall.false_negatives,
-        overall.precision(), overall.recall(), overall.f1()
+        overall.true_positives,
+        overall.false_positives,
+        overall.false_negatives,
+        overall.precision(),
+        overall.recall(),
+        overall.f1()
     );
     println!("╚══════════════════════════════════════════════════════════════╝");
 

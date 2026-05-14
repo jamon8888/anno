@@ -21,38 +21,70 @@ use tracing::{debug, info};
 /// IOB2 labels for ab-ai/pii_model_based_on_distilbert (65 labels).
 const LABELS: &[&str] = &[
     "O",
-    "B-FIRSTNAME", "I-FIRSTNAME",
-    "B-CITY", "I-CITY",
-    "B-AGE", "I-AGE",
-    "B-EMAIL", "I-EMAIL",
-    "B-USERNAME", "I-USERNAME",
-    "B-DATE", "I-DATE",
-    "B-URL", "I-URL",
-    "B-PIN", "I-PIN",
-    "B-DOB", "I-DOB",
-    "B-LASTNAME", "I-LASTNAME",
-    "B-COMPANYNAME", "I-COMPANYNAME",
-    "B-ACCOUNTNAME", "I-ACCOUNTNAME",
-    "B-MIDDLENAME", "I-MIDDLENAME",
-    "B-IBAN", "I-IBAN",
-    "B-CREDITCARDNUMBER", "I-CREDITCARDNUMBER",
-    "B-CREDITCARDISSUER", "I-CREDITCARDISSUER",
-    "B-SSN", "I-SSN",
-    "B-GENDER", "I-GENDER",
-    "B-COUNTY", "I-COUNTY",
-    "B-STATE", "I-STATE",
-    "B-SEX", "I-SEX",
-    "B-AMOUNT", "I-AMOUNT",
-    "B-PREFIX", "I-PREFIX",
-    "B-ACCOUNTNUMBER", "I-ACCOUNTNUMBER",
-    "B-PHONENUMBER", "I-PHONENUMBER",
-    "B-ZIPCODE", "I-ZIPCODE",
-    "B-PHONEIMEI", "I-PHONEIMEI",
-    "B-PASSWORD", "I-PASSWORD",
-    "B-BUILDINGNUMBER", "I-BUILDINGNUMBER",
-    "B-STREET", "I-STREET",
-    "B-SECONDARYADDRESS", "I-SECONDARYADDRESS",
-    "B-CREDITCARDCVV", "I-CREDITCARDCVV",
+    "B-FIRSTNAME",
+    "I-FIRSTNAME",
+    "B-CITY",
+    "I-CITY",
+    "B-AGE",
+    "I-AGE",
+    "B-EMAIL",
+    "I-EMAIL",
+    "B-USERNAME",
+    "I-USERNAME",
+    "B-DATE",
+    "I-DATE",
+    "B-URL",
+    "I-URL",
+    "B-PIN",
+    "I-PIN",
+    "B-DOB",
+    "I-DOB",
+    "B-LASTNAME",
+    "I-LASTNAME",
+    "B-COMPANYNAME",
+    "I-COMPANYNAME",
+    "B-ACCOUNTNAME",
+    "I-ACCOUNTNAME",
+    "B-MIDDLENAME",
+    "I-MIDDLENAME",
+    "B-IBAN",
+    "I-IBAN",
+    "B-CREDITCARDNUMBER",
+    "I-CREDITCARDNUMBER",
+    "B-CREDITCARDISSUER",
+    "I-CREDITCARDISSUER",
+    "B-SSN",
+    "I-SSN",
+    "B-GENDER",
+    "I-GENDER",
+    "B-COUNTY",
+    "I-COUNTY",
+    "B-STATE",
+    "I-STATE",
+    "B-SEX",
+    "I-SEX",
+    "B-AMOUNT",
+    "I-AMOUNT",
+    "B-PREFIX",
+    "I-PREFIX",
+    "B-ACCOUNTNUMBER",
+    "I-ACCOUNTNUMBER",
+    "B-PHONENUMBER",
+    "I-PHONENUMBER",
+    "B-ZIPCODE",
+    "I-ZIPCODE",
+    "B-PHONEIMEI",
+    "I-PHONEIMEI",
+    "B-PASSWORD",
+    "I-PASSWORD",
+    "B-BUILDINGNUMBER",
+    "I-BUILDINGNUMBER",
+    "B-STREET",
+    "I-STREET",
+    "B-SECONDARYADDRESS",
+    "I-SECONDARYADDRESS",
+    "B-CREDITCARDCVV",
+    "I-CREDITCARDCVV",
 ];
 
 /// Map IOB2 label to CloakPipe EntityCategory.
@@ -65,8 +97,8 @@ fn label_to_category(label: &str) -> EntityCategory {
     match entity_type {
         "FIRSTNAME" | "LASTNAME" | "MIDDLENAME" | "PREFIX" => EntityCategory::Person,
         "COMPANYNAME" => EntityCategory::Organization,
-        "CITY" | "STATE" | "COUNTY" | "ZIPCODE" | "BUILDINGNUMBER"
-        | "STREET" | "SECONDARYADDRESS" => EntityCategory::Location,
+        "CITY" | "STATE" | "COUNTY" | "ZIPCODE" | "BUILDINGNUMBER" | "STREET"
+        | "SECONDARYADDRESS" => EntityCategory::Location,
         "DATE" | "DOB" => EntityCategory::Date,
         "EMAIL" => EntityCategory::Email,
         "PHONENUMBER" => EntityCategory::PhoneNumber,
@@ -75,9 +107,7 @@ fn label_to_category(label: &str) -> EntityCategory {
         "CREDITCARDNUMBER" | "CREDITCARDCVV" | "CREDITCARDISSUER" => {
             EntityCategory::Custom("CREDIT_CARD".into())
         }
-        "ACCOUNTNUMBER" | "ACCOUNTNAME" | "IBAN" => {
-            EntityCategory::Custom("ACCOUNT_NUMBER".into())
-        }
+        "ACCOUNTNUMBER" | "ACCOUNTNAME" | "IBAN" => EntityCategory::Custom("ACCOUNT_NUMBER".into()),
         "PASSWORD" | "PIN" => EntityCategory::Secret,
         "AMOUNT" => EntityCategory::Amount,
         "USERNAME" => EntityCategory::Custom("USERNAME".into()),
@@ -108,7 +138,11 @@ impl DistilBertPiiDetector {
             .map_err(|e| anyhow::anyhow!("Failed to set threads: {}", e))?
             .commit_from_file(model_path)
             .map_err(|e| {
-                anyhow::anyhow!("Failed to load DistilBERT-PII model '{}': {}", model_path, e)
+                anyhow::anyhow!(
+                    "Failed to load DistilBERT-PII model '{}': {}",
+                    model_path,
+                    e
+                )
             })?;
 
         // Find tokenizer.json: check model dir first, then parent (for quantized/ subdir)
@@ -124,8 +158,9 @@ impl DistilBertPiiDetector {
                 .join("tokenizer.json")
         };
 
-        let tokenizer = Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| anyhow::anyhow!("Failed to load tokenizer from {:?}: {}", tokenizer_path, e))?;
+        let tokenizer = Tokenizer::from_file(&tokenizer_path).map_err(|e| {
+            anyhow::anyhow!("Failed to load tokenizer from {:?}: {}", tokenizer_path, e)
+        })?;
 
         info!(
             "DistilBERT-PII loaded: {} labels, threshold={:.2}",
@@ -251,8 +286,13 @@ impl DistilBertPiiDetector {
                         ),
                         EntityCategory::Location => matches!(
                             expected_type,
-                            "CITY" | "STATE" | "COUNTY" | "ZIPCODE" | "BUILDINGNUMBER"
-                                | "STREET" | "SECONDARYADDRESS"
+                            "CITY"
+                                | "STATE"
+                                | "COUNTY"
+                                | "ZIPCODE"
+                                | "BUILDINGNUMBER"
+                                | "STREET"
+                                | "SECONDARYADDRESS"
                         ),
                         _ => label_to_category(label) == *cat,
                     };
@@ -330,7 +370,8 @@ fn merge_name_entities(entities: Vec<DetectedEntity>) -> Vec<DetectedEntity> {
                     let gap = entity.start.saturating_sub(last.end);
                     if gap <= 2 {
                         // Merge: extend last entity
-                        last.original = format!("{} {}", last.original.trim(), entity.original.trim());
+                        last.original =
+                            format!("{} {}", last.original.trim(), entity.original.trim());
                         last.end = entity.end;
                         last.confidence = (last.confidence + entity.confidence) / 2.0;
                         continue;
@@ -371,11 +412,20 @@ mod tests {
         assert_eq!(label_to_category("B-FIRSTNAME"), EntityCategory::Person);
         assert_eq!(label_to_category("I-LASTNAME"), EntityCategory::Person);
         assert_eq!(label_to_category("B-EMAIL"), EntityCategory::Email);
-        assert_eq!(label_to_category("B-SSN"), EntityCategory::Custom("SSN".into()));
+        assert_eq!(
+            label_to_category("B-SSN"),
+            EntityCategory::Custom("SSN".into())
+        );
         assert_eq!(label_to_category("B-CITY"), EntityCategory::Location);
         assert_eq!(label_to_category("B-STREET"), EntityCategory::Location);
-        assert_eq!(label_to_category("B-PHONENUMBER"), EntityCategory::PhoneNumber);
-        assert_eq!(label_to_category("B-COMPANYNAME"), EntityCategory::Organization);
+        assert_eq!(
+            label_to_category("B-PHONENUMBER"),
+            EntityCategory::PhoneNumber
+        );
+        assert_eq!(
+            label_to_category("B-COMPANYNAME"),
+            EntityCategory::Organization
+        );
         assert_eq!(label_to_category("B-AMOUNT"), EntityCategory::Amount);
         assert_eq!(label_to_category("B-PASSWORD"), EntityCategory::Secret);
     }

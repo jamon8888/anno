@@ -61,9 +61,7 @@ fn label_to_category(label: &str) -> EntityCategory {
             EntityCategory::Custom("SSN".into())
         }
         "passport" | "passport number" => EntityCategory::Custom("PASSPORT".into()),
-        "medical record" | "medical record number" | "mrn" => {
-            EntityCategory::Custom("MRN".into())
-        }
+        "medical record" | "medical record number" | "mrn" => EntityCategory::Custom("MRN".into()),
         "bank account" | "bank account number" | "iban" => {
             EntityCategory::Custom("BANK_ACCOUNT".into())
         }
@@ -161,8 +159,7 @@ impl GlinerDetector {
 
         // Generate all valid spans from the text portion
         let max_span_width = 12; // Maximum entity width in tokens
-        let (span_idx, span_mask, num_spans) =
-            self.generate_spans(&word_mask, max_span_width);
+        let (span_idx, span_mask, num_spans) = self.generate_spans(&word_mask, max_span_width);
 
         if num_spans == 0 {
             return Ok(Vec::new());
@@ -174,15 +171,12 @@ impl GlinerDetector {
         let attention_mask_tensor =
             Value::from_array(([1i64, seq_len as i64], attention_mask.clone()))
                 .map_err(|e| anyhow::anyhow!("Failed to create attention_mask tensor: {}", e))?;
-        let word_mask_tensor =
-            Value::from_array(([1i64, seq_len as i64], word_mask.clone()))
-                .map_err(|e| anyhow::anyhow!("Failed to create word_mask tensor: {}", e))?;
-        let span_idx_tensor =
-            Value::from_array(([1i64, num_spans as i64, 2i64], span_idx))
-                .map_err(|e| anyhow::anyhow!("Failed to create span_idx tensor: {}", e))?;
-        let span_mask_tensor =
-            Value::from_array(([1i64, num_spans as i64], span_mask))
-                .map_err(|e| anyhow::anyhow!("Failed to create span_mask tensor: {}", e))?;
+        let word_mask_tensor = Value::from_array(([1i64, seq_len as i64], word_mask.clone()))
+            .map_err(|e| anyhow::anyhow!("Failed to create word_mask tensor: {}", e))?;
+        let span_idx_tensor = Value::from_array(([1i64, num_spans as i64, 2i64], span_idx))
+            .map_err(|e| anyhow::anyhow!("Failed to create span_idx tensor: {}", e))?;
+        let span_mask_tensor = Value::from_array(([1i64, num_spans as i64], span_mask))
+            .map_err(|e| anyhow::anyhow!("Failed to create span_mask tensor: {}", e))?;
 
         let mut session = self
             .session
@@ -206,8 +200,7 @@ impl GlinerDetector {
             .map_err(|e| anyhow::anyhow!("Failed to extract span logits: {}", e))?;
 
         // Decode spans into entities
-        let entities =
-            self.decode_spans(logits_data, num_spans, &text_token_offsets, text)?;
+        let entities = self.decode_spans(logits_data, num_spans, &text_token_offsets, text)?;
 
         debug!("GLiNER2 detected {} entities", entities.len());
         Ok(entities)
@@ -255,9 +248,7 @@ impl GlinerDetector {
             let label_enc = self
                 .tokenizer
                 .encode(label.as_str(), false)
-                .map_err(|e| {
-                    anyhow::anyhow!("Label '{}' tokenization failed: {}", label, e)
-                })?;
+                .map_err(|e| anyhow::anyhow!("Label '{}' tokenization failed: {}", label, e))?;
             label_tokens.extend_from_slice(label_enc.get_ids());
             label_tokens.push(sep_id);
         }
@@ -317,11 +308,7 @@ impl GlinerDetector {
     /// where both i and j have word_mask == 1 (text tokens).
     ///
     /// Returns (flat span_idx [num_spans * 2], span_mask [num_spans], count).
-    fn generate_spans(
-        &self,
-        word_mask: &[i64],
-        max_width: usize,
-    ) -> (Vec<i64>, Vec<f32>, usize) {
+    fn generate_spans(&self, word_mask: &[i64], max_width: usize) -> (Vec<i64>, Vec<f32>, usize) {
         // Find text token positions
         let text_positions: Vec<usize> = word_mask
             .iter()

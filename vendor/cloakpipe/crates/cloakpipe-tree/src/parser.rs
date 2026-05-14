@@ -154,17 +154,35 @@ struct HeadingInfo {
 fn parse_markdown_heading(line: &str) -> Option<HeadingInfo> {
     let trimmed = line.trim();
     if let Some(rest) = trimmed.strip_prefix("######") {
-        Some(HeadingInfo { text: rest.trim().to_string(), level: 6 })
+        Some(HeadingInfo {
+            text: rest.trim().to_string(),
+            level: 6,
+        })
     } else if let Some(rest) = trimmed.strip_prefix("#####") {
-        Some(HeadingInfo { text: rest.trim().to_string(), level: 5 })
+        Some(HeadingInfo {
+            text: rest.trim().to_string(),
+            level: 5,
+        })
     } else if let Some(rest) = trimmed.strip_prefix("####") {
-        Some(HeadingInfo { text: rest.trim().to_string(), level: 4 })
+        Some(HeadingInfo {
+            text: rest.trim().to_string(),
+            level: 4,
+        })
     } else if let Some(rest) = trimmed.strip_prefix("###") {
-        Some(HeadingInfo { text: rest.trim().to_string(), level: 3 })
+        Some(HeadingInfo {
+            text: rest.trim().to_string(),
+            level: 3,
+        })
     } else if let Some(rest) = trimmed.strip_prefix("##") {
-        Some(HeadingInfo { text: rest.trim().to_string(), level: 2 })
+        Some(HeadingInfo {
+            text: rest.trim().to_string(),
+            level: 2,
+        })
     } else {
-        trimmed.strip_prefix("# ").map(|rest| HeadingInfo { text: rest.trim().to_string(), level: 1 })
+        trimmed.strip_prefix("# ").map(|rest| HeadingInfo {
+            text: rest.trim().to_string(),
+            level: 1,
+        })
     }
 }
 
@@ -175,9 +193,7 @@ fn titlecase(s: &str) -> String {
             let mut chars = word.chars();
             match chars.next() {
                 None => String::new(),
-                Some(c) => {
-                    c.to_uppercase().to_string() + &chars.as_str().to_lowercase()
-                }
+                Some(c) => c.to_uppercase().to_string() + &chars.as_str().to_lowercase(),
             }
         })
         .collect::<Vec<_>>()

@@ -75,8 +75,9 @@ impl SqliteAuditLogger {
             CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
             CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event);
             CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id);
-            CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id);"
-        ).context("Failed to initialize audit schema")?;
+            CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id);",
+        )
+        .context("Failed to initialize audit schema")?;
         Ok(())
     }
 
@@ -88,7 +89,14 @@ impl SqliteAuditLogger {
         entities_replaced: usize,
         categories: Vec<String>,
     ) -> Result<()> {
-        self.log_pseudonymize_for_user(request_id, entities_detected, entities_replaced, categories, None, None)
+        self.log_pseudonymize_for_user(
+            request_id,
+            entities_detected,
+            entities_replaced,
+            categories,
+            None,
+            None,
+        )
     }
 
     /// Log a pseudonymization event with user/session context.
@@ -221,7 +229,7 @@ impl SqliteAuditLogger {
     /// Count events by type.
     pub fn event_counts(&self) -> Result<Vec<(String, usize)>> {
         let mut stmt = self.conn.prepare(
-            "SELECT event, COUNT(*) FROM audit_log GROUP BY event ORDER BY COUNT(*) DESC"
+            "SELECT event, COUNT(*) FROM audit_log GROUP BY event ORDER BY COUNT(*) DESC",
         )?;
 
         let rows = stmt.query_map([], |row| {
@@ -239,9 +247,9 @@ impl SqliteAuditLogger {
 
     /// Total entry count.
     pub fn total_entries(&self) -> Result<usize> {
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM audit_log", [], |row| row.get(0),
-        )?;
+        let count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM audit_log", [], |row| row.get(0))?;
         Ok(count as usize)
     }
 }
@@ -253,7 +261,9 @@ mod tests {
     #[test]
     fn test_sqlite_audit_pseudonymize() {
         let logger = SqliteAuditLogger::in_memory(true).unwrap();
-        logger.log_pseudonymize("req-1", 5, 3, vec!["PERSON".into(), "ORG".into()]).unwrap();
+        logger
+            .log_pseudonymize("req-1", 5, 3, vec!["PERSON".into(), "ORG".into()])
+            .unwrap();
 
         let entries = logger.recent(10).unwrap();
         assert_eq!(entries.len(), 1);
@@ -297,8 +307,12 @@ mod tests {
     #[test]
     fn test_sqlite_audit_multi_user() {
         let logger = SqliteAuditLogger::in_memory(true).unwrap();
-        logger.log_pseudonymize_for_user("r1", 3, 2, vec![], Some("user-1"), Some("sess-a")).unwrap();
-        logger.log_pseudonymize_for_user("r2", 1, 1, vec![], Some("user-2"), Some("sess-b")).unwrap();
+        logger
+            .log_pseudonymize_for_user("r1", 3, 2, vec![], Some("user-1"), Some("sess-a"))
+            .unwrap();
+        logger
+            .log_pseudonymize_for_user("r2", 1, 1, vec![], Some("user-2"), Some("sess-b"))
+            .unwrap();
 
         assert_eq!(logger.total_entries().unwrap(), 2);
     }
@@ -311,7 +325,9 @@ mod tests {
 
         {
             let logger = SqliteAuditLogger::open(path_str, true, 90).unwrap();
-            logger.log_pseudonymize("r1", 5, 3, vec!["PERSON".into()]).unwrap();
+            logger
+                .log_pseudonymize("r1", 5, 3, vec!["PERSON".into()])
+                .unwrap();
             logger.log_rehydrate("r2", 4).unwrap();
         }
 

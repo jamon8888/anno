@@ -1,6 +1,8 @@
 //! Industry detection profiles — pre-tuned configurations for common use cases.
 
-use crate::config::{CustomConfig, CustomPattern, DetectionConfig, NerBackend, NerConfig, OverrideConfig};
+use crate::config::{
+    CustomConfig, CustomPattern, DetectionConfig, NerBackend, NerConfig, OverrideConfig,
+};
 use serde::{Deserialize, Serialize};
 
 /// Available industry profiles.
@@ -108,12 +110,7 @@ impl IndustryProfile {
                     patterns: healthcare_patterns(),
                 },
                 overrides: OverrideConfig {
-                    preserve: vec![
-                        "FDA".into(),
-                        "CDC".into(),
-                        "WHO".into(),
-                        "NIH".into(),
-                    ],
+                    preserve: vec!["FDA".into(), "CDC".into(), "WHO".into(), "NIH".into()],
                     force: Vec::new(),
                 },
                 resolver: Default::default(),
@@ -148,12 +145,7 @@ impl IndustryProfile {
 
     /// List all available profiles.
     pub fn all() -> &'static [IndustryProfile] {
-        &[
-            Self::General,
-            Self::Legal,
-            Self::Healthcare,
-            Self::Fintech,
-        ]
+        &[Self::General, Self::Legal, Self::Healthcare, Self::Fintech]
     }
 }
 
@@ -183,10 +175,19 @@ pub fn resolve_detection_config(
             config.ip_addresses = user_config.ip_addresses;
             config.urls_internal = user_config.urls_internal;
             // Merge custom patterns (profile patterns + user patterns)
-            config.custom.patterns.extend(user_config.custom.patterns.clone());
+            config
+                .custom
+                .patterns
+                .extend(user_config.custom.patterns.clone());
             // User overrides always win
-            config.overrides.preserve.extend(user_config.overrides.preserve.clone());
-            config.overrides.force.extend(user_config.overrides.force.clone());
+            config
+                .overrides
+                .preserve
+                .extend(user_config.overrides.preserve.clone());
+            config
+                .overrides
+                .force
+                .extend(user_config.overrides.force.clone());
             config
         }
         None => user_config.clone(),
@@ -298,8 +299,15 @@ mod tests {
         assert!(config.ner.enabled);
         assert!(matches!(config.ner.backend, NerBackend::GlinerPii));
         assert!(!config.custom.patterns.is_empty());
-        assert!(config.custom.patterns.iter().any(|p| p.name == "case_number"));
-        assert!(config.overrides.preserve.contains(&"Supreme Court".to_string()));
+        assert!(config
+            .custom
+            .patterns
+            .iter()
+            .any(|p| p.name == "case_number"));
+        assert!(config
+            .overrides
+            .preserve
+            .contains(&"Supreme Court".to_string()));
     }
 
     #[test]
@@ -325,9 +333,18 @@ mod tests {
 
     #[test]
     fn test_profile_from_name() {
-        assert_eq!(IndustryProfile::from_name("legal"), Some(IndustryProfile::Legal));
-        assert_eq!(IndustryProfile::from_name("HEALTHCARE"), Some(IndustryProfile::Healthcare));
-        assert_eq!(IndustryProfile::from_name("finance"), Some(IndustryProfile::Fintech));
+        assert_eq!(
+            IndustryProfile::from_name("legal"),
+            Some(IndustryProfile::Legal)
+        );
+        assert_eq!(
+            IndustryProfile::from_name("HEALTHCARE"),
+            Some(IndustryProfile::Healthcare)
+        );
+        assert_eq!(
+            IndustryProfile::from_name("finance"),
+            Some(IndustryProfile::Fintech)
+        );
         assert_eq!(IndustryProfile::from_name("unknown"), None);
     }
 

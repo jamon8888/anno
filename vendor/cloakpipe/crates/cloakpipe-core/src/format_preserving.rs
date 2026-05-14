@@ -86,9 +86,17 @@ fn fake_pan(id: u32) -> String {
     let letters = b"ABCDEFGHJKLMNPQRSTUVWXYZ";
     let n = id as usize;
     let l = |i: usize| letters[(n + i * 7) % letters.len()] as char;
-    format!("{}{}{}{}{}{}{}{}{}{}",
-        l(0), l(1), l(2), l(3), l(4),
-        (id % 10), (id / 10 % 10), (id / 100 % 10), (id / 1000 % 10),
+    format!(
+        "{}{}{}{}{}{}{}{}{}{}",
+        l(0),
+        l(1),
+        l(2),
+        l(3),
+        l(4),
+        (id % 10),
+        (id / 10 % 10),
+        (id / 100 % 10),
+        (id / 1000 % 10),
         l(5)
     )
 }
@@ -121,10 +129,12 @@ fn fake_secret(original: &str, id: u32) -> String {
         .find(|p| original.starts_with(*p))
     {
         let suffix_len = original.len().saturating_sub(prefix.len()).min(20);
-        let suffix: String = (0..suffix_len).map(|i| {
-            let c = b"ABCDEFGHJKLMNPQRSTUVWXYZ0123456789";
-            c[(id as usize + i * 7) % c.len()] as char
-        }).collect();
+        let suffix: String = (0..suffix_len)
+            .map(|i| {
+                let c = b"ABCDEFGHJKLMNPQRSTUVWXYZ0123456789";
+                c[(id as usize + i * 7) % c.len()] as char
+            })
+            .collect();
         format!("{}{}", prefix, suffix)
     } else {
         format!("MASKED-SECRET-{:04}", id)
@@ -139,17 +149,26 @@ mod tests {
     #[test]
     fn test_india_phone_format() {
         let fake = generate("+91 98765 43210", &EntityCategory::PhoneNumber, 1);
-        assert!(fake.starts_with("+91 "), "India phone should start with +91");
+        assert!(
+            fake.starts_with("+91 "),
+            "India phone should start with +91"
+        );
         assert_ne!(fake, "+91 98765 43210", "Should not return original");
     }
 
     #[test]
     fn test_aadhaar_format() {
-        let fake = generate("2345 6789 0123", &EntityCategory::Custom("Aadhaar".into()), 1);
+        let fake = generate(
+            "2345 6789 0123",
+            &EntityCategory::Custom("Aadhaar".into()),
+            1,
+        );
         // Should be XXXX XXXX XXXX format
         let parts: Vec<&str> = fake.split_whitespace().collect();
         assert_eq!(parts.len(), 3);
-        assert!(parts.iter().all(|p| p.len() == 4 && p.chars().all(|c| c.is_ascii_digit())));
+        assert!(parts
+            .iter()
+            .all(|p| p.len() == 4 && p.chars().all(|c| c.is_ascii_digit())));
     }
 
     #[test]

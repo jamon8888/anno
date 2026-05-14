@@ -3,8 +3,8 @@
 use cloakpipe_core::{
     config::{CustomConfig, CustomPattern, DetectionConfig, NerConfig, OverrideConfig},
     detector::Detector,
-    replacer::Replacer,
     rehydrator::Rehydrator,
+    replacer::Replacer,
     vault::Vault,
     EntityCategory,
 };
@@ -28,7 +28,9 @@ fn test_detection_config() -> DetectionConfig {
 #[test]
 fn test_detect_email() {
     let detector = Detector::from_config(&test_detection_config()).unwrap();
-    let entities = detector.detect("Contact alice@example.com for details").unwrap();
+    let entities = detector
+        .detect("Contact alice@example.com for details")
+        .unwrap();
     assert_eq!(entities.len(), 1);
     assert_eq!(entities[0].original, "alice@example.com");
     assert_eq!(entities[0].category, EntityCategory::Email);
@@ -38,28 +40,38 @@ fn test_detect_email() {
 fn test_detect_aws_key() {
     let detector = Detector::from_config(&test_detection_config()).unwrap();
     let entities = detector.detect("Key: AKIAIOSFODNN7EXAMPLE").unwrap();
-    assert!(entities.iter().any(|e| e.category == EntityCategory::Secret));
+    assert!(entities
+        .iter()
+        .any(|e| e.category == EntityCategory::Secret));
 }
 
 #[test]
 fn test_detect_ip_address() {
     let detector = Detector::from_config(&test_detection_config()).unwrap();
     let entities = detector.detect("Server at 192.168.1.100 is down").unwrap();
-    assert!(entities.iter().any(|e| e.category == EntityCategory::IpAddress));
+    assert!(entities
+        .iter()
+        .any(|e| e.category == EntityCategory::IpAddress));
 }
 
 #[test]
 fn test_detect_currency_amount() {
     let detector = Detector::from_config(&test_detection_config()).unwrap();
     let entities = detector.detect("Revenue was $1.2M this quarter").unwrap();
-    assert!(entities.iter().any(|e| e.category == EntityCategory::Amount));
+    assert!(entities
+        .iter()
+        .any(|e| e.category == EntityCategory::Amount));
 }
 
 #[test]
 fn test_detect_percentage() {
     let detector = Detector::from_config(&test_detection_config()).unwrap();
-    let entities = detector.detect("Growth rate: 15.3% year-over-year").unwrap();
-    assert!(entities.iter().any(|e| e.category == EntityCategory::Percentage));
+    let entities = detector
+        .detect("Growth rate: 15.3% year-over-year")
+        .unwrap();
+    assert!(entities
+        .iter()
+        .any(|e| e.category == EntityCategory::Percentage));
 }
 
 #[test]
@@ -72,7 +84,9 @@ fn test_detect_fiscal_date() {
 #[test]
 fn test_detect_internal_url() {
     let detector = Detector::from_config(&test_detection_config()).unwrap();
-    let entities = detector.detect("Check https://internal.corp.com/api/status").unwrap();
+    let entities = detector
+        .detect("Check https://internal.corp.com/api/status")
+        .unwrap();
     assert!(entities.iter().any(|e| e.category == EntityCategory::Url));
 }
 
@@ -81,7 +95,9 @@ fn test_detect_jwt() {
     let detector = Detector::from_config(&test_detection_config()).unwrap();
     let jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
     let entities = detector.detect(&format!("Token: {}", jwt)).unwrap();
-    assert!(entities.iter().any(|e| e.category == EntityCategory::Secret));
+    assert!(entities
+        .iter()
+        .any(|e| e.category == EntityCategory::Secret));
 }
 
 #[test]
@@ -213,7 +229,8 @@ fn test_streaming_rehydration_complete_token() {
     vault.get_or_create("Acme Corp", &EntityCategory::Organization);
 
     let mut buffer = String::new();
-    let (output, matched) = Rehydrator::rehydrate_chunk("The company ORG_1 reported", &mut buffer, &vault).unwrap();
+    let (output, matched) =
+        Rehydrator::rehydrate_chunk("The company ORG_1 reported", &mut buffer, &vault).unwrap();
     assert!(matched);
     assert!(output.contains("Acme Corp"));
 }

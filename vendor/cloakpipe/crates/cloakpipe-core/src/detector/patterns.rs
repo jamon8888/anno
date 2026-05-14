@@ -1,6 +1,6 @@
 //! Layer 1: Regex-based pattern detection for secrets, emails, IPs, etc.
 
-use crate::{DetectedEntity, EntityCategory, DetectionSource, config::DetectionConfig};
+use crate::{config::DetectionConfig, DetectedEntity, DetectionSource, EntityCategory};
 use anyhow::Result;
 use regex::Regex;
 
@@ -44,7 +44,9 @@ impl PatternDetector {
             });
             // Connection strings
             rules.push(PatternRule {
-                regex: Regex::new(r"(?i)(postgres(?:ql)?://[^\s]+|mysql://[^\s]+|mongodb(?:\+srv)?://[^\s]+)")?,
+                regex: Regex::new(
+                    r"(?i)(postgres(?:ql)?://[^\s]+|mysql://[^\s]+|mongodb(?:\+srv)?://[^\s]+)",
+                )?,
                 category: EntityCategory::Secret,
                 _name: "connection_string".into(),
             });
@@ -67,7 +69,9 @@ impl PatternDetector {
         // IP addresses MUST come before phone numbers so they win dedup
         if config.ip_addresses {
             rules.push(PatternRule {
-                regex: Regex::new(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b")?,
+                regex: Regex::new(
+                    r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b",
+                )?,
                 category: EntityCategory::IpAddress,
                 _name: "ipv4".into(),
             });
@@ -116,7 +120,9 @@ impl PatternDetector {
             // Tighter phone regex: requires country code or area code pattern,
             // minimum 7 digits total, won't match bare 4-digit numbers or IPs
             rules.push(PatternRule {
-                regex: Regex::new(r"(?:\+[1-9]\d{0,2}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}")?,
+                regex: Regex::new(
+                    r"(?:\+[1-9]\d{0,2}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}",
+                )?,
                 category: EntityCategory::PhoneNumber,
                 _name: "phone".into(),
             });
@@ -125,7 +131,9 @@ impl PatternDetector {
         // URLs: both internal and general
         if config.urls_internal {
             rules.push(PatternRule {
-                regex: Regex::new(r"https?://[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?(?::\d{1,5})?(?:/[^\s)]*)?")?,
+                regex: Regex::new(
+                    r"https?://[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?(?::\d{1,5})?(?:/[^\s)]*)?",
+                )?,
                 category: EntityCategory::Url,
                 _name: "url".into(),
             });
