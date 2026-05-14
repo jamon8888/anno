@@ -76,10 +76,6 @@ name = "bench_ingest"
 harness = false
 
 [[bench]]
-name = "bench_recall"
-harness = false
-
-[[bench]]
 name = "bench_eval"
 harness = false
 

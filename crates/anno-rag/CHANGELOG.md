@@ -2,6 +2,30 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — v0.6 hybrid retrieval + legal eval harness
+
+### Added
+- **Legal RAG eval harness** — ~60-document synthetic French legal corpus
+  (`tests/fixtures/eval_corpus/`), ~40 graded concept queries
+  (`queries.toml`), and `recall@10` / `nDCG@10` metrics in `anno_rag::eval`.
+  `bench_eval` replaces `bench_recall`; CI gates both metrics against a
+  committed `eval_baseline.toml` (98% tolerance).
+- **Optional real eval corpus** via `ANNO_RAG_EVAL_CORPUS` — points the
+  harness at an out-of-repo `{*.txt, queries.toml}` directory.
+
+### Changed
+- **Hybrid retrieval** — `search()` is now a hybrid vector + full-text
+  query: a French-tokenized LanceDB FTS index (stemming + stop-words +
+  lowercase) on `text_pseudo`, fused with the dense vector results via
+  `RRFReranker`. Legal French is saturated with exact-match terms that
+  dense embeddings retrieve poorly.
+- **e5 prefix fix** — search queries are embedded with the e5 `"query: "`
+  prefix (was `"passage: "`, the passage prefix). `Embedder::embed_query`
+  is the new query path; `embed_batch` stays the passage path.
+- `SearchHit.distance` (L2, lower = closer) is replaced by
+  `SearchHit.score` (RRF relevance, higher = better). Minor breaking
+  change; anno-rag is pre-1.0.
+
 ## [Unreleased] — v0.5 performance budget
 
 ### Added
