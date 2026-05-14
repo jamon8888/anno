@@ -21,6 +21,15 @@ pub struct PrivacyReport {
     pub fresh_pii_redacted: usize,
 }
 
+/// Text output and counts emitted by a stream text transform.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StreamTextReport {
+    /// Transformed text safe to emit to Cowork.
+    pub output: String,
+    /// Privacy counters from this fragment.
+    pub privacy: PrivacyReport,
+}
+
 /// Stateful privacy engine. The vault owns cleartext mappings and never leaves
 /// this boundary.
 pub struct PrivacyEngine {
@@ -120,6 +129,25 @@ impl PrivacyEngine {
             self.rehydrate_content_value(content, &mut report)?;
         }
         Ok(report)
+    }
+
+    /// Transform a stream text fragment before it is emitted to Cowork.
+    pub fn transform_stream_text(
+        &self,
+        text: &mut String,
+        scan_fresh_pii: bool,
+    ) -> Result<StreamTextReport> {
+        let mut report = PrivacyReport::default();
+        if scan_fresh_pii {
+            report.fresh_pii_redacted += self.redact_fresh_pii(text);
+        }
+        let rehydrated =
+            Rehydrator::rehydrate(text, &self.vault).map_err(|e| Error::Privacy(e.to_string()))?;
+        report.rehydrated_tokens += rehydrated.rehydrated_count;
+        Ok(StreamTextReport {
+            output: rehydrated.text,
+            privacy: report,
+        })
     }
 
     fn transform_content_value(
@@ -539,6 +567,56 @@ mod tests {
 
         assert_eq!(report.rehydrated_tokens, 1);
         assert_eq!(response["content"][0]["text"], "Bonjour Marie Dupont");
+    }
+
+    #[test]
+    fn stream_transform_rehydrates_known_tokens() {
+        let mut engine = PrivacyEngine::default();
+        let mut request = json!({
+            "messages": [{"role": "user", "content": "Marie Dupont"}]
+        });
+        engine.pseudonymize_request(&mut request).unwrap();
+        let token = request["messages"][0]["content"]
+            .as_str()
+            .unwrap()
+            .split_whitespace()
+            .find(|part| part.starts_with("PERSON_"))
+            .unwrap()
+            .to_string();
+
+        let report = engine
+            .transform_stream_text(&mut format!("Bonjour {token}"), true)
+            .unwrap();
+
+        assert_eq!(report.output, "Bonjour Marie Dupont");
+        assert_eq!(report.privacy.rehydrated_tokens, 1);
+        assert_eq!(report.privacy.fresh_pii_redacted, 0);
+    }
+
+    #[test]
+    fn stream_transform_redacts_fresh_pii_when_scanning() {
+        let engine = PrivacyEngine::default();
+        let report = engine
+            .transform_stream_text(
+                &mut "Le fournisseur invente Jean Martin et jean.martin@example.com".to_string(),
+                true,
+            )
+            .unwrap();
+
+        assert!(!report.output.contains("Jean Martin"));
+        assert!(!report.output.contains("jean.martin@example.com"));
+        assert_eq!(report.privacy.fresh_pii_redacted, 2);
+    }
+
+    #[test]
+    fn stream_transform_can_skip_fresh_pii_scan() {
+        let engine = PrivacyEngine::default();
+        let report = engine
+            .transform_stream_text(&mut "Le fournisseur invente Jean Martin".to_string(), false)
+            .unwrap();
+
+        assert!(report.output.contains("Jean Martin"));
+        assert_eq!(report.privacy.fresh_pii_redacted, 0);
     }
 
     #[test]

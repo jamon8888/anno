@@ -73,6 +73,79 @@ impl SseFrame {
     }
 }
 
+/// Hybrid buffer for streamed assistant text.
+#[derive(Debug, Clone)]
+pub struct StreamBuffer {
+    pending: String,
+    max_chars: usize,
+}
+
+impl StreamBuffer {
+    /// Build a buffer with a forced flush size.
+    #[must_use]
+    pub fn new(max_chars: usize) -> Self {
+        Self {
+            pending: String::new(),
+            max_chars,
+        }
+    }
+
+    /// Push a fragment and return a safe emission unit when available.
+    pub fn push(&mut self, fragment: &str) -> Option<String> {
+        self.pending.push_str(fragment);
+        if ends_with_open_pseudonym_prefix(&self.pending) {
+            return None;
+        }
+        if has_sentence_boundary(&self.pending) || self.pending.len() >= self.max_chars {
+            return Some(std::mem::take(&mut self.pending));
+        }
+        None
+    }
+
+    /// Return true when the buffer holds text.
+    #[must_use]
+    pub fn has_pending(&self) -> bool {
+        !self.pending.is_empty()
+    }
+
+    /// Flush buffered text only when it cannot be an open pseudonym prefix.
+    pub fn flush_if_safe(&mut self) -> Option<String> {
+        if self.pending.is_empty() || ends_with_open_pseudonym_prefix(&self.pending) {
+            None
+        } else {
+            Some(std::mem::take(&mut self.pending))
+        }
+    }
+
+    /// Flush remaining buffered text.
+    pub fn finish(&mut self) -> Option<String> {
+        if self.pending.is_empty() {
+            None
+        } else {
+            Some(std::mem::take(&mut self.pending))
+        }
+    }
+}
+
+fn has_sentence_boundary(text: &str) -> bool {
+    text.ends_with('.') || text.ends_with('!') || text.ends_with('?') || text.ends_with('\n')
+}
+
+fn ends_with_open_pseudonym_prefix(text: &str) -> bool {
+    const PREFIXES: &[&str] = &["PERSON_", "EMAIL_", "PHONE_", "IBAN_", "SIRET_"];
+    text.char_indices().any(|(index, _)| {
+        let suffix = &text[index..];
+        PREFIXES.iter().any(|prefix| {
+            if prefix.starts_with(suffix) {
+                return true;
+            }
+            suffix
+                .strip_prefix(prefix)
+                .is_some_and(|id| !id.is_empty() && id.chars().all(|ch| ch.is_ascii_digit()))
+        })
+    })
+}
+
 fn json_to_anthropic_string(value: &Value) -> String {
     match value {
         Value::Object(object) => {
@@ -168,5 +241,51 @@ mod tests {
         assert_eq!(event.text_delta(), None);
         event.set_text_delta("Marie Dupont");
         assert_eq!(event.data["delta"]["text"], "PERSON_1");
+    }
+
+    #[test]
+    fn buffer_holds_incomplete_pseudonym_token() {
+        let mut buffer = StreamBuffer::new(4096);
+
+        assert_eq!(buffer.push("Bonjour PER"), None);
+        assert_eq!(buffer.push("SON_1."), Some("Bonjour PERSON_1.".to_string()));
+    }
+
+    #[test]
+    fn buffer_flushes_complete_sentence() {
+        let mut buffer = StreamBuffer::new(4096);
+
+        assert_eq!(buffer.push("Bonjour Marie"), None);
+        assert_eq!(
+            buffer.push(" Dupont."),
+            Some("Bonjour Marie Dupont.".to_string())
+        );
+    }
+
+    #[test]
+    fn buffer_flushes_on_size_limit() {
+        let mut buffer = StreamBuffer::new(10);
+
+        assert_eq!(buffer.push("abcdefghijk"), Some("abcdefghijk".to_string()));
+    }
+
+    #[test]
+    fn timed_flush_does_not_emit_open_pseudonym_prefix() {
+        let mut buffer = StreamBuffer::new(4096);
+
+        assert_eq!(buffer.push("Bonjour PER"), None);
+        assert_eq!(buffer.flush_if_safe(), None);
+        assert_eq!(buffer.push("SON_1"), None);
+        assert_eq!(buffer.flush_if_safe(), None);
+        assert_eq!(buffer.push("."), Some("Bonjour PERSON_1.".to_string()));
+    }
+
+    #[test]
+    fn timed_flush_holds_ambiguous_pseudonym_suffix() {
+        let mut buffer = StreamBuffer::new(4096);
+
+        assert_eq!(buffer.push("Bonjour PERSON_1"), None);
+        assert_eq!(buffer.flush_if_safe(), None);
+        assert_eq!(buffer.push("2."), Some("Bonjour PERSON_12.".to_string()));
     }
 }
