@@ -58,9 +58,14 @@ impl Embedder {
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| Error::Embed(format!("tokenizer load: {e}")))?;
 
+        // F32 is the default: the e5-small BERT forward pass on CPU can
+        // produce degenerate (NaN) embeddings in F16 — overflow in the
+        // attention softmax — which collapses recall@10 to 0. F16 halves
+        // embedder RSS (~236 MB) and stays available as an explicit opt-in
+        // for callers who validate recall on their own corpus.
         let dtype = match cfg.embedder_dtype.as_deref() {
-            Some("f32") => DType::F32,
-            _ => DType::F16,
+            Some("f16") => DType::F16,
+            _ => DType::F32,
         };
         // SAFETY: hf-hub writes the safetensors file before returning the path
         // and we don't mutate it for the lifetime of the mmap.
@@ -185,19 +190,20 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "requires HF cache populated"]
-    async fn loads_with_f16_default() {
+    async fn loads_with_f32_default() {
         let cfg = AnnoRagConfig::default();
-        let e = Embedder::load(&cfg).await.expect("f16 load");
+        assert!(cfg.embedder_dtype.is_none(), "default leaves dtype unset");
+        let e = Embedder::load(&cfg).await.expect("f32 load");
         let v = e.embed_batch(&["Bonjour".into()]).expect("embed");
         assert_eq!(v[0].len(), 384);
     }
 
     #[tokio::test]
     #[ignore = "requires HF cache populated"]
-    async fn loads_with_f32_override() {
+    async fn loads_with_f16_opt_in() {
         let mut cfg = AnnoRagConfig::default();
-        cfg.embedder_dtype = Some("f32".into());
-        let e = Embedder::load(&cfg).await.expect("f32 load");
+        cfg.embedder_dtype = Some("f16".into());
+        let e = Embedder::load(&cfg).await.expect("f16 load");
         let v = e.embed_batch(&["Bonjour".into()]).expect("embed");
         assert_eq!(v[0].len(), 384);
     }

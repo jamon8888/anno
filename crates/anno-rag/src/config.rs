@@ -46,8 +46,10 @@ pub struct AnnoRagConfig {
     #[serde(default)]
     pub tesseract_path: Option<PathBuf>,
 
-    /// Embedder weight dtype. "f16" (default v0.5+) or "f32" (fallback).
-    /// Read by `Embedder::load`. None → "f16".
+    /// Embedder weight dtype. `"f32"` (default) or `"f16"` (experimental
+    /// opt-in). Read by `Embedder::load`. `None` → `"f32"`. F16 halves
+    /// embedder RSS (~236 MB) but the e5-small BERT forward can produce
+    /// degenerate (NaN) vectors on CPU — opt-in until numerically stable.
     #[serde(default)]
     pub embedder_dtype: Option<String>,
 }
