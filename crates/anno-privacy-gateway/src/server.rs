@@ -507,6 +507,41 @@ mod tests {
         axum::response::Sse::new(stream)
     }
 
+    async fn mock_stream_leaky_messages(
+        State(state): State<MockState>,
+        Json(body): Json<Value>,
+    ) -> axum::response::Sse<
+        impl futures_util::Stream<
+            Item = std::result::Result<axum::response::sse::Event, std::convert::Infallible>,
+        >,
+    > {
+        *state.captured.lock().await = Some(body);
+        let stream = futures_util::stream::iter(vec![
+            Ok(axum::response::sse::Event::default()
+                .event("content_block_delta")
+                .data(json!({"type":"content_block_delta","delta":{"type":"text_delta","text":"Le fournisseur invente Jean "}}).to_string())),
+            Ok(axum::response::sse::Event::default()
+                .event("content_block_delta")
+                .data(json!({"type":"content_block_delta","delta":{"type":"text_delta","text":"Martin et jean.martin@example.com."}}).to_string())),
+        ]);
+        axum::response::Sse::new(stream)
+    }
+
+    async fn mock_stream_malformed_messages(
+        State(state): State<MockState>,
+        Json(body): Json<Value>,
+    ) -> axum::response::Sse<
+        impl futures_util::Stream<
+            Item = std::result::Result<axum::response::sse::Event, std::convert::Infallible>,
+        >,
+    > {
+        *state.captured.lock().await = Some(body);
+        let stream = futures_util::stream::iter(vec![Ok(axum::response::sse::Event::default()
+            .event("content_block_delta")
+            .data("{not-json"))]);
+        axum::response::Sse::new(stream)
+    }
+
     async fn spawn(app: Router) -> SocketAddr {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -762,6 +797,114 @@ mod tests {
         assert!(!body.contains("Jean"));
         assert!(!body.contains("Martin"));
         assert!(body.contains("[REDACTED]"));
+    }
+
+    #[tokio::test]
+    async fn stream_buffered_scan_redacts_fresh_pii_split_across_chunks() {
+        let captured = Arc::new(Mutex::new(None));
+        let upstream = Router::new()
+            .route("/v1/messages", post(mock_stream_leaky_messages))
+            .with_state(MockState {
+                captured: Arc::clone(&captured),
+            });
+        let upstream_addr = spawn(upstream).await;
+
+        let config = GatewayConfig {
+            upstream_anthropic_base: format!("http://{upstream_addr}"),
+            streaming: crate::config::StreamingMode::Enabled,
+            stream_privacy: crate::config::StreamPrivacyMode::BufferedScan,
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+
+        let body = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/v1/messages"))
+            .json(&json!({
+                "model": "claude",
+                "stream": true,
+                "messages": [{"role": "user", "content": "Bonjour"}]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert!(!body.contains("Jean Martin"));
+        assert!(!body.contains("jean.martin@example.com"));
+        assert!(body.contains("[REDACTED]"));
+    }
+
+    #[tokio::test]
+    async fn stream_token_rehydrate_only_does_not_scan_fresh_pii() {
+        let captured = Arc::new(Mutex::new(None));
+        let upstream = Router::new()
+            .route("/v1/messages", post(mock_stream_leaky_messages))
+            .with_state(MockState {
+                captured: Arc::clone(&captured),
+            });
+        let upstream_addr = spawn(upstream).await;
+
+        let config = GatewayConfig {
+            upstream_anthropic_base: format!("http://{upstream_addr}"),
+            streaming: crate::config::StreamingMode::Enabled,
+            stream_privacy: crate::config::StreamPrivacyMode::TokenRehydrateOnly,
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+
+        let body = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/v1/messages"))
+            .json(&json!({
+                "model": "claude",
+                "stream": true,
+                "messages": [{"role": "user", "content": "Bonjour"}]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert!(body.contains("Jean Martin"));
+        assert!(body.contains("jean.martin@example.com"));
+    }
+
+    #[tokio::test]
+    async fn malformed_stream_emits_error_event() {
+        let captured = Arc::new(Mutex::new(None));
+        let upstream = Router::new()
+            .route("/v1/messages", post(mock_stream_malformed_messages))
+            .with_state(MockState {
+                captured: Arc::clone(&captured),
+            });
+        let upstream_addr = spawn(upstream).await;
+
+        let config = GatewayConfig {
+            upstream_anthropic_base: format!("http://{upstream_addr}"),
+            streaming: crate::config::StreamingMode::Enabled,
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+
+        let body = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/v1/messages"))
+            .json(&json!({
+                "model": "claude",
+                "stream": true,
+                "messages": [{"role": "user", "content": "Bonjour"}]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert!(body.contains("event: error"));
+        assert!(body.contains("stream_parse_error"));
     }
 
     #[tokio::test]
