@@ -1,7 +1,7 @@
 //! Extract full text content from selected tree nodes for RAG context.
 
-use crate::tree::{TreeIndex, ExtractedContent};
 use crate::indexer::ParsedPage;
+use crate::tree::{ExtractedContent, TreeIndex};
 use anyhow::Result;
 
 /// Extracts full text from tree nodes identified by search.
@@ -18,7 +18,8 @@ impl ContentExtractor {
 
         for id in node_ids {
             if let Some(node) = tree.find_node(id) {
-                let text: String = pages.iter()
+                let text: String = pages
+                    .iter()
                     .filter(|p| p.page_number >= node.pages.0 && p.page_number <= node.pages.1)
                     .map(|p| p.text.as_str())
                     .collect::<Vec<_>>()

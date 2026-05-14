@@ -1,4 +1,5 @@
 //! Phase 3.5: IoBinding-mode 8-session inference pipeline.
+#![allow(missing_docs)] // implementation internals; public API is on GLiNER2Fastino in mod.rs
 //!
 //! Adapted from SemplificaAI/gliner2-rs/rust_component/src/lib_v2.rs:285-660
 //! (`Gliner2EngineV2::extract_iobinding`, Apache-2.0). See
@@ -73,73 +74,76 @@ pub(crate) fn run_encoder_io(
     use ndarray::Array2;
 
     let seq_len = record.input_ids.len();
-    let input_ids: Array2<i64> = Array2::from_shape_vec(
-        (1, seq_len),
-        record.input_ids.clone(),
-    )
-    .map_err(|e| Error::Tokenizer(format!("encoder input_ids reshape: {e}")))?;
-    let attn_mask: Array2<i64> = Array2::from_shape_vec(
-        (1, seq_len),
-        record.attention_mask.clone(),
-    )
-    .map_err(|e| Error::Tokenizer(format!("encoder attn reshape: {e}")))?;
+    let input_ids: Array2<i64> = Array2::from_shape_vec((1, seq_len), record.input_ids.clone())
+        .map_err(|e| Error::Tokenizer(format!("encoder input_ids reshape: {e}")))?;
+    let attn_mask: Array2<i64> =
+        Array2::from_shape_vec((1, seq_len), record.attention_mask.clone())
+            .map_err(|e| Error::Tokenizer(format!("encoder attn reshape: {e}")))?;
 
     let input_ids_t = crate::backends::ort_compat::tensor_from_ndarray(input_ids)
         .map_err(|e| Error::Tokenizer(format!("encoder input_ids tensor: {e}")))?;
     let attn_mask_t = crate::backends::ort_compat::tensor_from_ndarray(attn_mask)
         .map_err(|e| Error::Tokenizer(format!("encoder attn tensor: {e}")))?;
 
-    sessions.encoder.with_session(|s| -> Result<EncoderOutputIo, Error> {
-        // Resolve output name. Different fastino exports ship different
-        // names — match the standard pipeline's priority order.
-        let output_name = resolve_output_name(s, &["hidden_states", "last_hidden_state", "output"]);
+    sessions
+        .encoder
+        .with_session(|s| -> Result<EncoderOutputIo, Error> {
+            // Resolve output name. Different fastino exports ship different
+            // names — match the standard pipeline's priority order.
+            let output_name =
+                resolve_output_name(s, &["hidden_states", "last_hidden_state", "output"]);
 
-        let mut binding = s
-            .create_binding()
-            .map_err(|e| Error::Tokenizer(format!("encoder create_binding: {e}")))?;
-        binding
-            .bind_input("input_ids", &input_ids_t)
-            .map_err(|e| Error::Tokenizer(format!("encoder bind input_ids: {e}")))?;
-        binding
-            .bind_input("attention_mask", &attn_mask_t)
-            .map_err(|e| Error::Tokenizer(format!("encoder bind attention_mask: {e}")))?;
-        binding
-            .bind_output_to_device(&output_name, device_mem)
-            .map_err(|e| Error::Tokenizer(format!("encoder bind_output_to_device: {e}")))?;
+            let mut binding = s
+                .create_binding()
+                .map_err(|e| Error::Tokenizer(format!("encoder create_binding: {e}")))?;
+            binding
+                .bind_input("input_ids", &input_ids_t)
+                .map_err(|e| Error::Tokenizer(format!("encoder bind input_ids: {e}")))?;
+            binding
+                .bind_input("attention_mask", &attn_mask_t)
+                .map_err(|e| Error::Tokenizer(format!("encoder bind attention_mask: {e}")))?;
+            binding
+                .bind_output_to_device(&output_name, device_mem)
+                .map_err(|e| Error::Tokenizer(format!("encoder bind_output_to_device: {e}")))?;
 
-        let outputs = s
-            .run_binding(&binding)
-            .map_err(|e| Error::Tokenizer(format!("encoder run_binding: {e}")))?;
+            let outputs = s
+                .run_binding(&binding)
+                .map_err(|e| Error::Tokenizer(format!("encoder run_binding: {e}")))?;
 
-        // Take the bound output by name. The returned `Value` owns its
-        // buffer and is safe to return out of the with_session closure.
-        let hidden_states = outputs
-            .into_iter()
-            .find_map(|(name, val)| {
-                if &*name == output_name.as_str() {
-                    Some(val)
-                } else {
-                    None
-                }
+            // Take the bound output by name. The returned `Value` owns its
+            // buffer and is safe to return out of the with_session closure.
+            let hidden_states = outputs
+                .into_iter()
+                .find_map(|(name, val)| {
+                    if name == output_name.as_str() {
+                        Some(val)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    Error::Tokenizer(format!(
+                        "encoder: output '{output_name}' not present in run_binding result"
+                    ))
+                })?;
+
+            Ok(EncoderOutputIo {
+                hidden_states,
+                output_name,
             })
-            .ok_or_else(|| Error::Tokenizer(format!(
-                "encoder: output '{output_name}' not present in run_binding result"
-            )))?;
-
-        Ok(EncoderOutputIo { hidden_states, output_name })
-    })
+        })
 }
 
 /// Look up an output's name in priority order. Falls back to the
 /// session's first output if none of the candidates match — matches
 /// the standard pipeline's behavior so IoBinding works on any export
 /// the standard pipeline does.
-fn resolve_output_name(
-    session: &ort::session::Session,
-    candidates: &[&str],
-) -> String {
-    let session_outputs: Vec<String> =
-        session.outputs().iter().map(|o| o.name().to_string()).collect();
+fn resolve_output_name(session: &ort::session::Session, candidates: &[&str]) -> String {
+    let session_outputs: Vec<String> = session
+        .outputs()
+        .iter()
+        .map(|o| o.name().to_string())
+        .collect();
     for &c in candidates {
         if session_outputs.iter().any(|n| n == c) {
             return c.to_string();
@@ -199,7 +203,9 @@ pub(crate) fn run_token_gather_io(
 
     let num_words = record.word_to_token_maps.len();
     if num_words == 0 {
-        return Err(Error::Tokenizer("token_gather_io: 0 words in record".into()));
+        return Err(Error::Tokenizer(
+            "token_gather_io: 0 words in record".into(),
+        ));
     }
     let word_starts: Vec<i64> = record
         .word_to_token_maps
@@ -210,31 +216,46 @@ pub(crate) fn run_token_gather_io(
     let word_idx_t = crate::backends::ort_compat::tensor_from_ndarray(word_idx_arr)
         .map_err(|e| Error::Tokenizer(format!("token_gather_io word_idx tensor: {e}")))?;
 
-    sessions.token_gather.with_session(|s| -> Result<TokenGatherOutputIo, Error> {
-        let output_name = resolve_output_name(s, &["text_embs"]);
-        let mut binding = s
-            .create_binding()
-            .map_err(|e| Error::Tokenizer(format!("token_gather_io create_binding: {e}")))?;
-        binding
-            .bind_input("last_hidden_state", &encoder_out.hidden_states)
-            .map_err(|e| Error::Tokenizer(format!("token_gather_io bind last_hidden_state: {e}")))?;
-        binding
-            .bind_input("word_indices", &word_idx_t)
-            .map_err(|e| Error::Tokenizer(format!("token_gather_io bind word_indices: {e}")))?;
-        binding
-            .bind_output_to_device(&output_name, device_mem)
-            .map_err(|e| Error::Tokenizer(format!("token_gather_io bind_output: {e}")))?;
-        let outputs = s
-            .run_binding(&binding)
-            .map_err(|e| Error::Tokenizer(format!("token_gather_io run_binding: {e}")))?;
-        let text_embs = outputs
-            .into_iter()
-            .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
-            .ok_or_else(|| Error::Tokenizer(format!(
-                "token_gather_io: output '{output_name}' not present"
-            )))?;
-        Ok(TokenGatherOutputIo { text_embs, output_name })
-    })
+    sessions
+        .token_gather
+        .with_session(|s| -> Result<TokenGatherOutputIo, Error> {
+            let output_name = resolve_output_name(s, &["text_embs"]);
+            let mut binding = s
+                .create_binding()
+                .map_err(|e| Error::Tokenizer(format!("token_gather_io create_binding: {e}")))?;
+            binding
+                .bind_input("last_hidden_state", &encoder_out.hidden_states)
+                .map_err(|e| {
+                    Error::Tokenizer(format!("token_gather_io bind last_hidden_state: {e}"))
+                })?;
+            binding
+                .bind_input("word_indices", &word_idx_t)
+                .map_err(|e| Error::Tokenizer(format!("token_gather_io bind word_indices: {e}")))?;
+            binding
+                .bind_output_to_device(&output_name, device_mem)
+                .map_err(|e| Error::Tokenizer(format!("token_gather_io bind_output: {e}")))?;
+            let outputs = s
+                .run_binding(&binding)
+                .map_err(|e| Error::Tokenizer(format!("token_gather_io run_binding: {e}")))?;
+            let text_embs = outputs
+                .into_iter()
+                .find_map(|(name, val)| {
+                    if name == output_name.as_str() {
+                        Some(val)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    Error::Tokenizer(format!(
+                        "token_gather_io: output '{output_name}' not present"
+                    ))
+                })?;
+            Ok(TokenGatherOutputIo {
+                text_embs,
+                output_name,
+            })
+        })
 }
 
 /// Run span_rep via IoBinding. Inputs:
@@ -254,31 +275,42 @@ pub(crate) fn run_span_rep_io(
     let span_idx_t = crate::backends::ort_compat::tensor_from_ndarray(span_idx)
         .map_err(|e| Error::Tokenizer(format!("span_rep_io span_idx tensor: {e}")))?;
 
-    sessions.span_rep.with_session(|s| -> Result<SpanRepOutputIo, Error> {
-        let output_name = resolve_output_name(s, &["span_embeddings", "span_embs"]);
-        let mut binding = s
-            .create_binding()
-            .map_err(|e| Error::Tokenizer(format!("span_rep_io create_binding: {e}")))?;
-        binding
-            .bind_input("hidden_states", &tg_out.text_embs)
-            .map_err(|e| Error::Tokenizer(format!("span_rep_io bind hidden_states: {e}")))?;
-        binding
-            .bind_input("span_idx", &span_idx_t)
-            .map_err(|e| Error::Tokenizer(format!("span_rep_io bind span_idx: {e}")))?;
-        binding
-            .bind_output_to_device(&output_name, device_mem)
-            .map_err(|e| Error::Tokenizer(format!("span_rep_io bind_output: {e}")))?;
-        let outputs = s
-            .run_binding(&binding)
-            .map_err(|e| Error::Tokenizer(format!("span_rep_io run_binding: {e}")))?;
-        let span_embs = outputs
-            .into_iter()
-            .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
-            .ok_or_else(|| Error::Tokenizer(format!(
-                "span_rep_io: output '{output_name}' not present"
-            )))?;
-        Ok(SpanRepOutputIo { span_embs, output_name })
-    })
+    sessions
+        .span_rep
+        .with_session(|s| -> Result<SpanRepOutputIo, Error> {
+            let output_name = resolve_output_name(s, &["span_embeddings", "span_embs"]);
+            let mut binding = s
+                .create_binding()
+                .map_err(|e| Error::Tokenizer(format!("span_rep_io create_binding: {e}")))?;
+            binding
+                .bind_input("hidden_states", &tg_out.text_embs)
+                .map_err(|e| Error::Tokenizer(format!("span_rep_io bind hidden_states: {e}")))?;
+            binding
+                .bind_input("span_idx", &span_idx_t)
+                .map_err(|e| Error::Tokenizer(format!("span_rep_io bind span_idx: {e}")))?;
+            binding
+                .bind_output_to_device(&output_name, device_mem)
+                .map_err(|e| Error::Tokenizer(format!("span_rep_io bind_output: {e}")))?;
+            let outputs = s
+                .run_binding(&binding)
+                .map_err(|e| Error::Tokenizer(format!("span_rep_io run_binding: {e}")))?;
+            let span_embs = outputs
+                .into_iter()
+                .find_map(|(name, val)| {
+                    if name == output_name.as_str() {
+                        Some(val)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    Error::Tokenizer(format!("span_rep_io: output '{output_name}' not present"))
+                })?;
+            Ok(SpanRepOutputIo {
+                span_embs,
+                output_name,
+            })
+        })
 }
 
 /// Run schema_gather via IoBinding. Inputs:
@@ -308,61 +340,67 @@ pub(crate) fn run_schema_gather_io(
     let idx_t = crate::backends::ort_compat::tensor_from_ndarray(idx_arr)
         .map_err(|e| Error::Tokenizer(format!("schema_gather_io idx tensor: {e}")))?;
 
-    sessions.schema_gather.with_session(|s| -> Result<SchemaGatherOutputIo, Error> {
-        // schema_gather has 2 outputs in fixed order: pc_emb (idx 0),
-        // field_embs (idx 1). Resolve by position via the session's
-        // outputs() metadata.
-        let outs: Vec<String> = s.outputs().iter().map(|o| o.name().to_string()).collect();
-        if outs.len() < 2 {
-            return Err(Error::Tokenizer(format!(
-                "schema_gather_io: expected 2 outputs, found {}",
-                outs.len()
-            )));
-        }
-        let pc_output_name = outs[0].clone();
-        let field_output_name = outs[1].clone();
+    sessions
+        .schema_gather
+        .with_session(|s| -> Result<SchemaGatherOutputIo, Error> {
+            // schema_gather has 2 outputs in fixed order: pc_emb (idx 0),
+            // field_embs (idx 1). Resolve by position via the session's
+            // outputs() metadata.
+            let outs: Vec<String> = s.outputs().iter().map(|o| o.name().to_string()).collect();
+            if outs.len() < 2 {
+                return Err(Error::Tokenizer(format!(
+                    "schema_gather_io: expected 2 outputs, found {}",
+                    outs.len()
+                )));
+            }
+            let pc_output_name = outs[0].clone();
+            let field_output_name = outs[1].clone();
 
-        let mut binding = s
-            .create_binding()
-            .map_err(|e| Error::Tokenizer(format!("schema_gather_io create_binding: {e}")))?;
-        binding
-            .bind_input("last_hidden_state", &encoder_out.hidden_states)
-            .map_err(|e| Error::Tokenizer(format!("schema_gather_io bind last_hidden_state: {e}")))?;
-        binding
-            .bind_input("schema_indices", &idx_t)
-            .map_err(|e| Error::Tokenizer(format!("schema_gather_io bind schema_indices: {e}")))?;
-        binding
-            .bind_output_to_device(&pc_output_name, device_mem)
-            .map_err(|e| Error::Tokenizer(format!("schema_gather_io bind pc_emb: {e}")))?;
-        binding
-            .bind_output_to_device(&field_output_name, device_mem)
-            .map_err(|e| Error::Tokenizer(format!("schema_gather_io bind field_embs: {e}")))?;
-        let outputs = s
-            .run_binding(&binding)
-            .map_err(|e| Error::Tokenizer(format!("schema_gather_io run_binding: {e}")))?;
+            let mut binding = s
+                .create_binding()
+                .map_err(|e| Error::Tokenizer(format!("schema_gather_io create_binding: {e}")))?;
+            binding
+                .bind_input("last_hidden_state", &encoder_out.hidden_states)
+                .map_err(|e| {
+                    Error::Tokenizer(format!("schema_gather_io bind last_hidden_state: {e}"))
+                })?;
+            binding.bind_input("schema_indices", &idx_t).map_err(|e| {
+                Error::Tokenizer(format!("schema_gather_io bind schema_indices: {e}"))
+            })?;
+            binding
+                .bind_output_to_device(&pc_output_name, device_mem)
+                .map_err(|e| Error::Tokenizer(format!("schema_gather_io bind pc_emb: {e}")))?;
+            binding
+                .bind_output_to_device(&field_output_name, device_mem)
+                .map_err(|e| Error::Tokenizer(format!("schema_gather_io bind field_embs: {e}")))?;
+            let outputs = s
+                .run_binding(&binding)
+                .map_err(|e| Error::Tokenizer(format!("schema_gather_io run_binding: {e}")))?;
 
-        // Drain both outputs by name. Order isn't guaranteed in
-        // SessionOutputs iteration, so collect into HashMap then take.
-        let mut by_name: std::collections::HashMap<String, DynValue> =
-            outputs.into_iter().map(|(n, v)| (n.to_string(), v)).collect();
-        let pc_emb = by_name.remove(&pc_output_name).ok_or_else(|| {
-            Error::Tokenizer(format!(
-                "schema_gather_io: pc_emb output '{pc_output_name}' missing from result"
-            ))
-        })?;
-        let field_embs = by_name.remove(&field_output_name).ok_or_else(|| {
-            Error::Tokenizer(format!(
-                "schema_gather_io: field_embs output '{field_output_name}' missing from result"
-            ))
-        })?;
+            // Drain both outputs by name. Order isn't guaranteed in
+            // SessionOutputs iteration, so collect into HashMap then take.
+            let mut by_name: std::collections::HashMap<String, DynValue> = outputs
+                .into_iter()
+                .map(|(n, v)| (n.to_string(), v))
+                .collect();
+            let pc_emb = by_name.remove(&pc_output_name).ok_or_else(|| {
+                Error::Tokenizer(format!(
+                    "schema_gather_io: pc_emb output '{pc_output_name}' missing from result"
+                ))
+            })?;
+            let field_embs = by_name.remove(&field_output_name).ok_or_else(|| {
+                Error::Tokenizer(format!(
+                    "schema_gather_io: field_embs output '{field_output_name}' missing from result"
+                ))
+            })?;
 
-        Ok(SchemaGatherOutputIo {
-            pc_emb,
-            field_embs,
-            pc_output_name,
-            field_output_name,
+            Ok(SchemaGatherOutputIo {
+                pc_emb,
+                field_embs,
+                pc_output_name,
+                field_output_name,
+            })
         })
-    })
 }
 
 /// Run `count_pred_argmax` via IoBinding. Returns the predicted instance
@@ -377,36 +415,44 @@ pub(crate) fn run_count_pred_argmax_io(
     sg_out: &SchemaGatherOutputIo,
     cpu_out_mem: &MemoryInfo,
 ) -> Result<usize, Error> {
-    sessions.count_pred_argmax.with_session(|s| -> Result<usize, Error> {
-        let output_name = resolve_output_name(s, &["count"]);
-        let mut binding = s
-            .create_binding()
-            .map_err(|e| Error::Tokenizer(format!("count_pred_io create_binding: {e}")))?;
-        binding
-            .bind_input("pc_emb", &sg_out.pc_emb)
-            .map_err(|e| Error::Tokenizer(format!("count_pred_io bind pc_emb: {e}")))?;
-        binding
-            .bind_output_to_device(&output_name, cpu_out_mem)
-            .map_err(|e| Error::Tokenizer(format!("count_pred_io bind_output: {e}")))?;
-        let outputs = s
-            .run_binding(&binding)
-            .map_err(|e| Error::Tokenizer(format!("count_pred_io run_binding: {e}")))?;
+    sessions
+        .count_pred_argmax
+        .with_session(|s| -> Result<usize, Error> {
+            let output_name = resolve_output_name(s, &["count"]);
+            let mut binding = s
+                .create_binding()
+                .map_err(|e| Error::Tokenizer(format!("count_pred_io create_binding: {e}")))?;
+            binding
+                .bind_input("pc_emb", &sg_out.pc_emb)
+                .map_err(|e| Error::Tokenizer(format!("count_pred_io bind pc_emb: {e}")))?;
+            binding
+                .bind_output_to_device(&output_name, cpu_out_mem)
+                .map_err(|e| Error::Tokenizer(format!("count_pred_io bind_output: {e}")))?;
+            let outputs = s
+                .run_binding(&binding)
+                .map_err(|e| Error::Tokenizer(format!("count_pred_io run_binding: {e}")))?;
 
-        // Extract the scalar i64 from the bound output. The output is
-        // CPU-resident so try_extract_tensor returns a host slice
-        // without device-to-host copy.
-        let count_val = outputs
-            .into_iter()
-            .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
-            .ok_or_else(|| Error::Tokenizer(format!(
-                "count_pred_io: output '{output_name}' not present"
-            )))?;
-        let (_, cow) = count_val
-            .try_extract_tensor::<i64>()
-            .map_err(|e| Error::Tokenizer(format!("count_pred_io extract: {e}")))?;
-        let val = cow.iter().next().copied().unwrap_or(0);
-        Ok(val.max(0) as usize)
-    })
+            // Extract the scalar i64 from the bound output. The output is
+            // CPU-resident so try_extract_tensor returns a host slice
+            // without device-to-host copy.
+            let count_val = outputs
+                .into_iter()
+                .find_map(|(name, val)| {
+                    if name == output_name.as_str() {
+                        Some(val)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    Error::Tokenizer(format!("count_pred_io: output '{output_name}' not present"))
+                })?;
+            let (_, cow) = count_val
+                .try_extract_tensor::<i64>()
+                .map_err(|e| Error::Tokenizer(format!("count_pred_io extract: {e}")))?;
+            let val = cow.iter().next().copied().unwrap_or(0);
+            Ok(val.max(0) as usize)
+        })
 }
 
 /// Run count_lstm_fixed via IoBinding. Input: device-resident
@@ -418,28 +464,39 @@ pub(crate) fn run_count_lstm_fixed_io(
     sg_out: &SchemaGatherOutputIo,
     device_mem: &MemoryInfo,
 ) -> Result<CountLstmOutputIo, Error> {
-    sessions.count_lstm_fixed.with_session(|s| -> Result<CountLstmOutputIo, Error> {
-        let output_name = resolve_output_name(s, &["struct_proj"]);
-        let mut binding = s
-            .create_binding()
-            .map_err(|e| Error::Tokenizer(format!("count_lstm_io create_binding: {e}")))?;
-        binding
-            .bind_input("field_embs", &sg_out.field_embs)
-            .map_err(|e| Error::Tokenizer(format!("count_lstm_io bind field_embs: {e}")))?;
-        binding
-            .bind_output_to_device(&output_name, device_mem)
-            .map_err(|e| Error::Tokenizer(format!("count_lstm_io bind_output: {e}")))?;
-        let outputs = s
-            .run_binding(&binding)
-            .map_err(|e| Error::Tokenizer(format!("count_lstm_io run_binding: {e}")))?;
-        let struct_proj = outputs
-            .into_iter()
-            .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
-            .ok_or_else(|| Error::Tokenizer(format!(
-                "count_lstm_io: output '{output_name}' not present"
-            )))?;
-        Ok(CountLstmOutputIo { struct_proj, output_name })
-    })
+    sessions
+        .count_lstm_fixed
+        .with_session(|s| -> Result<CountLstmOutputIo, Error> {
+            let output_name = resolve_output_name(s, &["struct_proj"]);
+            let mut binding = s
+                .create_binding()
+                .map_err(|e| Error::Tokenizer(format!("count_lstm_io create_binding: {e}")))?;
+            binding
+                .bind_input("field_embs", &sg_out.field_embs)
+                .map_err(|e| Error::Tokenizer(format!("count_lstm_io bind field_embs: {e}")))?;
+            binding
+                .bind_output_to_device(&output_name, device_mem)
+                .map_err(|e| Error::Tokenizer(format!("count_lstm_io bind_output: {e}")))?;
+            let outputs = s
+                .run_binding(&binding)
+                .map_err(|e| Error::Tokenizer(format!("count_lstm_io run_binding: {e}")))?;
+            let struct_proj = outputs
+                .into_iter()
+                .find_map(|(name, val)| {
+                    if name == output_name.as_str() {
+                        Some(val)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    Error::Tokenizer(format!("count_lstm_io: output '{output_name}' not present"))
+                })?;
+            Ok(CountLstmOutputIo {
+                struct_proj,
+                output_name,
+            })
+        })
 }
 
 /// Run scorer via IoBinding. Inputs:
@@ -462,42 +519,46 @@ pub(crate) fn run_scorer_io(
     cl_out: &CountLstmOutputIo,
     device_mem: &MemoryInfo,
 ) -> Result<super::pipeline::ScorerOutput, Error> {
-    let result: ndarray::ArrayD<f32> = sessions.scorer.with_session(
-        |s| -> Result<_, Error> {
-            let output_name = resolve_output_name(s, &["entity_scores", "scores"]);
-            let mut binding = s
-                .create_binding()
-                .map_err(|e| Error::Tokenizer(format!("scorer_io create_binding: {e}")))?;
-            binding
-                .bind_input("span_embeddings", &sr_out.span_embs)
-                .map_err(|e| Error::Tokenizer(format!("scorer_io bind span_embeddings: {e}")))?;
-            binding
-                .bind_input("struct_proj", &cl_out.struct_proj)
-                .map_err(|e| Error::Tokenizer(format!("scorer_io bind struct_proj: {e}")))?;
-            binding
-                .bind_output_to_device(&output_name, device_mem)
-                .map_err(|e| Error::Tokenizer(format!("scorer_io bind_output: {e}")))?;
-            let outputs = s
-                .run_binding(&binding)
-                .map_err(|e| Error::Tokenizer(format!("scorer_io run_binding: {e}")))?;
-            let scores_val = outputs
-                .into_iter()
-                .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
-                .ok_or_else(|| Error::Tokenizer(format!(
-                    "scorer_io: output '{output_name}' not present"
-                )))?;
-            // Read back to host. CPU-allocated device_mem means this is
-            // already host-side; for a future GPU device_mem this would
-            // be the implicit device→host copy.
-            let (shape, cow) = scores_val
-                .try_extract_tensor::<f32>()
-                .map_err(|e| Error::Tokenizer(format!("scorer_io extract: {e}")))?;
-            let data: Vec<f32> = cow.to_vec();
-            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-            ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                .map_err(|e| Error::Tokenizer(format!("scorer_io reshape: {e}")))
-        },
-    )?;
+    let result: ndarray::ArrayD<f32> = sessions.scorer.with_session(|s| -> Result<_, Error> {
+        let output_name = resolve_output_name(s, &["entity_scores", "scores"]);
+        let mut binding = s
+            .create_binding()
+            .map_err(|e| Error::Tokenizer(format!("scorer_io create_binding: {e}")))?;
+        binding
+            .bind_input("span_embeddings", &sr_out.span_embs)
+            .map_err(|e| Error::Tokenizer(format!("scorer_io bind span_embeddings: {e}")))?;
+        binding
+            .bind_input("struct_proj", &cl_out.struct_proj)
+            .map_err(|e| Error::Tokenizer(format!("scorer_io bind struct_proj: {e}")))?;
+        binding
+            .bind_output_to_device(&output_name, device_mem)
+            .map_err(|e| Error::Tokenizer(format!("scorer_io bind_output: {e}")))?;
+        let outputs = s
+            .run_binding(&binding)
+            .map_err(|e| Error::Tokenizer(format!("scorer_io run_binding: {e}")))?;
+        let scores_val = outputs
+            .into_iter()
+            .find_map(|(name, val)| {
+                if name == output_name.as_str() {
+                    Some(val)
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| {
+                Error::Tokenizer(format!("scorer_io: output '{output_name}' not present"))
+            })?;
+        // Read back to host. CPU-allocated device_mem means this is
+        // already host-side; for a future GPU device_mem this would
+        // be the implicit device→host copy.
+        let (shape, cow) = scores_val
+            .try_extract_tensor::<f32>()
+            .map_err(|e| Error::Tokenizer(format!("scorer_io extract: {e}")))?;
+        let data: Vec<f32> = cow.to_vec();
+        let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+        ndarray::ArrayD::from_shape_vec(shape_usize, data)
+            .map_err(|e| Error::Tokenizer(format!("scorer_io reshape: {e}")))
+    })?;
 
     let scores: ndarray::Array4<f32> = result
         .into_dimensionality::<ndarray::Ix4>()
@@ -519,8 +580,8 @@ pub(crate) fn run_classifier_io(
     sg_out: &SchemaGatherOutputIo,
     device_mem: &MemoryInfo,
 ) -> Result<Vec<f32>, Error> {
-    use ndarray::Array4;
     use super::pipeline::MAX_WIDTH;
+    use ndarray::Array4;
 
     // Extract field_embs to host (small tensor: [num_labels, H]).
     let (fe_shape, fe_cow) = sg_out
@@ -548,34 +609,41 @@ pub(crate) fn run_classifier_io(
     let pad_t = crate::backends::ort_compat::tensor_from_ndarray(padded)
         .map_err(|e| Error::Tokenizer(format!("classifier_io padded tensor: {e}")))?;
 
-    let logits: ndarray::ArrayD<f32> = sessions.classifier.with_session(|s| -> Result<_, Error> {
-        let output_name = resolve_output_name(s, &["cls_logits", "logits"]);
-        let mut binding = s
-            .create_binding()
-            .map_err(|e| Error::Tokenizer(format!("classifier_io create_binding: {e}")))?;
-        binding
-            .bind_input("span_embeddings", &pad_t)
-            .map_err(|e| Error::Tokenizer(format!("classifier_io bind span_embeddings: {e}")))?;
-        binding
-            .bind_output_to_device(&output_name, device_mem)
-            .map_err(|e| Error::Tokenizer(format!("classifier_io bind_output: {e}")))?;
-        let outputs = s
-            .run_binding(&binding)
-            .map_err(|e| Error::Tokenizer(format!("classifier_io run_binding: {e}")))?;
-        let logits_val = outputs
-            .into_iter()
-            .find_map(|(name, val)| if &*name == output_name.as_str() { Some(val) } else { None })
-            .ok_or_else(|| Error::Tokenizer(format!(
-                "classifier_io: output '{output_name}' not present"
-            )))?;
-        let (shape, cow) = logits_val
-            .try_extract_tensor::<f32>()
-            .map_err(|e| Error::Tokenizer(format!("classifier_io extract: {e}")))?;
-        let data: Vec<f32> = cow.to_vec();
-        let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-        ndarray::ArrayD::from_shape_vec(shape_usize, data)
-            .map_err(|e| Error::Tokenizer(format!("classifier_io reshape: {e}")))
-    })?;
+    let logits: ndarray::ArrayD<f32> =
+        sessions.classifier.with_session(|s| -> Result<_, Error> {
+            let output_name = resolve_output_name(s, &["cls_logits", "logits"]);
+            let mut binding = s
+                .create_binding()
+                .map_err(|e| Error::Tokenizer(format!("classifier_io create_binding: {e}")))?;
+            binding.bind_input("span_embeddings", &pad_t).map_err(|e| {
+                Error::Tokenizer(format!("classifier_io bind span_embeddings: {e}"))
+            })?;
+            binding
+                .bind_output_to_device(&output_name, device_mem)
+                .map_err(|e| Error::Tokenizer(format!("classifier_io bind_output: {e}")))?;
+            let outputs = s
+                .run_binding(&binding)
+                .map_err(|e| Error::Tokenizer(format!("classifier_io run_binding: {e}")))?;
+            let logits_val = outputs
+                .into_iter()
+                .find_map(|(name, val)| {
+                    if name == output_name.as_str() {
+                        Some(val)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    Error::Tokenizer(format!("classifier_io: output '{output_name}' not present"))
+                })?;
+            let (shape, cow) = logits_val
+                .try_extract_tensor::<f32>()
+                .map_err(|e| Error::Tokenizer(format!("classifier_io extract: {e}")))?;
+            let data: Vec<f32> = cow.to_vec();
+            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+            ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                .map_err(|e| Error::Tokenizer(format!("classifier_io reshape: {e}")))
+        })?;
 
     // logits shape is [1, num_labels, MAX_WIDTH, 1]. Take position 0
     // along MAX_WIDTH and softmax over the labels axis.
@@ -696,9 +764,7 @@ pub(crate) fn run_pipeline_dispatch(
             let scorer_out = super::pipeline::run_scorer(sessions, &sr, &cl)?;
             Ok((scorer_out, pred_count))
         }
-        super::ExecutionMode::IoBinding => {
-            run_pipeline_for_decoding(sessions, record, task)
-        }
+        super::ExecutionMode::IoBinding => run_pipeline_for_decoding(sessions, record, task),
     }
 }
 
@@ -720,9 +786,7 @@ pub(crate) fn run_classify_dispatch(
             }
             super::pipeline::run_classifier(sessions, &sg)
         }
-        super::ExecutionMode::IoBinding => {
-            run_classify_pipeline(sessions, record, task)
-        }
+        super::ExecutionMode::IoBinding => run_classify_pipeline(sessions, record, task),
     }
 }
 

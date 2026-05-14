@@ -534,7 +534,6 @@ mod tests {
         assert!(entry.zero_shot);
         assert!(entry
             .recommended_models
-            .iter()
-            .any(|m| *m == "fastino/gliner2-multi-v1"));
+            .contains(&"fastino/gliner2-multi-v1"));
     }
 }

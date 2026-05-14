@@ -8,8 +8,8 @@
 //!
 //! Label scheme (IOB2): O, B-PER, I-PER, B-ORG, I-ORG, B-LOC, I-LOC, B-MISC, I-MISC
 
-use crate::{DetectedEntity, DetectionSource, EntityCategory};
 use crate::config::NerConfig;
+use crate::{DetectedEntity, DetectionSource, EntityCategory};
 use anyhow::Result;
 use ort::session::Session;
 use ort::value::Value;
@@ -37,8 +37,7 @@ impl NerDetector {
     /// - `config.model` = path to ONNX model file (e.g., "models/bert-ner.onnx")
     /// - A `tokenizer.json` file in the same directory as the model
     pub fn new(config: &NerConfig) -> Result<Self> {
-        let model_path = config.model.as_deref()
-            .unwrap_or("models/bert-ner.onnx");
+        let model_path = config.model.as_deref().unwrap_or("models/bert-ner.onnx");
 
         info!("Loading NER model from: {}", model_path);
 
@@ -76,37 +75,45 @@ impl NerDetector {
             return Ok(Vec::new());
         }
 
-        let encoding = self.tokenizer.encode(text, false)
+        let encoding = self
+            .tokenizer
+            .encode(text, false)
             .map_err(|e| anyhow::anyhow!("Tokenization failed: {}", e))?;
 
         let input_ids: Vec<i64> = encoding.get_ids().iter().map(|&id| id as i64).collect();
-        let attention_mask: Vec<i64> = encoding.get_attention_mask().iter().map(|&m| m as i64).collect();
+        let attention_mask: Vec<i64> = encoding
+            .get_attention_mask()
+            .iter()
+            .map(|&m| m as i64)
+            .collect();
         let token_type_ids: Vec<i64> = encoding.get_type_ids().iter().map(|&t| t as i64).collect();
 
         let seq_len = input_ids.len();
 
         // Create ONNX input tensors using (shape, data) tuple form
-        let input_ids_tensor = Value::from_array(
-            ([1i64, seq_len as i64], input_ids)
-        ).map_err(|e| anyhow::anyhow!("Failed to create input_ids tensor: {}", e))?;
-        let attention_mask_tensor = Value::from_array(
-            ([1i64, seq_len as i64], attention_mask)
-        ).map_err(|e| anyhow::anyhow!("Failed to create attention_mask tensor: {}", e))?;
-        let token_type_ids_tensor = Value::from_array(
-            ([1i64, seq_len as i64], token_type_ids)
-        ).map_err(|e| anyhow::anyhow!("Failed to create token_type_ids tensor: {}", e))?;
+        let input_ids_tensor = Value::from_array(([1i64, seq_len as i64], input_ids))
+            .map_err(|e| anyhow::anyhow!("Failed to create input_ids tensor: {}", e))?;
+        let attention_mask_tensor = Value::from_array(([1i64, seq_len as i64], attention_mask))
+            .map_err(|e| anyhow::anyhow!("Failed to create attention_mask tensor: {}", e))?;
+        let token_type_ids_tensor = Value::from_array(([1i64, seq_len as i64], token_type_ids))
+            .map_err(|e| anyhow::anyhow!("Failed to create token_type_ids tensor: {}", e))?;
 
-        let mut session = self.session.lock()
+        let mut session = self
+            .session
+            .lock()
             .map_err(|_| anyhow::anyhow!("NER session lock poisoned"))?;
 
-        let outputs = session.run(ort::inputs![
-            "input_ids" => input_ids_tensor,
-            "attention_mask" => attention_mask_tensor,
-            "token_type_ids" => token_type_ids_tensor,
-        ]).map_err(|e| anyhow::anyhow!("ONNX inference failed: {}", e))?;
+        let outputs = session
+            .run(ort::inputs![
+                "input_ids" => input_ids_tensor,
+                "attention_mask" => attention_mask_tensor,
+                "token_type_ids" => token_type_ids_tensor,
+            ])
+            .map_err(|e| anyhow::anyhow!("ONNX inference failed: {}", e))?;
 
         // Extract logits: flat slice with shape [1, seq_len, num_labels]
-        let (shape, logits_data) = outputs[0].try_extract_tensor::<f32>()
+        let (shape, logits_data) = outputs[0]
+            .try_extract_tensor::<f32>()
             .map_err(|e| anyhow::anyhow!("Failed to extract logits: {}", e))?;
 
         let num_labels = self.labels.len();
@@ -114,7 +121,9 @@ impl NerDetector {
         if shape.len() != 3 || shape[2] as usize != num_labels {
             anyhow::bail!(
                 "Unexpected logits shape: {:?}, expected [1, {}, {}]",
-                &shape[..], seq_len, num_labels
+                &shape[..],
+                seq_len,
+                num_labels
             );
         }
 
@@ -159,9 +168,17 @@ impl NerDetector {
 
                 let category = label_to_category(label);
                 let entity_text = &text[offset_start..offset_end];
-                current_entity = Some((entity_text.to_string(), offset_start, offset_end, confidence as f64, category));
+                current_entity = Some((
+                    entity_text.to_string(),
+                    offset_start,
+                    offset_end,
+                    confidence as f64,
+                    category,
+                ));
             } else if label.starts_with("I-") {
-                if let Some((ref mut text_val, _start, ref mut end, ref mut conf, _)) = current_entity {
+                if let Some((ref mut text_val, _start, ref mut end, ref mut conf, _)) =
+                    current_entity
+                {
                     let piece = &text[*end..offset_end];
                     text_val.push_str(piece);
                     *end = offset_end;
@@ -183,7 +200,13 @@ impl NerDetector {
     }
 }
 
-fn make_entity(text: &str, start: usize, end: usize, confidence: f64, category: EntityCategory) -> DetectedEntity {
+fn make_entity(
+    text: &str,
+    start: usize,
+    end: usize,
+    confidence: f64,
+    category: EntityCategory,
+) -> DetectedEntity {
     DetectedEntity {
         original: text.to_string(),
         start,

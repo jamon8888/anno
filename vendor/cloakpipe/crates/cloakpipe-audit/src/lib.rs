@@ -85,11 +85,7 @@ impl AuditLogger {
     }
 
     /// Log a rehydration event.
-    pub fn log_rehydrate(
-        &self,
-        request_id: &str,
-        tokens_rehydrated: usize,
-    ) -> Result<()> {
+    pub fn log_rehydrate(&self, request_id: &str, tokens_rehydrated: usize) -> Result<()> {
         let entry = AuditEntry {
             id: Uuid::new_v4().to_string(),
             timestamp: Utc::now().to_rfc3339(),

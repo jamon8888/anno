@@ -116,11 +116,10 @@ struct ConfigureResult {
 #[tool_router]
 impl CloakPipeServer {
     /// Pseudonymize text: detect and replace sensitive entities (emails, amounts, secrets, dates, etc.) with consistent tokens. Same entity always maps to same token.
-    #[tool(description = "Pseudonymize text: detect and replace sensitive entities with consistent tokens. Same entity always maps to same token. Use this before sending data to external APIs.")]
-    async fn pseudonymize(
-        &self,
-        Parameters(params): Parameters<PseudonymizeParams>,
-    ) -> String {
+    #[tool(
+        description = "Pseudonymize text: detect and replace sensitive entities with consistent tokens. Same entity always maps to same token. Use this before sending data to external APIs."
+    )]
+    async fn pseudonymize(&self, Parameters(params): Parameters<PseudonymizeParams>) -> String {
         let detector = self.detector.read().await;
         let entities = match detector.detect(&params.text) {
             Ok(e) => e,
@@ -150,11 +149,10 @@ impl CloakPipeServer {
     }
 
     /// Rehydrate text: replace pseudo-tokens back with original values.
-    #[tool(description = "Rehydrate text: replace pseudo-tokens (EMAIL_1, AMOUNT_2, etc.) back with original values. Use this to restore real data in LLM responses.")]
-    async fn rehydrate(
-        &self,
-        Parameters(params): Parameters<RehydrateParams>,
-    ) -> String {
+    #[tool(
+        description = "Rehydrate text: replace pseudo-tokens (EMAIL_1, AMOUNT_2, etc.) back with original values. Use this to restore real data in LLM responses."
+    )]
+    async fn rehydrate(&self, Parameters(params): Parameters<RehydrateParams>) -> String {
         let vault = self.vault.lock().await;
         let result = match Rehydrator::rehydrate(&params.text, &vault) {
             Ok(r) => r,
@@ -170,11 +168,10 @@ impl CloakPipeServer {
     }
 
     /// Detect sensitive entities in text without replacing them (dry run).
-    #[tool(description = "Detect sensitive entities in text without replacing them (dry run). Returns category, confidence, source for each match.")]
-    async fn detect(
-        &self,
-        Parameters(params): Parameters<DetectParams>,
-    ) -> String {
+    #[tool(
+        description = "Detect sensitive entities in text without replacing them (dry run). Returns category, confidence, source for each match."
+    )]
+    async fn detect(&self, Parameters(params): Parameters<DetectParams>) -> String {
         let detector = self.detector.read().await;
         let entities = match detector.detect(&params.text) {
             Ok(e) => e,
@@ -211,11 +208,10 @@ impl CloakPipeServer {
     }
 
     /// Configure detection: switch industry profile or toggle categories.
-    #[tool(description = "Configure detection at runtime: switch industry profile (general/legal/healthcare/fintech) or enable/disable categories (secrets, financial, dates, emails, phone_numbers, ip_addresses, urls_internal).")]
-    async fn configure(
-        &self,
-        Parameters(params): Parameters<ConfigureParams>,
-    ) -> String {
+    #[tool(
+        description = "Configure detection at runtime: switch industry profile (general/legal/healthcare/fintech) or enable/disable categories (secrets, financial, dates, emails, phone_numbers, ip_addresses, urls_internal)."
+    )]
+    async fn configure(&self, Parameters(params): Parameters<ConfigureParams>) -> String {
         let mut config = self.config.write().await;
 
         // Apply profile if specified
@@ -263,7 +259,9 @@ impl CloakPipeServer {
     }
 
     /// Query session context: inspect a session's entities and coreferences, or list all active sessions.
-    #[tool(description = "Query session context for context-aware pseudonymization. Pass a session ID to inspect it, or 'list' to see all active sessions. Shows entities tracked, coreferences, sensitivity level, and escalation keywords.")]
+    #[tool(
+        description = "Query session context for context-aware pseudonymization. Pass a session ID to inspect it, or 'list' to see all active sessions. Shows entities tracked, coreferences, sensitivity level, and escalation keywords."
+    )]
     async fn session_context(
         &self,
         Parameters(params): Parameters<SessionContextParams>,
@@ -280,9 +278,13 @@ impl CloakPipeServer {
             .unwrap_or_else(|e| format!("Error: {}", e))
         } else {
             match self.sessions.inspect(&params.session_id) {
-                Some(stats) => serde_json::to_string_pretty(&stats)
-                    .unwrap_or_else(|e| format!("Error: {}", e)),
-                None => format!(r#"{{"error": "Session '{}' not found"}}"#, params.session_id),
+                Some(stats) => {
+                    serde_json::to_string_pretty(&stats).unwrap_or_else(|e| format!("Error: {}", e))
+                }
+                None => format!(
+                    r#"{{"error": "Session '{}' not found"}}"#,
+                    params.session_id
+                ),
             }
         }
     }
@@ -312,9 +314,7 @@ impl ServerHandler for CloakPipeServer {
                  rehydrate (restore originals), detect (dry-run scan), vault_stats, configure \
                  (switch industry profiles or toggle detection categories).",
             )
-            .with_server_info(
-                Implementation::new("cloakpipe", env!("CARGO_PKG_VERSION")),
-            )
+            .with_server_info(Implementation::new("cloakpipe", env!("CARGO_PKG_VERSION")))
     }
 }
 

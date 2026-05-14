@@ -62,10 +62,7 @@ impl CountLstmFixed {
     ///   - `pos_embedding.weight` (20, 768)
     ///   - `projector.0.{weight,bias}`  (3072, 1536) / (3072,)
     ///   - `projector.2.{weight,bias}`  (768, 3072) / (768,)
-    pub fn from_var_builder(
-        vb: &VarBuilder,
-        device: &Device,
-    ) -> candle_core::Result<Self> {
+    pub fn from_var_builder(vb: &VarBuilder, device: &Device) -> candle_core::Result<Self> {
         let gru = gru(HIDDEN, HIDDEN, GRUConfig::default(), vb.pp("gru"))?;
         let pos_embedding = embedding(MAX_COUNT, HIDDEN, vb.pp("pos_embedding"))?;
         let projector_0 = linear(1536, 3072, vb.pp("projector.0"))?;
@@ -112,12 +109,14 @@ impl CountLstmFixed {
         // Build pos_seq: [L, 768] then broadcast to [L, F, 768].
         let pos_ids = Tensor::arange(0u32, l as u32, &self.device)?; // [L]
         let pos_seq = self.pos_embedding.forward(&pos_ids)?; // [L, 768]
-        // We don't actually materialise the broadcast tensor — the GRU
-        // step takes per-t inputs of shape [F, 768] and we fetch them
-        // from `pos_seq` row-by-row, then `.broadcast_as` to [F, 768].
+                                                             // We don't actually materialise the broadcast tensor — the GRU
+                                                             // step takes per-t inputs of shape [F, 768] and we fetch them
+                                                             // from `pos_seq` row-by-row, then `.broadcast_as` to [F, 768].
 
         // GRU initial state: h_0 = field_embs, shape [F, 768].
-        let mut state = GRUState { h: field_embs.contiguous()? };
+        let mut state = GRUState {
+            h: field_embs.contiguous()?,
+        };
         let mut hidden_states: Vec<Tensor> = Vec::with_capacity(l);
 
         for t in 0..l {

@@ -4,15 +4,18 @@
 
 #![warn(missing_docs)]
 
+pub mod bench_cli;
 pub mod config;
 pub mod detect;
 pub mod embed;
 pub mod error;
 pub mod ingest;
 pub mod mcp;
+pub(crate) mod ocr;
 pub mod pipeline;
 pub mod store;
 pub mod vault;
 
 pub use config::AnnoRagConfig;
 pub use error::{Error, Result};
+pub use pipeline::Pipeline;

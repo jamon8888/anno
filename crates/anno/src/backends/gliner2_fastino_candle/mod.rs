@@ -111,15 +111,9 @@ impl GLiNER2FastinoCandle {
         let merged = lora::merge_into_base(&base_safetensors, &adapter, &self.device)?;
 
         // Build a VarBuilder from the merged tensor map and rebuild encoder + heads.
-        let vb = candle_nn::VarBuilder::from_tensors(
-            merged,
-            candle_core::DType::F32,
-            &self.device,
-        );
-        let new_encoder = encoder::Encoder::from_var_builder(
-            vb.pp("encoder"),
-            &self.encoder.config,
-        )?;
+        let vb = candle_nn::VarBuilder::from_tensors(merged, candle_core::DType::F32, &self.device);
+        let new_encoder =
+            encoder::Encoder::from_var_builder(vb.pp("encoder"), &self.encoder.config)?;
         let new_heads = heads::AllHeads::from_var_builder(vb, &self.device)?;
 
         self.encoder = new_encoder;
@@ -136,16 +130,17 @@ impl GLiNER2FastinoCandle {
             return Ok(());
         }
         let weights_path = self.base_model_dir.join("model.safetensors");
-        let config_path = if self.base_model_dir.join("encoder_config/config.json").exists() {
+        let config_path = if self
+            .base_model_dir
+            .join("encoder_config/config.json")
+            .exists()
+        {
             self.base_model_dir.join("encoder_config/config.json")
         } else {
             self.base_model_dir.join("config.json")
         };
-        self.encoder = encoder::Encoder::from_safetensors(
-            &weights_path,
-            &config_path,
-            &self.device,
-        )?;
+        self.encoder =
+            encoder::Encoder::from_safetensors(&weights_path, &config_path, &self.device)?;
         self.heads = heads::AllHeads::from_safetensors(&weights_path, &self.device)?;
         self.active_adapter = None;
         Ok(())
@@ -175,24 +170,17 @@ impl GLiNER2FastinoCandle {
 
         // Touch each required file so it's in the local cache. Order
         // matters: weights last so we can use its parent as the snapshot dir.
-        let _tokenizer = crate::backends::hf_loader::download_model_file(
-            &repo,
-            &["tokenizer.json"],
-        )
-        .map_err(|e| crate::Error::Backend(format!("download tokenizer: {e}")))?;
-        let _config = crate::backends::hf_loader::download_model_file(
-            &repo,
-            &["config.json"],
-        )
-        .map_err(|e| crate::Error::Backend(format!("download config: {e}")))?;
+        let _tokenizer =
+            crate::backends::hf_loader::download_model_file(&repo, &["tokenizer.json"])
+                .map_err(|e| crate::Error::Backend(format!("download tokenizer: {e}")))?;
+        let _config = crate::backends::hf_loader::download_model_file(&repo, &["config.json"])
+            .map_err(|e| crate::Error::Backend(format!("download config: {e}")))?;
         // GLiNER2 stores the encoder's HF config (with vocab_size,
         // hidden_size, etc.) under encoder_config/config.json. The
         // top-level config.json is the GLiNER2 wrapper config.
-        let _encoder_config = crate::backends::hf_loader::download_model_file(
-            &repo,
-            &["encoder_config/config.json"],
-        )
-        .map_err(|e| crate::Error::Backend(format!("download encoder_config: {e}")))?;
+        let _encoder_config =
+            crate::backends::hf_loader::download_model_file(&repo, &["encoder_config/config.json"])
+                .map_err(|e| crate::Error::Backend(format!("download encoder_config: {e}")))?;
         let weights_path = crate::backends::hf_loader::download_model_file(
             &repo,
             &["model.safetensors", "pytorch_model.bin"],
@@ -210,10 +198,7 @@ impl GLiNER2FastinoCandle {
     /// Internal: like [`Self::from_local`] but explicit about the
     /// Candle device. Hot-swap on a different device requires re-
     /// loading; not exposed publicly until Phase 4.5.
-    pub(crate) fn from_local_on_device(
-        model_dir: &Path,
-        device: &Device,
-    ) -> crate::Result<Self> {
+    pub(crate) fn from_local_on_device(model_dir: &Path, device: &Device) -> crate::Result<Self> {
         let tokenizer_path = model_dir.join("tokenizer.json");
         let weights_path = model_dir.join("model.safetensors");
         // The encoder's HF config is under encoder_config/config.json
@@ -266,11 +251,13 @@ impl GLiNER2FastinoCandle {
         }
         let labels: Vec<String> = types.iter().map(|s| s.to_string()).collect();
         let task = processor::SchemaTask::Entities(labels);
-        let transformer = processor::SchemaTransformer::new(self.tokenizer.clone())
-            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}")))?;
-        let record = transformer
-            .transform(text, &[task])
-            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}")))?;
+        let transformer =
+            processor::SchemaTransformer::new(self.tokenizer.clone()).map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}"))
+            })?;
+        let record = transformer.transform(text, &[task]).map_err(|e| {
+            crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}"))
+        })?;
         let num_words = record.word_to_char_maps.len();
         if num_words == 0 {
             return Ok(vec![]);
@@ -281,8 +268,7 @@ impl GLiNER2FastinoCandle {
             )
         })?;
 
-        let (scorer_out, pred_count) =
-            pipeline::run_pipeline_candle(self, &record, task_map)?;
+        let (scorer_out, pred_count) = pipeline::run_pipeline_candle(self, &record, task_map)?;
         if pred_count == 0 {
             return Ok(vec![]);
         }
@@ -316,11 +302,13 @@ impl GLiNER2FastinoCandle {
             .map(|(l, d)| (l.to_string(), d.to_string()))
             .collect();
         let task = processor::SchemaTask::EntitiesDescribed(owned);
-        let transformer = processor::SchemaTransformer::new(self.tokenizer.clone())
-            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}")))?;
-        let record = transformer
-            .transform(text, &[task])
-            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}")))?;
+        let transformer =
+            processor::SchemaTransformer::new(self.tokenizer.clone()).map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}"))
+            })?;
+        let record = transformer.transform(text, &[task]).map_err(|e| {
+            crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}"))
+        })?;
         let num_words = record.word_to_char_maps.len();
         if num_words == 0 {
             return Ok(vec![]);
@@ -331,8 +319,7 @@ impl GLiNER2FastinoCandle {
             )
         })?;
 
-        let (scorer_out, pred_count) =
-            pipeline::run_pipeline_candle(self, &record, task_map)?;
+        let (scorer_out, pred_count) = pipeline::run_pipeline_candle(self, &record, task_map)?;
         if pred_count == 0 {
             return Ok(vec![]);
         }
@@ -364,11 +351,13 @@ impl GLiNER2FastinoCandle {
             .map(|(l, _)| l.to_string())
             .collect();
         let task = processor::SchemaTask::Entities(labels);
-        let transformer = processor::SchemaTransformer::new(self.tokenizer.clone())
-            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}")))?;
-        let record = transformer
-            .transform(text, &[task])
-            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}")))?;
+        let transformer =
+            processor::SchemaTransformer::new(self.tokenizer.clone()).map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}"))
+            })?;
+        let record = transformer.transform(text, &[task]).map_err(|e| {
+            crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}"))
+        })?;
         let num_words = record.word_to_char_maps.len();
         if num_words == 0 {
             return Ok(vec![]);
@@ -379,8 +368,7 @@ impl GLiNER2FastinoCandle {
             )
         })?;
 
-        let (scorer_out, pred_count) =
-            pipeline::run_pipeline_candle(self, &record, task_map)?;
+        let (scorer_out, pred_count) = pipeline::run_pipeline_candle(self, &record, task_map)?;
         if pred_count == 0 {
             return Ok(vec![]);
         }
@@ -408,8 +396,10 @@ impl GLiNER2FastinoCandle {
         if schema.structures.is_empty() {
             return Ok(vec![]);
         }
-        let transformer = processor::SchemaTransformer::new(self.tokenizer.clone())
-            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}")))?;
+        let transformer =
+            processor::SchemaTransformer::new(self.tokenizer.clone()).map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}"))
+            })?;
 
         let mut all_results: Vec<crate::backends::gliner2_fastino::schema::ExtractedStructure> =
             Vec::new();
@@ -417,15 +407,15 @@ impl GLiNER2FastinoCandle {
             if st.fields.is_empty() {
                 continue;
             }
-            let fields_owned: Vec<(String, crate::backends::gliner2_fastino::schema::FieldType)> = st
-                .fields
-                .iter()
-                .map(|f| (f.name.clone(), f.field_type))
-                .collect();
+            let fields_owned: Vec<(String, crate::backends::gliner2_fastino::schema::FieldType)> =
+                st.fields
+                    .iter()
+                    .map(|f| (f.name.clone(), f.field_type))
+                    .collect();
             let task = processor::SchemaTask::Structures(st.name.clone(), fields_owned.clone());
-            let record = transformer
-                .transform(text, &[task])
-                .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}")))?;
+            let record = transformer.transform(text, &[task]).map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}"))
+            })?;
             let num_words = record.word_to_char_maps.len();
             if num_words == 0 {
                 continue;
@@ -436,8 +426,7 @@ impl GLiNER2FastinoCandle {
                 )
             })?;
 
-            let (scorer_out, pred_count) =
-                pipeline::run_pipeline_candle(self, &record, task_map)?;
+            let (scorer_out, pred_count) = pipeline::run_pipeline_candle(self, &record, task_map)?;
             if pred_count == 0 {
                 continue;
             }
@@ -472,11 +461,13 @@ impl GLiNER2FastinoCandle {
             "classification".to_string(),
             label_strings.clone(),
         );
-        let transformer = processor::SchemaTransformer::new(self.tokenizer.clone())
-            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}")))?;
-        let record = transformer
-            .transform(text, &[task])
-            .map_err(|e| crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}")))?;
+        let transformer =
+            processor::SchemaTransformer::new(self.tokenizer.clone()).map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino_candle: transformer: {e}"))
+            })?;
+        let record = transformer.transform(text, &[task]).map_err(|e| {
+            crate::Error::Backend(format!("gliner2_fastino_candle: transform: {e}"))
+        })?;
         let task_map = record.tasks.first().ok_or_else(|| {
             crate::Error::Backend(
                 "gliner2_fastino_candle: transformer produced no task mapping".into(),
@@ -485,10 +476,8 @@ impl GLiNER2FastinoCandle {
 
         let probs = pipeline::run_classify_pipeline_candle(self, &record, task_map)?;
 
-        let mut out: Vec<(String, f32)> = label_strings
-            .into_iter()
-            .zip(probs.into_iter())
-            .collect();
+        let mut out: Vec<(String, f32)> =
+            label_strings.into_iter().zip(probs.into_iter()).collect();
         out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(out)
     }

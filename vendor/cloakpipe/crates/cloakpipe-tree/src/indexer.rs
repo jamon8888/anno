@@ -76,11 +76,7 @@ impl TreeIndexer {
     }
 
     /// Build a tree index from raw text (no file needed).
-    pub async fn build_index_from_text(
-        &self,
-        source_name: &str,
-        text: &str,
-    ) -> Result<TreeIndex> {
+    pub async fn build_index_from_text(&self, source_name: &str, text: &str) -> Result<TreeIndex> {
         info!("Building tree index from text: {}", source_name);
 
         let pages = vec![ParsedPage {
@@ -119,10 +115,7 @@ impl TreeIndexer {
         let mut stack: Vec<TreeNode> = Vec::new();
 
         for (i, heading) in headings.iter().enumerate() {
-            let next_page = headings
-                .get(i + 1)
-                .map(|h| h.page)
-                .unwrap_or(pages.len());
+            let next_page = headings.get(i + 1).map(|h| h.page).unwrap_or(pages.len());
 
             let node = TreeNode {
                 id: format!("{}", i + 1),
@@ -186,11 +179,7 @@ impl TreeIndexer {
         Ok(nodes)
     }
 
-    async fn generate_summaries(
-        &self,
-        nodes: &mut [TreeNode],
-        pages: &[ParsedPage],
-    ) -> Result<()> {
+    async fn generate_summaries(&self, nodes: &mut [TreeNode], pages: &[ParsedPage]) -> Result<()> {
         for node in nodes.iter_mut() {
             let text = self.extract_node_text(node, pages);
             if text.trim().is_empty() {
@@ -244,7 +233,10 @@ impl TreeIndexer {
             "temperature": 0.3
         });
 
-        let url = format!("{}/v1/chat/completions", self.api_base.trim_end_matches('/'));
+        let url = format!(
+            "{}/v1/chat/completions",
+            self.api_base.trim_end_matches('/')
+        );
 
         let response = self
             .client
@@ -280,7 +272,10 @@ impl TreeIndexer {
             "temperature": 0.3
         });
 
-        let url = format!("{}/v1/chat/completions", self.api_base.trim_end_matches('/'));
+        let url = format!(
+            "{}/v1/chat/completions",
+            self.api_base.trim_end_matches('/')
+        );
 
         let response = self
             .client

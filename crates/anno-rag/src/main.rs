@@ -10,7 +10,11 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "anno-rag", version, about = "Local GDPR-compliant document anonymizer + RAG (French legal)")]
+#[command(
+    name = "anno-rag",
+    version,
+    about = "Local GDPR-compliant document anonymizer + RAG (French legal)"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -29,6 +33,10 @@ enum Cmd {
         /// Where to write pseudonymized copies. Defaults to ~/.anno-rag/outputs.
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Enable OCR via system tesseract for PDFs without a text layer.
+        /// Requires the `tesseract` binary on PATH (install separately).
+        #[arg(long, default_value_t = false)]
+        enable_ocr: bool,
     },
     /// Search the indexed corpus and return ranked pseudonymized chunks.
     Search {
@@ -41,6 +49,12 @@ enum Cmd {
     /// Run the MCP server on stdio. Used by Cowork as a plugin transport.
     /// Blocks until stdin closes.
     Mcp,
+    /// Reproduce SLO measurements on a user corpus.
+    Bench {
+        /// Folder containing the documents to bench (PDF/DOCX/TXT/MD).
+        #[arg(long, value_name = "DIR")]
+        corpus: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -50,12 +64,27 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    let cfg = AnnoRagConfig::default();
+
+    // Bench builds its own Pipeline in a tempdir; short-circuit before keyring lookup.
+    if let Cmd::Bench { corpus } = &cli.cmd {
+        anno_rag::bench_cli::run(corpus).await?;
+        return Ok(());
+    }
+
+    let mut cfg = AnnoRagConfig::default();
+    if let Cmd::Ingest { enable_ocr, .. } = &cli.cmd {
+        cfg.enable_ocr |= *enable_ocr;
+    }
     let key = derive_key()?;
     let pipeline = Pipeline::new(cfg.clone(), key).await?;
 
     match cli.cmd {
-        Cmd::Ingest { folder, recursive, output } => {
+        Cmd::Ingest {
+            folder,
+            recursive,
+            output,
+            enable_ocr: _,
+        } => {
             let out = output.unwrap_or_else(|| cfg.outputs_dir());
             let n = pipeline.ingest_folder(&folder, recursive, &out).await?;
             println!("ingested {n} documents → {}", out.display());
@@ -66,12 +95,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("(no results)");
             }
             for (i, h) in hits.iter().enumerate() {
-                println!(
-                    "#{} distance={:.3} page={:?}",
-                    i + 1,
-                    h.distance,
-                    h.page
-                );
+                println!("#{} distance={:.3} page={:?}", i + 1, h.distance, h.page);
                 println!("    source: {}", h.source_path);
                 println!("    text:   {}", truncate(&h.text_pseudo, 200));
                 println!();
@@ -80,6 +104,7 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Mcp => {
             anno_rag::mcp::serve_stdio(pipeline, cfg).await?;
         }
+        Cmd::Bench { .. } => unreachable!("handled above before Pipeline::new"),
     }
     Ok(())
 }

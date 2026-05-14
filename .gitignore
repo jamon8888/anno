@@ -163,6 +163,7 @@ REVIEW_ISSUES.md
 !docs/**/*.md
 !crates/**/docs/**/*.md
 !crates/**/README.md
+!crates/**/tests/fixtures/**/*.md
 
 # Reports directory (generated; do not track)
 reports/

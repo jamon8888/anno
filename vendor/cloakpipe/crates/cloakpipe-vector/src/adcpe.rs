@@ -5,8 +5,8 @@
 //! similarity), making encrypted vectors usable for similarity search.
 
 use anyhow::{bail, Result};
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
@@ -188,7 +188,10 @@ fn gram_schmidt(matrix: &mut [f64], dim: usize) -> Result<()> {
             let dot = dot_rows(matrix, i, j, dim);
             let norm_sq = dot_rows(matrix, j, j, dim);
             if norm_sq < 1e-10 {
-                bail!("Gram-Schmidt failed: degenerate matrix (row {} near-zero)", j);
+                bail!(
+                    "Gram-Schmidt failed: degenerate matrix (row {} near-zero)",
+                    j
+                );
             }
             let scale = dot / norm_sq;
             for k in 0..dim {
@@ -280,12 +283,14 @@ mod tests {
         assert!(
             (cos_ab_orig - cos_ab_enc).abs() < 1e-10,
             "Cosine AB not preserved: {} vs {}",
-            cos_ab_orig, cos_ab_enc
+            cos_ab_orig,
+            cos_ab_enc
         );
         assert!(
             (cos_ac_orig - cos_ac_enc).abs() < 1e-10,
             "Cosine AC not preserved: {} vs {}",
-            cos_ac_orig, cos_ac_enc
+            cos_ac_orig,
+            cos_ac_enc
         );
     }
 
@@ -367,7 +372,9 @@ mod tests {
         let decrypted = enc.decrypt(&encrypted).unwrap();
 
         // With noise, roundtrip won't be exact
-        let max_err: f64 = v.iter().zip(decrypted.iter())
+        let max_err: f64 = v
+            .iter()
+            .zip(decrypted.iter())
             .map(|(a, b)| (a - b).abs())
             .fold(0.0, f64::max);
 
@@ -388,7 +395,10 @@ mod tests {
                 assert!(
                     (dot - expected).abs() < 1e-10,
                     "Not orthogonal at ({}, {}): {} vs {}",
-                    i, j, dot, expected
+                    i,
+                    j,
+                    dot,
+                    expected
                 );
             }
         }
@@ -413,7 +423,8 @@ mod tests {
         assert!(
             (cos_orig - cos_enc).abs() < 1e-10,
             "Cosine not preserved at dim=128: {} vs {}",
-            cos_orig, cos_enc
+            cos_orig,
+            cos_enc
         );
     }
 }
