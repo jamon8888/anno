@@ -1,6 +1,6 @@
 # anno privacy gateway v0.3 — non-streaming Cowork privacy boundary
 
-**Status:** Draft spec  
+**Status:** Finalized for v0.3 local gateway and documented sidecar deployment
 **Date:** 2026-05-13  
 **Depends on:** `anno-rag v0.2` MCP minimum  
 **Research inputs:**
@@ -9,6 +9,30 @@
 - Anthropic Files API docs: `document`/`image` blocks can reference uploaded `file_id`s.
 - Anthropic PDF docs: PDF inputs can arrive as URL, base64 `document` blocks, or Files API references.
 - Claude/Cowork 3P docs: local MCPB desktop extensions and local MCP servers are supported user/admin extension surfaces.
+
+## Implementation status
+
+Delivered in `crates/anno-privacy-gateway`:
+
+- Axum gateway routes for `/health`, `/v1/messages`, `/v1/models`, and fail-closed `/v1/files` operations.
+- In-place Anthropic request pseudonymization before forwarding to the configured upstream Anthropic-compatible chain.
+- Automatic response rehydration for known pseudonym tokens.
+- Fresh cleartext PII scan/redaction before returning model responses.
+- Strict v0.3 rejection for `stream=true`, image blocks, native `document` blocks, and Files API routes.
+- Ephemeral local vault by default, with optional persistent vault configuration through `ANNO_GATEWAY_VAULT_PATH` plus `ANNO_GATEWAY_VAULT_KEY_HEX`.
+- Mock-upstream integration test proving raw PII does not leave the gateway and the final Cowork-facing response is rehydrated.
+- `X-Anno-PII-Leak-Redacted` response header when fresh model-side PII is redacted.
+- Versioned smoke script: `scripts/smoke-privacy-gateway-v0.3.ps1`.
+- Operating runbook: `docs/runbooks/anno-privacy-gateway-v0.3.md`.
+
+Verified locally:
+
+- `cargo test -p anno-privacy-gateway`
+- `cargo check -p anno-privacy-gateway`
+- `cargo clippy -p anno-privacy-gateway -- -D warnings`
+- `powershell -ExecutionPolicy Bypass -File .\scripts\smoke-privacy-gateway-v0.3.ps1`
+
+Live Cowork -> gateway -> `anthropic-proxy-rs` -> TensorZero -> provider validation is documented in the runbook because it requires a running provider credential and TensorZero observability store. The automated smoke validates the v0.3 trust boundary by proving the configured upstream only receives pseudonymized payloads.
 
 ## Goal
 

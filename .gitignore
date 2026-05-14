@@ -159,7 +159,10 @@ REVIEW_ISSUES.md
 !CHANGELOG.md
 !CONTRIBUTING.md
 !SECURITY.md
+!BACKLOG.md
 !docs/**/*.md
+!crates/**/docs/**/*.md
+!crates/**/README.md
 
 # Reports directory (generated; do not track)
 reports/
