@@ -184,7 +184,9 @@ pub enum BatchSchemaMode<'a> {
 ///
 /// Construct via [`Self::from_pretrained`] or [`Self::from_local`].
 pub struct GLiNER2Fastino {
+    #[allow(dead_code)] // retained for re-tokenization paths in later phases
     pub(crate) tokenizer: tokenizers::Tokenizer,
+    #[allow(dead_code)] // retained for re-tokenization paths in later phases
     pub(crate) special: processor::SpecialTokenIds,
     pub(crate) transformer: processor::SchemaTransformer,
     pub(crate) config: config::FastinoConfig,
@@ -740,8 +742,7 @@ impl GLiNER2Fastino {
             self.execution_mode,
         )?;
 
-        let mut out: Vec<(String, f32)> =
-            label_strings.into_iter().zip(probs.into_iter()).collect();
+        let mut out: Vec<(String, f32)> = label_strings.into_iter().zip(probs).collect();
         out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(out)
     }
@@ -779,7 +780,7 @@ impl GLiNER2Fastino {
                     )));
                 }
                 for (text, labels_owned) in texts.iter().zip(per_text_labels.iter()) {
-                    let labels: Vec<&str> = labels_owned.iter().copied().collect();
+                    let labels: Vec<&str> = labels_owned.to_vec();
                     out.push(self.extract_ner(text, &labels, threshold)?);
                 }
             }

@@ -21,6 +21,7 @@ pub enum CountingLayer {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // counting_layer + max_seq_length reserved for Phase 2 dispatch
 pub struct FastinoConfig {
     /// Hidden size of the encoder (e.g. 768 base, 1024 large).
     pub hidden_size: usize,

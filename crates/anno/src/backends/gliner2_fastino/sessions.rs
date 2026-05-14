@@ -47,6 +47,7 @@ impl SessionSlot {
         })
     }
 
+    #[allow(dead_code)] // convenience ctor; pipeline uses from_path_with_cfg
     pub fn from_path(model_path: &Path) -> Result<Self, Error> {
         Self::from_path_with_cfg(model_path, hf_loader::OnnxSessionConfig::default())
     }
@@ -73,6 +74,7 @@ impl Sessions {
     ///
     /// Phase 3 standard mode does NOT use the `_iobinding.onnx` variants
     /// — those are reserved for Phase 3.5 IOBinding mode.
+    #[allow(dead_code)] // convenience ctor; pipeline uses from_dir_with_cfg_mode
     pub fn from_dir_with_cfg(
         model_dir: &Path,
         cfg: hf_loader::OnnxSessionConfig,
@@ -175,6 +177,7 @@ impl Sessions {
     ///
     /// Phase 3 standard mode does NOT use the `_iobinding.onnx` variants
     /// — those are reserved for Phase 3.5 IOBinding mode.
+    #[allow(dead_code)] // convenience ctor; pipeline uses from_dir_with_cfg_mode
     pub fn from_dir(model_dir: &Path) -> Result<(Self, std::path::PathBuf), Error> {
         Self::from_dir_with_cfg(model_dir, hf_loader::OnnxSessionConfig::default())
     }

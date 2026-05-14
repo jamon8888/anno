@@ -64,8 +64,8 @@ pub(crate) fn run_encoder(
                     .map_err(|e| Error::Tokenizer(format!("encoder extract: {e}")))?;
                 let data: Vec<f32> = cow.to_vec();
                 let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-                return Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                    .map_err(|e| Error::Tokenizer(format!("encoder array reshape: {e}")))?);
+                return ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                    .map_err(|e| Error::Tokenizer(format!("encoder array reshape: {e}")));
             }
         }
         // Fallback: take the first output.
@@ -78,8 +78,8 @@ pub(crate) fn run_encoder(
             .map_err(|e| Error::Tokenizer(format!("encoder extract first: {e}")))?;
         let data: Vec<f32> = cow.to_vec();
         let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-        Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-            .map_err(|e| Error::Tokenizer(format!("encoder array reshape: {e}")))?)
+        ndarray::ArrayD::from_shape_vec(shape_usize, data)
+            .map_err(|e| Error::Tokenizer(format!("encoder array reshape: {e}")))
     })?;
 
     // hs is dynamic; convert to fixed [1, L, H] Array3.
@@ -145,8 +145,8 @@ pub(crate) fn run_token_gather(
                     .map_err(|e| Error::Tokenizer(format!("token_gather extract: {e}")))?;
                 let data: Vec<f32> = cow.to_vec();
                 let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-                Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                    .map_err(|e| Error::Tokenizer(format!("token_gather array reshape: {e}")))?)
+                ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                    .map_err(|e| Error::Tokenizer(format!("token_gather array reshape: {e}")))
             })?;
 
     let text_embs: Array3<f32> = result
@@ -215,8 +215,8 @@ pub(crate) fn run_span_rep(
             .map_err(|e| Error::Tokenizer(format!("span_rep extract: {e}")))?;
         let data: Vec<f32> = cow.to_vec();
         let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-        Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-            .map_err(|e| Error::Tokenizer(format!("span_rep array reshape: {e}")))?)
+        ndarray::ArrayD::from_shape_vec(shape_usize, data)
+            .map_err(|e| Error::Tokenizer(format!("span_rep array reshape: {e}")))
     })?;
 
     let span_embs: ndarray::Array4<f32> = result
@@ -324,8 +324,8 @@ pub(crate) fn run_count_pred_argmax(
                     .map_err(|e| Error::Tokenizer(format!("count_pred extract: {e}")))?;
                 let data: Vec<i64> = cow.to_vec();
                 let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-                Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                    .map_err(|e| Error::Tokenizer(format!("count_pred reshape: {e}")))?)
+                ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                    .map_err(|e| Error::Tokenizer(format!("count_pred reshape: {e}")))
             })?;
 
     let val = count.iter().next().copied().unwrap_or(0);
@@ -363,8 +363,8 @@ pub(crate) fn run_count_lstm_fixed(
                     .map_err(|e| Error::Tokenizer(format!("count_lstm extract: {e}")))?;
                 let data: Vec<f32> = cow.to_vec();
                 let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-                Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                    .map_err(|e| Error::Tokenizer(format!("count_lstm reshape: {e}")))?)
+                ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                    .map_err(|e| Error::Tokenizer(format!("count_lstm reshape: {e}")))
             })?;
 
     let struct_proj: Array3<f32> = proj
@@ -407,8 +407,8 @@ pub(crate) fn run_scorer(
             .map_err(|e| Error::Tokenizer(format!("scorer extract: {e}")))?;
         let data: Vec<f32> = cow.to_vec();
         let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-        Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-            .map_err(|e| Error::Tokenizer(format!("scorer reshape: {e}")))?)
+        ndarray::ArrayD::from_shape_vec(shape_usize, data)
+            .map_err(|e| Error::Tokenizer(format!("scorer reshape: {e}")))
     })?;
 
     let scores: ndarray::Array4<f32> = result
@@ -644,8 +644,8 @@ pub(crate) fn run_classifier(
                 .map_err(|e| Error::Tokenizer(format!("classifier extract: {e}")))?;
             let data: Vec<f32> = cow.to_vec();
             let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                .map_err(|e| Error::Tokenizer(format!("classifier reshape: {e}")))?)
+            ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                .map_err(|e| Error::Tokenizer(format!("classifier reshape: {e}")))
         })?;
 
     // logits shape is [1, num_labels, MAX_WIDTH, 1]. Take position 0.

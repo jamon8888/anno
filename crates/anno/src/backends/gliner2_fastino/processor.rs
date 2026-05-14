@@ -29,6 +29,7 @@ pub const DESC_TOKEN: &str = "[DESCRIPTION]";
 /// Integer IDs for the seven fastino special tokens, resolved at load time
 /// from the tokenizer's vocabulary. Never hardcoded.
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // several token IDs reserved for Phase 2 structure/relation prompts
 pub struct SpecialTokenIds {
     pub p: u32,
     pub e: u32,
@@ -83,6 +84,7 @@ impl WhitespaceTokenSplitter {
     }
 
     /// Split into words. Returns borrowed slices into `text`.
+    #[allow(dead_code)] // pipeline uses split_with_offsets; split kept for parity/tests
     pub fn split<'a>(&self, text: &'a str) -> Vec<&'a str> {
         self.re.find_iter(text).map(|m| m.as_str()).collect()
     }
@@ -119,6 +121,7 @@ pub enum SchemaTask {
     Structures(String, Vec<(String, super::schema::FieldType)>),
     // TODO(Phase 2.5): port Relations arm from upstream when a workload
     // requests it. Phase 2 ships Structures only.
+    #[allow(dead_code)]
     Relations(String, Vec<String>),
 }
 

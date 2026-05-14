@@ -115,7 +115,7 @@ pub(crate) fn run_encoder_io(
             let hidden_states = outputs
                 .into_iter()
                 .find_map(|(name, val)| {
-                    if &*name == output_name.as_str() {
+                    if name == output_name.as_str() {
                         Some(val)
                     } else {
                         None
@@ -240,7 +240,7 @@ pub(crate) fn run_token_gather_io(
             let text_embs = outputs
                 .into_iter()
                 .find_map(|(name, val)| {
-                    if &*name == output_name.as_str() {
+                    if name == output_name.as_str() {
                         Some(val)
                     } else {
                         None
@@ -297,7 +297,7 @@ pub(crate) fn run_span_rep_io(
             let span_embs = outputs
                 .into_iter()
                 .find_map(|(name, val)| {
-                    if &*name == output_name.as_str() {
+                    if name == output_name.as_str() {
                         Some(val)
                     } else {
                         None
@@ -438,7 +438,7 @@ pub(crate) fn run_count_pred_argmax_io(
             let count_val = outputs
                 .into_iter()
                 .find_map(|(name, val)| {
-                    if &*name == output_name.as_str() {
+                    if name == output_name.as_str() {
                         Some(val)
                     } else {
                         None
@@ -483,7 +483,7 @@ pub(crate) fn run_count_lstm_fixed_io(
             let struct_proj = outputs
                 .into_iter()
                 .find_map(|(name, val)| {
-                    if &*name == output_name.as_str() {
+                    if name == output_name.as_str() {
                         Some(val)
                     } else {
                         None
@@ -539,7 +539,7 @@ pub(crate) fn run_scorer_io(
         let scores_val = outputs
             .into_iter()
             .find_map(|(name, val)| {
-                if &*name == output_name.as_str() {
+                if name == output_name.as_str() {
                     Some(val)
                 } else {
                     None
@@ -627,7 +627,7 @@ pub(crate) fn run_classifier_io(
             let logits_val = outputs
                 .into_iter()
                 .find_map(|(name, val)| {
-                    if &*name == output_name.as_str() {
+                    if name == output_name.as_str() {
                         Some(val)
                     } else {
                         None

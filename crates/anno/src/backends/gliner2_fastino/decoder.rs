@@ -14,6 +14,7 @@ use crate::Entity;
 
 /// One candidate span emitted by the model.
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)] // standalone decoder path; pipeline.rs has its own span decode
 pub struct Span {
     pub start_word: usize,
     pub end_word: usize,
@@ -22,6 +23,7 @@ pub struct Span {
 }
 
 /// Decode spans into Entities with **character** offsets in the original text.
+#[allow(dead_code)] // standalone decoder path; pipeline.rs has its own span decode
 pub fn decode_spans(
     text: &str,
     word_offsets: &[(usize, usize)], // (byte_start, byte_end) per word
