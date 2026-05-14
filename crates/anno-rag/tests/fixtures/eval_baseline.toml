@@ -2,8 +2,12 @@
 # explicit, reviewed change — see
 # docs/superpowers/specs/2026-05-14-anno-rag-v0.6-hybrid-retrieval-eval-design.md
 #
-# PLACEHOLDER VALUES — replaced with real bench_eval output during the
-# final build/verify phase. The CI gate compares against these with a
-# 0.98 tolerance factor.
-recall_at_10 = 0.00
-ndcg_at_10 = 0.00
+# Captured from `cargo bench -p anno-rag --bench bench_eval` on the synthetic
+# 60-document corpus (hybrid vector+FTS search, RRF rerank, e5 query prefix):
+#   observed recall@10 ≈ 0.850 (stable run-to-run)
+#   observed nDCG@10  ≈ 0.733–0.734 (minor rank-order variance)
+# Baseline set conservatively below the observed range; the CI gate compares
+# against these with a 0.98 tolerance factor to absorb cross-platform and
+# run-to-run variance.
+recall_at_10 = 0.84
+ndcg_at_10 = 0.72
