@@ -2,8 +2,9 @@
 //! and a runner that replays queries against a `Pipeline`.
 
 use crate::error::{Error, Result};
+use crate::pipeline::Pipeline;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// One graded query: free-text plus the documents considered relevant.
@@ -124,6 +125,52 @@ pub fn ndcg_at_k(ranked_docs: &[String], relevant: &HashMap<String, u8>, k: usiz
     }
 }
 
+/// How many chunk hits to request per query before deduping to documents.
+/// Large enough to yield ≥ 10 distinct documents on the eval corpus.
+pub const SEARCH_CHUNK_LIMIT: usize = 30;
+
+/// Macro-averaged eval scores across the query set.
+#[derive(Debug, Clone, Copy)]
+pub struct EvalScores {
+    /// Mean recall@10 over all queries.
+    pub recall_at_10: f64,
+    /// Mean nDCG@10 over all queries.
+    pub ndcg_at_10: f64,
+}
+
+/// Replay every query against `pipeline`, dedupe chunk hits to distinct
+/// documents in rank order, and compute macro-averaged recall@10 / nDCG@10.
+///
+/// # Errors
+/// Propagates any [`crate::error::Error`] from `pipeline.search`.
+pub async fn run_eval(pipeline: &Pipeline, queries: &EvalQueries) -> Result<EvalScores> {
+    let mut recalls = Vec::with_capacity(queries.queries.len());
+    let mut ndcgs = Vec::with_capacity(queries.queries.len());
+    for q in &queries.queries {
+        let hits = pipeline.search(&q.text, SEARCH_CHUNK_LIMIT).await?;
+        let mut seen = HashSet::new();
+        let ranked: Vec<String> = hits
+            .iter()
+            .filter_map(|h| {
+                Path::new(&h.source_path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(String::from)
+            })
+            .filter(|f| seen.insert(f.clone()))
+            .collect();
+        let relevant: HashMap<String, u8> =
+            q.relevant.iter().map(|r| (r.doc.clone(), r.grade)).collect();
+        recalls.push(recall_at_k(&ranked, &relevant, 10));
+        ndcgs.push(ndcg_at_k(&ranked, &relevant, 10));
+    }
+    let n = recalls.len().max(1) as f64;
+    Ok(EvalScores {
+        recall_at_10: recalls.iter().sum::<f64>() / n,
+        ndcg_at_10: ndcgs.iter().sum::<f64>() / n,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,5 +255,20 @@ relevant = [
             }],
         };
         assert!(check_queries(dir.path(), &q).is_err());
+    }
+
+    #[test]
+    fn fixture_corpus_is_consistent() {
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/eval_corpus");
+        let queries = load_queries(&dir).expect("queries.toml loads");
+        assert!(queries.queries.len() >= 30, "expected ~40 queries");
+        check_queries(&dir, &queries).expect("corpus consistent");
+        let docs = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .filter(|e| e.path().extension().is_some_and(|x| x == "txt"))
+            .count();
+        assert!(docs >= 50, "expected ~60 corpus docs, found {docs}");
     }
 }
