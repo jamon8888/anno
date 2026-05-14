@@ -5,29 +5,33 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use tokio::runtime::Runtime;
 
 const REFERENCE_QUERIES: &[(&str, &str)] = &[
-    ("résiliation contrat avec préavis", "doc1.md"),
-    ("conseil juridique fourniture", "doc1.md"),
-    ("identifiant numéro de sécurité", "doc2.md"),
-    ("coordonnées bancaires IBAN", "doc2.md"),
-    ("clause confidentialité informations", "doc3.md"),
-    ("non concurrence employé", "doc3.md"),
-    ("modalités de paiement facture", "doc4.md"),
-    ("indemnité licenciement", "doc4.md"),
-    ("droit applicable juridiction", "doc5.md"),
-    ("résolution amiable litige", "doc5.md"),
+    ("résiliation contrat avec préavis", "doc1.txt"),
+    ("conseil juridique fourniture", "doc1.txt"),
+    ("identifiant numéro de sécurité", "doc2.txt"),
+    ("coordonnées bancaires IBAN", "doc2.txt"),
+    ("clause confidentialité informations", "doc3.txt"),
+    ("non concurrence employé", "doc3.txt"),
+    ("modalités de paiement facture", "doc4.txt"),
+    ("indemnité licenciement", "doc4.txt"),
+    ("droit applicable juridiction", "doc5.txt"),
+    ("résolution amiable litige", "doc5.txt"),
 ];
 
 fn bench_recall(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let (pipeline, _tmp) = rt.block_on(async {
         let (p, tmp) = common::pipeline_in_tempdir().await;
-        p.ingest_folder(
-            &common::bench_corpus_dir(),
-            true,
-            &tmp.path().join("outputs"),
-        )
-        .await
-        .expect("ingest");
+        let n = p
+            .ingest_folder(&common::bench_corpus_dir(), true, &tmp.path().join("outputs"))
+            .await
+            .expect("ingest");
+        assert!(
+            n > 0,
+            "bench corpus ingested 0 documents — HF model cache likely missing \
+             (run `cargo run --release --example warmup_model -p anno-rag` first) \
+             or the fixture extension is unsupported. An empty index makes \
+             recall@10 read 0, a false negative."
+        );
         (p, tmp)
     });
     c.bench_function("recall_at_10", |b| {

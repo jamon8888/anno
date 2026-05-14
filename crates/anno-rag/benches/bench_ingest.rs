@@ -12,13 +12,11 @@ fn bench_ingest(c: &mut Criterion) {
     group.bench_function("five_doc_corpus", |b| {
         b.to_async(Runtime::new().unwrap()).iter(|| async {
             let (p, tmp) = common::pipeline_in_tempdir().await;
-            p.ingest_folder(
-                &common::bench_corpus_dir(),
-                true,
-                &tmp.path().join("outputs"),
-            )
-            .await
-            .expect("ingest");
+            let n = p
+                .ingest_folder(&common::bench_corpus_dir(), true, &tmp.path().join("outputs"))
+                .await
+                .expect("ingest");
+            assert!(n > 0, "bench corpus ingested 0 documents — warm the HF cache first");
         });
     });
     group.finish();

@@ -30,6 +30,13 @@ jobs:
           echo "RUSTFLAGS=-C target-feature=-crt-static" >> "$GITHUB_ENV"
           echo "CFLAGS_x86_64-pc-windows-msvc=-MD" >> "$GITHUB_ENV"
           echo "CXXFLAGS_x86_64-pc-windows-msvc=-MD" >> "$GITHUB_ENV"
+      # bench_ingest / bench_search / bench_recall need the embedder + the
+      # GLiNER2Fastino ONNX weights on disk. Without a warmed HF cache,
+      # ingest_one() fails per-file, ingest_folder() swallows the error, the
+      # index ends up empty, and recall@10 reads 0 — a false negative, not a
+      # real regression. Warm the cache once up front.
+      - name: Warm HF model cache
+        run: cargo run --release --example warmup_model -p anno-rag
       - name: Run benches
         run: cargo bench -p anno-rag 2>&1 | tee bench.log
       - name: Check idle RSS gate (<200 MB)

@@ -9,13 +9,11 @@ fn bench_search(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let (pipeline, _tmp) = rt.block_on(async {
         let (p, tmp) = common::pipeline_in_tempdir().await;
-        p.ingest_folder(
-            &common::bench_corpus_dir(),
-            true,
-            &tmp.path().join("outputs"),
-        )
-        .await
-        .expect("ingest");
+        let n = p
+            .ingest_folder(&common::bench_corpus_dir(), true, &tmp.path().join("outputs"))
+            .await
+            .expect("ingest");
+        assert!(n > 0, "bench corpus ingested 0 documents — warm the HF cache first");
         (p, tmp)
     });
     c.bench_function("search_p95", |b| {
