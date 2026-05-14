@@ -419,16 +419,16 @@ mod transformer_tests {
             .expect("missing [SEP_TEXT]");
         // Acme (12) appears AFTER [SEP_TEXT]
         assert!(
-            ids[sep_pos + 1..].iter().any(|&i| i == 12),
+            ids[sep_pos + 1..].contains(&12),
             "Acme not after SEP_TEXT, ids={ids:?}"
         );
         // Labels person (9), organization (10) appear BEFORE [SEP_TEXT]
         assert!(
-            ids[..sep_pos].iter().any(|&i| i == 9),
+            ids[..sep_pos].contains(&9),
             "person label not before SEP_TEXT"
         );
         assert!(
-            ids[..sep_pos].iter().any(|&i| i == 10),
+            ids[..sep_pos].contains(&10),
             "organization label not before SEP_TEXT"
         );
 
