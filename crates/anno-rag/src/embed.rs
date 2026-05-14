@@ -118,9 +118,9 @@ impl Embedder {
             let len = e.get_ids().len();
             let pad = max_len - len;
             ids.extend(e.get_ids().iter().map(|&x| i64::from(x)));
-            ids.extend(std::iter::repeat(0i64).take(pad));
+            ids.extend(std::iter::repeat_n(0i64, pad));
             mask.extend(e.get_attention_mask().iter().map(|&x| i64::from(x)));
-            mask.extend(std::iter::repeat(0i64).take(pad));
+            mask.extend(std::iter::repeat_n(0i64, pad));
         }
 
         let input_ids = Tensor::from_vec(ids, (n, max_len), &self.device)
@@ -201,8 +201,10 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires HF cache populated"]
     async fn loads_with_f16_opt_in() {
-        let mut cfg = AnnoRagConfig::default();
-        cfg.embedder_dtype = Some("f16".into());
+        let cfg = AnnoRagConfig {
+            embedder_dtype: Some("f16".into()),
+            ..Default::default()
+        };
         let e = Embedder::load(&cfg).await.expect("f16 load");
         let v = e.embed_batch(&["Bonjour".into()]).expect("embed");
         assert_eq!(v[0].len(), 384);

@@ -200,7 +200,7 @@ impl Pipeline {
         let qv = self
             .embedder()
             .await?
-            .embed_batch(&[pseudo_q.clone()])?
+            .embed_batch(std::slice::from_ref(&pseudo_q))?
             .into_iter()
             .next()
             .ok_or_else(|| Error::Embed("embedder returned empty result for query".into()))?;
@@ -216,7 +216,7 @@ impl Pipeline {
     pub async fn rehydrate(&self, text: &str) -> Result<RehydratedText> {
         use cloakpipe_core::rehydrator::Rehydrator;
         let guard = self.vault.lock_inner().await;
-        let r = Rehydrator::rehydrate(text, &*guard)
+        let r = Rehydrator::rehydrate(text, &guard)
             .map_err(|e| Error::Vault(format!("rehydrator: {e}")))?;
         Ok(RehydratedText {
             text: r.text,

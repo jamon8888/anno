@@ -24,8 +24,10 @@ const QUERIES: &[&str] = &[
 /// ingest, or search fails.
 pub async fn run(corpus: &Path) -> Result<()> {
     let tmp = tempfile::tempdir().map_err(crate::error::Error::from)?;
-    let mut cfg = AnnoRagConfig::default();
-    cfg.data_dir = tmp.path().to_path_buf();
+    let cfg = AnnoRagConfig {
+        data_dir: tmp.path().to_path_buf(),
+        ..Default::default()
+    };
     let key = [0u8; 32];
 
     let t0 = Instant::now();

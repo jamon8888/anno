@@ -79,7 +79,7 @@ fn luhn(s: &str) -> bool {
             }
         })
         .sum();
-    total % 10 == 0
+    total.is_multiple_of(10)
 }
 
 /// Aggregate PII detector: FR regex pack + anno NER.

@@ -53,7 +53,7 @@ impl Vault {
     /// sorted by start offset and non-overlapping (the detector guarantees this).
     pub async fn pseudonymize(&self, text: &str, entities: &[DetectedEntity]) -> Result<String> {
         let mut v = self.inner.lock().await;
-        let result = Replacer::pseudonymize(text, entities, &mut *v)
+        let result = Replacer::pseudonymize(text, entities, &mut v)
             .map_err(|e| Error::Vault(format!("replacer: {e}")))?;
         Ok(result.text)
     }

@@ -125,8 +125,10 @@ mod tests {
 
     #[test]
     fn paths_derive_from_data_dir() {
-        let mut c = AnnoRagConfig::default();
-        c.data_dir = PathBuf::from("/tmp/anno-rag");
+        let c = AnnoRagConfig {
+            data_dir: PathBuf::from("/tmp/anno-rag"),
+            ..Default::default()
+        };
         assert_eq!(c.vault_path(), PathBuf::from("/tmp/anno-rag/vault.enc"));
         assert_eq!(c.index_path(), PathBuf::from("/tmp/anno-rag/index.lance"));
         assert_eq!(c.models_cache(), PathBuf::from("/tmp/anno-rag/models"));

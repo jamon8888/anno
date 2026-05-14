@@ -5,8 +5,10 @@ use anno_rag::{AnnoRagConfig, Pipeline};
 #[tokio::test]
 async fn pipeline_new_does_not_load_embedder() {
     let tmp = tempfile::tempdir().unwrap();
-    let mut cfg = AnnoRagConfig::default();
-    cfg.data_dir = tmp.path().to_path_buf();
+    let cfg = AnnoRagConfig {
+        data_dir: tmp.path().to_path_buf(),
+        ..Default::default()
+    };
     let p = Pipeline::new(cfg, [0u8; 32]).await.expect("pipeline");
 
     let stats = p.vault_stats().await;
@@ -19,8 +21,10 @@ async fn pipeline_new_does_not_load_embedder() {
 #[ignore = "requires HF cache populated; exercised in bench harness"]
 async fn search_triggers_embedder_init() {
     let tmp = tempfile::tempdir().unwrap();
-    let mut cfg = AnnoRagConfig::default();
-    cfg.data_dir = tmp.path().to_path_buf();
+    let cfg = AnnoRagConfig {
+        data_dir: tmp.path().to_path_buf(),
+        ..Default::default()
+    };
     let p = Pipeline::new(cfg, [0u8; 32]).await.expect("pipeline");
     let _ = p.search("test", 5).await;
     assert!(p.embedder_loaded());

@@ -20,8 +20,10 @@ const TEST_KEY: [u8; 32] = [42u8; 32];
 #[ignore = "downloads ~470 MB model + does real I/O — opt-in via --ignored"]
 async fn ingest_then_search_french_fixtures() {
     let dir = TempDir::new().expect("tempdir");
-    let mut cfg = AnnoRagConfig::default();
-    cfg.data_dir = dir.path().to_path_buf();
+    let cfg = AnnoRagConfig {
+        data_dir: dir.path().to_path_buf(),
+        ..Default::default()
+    };
 
     let pipeline = Pipeline::new(cfg.clone(), TEST_KEY)
         .await

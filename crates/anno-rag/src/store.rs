@@ -424,9 +424,11 @@ mod tests {
 
     fn fresh_cfg(dim: usize) -> (TempDir, AnnoRagConfig) {
         let dir = TempDir::new().expect("tempdir");
-        let mut cfg = AnnoRagConfig::default();
-        cfg.data_dir = dir.path().to_path_buf();
-        cfg.embed_dim = dim;
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            embed_dim: dim,
+            ..Default::default()
+        };
         (dir, cfg)
     }
 
