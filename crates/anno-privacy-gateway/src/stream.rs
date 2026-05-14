@@ -62,6 +62,15 @@ impl SseFrame {
         delta.get("text").and_then(Value::as_str)
     }
 
+    /// Return the delta kind when present.
+    #[must_use]
+    pub fn delta_type(&self) -> Option<&str> {
+        self.data
+            .get("delta")
+            .and_then(|delta| delta.get("type"))
+            .and_then(Value::as_str)
+    }
+
     /// Replace assistant text delta.
     pub fn set_text_delta(&mut self, text: &str) {
         let Some(delta) = self.data.get_mut("delta").and_then(Value::as_object_mut) else {
@@ -241,6 +250,19 @@ mod tests {
         assert_eq!(event.text_delta(), None);
         event.set_text_delta("Marie Dupont");
         assert_eq!(event.data["delta"]["text"], "PERSON_1");
+    }
+
+    #[test]
+    fn exposes_delta_type() {
+        let event = SseFrame {
+            event: Some("content_block_delta".to_string()),
+            data: json!({
+                "type": "content_block_delta",
+                "delta": {"type": "input_json_delta", "partial_json": "{\"name\":\"PERSON_1"}
+            }),
+        };
+
+        assert_eq!(event.delta_type(), Some("input_json_delta"));
     }
 
     #[test]
