@@ -1,0 +1,371 @@
+# Graded relevance queries for the synthetic French legal eval corpus.
+# Each [[query]] has a concept-oriented `text` and a list of `relevant`
+# documents with grade 3 (directly addresses), 2 (partial), 1 (marginal).
+
+[[query]]
+text = "résiliation anticipée du contrat avec préavis"
+relevant = [
+  { doc = "prestation_01.txt", grade = 3 },
+  { doc = "prestation_03.txt", grade = 3 },
+  { doc = "bail_03.txt", grade = 2 },
+  { doc = "miseendemeure_02.txt", grade = 2 },
+  { doc = "cgv_05.txt", grade = 1 },
+]
+
+[[query]]
+text = "obligation de confidentialité après la fin du contrat"
+relevant = [
+  { doc = "nda_01.txt", grade = 3 },
+  { doc = "nda_03.txt", grade = 3 },
+  { doc = "nda_08.txt", grade = 3 },
+  { doc = "cdi_04.txt", grade = 2 },
+  { doc = "prestation_02.txt", grade = 2 },
+]
+
+[[query]]
+text = "pénalités de retard de paiement"
+relevant = [
+  { doc = "cgv_01.txt", grade = 3 },
+  { doc = "cgv_08.txt", grade = 3 },
+  { doc = "prestation_02.txt", grade = 3 },
+  { doc = "miseendemeure_01.txt", grade = 2 },
+  { doc = "bail_06.txt", grade = 1 },
+]
+
+[[query]]
+text = "clause de non-concurrence du salarié"
+relevant = [
+  { doc = "cdi_01.txt", grade = 3 },
+  { doc = "cdi_04.txt", grade = 3 },
+  { doc = "cdi_06.txt", grade = 3 },
+  { doc = "miseendemeure_06.txt", grade = 2 },
+]
+
+[[query]]
+text = "modalités de cession de parts sociales"
+relevant = [
+  { doc = "statuts_01.txt", grade = 3 },
+  { doc = "statuts_07.txt", grade = 3 },
+  { doc = "statuts_05.txt", grade = 3 },
+  { doc = "statuts_03.txt", grade = 2 },
+]
+
+[[query]]
+text = "agrément des associés pour la cession d'actions à un tiers"
+relevant = [
+  { doc = "statuts_02.txt", grade = 3 },
+  { doc = "statuts_04.txt", grade = 3 },
+  { doc = "statuts_06.txt", grade = 3 },
+  { doc = "statuts_08.txt", grade = 2 },
+]
+
+[[query]]
+text = "mise en demeure de payer une facture impayée"
+relevant = [
+  { doc = "miseendemeure_01.txt", grade = 3 },
+  { doc = "miseendemeure_03.txt", grade = 3 },
+  { doc = "miseendemeure_05.txt", grade = 3 },
+  { doc = "miseendemeure_08.txt", grade = 3 },
+]
+
+[[query]]
+text = "clause résolutoire du bail commercial pour défaut de paiement du loyer"
+relevant = [
+  { doc = "bail_01.txt", grade = 3 },
+  { doc = "bail_05.txt", grade = 3 },
+  { doc = "bail_08.txt", grade = 3 },
+  { doc = "miseendemeure_07.txt", grade = 2 },
+]
+
+[[query]]
+text = "durée du contrat et tacite reconduction"
+relevant = [
+  { doc = "prestation_01.txt", grade = 3 },
+  { doc = "prestation_03.txt", grade = 3 },
+  { doc = "prestation_06.txt", grade = 2 },
+  { doc = "cdi_01.txt", grade = 1 },
+]
+
+[[query]]
+text = "indemnité due en cas de rupture abusive du contrat"
+relevant = [
+  { doc = "prestation_03.txt", grade = 3 },
+  { doc = "prestation_07.txt", grade = 3 },
+  { doc = "cdi_05.txt", grade = 2 },
+  { doc = "bail_05.txt", grade = 1 },
+]
+
+[[query]]
+text = "droit applicable et tribunal compétent en cas de litige"
+relevant = [
+  { doc = "prestation_01.txt", grade = 3 },
+  { doc = "prestation_05.txt", grade = 3 },
+  { doc = "cgv_03.txt", grade = 3 },
+  { doc = "cgv_01.txt", grade = 2 },
+]
+
+[[query]]
+text = "rémunération mensuelle versée par virement bancaire"
+relevant = [
+  { doc = "cdi_01.txt", grade = 3 },
+  { doc = "cdi_02.txt", grade = 3 },
+  { doc = "prestation_01.txt", grade = 2 },
+  { doc = "cdi_09.txt", grade = 3 },
+]
+
+[[query]]
+text = "période d'essai d'un contrat de travail"
+relevant = [
+  { doc = "cdi_01.txt", grade = 3 },
+  { doc = "cdi_04.txt", grade = 3 },
+  { doc = "cdi_08.txt", grade = 3 },
+  { doc = "cdi_03.txt", grade = 2 },
+]
+
+[[query]]
+text = "préavis de congé triennal du preneur dans un bail commercial"
+relevant = [
+  { doc = "bail_01.txt", grade = 3 },
+  { doc = "bail_02.txt", grade = 3 },
+  { doc = "bail_07.txt", grade = 3 },
+  { doc = "bail_04.txt", grade = 2 },
+]
+
+[[query]]
+text = "restitution des documents confidentiels en fin de mission"
+relevant = [
+  { doc = "nda_03.txt", grade = 3 },
+  { doc = "nda_05.txt", grade = 3 },
+  { doc = "nda_02.txt", grade = 2 },
+  { doc = "miseendemeure_04.txt", grade = 2 },
+]
+
+[[query]]
+text = "charges et taxe foncière à la charge du locataire"
+relevant = [
+  { doc = "bail_01.txt", grade = 3 },
+  { doc = "bail_03.txt", grade = 3 },
+  { doc = "bail_04.txt", grade = 3 },
+  { doc = "bail_06.txt", grade = 2 },
+]
+
+[[query]]
+text = "objet social d'une société de prestation informatique"
+relevant = [
+  { doc = "statuts_01.txt", grade = 3 },
+  { doc = "statuts_02.txt", grade = 3 },
+  { doc = "statuts_03.txt", grade = 3 },
+]
+
+[[query]]
+text = "capital social et répartition en parts"
+relevant = [
+  { doc = "statuts_04.txt", grade = 3 },
+  { doc = "statuts_06.txt", grade = 3 },
+  { doc = "statuts_08.txt", grade = 3 },
+  { doc = "statuts_01.txt", grade = 2 },
+]
+
+[[query]]
+text = "champ d'application des conditions générales de vente"
+relevant = [
+  { doc = "cgv_01.txt", grade = 3 },
+  { doc = "cgv_04.txt", grade = 3 },
+  { doc = "cgv_07.txt", grade = 3 },
+  { doc = "cgv_09.txt", grade = 2 },
+]
+
+[[query]]
+text = "acompte exigible à la commande"
+relevant = [
+  { doc = "cgv_02.txt", grade = 3 },
+  { doc = "cgv_06.txt", grade = 3 },
+  { doc = "prestation_04.txt", grade = 1 },
+]
+
+[[query]]
+text = "réserve de propriété sur les marchandises jusqu'au paiement intégral"
+relevant = [
+  { doc = "cgv_03.txt", grade = 3 },
+  { doc = "cgv_06.txt", grade = 2 },
+]
+
+[[query]]
+text = "secret professionnel de l'expert-comptable"
+relevant = [
+  { doc = "prestation_06.txt", grade = 3 },
+  { doc = "cgv_09.txt", grade = 3 },
+  { doc = "statuts_07.txt", grade = 2 },
+  { doc = "cdi_08.txt", grade = 2 },
+]
+
+[[query]]
+text = "résilier un contrat de maintenance informatique"
+relevant = [
+  { doc = "prestation_03.txt", grade = 3 },
+  { doc = "cgv_05.txt", grade = 3 },
+  { doc = "miseendemeure_08.txt", grade = 2 },
+  { doc = "nda_05.txt", grade = 1 },
+]
+
+[[query]]
+text = "indemnité de fin de contrat à durée déterminée"
+relevant = [
+  { doc = "cdi_03.txt", grade = 3 },
+  { doc = "cdi_08.txt", grade = 3 },
+]
+
+[[query]]
+text = "manquement grave justifiant la résiliation de plein droit"
+relevant = [
+  { doc = "prestation_01.txt", grade = 3 },
+  { doc = "prestation_09.txt", grade = 3 },
+  { doc = "cgv_08.txt", grade = 3 },
+  { doc = "bail_08.txt", grade = 2 },
+]
+
+[[query]]
+text = "loyer annuel payable par trimestre et d'avance"
+relevant = [
+  { doc = "bail_02.txt", grade = 3 },
+  { doc = "bail_05.txt", grade = 3 },
+  { doc = "bail_07.txt", grade = 3 },
+  { doc = "bail_09.txt", grade = 3 },
+]
+
+[[query]]
+text = "information confidentielle échangée dans le cadre d'un partenariat"
+relevant = [
+  { doc = "nda_02.txt", grade = 3 },
+  { doc = "nda_07.txt", grade = 3 },
+  { doc = "nda_04.txt", grade = 2 },
+]
+
+[[query]]
+text = "engagement du prestataire à ne pas divulguer les informations du client"
+relevant = [
+  { doc = "prestation_01.txt", grade = 2 },
+  { doc = "nda_01.txt", grade = 3 },
+  { doc = "nda_05.txt", grade = 3 },
+  { doc = "nda_06.txt", grade = 3 },
+]
+
+[[query]]
+text = "durée du travail hebdomadaire du salarié"
+relevant = [
+  { doc = "cdi_01.txt", grade = 3 },
+  { doc = "cdi_05.txt", grade = 3 },
+  { doc = "cdi_09.txt", grade = 3 },
+  { doc = "cdi_02.txt", grade = 2 },
+]
+
+[[query]]
+text = "indemnité forfaitaire de recouvrement de quarante euros"
+relevant = [
+  { doc = "cgv_01.txt", grade = 3 },
+  { doc = "cgv_08.txt", grade = 3 },
+  { doc = "prestation_04.txt", grade = 3 },
+  { doc = "prestation_09.txt", grade = 2 },
+]
+
+[[query]]
+text = "gérance de la société pour une durée indéterminée"
+relevant = [
+  { doc = "statuts_01.txt", grade = 3 },
+  { doc = "statuts_03.txt", grade = 3 },
+  { doc = "statuts_05.txt", grade = 3 },
+  { doc = "statuts_07.txt", grade = 2 },
+]
+
+[[query]]
+text = "préavis de licenciement ou de démission applicable au cadre"
+relevant = [
+  { doc = "cdi_01.txt", grade = 3 },
+  { doc = "cdi_04.txt", grade = 3 },
+  { doc = "cdi_06.txt", grade = 2 },
+  { doc = "cdi_02.txt", grade = 2 },
+]
+
+[[query]]
+text = "mise en demeure de respecter une clause de non-concurrence"
+relevant = [
+  { doc = "miseendemeure_06.txt", grade = 3 },
+  { doc = "cdi_04.txt", grade = 2 },
+  { doc = "cdi_01.txt", grade = 1 },
+]
+
+[[query]]
+text = "conséquences du défaut d'exécution d'une obligation contractuelle"
+relevant = [
+  { doc = "miseendemeure_02.txt", grade = 3 },
+  { doc = "prestation_02.txt", grade = 2 },
+  { doc = "cgv_02.txt", grade = 2 },
+]
+
+[[query]]
+text = "confidentialité des conditions tarifaires et commerciales"
+relevant = [
+  { doc = "cgv_03.txt", grade = 3 },
+  { doc = "cdi_02.txt", grade = 2 },
+  { doc = "nda_02.txt", grade = 2 },
+]
+
+[[query]]
+text = "contrepartie financière de la clause de non-concurrence"
+relevant = [
+  { doc = "cdi_01.txt", grade = 3 },
+  { doc = "cdi_04.txt", grade = 3 },
+  { doc = "cdi_07.txt", grade = 3 },
+  { doc = "cdi_06.txt", grade = 2 },
+]
+
+[[query]]
+text = "honoraires payables à réception de facture par virement"
+relevant = [
+  { doc = "prestation_06.txt", grade = 3 },
+  { doc = "prestation_08.txt", grade = 3 },
+  { doc = "cgv_09.txt", grade = 2 },
+]
+
+[[query]]
+text = "durée de neuf ans du bail commercial"
+relevant = [
+  { doc = "bail_01.txt", grade = 3 },
+  { doc = "bail_04.txt", grade = 3 },
+  { doc = "bail_06.txt", grade = 3 },
+  { doc = "bail_09.txt", grade = 3 },
+]
+
+[[query]]
+text = "forme juridique société à responsabilité limitée"
+relevant = [
+  { doc = "statuts_01.txt", grade = 3 },
+  { doc = "statuts_05.txt", grade = 3 },
+  { doc = "statuts_07.txt", grade = 3 },
+  { doc = "statuts_08.txt", grade = 3 },
+]
+
+[[query]]
+text = "réparation du préjudice par le versement d'une indemnité en cas de divulgation"
+relevant = [
+  { doc = "nda_01.txt", grade = 3 },
+  { doc = "nda_03.txt", grade = 3 },
+  { doc = "nda_08.txt", grade = 3 },
+  { doc = "nda_07.txt", grade = 2 },
+]
+
+[[query]]
+text = "suspension des livraisons en cas de paiement tardif"
+relevant = [
+  { doc = "cgv_03.txt", grade = 3 },
+  { doc = "cgv_05.txt", grade = 2 },
+]
+
+[[query]]
+text = "engagement à payer le prix dans les délais convenus"
+relevant = [
+  { doc = "cgv_01.txt", grade = 3 },
+  { doc = "cgv_04.txt", grade = 3 },
+  { doc = "cgv_08.txt", grade = 3 },
+  { doc = "cgv_06.txt", grade = 2 },
+]

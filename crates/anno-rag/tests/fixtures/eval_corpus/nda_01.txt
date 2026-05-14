@@ -1,0 +1,33 @@
+ACCORD DE CONFIDENTIALITÉ
+
+Entre la société ATELIER NUMÉRIQUE, SARL, SIRET 81234567800019, représentée
+par Mme Claire Fontaine, ci-après « la Partie Divulgatrice »,
+Et Monsieur Julien Marchand, ci-après « la Partie Réceptrice ».
+
+Article 1 — Objet
+Le présent accord a pour objet de protéger les informations confidentielles
+échangées dans le cadre d'un projet de développement logiciel.
+
+Article 2 — Informations confidentielles
+Sont confidentielles toutes les informations techniques, commerciales et
+financières communiquées, quel qu'en soit le support.
+
+Article 3 — Obligations
+La Partie Réceptrice s'engage à ne pas divulguer ni utiliser les
+informations confidentielles à d'autres fins que celles du projet.
+
+Article 4 — Durée
+L'obligation de confidentialité s'applique pendant toute la durée des
+échanges et pendant cinq (5) ans après leur terme.
+
+Article 5 — Restitution
+À la fin des échanges, la Partie Réceptrice restitue ou détruit tous les
+documents confidentiels reçus.
+
+Article 6 — Indemnité et sanction
+Tout manquement à l'obligation de confidentialité engage la responsabilité
+de son auteur et l'oblige à réparer le préjudice par une indemnité.
+
+Article 7 — Droit applicable
+Le présent accord est régi par le droit français. Contact : 06 12 34 56 78,
+virement éventuel sur l'IBAN FR76 3000 4000 0500 0612 3456 789.

@@ -1,0 +1,33 @@
+ACCORD DE CONFIDENTIALITÉ
+
+Entre la société TECHNIPRO SERVICES, EURL, SIRET 60981234500017,
+représentée par M. Karim Benali, ci-après « le Prestataire »,
+Et Madame Hélène Vasseur, ci-après « le Client ».
+
+Article 1 — Objet
+Le présent accord encadre la protection des informations confidentielles
+auxquelles le Prestataire accède dans le cadre de sa mission de maintenance.
+
+Article 2 — Informations confidentielles
+Sont confidentielles toutes les données techniques et personnelles
+hébergées sur les systèmes du Client.
+
+Article 3 — Obligations
+Le Prestataire s'engage à ne pas divulguer, copier ni exploiter ces
+informations en dehors de la mission.
+
+Article 4 — Durée
+L'obligation de confidentialité s'applique pendant le contrat de
+maintenance et pendant cinq (5) ans après sa fin.
+
+Article 5 — Restitution
+À la fin du contrat, le Prestataire restitue les accès et détruit les
+copies de données confidentielles en sa possession.
+
+Article 6 — Indemnité
+Toute divulgation fautive oblige le Prestataire à réparer le préjudice par
+le versement d'une indemnité.
+
+Article 7 — Droit applicable
+L'accord est régi par le droit français. Contact : 07 12 90 45 67, IBAN
+FR76 3004 7140 0200 0567 8901 234.
