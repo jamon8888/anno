@@ -1,8 +1,10 @@
 # anno privacy gateway v0.4 — streaming and internal provider adapter
 
-**Status:** Draft spec  
-**Date:** 2026-05-13  
+**Status:** Superseded for v0.4 implementation scope by `2026-05-14-anno-privacy-gateway-v0.4-streaming.md`
+**Date:** 2026-05-13
 **Depends on:** `anno-privacy-gateway v0.3`
+
+This earlier draft explored streaming and the internal provider adapter together. The approved v0.4 scope is now streaming-first: keep `anthropic-proxy-rs` as the sidecar, add safe SSE support, and defer the internal provider adapter to a later gateway release.
 
 ## Goal
 
