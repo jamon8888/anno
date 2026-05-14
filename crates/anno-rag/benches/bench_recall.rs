@@ -1,5 +1,8 @@
 //! Recall@10 over 10 reference queries. Hard gate: ≥ 95% of main baseline.
 //! Emits RECALL_AT_10=<float> on stderr for CI scraping.
+// Bench harness: unwrap panics are acceptable (a failed bench is a failed
+// run), and criterion_group! expands to an undocumented `pub fn benches`.
+#![allow(clippy::unwrap_used, missing_docs)]
 mod common;
 use criterion::{criterion_group, criterion_main, Criterion};
 use tokio::runtime::Runtime;

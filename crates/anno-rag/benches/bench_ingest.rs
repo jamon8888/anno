@@ -1,4 +1,7 @@
 //! Measures ingest throughput on the 5-doc fixture corpus.
+// Bench harness: unwrap panics are acceptable (a failed bench is a failed
+// run), and criterion_group! expands to an undocumented `pub fn benches`.
+#![allow(clippy::unwrap_used, missing_docs)]
 mod common;
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::time::Duration;

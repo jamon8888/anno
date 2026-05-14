@@ -1,5 +1,8 @@
 //! Measures RSS after Pipeline::new but before any tool call. Hard gate: <200 MB.
 //! Emits IDLE_RSS_BYTES=<n> on stderr for CI scraping.
+// Bench harness: unwrap panics are acceptable (a failed bench is a failed
+// run), and criterion_group! expands to an undocumented `pub fn benches`.
+#![allow(clippy::unwrap_used, missing_docs)]
 mod common;
 use criterion::{criterion_group, criterion_main, Criterion};
 use tokio::runtime::Runtime;
