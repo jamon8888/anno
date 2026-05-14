@@ -7,6 +7,10 @@ ignore = [
     # No safe upgrade available (transitive).
     { id = "RUSTSEC-2025-0119", reason = "number_prefix is unmaintained; no safe upgrade is available." },
     { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; no safe upgrade is available." },
+    # rand unsound advisory: only triggers with a custom logger calling
+    # rand::rng() — not a pattern anno or anno-rag use. Pulled transitively
+    # via lance-datagen / candle-core. No safe upgrade across the tree yet.
+    { id = "RUSTSEC-2026-0097", reason = "rand::rng() unsoundness requires a custom logger path anno never exercises; transitive via lance/candle, no coordinated upgrade available." },
 ]
 
 [licenses]
@@ -45,6 +49,22 @@ exceptions = [
     # Root certificate bundles use data licensing.
     { crate = "webpki-root-certs", allow = ["CDLA-Permissive-2.0"] },
     { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
+
+    # Unicode-DFS-2016 via `finl_unicode` (transitive through the
+    # tokenizers / kreuzberg text-processing chain in anno-rag).
+    # Unicode-DFS-2016 is the permissive Unicode data license that
+    # predates Unicode-3.0 (already in `allow`); same permissive terms,
+    # no copyleft. Scoped to the one crate that still ships the old SPDX id.
+    { crate = "finl_unicode", allow = ["Unicode-DFS-2016"] },
+
+    # Elastic-2.0 via `kreuzberg` (direct anno-rag dependency — document
+    # extraction backend). Elastic License 2.0 is source-available, NOT
+    # OSI-approved: it forbids offering the software as a managed service
+    # and forbids removing license keys. anno-rag consumes kreuzberg as a
+    # library inside a locally-run desktop binary — neither restriction is
+    # triggered by that use. REVIEW BEFORE any SaaS/hosted offering of
+    # anno-rag: a hosted multi-tenant deployment may breach ELv2 §1.
+    { crate = "kreuzberg", allow = ["Elastic-2.0"] },
 ]
 
 [licenses.private]
