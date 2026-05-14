@@ -10,6 +10,7 @@ pub mod error;
 pub mod policy;
 pub mod privacy;
 pub mod server;
+pub mod stream;
 pub mod upstream;
 
 pub use config::GatewayConfig;

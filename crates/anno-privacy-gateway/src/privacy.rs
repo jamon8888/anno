@@ -75,13 +75,23 @@ impl PrivacyEngine {
 
     /// Pseudonymize all v0.3-supported request text fields in place.
     pub fn pseudonymize_request(&mut self, request: &mut Value) -> Result<PrivacyReport> {
+        self.pseudonymize_request_with_streaming(request, false)
+    }
+
+    /// Pseudonymize request text, optionally allowing `stream=true`.
+    pub fn pseudonymize_request_with_streaming(
+        &mut self,
+        request: &mut Value,
+        allow_streaming: bool,
+    ) -> Result<PrivacyReport> {
         if request
             .get("stream")
             .and_then(Value::as_bool)
             .unwrap_or(false)
+            && !allow_streaming
         {
             return Err(Error::UnsupportedFeature(
-                "stream=true is deferred to anno-privacy-gateway v0.4".to_string(),
+                "stream=true is disabled; set ANNO_GATEWAY_STREAMING=enabled".to_string(),
             ));
         }
 
@@ -410,6 +420,26 @@ mod tests {
 
         let err = engine.pseudonymize_request(&mut request).unwrap_err();
         assert!(matches!(err, Error::UnsupportedFeature(_)));
+    }
+
+    #[test]
+    fn allows_streaming_when_policy_enabled() {
+        let mut engine = PrivacyEngine::default();
+        let mut request = json!({
+            "model": "claude",
+            "stream": true,
+            "messages": [{"role": "user", "content": "Bonjour Marie Dupont"}]
+        });
+
+        let report = engine
+            .pseudonymize_request_with_streaming(&mut request, true)
+            .unwrap();
+        let body = serde_json::to_string(&request).unwrap();
+
+        assert_eq!(request["stream"], true);
+        assert!(report.entities >= 1);
+        assert!(!body.contains("Marie Dupont"));
+        assert!(body.contains("PERSON_"));
     }
 
     #[test]
