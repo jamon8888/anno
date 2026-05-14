@@ -16,13 +16,13 @@
 //! 3. **Extractor**: Pulls full text from selected nodes for context
 //! 4. **Storage**: Persists tree indices as local JSON files
 
-pub mod tree;
-pub mod indexer;
-pub mod search;
 pub mod extractor;
-pub mod storage;
+pub mod indexer;
 pub mod parser;
+pub mod search;
+pub mod storage;
+pub mod tree;
 
-pub use tree::{TreeIndex, TreeNode, NodeSummary};
 pub use indexer::TreeIndexer;
 pub use search::TreeSearcher;
+pub use tree::{NodeSummary, TreeIndex, TreeNode};

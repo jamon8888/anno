@@ -50,12 +50,19 @@ use anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle;
 use anno::backends::inference::ZeroShotNER;
 use anno::Entity;
 
-const TEXT: &str =
-    "Marie Curie won the Nobel Prize in Physics in 1903. \
+const TEXT: &str = "Marie Curie won the Nobel Prize in Physics in 1903. \
      Contact john.smith@example.com or call +1-555-867-5309. \
      Her credit card 4532-1234-5678-9010 is on file with SSN 123-45-6789.";
 
-const TYPES: &[&str] = &["person", "award", "year", "email", "phone", "credit_card", "ssn"];
+const TYPES: &[&str] = &[
+    "person",
+    "award",
+    "year",
+    "email",
+    "phone",
+    "credit_card",
+    "ssn",
+];
 
 fn adapter_path(env_var: &str, default: &str) -> PathBuf {
     std::env::var(env_var)
@@ -129,16 +136,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert_eq!(model.active_adapter(), Some("A"));
     let after_a = ZeroShotNER::extract_with_types(&model, TEXT, TYPES, 0.5)?;
     print_entities("after A", &after_a);
-    println!("\n  Δ(base, A) max_score_diff = {:.6e}", max_score_diff(&base, &after_a));
+    println!(
+        "\n  Δ(base, A) max_score_diff = {:.6e}",
+        max_score_diff(&base, &after_a)
+    );
 
     // ── Step 3: swap to B (no unload) ─────────────────────────────
-    println!("\n🟡 STEP 3 — load_adapter('B', {}) [direct swap, no unload]", adapter_b.display());
+    println!(
+        "\n🟡 STEP 3 — load_adapter('B', {}) [direct swap, no unload]",
+        adapter_b.display()
+    );
     model.load_adapter("B", &adapter_b)?;
     assert_eq!(model.active_adapter(), Some("B"));
     let after_b = ZeroShotNER::extract_with_types(&model, TEXT, TYPES, 0.5)?;
     print_entities("after B", &after_b);
-    println!("\n  Δ(A, B)    max_score_diff = {:.6e}", max_score_diff(&after_a, &after_b));
-    println!("  Δ(base, B) max_score_diff = {:.6e}", max_score_diff(&base, &after_b));
+    println!(
+        "\n  Δ(A, B)    max_score_diff = {:.6e}",
+        max_score_diff(&after_a, &after_b)
+    );
+    println!(
+        "  Δ(base, B) max_score_diff = {:.6e}",
+        max_score_diff(&base, &after_b)
+    );
 
     // ── Step 4: unload ───────────────────────────────────────────
     println!("\n⚪ STEP 4 — unload_adapter()");

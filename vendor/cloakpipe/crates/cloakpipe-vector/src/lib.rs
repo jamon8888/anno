@@ -17,4 +17,4 @@
 
 pub mod adcpe;
 
-pub use adcpe::{AdcpeEncryptor, AdcpeConfig};
+pub use adcpe::{AdcpeConfig, AdcpeEncryptor};

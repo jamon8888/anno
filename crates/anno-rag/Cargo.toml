@@ -10,8 +10,15 @@ description  = "Local GDPR-compliant document anonymizer + RAG service (French l
 name = "anno-rag"
 path = "src/main.rs"
 
+[features]
+default = []
+# Enables the `--enable-ocr` fork-to-system-tesseract runtime path.
+# No effect on linked code — the OCR module always compiles (it's a thin
+# tokio::process wrapper); the flag is informational/feature-gated docs.
+ocr = []
+
 [dependencies]
-anno            = { path = "../anno" }
+anno            = { path = "../anno", features = ["gliner2-fastino"] }
 cloakpipe-core  = { path = "../../vendor/cloakpipe/crates/cloakpipe-core" }
 
 kreuzberg            = { workspace = true }
@@ -44,10 +51,32 @@ keyring              = { workspace = true }
 rand                 = { workspace = true }
 dirs                 = { workspace = true }
 chrono               = { workspace = true }
+sysinfo              = "0.32"
+tempfile             = "3"
 
 [dev-dependencies]
-tempfile        = "3"
 insta           = { version = "1", features = ["yaml"] }
+criterion       = { version = "0.5", features = ["html_reports", "async_tokio"] }
+
+[[bench]]
+name = "bench_cold_start"
+harness = false
+
+[[bench]]
+name = "bench_idle_rss"
+harness = false
+
+[[bench]]
+name = "bench_search"
+harness = false
+
+[[bench]]
+name = "bench_ingest"
+harness = false
+
+[[bench]]
+name = "bench_recall"
+harness = false
 
 [lints]
 workspace = true

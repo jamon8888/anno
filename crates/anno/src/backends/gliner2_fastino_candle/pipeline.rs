@@ -64,12 +64,8 @@ pub(crate) fn run_pipeline_candle(
     // 4. Span rep.
     let span_idx_arr = build_span_idx(num_words); // ndarray Array3<i64> shape [1, T*W, 2]
     let span_idx_data: Vec<i64> = span_idx_arr.iter().copied().collect();
-    let span_idx = Tensor::from_slice(
-        &span_idx_data[..],
-        (1, num_words * MAX_WIDTH, 2),
-        device,
-    )
-    .map_err(|e| Error::Backend(format!("candle span_idx: {e}")))?;
+    let span_idx = Tensor::from_slice(&span_idx_data[..], (1, num_words * MAX_WIDTH, 2), device)
+        .map_err(|e| Error::Backend(format!("candle span_idx: {e}")))?;
     let span_rep_out = model
         .heads
         .span_rep
@@ -144,11 +140,9 @@ pub(crate) fn run_pipeline_candle(
         .flatten_all()
         .and_then(|t| t.to_vec1::<f32>())
         .map_err(|e| Error::Backend(format!("candle scores readback: {e}")))?;
-    let scores_arr = Array4::from_shape_vec(
-        (MAX_COUNT, num_words, MAX_WIDTH, num_fields),
-        scores_vec,
-    )
-    .map_err(|e| Error::Backend(format!("candle scores reshape: {e}")))?;
+    let scores_arr =
+        Array4::from_shape_vec((MAX_COUNT, num_words, MAX_WIDTH, num_fields), scores_vec)
+            .map_err(|e| Error::Backend(format!("candle scores reshape: {e}")))?;
 
     Ok((ScorerOutput { scores: scores_arr }, pred_count))
 }

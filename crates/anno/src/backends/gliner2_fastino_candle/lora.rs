@@ -85,16 +85,10 @@ impl LoraAdapter {
     pub fn load(adapter_dir: &Path, device: &Device) -> crate::Result<Self> {
         let config_path = adapter_dir.join("adapter_config.json");
         let cfg_str = std::fs::read_to_string(&config_path).map_err(|e| {
-            crate::Error::Backend(format!(
-                "lora: read {}: {e}",
-                config_path.display()
-            ))
+            crate::Error::Backend(format!("lora: read {}: {e}", config_path.display()))
         })?;
         let config: LoraConfig = serde_json::from_str(&cfg_str).map_err(|e| {
-            crate::Error::Backend(format!(
-                "lora: parse {}: {e}",
-                config_path.display()
-            ))
+            crate::Error::Backend(format!("lora: parse {}: {e}", config_path.display()))
         })?;
         if config.r == 0 {
             return Err(crate::Error::Backend(
@@ -114,16 +108,10 @@ impl LoraAdapter {
         };
 
         let bytes = std::fs::read(&weights_path).map_err(|e| {
-            crate::Error::Backend(format!(
-                "lora: read {}: {e}",
-                weights_path.display()
-            ))
+            crate::Error::Backend(format!("lora: read {}: {e}", weights_path.display()))
         })?;
         let st = SafeTensors::deserialize(&bytes).map_err(|e| {
-            crate::Error::Backend(format!(
-                "lora: deserialize {}: {e}",
-                weights_path.display()
-            ))
+            crate::Error::Backend(format!("lora: deserialize {}: {e}", weights_path.display()))
         })?;
 
         // Walk keys, group by module path, slot lora_A/lora_B.
@@ -147,9 +135,8 @@ impl LoraAdapter {
             for chunk in bytes.chunks_exact(4) {
                 data.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
             }
-            let tensor = Tensor::from_vec(data, shape, device).map_err(|e| {
-                crate::Error::Backend(format!("lora: tensor {key}: {e}"))
-            })?;
+            let tensor = Tensor::from_vec(data, shape, device)
+                .map_err(|e| crate::Error::Backend(format!("lora: tensor {key}: {e}")))?;
             let entry = by_module.entry(module_path).or_default();
             match slot {
                 LoraSlot::A => entry.0 = Some(tensor),
@@ -237,9 +224,8 @@ pub(crate) fn merge_into_base(
     for (key, view) in st.tensors() {
         // Decode safetensors view to a Candle tensor.
         let shape: Vec<usize> = view.shape().to_vec();
-        let mut tensor = decode_view(&view, shape, device).map_err(|e| {
-            crate::Error::Backend(format!("lora_merge: decode {key}: {e}"))
-        })?;
+        let mut tensor = decode_view(&view, shape, device)
+            .map_err(|e| crate::Error::Backend(format!("lora_merge: decode {key}: {e}")))?;
 
         // Match key against adapter modules: strip `.weight` suffix, look up.
         if let Some(mod_path) = key.strip_suffix(".weight") {
@@ -252,9 +238,7 @@ pub(crate) fn merge_into_base(
                     adapter.config.fan_in_fan_out,
                 )
                 .map_err(|e| {
-                    crate::Error::Backend(format!(
-                        "lora_merge: apply delta to {mod_path}: {e}"
-                    ))
+                    crate::Error::Backend(format!("lora_merge: apply delta to {mod_path}: {e}"))
                 })?;
                 applied.insert(mod_path.to_string());
             }
@@ -317,9 +301,9 @@ fn decode_view(
 /// base weight is `[in, out]` instead of `[out, in]` and the delta is
 /// transposed before adding.
 fn apply_lora_delta(
-    base: &Tensor,    // [out, in]  (or [in, out] if fan_in_fan_out)
-    lora_a: &Tensor,  // [r, in]
-    lora_b: &Tensor,  // [out, r]
+    base: &Tensor,   // [out, in]  (or [in, out] if fan_in_fan_out)
+    lora_a: &Tensor, // [r, in]
+    lora_b: &Tensor, // [out, r]
     scale: f64,
     fan_in_fan_out: bool,
 ) -> candle_core::Result<Tensor> {
@@ -354,17 +338,15 @@ mod tests {
 
     #[test]
     fn parse_lora_key_strict() {
-        let (path, slot) = parse_lora_key(
-            "base_model.model.encoder.layer.0.attention.self.query.lora_A.weight",
-        )
-        .expect("valid PEFT key should parse");
+        let (path, slot) =
+            parse_lora_key("base_model.model.encoder.layer.0.attention.self.query.lora_A.weight")
+                .expect("valid PEFT key should parse");
         assert_eq!(path, "encoder.layer.0.attention.self.query");
         assert!(matches!(slot, LoraSlot::A));
 
-        let (path_b, slot_b) = parse_lora_key(
-            "base_model.model.encoder.layer.0.attention.self.query.lora_B.weight",
-        )
-        .expect("valid PEFT key (B) should parse");
+        let (path_b, slot_b) =
+            parse_lora_key("base_model.model.encoder.layer.0.attention.self.query.lora_B.weight")
+                .expect("valid PEFT key (B) should parse");
         assert_eq!(path_b, "encoder.layer.0.attention.self.query");
         assert!(matches!(slot_b, LoraSlot::B));
 

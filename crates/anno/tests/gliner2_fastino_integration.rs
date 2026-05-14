@@ -28,7 +28,9 @@ fn fastino_multi_v1_extracts_org_and_loc() {
     // Loose assertions — the model's exact tokenization-driven output
     // varies, but Acme Corp + Paris are clearly correct labels.
     let acme = ents.iter().find(|e| e.text.contains("Acme"));
-    let paris = ents.iter().find(|e| e.text == "Paris" || e.text.contains("Paris"));
+    let paris = ents
+        .iter()
+        .find(|e| e.text == "Paris" || e.text.contains("Paris"));
     assert!(acme.is_some(), "expected an Acme org entity, got {ents:#?}");
     assert!(paris.is_some(), "expected a Paris entity, got {ents:#?}");
 }
@@ -56,7 +58,8 @@ fn fastino_extract_with_label_descriptions() {
         "expected an Acme org entity, got {ents:#?}",
     );
     assert!(
-        ents.iter().any(|e| e.text == "Paris" || e.text.contains("Paris")),
+        ents.iter()
+            .any(|e| e.text == "Paris" || e.text.contains("Paris")),
         "expected a Paris location entity, got {ents:#?}",
     );
 }
@@ -70,31 +73,21 @@ fn fastino_batch_per_sample_labels() {
 
     let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
         .expect("load gliner2-multi-v1");
-    let texts: Vec<&str> = vec![
-        "Acme Corp signed a deal.",
-        "Marie Curie worked in France.",
-    ];
-    let labels_per_text: Vec<Vec<&str>> = vec![
-        vec!["organization"],
-        vec!["person", "location"],
-    ];
+    let texts: Vec<&str> = vec!["Acme Corp signed a deal.", "Marie Curie worked in France."];
+    let labels_per_text: Vec<Vec<&str>> = vec![vec!["organization"], vec!["person", "location"]];
 
     let results = model
-        .batch_extract_with_schema_mode(
-            &texts,
-            BatchSchemaMode::PerSample(&labels_per_text),
-            0.5,
-        )
+        .batch_extract_with_schema_mode(&texts, BatchSchemaMode::PerSample(&labels_per_text), 0.5)
         .expect("batch extract");
 
     assert_eq!(results.len(), 2);
     // Text 0 should detect Acme as organization (or at least produce non-empty).
     assert!(
-        results[0].iter().any(|e| matches!(
-            e.entity_type,
-            anno::EntityType::Organization
-        )),
-        "expected an Organization in results[0], got {:#?}", results[0],
+        results[0]
+            .iter()
+            .any(|e| matches!(e.entity_type, anno::EntityType::Organization)),
+        "expected an Organization in results[0], got {:#?}",
+        results[0],
     );
     // Text 1 should detect Marie as person OR France as location.
     assert!(
@@ -102,7 +95,8 @@ fn fastino_batch_per_sample_labels() {
             e.entity_type,
             anno::EntityType::Person | anno::EntityType::Location
         )),
-        "expected a Person or Location in results[1], got {:#?}", results[1],
+        "expected a Person or Location in results[1], got {:#?}",
+        results[1],
     );
 }
 
@@ -113,17 +107,13 @@ fn fastino_batch_per_sample_length_mismatch_errors() {
     // a typed Backend error, not a panic.
     use anno::backends::gliner2_fastino::BatchSchemaMode;
 
-    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
-        .expect("load");
+    let model =
+        GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx").expect("load");
     let texts: Vec<&str> = vec!["one", "two"];
     let labels_per_text: Vec<Vec<&str>> = vec![vec!["organization"]]; // 1 entry, not 2.
 
     let err = model
-        .batch_extract_with_schema_mode(
-            &texts,
-            BatchSchemaMode::PerSample(&labels_per_text),
-            0.5,
-        )
+        .batch_extract_with_schema_mode(&texts, BatchSchemaMode::PerSample(&labels_per_text), 0.5)
         .expect_err("expected length-mismatch error");
     assert!(
         err.to_string().contains("PerSample label count")
@@ -177,16 +167,12 @@ fn fastino_batch_extract_streaming_fires_callbacks_in_order() {
 #[ignore]
 fn fastino_batch_extract_streaming_rejects_zero_batch_size() {
     // Defensive: typed Backend error rather than silent loop / divide-by-zero.
-    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
-        .expect("load");
+    let model =
+        GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx").expect("load");
     let texts: &[&str] = &["irrelevant"];
-    let result = model.batch_extract_streaming(
-        texts,
-        &["organization"],
-        0.5,
-        0,
-        |_, _| panic!("callback should not fire when batch_size = 0"),
-    );
+    let result = model.batch_extract_streaming(texts, &["organization"], 0.5, 0, |_, _| {
+        panic!("callback should not fire when batch_size = 0")
+    });
     let err = result.expect_err("expected an error for batch_size = 0");
     assert!(
         err.to_string().contains("batch_size must be > 0"),
@@ -197,8 +183,8 @@ fn fastino_batch_extract_streaming_rejects_zero_batch_size() {
 #[test]
 #[ignore]
 fn fastino_classify_smoke() {
-    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
-        .expect("load");
+    let model =
+        GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx").expect("load");
     let scores = model
         .classify(
             "This product is wonderful, I love it.",
@@ -209,7 +195,10 @@ fn fastino_classify_smoke() {
     assert_eq!(scores.len(), 3);
     eprintln!("classify scores: {scores:?}");
     // Top-ranked should be 'positive' for this clearly-positive text.
-    assert_eq!(scores[0].0, "positive", "expected 'positive' top-ranked, got {scores:?}");
+    assert_eq!(
+        scores[0].0, "positive",
+        "expected 'positive' top-ranked, got {scores:?}"
+    );
 }
 
 #[test]
@@ -229,7 +218,9 @@ fn fastino_extract_structure_invoice_single_instance() {
     );
 
     let text = "Invoice from Acme Corp for $4,250.00 dated January 15, 2026.";
-    let result = model.extract_structure(text, &schema, 0.5).expect("extract");
+    let result = model
+        .extract_structure(text, &schema, 0.5)
+        .expect("extract");
 
     eprintln!("invoice extraction: {result:#?}");
 
@@ -237,7 +228,10 @@ fn fastino_extract_structure_invoice_single_instance() {
     // as the vendor (or somewhere in the result). We don't pin to exact
     // count because the model's count predictor can return 1 or more
     // depending on tokenization.
-    assert!(!result.is_empty(), "expected at least 1 instance, got {result:#?}");
+    assert!(
+        !result.is_empty(),
+        "expected at least 1 instance, got {result:#?}"
+    );
     let serialized = serde_json::to_string(&result).expect("serialize");
     assert!(
         serialized.contains("Acme"),
@@ -263,17 +257,18 @@ fn fastino_extract_structure_multi_instance_people() {
     // the text → expect at least 2 instances.
     use anno::backends::gliner2_fastino::schema::{FieldType, StructureTask, TaskSchema};
 
-    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
-        .expect("load");
+    let model =
+        GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx").expect("load");
     let schema = TaskSchema::new().with_structure(
         StructureTask::new("person_record")
             .with_field("name", FieldType::String)
             .with_field("role", FieldType::String),
     );
 
-    let text =
-        "Marie Curie was a physicist. Albert Einstein was also a physicist.";
-    let result = model.extract_structure(text, &schema, 0.3).expect("extract");
+    let text = "Marie Curie was a physicist. Albert Einstein was also a physicist.";
+    let result = model
+        .extract_structure(text, &schema, 0.3)
+        .expect("extract");
 
     eprintln!("multi-instance: {result:#?}");
     assert!(
@@ -293,8 +288,8 @@ fn fastino_extract_structure_empty_schema_returns_empty() {
     // Phase 2 M5: defensive — empty schema → empty vec, no inference passes.
     use anno::backends::gliner2_fastino::schema::TaskSchema;
 
-    let model = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
-        .expect("load");
+    let model =
+        GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx").expect("load");
     let schema = TaskSchema::new(); // no structures
     let result = model
         .extract_structure("anything", &schema, 0.5)
@@ -341,10 +336,10 @@ fn parity_standard_iobinding_extract_with_types() {
     let text = "Marie Curie won the Nobel Prize in Physics in 1903.";
     let types = ["person", "award", "year"];
 
-    let std_result = ZeroShotNER::extract_with_types(&standard, text, &types, 0.5)
-        .expect("standard extract");
-    let io_result = ZeroShotNER::extract_with_types(&iobinding, text, &types, 0.5)
-        .expect("iobinding extract");
+    let std_result =
+        ZeroShotNER::extract_with_types(&standard, text, &types, 0.5).expect("standard extract");
+    let io_result =
+        ZeroShotNER::extract_with_types(&iobinding, text, &types, 0.5).expect("iobinding extract");
 
     eprintln!("standard ({}): {:#?}", std_result.len(), std_result);
     eprintln!("iobinding ({}): {:#?}", io_result.len(), io_result);
@@ -367,7 +362,13 @@ fn parity_standard_iobinding_extract_with_types() {
 
     let mut max_diff: f64 = 0.0;
     for (s, i) in std_sorted.iter().zip(io_sorted.iter()) {
-        assert_eq!(s.start(), i.start(), "start mismatch: std={:?}, io={:?}", s, i);
+        assert_eq!(
+            s.start(),
+            i.start(),
+            "start mismatch: std={:?}, io={:?}",
+            s,
+            i
+        );
         assert_eq!(s.end(), i.end(), "end mismatch: std={:?}, io={:?}", s, i);
         assert_eq!(s.text, i.text, "text mismatch: std={:?}, io={:?}", s, i);
         let diff = (s.confidence.value() - i.confidence.value()).abs();
@@ -458,11 +459,9 @@ fn smoke_iobinding_cuda() {
         .with_execution_mode(ExecutionMode::IoBinding)
         .with_onnx(onnx);
 
-    let model = GLiNER2Fastino::from_pretrained_with_config(
-        "SemplificaAI/gliner2-multi-v1-onnx",
-        cfg,
-    )
-    .expect("load with CUDA + IoBinding");
+    let model =
+        GLiNER2Fastino::from_pretrained_with_config("SemplificaAI/gliner2-multi-v1-onnx", cfg)
+            .expect("load with CUDA + IoBinding");
 
     let text = "Marie Curie won the Nobel Prize in Physics in 1903.";
     let result = ZeroShotNER::extract_with_types(&model, text, &["person", "award", "year"], 0.5)

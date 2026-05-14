@@ -174,8 +174,22 @@ async fn main() -> anyhow::Result<()> {
         Commands::Tree { action } => commands::tree(&cli.config, action).await,
         Commands::Vector { action } => commands::vector(action).await,
         Commands::Sessions { action } => commands::sessions(&cli.config, action).await,
-        Commands::Scan { input, output, strategy, detect_only, min_confidence } => {
-            commands::scan(&cli.config, input, output, strategy, detect_only, min_confidence).await
+        Commands::Scan {
+            input,
+            output,
+            strategy,
+            detect_only,
+            min_confidence,
+        } => {
+            commands::scan(
+                &cli.config,
+                input,
+                output,
+                strategy,
+                detect_only,
+                min_confidence,
+            )
+            .await
         }
     }
 }

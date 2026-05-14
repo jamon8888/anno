@@ -2,6 +2,7 @@
 //! enum that selects the encoder counting architecture; Phase 1 doesn't use
 //! it (it's a Phase 2 head), but we read it at load time so Phase 2 can
 //! dispatch without re-parsing.
+#![allow(missing_docs)] // implementation internals; public API is on GLiNER2Fastino in mod.rs
 
 use serde::Deserialize;
 
@@ -20,6 +21,7 @@ pub enum CountingLayer {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // counting_layer + max_seq_length reserved for Phase 2 dispatch
 pub struct FastinoConfig {
     /// Hidden size of the encoder (e.g. 768 base, 1024 large).
     pub hidden_size: usize,

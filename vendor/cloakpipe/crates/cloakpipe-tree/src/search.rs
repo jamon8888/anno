@@ -71,11 +71,7 @@ impl TreeSearcher {
         self.parse_search_response(&response)
     }
 
-    async fn iterative_search(
-        &self,
-        tree: &TreeIndex,
-        query: &str,
-    ) -> Result<SearchResult> {
+    async fn iterative_search(&self, tree: &TreeIndex, query: &str) -> Result<SearchResult> {
         let mut selected_ids: Vec<String> = Vec::new();
         let current_nodes = &tree.children;
         let mut all_reasoning = Vec::new();
@@ -118,10 +114,9 @@ impl TreeSearcher {
             );
 
             let response = self.call_llm(&prompt).await?;
-            let round_result: serde_json::Value = serde_json::from_str(&response)
-                .unwrap_or_else(|_| {
-                    serde_json::json!({"node_ids": [], "reasoning": "parse error", "found": true})
-                });
+            let round_result: serde_json::Value = serde_json::from_str(&response).unwrap_or_else(
+                |_| serde_json::json!({"node_ids": [], "reasoning": "parse error", "found": true}),
+            );
 
             let ids: Vec<String> = round_result["node_ids"]
                 .as_array()
@@ -130,10 +125,7 @@ impl TreeSearcher {
                 .filter_map(|v| v.as_str().map(String::from))
                 .collect();
 
-            let reasoning = round_result["reasoning"]
-                .as_str()
-                .unwrap_or("")
-                .to_string();
+            let reasoning = round_result["reasoning"].as_str().unwrap_or("").to_string();
             let found = round_result["found"].as_bool().unwrap_or(true);
 
             all_reasoning.push(reasoning);
@@ -209,9 +201,8 @@ impl TreeSearcher {
     }
 
     fn parse_search_response(&self, response: &str) -> Result<SearchResult> {
-        let parsed: serde_json::Value = serde_json::from_str(response).unwrap_or_else(|_| {
-            serde_json::json!({"node_ids": [], "reasoning": "parse error"})
-        });
+        let parsed: serde_json::Value = serde_json::from_str(response)
+            .unwrap_or_else(|_| serde_json::json!({"node_ids": [], "reasoning": "parse error"}));
 
         Ok(SearchResult {
             node_ids: parsed["node_ids"]

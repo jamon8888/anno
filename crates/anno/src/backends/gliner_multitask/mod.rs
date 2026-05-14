@@ -48,7 +48,10 @@
 //! - **ONNX** (recommended): `cargo build --features onnx`
 //! - **Candle** (native): `cargo build --features candle`
 
+#![allow(missing_docs)] // stub implementation; full docs on the real ONNX/Candle structs
+
 use crate::EntityCategory;
+#[allow(unused_imports)] // used only in feature-gated stub/error paths
 use crate::Error;
 use crate::{Entity, EntityType, Language, Result};
 pub(crate) mod relations;

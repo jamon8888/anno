@@ -77,11 +77,7 @@ impl SpanRep {
     ///   `(0, 0)` for invalid spans).
     ///
     /// Returns `[1, T, MAX_WIDTH, 768]`.
-    pub fn forward(
-        &self,
-        text_emb: &Tensor,
-        span_idx: &Tensor,
-    ) -> candle_core::Result<Tensor> {
+    pub fn forward(&self, text_emb: &Tensor, span_idx: &Tensor) -> candle_core::Result<Tensor> {
         let (b, t, _h) = text_emb.dims3()?;
         debug_assert_eq!(b, 1, "SpanRep currently assumes batch=1");
 

@@ -58,14 +58,23 @@ impl Embedder {
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| Error::Embed(format!("tokenizer load: {e}")))?;
 
+        // F32 is the default: the e5-small BERT forward pass on CPU can
+        // produce degenerate (NaN) embeddings in F16 — overflow in the
+        // attention softmax — which collapses recall@10 to 0. F16 halves
+        // embedder RSS (~236 MB) and stays available as an explicit opt-in
+        // for callers who validate recall on their own corpus.
+        let dtype = match cfg.embedder_dtype.as_deref() {
+            Some("f16") => DType::F16,
+            _ => DType::F32,
+        };
         // SAFETY: hf-hub writes the safetensors file before returning the path
         // and we don't mutate it for the lifetime of the mmap.
         let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)
+            VarBuilder::from_mmaped_safetensors(&[weights_path], dtype, &device)
                 .map_err(|e| Error::Embed(format!("var builder: {e}")))?
         };
-        let model = BertModel::load(vb, &config)
-            .map_err(|e| Error::Embed(format!("bert load: {e}")))?;
+        let model =
+            BertModel::load(vb, &config).map_err(|e| Error::Embed(format!("bert load: {e}")))?;
 
         Ok(Self {
             model,
@@ -109,9 +118,9 @@ impl Embedder {
             let len = e.get_ids().len();
             let pad = max_len - len;
             ids.extend(e.get_ids().iter().map(|&x| i64::from(x)));
-            ids.extend(std::iter::repeat(0i64).take(pad));
+            ids.extend(std::iter::repeat_n(0i64, pad));
             mask.extend(e.get_attention_mask().iter().map(|&x| i64::from(x)));
-            mask.extend(std::iter::repeat(0i64).take(pad));
+            mask.extend(std::iter::repeat_n(0i64, pad));
         }
 
         let input_ids = Tensor::from_vec(ids, (n, max_len), &self.device)
@@ -125,6 +134,9 @@ impl Embedder {
             .model
             .forward(&input_ids, &token_type, Some(&attn))
             .map_err(|e| Error::Embed(format!("forward: {e}")))?;
+        let out = out
+            .to_dtype(DType::F32)
+            .map_err(|e| Error::Embed(format!("output dtype cast: {e}")))?;
 
         let mask_f = attn
             .to_dtype(DType::F32)
@@ -174,5 +186,27 @@ mod tests {
         assert_eq!(v[0].len(), 384);
         let norm: f32 = v[0].iter().map(|x| x * x).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 0.01);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires HF cache populated"]
+    async fn loads_with_f32_default() {
+        let cfg = AnnoRagConfig::default();
+        assert!(cfg.embedder_dtype.is_none(), "default leaves dtype unset");
+        let e = Embedder::load(&cfg).await.expect("f32 load");
+        let v = e.embed_batch(&["Bonjour".into()]).expect("embed");
+        assert_eq!(v[0].len(), 384);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires HF cache populated"]
+    async fn loads_with_f16_opt_in() {
+        let cfg = AnnoRagConfig {
+            embedder_dtype: Some("f16".into()),
+            ..Default::default()
+        };
+        let e = Embedder::load(&cfg).await.expect("f16 load");
+        let v = e.embed_batch(&["Bonjour".into()]).expect("embed");
+        assert_eq!(v[0].len(), 384);
     }
 }

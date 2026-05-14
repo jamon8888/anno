@@ -2,7 +2,7 @@
 //!
 //! Handles both complete responses and SSE streaming chunks.
 
-use crate::{RehydratedText, vault::Vault};
+use crate::{vault::Vault, RehydratedText};
 use anyhow::Result;
 
 pub struct Rehydrator;

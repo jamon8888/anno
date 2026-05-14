@@ -4,7 +4,7 @@
 
 use crate::config::AnnoRagConfig;
 use crate::error::{Error, Result};
-use kreuzberg::core::config::{ChunkerType, ChunkingConfig, ExtractionConfig, OcrConfig};
+use kreuzberg::core::config::{ChunkerType, ChunkingConfig, ExtractionConfig};
 use std::path::Path;
 
 /// One extracted document. Carries chunk-level provenance (page + char offsets).
@@ -55,14 +55,8 @@ pub async fn extract(path: &Path, cfg: &AnnoRagConfig) -> Result<ExtractedDoc> {
         ..Default::default()
     };
 
-    let ocr = OcrConfig {
-        language: "fra".to_string(),
-        ..Default::default()
-    };
-
     let extraction_config = ExtractionConfig {
         chunking: Some(chunking),
-        ocr: Some(ocr),
         ..Default::default()
     };
 
@@ -73,7 +67,8 @@ pub async fn extract(path: &Path, cfg: &AnnoRagConfig) -> Result<ExtractedDoc> {
             source: Box::new(e),
         })?;
 
-    let chunks = result
+    let mut content = result.content;
+    let mut chunks: Vec<ExtractedChunk> = result
         .chunks
         .unwrap_or_default()
         .into_iter()
@@ -86,9 +81,47 @@ pub async fn extract(path: &Path, cfg: &AnnoRagConfig) -> Result<ExtractedDoc> {
         })
         .collect();
 
+    // System-tesseract opt-in fallback for PDFs without a text layer.
+    // Bundled OCR was dropped in v0.5 (~500 MB resident); user installs system
+    // tesseract and passes --enable-ocr (or sets enable_ocr=true in config).
+    let is_pdf = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.eq_ignore_ascii_case("pdf"))
+        .unwrap_or(false);
+
+    if cfg.enable_ocr && is_pdf && content.trim().is_empty() {
+        match crate::ocr::ocr_pdf(path, cfg.tesseract_path.as_ref()).await {
+            Ok(text) => {
+                // Synthesize a single chunk covering the OCR'd text. This keeps
+                // the indexing path simple at v0.5 — for larger scanned docs we
+                // re-chunk in a later iteration.
+                let end = text.len() as u32;
+                chunks = vec![ExtractedChunk {
+                    idx: 0,
+                    text: text.clone(),
+                    char_start: 0,
+                    char_end: end,
+                    page: None,
+                }];
+                content = text;
+            }
+            Err(e) => tracing::warn!(
+                error = %e,
+                path = %path.display(),
+                "OCR fork failed; document text empty"
+            ),
+        }
+    } else if is_pdf && content.trim().is_empty() && !cfg.enable_ocr {
+        tracing::warn!(
+            path = %path.display(),
+            "PDF has no text layer; enable --enable-ocr (requires system tesseract) to OCR it"
+        );
+    }
+
     Ok(ExtractedDoc {
         source_path: path.display().to_string(),
-        content: result.content,
+        content,
         chunks,
     })
 }
@@ -101,10 +134,7 @@ mod tests {
 
     #[tokio::test]
     async fn extracts_plain_text_file() {
-        let mut f = tempfile::Builder::new()
-            .suffix(".txt")
-            .tempfile()
-            .unwrap();
+        let mut f = tempfile::Builder::new().suffix(".txt").tempfile().unwrap();
         writeln!(
             f,
             "Article 1.\n\nLe présent contrat est régi par le droit français.\n\nArticle 2.\n\nLa juridiction est Paris."
@@ -126,10 +156,7 @@ mod tests {
 
     #[tokio::test]
     async fn extracts_markdown_file() {
-        let mut f = tempfile::Builder::new()
-            .suffix(".md")
-            .tempfile()
-            .unwrap();
+        let mut f = tempfile::Builder::new().suffix(".md").tempfile().unwrap();
         writeln!(
             f,
             "# Contrat de prestation\n\n## Article 1\n\nObjet du contrat.\n\n## Article 2\n\nDurée: 12 mois."

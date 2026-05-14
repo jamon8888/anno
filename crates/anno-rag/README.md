@@ -104,3 +104,18 @@ Kreuzberg is Elastic License 2.0 — fine for on-prem use; if you ever ship as S
 v0.2 — Cowork-minimum. See `docs/superpowers/specs/2026-05-13-anno-rag-v0.2-cowork-minimum.md` for the in/out-of-scope list.
 
 The Northstar is `docs/superpowers/specs/2026-05-12-anno-rag-design.md` (v1 design).
+
+## Optional: OCR for scanned PDFs
+
+By default anno-rag does not bundle Tesseract (saves ~500 MB RAM). For PDFs
+without a text layer, install tesseract system-wide and pass `--enable-ocr`:
+
+- Linux:   `sudo apt install tesseract-ocr tesseract-ocr-fra`
+- macOS:   `brew install tesseract tesseract-lang`
+- Windows: `winget install --id UB-Mannheim.TesseractOCR`
+
+Then `anno-rag ingest <folder> --enable-ocr`.
+
+If `tesseract` is not on `PATH`, set `tesseract_path` in your config file to
+its absolute path. When `--enable-ocr` is off and a PDF has no text layer,
+anno-rag emits a structured `tracing::warn!` and skips the document.

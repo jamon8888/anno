@@ -12,12 +12,10 @@ pub enum Error {
     TokenizerMissing(PathBuf),
 
     /// Required config field missing.
-    #[error(
-        "config.json missing required field `{field}` for fastino GLiNER2 model"
-    )]
+    #[error("config.json missing required field `{field}` for fastino GLiNER2 model")]
     ConfigFieldMissing {
         /// The missing field name.
-        field: &'static str
+        field: &'static str,
     },
 
     /// Required special token missing.
@@ -27,7 +25,7 @@ pub enum Error {
     )]
     SpecialTokenMissing {
         /// The missing token.
-        token: &'static str
+        token: &'static str,
     },
 
     /// LoRA adapter not supported (Phase 1).
@@ -40,7 +38,7 @@ pub enum Error {
     )]
     LoraAdapterNotSupported {
         /// Path to the adapter directory.
-        path: PathBuf
+        path: PathBuf,
     },
 
     /// ONNX Runtime session error.
@@ -76,8 +74,14 @@ mod tests {
             path: PathBuf::from("/tmp/my_adapter"),
         };
         let msg = e.to_string();
-        assert!(msg.contains("scripts/gliner2_export_onnx.py"), "missing script path: {msg}");
+        assert!(
+            msg.contains("scripts/gliner2_export_onnx.py"),
+            "missing script path: {msg}"
+        );
         assert!(msg.contains("--lora-adapter"), "missing flag in msg: {msg}");
-        assert!(msg.contains("Phase 4") || msg.contains("hot-swap"), "missing future-state pointer: {msg}");
+        assert!(
+            msg.contains("Phase 4") || msg.contains("hot-swap"),
+            "missing future-state pointer: {msg}"
+        );
     }
 }

@@ -20,10 +20,14 @@ const TEST_KEY: [u8; 32] = [42u8; 32];
 #[ignore = "downloads ~470 MB model + does real I/O — opt-in via --ignored"]
 async fn ingest_then_search_french_fixtures() {
     let dir = TempDir::new().expect("tempdir");
-    let mut cfg = AnnoRagConfig::default();
-    cfg.data_dir = dir.path().to_path_buf();
+    let cfg = AnnoRagConfig {
+        data_dir: dir.path().to_path_buf(),
+        ..Default::default()
+    };
 
-    let pipeline = Pipeline::new(cfg.clone(), TEST_KEY).await.expect("pipeline init");
+    let pipeline = Pipeline::new(cfg.clone(), TEST_KEY)
+        .await
+        .expect("pipeline init");
 
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let output_dir = dir.path().join("outputs");
@@ -35,7 +39,10 @@ async fn ingest_then_search_french_fixtures() {
     assert_eq!(n, 3, "should ingest 3 fixtures, got {n}");
 
     // Run a semantic search relevant to IBAN/payment language.
-    let hits = pipeline.search("virement bancaire IBAN", 5).await.expect("search");
+    let hits = pipeline
+        .search("virement bancaire IBAN", 5)
+        .await
+        .expect("search");
     assert!(
         !hits.is_empty(),
         "search must return at least one hit for IBAN query"
@@ -46,18 +53,25 @@ async fn ingest_then_search_french_fixtures() {
         .expect("read output_dir")
         .flatten()
         .collect();
-    assert_eq!(entries.len(), 3, "should write 3 .anon.md files, got {}", entries.len());
+    assert_eq!(
+        entries.len(),
+        3,
+        "should write 3 .anon.md files, got {}",
+        entries.len()
+    );
 
     // Structured PII (regex layer) MUST always be scrubbed — hard assertion.
     //
-    // Name PII (anno NER layer) is *best-effort* in v0.2: anno's
-    // StackedNER picks gliner_small-v2.1 / bert-base-NER-onnx as fallbacks,
-    // neither of which is French-tuned. Names like "Jean Martin" in
-    // markdown-formatted contexts leak. The proper fix is v0.3 priority #1:
-    // replace StackedNER with `GLiNER2Fastino::from_pretrained(
-    // "SemplificaAI/gliner2-multi-v1-onnx")` directly (multilingual, FR-aware).
-    // Until then we count name-scrub successes and require >= 2 out of 4.
-    let names = ["Marie Dupont", "Jean Martin", "Sophie Bernard", "Pierre Lefebvre"];
+    // Name PII (anno NER layer): as of v0.5 #025 (T4), anno-rag uses
+    // GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+    // directly (multilingual, FR-aware). Coverage is now expected to be
+    // 100% (12/12) — every name in every anonymized fixture.
+    let names = [
+        "Marie Dupont",
+        "Jean Martin",
+        "Sophie Bernard",
+        "Pierre Lefebvre",
+    ];
     let mut total_leaks: Vec<String> = Vec::new();
     for entry in &entries {
         let content = std::fs::read_to_string(entry.path()).expect("read output");
@@ -74,11 +88,11 @@ async fn ingest_then_search_french_fixtures() {
         "name-scrub coverage: {scrubbed}/{total_checks} (leaks: {:?})",
         total_leaks
     );
-    // Soft minimum: at least half the name-checks must succeed. v0.3 makes
-    // this 100%.
-    assert!(
-        scrubbed * 2 >= total_checks,
-        "less than half of name occurrences were scrubbed; warmup or NER model is broken"
+    // v0.5 #025 — hard 100% gate (was >=50% in v0.2 when StackedNER
+    // missed FR names in markdown contexts).
+    assert_eq!(
+        scrubbed, total_checks,
+        "expected full name-scrub coverage with GLiNER2Fastino multi-v1, leaked: {total_leaks:?}"
     );
 
     for entry in &entries {

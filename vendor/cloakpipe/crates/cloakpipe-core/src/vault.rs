@@ -6,7 +6,7 @@
 //! - Persistent across sessions for consistent pseudonymization
 //! - Atomic file writes (write to .tmp, rename)
 
-use crate::{EntityCategory, PseudoToken, resolver::EntityResolver};
+use crate::{resolver::EntityResolver, EntityCategory, PseudoToken};
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
     Aes256Gcm, Nonce,
@@ -154,10 +154,8 @@ impl Vault {
         };
 
         self.forward.insert(original.to_string(), token.clone());
-        self.reverse.insert(
-            token.token.clone(),
-            SensitiveString(original.to_string()),
-        );
+        self.reverse
+            .insert(token.token.clone(), SensitiveString(original.to_string()));
 
         token
     }
@@ -200,10 +198,8 @@ impl Vault {
         };
 
         self.forward.insert(original.to_string(), token.clone());
-        self.reverse.insert(
-            token.token.clone(),
-            SensitiveString(original.to_string()),
-        );
+        self.reverse
+            .insert(token.token.clone(), SensitiveString(original.to_string()));
 
         token
     }
@@ -334,9 +330,8 @@ impl Vault {
 
     /// Encrypt plaintext with AES-256-GCM. Output: 12-byte nonce || ciphertext.
     fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>> {
-        let cipher =
-            Aes256Gcm::new_from_slice(&self.key.0)
-                .map_err(|_| anyhow::anyhow!("Invalid AES-256-GCM key"))?;
+        let cipher = Aes256Gcm::new_from_slice(&self.key.0)
+            .map_err(|_| anyhow::anyhow!("Invalid AES-256-GCM key"))?;
 
         let mut nonce_bytes = [0u8; 12];
         OsRng.fill_bytes(&mut nonce_bytes);
@@ -498,6 +493,9 @@ mod tests {
         let mut vault = Vault::ephemeral();
         let t = vault.get_or_create_fp("priya@example.com", &EntityCategory::Email);
         assert!(t.token.contains("@"), "FP email should contain @");
-        assert!(t.token.ends_with(".invalid"), "FP email should use .invalid TLD");
+        assert!(
+            t.token.ends_with(".invalid"),
+            "FP email should use .invalid TLD"
+        );
     }
 }

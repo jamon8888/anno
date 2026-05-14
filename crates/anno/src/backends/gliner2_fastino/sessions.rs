@@ -1,4 +1,5 @@
 //! Multi-session ONNX container for `gliner2_fastino`. Phase 3.
+#![allow(missing_docs)] // implementation internals; public API is on GLiNER2Fastino in mod.rs
 //!
 //! Adapted from SemplificaAI/gliner2-rs (Apache-2.0):
 //! https://github.com/SemplificaAI/gliner2-rs/blob/main/rust_component/src/lib_v2.rs
@@ -16,14 +17,14 @@ use std::sync::{Arc, Mutex};
 /// underlying ort `Session::run`. This mirrors Phase 1's single-Session
 /// pattern, applied per role.
 pub struct Sessions {
-    pub encoder:           SessionSlot,
-    pub token_gather:      SessionSlot,
-    pub span_rep:          SessionSlot,
-    pub schema_gather:     SessionSlot,
+    pub encoder: SessionSlot,
+    pub token_gather: SessionSlot,
+    pub span_rep: SessionSlot,
+    pub schema_gather: SessionSlot,
     pub count_pred_argmax: SessionSlot,
-    pub count_lstm_fixed:  SessionSlot,
-    pub scorer:            SessionSlot,
-    pub classifier:        SessionSlot,
+    pub count_lstm_fixed: SessionSlot,
+    pub scorer: SessionSlot,
+    pub classifier: SessionSlot,
 }
 
 /// Single session wrapped in Arc<Mutex<>> with a `with_session` closure
@@ -46,6 +47,7 @@ impl SessionSlot {
         })
     }
 
+    #[allow(dead_code)] // convenience ctor; pipeline uses from_path_with_cfg
     pub fn from_path(model_path: &Path) -> Result<Self, Error> {
         Self::from_path_with_cfg(model_path, hf_loader::OnnxSessionConfig::default())
     }
@@ -72,6 +74,7 @@ impl Sessions {
     ///
     /// Phase 3 standard mode does NOT use the `_iobinding.onnx` variants
     /// — those are reserved for Phase 3.5 IOBinding mode.
+    #[allow(dead_code)] // convenience ctor; pipeline uses from_dir_with_cfg_mode
     pub fn from_dir_with_cfg(
         model_dir: &Path,
         cfg: hf_loader::OnnxSessionConfig,
@@ -98,8 +101,8 @@ impl Sessions {
         for (subdir, suffix) in [
             ("fp32_v2", "_fp32.onnx"),
             ("fp16_v2", "_fp16.onnx"),
-            ("fp32",    "_fp32.onnx"),  // v1 fallback — likely won't match
-            ("fp16",    "_fp16.onnx"),  // v1 fallback
+            ("fp32", "_fp32.onnx"), // v1 fallback — likely won't match
+            ("fp16", "_fp16.onnx"), // v1 fallback
         ] {
             let try_dir = model_dir.join(subdir);
             if !try_dir.is_dir() {
@@ -119,22 +122,45 @@ impl Sessions {
                 try_dir.join(format!("{name}{suffix}"))
             };
             let all_present = [
-                "encoder", "token_gather", "span_rep", "schema_gather",
-                "count_pred_argmax", "count_lstm_fixed", "scorer", "classifier",
-            ].iter().all(|n| resolve(n).exists());
+                "encoder",
+                "token_gather",
+                "span_rep",
+                "schema_gather",
+                "count_pred_argmax",
+                "count_lstm_fixed",
+                "scorer",
+                "classifier",
+            ]
+            .iter()
+            .all(|n| resolve(n).exists());
             if !all_present {
                 continue;
             }
             return Ok((
                 Self {
-                    encoder:           SessionSlot::from_path_with_cfg(&resolve("encoder"), cfg.clone())?,
-                    token_gather:      SessionSlot::from_path_with_cfg(&resolve("token_gather"), cfg.clone())?,
-                    span_rep:          SessionSlot::from_path_with_cfg(&resolve("span_rep"), cfg.clone())?,
-                    schema_gather:     SessionSlot::from_path_with_cfg(&resolve("schema_gather"), cfg.clone())?,
-                    count_pred_argmax: SessionSlot::from_path_with_cfg(&resolve("count_pred_argmax"), cfg.clone())?,
-                    count_lstm_fixed:  SessionSlot::from_path_with_cfg(&resolve("count_lstm_fixed"), cfg.clone())?,
-                    scorer:            SessionSlot::from_path_with_cfg(&resolve("scorer"), cfg.clone())?,
-                    classifier:        SessionSlot::from_path_with_cfg(&resolve("classifier"), cfg.clone())?,
+                    encoder: SessionSlot::from_path_with_cfg(&resolve("encoder"), cfg.clone())?,
+                    token_gather: SessionSlot::from_path_with_cfg(
+                        &resolve("token_gather"),
+                        cfg.clone(),
+                    )?,
+                    span_rep: SessionSlot::from_path_with_cfg(&resolve("span_rep"), cfg.clone())?,
+                    schema_gather: SessionSlot::from_path_with_cfg(
+                        &resolve("schema_gather"),
+                        cfg.clone(),
+                    )?,
+                    count_pred_argmax: SessionSlot::from_path_with_cfg(
+                        &resolve("count_pred_argmax"),
+                        cfg.clone(),
+                    )?,
+                    count_lstm_fixed: SessionSlot::from_path_with_cfg(
+                        &resolve("count_lstm_fixed"),
+                        cfg.clone(),
+                    )?,
+                    scorer: SessionSlot::from_path_with_cfg(&resolve("scorer"), cfg.clone())?,
+                    classifier: SessionSlot::from_path_with_cfg(
+                        &resolve("classifier"),
+                        cfg.clone(),
+                    )?,
                 },
                 try_dir,
             ));
@@ -151,6 +177,7 @@ impl Sessions {
     ///
     /// Phase 3 standard mode does NOT use the `_iobinding.onnx` variants
     /// — those are reserved for Phase 3.5 IOBinding mode.
+    #[allow(dead_code)] // convenience ctor; pipeline uses from_dir_with_cfg_mode
     pub fn from_dir(model_dir: &Path) -> Result<(Self, std::path::PathBuf), Error> {
         Self::from_dir_with_cfg(model_dir, hf_loader::OnnxSessionConfig::default())
     }
@@ -191,8 +218,16 @@ mod tests {
         let dir = tempdir().unwrap();
         let v2 = dir.path().join("fp32_v2");
         std::fs::create_dir_all(&v2).unwrap();
-        for n in ["encoder", "token_gather", "span_rep", "schema_gather",
-                  "count_pred_argmax", "count_lstm_fixed", "scorer", "classifier"] {
+        for n in [
+            "encoder",
+            "token_gather",
+            "span_rep",
+            "schema_gather",
+            "count_pred_argmax",
+            "count_lstm_fixed",
+            "scorer",
+            "classifier",
+        ] {
             std::fs::write(v2.join(format!("{n}_iobinding_fp32.onnx")), b"").unwrap();
         }
 
@@ -230,8 +265,16 @@ mod tests {
         let dir = tempdir().unwrap();
         let v2 = dir.path().join("fp32_v2");
         std::fs::create_dir_all(&v2).unwrap();
-        for n in ["encoder", "token_gather", "span_rep", "schema_gather",
-                  "count_pred_argmax", "count_lstm_fixed", "scorer", "classifier"] {
+        for n in [
+            "encoder",
+            "token_gather",
+            "span_rep",
+            "schema_gather",
+            "count_pred_argmax",
+            "count_lstm_fixed",
+            "scorer",
+            "classifier",
+        ] {
             std::fs::write(v2.join(format!("{n}_fp32.onnx")), b"").unwrap();
         }
 

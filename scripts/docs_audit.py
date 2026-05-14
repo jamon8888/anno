@@ -85,10 +85,20 @@ def check_stale_doc_path_mentions(repo_root: Path) -> int:
     not clickable links.
     """
     # Conservative: check markdown files in docs/ + README.md.
+    #
+    # Planning artifacts under docs/superpowers/{plans,specs}/ are excluded:
+    # a plan or spec legitimately references files it *proposes to create*,
+    # so a not-yet-existing path there is by-design, not drift. The markdown
+    # link checker still validates any clickable links in those docs.
     md_paths: list[Path] = []
     for p in iter_tracked_text_files(repo_root):
         rel = p.relative_to(repo_root)
         if p.suffix.lower() != ".md":
+            continue
+        if rel.parts[:3] in {
+            ("docs", "superpowers", "plans"),
+            ("docs", "superpowers", "specs"),
+        }:
             continue
         if rel == Path("README.md") or (rel.parts and rel.parts[0] == "docs"):
             md_paths.append(p)
