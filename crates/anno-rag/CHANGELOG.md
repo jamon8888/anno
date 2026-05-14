@@ -8,6 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`anno-rag bench --corpus <dir>`** — reproducible SLO measurement subcommand emitting a markdown report (cold-start, idle/peak RSS, ingest throughput, search p50/p95).
 - **Criterion bench harness** under `benches/` (cold-start, idle RSS, search, ingest, recall) with per-OS CI gates (idle RSS <200 MB, recall@10 ≥95%).
 - **Optional OCR** via `--enable-ocr` runtime flag (or `enable_ocr = true` in config). Forks system `tesseract` for PDFs without a text layer. Install: `apt install tesseract-ocr tesseract-ocr-fra` / `brew install tesseract tesseract-lang` / `winget install UB-Mannheim.TesseractOCR`.
+- **Expanded format support** via kreuzberg features `email`, `excel`, `xml`, `archives`, `tree-sitter`:
+  - **Email**: `.eml` (RFC 5322), `.msg` (Outlook)
+  - **Spreadsheets**: `.xlsx`, `.xls`, `.xlsb`, `.xlsm`, `.csv`, `.tsv`
+  - **Data / markup**: `.xml`, `.json`, `.yaml`, `.toml`, `.rst`
+  - **Archives**: `.zip`, `.tar`, `.gz`, `.bz2`, `.xz`, `.7z` (kreuzberg recurses into the archive)
+  - **Code source** (texte brut, sans parsing sémantique): `.rs`, `.py`, `.js`, `.ts`, `.java`, `.c`, `.cpp`, `.cs`, `.go`, `.rb`, `.php`, `.swift`, `.kt`, `.scala`, `.sql`
+  - Bundled (sans feature): `.rtf`, `.epub`, `.htm`
 
 ### Changed
 - **Lazy-init `Embedder` and `Detector`** via `tokio::sync::OnceCell`. `Pipeline::new` now constructs in <200 MB RSS; models load on first `ingest`/`search`/`detect` call. (#023)

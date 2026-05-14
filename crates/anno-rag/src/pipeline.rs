@@ -154,7 +154,18 @@ impl Pipeline {
                 .to_lowercase();
             if !matches!(
                 ext.as_str(),
-                "pdf" | "docx" | "pptx" | "xlsx" | "txt" | "md" | "html" | "eml" | "msg"
+                // Documents
+                "pdf" | "docx" | "pptx" | "xlsx" | "xls" | "xlsb" | "xlsm"
+                | "txt" | "md" | "rst" | "html" | "htm" | "rtf" | "epub" | "odt" | "ods" | "odp"
+                // Email
+                | "eml" | "msg"
+                // Data / markup
+                | "xml" | "csv" | "tsv" | "json" | "yaml" | "yml" | "toml"
+                // Archives (kreuzberg extracts + recurses)
+                | "zip" | "tar" | "gz" | "bz2" | "xz" | "7z"
+                // Code source (tree-sitter)
+                | "rs" | "py" | "js" | "ts" | "java" | "c" | "cpp" | "h" | "hpp"
+                | "cs" | "go" | "rb" | "php" | "swift" | "kt" | "scala" | "sql"
             ) {
                 continue;
             }
