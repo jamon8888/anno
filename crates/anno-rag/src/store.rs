@@ -190,7 +190,8 @@ impl Store {
 
         // Hybrid: a vector query that also carries a full-text-search query
         // becomes a hybrid query; `rerank` is only valid on hybrid queries.
-        // The FTS arm searches the single indexed column `text_pseudo`.
+        // The FTS arm searches whichever column carries the FTS index —
+        // currently only `text_pseudo` (see `maybe_build_fts_index`).
         let stream = self
             .tbl
             .query()

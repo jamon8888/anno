@@ -2,7 +2,9 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — v0.6 hybrid retrieval + legal eval harness
+## [Unreleased]
+
+### v0.6 — hybrid retrieval + legal eval harness
 
 ### Added
 - **Legal RAG eval harness** — ~60-document synthetic French legal corpus
@@ -26,7 +28,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `SearchHit.score` (RRF relevance, higher = better). Minor breaking
   change; anno-rag is pre-1.0.
 
-## [Unreleased] — v0.5 performance budget
+### v0.5 — performance budget
 
 ### Added
 - **`anno-rag bench --corpus <dir>`** — reproducible SLO measurement subcommand emitting a markdown report (cold-start, idle/peak RSS, ingest throughput, search p50/p95).
