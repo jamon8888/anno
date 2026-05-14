@@ -62,7 +62,6 @@ impl AppState {
 }
 
 /// Build the v0.3 router.
-#[must_use]
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))

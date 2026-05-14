@@ -11,6 +11,7 @@ env:
 permissions:
   contents: read
   checks: write
+  issues: write
   security-events: write
   id-token: write
 jobs:
@@ -1068,18 +1069,23 @@ jobs:
           path: static-analysis-failures-summary.md
       - name: Comment on PR
         if: github.event_name == 'pull_request' && always()
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             if (fs.existsSync('static-analysis-failures-summary.md')) {
               const summary = fs.readFileSync('static-analysis-failures-summary.md', 'utf8');
-              github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: `## Static Analysis Summary\n\n${summary}`
-              });
+              try {
+                await github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: `## Static Analysis Summary\n\n${summary}`
+                });
+              } catch (error) {
+                core.warning(`Unable to comment on PR: ${error.message}`);
+              }
             }
   # Code coverage (optional, runs on schedule or manual trigger)
   # Only runs on push to main/master, schedule, or manual trigger (too slow for PRs)
