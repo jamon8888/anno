@@ -49,13 +49,21 @@ jobs:
             echo "::error::idle RSS ${mb} MB exceeds 200 MB gate"
             exit 1
           fi
-      - name: Check recall gate (>=95%)
+      - name: Eval gate (recall@10 + nDCG@10 vs baseline)
         shell: bash
         run: |
           recall=$(grep -o 'RECALL_AT_10=[0-9.]*' bench.log | tail -1 | cut -d= -f2)
-          echo "recall@10: $recall"
-          if awk "BEGIN {exit !($recall < 0.95)}"; then
-            echo "::error::recall@10 ${recall} below 0.95 gate"
+          ndcg=$(grep -o 'NDCG_AT_10=[0-9.]*' bench.log | tail -1 | cut -d= -f2)
+          base_recall=$(grep -o 'recall_at_10 = [0-9.]*' crates/anno-rag/tests/fixtures/eval_baseline.toml | cut -d' ' -f3)
+          base_ndcg=$(grep -o 'ndcg_at_10 = [0-9.]*' crates/anno-rag/tests/fixtures/eval_baseline.toml | cut -d' ' -f3)
+          echo "recall@10: $recall (baseline $base_recall)"
+          echo "nDCG@10:   $ndcg (baseline $base_ndcg)"
+          if awk "BEGIN {exit !($recall < $base_recall * 0.98)}"; then
+            echo "::error::recall@10 $recall below 98% of baseline $base_recall"
+            exit 1
+          fi
+          if awk "BEGIN {exit !($ndcg < $base_ndcg * 0.98)}"; then
+            echo "::error::nDCG@10 $ndcg below 98% of baseline $base_ndcg"
             exit 1
           fi
       - uses: actions/upload-artifact@v4

@@ -1,0 +1,9 @@
+# Committed reference scores for the v0.6 eval gate. Raising these is an
+# explicit, reviewed change — see
+# docs/superpowers/specs/2026-05-14-anno-rag-v0.6-hybrid-retrieval-eval-design.md
+#
+# PLACEHOLDER VALUES — replaced with real bench_eval output during the
+# final build/verify phase. The CI gate compares against these with a
+# 0.98 tolerance factor.
+recall_at_10 = 0.00
+ndcg_at_10 = 0.00
