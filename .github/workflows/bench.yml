@@ -18,6 +18,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install protoc
         uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      # anno-rag -> anno/gliner2-fastino -> onnx -> ort_sys (/MD) vs esaxx-rs
+      # (/MT default) causes an MSVC LNK2038 RuntimeLibrary mismatch. Force the
+      # dynamic CRT for rustc + cc-rs on Windows.
+      - name: Align MSVC CRT (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          echo "RUSTFLAGS=-C target-feature=-crt-static" >> "$GITHUB_ENV"
+          echo "CFLAGS_x86_64-pc-windows-msvc=-MD" >> "$GITHUB_ENV"
+          echo "CXXFLAGS_x86_64-pc-windows-msvc=-MD" >> "$GITHUB_ENV"
       - name: Run benches
         run: cargo bench -p anno-rag 2>&1 | tee bench.log
       - name: Check idle RSS gate (<200 MB)
