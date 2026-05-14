@@ -16,14 +16,14 @@ use std::sync::{Arc, Mutex};
 /// underlying ort `Session::run`. This mirrors Phase 1's single-Session
 /// pattern, applied per role.
 pub struct Sessions {
-    pub encoder:           SessionSlot,
-    pub token_gather:      SessionSlot,
-    pub span_rep:          SessionSlot,
-    pub schema_gather:     SessionSlot,
+    pub encoder: SessionSlot,
+    pub token_gather: SessionSlot,
+    pub span_rep: SessionSlot,
+    pub schema_gather: SessionSlot,
     pub count_pred_argmax: SessionSlot,
-    pub count_lstm_fixed:  SessionSlot,
-    pub scorer:            SessionSlot,
-    pub classifier:        SessionSlot,
+    pub count_lstm_fixed: SessionSlot,
+    pub scorer: SessionSlot,
+    pub classifier: SessionSlot,
 }
 
 /// Single session wrapped in Arc<Mutex<>> with a `with_session` closure
@@ -98,8 +98,8 @@ impl Sessions {
         for (subdir, suffix) in [
             ("fp32_v2", "_fp32.onnx"),
             ("fp16_v2", "_fp16.onnx"),
-            ("fp32",    "_fp32.onnx"),  // v1 fallback — likely won't match
-            ("fp16",    "_fp16.onnx"),  // v1 fallback
+            ("fp32", "_fp32.onnx"), // v1 fallback — likely won't match
+            ("fp16", "_fp16.onnx"), // v1 fallback
         ] {
             let try_dir = model_dir.join(subdir);
             if !try_dir.is_dir() {
@@ -119,22 +119,45 @@ impl Sessions {
                 try_dir.join(format!("{name}{suffix}"))
             };
             let all_present = [
-                "encoder", "token_gather", "span_rep", "schema_gather",
-                "count_pred_argmax", "count_lstm_fixed", "scorer", "classifier",
-            ].iter().all(|n| resolve(n).exists());
+                "encoder",
+                "token_gather",
+                "span_rep",
+                "schema_gather",
+                "count_pred_argmax",
+                "count_lstm_fixed",
+                "scorer",
+                "classifier",
+            ]
+            .iter()
+            .all(|n| resolve(n).exists());
             if !all_present {
                 continue;
             }
             return Ok((
                 Self {
-                    encoder:           SessionSlot::from_path_with_cfg(&resolve("encoder"), cfg.clone())?,
-                    token_gather:      SessionSlot::from_path_with_cfg(&resolve("token_gather"), cfg.clone())?,
-                    span_rep:          SessionSlot::from_path_with_cfg(&resolve("span_rep"), cfg.clone())?,
-                    schema_gather:     SessionSlot::from_path_with_cfg(&resolve("schema_gather"), cfg.clone())?,
-                    count_pred_argmax: SessionSlot::from_path_with_cfg(&resolve("count_pred_argmax"), cfg.clone())?,
-                    count_lstm_fixed:  SessionSlot::from_path_with_cfg(&resolve("count_lstm_fixed"), cfg.clone())?,
-                    scorer:            SessionSlot::from_path_with_cfg(&resolve("scorer"), cfg.clone())?,
-                    classifier:        SessionSlot::from_path_with_cfg(&resolve("classifier"), cfg.clone())?,
+                    encoder: SessionSlot::from_path_with_cfg(&resolve("encoder"), cfg.clone())?,
+                    token_gather: SessionSlot::from_path_with_cfg(
+                        &resolve("token_gather"),
+                        cfg.clone(),
+                    )?,
+                    span_rep: SessionSlot::from_path_with_cfg(&resolve("span_rep"), cfg.clone())?,
+                    schema_gather: SessionSlot::from_path_with_cfg(
+                        &resolve("schema_gather"),
+                        cfg.clone(),
+                    )?,
+                    count_pred_argmax: SessionSlot::from_path_with_cfg(
+                        &resolve("count_pred_argmax"),
+                        cfg.clone(),
+                    )?,
+                    count_lstm_fixed: SessionSlot::from_path_with_cfg(
+                        &resolve("count_lstm_fixed"),
+                        cfg.clone(),
+                    )?,
+                    scorer: SessionSlot::from_path_with_cfg(&resolve("scorer"), cfg.clone())?,
+                    classifier: SessionSlot::from_path_with_cfg(
+                        &resolve("classifier"),
+                        cfg.clone(),
+                    )?,
                 },
                 try_dir,
             ));
@@ -191,8 +214,16 @@ mod tests {
         let dir = tempdir().unwrap();
         let v2 = dir.path().join("fp32_v2");
         std::fs::create_dir_all(&v2).unwrap();
-        for n in ["encoder", "token_gather", "span_rep", "schema_gather",
-                  "count_pred_argmax", "count_lstm_fixed", "scorer", "classifier"] {
+        for n in [
+            "encoder",
+            "token_gather",
+            "span_rep",
+            "schema_gather",
+            "count_pred_argmax",
+            "count_lstm_fixed",
+            "scorer",
+            "classifier",
+        ] {
             std::fs::write(v2.join(format!("{n}_iobinding_fp32.onnx")), b"").unwrap();
         }
 
@@ -230,8 +261,16 @@ mod tests {
         let dir = tempdir().unwrap();
         let v2 = dir.path().join("fp32_v2");
         std::fs::create_dir_all(&v2).unwrap();
-        for n in ["encoder", "token_gather", "span_rep", "schema_gather",
-                  "count_pred_argmax", "count_lstm_fixed", "scorer", "classifier"] {
+        for n in [
+            "encoder",
+            "token_gather",
+            "span_rep",
+            "schema_gather",
+            "count_pred_argmax",
+            "count_lstm_fixed",
+            "scorer",
+            "classifier",
+        ] {
             std::fs::write(v2.join(format!("{n}_fp32.onnx")), b"").unwrap();
         }
 

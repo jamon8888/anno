@@ -15,11 +15,7 @@ impl TokenGather {
     /// * `hidden_states`: `[1, S, H]` — encoder output.
     /// * `word_indices`: `[num_words]` (i64 / u32) — token-level
     ///   start positions for each word.
-    pub fn forward(
-        &self,
-        hidden_states: &Tensor,
-        word_indices: &Tensor,
-    ) -> Result<Tensor> {
+    pub fn forward(&self, hidden_states: &Tensor, word_indices: &Tensor) -> Result<Tensor> {
         // Squeeze batch dim, gather, restore batch dim.
         let h = hidden_states.squeeze(0)?; // [S, H]
         let gathered = h.index_select(word_indices, 0)?; // [num_words, H]

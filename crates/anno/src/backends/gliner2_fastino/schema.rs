@@ -7,6 +7,5 @@
 //! semantics, fork the types here.
 
 pub use crate::backends::gliner_multitask::schema::{
-    ExtractedStructure, FieldType, StructureField, StructureTask,
-    StructureValue, TaskSchema,
+    ExtractedStructure, FieldType, StructureField, StructureTask, StructureValue, TaskSchema,
 };

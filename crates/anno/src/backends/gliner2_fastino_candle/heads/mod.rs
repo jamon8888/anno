@@ -38,49 +38,34 @@ impl AllHeads {
     ///
     /// See `docs/dev-notes/gliner2-multi-v1-safetensors-keys.md` for the
     /// authoritative key reference.
-    pub fn from_safetensors(
-        weights_path: &Path,
-        device: &Device,
-    ) -> crate::Result<Self> {
+    pub fn from_safetensors(weights_path: &Path, device: &Device) -> crate::Result<Self> {
         // SAFETY: VarBuilder::from_mmaped_safetensors mmap-reads the
         // weights file. Safe as long as the file isn't mutated under us —
         // Candle's standard pattern (matches `encoder::Encoder`).
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, device)
-        }
-        .map_err(|e| {
-            crate::Error::Backend(format!("gliner2_fastino_candle: heads safetensors: {e}"))
-        })?;
+        let vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, device) }
+                .map_err(|e| {
+                    crate::Error::Backend(format!("gliner2_fastino_candle: heads safetensors: {e}"))
+                })?;
 
-        let span_rep = span_rep::SpanRep::from_var_builder(
-            &vb.pp("span_rep").pp("span_rep_layer"),
-        )
-        .map_err(|e| {
-            crate::Error::Backend(format!("gliner2_fastino_candle: span_rep load: {e}"))
-        })?;
-
-        let count_lstm = count_lstm::CountLstmFixed::from_var_builder(
-            &vb.pp("count_embed"),
-            device,
-        )
-        .map_err(|e| {
-            crate::Error::Backend(format!(
-                "gliner2_fastino_candle: count_embed load: {e}"
-            ))
-        })?;
-
-        let count_pred = count_pred::CountPred::from_var_builder(&vb.pp("count_pred"))
+        let span_rep = span_rep::SpanRep::from_var_builder(&vb.pp("span_rep").pp("span_rep_layer"))
             .map_err(|e| {
-                crate::Error::Backend(format!(
-                    "gliner2_fastino_candle: count_pred load: {e}"
-                ))
+                crate::Error::Backend(format!("gliner2_fastino_candle: span_rep load: {e}"))
             })?;
 
-        let classifier = classifier::Classifier::from_var_builder(&vb.pp("classifier"))
-            .map_err(|e| {
-                crate::Error::Backend(format!(
-                    "gliner2_fastino_candle: classifier load: {e}"
-                ))
+        let count_lstm =
+            count_lstm::CountLstmFixed::from_var_builder(&vb.pp("count_embed"), device).map_err(
+                |e| crate::Error::Backend(format!("gliner2_fastino_candle: count_embed load: {e}")),
+            )?;
+
+        let count_pred =
+            count_pred::CountPred::from_var_builder(&vb.pp("count_pred")).map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino_candle: count_pred load: {e}"))
+            })?;
+
+        let classifier =
+            classifier::Classifier::from_var_builder(&vb.pp("classifier")).map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino_candle: classifier load: {e}"))
             })?;
 
         Ok(Self {
@@ -98,41 +83,29 @@ impl AllHeads {
     /// a `VarBuilder::from_tensors`. The VarBuilder must be rooted at
     /// the model's top level (so that `vb.pp("span_rep").pp("span_rep_layer")`
     /// resolves correctly).
-    pub fn from_var_builder(
-        vb: VarBuilder<'_>,
-        device: &Device,
-    ) -> crate::Result<Self> {
-        let span_rep = span_rep::SpanRep::from_var_builder(
-            &vb.pp("span_rep").pp("span_rep_layer"),
-        )
-        .map_err(|e| {
-            crate::Error::Backend(format!(
-                "gliner2_fastino_candle: span_rep load (vb): {e}"
-            ))
-        })?;
-
-        let count_lstm = count_lstm::CountLstmFixed::from_var_builder(
-            &vb.pp("count_embed"),
-            device,
-        )
-        .map_err(|e| {
-            crate::Error::Backend(format!(
-                "gliner2_fastino_candle: count_embed load (vb): {e}"
-            ))
-        })?;
-
-        let count_pred = count_pred::CountPred::from_var_builder(&vb.pp("count_pred"))
+    pub fn from_var_builder(vb: VarBuilder<'_>, device: &Device) -> crate::Result<Self> {
+        let span_rep = span_rep::SpanRep::from_var_builder(&vb.pp("span_rep").pp("span_rep_layer"))
             .map_err(|e| {
-                crate::Error::Backend(format!(
-                    "gliner2_fastino_candle: count_pred load (vb): {e}"
-                ))
+                crate::Error::Backend(format!("gliner2_fastino_candle: span_rep load (vb): {e}"))
             })?;
 
-        let classifier = classifier::Classifier::from_var_builder(&vb.pp("classifier"))
-            .map_err(|e| {
-                crate::Error::Backend(format!(
-                    "gliner2_fastino_candle: classifier load (vb): {e}"
-                ))
+        let count_lstm =
+            count_lstm::CountLstmFixed::from_var_builder(&vb.pp("count_embed"), device).map_err(
+                |e| {
+                    crate::Error::Backend(format!(
+                        "gliner2_fastino_candle: count_embed load (vb): {e}"
+                    ))
+                },
+            )?;
+
+        let count_pred =
+            count_pred::CountPred::from_var_builder(&vb.pp("count_pred")).map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino_candle: count_pred load (vb): {e}"))
+            })?;
+
+        let classifier =
+            classifier::Classifier::from_var_builder(&vb.pp("classifier")).map_err(|e| {
+                crate::Error::Backend(format!("gliner2_fastino_candle: classifier load (vb): {e}"))
             })?;
 
         Ok(Self {

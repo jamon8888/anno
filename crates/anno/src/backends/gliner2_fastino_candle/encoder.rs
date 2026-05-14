@@ -49,9 +49,8 @@ impl Encoder {
         // GLiNER2 stores all encoder tensors under the `encoder.` prefix
         // (e.g. `encoder.embeddings.word_embeddings.weight`). DebertaV2Model
         // expects them at root, so scope into the prefix.
-        let model = DebertaV2Model::load(vb.pp("encoder"), &config).map_err(|e| {
-            crate::Error::Backend(format!("encoder DebertaV2Model::load: {e}"))
-        })?;
+        let model = DebertaV2Model::load(vb.pp("encoder"), &config)
+            .map_err(|e| crate::Error::Backend(format!("encoder DebertaV2Model::load: {e}")))?;
 
         Ok(Self { model, config })
     }
@@ -63,10 +62,7 @@ impl Encoder {
     /// `VarBuilder::from_tensors`. The caller is responsible for scoping
     /// into the `encoder.` prefix; this constructor calls `DebertaV2Model::load`
     /// directly on the provided VarBuilder.
-    pub fn from_var_builder(
-        vb: VarBuilder<'_>,
-        config: &DebertaV2Config,
-    ) -> crate::Result<Self> {
+    pub fn from_var_builder(vb: VarBuilder<'_>, config: &DebertaV2Config) -> crate::Result<Self> {
         let model = DebertaV2Model::load(vb, config).map_err(|e| {
             crate::Error::Backend(format!("encoder DebertaV2Model::load (vb): {e}"))
         })?;

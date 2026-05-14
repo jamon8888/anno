@@ -37,55 +37,49 @@ pub(crate) fn run_encoder(
     record: &ProcessedRecord,
 ) -> Result<EncoderOutput, Error> {
     let seq_len = record.input_ids.len();
-    let input_ids: Array2<i64> = Array2::from_shape_vec(
-        (1, seq_len),
-        record.input_ids.clone(),
-    )
-    .map_err(|e| Error::Tokenizer(format!("encoder input_ids reshape: {e}")))?;
-    let attn_mask: Array2<i64> = Array2::from_shape_vec(
-        (1, seq_len),
-        record.attention_mask.clone(),
-    )
-    .map_err(|e| Error::Tokenizer(format!("encoder attn reshape: {e}")))?;
+    let input_ids: Array2<i64> = Array2::from_shape_vec((1, seq_len), record.input_ids.clone())
+        .map_err(|e| Error::Tokenizer(format!("encoder input_ids reshape: {e}")))?;
+    let attn_mask: Array2<i64> =
+        Array2::from_shape_vec((1, seq_len), record.attention_mask.clone())
+            .map_err(|e| Error::Tokenizer(format!("encoder attn reshape: {e}")))?;
 
     let input_ids_t = crate::backends::ort_compat::tensor_from_ndarray(input_ids)
         .map_err(|e| Error::Tokenizer(format!("encoder input_ids tensor: {e}")))?;
     let attn_mask_t = crate::backends::ort_compat::tensor_from_ndarray(attn_mask)
         .map_err(|e| Error::Tokenizer(format!("encoder attn tensor: {e}")))?;
 
-    let hs: ndarray::ArrayD<f32> = sessions.encoder.with_session(
-        |s| -> Result<_, Error> {
-            let outputs = s
-                .run(ort::inputs![
-                    "input_ids"      => input_ids_t.into_dyn(),
-                    "attention_mask" => attn_mask_t.into_dyn(),
-                ])
-                .map_err(|e| Error::Tokenizer(format!("encoder run: {e}")))?;
+    let hs: ndarray::ArrayD<f32> = sessions.encoder.with_session(|s| -> Result<_, Error> {
+        let outputs = s
+            .run(ort::inputs![
+                "input_ids"      => input_ids_t.into_dyn(),
+                "attention_mask" => attn_mask_t.into_dyn(),
+            ])
+            .map_err(|e| Error::Tokenizer(format!("encoder run: {e}")))?;
 
-            for name in ["hidden_states", "last_hidden_state", "output"] {
-                if let Some(v) = outputs.get(name) {
-                    let (shape, cow) = v
-                        .try_extract_tensor::<f32>()
-                        .map_err(|e| Error::Tokenizer(format!("encoder extract: {e}")))?;
-                    let data: Vec<f32> = cow.to_vec();
-                    let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-                    return Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                        .map_err(|e| Error::Tokenizer(format!("encoder array reshape: {e}")))?);
-                }
+        for name in ["hidden_states", "last_hidden_state", "output"] {
+            if let Some(v) = outputs.get(name) {
+                let (shape, cow) = v
+                    .try_extract_tensor::<f32>()
+                    .map_err(|e| Error::Tokenizer(format!("encoder extract: {e}")))?;
+                let data: Vec<f32> = cow.to_vec();
+                let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+                return Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                    .map_err(|e| Error::Tokenizer(format!("encoder array reshape: {e}")))?);
             }
-            // Fallback: take the first output.
-            let first = outputs.values().next().ok_or_else(|| {
-                Error::Tokenizer("encoder: no outputs".into())
-            })?;
-            let (shape, cow) = first
-                .try_extract_tensor::<f32>()
-                .map_err(|e| Error::Tokenizer(format!("encoder extract first: {e}")))?;
-            let data: Vec<f32> = cow.to_vec();
-            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                .map_err(|e| Error::Tokenizer(format!("encoder array reshape: {e}")))?)
-        },
-    )?;
+        }
+        // Fallback: take the first output.
+        let first = outputs
+            .values()
+            .next()
+            .ok_or_else(|| Error::Tokenizer("encoder: no outputs".into()))?;
+        let (shape, cow) = first
+            .try_extract_tensor::<f32>()
+            .map_err(|e| Error::Tokenizer(format!("encoder extract first: {e}")))?;
+        let data: Vec<f32> = cow.to_vec();
+        let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+        Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+            .map_err(|e| Error::Tokenizer(format!("encoder array reshape: {e}")))?)
+    })?;
 
     // hs is dynamic; convert to fixed [1, L, H] Array3.
     let shape = hs.shape().to_vec();
@@ -126,33 +120,33 @@ pub(crate) fn run_token_gather(
         .collect();
     let word_idx_arr: Array1<i64> = Array1::from_vec(word_starts);
 
-    let hs_t = crate::backends::ort_compat::tensor_from_ndarray(
-        encoder_out.hidden_states.clone(),
-    )
-    .map_err(|e| Error::Tokenizer(format!("token_gather hs tensor: {e}")))?;
+    let hs_t = crate::backends::ort_compat::tensor_from_ndarray(encoder_out.hidden_states.clone())
+        .map_err(|e| Error::Tokenizer(format!("token_gather hs tensor: {e}")))?;
     let word_idx_t = crate::backends::ort_compat::tensor_from_ndarray(word_idx_arr)
         .map_err(|e| Error::Tokenizer(format!("token_gather idx tensor: {e}")))?;
 
-    let result: ndarray::ArrayD<f32> = sessions.token_gather.with_session(
-        |s| -> Result<_, Error> {
-            let outputs = s
-                .run(ort::inputs![
-                    "last_hidden_state" => hs_t.into_dyn(),
-                    "word_indices"      => word_idx_t.into_dyn(),
-                ])
-                .map_err(|e| Error::Tokenizer(format!("token_gather run: {e}")))?;
-            let v = outputs.values().next().ok_or_else(|| {
-                Error::Tokenizer("token_gather: no outputs".into())
+    let result: ndarray::ArrayD<f32> =
+        sessions
+            .token_gather
+            .with_session(|s| -> Result<_, Error> {
+                let outputs = s
+                    .run(ort::inputs![
+                        "last_hidden_state" => hs_t.into_dyn(),
+                        "word_indices"      => word_idx_t.into_dyn(),
+                    ])
+                    .map_err(|e| Error::Tokenizer(format!("token_gather run: {e}")))?;
+                let v = outputs
+                    .values()
+                    .next()
+                    .ok_or_else(|| Error::Tokenizer("token_gather: no outputs".into()))?;
+                let (shape, cow) = v
+                    .try_extract_tensor::<f32>()
+                    .map_err(|e| Error::Tokenizer(format!("token_gather extract: {e}")))?;
+                let data: Vec<f32> = cow.to_vec();
+                let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+                Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                    .map_err(|e| Error::Tokenizer(format!("token_gather array reshape: {e}")))?)
             })?;
-            let (shape, cow) = v
-                .try_extract_tensor::<f32>()
-                .map_err(|e| Error::Tokenizer(format!("token_gather extract: {e}")))?;
-            let data: Vec<f32> = cow.to_vec();
-            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                .map_err(|e| Error::Tokenizer(format!("token_gather array reshape: {e}")))?)
-        },
-    )?;
 
     let text_embs: Array3<f32> = result
         .into_dimensionality::<ndarray::Ix3>()
@@ -199,33 +193,30 @@ pub(crate) fn run_span_rep(
 ) -> Result<SpanRepOutput, Error> {
     let span_idx = build_span_idx(num_words);
 
-    let hs_t = crate::backends::ort_compat::tensor_from_ndarray(
-        tg_out.text_embs.clone(),
-    )
-    .map_err(|e| Error::Tokenizer(format!("span_rep hs tensor: {e}")))?;
+    let hs_t = crate::backends::ort_compat::tensor_from_ndarray(tg_out.text_embs.clone())
+        .map_err(|e| Error::Tokenizer(format!("span_rep hs tensor: {e}")))?;
     let idx_t = crate::backends::ort_compat::tensor_from_ndarray(span_idx)
         .map_err(|e| Error::Tokenizer(format!("span_rep idx tensor: {e}")))?;
 
-    let result: ndarray::ArrayD<f32> = sessions.span_rep.with_session(
-        |s| -> Result<_, Error> {
-            let outputs = s
-                .run(ort::inputs![
-                    "hidden_states" => hs_t.into_dyn(),
-                    "span_idx"      => idx_t.into_dyn(),
-                ])
-                .map_err(|e| Error::Tokenizer(format!("span_rep run: {e}")))?;
-            let v = outputs.values().next().ok_or_else(|| {
-                Error::Tokenizer("span_rep: no outputs".into())
-            })?;
-            let (shape, cow) = v
-                .try_extract_tensor::<f32>()
-                .map_err(|e| Error::Tokenizer(format!("span_rep extract: {e}")))?;
-            let data: Vec<f32> = cow.to_vec();
-            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                .map_err(|e| Error::Tokenizer(format!("span_rep array reshape: {e}")))?)
-        },
-    )?;
+    let result: ndarray::ArrayD<f32> = sessions.span_rep.with_session(|s| -> Result<_, Error> {
+        let outputs = s
+            .run(ort::inputs![
+                "hidden_states" => hs_t.into_dyn(),
+                "span_idx"      => idx_t.into_dyn(),
+            ])
+            .map_err(|e| Error::Tokenizer(format!("span_rep run: {e}")))?;
+        let v = outputs
+            .values()
+            .next()
+            .ok_or_else(|| Error::Tokenizer("span_rep: no outputs".into()))?;
+        let (shape, cow) = v
+            .try_extract_tensor::<f32>()
+            .map_err(|e| Error::Tokenizer(format!("span_rep extract: {e}")))?;
+        let data: Vec<f32> = cow.to_vec();
+        let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+        Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+            .map_err(|e| Error::Tokenizer(format!("span_rep array reshape: {e}")))?)
+    })?;
 
     let span_embs: ndarray::Array4<f32> = result
         .into_dimensionality::<ndarray::Ix4>()
@@ -253,46 +244,48 @@ pub(crate) fn run_schema_gather(
     indices.extend(task.field_tok_indices.iter().map(|&i| i as i64));
     let idx_arr: Array1<i64> = Array1::from_vec(indices);
 
-    let hs_t = crate::backends::ort_compat::tensor_from_ndarray(
-        encoder_out.hidden_states.clone(),
-    )
-    .map_err(|e| Error::Tokenizer(format!("schema_gather hs tensor: {e}")))?;
+    let hs_t = crate::backends::ort_compat::tensor_from_ndarray(encoder_out.hidden_states.clone())
+        .map_err(|e| Error::Tokenizer(format!("schema_gather hs tensor: {e}")))?;
     let idx_t = crate::backends::ort_compat::tensor_from_ndarray(idx_arr)
         .map_err(|e| Error::Tokenizer(format!("schema_gather idx tensor: {e}")))?;
 
     type SchemaResult = (ndarray::ArrayD<f32>, ndarray::ArrayD<f32>);
-    let (pc, fields): SchemaResult = sessions.schema_gather.with_session(
-        |s| -> Result<_, Error> {
-            let outputs = s
-                .run(ort::inputs![
-                    "last_hidden_state" => hs_t.into_dyn(),
-                    "schema_indices"    => idx_t.into_dyn(),
-                ])
-                .map_err(|e| Error::Tokenizer(format!("schema_gather run: {e}")))?;
-            let mut iter = outputs.values();
-            let pc_v = iter.next().ok_or_else(|| {
-                Error::Tokenizer("schema_gather: missing pc_emb".into())
+    let (pc, fields): SchemaResult =
+        sessions
+            .schema_gather
+            .with_session(|s| -> Result<_, Error> {
+                let outputs = s
+                    .run(ort::inputs![
+                        "last_hidden_state" => hs_t.into_dyn(),
+                        "schema_indices"    => idx_t.into_dyn(),
+                    ])
+                    .map_err(|e| Error::Tokenizer(format!("schema_gather run: {e}")))?;
+                let mut iter = outputs.values();
+                let pc_v = iter
+                    .next()
+                    .ok_or_else(|| Error::Tokenizer("schema_gather: missing pc_emb".into()))?;
+                let fields_v = iter
+                    .next()
+                    .ok_or_else(|| Error::Tokenizer("schema_gather: missing field_embs".into()))?;
+                let (pc_shape, pc_cow) = pc_v
+                    .try_extract_tensor::<f32>()
+                    .map_err(|e| Error::Tokenizer(format!("schema_gather pc extract: {e}")))?;
+                let (fields_shape, fields_cow) = fields_v
+                    .try_extract_tensor::<f32>()
+                    .map_err(|e| Error::Tokenizer(format!("schema_gather fields extract: {e}")))?;
+                let pc_data: Vec<f32> = pc_cow.to_vec();
+                let pc_shape_usize: Vec<usize> = pc_shape.iter().map(|&s| s as usize).collect();
+                let pc_arr = ndarray::ArrayD::from_shape_vec(pc_shape_usize, pc_data)
+                    .map_err(|e| Error::Tokenizer(format!("schema_gather pc reshape: {e}")))?;
+                let fields_data: Vec<f32> = fields_cow.to_vec();
+                let fields_shape_usize: Vec<usize> =
+                    fields_shape.iter().map(|&s| s as usize).collect();
+                let fields_arr = ndarray::ArrayD::from_shape_vec(fields_shape_usize, fields_data)
+                    .map_err(|e| {
+                    Error::Tokenizer(format!("schema_gather fields reshape: {e}"))
+                })?;
+                Ok((pc_arr, fields_arr))
             })?;
-            let fields_v = iter.next().ok_or_else(|| {
-                Error::Tokenizer("schema_gather: missing field_embs".into())
-            })?;
-            let (pc_shape, pc_cow) = pc_v
-                .try_extract_tensor::<f32>()
-                .map_err(|e| Error::Tokenizer(format!("schema_gather pc extract: {e}")))?;
-            let (fields_shape, fields_cow) = fields_v
-                .try_extract_tensor::<f32>()
-                .map_err(|e| Error::Tokenizer(format!("schema_gather fields extract: {e}")))?;
-            let pc_data: Vec<f32> = pc_cow.to_vec();
-            let pc_shape_usize: Vec<usize> = pc_shape.iter().map(|&s| s as usize).collect();
-            let pc_arr = ndarray::ArrayD::from_shape_vec(pc_shape_usize, pc_data)
-                .map_err(|e| Error::Tokenizer(format!("schema_gather pc reshape: {e}")))?;
-            let fields_data: Vec<f32> = fields_cow.to_vec();
-            let fields_shape_usize: Vec<usize> = fields_shape.iter().map(|&s| s as usize).collect();
-            let fields_arr = ndarray::ArrayD::from_shape_vec(fields_shape_usize, fields_data)
-                .map_err(|e| Error::Tokenizer(format!("schema_gather fields reshape: {e}")))?;
-            Ok((pc_arr, fields_arr))
-        },
-    )?;
 
     let pc_emb: Array2<f32> = pc
         .into_dimensionality::<ndarray::Ix2>()
@@ -312,25 +305,27 @@ pub(crate) fn run_count_pred_argmax(
     let pc_t = crate::backends::ort_compat::tensor_from_ndarray(sg_out.pc_emb.clone())
         .map_err(|e| Error::Tokenizer(format!("count_pred pc tensor: {e}")))?;
 
-    let count: ndarray::ArrayD<i64> = sessions.count_pred_argmax.with_session(
-        |s| -> Result<_, Error> {
-            let outputs = s
-                .run(ort::inputs![
-                    "pc_emb" => pc_t.into_dyn(),
-                ])
-                .map_err(|e| Error::Tokenizer(format!("count_pred run: {e}")))?;
-            let v = outputs.values().next().ok_or_else(|| {
-                Error::Tokenizer("count_pred_argmax: no outputs".into())
+    let count: ndarray::ArrayD<i64> =
+        sessions
+            .count_pred_argmax
+            .with_session(|s| -> Result<_, Error> {
+                let outputs = s
+                    .run(ort::inputs![
+                        "pc_emb" => pc_t.into_dyn(),
+                    ])
+                    .map_err(|e| Error::Tokenizer(format!("count_pred run: {e}")))?;
+                let v = outputs
+                    .values()
+                    .next()
+                    .ok_or_else(|| Error::Tokenizer("count_pred_argmax: no outputs".into()))?;
+                let (shape, cow) = v
+                    .try_extract_tensor::<i64>()
+                    .map_err(|e| Error::Tokenizer(format!("count_pred extract: {e}")))?;
+                let data: Vec<i64> = cow.to_vec();
+                let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+                Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                    .map_err(|e| Error::Tokenizer(format!("count_pred reshape: {e}")))?)
             })?;
-            let (shape, cow) = v
-                .try_extract_tensor::<i64>()
-                .map_err(|e| Error::Tokenizer(format!("count_pred extract: {e}")))?;
-            let data: Vec<i64> = cow.to_vec();
-            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                .map_err(|e| Error::Tokenizer(format!("count_pred reshape: {e}")))?)
-        },
-    )?;
 
     let val = count.iter().next().copied().unwrap_or(0);
     Ok(val.max(0) as usize)
@@ -346,30 +341,30 @@ pub(crate) fn run_count_lstm_fixed(
     sessions: &Sessions,
     sg_out: &SchemaGatherOutput,
 ) -> Result<CountLstmOutput, Error> {
-    let fields_t = crate::backends::ort_compat::tensor_from_ndarray(
-        sg_out.field_embs.clone(),
-    )
-    .map_err(|e| Error::Tokenizer(format!("count_lstm tensor: {e}")))?;
+    let fields_t = crate::backends::ort_compat::tensor_from_ndarray(sg_out.field_embs.clone())
+        .map_err(|e| Error::Tokenizer(format!("count_lstm tensor: {e}")))?;
 
-    let proj: ndarray::ArrayD<f32> = sessions.count_lstm_fixed.with_session(
-        |s| -> Result<_, Error> {
-            let outputs = s
-                .run(ort::inputs![
-                    "field_embs" => fields_t.into_dyn(),
-                ])
-                .map_err(|e| Error::Tokenizer(format!("count_lstm run: {e}")))?;
-            let v = outputs.values().next().ok_or_else(|| {
-                Error::Tokenizer("count_lstm_fixed: no outputs".into())
+    let proj: ndarray::ArrayD<f32> =
+        sessions
+            .count_lstm_fixed
+            .with_session(|s| -> Result<_, Error> {
+                let outputs = s
+                    .run(ort::inputs![
+                        "field_embs" => fields_t.into_dyn(),
+                    ])
+                    .map_err(|e| Error::Tokenizer(format!("count_lstm run: {e}")))?;
+                let v = outputs
+                    .values()
+                    .next()
+                    .ok_or_else(|| Error::Tokenizer("count_lstm_fixed: no outputs".into()))?;
+                let (shape, cow) = v
+                    .try_extract_tensor::<f32>()
+                    .map_err(|e| Error::Tokenizer(format!("count_lstm extract: {e}")))?;
+                let data: Vec<f32> = cow.to_vec();
+                let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+                Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+                    .map_err(|e| Error::Tokenizer(format!("count_lstm reshape: {e}")))?)
             })?;
-            let (shape, cow) = v
-                .try_extract_tensor::<f32>()
-                .map_err(|e| Error::Tokenizer(format!("count_lstm extract: {e}")))?;
-            let data: Vec<f32> = cow.to_vec();
-            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                .map_err(|e| Error::Tokenizer(format!("count_lstm reshape: {e}")))?)
-        },
-    )?;
 
     let struct_proj: Array3<f32> = proj
         .into_dimensionality::<ndarray::Ix3>()
@@ -390,35 +385,30 @@ pub(crate) fn run_scorer(
     sr_out: &SpanRepOutput,
     cl_out: &CountLstmOutput,
 ) -> Result<ScorerOutput, Error> {
-    let span_t = crate::backends::ort_compat::tensor_from_ndarray(
-        sr_out.span_embs.clone(),
-    )
-    .map_err(|e| Error::Tokenizer(format!("scorer span tensor: {e}")))?;
-    let proj_t = crate::backends::ort_compat::tensor_from_ndarray(
-        cl_out.struct_proj.clone(),
-    )
-    .map_err(|e| Error::Tokenizer(format!("scorer proj tensor: {e}")))?;
+    let span_t = crate::backends::ort_compat::tensor_from_ndarray(sr_out.span_embs.clone())
+        .map_err(|e| Error::Tokenizer(format!("scorer span tensor: {e}")))?;
+    let proj_t = crate::backends::ort_compat::tensor_from_ndarray(cl_out.struct_proj.clone())
+        .map_err(|e| Error::Tokenizer(format!("scorer proj tensor: {e}")))?;
 
-    let result: ndarray::ArrayD<f32> = sessions.scorer.with_session(
-        |s| -> Result<_, Error> {
-            let outputs = s
-                .run(ort::inputs![
-                    "span_embeddings" => span_t.into_dyn(),
-                    "struct_proj"     => proj_t.into_dyn(),
-                ])
-                .map_err(|e| Error::Tokenizer(format!("scorer run: {e}")))?;
-            let v = outputs.values().next().ok_or_else(|| {
-                Error::Tokenizer("scorer: no outputs".into())
-            })?;
-            let (shape, cow) = v
-                .try_extract_tensor::<f32>()
-                .map_err(|e| Error::Tokenizer(format!("scorer extract: {e}")))?;
-            let data: Vec<f32> = cow.to_vec();
-            let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
-            Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
-                .map_err(|e| Error::Tokenizer(format!("scorer reshape: {e}")))?)
-        },
-    )?;
+    let result: ndarray::ArrayD<f32> = sessions.scorer.with_session(|s| -> Result<_, Error> {
+        let outputs = s
+            .run(ort::inputs![
+                "span_embeddings" => span_t.into_dyn(),
+                "struct_proj"     => proj_t.into_dyn(),
+            ])
+            .map_err(|e| Error::Tokenizer(format!("scorer run: {e}")))?;
+        let v = outputs
+            .values()
+            .next()
+            .ok_or_else(|| Error::Tokenizer("scorer: no outputs".into()))?;
+        let (shape, cow) = v
+            .try_extract_tensor::<f32>()
+            .map_err(|e| Error::Tokenizer(format!("scorer extract: {e}")))?;
+        let data: Vec<f32> = cow.to_vec();
+        let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
+        Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
+            .map_err(|e| Error::Tokenizer(format!("scorer reshape: {e}")))?)
+    })?;
 
     let scores: ndarray::Array4<f32> = result
         .into_dimensionality::<ndarray::Ix4>()
@@ -509,7 +499,13 @@ pub(crate) fn decode_entities(
         .map(|l| (l.as_str(), threshold))
         .collect();
     decode_entities_with_thresholds(
-        text, record, task, scorer_out, pred_count, &label_thresholds, flat_ner,
+        text,
+        record,
+        task,
+        scorer_out,
+        pred_count,
+        &label_thresholds,
+        flat_ner,
     )
 }
 
@@ -537,17 +533,17 @@ pub(crate) fn decode_structure(
     threshold: f32,
     fields: &[(String, crate::backends::gliner2_fastino::schema::FieldType)],
 ) -> Vec<crate::backends::gliner2_fastino::schema::ExtractedStructure> {
-    use crate::backends::gliner2_fastino::schema::{
-        ExtractedStructure, StructureValue,
-    };
+    use crate::backends::gliner2_fastino::schema::{ExtractedStructure, StructureValue};
     use std::collections::HashMap;
 
     let num_words = record.word_to_char_maps.len();
     let num_fields = task.labels.len();
     debug_assert_eq!(
-        num_fields, fields.len(),
+        num_fields,
+        fields.len(),
         "decode_structure: task.labels.len() = {} but fields.len() = {}",
-        num_fields, fields.len(),
+        num_fields,
+        fields.len(),
     );
     let scores = &scorer_out.scores;
 
@@ -622,27 +618,26 @@ pub(crate) fn run_classifier(
     );
     for m in 0..num_labels {
         for d in 0..hidden_size {
-            padded_fp16[[0, m, 0, d]] =
-                half::f16::from_f32(sg_out.field_embs[[m, d]]);
+            padded_fp16[[0, m, 0, d]] = half::f16::from_f32(sg_out.field_embs[[m, d]]);
         }
     }
     // Convert fp16 padding to f32 for ort tensor compatibility.
-    let padded: Array4<f32> = padded_fp16
-        .mapv(|v| v.to_f32());
+    let padded: Array4<f32> = padded_fp16.mapv(|v| v.to_f32());
 
     let pad_t = crate::backends::ort_compat::tensor_from_ndarray(padded)
         .map_err(|e| Error::Tokenizer(format!("classifier tensor: {e}")))?;
 
-    let logits: ndarray::ArrayD<f32> = sessions.classifier.with_session(
-        |s| -> Result<_, Error> {
+    let logits: ndarray::ArrayD<f32> =
+        sessions.classifier.with_session(|s| -> Result<_, Error> {
             let outputs = s
                 .run(ort::inputs![
                     "span_embeddings" => pad_t.into_dyn(),
                 ])
                 .map_err(|e| Error::Tokenizer(format!("classifier run: {e}")))?;
-            let v = outputs.values().next().ok_or_else(|| {
-                Error::Tokenizer("classifier: no outputs".into())
-            })?;
+            let v = outputs
+                .values()
+                .next()
+                .ok_or_else(|| Error::Tokenizer("classifier: no outputs".into()))?;
             let (shape, cow) = v
                 .try_extract_tensor::<f32>()
                 .map_err(|e| Error::Tokenizer(format!("classifier extract: {e}")))?;
@@ -650,8 +645,7 @@ pub(crate) fn run_classifier(
             let shape_usize: Vec<usize> = shape.iter().map(|&s| s as usize).collect();
             Ok(ndarray::ArrayD::from_shape_vec(shape_usize, data)
                 .map_err(|e| Error::Tokenizer(format!("classifier reshape: {e}")))?)
-        },
-    )?;
+        })?;
 
     // logits shape is [1, num_labels, MAX_WIDTH, 1]. Take position 0.
     let mut exps = Vec::with_capacity(num_labels);
@@ -865,7 +859,10 @@ mod tests {
         let fields = vec![("a".to_string(), FieldType::String)];
 
         let result = decode_structure("Acme", &record, &task, &scorer_out, 0, 0.5, &fields);
-        assert!(result.is_empty(), "expected 0 instances when pred_count=0, got {result:?}");
+        assert!(
+            result.is_empty(),
+            "expected 0 instances when pred_count=0, got {result:?}"
+        );
     }
 
     #[test]
@@ -898,7 +895,13 @@ mod tests {
         let fields = vec![("name".to_string(), FieldType::String)];
 
         let result = decode_structure(
-            "Marie Albert physicist", &record, &task, &scorer_out, 2, 0.5, &fields,
+            "Marie Albert physicist",
+            &record,
+            &task,
+            &scorer_out,
+            2,
+            0.5,
+            &fields,
         );
 
         assert_eq!(result.len(), 2, "expected 2 instances");
@@ -940,10 +943,15 @@ mod tests {
         let fields = vec![("f".to_string(), FieldType::String)];
 
         let result = decode_structure("Acme", &record, &task, &scorer_out, 1, 0.5, &fields);
-        assert_eq!(result.len(), 1, "instance is still emitted (with empty fields)");
+        assert_eq!(
+            result.len(),
+            1,
+            "instance is still emitted (with empty fields)"
+        );
         assert!(
             result[0].fields.is_empty(),
-            "field below threshold should be dropped, got {:?}", result[0].fields,
+            "field below threshold should be dropped, got {:?}",
+            result[0].fields,
         );
     }
 }
