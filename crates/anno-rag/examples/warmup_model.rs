@@ -59,6 +59,9 @@ async fn warm_embedder(api: &Api, model_id: &str) -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("neither model.safetensors nor pytorch_model.bin: {e}"))?,
     };
     let size_mb = std::fs::metadata(&weights_path)?.len() as f64 / 1024.0 / 1024.0;
-    println!("  weights ... ok ({size_mb:.1} MiB) -> {}", weights_path.display());
+    println!(
+        "  weights ... ok ({size_mb:.1} MiB) -> {}",
+        weights_path.display()
+    );
     Ok(())
 }

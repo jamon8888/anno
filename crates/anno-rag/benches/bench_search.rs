@@ -9,9 +9,13 @@ fn bench_search(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let (pipeline, _tmp) = rt.block_on(async {
         let (p, tmp) = common::pipeline_in_tempdir().await;
-        p.ingest_folder(&common::bench_corpus_dir(), true, &tmp.path().join("outputs"))
-            .await
-            .expect("ingest");
+        p.ingest_folder(
+            &common::bench_corpus_dir(),
+            true,
+            &tmp.path().join("outputs"),
+        )
+        .await
+        .expect("ingest");
         (p, tmp)
     });
     c.bench_function("search_p95", |b| {

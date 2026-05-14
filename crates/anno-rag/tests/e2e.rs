@@ -23,7 +23,9 @@ async fn ingest_then_search_french_fixtures() {
     let mut cfg = AnnoRagConfig::default();
     cfg.data_dir = dir.path().to_path_buf();
 
-    let pipeline = Pipeline::new(cfg.clone(), TEST_KEY).await.expect("pipeline init");
+    let pipeline = Pipeline::new(cfg.clone(), TEST_KEY)
+        .await
+        .expect("pipeline init");
 
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let output_dir = dir.path().join("outputs");
@@ -35,7 +37,10 @@ async fn ingest_then_search_french_fixtures() {
     assert_eq!(n, 3, "should ingest 3 fixtures, got {n}");
 
     // Run a semantic search relevant to IBAN/payment language.
-    let hits = pipeline.search("virement bancaire IBAN", 5).await.expect("search");
+    let hits = pipeline
+        .search("virement bancaire IBAN", 5)
+        .await
+        .expect("search");
     assert!(
         !hits.is_empty(),
         "search must return at least one hit for IBAN query"
@@ -46,7 +51,12 @@ async fn ingest_then_search_french_fixtures() {
         .expect("read output_dir")
         .flatten()
         .collect();
-    assert_eq!(entries.len(), 3, "should write 3 .anon.md files, got {}", entries.len());
+    assert_eq!(
+        entries.len(),
+        3,
+        "should write 3 .anon.md files, got {}",
+        entries.len()
+    );
 
     // Structured PII (regex layer) MUST always be scrubbed — hard assertion.
     //
@@ -54,7 +64,12 @@ async fn ingest_then_search_french_fixtures() {
     // GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
     // directly (multilingual, FR-aware). Coverage is now expected to be
     // 100% (12/12) — every name in every anonymized fixture.
-    let names = ["Marie Dupont", "Jean Martin", "Sophie Bernard", "Pierre Lefebvre"];
+    let names = [
+        "Marie Dupont",
+        "Jean Martin",
+        "Sophie Bernard",
+        "Pierre Lefebvre",
+    ];
     let mut total_leaks: Vec<String> = Vec::new();
     for entry in &entries {
         let content = std::fs::read_to_string(entry.path()).expect("read output");

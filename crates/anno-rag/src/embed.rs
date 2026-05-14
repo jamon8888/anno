@@ -68,8 +68,8 @@ impl Embedder {
             VarBuilder::from_mmaped_safetensors(&[weights_path], dtype, &device)
                 .map_err(|e| Error::Embed(format!("var builder: {e}")))?
         };
-        let model = BertModel::load(vb, &config)
-            .map_err(|e| Error::Embed(format!("bert load: {e}")))?;
+        let model =
+            BertModel::load(vb, &config).map_err(|e| Error::Embed(format!("bert load: {e}")))?;
 
         Ok(Self {
             model,

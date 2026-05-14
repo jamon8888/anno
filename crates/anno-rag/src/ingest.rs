@@ -134,10 +134,7 @@ mod tests {
 
     #[tokio::test]
     async fn extracts_plain_text_file() {
-        let mut f = tempfile::Builder::new()
-            .suffix(".txt")
-            .tempfile()
-            .unwrap();
+        let mut f = tempfile::Builder::new().suffix(".txt").tempfile().unwrap();
         writeln!(
             f,
             "Article 1.\n\nLe présent contrat est régi par le droit français.\n\nArticle 2.\n\nLa juridiction est Paris."
@@ -159,10 +156,7 @@ mod tests {
 
     #[tokio::test]
     async fn extracts_markdown_file() {
-        let mut f = tempfile::Builder::new()
-            .suffix(".md")
-            .tempfile()
-            .unwrap();
+        let mut f = tempfile::Builder::new().suffix(".md").tempfile().unwrap();
         writeln!(
             f,
             "# Contrat de prestation\n\n## Article 1\n\nObjet du contrat.\n\n## Article 2\n\nDurée: 12 mois."

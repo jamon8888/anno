@@ -34,7 +34,9 @@ pub async fn run(corpus: &Path) -> Result<()> {
     let rss_idle = current_rss_mb();
 
     let t1 = Instant::now();
-    let n = p.ingest_folder(corpus, true, &tmp.path().join("out")).await?;
+    let n = p
+        .ingest_folder(corpus, true, &tmp.path().join("out"))
+        .await?;
     let ingest = t1.elapsed();
     let rss_after_ingest = current_rss_mb();
 
@@ -79,5 +81,7 @@ fn current_rss_mb() -> u64 {
     );
     let pid = Pid::from_u32(std::process::id());
     sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
-    sys.process(pid).map(|p| p.memory() / 1024 / 1024).unwrap_or(0)
+    sys.process(pid)
+        .map(|p| p.memory() / 1024 / 1024)
+        .unwrap_or(0)
 }

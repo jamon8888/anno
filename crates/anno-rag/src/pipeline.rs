@@ -167,7 +167,11 @@ impl Pipeline {
         }
         // Build the vector index in a background-equivalent flow once we
         // cross the configured threshold. Idempotent on retry.
-        match self.store.maybe_build_index(self.cfg.vector_index_threshold).await {
+        match self
+            .store
+            .maybe_build_index(self.cfg.vector_index_threshold)
+            .await
+        {
             Ok(true) => tracing::info!(
                 threshold = self.cfg.vector_index_threshold,
                 "built IVF_HNSW_SQ index on chunks.vector"

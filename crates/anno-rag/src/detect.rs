@@ -265,7 +265,8 @@ mod tests {
         let text = "Appelez le 06 12 34 56 78 demain.";
         let ents = d.detect(text).expect("detect ok");
         assert!(
-            ents.iter().any(|e| matches!(e.category, EntityCategory::PhoneNumber)),
+            ents.iter()
+                .any(|e| matches!(e.category, EntityCategory::PhoneNumber)),
             "expected phone among {:?}",
             ents.iter().map(|e| &e.category).collect::<Vec<_>>()
         );
@@ -281,16 +282,12 @@ mod tests {
         let valid = d.detect(text_valid).expect("ok");
         let invalid = d.detect(text_invalid).expect("ok");
 
-        assert!(
-            valid
-                .iter()
-                .any(|e| matches!(e.category, EntityCategory::Custom(ref s) if s == "SIRET"))
-        );
-        assert!(
-            !invalid
-                .iter()
-                .any(|e| matches!(e.category, EntityCategory::Custom(ref s) if s == "SIRET"))
-        );
+        assert!(valid
+            .iter()
+            .any(|e| matches!(e.category, EntityCategory::Custom(ref s) if s == "SIRET")));
+        assert!(!invalid
+            .iter()
+            .any(|e| matches!(e.category, EntityCategory::Custom(ref s) if s == "SIRET")));
     }
 
     #[test]

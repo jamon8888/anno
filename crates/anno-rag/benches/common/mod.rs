@@ -7,8 +7,7 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
 
 /// Path to the bench fixture corpus relative to crate root.
 pub fn bench_corpus_dir() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/bench_corpus")
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/bench_corpus")
 }
 
 /// Build a Pipeline pointing at a fresh temp data dir. Caller owns the TempDir.

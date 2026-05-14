@@ -10,7 +10,11 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "anno-rag", version, about = "Local GDPR-compliant document anonymizer + RAG (French legal)")]
+#[command(
+    name = "anno-rag",
+    version,
+    about = "Local GDPR-compliant document anonymizer + RAG (French legal)"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -75,7 +79,12 @@ async fn main() -> anyhow::Result<()> {
     let pipeline = Pipeline::new(cfg.clone(), key).await?;
 
     match cli.cmd {
-        Cmd::Ingest { folder, recursive, output, enable_ocr: _ } => {
+        Cmd::Ingest {
+            folder,
+            recursive,
+            output,
+            enable_ocr: _,
+        } => {
             let out = output.unwrap_or_else(|| cfg.outputs_dir());
             let n = pipeline.ingest_folder(&folder, recursive, &out).await?;
             println!("ingested {n} documents → {}", out.display());
@@ -86,12 +95,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("(no results)");
             }
             for (i, h) in hits.iter().enumerate() {
-                println!(
-                    "#{} distance={:.3} page={:?}",
-                    i + 1,
-                    h.distance,
-                    h.page
-                );
+                println!("#{} distance={:.3} page={:?}", i + 1, h.distance, h.page);
                 println!("    source: {}", h.source_path);
                 println!("    text:   {}", truncate(&h.text_pseudo, 200));
                 println!();
