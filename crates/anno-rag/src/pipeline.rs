@@ -190,6 +190,12 @@ impl Pipeline {
             Ok(false) => {}
             Err(e) => tracing::warn!(error = %e, "index build skipped"),
         }
+        // Build the French-tokenized FTS index for hybrid search.
+        match self.store.maybe_build_fts_index().await {
+            Ok(true) => tracing::info!("built French FTS index on chunks.text_pseudo"),
+            Ok(false) => {}
+            Err(e) => tracing::warn!(error = %e, "FTS index build skipped"),
+        }
         Ok(count)
     }
 

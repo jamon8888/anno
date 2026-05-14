@@ -250,6 +250,61 @@ impl Store {
             .map_err(|e| Error::Store(format!("create_index: {e}")))?;
         Ok(true)
     }
+
+    /// Build a French-tokenized full-text-search index on `text_pseudo` if
+    /// the table has rows and the index does not already exist. Idempotent.
+    ///
+    /// French tokenization (stemming + stop-word removal + lowercase) is
+    /// mandatory for legal French — the default `simple` tokenizer would
+    /// make "résiliation" miss "résilier" and let stop-words pollute BM25.
+    ///
+    /// Locked v0.6 config: French stem + stop-words + lowercase. The
+    /// comparative tokenizer spike is deferred — the eval harness now
+    /// exists to support it as a follow-up.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if `count_rows`, `list_indices`, or
+    /// `create_index` fail.
+    pub async fn maybe_build_fts_index(&self) -> Result<bool> {
+        use lancedb::index::scalar::FtsIndexBuilder;
+        use lancedb::index::Index;
+
+        let count = self
+            .tbl
+            .count_rows(None)
+            .await
+            .map_err(|e| Error::Store(format!("count_rows: {e}")))?;
+        if count == 0 {
+            return Ok(false);
+        }
+        let existing = self
+            .tbl
+            .list_indices()
+            .await
+            .map_err(|e| Error::Store(format!("list_indices: {e}")))?;
+        let already = existing
+            .iter()
+            .any(|i| i.columns.iter().any(|c| c == "text_pseudo"));
+        if already {
+            return Ok(false);
+        }
+
+        // French legal tokenization: stem + stop-words + lowercase.
+        let fts = FtsIndexBuilder::default()
+            .base_tokenizer("simple".to_string())
+            .language("French")
+            .map_err(|e| Error::Store(format!("fts language: {e}")))?
+            .stem(true)
+            .remove_stop_words(true)
+            .lower_case(true);
+
+        self.tbl
+            .create_index(&["text_pseudo"], Index::FTS(fts))
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("create_fts_index: {e}")))?;
+        Ok(true)
+    }
 }
 
 /// Deterministic chunk id: UUID v5 (OID namespace) of `"{doc_id}::{chunk_idx}"`.
