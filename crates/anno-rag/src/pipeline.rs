@@ -197,13 +197,7 @@ impl Pipeline {
     pub async fn search(&self, query: &str, top_k: usize) -> Result<Vec<SearchHit>> {
         let entities = self.detector_get_or_init()?.detect(query)?;
         let pseudo_q = self.vault.pseudonymize(query, &entities).await?;
-        let qv = self
-            .embedder()
-            .await?
-            .embed_batch(std::slice::from_ref(&pseudo_q))?
-            .into_iter()
-            .next()
-            .ok_or_else(|| Error::Embed("embedder returned empty result for query".into()))?;
+        let qv = self.embedder().await?.embed_query(&pseudo_q)?;
         self.store.search(&pseudo_q, &qv, top_k).await
     }
 
