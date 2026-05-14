@@ -11,8 +11,11 @@ name = "anno-privacy-gateway"
 path = "src/main.rs"
 
 [dependencies]
+async-stream = { workspace = true }
 axum = { workspace = true }
+bytes = { workspace = true }
 cloakpipe-core = { path = "../../vendor/cloakpipe/crates/cloakpipe-core" }
+futures-util = { workspace = true }
 reqwest = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }

@@ -34,6 +34,9 @@ regex = "1"
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
 bitflags = "2"
+async-stream = "0.3"
+bytes = "1"
+futures-util = "0.3"
 
 # `textprep` is published on crates.io. For local development with sibling checkouts,
 # merge `.cargo/config.toml.example` into your `.cargo/config.toml` to patch it to a path dependency.
@@ -105,7 +108,7 @@ futures         = "0.3"
 argon2          = "0.5"
 keyring         = "3"
 axum            = "0.8"
-reqwest         = { version = "0.13", features = ["json"] }
+reqwest         = { version = "0.13", features = ["json", "stream"] }
 
 # anno-rag v0.2 — MCP server deps
 rmcp            = { version = "1.6", features = ["server", "transport-io", "macros"] }
