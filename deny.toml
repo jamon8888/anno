@@ -65,6 +65,13 @@ exceptions = [
     # triggered by that use. REVIEW BEFORE any SaaS/hosted offering of
     # anno-rag: a hosted multi-tenant deployment may breach ELv2 §1.
     { crate = "kreuzberg", allow = ["Elastic-2.0"] },
+
+    # bzip2-1.0.6 is the bzip2 open-source license (BSD-style, permissive).
+    # It predates SPDX and is not in the standard allow list; the license
+    # text is functionally equivalent to BSD-2-Clause. Pulled transitively
+    # via kreuzberg's `archives` feature (sevenz-rust2 → libbz2-rs-sys).
+    { crate = "bzip2", allow = ["bzip2-1.0.6"] },
+    { crate = "libbz2-rs-sys", allow = ["bzip2-1.0.6"] },
 ]
 
 [licenses.private]

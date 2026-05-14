@@ -135,7 +135,9 @@ pub enum ExecutionMode {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct GLiNER2FastinoConfig {
+    /// ONNX session configuration (thread count, provider, etc.).
     pub onnx: crate::backends::hf_loader::OnnxSessionConfig,
+    /// Execution path: standard round-trip or IoBinding device-resident.
     pub execution_mode: ExecutionMode,
 }
 
@@ -178,6 +180,9 @@ pub enum BatchSchemaMode<'a> {
     PerSample(&'a [Vec<&'a str>]),
 }
 
+/// GLiNER2 fastino-ai NER model loaded from ONNX sessions.
+///
+/// Construct via [`Self::from_pretrained`] or [`Self::from_local`].
 pub struct GLiNER2Fastino {
     pub(crate) tokenizer: tokenizers::Tokenizer,
     pub(crate) special: processor::SpecialTokenIds,

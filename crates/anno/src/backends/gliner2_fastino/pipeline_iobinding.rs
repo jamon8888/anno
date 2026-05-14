@@ -1,4 +1,5 @@
 //! Phase 3.5: IoBinding-mode 8-session inference pipeline.
+#![allow(missing_docs)] // implementation internals; public API is on GLiNER2Fastino in mod.rs
 //!
 //! Adapted from SemplificaAI/gliner2-rs/rust_component/src/lib_v2.rs:285-660
 //! (`Gliner2EngineV2::extract_iobinding`, Apache-2.0). See

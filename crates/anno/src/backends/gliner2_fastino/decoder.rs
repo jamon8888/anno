@@ -1,4 +1,5 @@
 //! Span-score → Entity decoder. Converts ONNX output to char-offset entities.
+#![allow(missing_docs)] // implementation internals; public API is on GLiNER2Fastino in mod.rs
 //!
 //! For each span (start_word, end_word) where score > threshold for label L,
 //! look up the byte offsets of `start_word` and `end_word` in the original

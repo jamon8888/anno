@@ -22,7 +22,11 @@ fn bench_recall(c: &mut Criterion) {
     let (pipeline, _tmp) = rt.block_on(async {
         let (p, tmp) = common::pipeline_in_tempdir().await;
         let n = p
-            .ingest_folder(&common::bench_corpus_dir(), true, &tmp.path().join("outputs"))
+            .ingest_folder(
+                &common::bench_corpus_dir(),
+                true,
+                &tmp.path().join("outputs"),
+            )
             .await
             .expect("ingest");
         assert!(

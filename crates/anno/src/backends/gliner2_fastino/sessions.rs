@@ -1,4 +1,5 @@
 //! Multi-session ONNX container for `gliner2_fastino`. Phase 3.
+#![allow(missing_docs)] // implementation internals; public API is on GLiNER2Fastino in mod.rs
 //!
 //! Adapted from SemplificaAI/gliner2-rs (Apache-2.0):
 //! https://github.com/SemplificaAI/gliner2-rs/blob/main/rust_component/src/lib_v2.rs

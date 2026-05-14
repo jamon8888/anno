@@ -2,6 +2,7 @@
 //! enum that selects the encoder counting architecture; Phase 1 doesn't use
 //! it (it's a Phase 2 head), but we read it at load time so Phase 2 can
 //! dispatch without re-parsing.
+#![allow(missing_docs)] // implementation internals; public API is on GLiNER2Fastino in mod.rs
 
 use serde::Deserialize;
 

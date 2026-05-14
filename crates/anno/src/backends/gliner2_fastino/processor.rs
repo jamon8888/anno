@@ -6,6 +6,7 @@
 // integration with anno::Entity / anno::backends::inference traits;
 // removal of Relations and Classifications schema arms (NER-only Phase 1).
 // Error type translated from anyhow::Result to backend-local Error.
+#![allow(missing_docs)] // implementation internals; public API is on GLiNER2Fastino in mod.rs
 
 use crate::backends::gliner2_fastino::errors::Error;
 use regex::Regex;
