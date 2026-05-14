@@ -95,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("(no results)");
             }
             for (i, h) in hits.iter().enumerate() {
-                println!("#{} distance={:.3} page={:?}", i + 1, h.distance, h.page);
+                println!("#{} score={:.3} page={:?}", i + 1, h.score, h.page);
                 println!("    source: {}", h.source_path);
                 println!("    text:   {}", truncate(&h.text_pseudo, 200));
                 println!();

@@ -71,7 +71,7 @@ struct SearchHitWire {
     page: Option<u32>,
     char_start: u32,
     char_end: u32,
-    distance: f32,
+    score: f32,
 }
 
 #[derive(Serialize)]
@@ -131,7 +131,7 @@ impl AnnoRagServer {
                             page: h.page,
                             char_start: h.char_start,
                             char_end: h.char_end,
-                            distance: h.distance,
+                            score: h.score,
                         })
                         .collect(),
                 };
