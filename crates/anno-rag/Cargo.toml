@@ -57,6 +57,7 @@ rand                 = { workspace = true }
 dirs                 = { workspace = true }
 chrono               = { workspace = true }
 csv                  = "1"
+unicode-normalization = "0.1"
 sysinfo              = "0.32"
 tempfile             = "3"
 
