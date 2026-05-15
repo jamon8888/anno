@@ -321,6 +321,68 @@ impl Pipeline {
             }
         }
     }
+
+    /// Detect PII in `text`, pseudonymize with the vault, embed the
+    /// tokenized text, and persist as a Memory row. The on-disk text is
+    /// **always** the tokenized form; cleartext never reaches the
+    /// `memories` LanceDB collection.
+    ///
+    /// # Errors
+    /// Returns [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] depending on which layer fails.
+    pub async fn save_memory(
+        &self,
+        text: &str,
+        kind: Option<crate::memory::MemoryKind>,
+        session_id: Option<String>,
+    ) -> Result<SavedMemory> {
+        let entities = self.detector_get_or_init()?.detect(text)?;
+        let (tokenized, token_refs) =
+            self.vault.pseudonymize_with_refs(text, &entities).await?;
+
+        let mut embedding = self
+            .embedder()
+            .await?
+            .embed_batch(std::slice::from_ref(&tokenized))?;
+        let embedding = embedding.pop().ok_or_else(|| {
+            Error::Embed("embed_batch returned no vector for memory".into())
+        })?;
+
+        let now = chrono::Utc::now();
+        let id = crate::memory::MemoryId::new();
+        let m = crate::memory::Memory {
+            id: id.clone(),
+            session_id,
+            kind: kind.unwrap_or(crate::memory::MemoryKind::Context),
+            text: tokenized.clone(),
+            created_at: now,
+            accessed_at: now,
+            valid_from: now,
+            valid_to: None,
+            embedding,
+            token_refs: token_refs.clone(),
+            entity_refs: vec![],
+        };
+
+        self.store.memory_insert(&m).await?;
+
+        Ok(SavedMemory {
+            id,
+            redacted_text: tokenized,
+            token_refs,
+        })
+    }
+}
+
+/// Receipt returned by [`Pipeline::save_memory`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SavedMemory {
+    /// Newly minted memory id.
+    pub id: crate::memory::MemoryId,
+    /// Tokenized form of the input text (what got persisted).
+    pub redacted_text: String,
+    /// `(category, token)` pairs minted for the GDPR Art. 17 cascade.
+    pub token_refs: Vec<crate::memory::TokenRef>,
 }
 
 /// Receipt returned by [`Pipeline::forget`]. Suitable for inclusion in an

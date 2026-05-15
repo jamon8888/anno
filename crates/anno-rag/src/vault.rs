@@ -60,6 +60,45 @@ impl Vault {
         Ok(result.text)
     }
 
+    /// Pseudonymize `text` and also return the `(category, token)` pairs the
+    /// vault minted — needed by the memory layer for the GDPR Art. 17
+    /// cascade. The text returned matches [`Self::pseudonymize`] exactly.
+    ///
+    /// # Errors
+    /// Returns [`Error::Vault`] on cloakpipe replacer failure.
+    pub async fn pseudonymize_with_refs(
+        &self,
+        text: &str,
+        entities: &[DetectedEntity],
+    ) -> Result<(String, Vec<crate::memory::TokenRef>)> {
+        let mut v = self.inner.lock().await;
+        let result = Replacer::pseudonymize(text, entities, &mut v)
+            .map_err(|e| Error::Vault(format!("replacer: {e}")))?;
+        // result.mappings is token -> original. Walk the entities so the
+        // returned refs carry the detector's category as the label (e.g.
+        // "Person", "Email", "NIR"), not the raw original value.
+        let mut refs: Vec<crate::memory::TokenRef> = Vec::with_capacity(entities.len());
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for e in entities {
+            // The vault may have collapsed alias variants onto a canonical
+            // entry; look up via the originals map.
+            let token = result
+                .mappings
+                .iter()
+                .find(|(_, orig)| orig.as_str() == e.original)
+                .map(|(tok, _)| tok.clone());
+            if let Some(token) = token {
+                if seen.insert(token.clone()) {
+                    refs.push(crate::memory::TokenRef {
+                        label: format!("{:?}", e.category),
+                        token,
+                    });
+                }
+            }
+        }
+        Ok((result.text, refs))
+    }
+
     /// Reverse-lookup a pseudo-token to its original.
     /// Returns `None` if the token is unknown.
     #[must_use = "lookup returns the original value — discard means you wanted lookup_exists"]
