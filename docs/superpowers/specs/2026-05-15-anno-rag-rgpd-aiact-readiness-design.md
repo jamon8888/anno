@@ -43,9 +43,9 @@ This document records, with code citations:
 ## 2. Gaps
 
 > **Status update (2026-05-16):**
-> - Code gaps **G1–G6** closed (v0.7 + v0.4 GDPR core). Reclassified as claims C13–C17 below.
+> - Code gaps **G1–G7** closed (v0.7 + v0.4 GDPR core + G7 graceful shutdown). Reclassified as claims C13–C18 below.
 > - Doc gaps **U1, U2, U3, U4, U7, U8, U9, U11, U12, U13** closed v1 (pending DPO + outside-counsel sign-off). See the doc-pack mapping below.
-> - **Still open:** G7 (MCP graceful shutdown — code, ~1 day), U5 (at-rest encryption — operator + v0.5 code), U6 (KMS — v0.5+ code), U10 (detector logging — small code task).
+> - **Still open:** U5 (at-rest encryption — operator + v0.5 code), U6 (KMS — v0.5+ code), U10 (detector logging — small code task).
 > - PR-D (anno-memory v0.2, 1/11 tasks shipped on `feat/anno-memory-v0.2`) is paused but unblocked.
 
 ### Doc-pack mapping (closed gaps → doc anchors)
@@ -75,6 +75,7 @@ Split into **G — specified but not shipped** (v0.4 GDPR spec is the design; th
 | C15 | **Right to portability** | RGPD Art. 20 | `Pipeline::export_subject(ExportFormat::Json\|Csv)` + route `GET /v1/subjects/{subject_ref}/export?format=json\|csv` (auth-gated). |
 | C16 | **Persistent Art. 30 register** | RGPD Art. 30 | `JsonlAuditSink` (audit.rs) — append-only `YYYY-MM-DD.jsonl` with sha256 hash chain over canonicalised event bytes (round-tripped through `serde_json::Value` for key-sorted determinism so a third party can replay off-line); daily `YYYY-MM-DD.sig` HMAC-SHA256 file. Chain head recovers across restarts. e2e test `forget_persists_to_audit_chain` (tests/e2e_gdpr.rs) verifies the chain. |
 | C17 | **Bearer-token auth on the gateway** | RGPD Art. 32 | `auth::require_bearer` middleware with constant-time compare (`subtle::ct_eq`). `/health` stays public. When no token is configured the middleware is a no-op so loopback dev/test flows keep working; operators must set `ANNO_GATEWAY_BEARER_TOKEN` before exposing the gateway beyond loopback. e2e test `forget_without_bearer_does_not_write_audit` verifies short-circuit. |
+| C18 | **Graceful shutdown on the gateway + MCP server** | RGPD Art. 30 (audit-log durability), Art. 32 (integrity of processing) | Gateway: `server::serve` wires `axum::serve(...).with_graceful_shutdown(shutdown_signal())` racing `tokio::signal::ctrl_c()` against `SIGTERM` (Unix). In-flight handlers drain; `JsonlAuditSink` per-line `sync_data` means no audit events are lost. MCP: `mcp::serve_stdio` uses `rmcp::service.cancellation_token()` to interrupt `service.waiting()` on signal — Pipeline drops on return → LanceDB connection closes + vault flushes pending saves. Structured tracing at `anno_privacy_gateway::shutdown` + `anno_rag::mcp::shutdown` makes the lifecycle observable. |
 
 ### G — specified but not shipped on this branch
 
