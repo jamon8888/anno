@@ -5,12 +5,14 @@
 
 pub mod anthropic;
 pub mod audit;
+pub mod auth;
 pub mod config;
 pub mod error;
 pub mod policy;
 pub mod privacy;
 pub mod server;
 pub mod stream;
+pub mod subjects;
 pub mod upstream;
 
 pub use config::GatewayConfig;

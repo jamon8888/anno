@@ -65,6 +65,17 @@ impl PrivacyEngine {
         }
     }
 
+    /// Borrow the underlying vault for the GDPR rights handlers.
+    #[must_use]
+    pub fn vault(&self) -> &Vault {
+        &self.vault
+    }
+
+    /// Mutable vault access — used by GDPR Art. 17 erasure.
+    pub fn vault_mut(&mut self) -> &mut Vault {
+        &mut self.vault
+    }
+
     /// Build a privacy engine from a vault.
     #[must_use]
     pub fn new(vault: Vault) -> Self {

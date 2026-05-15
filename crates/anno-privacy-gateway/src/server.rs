@@ -26,6 +26,7 @@ pub struct AppState {
     config: GatewayConfig,
     client: Client,
     privacy: Arc<Mutex<PrivacyEngine>>,
+    audit: Arc<dyn crate::audit::AuditSink>,
 }
 
 type SseResultStream = Pin<Box<dyn Stream<Item = std::result::Result<Event, Infallible>> + Send>>;
@@ -53,18 +54,69 @@ impl AppState {
     /// Build app state and validate persistent vault configuration.
     pub fn try_new(config: GatewayConfig) -> Result<Self> {
         let privacy = PrivacyEngine::from_config(&config)?;
+        let audit: Arc<dyn crate::audit::AuditSink> =
+            match (&config.audit_dir, &config.audit_hmac_key_hex) {
+                (Some(dir), Some(key_hex)) => {
+                    let key_bytes = hex::decode(key_hex)
+                        .map_err(|e| Error::Config(format!("audit hmac key hex: {e}")))?;
+                    let key: [u8; 32] = key_bytes
+                        .try_into()
+                        .map_err(|_| Error::Config("audit hmac key must be 32 bytes".into()))?;
+                    Arc::new(
+                        crate::audit::JsonlAuditSink::new(dir, key)
+                            .map_err(|e| Error::Config(format!("audit init: {e}")))?,
+                    )
+                }
+                (Some(_), None) => {
+                    return Err(Error::Config(
+                        "audit_dir set but audit_hmac_key_hex missing".into(),
+                    ))
+                }
+                _ => Arc::new(crate::audit::NoopAuditSink),
+            };
         Ok(Self {
             config,
             client: Client::new(),
             privacy: Arc::new(Mutex::new(privacy)),
+            audit,
         })
+    }
+
+    /// Borrow the shared privacy engine handle.
+    #[must_use]
+    pub fn privacy(&self) -> &Arc<Mutex<PrivacyEngine>> {
+        &self.privacy
+    }
+
+    /// Borrow the audit sink.
+    #[must_use]
+    pub fn audit(&self) -> &Arc<dyn crate::audit::AuditSink> {
+        &self.audit
+    }
+
+    /// Borrow the runtime config.
+    #[must_use]
+    pub fn config(&self) -> &GatewayConfig {
+        &self.config
+    }
+
+    /// Configured bearer token, if any.
+    #[must_use]
+    pub fn bearer_token(&self) -> Option<&str> {
+        self.config.bearer_token.as_deref()
     }
 }
 
-/// Build the v0.3 router.
+/// Build the gateway router.
+///
+/// `/health` is public; everything under `/v1/*` is gated by the bearer-token
+/// middleware ([`crate::auth::require_bearer`]). When `config.bearer_token`
+/// is `None`, every protected request returns 500 — the operator must
+/// either configure a token or front the gateway with their own auth layer.
 pub fn router(state: AppState) -> Router {
-    Router::new()
-        .route("/health", get(health))
+    let public = Router::new().route("/health", get(health));
+
+    let protected = Router::new()
         .route("/v1/messages", post(messages))
         .route("/v1/models", get(models))
         .route("/v1/files", post(files_unsupported).get(files_unsupported))
@@ -73,7 +125,18 @@ pub fn router(state: AppState) -> Router {
             get(files_unsupported).delete(files_unsupported),
         )
         .route("/v1/files/{id}/content", get(files_unsupported))
-        .with_state(state)
+        .route("/v1/subjects/find", post(crate::subjects::find))
+        .route("/v1/subjects/forget", post(crate::subjects::forget))
+        .route(
+            "/v1/subjects/{subject_ref}/export",
+            get(crate::subjects::export),
+        )
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::auth::require_bearer,
+        ));
+
+    public.merge(protected).with_state(state)
 }
 
 async fn health(State(state): State<AppState>) -> Json<Value> {
