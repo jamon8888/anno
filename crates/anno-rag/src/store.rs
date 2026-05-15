@@ -20,20 +20,24 @@ use crate::error::{Error, Result};
 use arrow_array::cast::AsArray;
 use arrow_array::types::Float32Type;
 use arrow_array::{
-    builder::FixedSizeBinaryBuilder, Array, FixedSizeBinaryArray, FixedSizeListArray, Float32Array,
-    RecordBatch, RecordBatchIterator, StringArray, TimestampMicrosecondArray, UInt32Array,
+    builder::{FixedSizeBinaryBuilder, ListBuilder, StringBuilder, StructBuilder},
+    Array, FixedSizeBinaryArray, FixedSizeListArray, Float32Array, ListArray, RecordBatch,
+    RecordBatchIterator, StringArray, StructArray, TimestampMicrosecondArray, UInt32Array,
 };
-use arrow_schema::{DataType, Field, Schema, TimeUnit};
-use chrono::Utc;
+use arrow_schema::{DataType, Field, Fields, Schema, TimeUnit};
+use chrono::{DateTime, TimeZone, Utc};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
-use lancedb::Table;
+use lancedb::{Connection, Table};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use uuid::Uuid;
 
 /// Name of the chunks table inside the LanceDB index directory.
 pub const TABLE_NAME: &str = "chunks";
+
+/// Name of the memories table inside the LanceDB index directory.
+pub const MEMORIES_TABLE_NAME: &str = "memories";
 
 /// Build the Arrow schema for the `memories` collection.
 ///
@@ -180,6 +184,9 @@ pub struct SearchHit {
 pub struct Store {
     tbl: Table,
     dim: usize,
+    memories_tbl: Table,
+    memories_schema: Arc<Schema>,
+    memory_embedding_dim: usize,
 }
 
 impl Store {
@@ -195,19 +202,81 @@ impl Store {
             .to_str()
             .ok_or_else(|| Error::Store(format!("non-utf8 index path: {}", path.display())))?;
         let conn = lancedb::connect(uri).execute().await?;
-        let names = conn.table_names().execute().await?;
-        let tbl = if names.iter().any(|n| n == TABLE_NAME) {
-            conn.open_table(TABLE_NAME).execute().await?
-        } else {
-            let schema = chunks_schema(cfg.embed_dim);
-            let empty = RecordBatchIterator::new(std::iter::empty(), schema);
-            let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(empty);
-            conn.create_table(TABLE_NAME, reader).execute().await?
-        };
+
+        let chunks_schema = chunks_schema(cfg.embed_dim);
+        let tbl = open_or_create_table(&conn, TABLE_NAME, &chunks_schema).await?;
+
+        let memories_schema = memories_schema(cfg.memory_embedding_dim);
+        let memories_tbl =
+            open_or_create_table(&conn, &cfg.memory_collection_name, &memories_schema).await?;
+
         Ok(Self {
             tbl,
             dim: cfg.embed_dim,
+            memories_tbl,
+            memories_schema,
+            memory_embedding_dim: cfg.memory_embedding_dim,
         })
+    }
+
+    /// Insert one memory row into the `memories` table.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] / [`Error::Arrow`] / [`Error::Lance`] on
+    /// build or insert failure.
+    pub async fn memory_insert(&self, m: &crate::memory::Memory) -> Result<()> {
+        let batch = memory_to_batch(m, self.memory_embedding_dim, &self.memories_schema)?;
+        let reader = RecordBatchIterator::new(
+            std::iter::once(Ok(batch)),
+            self.memories_schema.clone(),
+        );
+        let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(reader);
+        self.memories_tbl
+            .add(reader)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("memory add: {e}")))?;
+        Ok(())
+    }
+
+    /// Fetch one memory row by id.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query failure or row decoding failure.
+    pub async fn memory_get(
+        &self,
+        id: &crate::memory::MemoryId,
+    ) -> Result<Option<crate::memory::Memory>> {
+        let filter = format!("id = '{}'", id.as_string());
+        let mut stream = self
+            .memories_tbl
+            .query()
+            .only_if(&filter)
+            .limit(1)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("memory_get exec: {e}")))?;
+        let next = stream
+            .try_next()
+            .await
+            .map_err(|e| Error::Store(format!("memory_get stream: {e}")))?;
+        match next {
+            Some(batch) if batch.num_rows() > 0 => Ok(Some(batch_row_to_memory(&batch, 0)?)),
+            _ => Ok(None),
+        }
+    }
+
+    /// Delete a memory by id.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on delete failure.
+    pub async fn memory_delete_by_id(&self, id: &crate::memory::MemoryId) -> Result<bool> {
+        let filter = format!("id = '{}'", id.as_string());
+        self.memories_tbl
+            .delete(&filter)
+            .await
+            .map_err(|e| Error::Store(format!("memory_delete: {e}")))?;
+        Ok(true)
     }
 
     /// Upsert chunks. Idempotent on `(doc_id, chunk_idx)` via `merge_insert`.
@@ -377,6 +446,245 @@ impl Store {
             .map_err(|e| Error::Store(format!("create_fts_index: {e}")))?;
         Ok(true)
     }
+}
+
+/// Open an existing LanceDB table by name, or create an empty one with `schema`
+/// if no table by that name exists. Idempotent across process restarts.
+async fn open_or_create_table(
+    conn: &Connection,
+    name: &str,
+    schema: &Arc<Schema>,
+) -> Result<Table> {
+    let names = conn.table_names().execute().await?;
+    if names.iter().any(|n| n == name) {
+        Ok(conn.open_table(name).execute().await?)
+    } else {
+        let empty = RecordBatchIterator::new(std::iter::empty(), schema.clone());
+        let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(empty);
+        Ok(conn.create_table(name, reader).execute().await?)
+    }
+}
+
+/// Build a single-row Arrow `RecordBatch` for one [`Memory`].
+fn memory_to_batch(
+    m: &crate::memory::Memory,
+    dim: usize,
+    schema: &Arc<Schema>,
+) -> Result<RecordBatch> {
+    use crate::memory::Memory;
+
+    let Memory {
+        id,
+        session_id,
+        kind,
+        text,
+        created_at,
+        accessed_at,
+        valid_from,
+        valid_to,
+        embedding,
+        token_refs,
+        entity_refs,
+    } = m;
+
+    if embedding.len() != dim {
+        return Err(Error::Store(format!(
+            "embedding len {} != memory_embedding_dim {}",
+            embedding.len(),
+            dim
+        )));
+    }
+
+    let id_arr = StringArray::from(vec![id.as_string()]);
+    let session_arr = StringArray::from(vec![session_id.clone()]);
+    let kind_str = match kind {
+        crate::memory::MemoryKind::Fact => "fact",
+        crate::memory::MemoryKind::Preference => "preference",
+        crate::memory::MemoryKind::Reference => "reference",
+        crate::memory::MemoryKind::Context => "context",
+    };
+    let kind_arr = StringArray::from(vec![kind_str.to_string()]);
+    let text_arr = StringArray::from(vec![text.clone()]);
+    let created_arr =
+        TimestampMicrosecondArray::from(vec![created_at.timestamp_micros()]);
+    let accessed_arr =
+        TimestampMicrosecondArray::from(vec![accessed_at.timestamp_micros()]);
+    let valid_from_arr =
+        TimestampMicrosecondArray::from(vec![valid_from.timestamp_micros()]);
+    let valid_to_arr =
+        TimestampMicrosecondArray::from(vec![valid_to.map(|t| t.timestamp_micros())]);
+
+    // embedding — FixedSizeList<Float32>(dim)
+    let values_arr = Arc::new(Float32Array::from(embedding.clone()));
+    let item_field = Arc::new(Field::new("item", DataType::Float32, true));
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    let embedding_arr =
+        FixedSizeListArray::try_new(item_field, dim as i32, values_arr, None)
+            .map_err(Error::Arrow)?;
+
+    // token_refs — List<Struct{label, token}>
+    let struct_fields: Fields = vec![
+        Field::new("label", DataType::Utf8, false),
+        Field::new("token", DataType::Utf8, false),
+    ]
+    .into();
+    let label_builder = StringBuilder::new();
+    let token_builder = StringBuilder::new();
+    let struct_builder = StructBuilder::new(
+        struct_fields.clone(),
+        vec![Box::new(label_builder), Box::new(token_builder)],
+    );
+    let mut list_builder = ListBuilder::new(struct_builder);
+    for tr in token_refs {
+        let sb = list_builder.values();
+        sb.field_builder::<StringBuilder>(0)
+            .expect("label builder")
+            .append_value(&tr.label);
+        sb.field_builder::<StringBuilder>(1)
+            .expect("token builder")
+            .append_value(&tr.token);
+        sb.append(true);
+    }
+    list_builder.append(true);
+    let token_refs_arr: ListArray = list_builder.finish();
+
+    // entity_refs — List<Utf8>
+    let mut entity_lb = ListBuilder::new(StringBuilder::new());
+    for s in entity_refs {
+        entity_lb.values().append_value(s);
+    }
+    entity_lb.append(true);
+    let entity_refs_arr: ListArray = entity_lb.finish();
+
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(id_arr),
+            Arc::new(session_arr),
+            Arc::new(kind_arr),
+            Arc::new(text_arr),
+            Arc::new(created_arr),
+            Arc::new(accessed_arr),
+            Arc::new(valid_from_arr),
+            Arc::new(valid_to_arr),
+            Arc::new(embedding_arr),
+            Arc::new(token_refs_arr),
+            Arc::new(entity_refs_arr),
+        ],
+    )
+    .map_err(Error::Arrow)?;
+    Ok(batch)
+}
+
+/// Decode one row of the `memories` table back into a [`Memory`].
+fn batch_row_to_memory(b: &RecordBatch, i: usize) -> Result<crate::memory::Memory> {
+    use crate::memory::{Memory, MemoryId, MemoryKind, TokenRef};
+
+    let id_arr = get_col::<StringArray>(b, "id")?;
+    let session_arr = get_col::<StringArray>(b, "session_id")?;
+    let kind_arr = get_col::<StringArray>(b, "kind")?;
+    let text_arr = get_col::<StringArray>(b, "text")?;
+    let created_arr = get_col::<TimestampMicrosecondArray>(b, "created_at")?;
+    let accessed_arr = get_col::<TimestampMicrosecondArray>(b, "accessed_at")?;
+    let valid_from_arr = get_col::<TimestampMicrosecondArray>(b, "valid_from")?;
+    let valid_to_arr = get_col::<TimestampMicrosecondArray>(b, "valid_to")?;
+    let embedding_arr = get_col::<FixedSizeListArray>(b, "embedding")?;
+    let token_refs_arr = get_col::<ListArray>(b, "token_refs")?;
+    let entity_refs_arr = get_col::<ListArray>(b, "entity_refs")?;
+
+    let id_uuid = Uuid::parse_str(id_arr.value(i))
+        .map_err(|e| Error::Store(format!("invalid memory id uuid: {e}")))?;
+    let id = MemoryId(id_uuid);
+
+    let session_id = if session_arr.is_null(i) {
+        None
+    } else {
+        Some(session_arr.value(i).to_string())
+    };
+
+    let kind = match kind_arr.value(i) {
+        "fact" => MemoryKind::Fact,
+        "preference" => MemoryKind::Preference,
+        "reference" => MemoryKind::Reference,
+        "context" => MemoryKind::Context,
+        other => return Err(Error::Store(format!("unknown memory kind: {other}"))),
+    };
+
+    let text = text_arr.value(i).to_string();
+
+    let to_dt = |micros: i64| -> Result<DateTime<Utc>> {
+        Utc.timestamp_micros(micros)
+            .single()
+            .ok_or_else(|| Error::Store(format!("invalid timestamp micros: {micros}")))
+    };
+
+    let created_at = to_dt(created_arr.value(i))?;
+    let accessed_at = to_dt(accessed_arr.value(i))?;
+    let valid_from = to_dt(valid_from_arr.value(i))?;
+    let valid_to = if valid_to_arr.is_null(i) {
+        None
+    } else {
+        Some(to_dt(valid_to_arr.value(i))?)
+    };
+
+    // embedding: copy the i-th FixedSizeList element back to Vec<f32>
+    let emb_list = embedding_arr.value(i);
+    let emb_f32 = emb_list
+        .as_any()
+        .downcast_ref::<Float32Array>()
+        .ok_or_else(|| Error::Store("embedding inner not Float32".into()))?;
+    let embedding: Vec<f32> = (0..emb_f32.len()).map(|k| emb_f32.value(k)).collect();
+
+    // token_refs: List<Struct{label, token}>
+    let mut token_refs: Vec<TokenRef> = Vec::new();
+    if !token_refs_arr.is_null(i) {
+        let inner = token_refs_arr.value(i);
+        let s = inner
+            .as_any()
+            .downcast_ref::<StructArray>()
+            .ok_or_else(|| Error::Store("token_refs inner not Struct".into()))?;
+        let label = s
+            .column_by_name("label")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+            .ok_or_else(|| Error::Store("token_refs.label not Utf8".into()))?;
+        let token = s
+            .column_by_name("token")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+            .ok_or_else(|| Error::Store("token_refs.token not Utf8".into()))?;
+        for k in 0..s.len() {
+            token_refs.push(TokenRef {
+                label: label.value(k).to_string(),
+                token: token.value(k).to_string(),
+            });
+        }
+    }
+
+    // entity_refs: List<Utf8>
+    let mut entity_refs: Vec<String> = Vec::new();
+    if !entity_refs_arr.is_null(i) {
+        let inner = entity_refs_arr.value(i);
+        let s = inner
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .ok_or_else(|| Error::Store("entity_refs inner not Utf8".into()))?;
+        for k in 0..s.len() {
+            entity_refs.push(s.value(k).to_string());
+        }
+    }
+
+    Ok(Memory {
+        id,
+        session_id,
+        kind,
+        text,
+        created_at,
+        accessed_at,
+        valid_from,
+        valid_to,
+        embedding,
+        token_refs,
+        entity_refs,
+    })
 }
 
 /// Deterministic chunk id: UUID v5 (OID namespace) of `"{doc_id}::{chunk_idx}"`.
