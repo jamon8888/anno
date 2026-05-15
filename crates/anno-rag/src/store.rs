@@ -279,6 +279,90 @@ impl Store {
         Ok(true)
     }
 
+    /// Create the v0.1 scalar indexes on the memories collection.
+    /// Idempotent — skips columns that already have an index.
+    ///
+    /// - `created_at` → `BTree` (range scans for pagination + as-of in v0.2)
+    /// - `session_id` → `BTree` (per-session listing)
+    /// - `kind` → `Bitmap` (low-cardinality category filter)
+    /// - `token_refs` → `LabelList` (vault-cascade erasure path)
+    /// - `entity_refs` → `LabelList` (v0.2 graph traversal — populated empty in v0.1)
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if listing or creating any index fails.
+    pub async fn setup_memory_indexes(&self) -> Result<()> {
+        use lancedb::index::scalar::{
+            BTreeIndexBuilder, BitmapIndexBuilder, LabelListIndexBuilder,
+        };
+        use lancedb::index::Index;
+
+        let existing = self
+            .memories_tbl
+            .list_indices()
+            .await
+            .map_err(|e| Error::Store(format!("list_indices: {e}")))?;
+        let has_index_on = |col: &str| {
+            existing
+                .iter()
+                .any(|i| i.columns.iter().any(|c| c == col))
+        };
+
+        if !has_index_on("created_at") {
+            self.memories_tbl
+                .create_index(&["created_at"], Index::BTree(BTreeIndexBuilder::default()))
+                .execute()
+                .await
+                .map_err(|e| Error::Store(format!("btree created_at: {e}")))?;
+        }
+        if !has_index_on("session_id") {
+            self.memories_tbl
+                .create_index(&["session_id"], Index::BTree(BTreeIndexBuilder::default()))
+                .execute()
+                .await
+                .map_err(|e| Error::Store(format!("btree session_id: {e}")))?;
+        }
+        if !has_index_on("kind") {
+            self.memories_tbl
+                .create_index(&["kind"], Index::Bitmap(BitmapIndexBuilder::default()))
+                .execute()
+                .await
+                .map_err(|e| Error::Store(format!("bitmap kind: {e}")))?;
+        }
+        if !has_index_on("token_refs") {
+            self.memories_tbl
+                .create_index(
+                    &["token_refs"],
+                    Index::LabelList(LabelListIndexBuilder::default()),
+                )
+                .execute()
+                .await
+                .map_err(|e| Error::Store(format!("label_list token_refs: {e}")))?;
+        }
+        if !has_index_on("entity_refs") {
+            self.memories_tbl
+                .create_index(
+                    &["entity_refs"],
+                    Index::LabelList(LabelListIndexBuilder::default()),
+                )
+                .execute()
+                .await
+                .map_err(|e| Error::Store(format!("label_list entity_refs: {e}")))?;
+        }
+        Ok(())
+    }
+
+    /// List indexes currently registered on the memories table. Useful for
+    /// startup checks and tests.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on LanceDB listing failure.
+    pub async fn memory_list_indexes(&self) -> Result<Vec<lancedb::index::IndexConfig>> {
+        self.memories_tbl
+            .list_indices()
+            .await
+            .map_err(|e| Error::Store(format!("memory_list_indexes: {e}")))
+    }
+
     /// Upsert chunks. Idempotent on `(doc_id, chunk_idx)` via `merge_insert`.
     ///
     /// # Errors
