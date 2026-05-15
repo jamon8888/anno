@@ -96,6 +96,8 @@ pub struct Memory {
 pub struct MemoryHitRow {
     /// Stringified [`MemoryId`].
     pub id: String,
+    /// Cowork session id (if any) — used by the pipeline's session filter.
+    pub session_id: Option<String>,
     /// Pseudonymized text as stored on disk.
     pub text_tokenized: String,
     /// Category.

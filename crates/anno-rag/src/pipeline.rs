@@ -372,6 +372,57 @@ impl Pipeline {
             token_refs,
         })
     }
+
+    /// Hybrid recall: detect + pseudonymize the query, embed (e5 query
+    /// prefix), run the dense+FTS RRF-reranked search on the `memories`
+    /// table, optionally filter by `session_id` / `kinds`, rehydrate.
+    ///
+    /// `top_k` is the maximum returned. The search oversamples by 2× to
+    /// give the filter some headroom; the final result is truncated.
+    ///
+    /// # Errors
+    /// Returns [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] depending on which layer fails.
+    pub async fn recall_memory(
+        &self,
+        query: &str,
+        top_k: usize,
+        session_id: Option<String>,
+        kinds: Option<Vec<crate::memory::MemoryKind>>,
+    ) -> Result<Vec<crate::memory::MemoryHit>> {
+        let entities = self.detector_get_or_init()?.detect(query)?;
+        let (tokenized_query, _) =
+            self.vault.pseudonymize_with_refs(query, &entities).await?;
+        let query_vec = self.embedder().await?.embed_query(&tokenized_query)?;
+
+        let mut raw = self
+            .store
+            .memories_hybrid_search(&query_vec, &tokenized_query, top_k.saturating_mul(2))
+            .await?;
+
+        if let Some(allowed) = &kinds {
+            raw.retain(|h| allowed.iter().any(|k| *k == h.kind));
+        }
+        if let Some(s) = &session_id {
+            // Match the session OR rows with no session (cross-session
+            // facts shouldn't be hidden by a per-session recall).
+            raw.retain(|h| h.session_id.as_deref() == Some(s.as_str()) || h.session_id.is_none());
+        }
+        raw.truncate(top_k);
+
+        let mut out: Vec<crate::memory::MemoryHit> = Vec::with_capacity(raw.len());
+        for row in raw {
+            let rehydrated = self.rehydrate(&row.text_tokenized).await?;
+            out.push(crate::memory::MemoryHit {
+                id: row.id,
+                text: rehydrated.text,
+                kind: row.kind,
+                created_at: row.created_at,
+                score: row.score,
+            });
+        }
+        Ok(out)
+    }
 }
 
 /// Receipt returned by [`Pipeline::save_memory`].

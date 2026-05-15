@@ -866,11 +866,17 @@ fn batch_row_to_memory_hit(
     use crate::memory::{MemoryHitRow, MemoryKind};
 
     let id_arr = get_col::<StringArray>(b, "id")?;
+    let session_arr = get_col::<StringArray>(b, "session_id")?;
     let kind_arr = get_col::<StringArray>(b, "kind")?;
     let text_arr = get_col::<StringArray>(b, "text")?;
     let created_arr = get_col::<TimestampMicrosecondArray>(b, "created_at")?;
 
     let id = id_arr.value(i).to_string();
+    let session_id = if session_arr.is_null(i) {
+        None
+    } else {
+        Some(session_arr.value(i).to_string())
+    };
     let kind = match kind_arr.value(i) {
         "fact" => MemoryKind::Fact,
         "preference" => MemoryKind::Preference,
@@ -894,6 +900,7 @@ fn batch_row_to_memory_hit(
 
     Ok(MemoryHitRow {
         id,
+        session_id,
         text_tokenized,
         kind,
         created_at,
