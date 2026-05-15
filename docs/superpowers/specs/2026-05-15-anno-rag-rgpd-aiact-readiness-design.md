@@ -42,7 +42,19 @@ This document records, with code citations:
 
 ## 2. Gaps
 
+> **Status update (v0.4 GDPR core landed on `feat/v0.4-gdpr-core`, branched off `main`):** gaps G2–G6 are now closed and reclassified as claims C13–C17 below. G1 (Person detector recall) was closed by v0.7. G7 and U1–U13 remain open.
+
 Split into **G — specified but not shipped** (v0.4 GDPR spec is the design; the code is missing) and **U — undefined** (no spec yet).
+
+### Claims added by v0.4 GDPR core
+
+| # | Claim | Anchor | Code evidence |
+|---|---|---|---|
+| C13 | **Right to erasure** | RGPD Art. 17 | `Pipeline::forget` (pipeline.rs) + `Vault::forget` (vault.rs) + `cloakpipe-core::Vault::remove`; route `POST /v1/subjects/forget` (gateway/subjects.rs) emits an `AuditEvent` per call. Counter-monotonicity preserved. |
+| C14 | **Right of access** | RGPD Art. 15 | `Pipeline::find_subject` + `Vault::find_subject` + `cloakpipe-core::Vault::find`; route `POST /v1/subjects/find` (auth-gated). |
+| C15 | **Right to portability** | RGPD Art. 20 | `Pipeline::export_subject(ExportFormat::Json\|Csv)` + route `GET /v1/subjects/{subject_ref}/export?format=json\|csv` (auth-gated). |
+| C16 | **Persistent Art. 30 register** | RGPD Art. 30 | `JsonlAuditSink` (audit.rs) — append-only `YYYY-MM-DD.jsonl` with sha256 hash chain over canonicalised event bytes (round-tripped through `serde_json::Value` for key-sorted determinism so a third party can replay off-line); daily `YYYY-MM-DD.sig` HMAC-SHA256 file. Chain head recovers across restarts. e2e test `forget_persists_to_audit_chain` (tests/e2e_gdpr.rs) verifies the chain. |
+| C17 | **Bearer-token auth on the gateway** | RGPD Art. 32 | `auth::require_bearer` middleware with constant-time compare (`subtle::ct_eq`). `/health` stays public. When no token is configured the middleware is a no-op so loopback dev/test flows keep working; operators must set `ANNO_GATEWAY_BEARER_TOKEN` before exposing the gateway beyond loopback. e2e test `forget_without_bearer_does_not_write_audit` verifies short-circuit. |
 
 ### G — specified but not shipped on this branch
 

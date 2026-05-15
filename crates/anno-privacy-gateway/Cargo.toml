@@ -15,13 +15,21 @@ async-stream = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
 cloakpipe-core = { path = "../../vendor/cloakpipe/crates/cloakpipe-core" }
+csv = "1"
 futures-util = { workspace = true }
+hex = "0.4"
+hmac = "0.12"
 reqwest = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
+subtle = "2"
 thiserror = { workspace = true }
+time = { version = "0.3", features = ["formatting", "macros"] }
 tokio = { workspace = true }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["auth"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 

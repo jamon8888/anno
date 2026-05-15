@@ -242,6 +242,205 @@ impl Pipeline {
             categories: s.categories,
         }
     }
+
+    /// Remove every vault mapping that matches `subject_ref` (original or
+    /// token). Idempotent: returns a receipt with `mappings_removed = 0` if
+    /// nothing matched. Persists the vault on success.
+    ///
+    /// # Errors
+    /// Returns [`Error::Vault`] if the vault could not be persisted.
+    pub async fn forget(&self, subject_ref: &str) -> Result<ErasureReceipt> {
+        let removed = self.vault.forget(subject_ref).await?;
+        let now = chrono::Utc::now().to_rfc3339();
+        Ok(match removed {
+            Some(m) => ErasureReceipt {
+                subject_ref: subject_ref.to_string(),
+                mappings_removed: 1,
+                token: Some(m.token),
+                category: Some(format!("{:?}", m.category)),
+                executed_at: now,
+            },
+            None => ErasureReceipt {
+                subject_ref: subject_ref.to_string(),
+                mappings_removed: 0,
+                token: None,
+                category: None,
+                executed_at: now,
+            },
+        })
+    }
+
+    /// Look up every vault mapping for `subject_ref` (original or token).
+    pub async fn find_subject(&self, subject_ref: &str) -> SubjectMatches {
+        let matches = self
+            .vault
+            .find_subject(subject_ref)
+            .await
+            .into_iter()
+            .map(|m| SubjectMatch {
+                original: m.original,
+                token: m.token,
+                category: format!("{:?}", m.category),
+            })
+            .collect();
+        SubjectMatches {
+            subject_ref: subject_ref.to_string(),
+            matches,
+        }
+    }
+
+    /// Export the matches for `subject_ref` in the requested format. JSON
+    /// returns the [`SubjectMatches`] shape; CSV returns
+    /// `original,token,category` rows with a header.
+    ///
+    /// # Errors
+    /// Returns [`Error::Audit`] if serialisation fails.
+    pub async fn export_subject(
+        &self,
+        subject_ref: &str,
+        format: ExportFormat,
+    ) -> Result<Vec<u8>> {
+        let res = self.find_subject(subject_ref).await;
+        match format {
+            ExportFormat::Json => serde_json::to_vec_pretty(&res)
+                .map_err(|e| Error::Audit(format!("json serialize: {e}"))),
+            ExportFormat::Csv => {
+                let mut buf = Vec::new();
+                {
+                    let mut w = csv::Writer::from_writer(&mut buf);
+                    w.write_record(["original", "token", "category"])
+                        .map_err(|e| Error::Audit(format!("csv header: {e}")))?;
+                    for m in &res.matches {
+                        w.write_record([&m.original, &m.token, &m.category])
+                            .map_err(|e| Error::Audit(format!("csv row: {e}")))?;
+                    }
+                    w.flush()
+                        .map_err(|e| Error::Audit(format!("csv flush: {e}")))?;
+                }
+                Ok(buf)
+            }
+        }
+    }
+}
+
+/// Receipt returned by [`Pipeline::forget`]. Suitable for inclusion in an
+/// audit event.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ErasureReceipt {
+    /// Whatever the caller passed (original or token).
+    pub subject_ref: String,
+    /// Number of vault mappings removed (0 if subject was unknown).
+    pub mappings_removed: usize,
+    /// Token that was retired, if a mapping was found.
+    pub token: Option<String>,
+    /// Category of the retired mapping, if any.
+    pub category: Option<String>,
+    /// UTC timestamp of the operation, RFC 3339.
+    pub executed_at: String,
+}
+
+/// Result of [`Pipeline::find_subject`]. Multiple matches may be returned
+/// (the cloakpipe primitive currently returns 0 or 1 entries; the type is
+/// vec-shaped for a future fuzzy match).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SubjectMatches {
+    /// The subject reference the caller looked up.
+    pub subject_ref: String,
+    /// Zero or more matches.
+    pub matches: Vec<SubjectMatch>,
+}
+
+/// One match returned by [`Pipeline::find_subject`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SubjectMatch {
+    /// Original (sensitive) value.
+    pub original: String,
+    /// Pseudo-token in the vault.
+    pub token: String,
+    /// Category key (e.g. `"Person"`, `"Email"`, `"NIR"`).
+    pub category: String,
+}
+
+/// Output format for [`Pipeline::export_subject`].
+#[derive(Debug, Clone, Copy)]
+pub enum ExportFormat {
+    /// JSON object: `{ "subject_ref": ..., "matches": [...] }`.
+    Json,
+    /// CSV with header: `original,token,category`.
+    Csv,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a Pipeline rooted at `dir` (tempdir-friendly). `Pipeline::new`
+    /// opens LanceDB, which takes ~30 s — these tests are gated behind
+    /// `--ignored` to keep `cargo test` snappy on every run.
+    async fn pipeline_in(dir: &Path) -> Pipeline {
+        let mut cfg = AnnoRagConfig::default();
+        cfg.data_dir = dir.to_path_buf();
+        Pipeline::new(cfg, [0u8; 32]).await.expect("pipeline opens")
+    }
+
+    #[tokio::test]
+    #[ignore = "Pipeline::new opens LanceDB (~30s) — opt in via --ignored"]
+    async fn pipeline_forget_returns_receipt_with_token() {
+        use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
+        let tmp = tempfile::tempdir().unwrap();
+        let p = pipeline_in(tmp.path()).await;
+        let _ = p
+            .vault
+            .pseudonymize(
+                "Marie Dupont",
+                &[DetectedEntity {
+                    original: "Marie Dupont".into(),
+                    start: 0,
+                    end: 12,
+                    category: EntityCategory::Person,
+                    confidence: 1.0,
+                    source: DetectionSource::Pattern,
+                }],
+            )
+            .await
+            .unwrap();
+
+        let receipt = p.forget("Marie Dupont").await.unwrap();
+        assert_eq!(receipt.subject_ref, "Marie Dupont");
+        assert_eq!(receipt.mappings_removed, 1);
+        assert!(receipt.token.is_some());
+    }
+
+    #[tokio::test]
+    #[ignore = "Pipeline::new opens LanceDB (~30s) — opt in via --ignored"]
+    async fn pipeline_forget_is_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = pipeline_in(tmp.path()).await;
+        let r = p.forget("never seen").await.unwrap();
+        assert_eq!(r.mappings_removed, 0);
+    }
+
+    #[tokio::test]
+    #[ignore = "Pipeline::new opens LanceDB (~30s) — opt in via --ignored"]
+    async fn pipeline_find_subject_returns_empty_when_unknown() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = pipeline_in(tmp.path()).await;
+        assert!(p.find_subject("nope").await.matches.is_empty());
+    }
+
+    #[test]
+    fn erasure_receipt_serialises_to_json() {
+        let r = ErasureReceipt {
+            subject_ref: "x".into(),
+            mappings_removed: 1,
+            token: Some("PERSON_1".into()),
+            category: Some("Person".into()),
+            executed_at: "2026-05-15T00:00:00Z".into(),
+        };
+        let s = serde_json::to_string(&r).unwrap();
+        assert!(s.contains("\"mappings_removed\":1"));
+        assert!(s.contains("\"token\":\"PERSON_1\""));
+    }
 }
 
 /// Output of [`Pipeline::rehydrate`].

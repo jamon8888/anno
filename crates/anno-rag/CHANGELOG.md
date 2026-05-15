@@ -4,6 +4,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### v0.4 GDPR core — rights of data subjects + persistent audit
+
+### Added
+- **`Pipeline::forget(subject_ref)`** — Art. 17 erasure. Idempotent;
+  returns `ErasureReceipt { subject_ref, mappings_removed, token,
+  category, executed_at }`. Persists the vault on every removal.
+- **`Pipeline::find_subject(subject_ref)`** — Art. 15 access. Returns
+  `SubjectMatches` (currently 0 or 1, vec-shaped for future fuzzy match).
+- **`Pipeline::export_subject(subject_ref, ExportFormat::{Json,Csv})`** —
+  Art. 20 portability. Returns the matches as machine-readable bytes.
+- **`Vault::forget` / `Vault::find_subject`** — async-locked wrappers
+  over the new cloakpipe primitives (`Vault::remove`, `Vault::find` in
+  `cloakpipe-core::vault`). Counters stay monotonic on removal so token
+  ids never collide with retired ones.
+- **`Error::Audit`** variant — surfaces export-serialisation failures.
+
 ### v0.7 — anonymization eval + FR honorific Person regex + email detection
 
 ### Added
