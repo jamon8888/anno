@@ -397,15 +397,86 @@ async fn files_unsupported() -> Error {
     Error::UnsupportedFeature("native Files API is deferred to v0.5".to_string())
 }
 
-/// Start the server and run until the listener exits.
+/// Start the server. Runs until SIGINT (Ctrl-C) or, on Unix, SIGTERM
+/// is received — at which point axum stops accepting new connections,
+/// in-flight requests drain, and the function returns Ok.
+///
+/// **Audit-log + LanceDB clean shutdown:** the `JsonlAuditSink` writes
+/// each event synchronously (sync_data after every line), so any event
+/// emitted by an in-flight handler is already flushed when the handler
+/// completes — the drain phase only has to wait for handlers to finish.
+/// The LanceDB connection inside `AppState` (via `PrivacyEngine`)
+/// closes on the final `Arc` drop after axum returns; nothing additional
+/// is needed because LanceDB's `Table` handles flush their pending
+/// fragment writes on drop. The structured tracing event below makes
+/// the shutdown observable for operators.
 pub async fn serve(config: GatewayConfig) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(config.listen)
         .await
         .map_err(|e| Error::Upstream(e.to_string()))?;
     let app = router(AppState::try_new(config)?);
     axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
         .await
-        .map_err(|e| Error::Upstream(e.to_string()))
+        .map_err(|e| Error::Upstream(e.to_string()))?;
+    tracing::info!(
+        target: "anno_privacy_gateway::shutdown",
+        event = "stopped",
+        "anno-privacy-gateway stopped cleanly"
+    );
+    Ok(())
+}
+
+/// Future that resolves when SIGINT (or, on Unix, SIGTERM) fires.
+/// On the first signal, logs at `target = "anno_privacy_gateway::shutdown"`
+/// and returns — axum stops accepting new connections and drains in-flight.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::error!(
+                target: "anno_privacy_gateway::shutdown",
+                "ctrl_c listener failed: {e}"
+            );
+        }
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut s) => {
+                s.recv().await;
+            }
+            Err(e) => {
+                tracing::error!(
+                    target: "anno_privacy_gateway::shutdown",
+                    "SIGTERM listener failed: {e}"
+                );
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {
+            tracing::info!(
+                target: "anno_privacy_gateway::shutdown",
+                event = "draining",
+                signal = "SIGINT",
+                "shutdown signal received, draining in-flight requests"
+            );
+        }
+        () = terminate => {
+            tracing::info!(
+                target: "anno_privacy_gateway::shutdown",
+                event = "draining",
+                signal = "SIGTERM",
+                "shutdown signal received, draining in-flight requests"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

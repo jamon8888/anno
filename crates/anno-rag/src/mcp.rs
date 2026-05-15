@@ -565,9 +565,81 @@ pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> crate::error
         .serve(transport)
         .await
         .map_err(|e| crate::error::Error::Detect(format!("MCP server failed to start: {e}")))?;
-    service
+
+    // Graceful shutdown: race the rmcp `waiting()` loop (which exits when the
+    // stdio peer closes) against SIGINT / SIGTERM. On signal, cancel the
+    // service via the clonable cancellation token — that causes `waiting()`
+    // to return `QuitReason::Cancelled`. Either way, the function returns
+    // and the Pipeline drops (Store → LanceDB connection closes; vault flushes
+    // any pending save). The audit-event tracing emitted by every handler
+    // is already on disk because the JsonlAuditSink sync_data's per line.
+    let cancel = service.cancellation_token();
+    let signal_task = tokio::spawn(async move {
+        shutdown_signal_mcp().await;
+        cancel.cancel();
+    });
+
+    let quit = service
         .waiting()
         .await
         .map_err(|e| crate::error::Error::Detect(format!("MCP server error: {e}")))?;
+    signal_task.abort();
+    tracing::info!(
+        target: "anno_rag::mcp::shutdown",
+        event = "stopped",
+        reason = ?quit,
+        "anno-rag MCP server stopped cleanly"
+    );
     Ok(())
+}
+
+/// Future that resolves on Ctrl-C (or SIGTERM on Unix). Used to interrupt
+/// the rmcp `service.waiting()` loop in `serve_stdio`.
+async fn shutdown_signal_mcp() {
+    let ctrl_c = async {
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::error!(
+                target: "anno_rag::mcp::shutdown",
+                "ctrl_c listener failed: {e}"
+            );
+        }
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut s) => {
+                s.recv().await;
+            }
+            Err(e) => {
+                tracing::error!(
+                    target: "anno_rag::mcp::shutdown",
+                    "SIGTERM listener failed: {e}"
+                );
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {
+            tracing::info!(
+                target: "anno_rag::mcp::shutdown",
+                event = "cancelling",
+                signal = "SIGINT",
+                "shutdown signal received, cancelling MCP service"
+            );
+        }
+        () = terminate => {
+            tracing::info!(
+                target: "anno_rag::mcp::shutdown",
+                event = "cancelling",
+                signal = "SIGTERM",
+                "shutdown signal received, cancelling MCP service"
+            );
+        }
+    }
 }
