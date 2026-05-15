@@ -42,6 +42,12 @@ pub enum Error {
     #[error("config error: {0}")]
     Config(String),
 
+    /// Audit log write or export serialisation failed. Non-fatal at the
+    /// request path — the sink logs and drops — but surfaced where callers
+    /// need to react (e.g. CSV/JSON export endpoints).
+    #[error("audit: {0}")]
+    Audit(String),
+
     /// I/O error from std.
     #[error(transparent)]
     Io(#[from] std::io::Error),

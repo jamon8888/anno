@@ -56,6 +56,7 @@ keyring              = { workspace = true }
 rand                 = { workspace = true }
 dirs                 = { workspace = true }
 chrono               = { workspace = true }
+csv                  = "1"
 sysinfo              = "0.32"
 tempfile             = "3"
 
