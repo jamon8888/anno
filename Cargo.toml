@@ -96,10 +96,10 @@ criterion = { version = "0.5", features = ["html_reports"] }
 
 # anno-rag (v0.1 walking skeleton) — new deps not already in workspace
 kreuzberg       = { version = "=4.9.7", default-features = false, features = ["pdf", "office", "html", "email", "excel", "xml", "archives", "tokio-runtime", "chunking"] }
-lancedb         = "=0.27.2"
-arrow           = "=57"
-arrow-array     = "=57"
-arrow-schema    = "=57"
+lancedb         = "=0.29.0"
+arrow           = "=58"
+arrow-array     = "=58"
+arrow-schema    = "=58"
 tokio           = { version = "1.51", features = ["full"] }
 anyhow          = "1"
 uuid            = { version = "1", features = ["v5", "v7", "serde"] }

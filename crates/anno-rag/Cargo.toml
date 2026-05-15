@@ -26,7 +26,7 @@ lancedb              = { workspace = true }
 # `lance-index` is a transitive dep of lancedb; declared explicitly because
 # `FullTextSearchQuery` (used by the hybrid search path) is not re-exported
 # by lancedb 0.27.2. Pinned to the version lancedb 0.27.2 resolves.
-lance-index          = "=4.0.0"
+lance-index          = "=6.0.0"
 arrow                = { workspace = true }
 arrow-array          = { workspace = true }
 arrow-schema        = { workspace = true }
