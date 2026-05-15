@@ -73,6 +73,28 @@ struct StoredToken {
     original: String,
 }
 
+/// Result of a successful [`Vault::remove`] call. Returned for the audit log.
+#[derive(Debug, Clone)]
+pub struct RemovedMapping {
+    /// The original (sensitive) value that was removed.
+    pub original: String,
+    /// The pseudo-token that referenced it.
+    pub token: String,
+    /// The category the mapping was tracked under.
+    pub category: EntityCategory,
+}
+
+/// Result of a [`Vault::find`] match.
+#[derive(Debug, Clone)]
+pub struct MatchedMapping {
+    /// The original (sensitive) value.
+    pub original: String,
+    /// The pseudo-token.
+    pub token: String,
+    /// The category.
+    pub category: EntityCategory,
+}
+
 impl Vault {
     /// Create or load a vault from the given path.
     pub fn open(path: &str, key: Vec<u8>) -> Result<Self> {
@@ -251,6 +273,70 @@ impl Vault {
             total_mappings: self.forward.len(),
             categories: self.counters.clone(),
         }
+    }
+
+    /// Remove the mapping for `subject_ref`, which may be either the original
+    /// value or its pseudo-token. Returns the removed mapping on success, or
+    /// `None` if no mapping matched. Counters are NOT decremented — token
+    /// ids remain monotonic so future tokens never collide with retired ones.
+    ///
+    /// This is the primitive used to honour GDPR Art. 17 (right to erasure):
+    /// after this call, neither the original nor the token resolves to a
+    /// vault entry; rehydration of any pseudonymised text containing the
+    /// retired token will leave the token in place.
+    pub fn remove(&mut self, subject_ref: &str) -> Option<RemovedMapping> {
+        // Case 1: subject_ref is an original (look up its token via forward).
+        if let Some(token) = self.forward.remove(subject_ref) {
+            self.reverse.remove(&token.token);
+            return Some(RemovedMapping {
+                original: subject_ref.to_string(),
+                token: token.token,
+                category: token.category,
+            });
+        }
+        // Case 2: subject_ref is a token (look up its original via reverse).
+        if let Some(sensitive) = self.reverse.remove(subject_ref) {
+            let original = sensitive.0.clone();
+            // Drop the forward entry whose token matches.
+            if let Some(token) = self.forward.remove(&original) {
+                return Some(RemovedMapping {
+                    original,
+                    token: token.token,
+                    category: token.category,
+                });
+            }
+            // forward map missing the back-reference — should not happen, but
+            // surface what we have so the audit record is complete.
+            return Some(RemovedMapping {
+                original,
+                token: subject_ref.to_string(),
+                category: EntityCategory::Custom("Unknown".into()),
+            });
+        }
+        None
+    }
+
+    /// Find every vault entry matching `subject_ref` — searched against both
+    /// originals (forward) and tokens (reverse). Currently returns 0 or 1
+    /// matches (fuzzy resolver not consulted; that would be a v0.5 extension).
+    pub fn find(&self, subject_ref: &str) -> Vec<MatchedMapping> {
+        if let Some(token) = self.forward.get(subject_ref) {
+            return vec![MatchedMapping {
+                original: subject_ref.to_string(),
+                token: token.token.clone(),
+                category: token.category.clone(),
+            }];
+        }
+        if let Some(sensitive) = self.reverse.get(subject_ref) {
+            if let Some(token) = self.forward.get(&sensitive.0) {
+                return vec![MatchedMapping {
+                    original: sensitive.0.clone(),
+                    token: token.token.clone(),
+                    category: token.category.clone(),
+                }];
+            }
+        }
+        Vec::new()
     }
 
     fn category_prefix(category: &EntityCategory) -> String {
@@ -486,6 +572,57 @@ mod tests {
         // Different value -> different token
         let t3 = vault.get_or_create_fp("+91 11111 22222", &EntityCategory::PhoneNumber);
         assert_ne!(t1.token, t3.token);
+    }
+
+    #[test]
+    fn remove_by_original_purges_forward_and_reverse() {
+        let mut v = Vault::ephemeral();
+        let cat = EntityCategory::Person;
+        let token = v.get_or_create("Marie Dupont", &cat).token;
+        assert!(v.contains_original("Marie Dupont"));
+        let removed = v.remove("Marie Dupont").expect("removable");
+        assert_eq!(removed.original, "Marie Dupont");
+        assert_eq!(removed.token, token);
+        assert!(!v.contains_original("Marie Dupont"));
+        assert!(v.lookup(&token).is_none());
+    }
+
+    #[test]
+    fn remove_by_token_purges_forward_and_reverse() {
+        let mut v = Vault::ephemeral();
+        let cat = EntityCategory::Email;
+        let token = v.get_or_create("a@b.fr", &cat).token;
+        let removed = v.remove(&token).expect("removable");
+        assert_eq!(removed.original, "a@b.fr");
+        assert_eq!(removed.token, token);
+        assert!(v.lookup(&token).is_none());
+    }
+
+    #[test]
+    fn remove_unknown_returns_none() {
+        let mut v = Vault::ephemeral();
+        assert!(v.remove("never inserted").is_none());
+    }
+
+    #[test]
+    fn find_by_original_returns_match() {
+        let mut v = Vault::ephemeral();
+        let cat = EntityCategory::Person;
+        let tk = v.get_or_create("Marie Dupont", &cat);
+        let matches = v.find("Marie Dupont");
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].original, "Marie Dupont");
+        assert_eq!(matches[0].token, tk.token);
+        assert!(matches!(matches[0].category, EntityCategory::Person));
+    }
+
+    #[test]
+    fn find_by_token_returns_match() {
+        let mut v = Vault::ephemeral();
+        let tk = v.get_or_create("a@b.fr", &EntityCategory::Email);
+        let matches = v.find(&tk.token);
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].token, tk.token);
     }
 
     #[test]
