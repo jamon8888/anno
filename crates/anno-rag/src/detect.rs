@@ -48,8 +48,17 @@ impl FrPatterns {
             iban_fr: Regex::new(r"\bFR\d{2}\s?(?:[A-Z0-9]{4}\s?){5}[A-Z0-9]{3}\b")
                 .expect("iban regex is a literal"),
             // FR phone — +33 / 0-prefix, 10-digit, optional separators.
-            phone_fr: Regex::new(r"\b(?:\+33[\s\.\-]?|0)[1-9](?:[\s\.\-]?\d{2}){4}\b")
-                .expect("phone regex is a literal"),
+            // The `\b` before `0` keeps the domestic branch anchored to a
+            // word boundary; the `+33` branch can't use a leading `\b`
+            // (the Rust `regex` crate has no lookbehind, and `\b\+` only
+            // matches when preceded by a word char, missing every
+            // start-of-line `+33`). The trailing `\b` still blocks
+            // arbitrary 10-digit-run extension, and `+33` itself acts as
+            // a structural guard against being grabbed mid-number.
+            phone_fr: Regex::new(
+                r"(?:\+33[\s\.\-]?[1-9]|\b0[1-9])(?:[\s\.\-]?\d{2}){4}\b",
+            )
+            .expect("phone regex is a literal"),
             // Email — pragmatic RFC-5321-ish: local-part @ domain . TLD.
             // Contract-style addresses only; quoted local parts are out of scope.
             email: Regex::new(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")

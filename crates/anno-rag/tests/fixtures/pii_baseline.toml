@@ -6,9 +6,9 @@
 # The CI gate compares observed recall against these with a 0.98 tolerance.
 [recall]
 NIR = 1.0000
-SIRET = 0.0857
+SIRET = 1.0000
 IBAN_FR = 1.0000
-PhoneNumber = 0.7429
+PhoneNumber = 1.0000
 Email = 1.0000
 Person = 0.0
 Organization = 0.0
