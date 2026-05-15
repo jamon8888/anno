@@ -117,9 +117,14 @@ internals:
   versioned writes. Source of truth.
 - **Vector:** dense embedding stored as a column on the persistence row
   (no separate usearch index — LanceDB already does dense KNN).
-- **Lexical:** Tantivy FTS index on the tokenized text, built reusing
-  the v0.6 hybrid-retrieval helpers (`store::build_fts_index`,
-  `store::hybrid_search`). Memories use the same RRF reranker as documents.
+- **Lexical:** LanceDB native FTS index on the tokenized text
+  (`Index::FTS(FtsIndexBuilder::default())`), built reusing the v0.6
+  hybrid-retrieval helpers (`store::build_fts_index`,
+  `store::hybrid_search`). Memories use the same `lancedb::rerankers::RRFReranker`
+  as documents. The index keeps in sync with the data automatically — no
+  separate lifecycle to manage. Standalone Tantivy is **not** used; upstream
+  LanceDB is removing Tantivy support (lancedb/lancedb#2998) and exposing a
+  native inverted index instead.
 
 This matches subcog's hexagonal split *logically* but uses one storage
 engine (LanceDB) instead of three (SQLite + SQLite-FTS + usearch). That is
@@ -197,9 +202,51 @@ LanceDB schema (Arrow):
 | `kind`         | `string`            | `MemoryKind` discriminant      |
 | `text`         | `string`            | tokenized text                 |
 | `created_at`   | `timestamp[us]`     |                                |
-| `accessed_at`  | `timestamp[us]`     |                                |
+| `accessed_at`  | `timestamp[us]`     | updated on recall hit          |
+| `valid_from`   | `timestamp[us]`     | **forward-compat (v0.2):** populated as `created_at` in v0.1 |
+| `valid_to`     | `timestamp[us] (nullable)` | **forward-compat (v0.2):** always null in v0.1 |
 | `embedding`    | `fixed_size_list<f32, 384>` | e5-small dim, matches `documents` |
 | `token_refs`   | `list<struct<label:string, token:string>>` | for forget cascade |
+| `entity_refs`  | `list<string>`      | **forward-compat (v0.2):** always empty list in v0.1; populated by v0.2 entity extraction |
+
+### 4.1 Scalar indexes (mandatory)
+
+Without these, `memory_list` pagination and forget-cascade scans degrade
+to full-table reads. All three are cheap and ship with v0.1:
+
+| column        | index type   | purpose                                   |
+|---------------|--------------|-------------------------------------------|
+| `created_at`  | `BTree`      | time-ordered pagination, range filters    |
+| `kind`        | `Bitmap`     | low-cardinality (4 values) filter         |
+| `token_refs`  | `LabelList`  | `array_contains_*` for forget cascade     |
+| `session_id`  | `BTree`      | session-scoped recall filter              |
+
+`entity_refs` is also indexed `LabelList` even though it is always empty
+in v0.1 — adding the index now means v0.2 can populate the column
+without an index-rebuild step.
+
+### 4.2 Forward-compat columns: why now
+
+LanceDB's `Table::add_columns` is metadata-only for all-null additions,
+so technically we could defer `valid_to` and `entity_refs` to v0.2 free
+of cost. We add them now anyway for two reasons:
+
+1. The schema is the contract. Downstream consumers (Cowork, eval
+   tooling, an audit log) can pin against the v0.1 schema and remain
+   compatible with v0.2 without re-binding.
+2. Populating `valid_from = created_at` from row 1 means v0.2's
+   temporal queries have a clean monotonically-increasing column from
+   the very first memory, with no "before/after the migration"
+   discontinuity.
+
+`token_refs` and `entity_refs` are deliberately separate columns even
+though both store "things this memory refers to." `token_refs` is the
+**vault-cascade primitive** (cleanup of PII material on forget) and is
+strictly tied to the 36 PII labels. `entity_refs` is the **graph
+primitive** (multi-hop traversal in v0.2) and includes non-PII entities
+(legal concepts, clause references, organisations not flagged as PII).
+Conflating them would make v0.2 either drop graph nodes that happen to
+be PII, or leak non-PII entities into the cascade logic.
 
 ## 5. MCP tools
 
@@ -310,6 +357,33 @@ The differentiator vs ourmem/subcog/project-rag.
    every memory recall in the trace" story that transparent injection
    architectures cannot match.
 
+### 6.1 Erasure SLO (compaction is mandatory)
+
+`Table::delete` in LanceDB is **tombstone-based**: deleted rows are
+marked invisible but the underlying parquet bytes remain on disk until
+a compaction job (`Table::optimize` / `compact_files`) runs. For GDPR
+Art. 17 compliance this matters — "right to erasure" cannot mean "we
+will mark it invisible." The spec commits to:
+
+- **SLO:** physical erasure within **24 hours** of `memory_forget`.
+- **Mechanism:** a background task in the `anno-rag` MCP server runs
+  `Table::optimize` on both the `memories` and `documents` collections
+  daily (configurable via `AnnoRagConfig::compaction_cron`). The task
+  reclaims deletion-marker rows older than 1 hour.
+- **Tool response:** `memory_forget` returns `"logically forgotten;
+  physical erasure within 24h"` in its `MemoryForgetResult` so the
+  caller can be honest with end users.
+- **Vault parity:** the vault-token purge happens at delete time
+  (immediate), but the LanceDB row carrying the token-refs lingers
+  until compaction. This is acceptable because the row's `text` column
+  contains only the *token* (`PERSON_a4f3`), never the plaintext
+  (`Sophie Wilson`) — the residual data on disk has no PII value
+  without the (already-purged) vault entry.
+
+The 24h SLO is a default, not a contract — tenants with stricter
+requirements can run `Table::optimize` on demand after each forget at
+the cost of more frequent rewrites.
+
 ## 7. Tenancy
 
 v0.1 reuses anno-rag's existing single-tenant configuration. Multi-tenant
@@ -372,8 +446,18 @@ in v0.1.**
 
 - Extend the v0.6 eval harness with a small `memories.toml` fixture (~20
   short memories, ~10 recall queries with ground truth). Add `recall@5`
-  on memories as a separate metric. CI does **not** gate on memory eval
-  in v0.1 — the corpus is too small to be a reliable signal.
+  on memories as a separate metric.
+- **Benchmark baseline:** run a subset of the LoCoMo benchmark
+  (Long-Conversation-Memory, the de-facto standard used by Zep / mem0 /
+  MemoryOS / A-MEM 2025 papers). Pick 50 conversation/question pairs,
+  commit baseline `accuracy@1` and `latency_p95_ms` scores to
+  `tests/fixtures/locomo_baseline.toml`. CI does **not** gate on the
+  number in v0.1 — we just need the harness wired and a number on the
+  table so v0.2 has something to beat. Without this baseline the team
+  has no objective way to claim "PII-safe memory that competes with
+  graph-based systems."
+- CI does **not** gate on the bespoke `memories.toml` recall — the
+  corpus is too small to be a reliable signal.
 
 ## 10. File layout
 
@@ -402,6 +486,12 @@ New test file:
 
 ## 11. Open questions
 
+0. **Workspace `lancedb` pin (blocker).** Currently pinned to `=0.27.2`.
+   Native `Index::FTS` and the bug-fixed `RRFReranker` require 0.29.x.
+   Land a separate PR bumping the workspace pin and re-running the v0.6
+   hybrid-retrieval smoke tests **before** anno-memory v0.1 merges. If
+   v0.6 has not yet shipped when memory v0.1 starts, the version bump
+   becomes a shared prerequisite of both efforts.
 1. **`MemoryKind` taxonomy.** Four values feels right for a notarial
    workflow but is a guess. Worth a 1-hour pass with a sample of real
    Cowork sessions before locking it in.
@@ -434,3 +524,35 @@ New test file:
   `anno-privacy-gateway`.
 - Peak RSS for `anno-rag` MCP under combined document + memory load
   stays under 1.5 GB.
+- LoCoMo baseline numbers (`accuracy@1`, `latency_p95_ms`) committed —
+  even if modest — so v0.2 has a regression target.
+- Daily compaction reduces tombstoned bytes within the 24h erasure SLO,
+  verified by an integration test that deletes 100 rows and asserts
+  on-disk file size shrinks after `Table::optimize`.
+
+## 13. Planned extensions (v0.2 and beyond)
+
+v0.1 is deliberately a flat KV store with hybrid retrieval and forward-
+compat columns. v0.2 turns those columns into capabilities.
+
+- **v0.2 — temporal + graph-aware memory** (see
+  `2026-05-15-anno-memory-v0.2-design.md`):
+  - Activate bi-temporal semantics on `valid_from` / `valid_to`:
+    invalidate-on-conflict for `Preference` and `Reference` kinds.
+  - Populate `entity_refs` at write time by reusing
+    **anno-core's own `StackedNER`** — no LLM call needed. PII tokens
+    (from `token_refs`) + non-PII NER entities together form the
+    graph-node set.
+  - New `memory_graph_recall` MCP tool: 2-hop traversal over
+    `entity_refs` using LanceDB's `LabelList` index. No external
+    graph database.
+- **v0.3 and beyond (out of scope for both v0.1 and v0.2):**
+  - Passive capture (gateway-side fact extraction from streamed
+    completions).
+  - Letta-style core-vs-archival split at the MCP surface, if a
+    sub-second "what is the user's standing context" call becomes
+    a hot path.
+  - Cross-tenant "Spaces" (the ourmem feature).
+  - Heat-based eviction (the MemoryOS pattern).
+  - Optional embedded graph DB (Oxigraph) — only if a real multi-hop
+    workload exceeds what `entity_refs + LabelList` can serve.
