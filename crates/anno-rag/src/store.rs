@@ -351,6 +351,55 @@ impl Store {
         Ok(())
     }
 
+    /// Count how many memory rows reference `token` in their `token_refs`.
+    /// Used by the GDPR Art. 17 cascade to decide whether a vault token
+    /// is orphaned after a `forget_memory` deletion.
+    ///
+    /// v0.1 implementation scans the table (O(N)). v0.2 will switch to the
+    /// LabelList index once the lance struct-subfield filter syntax is
+    /// confirmed for `List<Struct>` columns.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on scan failure.
+    pub async fn token_reference_count(&self, token: &str) -> Result<u64> {
+        let mut stream = self
+            .memories_tbl
+            .query()
+            .select(lancedb::query::Select::columns(&["token_refs"]))
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("token_ref scan: {e}")))?;
+        let mut count: u64 = 0;
+        while let Some(batch) = stream
+            .try_next()
+            .await
+            .map_err(|e| Error::Store(format!("token_ref stream: {e}")))?
+        {
+            let token_refs_arr = get_col::<ListArray>(&batch, "token_refs")?;
+            for i in 0..batch.num_rows() {
+                if token_refs_arr.is_null(i) {
+                    continue;
+                }
+                let inner = token_refs_arr.value(i);
+                let s = inner
+                    .as_any()
+                    .downcast_ref::<StructArray>()
+                    .ok_or_else(|| Error::Store("token_refs inner not Struct".into()))?;
+                let token_col = s
+                    .column_by_name("token")
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                    .ok_or_else(|| Error::Store("token_refs.token not Utf8".into()))?;
+                for k in 0..s.len() {
+                    if token_col.value(k) == token {
+                        count += 1;
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(count)
+    }
+
     /// List indexes currently registered on the memories table. Useful for
     /// startup checks and tests.
     ///

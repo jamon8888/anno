@@ -423,6 +423,117 @@ impl Pipeline {
         }
         Ok(out)
     }
+
+    /// GDPR Art. 17 erasure on a Memory row.
+    ///
+    /// Either `id` OR `query` must be set (not both, not neither). When
+    /// `query` is set, runs a hybrid recall and forgets up to `limit`
+    /// rows. When `id` is set, `limit` is ignored.
+    ///
+    /// Cascade semantics: for every `TokenRef` on a deleted row, the
+    /// vault entry is purged ONLY if no other memory row references it.
+    /// This avoids breaking rehydration of co-occurring memories that
+    /// reference the same pseudonym.
+    ///
+    /// When `dry_run` is true, returns the list of ids that *would* be
+    /// forgotten without mutating either the memories table or the vault.
+    ///
+    /// # Errors
+    /// Returns [`Error::Memory`] for bad arguments (neither/both id+query),
+    /// [`Error::Store`] on memories-table failures, [`Error::Vault`] on
+    /// cascade failures.
+    pub async fn forget_memory(
+        &self,
+        id: Option<crate::memory::MemoryId>,
+        query: Option<String>,
+        limit: usize,
+        dry_run: bool,
+    ) -> Result<ForgetResult> {
+        let targets: Vec<crate::memory::Memory> = match (id, query) {
+            (Some(mid), None) => self
+                .store
+                .memory_get(&mid)
+                .await?
+                .into_iter()
+                .collect(),
+            (None, Some(q)) => {
+                let hits = self.recall_memory(&q, limit, None, None).await?;
+                let mut out = Vec::with_capacity(hits.len());
+                for h in hits.iter().take(limit) {
+                    let uid = uuid::Uuid::parse_str(&h.id)
+                        .map_err(|e| Error::Memory(format!("bad id: {e}")))?;
+                    if let Some(m) =
+                        self.store.memory_get(&crate::memory::MemoryId(uid)).await?
+                    {
+                        out.push(m);
+                    }
+                }
+                out
+            }
+            (Some(_), Some(_)) => {
+                return Err(Error::Memory(
+                    "exactly one of id / query must be set, not both".into(),
+                ));
+            }
+            (None, None) => {
+                return Err(Error::Memory(
+                    "exactly one of id / query must be set".into(),
+                ));
+            }
+        };
+
+        if dry_run {
+            return Ok(ForgetResult {
+                forgotten_ids: targets.iter().map(|t| t.id.as_string()).collect(),
+                vault_tokens_purged: 0,
+            });
+        }
+
+        // Snapshot candidate tokens BEFORE the deletes, since
+        // token_reference_count must run after deletion to count the
+        // remaining references (which excludes the target rows).
+        let mut candidate_tokens: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for t in &targets {
+            for r in &t.token_refs {
+                candidate_tokens.insert(r.token.clone());
+            }
+        }
+
+        let mut forgotten_ids = Vec::with_capacity(targets.len());
+        for t in &targets {
+            self.store.memory_delete_by_id(&t.id).await?;
+            forgotten_ids.push(t.id.as_string());
+        }
+
+        let mut purged = 0usize;
+        for token in candidate_tokens {
+            let count = self.store.token_reference_count(&token).await?;
+            if count == 0 {
+                // Reuse the v0.4 vault primitive — Vault::forget takes
+                // either the original value or the token, and returns
+                // Some(RemovedMapping) iff a vault entry actually went away.
+                if self.vault.forget(&token).await?.is_some() {
+                    purged += 1;
+                }
+            }
+        }
+
+        Ok(ForgetResult {
+            forgotten_ids,
+            vault_tokens_purged: purged,
+        })
+    }
+}
+
+/// Result returned by [`Pipeline::forget_memory`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ForgetResult {
+    /// Stringified ids of memory rows that were deleted (or would be, when
+    /// `dry_run` is true).
+    pub forgotten_ids: Vec<String>,
+    /// Number of vault entries actually purged. Always 0 when `dry_run`.
+    pub vault_tokens_purged: usize,
 }
 
 /// Receipt returned by [`Pipeline::save_memory`].
