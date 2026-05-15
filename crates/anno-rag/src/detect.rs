@@ -30,6 +30,7 @@ struct FrPatterns {
     iban_fr: Regex,
     phone_fr: Regex,
     email: Regex,
+    person_fr_honorific: Regex,
 }
 
 impl FrPatterns {
@@ -63,6 +64,18 @@ impl FrPatterns {
             // Contract-style addresses only; quoted local parts are out of scope.
             email: Regex::new(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
                 .expect("email regex is a literal"),
+            // FR honorific-prefixed person — `Monsieur Julien Marchand`,
+            // `Madame Anne-Sophie Perrin`, `Maître Hugo Faure`, `Mme Inès
+            // Coulibaly`. Capture group 1 is the name (2+ capitalised words,
+            // accents/hyphens/apostrophes allowed). GLiNER2-Fastino under-
+            // detects names sitting right after these French honorifics, so
+            // we complement the NER tier here. Lowercase function words
+            // ("le", "la") after the honorific block role titles like
+            // `Monsieur le Président` from being mistaken for a person.
+            person_fr_honorific: Regex::new(
+                r"(?:Monsieur|Madame|Mademoiselle|Mme\.?|Mlle\.?|M\.|Maître|Me\.?)\s+(\p{Lu}[\p{L}'\-]+(?:\s+\p{Lu}[\p{L}'\-]+)+)",
+            )
+            .expect("person honorific regex is a literal"),
         })
     }
 }
@@ -157,6 +170,18 @@ pub fn detect_patterns(text: &str) -> Vec<DetectedEntity> {
             confidence: 1.0,
             source: DetectionSource::Pattern,
         });
+    }
+    for caps in p.person_fr_honorific.captures_iter(text) {
+        if let Some(name) = caps.get(1) {
+            all.push(DetectedEntity {
+                original: name.as_str().to_string(),
+                start: name.start(),
+                end: name.end(),
+                category: EntityCategory::Person,
+                confidence: 0.95,
+                source: DetectionSource::Pattern,
+            });
+        }
     }
     all
 }

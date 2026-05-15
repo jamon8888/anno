@@ -1,8 +1,8 @@
 # Committed per-category recall baselines for the v0.7 anonymization gate.
 # Regex-category values (NIR, SIRET, IBAN_FR, PhoneNumber, Email) are
 # captured from `cargo test --test pii_regex`; NER-category values
-# (Person, Organization, Location) from `cargo bench --bench bench_pii`.
-# Both are filled with real numbers during the final build/verify phase.
+# (Person, Organization, Location) from `cargo test --test pii_ner
+# -- --ignored --nocapture` (requires the HF GLiNER2 model cache).
 # The CI gate compares observed recall against these with a 0.98 tolerance.
 [recall]
 NIR = 1.0000
@@ -10,6 +10,6 @@ SIRET = 1.0000
 IBAN_FR = 1.0000
 PhoneNumber = 1.0000
 Email = 1.0000
-Person = 0.0
-Organization = 0.0
-Location = 0.0
+Person = 1.0000
+Organization = 1.0000
+Location = 0.9302
