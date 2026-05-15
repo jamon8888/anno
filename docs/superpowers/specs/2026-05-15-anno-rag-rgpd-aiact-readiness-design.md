@@ -21,7 +21,7 @@ This document records, with code citations:
 
 ## 1. Claims supportable by shipped code
 
-> **Audit note (2026-05-15):** the v0.4 spec at `docs/superpowers/specs/2026-05-13-anno-rag-v0.4-http-gdpr.md` describes `Pipeline::forget`, `Pipeline::find_subject`, the Art. 30 audit register, and the bearer-auth HTTP API. **None of those are implemented on `feat/v0.7-anon-eval`.** `Pipeline` exposes only `new/ingest_one/ingest_folder/search/rehydrate/detect/vault_stats`. The MCP surface is stdio-only via `serve_stdio`. The claims below are restricted to code that actually exists today.
+> **Audit note (2026-05-15, revised):** an initial draft of this section claimed the v0.4 GDPR HTTP layer was shipped in `anno-rag`. It is not — `anno-rag::Pipeline` exposes only `new/ingest_one/ingest_folder/search/rehydrate/detect/vault_stats`, and `anno-rag::mcp::serve_stdio` is stdio-only. **However**, a separate crate `anno-privacy-gateway` (962 LOC `server.rs`, 668 LOC `privacy.rs`, 313 LOC `stream.rs`) ships an axum HTTP gateway with Anthropic-API-compatible `/v1/messages` + `/v1/models` routes, streaming SSE, and **on-the-wire pseudonymisation + rehydration** between client and upstream LLM. The gateway is merged on `origin/main` and is present on this branch unchanged. The claims below distinguish anno-rag from anno-privacy-gateway and credit each only for code that actually exists in that crate.
 
 | # | Claim | RGPD / AI Act anchor | Code evidence | Caveat |
 |---|---|---|---|---|
@@ -34,6 +34,9 @@ This document records, with code citations:
 | C7 | **AI Act Art. 4 — AI literacy baseline** | AI Act Art. 4 | `docs/superpowers/specs/*`, `docs/runbooks/*`, `README.md`, `CHANGELOG.md`, and this document. Detector behavior, measured accuracy, and known limitations are documented. | Full deployer-side literacy program is the cabinet's obligation. |
 | C8 | **AI Act Art. 50 — out of scope for the detector** | AI Act Art. 50 | The detector classifies spans; it does not generate text or media. `Pipeline::detect` / `pseudonymize` are deterministic transformations, not generative | Triggers if a generator is later embedded |
 | C9 | **No GPAI obligations on the embedded models** | AI Act Art. 51 / Annex XIII | GLiNER2-Fastino is a small ~100M-param specialised NER model; `intfloat/multilingual-e5-small` is a sentence-embedding model. Both are well below the 10²⁵ FLOP training-compute threshold for GPAI-with-systemic-risk | If we later swap in a foundation model the analysis must be re-run |
+| C10 | **On-the-wire pseudonymisation gateway (LLM proxy)** | RGPD Art. 4(5), Recital 26, Art. 25 (data protection by design) | `crates/anno-privacy-gateway/src/server.rs` exposes axum routes `/v1/messages`, `/v1/models`, `/v1/files`; `privacy.rs` (668 LOC) pseudonymises every outbound request body before `upstream::forward_messages` is called and rehydrates responses on the way back; `stream.rs` does the same for SSE streams. Integration test `messages_route_never_sends_cleartext_to_upstream_and_rehydrates` (server.rs:554) is asserted in CI. | Cleartext never leaves the gateway *if* the detector achieves 1.0/1.0 — see G1 |
+| C11 | **Audit event shape + sink abstraction** | RGPD Art. 30 (data shape only) | `crates/anno-privacy-gateway/src/audit.rs` — `AuditEvent { request_id, provider_profile, entity_count, fresh_pii_redacted }` (cleartext-free) + `AuditSink` trait | **Only `NoopAuditSink` is implemented** — persistent storage explicitly deferred ("persistent audit lands after v0.3", audit.rs:25). Counts as design-ready, not as a shipped Art. 30 register. |
+| C12 | **Streaming PII redaction across SSE boundaries** | RGPD Art. 32 | `stream.rs` — pseudonymisation runs incrementally on streamed token deltas; test `mock_stream_leaky_messages` verifies a leaking upstream is still redacted on the way out | — |
 
 ---
 
@@ -49,8 +52,8 @@ Split into **G — specified but not shipped** (v0.4 GDPR spec is the design; th
 | G2 | Right to erasure — `Pipeline::forget(subject)`, CLI subcommand, MCP/HTTP route | `docs/superpowers/specs/2026-05-13-anno-rag-v0.4-http-gdpr.md` §1, §4 | **Critical** before any production use |
 | G3 | Right of access — `Pipeline::find_subject(ref)`, exporters | v0.4 spec §1, §4 | **Critical** before any production use |
 | G4 | Right to portability (machine-readable export) — `/v1/subjects/:ref/export?format=json\|csv` | v0.4 spec | **High** — useful even where Art. 20 is not strictly applicable |
-| G5 | Art. 30 records of processing — append-only JSONL register with sha256 hash chain + daily HMAC, `anno-rag register` exporter | v0.4 spec §1 | **Critical** before any production use |
-| G6 | Bearer-token-authed HTTP API bound to `127.0.0.1`, OS-keyring token storage, optional TLS | v0.4 spec §3 | **High** for any non-stdio integration |
+| G5 | Art. 30 records of processing — **persistent** sink (JSONL register with sha256 hash chain + daily HMAC), `anno-rag register` exporter. Shape and trait exist (C11); only `NoopAuditSink` is wired today. | v0.4 spec §1 + `anno-privacy-gateway/src/audit.rs:25` | **Critical** before any production use |
+| G6 | Bearer-token (or mTLS) auth on the gateway HTTP routes. Gateway is currently unauthenticated — anyone who can reach `/v1/messages` can send through the upstream Anthropic key. Bind to loopback or put behind a reverse proxy as a stopgap. | v0.4 spec §3 — not in `Cargo.toml` deps of the gateway either | **Critical** before exposing the gateway beyond `127.0.0.1` |
 | G7 | MCP graceful shutdown that flushes the audit log + closes LanceDB cleanly | v0.4 spec §1 | Medium |
 
 ### U — undefined (no spec yet)
