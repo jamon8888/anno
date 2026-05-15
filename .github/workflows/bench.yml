@@ -66,6 +66,16 @@ jobs:
             echo "::error::nDCG@10 $ndcg below 98% of baseline $base_ndcg"
             exit 1
           fi
+      # v0.7 anonymization eval — model-free regex tier. Runs on every CI
+      # build (no model needed; bench.yml already pays the anno-rag build
+      # cost, so we piggyback here rather than re-compiling in ci.yml).
+      - name: Anonymization regex gate (NIR / SIRET / IBAN_FR / Phone / Email)
+        run: cargo test -p anno-rag --test pii_regex -- --nocapture
+      # v0.7 anonymization eval — model-requiring NER tier. The HF cache
+      # was warmed above by `cargo run --release --example warmup_model`,
+      # so Detector::new() reuses the GLiNER2 ONNX weights from disk.
+      - name: Anonymization NER gate (Person / Organization / Location)
+        run: cargo test -p anno-rag --test pii_ner -- --ignored --nocapture
       - uses: actions/upload-artifact@v4
         with:
           name: criterion-${{ matrix.os }}

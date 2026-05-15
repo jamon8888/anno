@@ -4,6 +4,81 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### v0.7 — anonymization eval + FR honorific Person regex + email detection
+
+### Added
+- **Email detection in `detect_patterns`** — pragmatic RFC-5321-ish regex
+  on the `FrPatterns` pack, emitted as `EntityCategory::Email`. Contract-
+  style addresses; quoted local parts out of scope.
+- **`pub fn detect_patterns(text)`** — model-free regex pipeline
+  (NIR / SIRET+Luhn / IBAN-FR / phone-FR / email / FR honorific Person)
+  extracted from `Detector::detect` so callers that must not pay the
+  GLiNER2 model load can score the regex categories alone.
+- **FR honorific Person regex** — closes the 14/59 Person gap
+  GLiNER2-Fastino exhibits on names introduced by `Monsieur`/`Madame`/
+  `Mademoiselle`/`Mme`/`Mlle`/`M.`/`Maître`/`Me`. Capture group 1 is the
+  name (2+ capitalised words; accents, hyphens, apostrophes); the
+  honorific itself stays unredacted. Lowercase function words
+  (`le`, `la`) between honorific and noun block role titles like
+  `Monsieur le Président` from being mistaken for a person.
+- **`pii_eval` module** — pure `score_detections(detected, truth)` with
+  per-category precision/recall/F1 and overlap-span matching (greedy
+  left-to-right so one wide detection cannot inflate TP across multiple
+  truths). Categories use canonical string keys via `category_key`.
+- **PII annotation loader** — `PiiAnnotations`/`PiiDoc`/`PiiEntry` serde
+  shapes for `pii_annotations.toml`; `pii_corpus_dir`,
+  `load_pii_annotations`, `resolve_span`, `check_pii_corpus`. The
+  consistency checker enforces every annotated `text` occurs exactly
+  once in its document so search-based offset resolution is unambiguous.
+- **35-doc annotated French legal PII corpus** —
+  `crates/anno-rag/tests/fixtures/pii_corpus/` covers five contract
+  families (prestation, CDI, mise en demeure, bail, statuts) × 7 docs
+  each, with 309 annotations across 8 categories. Precision traps left
+  un-annotated (`le Prestataire`, `Tribunal de commerce`, form names).
+- **Model-free regex eval tier** —
+  `crates/anno-rag/tests/pii_regex.rs` aggregates TP/FP/FN over the full
+  corpus and hard-gates per-category recall against `pii_baseline.toml`
+  at 0.98 tolerance. Runs on every CI build (no model needed).
+- **Model-requiring NER eval tier** —
+  `crates/anno-rag/tests/pii_ner.rs` (`#[ignore]`'d, opt-in via
+  `--ignored`) does a single-pass `Detector::detect` over the corpus
+  and gates Person/Organization/Location recall. A sibling
+  `diagnose_ner_misses` test prints every FN/FP with 20 chars of context
+  for debugging (char-boundary-safe for accented French).
+- **CI wiring** in `.github/workflows/bench.yml` runs both gates after
+  the HF model cache is warmed by `warmup_model`.
+
+### Changed
+- **Widened FR phone regex** — the old
+  `\b(?:\+33[\s\.\-]?|0)[1-9](?:[\s\.\-]?\d{2}){4}\b` silently dropped
+  9/35 `+33 …` phones because Rust's `regex` has no lookbehind and `\b\+`
+  never matches before a `+` at start-of-line or after whitespace. New
+  pattern keeps `\b` on the domestic `0` branch and at the tail; the
+  `+33` literal itself is the structural left guard for the
+  international branch:
+  `(?:\+33[\s\.\-]?[1-9]|\b0[1-9])(?:[\s\.\-]?\d{2}){4}\b`
+- **Luhn-valid corpus SIRETs** — 32 of 35 synthetic corpus SIRETs failed
+  `detect::luhn` and were correctly rejected, pinning SIRET recall at
+  0.0857. Regenerated each with a Luhn-valid check digit while keeping
+  the first 13 digits and uniqueness across the corpus.
+
+### Measured baselines (35-doc FR legal corpus, 309 annotations)
+| Category    | Recall | Precision | Truths |
+|-------------|-------:|----------:|-------:|
+| NIR         | 1.0000 | 1.0000    | 25     |
+| SIRET       | 1.0000 | 1.0000    | 35     |
+| IBAN_FR     | 1.0000 | 1.0000    | 35     |
+| PhoneNumber | 1.0000 | 1.0000    | 35     |
+| Email       | 1.0000 | 1.0000    | 35     |
+| Person      | 1.0000 | 1.0000    | 59     |
+| Organization| 1.0000 | 1.0000    | 42     |
+| Location    | 0.9302 | 0.9756    | 43     |
+
+Location residual: 3 missed (Chambéry, La Baule, Saint-Nazaire) +
+1 FP ("location de navires de plaisance" — multilingual NER false
+friend reading `location` as English). Locked at 0.93 baseline; v0.8
+candidate fix is a FR location pattern or a multilingual-NER post-filter.
+
 ### v0.6 — hybrid retrieval + legal eval harness
 
 ### Added
