@@ -186,6 +186,11 @@ pub fn detect_patterns(text: &str) -> Vec<DetectedEntity> {
     all
 }
 
+/// HuggingFace id of the NER model loaded by [`Detector::new`]. Surfaced
+/// in the detector audit event so operators can reconcile observed
+/// behaviour against a specific model version.
+pub const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
+
 /// Aggregate PII detector: FR regex pack + anno NER.
 pub struct Detector {
     ner: GLiNER2Fastino,
@@ -195,14 +200,30 @@ impl Detector {
     /// Build a new detector. Loads the GLiNER2Fastino multi-v1 ONNX model
     /// (multilingual, FR-aware) from the HF Hub cache.
     pub fn new() -> Result<Self> {
-        let ner = GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+        let ner = GLiNER2Fastino::from_pretrained(NER_MODEL_ID)
             .map_err(|e| Error::Detect(format!("gliner2_fastino load: {e}")))?;
         Ok(Self { ner })
     }
 
     /// Detect entities in `text`. Returns spans sorted by start, deduplicated
     /// to non-overlapping (longer span wins on overlap; Pattern beats Ner on tie).
+    ///
+    /// Emits an audit event at `target = "anno_rag::detect::audit"` with
+    /// AI Act Art. 12 / Art. 72 logging payload: input length (chars), wall-
+    /// clock duration, per-category span counts, per-source span counts,
+    /// detector version, NER model id. **Never logs raw text or detected
+    /// values** — the event carries only counts and IDs that are safe to
+    /// pipe to a SIEM.
     pub fn detect(&self, text: &str) -> Result<Vec<DetectedEntity>> {
+        let started = std::time::Instant::now();
+        let input_chars = text.chars().count();
+        let out = self.detect_inner(text)?;
+        let elapsed_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        emit_detect_audit(input_chars, elapsed_us, &out);
+        Ok(out)
+    }
+
+    fn detect_inner(&self, text: &str) -> Result<Vec<DetectedEntity>> {
         // 1. FR regex set (model-free layer).
         let mut all = detect_patterns(text);
 
@@ -256,6 +277,46 @@ impl Detector {
         }
         Ok(out)
     }
+}
+
+/// Emit the AI Act Art. 12 / Art. 72 detector audit event. Cleartext-free:
+/// only counts, durations, and model ids. Deployers pipe the
+/// `anno_rag::detect::audit` target to their SIEM / Art. 30 register.
+fn emit_detect_audit(input_chars: usize, elapsed_us: u64, out: &[DetectedEntity]) {
+    use std::collections::BTreeMap;
+    let mut per_category: BTreeMap<String, usize> = BTreeMap::new();
+    let mut from_pattern: usize = 0;
+    let mut from_ner: usize = 0;
+    let mut from_other: usize = 0;
+    for e in out {
+        let key = match &e.category {
+            EntityCategory::Custom(s) => format!("Custom({s})"),
+            other => format!("{other:?}"),
+        };
+        *per_category.entry(key).or_insert(0) += 1;
+        match e.source {
+            DetectionSource::Ner => from_ner += 1,
+            DetectionSource::Pattern => from_pattern += 1,
+            _ => from_other += 1,
+        }
+    }
+    // Serialise per_category as a compact JSON map so a single field carries
+    // the breakdown without exploding the tracing schema.
+    let per_category_json = serde_json::to_string(&per_category).unwrap_or_default();
+    tracing::info!(
+        target: "anno_rag::detect::audit",
+        event = "detect",
+        detector_version = env!("CARGO_PKG_VERSION"),
+        ner_model_id = NER_MODEL_ID,
+        input_chars = input_chars,
+        elapsed_us = elapsed_us,
+        spans_total = out.len(),
+        spans_from_pattern = from_pattern,
+        spans_from_ner = from_ner,
+        spans_from_other = from_other,
+        per_category = %per_category_json,
+        "detector pass complete"
+    );
 }
 
 fn pattern_priority(s: &DetectionSource) -> u8 {
