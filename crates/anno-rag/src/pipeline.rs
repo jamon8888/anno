@@ -589,6 +589,46 @@ impl Pipeline {
         }
         Ok(ListPage { items, next_cursor })
     }
+
+    /// Run a single compaction pass on the memories table. Reclaims
+    /// tombstoned bytes from prior `forget_memory` calls. Suitable for
+    /// admin-triggered compaction; the background ticker (see
+    /// [`Self::spawn_compaction_task`]) runs this on a 24h interval by
+    /// default.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on optimize failure.
+    pub async fn compact_now(&self) -> Result<()> {
+        let min_age = std::time::Duration::from_secs(self.cfg.compaction_min_age_secs);
+        self.store.optimize_memories(min_age).await
+    }
+
+    /// Spawn a tokio task that calls [`Self::compact_now`] on a fixed
+    /// interval (configurable via `compaction_interval_secs`, default 24h).
+    /// The first tick is skipped so startup is cheap.
+    ///
+    /// Failures are logged at `target = "anno_rag::memory::audit"` with
+    /// `event = "compaction_failed"` — the ticker continues. The returned
+    /// `JoinHandle` is detached unless the caller stores it; the tokio
+    /// runtime cancels detached tasks at shutdown, which is acceptable
+    /// for v0.1.
+    pub fn spawn_compaction_task(self: std::sync::Arc<Self>) -> tokio::task::JoinHandle<()> {
+        let interval = std::time::Duration::from_secs(self.cfg.compaction_interval_secs);
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            ticker.tick().await; // skip the immediate fire
+            loop {
+                ticker.tick().await;
+                if let Err(e) = self.compact_now().await {
+                    tracing::warn!(
+                        target: "anno_rag::memory::audit",
+                        event = "compaction_failed",
+                        "{e}"
+                    );
+                }
+            }
+        })
+    }
 }
 
 /// Receipt returned by [`Pipeline::save_memory`].

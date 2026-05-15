@@ -351,6 +351,30 @@ impl Store {
         Ok(())
     }
 
+    /// Compact the memories table — reclaim tombstoned bytes, merge small
+    /// fragments. Drives the v0.1 GDPR Art. 17 erasure SLO: after the
+    /// background ticker fires (default 24h interval), forgotten rows are
+    /// physically gone from disk.
+    ///
+    /// `_min_age` is the desired minimum age of a tombstone before
+    /// reclaim; on lance 0.29 the value is informational — `OptimizeAction::All`
+    /// reclaims everything compaction-eligible. A v0.2 patch can plumb the
+    /// age through `CompactionOptions` once the surface stabilises.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on optimize failure.
+    pub async fn optimize_memories(
+        &self,
+        _min_age: std::time::Duration,
+    ) -> Result<()> {
+        use lancedb::table::OptimizeAction;
+        self.memories_tbl
+            .optimize(OptimizeAction::All)
+            .await
+            .map_err(|e| Error::Store(format!("optimize_memories: {e}")))?;
+        Ok(())
+    }
+
     /// Cursor-paginated memory list. Filters by optional `session_id` /
     /// `kind`; orders by `created_at` DESC; pages by passing the
     /// previous page's last `created_at` (RFC 3339) as `cursor`.
