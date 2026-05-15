@@ -74,6 +74,15 @@ pub struct GatewayConfig {
     pub stream_max_buffer_chars: usize,
     /// Maximum buffered age before a forced streaming flush.
     pub stream_max_buffer_ms: u64,
+    /// Directory where the persistent audit register writes
+    /// `YYYY-MM-DD.jsonl` + `.sig` files. If `None`, a `NoopAuditSink`
+    /// is used (suitable for tests only).
+    pub audit_dir: Option<std::path::PathBuf>,
+    /// 32-byte HMAC key (hex-encoded) for the daily audit signature file.
+    /// If `audit_dir` is set and this is `None`, gateway startup fails.
+    pub audit_hmac_key_hex: Option<String>,
+    /// Bearer token required on protected routes. `/health` stays public.
+    pub bearer_token: Option<String>,
 }
 
 impl Default for GatewayConfig {
@@ -90,6 +99,9 @@ impl Default for GatewayConfig {
             stream_privacy: StreamPrivacyMode::BufferedScan,
             stream_max_buffer_chars: 4096,
             stream_max_buffer_ms: 750,
+            audit_dir: None,
+            audit_hmac_key_hex: None,
+            bearer_token: None,
         }
     }
 }
@@ -131,6 +143,15 @@ impl GatewayConfig {
             if let Ok(parsed) = value.parse() {
                 cfg.stream_max_buffer_ms = parsed;
             }
+        }
+        if let Ok(d) = std::env::var("ANNO_GATEWAY_AUDIT_DIR") {
+            cfg.audit_dir = Some(std::path::PathBuf::from(d));
+        }
+        if let Ok(k) = std::env::var("ANNO_GATEWAY_AUDIT_HMAC_KEY_HEX") {
+            cfg.audit_hmac_key_hex = Some(k);
+        }
+        if let Ok(t) = std::env::var("ANNO_GATEWAY_BEARER_TOKEN") {
+            cfg.bearer_token = Some(t);
         }
         cfg
     }
