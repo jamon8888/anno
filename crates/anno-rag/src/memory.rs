@@ -89,6 +89,23 @@ pub struct Memory {
     pub entity_refs: Vec<String>,
 }
 
+/// On-disk hit returned by `Store::memories_hybrid_search` — text is the
+/// **tokenized** form (still PII-safe). The Pipeline layer rehydrates
+/// before returning to the caller as [`MemoryHit`].
+#[derive(Debug, Clone)]
+pub struct MemoryHitRow {
+    /// Stringified [`MemoryId`].
+    pub id: String,
+    /// Pseudonymized text as stored on disk.
+    pub text_tokenized: String,
+    /// Category.
+    pub kind: MemoryKind,
+    /// RFC 3339 creation timestamp.
+    pub created_at: String,
+    /// Hybrid retrieval score (RRF; higher is better).
+    pub score: f32,
+}
+
 /// One hit returned by [`Pipeline::recall_memory`]. Text is rehydrated
 /// (plaintext) at the boundary — the stored form on disk stays tokenized.
 #[derive(Debug, Clone, Serialize)]

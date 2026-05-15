@@ -363,6 +363,91 @@ impl Store {
             .map_err(|e| Error::Store(format!("memory_list_indexes: {e}")))
     }
 
+    /// Build an FTS index on `memories.text`. Idempotent — returns `Ok(false)`
+    /// when the index already exists or the table is empty. Mirrors the
+    /// French-tokenized chunks FTS index in [`Self::maybe_build_fts_index`].
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if `count_rows`, `list_indices`, or
+    /// `create_index` fails.
+    pub async fn build_memories_fts_index(&self) -> Result<bool> {
+        use lancedb::index::scalar::FtsIndexBuilder;
+        use lancedb::index::Index;
+
+        let count = self
+            .memories_tbl
+            .count_rows(None)
+            .await
+            .map_err(|e| Error::Store(format!("memories count_rows: {e}")))?;
+        if count == 0 {
+            return Ok(false);
+        }
+        let existing = self
+            .memories_tbl
+            .list_indices()
+            .await
+            .map_err(|e| Error::Store(format!("list_indices: {e}")))?;
+        let already = existing
+            .iter()
+            .any(|i| i.columns.iter().any(|c| c == "text"));
+        if already {
+            return Ok(false);
+        }
+
+        let fts = FtsIndexBuilder::default()
+            .base_tokenizer("simple".to_string())
+            .language("French")
+            .map_err(|e| Error::Store(format!("fts language: {e}")))?
+            .stem(true)
+            .remove_stop_words(true)
+            .lower_case(true);
+        self.memories_tbl
+            .create_index(&["text"], Index::FTS(fts))
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("memories fts: {e}")))?;
+        Ok(true)
+    }
+
+    /// Hybrid search (dense vector + native FTS, RRF-reranked) over memories.
+    /// Returns at most `top_k` rows with the on-disk tokenized text — the
+    /// Pipeline rehydrates before exposing to the caller.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] / [`Error::Lance`] on query failures.
+    pub async fn memories_hybrid_search(
+        &self,
+        query_vec: &[f32],
+        query_text: &str,
+        top_k: usize,
+    ) -> Result<Vec<crate::memory::MemoryHitRow>> {
+        use lance_index::scalar::FullTextSearchQuery;
+        use lancedb::rerankers::rrf::RRFReranker;
+
+        let stream = self
+            .memories_tbl
+            .query()
+            .nearest_to(query_vec.to_vec())?
+            .full_text_search(FullTextSearchQuery::new(query_text.to_string()))
+            .rerank(Arc::new(RRFReranker::default()))
+            .limit(top_k)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("memories hybrid: {e}")))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| Error::Store(format!("memories stream: {e}")))?;
+        let mut hits = Vec::with_capacity(top_k);
+        for batch in &batches {
+            for row in 0..batch.num_rows() {
+                hits.push(batch_row_to_memory_hit(batch, row)?);
+            }
+        }
+        hits.truncate(top_k);
+        Ok(hits)
+    }
+
     /// Upsert chunks. Idempotent on `(doc_id, chunk_idx)` via `merge_insert`.
     ///
     /// # Errors
@@ -769,6 +854,58 @@ fn batch_row_to_memory(b: &RecordBatch, i: usize) -> Result<crate::memory::Memor
         token_refs,
         entity_refs,
     })
+}
+
+/// Slim batch decoder for hybrid-search hits. Reads only the columns the
+/// caller actually surfaces (no embeddings, no entity refs) plus the
+/// `_relevance_score` RRF column.
+fn batch_row_to_memory_hit(
+    b: &RecordBatch,
+    i: usize,
+) -> Result<crate::memory::MemoryHitRow> {
+    use crate::memory::{MemoryHitRow, MemoryKind};
+
+    let id_arr = get_col::<StringArray>(b, "id")?;
+    let kind_arr = get_col::<StringArray>(b, "kind")?;
+    let text_arr = get_col::<StringArray>(b, "text")?;
+    let created_arr = get_col::<TimestampMicrosecondArray>(b, "created_at")?;
+
+    let id = id_arr.value(i).to_string();
+    let kind = match kind_arr.value(i) {
+        "fact" => MemoryKind::Fact,
+        "preference" => MemoryKind::Preference,
+        "reference" => MemoryKind::Reference,
+        "context" => MemoryKind::Context,
+        other => {
+            return Err(Error::Store(format!("unknown memory kind: {other}")));
+        }
+    };
+    let text_tokenized = text_arr.value(i).to_string();
+    let created_at = ts_to_rfc3339(created_arr.value(i));
+
+    // Score: lancedb writes `_relevance_score` for hybrid queries; absence
+    // means the batch carried no relevance column (e.g. a pure vector arm),
+    // in which case 0.0 is the documented sentinel.
+    let score = b
+        .column_by_name("_relevance_score")
+        .and_then(|c| c.as_any().downcast_ref::<Float32Array>())
+        .map(|a| a.value(i))
+        .unwrap_or(0.0);
+
+    Ok(MemoryHitRow {
+        id,
+        text_tokenized,
+        kind,
+        created_at,
+        score,
+    })
+}
+
+fn ts_to_rfc3339(micros: i64) -> String {
+    Utc.timestamp_micros(micros)
+        .single()
+        .map(|t| t.to_rfc3339())
+        .unwrap_or_else(|| String::from("1970-01-01T00:00:00Z"))
 }
 
 /// Deterministic chunk id: UUID v5 (OID namespace) of `"{doc_id}::{chunk_idx}"`.
