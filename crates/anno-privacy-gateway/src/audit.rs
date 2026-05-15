@@ -92,8 +92,15 @@ impl JsonlAuditSink {
             state.chain_head = "0".repeat(64);
         }
         let prev = state.chain_head.clone();
-        let event_bytes = serde_json::to_vec(event)
+        // Canonical form: round-trip through serde_json::Value so the
+        // hashed bytes are key-sorted (serde_json::Map is BTreeMap-backed
+        // when the `preserve_order` feature is off, which is the default).
+        // This is what makes the chain verifiable off-line by a third
+        // party who only sees the JSONL file.
+        let event_value = serde_json::to_value(event)
             .map_err(|e| std::io::Error::other(format!("serialize: {e}")))?;
+        let event_bytes = serde_json::to_vec(&event_value)
+            .map_err(|e| std::io::Error::other(format!("canonicalize: {e}")))?;
         let mut hasher = Sha256::new();
         hasher.update(hex::decode(&prev).unwrap_or_default());
         hasher.update(&event_bytes);
