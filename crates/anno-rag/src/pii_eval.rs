@@ -343,4 +343,22 @@ pii = [
         assert!(check_pii_corpus(dir.path(), &ann).is_err());
     }
 
+    #[test]
+    fn fixture_pii_corpus_is_consistent() {
+        let dir = pii_corpus_dir();
+        let ann = load_pii_annotations(&dir).expect("pii_annotations.toml loads");
+        assert!(ann.docs.len() >= 30, "expected ~35 annotated docs, got {}", ann.docs.len());
+        check_pii_corpus(&dir, &ann).expect("corpus consistent");
+        // Every category appears somewhere in the corpus.
+        let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for d in &ann.docs {
+            for e in &d.pii {
+                seen.insert(e.category.as_str());
+            }
+        }
+        for cat in ["NIR", "SIRET", "IBAN_FR", "PhoneNumber", "Email",
+                    "Person", "Organization", "Location"] {
+            assert!(seen.contains(cat), "category {cat} missing from corpus");
+        }
+    }
 }

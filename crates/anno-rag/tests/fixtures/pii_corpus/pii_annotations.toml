@@ -1,0 +1,489 @@
+# Annotated PII for the v0.7 anonymization eval corpus.
+# Every PII string is the EXACT substring that appears in the document,
+# and must occur exactly once per document. Precision traps such as
+# « le Prestataire », « le Bailleur », « Tribunal de commerce » are
+# deliberately not annotated.
+
+[[doc]]
+file = "prestation_01.txt"
+pii = [
+  { category = "Organization", text = "ATELIER NUMÉRIQUE" },
+  { category = "SIRET",        text = "81234567800019" },
+  { category = "Person",       text = "Claire Fontaine" },
+  { category = "NIR",          text = "285091312345638" },
+  { category = "Location",     text = "Lyon" },
+  { category = "PhoneNumber",  text = "06 12 34 56 78" },
+  { category = "Email",        text = "claire.fontaine@atelier-numerique.fr" },
+  { category = "Person",       text = "Julien Marchand" },
+  { category = "IBAN_FR",      text = "FR76 3000 4000 0500 0612 3456 789" },
+]
+
+[[doc]]
+file = "prestation_02.txt"
+pii = [
+  { category = "Organization", text = "VOLTA CONSEIL" },
+  { category = "SIRET",        text = "79283746500024" },
+  { category = "Person",       text = "Thomas Rivière" },
+  { category = "NIR",          text = "175082512345613" },
+  { category = "Location",     text = "Bordeaux" },
+  { category = "PhoneNumber",  text = "07 45 89 12 30" },
+  { category = "Email",        text = "thomas.riviere@volta-conseil.fr" },
+  { category = "Organization", text = "Pivoine SAS" },
+  { category = "IBAN_FR",      text = "FR76 1027 8060 4100 0123 4567 890" },
+]
+
+[[doc]]
+file = "prestation_03.txt"
+pii = [
+  { category = "Organization", text = "AURORE DIGITALE" },
+  { category = "SIRET",        text = "50324178900037" },
+  { category = "Person",       text = "Hélène Berger" },
+  { category = "NIR",          text = "268041687654321" },
+  { category = "Location",     text = "Strasbourg" },
+  { category = "PhoneNumber",  text = "+33 6 78 90 12 34" },
+  { category = "Email",        text = "helene.berger@aurore-digitale.eu" },
+  { category = "Person",       text = "Lucas Petit" },
+  { category = "IBAN_FR",      text = "FR76 1820 6004 3300 0987 6543 210" },
+]
+
+[[doc]]
+file = "prestation_04.txt"
+pii = [
+  { category = "Organization", text = "SYLVA & ASSOCIÉS" },
+  { category = "SIRET",        text = "41028573600015" },
+  { category = "Person",       text = "Antoine Lefebvre" },
+  { category = "NIR",          text = "182111278123456" },
+  { category = "Location",     text = "Nantes" },
+  { category = "PhoneNumber",  text = "06 23 41 58 79" },
+  { category = "Email",        text = "antoine.lefebvre@sylva-associes.fr" },
+  { category = "Person",       text = "Sophie Garnier" },
+  { category = "IBAN_FR",      text = "FR76 3007 7099 9900 0234 5678 901" },
+]
+
+[[doc]]
+file = "prestation_05.txt"
+pii = [
+  { category = "Organization", text = "HORIZON FORMATION" },
+  { category = "SIRET",        text = "32519847600028" },
+  { category = "Person",       text = "Camille Dubois" },
+  { category = "NIR",          text = "274062798765432" },
+  { category = "Location",     text = "Toulouse" },
+  { category = "PhoneNumber",  text = "07 56 78 90 12" },
+  { category = "Email",        text = "camille.dubois@horizon-formation.fr" },
+  { category = "Organization", text = "Mistral SARL" },
+  { category = "IBAN_FR",      text = "FR76 1009 6182 6800 0345 6789 012" },
+]
+
+[[doc]]
+file = "prestation_06.txt"
+pii = [
+  { category = "Organization", text = "KAPPA INGÉNIERIE" },
+  { category = "SIRET",        text = "88401239500041" },
+  { category = "Person",       text = "Pierre Moreau" },
+  { category = "NIR",          text = "181101434567812" },
+  { category = "Location",     text = "Rennes" },
+  { category = "PhoneNumber",  text = "06 87 65 43 21" },
+  { category = "Email",        text = "pierre.moreau@kappa-ingenierie.fr" },
+  { category = "Organization", text = "Olympe SAS" },
+  { category = "IBAN_FR",      text = "FR76 1751 5900 0000 0456 7890 123" },
+]
+
+[[doc]]
+file = "prestation_07.txt"
+pii = [
+  { category = "Organization", text = "MARÉE HAUTE COMMUNICATION" },
+  { category = "SIRET",        text = "49217865400052" },
+  { category = "Person",       text = "Inès Lacroix" },
+  { category = "NIR",          text = "290121645123987" },
+  { category = "Location",     text = "Marseille" },
+  { category = "PhoneNumber",  text = "+33 7 12 34 56 78" },
+  { category = "Email",        text = "ines.lacroix@maree-haute.com" },
+  { category = "Person",       text = "Bertrand Noël" },
+  { category = "IBAN_FR",      text = "FR76 1820 6004 4400 0567 8901 234" },
+]
+
+[[doc]]
+file = "cdi_01.txt"
+pii = [
+  { category = "Organization", text = "CLARITÉ LOGICIELLE" },
+  { category = "SIRET",        text = "51847362900018" },
+  { category = "Person",       text = "Émilie Chevalier" },
+  { category = "NIR",          text = "269031298765432" },
+  { category = "Location",     text = "Grenoble" },
+  { category = "PhoneNumber",  text = "06 14 25 36 47" },
+  { category = "Email",        text = "emilie.chevalier@clarte-logicielle.fr" },
+  { category = "IBAN_FR",      text = "FR76 3000 4011 5500 0678 9012 345" },
+]
+
+[[doc]]
+file = "cdi_02.txt"
+pii = [
+  { category = "Organization", text = "NOVATECH INDUSTRIE" },
+  { category = "SIRET",        text = "60932184700031" },
+  { category = "Person",       text = "Romain Sanchez" },
+  { category = "NIR",          text = "184072845678123" },
+  { category = "Location",     text = "Lille" },
+  { category = "PhoneNumber",  text = "07 65 43 21 09" },
+  { category = "Email",        text = "romain.sanchez@novatech-industrie.fr" },
+  { category = "IBAN_FR",      text = "FR76 1027 8060 5500 0789 0123 456" },
+]
+
+[[doc]]
+file = "cdi_03.txt"
+pii = [
+  { category = "Organization", text = "PHARE & CIE" },
+  { category = "SIRET",        text = "71504826300049" },
+  { category = "Person",       text = "Nadia Roussel" },
+  { category = "NIR",          text = "277052956781234" },
+  { category = "Location",     text = "Dijon" },
+  { category = "PhoneNumber",  text = "06 58 47 36 25" },
+  { category = "Email",        text = "nadia.roussel@phare-cie.fr" },
+  { category = "IBAN_FR",      text = "FR76 1009 6184 6700 0890 1234 567" },
+]
+
+[[doc]]
+file = "cdi_04.txt"
+pii = [
+  { category = "Organization", text = "CITRINE PARTNERS" },
+  { category = "SIRET",        text = "38291746500036" },
+  { category = "Person",       text = "Vincent Lopez" },
+  { category = "NIR",          text = "186091389123456" },
+  { category = "Location",     text = "Montpellier" },
+  { category = "PhoneNumber",  text = "+33 6 91 82 73 64" },
+  { category = "Email",        text = "vincent.lopez@citrine-partners.fr" },
+  { category = "IBAN_FR",      text = "FR76 3007 7099 8800 0901 2345 678" },
+]
+
+[[doc]]
+file = "cdi_05.txt"
+pii = [
+  { category = "Organization", text = "VERDOYANT SOLUTIONS" },
+  { category = "SIRET",        text = "90438172600054" },
+  { category = "Person",       text = "Aurélie Bernard" },
+  { category = "NIR",          text = "271082176512348" },
+  { category = "Location",     text = "Reims" },
+  { category = "PhoneNumber",  text = "07 23 14 05 96" },
+  { category = "Email",        text = "aurelie.bernard@verdoyant-solutions.fr" },
+  { category = "IBAN_FR",      text = "FR76 1751 5901 1100 1012 3456 789" },
+]
+
+[[doc]]
+file = "cdi_06.txt"
+pii = [
+  { category = "Organization", text = "BORÉAL & FILS" },
+  { category = "SIRET",        text = "27084195300062" },
+  { category = "Person",       text = "Mathieu Caron" },
+  { category = "NIR",          text = "188062556789012" },
+  { category = "Location",     text = "Caen" },
+  { category = "PhoneNumber",  text = "06 32 14 87 56" },
+  { category = "Email",        text = "mathieu.caron@boreal-fils.fr" },
+  { category = "IBAN_FR",      text = "FR76 1820 6005 6600 1123 4567 890" },
+]
+
+[[doc]]
+file = "cdi_07.txt"
+pii = [
+  { category = "Organization", text = "TERRA NOVA AGENCE" },
+  { category = "SIRET",        text = "64207513800077" },
+  { category = "Person",       text = "Léa Vidal" },
+  { category = "NIR",          text = "296041667812345" },
+  { category = "Location",     text = "Nice" },
+  { category = "PhoneNumber",  text = "+33 7 84 73 62 51" },
+  { category = "Email",        text = "lea.vidal@terra-nova-agence.fr" },
+  { category = "IBAN_FR",      text = "FR76 1027 8060 9900 1234 5678 901" },
+]
+
+[[doc]]
+file = "miseendemeure_01.txt"
+pii = [
+  { category = "Person",       text = "Sébastien Olivier" },
+  { category = "Organization", text = "ARTEMIS DISTRIBUTION" },
+  { category = "SIRET",        text = "75312964800019" },
+  { category = "Person",       text = "Patricia Lemaire" },
+  { category = "Location",     text = "Angers" },
+  { category = "PhoneNumber",  text = "06 47 58 69 70" },
+  { category = "Email",        text = "patricia.lemaire@gmail.fr" },
+  { category = "IBAN_FR",      text = "FR76 1009 6182 3300 1345 6789 012" },
+]
+
+[[doc]]
+file = "miseendemeure_02.txt"
+pii = [
+  { category = "Organization", text = "RÉSILIENCE AVOCATS" },
+  { category = "SIRET",        text = "82931745600025" },
+  { category = "Person",       text = "Catherine Rolland" },
+  { category = "Person",       text = "Olivier Mercier" },
+  { category = "Location",     text = "Perpignan" },
+  { category = "PhoneNumber",  text = "07 19 28 37 46" },
+  { category = "Email",        text = "olivier.mercier@orange.fr" },
+  { category = "IBAN_FR",      text = "FR76 3000 4012 8800 1456 7890 123" },
+]
+
+[[doc]]
+file = "miseendemeure_03.txt"
+pii = [
+  { category = "Organization", text = "CRYSTAL FINANCEMENT" },
+  { category = "SIRET",        text = "53801472900037" },
+  { category = "Person",       text = "Damien Roy" },
+  { category = "Person",       text = "Florence Vasseur" },
+  { category = "Location",     text = "Limoges" },
+  { category = "PhoneNumber",  text = "06 12 84 73 65" },
+  { category = "Email",        text = "florence.vasseur@laposte.net" },
+  { category = "IBAN_FR",      text = "FR76 1751 5902 2200 1567 8901 234" },
+]
+
+[[doc]]
+file = "miseendemeure_04.txt"
+pii = [
+  { category = "Person",       text = "Hugo Faure" },
+  { category = "Organization", text = "GLOBAL ÉNERGIE" },
+  { category = "SIRET",        text = "49827136500048" },
+  { category = "Person",       text = "Karim Benali" },
+  { category = "Location",     text = "Saint-Étienne" },
+  { category = "PhoneNumber",  text = "07 38 47 56 65" },
+  { category = "Email",        text = "karim.benali@hotmail.fr" },
+  { category = "IBAN_FR",      text = "FR76 1820 6005 7700 1678 9012 345" },
+]
+
+[[doc]]
+file = "miseendemeure_05.txt"
+pii = [
+  { category = "Organization", text = "PIANO IMMOBILIER" },
+  { category = "SIRET",        text = "18540793200056" },
+  { category = "Person",       text = "Stéphanie Lambert" },
+  { category = "Person",       text = "Gilles Vernier" },
+  { category = "NIR",          text = "178031345678234" },
+  { category = "Location",     text = "Tours" },
+  { category = "PhoneNumber",  text = "+33 6 49 38 27 16" },
+  { category = "Email",        text = "gilles.vernier@yahoo.fr" },
+  { category = "IBAN_FR",      text = "FR76 1027 8061 0000 1789 0123 456" },
+]
+
+[[doc]]
+file = "miseendemeure_06.txt"
+pii = [
+  { category = "Organization", text = "QUERCUS LEGAL" },
+  { category = "SIRET",        text = "60418273500064" },
+  { category = "Person",       text = "Aïcha Tahiri" },
+  { category = "Person",       text = "Brigitte Charpentier" },
+  { category = "NIR",          text = "264121478912345" },
+  { category = "Location",     text = "Pau" },
+  { category = "PhoneNumber",  text = "06 73 82 91 04" },
+  { category = "Email",        text = "brigitte.charpentier@free.fr" },
+  { category = "IBAN_FR",      text = "FR76 3000 4013 6600 1890 1234 567" },
+]
+
+[[doc]]
+file = "miseendemeure_07.txt"
+pii = [
+  { category = "Organization", text = "NEPTUNE ASSURANCES" },
+  { category = "SIRET",        text = "31729485700072" },
+  { category = "Person",       text = "Frédéric Boyer" },
+  { category = "Person",       text = "Anne-Sophie Perrin" },
+  { category = "Location",     text = "Clermont-Ferrand" },
+  { category = "PhoneNumber",  text = "07 95 84 73 62" },
+  { category = "Email",        text = "anne-sophie.perrin@protonmail.com" },
+  { category = "IBAN_FR",      text = "FR76 1009 6184 8800 1901 2345 678" },
+]
+
+[[doc]]
+file = "bail_01.txt"
+pii = [
+  { category = "Person",       text = "Édouard Royer" },
+  { category = "NIR",          text = "175062423456198" },
+  { category = "Location",     text = "Versailles" },
+  { category = "PhoneNumber",  text = "06 81 72 63 54" },
+  { category = "Email",        text = "edouard.royer@bailleur.fr" },
+  { category = "Organization", text = "CAFÉ DU MARCHÉ" },
+  { category = "SIRET",        text = "84120597300017" },
+  { category = "Person",       text = "Juliette Lemoine" },
+  { category = "Location",     text = "Annecy" },
+  { category = "IBAN_FR",      text = "FR76 1751 5903 3300 2012 3456 789" },
+]
+
+[[doc]]
+file = "bail_02.txt"
+pii = [
+  { category = "Organization", text = "SCI HÉLIANTHE" },
+  { category = "SIRET",        text = "65049173800023" },
+  { category = "Person",       text = "Valérie Henry" },
+  { category = "PhoneNumber",  text = "07 23 45 67 89" },
+  { category = "Email",        text = "valerie.henry@sci-helianthe.fr" },
+  { category = "Organization", text = "LIBRAIRIE DES ARTS" },
+  { category = "Person",       text = "Hervé Aubry" },
+  { category = "Location",     text = "Avignon" },
+  { category = "IBAN_FR",      text = "FR76 1820 6006 4400 2123 4567 890" },
+]
+
+[[doc]]
+file = "bail_03.txt"
+pii = [
+  { category = "Organization", text = "PATRIMOINE GESTION" },
+  { category = "SIRET",        text = "90716248500032" },
+  { category = "Person",       text = "Christophe Guillot" },
+  { category = "PhoneNumber",  text = "+33 6 14 25 36 47" },
+  { category = "Email",        text = "christophe.guillot@patrimoine-gestion.fr" },
+  { category = "Organization", text = "ÉCLAT COIFFURE" },
+  { category = "Person",       text = "Sandra Pacheco" },
+  { category = "Location",     text = "Mulhouse" },
+  { category = "IBAN_FR",      text = "FR76 3000 4014 4400 2234 5678 901" },
+]
+
+[[doc]]
+file = "bail_04.txt"
+pii = [
+  { category = "Person",       text = "Christine Pinto" },
+  { category = "NIR",          text = "269041587612349" },
+  { category = "Location",     text = "Le Mans" },
+  { category = "PhoneNumber",  text = "06 78 90 12 34" },
+  { category = "Email",        text = "christine.pinto@bailleur-lemans.fr" },
+  { category = "Organization", text = "PROXY OPTIQUE" },
+  { category = "SIRET",        text = "40128645900018" },
+  { category = "Person",       text = "Jean-Marc Brun" },
+  { category = "IBAN_FR",      text = "FR76 1027 8061 1100 2345 6789 012" },
+]
+
+[[doc]]
+file = "bail_05.txt"
+pii = [
+  { category = "Organization", text = "SCI MARGAUX" },
+  { category = "SIRET",        text = "27089415300041" },
+  { category = "Person",       text = "Philippe Daumas" },
+  { category = "PhoneNumber",  text = "07 56 89 12 34" },
+  { category = "Email",        text = "philippe.daumas@sci-margaux.fr" },
+  { category = "Organization", text = "BOULANGERIE DU CENTRE" },
+  { category = "Person",       text = "Léopoldine Fabre" },
+  { category = "Location",     text = "Béziers" },
+  { category = "IBAN_FR",      text = "FR76 1009 6184 9900 2456 7890 123" },
+]
+
+[[doc]]
+file = "bail_06.txt"
+pii = [
+  { category = "Organization", text = "FONCIÈRE CYPRÈS" },
+  { category = "SIRET",        text = "53297184600052" },
+  { category = "Person",       text = "Inès Coulibaly" },
+  { category = "PhoneNumber",  text = "+33 7 23 84 95 06" },
+  { category = "Email",        text = "ines.coulibaly@fonciere-cypres.fr" },
+  { category = "Organization", text = "TECHNO-RÉPARATION" },
+  { category = "Person",       text = "Yann Le Goff" },
+  { category = "Location",     text = "Quimper" },
+  { category = "IBAN_FR",      text = "FR76 1820 6007 5500 2567 8901 234" },
+]
+
+[[doc]]
+file = "bail_07.txt"
+pii = [
+  { category = "Person",       text = "Yves Pasquier" },
+  { category = "NIR",          text = "173072145671298" },
+  { category = "Location",     text = "Chambéry" },
+  { category = "PhoneNumber",  text = "06 92 81 70 65" },
+  { category = "Email",        text = "yves.pasquier@bailleur-savoie.fr" },
+  { category = "Organization", text = "FROMAGERIE DU LAC" },
+  { category = "SIRET",        text = "79401328500067" },
+  { category = "Person",       text = "Béatrice Daugeron" },
+  { category = "IBAN_FR",      text = "FR76 3007 7099 7700 2678 9012 345" },
+]
+
+[[doc]]
+file = "statuts_01.txt"
+pii = [
+  { category = "Organization", text = "OASIS NUMÉRIQUE" },
+  { category = "SIRET",        text = "91204785300018" },
+  { category = "Person",       text = "Renaud Carlier" },
+  { category = "NIR",          text = "187092178654309" },
+  { category = "Location",     text = "Vannes" },
+  { category = "PhoneNumber",  text = "06 71 82 93 04" },
+  { category = "Email",        text = "renaud.carlier@oasis-numerique.fr" },
+  { category = "Person",       text = "Sarah Aubert" },
+  { category = "Location",     text = "La Rochelle" },
+  { category = "IBAN_FR",      text = "FR76 1027 8061 2200 2789 0123 456" },
+]
+
+[[doc]]
+file = "statuts_02.txt"
+pii = [
+  { category = "Organization", text = "VOLTAÏQUE INDUSTRIES" },
+  { category = "SIRET",        text = "42018796500024" },
+  { category = "Person",       text = "Maxime Bouvet" },
+  { category = "Location",     text = "Angoulême" },
+  { category = "PhoneNumber",  text = "07 84 95 06 17" },
+  { category = "Email",        text = "maxime.bouvet@voltaique-industries.fr" },
+  { category = "Person",       text = "Olivia Renaud" },
+  { category = "NIR",          text = "295041378912340" },
+  { category = "Location",     text = "Cognac" },
+  { category = "IBAN_FR",      text = "FR76 1751 5904 4400 2890 1234 567" },
+]
+
+[[doc]]
+file = "statuts_03.txt"
+pii = [
+  { category = "Organization", text = "KAREL & CO" },
+  { category = "SIRET",        text = "68241759300035" },
+  { category = "Person",       text = "Estelle Hervieu" },
+  { category = "NIR",          text = "281062147893459" },
+  { category = "Location",     text = "Évreux" },
+  { category = "PhoneNumber",  text = "+33 6 23 84 95 06" },
+  { category = "Email",        text = "estelle.hervieu@karel-co.fr" },
+  { category = "Person",       text = "Adrien Boucher" },
+  { category = "Location",     text = "Rouen" },
+  { category = "IBAN_FR",      text = "FR76 1820 6008 6600 2901 2345 678" },
+]
+
+[[doc]]
+file = "statuts_04.txt"
+pii = [
+  { category = "Organization", text = "ALIZÉ MARITIME" },
+  { category = "SIRET",        text = "35719048600041" },
+  { category = "Person",       text = "Pascal Joubert" },
+  { category = "Location",     text = "La Baule" },
+  { category = "PhoneNumber",  text = "06 45 78 12 03" },
+  { category = "Email",        text = "pascal.joubert@alize-maritime.fr" },
+  { category = "Location",     text = "Saint-Nazaire" },
+  { category = "IBAN_FR",      text = "FR76 3000 4015 5500 3012 3456 789" },
+]
+
+[[doc]]
+file = "statuts_05.txt"
+pii = [
+  { category = "Organization", text = "VERMEIL CONSULTING" },
+  { category = "SIRET",        text = "80294716500059" },
+  { category = "Person",       text = "Charlotte Plisson" },
+  { category = "NIR",          text = "287101378921458" },
+  { category = "Location",     text = "Niort" },
+  { category = "PhoneNumber",  text = "07 12 03 94 85" },
+  { category = "Email",        text = "charlotte.plisson@vermeil-consulting.fr" },
+  { category = "Person",       text = "Tariq El Amrani" },
+  { category = "Location",     text = "Poitiers" },
+  { category = "IBAN_FR",      text = "FR76 1009 6185 0000 3123 4567 890" },
+]
+
+[[doc]]
+file = "statuts_06.txt"
+pii = [
+  { category = "Organization", text = "PRIME LOGISTIQUE" },
+  { category = "SIRET",        text = "56821940700067" },
+  { category = "Person",       text = "Cédric Vialatte" },
+  { category = "Location",     text = "Metz" },
+  { category = "PhoneNumber",  text = "06 38 24 19 50" },
+  { category = "Email",        text = "cedric.vialatte@prime-logistique.fr" },
+  { category = "Person",       text = "Élodie Marchais" },
+  { category = "NIR",          text = "274112465783214" },
+  { category = "Location",     text = "Thionville" },
+  { category = "IBAN_FR",      text = "FR76 1027 8061 3300 3234 5678 901" },
+]
+
+[[doc]]
+file = "statuts_07.txt"
+pii = [
+  { category = "Organization", text = "ATLAS GASTRONOMIE" },
+  { category = "SIRET",        text = "73491528600073" },
+  { category = "Person",       text = "Isabelle Mahé" },
+  { category = "Location",     text = "Brest" },
+  { category = "PhoneNumber",  text = "+33 7 04 95 86 73" },
+  { category = "Email",        text = "isabelle.mahe@atlas-gastronomie.fr" },
+  { category = "Person",       text = "Yannick Le Bras" },
+  { category = "NIR",          text = "178021456712390" },
+  { category = "Location",     text = "Lorient" },
+  { category = "IBAN_FR",      text = "FR76 1820 6009 7700 3345 6789 012" },
+]
