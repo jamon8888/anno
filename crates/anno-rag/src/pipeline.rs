@@ -321,6 +321,325 @@ impl Pipeline {
             }
         }
     }
+
+    /// Detect PII in `text`, pseudonymize with the vault, embed the
+    /// tokenized text, and persist as a Memory row. The on-disk text is
+    /// **always** the tokenized form; cleartext never reaches the
+    /// `memories` LanceDB collection.
+    ///
+    /// # Errors
+    /// Returns [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] depending on which layer fails.
+    pub async fn save_memory(
+        &self,
+        text: &str,
+        kind: Option<crate::memory::MemoryKind>,
+        session_id: Option<String>,
+    ) -> Result<SavedMemory> {
+        let entities = self.detector_get_or_init()?.detect(text)?;
+        let (tokenized, token_refs) =
+            self.vault.pseudonymize_with_refs(text, &entities).await?;
+
+        let mut embedding = self
+            .embedder()
+            .await?
+            .embed_batch(std::slice::from_ref(&tokenized))?;
+        let embedding = embedding.pop().ok_or_else(|| {
+            Error::Embed("embed_batch returned no vector for memory".into())
+        })?;
+
+        let now = chrono::Utc::now();
+        let id = crate::memory::MemoryId::new();
+        let m = crate::memory::Memory {
+            id: id.clone(),
+            session_id,
+            kind: kind.unwrap_or(crate::memory::MemoryKind::Context),
+            text: tokenized.clone(),
+            created_at: now,
+            accessed_at: now,
+            valid_from: now,
+            valid_to: None,
+            embedding,
+            token_refs: token_refs.clone(),
+            entity_refs: vec![],
+        };
+
+        self.store.memory_insert(&m).await?;
+
+        Ok(SavedMemory {
+            id,
+            redacted_text: tokenized,
+            token_refs,
+        })
+    }
+
+    /// Hybrid recall: detect + pseudonymize the query, embed (e5 query
+    /// prefix), run the dense+FTS RRF-reranked search on the `memories`
+    /// table, optionally filter by `session_id` / `kinds`, rehydrate.
+    ///
+    /// `top_k` is the maximum returned. The search oversamples by 2× to
+    /// give the filter some headroom; the final result is truncated.
+    ///
+    /// # Errors
+    /// Returns [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] depending on which layer fails.
+    pub async fn recall_memory(
+        &self,
+        query: &str,
+        top_k: usize,
+        session_id: Option<String>,
+        kinds: Option<Vec<crate::memory::MemoryKind>>,
+    ) -> Result<Vec<crate::memory::MemoryHit>> {
+        let entities = self.detector_get_or_init()?.detect(query)?;
+        let (tokenized_query, _) =
+            self.vault.pseudonymize_with_refs(query, &entities).await?;
+        let query_vec = self.embedder().await?.embed_query(&tokenized_query)?;
+
+        let mut raw = self
+            .store
+            .memories_hybrid_search(&query_vec, &tokenized_query, top_k.saturating_mul(2))
+            .await?;
+
+        if let Some(allowed) = &kinds {
+            raw.retain(|h| allowed.iter().any(|k| *k == h.kind));
+        }
+        if let Some(s) = &session_id {
+            // Match the session OR rows with no session (cross-session
+            // facts shouldn't be hidden by a per-session recall).
+            raw.retain(|h| h.session_id.as_deref() == Some(s.as_str()) || h.session_id.is_none());
+        }
+        raw.truncate(top_k);
+
+        let mut out: Vec<crate::memory::MemoryHit> = Vec::with_capacity(raw.len());
+        for row in raw {
+            let rehydrated = self.rehydrate(&row.text_tokenized).await?;
+            out.push(crate::memory::MemoryHit {
+                id: row.id,
+                text: rehydrated.text,
+                kind: row.kind,
+                created_at: row.created_at,
+                score: row.score,
+            });
+        }
+        Ok(out)
+    }
+
+    /// GDPR Art. 17 erasure on a Memory row.
+    ///
+    /// Either `id` OR `query` must be set (not both, not neither). When
+    /// `query` is set, runs a hybrid recall and forgets up to `limit`
+    /// rows. When `id` is set, `limit` is ignored.
+    ///
+    /// Cascade semantics: for every `TokenRef` on a deleted row, the
+    /// vault entry is purged ONLY if no other memory row references it.
+    /// This avoids breaking rehydration of co-occurring memories that
+    /// reference the same pseudonym.
+    ///
+    /// When `dry_run` is true, returns the list of ids that *would* be
+    /// forgotten without mutating either the memories table or the vault.
+    ///
+    /// # Errors
+    /// Returns [`Error::Memory`] for bad arguments (neither/both id+query),
+    /// [`Error::Store`] on memories-table failures, [`Error::Vault`] on
+    /// cascade failures.
+    pub async fn forget_memory(
+        &self,
+        id: Option<crate::memory::MemoryId>,
+        query: Option<String>,
+        limit: usize,
+        dry_run: bool,
+    ) -> Result<ForgetResult> {
+        let targets: Vec<crate::memory::Memory> = match (id, query) {
+            (Some(mid), None) => self
+                .store
+                .memory_get(&mid)
+                .await?
+                .into_iter()
+                .collect(),
+            (None, Some(q)) => {
+                let hits = self.recall_memory(&q, limit, None, None).await?;
+                let mut out = Vec::with_capacity(hits.len());
+                for h in hits.iter().take(limit) {
+                    let uid = uuid::Uuid::parse_str(&h.id)
+                        .map_err(|e| Error::Memory(format!("bad id: {e}")))?;
+                    if let Some(m) =
+                        self.store.memory_get(&crate::memory::MemoryId(uid)).await?
+                    {
+                        out.push(m);
+                    }
+                }
+                out
+            }
+            (Some(_), Some(_)) => {
+                return Err(Error::Memory(
+                    "exactly one of id / query must be set, not both".into(),
+                ));
+            }
+            (None, None) => {
+                return Err(Error::Memory(
+                    "exactly one of id / query must be set".into(),
+                ));
+            }
+        };
+
+        if dry_run {
+            return Ok(ForgetResult {
+                forgotten_ids: targets.iter().map(|t| t.id.as_string()).collect(),
+                vault_tokens_purged: 0,
+            });
+        }
+
+        // Snapshot candidate tokens BEFORE the deletes, since
+        // token_reference_count must run after deletion to count the
+        // remaining references (which excludes the target rows).
+        let mut candidate_tokens: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for t in &targets {
+            for r in &t.token_refs {
+                candidate_tokens.insert(r.token.clone());
+            }
+        }
+
+        let mut forgotten_ids = Vec::with_capacity(targets.len());
+        for t in &targets {
+            self.store.memory_delete_by_id(&t.id).await?;
+            forgotten_ids.push(t.id.as_string());
+        }
+
+        let mut purged = 0usize;
+        for token in candidate_tokens {
+            let count = self.store.token_reference_count(&token).await?;
+            if count == 0 {
+                // Reuse the v0.4 vault primitive — Vault::forget takes
+                // either the original value or the token, and returns
+                // Some(RemovedMapping) iff a vault entry actually went away.
+                if self.vault.forget(&token).await?.is_some() {
+                    purged += 1;
+                }
+            }
+        }
+
+        Ok(ForgetResult {
+            forgotten_ids,
+            vault_tokens_purged: purged,
+        })
+    }
+}
+
+/// Result returned by [`Pipeline::forget_memory`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ForgetResult {
+    /// Stringified ids of memory rows that were deleted (or would be, when
+    /// `dry_run` is true).
+    pub forgotten_ids: Vec<String>,
+    /// Number of vault entries actually purged. Always 0 when `dry_run`.
+    pub vault_tokens_purged: usize,
+}
+
+/// One page returned by [`Pipeline::list_memories`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ListPage {
+    /// Rehydrated hits, ordered by `created_at` DESC.
+    pub items: Vec<crate::memory::MemoryHit>,
+    /// Cursor to feed to the next call to get the following page. RFC 3339
+    /// timestamp of the row immediately after the last item on this page.
+    /// `None` when the result set is exhausted.
+    pub next_cursor: Option<String>,
+}
+
+impl Pipeline {
+    /// Cursor-paginated list of memories. Filters by optional session +
+    /// kind; orders by `created_at` DESC; rehydrates each row's text.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] / [`Error::Vault`] on backend failures.
+    pub async fn list_memories(
+        &self,
+        session_id: Option<String>,
+        kind: Option<crate::memory::MemoryKind>,
+        limit: usize,
+        cursor: Option<String>,
+    ) -> Result<ListPage> {
+        let kind_str = kind.map(|k| match k {
+            crate::memory::MemoryKind::Fact => "fact",
+            crate::memory::MemoryKind::Preference => "preference",
+            crate::memory::MemoryKind::Reference => "reference",
+            crate::memory::MemoryKind::Context => "context",
+        });
+        let (rows, next_cursor) = self
+            .store
+            .memory_list(
+                session_id.as_deref(),
+                kind_str,
+                limit,
+                cursor.as_deref(),
+            )
+            .await?;
+
+        let mut items: Vec<crate::memory::MemoryHit> = Vec::with_capacity(rows.len());
+        for m in rows {
+            let rehydrated = self.rehydrate(&m.text).await?;
+            items.push(crate::memory::MemoryHit {
+                id: m.id.as_string(),
+                text: rehydrated.text,
+                kind: m.kind,
+                created_at: m.created_at.to_rfc3339(),
+                score: 0.0,
+            });
+        }
+        Ok(ListPage { items, next_cursor })
+    }
+
+    /// Run a single compaction pass on the memories table. Reclaims
+    /// tombstoned bytes from prior `forget_memory` calls. Suitable for
+    /// admin-triggered compaction; the background ticker (see
+    /// [`Self::spawn_compaction_task`]) runs this on a 24h interval by
+    /// default.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on optimize failure.
+    pub async fn compact_now(&self) -> Result<()> {
+        let min_age = std::time::Duration::from_secs(self.cfg.compaction_min_age_secs);
+        self.store.optimize_memories(min_age).await
+    }
+
+    /// Spawn a tokio task that calls [`Self::compact_now`] on a fixed
+    /// interval (configurable via `compaction_interval_secs`, default 24h).
+    /// The first tick is skipped so startup is cheap.
+    ///
+    /// Failures are logged at `target = "anno_rag::memory::audit"` with
+    /// `event = "compaction_failed"` — the ticker continues. The returned
+    /// `JoinHandle` is detached unless the caller stores it; the tokio
+    /// runtime cancels detached tasks at shutdown, which is acceptable
+    /// for v0.1.
+    pub fn spawn_compaction_task(self: std::sync::Arc<Self>) -> tokio::task::JoinHandle<()> {
+        let interval = std::time::Duration::from_secs(self.cfg.compaction_interval_secs);
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            ticker.tick().await; // skip the immediate fire
+            loop {
+                ticker.tick().await;
+                if let Err(e) = self.compact_now().await {
+                    tracing::warn!(
+                        target: "anno_rag::memory::audit",
+                        event = "compaction_failed",
+                        "{e}"
+                    );
+                }
+            }
+        })
+    }
+}
+
+/// Receipt returned by [`Pipeline::save_memory`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SavedMemory {
+    /// Newly minted memory id.
+    pub id: crate::memory::MemoryId,
+    /// Tokenized form of the input text (what got persisted).
+    pub redacted_text: String,
+    /// `(category, token)` pairs minted for the GDPR Art. 17 cascade.
+    pub token_refs: Vec<crate::memory::TokenRef>,
 }
 
 /// Receipt returned by [`Pipeline::forget`]. Suitable for inclusion in an

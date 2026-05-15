@@ -13,6 +13,7 @@ pub mod eval;
 pub mod ingest;
 pub mod mcp;
 pub(crate) mod ocr;
+pub mod memory;
 pub mod pii_eval;
 pub mod pipeline;
 pub mod store;

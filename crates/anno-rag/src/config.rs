@@ -52,6 +52,44 @@ pub struct AnnoRagConfig {
     /// degenerate (NaN) vectors on CPU — opt-in until numerically stable.
     #[serde(default)]
     pub embedder_dtype: Option<String>,
+
+    /// Name of the LanceDB collection that stores memories (v0.1 default
+    /// `"memories"`). Lives alongside the `chunks` documents table.
+    #[serde(default = "default_memory_collection_name")]
+    pub memory_collection_name: String,
+
+    /// Embedding dimension for memory vectors. Matches `embed_dim` by
+    /// default (384 for e5-small) but kept independent so the memory
+    /// store can migrate to a different embedder than documents.
+    #[serde(default = "default_memory_embedding_dim")]
+    pub memory_embedding_dim: usize,
+
+    /// Interval between background compactions (seconds). Default: 24h.
+    /// Drives the GDPR Art. 17 erasure SLO — physical bytes reclaim
+    /// happens within at most this interval after `forget_memory`.
+    #[serde(default = "default_compaction_interval_secs")]
+    pub compaction_interval_secs: u64,
+
+    /// Minimum age of a tombstone before compaction reclaims it (seconds).
+    /// Default: 1h. Prevents thrashing on a hot delete-then-write loop.
+    #[serde(default = "default_compaction_min_age_secs")]
+    pub compaction_min_age_secs: u64,
+}
+
+fn default_memory_collection_name() -> String {
+    "memories".to_string()
+}
+
+fn default_memory_embedding_dim() -> usize {
+    384
+}
+
+fn default_compaction_interval_secs() -> u64 {
+    24 * 3600
+}
+
+fn default_compaction_min_age_secs() -> u64 {
+    3600
 }
 
 fn default_vector_index_threshold() -> usize {
@@ -81,6 +119,10 @@ impl Default for AnnoRagConfig {
             enable_ocr: false,
             tesseract_path: None,
             embedder_dtype: None,
+            memory_collection_name: default_memory_collection_name(),
+            memory_embedding_dim: default_memory_embedding_dim(),
+            compaction_interval_secs: default_compaction_interval_secs(),
+            compaction_min_age_secs: default_compaction_min_age_secs(),
         }
     }
 }
@@ -153,6 +195,8 @@ mod tests {
         assert!(!c.enable_ocr);
         assert!(c.tesseract_path.is_none());
         assert!(c.embedder_dtype.is_none());
+        assert_eq!(c.memory_collection_name, "memories");
+        assert_eq!(c.memory_embedding_dim, 384);
     }
 
     #[test]
@@ -164,6 +208,8 @@ mod tests {
         assert!(!c.enable_ocr);
         assert!(c.tesseract_path.is_none());
         assert!(c.embedder_dtype.is_none());
+        assert_eq!(c.memory_collection_name, "memories");
+        assert_eq!(c.memory_embedding_dim, 384);
     }
 
     #[test]

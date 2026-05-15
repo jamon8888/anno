@@ -4,6 +4,66 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### v0.7 anno-memory v0.1 — PII-safe session memory
+
+### Added
+- **`memory` module** (`crates/anno-rag/src/memory.rs`) — types: `Memory`,
+  `MemoryId` (v7 UUID, time-sortable), `MemoryKind` (Fact/Preference/
+  Reference/Context), `TokenRef`, `MemoryHit`, `MemoryHitRow`.
+- **`memories` LanceDB collection** with 11 columns — 7 active v0.1
+  (id, session_id, kind, text, created_at, accessed_at, embedding,
+  token_refs) + 3 forward-compat for v0.2 (valid_from, valid_to,
+  entity_refs).
+- **`Store::memory_insert / memory_get / memory_delete_by_id`** — CRUD over
+  the second LanceDB collection. Arrow batch helpers handle the
+  `List<Struct{label, token}>` for `token_refs`.
+- **Scalar indexes** — `setup_memory_indexes` creates BTree on
+  `created_at` + `session_id`, Bitmap on `kind`, LabelList on
+  `token_refs` + `entity_refs`. Idempotent; requires ≥1 row.
+- **Hybrid search over memories** — `Store::build_memories_fts_index`
+  (French-tokenized FTS on `text`) + `Store::memories_hybrid_search`
+  (dense vector + FTS via `Arc<RRFReranker>`), mirroring the chunks
+  retrieval pattern v0.6 landed.
+- **`Pipeline::save_memory(text, kind?, session_id?)`** — detect →
+  pseudonymize → embed → persist. The on-disk text is ALWAYS the
+  tokenized form. Returns `SavedMemory { id, redacted_text, token_refs }`.
+- **`Pipeline::recall_memory(query, top_k, session_id?, kinds?)`** —
+  hybrid search with 2× oversample, kind+session filter, vault
+  rehydrate at the boundary.
+- **`Pipeline::forget_memory(id | query, limit, dry_run)`** —
+  RGPD Art. 17 erasure with vault-token cascade. Reuses the v0.4
+  `Vault::forget` primitive; vault entries are purged only when the
+  token's `Store::token_reference_count` drops to zero.
+- **`Pipeline::list_memories(session_id?, kind?, limit, cursor?)`** —
+  cursor-paginated list ordered by `created_at` DESC.
+- **`Pipeline::compact_now` + `spawn_compaction_task`** — daily
+  `Table::optimize(All)` to satisfy the 24h physical-erasure SLO.
+- **MCP tools** — `memory_save / memory_recall / memory_forget /
+  memory_list` on `AnnoRagServer`, each emitting a structured
+  `tracing::info!` audit event at `target = "anno_rag::memory::audit"`
+  with `tool`, `result`, `duration_ms`, and (where applicable) row
+  counts. Deployers can pipe that target to the Art. 30 audit sink.
+- **Property test** — `tests/memory_proptest.rs` (50 cases,
+  `#[ignore]`) verifies the save/forget invariant: ≤1 row per forget,
+  no panic, no store corruption.
+- **Vault::pseudonymize_with_refs** — returns the
+  `(text, Vec<TokenRef>)` pair needed by `save_memory` for the
+  cascade payload.
+- **`Error::Memory`** variant for bad-argument paths in the memory
+  layer.
+
+### Changed
+- `AnnoRagConfig` gains `memory_collection_name`, `memory_embedding_dim`,
+  `compaction_interval_secs`, `compaction_min_age_secs`.
+- `Store::open` opens both the `chunks` and `memories` tables via
+  the new `open_or_create_table` helper.
+
+### Deferred
+- **LoCoMo subset eval baseline** (Task 13 of the plan) — `bench_locomo`
+  + 50-item conversation/question fixture + recorded `accuracy@1` /
+  `latency_p95_ms` baseline. The v0.1 surface ships without the eval
+  gate; baseline lands in a follow-up PR.
+
 ### v0.4 GDPR core — rights of data subjects + persistent audit
 
 ### Added

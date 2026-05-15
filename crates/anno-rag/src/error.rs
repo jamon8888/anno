@@ -48,6 +48,10 @@ pub enum Error {
     #[error("audit: {0}")]
     Audit(String),
 
+    /// Memory-layer logic error — bad arguments, malformed id, missing row.
+    #[error("memory: {0}")]
+    Memory(String),
+
     /// I/O error from std.
     #[error(transparent)]
     Io(#[from] std::io::Error),

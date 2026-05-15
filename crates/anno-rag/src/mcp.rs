@@ -106,6 +106,125 @@ struct VaultStatsResult {
     categories: std::collections::HashMap<String, u32>,
 }
 
+// ---- Memory tool param + result types (T10) ----
+
+/// Parameters for the `memory_save` tool.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct MemorySaveParams {
+    /// Plaintext memory body. PII is tokenized via the vault before persist.
+    pub text: String,
+    /// Memory category — one of `fact`, `preference`, `reference`, `context`.
+    /// Defaults to `context` when absent.
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// Cowork session id (optional).
+    #[serde(default)]
+    pub session_id: Option<String>,
+}
+
+fn parse_kind(s: &str) -> Option<crate::memory::MemoryKind> {
+    match s {
+        "fact" => Some(crate::memory::MemoryKind::Fact),
+        "preference" => Some(crate::memory::MemoryKind::Preference),
+        "reference" => Some(crate::memory::MemoryKind::Reference),
+        "context" => Some(crate::memory::MemoryKind::Context),
+        _ => None,
+    }
+}
+
+#[derive(Serialize)]
+struct MemorySaveResultWire {
+    id: String,
+    redacted_text: String,
+    token_count: usize,
+}
+
+/// Parameters for the `memory_recall` tool.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct MemoryRecallParams {
+    /// Free-text query. Pseudonymized at the boundary before search.
+    pub query: String,
+    /// Max hits to return.
+    #[serde(default = "default_top_k")]
+    pub top_k: usize,
+    /// Optional per-session filter.
+    #[serde(default)]
+    pub session_id: Option<String>,
+    /// Optional category filter. Strings matching `fact|preference|reference|context`.
+    #[serde(default)]
+    pub kinds: Option<Vec<String>>,
+}
+
+#[derive(Serialize)]
+struct MemoryHitWire {
+    id: String,
+    text: String,
+    kind: String,
+    created_at: String,
+    score: f32,
+}
+
+#[derive(Serialize)]
+struct MemoryRecallResultWire {
+    hits: Vec<MemoryHitWire>,
+}
+
+/// Parameters for the `memory_forget` tool.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct MemoryForgetParams {
+    /// Forget by exact memory id (stringified UUID).
+    #[serde(default)]
+    pub id: Option<String>,
+    /// Forget the top-`limit` hits of this hybrid-recall query.
+    #[serde(default)]
+    pub query: Option<String>,
+    /// Cap on rows to forget when using `query`.
+    #[serde(default = "default_forget_limit")]
+    pub limit: usize,
+    /// Preview which rows would be forgotten without mutating anything.
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+fn default_forget_limit() -> usize {
+    5
+}
+
+#[derive(Serialize)]
+struct MemoryForgetResultWire {
+    forgotten_ids: Vec<String>,
+    vault_tokens_purged: usize,
+    note: String,
+}
+
+/// Parameters for the `memory_list` tool.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct MemoryListParams {
+    /// Optional per-session filter.
+    #[serde(default)]
+    pub session_id: Option<String>,
+    /// Optional category filter — `fact|preference|reference|context`.
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// Page size.
+    #[serde(default = "default_list_limit")]
+    pub limit: usize,
+    /// Pagination cursor — the RFC 3339 `created_at` of the previous
+    /// page's last row.
+    #[serde(default)]
+    pub cursor: Option<String>,
+}
+
+fn default_list_limit() -> usize {
+    20
+}
+
+#[derive(Serialize)]
+struct MemoryListResultWire {
+    items: Vec<MemoryHitWire>,
+    next_cursor: Option<String>,
+}
+
 // ---- Tool router ----
 
 #[tool_router]
@@ -193,6 +312,213 @@ impl AnnoRagServer {
         };
         serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
     }
+
+    /// Save a memory. PII is tokenized through the local vault before storage.
+    #[tool(
+        description = "Save a memory. PII is tokenized through the local vault before storage. Returns the new id and the redacted text actually persisted."
+    )]
+    async fn memory_save(
+        &self,
+        Parameters(p): Parameters<MemorySaveParams>,
+    ) -> String {
+        let start = std::time::Instant::now();
+        let kind = p.kind.as_deref().and_then(parse_kind);
+        let r = self
+            .pipeline
+            .save_memory(&p.text, kind, p.session_id)
+            .await;
+        let elapsed = start.elapsed().as_millis() as u64;
+        match r {
+            Ok(s) => {
+                tracing::info!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_save",
+                    result = "ok",
+                    duration_ms = elapsed,
+                    ""
+                );
+                let wire = MemorySaveResultWire {
+                    id: s.id.as_string(),
+                    redacted_text: s.redacted_text,
+                    token_count: s.token_refs.len(),
+                };
+                serde_json::to_string_pretty(&wire)
+                    .unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_save",
+                    result = "error",
+                    duration_ms = elapsed,
+                    "{e}"
+                );
+                format!("Error: {e}")
+            }
+        }
+    }
+
+    /// Hybrid recall over memories. Returns rehydrated plaintext.
+    #[tool(
+        description = "Recall memories by hybrid (vector + FTS) search. Returns rehydrated plaintext for the caller's tenant."
+    )]
+    async fn memory_recall(
+        &self,
+        Parameters(p): Parameters<MemoryRecallParams>,
+    ) -> String {
+        let start = std::time::Instant::now();
+        let kinds = p.kinds.as_ref().map(|v| {
+            v.iter().filter_map(|k| parse_kind(k)).collect::<Vec<_>>()
+        });
+        let r = self
+            .pipeline
+            .recall_memory(&p.query, p.top_k, p.session_id, kinds)
+            .await;
+        let elapsed = start.elapsed().as_millis() as u64;
+        match r {
+            Ok(hits) => {
+                tracing::info!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_recall",
+                    result = "ok",
+                    duration_ms = elapsed,
+                    n = hits.len(),
+                    ""
+                );
+                let wire = MemoryRecallResultWire {
+                    hits: hits
+                        .into_iter()
+                        .map(|h| MemoryHitWire {
+                            id: h.id,
+                            text: h.text,
+                            kind: format!("{:?}", h.kind).to_lowercase(),
+                            created_at: h.created_at,
+                            score: h.score,
+                        })
+                        .collect(),
+                };
+                serde_json::to_string_pretty(&wire)
+                    .unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_recall",
+                    result = "error",
+                    duration_ms = elapsed,
+                    "{e}"
+                );
+                format!("Error: {e}")
+            }
+        }
+    }
+
+    /// Forget memories by id or by query. Cascades vault tokens.
+    #[tool(
+        description = "Forget memories by id or by query. Cascades to vault tokens no longer referenced. Returns the SLO note that physical erasure may take up to 24h."
+    )]
+    async fn memory_forget(
+        &self,
+        Parameters(p): Parameters<MemoryForgetParams>,
+    ) -> String {
+        let id = match &p.id {
+            Some(s) => match uuid::Uuid::parse_str(s) {
+                Ok(u) => Some(crate::memory::MemoryId(u)),
+                Err(e) => return format!("Error: bad id: {e}"),
+            },
+            None => None,
+        };
+        let start = std::time::Instant::now();
+        let r = self
+            .pipeline
+            .forget_memory(id, p.query, p.limit, p.dry_run)
+            .await;
+        let elapsed = start.elapsed().as_millis() as u64;
+        match r {
+            Ok(res) => {
+                tracing::info!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_forget",
+                    result = "ok",
+                    duration_ms = elapsed,
+                    n = res.forgotten_ids.len(),
+                    ""
+                );
+                let wire = MemoryForgetResultWire {
+                    forgotten_ids: res.forgotten_ids,
+                    vault_tokens_purged: res.vault_tokens_purged,
+                    note: "logically forgotten; physical erasure within 24h".into(),
+                };
+                serde_json::to_string_pretty(&wire)
+                    .unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_forget",
+                    result = "error",
+                    duration_ms = elapsed,
+                    "{e}"
+                );
+                format!("Error: {e}")
+            }
+        }
+    }
+
+    /// List memories with cursor pagination.
+    #[tool(
+        description = "List memories with optional session/kind filter and cursor pagination."
+    )]
+    async fn memory_list(
+        &self,
+        Parameters(p): Parameters<MemoryListParams>,
+    ) -> String {
+        let start = std::time::Instant::now();
+        let kind = p.kind.as_deref().and_then(parse_kind);
+        let r = self
+            .pipeline
+            .list_memories(p.session_id, kind, p.limit, p.cursor)
+            .await;
+        let elapsed = start.elapsed().as_millis() as u64;
+        match r {
+            Ok(page) => {
+                tracing::info!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_list",
+                    result = "ok",
+                    duration_ms = elapsed,
+                    n = page.items.len(),
+                    ""
+                );
+                let wire = MemoryListResultWire {
+                    items: page
+                        .items
+                        .into_iter()
+                        .map(|h| MemoryHitWire {
+                            id: h.id,
+                            text: h.text,
+                            kind: format!("{:?}", h.kind).to_lowercase(),
+                            created_at: h.created_at,
+                            score: h.score,
+                        })
+                        .collect(),
+                    next_cursor: page.next_cursor,
+                };
+                serde_json::to_string_pretty(&wire)
+                    .unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_list",
+                    result = "error",
+                    duration_ms = elapsed,
+                    "{e}"
+                );
+                format!("Error: {e}")
+            }
+        }
+    }
 }
 
 #[tool_handler]
@@ -201,7 +527,9 @@ impl ServerHandler for AnnoRagServer {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
             .with_instructions(
                 "anno-rag MCP server. Tools: search (pseudonymized retrieval), \
-                 rehydrate (restore originals), detect (dry-run scan), vault_stats.",
+                 rehydrate (restore originals), detect (dry-run scan), vault_stats, \
+                 memory_save / memory_recall / memory_forget / memory_list \
+                 (PII-safe session memory; GDPR Art. 17 cascades to vault tokens).",
             )
             .with_server_info(Implementation::new(
                 self.cfg.mcp_server_name.clone(),
