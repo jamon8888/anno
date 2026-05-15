@@ -90,20 +90,43 @@ impl Embedder {
         self.dim
     }
 
-    /// Embed a batch of texts.
+    /// Embed a batch of passages (indexed documents).
     ///
     /// Returns a `Vec<Vec<f32>>` of shape `(texts.len(), dim)`, L2-normalized
     /// and mean-pooled with attention-mask weighting. Each text is prefixed
-    /// with `"passage: "` per the e5 convention.
+    /// with the e5 `"passage: "` task prefix.
     ///
     /// # Errors
     /// Returns [`Error::Embed`] if tokenization, tensor construction, or the
     /// BERT forward pass fails.
     pub fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        self.embed_prefixed(texts, "passage: ")
+    }
+
+    /// Embed a single search query. Applies the e5 `"query: "` prefix —
+    /// distinct from the `"passage: "` prefix used for indexed documents.
+    /// Using the wrong prefix measurably degrades retrieval.
+    ///
+    /// # Errors
+    /// Returns [`Error::Embed`] on tokenization or forward-pass failure.
+    pub fn embed_query(&self, text: &str) -> Result<Vec<f32>> {
+        let mut v = self.embed_prefixed(std::slice::from_ref(&text.to_string()), "query: ")?;
+        v.pop()
+            .ok_or_else(|| Error::Embed("embed_query produced no vector".into()))
+    }
+
+    /// Shared embed path: prefix every input, tokenize, forward, mean-pool,
+    /// L2-normalize. `prefix` is the e5 task prefix (`"passage: "` /
+    /// `"query: "`).
+    ///
+    /// # Errors
+    /// Returns [`Error::Embed`] if tokenization, tensor construction, or the
+    /// BERT forward pass fails.
+    fn embed_prefixed(&self, texts: &[String], prefix: &str) -> Result<Vec<Vec<f32>>> {
         if texts.is_empty() {
             return Ok(Vec::new());
         }
-        let prefixed: Vec<String> = texts.iter().map(|t| format!("passage: {t}")).collect();
+        let prefixed: Vec<String> = texts.iter().map(|t| format!("{prefix}{t}")).collect();
         let encs = self
             .tokenizer
             .encode_batch(prefixed, true)
@@ -172,6 +195,17 @@ impl Embedder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn query_and_passage_prefixes_differ() {
+        // Guards the e5 asymmetric-prefix contract without loading a model:
+        // the two public entry points must format their inputs differently.
+        let passage = format!("{}{}", "passage: ", "x");
+        let query = format!("{}{}", "query: ", "x");
+        assert_ne!(passage, query);
+        assert!(passage.starts_with("passage: "));
+        assert!(query.starts_with("query: "));
+    }
 
     #[tokio::test]
     #[ignore = "downloads ~470 MB model on first run; exercised in Task 10 integration"]

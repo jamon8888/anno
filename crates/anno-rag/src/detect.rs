@@ -29,6 +29,8 @@ struct FrPatterns {
     siret: Regex,
     iban_fr: Regex,
     phone_fr: Regex,
+    email: Regex,
+    person_fr_honorific: Regex,
 }
 
 impl FrPatterns {
@@ -47,8 +49,33 @@ impl FrPatterns {
             iban_fr: Regex::new(r"\bFR\d{2}\s?(?:[A-Z0-9]{4}\s?){5}[A-Z0-9]{3}\b")
                 .expect("iban regex is a literal"),
             // FR phone — +33 / 0-prefix, 10-digit, optional separators.
-            phone_fr: Regex::new(r"\b(?:\+33[\s\.\-]?|0)[1-9](?:[\s\.\-]?\d{2}){4}\b")
-                .expect("phone regex is a literal"),
+            // The `\b` before `0` keeps the domestic branch anchored to a
+            // word boundary; the `+33` branch can't use a leading `\b`
+            // (the Rust `regex` crate has no lookbehind, and `\b\+` only
+            // matches when preceded by a word char, missing every
+            // start-of-line `+33`). The trailing `\b` still blocks
+            // arbitrary 10-digit-run extension, and `+33` itself acts as
+            // a structural guard against being grabbed mid-number.
+            phone_fr: Regex::new(
+                r"(?:\+33[\s\.\-]?[1-9]|\b0[1-9])(?:[\s\.\-]?\d{2}){4}\b",
+            )
+            .expect("phone regex is a literal"),
+            // Email — pragmatic RFC-5321-ish: local-part @ domain . TLD.
+            // Contract-style addresses only; quoted local parts are out of scope.
+            email: Regex::new(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+                .expect("email regex is a literal"),
+            // FR honorific-prefixed person — `Monsieur Julien Marchand`,
+            // `Madame Anne-Sophie Perrin`, `Maître Hugo Faure`, `Mme Inès
+            // Coulibaly`. Capture group 1 is the name (2+ capitalised words,
+            // accents/hyphens/apostrophes allowed). GLiNER2-Fastino under-
+            // detects names sitting right after these French honorifics, so
+            // we complement the NER tier here. Lowercase function words
+            // ("le", "la") after the honorific block role titles like
+            // `Monsieur le Président` from being mistaken for a person.
+            person_fr_honorific: Regex::new(
+                r"(?:Monsieur|Madame|Mademoiselle|Mme\.?|Mlle\.?|M\.|Maître|Me\.?)\s+(\p{Lu}[\p{L}'\-]+(?:\s+\p{Lu}[\p{L}'\-]+)+)",
+            )
+            .expect("person honorific regex is a literal"),
         })
     }
 }
@@ -82,6 +109,83 @@ fn luhn(s: &str) -> bool {
     total.is_multiple_of(10)
 }
 
+/// Model-free PII detection: the French regex pattern layer only
+/// (NIR, SIRET with Luhn check, IBAN-FR, French phone, email).
+///
+/// This is the layer `Detector::detect` runs before the NER model. It is
+/// exposed so callers that must not pay the GLiNER2 model load — the
+/// model-free eval tier — can score the regex categories on their own.
+#[must_use]
+pub fn detect_patterns(text: &str) -> Vec<DetectedEntity> {
+    let p = FrPatterns::get();
+    let mut all = Vec::new();
+    for m in p.nir.find_iter(text) {
+        all.push(DetectedEntity {
+            original: m.as_str().to_string(),
+            start: m.start(),
+            end: m.end(),
+            category: EntityCategory::Custom("NIR".into()),
+            confidence: 1.0,
+            source: DetectionSource::Pattern,
+        });
+    }
+    for m in p.siret.find_iter(text) {
+        if luhn(m.as_str()) {
+            all.push(DetectedEntity {
+                original: m.as_str().to_string(),
+                start: m.start(),
+                end: m.end(),
+                category: EntityCategory::Custom("SIRET".into()),
+                confidence: 1.0,
+                source: DetectionSource::Pattern,
+            });
+        }
+    }
+    for m in p.iban_fr.find_iter(text) {
+        all.push(DetectedEntity {
+            original: m.as_str().to_string(),
+            start: m.start(),
+            end: m.end(),
+            category: EntityCategory::Custom("IBAN_FR".into()),
+            confidence: 1.0,
+            source: DetectionSource::Pattern,
+        });
+    }
+    for m in p.phone_fr.find_iter(text) {
+        all.push(DetectedEntity {
+            original: m.as_str().to_string(),
+            start: m.start(),
+            end: m.end(),
+            category: EntityCategory::PhoneNumber,
+            confidence: 0.95,
+            source: DetectionSource::Pattern,
+        });
+    }
+    for m in p.email.find_iter(text) {
+        all.push(DetectedEntity {
+            original: m.as_str().to_string(),
+            start: m.start(),
+            end: m.end(),
+            category: EntityCategory::Email,
+            confidence: 1.0,
+            source: DetectionSource::Pattern,
+        });
+    }
+    for caps in p.person_fr_honorific.captures_iter(text) {
+        if let Some(name) = caps.get(1) {
+            all.push(DetectedEntity {
+                original: name.as_str().to_string(),
+                start: name.start(),
+                end: name.end(),
+                category: EntityCategory::Person,
+                confidence: 0.95,
+                source: DetectionSource::Pattern,
+            });
+        }
+    }
+    all
+}
+
 /// Aggregate PII detector: FR regex pack + anno NER.
 pub struct Detector {
     ner: GLiNER2Fastino,
@@ -99,52 +203,8 @@ impl Detector {
     /// Detect entities in `text`. Returns spans sorted by start, deduplicated
     /// to non-overlapping (longer span wins on overlap; Pattern beats Ner on tie).
     pub fn detect(&self, text: &str) -> Result<Vec<DetectedEntity>> {
-        let mut all = Vec::new();
-
-        // 1. FR regex set.
-        let p = FrPatterns::get();
-        for m in p.nir.find_iter(text) {
-            all.push(DetectedEntity {
-                original: m.as_str().to_string(),
-                start: m.start(),
-                end: m.end(),
-                category: EntityCategory::Custom("NIR".into()),
-                confidence: 1.0,
-                source: DetectionSource::Pattern,
-            });
-        }
-        for m in p.siret.find_iter(text) {
-            if luhn(m.as_str()) {
-                all.push(DetectedEntity {
-                    original: m.as_str().to_string(),
-                    start: m.start(),
-                    end: m.end(),
-                    category: EntityCategory::Custom("SIRET".into()),
-                    confidence: 1.0,
-                    source: DetectionSource::Pattern,
-                });
-            }
-        }
-        for m in p.iban_fr.find_iter(text) {
-            all.push(DetectedEntity {
-                original: m.as_str().to_string(),
-                start: m.start(),
-                end: m.end(),
-                category: EntityCategory::Custom("IBAN_FR".into()),
-                confidence: 1.0,
-                source: DetectionSource::Pattern,
-            });
-        }
-        for m in p.phone_fr.find_iter(text) {
-            all.push(DetectedEntity {
-                original: m.as_str().to_string(),
-                start: m.start(),
-                end: m.end(),
-                category: EntityCategory::PhoneNumber,
-                confidence: 0.95,
-                source: DetectionSource::Pattern,
-            });
-        }
+        // 1. FR regex set (model-free layer).
+        let mut all = detect_patterns(text);
 
         // 2. anno NER. anno reports *character* offsets; cloakpipe (and Rust
         // string slicing) want *byte* offsets. Build a once-per-doc char→byte
@@ -219,6 +279,37 @@ fn map_anno_category(t: &EntityType) -> EntityCategory {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn email_regex_matches_contract_emails() {
+        let ents = detect_patterns("Contact : claire.fontaine@atelier-numerique.fr pour le suivi.");
+        assert!(
+            ents.iter().any(|e| matches!(e.category, EntityCategory::Email)
+                && e.original == "claire.fontaine@atelier-numerique.fr"),
+            "expected Email entity, got {:?}",
+            ents.iter().map(|e| (&e.category, &e.original)).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn email_regex_rejects_non_emails() {
+        // A bare `@`, and `a@b` with no TLD, must not be detected as emails.
+        let ents = detect_patterns("mention @julien et adresse a@b sans domaine.");
+        assert!(
+            !ents.iter().any(|e| matches!(e.category, EntityCategory::Email)),
+            "no Email entity expected, got {:?}",
+            ents.iter().map(|e| (&e.category, &e.original)).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn detect_patterns_finds_structured_pii_without_model() {
+        // detect_patterns is the model-free regex layer.
+        let text = "IBAN FR76 3000 4000 0500 0612 3456 789, tel 06 12 34 56 78.";
+        let ents = detect_patterns(text);
+        assert!(ents.iter().any(|e| matches!(&e.category, EntityCategory::Custom(s) if s == "IBAN_FR")));
+        assert!(ents.iter().any(|e| matches!(e.category, EntityCategory::PhoneNumber)));
+    }
 
     #[test]
     fn luhn_validates_known_siret() {

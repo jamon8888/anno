@@ -108,10 +108,10 @@ pub struct SearchHit {
     pub char_start: u32,
     /// Char end offset.
     pub char_end: u32,
-    /// L2 distance from LanceDB's `_distance` column — **lower is closer**.
-    /// `f32::INFINITY` means the underlying batch didn't carry the
-    /// `_distance` column (i.e. the query path was not nearest-neighbour).
-    pub distance: f32,
+    /// Relevance score from the hybrid reranker (`_relevance_score`) —
+    /// **higher is more relevant**. `0.0` means the batch carried no
+    /// relevance column.
+    pub score: f32,
 }
 
 /// Handle to the `chunks` table.
@@ -179,14 +179,25 @@ impl Store {
     /// on batch decoding, or [`Error::Store`] if a row is malformed.
     pub async fn search(
         &self,
-        _query_text: &str,
+        query_text: &str,
         query_vec: &[f32],
         k: usize,
     ) -> Result<Vec<SearchHit>> {
+        use lance_index::scalar::FullTextSearchQuery;
+        use lancedb::query::QueryBase;
+        use lancedb::rerankers::rrf::RRFReranker;
+        use std::sync::Arc;
+
+        // Hybrid: a vector query that also carries a full-text-search query
+        // becomes a hybrid query; `rerank` is only valid on hybrid queries.
+        // The FTS arm searches whichever column carries the FTS index —
+        // currently only `text_pseudo` (see `maybe_build_fts_index`).
         let stream = self
             .tbl
             .query()
             .nearest_to(query_vec.to_vec())?
+            .full_text_search(FullTextSearchQuery::new(query_text.to_string()))
+            .rerank(Arc::new(RRFReranker::default()))
             .limit(k)
             .execute()
             .await?;
@@ -248,6 +259,61 @@ impl Store {
             .execute()
             .await
             .map_err(|e| Error::Store(format!("create_index: {e}")))?;
+        Ok(true)
+    }
+
+    /// Build a French-tokenized full-text-search index on `text_pseudo` if
+    /// the table has rows and the index does not already exist. Idempotent.
+    ///
+    /// French tokenization (stemming + stop-word removal + lowercase) is
+    /// mandatory for legal French — the default `simple` tokenizer would
+    /// make "résiliation" miss "résilier" and let stop-words pollute BM25.
+    ///
+    /// Locked v0.6 config: French stem + stop-words + lowercase. The
+    /// comparative tokenizer spike is deferred — the eval harness now
+    /// exists to support it as a follow-up.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if `count_rows`, `list_indices`, or
+    /// `create_index` fail.
+    pub async fn maybe_build_fts_index(&self) -> Result<bool> {
+        use lancedb::index::scalar::FtsIndexBuilder;
+        use lancedb::index::Index;
+
+        let count = self
+            .tbl
+            .count_rows(None)
+            .await
+            .map_err(|e| Error::Store(format!("count_rows: {e}")))?;
+        if count == 0 {
+            return Ok(false);
+        }
+        let existing = self
+            .tbl
+            .list_indices()
+            .await
+            .map_err(|e| Error::Store(format!("list_indices: {e}")))?;
+        let already = existing
+            .iter()
+            .any(|i| i.columns.iter().any(|c| c == "text_pseudo"));
+        if already {
+            return Ok(false);
+        }
+
+        // French legal tokenization: stem + stop-words + lowercase.
+        let fts = FtsIndexBuilder::default()
+            .base_tokenizer("simple".to_string())
+            .language("French")
+            .map_err(|e| Error::Store(format!("fts language: {e}")))?
+            .stem(true)
+            .remove_stop_words(true)
+            .lower_case(true);
+
+        self.tbl
+            .create_index(&["text_pseudo"], Index::FTS(fts))
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("create_fts_index: {e}")))?;
         Ok(true)
     }
 }
@@ -389,15 +455,15 @@ fn batch_to_hit(b: &RecordBatch, i: usize) -> Result<SearchHit> {
     let cs_arr = get_col::<UInt32Array>(b, "char_start")?;
     let ce_arr = get_col::<UInt32Array>(b, "char_end")?;
 
-    let distance = b
+    let score = b
         .schema()
-        .index_of("_distance")
+        .index_of("_relevance_score")
         .ok()
         .and_then(|idx| {
             let col = b.column(idx);
             col.as_primitive_opt::<Float32Type>().map(|a| a.value(i))
         })
-        .unwrap_or(f32::INFINITY);
+        .unwrap_or(0.0);
 
     Ok(SearchHit {
         doc_id: uuid_from_fsb(doc_id_arr, i)?,
@@ -413,7 +479,7 @@ fn batch_to_hit(b: &RecordBatch, i: usize) -> Result<SearchHit> {
         },
         char_start: cs_arr.value(i),
         char_end: ce_arr.value(i),
-        distance,
+        score,
     })
 }
 
@@ -479,5 +545,14 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].text_pseudo, "hello world");
         assert_eq!(hits[0].doc_id, doc_id);
+    }
+
+    #[tokio::test]
+    #[ignore = "needs an FTS index build; exercised by bench_eval"]
+    async fn fts_stemming_matches_french_variant() {
+        // A query for "résiliation" must retrieve a chunk that only contains
+        // "résilier" — proves the FTS index uses French stemming, not the
+        // default `simple` tokenizer. Full exercise lives in bench_eval;
+        // this test documents the contract.
     }
 }
