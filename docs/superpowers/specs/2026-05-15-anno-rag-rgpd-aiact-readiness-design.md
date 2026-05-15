@@ -42,7 +42,27 @@ This document records, with code citations:
 
 ## 2. Gaps
 
-> **Status update (v0.4 GDPR core landed on `feat/v0.4-gdpr-core`, branched off `main`):** gaps G2–G6 are now closed and reclassified as claims C13–C17 below. G1 (Person detector recall) was closed by v0.7. G7 and U1–U13 remain open.
+> **Status update (2026-05-16):**
+> - Code gaps **G1–G6** closed (v0.7 + v0.4 GDPR core). Reclassified as claims C13–C17 below.
+> - Doc gaps **U1, U2, U3, U4, U7, U8, U9, U11, U12, U13** closed v1 (pending DPO + outside-counsel sign-off). See the doc-pack mapping below.
+> - **Still open:** G7 (MCP graceful shutdown — code, ~1 day), U5 (at-rest encryption — operator + v0.5 code), U6 (KMS — v0.5+ code), U10 (detector logging — small code task).
+> - PR-D (anno-memory v0.2, 1/11 tasks shipped on `feat/anno-memory-v0.2`) is paused but unblocked.
+
+### Doc-pack mapping (closed gaps → doc anchors)
+
+| Closed gap | Document |
+|---|---|
+| U1 DPIA | `docs/superpowers/specs/2026-05-15-anno-rag-dpia-v1.md` |
+| U2 lawful basis | `docs/superpowers/specs/2026-05-15-anno-rag-data-subject-pack-v1.md` §1 |
+| U3 Art. 14 notice | same §2 |
+| U4 retention policy | same §3 |
+| U7 AI Act position | `docs/superpowers/specs/2026-05-15-anno-rag-ai-act-position-v1.md` |
+| U8 deployer guide | `docs/runbooks/anno-privacy-gateway-v0.4-deployer-guide.md` |
+| U9 human oversight | `docs/superpowers/specs/2026-05-15-anno-rag-human-oversight-v1.md` |
+| U11 cross-border review | `docs/superpowers/specs/2026-05-15-anno-rag-cross-border-and-subprocessors-v1.md` Part A |
+| U12 sub-processor register | same Part B |
+| U13 breach playbook | `docs/runbooks/anno-rag-breach-playbook-v1.md` |
+| ADRs 1–10 (cross-cutting design rationale) | `docs/adrs/` |
 
 Split into **G — specified but not shipped** (v0.4 GDPR spec is the design; the code is missing) and **U — undefined** (no spec yet).
 
