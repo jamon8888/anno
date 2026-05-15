@@ -35,6 +35,67 @@ use uuid::Uuid;
 /// Name of the chunks table inside the LanceDB index directory.
 pub const TABLE_NAME: &str = "chunks";
 
+/// Build the Arrow schema for the `memories` collection.
+///
+/// 11 columns: 7 always populated in v0.1, 3 forward-compat for v0.2
+/// (`valid_from`, `valid_to`, `entity_refs`), and `embedding` /
+/// `token_refs` carrying the runtime PII-cascade payload.
+#[must_use]
+pub fn memories_schema(embedding_dim: usize) -> Arc<Schema> {
+    let token_ref_struct = DataType::Struct(
+        vec![
+            Field::new("label", DataType::Utf8, false),
+            Field::new("token", DataType::Utf8, false),
+        ]
+        .into(),
+    );
+    Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Utf8, false),
+        Field::new("session_id", DataType::Utf8, true),
+        Field::new("kind", DataType::Utf8, false),
+        Field::new("text", DataType::Utf8, false),
+        Field::new(
+            "created_at",
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+            false,
+        ),
+        Field::new(
+            "accessed_at",
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+            false,
+        ),
+        Field::new(
+            "valid_from",
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+            false,
+        ),
+        Field::new(
+            "valid_to",
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+            true,
+        ),
+        Field::new(
+            "embedding",
+            #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+            DataType::FixedSizeList(
+                Arc::new(Field::new("item", DataType::Float32, true)),
+                embedding_dim as i32,
+            ),
+            false,
+        ),
+        Field::new(
+            "token_refs",
+            DataType::List(Arc::new(Field::new("item", token_ref_struct, true))),
+            false,
+        ),
+        Field::new(
+            "entity_refs",
+            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
+            false,
+        ),
+    ]))
+}
+
 /// Build the Arrow schema for the chunks table.
 #[must_use]
 pub fn chunks_schema(dim: usize) -> Arc<Schema> {
@@ -504,6 +565,24 @@ mod tests {
         assert_eq!(s.fields().len(), 12);
         assert_eq!(s.field(0).name(), "chunk_id");
         assert_eq!(s.field(10).name(), "vector");
+    }
+
+    #[test]
+    fn memories_schema_has_required_columns() {
+        let schema = memories_schema(384);
+        let names: Vec<&str> = schema
+            .fields()
+            .iter()
+            .map(|f| f.name().as_str())
+            .collect();
+        for expected in [
+            "id", "session_id", "kind", "text", "created_at", "accessed_at",
+            "valid_from", "valid_to", "embedding", "token_refs", "entity_refs",
+        ] {
+            assert!(names.contains(&expected), "missing column: {expected}");
+        }
+        // 7 active v0.1 columns + 3 forward-compat + embedding = 11.
+        assert_eq!(schema.fields().len(), 11);
     }
 
     #[test]
