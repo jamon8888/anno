@@ -18,6 +18,8 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+pub use cloakpipe_core::vault::{MatchedMapping, RemovedMapping};
+
 /// Async-safe handle to a cloakpipe file-based Vault.
 #[derive(Clone)]
 pub struct Vault {
@@ -73,6 +75,28 @@ impl Vault {
         &self,
     ) -> tokio::sync::MutexGuard<'_, cloakpipe_core::vault::Vault> {
         self.inner.lock().await
+    }
+
+    /// Remove the vault mapping for `subject_ref` (original or token). Persists
+    /// the vault to disk on success. Returns the removed mapping for audit, or
+    /// `None` if no mapping matched.
+    ///
+    /// # Errors
+    /// Returns [`Error::Vault`] if persisting the vault to disk fails.
+    pub async fn forget(&self, subject_ref: &str) -> Result<Option<RemovedMapping>> {
+        let mut v = self.inner.lock().await;
+        let removed = v.remove(subject_ref);
+        if removed.is_some() {
+            v.save()
+                .map_err(|e| Error::Vault(format!("save after forget: {e}")))?;
+        }
+        Ok(removed)
+    }
+
+    /// Find every vault entry matching `subject_ref` (original or token).
+    pub async fn find_subject(&self, subject_ref: &str) -> Vec<MatchedMapping> {
+        let v = self.inner.lock().await;
+        v.find(subject_ref)
     }
 }
 
@@ -229,6 +253,48 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(v.lookup("EMAIL_1").await.as_deref(), Some(email));
+    }
+
+    #[tokio::test]
+    async fn forget_removes_existing_mapping() {
+        use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
+        let v = Vault::ephemeral_for_test();
+        let entities = vec![DetectedEntity {
+            original: "Marie Dupont".into(),
+            start: 0,
+            end: 12,
+            category: EntityCategory::Person,
+            confidence: 1.0,
+            source: DetectionSource::Pattern,
+        }];
+        v.pseudonymize("Marie Dupont", &entities).await.unwrap();
+
+        let receipt = v.forget("Marie Dupont").await.unwrap();
+        assert_eq!(receipt.unwrap().original, "Marie Dupont");
+
+        // Second call returns None (idempotent).
+        assert!(v.forget("Marie Dupont").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn find_subject_returns_match_then_empty_after_forget() {
+        use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
+        let v = Vault::ephemeral_for_test();
+        let entities = vec![DetectedEntity {
+            original: "a@b.fr".into(),
+            start: 0,
+            end: 6,
+            category: EntityCategory::Email,
+            confidence: 1.0,
+            source: DetectionSource::Pattern,
+        }];
+        v.pseudonymize("a@b.fr", &entities).await.unwrap();
+
+        let m = v.find_subject("a@b.fr").await;
+        assert_eq!(m.len(), 1);
+
+        v.forget("a@b.fr").await.unwrap();
+        assert!(v.find_subject("a@b.fr").await.is_empty());
     }
 
     #[test]
