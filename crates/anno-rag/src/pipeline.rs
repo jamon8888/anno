@@ -536,6 +536,61 @@ pub struct ForgetResult {
     pub vault_tokens_purged: usize,
 }
 
+/// One page returned by [`Pipeline::list_memories`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ListPage {
+    /// Rehydrated hits, ordered by `created_at` DESC.
+    pub items: Vec<crate::memory::MemoryHit>,
+    /// Cursor to feed to the next call to get the following page. RFC 3339
+    /// timestamp of the row immediately after the last item on this page.
+    /// `None` when the result set is exhausted.
+    pub next_cursor: Option<String>,
+}
+
+impl Pipeline {
+    /// Cursor-paginated list of memories. Filters by optional session +
+    /// kind; orders by `created_at` DESC; rehydrates each row's text.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] / [`Error::Vault`] on backend failures.
+    pub async fn list_memories(
+        &self,
+        session_id: Option<String>,
+        kind: Option<crate::memory::MemoryKind>,
+        limit: usize,
+        cursor: Option<String>,
+    ) -> Result<ListPage> {
+        let kind_str = kind.map(|k| match k {
+            crate::memory::MemoryKind::Fact => "fact",
+            crate::memory::MemoryKind::Preference => "preference",
+            crate::memory::MemoryKind::Reference => "reference",
+            crate::memory::MemoryKind::Context => "context",
+        });
+        let (rows, next_cursor) = self
+            .store
+            .memory_list(
+                session_id.as_deref(),
+                kind_str,
+                limit,
+                cursor.as_deref(),
+            )
+            .await?;
+
+        let mut items: Vec<crate::memory::MemoryHit> = Vec::with_capacity(rows.len());
+        for m in rows {
+            let rehydrated = self.rehydrate(&m.text).await?;
+            items.push(crate::memory::MemoryHit {
+                id: m.id.as_string(),
+                text: rehydrated.text,
+                kind: m.kind,
+                created_at: m.created_at.to_rfc3339(),
+                score: 0.0,
+            });
+        }
+        Ok(ListPage { items, next_cursor })
+    }
+}
+
 /// Receipt returned by [`Pipeline::save_memory`].
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SavedMemory {

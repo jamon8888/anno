@@ -351,6 +351,73 @@ impl Store {
         Ok(())
     }
 
+    /// Cursor-paginated memory list. Filters by optional `session_id` /
+    /// `kind`; orders by `created_at` DESC; pages by passing the
+    /// previous page's last `created_at` (RFC 3339) as `cursor`.
+    ///
+    /// Returns `(rows, next_cursor)`. `next_cursor` is `Some(...)` when a
+    /// further page exists; `None` when the result set is exhausted.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query/scan failure.
+    pub async fn memory_list(
+        &self,
+        session_id: Option<&str>,
+        kind: Option<&str>,
+        limit: usize,
+        cursor: Option<&str>,
+    ) -> Result<(Vec<crate::memory::Memory>, Option<String>)> {
+        let mut clauses: Vec<String> = Vec::new();
+        if let Some(s) = session_id {
+            // Single-quote escape: replace ' with '' (SQL standard).
+            clauses.push(format!("session_id = '{}'", s.replace('\'', "''")));
+        }
+        if let Some(k) = kind {
+            clauses.push(format!("kind = '{}'", k.replace('\'', "''")));
+        }
+        if let Some(c) = cursor {
+            clauses.push(format!(
+                "created_at < timestamp '{}'",
+                c.replace('\'', "''")
+            ));
+        }
+        let mut q = self.memories_tbl.query();
+        if !clauses.is_empty() {
+            let filter = clauses.join(" AND ");
+            q = q.only_if(filter);
+        }
+        // Fetch limit + 1 so we know if there's a next page.
+        let mut stream = q
+            .limit(limit + 1)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("memory_list exec: {e}")))?;
+
+        let mut items: Vec<crate::memory::Memory> = Vec::with_capacity(limit + 1);
+        while let Some(batch) = stream
+            .try_next()
+            .await
+            .map_err(|e| Error::Store(format!("memory_list stream: {e}")))?
+        {
+            for r in 0..batch.num_rows() {
+                items.push(batch_row_to_memory(&batch, r)?);
+            }
+        }
+        // Order by created_at DESC in Rust — LanceDB Query lacks a stable
+        // `order_by` on the 0.29 surface used elsewhere in this crate.
+        items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+        let next_cursor = if items.len() > limit {
+            items.truncate(limit + 1);
+            let extra = items.pop();
+            extra.map(|m| m.created_at.to_rfc3339())
+        } else {
+            None
+        };
+        items.truncate(limit);
+        Ok((items, next_cursor))
+    }
+
     /// Count how many memory rows reference `token` in their `token_refs`.
     /// Used by the GDPR Art. 17 cascade to decide whether a vault token
     /// is orphaned after a `forget_memory` deletion.
