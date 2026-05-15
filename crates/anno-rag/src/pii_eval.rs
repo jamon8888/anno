@@ -1,8 +1,11 @@
 //! Anonymization evaluation harness: per-category precision/recall/F1 over a
 //! labelled PII corpus, with overlap-span matching, plus the corpus loader.
 
+use crate::error::{Error, Result};
 use cloakpipe_core::{DetectedEntity, EntityCategory};
+use serde::Deserialize;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 /// A ground-truth PII span: byte offsets into a document plus its category
 /// key (`"NIR"`, `"Person"`, …).
@@ -126,6 +129,100 @@ pub fn score_detections(detected: &[DetectedEntity], truth: &[TrueSpan]) -> PiiS
     PiiScores { per_category }
 }
 
+/// One annotated PII value inside a document: its category and the exact
+/// substring it occupies. Offsets are resolved by searching the document.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PiiEntry {
+    /// Category key — `"NIR"`, `"SIRET"`, `"IBAN_FR"`, `"PhoneNumber"`,
+    /// `"Email"`, `"Person"`, `"Organization"`, `"Location"`.
+    pub category: String,
+    /// The exact PII substring as it appears in the document. Must be
+    /// unique within the document (enforced by [`check_pii_corpus`]).
+    pub text: String,
+}
+
+/// All PII annotations for one document.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PiiDoc {
+    /// File name within the PII corpus directory.
+    pub file: String,
+    /// Every PII value present in the document.
+    pub pii: Vec<PiiEntry>,
+}
+
+/// Parsed `pii_annotations.toml`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PiiAnnotations {
+    /// One entry per annotated document.
+    #[serde(rename = "doc")]
+    pub docs: Vec<PiiDoc>,
+}
+
+/// Resolve the PII corpus directory (the versioned fixtures under the crate).
+#[must_use]
+pub fn pii_corpus_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pii_corpus")
+}
+
+/// Load and parse `pii_annotations.toml` from `dir`.
+///
+/// # Errors
+/// Returns [`Error::Config`] if the file is missing or malformed.
+pub fn load_pii_annotations(dir: &Path) -> Result<PiiAnnotations> {
+    let path = dir.join("pii_annotations.toml");
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| Error::Config(format!("read {}: {e}", path.display())))?;
+    toml::from_str(&text).map_err(|e| Error::Config(format!("parse {}: {e}", path.display())))
+}
+
+/// Resolve a [`PiiEntry`] to a [`TrueSpan`] by locating its `text` in
+/// `content`. Assumes the text occurs exactly once (guaranteed by
+/// [`check_pii_corpus`]).
+///
+/// # Errors
+/// Returns [`Error::Config`] if the text is not found.
+pub fn resolve_span(content: &str, entry: &PiiEntry) -> Result<TrueSpan> {
+    let start = content.find(&entry.text).ok_or_else(|| {
+        Error::Config(format!("annotated text {:?} not found", entry.text))
+    })?;
+    Ok(TrueSpan {
+        start,
+        end: start + entry.text.len(),
+        category: entry.category.clone(),
+    })
+}
+
+/// Verify every annotated `text` appears exactly once in its document, and
+/// every referenced file exists. This guarantees offset resolution by search
+/// is unambiguous.
+///
+/// # Errors
+/// Returns [`Error::Config`] describing the first inconsistency found.
+pub fn check_pii_corpus(dir: &Path, ann: &PiiAnnotations) -> Result<()> {
+    for doc in &ann.docs {
+        let path = dir.join(&doc.file);
+        let content = std::fs::read_to_string(&path).map_err(|e| {
+            Error::Config(format!("read {}: {e}", path.display()))
+        })?;
+        for entry in &doc.pii {
+            let count = content.matches(&entry.text).count();
+            if count == 0 {
+                return Err(Error::Config(format!(
+                    "{}: annotated {} text {:?} not found",
+                    doc.file, entry.category, entry.text
+                )));
+            }
+            if count > 1 {
+                return Err(Error::Config(format!(
+                    "{}: annotated {} text {:?} occurs {count} times (must be unique)",
+                    doc.file, entry.category, entry.text
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,4 +292,55 @@ mod tests {
         assert_eq!(s.per_category.get("Person").unwrap().fn_, 1);
         assert_eq!(s.per_category.get("Organization").unwrap().fp, 1);
     }
+
+    #[test]
+    fn parses_pii_annotations_toml() {
+        let toml = r#"
+[[doc]]
+file = "a.txt"
+pii = [
+  { category = "Email", text = "x@y.fr" },
+  { category = "Person", text = "Marie Dupont" },
+]
+"#;
+        let ann: PiiAnnotations = toml::from_str(toml).expect("parse");
+        assert_eq!(ann.docs.len(), 1);
+        assert_eq!(ann.docs[0].pii.len(), 2);
+        assert_eq!(ann.docs[0].pii[0].category, "Email");
+    }
+
+    #[test]
+    fn resolve_span_locates_text() {
+        let entry = PiiEntry { category: "Email".into(), text: "x@y.fr".into() };
+        let span = resolve_span("contact x@y.fr svp", &entry).unwrap();
+        assert_eq!((span.start, span.end), (8, 14));
+        assert_eq!(span.category, "Email");
+    }
+
+    #[test]
+    fn check_pii_corpus_rejects_ambiguous_text() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "Paris et Paris").unwrap();
+        let ann = PiiAnnotations {
+            docs: vec![PiiDoc {
+                file: "a.txt".into(),
+                pii: vec![PiiEntry { category: "Location".into(), text: "Paris".into() }],
+            }],
+        };
+        assert!(check_pii_corpus(dir.path(), &ann).is_err());
+    }
+
+    #[test]
+    fn check_pii_corpus_rejects_missing_text() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "no pii here").unwrap();
+        let ann = PiiAnnotations {
+            docs: vec![PiiDoc {
+                file: "a.txt".into(),
+                pii: vec![PiiEntry { category: "Email".into(), text: "x@y.fr".into() }],
+            }],
+        };
+        assert!(check_pii_corpus(dir.path(), &ann).is_err());
+    }
+
 }
