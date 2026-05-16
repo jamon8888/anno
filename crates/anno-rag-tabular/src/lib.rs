@@ -18,3 +18,5 @@ pub mod schema;
 pub use schema::CellType;
 
 pub mod storage;
+
+pub mod llm;
