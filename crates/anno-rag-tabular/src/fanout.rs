@@ -39,6 +39,7 @@ use crate::schema::Column;
 use crate::storage::cells::CellsTable;
 use crate::storage::rows::Row;
 use crate::storage::StorageHandle;
+use crate::verify::support::SupportScorer;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -49,7 +50,7 @@ use std::sync::Arc;
 /// in-flight while staying well under the typical 50 req/s rate
 /// limit, and the 80k token budget is the same default used by
 /// [`crate::extract::Extractor`].
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct FanoutConfig {
     /// Max concurrent extraction tasks. Default 8.
     pub max_concurrency: usize,
@@ -68,6 +69,23 @@ pub struct FanoutConfig {
     /// "drift" today is "cell-missing", not "cell extracted under
     /// an older `schema_version`".
     pub force_reextract: bool,
+    /// Optional cross-encoder support scorer (T29). When `None`,
+    /// the support-scoring pass is skipped entirely and cells keep
+    /// their post-T28 confidence + a `support_score` of `0.0`.
+    /// `Arc<dyn …>` because the scorer is shared across all
+    /// per-row tokio tasks spawned by [`run_review`].
+    pub scorer: Option<Arc<dyn SupportScorer>>,
+}
+
+impl std::fmt::Debug for FanoutConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FanoutConfig")
+            .field("max_concurrency", &self.max_concurrency)
+            .field("budget_tokens", &self.budget_tokens)
+            .field("force_reextract", &self.force_reextract)
+            .field("scorer", &self.scorer.as_ref().map(|_| "<dyn SupportScorer>"))
+            .finish()
+    }
 }
 
 impl Default for FanoutConfig {
@@ -76,6 +94,7 @@ impl Default for FanoutConfig {
             max_concurrency: 8,
             budget_tokens: crate::extract::budget::DEFAULT_BUDGET_TOKENS,
             force_reextract: false,
+            scorer: None,
         }
     }
 }
@@ -143,12 +162,14 @@ pub async fn run_review(
     let cells_table = storage.cells.clone();
 
     let force_reextract = config.force_reextract;
+    let scorer = config.scorer.clone();
     let mut handles = Vec::with_capacity(rows.len());
     for row in rows {
         let sem = Arc::clone(&sem);
         let columns = Arc::clone(&columns);
         let extractor = Arc::clone(&extractor);
         let cells = cells_table.clone();
+        let scorer = scorer.clone();
         let row_id = row.id;
         let doc_id = row.doc_id;
         let handle = tokio::spawn(async move {
@@ -166,6 +187,7 @@ pub async fn run_review(
                 &row,
                 &columns,
                 force_reextract,
+                scorer.as_deref(),
             )
             .await
         });
@@ -242,6 +264,7 @@ async fn extract_and_upsert_one_row(
     row: &Row,
     columns: &[Column],
     force_reextract: bool,
+    scorer: Option<&dyn SupportScorer>,
 ) -> Result<usize> {
     let waves = topo_waves(columns)?;
 
@@ -323,9 +346,18 @@ async fn extract_and_upsert_one_row(
             crate::verify::offsets::verify_cell_offsets(cell, row.doc_id, extractor.chunks())
                 .await?;
         }
-        // TODO(T29): cross-encoder support scoring goes here — set
-        // `support_score` and re-bin `confidence` against
-        // High/Medium/Low thresholds before the upsert loop runs.
+        // T29: cross-encoder support scoring. Skipped when no scorer
+        // was injected on FanoutConfig — see module docs.
+        if let Some(s) = scorer {
+            for cell in &mut extracted {
+                // Map cell.col_id back to its Column to get the prompt.
+                // `to_extract` is the slice we just sent to the LLM, so
+                // every extracted cell's col_id must be present.
+                if let Some(col) = to_extract.iter().find(|c| c.id == cell.col_id) {
+                    crate::verify::support::verify_cell_support(cell, &col.prompt, s).await?;
+                }
+            }
+        }
 
         for cell in extracted {
             match cells.upsert(&cell).await {
@@ -1293,5 +1325,97 @@ mod tests {
             1,
             "default config (force_reextract=false) skips the pre-seeded col_a"
         );
+    }
+
+    // ---- T29: support scoring wire-up ----
+
+    #[tokio::test]
+    async fn fanout_with_support_scorer_sets_confidence_high() {
+        let (_dir, storage) = fresh_storage().await;
+        let (review, rows, chunk_map) = seed_review(&storage, 1).await;
+
+        let llm = Arc::new(StubLlm {
+            chunk_id: any_chunk_id(&chunk_map),
+            calls: Arc::new(AtomicUsize::new(0)),
+            delay_ms: 0,
+        });
+        let chunks = Arc::new(InMemoryChunks { by_doc: chunk_map });
+        let extractor = Extractor::new(llm, chunks);
+
+        let cfg = FanoutConfig {
+            scorer: Some(Arc::new(crate::verify::support::MockSupportScorer::new(
+                0.9,
+            ))),
+            ..Default::default()
+        };
+        let outcomes = run_review(&storage, &extractor, review, cfg)
+            .await
+            .expect("run_review succeeds");
+        assert_eq!(outcomes.len(), 1);
+
+        for col_name in ["col_a", "col_b"] {
+            let col = ColumnId::for_name(review, col_name);
+            let cell = storage
+                .cells
+                .latest(review, rows[0].id, col)
+                .await
+                .expect("latest")
+                .expect("cell exists");
+            assert!(
+                (cell.support_score - 0.9).abs() < 1e-6,
+                "{col_name}: support_score = {}",
+                cell.support_score
+            );
+            assert!(
+                matches!(cell.confidence, Confidence::High),
+                "{col_name}: confidence = {:?}",
+                cell.confidence
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn fanout_with_support_scorer_downgrades_to_low() {
+        let (_dir, storage) = fresh_storage().await;
+        let (review, rows, chunk_map) = seed_review(&storage, 1).await;
+
+        let llm = Arc::new(StubLlm {
+            chunk_id: any_chunk_id(&chunk_map),
+            calls: Arc::new(AtomicUsize::new(0)),
+            delay_ms: 0,
+        });
+        let chunks = Arc::new(InMemoryChunks { by_doc: chunk_map });
+        let extractor = Extractor::new(llm, chunks);
+
+        let cfg = FanoutConfig {
+            scorer: Some(Arc::new(crate::verify::support::MockSupportScorer::new(
+                0.2,
+            ))),
+            ..Default::default()
+        };
+        let outcomes = run_review(&storage, &extractor, review, cfg)
+            .await
+            .expect("run_review succeeds");
+        assert_eq!(outcomes.len(), 1);
+
+        for col_name in ["col_a", "col_b"] {
+            let col = ColumnId::for_name(review, col_name);
+            let cell = storage
+                .cells
+                .latest(review, rows[0].id, col)
+                .await
+                .expect("latest")
+                .expect("cell exists");
+            assert!(
+                (cell.support_score - 0.2).abs() < 1e-6,
+                "{col_name}: support_score = {}",
+                cell.support_score
+            );
+            assert!(
+                matches!(cell.confidence, Confidence::Low),
+                "{col_name}: confidence = {:?}",
+                cell.confidence
+            );
+        }
     }
 }
