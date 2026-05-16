@@ -20,3 +20,5 @@ pub use schema::CellType;
 pub mod storage;
 
 pub mod llm;
+
+pub mod extract;
