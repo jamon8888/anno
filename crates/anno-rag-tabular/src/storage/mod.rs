@@ -14,6 +14,7 @@ pub mod columns;
 pub mod lock;
 pub mod reviews;
 pub mod rows;
+pub(crate) mod util;
 
 pub use cells::CellsTable;
 pub use columns::ColumnsTable;

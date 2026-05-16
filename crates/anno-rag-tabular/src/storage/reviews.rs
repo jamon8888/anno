@@ -8,9 +8,10 @@
 use crate::error::Result;
 use crate::ids::ReviewId;
 use crate::storage::arrow_schema::reviews_schema;
+use crate::storage::util::{opt_str, uuid_to_filter_lit};
 use arrow::error::ArrowError;
 use arrow_array::{
-    Array, FixedSizeBinaryArray, RecordBatch, RecordBatchIterator, StringArray,
+    FixedSizeBinaryArray, RecordBatch, RecordBatchIterator, StringArray,
     TimestampMicrosecondArray, UInt32Array,
 };
 use chrono::{DateTime, Utc};
@@ -180,18 +181,6 @@ impl ReviewsTable {
     }
 }
 
-/// Render a UUID as the uppercase hex blob literal Lance/DataFusion's
-/// SQL expects for FixedSizeBinary filters (`X'...'`).
-fn uuid_to_filter_lit(u: uuid::Uuid) -> String {
-    let mut s = String::with_capacity(32);
-    for b in u.as_bytes() {
-        use std::fmt::Write as _;
-        // Writing to a `String` is infallible.
-        let _ = write!(&mut s, "{b:02X}");
-    }
-    s
-}
-
 /// Decode row `i` of a `tabular_reviews` batch into a [`Review`].
 ///
 /// The downcasts use `.expect` because the schema is fixed by
@@ -247,15 +236,6 @@ fn row_to_review(b: &RecordBatch, i: usize) -> Review {
         scope_folder: opt_str(folder_arr, i),
         created_at: DateTime::<Utc>::from_timestamp_micros(ts_arr.value(i)).unwrap_or_default(),
         schema_version: sv_arr.value(i),
-    }
-}
-
-/// Null-aware `&str → Option<String>` for nullable StringArray columns.
-fn opt_str(a: &StringArray, i: usize) -> Option<String> {
-    if a.is_null(i) {
-        None
-    } else {
-        Some(a.value(i).to_string())
     }
 }
 
