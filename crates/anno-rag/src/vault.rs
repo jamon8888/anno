@@ -139,18 +139,88 @@ impl Vault {
     }
 }
 
-/// Derive the 32-byte vault key.
+/// Where the 32-byte vault key comes from. v0.4 ships two real sources
+/// ([`Self::Passphrase`] + [`Self::Keyring`]); [`Self::Kms`] is a
+/// scaffolded stub that an external KMS adapter will plug into in v0.5+
+/// (Azure Key Vault, AWS KMS, HashiCorp Vault — DPIA v1 §3 R1 mitigation
+/// G-3). See `docs/adrs/0002-encrypted-vault-aes-256-gcm-passphrase-or-keyring.md`
+/// for the per-source rationale.
+#[derive(Debug, Clone)]
+pub enum VaultKeySource {
+    /// Argon2id KDF over an operator-supplied passphrase. Deterministic
+    /// across runs given the same passphrase + fixed app salt.
+    Passphrase(String),
+    /// OS keyring entry `anno-rag:vault-key`. Generated + stored on first
+    /// run if the entry is missing.
+    Keyring,
+    /// External KMS provider — v0.5+. Currently a stub: returns
+    /// [`Error::Vault`] with a clear message pointing at the adapter
+    /// implementation as TODO.
+    Kms {
+        /// Provider name (e.g. `"azure-key-vault"`, `"aws-kms"`,
+        /// `"hashicorp-vault"`). Reserved for the v0.5+ adapter lookup.
+        provider: String,
+        /// Provider-specific key id (URI, ARN, alias).
+        key_id: String,
+    },
+}
+
+impl VaultKeySource {
+    /// Pick the source from environment. Priority order:
+    ///
+    /// 1. `ANNO_RAG_VAULT_KMS_PROVIDER` + `ANNO_RAG_VAULT_KMS_KEY_ID` → KMS.
+    /// 2. `ANNO_RAG_VAULT_PASSPHRASE` → Passphrase.
+    /// 3. Default → Keyring.
+    #[must_use]
+    pub fn from_env() -> Self {
+        let provider = std::env::var("ANNO_RAG_VAULT_KMS_PROVIDER").ok();
+        let key_id = std::env::var("ANNO_RAG_VAULT_KMS_KEY_ID").ok();
+        if let (Some(provider), Some(key_id)) = (provider, key_id) {
+            if !provider.is_empty() && !key_id.is_empty() {
+                return Self::Kms { provider, key_id };
+            }
+        }
+        if let Ok(passphrase) = std::env::var("ANNO_RAG_VAULT_PASSPHRASE") {
+            return Self::Passphrase(passphrase);
+        }
+        Self::Keyring
+    }
+
+    /// Derive the 32-byte key from this source.
+    ///
+    /// # Errors
+    /// Returns [`Error::Vault`] on KDF / keyring / KMS-stub failure.
+    pub fn derive(&self) -> Result<[u8; 32]> {
+        match self {
+            Self::Passphrase(p) => derive_via_argon2(p),
+            Self::Keyring => derive_via_keyring(),
+            Self::Kms { provider, key_id } => Err(Error::Vault(format!(
+                "KMS key source not implemented in v0.4 \
+                 (provider={provider}, key_id={key_id}). \
+                 Configure ANNO_RAG_VAULT_PASSPHRASE or the OS keyring \
+                 instead. Tracked as U6 in the readiness spec; v0.5+ \
+                 will land a KmsAdapter trait + per-provider impls."
+            ))),
+        }
+    }
+}
+
+/// Derive the 32-byte vault key from the environment. Thin wrapper around
+/// [`VaultKeySource::from_env`] + [`VaultKeySource::derive`] kept for
+/// backwards compatibility with v0.1–v0.3 call sites.
 ///
 /// Order:
-/// 1. `ANNO_RAG_VAULT_PASSPHRASE` env var (Argon2id with a fixed app salt — the
-///    passphrase IS the entropy source, so a deterministic salt is fine here).
-/// 2. OS keyring entry `anno-rag:vault-key`. If missing, generate 32 random
+/// 1. `ANNO_RAG_VAULT_KMS_PROVIDER` + `ANNO_RAG_VAULT_KMS_KEY_ID` (stub in
+///    v0.4 — returns an explanatory error).
+/// 2. `ANNO_RAG_VAULT_PASSPHRASE` env var (Argon2id with a fixed app salt).
+/// 3. OS keyring entry `anno-rag:vault-key`. If missing, generate 32 random
 ///    bytes via `OsRng`, hex-encode, store in keyring.
+///
+/// # Errors
+/// Returns [`Error::Vault`] on KDF / keyring failure, or if the KMS source
+/// is selected (v0.4 stub).
 pub fn derive_key() -> Result<[u8; 32]> {
-    if let Ok(passphrase) = std::env::var("ANNO_RAG_VAULT_PASSPHRASE") {
-        return derive_via_argon2(&passphrase);
-    }
-    derive_via_keyring()
+    VaultKeySource::from_env().derive()
 }
 
 fn derive_via_argon2(passphrase: &str) -> Result<[u8; 32]> {
@@ -361,5 +431,36 @@ mod tests {
     fn parse_hex_key_rejects_wrong_length() {
         let r = parse_hex_key("abcd");
         assert!(matches!(r, Err(Error::Vault(_))));
+    }
+
+    #[test]
+    fn key_source_kms_returns_stub_error_with_provider_in_message() {
+        let s = VaultKeySource::Kms {
+            provider: "aws-kms".into(),
+            key_id: "arn:aws:kms:eu-west-3:1234:key/abc".into(),
+        };
+        let err = s.derive().expect_err("v0.4 KMS path is a stub");
+        let msg = err.to_string();
+        assert!(msg.contains("KMS key source not implemented"), "msg = {msg}");
+        assert!(msg.contains("aws-kms"), "msg should name the provider");
+        assert!(msg.contains("U6"), "msg should point at the readiness gap");
+    }
+
+    #[test]
+    fn key_source_passphrase_derives_deterministically() {
+        let a = VaultKeySource::Passphrase("test-deterministic".into())
+            .derive()
+            .unwrap();
+        let b = VaultKeySource::Passphrase("test-deterministic".into())
+            .derive()
+            .unwrap();
+        assert_eq!(a, b, "argon2id with fixed salt must be deterministic");
+    }
+
+    #[test]
+    fn key_source_passphrase_differs_per_input() {
+        let a = VaultKeySource::Passphrase("one".into()).derive().unwrap();
+        let b = VaultKeySource::Passphrase("two".into()).derive().unwrap();
+        assert_ne!(a, b);
     }
 }
