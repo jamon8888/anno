@@ -16,3 +16,5 @@ pub use ids::{ColumnId, ReviewId, RowId};
 
 pub mod schema;
 pub use schema::CellType;
+
+pub mod storage;
