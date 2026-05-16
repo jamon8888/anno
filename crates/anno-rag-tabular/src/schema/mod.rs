@@ -10,6 +10,7 @@
 
 pub mod column;
 pub mod conditional;
+pub mod json_schema;
 pub mod ttype;
 
 pub use column::{Column, ColumnBuilder};
