@@ -298,6 +298,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "anno-rag-tabular"
+version = "0.1.0"
+dependencies = [
+ "anno-rag",
+ "arrow",
+ "arrow-array",
+ "arrow-schema",
+ "async-trait",
+ "chrono",
+ "futures",
+ "insta",
+ "lancedb",
+ "proptest",
+ "regex",
+ "reqwest 0.13.3",
+ "rust_xlsxwriter",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "anstream"
 version = "0.6.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8003,6 +8031,15 @@ checksum = "e46a2036019fdb888131db7a4c847a1063a7493f971ed94ea82c67eada63ca54"
 dependencies = [
  "serde",
  "serde_derive",
+]
+
+[[package]]
+name = "rust_xlsxwriter"
+version = "0.95.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f281b687352597d29efaad39701d1167d5c48aa76fb973e392bc13e9d44e7f36"
+dependencies = [
+ "zip 7.2.0",
 ]
 
 [[package]]
