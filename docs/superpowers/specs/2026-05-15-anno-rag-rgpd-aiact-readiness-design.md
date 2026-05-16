@@ -46,7 +46,8 @@ This document records, with code citations:
 > - Code gaps **G1–G7** closed (v0.7 + v0.4 GDPR core + G7 graceful shutdown). Reclassified as claims C13–C18 below.
 > - Doc gaps **U1, U2, U3, U4, U7, U8, U9, U11, U12, U13** closed v1 (pending DPO + outside-counsel sign-off). See the doc-pack mapping below.
 > - **U10** (AI Act Art. 12 / Art. 72 detector logging) closed as code — see C19 below.
-> - **Still open:** U5 (at-rest encryption — operator + v0.5 code), U6 (KMS — v0.5+ code).
+> - **U6** scaffolding shipped (`VaultKeySource` enum with KMS stub variant — see C20 below). The actual KMS adapter implementations (Azure Key Vault / AWS KMS / HashiCorp Vault) remain v0.5+ work.
+> - **Still open:** U5 (at-rest encryption — operator + v0.5 code); U6 real KMS adapter (v0.5+).
 > - PR-D (anno-memory v0.2, 1/11 tasks shipped on `feat/anno-memory-v0.2`) is paused but unblocked.
 
 ### Doc-pack mapping (closed gaps → doc anchors)
@@ -78,6 +79,7 @@ Split into **G — specified but not shipped** (v0.4 GDPR spec is the design; th
 | C17 | **Bearer-token auth on the gateway** | RGPD Art. 32 | `auth::require_bearer` middleware with constant-time compare (`subtle::ct_eq`). `/health` stays public. When no token is configured the middleware is a no-op so loopback dev/test flows keep working; operators must set `ANNO_GATEWAY_BEARER_TOKEN` before exposing the gateway beyond loopback. e2e test `forget_without_bearer_does_not_write_audit` verifies short-circuit. |
 | C18 | **Graceful shutdown on the gateway + MCP server** | RGPD Art. 30 (audit-log durability), Art. 32 (integrity of processing) | Gateway: `server::serve` wires `axum::serve(...).with_graceful_shutdown(shutdown_signal())` racing `tokio::signal::ctrl_c()` against `SIGTERM` (Unix). In-flight handlers drain; `JsonlAuditSink` per-line `sync_data` means no audit events are lost. MCP: `mcp::serve_stdio` uses `rmcp::service.cancellation_token()` to interrupt `service.waiting()` on signal — Pipeline drops on return → LanceDB connection closes + vault flushes pending saves. Structured tracing at `anno_privacy_gateway::shutdown` + `anno_rag::mcp::shutdown` makes the lifecycle observable. |
 | C19 | **Detector audit event (Art. 12 logging + Art. 72 post-market monitoring)** | AI Act Art. 12 + Art. 72 | `Detector::detect` (detect.rs) emits a structured `tracing::info!` at `target = "anno_rag::detect::audit"` with: `detector_version` (crate `CARGO_PKG_VERSION`), `ner_model_id` (`NER_MODEL_ID` const), `input_chars`, `elapsed_us`, `spans_total`, `spans_from_pattern` / `_ner` / `_other`, `per_category` (compact JSON map). **Cleartext-free** — no raw text or detected values. Deployers pipe this target to their SIEM / Art. 30 register. |
+| C20 | **Vault-key-source scaffolding (KMS-ready)** | RGPD Art. 32 + DPIA v1 §3 R1 mitigation G-3 | `VaultKeySource` enum in `crates/anno-rag/src/vault.rs`: `Passphrase(String)` (Argon2id), `Keyring` (OS keyring), `Kms { provider, key_id }` (v0.4 stub returning a clear error pointing at U6). `VaultKeySource::from_env` selects from env vars `ANNO_RAG_VAULT_KMS_PROVIDER`+`_KEY_ID`, then `ANNO_RAG_VAULT_PASSPHRASE`, else Keyring. `derive_key()` is a thin compat wrapper. Real KMS adapter impls (Azure Key Vault / AWS KMS / HashiCorp Vault) plug into the `Kms` arm in v0.5+. Tests: stub message contains provider name + "U6"; passphrase derivation deterministic; differs per input. |
 
 ### G — specified but not shipped on this branch
 
