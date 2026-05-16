@@ -279,6 +279,64 @@ impl Store {
         Ok(true)
     }
 
+    /// Fetch memories that reference any of `entity_ids` in their
+    /// `entity_refs` column, optionally bounded by a bi-temporal `as_of`
+    /// (defaults to "now"). Used by v0.2's BFS graph-recall.
+    ///
+    /// Exploits the `LabelList` scalar index on `entity_refs` (v0.1 T4)
+    /// so the per-hop scan is sub-linear in table size.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query / decode failure.
+    pub async fn memory_filter_by_entities(
+        &self,
+        entity_ids: &[String],
+        as_of: Option<chrono::DateTime<chrono::Utc>>,
+        limit: usize,
+    ) -> Result<Vec<crate::memory::Memory>> {
+        if entity_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let parts: Vec<String> = entity_ids
+            .iter()
+            .map(|e| {
+                format!(
+                    "array_contains(entity_refs, '{}')",
+                    e.replace('\'', "''")
+                )
+            })
+            .collect();
+        let mut filter = format!("({})", parts.join(" OR "));
+        let t_us = as_of
+            .unwrap_or_else(chrono::Utc::now)
+            .timestamp_micros();
+        filter = format!(
+            "{filter} AND valid_from <= CAST({t_us} AS TIMESTAMP) \
+             AND (valid_to IS NULL OR valid_to > CAST({t_us} AS TIMESTAMP))"
+        );
+
+        let mut stream = self
+            .memories_tbl
+            .query()
+            .only_if(filter)
+            .limit(limit)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("graph filter exec: {e}")))?;
+
+        let mut out: Vec<crate::memory::Memory> = Vec::new();
+        while let Some(batch) = stream
+            .try_next()
+            .await
+            .map_err(|e| Error::Store(format!("graph filter stream: {e}")))?
+        {
+            for r in 0..batch.num_rows() {
+                out.push(batch_row_to_memory(&batch, r)?);
+            }
+        }
+        Ok(out)
+    }
+
     /// Fetch candidate memories that share at least one entity with any of
     /// `entity_refs`, optionally scoped to a session (matches that session
     /// or session-less rows), and currently valid (`valid_to IS NULL`).

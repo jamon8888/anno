@@ -91,6 +91,18 @@ pub struct AnnoRagConfig {
     /// catch more re-statements.
     #[serde(default = "default_conflict_cosine_threshold")]
     pub conflict_cosine_threshold: f32,
+
+    /// Maximum hop count for `Pipeline::graph_recall`. Default 2.
+    /// Caps the BFS depth over `entity_refs`; higher values risk
+    /// exponential expansion on popular-entity graphs.
+    #[serde(default = "default_graph_max_hops")]
+    pub graph_max_hops: u8,
+
+    /// Per-hop row limit for `Pipeline::graph_recall`. Default 50.
+    /// Bounds the candidate set scanned at each BFS hop to keep
+    /// graph recall sub-quadratic on hot entities.
+    #[serde(default = "default_graph_per_hop_limit")]
+    pub graph_per_hop_limit: usize,
 }
 
 fn default_memory_collection_name() -> String {
@@ -111,6 +123,14 @@ fn default_compaction_min_age_secs() -> u64 {
 
 fn default_conflict_cosine_threshold() -> f32 {
     0.85
+}
+
+fn default_graph_max_hops() -> u8 {
+    2
+}
+
+fn default_graph_per_hop_limit() -> usize {
+    50
 }
 
 fn default_vector_index_threshold() -> usize {
@@ -146,6 +166,8 @@ impl Default for AnnoRagConfig {
             compaction_min_age_secs: default_compaction_min_age_secs(),
             entity_aliases: std::collections::HashMap::new(),
             conflict_cosine_threshold: default_conflict_cosine_threshold(),
+            graph_max_hops: default_graph_max_hops(),
+            graph_per_hop_limit: default_graph_per_hop_limit(),
         }
     }
 }

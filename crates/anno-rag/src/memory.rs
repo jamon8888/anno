@@ -153,6 +153,63 @@ pub struct MemoryHit {
     pub via: HitProvenance,
 }
 
+/// Entity-source tag for the graph-recall wire shape.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EntityKindWire {
+    /// Vault-tokenized PII entity (resolves only inside the tenant).
+    PiiToken,
+    /// Non-PII NER entity (canonical text form).
+    NamedEntity,
+}
+
+/// One node in [`GraphRecallResult`]. `id` is the canonical entity key
+/// (`pii:...` or `ent:...`); `display` is the human-readable form
+/// (rehydrated for PII; the canonical tail for named entities).
+#[derive(Debug, Clone, Serialize)]
+pub struct EntityNode {
+    /// Canonical entity id (`pii:LABEL:TOKEN` or `ent:TAG:value`).
+    pub id: String,
+    /// Display string — token rehydrated for PII, lowercase canonical
+    /// tail for named entities.
+    pub display: String,
+    /// Source tag (PII vault vs NER).
+    pub kind: EntityKindWire,
+    /// Number of memories in the subgraph that reference this node.
+    pub mention_count: u32,
+}
+
+/// One edge in [`GraphRecallResult`] — a memory `via` connecting two
+/// entities. The same memory can produce multiple edges if it references
+/// more than two entities.
+#[derive(Debug, Clone, Serialize)]
+pub struct MemoryEdge {
+    /// Source entity id.
+    pub from: String,
+    /// Memory id that carries the co-occurrence.
+    pub via: String,
+    /// Target entity id.
+    pub to: String,
+}
+
+/// Output of `Pipeline::graph_recall` — the connected subgraph reached
+/// from a seed entity in at most N hops over the `entity_refs` LabelList.
+#[derive(Debug, Clone, Serialize)]
+pub struct GraphRecallResult {
+    /// Canonical seed entity id (the resolved form of the input).
+    pub seed: String,
+    /// For PII seeds, the rehydrated plaintext (if known). `None` for
+    /// named-entity seeds and for unknown PII tokens.
+    pub seed_resolved: Option<String>,
+    /// Entity nodes reached in the traversal, with mention counts.
+    pub nodes: Vec<EntityNode>,
+    /// Co-occurrence edges between entities.
+    pub edges: Vec<MemoryEdge>,
+    /// Memories visited along the traversal, rehydrated. `via =
+    /// HitProvenance::GraphExpand` on each.
+    pub memories: Vec<MemoryHit>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

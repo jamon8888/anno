@@ -535,6 +535,152 @@ impl Pipeline {
         Ok(out)
     }
 
+    /// Two-hop graph recall over `entity_refs`.
+    ///
+    /// Canonicalises `seed_entity` (if not already a `pii:`/`ent:` form,
+    /// treats it as a MISC named entity for canonicalisation). BFS from
+    /// the seed for at most `max_hops` (capped by `cfg.graph_max_hops`,
+    /// default 2), pulling at most `per_hop_limit` rows per hop (capped
+    /// by `cfg.graph_per_hop_limit`, default 50).
+    ///
+    /// Returns the connected subgraph: entity nodes (with mention counts),
+    /// memory-mediated edges, and rehydrated memories tagged
+    /// `HitProvenance::GraphExpand`.
+    ///
+    /// Bi-temporal: `as_of` (defaults to "now") filters out rows whose
+    /// `valid_to` ≤ the cutoff, so invalidated branches do not pollute
+    /// the graph.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] / [`Error::Vault`] on backend failure.
+    pub async fn graph_recall(
+        &self,
+        seed_entity: &str,
+        max_hops: u8,
+        per_hop_limit: usize,
+        as_of: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<crate::memory::GraphRecallResult> {
+        use crate::memory::{
+            EntityKindWire, EntityNode, GraphRecallResult, HitProvenance, MemoryEdge,
+            MemoryHit,
+        };
+        use std::collections::{HashMap, HashSet};
+
+        let max_hops = max_hops.min(self.cfg.graph_max_hops);
+        let per_hop_limit = per_hop_limit.min(self.cfg.graph_per_hop_limit);
+
+        // 1. Canonicalise seed. Pass-through if already a `pii:` / `ent:`
+        //    form; otherwise treat as MISC named entity.
+        let canonical_seed = if seed_entity.starts_with("ent:") || seed_entity.starts_with("pii:")
+        {
+            seed_entity.to_string()
+        } else {
+            crate::canonicalize::canonicalize_entity(
+                seed_entity,
+                "MISC",
+                &self.cfg.entity_aliases,
+            )
+        };
+
+        let mut visited_entities: HashSet<String> = HashSet::new();
+        visited_entities.insert(canonical_seed.clone());
+
+        let mut memories_by_id: HashMap<String, crate::memory::Memory> = HashMap::new();
+        let mut edges: Vec<MemoryEdge> = Vec::new();
+        let mut frontier: Vec<String> = vec![canonical_seed.clone()];
+
+        for _hop in 0..max_hops {
+            if frontier.is_empty() {
+                break;
+            }
+            let rows = self
+                .store
+                .memory_filter_by_entities(&frontier, as_of, per_hop_limit)
+                .await?;
+            let mut next_frontier: HashSet<String> = HashSet::new();
+            for m in rows {
+                let mid = m.id.as_string();
+                if memories_by_id.contains_key(&mid) {
+                    continue;
+                }
+                // Build edges from any frontier entity in this row to any other entity.
+                for from in &m.entity_refs {
+                    if !frontier.contains(from) {
+                        continue;
+                    }
+                    for to in &m.entity_refs {
+                        if from == to {
+                            continue;
+                        }
+                        edges.push(MemoryEdge {
+                            from: from.clone(),
+                            via: mid.clone(),
+                            to: to.clone(),
+                        });
+                        if !visited_entities.contains(to) {
+                            next_frontier.insert(to.clone());
+                        }
+                    }
+                }
+                memories_by_id.insert(mid, m);
+            }
+            visited_entities.extend(next_frontier.iter().cloned());
+            frontier = next_frontier.into_iter().collect();
+        }
+
+        // Mention counts per entity, then build node list.
+        let mut mention_counts: HashMap<String, u32> = HashMap::new();
+        for m in memories_by_id.values() {
+            for e in &m.entity_refs {
+                *mention_counts.entry(e.clone()).or_insert(0) += 1;
+            }
+        }
+        let mut nodes: Vec<EntityNode> = mention_counts
+            .into_iter()
+            .map(|(id, c)| {
+                let (kind, display) = entity_id_display(&id, &self.vault);
+                EntityNode {
+                    id,
+                    display,
+                    kind,
+                    mention_count: c,
+                }
+            })
+            .collect();
+        nodes.sort_by(|a, b| b.mention_count.cmp(&a.mention_count).then_with(|| a.id.cmp(&b.id)));
+
+        // Rehydrate memories, tagged GraphExpand.
+        let mut memories: Vec<MemoryHit> = Vec::with_capacity(memories_by_id.len());
+        for m in memories_by_id.into_values() {
+            let r = self.rehydrate(&m.text).await?;
+            memories.push(MemoryHit {
+                id: m.id.as_string(),
+                text: r.text,
+                kind: m.kind,
+                created_at: m.created_at.to_rfc3339(),
+                valid_from: m.valid_from.to_rfc3339(),
+                valid_to: m.valid_to.map(|t| t.to_rfc3339()),
+                entity_refs: m.entity_refs.clone(),
+                score: 0.0,
+                via: HitProvenance::GraphExpand,
+            });
+        }
+
+        // PII seeds: try to resolve to plaintext.
+        let seed_resolved = canonical_seed
+            .strip_prefix("pii:")
+            .and_then(|rest| rest.splitn(2, ':').nth(1).map(str::to_string))
+            .and_then(|tok| self.vault.lookup_blocking(&tok));
+
+        Ok(GraphRecallResult {
+            seed: canonical_seed,
+            seed_resolved,
+            nodes,
+            edges,
+            memories,
+        })
+    }
+
     /// Mark a memory row as invalidated at `at` (defaults to "now"). The
     /// row stays on disk (history-preserving), but `recall_memory` with
     /// `as_of >= at` will exclude it. Guarded by `valid_to IS NULL` so a
@@ -920,6 +1066,30 @@ pub struct VaultStats {
     pub total_mappings: usize,
     /// Count per PII category (e.g. `"Email"`, `"PhoneNumber"`, `"Custom(NIR)"`).
     pub categories: std::collections::HashMap<String, u32>,
+}
+
+/// Decode a canonical entity id into `(kind, display)` for the
+/// graph-recall wire shape. `display` is the rehydrated plaintext for
+/// PII tokens (best-effort — falls back to the token id if the vault
+/// is currently locked), or the lowercase tail for named entities.
+fn entity_id_display(
+    id: &str,
+    vault: &crate::vault::Vault,
+) -> (crate::memory::EntityKindWire, String) {
+    use crate::memory::EntityKindWire;
+    if let Some(rest) = id.strip_prefix("pii:") {
+        // pii:<LABEL>:<TOKEN>
+        let token = rest.splitn(2, ':').nth(1).unwrap_or("");
+        let display = vault
+            .lookup_blocking(token)
+            .unwrap_or_else(|| token.to_string());
+        (EntityKindWire::PiiToken, display)
+    } else if let Some(rest) = id.strip_prefix("ent:") {
+        let display = rest.splitn(2, ':').nth(1).unwrap_or(rest).to_string();
+        (EntityKindWire::NamedEntity, display)
+    } else {
+        (EntityKindWire::NamedEntity, id.to_string())
+    }
 }
 
 /// Convert a microsecond UTC timestamp into an RFC 3339 string. Used by
