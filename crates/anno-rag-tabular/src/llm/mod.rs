@@ -73,3 +73,62 @@ pub trait LlmClient: Send + Sync {
     /// audit logs and `Author::System { extractor_version }`.
     fn model_id(&self) -> &str;
 }
+
+/// Resolve the default LLM client from environment + OS keyring.
+///
+/// Resolution order:
+/// 1. `ANTHROPIC_API_KEY` env var (override for CI, scripted runs,
+///    or local dev where you want to bypass the keyring).
+/// 2. OS keyring entry under service `anno-rag`, user `anthropic`
+///    (set via `anno-rag config set-llm-key`, mirroring the vault-key
+///    pattern in `anno-rag::vault`).
+/// 3. Error.
+///
+/// Returns a boxed [`LlmClient`] so callers don't have to name the
+/// concrete provider — swapping Anthropic for another backend in v1.x
+/// stays a one-line change here.
+///
+/// # Errors
+///
+/// Returns [`Error::Extract`] with `doc = "config"` when:
+/// - The keyring entry cannot be opened (OS-level keyring failure).
+/// - No keyring entry exists and `ANTHROPIC_API_KEY` is unset.
+pub fn default_from_env() -> crate::error::Result<Box<dyn LlmClient>> {
+    use crate::error::Error;
+
+    if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
+        return Ok(Box::new(anthropic::AnthropicLlm::new(key)));
+    }
+    let entry = keyring::Entry::new("anno-rag", "anthropic").map_err(|e| Error::Extract {
+        doc: "config".into(),
+        col: "?".into(),
+        source: Box::new(e),
+    })?;
+    let key = entry.get_password().map_err(|e| Error::Extract {
+        doc: "config".into(),
+        col: "?".into(),
+        source: Box::new(e),
+    })?;
+    Ok(Box::new(anthropic::AnthropicLlm::new(key)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_from_env_picks_up_env_var() {
+        // SAFETY: we set and immediately remove the env var. Other
+        // tests touching ANTHROPIC_API_KEY would race; none do today.
+        // SAFETY block needed because `set_var`/`remove_var` are
+        // `unsafe` since Rust 1.78 (mutating process-global state).
+        unsafe {
+            std::env::set_var("ANTHROPIC_API_KEY", "test-key");
+        }
+        let c = default_from_env().expect("env path must resolve");
+        assert_eq!(c.model_id(), "claude-sonnet-4-6");
+        unsafe {
+            std::env::remove_var("ANTHROPIC_API_KEY");
+        }
+    }
+}

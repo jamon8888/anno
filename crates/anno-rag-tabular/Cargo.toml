@@ -28,6 +28,7 @@ sha2               = { workspace = true }
 regex              = { workspace = true }
 reqwest            = { workspace = true }
 futures            = { workspace = true }
+keyring            = { workspace = true }
 
 rust_xlsxwriter    = "0.95"
 
