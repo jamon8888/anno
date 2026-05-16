@@ -279,6 +279,153 @@ impl Store {
         Ok(true)
     }
 
+    /// Fetch memories that reference any of `entity_ids` in their
+    /// `entity_refs` column, optionally bounded by a bi-temporal `as_of`
+    /// (defaults to "now"). Used by v0.2's BFS graph-recall.
+    ///
+    /// Exploits the `LabelList` scalar index on `entity_refs` (v0.1 T4)
+    /// so the per-hop scan is sub-linear in table size.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query / decode failure.
+    pub async fn memory_filter_by_entities(
+        &self,
+        entity_ids: &[String],
+        as_of: Option<chrono::DateTime<chrono::Utc>>,
+        limit: usize,
+    ) -> Result<Vec<crate::memory::Memory>> {
+        if entity_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let parts: Vec<String> = entity_ids
+            .iter()
+            .map(|e| {
+                format!(
+                    "array_contains(entity_refs, '{}')",
+                    e.replace('\'', "''")
+                )
+            })
+            .collect();
+        let mut filter = format!("({})", parts.join(" OR "));
+        let t_us = as_of
+            .unwrap_or_else(chrono::Utc::now)
+            .timestamp_micros();
+        filter = format!(
+            "{filter} AND valid_from <= CAST({t_us} AS TIMESTAMP) \
+             AND (valid_to IS NULL OR valid_to > CAST({t_us} AS TIMESTAMP))"
+        );
+
+        let mut stream = self
+            .memories_tbl
+            .query()
+            .only_if(filter)
+            .limit(limit)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("graph filter exec: {e}")))?;
+
+        let mut out: Vec<crate::memory::Memory> = Vec::new();
+        while let Some(batch) = stream
+            .try_next()
+            .await
+            .map_err(|e| Error::Store(format!("graph filter stream: {e}")))?
+        {
+            for r in 0..batch.num_rows() {
+                out.push(batch_row_to_memory(&batch, r)?);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Fetch candidate memories that share at least one entity with any of
+    /// `entity_refs`, optionally scoped to a session (matches that session
+    /// or session-less rows), and currently valid (`valid_to IS NULL`).
+    ///
+    /// Used by the v0.2 conflict resolver — cosine similarity is computed
+    /// in Rust against the embeddings, not in SQL, so this candidate set
+    /// must be small. Capped at 100 rows; deployers with hot popular
+    /// entities will see candidate truncation rather than O(table) scans.
+    ///
+    /// `array_contains(entity_refs, '<key>')` exploits the LabelList scalar
+    /// index on `entity_refs` (v0.1 T4), so the scan is sub-linear.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query / decode failure.
+    pub async fn memory_candidates_for_conflict(
+        &self,
+        entity_refs: &[String],
+        session_id: Option<&str>,
+    ) -> Result<Vec<crate::memory::Memory>> {
+        if entity_refs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let parts: Vec<String> = entity_refs
+            .iter()
+            .map(|e| {
+                format!(
+                    "array_contains(entity_refs, '{}')",
+                    e.replace('\'', "''")
+                )
+            })
+            .collect();
+        let mut filter = format!("({}) AND valid_to IS NULL", parts.join(" OR "));
+        if let Some(s) = session_id {
+            filter = format!(
+                "{filter} AND (session_id = '{}' OR session_id IS NULL)",
+                s.replace('\'', "''")
+            );
+        }
+
+        let mut stream = self
+            .memories_tbl
+            .query()
+            .only_if(filter)
+            .limit(100)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("candidates exec: {e}")))?;
+
+        let mut out: Vec<crate::memory::Memory> = Vec::new();
+        while let Some(batch) = stream
+            .try_next()
+            .await
+            .map_err(|e| Error::Store(format!("candidates stream: {e}")))?
+        {
+            for r in 0..batch.num_rows() {
+                out.push(batch_row_to_memory(&batch, r)?);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Set `valid_to` on the memory with `id` to `valid_to`. Used by the
+    /// v0.2 bi-temporal invalidation path: a memory whose `valid_to` is
+    /// non-null + ≤ `as_of` is excluded from `recall_memory` results.
+    ///
+    /// Guarded by `valid_to IS NULL` so a double-invalidation is a no-op
+    /// (returns `Ok(false)`).
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on update failure.
+    pub async fn memory_update_valid_to(
+        &self,
+        id: &crate::memory::MemoryId,
+        valid_to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool> {
+        let id_s = id.as_string();
+        let ts = valid_to.timestamp_micros();
+        let filter = format!("id = '{id_s}' AND valid_to IS NULL");
+        let res = self
+            .memories_tbl
+            .update()
+            .only_if(filter)
+            .column("valid_to", format!("CAST({ts} AS TIMESTAMP)"))
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("update valid_to: {e}")))?;
+        Ok(res.rows_updated > 0)
+    }
+
     /// Create the v0.1 scalar indexes on the memories collection.
     /// Idempotent — skips columns that already have an index.
     ///
@@ -1010,6 +1157,9 @@ fn batch_row_to_memory_hit(
     let kind_arr = get_col::<StringArray>(b, "kind")?;
     let text_arr = get_col::<StringArray>(b, "text")?;
     let created_arr = get_col::<TimestampMicrosecondArray>(b, "created_at")?;
+    let valid_from_arr = get_col::<TimestampMicrosecondArray>(b, "valid_from")?;
+    let valid_to_arr = get_col::<TimestampMicrosecondArray>(b, "valid_to")?;
+    let entity_refs_arr = get_col::<ListArray>(b, "entity_refs")?;
 
     let id = id_arr.value(i).to_string();
     let session_id = if session_arr.is_null(i) {
@@ -1028,6 +1178,23 @@ fn batch_row_to_memory_hit(
     };
     let text_tokenized = text_arr.value(i).to_string();
     let created_at = ts_to_rfc3339(created_arr.value(i));
+    let valid_from_us = valid_from_arr.value(i);
+    let valid_to_us = if valid_to_arr.is_null(i) {
+        None
+    } else {
+        Some(valid_to_arr.value(i))
+    };
+
+    // entity_refs: List<Utf8>
+    let mut entity_refs: Vec<String> = Vec::new();
+    if !entity_refs_arr.is_null(i) {
+        let inner = entity_refs_arr.value(i);
+        if let Some(s) = inner.as_any().downcast_ref::<StringArray>() {
+            for k in 0..s.len() {
+                entity_refs.push(s.value(k).to_string());
+            }
+        }
+    }
 
     // Score: lancedb writes `_relevance_score` for hybrid queries; absence
     // means the batch carried no relevance column (e.g. a pure vector arm),
@@ -1044,6 +1211,9 @@ fn batch_row_to_memory_hit(
         text_tokenized,
         kind,
         created_at,
+        valid_from_us,
+        valid_to_us,
+        entity_refs,
         score,
     })
 }

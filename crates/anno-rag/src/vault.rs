@@ -107,6 +107,17 @@ impl Vault {
         v.lookup(token).map(|s| s.to_owned())
     }
 
+    /// Non-async best-effort reverse lookup. Used by v0.2 graph-recall to
+    /// hydrate display strings for entity nodes without dragging an
+    /// `.await` through the BFS. Returns `None` if the vault is currently
+    /// locked by another caller — the graph builder falls back to showing
+    /// the raw token id in `display`.
+    #[must_use]
+    pub fn lookup_blocking(&self, token: &str) -> Option<String> {
+        let inner = self.inner.try_lock().ok()?;
+        inner.lookup(token).map(|s| s.to_owned())
+    }
+
     /// Internal: lock the underlying cloakpipe vault. Used by Pipeline to
     /// call Rehydrator and stats. Held briefly — do NOT hold across `.await`
     /// of unrelated work.

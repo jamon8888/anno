@@ -233,6 +233,73 @@ impl Pipeline {
         self.detector_get_or_init()?.detect(text)
     }
 
+    /// Build the `entity_refs` payload for a memory row: merge the vault
+    /// token refs (already collected during `pseudonymize_with_refs`) with
+    /// non-PII NER entities extracted from the **pre-vault plaintext**.
+    ///
+    /// Output strings are canonical (see `canonicalize_entity` +
+    /// `canonicalize_pii_token`) — they're the keys the LabelList scalar
+    /// index on `memories.entity_refs` will filter on for v0.2's 2-hop
+    /// graph traversal.
+    ///
+    /// Person entities returned by the NER are **deliberately skipped** —
+    /// names are the vault's job; if a Person slips past the vault into
+    /// the entity_refs path, that's a leak we do NOT want a graph traversal
+    /// to amplify.
+    ///
+    /// NER errors are logged at `target = "anno_rag::memory::audit"` and
+    /// returned as "vault tokens only" — never panic the save path. Sub-
+    /// 0.6 confidence NER hits are filtered out to bound false-positive
+    /// graph edges.
+    pub fn extract_entities(
+        &self,
+        plaintext: &str,
+        token_refs: &[crate::memory::TokenRef],
+    ) -> Vec<String> {
+        use crate::canonicalize::{canonicalize_entity, canonicalize_pii_token};
+        use anno::{EntityType, Model, StackedNER};
+        use std::collections::HashSet;
+
+        let mut out: HashSet<String> = HashSet::new();
+
+        // 1. Vault token refs — already collected upstream; canonical form
+        //    embeds the token id so the graph traversal scopes per-tenant.
+        for tr in token_refs {
+            out.insert(canonicalize_pii_token(&tr.label, &tr.token));
+        }
+
+        // 2. Non-PII NER. StackedNER::new() is zero-dependency (Pattern +
+        //    Statistical layers); no ONNX cache hit at v0.1 corpus scale.
+        let ner = StackedNER::new();
+        match ner.extract_entities(plaintext, None) {
+            Ok(ents) => {
+                for e in ents {
+                    if e.confidence.value() < 0.6 {
+                        continue;
+                    }
+                    let tag = match &e.entity_type {
+                        EntityType::Organization => "ORG",
+                        EntityType::Location => "LOC",
+                        EntityType::Person => continue, // vault path only
+                        _ => continue, // skip Date/Money/etc. — not graph-useful
+                    };
+                    out.insert(canonicalize_entity(&e.text, tag, &self.cfg.entity_aliases));
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::memory::audit",
+                    event = "extract_entities_failed",
+                    "{e}"
+                );
+            }
+        }
+
+        let mut v: Vec<String> = out.into_iter().collect();
+        v.sort(); // deterministic order on disk
+        v
+    }
+
     /// Snapshot of the vault: total mappings + per-category counts.
     pub async fn vault_stats(&self) -> VaultStats {
         let guard = self.vault.lock_inner().await;
@@ -361,8 +428,33 @@ impl Pipeline {
             valid_to: None,
             embedding,
             token_refs: token_refs.clone(),
-            entity_refs: vec![],
+            entity_refs: self.extract_entities(text, &token_refs),
         };
+
+        // v0.2 T4: conflict resolver — only Preference + Reference can
+        // auto-invalidate prior rows. Facts + Context are append-only.
+        let mut invalidated_ids: Vec<String> = Vec::new();
+        if matches!(
+            m.kind,
+            crate::memory::MemoryKind::Preference | crate::memory::MemoryKind::Reference
+        ) {
+            let candidates = self
+                .store
+                .memory_candidates_for_conflict(&m.entity_refs, m.session_id.as_deref())
+                .await?;
+            for prior in &candidates {
+                if crate::conflict::resolves_conflict(
+                    &m,
+                    prior,
+                    self.cfg.conflict_cosine_threshold,
+                ) {
+                    self.store
+                        .memory_update_valid_to(&prior.id, m.created_at)
+                        .await?;
+                    invalidated_ids.push(prior.id.as_string());
+                }
+            }
+        }
 
         self.store.memory_insert(&m).await?;
 
@@ -370,6 +462,8 @@ impl Pipeline {
             id,
             redacted_text: tokenized,
             token_refs,
+            entity_refs: m.entity_refs,
+            invalidated_ids,
         })
     }
 
@@ -389,6 +483,8 @@ impl Pipeline {
         top_k: usize,
         session_id: Option<String>,
         kinds: Option<Vec<crate::memory::MemoryKind>>,
+        as_of: Option<chrono::DateTime<chrono::Utc>>,
+        graph_expand: bool,
     ) -> Result<Vec<crate::memory::MemoryHit>> {
         let entities = self.detector_get_or_init()?.detect(query)?;
         let (tokenized_query, _) =
@@ -408,20 +504,247 @@ impl Pipeline {
             // facts shouldn't be hidden by a per-session recall).
             raw.retain(|h| h.session_id.as_deref() == Some(s.as_str()) || h.session_id.is_none());
         }
+
+        // Bi-temporal filter. as_of = Some(t) → point-in-time semantics
+        // (valid_from <= t AND (valid_to IS NULL OR valid_to > t)).
+        // as_of = None → "now": include only currently-valid rows.
+        let t_us = as_of
+            .unwrap_or_else(chrono::Utc::now)
+            .timestamp_micros();
+        raw.retain(|r| {
+            r.valid_from_us <= t_us && r.valid_to_us.map_or(true, |v| v > t_us)
+        });
+
         raw.truncate(top_k);
+
+        // Track which ids came from the hybrid arm so the graph-expand pass
+        // can tag freshly added rows with HitProvenance::GraphExpand.
+        let hybrid_ids: std::collections::HashSet<String> =
+            raw.iter().map(|r| r.id.clone()).collect();
+
+        // v0.2 T6: optional graph-expand post-pass. Pulls in memories that
+        // share at least one entity with any top-k hit, bounded by
+        // graph_per_hop_limit. Bi-temporal predicate already applied.
+        if graph_expand {
+            let frontier: std::collections::HashSet<String> = raw
+                .iter()
+                .flat_map(|r| r.entity_refs.clone())
+                .collect();
+            if !frontier.is_empty() {
+                let frontier_vec: Vec<String> = frontier.into_iter().collect();
+                let extras = self
+                    .store
+                    .memory_filter_by_entities(
+                        &frontier_vec,
+                        as_of,
+                        self.cfg.graph_per_hop_limit,
+                    )
+                    .await?;
+                let known: std::collections::HashSet<String> =
+                    raw.iter().map(|r| r.id.clone()).collect();
+                for m in extras {
+                    let id = m.id.as_string();
+                    if known.contains(&id) {
+                        continue;
+                    }
+                    raw.push(crate::memory::MemoryHitRow {
+                        id,
+                        session_id: m.session_id.clone(),
+                        text_tokenized: m.text.clone(),
+                        kind: m.kind,
+                        created_at: m.created_at.to_rfc3339(),
+                        valid_from_us: m.valid_from.timestamp_micros(),
+                        valid_to_us: m.valid_to.map(|t| t.timestamp_micros()),
+                        entity_refs: m.entity_refs.clone(),
+                        score: 0.0, // graph-expanded rows carry no RRF score
+                    });
+                }
+            }
+        }
 
         let mut out: Vec<crate::memory::MemoryHit> = Vec::with_capacity(raw.len());
         for row in raw {
+            let from_hybrid = hybrid_ids.contains(&row.id);
             let rehydrated = self.rehydrate(&row.text_tokenized).await?;
             out.push(crate::memory::MemoryHit {
                 id: row.id,
                 text: rehydrated.text,
                 kind: row.kind,
                 created_at: row.created_at,
+                valid_from: ts_us_to_rfc3339(row.valid_from_us),
+                valid_to: row.valid_to_us.map(ts_us_to_rfc3339),
+                entity_refs: row.entity_refs,
                 score: row.score,
+                via: if from_hybrid {
+                    crate::memory::HitProvenance::Hybrid
+                } else {
+                    crate::memory::HitProvenance::GraphExpand
+                },
             });
         }
         Ok(out)
+    }
+
+    /// Two-hop graph recall over `entity_refs`.
+    ///
+    /// Canonicalises `seed_entity` (if not already a `pii:`/`ent:` form,
+    /// treats it as a MISC named entity for canonicalisation). BFS from
+    /// the seed for at most `max_hops` (capped by `cfg.graph_max_hops`,
+    /// default 2), pulling at most `per_hop_limit` rows per hop (capped
+    /// by `cfg.graph_per_hop_limit`, default 50).
+    ///
+    /// Returns the connected subgraph: entity nodes (with mention counts),
+    /// memory-mediated edges, and rehydrated memories tagged
+    /// `HitProvenance::GraphExpand`.
+    ///
+    /// Bi-temporal: `as_of` (defaults to "now") filters out rows whose
+    /// `valid_to` ≤ the cutoff, so invalidated branches do not pollute
+    /// the graph.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] / [`Error::Vault`] on backend failure.
+    pub async fn graph_recall(
+        &self,
+        seed_entity: &str,
+        max_hops: u8,
+        per_hop_limit: usize,
+        as_of: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<crate::memory::GraphRecallResult> {
+        use crate::memory::{
+            EntityKindWire, EntityNode, GraphRecallResult, HitProvenance, MemoryEdge,
+            MemoryHit,
+        };
+        use std::collections::{HashMap, HashSet};
+
+        let max_hops = max_hops.min(self.cfg.graph_max_hops);
+        let per_hop_limit = per_hop_limit.min(self.cfg.graph_per_hop_limit);
+
+        // 1. Canonicalise seed. Pass-through if already a `pii:` / `ent:`
+        //    form; otherwise treat as MISC named entity.
+        let canonical_seed = if seed_entity.starts_with("ent:") || seed_entity.starts_with("pii:")
+        {
+            seed_entity.to_string()
+        } else {
+            crate::canonicalize::canonicalize_entity(
+                seed_entity,
+                "MISC",
+                &self.cfg.entity_aliases,
+            )
+        };
+
+        let mut visited_entities: HashSet<String> = HashSet::new();
+        visited_entities.insert(canonical_seed.clone());
+
+        let mut memories_by_id: HashMap<String, crate::memory::Memory> = HashMap::new();
+        let mut edges: Vec<MemoryEdge> = Vec::new();
+        let mut frontier: Vec<String> = vec![canonical_seed.clone()];
+
+        for _hop in 0..max_hops {
+            if frontier.is_empty() {
+                break;
+            }
+            let rows = self
+                .store
+                .memory_filter_by_entities(&frontier, as_of, per_hop_limit)
+                .await?;
+            let mut next_frontier: HashSet<String> = HashSet::new();
+            for m in rows {
+                let mid = m.id.as_string();
+                if memories_by_id.contains_key(&mid) {
+                    continue;
+                }
+                // Build edges from any frontier entity in this row to any other entity.
+                for from in &m.entity_refs {
+                    if !frontier.contains(from) {
+                        continue;
+                    }
+                    for to in &m.entity_refs {
+                        if from == to {
+                            continue;
+                        }
+                        edges.push(MemoryEdge {
+                            from: from.clone(),
+                            via: mid.clone(),
+                            to: to.clone(),
+                        });
+                        if !visited_entities.contains(to) {
+                            next_frontier.insert(to.clone());
+                        }
+                    }
+                }
+                memories_by_id.insert(mid, m);
+            }
+            visited_entities.extend(next_frontier.iter().cloned());
+            frontier = next_frontier.into_iter().collect();
+        }
+
+        // Mention counts per entity, then build node list.
+        let mut mention_counts: HashMap<String, u32> = HashMap::new();
+        for m in memories_by_id.values() {
+            for e in &m.entity_refs {
+                *mention_counts.entry(e.clone()).or_insert(0) += 1;
+            }
+        }
+        let mut nodes: Vec<EntityNode> = mention_counts
+            .into_iter()
+            .map(|(id, c)| {
+                let (kind, display) = entity_id_display(&id, &self.vault);
+                EntityNode {
+                    id,
+                    display,
+                    kind,
+                    mention_count: c,
+                }
+            })
+            .collect();
+        nodes.sort_by(|a, b| b.mention_count.cmp(&a.mention_count).then_with(|| a.id.cmp(&b.id)));
+
+        // Rehydrate memories, tagged GraphExpand.
+        let mut memories: Vec<MemoryHit> = Vec::with_capacity(memories_by_id.len());
+        for m in memories_by_id.into_values() {
+            let r = self.rehydrate(&m.text).await?;
+            memories.push(MemoryHit {
+                id: m.id.as_string(),
+                text: r.text,
+                kind: m.kind,
+                created_at: m.created_at.to_rfc3339(),
+                valid_from: m.valid_from.to_rfc3339(),
+                valid_to: m.valid_to.map(|t| t.to_rfc3339()),
+                entity_refs: m.entity_refs.clone(),
+                score: 0.0,
+                via: HitProvenance::GraphExpand,
+            });
+        }
+
+        // PII seeds: try to resolve to plaintext.
+        let seed_resolved = canonical_seed
+            .strip_prefix("pii:")
+            .and_then(|rest| rest.splitn(2, ':').nth(1).map(str::to_string))
+            .and_then(|tok| self.vault.lookup_blocking(&tok));
+
+        Ok(GraphRecallResult {
+            seed: canonical_seed,
+            seed_resolved,
+            nodes,
+            edges,
+            memories,
+        })
+    }
+
+    /// Mark a memory row as invalidated at `at` (defaults to "now"). The
+    /// row stays on disk (history-preserving), but `recall_memory` with
+    /// `as_of >= at` will exclude it. Guarded by `valid_to IS NULL` so a
+    /// double-invalidate is a no-op (returns `Ok(false)`).
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on update failure.
+    pub async fn invalidate_memory(
+        &self,
+        id: &crate::memory::MemoryId,
+        at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<bool> {
+        let when = at.unwrap_or_else(chrono::Utc::now);
+        self.store.memory_update_valid_to(id, when).await
     }
 
     /// GDPR Art. 17 erasure on a Memory row.
@@ -457,7 +780,11 @@ impl Pipeline {
                 .into_iter()
                 .collect(),
             (None, Some(q)) => {
-                let hits = self.recall_memory(&q, limit, None, None).await?;
+                // Forget by query: scan currently-valid rows (as_of = now);
+                // graph_expand off — forget is identity-anchored, not graph-anchored.
+                let hits = self
+                    .recall_memory(&q, limit, None, None, None, false)
+                    .await?;
                 let mut out = Vec::with_capacity(hits.len());
                 for h in hits.iter().take(limit) {
                     let uid = uuid::Uuid::parse_str(&h.id)
@@ -584,7 +911,11 @@ impl Pipeline {
                 text: rehydrated.text,
                 kind: m.kind,
                 created_at: m.created_at.to_rfc3339(),
+                valid_from: m.valid_from.to_rfc3339(),
+                valid_to: m.valid_to.map(|v| v.to_rfc3339()),
+                entity_refs: m.entity_refs,
                 score: 0.0,
+                via: crate::memory::HitProvenance::Hybrid,
             });
         }
         Ok(ListPage { items, next_cursor })
@@ -640,6 +971,13 @@ pub struct SavedMemory {
     pub redacted_text: String,
     /// `(category, token)` pairs minted for the GDPR Art. 17 cascade.
     pub token_refs: Vec<crate::memory::TokenRef>,
+    /// Canonicalised entity references attached to the new row (v0.2 T2).
+    /// Surfaces what got LabelList-indexed for the future graph traversal.
+    pub entity_refs: Vec<String>,
+    /// Ids of prior `Preference` / `Reference` memories the conflict
+    /// resolver auto-invalidated on this save (v0.2 T4). Empty for
+    /// `Fact` / `Context` saves.
+    pub invalidated_ids: Vec<String>,
 }
 
 /// Receipt returned by [`Pipeline::forget`]. Suitable for inclusion in an
@@ -778,4 +1116,40 @@ pub struct VaultStats {
     pub total_mappings: usize,
     /// Count per PII category (e.g. `"Email"`, `"PhoneNumber"`, `"Custom(NIR)"`).
     pub categories: std::collections::HashMap<String, u32>,
+}
+
+/// Decode a canonical entity id into `(kind, display)` for the
+/// graph-recall wire shape. `display` is the rehydrated plaintext for
+/// PII tokens (best-effort — falls back to the token id if the vault
+/// is currently locked), or the lowercase tail for named entities.
+fn entity_id_display(
+    id: &str,
+    vault: &crate::vault::Vault,
+) -> (crate::memory::EntityKindWire, String) {
+    use crate::memory::EntityKindWire;
+    if let Some(rest) = id.strip_prefix("pii:") {
+        // pii:<LABEL>:<TOKEN>
+        let token = rest.splitn(2, ':').nth(1).unwrap_or("");
+        let display = vault
+            .lookup_blocking(token)
+            .unwrap_or_else(|| token.to_string());
+        (EntityKindWire::PiiToken, display)
+    } else if let Some(rest) = id.strip_prefix("ent:") {
+        let display = rest.splitn(2, ':').nth(1).unwrap_or(rest).to_string();
+        (EntityKindWire::NamedEntity, display)
+    } else {
+        (EntityKindWire::NamedEntity, id.to_string())
+    }
+}
+
+/// Convert a microsecond UTC timestamp into an RFC 3339 string. Used by
+/// the v0.2 `MemoryHit` builders to surface `valid_from` / `valid_to` in
+/// the form the MCP client expects.
+fn ts_us_to_rfc3339(micros: i64) -> String {
+    use chrono::TimeZone;
+    chrono::Utc
+        .timestamp_micros(micros)
+        .single()
+        .map(|t| t.to_rfc3339())
+        .unwrap_or_else(|| String::from("1970-01-01T00:00:00Z"))
 }

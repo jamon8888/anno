@@ -153,6 +153,56 @@ pub struct MemoryRecallParams {
     /// Optional category filter. Strings matching `fact|preference|reference|context`.
     #[serde(default)]
     pub kinds: Option<Vec<String>>,
+    /// Bi-temporal cutoff: only memories valid at this instant are returned.
+    /// `None` means "now". v0.2.
+    #[serde(default)]
+    pub as_of: Option<chrono::DateTime<chrono::Utc>>,
+    /// When true, expand the top-k hybrid hits via the entity-refs graph
+    /// (one-hop neighbours, bounded by `graph_per_hop_limit`). v0.2.
+    #[serde(default)]
+    pub graph_expand: bool,
+}
+
+/// Parameters for the `memory_graph_recall` tool (v0.2).
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct MemoryGraphRecallParams {
+    /// Seed entity — either a canonical id (`pii:LABEL:TOKEN` /
+    /// `ent:TAG:value`) or a free-text name (will be canonicalised as
+    /// MISC for the lookup).
+    pub entity: String,
+    /// BFS depth. Capped by `cfg.graph_max_hops` (default 2).
+    #[serde(default = "default_max_hops")]
+    pub max_hops: u8,
+    /// Rows scanned per hop. Capped by `cfg.graph_per_hop_limit` (default 50).
+    #[serde(default = "default_per_hop_limit")]
+    pub per_hop_limit: usize,
+    /// Bi-temporal cutoff. `None` means "now".
+    #[serde(default)]
+    pub as_of: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+fn default_max_hops() -> u8 {
+    2
+}
+fn default_per_hop_limit() -> usize {
+    50
+}
+
+/// Parameters for the `memory_invalidate` tool (v0.2).
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct MemoryInvalidateParams {
+    /// Memory id (stringified UUID).
+    pub id: String,
+    /// Timestamp at which the memory becomes invalid. `None` means "now".
+    #[serde(default)]
+    pub at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Serialize)]
+struct MemoryInvalidateResultWire {
+    id: String,
+    invalidated: bool,
+    valid_to: String,
 }
 
 #[derive(Serialize)]
@@ -372,7 +422,7 @@ impl AnnoRagServer {
         });
         let r = self
             .pipeline
-            .recall_memory(&p.query, p.top_k, p.session_id, kinds)
+            .recall_memory(&p.query, p.top_k, p.session_id, kinds, p.as_of, p.graph_expand)
             .await;
         let elapsed = start.elapsed().as_millis() as u64;
         match r {
@@ -519,6 +569,93 @@ impl AnnoRagServer {
             }
         }
     }
+
+    /// v0.2 graph-recall: 2-hop BFS over entity_refs from a seed entity.
+    #[tool(
+        description = "Graph-expand from a seed entity over the entity_refs index. Returns the connected subgraph (entities + memories + edges) up to max_hops (default 2)."
+    )]
+    async fn memory_graph_recall(
+        &self,
+        Parameters(p): Parameters<MemoryGraphRecallParams>,
+    ) -> String {
+        let start = std::time::Instant::now();
+        let r = self
+            .pipeline
+            .graph_recall(&p.entity, p.max_hops, p.per_hop_limit, p.as_of)
+            .await;
+        let elapsed = start.elapsed().as_millis() as u64;
+        match r {
+            Ok(res) => {
+                tracing::info!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_graph_recall",
+                    result = "ok",
+                    duration_ms = elapsed,
+                    nodes = res.nodes.len(),
+                    edges = res.edges.len(),
+                    memories = res.memories.len(),
+                    ""
+                );
+                serde_json::to_string_pretty(&res)
+                    .unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_graph_recall",
+                    result = "error",
+                    duration_ms = elapsed,
+                    "{e}"
+                );
+                format!("Error: {e}")
+            }
+        }
+    }
+
+    /// v0.2 memory_invalidate: mark a memory invalid at `at` (default now).
+    #[tool(
+        description = "Mark a memory as no longer valid as of the given timestamp (default: now). No-op if valid_to is already set."
+    )]
+    async fn memory_invalidate(
+        &self,
+        Parameters(p): Parameters<MemoryInvalidateParams>,
+    ) -> String {
+        let id = match uuid::Uuid::parse_str(&p.id) {
+            Ok(u) => crate::memory::MemoryId(u),
+            Err(e) => return format!("Error: bad id: {e}"),
+        };
+        let when = p.at.unwrap_or_else(chrono::Utc::now);
+        let start = std::time::Instant::now();
+        let r = self.pipeline.invalidate_memory(&id, Some(when)).await;
+        let elapsed = start.elapsed().as_millis() as u64;
+        match r {
+            Ok(invalidated) => {
+                tracing::info!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_invalidate",
+                    result = if invalidated { "ok" } else { "noop" },
+                    duration_ms = elapsed,
+                    ""
+                );
+                serde_json::to_string_pretty(&MemoryInvalidateResultWire {
+                    id: p.id,
+                    invalidated,
+                    valid_to: when.to_rfc3339(),
+                })
+                .unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::memory::audit",
+                    tool = "memory_invalidate",
+                    result = "error",
+                    duration_ms = elapsed,
+                    "{e}"
+                );
+                format!("Error: {e}")
+            }
+        }
+    }
 }
 
 #[tool_handler]
@@ -529,7 +666,9 @@ impl ServerHandler for AnnoRagServer {
                 "anno-rag MCP server. Tools: search (pseudonymized retrieval), \
                  rehydrate (restore originals), detect (dry-run scan), vault_stats, \
                  memory_save / memory_recall / memory_forget / memory_list \
-                 (PII-safe session memory; GDPR Art. 17 cascades to vault tokens).",
+                 (PII-safe session memory; GDPR Art. 17 cascades to vault tokens), \
+                 memory_graph_recall / memory_invalidate (v0.2 entity-graph + \
+                 bi-temporal). memory_recall accepts as_of + graph_expand.",
             )
             .with_server_info(Implementation::new(
                 self.cfg.mcp_server_name.clone(),

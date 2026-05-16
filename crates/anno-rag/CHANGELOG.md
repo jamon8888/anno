@@ -4,6 +4,67 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### v0.8 anno-memory v0.2 — bi-temporal + entity-graph
+
+### Added
+- **`canonicalize` module** (T1) — deterministic entity canonicalisation:
+  lowercase → NFD diacritic strip → ASCII-punct strip → whitespace
+  collapse → per-tenant alias table lookup. Output format `ent:TAG:value`
+  for NER entities, `pii:LABEL:TOKEN` for vault references.
+- **`Pipeline::extract_entities`** (T2) — merges the vault TokenRefs
+  from `pseudonymize_with_refs` with non-PII NER from `anno::StackedNER`.
+  Filters: confidence ≥ 0.6; Person dropped (vault path only). Now
+  populates `Memory::entity_refs` on every `save_memory` (was empty in
+  v0.1). Failures non-fatal — log via tracing, return vault tokens only.
+- **Bi-temporal recall** (T3) — `Pipeline::recall_memory` gains
+  `as_of: Option<DateTime<Utc>>` + `graph_expand: bool` parameters.
+  Filter: `valid_from <= t AND (valid_to IS NULL OR valid_to > t)`,
+  defaulting to "now". `MemoryHitRow` + `MemoryHit` carry
+  `valid_from` / `valid_to` / `entity_refs` / `via` (HitProvenance).
+  `Pipeline::invalidate_memory(id, at?) -> Result<bool>` sets
+  `valid_to`; idempotent via `valid_to IS NULL` guard.
+- **`conflict` module** (T4) — `cosine_sim`, `shares_any`,
+  `resolves_conflict(new, prior, threshold)`. Five guards: same kind,
+  kind in `{Preference, Reference}`, `prior.valid_to IS NULL`, shared
+  entity_ref, cosine ≥ threshold. `save_memory` runs the resolver
+  before insert; invalidated ids returned in `SavedMemory.invalidated_ids`.
+  Fact and Context stay append-only by design. Config:
+  `conflict_cosine_threshold` (default 0.85).
+- **`Pipeline::graph_recall(seed, max_hops, per_hop_limit, as_of)`** (T5) —
+  BFS over `entity_refs` using the LabelList scalar index from v0.1.
+  Returns `GraphRecallResult { seed, seed_resolved, nodes, edges, memories }`
+  with `HitProvenance::GraphExpand` on every memory. Bi-temporal threading
+  via the `as_of` arg. Config: `graph_max_hops` (default 2),
+  `graph_per_hop_limit` (default 50).
+- **`Vault::lookup_blocking`** — non-async best-effort reverse lookup
+  via `tokio::sync::Mutex::try_lock`; returns `None` on contention.
+  Used by `graph_recall` to populate node `display` strings without
+  threading `.await` through the BFS.
+- **MCP wiring** (T5/T6/T7):
+  - `memory_recall` gains `as_of` + `graph_expand`.
+  - `memory_graph_recall(entity, max_hops, per_hop_limit, as_of)` —
+    new tool returning the full subgraph.
+  - `memory_invalidate(id, at?)` — new tool; reports `invalidated`
+    + the `valid_to` set; emits `result='noop'` on idempotent re-call.
+  - All three tools audit at `target = "anno_rag::memory::audit"`
+    with structured fields.
+- **Property test** (T8) — `graph_recall_is_monotonic_in_hops`
+  (#[ignore]'d, 25 cases). 2 hops never returns fewer memories or
+  nodes than 1 hop over the same planted graph.
+
+### Changed
+- `MemoryHitRow` gains `session_id`, `valid_from_us`, `valid_to_us`,
+  `entity_refs` fields. `MemoryHit` gains `valid_from`, `valid_to`,
+  `entity_refs`, `via`.
+- `SavedMemory` gains `entity_refs`, `invalidated_ids`.
+- `AnnoRagConfig` gains `entity_aliases`, `conflict_cosine_threshold`,
+  `graph_max_hops`, `graph_per_hop_limit`.
+
+### Deferred
+- **Task 9 LoCoMo multi-hop accuracy gate** — depends on the still-
+  deferred v0.1 LoCoMo subset (T13). v0.2 ships without the eval gate
+  per the same no-CI-gate carve-out v0.1 took.
+
 ### v0.7 anno-memory v0.1 — PII-safe session memory
 
 ### Added
