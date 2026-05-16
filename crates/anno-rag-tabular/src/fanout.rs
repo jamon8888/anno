@@ -312,17 +312,20 @@ async fn extract_and_upsert_one_row(
             continue;
         }
 
-        let extracted = extractor
+        let mut extracted = extractor
             .extract_doc(review_id, row.doc_id, &to_extract)
             .await?;
 
-        // TODO(T28-T30): run verifier on each cell here — set
-        // support_score + confidence from the cross-encoder support
-        // check before upserting. Today every cell hits the table
-        // with the placeholder `support_score = 0.0` /
-        // `Confidence::Medium` assigned by `extract::batch`. The
-        // verifier hook lives in this exact spot, between
-        // `extract_doc` and the per-cell `cells.upsert` loop below.
+        // T28: offset / quote round-trip verification. Mutates each
+        // cell's `confidence` to `Low` if any citation fails — does
+        // not drop the cell, does not touch `support_score`.
+        for cell in &mut extracted {
+            crate::verify::offsets::verify_cell_offsets(cell, row.doc_id, extractor.chunks())
+                .await?;
+        }
+        // TODO(T29): cross-encoder support scoring goes here — set
+        // `support_score` and re-bin `confidence` against
+        // High/Medium/Low thresholds before the upsert loop runs.
 
         for cell in extracted {
             match cells.upsert(&cell).await {
@@ -1090,6 +1093,100 @@ mod tests {
             .expect("latest")
             .expect("col_b cell exists");
         assert_eq!(fresh.value, json!("B"), "col_b freshly extracted");
+    }
+
+    /// LLM whose citations point at bogus offsets so the T28 offset
+    /// verifier must downgrade every extracted cell to `Low`.
+    struct BadOffsetLlm {
+        chunk_id: uuid::Uuid,
+    }
+
+    #[async_trait]
+    impl LlmClient for BadOffsetLlm {
+        async fn generate_structured(
+            &self,
+            _system: &str,
+            _user: &str,
+            _json_schema: &Value,
+        ) -> Result<StructuredOutput> {
+            Ok(StructuredOutput {
+                value: json!({
+                    "col_a": {
+                        "value": "A",
+                        "reasoning": "stub",
+                        "citations": [{
+                            "chunk_id": self.chunk_id.to_string(),
+                            "char_start": 0,
+                            "char_end": 5,
+                            // Chunk content is "Governing law: ..." —
+                            // bytes 0..5 are "Gover", NOT "WRONG".
+                            "quoted_text": "WRONG"
+                        }]
+                    },
+                    "col_b": {
+                        "value": "B",
+                        "reasoning": "stub",
+                        "citations": [{
+                            "chunk_id": self.chunk_id.to_string(),
+                            "char_start": 0,
+                            "char_end": 5,
+                            "quoted_text": "Gover"
+                        }]
+                    }
+                }),
+                usage: Usage::default(),
+            })
+        }
+
+        fn model_id(&self) -> &str {
+            "bad-offset"
+        }
+    }
+
+    #[tokio::test]
+    async fn fanout_offset_verifier_downgrades_bad_citation() {
+        let (_dir, storage) = fresh_storage().await;
+        let (review, rows, chunk_map) = seed_review(&storage, 1).await;
+
+        let llm = Arc::new(BadOffsetLlm {
+            chunk_id: any_chunk_id(&chunk_map),
+        });
+        let chunks = Arc::new(InMemoryChunks { by_doc: chunk_map });
+        let extractor = Extractor::new(llm, chunks);
+
+        let outcomes = run_review(&storage, &extractor, review, FanoutConfig::default())
+            .await
+            .expect("run_review succeeds");
+        assert_eq!(outcomes.len(), 1);
+
+        // col_a's citation quote was bogus → must be downgraded to Low.
+        let col_a = ColumnId::for_name(review, "col_a");
+        let bad_cell = storage
+            .cells
+            .latest(review, rows[0].id, col_a)
+            .await
+            .expect("latest")
+            .expect("col_a cell exists");
+        assert!(
+            matches!(bad_cell.confidence, Confidence::Low),
+            "T28 must downgrade cells whose citations don't round-trip, got {:?}",
+            bad_cell.confidence
+        );
+
+        // col_b's citation matched the chunk → must stay at the
+        // extractor's default Medium (verifier never upgrades).
+        let col_b = ColumnId::for_name(review, "col_b");
+        let good_cell = storage
+            .cells
+            .latest(review, rows[0].id, col_b)
+            .await
+            .expect("latest")
+            .expect("col_b cell exists");
+        assert!(
+            matches!(good_cell.confidence, Confidence::Medium),
+            "well-formed citation must keep its starting confidence, got {:?}",
+            good_cell.confidence
+        );
     }
 
     #[tokio::test]

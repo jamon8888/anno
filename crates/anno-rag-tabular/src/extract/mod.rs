@@ -89,6 +89,16 @@ impl Extractor {
         }
     }
 
+    /// Borrow the underlying [`ChunkSource`] this extractor is wired
+    /// to. Exposed so downstream callers (notably the offset verifier
+    /// in [`crate::verify::offsets`]) can fetch the same chunks the
+    /// extractor saw without taking a second `Arc<dyn ChunkSource>`
+    /// dependency.
+    #[must_use]
+    pub fn chunks(&self) -> &dyn ChunkSource {
+        self.chunks.as_ref()
+    }
+
     /// Override the per-call LLM token budget used by the column-batch
     /// splitter. Mainly a test seam: production code uses the default
     /// 80k budget which is calibrated for Anthropic's 200k window.
