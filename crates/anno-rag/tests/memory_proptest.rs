@@ -82,4 +82,49 @@ proptest! {
             }
         });
     }
+
+    #[test]
+    #[ignore = "drives full LanceDB + NER per case; minutes/run — opt in via --ignored --release"]
+    fn graph_recall_is_monotonic_in_hops(seed in "[a-z]{4,10}") {
+        // Property: `graph_recall(seed, n, ...)` returns at least as many
+        // memories and at least as many nodes as `graph_recall(seed, n-1, ...)`.
+        // BFS over a non-shrinking graph cannot lose reach when you grant
+        // more hops.
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let tmp = TempDir::new().unwrap();
+            let cfg = fresh_cfg(tmp.path());
+            let p = Pipeline::new(cfg, [0u8; 32]).await.unwrap();
+
+            // Plant a small two-edge graph: seed → Bordeaux, seed → Cabinet Martin.
+            p.save_memory(
+                &format!("Cabinet {seed} a Bordeaux."),
+                Some(MemoryKind::Fact),
+                None,
+            )
+            .await
+            .unwrap();
+            p.save_memory(
+                &format!("Cabinet {seed} collabore avec Cabinet Martin."),
+                Some(MemoryKind::Fact),
+                None,
+            )
+            .await
+            .unwrap();
+
+            let r1 = p
+                .graph_recall(&format!("Cabinet {seed}"), 1, 50, None)
+                .await
+                .unwrap();
+            let r2 = p
+                .graph_recall(&format!("Cabinet {seed}"), 2, 50, None)
+                .await
+                .unwrap();
+            assert!(
+                r2.memories.len() >= r1.memories.len(),
+                "2 hops must reach >= memories than 1 hop"
+            );
+            assert!(r2.nodes.len() >= r1.nodes.len());
+        });
+    }
 }
