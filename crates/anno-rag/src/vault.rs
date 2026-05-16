@@ -452,7 +452,10 @@ mod tests {
         };
         let err = s.derive().expect_err("v0.4 KMS path is a stub");
         let msg = err.to_string();
-        assert!(msg.contains("KMS key source not implemented"), "msg = {msg}");
+        assert!(
+            msg.contains("KMS key source not implemented"),
+            "msg = {msg}"
+        );
         assert!(msg.contains("aws-kms"), "msg should name the provider");
         assert!(msg.contains("U6"), "msg should point at the readiness gap");
     }

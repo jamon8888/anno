@@ -50,10 +50,7 @@ fn ner_pii_recall_meets_baseline() {
     }
 
     // Load baselines (Person, Organization, Location keys).
-    let baseline_path = pii_corpus_dir()
-        .parent()
-        .unwrap()
-        .join("pii_baseline.toml");
+    let baseline_path = pii_corpus_dir().parent().unwrap().join("pii_baseline.toml");
     let baseline_text = std::fs::read_to_string(&baseline_path).expect("pii_baseline.toml");
     let parsed: toml::Value = toml::from_str(&baseline_text).expect("parse baseline");
     let recall_tbl = parsed.get("recall").expect("[recall] table");
@@ -92,7 +89,10 @@ fn ner_pii_recall_meets_baseline() {
             ));
         }
     }
-    assert!(failures.is_empty(), "PII NER recall regressions: {failures:?}");
+    assert!(
+        failures.is_empty(),
+        "PII NER recall regressions: {failures:?}"
+    );
 }
 
 /// Diagnostic: print every Person/Organization/Location annotation the NER
@@ -118,9 +118,7 @@ fn diagnose_ner_misses() {
         // FN: which truths got no overlapping same-category detection?
         for (t, txt) in &truth {
             let hit = detected.iter().any(|d| {
-                category_key(&d.category) == t.category
-                    && t.start < d.end
-                    && d.start < t.end
+                category_key(&d.category) == t.category && t.start < d.end && d.start < t.end
             });
             if !hit {
                 let mut cstart = t.start.saturating_sub(20);

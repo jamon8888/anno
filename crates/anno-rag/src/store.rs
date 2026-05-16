@@ -226,10 +226,8 @@ impl Store {
     /// build or insert failure.
     pub async fn memory_insert(&self, m: &crate::memory::Memory) -> Result<()> {
         let batch = memory_to_batch(m, self.memory_embedding_dim, &self.memories_schema)?;
-        let reader = RecordBatchIterator::new(
-            std::iter::once(Ok(batch)),
-            self.memories_schema.clone(),
-        );
+        let reader =
+            RecordBatchIterator::new(std::iter::once(Ok(batch)), self.memories_schema.clone());
         let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(reader);
         self.memories_tbl
             .add(reader)
@@ -299,17 +297,10 @@ impl Store {
         }
         let parts: Vec<String> = entity_ids
             .iter()
-            .map(|e| {
-                format!(
-                    "array_contains(entity_refs, '{}')",
-                    e.replace('\'', "''")
-                )
-            })
+            .map(|e| format!("array_contains(entity_refs, '{}')", e.replace('\'', "''")))
             .collect();
         let mut filter = format!("({})", parts.join(" OR "));
-        let t_us = as_of
-            .unwrap_or_else(chrono::Utc::now)
-            .timestamp_micros();
+        let t_us = as_of.unwrap_or_else(chrono::Utc::now).timestamp_micros();
         filter = format!(
             "{filter} AND valid_from <= CAST({t_us} AS TIMESTAMP) \
              AND (valid_to IS NULL OR valid_to > CAST({t_us} AS TIMESTAMP))"
@@ -361,12 +352,7 @@ impl Store {
         }
         let parts: Vec<String> = entity_refs
             .iter()
-            .map(|e| {
-                format!(
-                    "array_contains(entity_refs, '{}')",
-                    e.replace('\'', "''")
-                )
-            })
+            .map(|e| format!("array_contains(entity_refs, '{}')", e.replace('\'', "''")))
             .collect();
         let mut filter = format!("({}) AND valid_to IS NULL", parts.join(" OR "));
         if let Some(s) = session_id {
@@ -448,11 +434,7 @@ impl Store {
             .list_indices()
             .await
             .map_err(|e| Error::Store(format!("list_indices: {e}")))?;
-        let has_index_on = |col: &str| {
-            existing
-                .iter()
-                .any(|i| i.columns.iter().any(|c| c == col))
-        };
+        let has_index_on = |col: &str| existing.iter().any(|i| i.columns.iter().any(|c| c == col));
 
         if !has_index_on("created_at") {
             self.memories_tbl
@@ -510,10 +492,7 @@ impl Store {
     ///
     /// # Errors
     /// Returns [`Error::Store`] on optimize failure.
-    pub async fn optimize_memories(
-        &self,
-        _min_age: std::time::Duration,
-    ) -> Result<()> {
+    pub async fn optimize_memories(&self, _min_age: std::time::Duration) -> Result<()> {
         use lancedb::table::OptimizeAction;
         self.memories_tbl
             .optimize(OptimizeAction::All)
@@ -961,12 +940,9 @@ fn memory_to_batch(
     };
     let kind_arr = StringArray::from(vec![kind_str.to_string()]);
     let text_arr = StringArray::from(vec![text.clone()]);
-    let created_arr =
-        TimestampMicrosecondArray::from(vec![created_at.timestamp_micros()]);
-    let accessed_arr =
-        TimestampMicrosecondArray::from(vec![accessed_at.timestamp_micros()]);
-    let valid_from_arr =
-        TimestampMicrosecondArray::from(vec![valid_from.timestamp_micros()]);
+    let created_arr = TimestampMicrosecondArray::from(vec![created_at.timestamp_micros()]);
+    let accessed_arr = TimestampMicrosecondArray::from(vec![accessed_at.timestamp_micros()]);
+    let valid_from_arr = TimestampMicrosecondArray::from(vec![valid_from.timestamp_micros()]);
     let valid_to_arr =
         TimestampMicrosecondArray::from(vec![valid_to.map(|t| t.timestamp_micros())]);
 
@@ -974,9 +950,8 @@ fn memory_to_batch(
     let values_arr = Arc::new(Float32Array::from(embedding.clone()));
     let item_field = Arc::new(Field::new("item", DataType::Float32, true));
     #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-    let embedding_arr =
-        FixedSizeListArray::try_new(item_field, dim as i32, values_arr, None)
-            .map_err(Error::Arrow)?;
+    let embedding_arr = FixedSizeListArray::try_new(item_field, dim as i32, values_arr, None)
+        .map_err(Error::Arrow)?;
 
     // token_refs — List<Struct{label, token}>
     let struct_fields: Fields = vec![
@@ -1146,10 +1121,7 @@ fn batch_row_to_memory(b: &RecordBatch, i: usize) -> Result<crate::memory::Memor
 /// Slim batch decoder for hybrid-search hits. Reads only the columns the
 /// caller actually surfaces (no embeddings, no entity refs) plus the
 /// `_relevance_score` RRF column.
-fn batch_row_to_memory_hit(
-    b: &RecordBatch,
-    i: usize,
-) -> Result<crate::memory::MemoryHitRow> {
+fn batch_row_to_memory_hit(b: &RecordBatch, i: usize) -> Result<crate::memory::MemoryHitRow> {
     use crate::memory::{MemoryHitRow, MemoryKind};
 
     let id_arr = get_col::<StringArray>(b, "id")?;
@@ -1416,14 +1388,19 @@ mod tests {
     #[test]
     fn memories_schema_has_required_columns() {
         let schema = memories_schema(384);
-        let names: Vec<&str> = schema
-            .fields()
-            .iter()
-            .map(|f| f.name().as_str())
-            .collect();
+        let names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
         for expected in [
-            "id", "session_id", "kind", "text", "created_at", "accessed_at",
-            "valid_from", "valid_to", "embedding", "token_refs", "entity_refs",
+            "id",
+            "session_id",
+            "kind",
+            "text",
+            "created_at",
+            "accessed_at",
+            "valid_from",
+            "valid_to",
+            "embedding",
+            "token_refs",
+            "entity_refs",
         ] {
             assert!(names.contains(&expected), "missing column: {expected}");
         }

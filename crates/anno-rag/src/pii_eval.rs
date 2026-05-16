@@ -82,8 +82,7 @@ pub fn score_detections(detected: &[DetectedEntity], truth: &[TrueSpan]) -> PiiS
 
     let mut per_category = HashMap::new();
     for cat in categories {
-        let truth_cat: Vec<&TrueSpan> =
-            truth.iter().filter(|t| t.category == cat).collect();
+        let truth_cat: Vec<&TrueSpan> = truth.iter().filter(|t| t.category == cat).collect();
         let det_cat: Vec<&DetectedEntity> = detected
             .iter()
             .filter(|d| category_key(&d.category) == cat)
@@ -123,7 +122,14 @@ pub fn score_detections(detected: &[DetectedEntity], truth: &[TrueSpan]) -> PiiS
         };
         per_category.insert(
             cat,
-            CategoryScore { tp, fp, fn_, precision, recall, f1 },
+            CategoryScore {
+                tp,
+                fp,
+                fn_,
+                precision,
+                recall,
+                f1,
+            },
         );
     }
     PiiScores { per_category }
@@ -182,9 +188,9 @@ pub fn load_pii_annotations(dir: &Path) -> Result<PiiAnnotations> {
 /// # Errors
 /// Returns [`Error::Config`] if the text is not found.
 pub fn resolve_span(content: &str, entry: &PiiEntry) -> Result<TrueSpan> {
-    let start = content.find(&entry.text).ok_or_else(|| {
-        Error::Config(format!("annotated text {:?} not found", entry.text))
-    })?;
+    let start = content
+        .find(&entry.text)
+        .ok_or_else(|| Error::Config(format!("annotated text {:?} not found", entry.text)))?;
     Ok(TrueSpan {
         start,
         end: start + entry.text.len(),
@@ -201,9 +207,8 @@ pub fn resolve_span(content: &str, entry: &PiiEntry) -> Result<TrueSpan> {
 pub fn check_pii_corpus(dir: &Path, ann: &PiiAnnotations) -> Result<()> {
     for doc in &ann.docs {
         let path = dir.join(&doc.file);
-        let content = std::fs::read_to_string(&path).map_err(|e| {
-            Error::Config(format!("read {}: {e}", path.display()))
-        })?;
+        let content = std::fs::read_to_string(&path)
+            .map_err(|e| Error::Config(format!("read {}: {e}", path.display())))?;
         for entry in &doc.pii {
             let count = content.matches(&entry.text).count();
             if count == 0 {
@@ -239,7 +244,11 @@ mod tests {
         }
     }
     fn truth(start: usize, end: usize, cat: &str) -> TrueSpan {
-        TrueSpan { start, end, category: cat.to_string() }
+        TrueSpan {
+            start,
+            end,
+            category: cat.to_string(),
+        }
     }
 
     #[test]
@@ -311,7 +320,10 @@ pii = [
 
     #[test]
     fn resolve_span_locates_text() {
-        let entry = PiiEntry { category: "Email".into(), text: "x@y.fr".into() };
+        let entry = PiiEntry {
+            category: "Email".into(),
+            text: "x@y.fr".into(),
+        };
         let span = resolve_span("contact x@y.fr svp", &entry).unwrap();
         assert_eq!((span.start, span.end), (8, 14));
         assert_eq!(span.category, "Email");
@@ -324,7 +336,10 @@ pii = [
         let ann = PiiAnnotations {
             docs: vec![PiiDoc {
                 file: "a.txt".into(),
-                pii: vec![PiiEntry { category: "Location".into(), text: "Paris".into() }],
+                pii: vec![PiiEntry {
+                    category: "Location".into(),
+                    text: "Paris".into(),
+                }],
             }],
         };
         assert!(check_pii_corpus(dir.path(), &ann).is_err());
@@ -337,7 +352,10 @@ pii = [
         let ann = PiiAnnotations {
             docs: vec![PiiDoc {
                 file: "a.txt".into(),
-                pii: vec![PiiEntry { category: "Email".into(), text: "x@y.fr".into() }],
+                pii: vec![PiiEntry {
+                    category: "Email".into(),
+                    text: "x@y.fr".into(),
+                }],
             }],
         };
         assert!(check_pii_corpus(dir.path(), &ann).is_err());
@@ -347,7 +365,11 @@ pii = [
     fn fixture_pii_corpus_is_consistent() {
         let dir = pii_corpus_dir();
         let ann = load_pii_annotations(&dir).expect("pii_annotations.toml loads");
-        assert!(ann.docs.len() >= 30, "expected ~35 annotated docs, got {}", ann.docs.len());
+        assert!(
+            ann.docs.len() >= 30,
+            "expected ~35 annotated docs, got {}",
+            ann.docs.len()
+        );
         check_pii_corpus(&dir, &ann).expect("corpus consistent");
         // Every category appears somewhere in the corpus.
         let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
@@ -356,8 +378,16 @@ pii = [
                 seen.insert(e.category.as_str());
             }
         }
-        for cat in ["NIR", "SIRET", "IBAN_FR", "PhoneNumber", "Email",
-                    "Person", "Organization", "Location"] {
+        for cat in [
+            "NIR",
+            "SIRET",
+            "IBAN_FR",
+            "PhoneNumber",
+            "Email",
+            "Person",
+            "Organization",
+            "Location",
+        ] {
             assert!(seen.contains(cat), "category {cat} missing from corpus");
         }
     }

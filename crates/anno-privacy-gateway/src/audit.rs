@@ -228,8 +228,7 @@ mod tests {
         s.record(ev("r2"));
 
         let today = current_day();
-        let body =
-            std::fs::read_to_string(dir.path().join(format!("{today}.jsonl"))).unwrap();
+        let body = std::fs::read_to_string(dir.path().join(format!("{today}.jsonl"))).unwrap();
         let lines: Vec<&str> = body.lines().collect();
         let l1: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
         let l2: serde_json::Value = serde_json::from_str(lines[1]).unwrap();

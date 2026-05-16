@@ -367,16 +367,10 @@ impl AnnoRagServer {
     #[tool(
         description = "Save a memory. PII is tokenized through the local vault before storage. Returns the new id and the redacted text actually persisted."
     )]
-    async fn memory_save(
-        &self,
-        Parameters(p): Parameters<MemorySaveParams>,
-    ) -> String {
+    async fn memory_save(&self, Parameters(p): Parameters<MemorySaveParams>) -> String {
         let start = std::time::Instant::now();
         let kind = p.kind.as_deref().and_then(parse_kind);
-        let r = self
-            .pipeline
-            .save_memory(&p.text, kind, p.session_id)
-            .await;
+        let r = self.pipeline.save_memory(&p.text, kind, p.session_id).await;
         let elapsed = start.elapsed().as_millis() as u64;
         match r {
             Ok(s) => {
@@ -392,8 +386,7 @@ impl AnnoRagServer {
                     redacted_text: s.redacted_text,
                     token_count: s.token_refs.len(),
                 };
-                serde_json::to_string_pretty(&wire)
-                    .unwrap_or_else(|e| format!("Error: {e}"))
+                serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => {
                 tracing::warn!(
@@ -412,17 +405,22 @@ impl AnnoRagServer {
     #[tool(
         description = "Recall memories by hybrid (vector + FTS) search. Returns rehydrated plaintext for the caller's tenant."
     )]
-    async fn memory_recall(
-        &self,
-        Parameters(p): Parameters<MemoryRecallParams>,
-    ) -> String {
+    async fn memory_recall(&self, Parameters(p): Parameters<MemoryRecallParams>) -> String {
         let start = std::time::Instant::now();
-        let kinds = p.kinds.as_ref().map(|v| {
-            v.iter().filter_map(|k| parse_kind(k)).collect::<Vec<_>>()
-        });
+        let kinds = p
+            .kinds
+            .as_ref()
+            .map(|v| v.iter().filter_map(|k| parse_kind(k)).collect::<Vec<_>>());
         let r = self
             .pipeline
-            .recall_memory(&p.query, p.top_k, p.session_id, kinds, p.as_of, p.graph_expand)
+            .recall_memory(
+                &p.query,
+                p.top_k,
+                p.session_id,
+                kinds,
+                p.as_of,
+                p.graph_expand,
+            )
             .await;
         let elapsed = start.elapsed().as_millis() as u64;
         match r {
@@ -447,8 +445,7 @@ impl AnnoRagServer {
                         })
                         .collect(),
                 };
-                serde_json::to_string_pretty(&wire)
-                    .unwrap_or_else(|e| format!("Error: {e}"))
+                serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => {
                 tracing::warn!(
@@ -467,10 +464,7 @@ impl AnnoRagServer {
     #[tool(
         description = "Forget memories by id or by query. Cascades to vault tokens no longer referenced. Returns the SLO note that physical erasure may take up to 24h."
     )]
-    async fn memory_forget(
-        &self,
-        Parameters(p): Parameters<MemoryForgetParams>,
-    ) -> String {
+    async fn memory_forget(&self, Parameters(p): Parameters<MemoryForgetParams>) -> String {
         let id = match &p.id {
             Some(s) => match uuid::Uuid::parse_str(s) {
                 Ok(u) => Some(crate::memory::MemoryId(u)),
@@ -499,8 +493,7 @@ impl AnnoRagServer {
                     vault_tokens_purged: res.vault_tokens_purged,
                     note: "logically forgotten; physical erasure within 24h".into(),
                 };
-                serde_json::to_string_pretty(&wire)
-                    .unwrap_or_else(|e| format!("Error: {e}"))
+                serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => {
                 tracing::warn!(
@@ -516,13 +509,8 @@ impl AnnoRagServer {
     }
 
     /// List memories with cursor pagination.
-    #[tool(
-        description = "List memories with optional session/kind filter and cursor pagination."
-    )]
-    async fn memory_list(
-        &self,
-        Parameters(p): Parameters<MemoryListParams>,
-    ) -> String {
+    #[tool(description = "List memories with optional session/kind filter and cursor pagination.")]
+    async fn memory_list(&self, Parameters(p): Parameters<MemoryListParams>) -> String {
         let start = std::time::Instant::now();
         let kind = p.kind.as_deref().and_then(parse_kind);
         let r = self
@@ -554,8 +542,7 @@ impl AnnoRagServer {
                         .collect(),
                     next_cursor: page.next_cursor,
                 };
-                serde_json::to_string_pretty(&wire)
-                    .unwrap_or_else(|e| format!("Error: {e}"))
+                serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => {
                 tracing::warn!(
@@ -596,8 +583,7 @@ impl AnnoRagServer {
                     memories = res.memories.len(),
                     ""
                 );
-                serde_json::to_string_pretty(&res)
-                    .unwrap_or_else(|e| format!("Error: {e}"))
+                serde_json::to_string_pretty(&res).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => {
                 tracing::warn!(
@@ -616,10 +602,7 @@ impl AnnoRagServer {
     #[tool(
         description = "Mark a memory as no longer valid as of the given timestamp (default: now). No-op if valid_to is already set."
     )]
-    async fn memory_invalidate(
-        &self,
-        Parameters(p): Parameters<MemoryInvalidateParams>,
-    ) -> String {
+    async fn memory_invalidate(&self, Parameters(p): Parameters<MemoryInvalidateParams>) -> String {
         let id = match uuid::Uuid::parse_str(&p.id) {
             Ok(u) => crate::memory::MemoryId(u),
             Err(e) => return format!("Error: bad id: {e}"),
