@@ -1,0 +1,312 @@
+# 10-item LoCoMo-style sanity fixture for anno-memory v0.1 + v0.2.
+#
+# This is NOT a statistical accuracy benchmark — it's a smoke fixture
+# that exercises every v0.2 code path end-to-end on a deterministic
+# planted memory graph. Use it to catch regressions; do NOT use the
+# numbers it produces as a recall@k baseline.
+#
+# A full 50-item LoCoMo subset for the real eval gate is tracked as
+# v0.1 T13 + v0.2 T9.
+#
+# Format:
+#   [[scenario]]
+#   id = "smoke_NN"
+#   description = "what feature this exercises"
+#   [[scenario.memories]]
+#     text     = "..."                    # plaintext — vault tokenises at ingest
+#     kind     = "fact|preference|reference|context"
+#     session_id = "..."                  # optional
+#   [[scenario.queries]]
+#     text     = "..."                    # recall query
+#     top_k    = 3                        # optional, default 3
+#     graph_expand = false                # optional, v0.2 only
+#     as_of_offset_ms = 0                 # optional, v0.2 — point-in-time relative to last save
+#     expected_memory_indexes = [0, 2]    # 0-based; must appear in the top_k hits
+#     # OR
+#     expected_zero = true                # asserts an empty / "not found" result
+#
+# The harness (TBD — see notes at the bottom of this file) walks the
+# scenarios in order, calls save_memory + recall_memory + optionally
+# graph_recall + invalidate_memory, and asserts the expected indexes
+# appear in the returned hits.
+
+# =============================================================================
+# Scenario 01 — Single-memory direct preference recall (v0.1 baseline).
+# =============================================================================
+[[scenario]]
+id = "smoke_01_direct_preference"
+description = "Recall a saved preference by direct topical query (no graph, no temporal)."
+
+[[scenario.memories]]
+text = "Le client Cabinet Lefebvre préfère recevoir les actes au format PDF."
+kind = "preference"
+session_id = "s1"
+
+[[scenario.queries]]
+text = "format préféré pour les actes du Cabinet Lefebvre"
+top_k = 3
+expected_memory_indexes = [0]
+
+
+# =============================================================================
+# Scenario 02 — Kind filter excludes Preferences from a Fact-only recall.
+# =============================================================================
+[[scenario]]
+id = "smoke_02_kind_filter"
+description = "Recall with kinds=['fact'] must skip a same-entity Preference."
+
+[[scenario.memories]]
+text = "Cabinet Dupont gère les dossiers de Marie Martin."
+kind = "fact"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Cabinet Dupont préfère les communications par email."
+kind = "preference"
+session_id = "s1"
+
+[[scenario.queries]]
+text = "Cabinet Dupont"
+top_k = 3
+kinds = ["fact"]
+expected_memory_indexes = [0]
+
+
+# =============================================================================
+# Scenario 03 — Session filter scopes recall.
+# =============================================================================
+[[scenario]]
+id = "smoke_03_session_filter"
+description = "Same fact recorded in two sessions; per-session recall returns only s1's row."
+
+[[scenario.memories]]
+text = "Le siège du Cabinet Bernard est à Paris."
+kind = "fact"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Le siège du Cabinet Bernard est à Lyon."
+kind = "fact"
+session_id = "s2"
+
+[[scenario.queries]]
+text = "siège Cabinet Bernard"
+top_k = 3
+session_id = "s1"
+expected_memory_indexes = [0]
+
+
+# =============================================================================
+# Scenario 04 — Conflict resolver auto-invalidates an old Preference.
+# =============================================================================
+[[scenario]]
+id = "smoke_04_conflict_resolver_pref"
+description = "Two Preferences for the same client; the second invalidates the first. recall_memory(as_of=now) returns only the second."
+
+[[scenario.memories]]
+text = "Le client Cabinet Rousseau préfère les rendez-vous le lundi matin."
+kind = "preference"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Le client Cabinet Rousseau préfère les rendez-vous le mercredi après-midi."
+kind = "preference"
+session_id = "s1"
+
+[[scenario.queries]]
+text = "rendez-vous Cabinet Rousseau"
+top_k = 3
+expected_memory_indexes = [1]
+
+
+# =============================================================================
+# Scenario 05 — Facts are append-only: no auto-invalidation.
+# =============================================================================
+[[scenario]]
+id = "smoke_05_facts_append_only"
+description = "Two contradictory facts about the same entity; both stay valid (Facts don't auto-invalidate)."
+
+[[scenario.memories]]
+text = "Cabinet Moreau emploie 12 avocats."
+kind = "fact"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Cabinet Moreau emploie 15 avocats."
+kind = "fact"
+session_id = "s1"
+
+[[scenario.queries]]
+text = "effectif Cabinet Moreau"
+top_k = 3
+expected_memory_indexes = [0, 1]
+
+
+# =============================================================================
+# Scenario 06 — Bi-temporal as_of returns the pre-invalidation Preference.
+# =============================================================================
+[[scenario]]
+id = "smoke_06_as_of_pre_invalidation"
+description = "Invalidate then recall as_of=before; the invalidated row must reappear."
+
+[[scenario.memories]]
+text = "Le client Cabinet Petit préfère les actes papier."
+kind = "preference"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Le client Cabinet Petit préfère les actes électroniques."
+kind = "preference"
+session_id = "s1"
+
+[[scenario.queries]]
+text = "format Cabinet Petit"
+top_k = 3
+as_of_offset_ms = -1000
+expected_memory_indexes = [0]
+
+
+# =============================================================================
+# Scenario 07 — graph_expand surfaces an indirect neighbour.
+# =============================================================================
+[[scenario]]
+id = "smoke_07_graph_expand_one_hop"
+description = "Hybrid recall on Cabinet Vidal returns row 0. graph_expand=true must surface row 1 (shares Cabinet Vidal)."
+
+[[scenario.memories]]
+text = "Cabinet Vidal est situé à Bordeaux."
+kind = "fact"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Cabinet Vidal collabore avec Cabinet Castellan."
+kind = "fact"
+session_id = "s1"
+
+[[scenario.queries]]
+text = "Cabinet Vidal"
+top_k = 1
+graph_expand = true
+expected_memory_indexes = [0, 1]
+
+
+# =============================================================================
+# Scenario 08 — graph_recall reaches a 2-hop neighbour.
+# =============================================================================
+[[scenario]]
+id = "smoke_08_graph_recall_two_hop"
+description = "Plant a 3-edge graph: Vidal→Bordeaux, Vidal→Castellan, Castellan→Toulouse. graph_recall on Vidal at 2 hops must reach Toulouse."
+
+[[scenario.memories]]
+text = "Cabinet Vidal est situé à Bordeaux."
+kind = "fact"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Cabinet Vidal collabore avec Cabinet Castellan."
+kind = "fact"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Cabinet Castellan a un bureau à Toulouse."
+kind = "fact"
+session_id = "s1"
+
+[[scenario.queries]]
+operation = "graph_recall"
+seed_entity = "Cabinet Vidal"
+max_hops = 2
+per_hop_limit = 50
+expected_entity_substring = "toulouse"
+
+
+# =============================================================================
+# Scenario 09 — forget cascades to vault token only when no row references it.
+# =============================================================================
+[[scenario]]
+id = "smoke_09_forget_cascade_partial"
+description = "Two memories reference Marie Dubois. Forget memory 0 — vault retains token (memory 1 still references it). Recall on memory 1 must rehydrate to plaintext."
+
+[[scenario.memories]]
+text = "Marie Dubois est cliente du Cabinet Reynaud depuis 2020."
+kind = "fact"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Marie Dubois préfère les comptes-rendus mensuels."
+kind = "preference"
+session_id = "s1"
+
+[[scenario.queries]]
+operation = "forget_memory_by_index"
+forget_index = 0
+
+[[scenario.queries]]
+text = "compte-rendu Marie Dubois"
+top_k = 3
+expected_memory_indexes = [1]
+expected_text_contains = "Marie Dubois"
+
+
+# =============================================================================
+# Scenario 10 — Pagination via list_memories cursor.
+# =============================================================================
+[[scenario]]
+id = "smoke_10_list_pagination"
+description = "Five memories saved in order. list_memories(limit=2) returns the first page; following with the cursor returns the next; the third call returns the last row."
+
+[[scenario.memories]]
+text = "Note 1 — réunion Cabinet Albert."
+kind = "context"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Note 2 — réunion Cabinet Albert."
+kind = "context"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Note 3 — réunion Cabinet Albert."
+kind = "context"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Note 4 — réunion Cabinet Albert."
+kind = "context"
+session_id = "s1"
+
+[[scenario.memories]]
+text = "Note 5 — réunion Cabinet Albert."
+kind = "context"
+session_id = "s1"
+
+[[scenario.queries]]
+operation = "list_memories"
+limit = 2
+expected_page_sizes = [2, 2, 1]
+
+
+# =============================================================================
+# Notes for the harness implementation (deferred to v0.8 follow-up).
+# =============================================================================
+#
+# A `bench_locomo` (or `tests/locomo_smoke.rs`) implementer reads this file,
+# walks each scenario in order, and:
+#
+#   1. Builds a fresh Pipeline (tempdir + AnnoRagConfig).
+#   2. For each `memories` entry, calls `Pipeline::save_memory(text, kind, session_id)`.
+#      Records the SavedMemory.id at the corresponding 0-based index.
+#   3. For each `queries` entry, dispatches by `operation`:
+#      - default (no op set): `recall_memory(text, top_k?, session_id?, kinds?, as_of?, graph_expand?)`
+#        - as_of_offset_ms: computed relative to the *last save* before this query.
+#        - assert that every `expected_memory_indexes` id appears in the returned hits.
+#      - "graph_recall": `graph_recall(seed_entity, max_hops, per_hop_limit, None)`
+#        - assert `expected_entity_substring` appears (case-insensitive) in any
+#          node's `display` field.
+#      - "forget_memory_by_index": `forget_memory(Some(id_at_index), None, 1, false)`
+#      - "list_memories": pages through `list_memories(None, None, limit, cursor)`
+#        until `next_cursor=None`; assert page sizes match `expected_page_sizes`.
+#
+# Until that harness lands, this fixture is documentation of the v0.2
+# behavioural surface — and a ready-to-use input the moment the harness
+# is written.
