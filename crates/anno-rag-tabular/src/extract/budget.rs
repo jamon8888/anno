@@ -152,14 +152,16 @@ mod tests {
 
     #[test]
     fn split_returns_multiple_batches_when_columns_overflow() {
-        let cols: Vec<Column> = (0..30)
-            .map(|i| col(&format!("c{i}"), 50_000))
-            .collect();
+        let cols: Vec<Column> = (0..30).map(|i| col(&format!("c{i}"), 50_000)).collect();
         let out = split_columns(&cols, 1_000, 80_000);
         // Sum of batches must equal the input length.
         let total: usize = out.iter().map(|b| b.len()).sum();
         assert_eq!(total, 30);
-        assert!(out.len() > 1, "expected splitting, got {} batch(es)", out.len());
+        assert!(
+            out.len() > 1,
+            "expected splitting, got {} batch(es)",
+            out.len()
+        );
         // Column order is preserved across batches.
         let flat: Vec<&str> = out
             .iter()

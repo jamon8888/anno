@@ -57,9 +57,7 @@ mod tests {
 
     #[test]
     fn serializes_with_kind_tag() {
-        let t = CellType::Currency {
-            code: "EUR".into(),
-        };
+        let t = CellType::Currency { code: "EUR".into() };
         let v = serde_json::to_value(&t).unwrap();
         assert_eq!(v, json!({"kind": "currency", "code": "EUR"}));
     }

@@ -10,8 +10,7 @@ use crate::storage::arrow_schema::rows_schema;
 use crate::storage::util::{opt_str, uuid_to_filter_lit};
 use arrow::error::ArrowError;
 use arrow_array::{
-    FixedSizeBinaryArray, RecordBatch, RecordBatchIterator, StringArray,
-    TimestampMicrosecondArray,
+    FixedSizeBinaryArray, RecordBatch, RecordBatchIterator, StringArray, TimestampMicrosecondArray,
 };
 use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
@@ -90,15 +89,13 @@ impl RowsTable {
     /// [`crate::error::Error::Lance`] on table write failure.
     pub async fn add(&self, row: &Row) -> Result<()> {
         let schema = rows_schema();
-        let id_arr = FixedSizeBinaryArray::try_from_iter(std::iter::once(
-            row.id.0.as_bytes().to_vec(),
-        ))?;
+        let id_arr =
+            FixedSizeBinaryArray::try_from_iter(std::iter::once(row.id.0.as_bytes().to_vec()))?;
         let rid_arr = FixedSizeBinaryArray::try_from_iter(std::iter::once(
             row.review_id.0.as_bytes().to_vec(),
         ))?;
-        let did_arr = FixedSizeBinaryArray::try_from_iter(std::iter::once(
-            row.doc_id.as_bytes().to_vec(),
-        ))?;
+        let did_arr =
+            FixedSizeBinaryArray::try_from_iter(std::iter::once(row.doc_id.as_bytes().to_vec()))?;
         let folder_arr = StringArray::from(vec![row.folder_path.clone()]);
         // Schema declares `Timestamp(Microsecond, None)`; we attach no
         // timezone here so the RecordBatch matches by-type.

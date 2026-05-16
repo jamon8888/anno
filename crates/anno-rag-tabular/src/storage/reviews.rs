@@ -11,8 +11,8 @@ use crate::storage::arrow_schema::reviews_schema;
 use crate::storage::util::{opt_str, uuid_to_filter_lit};
 use arrow::error::ArrowError;
 use arrow_array::{
-    FixedSizeBinaryArray, RecordBatch, RecordBatchIterator, StringArray,
-    TimestampMicrosecondArray, UInt32Array,
+    FixedSizeBinaryArray, RecordBatch, RecordBatchIterator, StringArray, TimestampMicrosecondArray,
+    UInt32Array,
 };
 use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
@@ -110,8 +110,7 @@ impl ReviewsTable {
         // Schema declares `Timestamp(Microsecond, None)` (see
         // `arrow_schema::reviews_schema`); we attach no timezone here
         // so the RecordBatch matches by-type.
-        let ts_arr =
-            TimestampMicrosecondArray::from(vec![review.created_at.timestamp_micros()]);
+        let ts_arr = TimestampMicrosecondArray::from(vec![review.created_at.timestamp_micros()]);
         let sv_arr = UInt32Array::from(vec![review.schema_version]);
 
         let batch = RecordBatch::try_new(

@@ -117,9 +117,7 @@ mod tests {
                 .await
                 .expect("lancedb connect"),
         );
-        let _h1 = StorageHandle::open(conn.clone())
-            .await
-            .expect("first open");
+        let _h1 = StorageHandle::open(conn.clone()).await.expect("first open");
         let _h2 = StorageHandle::open(conn.clone())
             .await
             .expect("second open");

@@ -129,7 +129,10 @@ mod tests {
         let r = ReviewId::new();
         let c = ColumnBuilder::new(r, "term", "What term?", CellType::Text).build();
         let s = for_columns(&[c]);
-        assert_eq!(s["properties"]["term"]["properties"]["value"]["type"], "string");
+        assert_eq!(
+            s["properties"]["term"]["properties"]["value"]["type"],
+            "string"
+        );
     }
 
     #[test]
@@ -158,9 +161,7 @@ mod tests {
             r,
             "cap",
             "Liability cap?",
-            CellType::Currency {
-                code: "EUR".into(),
-            },
+            CellType::Currency { code: "EUR".into() },
         )
         .build();
         let s = for_columns(&[c]);

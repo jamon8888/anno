@@ -80,9 +80,8 @@ impl ColumnsTable {
         let schema = columns_schema();
         let id_b =
             FixedSizeBinaryArray::try_from_iter(std::iter::once(col.id.0.as_bytes().to_vec()))?;
-        let rid_b = FixedSizeBinaryArray::try_from_iter(std::iter::once(
-            review_id.0.as_bytes().to_vec(),
-        ))?;
+        let rid_b =
+            FixedSizeBinaryArray::try_from_iter(std::iter::once(review_id.0.as_bytes().to_vec()))?;
         let name_a = StringArray::from(vec![col.name.clone()]);
         let prompt_a = StringArray::from(vec![col.prompt.clone()]);
         let ttype_json = serde_json::to_string(&col.cell_type)?;
@@ -259,7 +258,9 @@ mod tests {
                 .await
                 .expect("lancedb connect"),
         );
-        let r = ReviewsTable::open(conn.clone()).await.expect("open reviews");
+        let r = ReviewsTable::open(conn.clone())
+            .await
+            .expect("open reviews");
         let c = ColumnsTable::open(conn).await.expect("open columns");
         (dir, r, c)
     }

@@ -309,6 +309,7 @@ dependencies = [
  "chrono",
  "futures",
  "insta",
+ "keyring",
  "lancedb",
  "proptest",
  "regex",

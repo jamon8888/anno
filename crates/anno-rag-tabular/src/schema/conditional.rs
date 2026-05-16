@@ -91,9 +91,7 @@ mod tests {
 
     #[test]
     fn equals_predicate() {
-        let p = Predicate::Equals {
-            value: json!("FR"),
-        };
+        let p = Predicate::Equals { value: json!("FR") };
         assert!(p.eval(Some(&json!("FR"))));
         assert!(!p.eval(Some(&json!("DE"))));
         assert!(!p.eval(None));

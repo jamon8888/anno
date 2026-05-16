@@ -202,7 +202,12 @@ mod tests {
     fn employment_v1_has_required_columns() {
         let t = Template::builtin("employment-v1").expect("loads");
         let names: Vec<_> = t.columns.iter().map(|c| c.name.as_str()).collect();
-        for must in ["employee_name", "base_salary", "non_compete", "ip_assignment"] {
+        for must in [
+            "employee_name",
+            "base_salary",
+            "non_compete",
+            "ip_assignment",
+        ] {
             assert!(names.contains(&must), "missing required col {must}");
         }
     }

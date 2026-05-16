@@ -129,9 +129,7 @@ mod tests {
             r,
             "amount",
             "Total amount",
-            CellType::Currency {
-                code: "EUR".into(),
-            },
+            CellType::Currency { code: "EUR".into() },
         )
         .order(3)
         .build();

@@ -221,7 +221,9 @@ impl CellsTable {
         // here (we'll typically need it for the caller's `version + 1`
         // computation too) and hand it to the sync core of the lock
         // check so the lock layer doesn't re-read the table.
-        let prev = self.latest(cell.review_id, cell.row_id, cell.col_id).await?;
+        let prev = self
+            .latest(cell.review_id, cell.row_id, cell.col_id)
+            .await?;
         crate::storage::lock::deny_if_locked(prev.as_ref(), cell)?;
 
         let schema = cells_schema();
@@ -303,12 +305,7 @@ impl CellsTable {
     ///
     /// Returns [`Error::Lance`] on query failure, [`Error::Arrow`] /
     /// [`Error::Json`] on decode failure.
-    pub async fn history(
-        &self,
-        review: ReviewId,
-        row: RowId,
-        col: ColumnId,
-    ) -> Result<Vec<Cell>> {
+    pub async fn history(&self, review: ReviewId, row: RowId, col: ColumnId) -> Result<Vec<Cell>> {
         let rh = uuid_to_filter_lit(review.0);
         let row_h = uuid_to_filter_lit(row.0);
         let col_h = uuid_to_filter_lit(col.0);
@@ -617,7 +614,12 @@ mod tests {
         let col_y = ColumnId::for_name(r, "y");
         // Two rows × two cols = four (row, col) pairs; multiple
         // versions per pair must collapse to one entry.
-        for (row, col) in [(row_a, col_x), (row_a, col_y), (row_b, col_x), (row_b, col_y)] {
+        for (row, col) in [
+            (row_a, col_x),
+            (row_a, col_y),
+            (row_b, col_x),
+            (row_b, col_y),
+        ] {
             t.upsert(&mk_cell(r, row, col, 1, false, system_v1()))
                 .await
                 .expect("v1");

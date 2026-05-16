@@ -23,6 +23,7 @@
 
 pub(crate) mod batch;
 pub mod budget;
+pub mod conditional;
 
 use crate::error::Result;
 use crate::ids::ReviewId;

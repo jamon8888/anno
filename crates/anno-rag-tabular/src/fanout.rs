@@ -32,12 +32,14 @@
 //! that row's [`RowOutcome::result`].
 
 use crate::error::{Error, Result};
+use crate::extract::conditional::{should_extract, topo_waves};
 use crate::extract::Extractor;
-use crate::ids::{ReviewId, RowId};
+use crate::ids::{ColumnId, ReviewId, RowId};
 use crate::schema::Column;
 use crate::storage::cells::CellsTable;
 use crate::storage::rows::Row;
 use crate::storage::StorageHandle;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 /// Configuration for a fan-out run.
@@ -54,6 +56,18 @@ pub struct FanoutConfig {
     /// Per-call LLM token budget passed through to
     /// [`Extractor::with_budget`].
     pub budget_tokens: usize,
+    /// If `true`, ignore the schema-drift incremental check and
+    /// re-extract every column for every row even when a cell
+    /// already exists. Useful when the operator just edited a
+    /// column's prompt and wants every doc re-asked from scratch.
+    /// Default `false`: cells that already exist for `(row, col)`
+    /// are skipped (locked cells survive regardless via
+    /// [`CellsTable::upsert`]'s lock guard).
+    ///
+    /// See `extract_and_upsert_one_row` for the v1 simplification:
+    /// "drift" today is "cell-missing", not "cell extracted under
+    /// an older `schema_version`".
+    pub force_reextract: bool,
 }
 
 impl Default for FanoutConfig {
@@ -61,6 +75,7 @@ impl Default for FanoutConfig {
         Self {
             max_concurrency: 8,
             budget_tokens: crate::extract::budget::DEFAULT_BUDGET_TOKENS,
+            force_reextract: false,
         }
     }
 }
@@ -127,6 +142,7 @@ pub async fn run_review(
     let extractor = Arc::new(extractor.clone().with_budget(config.budget_tokens));
     let cells_table = storage.cells.clone();
 
+    let force_reextract = config.force_reextract;
     let mut handles = Vec::with_capacity(rows.len());
     for row in rows {
         let sem = Arc::clone(&sem);
@@ -143,7 +159,15 @@ pub async fn run_review(
                 .acquire_owned()
                 .await
                 .expect("fanout semaphore must stay open for the lifetime of run_review");
-            extract_and_upsert_one_row(&extractor, &cells, review_id, &row, &columns).await
+            extract_and_upsert_one_row(
+                &extractor,
+                &cells,
+                review_id,
+                &row,
+                &columns,
+                force_reextract,
+            )
+            .await
         });
         handles.push((row_id, doc_id, handle));
     }
@@ -171,8 +195,43 @@ pub async fn run_review(
 }
 
 /// Extract one row's cells and upsert them. Returns the count of
-/// cells that actually landed in the table (locked-cell skips don't
-/// count).
+/// cells that actually landed in the table (locked-cell skips and
+/// conditional-gate skips don't count).
+///
+/// ## Conditional gating (T26)
+///
+/// Columns are first topo-sorted into *waves* by their
+/// [`crate::schema::ConditionalSpec::parent_col`] edges (see
+/// [`crate::extract::conditional::topo_waves`]). Each wave is one
+/// batched LLM round-trip via [`Extractor::extract_doc`]. Between
+/// waves we read parents back from the cells table and evaluate each
+/// child column's predicate against the parent's freshly-written
+/// value — if the predicate is false (or the parent was itself
+/// skipped) the child is dropped from the next batch and we emit a
+/// `tracing::debug` audit event.
+///
+/// ## Incremental re-extract (T27)
+///
+/// Before any wave runs we collect the set of `(row, col)` pairs
+/// that already have a cell, and filter every wave's "to extract"
+/// list against it. Existing cells are left untouched — including
+/// non-locked ones. Pass `force_reextract = true` to bypass this
+/// (operator-level override for prompt edits).
+///
+/// **v1 simplification:** "schema drift" here means *"cell does
+/// not exist yet"*, not *"cell was extracted under an older
+/// `Review::schema_version`"*. The `Cell` row carries a `version`
+/// (per-cell revision number) but **not** the review's
+/// `schema_version` at extraction time, so we can't distinguish
+/// "old schema" from "current schema" without a storage migration.
+///
+/// // TODO(v1.x): track `schema_version_at_extract: u32` on each
+/// // `Cell` so we can detect cells whose extraction predates a
+/// // column's prompt edit and re-run *only* those. For v1 we only
+/// // skip re-extracting columns that already have ANY cell for
+/// // this `(review, row)` pair. Locked cells are handled separately
+/// // by `CellsTable::upsert` and remain untouched even when
+/// // re-extracted.
 ///
 /// Kept private — callers should go through [`run_review`] so the
 /// concurrency cap and outcome aggregation apply uniformly.
@@ -182,28 +241,123 @@ async fn extract_and_upsert_one_row(
     review_id: ReviewId,
     row: &Row,
     columns: &[Column],
+    force_reextract: bool,
 ) -> Result<usize> {
-    let extracted = extractor.extract_doc(review_id, row.doc_id, columns).await?;
+    let waves = topo_waves(columns)?;
 
-    // TODO(T28-T30): run verifier on each cell — set support_score
-    // + confidence based on the cross-encoder support check before
-    // upserting. Today every cell hits the table with the
-    // placeholder `support_score = 0.0` / `Confidence::Medium`
-    // assigned by `extract::batch`.
+    // T27: cells that already exist for this row — we'll filter
+    // each wave's "to extract" list against this set unless the
+    // operator explicitly asked for a full re-run.
+    let existing: HashSet<ColumnId> = if force_reextract {
+        HashSet::new()
+    } else {
+        cells_for_row_columns(cells, review_id, row.id, columns).await?
+    };
 
-    let mut written = 0usize;
-    for cell in extracted {
-        match cells.upsert(&cell).await {
-            Ok(()) => written += 1,
-            // Locked cells are expected to survive re-extraction —
-            // that's the whole point of the lock. Swallow only this
-            // variant; anything else (Lance, Arrow, Json …) is a
-            // real failure and aborts the row.
-            Err(Error::LockedCell { .. }) => {}
-            Err(other) => return Err(other),
+    let mut total_upserted = 0usize;
+    let mut skipped_cols: HashSet<ColumnId> = HashSet::new();
+
+    for wave in waves {
+        // Build the wave's effective extract list: drop columns
+        // whose conditional gate fails, drop columns that already
+        // have a cell (unless force_reextract), and skip children
+        // whose parent was itself skipped (cascading gate).
+        let mut to_extract: Vec<Column> = Vec::with_capacity(wave.len());
+        for col in &wave {
+            if existing.contains(&col.id) {
+                tracing::debug!(
+                    target: "tabular::fanout",
+                    col = %col.name,
+                    reason = "cell_exists",
+                    "incremental skip"
+                );
+                continue;
+            }
+            let Some(spec) = &col.conditional else {
+                to_extract.push(col.clone());
+                continue;
+            };
+            // Cascading: parent skipped → child skipped.
+            if skipped_cols.contains(&spec.parent_col) {
+                skipped_cols.insert(col.id);
+                tracing::debug!(
+                    target: "tabular::fanout",
+                    col = %col.name,
+                    reason = "parent_skipped",
+                    "conditional skip"
+                );
+                continue;
+            }
+            // Read parent's latest value (could be from a prior
+            // wave in this run, or pre-existing from an earlier
+            // partial run).
+            let parent_value = cells
+                .latest(review_id, row.id, spec.parent_col)
+                .await?
+                .map(|c| c.value);
+            if should_extract(col, parent_value.as_ref()) {
+                to_extract.push(col.clone());
+            } else {
+                skipped_cols.insert(col.id);
+                tracing::debug!(
+                    target: "tabular::fanout",
+                    col = %col.name,
+                    reason = "predicate_false",
+                    "conditional skip"
+                );
+            }
+        }
+
+        if to_extract.is_empty() {
+            continue;
+        }
+
+        let extracted = extractor
+            .extract_doc(review_id, row.doc_id, &to_extract)
+            .await?;
+
+        // TODO(T28-T30): run verifier on each cell here — set
+        // support_score + confidence from the cross-encoder support
+        // check before upserting. Today every cell hits the table
+        // with the placeholder `support_score = 0.0` /
+        // `Confidence::Medium` assigned by `extract::batch`. The
+        // verifier hook lives in this exact spot, between
+        // `extract_doc` and the per-cell `cells.upsert` loop below.
+
+        for cell in extracted {
+            match cells.upsert(&cell).await {
+                Ok(()) => total_upserted += 1,
+                // Locked cells are expected to survive re-extraction —
+                // that's the whole point of the lock. Swallow only this
+                // variant; anything else (Lance, Arrow, Json …) is a
+                // real failure and aborts the row.
+                Err(Error::LockedCell { .. }) => {}
+                Err(other) => return Err(other),
+            }
         }
     }
-    Ok(written)
+
+    Ok(total_upserted)
+}
+
+/// Collect the set of `ColumnId`s in `columns` that already have at
+/// least one cell stored for `(review, row)`. One `CellsTable::latest`
+/// round-trip per column — fine for v1 where the typical column count
+/// is small (<50); optimisation candidate for later if templates
+/// balloon.
+async fn cells_for_row_columns(
+    cells: &CellsTable,
+    review: ReviewId,
+    row: RowId,
+    columns: &[Column],
+) -> Result<HashSet<ColumnId>> {
+    let mut out = HashSet::new();
+    for col in columns {
+        if cells.latest(review, row, col.id).await?.is_some() {
+            out.insert(col.id);
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -377,14 +531,9 @@ mod tests {
         let review = ReviewId::new();
         for (i, name) in ["col_a", "col_b"].iter().enumerate() {
             let mut col =
-                ColumnBuilder::new(review, name, &format!("Q for {name}?"), CellType::Text)
-                    .build();
+                ColumnBuilder::new(review, name, &format!("Q for {name}?"), CellType::Text).build();
             col.order = i as u32;
-            storage
-                .columns
-                .add(review, &col)
-                .await
-                .expect("add column");
+            storage.columns.add(review, &col).await.expect("add column");
         }
         let mut rows = Vec::new();
         let mut chunk_map: HashMap<uuid::Uuid, Vec<ChunkRef>> = HashMap::new();
@@ -527,8 +676,7 @@ mod tests {
         // failing LLM will detect and reject. The other two rows
         // keep the normal content.
         let poison_doc = rows[1].doc_id;
-        chunk_map.get_mut(&poison_doc).expect("doc seeded")[0].content =
-            "POISON DO NOT EAT".into();
+        chunk_map.get_mut(&poison_doc).expect("doc seeded")[0].content = "POISON DO NOT EAT".into();
 
         let good_chunk_id = chunk_map
             .iter()
@@ -655,5 +803,398 @@ mod tests {
     #[allow(dead_code)]
     fn _phantom_mutex() -> Mutex<()> {
         Mutex::new(())
+    }
+
+    // ---- T26 / T27 tests ----
+
+    use crate::schema::{ConditionalSpec, Predicate};
+
+    /// LLM that returns column envelopes keyed off a per-doc *parent
+    /// value*. Used by the conditional-gating tests: row A's chunk
+    /// content carries marker "GATE=X" → LLM returns `parent="X"`;
+    /// row B's marker says "GATE=Y" → LLM returns `parent="Y"`. Also
+    /// records the column-name list of each call so the test can
+    /// assert wave ordering (parent before child).
+    struct GatedLlm {
+        chunk_id: uuid::Uuid,
+        /// Per-call record: requested column names (parsed from
+        /// `[COLUMN::name]` markers) in the order they appeared.
+        calls: Arc<Mutex<Vec<Vec<String>>>>,
+    }
+
+    #[async_trait]
+    impl LlmClient for GatedLlm {
+        async fn generate_structured(
+            &self,
+            _system: &str,
+            user: &str,
+            _json_schema: &Value,
+        ) -> Result<StructuredOutput> {
+            // Parse [COLUMN::name] markers to record what was asked.
+            let mut asked: Vec<String> = Vec::new();
+            let mut rest = user;
+            while let Some(idx) = rest.find("[COLUMN::") {
+                let after = &rest[idx + "[COLUMN::".len()..];
+                if let Some(end) = after.find(']') {
+                    asked.push(after[..end].to_string());
+                    rest = &after[end..];
+                } else {
+                    break;
+                }
+            }
+            self.calls.lock().unwrap().push(asked.clone());
+
+            // Decide parent's value from the chunk marker.
+            let parent_value = if user.contains("GATE=X") { "X" } else { "Y" };
+
+            // Build a response that includes envelopes for any
+            // column the caller asked for. Child gets a stub value
+            // — the gate decides if it's ever invoked at all.
+            let mut map = serde_json::Map::new();
+            for name in &asked {
+                let v = if name == "parent" {
+                    parent_value.to_string()
+                } else {
+                    format!("child-of-{parent_value}")
+                };
+                map.insert(
+                    name.clone(),
+                    json!({
+                        "value": v,
+                        "reasoning": "stub",
+                        "citations": [{
+                            "chunk_id": self.chunk_id.to_string(),
+                            "char_start": 0,
+                            "char_end": 1,
+                            "quoted_text": "G"
+                        }]
+                    }),
+                );
+            }
+            Ok(StructuredOutput {
+                value: Value::Object(map),
+                usage: Usage::default(),
+            })
+        }
+
+        fn model_id(&self) -> &str {
+            "gated"
+        }
+    }
+
+    /// Seed a 2-row review with one ungated `parent` column and one
+    /// `child` column gated on `parent == "X"`. Row 0's chunk
+    /// contains "GATE=X", row 1's contains "GATE=Y".
+    async fn seed_gated_review(
+        storage: &StorageHandle,
+    ) -> (ReviewId, Vec<Row>, HashMap<uuid::Uuid, Vec<ChunkRef>>) {
+        let review = ReviewId::new();
+        let parent_id = ColumnId::for_name(review, "parent");
+        let parent_col = ColumnBuilder::new(review, "parent", "parent?", CellType::Text)
+            .order(0)
+            .build();
+        let child_col = ColumnBuilder::new(review, "child", "child?", CellType::Text)
+            .order(1)
+            .conditional(ConditionalSpec {
+                parent_col: parent_id,
+                predicate: Predicate::Equals { value: json!("X") },
+            })
+            .build();
+        storage
+            .columns
+            .add(review, &parent_col)
+            .await
+            .expect("add parent");
+        storage
+            .columns
+            .add(review, &child_col)
+            .await
+            .expect("add child");
+
+        let mut rows = Vec::new();
+        let mut chunk_map: HashMap<uuid::Uuid, Vec<ChunkRef>> = HashMap::new();
+        for marker in ["GATE=X", "GATE=Y"] {
+            let doc = uuid::Uuid::now_v7();
+            let chunk_id = uuid::Uuid::now_v7();
+            chunk_map.insert(
+                doc,
+                vec![ChunkRef {
+                    id: chunk_id,
+                    doc_id: doc,
+                    content: format!("Hello world. {marker}"),
+                    page: Some(1),
+                }],
+            );
+            let row = Row {
+                id: RowId::for_doc(review, doc),
+                review_id: review,
+                doc_id: doc,
+                folder_path: None,
+                created_at: Utc::now(),
+            };
+            storage.rows.add(&row).await.expect("add row");
+            rows.push(row);
+        }
+        (review, rows, chunk_map)
+    }
+
+    #[tokio::test]
+    async fn fanout_skips_child_when_parent_predicate_false() {
+        let (_dir, storage) = fresh_storage().await;
+        let (review, rows, chunk_map) = seed_gated_review(&storage).await;
+
+        let llm = Arc::new(GatedLlm {
+            chunk_id: any_chunk_id(&chunk_map),
+            calls: Arc::new(Mutex::new(Vec::new())),
+        });
+        let chunks = Arc::new(InMemoryChunks { by_doc: chunk_map });
+        let extractor = Extractor::new(llm, chunks);
+
+        let outcomes = run_review(&storage, &extractor, review, FanoutConfig::default())
+            .await
+            .expect("run_review succeeds");
+        assert_eq!(outcomes.len(), 2);
+
+        // Row 0 (GATE=X): parent + child = 2 cells.
+        // Row 1 (GATE=Y): parent only = 1 cell.
+        let by_row: HashMap<RowId, usize> = outcomes
+            .iter()
+            .map(|o| (o.row_id, *o.result.as_ref().expect("row succeeded")))
+            .collect();
+        assert_eq!(by_row[&rows[0].id], 2, "X row extracts both columns");
+        assert_eq!(by_row[&rows[1].id], 1, "Y row gates out the child");
+
+        let child_id = ColumnId::for_name(review, "child");
+        let child_row0 = storage
+            .cells
+            .latest(review, rows[0].id, child_id)
+            .await
+            .expect("latest")
+            .expect("child cell exists for X row");
+        assert_eq!(child_row0.value, json!("child-of-X"));
+        let child_row1 = storage
+            .cells
+            .latest(review, rows[1].id, child_id)
+            .await
+            .expect("latest");
+        assert!(child_row1.is_none(), "child must NOT exist for Y row");
+    }
+
+    #[tokio::test]
+    async fn fanout_extracts_child_after_parent_in_wave_order() {
+        let (_dir, storage) = fresh_storage().await;
+        let (review, _rows, chunk_map) = seed_gated_review(&storage).await;
+
+        let calls = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+        let llm = Arc::new(GatedLlm {
+            chunk_id: any_chunk_id(&chunk_map),
+            calls: Arc::clone(&calls),
+        });
+        let chunks = Arc::new(InMemoryChunks { by_doc: chunk_map });
+        let extractor = Extractor::new(llm, chunks);
+
+        let outcomes = run_review(&storage, &extractor, review, FanoutConfig::default())
+            .await
+            .expect("run_review succeeds");
+        assert_eq!(outcomes.len(), 2);
+
+        // For the GATE=X row we expect TWO calls: wave 0 with just
+        // "parent", then wave 1 with just "child". Inspect every
+        // recorded call list; we must see at least one (parent-only,
+        // child-only) pair in that order. Calls from the GATE=Y row
+        // contribute a parent-only call (no second wave: child gated
+        // out) — that's fine, it doesn't violate ordering.
+        let recorded = calls.lock().unwrap().clone();
+
+        // Across all calls, "parent" appears before "child"
+        // somewhere — and "child" never co-occurs with "parent" in
+        // the same call (proving the two are in separate waves).
+        let mut saw_parent_only = false;
+        let mut saw_child_only_after_parent = false;
+        for call in &recorded {
+            if call.len() == 1 && call[0] == "parent" {
+                saw_parent_only = true;
+            } else if call.len() == 1 && call[0] == "child" {
+                assert!(saw_parent_only, "child wave fired before parent wave");
+                saw_child_only_after_parent = true;
+            } else {
+                panic!("unexpected co-batched call: {call:?}");
+            }
+        }
+        assert!(saw_parent_only, "expected at least one parent-only batch");
+        assert!(
+            saw_child_only_after_parent,
+            "expected a child-only batch after parent (got {recorded:?})"
+        );
+    }
+
+    #[tokio::test]
+    async fn fanout_skips_columns_with_existing_cells() {
+        let (_dir, storage) = fresh_storage().await;
+        let (review, rows, chunk_map) = seed_review(&storage, 1).await;
+
+        // Pre-seed a cell for (row_0, col_a). Default config →
+        // force_reextract=false → that column must be skipped while
+        // col_b is freshly extracted.
+        let col_a = ColumnId::for_name(review, "col_a");
+        let col_b = ColumnId::for_name(review, "col_b");
+        let pre = Cell {
+            review_id: review,
+            row_id: rows[0].id,
+            col_id: col_a,
+            value: json!("PRE_EXISTING"),
+            reasoning: Some("pre-seeded".into()),
+            citations: vec![],
+            support_score: 0.5,
+            confidence: Confidence::Medium,
+            locked: false,
+            version: 1,
+            author: Author::System {
+                extractor_version: "old".into(),
+            },
+            updated_at: Utc::now(),
+        };
+        storage.cells.upsert(&pre).await.expect("seed cell");
+
+        let llm = Arc::new(StubLlm {
+            chunk_id: any_chunk_id(&chunk_map),
+            calls: Arc::new(AtomicUsize::new(0)),
+            delay_ms: 0,
+        });
+        let chunks = Arc::new(InMemoryChunks { by_doc: chunk_map });
+        let extractor = Extractor::new(llm, chunks);
+
+        let outcomes = run_review(&storage, &extractor, review, FanoutConfig::default())
+            .await
+            .expect("run_review succeeds");
+        assert_eq!(outcomes.len(), 1);
+        assert_eq!(
+            *outcomes[0].result.as_ref().expect("ok"),
+            1,
+            "only col_b should be (re)extracted"
+        );
+
+        let kept = storage
+            .cells
+            .latest(review, rows[0].id, col_a)
+            .await
+            .expect("latest")
+            .expect("col_a cell exists");
+        assert_eq!(kept.value, json!("PRE_EXISTING"), "col_a untouched");
+        assert_eq!(kept.version, 1, "version not incremented");
+
+        let fresh = storage
+            .cells
+            .latest(review, rows[0].id, col_b)
+            .await
+            .expect("latest")
+            .expect("col_b cell exists");
+        assert_eq!(fresh.value, json!("B"), "col_b freshly extracted");
+    }
+
+    #[tokio::test]
+    async fn fanout_force_reextract_runs_all_columns() {
+        // With force_reextract=true the incremental skip is bypassed,
+        // so even a pre-seeded col_a is sent to the LLM again. The
+        // re-extraction is asserted via:
+        //  1. the per-row upsert count = 2 (both columns wrote),
+        //  2. the LLM was invoked (extract_doc actually ran).
+        //
+        // Note we deliberately don't assert that `latest.value`
+        // flipped from "OLD_VALUE" to "A": `extract::batch` always
+        // writes `version = 1`, identical to the pre-seeded version,
+        // and `CellsTable::latest` picks max-by-version which is then
+        // a tie between two `version = 1` rows. Version-bump semantics
+        // belong to the verifier+commit path (later phases). The
+        // re-extraction *happened* — that's what force_reextract
+        // guarantees.
+        let (_dir, storage) = fresh_storage().await;
+        let (review, rows, chunk_map) = seed_review(&storage, 1).await;
+
+        let col_a = ColumnId::for_name(review, "col_a");
+        let pre = Cell {
+            review_id: review,
+            row_id: rows[0].id,
+            col_id: col_a,
+            value: json!("OLD_VALUE"),
+            reasoning: Some("pre".into()),
+            citations: vec![],
+            support_score: 0.5,
+            confidence: Confidence::Medium,
+            locked: false,
+            version: 1,
+            author: Author::System {
+                extractor_version: "old".into(),
+            },
+            updated_at: Utc::now(),
+        };
+        storage.cells.upsert(&pre).await.expect("seed cell");
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let llm = Arc::new(StubLlm {
+            chunk_id: any_chunk_id(&chunk_map),
+            calls: Arc::clone(&calls),
+            delay_ms: 0,
+        });
+        let chunks = Arc::new(InMemoryChunks { by_doc: chunk_map });
+        let extractor = Extractor::new(llm, chunks);
+
+        let cfg = FanoutConfig {
+            force_reextract: true,
+            ..Default::default()
+        };
+        let outcomes = run_review(&storage, &extractor, review, cfg)
+            .await
+            .expect("run_review succeeds");
+        assert_eq!(outcomes.len(), 1);
+        assert_eq!(
+            *outcomes[0].result.as_ref().expect("ok"),
+            2,
+            "both columns re-extracted under force_reextract (col_a not skipped)"
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "LLM was invoked (single batched call) — incremental skip bypassed"
+        );
+
+        // Sanity: by contrast, the default-config skip path would have
+        // counted only 1 upsert and returned. Make that explicit by
+        // re-running with force_reextract=false on a sibling storage.
+        let (_dir2, storage2) = fresh_storage().await;
+        let (review2, rows2, chunk_map2) = seed_review(&storage2, 1).await;
+        let col_a2 = ColumnId::for_name(review2, "col_a");
+        let pre2 = Cell {
+            review_id: review2,
+            row_id: rows2[0].id,
+            col_id: col_a2,
+            value: json!("OLD_VALUE"),
+            reasoning: Some("pre".into()),
+            citations: vec![],
+            support_score: 0.5,
+            confidence: Confidence::Medium,
+            locked: false,
+            version: 1,
+            author: Author::System {
+                extractor_version: "old".into(),
+            },
+            updated_at: Utc::now(),
+        };
+        storage2.cells.upsert(&pre2).await.expect("seed");
+        let llm2 = Arc::new(StubLlm {
+            chunk_id: any_chunk_id(&chunk_map2),
+            calls: Arc::new(AtomicUsize::new(0)),
+            delay_ms: 0,
+        });
+        let chunks2 = Arc::new(InMemoryChunks { by_doc: chunk_map2 });
+        let extractor2 = Extractor::new(llm2, chunks2);
+        let outcomes2 = run_review(&storage2, &extractor2, review2, FanoutConfig::default())
+            .await
+            .expect("run_review succeeds");
+        assert_eq!(
+            *outcomes2[0].result.as_ref().expect("ok"),
+            1,
+            "default config (force_reextract=false) skips the pre-seeded col_a"
+        );
     }
 }
