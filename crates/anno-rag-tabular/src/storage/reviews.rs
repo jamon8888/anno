@@ -5,7 +5,7 @@
 //! encode/decode pair and the idempotent `open` so the rest of the
 //! crate never has to touch raw `RecordBatch` shapes.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::ids::ReviewId;
 use crate::storage::arrow_schema::reviews_schema;
 use crate::storage::util::{opt_str, uuid_to_filter_lit};
@@ -160,6 +160,39 @@ impl ReviewsTable {
             }
         }
         Ok(None)
+    }
+
+    /// Increment the review's `schema_version` by one and return the
+    /// new value. Called by [`crate::storage::ColumnsTable::add_with_bump`]
+    /// whenever a column is added so the extraction engine can detect
+    /// schema drift against previously-written cells and re-run only
+    /// the missing ones.
+    ///
+    /// Implementation note: `lancedb` 0.29 exposes a SQL-style
+    /// `update().only_if(...).column(name, expr).execute()` builder; the
+    /// expression is parsed by Lance as SQL, so a `u32` literal is
+    /// passed as its decimal string form.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::TemplateNotFound`] when no review with `id` exists.
+    ///   (The variant name doesn't quite match the situation — the plan
+    ///   reuses it deliberately to avoid adding a new error variant for
+    ///   one call site; the `name` field carries the stringified id.)
+    /// - [`Error::Lance`] on `get` or `update` failure, propagated.
+    pub async fn bump_schema_version(&self, id: ReviewId) -> Result<u32> {
+        let prev = self.get(id).await?.ok_or_else(|| Error::TemplateNotFound {
+            name: id.0.to_string(),
+        })?;
+        let new_version = prev.schema_version + 1;
+        let id_hex = uuid_to_filter_lit(id.0);
+        self.tbl
+            .update()
+            .only_if(format!("id = X'{id_hex}'"))
+            .column("schema_version", new_version.to_string())
+            .execute()
+            .await?;
+        Ok(new_version)
     }
 
     /// Return every review row. Order is whatever Lance hands back —

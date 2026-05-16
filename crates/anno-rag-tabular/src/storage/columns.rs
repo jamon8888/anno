@@ -13,6 +13,7 @@ use crate::error::Result;
 use crate::ids::{ColumnId, ReviewId};
 use crate::schema::Column;
 use crate::storage::arrow_schema::columns_schema;
+use crate::storage::reviews::ReviewsTable;
 use crate::storage::util::uuid_to_filter_lit;
 use arrow::error::ArrowError;
 use arrow_array::{
@@ -119,6 +120,31 @@ impl ColumnsTable {
         Ok(())
     }
 
+    /// Add a column and bump the owning review's `schema_version` in
+    /// one step. Returns the new `schema_version`.
+    ///
+    /// This is the convenience wrapper most callers want; the extraction
+    /// engine relies on the bump to detect drift and re-run missing
+    /// cells. The lower-level [`Self::add`] stays available for the rare
+    /// case where multiple columns land inside a single logical schema
+    /// update — then the caller batches the bump itself.
+    ///
+    /// # Errors
+    ///
+    /// Propagates errors from [`Self::add`] (see that method) and from
+    /// [`ReviewsTable::bump_schema_version`] (notably
+    /// [`crate::error::Error::TemplateNotFound`] if `review_id` does
+    /// not exist).
+    pub async fn add_with_bump(
+        &self,
+        reviews: &ReviewsTable,
+        review_id: ReviewId,
+        col: &Column,
+    ) -> Result<u32> {
+        self.add(review_id, col).await?;
+        reviews.bump_schema_version(review_id).await
+    }
+
     /// List every column belonging to `review_id`, sorted by `order`.
     ///
     /// Lance returns batches in arbitrary order, so we sort in-process —
@@ -221,7 +247,22 @@ fn row_to_column(b: &RecordBatch, i: usize) -> Result<Column> {
 mod tests {
     use super::*;
     use crate::schema::{CellType, ColumnBuilder};
+    use crate::storage::reviews::Review;
+    use chrono::Utc;
     use tempfile::TempDir;
+
+    async fn fresh_both() -> (TempDir, ReviewsTable, ColumnsTable) {
+        let dir = TempDir::new().expect("tempdir");
+        let conn = Arc::new(
+            lancedb::connect(dir.path().to_str().expect("utf8 path"))
+                .execute()
+                .await
+                .expect("lancedb connect"),
+        );
+        let r = ReviewsTable::open(conn.clone()).await.expect("open reviews");
+        let c = ColumnsTable::open(conn).await.expect("open columns");
+        (dir, r, c)
+    }
 
     async fn fresh_table() -> (TempDir, ColumnsTable) {
         let dir = TempDir::new().expect("tempdir");
@@ -278,5 +319,32 @@ mod tests {
         let only_r1 = t.list_for_review(r1).await.expect("list r1");
         assert_eq!(only_r1.len(), 1);
         assert_eq!(only_r1[0].name, "a");
+    }
+
+    #[tokio::test]
+    async fn add_column_bumps_review_schema_version() {
+        let (_dir, reviews, columns) = fresh_both().await;
+        let review = Review {
+            id: ReviewId::new(),
+            name: "Deal Acme NDAs".into(),
+            project_id: None,
+            template_id: None,
+            scope_folder: None,
+            created_at: Utc::now(),
+            schema_version: 1,
+        };
+        reviews.create(&review).await.expect("create review");
+        let col = ColumnBuilder::new(review.id, "governing_law", "p", CellType::Text).build();
+        let new_v = columns
+            .add_with_bump(&reviews, review.id, &col)
+            .await
+            .expect("add_with_bump");
+        assert_eq!(new_v, 2);
+        let refetched = reviews
+            .get(review.id)
+            .await
+            .expect("get review")
+            .expect("review row should still exist after update");
+        assert_eq!(refetched.schema_version, 2);
     }
 }
