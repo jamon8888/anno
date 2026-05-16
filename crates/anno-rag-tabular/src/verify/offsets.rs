@@ -23,6 +23,45 @@ use crate::storage::cells::{Cell, Citation, Confidence};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+/// Why a citation failed offset/quote round-trip. Each variant maps
+/// 1:1 to one of the `tracing::warn` branches in [`check_citation`].
+///
+/// Exposed as public API so downstream callers (notably T30's
+/// free-form output verifier) can match on the reason and surface it
+/// to the LLM verbatim.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OffsetFailure {
+    /// The chunk_id doesn't exist in the source.
+    UnknownChunkId,
+    /// `char_start > char_end` (range inverted).
+    StartAfterEnd,
+    /// `char_end > chunk.len()` (out of bounds).
+    OutOfBounds {
+        /// Actual chunk length in bytes, for the error message.
+        chunk_len: u32,
+    },
+    /// `char_start..char_end` doesn't land on UTF-8 boundaries.
+    Utf8Boundary,
+    /// `content[start..end] != quoted_text` (LLM hallucinated the
+    /// quote).
+    QuoteMismatch {
+        /// The slice the offsets actually point at — useful for the
+        /// MCP tool to surface "you said X but the chunk says Y" to
+        /// the LLM.
+        actual: String,
+    },
+}
+
+/// Per-citation verification result. Either the citation round-trips
+/// cleanly or it carries a typed failure reason.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OffsetCheck {
+    /// Citation passes all offset / UTF-8 / quote checks.
+    Ok,
+    /// Citation failed for the specified reason.
+    Fail(OffsetFailure),
+}
+
 /// Verify every citation in `cell` against the source chunks fetched
 /// via `chunks`. Mutates `cell.confidence` to `Low` if any citation
 /// fails offset/quote round-trip; otherwise leaves it untouched.
@@ -50,7 +89,7 @@ pub async fn verify_cell_offsets(
 
     let mut all_pass = true;
     for cite in &cell.citations {
-        if !check_citation(cite, &by_id) {
+        if matches!(check_citation(cite, &by_id), OffsetCheck::Fail(_)) {
             all_pass = false;
             // Don't break — emit one trace event per failed citation
             // so audit can show every reason.
@@ -63,10 +102,18 @@ pub async fn verify_cell_offsets(
     Ok(())
 }
 
-/// Returns `true` iff this citation's offsets + quote round-trip
-/// cleanly. Logs a `tracing::warn` describing the failure mode when
-/// the result is `false`.
-fn check_citation(c: &Citation, chunks: &HashMap<Uuid, &str>) -> bool {
+/// Verify a single citation against a chunk-content map.
+///
+/// Returns [`OffsetCheck::Ok`] iff `chunks[citation.chunk_id]` exists,
+/// the range is well-formed and in-bounds, lands on UTF-8 boundaries,
+/// and the slice byte-for-byte equals `citation.quoted_text`.
+/// Otherwise returns [`OffsetCheck::Fail`] with a typed reason — and,
+/// preserving pre-refactor behaviour, also logs a `tracing::warn` so
+/// the audit pipeline keeps seeing the same events.
+///
+/// Public because T30's free-form-output verifier reuses both the
+/// logic and the typed reason enum.
+pub fn check_citation(c: &Citation, chunks: &HashMap<Uuid, &str>) -> OffsetCheck {
     let Some(content) = chunks.get(&c.chunk_id) else {
         tracing::warn!(
             target: "tabular::verify::offsets",
@@ -74,7 +121,7 @@ fn check_citation(c: &Citation, chunks: &HashMap<Uuid, &str>) -> bool {
             reason = "unknown_chunk_id",
             "citation refers to chunk not present in doc"
         );
-        return false;
+        return OffsetCheck::Fail(OffsetFailure::UnknownChunkId);
     };
 
     if c.char_start > c.char_end {
@@ -86,7 +133,7 @@ fn check_citation(c: &Citation, chunks: &HashMap<Uuid, &str>) -> bool {
             reason = "start_after_end",
             "citation char range is inverted"
         );
-        return false;
+        return OffsetCheck::Fail(OffsetFailure::StartAfterEnd);
     }
 
     let start = c.char_start as usize;
@@ -100,7 +147,9 @@ fn check_citation(c: &Citation, chunks: &HashMap<Uuid, &str>) -> bool {
             reason = "out_of_bounds",
             "citation char_end exceeds chunk content length"
         );
-        return false;
+        return OffsetCheck::Fail(OffsetFailure::OutOfBounds {
+            chunk_len: u32::try_from(content.len()).unwrap_or(u32::MAX),
+        });
     }
 
     // `get(range)` returns None if the range doesn't land on UTF-8
@@ -112,7 +161,7 @@ fn check_citation(c: &Citation, chunks: &HashMap<Uuid, &str>) -> bool {
             reason = "utf8_boundary",
             "char_start..char_end does not land on UTF-8 boundaries"
         );
-        return false;
+        return OffsetCheck::Fail(OffsetFailure::Utf8Boundary);
     };
 
     if slice != c.quoted_text {
@@ -122,10 +171,12 @@ fn check_citation(c: &Citation, chunks: &HashMap<Uuid, &str>) -> bool {
             reason = "quote_mismatch",
             "citation quoted_text does not match chunk slice at offsets"
         );
-        return false;
+        return OffsetCheck::Fail(OffsetFailure::QuoteMismatch {
+            actual: slice.to_string(),
+        });
     }
 
-    true
+    OffsetCheck::Ok
 }
 
 #[cfg(test)]
@@ -150,6 +201,15 @@ mod tests {
     impl ChunkSource for InMemoryChunks {
         async fn chunks_for_doc(&self, doc_id: Uuid) -> Result<Vec<ChunkRef>> {
             Ok(self.by_doc.get(&doc_id).cloned().unwrap_or_default())
+        }
+
+        async fn chunk_by_id(&self, chunk_id: Uuid) -> Result<Option<ChunkRef>> {
+            Ok(self
+                .by_doc
+                .values()
+                .flatten()
+                .find(|c| c.id == chunk_id)
+                .cloned())
         }
     }
 

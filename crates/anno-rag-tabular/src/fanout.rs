@@ -427,6 +427,15 @@ mod tests {
         async fn chunks_for_doc(&self, doc_id: uuid::Uuid) -> Result<Vec<ChunkRef>> {
             Ok(self.by_doc.get(&doc_id).cloned().unwrap_or_default())
         }
+
+        async fn chunk_by_id(&self, chunk_id: uuid::Uuid) -> Result<Option<ChunkRef>> {
+            Ok(self
+                .by_doc
+                .values()
+                .flatten()
+                .find(|c| c.id == chunk_id)
+                .cloned())
+        }
     }
 
     /// Mock LLM that always returns the same envelope for the two

@@ -10,4 +10,5 @@
 //!   High/Medium/Low. Sets `cell.support_score`.
 
 pub mod offsets;
+pub mod output;
 pub mod support;

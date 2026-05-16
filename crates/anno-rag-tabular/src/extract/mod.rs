@@ -63,6 +63,23 @@ pub trait ChunkSource: Send + Sync {
     /// Returns a [`crate::error::Error`] wrapping the underlying store
     /// failure.
     async fn chunks_for_doc(&self, doc_id: uuid::Uuid) -> Result<Vec<ChunkRef>>;
+
+    /// Look up a single chunk by its id. Returns `Ok(None)` when the
+    /// chunk doesn't exist; that is **not** an error (it surfaces to
+    /// the offset verifier as a typed
+    /// [`OffsetFailure::UnknownChunkId`](crate::verify::offsets::OffsetFailure::UnknownChunkId)).
+    ///
+    /// No default impl on purpose — production sources usually have a
+    /// fast point-lookup path (e.g. a LanceDB `only_if` query on the
+    /// `chunk_id` primary key), and forcing implementors to think
+    /// about it keeps that hot path from accidentally falling back to
+    /// a doc-wide scan via `chunks_for_doc`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`crate::error::Error`] wrapping the underlying store
+    /// failure. A missing chunk is reported as `Ok(None)`.
+    async fn chunk_by_id(&self, chunk_id: uuid::Uuid) -> Result<Option<ChunkRef>>;
 }
 
 /// Top-level extraction engine. Owns the LLM client and a chunk source;
@@ -181,6 +198,15 @@ mod tests {
     impl ChunkSource for InMemoryChunks {
         async fn chunks_for_doc(&self, doc_id: uuid::Uuid) -> Result<Vec<ChunkRef>> {
             Ok(self.by_doc.get(&doc_id).cloned().unwrap_or_default())
+        }
+
+        async fn chunk_by_id(&self, chunk_id: uuid::Uuid) -> Result<Option<ChunkRef>> {
+            Ok(self
+                .by_doc
+                .values()
+                .flatten()
+                .find(|c| c.id == chunk_id)
+                .cloned())
         }
     }
 
