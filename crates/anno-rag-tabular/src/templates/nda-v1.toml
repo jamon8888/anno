@@ -1,0 +1,77 @@
+id = "nda-v1"
+name = "NDA Review (FR)"
+version = "1.0.0"
+description = "Non-disclosure agreement abstraction — parties, term, governing law, scope, remedies."
+vertical = "legal-fr"
+
+[[column]]
+name   = "parties"
+prompt = "List the contracting parties (full legal names, including form: SAS, SARL, etc.)."
+type   = "text"
+
+[[column]]
+name   = "effective_date"
+prompt = "What is the effective date of the agreement? Return ISO 8601 (YYYY-MM-DD)."
+type   = "date"
+
+[[column]]
+name   = "term"
+prompt = "What is the term/duration of the confidentiality obligation? Verbatim from the contract."
+type   = "verbatim"
+
+[[column]]
+name    = "governing_law"
+prompt  = "What governing law applies? Use ISO 3166-1 alpha-2 country code (FR, DE, UK, US, ...)."
+type    = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "OTHER"]
+
+[[column]]
+name   = "jurisdiction"
+prompt = "What court or tribunal has jurisdiction? Verbatim clause."
+type   = "verbatim"
+
+[[column]]
+name   = "scope_definition"
+prompt = "What is the definition of 'Confidential Information'? Verbatim clause."
+type   = "verbatim"
+
+[[column]]
+name   = "permitted_disclosures"
+prompt = "Are there permitted-disclosure carve-outs (legal, regulators, advisors)? Verbatim."
+type   = "verbatim"
+
+[[column]]
+name   = "non_solicitation"
+prompt = "Does the contract include a non-solicitation clause covering employees or customers?"
+type   = "boolean"
+
+[[column]]
+name   = "non_solicitation_term"
+prompt = "If non-solicitation present: duration of the non-solicit obligation in months. Otherwise null."
+type   = "number"
+
+[[column]]
+name   = "exclusivity"
+prompt = "Does the contract grant exclusivity to either party? Verbatim if yes, else 'none'."
+type   = "text"
+
+[[column]]
+name   = "residual_clause"
+prompt = "Is there a residual-information clause (memorized info exempted)?"
+type   = "boolean"
+
+[[column]]
+name   = "return_of_info"
+prompt = "Return/destruction-of-information obligations: verbatim or 'none'."
+type   = "text"
+
+[[column]]
+name   = "remedies"
+prompt = "What remedies for breach are specified (injunctive relief, liquidated damages)? Verbatim."
+type   = "verbatim"
+
+[[column]]
+name   = "liability_cap"
+prompt = "Liability cap if any (in EUR). Return null if uncapped or not specified."
+type   = "currency"
+code   = "EUR"

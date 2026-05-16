@@ -1,0 +1,10 @@
+id = "employment-v1"
+name = "Placeholder — filled in Task 11"
+version = "0.0.1"
+description = "Placeholder for employment contract review template."
+vertical = "legal-fr"
+
+[[column]]
+name   = "_placeholder"
+prompt = "filled in a later task"
+type   = "text"

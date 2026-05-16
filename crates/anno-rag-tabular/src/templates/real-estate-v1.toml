@@ -1,0 +1,10 @@
+id = "real-estate-v1"
+name = "Placeholder — filled in Task 10"
+version = "0.0.1"
+description = "Placeholder for real-estate contract review template."
+vertical = "legal-fr"
+
+[[column]]
+name   = "_placeholder"
+prompt = "filled in a later task"
+type   = "text"
