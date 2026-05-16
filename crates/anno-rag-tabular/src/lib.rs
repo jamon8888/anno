@@ -11,5 +11,7 @@
 //! - `llm` (Phase 4)
 //! - `extract` + `verify` + `export` (Phases 5+)
 
+pub mod error;
 pub mod ids;
+pub use error::{Error, Result};
 pub use ids::{ColumnId, ReviewId, RowId};
