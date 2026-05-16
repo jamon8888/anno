@@ -5,17 +5,17 @@
 #![warn(missing_docs)]
 
 pub mod bench_cli;
+pub mod canonicalize;
 pub mod config;
+pub mod conflict;
 pub mod detect;
 pub mod embed;
 pub mod error;
 pub mod eval;
 pub mod ingest;
-pub mod canonicalize;
-pub mod conflict;
 pub mod mcp;
-pub(crate) mod ocr;
 pub mod memory;
+pub(crate) mod ocr;
 pub mod pii_eval;
 pub mod pipeline;
 pub mod store;

@@ -7,9 +7,7 @@ use uuid::Uuid;
 /// Memory category. `Fact` and `Preference` are first-class for retrieval;
 /// `Reference` and `Context` are reserved for v0.2's conflict-resolution and
 /// transient-context paths.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum MemoryKind {
     /// Stable factual claim ("the cabinet has 12 lawyers").
@@ -51,9 +49,7 @@ impl Default for MemoryId {
 /// span the detector found ("Marie Dupont"); `token` is the vault token
 /// emitted ("PERSON_42"). Used by [`Pipeline::forget_memory`] to cascade
 /// erasure into the vault.
-#[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TokenRef {
     /// Detector label or category (for human review).
     pub label: String,

@@ -345,10 +345,13 @@ mod tests {
     fn email_regex_matches_contract_emails() {
         let ents = detect_patterns("Contact : claire.fontaine@atelier-numerique.fr pour le suivi.");
         assert!(
-            ents.iter().any(|e| matches!(e.category, EntityCategory::Email)
-                && e.original == "claire.fontaine@atelier-numerique.fr"),
+            ents.iter()
+                .any(|e| matches!(e.category, EntityCategory::Email)
+                    && e.original == "claire.fontaine@atelier-numerique.fr"),
             "expected Email entity, got {:?}",
-            ents.iter().map(|e| (&e.category, &e.original)).collect::<Vec<_>>()
+            ents.iter()
+                .map(|e| (&e.category, &e.original))
+                .collect::<Vec<_>>()
         );
     }
 
@@ -357,9 +360,13 @@ mod tests {
         // A bare `@`, and `a@b` with no TLD, must not be detected as emails.
         let ents = detect_patterns("mention @julien et adresse a@b sans domaine.");
         assert!(
-            !ents.iter().any(|e| matches!(e.category, EntityCategory::Email)),
+            !ents
+                .iter()
+                .any(|e| matches!(e.category, EntityCategory::Email)),
             "no Email entity expected, got {:?}",
-            ents.iter().map(|e| (&e.category, &e.original)).collect::<Vec<_>>()
+            ents.iter()
+                .map(|e| (&e.category, &e.original))
+                .collect::<Vec<_>>()
         );
     }
 
@@ -368,8 +375,12 @@ mod tests {
         // detect_patterns is the model-free regex layer.
         let text = "IBAN FR76 3000 4000 0500 0612 3456 789, tel 06 12 34 56 78.";
         let ents = detect_patterns(text);
-        assert!(ents.iter().any(|e| matches!(&e.category, EntityCategory::Custom(s) if s == "IBAN_FR")));
-        assert!(ents.iter().any(|e| matches!(e.category, EntityCategory::PhoneNumber)));
+        assert!(ents
+            .iter()
+            .any(|e| matches!(&e.category, EntityCategory::Custom(s) if s == "IBAN_FR")));
+        assert!(ents
+            .iter()
+            .any(|e| matches!(e.category, EntityCategory::PhoneNumber)));
     }
 
     #[test]

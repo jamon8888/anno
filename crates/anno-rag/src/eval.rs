@@ -159,8 +159,11 @@ pub async fn run_eval(pipeline: &Pipeline, queries: &EvalQueries) -> Result<Eval
             })
             .filter(|f| seen.insert(f.clone()))
             .collect();
-        let relevant: HashMap<String, u8> =
-            q.relevant.iter().map(|r| (r.doc.clone(), r.grade)).collect();
+        let relevant: HashMap<String, u8> = q
+            .relevant
+            .iter()
+            .map(|r| (r.doc.clone(), r.grade))
+            .collect();
         recalls.push(recall_at_k(&ranked, &relevant, 10));
         ndcgs.push(ndcg_at_k(&ranked, &relevant, 10));
     }
@@ -239,7 +242,10 @@ relevant = [
         let q = EvalQueries {
             queries: vec![EvalQuery {
                 text: "t".into(),
-                relevant: vec![RelevantDoc { doc: "a.txt".into(), grade: 9 }],
+                relevant: vec![RelevantDoc {
+                    doc: "a.txt".into(),
+                    grade: 9,
+                }],
             }],
         };
         assert!(check_queries(dir.path(), &q).is_err());
@@ -251,7 +257,10 @@ relevant = [
         let q = EvalQueries {
             queries: vec![EvalQuery {
                 text: "t".into(),
-                relevant: vec![RelevantDoc { doc: "missing.txt".into(), grade: 2 }],
+                relevant: vec![RelevantDoc {
+                    doc: "missing.txt".into(),
+                    grade: 2,
+                }],
             }],
         };
         assert!(check_queries(dir.path(), &q).is_err());
@@ -259,8 +268,8 @@ relevant = [
 
     #[test]
     fn fixture_corpus_is_consistent() {
-        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/eval_corpus");
+        let dir =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/eval_corpus");
         let queries = load_queries(&dir).expect("queries.toml loads");
         assert!(queries.queries.len() >= 30, "expected ~40 queries");
         check_queries(&dir, &queries).expect("corpus consistent");

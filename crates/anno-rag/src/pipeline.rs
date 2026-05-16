@@ -281,7 +281,7 @@ impl Pipeline {
                         EntityType::Organization => "ORG",
                         EntityType::Location => "LOC",
                         EntityType::Person => continue, // vault path only
-                        _ => continue, // skip Date/Money/etc. — not graph-useful
+                        _ => continue,                  // skip Date/Money/etc. — not graph-useful
                     };
                     out.insert(canonicalize_entity(&e.text, tag, &self.cfg.entity_aliases));
                 }
@@ -362,11 +362,7 @@ impl Pipeline {
     ///
     /// # Errors
     /// Returns [`Error::Audit`] if serialisation fails.
-    pub async fn export_subject(
-        &self,
-        subject_ref: &str,
-        format: ExportFormat,
-    ) -> Result<Vec<u8>> {
+    pub async fn export_subject(&self, subject_ref: &str, format: ExportFormat) -> Result<Vec<u8>> {
         let res = self.find_subject(subject_ref).await;
         match format {
             ExportFormat::Json => serde_json::to_vec_pretty(&res)
@@ -404,16 +400,15 @@ impl Pipeline {
         session_id: Option<String>,
     ) -> Result<SavedMemory> {
         let entities = self.detector_get_or_init()?.detect(text)?;
-        let (tokenized, token_refs) =
-            self.vault.pseudonymize_with_refs(text, &entities).await?;
+        let (tokenized, token_refs) = self.vault.pseudonymize_with_refs(text, &entities).await?;
 
         let mut embedding = self
             .embedder()
             .await?
             .embed_batch(std::slice::from_ref(&tokenized))?;
-        let embedding = embedding.pop().ok_or_else(|| {
-            Error::Embed("embed_batch returned no vector for memory".into())
-        })?;
+        let embedding = embedding
+            .pop()
+            .ok_or_else(|| Error::Embed("embed_batch returned no vector for memory".into()))?;
 
         let now = chrono::Utc::now();
         let id = crate::memory::MemoryId::new();
@@ -443,11 +438,8 @@ impl Pipeline {
                 .memory_candidates_for_conflict(&m.entity_refs, m.session_id.as_deref())
                 .await?;
             for prior in &candidates {
-                if crate::conflict::resolves_conflict(
-                    &m,
-                    prior,
-                    self.cfg.conflict_cosine_threshold,
-                ) {
+                if crate::conflict::resolves_conflict(&m, prior, self.cfg.conflict_cosine_threshold)
+                {
                     self.store
                         .memory_update_valid_to(&prior.id, m.created_at)
                         .await?;
@@ -487,8 +479,7 @@ impl Pipeline {
         graph_expand: bool,
     ) -> Result<Vec<crate::memory::MemoryHit>> {
         let entities = self.detector_get_or_init()?.detect(query)?;
-        let (tokenized_query, _) =
-            self.vault.pseudonymize_with_refs(query, &entities).await?;
+        let (tokenized_query, _) = self.vault.pseudonymize_with_refs(query, &entities).await?;
         let query_vec = self.embedder().await?.embed_query(&tokenized_query)?;
 
         let mut raw = self
@@ -508,12 +499,8 @@ impl Pipeline {
         // Bi-temporal filter. as_of = Some(t) → point-in-time semantics
         // (valid_from <= t AND (valid_to IS NULL OR valid_to > t)).
         // as_of = None → "now": include only currently-valid rows.
-        let t_us = as_of
-            .unwrap_or_else(chrono::Utc::now)
-            .timestamp_micros();
-        raw.retain(|r| {
-            r.valid_from_us <= t_us && r.valid_to_us.map_or(true, |v| v > t_us)
-        });
+        let t_us = as_of.unwrap_or_else(chrono::Utc::now).timestamp_micros();
+        raw.retain(|r| r.valid_from_us <= t_us && r.valid_to_us.map_or(true, |v| v > t_us));
 
         raw.truncate(top_k);
 
@@ -526,19 +513,13 @@ impl Pipeline {
         // share at least one entity with any top-k hit, bounded by
         // graph_per_hop_limit. Bi-temporal predicate already applied.
         if graph_expand {
-            let frontier: std::collections::HashSet<String> = raw
-                .iter()
-                .flat_map(|r| r.entity_refs.clone())
-                .collect();
+            let frontier: std::collections::HashSet<String> =
+                raw.iter().flat_map(|r| r.entity_refs.clone()).collect();
             if !frontier.is_empty() {
                 let frontier_vec: Vec<String> = frontier.into_iter().collect();
                 let extras = self
                     .store
-                    .memory_filter_by_entities(
-                        &frontier_vec,
-                        as_of,
-                        self.cfg.graph_per_hop_limit,
-                    )
+                    .memory_filter_by_entities(&frontier_vec, as_of, self.cfg.graph_per_hop_limit)
                     .await?;
                 let known: std::collections::HashSet<String> =
                     raw.iter().map(|r| r.id.clone()).collect();
@@ -611,8 +592,7 @@ impl Pipeline {
         as_of: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<crate::memory::GraphRecallResult> {
         use crate::memory::{
-            EntityKindWire, EntityNode, GraphRecallResult, HitProvenance, MemoryEdge,
-            MemoryHit,
+            EntityKindWire, EntityNode, GraphRecallResult, HitProvenance, MemoryEdge, MemoryHit,
         };
         use std::collections::{HashMap, HashSet};
 
@@ -621,15 +601,10 @@ impl Pipeline {
 
         // 1. Canonicalise seed. Pass-through if already a `pii:` / `ent:`
         //    form; otherwise treat as MISC named entity.
-        let canonical_seed = if seed_entity.starts_with("ent:") || seed_entity.starts_with("pii:")
-        {
+        let canonical_seed = if seed_entity.starts_with("ent:") || seed_entity.starts_with("pii:") {
             seed_entity.to_string()
         } else {
-            crate::canonicalize::canonicalize_entity(
-                seed_entity,
-                "MISC",
-                &self.cfg.entity_aliases,
-            )
+            crate::canonicalize::canonicalize_entity(seed_entity, "MISC", &self.cfg.entity_aliases)
         };
 
         let mut visited_entities: HashSet<String> = HashSet::new();
@@ -697,7 +672,11 @@ impl Pipeline {
                 }
             })
             .collect();
-        nodes.sort_by(|a, b| b.mention_count.cmp(&a.mention_count).then_with(|| a.id.cmp(&b.id)));
+        nodes.sort_by(|a, b| {
+            b.mention_count
+                .cmp(&a.mention_count)
+                .then_with(|| a.id.cmp(&b.id))
+        });
 
         // Rehydrate memories, tagged GraphExpand.
         let mut memories: Vec<MemoryHit> = Vec::with_capacity(memories_by_id.len());
@@ -773,12 +752,7 @@ impl Pipeline {
         dry_run: bool,
     ) -> Result<ForgetResult> {
         let targets: Vec<crate::memory::Memory> = match (id, query) {
-            (Some(mid), None) => self
-                .store
-                .memory_get(&mid)
-                .await?
-                .into_iter()
-                .collect(),
+            (Some(mid), None) => self.store.memory_get(&mid).await?.into_iter().collect(),
             (None, Some(q)) => {
                 // Forget by query: scan currently-valid rows (as_of = now);
                 // graph_expand off — forget is identity-anchored, not graph-anchored.
@@ -789,9 +763,7 @@ impl Pipeline {
                 for h in hits.iter().take(limit) {
                     let uid = uuid::Uuid::parse_str(&h.id)
                         .map_err(|e| Error::Memory(format!("bad id: {e}")))?;
-                    if let Some(m) =
-                        self.store.memory_get(&crate::memory::MemoryId(uid)).await?
-                    {
+                    if let Some(m) = self.store.memory_get(&crate::memory::MemoryId(uid)).await? {
                         out.push(m);
                     }
                 }
@@ -895,12 +867,7 @@ impl Pipeline {
         });
         let (rows, next_cursor) = self
             .store
-            .memory_list(
-                session_id.as_deref(),
-                kind_str,
-                limit,
-                cursor.as_deref(),
-            )
+            .memory_list(session_id.as_deref(), kind_str, limit, cursor.as_deref())
             .await?;
 
         let mut items: Vec<crate::memory::MemoryHit> = Vec::with_capacity(rows.len());

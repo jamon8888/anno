@@ -247,9 +247,7 @@ async fn run_scenario(s: &Scenario) {
                         q.graph_expand,
                     )
                     .await
-                    .unwrap_or_else(|e| {
-                        panic!("{} query #{} recall_memory: {e}", s.id, qi)
-                    });
+                    .unwrap_or_else(|e| panic!("{} query #{} recall_memory: {e}", s.id, qi));
 
                 // Assertion: every expected_memory_index must appear in the hits.
                 let id_strs: HashMap<String, usize> = ids

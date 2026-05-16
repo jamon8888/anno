@@ -11,6 +11,11 @@ ignore = [
     # rand::rng() — not a pattern anno or anno-rag use. Pulled transitively
     # via lance-datagen / candle-core. No safe upgrade across the tree yet.
     { id = "RUSTSEC-2026-0097", reason = "rand::rng() unsoundness requires a custom logger path anno never exercises; transitive via lance/candle, no coordinated upgrade available." },
+    # Surfaced by the lance 0.29 bump (anno-rag PR-A). Both are transitive
+    # through lance-tokenizer → lindera → bincode/encoding. The upstream
+    # lindera/lance chain has not yet migrated. Re-check on every lance bump.
+    { id = "RUSTSEC-2025-0141", reason = "bincode is unmaintained; transitive via lance-tokenizer → lindera. No coordinated upgrade available; re-check on every lance bump." },
+    { id = "RUSTSEC-2021-0153", reason = "encoding is unmaintained; transitive via lance-tokenizer → lindera. No coordinated upgrade available; re-check on every lance bump." },
 ]
 
 [licenses]

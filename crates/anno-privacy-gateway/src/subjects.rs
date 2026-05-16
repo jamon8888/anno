@@ -196,7 +196,9 @@ mod tests {
             .unwrap();
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), 200);
-        let body = axum::body::to_bytes(res.into_body(), 8 * 1024).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), 8 * 1024)
+            .await
+            .unwrap();
         let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(v["mappings_removed"].as_u64().unwrap(), 0);
     }
