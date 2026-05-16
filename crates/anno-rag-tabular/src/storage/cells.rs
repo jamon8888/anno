@@ -217,16 +217,12 @@ impl CellsTable {
     /// - [`Error::Lance`] on table read or write failure.
     pub async fn upsert(&self, cell: &Cell) -> Result<()> {
         // Check the lock *before* writing — Lance is append-only so a
-        // rejected write must not produce a row.
-        if let Some(prev) = self.latest(cell.review_id, cell.row_id, cell.col_id).await? {
-            if prev.locked && matches!(cell.author, Author::System { .. }) {
-                return Err(Error::LockedCell {
-                    review: cell.review_id.0.to_string(),
-                    row: cell.row_id.0.to_string(),
-                    col: cell.col_id.0.to_string(),
-                });
-            }
-        }
+        // rejected write must not produce a row. We fetch `latest` once
+        // here (we'll typically need it for the caller's `version + 1`
+        // computation too) and hand it to the sync core of the lock
+        // check so the lock layer doesn't re-read the table.
+        let prev = self.latest(cell.review_id, cell.row_id, cell.col_id).await?;
+        crate::storage::lock::deny_if_locked(prev.as_ref(), cell)?;
 
         let schema = cells_schema();
         let rid_arr = FixedSizeBinaryArray::try_from_iter(std::iter::once(
