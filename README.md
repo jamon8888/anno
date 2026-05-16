@@ -1,18 +1,157 @@
-# anno
+# Hacienda
 
 [![crates.io](https://img.shields.io/crates/v/anno.svg)](https://crates.io/crates/anno)
 [![Documentation](https://docs.rs/anno/badge.svg)](https://docs.rs/anno)
 [![CI](https://github.com/arclabs561/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/anno/actions/workflows/ci.yml)
 
-Text annotation and entity extraction. Covers NER, coreference resolution,
-PII detection, relation extraction, and export to standard formats.
+> **Hacienda** est le nom de ce projet. Les crates publiées conservent leurs noms historiques (`anno`, `anno-cli`, `anno-rag`, `anno-privacy-gateway`) pour la rétro-compatibilité ; « Hacienda » désigne le workspace dans son ensemble.
 
-Multiple backends (ML, statistical, rule-based) are tried at runtime;
-works without model downloads via built-in fallbacks.
+**Hacienda est une boîte à outils Rust pour transformer du texte brut — y compris des documents juridiques français — en données structurées exploitables par un LLM, tout en gardant les informations personnelles hors du cloud.**
 
-Dual-licensed under MIT or Apache-2.0. MSRV: 1.88.
+Le workspace empile quatre couches :
 
-## Quickstart
+1. **`anno`** — bibliothèque NER / coreference / PII / extraction de relations.
+2. **`anno-cli`** — interface en ligne de commande pour exécuter ces extractions.
+3. **`anno-rag`** — pipeline d'anonymisation + RAG local (LanceDB), avec serveur MCP exposant retrieval et mémoire à long terme à Claude.
+4. **`anno-privacy-gateway`** — passerelle compatible API Anthropic qui filtre les PII avant qu'un prompt ne sorte vers un fournisseur LLM distant.
+
+Tout fonctionne **localement par défaut** : poids de modèles en cache, vault chiffré AES-256-GCM sur disque, base vectorielle locale. Le seul cas où des données sortent de la machine est lorsque l'utilisateur l'autorise explicitement — et dans ce cas elles sont pseudonymisées au préalable.
+
+Double licence MIT ou Apache-2.0. MSRV : 1.88.
+
+---
+
+## 1. Ce que fait le projet, fonctionnellement
+
+### 1.1 Extraction d'entités (NER) — couche `anno`
+
+Étant donné un texte, `anno::extract` retourne la liste des entités détectées avec leur type, leur position en offsets caractères, et un score de confiance.
+
+```rust
+let entities = anno::extract("Sophie Wilson designed the ARM processor.")?;
+// Sophie Wilson [PER] (0,13) 0.60
+// ARM           [ORG] (27,30) 0.55
+# Ok::<(), anno::Error>(())
+```
+
+`StackedNER::default()` choisit dynamiquement le meilleur backend disponible à l'exécution :
+
+- **BERT ONNX** et **NuNER** (chargés indépendamment si la feature `onnx` est active et que les poids sont en cache),
+- puis **GLiNER** (zero-shot, types personnalisés) si aucun des précédents ne se charge,
+- enfin **patterns + heuristiques** pures Rust comme filet de sécurité hors-ligne.
+
+`ANNO_NO_DOWNLOADS=1` interdit les téléchargements HuggingFace ; les modèles déjà en cache ou exportés localement continuent de fonctionner. Aucun appel réseau silencieux.
+
+Backends additionnels disponibles via features : **W2NER**, **TPLinker** (relations), **GLiRel** (relations zero-shot), **CRF** et **HMM** (statistiques), **LLM** (extraction par modèle distant via OpenRouter / Anthropic / Groq / Gemini / Ollama). Liste complète : [docs/BACKENDS.md](docs/BACKENDS.md).
+
+### 1.2 Coreference et préprocessing RAG
+
+Trois résolveurs : `SimpleCorefResolver` (règles, 9 sieves), `FCoref` (neuronal, 78.5 F1 sur CoNLL-2012), `MentionRankingCoref`.
+
+`rag::resolve_for_rag()` et `rag::preprocess()` réécrivent les pronoms après chunking pour que **chaque chunk soit autonome** (« Elle a fondé X. » → « Marie Curie a fondé X. »). Indispensable pour qu'un système RAG retrouve les bons passages — un chunk avec un pronom non résolu est un chunk perdu pour la recherche sémantique.
+
+### 1.3 PII et pseudonymisation
+
+`anno::pii` classe les entités NER (personnes, lieux, organisations) **et** matche des motifs structurés : SSN, IBAN, IBAN-FR, NIR (sécurité sociale française), SIRET, cartes bancaires, e-mails, téléphones. Deux modes :
+
+- `scan_and_redact` — remplace par `[PERSON_1]`, `[ID_NUMBER_1]`, etc. (perte d'information, mais irréversible).
+- **Pseudonymisation via vault** (couche `anno-rag`) — remplace par des tokens stables (`PERSON_42`) tout en gardant le mapping cleartext ↔ token dans un fichier chiffré AES-256-GCM. La rehydratation est ensuite réversible côté machine locale uniquement.
+
+### 1.4 RAG local sur documents juridiques français — couche `anno-rag`
+
+Pipeline complet pour cabinet d'avocats ou DPO :
+
+```
+Dossier de documents
+  → extraction texte (kreuzberg, OCR Tesseract optionnel pour PDF scannés)
+  → détection PII (regex FR + anno NER) sur noms / NIR / SIRET / IBAN-FR / téléphones
+  → pseudonymisation via Vault AES-256-GCM (cloakpipe-core)
+  → embedding (BGE-multilingual-e5-small)
+  → indexation LanceDB
+  → sortie : outputs/*.anon.md (pseudonymisée) + index vectoriel
+```
+
+Au query time : la requête est pseudonymisée avec le **même mapping**, embeddée, et recherchée dans LanceDB ; les top-K chunks renvoyés sont eux aussi pseudonymisés. Le PII en clair ne quitte jamais `~/.anno-rag/vault.enc`.
+
+Index vectoriel construit automatiquement dès que la table de chunks dépasse 1000 lignes (seuil configurable). Détails techniques : [crates/anno-rag/README.md](crates/anno-rag/README.md).
+
+### 1.5 Mémoire à long terme — `anno-rag` MCP
+
+Au-dessus du moteur RAG, `anno-rag` expose une mémoire structurée persistante destinée à un assistant LLM. Quatre catégories typées :
+
+| Kind | Usage |
+|---|---|
+| `Fact` | Affirmation factuelle stable (« le cabinet a 12 avocats ») |
+| `Preference` | Préférence utilisateur / session (« l'utilisateur préfère les tableaux à la prose ») |
+| `Reference` | Pointeur vers une entité canonique citée par d'autres mémoires |
+| `Context` | Contexte transitoire (dossier courant, tâche en cours) |
+
+Chaque mémoire est **pseudonymisée à l'écriture** (les PII de son corps sont remplacés par des tokens vault), puis indexée avec recherche **hybride vecteur + plein texte**. Les IDs sont des UUID v7, triables lexicographiquement par temps de création. Forget = suppression logique avec cascade sur les tokens vault qui ne sont plus référencés (SLO d'effacement physique sous 24 h, conforme à l'esprit de l'Art. 17 RGPD).
+
+### 1.6 Intégration Claude Desktop / Cowork via MCP
+
+`anno-rag mcp` lance un serveur **Model Context Protocol** sur stdio. Claude Desktop, Cowork ou n'importe quel client MCP s'y branche en ajoutant une entrée à son fichier de configuration :
+
+```json
+{
+  "anno-rag": {
+    "command": "/absolute/path/to/anno-rag",
+    "args": ["mcp"],
+    "env": {
+      "ANNO_RAG_VAULT_PASSPHRASE": "your-passphrase-here"
+    }
+  }
+}
+```
+
+Outils MCP exposés :
+
+| Outil | Description |
+|---|---|
+| `search(query, top_k)` | Recherche le corpus indexé. La requête est pseudonymisée → embeddée → top-K LanceDB. Renvoie des chunks **pseudonymisés** : c'est exactement ce que Claude verra. |
+| `rehydrate(text)` | Remplace les tokens `PERSON_*`, `EMAIL_*`, `NIR_*`… par les originaux depuis le vault local. Seule la machine de l'utilisateur a les deux faces du mapping. |
+| `detect(text)` | Scan PII à blanc : liste des entités avec catégorie, source, confiance, offsets. Aucune substitution. Pratique pour l'aperçu UI. |
+| `vault_stats()` | Statistiques du vault : nombre total de mappings et comptes par catégorie. |
+| `memory_save(text, kind, session?)` | Persiste une mémoire après tokenization PII. Renvoie l'id et le texte effectivement stocké. |
+| `memory_recall(query, top_k)` | Recall hybride (vecteur + FTS). Renvoie le plaintext **rehydraté** pour le tenant appelant. |
+| `memory_forget(id? \| query?)` | Oubli par id ou par requête. Cascade sur les tokens vault orphelins. |
+| `memory_list(session?, kind?, cursor?)` | Listing paginé par session ou catégorie. |
+
+Le flux typique avec Claude Desktop :
+
+```
+Utilisateur  →  Claude  →  search("résiliation Acme")
+                            ↓
+              anno-rag pseudonymise la query,
+              embedde, fetch LanceDB
+                            ↓
+              chunks pseudonymisés (PERSON_42, NIR_7…)
+                            ↓
+              Claude raisonne UNIQUEMENT sur les tokens
+                            ↓
+Utilisateur  ←  Claude  ←  rehydrate("…PERSON_42…")
+              (sortie finale avec noms réels,
+               jamais vue par le modèle distant)
+```
+
+Conséquence : on peut utiliser un modèle hébergé (Claude API) sur des documents soumis au secret professionnel sans que les noms, NIR ou IBAN ne quittent la machine en clair.
+
+### 1.7 Privacy Gateway — `anno-privacy-gateway`
+
+Passerelle HTTP **compatible API Anthropic** qui s'intercale entre n'importe quel client (Cowork, app maison) et un fournisseur LLM. Elle :
+
+- inspecte le prompt sortant,
+- pseudonymise les PII via le même vault que `anno-rag`,
+- relaie la requête vers le fournisseur,
+- rehydrate la réponse avant de la rendre au client.
+
+Permet d'imposer le tokenization à des outils qui ne savent pas parler MCP.
+
+---
+
+## 2. Démarrage rapide
+
+### 2.1 Bibliothèque NER seule
 
 ```toml
 [dependencies]
@@ -20,31 +159,15 @@ anno = "0.10"
 ```
 
 ```rust
-let entities = anno::extract("Sophie Wilson designed the ARM processor.")?;
-for e in &entities {
-    println!("{} [{}] ({},{}) {:.2}", e.text, e.entity_type, e.start(), e.end(), e.confidence);
-}
-// Offline (heuristic only):
-//   Sophie Wilson [PER] (0,13) 0.60
-//   ARM [ORG] (27,30) 0.55
-// With `onnx` enabled and default models cached, the ML backends raise
-// confidences and add entities. `ANNO_NO_DOWNLOADS=1` blocks new
-// HuggingFace fetches but still loads cached or locally-exported models.
-# Ok::<(), anno::Error>(())
-```
-
-Filter results with `prelude` (re-exports common types including `Result`):
-
-```rust
 use anno::prelude::*;
 
-# let entities = anno::extract("Sophie Wilson designed the ARM processor.")?;
+let entities = anno::extract("Sophie Wilson designed the ARM processor.")?;
 let people: Vec<_> = entities.of_type(&EntityType::Person).collect();
 let confident: Vec<_> = entities.above_confidence(0.8).collect();
 # Ok::<(), Error>(())
 ```
 
-For backend control, construct a model directly:
+Contrôle direct des backends :
 
 ```rust
 use anno::{Model, StackedNER};
@@ -54,120 +177,118 @@ let ents = m.extract_entities("Sophie Wilson designed the ARM processor.", None)
 # Ok::<(), anno::Error>(())
 ```
 
-`StackedNER::default()` selects the best available backend at runtime: BERT ONNX and NuNER (both tried independently when `onnx` enabled and models cached), then GLiNER if neither loaded, falling back to pattern + heuristic extraction. Set `ANNO_NO_DOWNLOADS=1` to disable new HuggingFace downloads; cached models and any backend loaded from a local path (`from_local` / ONNX export scripts) continue to work.
-
-Zero-shot custom types via GLiNER:
+Zero-shot avec GLiNER :
 
 ```rust
 use anno::GLiNEROnnx;
 
 let m = GLiNEROnnx::new("onnx-community/gliner_small-v2.1")?;
 let ents = m.extract("Aspirin treats headaches.", &["drug", "symptom"], 0.5)?;
-for e in &ents {
-    println!("{}: {}", e.entity_type, e.text);
-}
-// drug: Aspirin
-// symptom: headaches
 # Ok::<(), anno::Error>(())
 ```
 
-### Custom backends
-
-`AnyModel` wraps a closure into a `Model`, bypassing the sealed trait when you need to plug in an external NER system:
+Backend externe via closure :
 
 ```rust
 use anno::{AnyModel, Entity, EntityType, Language, Model, Result};
 
 let model = AnyModel::new(
-    "my-ner",
-    "REST API wrapper",
+    "my-ner", "REST API wrapper",
     vec![EntityType::Person, EntityType::Organization],
-    |text: &str, _lang: Option<Language>| -> Result<Vec<Entity>> {
-        Ok(vec![]) // call your backend here
-    },
+    |_text, _lang| -> Result<Vec<Entity>> { Ok(vec![]) },
 );
-let ents = model.extract_entities("test", None)?;
 # Ok::<(), anno::Error>(())
 ```
 
-## PII detection
+### 2.2 RAG local complet
 
-Classify NER entities as PII and scan for structured patterns (SSN, credit card, IBAN, email, phone). Redact or pseudonymize in one call:
+```sh
+cargo build --release -p anno-rag
 
-```rust
-use anno::{pii, Model, StackedNER};
+# Pré-chauffe le cache de modèles (~600 MiB : embedder + NER)
+cargo run --release --example warmup_model -p anno-rag
 
-let text = "John Smith's SSN is 123-45-6789.";
-let m = StackedNER::default();
-let redacted = pii::scan_and_redact(text, &m)?;
-// "[PERSON_1]'s SSN is [ID_NUMBER_1]."
-# Ok::<(), anno::Error>(())
+# Ingestion d'un dossier
+./target/release/anno-rag ingest ~/cabinet/dossier-acme --recursive
+
+# Recherche CLI
+./target/release/anno-rag search "résiliation pour cause"
+
+# Serveur MCP (à brancher à Claude Desktop / Cowork)
+./target/release/anno-rag mcp
 ```
 
-## Backends
-
-Multiple backends spanning ML (GLiNER, NuNER, BERT, W2NER, TPLinker, GLiRel), statistical (CRF, HMM), rule-based (pattern, heuristic), and LLM-based extraction. ML backends are feature-gated (`onnx` or `candle`); weights download from HuggingFace on first use. See [BACKENDS.md](docs/BACKENDS.md) for the full list, default models, and status.
-
-### Feature flags
-
-`onnx` (default): ONNX Runtime backends. `candle`: pure-Rust backends, no C++ runtime. `metal` / `cuda`: GPU acceleration (enables `candle`). `llm`: LLM-based extraction via OpenRouter, Anthropic, Groq, Gemini, or Ollama. `discourse`: centering theory, abstract anaphora, dialogue acts. `analysis`: coref metrics and cluster encoders. `schema`: JSON Schema for output types. `production`: `tracing` instrumentation.
-
-## CLI
+### 2.3 CLI
 
 ```sh
 cargo install anno-cli --features onnx
-```
 
-```sh
 anno extract --text "Lynn Conway worked at IBM and Xerox PARC in California."
-# PER:1 "Lynn Conway"
-# ORG:2 "IBM" "Xerox PARC"
-# LOC:1 "California"
-
 anno extract --model gliner --extract-types "DRUG,SYMPTOM" \
   --text "Aspirin can treat headaches and reduce fever."
-# drug:1 "Aspirin" symptom:2 "headaches" "fever"
-
 anno debug --coref -t "Sophie Wilson designed the ARM. She revolutionized mobile computing."
-# Coreference: "Sophie Wilson" -> "She"
 ```
 
-JSON output with `--format json`. Batch processing with `anno batch`. Graph export (N-Triples, JSON-LD, CSV) with `anno export --features graph`.
+Sortie JSON avec `--format json`. Batch avec `anno batch`. Export graphe (N-Triples, JSON-LD, CSV) avec `anno export --features graph`.
 
-## Coreference
+---
 
-Three resolvers: `SimpleCorefResolver` (rule-based, 9 sieves; requires `analysis` feature), `FCoref` (neural, 78.5 F1 on CoNLL-2012 [3]; requires `onnx`), and `MentionRankingCoref`. `FCoref` requires a one-time model export: `uv run scripts/export_fcoref.py` (from a repo clone).
+## 3. Aspects techniques
 
-RAG preprocessing (`rag::resolve_for_rag()`, `rag::preprocess()`): rewrites pronouns for self-contained chunks after splitting. Always available (no feature flag required).
+### 3.1 Feature flags (crate `anno`)
 
-## Scope
+- `onnx` (par défaut) — runtime ONNX, backends BERT / NuNER / GLiNER / FCoref.
+- `candle` — backends pure-Rust (pas de runtime C++).
+- `metal` / `cuda` — accélération GPU (active `candle`).
+- `llm` — extraction par LLM (OpenRouter, Anthropic, Groq, Gemini, Ollama).
+- `discourse` — centering theory, anaphores abstraites, dialog acts.
+- `analysis` — métriques de coreference et encodeurs de clusters.
+- `schema` — JSON Schema pour les types de sortie.
+- `production` — instrumentation `tracing`.
 
-Inference-time extraction. Training pipelines are out of scope. Use upstream frameworks and export ONNX weights.
+### 3.2 Garanties d'offsets
 
-## Troubleshooting
+Tous les spans sont en **offsets caractères**, pas en bytes. Détails et invariants : [docs/CONTRACT.md](docs/CONTRACT.md).
 
-- **ONNX linking errors**: use `default-features = false` for builds without C++, or check `ORT_DYLIB_PATH`.
-- **Model downloads**: set `ANNO_NO_DOWNLOADS=1` for cached-only mode behind firewalls.
-- **Feature errors**: most backends are gated behind `onnx` or `candle`.
-- **Offset mismatches**: all spans use character offsets, not byte offsets. See [CONTRACT.md](docs/CONTRACT.md).
+### 3.3 Vault et clé de chiffrement (anno-rag)
 
-## Examples
+- Clé dérivée par **Argon2id** depuis `ANNO_RAG_VAULT_PASSPHRASE`, ou tirée aléatoirement (32 bytes hex) et stockée dans le keyring OS.
+- Cleartext jamais écrit hors de `~/.anno-rag/vault.enc`.
+- Les `outputs/*.anon.md` et l'index LanceDB ne contiennent que des tokens.
 
-All examples live in `crates/anno/examples/`. Run with `cargo run --example <name>`.
+### 3.4 Périmètre
 
-| Example | Feature | What it shows |
-|---------|---------|---------------|
-| `quickstart` | -- | One-line extraction, filtering with `EntitySliceExt` |
-| `pii_redact` | -- | Detect names, SSNs, emails; redact or pseudonymize |
-| `zero_shot` | `onnx` | Custom entity types ("drug", "symptom") via GLiNER |
-| `relations` | -- | Entity-pair relation extraction with TPLinker |
-| `gliner_multitask` | `onnx` | Multi-task extraction (NER + classification) via TaskSchema |
-| `coref` | `analysis` | Coreference chains linking "Marie Curie" and "Curie" |
-| `export_formats` | -- | brat standoff, CoNLL BIO, JSONL, graph CSV |
-| `rag_preprocess` | -- | Chunking + pronoun rewriting for self-contained RAG chunks |
-| `batch` | -- | Parallel extraction over multiple documents |
+Anno fait de l'**inférence**. Les pipelines d'entraînement sont hors scope : utilisez les frameworks upstream et exportez en ONNX.
 
-## References
+### 3.5 Troubleshooting
+
+- **Erreurs de link ONNX** : compilez avec `default-features = false` ou positionnez `ORT_DYLIB_PATH`.
+- **Téléchargements** : `ANNO_NO_DOWNLOADS=1` pour rester sur le cache (utile derrière un firewall).
+- **Features manquantes** : la plupart des backends sont gated derrière `onnx` ou `candle`.
+- **Dépendance build sur Linux/WSL** (anno-rag) : `apt install libprotobuf-dev` puis build avec `PROTOC_INCLUDE=/usr/include` (lance-encoding réclame `google/protobuf/empty.proto`).
+- **OCR PDF scanné** (anno-rag) : Tesseract n'est pas bundlé. `sudo apt install tesseract-ocr tesseract-ocr-fra` puis `--enable-ocr`.
+
+---
+
+## 4. Exemples
+
+Tous dans `crates/anno/examples/`. `cargo run --example <name>`.
+
+| Exemple | Feature | Démontre |
+|---------|---------|----------|
+| `quickstart` | — | Extraction en une ligne, filtrage `EntitySliceExt` |
+| `pii_redact` | — | Détection noms / SSN / e-mails, redaction ou pseudonymisation |
+| `zero_shot` | `onnx` | Types personnalisés via GLiNER |
+| `relations` | — | Extraction de paires d'entités avec TPLinker |
+| `gliner_multitask` | `onnx` | NER + classification via TaskSchema |
+| `coref` | `analysis` | Chaînes coreference (« Marie Curie » → « Curie ») |
+| `export_formats` | — | brat standoff, CoNLL BIO, JSONL, graph CSV |
+| `rag_preprocess` | — | Chunking + réécriture pronominale pour chunks RAG autonomes |
+| `batch` | — | Extraction parallèle multi-documents |
+
+---
+
+## 5. Références
 
 [1] Grishman & Sundheim, *COLING* 1996.
 [2] Tjong Kim Sang & De Meulder, *CoNLL* 2003.
@@ -182,8 +303,10 @@ All examples live in `crates/anno/examples/`. Run with `cargo run --example <nam
 [11] Stepanov & Shtopko, 2024 (GLiNER multi-task).
 [12] Rabiner, *Proc. IEEE* 1989 (HMM).
 
-Full list: [docs/REFERENCES.md](docs/REFERENCES.md). Citeable via [CITATION.cff](CITATION.cff).
+Liste complète : [docs/REFERENCES.md](docs/REFERENCES.md). Citable via [CITATION.cff](CITATION.cff).
 
 ## License
 
-Dual-licensed under MIT or Apache-2.0.
+Double licence MIT ou Apache-2.0.
+Le `cloakpipe-core` vendu est Apache-2.0 (upstream `rohansx/cloakpipe`).
+Kreuzberg est sous Elastic License 2.0 — compatible avec un usage on-prem ; pour une distribution SaaS, vérifier les termes.
