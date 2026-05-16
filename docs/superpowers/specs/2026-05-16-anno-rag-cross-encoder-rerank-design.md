@@ -39,7 +39,22 @@ Why this and not alternatives:
 | mxbai-rerank-base-v1 | English only | Apache-2.0 | 184M | Out — French |
 | BGE-reranker-v2-gemma | yes | Gemma terms | 2.5B | Out — too big for CPU baseline |
 
-**Open verification item (plan, not spec)**: confirm `candle_transformers::models::xlm_roberta` (or `xlm_roberta_xl`) supports the BGE-reranker-v2-m3 weights and that the classification head loads cleanly. Fallback if it doesn't: package a minimal Candle XLM-RoBERTa-classifier wrapper in `crates/anno-rag/src/rerank/model.rs` (the gliner2_fastino_candle backend in `crates/anno/src/backends/gliner2_fastino_candle/` is the precedent for hand-rolling a Candle head when upstream doesn't ship the exact variant).
+**Candle support — verified.** `candle-transformers` v0.10.x ships `candle_transformers::models::xlm_roberta::XLMRobertaForSequenceClassification` (huggingface/candle, [`candle-transformers/src/models/xlm_roberta.rs`](https://github.com/huggingface/candle/blob/0.10.1/candle-transformers/src/models/xlm_roberta.rs) — verified against the v0.10.1 tag; v0.10.2 is anno's resolved version per `Cargo.lock`). The relevant API:
+
+```rust
+// candle_transformers::models::xlm_roberta
+pub struct XLMRobertaForSequenceClassification { /* roberta + classifier head */ }
+
+impl XLMRobertaForSequenceClassification {
+    pub fn new(num_labels: usize, cfg: &Config, vb: VarBuilder) -> Result<Self>;
+    pub fn forward(&self, input_ids: &Tensor, attention_mask: &Tensor,
+                   token_type_ids: &Tensor) -> Result<Tensor>;
+}
+```
+
+The variable-builder scoping (`vb.pp("roberta")` for the encoder, `vb.pp("classifier")` for the head) matches HuggingFace's safetensors layout for `XLMRobertaForSequenceClassification`, which is exactly what BGE-reranker-v2-m3 ships with. `num_labels = 1` gives the single-logit relevance head BGE uses. RoBERTa ignores `token_type_ids` semantically but the forward signature requires a tensor of zeros — trivial.
+
+No fallback / hand-rolled head needed.
 
 ## 5. Architecture
 
@@ -152,7 +167,7 @@ The rehydration step uses the existing `Pipeline::rehydrate` ([pipeline.rs:216](
 
 ### 5.4 Model implementation
 
-XLM-RoBERTa-large classifier with a single-logit head (sequence-classification fashion). The classifier output is sigmoid'd to a relevance score in [0, 1]. The input format is the standard cross-encoder layout:
+XLM-RoBERTa-large classifier via `candle_transformers::models::xlm_roberta::XLMRobertaForSequenceClassification::new(1, &cfg, vb)` (single-logit head). The forward returns logits shape `[batch, 1]`; sigmoid'd to a relevance score in [0, 1]. The input format is the standard cross-encoder layout:
 
 ```
 <s> query </s></s> passage </s>
@@ -274,7 +289,7 @@ Benchmark (`benches/bench_rerank.rs`, additive next to the existing benches at C
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| Candle's XLM-RoBERTa support doesn't load BGE-reranker-v2-m3 cleanly | Medium | Verify in plan, before commit 1 of implementation. Fallback: hand-rolled Candle classifier head (~150 LOC), gliner2_fastino_candle is the precedent. |
+| BGE-reranker-v2-m3 safetensors key names don't match Candle's `vb.pp("roberta")` / `vb.pp("classifier")` scoping | Low (HF convention is followed) | Verified upstream API in §4; plan still adds a smoke-load test as commit 1 before wiring the rest. If keys diverge, a thin `VarBuilder::rename_keys` mapping resolves it. |
 | ~2.3 GB model download surprises users on first run | High consequence if mishandled | Feature-gated; opt-in. Document download size in README. Optional: pre-flight check that warns + asks for confirmation before fetching. |
 | CPU latency too slow for interactive Cowork use | Medium | Document expected 1.5–4.5 s; offer config knob to shrink pool_size; quantization as a follow-up. |
 | Rehydration leaks entities into a long-lived cross-encoder cache | Low (no cache in v1) | Explicitly: no scoring cache. `score_pairs` is stateless. |
@@ -285,7 +300,7 @@ Benchmark (`benches/bench_rerank.rs`, additive next to the existing benches at C
 
 ## 10. Open questions (decisions deferred to the plan)
 
-1. **Does `candle_transformers::models::xlm_roberta` exist and accept BGE-reranker-v2-m3 weights?** Plan verifies in the first task. If yes, use it. If no, build a minimal classifier wrapper.
+1. ~~**Does `candle_transformers::models::xlm_roberta` exist and accept BGE-reranker-v2-m3 weights?**~~ **Resolved**: `XLMRobertaForSequenceClassification` exists in candle-transformers 0.10.1+ with the right shape (see §4). Plan keeps a smoke-load test as the first commit to confirm safetensors-key alignment before wiring the rest.
 2. **Should `recall_memory_reranked` ship in v1, or come right after?** Lean: include it; the cost is mostly copy-paste from `search_reranked`. Plan decides.
 3. **Where exactly does score_source go in the audit log?** Plan reads `audit.rs` and decides additive-field vs separate-row.
 4. **Pre-flight download warning UX**: CLI prompt, hard error, or silent fetch with `tracing::info` only? Lean: warn + prompt only in interactive terminals; silent in MCP / daemon contexts.
@@ -296,7 +311,7 @@ Benchmark (`benches/bench_rerank.rs`, additive next to the existing benches at C
 
 Anticipated commits:
 
-1. Verify Candle XLM-RoBERTa support against BGE-reranker-v2-m3 weights. Spike, no production code.
+1. Smoke-load test: instantiate `XLMRobertaForSequenceClassification::new(1, ...)` from the BGE-reranker-v2-m3 safetensors and run a single forward pass on a dummy pair. Confirms key alignment (§9 risk). No production code yet.
 2. `rerank.rs` module: `Reranker::load` + `score_pairs`, with unit tests #1–#5.
 3. `Pipeline::reranker` lazy-init + `Pipeline::search_reranked`, feature-gated.
 4. Config additions; CHANGELOG; README "v0.2 deliberate non-goals" entry moves from non-goal to opt-in.
