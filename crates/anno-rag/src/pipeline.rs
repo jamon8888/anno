@@ -484,7 +484,7 @@ impl Pipeline {
         session_id: Option<String>,
         kinds: Option<Vec<crate::memory::MemoryKind>>,
         as_of: Option<chrono::DateTime<chrono::Utc>>,
-        _graph_expand: bool, // wired in v0.2 T5
+        graph_expand: bool,
     ) -> Result<Vec<crate::memory::MemoryHit>> {
         let entities = self.detector_get_or_init()?.detect(query)?;
         let (tokenized_query, _) =
@@ -517,8 +517,54 @@ impl Pipeline {
 
         raw.truncate(top_k);
 
+        // Track which ids came from the hybrid arm so the graph-expand pass
+        // can tag freshly added rows with HitProvenance::GraphExpand.
+        let hybrid_ids: std::collections::HashSet<String> =
+            raw.iter().map(|r| r.id.clone()).collect();
+
+        // v0.2 T6: optional graph-expand post-pass. Pulls in memories that
+        // share at least one entity with any top-k hit, bounded by
+        // graph_per_hop_limit. Bi-temporal predicate already applied.
+        if graph_expand {
+            let frontier: std::collections::HashSet<String> = raw
+                .iter()
+                .flat_map(|r| r.entity_refs.clone())
+                .collect();
+            if !frontier.is_empty() {
+                let frontier_vec: Vec<String> = frontier.into_iter().collect();
+                let extras = self
+                    .store
+                    .memory_filter_by_entities(
+                        &frontier_vec,
+                        as_of,
+                        self.cfg.graph_per_hop_limit,
+                    )
+                    .await?;
+                let known: std::collections::HashSet<String> =
+                    raw.iter().map(|r| r.id.clone()).collect();
+                for m in extras {
+                    let id = m.id.as_string();
+                    if known.contains(&id) {
+                        continue;
+                    }
+                    raw.push(crate::memory::MemoryHitRow {
+                        id,
+                        session_id: m.session_id.clone(),
+                        text_tokenized: m.text.clone(),
+                        kind: m.kind,
+                        created_at: m.created_at.to_rfc3339(),
+                        valid_from_us: m.valid_from.timestamp_micros(),
+                        valid_to_us: m.valid_to.map(|t| t.timestamp_micros()),
+                        entity_refs: m.entity_refs.clone(),
+                        score: 0.0, // graph-expanded rows carry no RRF score
+                    });
+                }
+            }
+        }
+
         let mut out: Vec<crate::memory::MemoryHit> = Vec::with_capacity(raw.len());
         for row in raw {
+            let from_hybrid = hybrid_ids.contains(&row.id);
             let rehydrated = self.rehydrate(&row.text_tokenized).await?;
             out.push(crate::memory::MemoryHit {
                 id: row.id,
@@ -529,7 +575,11 @@ impl Pipeline {
                 valid_to: row.valid_to_us.map(ts_us_to_rfc3339),
                 entity_refs: row.entity_refs,
                 score: row.score,
-                via: crate::memory::HitProvenance::Hybrid,
+                via: if from_hybrid {
+                    crate::memory::HitProvenance::Hybrid
+                } else {
+                    crate::memory::HitProvenance::GraphExpand
+                },
             });
         }
         Ok(out)
