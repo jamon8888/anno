@@ -74,6 +74,15 @@ pub struct AnnoRagConfig {
     /// Default: 1h. Prevents thrashing on a hot delete-then-write loop.
     #[serde(default = "default_compaction_min_age_secs")]
     pub compaction_min_age_secs: u64,
+
+    /// Per-tenant entity alias map applied during canonicalisation
+    /// (`canonicalize_entity`). Keys are the already-canonical surface
+    /// form (lowercase + diacritic strip + punct strip + whitespace
+    /// collapse); values are the substituted form. Empty by default —
+    /// each cabinet builds its own (e.g. `"me dupont" → "dupont"`).
+    /// v0.6 candidate: load from a TOML file alongside the vault.
+    #[serde(default)]
+    pub entity_aliases: std::collections::HashMap<String, String>,
 }
 
 fn default_memory_collection_name() -> String {
@@ -123,6 +132,7 @@ impl Default for AnnoRagConfig {
             memory_embedding_dim: default_memory_embedding_dim(),
             compaction_interval_secs: default_compaction_interval_secs(),
             compaction_min_age_secs: default_compaction_min_age_secs(),
+            entity_aliases: std::collections::HashMap::new(),
         }
     }
 }

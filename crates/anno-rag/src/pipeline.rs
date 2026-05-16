@@ -233,6 +233,73 @@ impl Pipeline {
         self.detector_get_or_init()?.detect(text)
     }
 
+    /// Build the `entity_refs` payload for a memory row: merge the vault
+    /// token refs (already collected during `pseudonymize_with_refs`) with
+    /// non-PII NER entities extracted from the **pre-vault plaintext**.
+    ///
+    /// Output strings are canonical (see `canonicalize_entity` +
+    /// `canonicalize_pii_token`) — they're the keys the LabelList scalar
+    /// index on `memories.entity_refs` will filter on for v0.2's 2-hop
+    /// graph traversal.
+    ///
+    /// Person entities returned by the NER are **deliberately skipped** —
+    /// names are the vault's job; if a Person slips past the vault into
+    /// the entity_refs path, that's a leak we do NOT want a graph traversal
+    /// to amplify.
+    ///
+    /// NER errors are logged at `target = "anno_rag::memory::audit"` and
+    /// returned as "vault tokens only" — never panic the save path. Sub-
+    /// 0.6 confidence NER hits are filtered out to bound false-positive
+    /// graph edges.
+    pub fn extract_entities(
+        &self,
+        plaintext: &str,
+        token_refs: &[crate::memory::TokenRef],
+    ) -> Vec<String> {
+        use crate::canonicalize::{canonicalize_entity, canonicalize_pii_token};
+        use anno::{EntityType, Model, StackedNER};
+        use std::collections::HashSet;
+
+        let mut out: HashSet<String> = HashSet::new();
+
+        // 1. Vault token refs — already collected upstream; canonical form
+        //    embeds the token id so the graph traversal scopes per-tenant.
+        for tr in token_refs {
+            out.insert(canonicalize_pii_token(&tr.label, &tr.token));
+        }
+
+        // 2. Non-PII NER. StackedNER::new() is zero-dependency (Pattern +
+        //    Statistical layers); no ONNX cache hit at v0.1 corpus scale.
+        let ner = StackedNER::new();
+        match ner.extract_entities(plaintext, None) {
+            Ok(ents) => {
+                for e in ents {
+                    if e.confidence.value() < 0.6 {
+                        continue;
+                    }
+                    let tag = match &e.entity_type {
+                        EntityType::Organization => "ORG",
+                        EntityType::Location => "LOC",
+                        EntityType::Person => continue, // vault path only
+                        _ => continue, // skip Date/Money/etc. — not graph-useful
+                    };
+                    out.insert(canonicalize_entity(&e.text, tag, &self.cfg.entity_aliases));
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::memory::audit",
+                    event = "extract_entities_failed",
+                    "{e}"
+                );
+            }
+        }
+
+        let mut v: Vec<String> = out.into_iter().collect();
+        v.sort(); // deterministic order on disk
+        v
+    }
+
     /// Snapshot of the vault: total mappings + per-category counts.
     pub async fn vault_stats(&self) -> VaultStats {
         let guard = self.vault.lock_inner().await;
@@ -361,7 +428,7 @@ impl Pipeline {
             valid_to: None,
             embedding,
             token_refs: token_refs.clone(),
-            entity_refs: vec![],
+            entity_refs: self.extract_entities(text, &token_refs),
         };
 
         self.store.memory_insert(&m).await?;
