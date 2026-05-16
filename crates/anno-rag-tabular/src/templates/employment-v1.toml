@@ -1,10 +1,88 @@
 id = "employment-v1"
-name = "Placeholder — filled in Task 11"
-version = "0.0.1"
-description = "Placeholder for employment contract review template."
+name = "Employment Contract Abstraction (FR)"
+version = "1.0.0"
+description = "Key-employee employment contract abstraction for M&A retention/IP review."
 vertical = "legal-fr"
 
 [[column]]
-name   = "_placeholder"
-prompt = "filled in a later task"
+name   = "employee_name"
+prompt = "Full name of the employee."
+type   = "text"
+
+[[column]]
+name   = "role"
+prompt = "Job title / role."
+type   = "text"
+
+[[column]]
+name   = "start_date"
+prompt = "Employment start date. ISO 8601."
+type   = "date"
+
+[[column]]
+name    = "contract_type"
+prompt  = "Contract type."
+type    = "enum"
+options = ["cdi", "cdd", "alternance", "stage", "interim", "other"]
+
+[[column]]
+name   = "convention_collective"
+prompt = "Applicable convention collective (with IDCC if visible)."
+type   = "text"
+
+[[column]]
+name   = "base_salary"
+prompt = "Annual gross base salary in EUR."
+type   = "currency"
+code   = "EUR"
+
+[[column]]
+name   = "bonus_scheme"
+prompt = "Bonus / variable compensation scheme. Verbatim or 'none'."
+type   = "text"
+
+[[column]]
+name   = "equity_grants"
+prompt = "Equity / stock-option grants. Verbatim or 'none'."
+type   = "text"
+
+[[column]]
+name   = "notice_period"
+prompt = "Notice period in months."
+type   = "number"
+
+[[column]]
+name   = "severance"
+prompt = "Severance / indemnité de rupture. Verbatim or 'none'."
+type   = "text"
+
+[[column]]
+name   = "non_compete"
+prompt = "Is there a non-compete clause?"
+type   = "boolean"
+
+[[column]]
+name   = "non_compete_term"
+prompt = "If non-compete: term in months. Else null."
+type   = "number"
+
+[[column]]
+name   = "non_compete_compensation"
+prompt = "Non-compete compensation per month in EUR. Else null."
+type   = "currency"
+code   = "EUR"
+
+[[column]]
+name   = "non_solicit"
+prompt = "Is there a non-solicit clause?"
+type   = "boolean"
+
+[[column]]
+name   = "ip_assignment"
+prompt = "Is there an IP assignment clause covering work product?"
+type   = "boolean"
+
+[[column]]
+name   = "change_of_control_protection"
+prompt = "Does the contract include change-of-control protection (golden parachute, accelerated vesting)? Verbatim or 'none'."
 type   = "text"

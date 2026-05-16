@@ -173,4 +173,46 @@ mod tests {
             Template::builtin(id).unwrap_or_else(|e| panic!("builtin {id} must load: {e}"));
         }
     }
+
+    #[test]
+    fn customer_contract_v1_has_required_columns() {
+        let t = Template::builtin("customer-contract-v1").expect("loads");
+        let names: Vec<_> = t.columns.iter().map(|c| c.name.as_str()).collect();
+        for must in [
+            "parties",
+            "term",
+            "change_of_control",
+            "liability_cap",
+            "governing_law",
+        ] {
+            assert!(names.contains(&must), "missing required col {must}");
+        }
+    }
+
+    #[test]
+    fn real_estate_v1_has_required_columns() {
+        let t = Template::builtin("real-estate-v1").expect("loads");
+        let names: Vec<_> = t.columns.iter().map(|c| c.name.as_str()).collect();
+        for must in ["landlord", "tenant", "base_rent", "permitted_use"] {
+            assert!(names.contains(&must), "missing required col {must}");
+        }
+    }
+
+    #[test]
+    fn employment_v1_has_required_columns() {
+        let t = Template::builtin("employment-v1").expect("loads");
+        let names: Vec<_> = t.columns.iter().map(|c| c.name.as_str()).collect();
+        for must in ["employee_name", "base_salary", "non_compete", "ip_assignment"] {
+            assert!(names.contains(&must), "missing required col {must}");
+        }
+    }
+
+    #[test]
+    fn ip_v1_has_required_columns() {
+        let t = Template::builtin("ip-v1").expect("loads");
+        let names: Vec<_> = t.columns.iter().map(|c| c.name.as_str()).collect();
+        for must in ["asset_name", "owner", "status", "encumbrances"] {
+            assert!(names.contains(&must), "missing required col {must}");
+        }
+    }
 }

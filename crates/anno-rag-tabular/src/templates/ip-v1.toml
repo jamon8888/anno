@@ -1,10 +1,72 @@
 id = "ip-v1"
-name = "Placeholder — filled in Task 12"
-version = "0.0.1"
-description = "Placeholder for IP licence/assignment review template."
+name = "Intellectual Property Asset Schedule (FR)"
+version = "1.0.0"
+description = "IP-asset abstraction for M&A: ownership, registrations, encumbrances, licenses."
 vertical = "legal-fr"
 
 [[column]]
-name   = "_placeholder"
-prompt = "filled in a later task"
+name   = "asset_name"
+prompt = "Name / title of the IP asset."
+type   = "text"
+
+[[column]]
+name    = "asset_type"
+prompt  = "Type of IP asset."
+type    = "enum"
+options = ["patent", "trademark", "copyright", "domain", "trade_secret", "know_how", "design", "software", "other"]
+
+[[column]]
+name   = "owner"
+prompt = "Registered owner / titulaire. Full legal name."
+type   = "text"
+
+[[column]]
+name   = "registration_number"
+prompt = "Registration number (patent #, INPI mark #, ...). 'unregistered' if not registered."
+type   = "text"
+
+[[column]]
+name   = "jurisdictions"
+prompt = "Jurisdictions where registered or protected. Comma-separated ISO 3166-1 alpha-2 codes."
+type   = "text"
+
+[[column]]
+name    = "status"
+prompt  = "Current status."
+type    = "enum"
+options = ["pending", "granted", "registered", "expired", "lapsed", "abandoned", "opposed", "litigation", "other"]
+
+[[column]]
+name   = "filing_date"
+prompt = "Filing date. ISO 8601."
+type   = "date"
+
+[[column]]
+name   = "renewal_date"
+prompt = "Next renewal/maintenance date. ISO 8601 or null."
+type   = "date"
+
+[[column]]
+name   = "assignment_chain"
+prompt = "Chain of title / assignments. Verbatim or 'first owner'."
+type   = "text"
+
+[[column]]
+name   = "encumbrances"
+prompt = "Liens, pledges, security interests. Verbatim or 'none'."
+type   = "text"
+
+[[column]]
+name   = "licenses_in"
+prompt = "Inbound licenses (rights we hold from third parties). Verbatim or 'none'."
+type   = "text"
+
+[[column]]
+name   = "licenses_out"
+prompt = "Outbound licenses granted to third parties. Verbatim or 'none'."
+type   = "text"
+
+[[column]]
+name   = "infringement_claims"
+prompt = "Ongoing or threatened infringement claims (either direction). Verbatim or 'none'."
 type   = "text"
