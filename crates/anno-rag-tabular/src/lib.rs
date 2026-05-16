@@ -22,3 +22,6 @@ pub mod storage;
 pub mod llm;
 
 pub mod extract;
+
+pub mod fanout;
+pub use fanout::{run_review, FanoutConfig, RowOutcome};
