@@ -456,6 +456,8 @@ impl Pipeline {
         top_k: usize,
         session_id: Option<String>,
         kinds: Option<Vec<crate::memory::MemoryKind>>,
+        as_of: Option<chrono::DateTime<chrono::Utc>>,
+        _graph_expand: bool, // wired in v0.2 T5
     ) -> Result<Vec<crate::memory::MemoryHit>> {
         let entities = self.detector_get_or_init()?.detect(query)?;
         let (tokenized_query, _) =
@@ -475,6 +477,17 @@ impl Pipeline {
             // facts shouldn't be hidden by a per-session recall).
             raw.retain(|h| h.session_id.as_deref() == Some(s.as_str()) || h.session_id.is_none());
         }
+
+        // Bi-temporal filter. as_of = Some(t) → point-in-time semantics
+        // (valid_from <= t AND (valid_to IS NULL OR valid_to > t)).
+        // as_of = None → "now": include only currently-valid rows.
+        let t_us = as_of
+            .unwrap_or_else(chrono::Utc::now)
+            .timestamp_micros();
+        raw.retain(|r| {
+            r.valid_from_us <= t_us && r.valid_to_us.map_or(true, |v| v > t_us)
+        });
+
         raw.truncate(top_k);
 
         let mut out: Vec<crate::memory::MemoryHit> = Vec::with_capacity(raw.len());
@@ -485,10 +498,30 @@ impl Pipeline {
                 text: rehydrated.text,
                 kind: row.kind,
                 created_at: row.created_at,
+                valid_from: ts_us_to_rfc3339(row.valid_from_us),
+                valid_to: row.valid_to_us.map(ts_us_to_rfc3339),
+                entity_refs: row.entity_refs,
                 score: row.score,
+                via: crate::memory::HitProvenance::Hybrid,
             });
         }
         Ok(out)
+    }
+
+    /// Mark a memory row as invalidated at `at` (defaults to "now"). The
+    /// row stays on disk (history-preserving), but `recall_memory` with
+    /// `as_of >= at` will exclude it. Guarded by `valid_to IS NULL` so a
+    /// double-invalidate is a no-op (returns `Ok(false)`).
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on update failure.
+    pub async fn invalidate_memory(
+        &self,
+        id: &crate::memory::MemoryId,
+        at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<bool> {
+        let when = at.unwrap_or_else(chrono::Utc::now);
+        self.store.memory_update_valid_to(id, when).await
     }
 
     /// GDPR Art. 17 erasure on a Memory row.
@@ -524,7 +557,11 @@ impl Pipeline {
                 .into_iter()
                 .collect(),
             (None, Some(q)) => {
-                let hits = self.recall_memory(&q, limit, None, None).await?;
+                // Forget by query: scan currently-valid rows (as_of = now);
+                // graph_expand off — forget is identity-anchored, not graph-anchored.
+                let hits = self
+                    .recall_memory(&q, limit, None, None, None, false)
+                    .await?;
                 let mut out = Vec::with_capacity(hits.len());
                 for h in hits.iter().take(limit) {
                     let uid = uuid::Uuid::parse_str(&h.id)
@@ -651,7 +688,11 @@ impl Pipeline {
                 text: rehydrated.text,
                 kind: m.kind,
                 created_at: m.created_at.to_rfc3339(),
+                valid_from: m.valid_from.to_rfc3339(),
+                valid_to: m.valid_to.map(|v| v.to_rfc3339()),
+                entity_refs: m.entity_refs,
                 score: 0.0,
+                via: crate::memory::HitProvenance::Hybrid,
             });
         }
         Ok(ListPage { items, next_cursor })
@@ -845,4 +886,16 @@ pub struct VaultStats {
     pub total_mappings: usize,
     /// Count per PII category (e.g. `"Email"`, `"PhoneNumber"`, `"Custom(NIR)"`).
     pub categories: std::collections::HashMap<String, u32>,
+}
+
+/// Convert a microsecond UTC timestamp into an RFC 3339 string. Used by
+/// the v0.2 `MemoryHit` builders to surface `valid_from` / `valid_to` in
+/// the form the MCP client expects.
+fn ts_us_to_rfc3339(micros: i64) -> String {
+    use chrono::TimeZone;
+    chrono::Utc
+        .timestamp_micros(micros)
+        .single()
+        .map(|t| t.to_rfc3339())
+        .unwrap_or_else(|| String::from("1970-01-01T00:00:00Z"))
 }

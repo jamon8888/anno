@@ -372,7 +372,8 @@ impl AnnoRagServer {
         });
         let r = self
             .pipeline
-            .recall_memory(&p.query, p.top_k, p.session_id, kinds)
+            // v0.2 T3: extra params wired to defaults; T6 surfaces them.
+            .recall_memory(&p.query, p.top_k, p.session_id, kinds, None, false)
             .await;
         let elapsed = start.elapsed().as_millis() as u64;
         match r {

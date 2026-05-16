@@ -279,6 +279,34 @@ impl Store {
         Ok(true)
     }
 
+    /// Set `valid_to` on the memory with `id` to `valid_to`. Used by the
+    /// v0.2 bi-temporal invalidation path: a memory whose `valid_to` is
+    /// non-null + ≤ `as_of` is excluded from `recall_memory` results.
+    ///
+    /// Guarded by `valid_to IS NULL` so a double-invalidation is a no-op
+    /// (returns `Ok(false)`).
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on update failure.
+    pub async fn memory_update_valid_to(
+        &self,
+        id: &crate::memory::MemoryId,
+        valid_to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool> {
+        let id_s = id.as_string();
+        let ts = valid_to.timestamp_micros();
+        let filter = format!("id = '{id_s}' AND valid_to IS NULL");
+        let res = self
+            .memories_tbl
+            .update()
+            .only_if(filter)
+            .column("valid_to", format!("CAST({ts} AS TIMESTAMP)"))
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("update valid_to: {e}")))?;
+        Ok(res.rows_updated > 0)
+    }
+
     /// Create the v0.1 scalar indexes on the memories collection.
     /// Idempotent — skips columns that already have an index.
     ///
@@ -1010,6 +1038,9 @@ fn batch_row_to_memory_hit(
     let kind_arr = get_col::<StringArray>(b, "kind")?;
     let text_arr = get_col::<StringArray>(b, "text")?;
     let created_arr = get_col::<TimestampMicrosecondArray>(b, "created_at")?;
+    let valid_from_arr = get_col::<TimestampMicrosecondArray>(b, "valid_from")?;
+    let valid_to_arr = get_col::<TimestampMicrosecondArray>(b, "valid_to")?;
+    let entity_refs_arr = get_col::<ListArray>(b, "entity_refs")?;
 
     let id = id_arr.value(i).to_string();
     let session_id = if session_arr.is_null(i) {
@@ -1028,6 +1059,23 @@ fn batch_row_to_memory_hit(
     };
     let text_tokenized = text_arr.value(i).to_string();
     let created_at = ts_to_rfc3339(created_arr.value(i));
+    let valid_from_us = valid_from_arr.value(i);
+    let valid_to_us = if valid_to_arr.is_null(i) {
+        None
+    } else {
+        Some(valid_to_arr.value(i))
+    };
+
+    // entity_refs: List<Utf8>
+    let mut entity_refs: Vec<String> = Vec::new();
+    if !entity_refs_arr.is_null(i) {
+        let inner = entity_refs_arr.value(i);
+        if let Some(s) = inner.as_any().downcast_ref::<StringArray>() {
+            for k in 0..s.len() {
+                entity_refs.push(s.value(k).to_string());
+            }
+        }
+    }
 
     // Score: lancedb writes `_relevance_score` for hybrid queries; absence
     // means the batch carried no relevance column (e.g. a pure vector arm),
@@ -1044,6 +1092,9 @@ fn batch_row_to_memory_hit(
         text_tokenized,
         kind,
         created_at,
+        valid_from_us,
+        valid_to_us,
+        entity_refs,
         score,
     })
 }

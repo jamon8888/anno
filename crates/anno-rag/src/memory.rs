@@ -104,8 +104,27 @@ pub struct MemoryHitRow {
     pub kind: MemoryKind,
     /// RFC 3339 creation timestamp.
     pub created_at: String,
+    /// Bi-temporal start (μs since epoch). Equals `created_at` until v0.2
+    /// invalidation lands; v0.2 conflict resolver may override.
+    pub valid_from_us: i64,
+    /// Bi-temporal end (μs since epoch). `None` means still valid.
+    pub valid_to_us: Option<i64>,
+    /// Canonicalised entity references (`pii:...` + `ent:...`) — the
+    /// LabelList index payload v0.2 uses for graph traversal.
+    pub entity_refs: Vec<String>,
     /// Hybrid retrieval score (RRF; higher is better).
     pub score: f32,
+}
+
+/// Where a hit came from. v0.2 introduces a second path — graph-expansion
+/// over `entity_refs` (LabelList scan) — alongside the hybrid arm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HitProvenance {
+    /// Vector + FTS RRF-reranked hit.
+    Hybrid,
+    /// LabelList-indexed 2-hop graph traversal hit.
+    GraphExpand,
 }
 
 /// One hit returned by [`Pipeline::recall_memory`]. Text is rehydrated
@@ -120,8 +139,18 @@ pub struct MemoryHit {
     pub kind: MemoryKind,
     /// RFC 3339 creation timestamp.
     pub created_at: String,
+    /// Bi-temporal start, RFC 3339.
+    pub valid_from: String,
+    /// Bi-temporal end, RFC 3339. `None` while the row is still valid.
+    pub valid_to: Option<String>,
+    /// Canonicalised entity references (LabelList payload).
+    pub entity_refs: Vec<String>,
     /// Hybrid retrieval score (higher = better; produced by `RRFReranker`).
+    /// For `HitProvenance::GraphExpand`, this is a co-occurrence-derived
+    /// score (v0.2 T5).
     pub score: f32,
+    /// Which path produced this hit. See [`HitProvenance`].
+    pub via: HitProvenance,
 }
 
 #[cfg(test)]
