@@ -431,12 +431,39 @@ impl Pipeline {
             entity_refs: self.extract_entities(text, &token_refs),
         };
 
+        // v0.2 T4: conflict resolver — only Preference + Reference can
+        // auto-invalidate prior rows. Facts + Context are append-only.
+        let mut invalidated_ids: Vec<String> = Vec::new();
+        if matches!(
+            m.kind,
+            crate::memory::MemoryKind::Preference | crate::memory::MemoryKind::Reference
+        ) {
+            let candidates = self
+                .store
+                .memory_candidates_for_conflict(&m.entity_refs, m.session_id.as_deref())
+                .await?;
+            for prior in &candidates {
+                if crate::conflict::resolves_conflict(
+                    &m,
+                    prior,
+                    self.cfg.conflict_cosine_threshold,
+                ) {
+                    self.store
+                        .memory_update_valid_to(&prior.id, m.created_at)
+                        .await?;
+                    invalidated_ids.push(prior.id.as_string());
+                }
+            }
+        }
+
         self.store.memory_insert(&m).await?;
 
         Ok(SavedMemory {
             id,
             redacted_text: tokenized,
             token_refs,
+            entity_refs: m.entity_refs,
+            invalidated_ids,
         })
     }
 
@@ -748,6 +775,13 @@ pub struct SavedMemory {
     pub redacted_text: String,
     /// `(category, token)` pairs minted for the GDPR Art. 17 cascade.
     pub token_refs: Vec<crate::memory::TokenRef>,
+    /// Canonicalised entity references attached to the new row (v0.2 T2).
+    /// Surfaces what got LabelList-indexed for the future graph traversal.
+    pub entity_refs: Vec<String>,
+    /// Ids of prior `Preference` / `Reference` memories the conflict
+    /// resolver auto-invalidated on this save (v0.2 T4). Empty for
+    /// `Fact` / `Context` saves.
+    pub invalidated_ids: Vec<String>,
 }
 
 /// Receipt returned by [`Pipeline::forget`]. Suitable for inclusion in an

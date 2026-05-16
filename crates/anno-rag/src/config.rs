@@ -83,6 +83,14 @@ pub struct AnnoRagConfig {
     /// v0.6 candidate: load from a TOML file alongside the vault.
     #[serde(default)]
     pub entity_aliases: std::collections::HashMap<String, String>,
+
+    /// Cosine-similarity threshold above which two `Preference` /
+    /// `Reference` memories with a shared entity are treated as a
+    /// conflict (the prior is auto-invalidated on save). Default 0.85.
+    /// Tune up to reduce false-positive invalidation; tune down to
+    /// catch more re-statements.
+    #[serde(default = "default_conflict_cosine_threshold")]
+    pub conflict_cosine_threshold: f32,
 }
 
 fn default_memory_collection_name() -> String {
@@ -99,6 +107,10 @@ fn default_compaction_interval_secs() -> u64 {
 
 fn default_compaction_min_age_secs() -> u64 {
     3600
+}
+
+fn default_conflict_cosine_threshold() -> f32 {
+    0.85
 }
 
 fn default_vector_index_threshold() -> usize {
@@ -133,6 +145,7 @@ impl Default for AnnoRagConfig {
             compaction_interval_secs: default_compaction_interval_secs(),
             compaction_min_age_secs: default_compaction_min_age_secs(),
             entity_aliases: std::collections::HashMap::new(),
+            conflict_cosine_threshold: default_conflict_cosine_threshold(),
         }
     }
 }

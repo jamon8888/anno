@@ -12,6 +12,7 @@ pub mod error;
 pub mod eval;
 pub mod ingest;
 pub mod canonicalize;
+pub mod conflict;
 pub mod mcp;
 pub(crate) mod ocr;
 pub mod memory;

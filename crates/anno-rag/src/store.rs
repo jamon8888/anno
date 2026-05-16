@@ -279,6 +279,67 @@ impl Store {
         Ok(true)
     }
 
+    /// Fetch candidate memories that share at least one entity with any of
+    /// `entity_refs`, optionally scoped to a session (matches that session
+    /// or session-less rows), and currently valid (`valid_to IS NULL`).
+    ///
+    /// Used by the v0.2 conflict resolver — cosine similarity is computed
+    /// in Rust against the embeddings, not in SQL, so this candidate set
+    /// must be small. Capped at 100 rows; deployers with hot popular
+    /// entities will see candidate truncation rather than O(table) scans.
+    ///
+    /// `array_contains(entity_refs, '<key>')` exploits the LabelList scalar
+    /// index on `entity_refs` (v0.1 T4), so the scan is sub-linear.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query / decode failure.
+    pub async fn memory_candidates_for_conflict(
+        &self,
+        entity_refs: &[String],
+        session_id: Option<&str>,
+    ) -> Result<Vec<crate::memory::Memory>> {
+        if entity_refs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let parts: Vec<String> = entity_refs
+            .iter()
+            .map(|e| {
+                format!(
+                    "array_contains(entity_refs, '{}')",
+                    e.replace('\'', "''")
+                )
+            })
+            .collect();
+        let mut filter = format!("({}) AND valid_to IS NULL", parts.join(" OR "));
+        if let Some(s) = session_id {
+            filter = format!(
+                "{filter} AND (session_id = '{}' OR session_id IS NULL)",
+                s.replace('\'', "''")
+            );
+        }
+
+        let mut stream = self
+            .memories_tbl
+            .query()
+            .only_if(filter)
+            .limit(100)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("candidates exec: {e}")))?;
+
+        let mut out: Vec<crate::memory::Memory> = Vec::new();
+        while let Some(batch) = stream
+            .try_next()
+            .await
+            .map_err(|e| Error::Store(format!("candidates stream: {e}")))?
+        {
+            for r in 0..batch.num_rows() {
+                out.push(batch_row_to_memory(&batch, r)?);
+            }
+        }
+        Ok(out)
+    }
+
     /// Set `valid_to` on the memory with `id` to `valid_to`. Used by the
     /// v0.2 bi-temporal invalidation path: a memory whose `valid_to` is
     /// non-null + ≤ `as_of` is excluded from `recall_memory` results.
