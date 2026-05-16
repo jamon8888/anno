@@ -22,6 +22,7 @@
 //! each citation.
 
 pub(crate) mod batch;
+pub mod budget;
 
 use crate::error::Result;
 use crate::ids::ReviewId;
@@ -69,13 +70,31 @@ pub trait ChunkSource: Send + Sync {
 pub struct Extractor {
     llm: Arc<dyn LlmClient>,
     chunks: Arc<dyn ChunkSource>,
+    /// Per-call LLM token budget used by the column-batch splitter.
+    /// Defaults to [`budget::DEFAULT_BUDGET_TOKENS`]; tests use
+    /// [`Extractor::with_budget`] to force multi-batch behaviour with
+    /// small inputs.
+    budget_tokens: usize,
 }
 
 impl Extractor {
     /// Build an extractor over an [`LlmClient`] and a [`ChunkSource`].
     #[must_use]
     pub fn new(llm: Arc<dyn LlmClient>, chunks: Arc<dyn ChunkSource>) -> Self {
-        Self { llm, chunks }
+        Self {
+            llm,
+            chunks,
+            budget_tokens: budget::DEFAULT_BUDGET_TOKENS,
+        }
+    }
+
+    /// Override the per-call LLM token budget used by the column-batch
+    /// splitter. Mainly a test seam: production code uses the default
+    /// 80k budget which is calibrated for Anthropic's 200k window.
+    #[must_use]
+    pub fn with_budget(mut self, budget_tokens: usize) -> Self {
+        self.budget_tokens = budget_tokens;
+        self
     }
 
     /// Extract every non-manual column for `doc_id` into a `Vec<Cell>`.
@@ -99,9 +118,29 @@ impl Extractor {
         columns: &[Column],
     ) -> Result<Vec<Cell>> {
         let chunks = self.chunks.chunks_for_doc(doc_id).await?;
-        // TODO(T24): split `columns` into batches when the assembled
-        // prompt exceeds ~80k tokens. Today everything goes in one call.
-        batch::extract_batch(self.llm.as_ref(), review_id, doc_id, &chunks, columns).await
+
+        // Empty column list (or all-manual) short-circuits: no LLM call.
+        if columns.iter().all(|c| c.manual) {
+            return Ok(Vec::new());
+        }
+
+        // Split columns into batches that fit the LLM context window
+        // together with the doc body. See `extract::budget` for the
+        // heuristic. For typical docs (<25 columns) this is a single
+        // batch and identical to the pre-T24 single-call path.
+        let doc_tokens = budget::estimate_doc_tokens(chunks.iter().map(|c| c.content.as_str()));
+        let batches = budget::split_columns(columns, doc_tokens, self.budget_tokens);
+
+        let mut cells = Vec::with_capacity(columns.len());
+        for batch in batches {
+            if batch.is_empty() {
+                continue;
+            }
+            let mut batch_cells =
+                batch::extract_batch(self.llm.as_ref(), review_id, doc_id, &chunks, &batch).await?;
+            cells.append(&mut batch_cells);
+        }
+        Ok(cells)
     }
 }
 
@@ -267,6 +306,71 @@ mod tests {
             }
             other => panic!("expected Error::Extract, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn extract_doc_handles_many_columns_via_batching() {
+        // Wire-up smoke test for T24: with a tiny budget the splitter
+        // is forced to break a 5-column request into multiple batches;
+        // we assert all 5 cells still come back and order is preserved.
+        let review = ReviewId::new();
+        let doc = uuid::Uuid::now_v7();
+        let (chunk_id, chunks) = mk_chunks(doc);
+
+        // Mock returns every column envelope; `extract_batch` only
+        // pulls the envelopes for the columns it was given, so a
+        // 1-column sub-batch yields exactly 1 cell.
+        let mut response = serde_json::Map::new();
+        for i in 0..5 {
+            response.insert(
+                format!("c{i}"),
+                json!({
+                    "value": format!("v{i}"),
+                    "reasoning": "stub",
+                    "citations": [{
+                        "chunk_id": chunk_id.to_string(),
+                        "char_start": 0,
+                        "char_end": 1,
+                        "quoted_text": "G"
+                    }]
+                }),
+            );
+        }
+        let llm = mk_llm(serde_json::Value::Object(response));
+
+        let cols: Vec<Column> = (0..5)
+            .map(|i| {
+                ColumnBuilder::new(
+                    review,
+                    &format!("c{i}"),
+                    &"x".repeat(30_000),
+                    CellType::Text,
+                )
+                .build()
+            })
+            .collect();
+
+        // Tiny budget forces the splitter to emit multiple batches.
+        let extractor = Extractor::new(llm, chunks).with_budget(10_000);
+        let cells = extractor
+            .extract_doc(review, doc, &cols)
+            .await
+            .expect("multi-batch extract_doc succeeds");
+
+        assert_eq!(cells.len(), 5, "all columns produce a cell across batches");
+        // Order preservation: cells come back in column-display order.
+        let names: Vec<String> = cells
+            .iter()
+            .map(|cell| {
+                cols.iter()
+                    .find(|c| c.id == cell.col_id)
+                    .unwrap()
+                    .name
+                    .clone()
+            })
+            .collect();
+        let expected: Vec<String> = (0..5).map(|i| format!("c{i}")).collect();
+        assert_eq!(names, expected);
     }
 
     #[tokio::test]

@@ -4,10 +4,11 @@
 //! of chunks and a set of columns, dispatches to the [`LlmClient`],
 //! parses the structured response into [`Cell`]s.
 //!
-//! TODO(T24): split columns into batches when the assembled prompt
-//! exceeds ~80k tokens. This module currently packs every column into a
-//! single call regardless of size; the splitter lands in Task 24 and
-//! will call this function repeatedly.
+//! For docs with many columns the caller (`Extractor::extract_doc`)
+//! splits the column list via [`crate::extract::budget::split_columns`]
+//! and invokes [`extract_batch`] once per sub-batch, then concatenates
+//! the resulting cells. This module stays single-batch on purpose —
+//! see `extract::budget` for the splitter.
 
 use crate::error::{Error, Result};
 use crate::extract::ChunkRef;
