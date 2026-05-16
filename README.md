@@ -44,6 +44,20 @@ let entities = anno::extract("Sophie Wilson designed the ARM processor.")?;
 
 Backends additionnels disponibles via features : **W2NER**, **TPLinker** (relations), **GLiRel** (relations zero-shot), **CRF** et **HMM** (statistiques), **LLM** (extraction par modèle distant via OpenRouter / Anthropic / Groq / Gemini / Ollama). Liste complète : [docs/BACKENDS.md](docs/BACKENDS.md).
 
+#### GLiNER2 (fastino) + LoRA adapters — backend Candle multi-domaine
+
+Pour les usages où l'on doit **changer de domaine à chaud** (juridique → médical → financier) sur un même modèle de base, Hacienda inclut le backend `gliner2_fastino_candle` (feature `gliner2-fastino-candle`). Caractéristiques :
+
+- **Encoder DeBERTa-v2/v3** via `candle_transformers::models::debertav2::DebertaV2Model` (attention disentangled), 7 têtes Candle natives (`token_gather`, `span_rep`, `schema_gather`, `count_pred`, `count_lstm`, `scorer`, `classifier`) — pas de runtime ONNX, pure-Rust, accélération `metal` / `cuda` au choix.
+- **Adapters LoRA au format PEFT**, fusionnés **à l'instant du load** :
+  `W_merged = W_base + (alpha / r) · (lora_B @ lora_A)`
+  La fusion est faite **une fois** sur les poids cibles à `load_adapter()`. Au forward, il n'y a **plus aucun coût LoRA** : on inference sur des poids fusionnés en place. Le compromis exact : swap d'adapter modéré (toutes les quelques minutes ou heures), pas une commutation par requête.
+- **API** : `from_pretrained(model_id)` / `from_local(dir)`, puis `load_adapter(name, dir)`, `unload_adapter()` (réhydrate les poids de base depuis `base_model_dir`), `active_adapter()`. Vérifie automatiquement que l'adapter a été entraîné sur le même modèle de base que celui chargé — refus loud sinon.
+- **Surface publique identique** au backend ONNX `gliner2_fastino` : `Model` + `ZeroShotNER`, plus `extract_with_label_descriptions`, `extract_with_label_thresholds`, `extract_structure`, `classify`. On bascule ONNX ↔ Candle par simple alias de type.
+- **Pourquoi ça compte** : en pratique, exporter un modèle ONNX fusionné par domaine coûte ~6 Go de disque par variante. Avec ce backend, on stocke une base + N petits adapters LoRA (typiquement quelques Mo chacun) et on bascule à chaud sans re-export.
+
+Détails d'implémentation : `crates/anno/src/backends/gliner2_fastino_candle/`.
+
 ### 1.2 Coreference et préprocessing RAG
 
 Trois résolveurs : `SimpleCorefResolver` (règles, 9 sieves), `FCoref` (neuronal, 78.5 F1 sur CoNLL-2012), `MentionRankingCoref`.
