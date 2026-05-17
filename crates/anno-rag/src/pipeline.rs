@@ -591,9 +591,7 @@ impl Pipeline {
         per_hop_limit: usize,
         as_of: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<crate::memory::GraphRecallResult> {
-        use crate::memory::{
-            EntityNode, GraphRecallResult, HitProvenance, MemoryEdge, MemoryHit,
-        };
+        use crate::memory::{EntityNode, GraphRecallResult, HitProvenance, MemoryEdge, MemoryHit};
         use std::collections::{HashMap, HashSet};
 
         let max_hops = max_hops.min(self.cfg.graph_max_hops);

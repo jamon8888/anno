@@ -324,7 +324,7 @@ impl CellsTable {
                 out.push(row_to_cell(&b, i)?);
             }
         }
-        out.sort_by(|a, b| b.version.cmp(&a.version));
+        out.sort_by_key(|b| std::cmp::Reverse(b.version));
         Ok(out)
     }
 

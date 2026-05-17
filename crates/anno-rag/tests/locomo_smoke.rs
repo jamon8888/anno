@@ -137,7 +137,7 @@ fn fresh_cfg(dir: &std::path::Path) -> AnnoRagConfig {
 async fn run_scenario(s: &Scenario) {
     println!("=== {} — {} ===", s.id, s.description);
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("tempdir");
     let p = Pipeline::new(fresh_cfg(tmp.path()), [0u8; 32])
         .await
         .expect("Pipeline::new");
