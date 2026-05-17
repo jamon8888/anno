@@ -229,4 +229,30 @@ mod tests {
         assert_eq!(s.len(), 1);
         assert!(s[0].is_finite());
     }
+
+    // Heavy: loads the model once, reuses it across cases via process
+    // statics so proptest shrinking doesn't reload 571 MB per case.
+    #[test]
+    #[ignore = "uses cached ~571 MB model"]
+    fn prop_score_pairs_total_and_finite() {
+        use proptest::prelude::*;
+        use std::sync::OnceLock;
+        static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+        static R: OnceLock<Reranker> = OnceLock::new();
+        let rt = RT.get_or_init(|| tokio::runtime::Runtime::new().unwrap());
+        let reranker = R.get_or_init(|| {
+            rt.block_on(Reranker::load(&AnnoRagConfig::default()))
+                .expect("load")
+        });
+
+        proptest!(|(q in ".{0,40}", ps in proptest::collection::vec(".{0,80}", 0..20))| {
+            let refs: Vec<&str> = ps.iter().map(String::as_str).collect();
+            let scores = reranker.score_pairs(&q, &refs).expect("score");
+            prop_assert_eq!(scores.len(), ps.len());
+            for s in scores {
+                prop_assert!(s.is_finite(), "score must be finite, got {}", s);
+                prop_assert!((0.0..=1.0).contains(&s), "score in [0,1], got {}", s);
+            }
+        });
+    }
 }
