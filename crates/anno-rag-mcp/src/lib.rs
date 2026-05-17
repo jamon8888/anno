@@ -1,16 +1,17 @@
 //! MCP server exposing anno-rag's retrieval surface to Cowork over stdio.
 //!
-//! Tools: `search`, `rehydrate`, `detect`, `vault_stats`.
+//! Tools: `search`, `rehydrate`, `detect`, `vault_stats`, memory_*.
 //! Reuse rmcp 1.6's `#[tool_router]` + `#[tool_handler]` pattern from
 //! `vendor/cloakpipe/crates/cloakpipe-mcp/src/lib.rs`.
 //!
-//! Task 6 wires the tool ROUTING and SCHEMAS. Tool bodies for rehydrate,
-//! detect, vault_stats are PLACEHOLDERS — Task 7 fills them once
-//! `Pipeline` exposes the underlying helpers. `search` is wired live
-//! because `Pipeline::search` already exists.
+//! This crate was extracted from `anno-rag::mcp` so that Phase 8 of the
+//! tabular-review plan can attach `anno-rag-tabular` review tools here
+//! without creating a cycle (anno-rag-tabular already depends on anno-rag).
 
-use crate::config::AnnoRagConfig;
-use crate::pipeline::Pipeline;
+#![warn(missing_docs)]
+
+use anno_rag::config::AnnoRagConfig;
+use anno_rag::pipeline::Pipeline;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{Implementation, ServerCapabilities, ServerInfo},
@@ -122,12 +123,12 @@ pub struct MemorySaveParams {
     pub session_id: Option<String>,
 }
 
-fn parse_kind(s: &str) -> Option<crate::memory::MemoryKind> {
+fn parse_kind(s: &str) -> Option<anno_rag::memory::MemoryKind> {
     match s {
-        "fact" => Some(crate::memory::MemoryKind::Fact),
-        "preference" => Some(crate::memory::MemoryKind::Preference),
-        "reference" => Some(crate::memory::MemoryKind::Reference),
-        "context" => Some(crate::memory::MemoryKind::Context),
+        "fact" => Some(anno_rag::memory::MemoryKind::Fact),
+        "preference" => Some(anno_rag::memory::MemoryKind::Preference),
+        "reference" => Some(anno_rag::memory::MemoryKind::Reference),
+        "context" => Some(anno_rag::memory::MemoryKind::Context),
         _ => None,
     }
 }
@@ -467,7 +468,7 @@ impl AnnoRagServer {
     async fn memory_forget(&self, Parameters(p): Parameters<MemoryForgetParams>) -> String {
         let id = match &p.id {
             Some(s) => match uuid::Uuid::parse_str(s) {
-                Ok(u) => Some(crate::memory::MemoryId(u)),
+                Ok(u) => Some(anno_rag::memory::MemoryId(u)),
                 Err(e) => return format!("Error: bad id: {e}"),
             },
             None => None,
@@ -604,7 +605,7 @@ impl AnnoRagServer {
     )]
     async fn memory_invalidate(&self, Parameters(p): Parameters<MemoryInvalidateParams>) -> String {
         let id = match uuid::Uuid::parse_str(&p.id) {
-            Ok(u) => crate::memory::MemoryId(u),
+            Ok(u) => anno_rag::memory::MemoryId(u),
             Err(e) => return format!("Error: bad id: {e}"),
         };
         let when = p.at.unwrap_or_else(chrono::Utc::now);
@@ -676,17 +677,16 @@ impl AnnoRagServer {
 ///
 /// # Errors
 ///
-/// Returns [`crate::error::Error::Detect`] if the rmcp transport fails to
+/// Returns [`anno_rag::error::Error::Detect`] if the rmcp transport fails to
 /// initialize or the server loop returns an error.
-pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> crate::error::Result<()> {
+pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> anno_rag::error::Result<()> {
     let server = AnnoRagServer::new(pipeline, cfg);
     tracing::info!("anno-rag MCP server starting on stdio");
 
     let transport = rmcp::transport::stdio();
-    let service = server
-        .serve(transport)
-        .await
-        .map_err(|e| crate::error::Error::Detect(format!("MCP server failed to start: {e}")))?;
+    let service = server.serve(transport).await.map_err(|e| {
+        anno_rag::error::Error::Detect(format!("MCP server failed to start: {e}"))
+    })?;
 
     // Graceful shutdown: race the rmcp `waiting()` loop (which exits when the
     // stdio peer closes) against SIGINT / SIGTERM. On signal, cancel the
@@ -704,7 +704,7 @@ pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> crate::error
     let quit = service
         .waiting()
         .await
-        .map_err(|e| crate::error::Error::Detect(format!("MCP server error: {e}")))?;
+        .map_err(|e| anno_rag::error::Error::Detect(format!("MCP server error: {e}")))?;
     signal_task.abort();
     tracing::info!(
         target: "anno_rag::mcp::shutdown",

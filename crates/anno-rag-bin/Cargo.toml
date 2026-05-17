@@ -1,0 +1,23 @@
+[package]
+name         = "anno-rag-bin"
+version      = "0.2.0"
+edition.workspace      = true
+rust-version.workspace = true
+license      = "MIT OR Apache-2.0"
+description  = "anno-rag CLI binary — splits out so anno-rag-mcp can depend on anno-rag without a cycle."
+
+[[bin]]
+name = "anno-rag"
+path = "src/main.rs"
+
+[dependencies]
+anno-rag        = { path = "../anno-rag" }
+anno-rag-mcp    = { path = "../anno-rag-mcp" }
+
+clap            = { workspace = true }
+tokio           = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow          = { workspace = true }
+
+[lints]
+workspace = true
