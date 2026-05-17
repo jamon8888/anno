@@ -245,8 +245,8 @@ mod tests {
                 "reasoning": "Stated explicitly in the contract preamble.",
                 "citations": [{
                     "chunk_id": chunk_id.to_string(),
-                    "char_start": 15,
-                    "char_end": 21,
+                    "byte_start": 15,
+                    "byte_end": 21,
                     "quoted_text": "France"
                 }]
             },
@@ -255,8 +255,8 @@ mod tests {
                 "reasoning": "Numeric term specified after the law clause.",
                 "citations": [{
                     "chunk_id": chunk_id.to_string(),
-                    "char_start": 29,
-                    "char_end": 38,
+                    "byte_start": 29,
+                    "byte_end": 38,
                     "quoted_text": "24 months"
                 }]
             }
@@ -298,8 +298,8 @@ mod tests {
                 "reasoning": "preamble",
                 "citations": [{
                     "chunk_id": chunk_id.to_string(),
-                    "char_start": 15,
-                    "char_end": 21,
+                    "byte_start": 15,
+                    "byte_end": 21,
                     "quoted_text": "France"
                 }]
             }
@@ -366,8 +366,8 @@ mod tests {
                     "reasoning": "stub",
                     "citations": [{
                         "chunk_id": chunk_id.to_string(),
-                        "char_start": 0,
-                        "char_end": 1,
+                        "byte_start": 0,
+                        "byte_end": 1,
                         "quoted_text": "G"
                     }]
                 }),
@@ -421,8 +421,8 @@ mod tests {
                 "reasoning": "preamble",
                 "citations": [{
                     "chunk_id": chunk_id.to_string(),
-                    "char_start": 15,
-                    "char_end": 21,
+                    "byte_start": 15,
+                    "byte_end": 21,
                     "quoted_text": "France"
                 }]
             }

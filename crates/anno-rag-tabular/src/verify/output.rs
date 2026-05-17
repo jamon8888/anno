@@ -1,4 +1,4 @@
-//! Free-form citation verifier — parse `[chunk_id:char_start-char_end]`
+//! Free-form citation verifier — parse `[chunk_id:byte_start-byte_end]`
 //! markers from arbitrary LLM output text and validate each against
 //! the chunk store.
 //!
@@ -7,7 +7,7 @@
 //! carries inline citations (not just structured cell extraction).
 //!
 //! **Marker syntax** (deviation from plan sketch): we use
-//! `[chunk_id:char_start-char_end]` rather than the plan's
+//! `[chunk_id:byte_start-byte_end]` rather than the plan's
 //! `[doc_id:...]` because real citations are chunk-scoped and
 //! `chunk_id` is what survives into the cells table. doc_id-scoped
 //! offsets would require gluing chunks back together at validation
@@ -21,7 +21,7 @@ use regex::Regex;
 use std::sync::LazyLock;
 use uuid::Uuid;
 
-/// Marker shape: `[<chunk_uuid>:<char_start>-<char_end>]`. UUID v4/v7
+/// Marker shape: `[<chunk_uuid>:<byte_start>-<byte_end>]`. UUID v4/v7
 /// patterns both match the standard 36-char hyphenated form.
 static MARKER_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
@@ -109,21 +109,21 @@ pub async fn verify_citations_in_output(
                 continue;
             }
         };
-        let Ok(char_start) = start_str.parse::<u32>() else {
+        let Ok(byte_start) = start_str.parse::<u32>() else {
             out.push(CitationReport {
                 marker,
                 citation: None,
                 status: Status::ParseError,
-                evidence: format!("char_start out of u32 range: {start_str}"),
+                evidence: format!("byte_start out of u32 range: {start_str}"),
             });
             continue;
         };
-        let Ok(char_end) = end_str.parse::<u32>() else {
+        let Ok(byte_end) = end_str.parse::<u32>() else {
             out.push(CitationReport {
                 marker,
                 citation: None,
                 status: Status::ParseError,
-                evidence: format!("char_end out of u32 range: {end_str}"),
+                evidence: format!("byte_end out of u32 range: {end_str}"),
             });
             continue;
         };
@@ -132,8 +132,8 @@ pub async fn verify_citations_in_output(
         let chunk = chunks.chunk_by_id(chunk_id).await?;
         let citation = Citation {
             chunk_id,
-            char_start,
-            char_end,
+            byte_start,
+            byte_end,
             // We don't know the LLM's claimed quote in this code path
             // — the marker syntax doesn't carry one. The verifier
             // reports the actual chunk slice in `evidence` instead.
@@ -149,27 +149,24 @@ pub async fn verify_citations_in_output(
                 evidence: format!("chunk {chunk_id} not found"),
             },
             Some(chunk_ref) => {
-                let start = char_start as usize;
-                let end = char_end as usize;
-                if char_start > char_end {
+                let start = byte_start as usize;
+                let end = byte_end as usize;
+                if byte_start > byte_end {
                     CitationReport {
                         marker: marker.clone(),
                         citation: Some(citation),
                         status: Status::OffsetFail(OffsetFailure::StartAfterEnd),
-                        evidence: format!(
-                            "char_start ({char_start}) > char_end ({char_end})"
-                        ),
+                        evidence: format!("byte_start ({byte_start}) > byte_end ({byte_end})"),
                     }
                 } else if end > chunk_ref.content.len() {
                     CitationReport {
                         marker: marker.clone(),
                         citation: Some(citation),
                         status: Status::OffsetFail(OffsetFailure::OutOfBounds {
-                            chunk_len: u32::try_from(chunk_ref.content.len())
-                                .unwrap_or(u32::MAX),
+                            chunk_len: u32::try_from(chunk_ref.content.len()).unwrap_or(u32::MAX),
                         }),
                         evidence: format!(
-                            "char_end ({char_end}) > chunk length ({})",
+                            "byte_end ({byte_end}) > chunk length ({})",
                             chunk_ref.content.len()
                         ),
                     }

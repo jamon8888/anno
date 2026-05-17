@@ -102,8 +102,8 @@ mod tests {
             reasoning: None,
             citations: vec![Citation {
                 chunk_id: uuid::Uuid::now_v7(),
-                char_start: 0,
-                char_end: 5,
+                byte_start: 0,
+                byte_end: 5,
                 quoted_text: "hello".into(),
                 page: None,
             }],

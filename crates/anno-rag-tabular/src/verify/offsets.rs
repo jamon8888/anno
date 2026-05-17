@@ -2,13 +2,13 @@
 //!
 //! For each citation in a cell, fetch the parent chunk and check:
 //!
-//! 1. `char_start <= char_end` (well-formed range).
-//! 2. `char_end <= chunk.content.len()` (range is in-bounds).
-//! 3. `chunk.content[char_start..char_end] == quoted_text` exactly
+//! 1. `byte_start <= byte_end` (well-formed range).
+//! 2. `byte_end <= chunk.content.len()` (range is in-bounds).
+//! 3. `chunk.content[byte_start..byte_end] == quoted_text` exactly
 //!    (the LLM didn't hallucinate the quote).
 //!
-//! Byte-level comparison is correct because the schema's `char_start`
-//! / `char_end` are documented as BYTE offsets, not codepoint offsets.
+//! Byte-level comparison is correct because the schema's `byte_start`
+//! / `byte_end` are documented as BYTE offsets, not codepoint offsets.
 //! UTF-8 boundary slicing panics on bad indices, so we validate by
 //! using `str::get(range)` rather than direct slicing.
 //!
@@ -33,14 +33,14 @@ use uuid::Uuid;
 pub enum OffsetFailure {
     /// The chunk_id doesn't exist in the source.
     UnknownChunkId,
-    /// `char_start > char_end` (range inverted).
+    /// `byte_start > byte_end` (range inverted).
     StartAfterEnd,
-    /// `char_end > chunk.len()` (out of bounds).
+    /// `byte_end > chunk.len()` (out of bounds).
     OutOfBounds {
         /// Actual chunk length in bytes, for the error message.
         chunk_len: u32,
     },
-    /// `char_start..char_end` doesn't land on UTF-8 boundaries.
+    /// `byte_start..byte_end` doesn't land on UTF-8 boundaries.
     Utf8Boundary,
     /// `content[start..end] != quoted_text` (LLM hallucinated the
     /// quote).
@@ -124,28 +124,28 @@ pub fn check_citation(c: &Citation, chunks: &HashMap<Uuid, &str>) -> OffsetCheck
         return OffsetCheck::Fail(OffsetFailure::UnknownChunkId);
     };
 
-    if c.char_start > c.char_end {
+    if c.byte_start > c.byte_end {
         tracing::warn!(
             target: "tabular::verify::offsets",
             chunk_id = %c.chunk_id,
-            char_start = c.char_start,
-            char_end = c.char_end,
+            byte_start = c.byte_start,
+            byte_end = c.byte_end,
             reason = "start_after_end",
             "citation char range is inverted"
         );
         return OffsetCheck::Fail(OffsetFailure::StartAfterEnd);
     }
 
-    let start = c.char_start as usize;
-    let end = c.char_end as usize;
+    let start = c.byte_start as usize;
+    let end = c.byte_end as usize;
     if end > content.len() {
         tracing::warn!(
             target: "tabular::verify::offsets",
             chunk_id = %c.chunk_id,
-            char_end = end,
+            byte_end = end,
             chunk_len = content.len(),
             reason = "out_of_bounds",
-            "citation char_end exceeds chunk content length"
+            "citation byte_end exceeds chunk content length"
         );
         return OffsetCheck::Fail(OffsetFailure::OutOfBounds {
             chunk_len: u32::try_from(content.len()).unwrap_or(u32::MAX),
@@ -159,7 +159,7 @@ pub fn check_citation(c: &Citation, chunks: &HashMap<Uuid, &str>) -> OffsetCheck
             target: "tabular::verify::offsets",
             chunk_id = %c.chunk_id,
             reason = "utf8_boundary",
-            "char_start..char_end does not land on UTF-8 boundaries"
+            "byte_start..byte_end does not land on UTF-8 boundaries"
         );
         return OffsetCheck::Fail(OffsetFailure::Utf8Boundary);
     };
@@ -235,8 +235,8 @@ mod tests {
     /// confidence. `chunk_id` is the citation target.
     fn cell_with(
         chunk_id: Uuid,
-        char_start: u32,
-        char_end: u32,
+        byte_start: u32,
+        byte_end: u32,
         quoted_text: &str,
         confidence: Confidence,
     ) -> Cell {
@@ -249,8 +249,8 @@ mod tests {
             reasoning: None,
             citations: vec![Citation {
                 chunk_id,
-                char_start,
-                char_end,
+                byte_start,
+                byte_end,
                 quoted_text: quoted_text.into(),
                 page: None,
             }],

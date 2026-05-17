@@ -99,12 +99,12 @@ fn value_schema(t: &CellType) -> Value {
 fn citation_schema() -> Value {
     json!({
         "type": "object",
-        "required": ["chunk_id", "char_start", "char_end", "quoted_text"],
+        "required": ["chunk_id", "byte_start", "byte_end", "quoted_text"],
         "additionalProperties": false,
         "properties": {
             "chunk_id":    { "type": "string", "format": "uuid" },
-            "char_start":  { "type": "integer", "minimum": 0 },
-            "char_end":    { "type": "integer", "minimum": 0 },
+            "byte_start":  { "type": "integer", "minimum": 0 },
+            "byte_end":    { "type": "integer", "minimum": 0 },
             "quoted_text": { "type": "string", "minLength": 1 }
         }
     })

@@ -25,8 +25,8 @@ use serde_json::Value;
 const SYSTEM_PROMPT: &str = "You are a legal-document extractor. Use the `emit_cells` tool to return one envelope per requested column.\n\n\
 Rules:\n\
 - Every citation MUST reference a `chunk_id` that appears verbatim in the user message (between [CHUNK::<id>] and [/CHUNK] markers).\n\
-- `char_start` and `char_end` MUST be valid byte offsets into that chunk's text, with `char_start < char_end`.\n\
-- `quoted_text` MUST equal the substring `chunk_text[char_start..char_end]` exactly.\n\
+- `byte_start` and `byte_end` MUST be valid byte offsets into that chunk's text, with `byte_start < byte_end`.\n\
+- `quoted_text` MUST equal the substring `chunk_text[byte_start..byte_end]` exactly.\n\
 - If a field cannot be supported by at least one citation from the supplied chunks, omit that column from the response.\n\
 - `reasoning` is a short justification (one or two sentences). Do not restate the value.";
 
@@ -233,8 +233,8 @@ fn parse_citation(v: &Value, doc_id: uuid::Uuid, col: &str) -> Result<Citation> 
         source: format!("citation `chunk_id` not a UUID: {e}").into(),
     })?;
 
-    let char_start = u32_field(obj, "char_start", doc_id, col)?;
-    let char_end = u32_field(obj, "char_end", doc_id, col)?;
+    let byte_start = u32_field(obj, "byte_start", doc_id, col)?;
+    let byte_end = u32_field(obj, "byte_end", doc_id, col)?;
     let quoted_text = obj
         .get("quoted_text")
         .and_then(|x| x.as_str())
@@ -254,8 +254,8 @@ fn parse_citation(v: &Value, doc_id: uuid::Uuid, col: &str) -> Result<Citation> 
 
     Ok(Citation {
         chunk_id,
-        char_start,
-        char_end,
+        byte_start,
+        byte_end,
         quoted_text,
         page,
     })

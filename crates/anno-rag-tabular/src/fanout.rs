@@ -83,7 +83,10 @@ impl std::fmt::Debug for FanoutConfig {
             .field("max_concurrency", &self.max_concurrency)
             .field("budget_tokens", &self.budget_tokens)
             .field("force_reextract", &self.force_reextract)
-            .field("scorer", &self.scorer.as_ref().map(|_| "<dyn SupportScorer>"))
+            .field(
+                "scorer",
+                &self.scorer.as_ref().map(|_| "<dyn SupportScorer>"),
+            )
             .finish()
     }
 }
@@ -470,8 +473,8 @@ mod tests {
                     "reasoning": "stub",
                     "citations": [{
                         "chunk_id": self.chunk_id.to_string(),
-                        "char_start": 0,
-                        "char_end": 1,
+                        "byte_start": 0,
+                        "byte_end": 1,
                         "quoted_text": "G"
                     }]
                 },
@@ -480,8 +483,8 @@ mod tests {
                     "reasoning": "stub",
                     "citations": [{
                         "chunk_id": self.chunk_id.to_string(),
-                        "char_start": 0,
-                        "char_end": 1,
+                        "byte_start": 0,
+                        "byte_end": 1,
                         "quoted_text": "G"
                     }]
                 }
@@ -529,8 +532,8 @@ mod tests {
                         "reasoning": "stub",
                         "citations": [{
                             "chunk_id": self.good_chunk_id.to_string(),
-                            "char_start": 0,
-                            "char_end": 1,
+                            "byte_start": 0,
+                            "byte_end": 1,
                             "quoted_text": "G"
                         }]
                     },
@@ -539,8 +542,8 @@ mod tests {
                         "reasoning": "stub",
                         "citations": [{
                             "chunk_id": self.good_chunk_id.to_string(),
-                            "char_start": 0,
-                            "char_end": 1,
+                            "byte_start": 0,
+                            "byte_end": 1,
                             "quoted_text": "G"
                         }]
                     }
@@ -785,8 +788,8 @@ mod tests {
             reasoning: Some("set by reviewer".into()),
             citations: vec![Citation {
                 chunk_id: uuid::Uuid::now_v7(),
-                char_start: 0,
-                char_end: 5,
+                byte_start: 0,
+                byte_end: 5,
                 quoted_text: "hello".into(),
                 page: None,
             }],
@@ -908,8 +911,8 @@ mod tests {
                         "reasoning": "stub",
                         "citations": [{
                             "chunk_id": self.chunk_id.to_string(),
-                            "char_start": 0,
-                            "char_end": 1,
+                            "byte_start": 0,
+                            "byte_end": 1,
                             "quoted_text": "G"
                         }]
                     }),
@@ -1157,8 +1160,8 @@ mod tests {
                         "reasoning": "stub",
                         "citations": [{
                             "chunk_id": self.chunk_id.to_string(),
-                            "char_start": 0,
-                            "char_end": 5,
+                            "byte_start": 0,
+                            "byte_end": 5,
                             // Chunk content is "Governing law: ..." —
                             // bytes 0..5 are "Gover", NOT "WRONG".
                             "quoted_text": "WRONG"
@@ -1169,8 +1172,8 @@ mod tests {
                         "reasoning": "stub",
                         "citations": [{
                             "chunk_id": self.chunk_id.to_string(),
-                            "char_start": 0,
-                            "char_end": 5,
+                            "byte_start": 0,
+                            "byte_end": 5,
                             "quoted_text": "Gover"
                         }]
                     }

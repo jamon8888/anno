@@ -124,9 +124,9 @@ pub struct Citation {
     /// workspace has no separate `ChunkId` newtype.
     pub chunk_id: uuid::Uuid,
     /// Inclusive start offset within the chunk's text.
-    pub char_start: u32,
+    pub byte_start: u32,
     /// Exclusive end offset within the chunk's text.
-    pub char_end: u32,
+    pub byte_end: u32,
     /// Verbatim quoted text. Stored alongside offsets so the verifier
     /// can detect chunk text drift between extract-time and review-time.
     pub quoted_text: String,
@@ -510,8 +510,8 @@ mod tests {
             reasoning: Some(format!("because v{version}")),
             citations: vec![Citation {
                 chunk_id: uuid::Uuid::now_v7(),
-                char_start: 0,
-                char_end: 10,
+                byte_start: 0,
+                byte_end: 10,
                 quoted_text: "hello, sir".into(),
                 page: Some(1),
             }],

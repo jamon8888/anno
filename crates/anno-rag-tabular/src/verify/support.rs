@@ -157,8 +157,8 @@ mod tests {
         let citations = (0..n)
             .map(|i| Citation {
                 chunk_id: Uuid::now_v7(),
-                char_start: 0,
-                char_end: 1,
+                byte_start: 0,
+                byte_end: 1,
                 quoted_text: format!("quote-{i}"),
                 page: None,
             })
