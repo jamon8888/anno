@@ -144,7 +144,10 @@ pub async fn export(
     let mut headers = HeaderMap::new();
     let body = match q.format.as_deref().unwrap_or("json") {
         "csv" => {
-            headers.insert(header::CONTENT_TYPE, "text/csv".parse().unwrap());
+            headers.insert(
+                header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("text/csv"),
+            );
             let mut buf = Vec::new();
             {
                 let mut w = csv::Writer::from_writer(&mut buf);
@@ -159,7 +162,10 @@ pub async fn export(
             buf
         }
         _ => {
-            headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+            headers.insert(
+                header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("application/json"),
+            );
             serde_json::to_vec_pretty(&FindResponse {
                 subject_ref,
                 matches,
