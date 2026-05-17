@@ -235,6 +235,59 @@ impl Pipeline {
         self.store.search(&pseudo_q, &qv, top_k).await
     }
 
+    /// Search + cross-encoder rerank.
+    ///
+    /// 1. `search` with `pool_size` (over-fetch).
+    /// 2. Rehydrate each hit's `text_pseudo` to plaintext via the vault
+    ///    — the cross-encoder must see real entities, not `<PERSON_42>`.
+    /// 3. Score `(plaintext_query, rehydrated_text)` pairs.
+    /// 4. Reorder by score desc; replace `SearchHit::score` with the
+    ///    cross-encoder score.
+    /// 5. Truncate to `top_k`.
+    ///
+    /// The plaintext query is used **only** for the rerank stage; the
+    /// upstream embed + FTS lookup still runs on the pseudonymized query,
+    /// preserving the privacy invariant.
+    ///
+    /// # Errors
+    /// [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] / [`Error::Rerank`] per failing layer.
+    #[cfg(feature = "rerank")]
+    pub async fn search_reranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        pool_size: usize,
+    ) -> Result<Vec<SearchHit>> {
+        let pool = pool_size.max(top_k).max(1);
+        let mut hits = self.search(query, pool).await?;
+        if hits.is_empty() {
+            return Ok(hits);
+        }
+
+        let mut passages: Vec<String> = Vec::with_capacity(hits.len());
+        for h in &hits {
+            let r = self.rehydrate(&h.text_pseudo).await?;
+            passages.push(r.text);
+        }
+        let refs: Vec<&str> = passages.iter().map(String::as_str).collect();
+
+        let reranker = self.reranker().await?;
+        let scores =
+            reranker.score_pairs_batched(query, &refs, self.cfg.rerank_batch_size)?;
+
+        for (h, s) in hits.iter_mut().zip(&scores) {
+            h.score = *s;
+        }
+        hits.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        hits.truncate(top_k);
+        Ok(hits)
+    }
+
     /// Rehydrate pseudo-tokens in `text` back to originals using the vault.
     ///
     /// # Errors
