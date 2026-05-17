@@ -684,9 +684,10 @@ pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> anno_rag::er
     tracing::info!("anno-rag MCP server starting on stdio");
 
     let transport = rmcp::transport::stdio();
-    let service = server.serve(transport).await.map_err(|e| {
-        anno_rag::error::Error::Detect(format!("MCP server failed to start: {e}"))
-    })?;
+    let service = server
+        .serve(transport)
+        .await
+        .map_err(|e| anno_rag::error::Error::Detect(format!("MCP server failed to start: {e}")))?;
 
     // Graceful shutdown: race the rmcp `waiting()` loop (which exits when the
     // stdio peer closes) against SIGINT / SIGTERM. On signal, cancel the
