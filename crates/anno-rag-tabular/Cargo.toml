@@ -1,0 +1,41 @@
+[package]
+name = "anno-rag-tabular"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Harvey/Legora-style tabular review for anno-rag — schema-driven extraction with per-cell citations."
+
+[dependencies]
+# Single-crate workspace today — pulls in detector, vault, store, embed, audit.
+# Replaces the plan's anno-rag-core / -store / -embed / -audit deps.
+anno-rag           = { path = "../anno-rag" }
+
+tokio              = { workspace = true }
+async-trait        = "0.1"
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+toml               = { workspace = true }
+thiserror          = { workspace = true }
+tracing            = { workspace = true }
+uuid               = { workspace = true }
+chrono             = { workspace = true }
+lancedb            = { workspace = true }
+arrow              = { workspace = true }
+arrow-array        = { workspace = true }
+arrow-schema       = { workspace = true }
+sha2               = { workspace = true }
+regex              = { workspace = true }
+reqwest            = { workspace = true }
+futures            = { workspace = true }
+keyring            = { workspace = true }
+
+rust_xlsxwriter    = "0.95"
+
+[dev-dependencies]
+tempfile           = "3"
+insta              = { version = "1", features = ["yaml"] }
+proptest           = "1"
+
+[lints]
+workspace = true

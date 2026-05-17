@@ -185,9 +185,10 @@ mod tests {
     use tower::ServiceExt;
 
     fn cfg() -> GatewayConfig {
-        let mut c = GatewayConfig::default();
-        c.bearer_token = Some("secret".into());
-        c
+        GatewayConfig {
+            bearer_token: Some("secret".into()),
+            ..Default::default()
+        }
     }
 
     #[tokio::test]

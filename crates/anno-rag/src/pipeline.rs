@@ -488,7 +488,7 @@ impl Pipeline {
             .await?;
 
         if let Some(allowed) = &kinds {
-            raw.retain(|h| allowed.iter().any(|k| *k == h.kind));
+            raw.retain(|h| allowed.contains(&h.kind));
         }
         if let Some(s) = &session_id {
             // Match the session OR rows with no session (cross-session
@@ -500,7 +500,7 @@ impl Pipeline {
         // (valid_from <= t AND (valid_to IS NULL OR valid_to > t)).
         // as_of = None → "now": include only currently-valid rows.
         let t_us = as_of.unwrap_or_else(chrono::Utc::now).timestamp_micros();
-        raw.retain(|r| r.valid_from_us <= t_us && r.valid_to_us.map_or(true, |v| v > t_us));
+        raw.retain(|r| r.valid_from_us <= t_us && r.valid_to_us.is_none_or(|v| v > t_us));
 
         raw.truncate(top_k);
 
@@ -591,9 +591,7 @@ impl Pipeline {
         per_hop_limit: usize,
         as_of: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<crate::memory::GraphRecallResult> {
-        use crate::memory::{
-            EntityKindWire, EntityNode, GraphRecallResult, HitProvenance, MemoryEdge, MemoryHit,
-        };
+        use crate::memory::{EntityNode, GraphRecallResult, HitProvenance, MemoryEdge, MemoryHit};
         use std::collections::{HashMap, HashSet};
 
         let max_hops = max_hops.min(self.cfg.graph_max_hops);
@@ -698,7 +696,7 @@ impl Pipeline {
         // PII seeds: try to resolve to plaintext.
         let seed_resolved = canonical_seed
             .strip_prefix("pii:")
-            .and_then(|rest| rest.splitn(2, ':').nth(1).map(str::to_string))
+            .and_then(|rest| rest.split_once(':').map(|x| x.1.to_string()))
             .and_then(|tok| self.vault.lookup_blocking(&tok));
 
         Ok(GraphRecallResult {
@@ -1002,8 +1000,10 @@ mod tests {
     /// opens LanceDB, which takes ~30 s — these tests are gated behind
     /// `--ignored` to keep `cargo test` snappy on every run.
     async fn pipeline_in(dir: &Path) -> Pipeline {
-        let mut cfg = AnnoRagConfig::default();
-        cfg.data_dir = dir.to_path_buf();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.to_path_buf(),
+            ..Default::default()
+        };
         Pipeline::new(cfg, [0u8; 32]).await.expect("pipeline opens")
     }
 
@@ -1096,13 +1096,17 @@ fn entity_id_display(
     use crate::memory::EntityKindWire;
     if let Some(rest) = id.strip_prefix("pii:") {
         // pii:<LABEL>:<TOKEN>
-        let token = rest.splitn(2, ':').nth(1).unwrap_or("");
+        let token = rest.split_once(':').map(|x| x.1).unwrap_or("");
         let display = vault
             .lookup_blocking(token)
             .unwrap_or_else(|| token.to_string());
         (EntityKindWire::PiiToken, display)
     } else if let Some(rest) = id.strip_prefix("ent:") {
-        let display = rest.splitn(2, ':').nth(1).unwrap_or(rest).to_string();
+        let display = rest
+            .split_once(':')
+            .map(|x| x.1)
+            .unwrap_or(rest)
+            .to_string();
         (EntityKindWire::NamedEntity, display)
     } else {
         (EntityKindWire::NamedEntity, id.to_string())

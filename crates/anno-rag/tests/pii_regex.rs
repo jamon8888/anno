@@ -1,4 +1,5 @@
 //! Model-free anonymization eval: scores the five regex-detected PII
+#![allow(clippy::unwrap_used)]
 //! categories with `detect_patterns` over the annotated corpus and hard-gates
 //! recall against `pii_baseline.toml`. Runs on every CI build (no model).
 
@@ -13,7 +14,10 @@ use std::collections::HashMap;
 const REGEX_CATEGORIES: &[&str] = &["NIR", "SIRET", "IBAN_FR", "PhoneNumber", "Email"];
 
 fn load_baseline_recall() -> HashMap<String, f64> {
-    let path = pii_corpus_dir().parent().unwrap().join("pii_baseline.toml");
+    let path = pii_corpus_dir()
+        .parent()
+        .expect("pii corpus parent dir")
+        .join("pii_baseline.toml");
     let text = std::fs::read_to_string(&path).expect("pii_baseline.toml");
     let parsed: toml::Value = toml::from_str(&text).expect("parse baseline");
     let recall = parsed.get("recall").expect("[recall] table");

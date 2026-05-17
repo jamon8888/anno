@@ -11,6 +11,7 @@ members = [
     "crates/anno-eval",
     "crates/anno-cli",
     "crates/anno-rag",
+    "crates/anno-rag-tabular",
     "crates/anno-privacy-gateway",
 ]
 exclude = ["vendor"]

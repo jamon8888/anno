@@ -1,0 +1,92 @@
+id = "customer-contract-v1"
+name = "Customer/Supplier Contract Abstraction (FR)"
+version = "1.0.0"
+description = "Commercial-contract abstraction for due diligence — term, termination, change-of-control, exclusivity, MFN, indemnity."
+vertical = "legal-fr"
+
+[[column]]
+name   = "parties"
+prompt = "List the contracting parties (full legal names, form, SIREN if visible)."
+type   = "text"
+
+[[column]]
+name   = "effective_date"
+prompt = "Effective date of the contract. ISO 8601."
+type   = "date"
+
+[[column]]
+name   = "term"
+prompt = "Initial term/duration of the contract. Verbatim clause."
+type   = "verbatim"
+
+[[column]]
+name   = "auto_renewal"
+prompt = "Does the contract auto-renew?"
+type   = "boolean"
+
+[[column]]
+name   = "renewal_term"
+prompt = "If auto-renewal: length of each renewal period. Verbatim or null."
+type   = "text"
+
+[[column]]
+name   = "termination_for_convenience"
+prompt = "Termination-for-convenience right and notice period. Verbatim or 'none'."
+type   = "text"
+
+[[column]]
+name   = "termination_for_cause"
+prompt = "Termination-for-cause / breach conditions. Verbatim."
+type   = "verbatim"
+
+[[column]]
+name   = "change_of_control"
+prompt = "Does the contract have a change-of-control trigger (e.g., termination on acquisition)?"
+type   = "boolean"
+
+[[column]]
+name   = "change_of_control_detail"
+prompt = "If change-of-control present: full clause verbatim. Else 'none'."
+type   = "text"
+
+[[column]]
+name   = "assignment_restriction"
+prompt = "Restrictions on assignment (consent required, no assignment). Verbatim or 'none'."
+type   = "text"
+
+[[column]]
+name   = "exclusivity"
+prompt = "Is there an exclusivity clause (single-source supplier, exclusive territory)?"
+type   = "boolean"
+
+[[column]]
+name   = "exclusivity_detail"
+prompt = "If exclusivity present: scope and term. Verbatim. Else 'none'."
+type   = "text"
+
+[[column]]
+name   = "mfn_clause"
+prompt = "Most-favored-nation pricing clause?"
+type   = "boolean"
+
+[[column]]
+name   = "liability_cap"
+prompt = "Total liability cap in EUR. Null if uncapped or not specified."
+type   = "currency"
+code   = "EUR"
+
+[[column]]
+name   = "indemnity"
+prompt = "Indemnification obligations summary. Verbatim of the indemnity clause."
+type   = "verbatim"
+
+[[column]]
+name    = "governing_law"
+prompt  = "Governing law ISO 3166-1 alpha-2."
+type    = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "OTHER"]
+
+[[column]]
+name   = "dispute_resolution"
+prompt = "Dispute resolution forum (court or arbitration). Verbatim."
+type   = "verbatim"

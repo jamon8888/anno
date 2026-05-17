@@ -1,4 +1,5 @@
 //! Verifies that Pipeline::new does NOT load models. Only ingest/search/detect should.
+#![allow(clippy::unwrap_used)]
 
 use anno_rag::{AnnoRagConfig, Pipeline};
 

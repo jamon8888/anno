@@ -555,7 +555,7 @@ impl Store {
         }
         // Order by created_at DESC in Rust — LanceDB Query lacks a stable
         // `order_by` on the 0.29 surface used elsewhere in this crate.
-        items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        items.sort_by_key(|b| std::cmp::Reverse(b.created_at));
 
         let next_cursor = if items.len() > limit {
             items.truncate(limit + 1);

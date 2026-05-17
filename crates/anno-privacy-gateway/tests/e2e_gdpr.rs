@@ -14,11 +14,12 @@ use sha2::{Digest, Sha256};
 use tower::ServiceExt;
 
 fn cfg(audit_dir: &std::path::Path, hmac_key_hex: &str) -> GatewayConfig {
-    let mut c = GatewayConfig::default();
-    c.bearer_token = Some("secret".into());
-    c.audit_dir = Some(audit_dir.to_path_buf());
-    c.audit_hmac_key_hex = Some(hmac_key_hex.to_string());
-    c
+    GatewayConfig {
+        bearer_token: Some("secret".into()),
+        audit_dir: Some(audit_dir.to_path_buf()),
+        audit_hmac_key_hex: Some(hmac_key_hex.to_string()),
+        ..Default::default()
+    }
 }
 
 #[tokio::test]

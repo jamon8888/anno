@@ -1,4 +1,5 @@
 //! Model-requiring anonymization eval: runs the full Detector (regex + NER)
+#![allow(clippy::unwrap_used)]
 //! over the annotated PII corpus exactly once and scores the three NER
 //! categories (Person, Organization, Location). Ignored by default — runs
 //! via `cargo test --test pii_ner -- --ignored --nocapture` and in the

@@ -1,4 +1,5 @@
 //! Property test for the forget-cascade invariant.
+#![allow(clippy::unwrap_used)]
 //!
 //! Invariant: every `forget_memory(id)` call returns at most 1
 //! `forgotten_id`, and `vault_tokens_purged` only counts tokens that

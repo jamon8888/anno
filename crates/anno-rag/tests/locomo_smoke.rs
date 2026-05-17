@@ -1,4 +1,5 @@
 //! LoCoMo sanity harness — walks `tests/fixtures/locomo_subset/scenarios.toml`
+#![allow(clippy::unwrap_used)]
 //! and asserts every v0.1 + v0.2 memory feature on a deterministic planted
 //! graph.
 //!
@@ -137,7 +138,7 @@ fn fresh_cfg(dir: &std::path::Path) -> AnnoRagConfig {
 async fn run_scenario(s: &Scenario) {
     println!("=== {} — {} ===", s.id, s.description);
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("tempdir");
     let p = Pipeline::new(fresh_cfg(tmp.path()), [0u8; 32])
         .await
         .expect("Pipeline::new");

@@ -1,0 +1,353 @@
+//! Offset / quote round-trip verification.
+//!
+//! For each citation in a cell, fetch the parent chunk and check:
+//!
+//! 1. `byte_start <= byte_end` (well-formed range).
+//! 2. `byte_end <= chunk.content.len()` (range is in-bounds).
+//! 3. `chunk.content[byte_start..byte_end] == quoted_text` exactly
+//!    (the LLM didn't hallucinate the quote).
+//!
+//! Byte-level comparison is correct because the schema's `byte_start`
+//! / `byte_end` are documented as BYTE offsets, not codepoint offsets.
+//! UTF-8 boundary slicing panics on bad indices, so we validate by
+//! using `str::get(range)` rather than direct slicing.
+//!
+//! A single failed citation pulls the whole cell's `confidence` down
+//! to `Low` — the audit log gets the per-citation reason via tracing.
+//! The cell itself is **not** dropped; surfacing it with `Low`
+//! confidence is more useful than silently dropping it.
+
+use crate::error::Result;
+use crate::extract::ChunkSource;
+use crate::storage::cells::{Cell, Citation, Confidence};
+use std::collections::HashMap;
+use uuid::Uuid;
+
+/// Why a citation failed offset/quote round-trip. Each variant maps
+/// 1:1 to one of the `tracing::warn` branches in [`check_citation`].
+///
+/// Exposed as public API so downstream callers (notably T30's
+/// free-form output verifier) can match on the reason and surface it
+/// to the LLM verbatim.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OffsetFailure {
+    /// The chunk_id doesn't exist in the source.
+    UnknownChunkId,
+    /// `byte_start > byte_end` (range inverted).
+    StartAfterEnd,
+    /// `byte_end > chunk.len()` (out of bounds).
+    OutOfBounds {
+        /// Actual chunk length in bytes, for the error message.
+        chunk_len: u32,
+    },
+    /// `byte_start..byte_end` doesn't land on UTF-8 boundaries.
+    Utf8Boundary,
+    /// `content[start..end] != quoted_text` (LLM hallucinated the
+    /// quote).
+    QuoteMismatch {
+        /// The slice the offsets actually point at — useful for the
+        /// MCP tool to surface "you said X but the chunk says Y" to
+        /// the LLM.
+        actual: String,
+    },
+}
+
+/// Per-citation verification result. Either the citation round-trips
+/// cleanly or it carries a typed failure reason.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OffsetCheck {
+    /// Citation passes all offset / UTF-8 / quote checks.
+    Ok,
+    /// Citation failed for the specified reason.
+    Fail(OffsetFailure),
+}
+
+/// Verify every citation in `cell` against the source chunks fetched
+/// via `chunks`. Mutates `cell.confidence` to `Low` if any citation
+/// fails offset/quote round-trip; otherwise leaves it untouched.
+///
+/// `cell.support_score` is **not** touched here — that's
+/// `super::support`'s job (T29).
+///
+/// # Errors
+///
+/// Returns the underlying [`Error`](crate::error::Error) from
+/// [`ChunkSource::chunks_for_doc`] if chunk fetch fails. Missing
+/// chunks (chunk_id in citation has no match in the doc) trigger a
+/// confidence downgrade — not an error — since that's data the LLM
+/// got wrong, not infra failure.
+pub async fn verify_cell_offsets(
+    cell: &mut Cell,
+    doc_id: Uuid,
+    chunks: &dyn ChunkSource,
+) -> Result<()> {
+    let chunk_list = chunks.chunks_for_doc(doc_id).await?;
+    let by_id: HashMap<Uuid, &str> = chunk_list
+        .iter()
+        .map(|c| (c.id, c.content.as_str()))
+        .collect();
+
+    let mut all_pass = true;
+    for cite in &cell.citations {
+        if matches!(check_citation(cite, &by_id), OffsetCheck::Fail(_)) {
+            all_pass = false;
+            // Don't break — emit one trace event per failed citation
+            // so audit can show every reason.
+        }
+    }
+
+    if !all_pass {
+        cell.confidence = Confidence::Low;
+    }
+    Ok(())
+}
+
+/// Verify a single citation against a chunk-content map.
+///
+/// Returns [`OffsetCheck::Ok`] iff `chunks[citation.chunk_id]` exists,
+/// the range is well-formed and in-bounds, lands on UTF-8 boundaries,
+/// and the slice byte-for-byte equals `citation.quoted_text`.
+/// Otherwise returns [`OffsetCheck::Fail`] with a typed reason — and,
+/// preserving pre-refactor behaviour, also logs a `tracing::warn` so
+/// the audit pipeline keeps seeing the same events.
+///
+/// Public because T30's free-form-output verifier reuses both the
+/// logic and the typed reason enum.
+pub fn check_citation(c: &Citation, chunks: &HashMap<Uuid, &str>) -> OffsetCheck {
+    let Some(content) = chunks.get(&c.chunk_id) else {
+        tracing::warn!(
+            target: "tabular::verify::offsets",
+            chunk_id = %c.chunk_id,
+            reason = "unknown_chunk_id",
+            "citation refers to chunk not present in doc"
+        );
+        return OffsetCheck::Fail(OffsetFailure::UnknownChunkId);
+    };
+
+    if c.byte_start > c.byte_end {
+        tracing::warn!(
+            target: "tabular::verify::offsets",
+            chunk_id = %c.chunk_id,
+            byte_start = c.byte_start,
+            byte_end = c.byte_end,
+            reason = "start_after_end",
+            "citation char range is inverted"
+        );
+        return OffsetCheck::Fail(OffsetFailure::StartAfterEnd);
+    }
+
+    let start = c.byte_start as usize;
+    let end = c.byte_end as usize;
+    if end > content.len() {
+        tracing::warn!(
+            target: "tabular::verify::offsets",
+            chunk_id = %c.chunk_id,
+            byte_end = end,
+            chunk_len = content.len(),
+            reason = "out_of_bounds",
+            "citation byte_end exceeds chunk content length"
+        );
+        return OffsetCheck::Fail(OffsetFailure::OutOfBounds {
+            chunk_len: u32::try_from(content.len()).unwrap_or(u32::MAX),
+        });
+    }
+
+    // `get(range)` returns None if the range doesn't land on UTF-8
+    // boundaries; avoids the panic of direct `&content[start..end]`.
+    let Some(slice) = content.get(start..end) else {
+        tracing::warn!(
+            target: "tabular::verify::offsets",
+            chunk_id = %c.chunk_id,
+            reason = "utf8_boundary",
+            "byte_start..byte_end does not land on UTF-8 boundaries"
+        );
+        return OffsetCheck::Fail(OffsetFailure::Utf8Boundary);
+    };
+
+    if slice != c.quoted_text {
+        tracing::warn!(
+            target: "tabular::verify::offsets",
+            chunk_id = %c.chunk_id,
+            reason = "quote_mismatch",
+            "citation quoted_text does not match chunk slice at offsets"
+        );
+        return OffsetCheck::Fail(OffsetFailure::QuoteMismatch {
+            actual: slice.to_string(),
+        });
+    }
+
+    OffsetCheck::Ok
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::extract::ChunkRef;
+    use crate::ids::{ColumnId, ReviewId, RowId};
+    use crate::storage::cells::{Author, Cell, Citation, Confidence};
+    use async_trait::async_trait;
+    use chrono::Utc;
+    use serde_json::json;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    /// Local in-memory chunk source so the test module is
+    /// self-contained — the one in `extract::tests` is private.
+    struct InMemoryChunks {
+        by_doc: HashMap<Uuid, Vec<ChunkRef>>,
+    }
+
+    #[async_trait]
+    impl ChunkSource for InMemoryChunks {
+        async fn chunks_for_doc(&self, doc_id: Uuid) -> Result<Vec<ChunkRef>> {
+            Ok(self.by_doc.get(&doc_id).cloned().unwrap_or_default())
+        }
+
+        async fn chunk_by_id(&self, chunk_id: Uuid) -> Result<Option<ChunkRef>> {
+            Ok(self
+                .by_doc
+                .values()
+                .flatten()
+                .find(|c| c.id == chunk_id)
+                .cloned())
+        }
+    }
+
+    /// Build a one-doc, one-chunk fixture with the given content.
+    /// Returns `(doc_id, chunk_id, ChunkSource)`.
+    fn fixture(content: &str) -> (Uuid, Uuid, Arc<InMemoryChunks>) {
+        let doc_id = Uuid::now_v7();
+        let chunk_id = Uuid::now_v7();
+        let mut by_doc = HashMap::new();
+        by_doc.insert(
+            doc_id,
+            vec![ChunkRef {
+                id: chunk_id,
+                doc_id,
+                content: content.to_string(),
+                page: Some(1),
+            }],
+        );
+        (doc_id, chunk_id, Arc::new(InMemoryChunks { by_doc }))
+    }
+
+    /// Build a cell with a single citation and the given starting
+    /// confidence. `chunk_id` is the citation target.
+    fn cell_with(
+        chunk_id: Uuid,
+        byte_start: u32,
+        byte_end: u32,
+        quoted_text: &str,
+        confidence: Confidence,
+    ) -> Cell {
+        let review = ReviewId::new();
+        Cell {
+            review_id: review,
+            row_id: RowId::for_doc(review, Uuid::now_v7()),
+            col_id: ColumnId::for_name(review, "c"),
+            value: json!("v"),
+            reasoning: None,
+            citations: vec![Citation {
+                chunk_id,
+                byte_start,
+                byte_end,
+                quoted_text: quoted_text.into(),
+                page: None,
+            }],
+            support_score: 0.0,
+            confidence,
+            locked: false,
+            version: 1,
+            author: Author::System {
+                extractor_version: "test".into(),
+            },
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[tokio::test]
+    async fn verify_passes_when_quote_matches_offsets() {
+        let (doc_id, chunk_id, chunks) = fixture("Hello world");
+        let mut cell = cell_with(chunk_id, 0, 5, "Hello", Confidence::Medium);
+        verify_cell_offsets(&mut cell, doc_id, chunks.as_ref())
+            .await
+            .expect("verify ok");
+        assert!(matches!(cell.confidence, Confidence::Medium));
+    }
+
+    #[tokio::test]
+    async fn verify_downgrades_on_quote_mismatch() {
+        let (doc_id, chunk_id, chunks) = fixture("Hello world");
+        let mut cell = cell_with(chunk_id, 0, 5, "Hallo", Confidence::Medium);
+        verify_cell_offsets(&mut cell, doc_id, chunks.as_ref())
+            .await
+            .expect("verify ok");
+        assert!(matches!(cell.confidence, Confidence::Low));
+    }
+
+    #[tokio::test]
+    async fn verify_downgrades_on_out_of_bounds() {
+        let (doc_id, chunk_id, chunks) = fixture("Hello");
+        let mut cell = cell_with(chunk_id, 0, 99, "Hello", Confidence::Medium);
+        verify_cell_offsets(&mut cell, doc_id, chunks.as_ref())
+            .await
+            .expect("verify ok");
+        assert!(matches!(cell.confidence, Confidence::Low));
+    }
+
+    #[tokio::test]
+    async fn verify_downgrades_on_inverted_range() {
+        let (doc_id, chunk_id, chunks) = fixture("Hello world");
+        let mut cell = cell_with(chunk_id, 10, 5, "Hello", Confidence::Medium);
+        verify_cell_offsets(&mut cell, doc_id, chunks.as_ref())
+            .await
+            .expect("verify ok");
+        assert!(matches!(cell.confidence, Confidence::Low));
+    }
+
+    #[tokio::test]
+    async fn verify_downgrades_on_unknown_chunk_id() {
+        let (doc_id, _chunk_id, chunks) = fixture("Hello world");
+        let random = Uuid::now_v7();
+        let mut cell = cell_with(random, 0, 5, "Hello", Confidence::Medium);
+        verify_cell_offsets(&mut cell, doc_id, chunks.as_ref())
+            .await
+            .expect("verify ok");
+        assert!(matches!(cell.confidence, Confidence::Low));
+    }
+
+    #[tokio::test]
+    async fn verify_downgrades_on_utf8_boundary_split() {
+        // "café" is 5 bytes: c(1) a(1) f(1) é(2). Byte index 4 falls
+        // in the middle of the é → `get(0..4)` returns None.
+        let (doc_id, chunk_id, chunks) = fixture("café");
+        let mut cell = cell_with(chunk_id, 0, 4, "caf", Confidence::Medium);
+        verify_cell_offsets(&mut cell, doc_id, chunks.as_ref())
+            .await
+            .expect("verify ok");
+        assert!(matches!(cell.confidence, Confidence::Low));
+    }
+
+    #[tokio::test]
+    async fn verify_passes_with_multibyte_chars() {
+        let (doc_id, chunk_id, chunks) = fixture("café");
+        let mut cell = cell_with(chunk_id, 0, 5, "café", Confidence::Medium);
+        verify_cell_offsets(&mut cell, doc_id, chunks.as_ref())
+            .await
+            .expect("verify ok");
+        assert!(matches!(cell.confidence, Confidence::Medium));
+    }
+
+    #[tokio::test]
+    async fn verify_leaves_high_confidence_alone_when_all_citations_pass() {
+        let (doc_id, chunk_id, chunks) = fixture("Hello world");
+        let mut cell = cell_with(chunk_id, 0, 5, "Hello", Confidence::High);
+        verify_cell_offsets(&mut cell, doc_id, chunks.as_ref())
+            .await
+            .expect("verify ok");
+        assert!(
+            matches!(cell.confidence, Confidence::High),
+            "verifier must never upgrade confidence"
+        );
+    }
+}

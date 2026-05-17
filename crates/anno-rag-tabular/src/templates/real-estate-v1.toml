@@ -1,0 +1,84 @@
+id = "real-estate-v1"
+name = "Real Estate Lease Abstraction (FR)"
+version = "1.0.0"
+description = "Commercial-lease abstraction for due diligence and portfolio review."
+vertical = "legal-fr"
+
+[[column]]
+name   = "landlord"
+prompt = "Landlord (bailleur) — full legal name and form."
+type   = "text"
+
+[[column]]
+name   = "tenant"
+prompt = "Tenant (preneur) — full legal name and form."
+type   = "text"
+
+[[column]]
+name   = "premises_address"
+prompt = "Full address of the leased premises."
+type   = "text"
+
+[[column]]
+name    = "lease_type"
+prompt  = "Type of lease (bail commercial 3-6-9, bail dérogatoire, bail professionnel, bail civil)."
+type    = "enum"
+options = ["bail_commercial_3_6_9", "bail_derogatoire", "bail_professionnel", "bail_civil", "other"]
+
+[[column]]
+name   = "start_date"
+prompt = "Lease start date. ISO 8601."
+type   = "date"
+
+[[column]]
+name   = "term_years"
+prompt = "Initial term in years."
+type   = "number"
+
+[[column]]
+name   = "tenant_break_rights"
+prompt = "Tenant break rights (sortie triennale). Verbatim or 'none'."
+type   = "text"
+
+[[column]]
+name   = "base_rent"
+prompt = "Annual base rent in EUR."
+type   = "currency"
+code   = "EUR"
+
+[[column]]
+name   = "rent_escalation"
+prompt = "Rent escalation clause (ILAT, ILC, ICC index). Verbatim."
+type   = "text"
+
+[[column]]
+name   = "security_deposit"
+prompt = "Security deposit (dépôt de garantie) amount in EUR."
+type   = "currency"
+code   = "EUR"
+
+[[column]]
+name   = "permitted_use"
+prompt = "Permitted use of premises (destination des lieux). Verbatim."
+type   = "verbatim"
+
+[[column]]
+name   = "assignment_sublet"
+prompt = "Assignment and sub-let rights. Verbatim or 'none'."
+type   = "text"
+
+[[column]]
+name   = "repair_obligations"
+prompt = "Repair obligations summary (charges récupérables, gros entretien). Verbatim."
+type   = "verbatim"
+
+[[column]]
+name   = "registered_lease"
+prompt = "Is the lease registered (enregistrement / publication)?"
+type   = "boolean"
+
+[[column]]
+name    = "governing_law"
+prompt  = "Governing law ISO 3166-1 alpha-2."
+type    = "enum"
+options = ["FR", "OTHER"]
