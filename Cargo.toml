@@ -11,6 +11,8 @@ members = [
     "crates/anno-eval",
     "crates/anno-cli",
     "crates/anno-rag",
+    "crates/anno-rag-bin",
+    "crates/anno-rag-mcp",
     "crates/anno-rag-tabular",
     "crates/anno-privacy-gateway",
 ]
