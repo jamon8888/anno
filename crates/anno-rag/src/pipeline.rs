@@ -17,6 +17,8 @@ pub struct Pipeline {
     detector: OnceCell<Arc<Detector>>,
     vault: Vault,
     embedder: OnceCell<Arc<Embedder>>,
+    #[cfg(feature = "rerank")]
+    reranker: tokio::sync::OnceCell<std::sync::Arc<crate::rerank::Reranker>>,
     store: Store,
     cfg: AnnoRagConfig,
 }
@@ -37,6 +39,8 @@ impl Pipeline {
             detector: OnceCell::new(),
             vault,
             embedder: OnceCell::new(),
+            #[cfg(feature = "rerank")]
+            reranker: tokio::sync::OnceCell::new(),
             store,
             cfg,
         })
@@ -64,6 +68,30 @@ impl Pipeline {
     #[must_use]
     pub fn embedder_loaded(&self) -> bool {
         self.embedder.initialized()
+    }
+
+    /// Lazy-init the cross-encoder reranker. Downloads ~571 MB (INT8
+    /// ONNX) on first call; cached thereafter. Only compiled when the
+    /// `rerank` feature is on.
+    ///
+    /// # Errors
+    /// [`Error::Rerank`] if the model fetch or session build fails.
+    #[cfg(feature = "rerank")]
+    async fn reranker(&self) -> Result<&Arc<crate::rerank::Reranker>> {
+        self.reranker
+            .get_or_try_init(|| async {
+                crate::rerank::Reranker::load(&self.cfg)
+                    .await
+                    .map(Arc::new)
+            })
+            .await
+    }
+
+    /// Returns `true` if the reranker has been initialized.
+    #[cfg(feature = "rerank")]
+    #[must_use]
+    pub fn reranker_loaded(&self) -> bool {
+        self.reranker.initialized()
     }
 
     /// Returns `true` if the PII detector has been initialized.
