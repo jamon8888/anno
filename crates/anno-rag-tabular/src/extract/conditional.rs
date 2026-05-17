@@ -103,7 +103,7 @@ pub fn topo_waves(columns: &[Column]) -> Result<Vec<Vec<Column>>> {
 pub fn should_extract(col: &Column, parent_value: Option<&serde_json::Value>) -> bool {
     col.conditional
         .as_ref()
-        .map_or(true, |c| c.predicate.eval(parent_value))
+        .is_none_or(|c| c.predicate.eval(parent_value))
 }
 
 /// Walk the parent chain starting from the first blocked column until
@@ -114,10 +114,7 @@ fn describe_cycle(blocked: &[&Column], parent_of: &HashMap<ColumnId, Option<Colu
     let start = blocked[0].id;
     let mut seen: Vec<ColumnId> = vec![start];
     let mut cursor = start;
-    loop {
-        let Some(Some(next)) = parent_of.get(&cursor) else {
-            break;
-        };
+    while let Some(Some(next)) = parent_of.get(&cursor) {
         if let Some(pos) = seen.iter().position(|id| id == next) {
             // Cycle closed: emit just the loop portion.
             let loop_part = &seen[pos..];

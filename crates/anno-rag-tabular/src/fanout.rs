@@ -727,8 +727,7 @@ mod tests {
 
         let good_chunk_id = chunk_map
             .iter()
-            .filter(|(d, _)| **d != poison_doc)
-            .next()
+            .find(|(d, _)| **d != poison_doc)
             .and_then(|(_, v)| v.first())
             .map(|c| c.id)
             .expect("a non-poisoned chunk");

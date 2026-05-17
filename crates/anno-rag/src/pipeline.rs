@@ -1104,7 +1104,11 @@ fn entity_id_display(
             .unwrap_or_else(|| token.to_string());
         (EntityKindWire::PiiToken, display)
     } else if let Some(rest) = id.strip_prefix("ent:") {
-        let display = rest.split_once(':').map(|x| x.1).unwrap_or(rest).to_string();
+        let display = rest
+            .split_once(':')
+            .map(|x| x.1)
+            .unwrap_or(rest)
+            .to_string();
         (EntityKindWire::NamedEntity, display)
     } else {
         (EntityKindWire::NamedEntity, id.to_string())
