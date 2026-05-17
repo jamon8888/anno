@@ -1,4 +1,5 @@
 //! T3 integration test — Memory round-trip through LanceDB.
+#![allow(clippy::unwrap_used)]
 //!
 //! Ignored by default: LanceDB table creation takes ~30s on the first run
 //! and dominates the per-task feedback loop. Run explicitly with

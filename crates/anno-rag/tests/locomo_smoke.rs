@@ -1,4 +1,5 @@
 //! LoCoMo sanity harness — walks `tests/fixtures/locomo_subset/scenarios.toml`
+#![allow(clippy::unwrap_used)]
 //! and asserts every v0.1 + v0.2 memory feature on a deterministic planted
 //! graph.
 //!
