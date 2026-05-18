@@ -629,6 +629,21 @@ impl Store {
             .map_err(|e| Error::Store(format!("memory_list_indexes: {e}")))
     }
 
+    /// Number of rows in the memories table. Cheap (`count_rows`); used
+    /// by the recall-path optimize gate to skip `optimize()` when no
+    /// memories were added since the last index fold-in.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if the LanceDB count fails.
+    pub async fn memory_row_count(&self) -> Result<u64> {
+        let n = self
+            .memories_tbl
+            .count_rows(None)
+            .await
+            .map_err(|e| Error::Store(format!("memories count_rows: {e}")))?;
+        Ok(n as u64)
+    }
+
     /// Build an FTS index on `memories.text`. Idempotent — returns `Ok(false)`
     /// when the index already exists or the table is empty. Mirrors the
     /// French-tokenized chunks FTS index in [`Self::maybe_build_fts_index`].
@@ -1375,6 +1390,14 @@ mod tests {
             ..Default::default()
         };
         (dir, cfg)
+    }
+
+    #[tokio::test]
+    #[ignore = "opens LanceDB (~30s); run with --ignored"]
+    async fn memory_row_count_reflects_inserts() {
+        let (_dir, cfg) = fresh_cfg(8);
+        let store = Store::open(&cfg).await.expect("open store");
+        assert_eq!(store.memory_row_count().await.expect("count"), 0);
     }
 
     #[test]

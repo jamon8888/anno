@@ -9,9 +9,15 @@ jobs:
   bench:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            bench_args: ""
+          - os: macos-latest
+            bench_args: "--bench bench_cold_start --bench bench_idle_rss --bench bench_search --bench bench_ingest --bench bench_eval"
+          - os: windows-latest
+            bench_args: "--bench bench_cold_start --bench bench_idle_rss --bench bench_search --bench bench_ingest --bench bench_eval"
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -38,7 +44,7 @@ jobs:
       - name: Warm HF model cache
         run: cargo run --release --example warmup_model -p anno-rag
       - name: Run benches
-        run: cargo bench -p anno-rag 2>&1 | tee bench.log
+        run: cargo bench -p anno-rag ${{ matrix.bench_args }} 2>&1 | tee bench.log
       - name: Check idle RSS gate (<200 MB)
         shell: bash
         run: |

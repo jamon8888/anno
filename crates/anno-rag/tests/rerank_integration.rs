@@ -77,16 +77,8 @@ async fn reranked_search_reorders_vs_rrf() {
     assert_ne!(rrf_order, rr_order, "rerank must change the ordering");
 }
 
-// NOTE: blocked by a pre-existing `recall_memory` gap (unrelated to
-// reranking): nothing in the public `Pipeline` API builds the memories
-// FTS/INVERTED index, so `memories_hybrid_search` hard-fails ("Cannot
-// perform full text search unless an INVERTED index has been created").
-// `recall_memory_reranked` is a faithful wrapper over `recall_memory`
-// and is correct; its structurally-identical sibling `search_reranked`
-// is fully proven end-to-end (reranked_search_reorders_vs_rrf). Tracked
-// as a separate follow-up; keep ignored until the FTS-index gap is fixed.
 #[tokio::test]
-#[ignore = "blocked by pre-existing recall_memory FTS-index gap (see note)"]
+#[ignore = "downloads model + opens LanceDB"]
 async fn reranked_memory_recall_returns_topk() {
     let tmp = tempfile::tempdir().expect("tmp");
     let p = Pipeline::new(cfg(tmp.path()), [0u8; 32])
