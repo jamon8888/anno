@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "anno-rag": {
+      "command": "C:\\path\\to\\anno-rag.exe",
+      "args": ["mcp"],
+      "env": {
+        "ANNO_NO_DOWNLOADS": "1"
+      }
+    }
+  }
+}
