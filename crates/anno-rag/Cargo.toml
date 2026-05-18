@@ -15,7 +15,7 @@ ocr = []
 # Opt-in cross-encoder reranker (BGE-reranker-v2-m3 INT8 ONNX, ~571 MB
 # download on first use). Pulls ort + ndarray. Default off so plain
 # `cargo install anno-rag` users don't pay the model download.
-rerank = ["dep:ort", "dep:ndarray"]
+rerank = ["dep:ort", "dep:ndarray", "dep:is-terminal"]
 
 [dependencies]
 anno            = { path = "../anno", features = ["gliner2-fastino"] }
@@ -35,6 +35,7 @@ candle-nn            = { workspace = true }
 candle-transformers  = { workspace = true }
 ort                  = { workspace = true, features = ["ndarray"], optional = true }
 ndarray              = { workspace = true, optional = true }
+is-terminal          = { version = "0.4", optional = true }
 hf-hub               = { workspace = true }
 tokenizers           = { workspace = true }
 tokio                = { workspace = true }
@@ -66,7 +67,6 @@ tempfile             = "3"
 insta           = { version = "1", features = ["yaml"] }
 criterion       = { version = "0.5", features = ["html_reports", "async_tokio"] }
 proptest        = "1"
-is-terminal     = "0.4"
 
 [[bench]]
 name = "bench_cold_start"
@@ -87,6 +87,16 @@ harness = false
 [[bench]]
 name = "bench_eval"
 harness = false
+
+[[bench]]
+name = "bench_rerank"
+harness = false
+required-features = ["rerank"]
+
+[[bench]]
+name = "bench_rerank_eval"
+harness = false
+required-features = ["rerank"]
 
 [lints]
 workspace = true

@@ -21,6 +21,29 @@ pub struct Reranker {
     max_seq_len: usize,
 }
 
+/// Emit a one-line notice before the ~571 MB model fetch. In an
+/// interactive terminal it warns on stderr; in MCP / daemon / CI
+/// contexts (no TTY) it logs at `info` and proceeds silently. Never
+/// blocks — the fetch is opt-in via the `rerank` feature already, so a
+/// hard prompt would deadlock non-interactive hosts (spec §10.4).
+fn download_notice(repo: &str, approx_mb: u32) -> Result<()> {
+    use is_terminal::IsTerminal;
+    if std::io::stderr().is_terminal() {
+        eprintln!(
+            "anno-rag: fetching reranker model '{repo}' (~{approx_mb} MB, \
+             one-time, cached). Build without the `rerank` feature to skip."
+        );
+    } else {
+        tracing::info!(
+            target: "anno_rag::rerank",
+            repo,
+            approx_mb,
+            "fetching reranker model (non-interactive: silent)"
+        );
+    }
+    Ok(())
+}
+
 impl Reranker {
     /// Score each `(query, passage)` pair. Returns relevance scores in
     /// [0, 1] (sigmoid of the classifier logit), in input order. Higher
@@ -139,6 +162,8 @@ impl Reranker {
         let api = Api::new().map_err(|e| Error::Rerank(format!("hf-hub init: {e}")))?;
         let repo = api.model(cfg.rerank_model.clone());
 
+        download_notice(&cfg.rerank_model, 571)?;
+
         let onnx_path = repo
             .get(&cfg.rerank_onnx_file)
             .await
@@ -169,6 +194,15 @@ impl Reranker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn download_notice_is_silent_when_not_a_tty() {
+        // Under `cargo test` stderr is piped (not a TTY), so the
+        // interactive prompt path is not taken; the helper must return
+        // Ok without blocking.
+        let decided = super::download_notice("onnx-community/bge-reranker-v2-m3-ONNX", 571);
+        assert!(decided.is_ok());
+    }
 
     #[tokio::test]
     #[ignore = "downloads ~571 MB (cached after first run)"]
