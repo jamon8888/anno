@@ -98,9 +98,95 @@ jobs:
         shell: pwsh
         run: .\scripts\release\package-windows.ps1 -Tag "$env:RELEASE_TAG" -Target "${{ matrix.target }}"
 
+      - name: Inspect Windows archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ArchivePath = Join-Path -Path "dist" -ChildPath ("hacienda-{0}-${{ matrix.target }}.zip" -f $env:RELEASE_TAG)
+          if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf)) {
+            throw "Archive not found: $ArchivePath"
+          }
+
+          $ExtractDir = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ([System.Guid]::NewGuid().ToString())
+          New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
+
+          try {
+            Expand-Archive -LiteralPath $ArchivePath -DestinationPath $ExtractDir -Force
+
+            $RequiredFiles = @(
+              "anno-rag.exe",
+              "anno-privacy-gateway.exe",
+              "README.md",
+              "LICENSE-MIT",
+              "LICENSE-APACHE",
+              "env.example",
+              "examples/claude_desktop_config.windows.json",
+              "examples/claude_desktop_config.macos.json"
+            )
+
+            $MissingFiles = @(
+              foreach ($RelativePath in $RequiredFiles) {
+                $FullPath = Join-Path -Path $ExtractDir -ChildPath $RelativePath
+                if (-not (Test-Path -LiteralPath $FullPath -PathType Leaf)) {
+                  $RelativePath
+                }
+              }
+            )
+
+            if ($MissingFiles.Count -gt 0) {
+              Get-ChildItem -Path $ExtractDir -Recurse | Select-Object -ExpandProperty FullName
+              throw "Windows archive is missing required file(s): $($MissingFiles -join ', ')"
+            }
+          } finally {
+            Remove-Item -LiteralPath $ExtractDir -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
       - name: Package macOS archive
         if: runner.os == 'macOS'
         run: ./scripts/release/package-unix.sh "$RELEASE_TAG" "${{ matrix.target }}"
+
+      - name: Inspect Unix archive
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          archive_path="dist/hacienda-${RELEASE_TAG}-${{ matrix.target }}.tar.gz"
+          if [[ ! -f "${archive_path}" ]]; then
+            echo "Archive not found: ${archive_path}" >&2
+            exit 1
+          fi
+
+          extract_dir="$(mktemp -d)"
+          trap 'rm -rf -- "${extract_dir}"' EXIT
+
+          tar -xzf "${archive_path}" -C "${extract_dir}"
+          package_dir="${extract_dir}/hacienda-${RELEASE_TAG}-${{ matrix.target }}"
+
+          required_files=(
+            "anno-rag"
+            "anno-privacy-gateway"
+            "README.md"
+            "LICENSE-MIT"
+            "LICENSE-APACHE"
+            "env.example"
+            "examples/claude_desktop_config.windows.json"
+            "examples/claude_desktop_config.macos.json"
+          )
+
+          missing=()
+          for relative_path in "${required_files[@]}"; do
+            if [[ ! -f "${package_dir}/${relative_path}" ]]; then
+              missing+=("${relative_path}")
+            fi
+          done
+
+          if (( ${#missing[@]} > 0 )); then
+            find "${extract_dir}" -type f -print
+            {
+              echo "Unix archive is missing required file(s):"
+              printf '  %s\n' "${missing[@]}"
+            } >&2
+            exit 1
+          fi
 
       - name: Upload packaged archive
         uses: actions/upload-artifact@v4
