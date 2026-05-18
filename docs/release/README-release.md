@@ -81,8 +81,11 @@ Download `SHA256SUMS.txt` from the release and verify the archive before extract
 Windows PowerShell:
 
 ```powershell
-Select-String -Path .\SHA256SUMS.txt -Pattern 'hacienda-<tag>-x86_64-pc-windows-msvc.zip'
-(Get-FileHash .\hacienda-<tag>-x86_64-pc-windows-msvc.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+$asset = "hacienda-<tag>-x86_64-pc-windows-msvc.zip"
+$expected = (Select-String -Path .\SHA256SUMS.txt -Pattern $asset).Line.Split()[0]
+$actual = (Get-FileHash .\$asset -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw "checksum mismatch for $asset" }
+"checksum ok: $asset"
 ```
 
 macOS:
