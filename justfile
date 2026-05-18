@@ -197,6 +197,19 @@ pre-tag: ci
     just validate-publish
     @echo "Pre-tag checks passed. Safe to tag."
 
+# Validate local release metadata without building artifacts.
+release-validate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    python -m json.tool docs/release/examples/claude_desktop_config.windows.json >/dev/null
+    python -m json.tool docs/release/examples/claude_desktop_config.macos.json >/dev/null
+    test -f scripts/release/package-unix.sh
+    test -f scripts/release/checksums.sh
+    test -f scripts/release/package-windows.ps1
+    test -f .github/workflows/release-binaries.yml
+    cargo metadata --no-deps --format-version 1 >/dev/null
+    git diff --check -- README.md docs/release .github/workflows/release-binaries.yml scripts/release
+
 # === Evaluation ===
 
 # Run randomized matrix test (backends x datasets x tasks)
