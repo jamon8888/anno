@@ -9,6 +9,19 @@ fi
 tag="$1"
 target="$2"
 
+validate_asset_component() {
+  local name="$1"
+  local value="$2"
+
+  if [[ ! "${value}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "Invalid ${name}: must match ^[A-Za-z0-9._-]+$" >&2
+    exit 2
+  fi
+}
+
+validate_asset_component "TAG" "${tag}"
+validate_asset_component "TARGET" "${target}"
+
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/../.." && pwd)"
 
