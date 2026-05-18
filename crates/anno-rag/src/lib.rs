@@ -13,7 +13,6 @@ pub mod embed;
 pub mod error;
 pub mod eval;
 pub mod ingest;
-pub mod mcp;
 pub mod memory;
 pub(crate) mod ocr;
 pub mod pii_eval;
