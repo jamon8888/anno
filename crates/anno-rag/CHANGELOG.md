@@ -4,6 +4,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### rerank — cross-encoder reranking (opt-in)
+
+#### Added
+- Opt-in cross-encoder reranker (`rerank` feature): `Pipeline::search_reranked`
+  and `Pipeline::recall_memory_reranked` using BGE-reranker-v2-m3 INT8 ONNX
+  via `ort`. Default off; ~571 MB model fetched on first use.
+
 ### v0.8 anno-memory v0.2 — bi-temporal + entity-graph
 
 ### Added
