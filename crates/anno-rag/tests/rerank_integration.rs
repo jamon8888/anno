@@ -62,3 +62,39 @@ async fn reranked_search_reorders_vs_rrf() {
     let rr_order: Vec<&str> = reranked.iter().map(|h| h.source_path.as_str()).collect();
     assert_ne!(rrf_order, rr_order, "rerank must change the ordering");
 }
+
+#[tokio::test]
+#[ignore = "downloads model + opens LanceDB"]
+async fn reranked_memory_recall_returns_topk() {
+    let tmp = tempfile::tempdir().expect("tmp");
+    let p = Pipeline::new(cfg(tmp.path()), [0u8; 32])
+        .await
+        .expect("pipeline");
+
+    for body in [
+        "La prescription quinquennale court à compter de la connaissance du dommage.",
+        "Le café de la machine est trop amer ce matin.",
+        "La prescription de l'action en responsabilité est de cinq ans.",
+    ] {
+        p.save_memory(body, None, None).await.expect("save");
+    }
+
+    let hits = p
+        .recall_memory_reranked(
+            "délai de prescription en responsabilité",
+            2,
+            None,
+            None,
+            None,
+            false,
+            10,
+        )
+        .await
+        .expect("reranked recall");
+    assert_eq!(hits.len(), 2);
+    assert!(
+        hits[0].text.contains("prescription"),
+        "top hit must be about prescription, got: {}",
+        hits[0].text
+    );
+}

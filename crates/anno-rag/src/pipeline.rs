@@ -647,6 +647,53 @@ impl Pipeline {
         Ok(out)
     }
 
+    /// Memory recall + cross-encoder rerank. Same contract as
+    /// [`Pipeline::recall_memory`] plus a `pool_size` over-fetch and a
+    /// rerank stage. `recall_memory` already returns rehydrated
+    /// plaintext, so the cross-encoder scores `(query, hit.text)`
+    /// directly — no extra vault round-trip.
+    ///
+    /// # Errors
+    /// [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] / [`Error::Rerank`] per failing layer.
+    #[cfg(feature = "rerank")]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn recall_memory_reranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        session_id: Option<String>,
+        kinds: Option<Vec<crate::memory::MemoryKind>>,
+        as_of: Option<chrono::DateTime<chrono::Utc>>,
+        graph_expand: bool,
+        pool_size: usize,
+    ) -> Result<Vec<crate::memory::MemoryHit>> {
+        let pool = pool_size.max(top_k).max(1);
+        let mut hits = self
+            .recall_memory(query, pool, session_id, kinds, as_of, graph_expand)
+            .await?;
+        if hits.is_empty() {
+            return Ok(hits);
+        }
+
+        let passages: Vec<&str> = hits.iter().map(|h| h.text.as_str()).collect();
+        let reranker = self.reranker().await?;
+        let scores =
+            reranker.score_pairs_batched(query, &passages, self.cfg.rerank_batch_size)?;
+
+        let mut scored: Vec<(crate::memory::MemoryHit, f32)> =
+            hits.drain(..).zip(scores).collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(scored
+            .into_iter()
+            .take(top_k)
+            .map(|(mut h, s)| {
+                h.score = s;
+                h
+            })
+            .collect())
+    }
+
     /// Two-hop graph recall over `entity_refs`.
     ///
     /// Canonicalises `seed_entity` (if not already a `pii:`/`ent:` form,
