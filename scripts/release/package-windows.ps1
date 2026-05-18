@@ -12,6 +12,27 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Test-AssetComponent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    if ($Value -notmatch '^[A-Za-z0-9._-]+$') {
+        throw "Invalid $Name`: must match ^[A-Za-z0-9._-]+$"
+    }
+
+    if ($Value -notmatch '[A-Za-z0-9]') {
+        throw "Invalid $Name`: must contain at least one ASCII alphanumeric character"
+    }
+}
+
+Test-AssetComponent -Name "Tag" -Value $Tag
+Test-AssetComponent -Name "Target" -Value $Target
+
 $ScriptPath = $PSCommandPath
 if (-not $ScriptPath) {
     $ScriptPath = $MyInvocation.MyCommand.Path
