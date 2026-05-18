@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "anno-rag": {
-      "command": "C:\\\\path\\\\to\\\\anno-rag.exe",
+      "command": "C:\\path\\to\\anno-rag.exe",
       "args": ["mcp"],
       "env": {
         "ANNO_RAG_VAULT_PASSPHRASE": "change-me",
