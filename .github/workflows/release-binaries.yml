@@ -60,7 +60,7 @@ jobs:
           cache-all-crates: true
           key: release-binaries-${{ matrix.os }}-${{ matrix.target }}
 
-      # MSVC CRT alignment: anno-rag pulls anno/gliner2-fastino -> onnx -> ort,
+      # MSVC CRT alignment: anno-rag-bin pulls anno-rag -> anno/gliner2-fastino -> onnx -> ort,
       # which links ort_sys (built /MD, dynamic CRT). esaxx-rs (via tokenizers)
       # builds its C++ with cc-rs defaulting to /MT (static CRT) -> LNK2038
       # RuntimeLibrary mismatch. Force the whole Windows build onto the dynamic
@@ -75,7 +75,7 @@ jobs:
           echo "CXXFLAGS_x86_64-pc-windows-msvc=-MD" >> "$GITHUB_ENV"
 
       - name: Build release binaries
-        run: cargo build --release -p anno-rag -p anno-privacy-gateway --target ${{ matrix.target }}
+        run: cargo build --release -p anno-rag-bin -p anno-privacy-gateway --target ${{ matrix.target }}
 
       - name: Smoke test anno-rag (Windows)
         if: runner.os == 'Windows'
