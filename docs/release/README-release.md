@@ -32,7 +32,6 @@ Claude Desktop uses the `anno-rag` binary through stdio MCP:
       "command": "/absolute/path/to/anno-rag",
       "args": ["mcp"],
       "env": {
-        "ANNO_RAG_VAULT_PASSPHRASE": "change-me",
         "ANNO_NO_DOWNLOADS": "1"
       }
     }
@@ -51,7 +50,8 @@ Rules:
 - Escape Windows backslashes in JSON.
 - Restart Claude Desktop after editing the config.
 - Verify `anno-rag` appears under Claude Desktop Connectors.
-- Keep real passphrases out of git.
+- By default, omit `ANNO_RAG_VAULT_PASSPHRASE` so `anno-rag` uses the OS keyring for vault encryption.
+- Advanced users may add `ANNO_RAG_VAULT_PASSPHRASE` locally with a strong, unique secret. JSON does not support comments, so keep this note outside the config file.
 
 ## First Run and Offline Mode
 
@@ -72,7 +72,7 @@ Tesseract is optional and is not bundled.
 - Windows: `winget install --id UB-Mannheim.TesseractOCR`
 - macOS: `brew install tesseract tesseract-lang`
 
-If `tesseract` is not on `PATH`, set `tesseract_path` in the `anno-rag` config.
+For release binaries, `tesseract` must be on `PATH` for OCR. A custom `tesseract_path` requires source/config support and is not part of the release install flow.
 
 ## Checksums
 
@@ -81,11 +81,15 @@ Download `SHA256SUMS.txt` from the release and verify the archive before extract
 Windows PowerShell:
 
 ```powershell
-Get-FileHash .\hacienda-<tag>-x86_64-pc-windows-msvc.zip -Algorithm SHA256
+Select-String -Path .\SHA256SUMS.txt -Pattern 'hacienda-<tag>-x86_64-pc-windows-msvc.zip'
+(Get-FileHash .\hacienda-<tag>-x86_64-pc-windows-msvc.zip -Algorithm SHA256).Hash.ToLowerInvariant()
 ```
 
 macOS:
 
 ```sh
-shasum -a 256 hacienda-<tag>-aarch64-apple-darwin.tar.gz
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+expected="$(grep 'hacienda-<tag>-aarch64-apple-darwin.tar.gz' SHA256SUMS.txt | awk '{print $1}')"
+actual="$(shasum -a 256 hacienda-<tag>-aarch64-apple-darwin.tar.gz | awk '{print $1}')"
+test "$expected" = "$actual"
 ```

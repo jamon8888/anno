@@ -131,12 +131,12 @@ La v0.2 ajoute une couche mémoire temporelle et graphe sans base de graphe exte
   "anno-rag": {
     "command": "/absolute/path/to/anno-rag",
     "args": ["mcp"],
-    "env": {
-      "ANNO_RAG_VAULT_PASSPHRASE": "your-passphrase-here"
-    }
+    "env": {}
   }
 }
 ```
+
+Par défaut, omettez `ANNO_RAG_VAULT_PASSPHRASE` pour utiliser le keyring OS. Les utilisateurs avancés peuvent ajouter localement `ANNO_RAG_VAULT_PASSPHRASE` avec un secret fort et unique ; JSON ne prend pas en charge les commentaires, gardez donc cette note hors du fichier de configuration.
 
 Outils MCP exposés :
 
@@ -253,7 +253,7 @@ Binaires produits :
 .\target\release\anno-privacy-gateway.exe
 ```
 
-Si Tesseract n'est pas dans le `PATH`, renseigner `tesseract_path` dans la config `anno-rag`. Pour rester strictement hors-ligne après préchauffe, définir `ANNO_NO_DOWNLOADS=1`.
+Pour les binaires de release, Tesseract doit être dans le `PATH` pour l'OCR. Un `tesseract_path` personnalisé nécessite le support source/config et ne fait pas partie de l'installation release. Pour rester strictement hors-ligne après préchauffe, définir `ANNO_NO_DOWNLOADS=1`.
 
 #### macOS
 
@@ -314,7 +314,6 @@ Exemple Windows :
       "command": "C:\\Users\\NMarchitecte\\anno\\target\\release\\anno-rag.exe",
       "args": ["mcp"],
       "env": {
-        "ANNO_RAG_VAULT_PASSPHRASE": "change-me",
         "ANNO_NO_DOWNLOADS": "1"
       }
     }
@@ -331,7 +330,6 @@ Exemple macOS :
       "command": "/Users/you/anno/target/release/anno-rag",
       "args": ["mcp"],
       "env": {
-        "ANNO_RAG_VAULT_PASSPHRASE": "change-me",
         "ANNO_NO_DOWNLOADS": "1"
       }
     }

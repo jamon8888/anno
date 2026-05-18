@@ -4,7 +4,6 @@
       "command": "C:\\path\\to\\anno-rag.exe",
       "args": ["mcp"],
       "env": {
-        "ANNO_RAG_VAULT_PASSPHRASE": "change-me",
         "ANNO_NO_DOWNLOADS": "1"
       }
     }
