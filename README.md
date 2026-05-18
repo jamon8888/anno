@@ -4,22 +4,34 @@
 [![Documentation](https://docs.rs/anno/badge.svg)](https://docs.rs/anno)
 [![CI](https://github.com/arclabs561/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/anno/actions/workflows/ci.yml)
 
-> **Hacienda** est le nom de ce projet. Les crates publiées conservent leurs noms historiques (`anno`, `anno-cli`, `anno-rag`, `anno-privacy-gateway`) pour la rétro-compatibilité ; « Hacienda » désigne le workspace dans son ensemble.
+> **Hacienda** est le nom de ce projet. Les crates conservent leurs noms historiques (`anno`, `anno-cli`, `anno-rag`, `anno-privacy-gateway`, `anno-rag-tabular`) pour la rétro-compatibilité ; « Hacienda » désigne le workspace dans son ensemble.
 
 **Hacienda est une boîte à outils Rust pour transformer du texte brut — y compris des documents juridiques français — en données structurées exploitables par un LLM, tout en gardant les informations personnelles hors du cloud.**
 
-Le workspace empile quatre couches :
+Le workspace empile maintenant cinq couches principales :
 
 1. **`anno`** — bibliothèque NER / coreference / PII / extraction de relations.
 2. **`anno-cli`** — interface en ligne de commande pour exécuter ces extractions.
 3. **`anno-rag`** — pipeline d'anonymisation + RAG local (LanceDB), avec serveur MCP exposant retrieval et mémoire à long terme à Claude.
 4. **`anno-privacy-gateway`** — passerelle compatible API Anthropic qui filtre les PII avant qu'un prompt ne sorte vers un fournisseur LLM distant.
+5. **`anno-rag-tabular`** — extraction tabulaire schema-driven pour revues juridiques, avec citations par cellule, vérification extractive et stockage LanceDB.
 
 Tout fonctionne **localement par défaut** : poids de modèles en cache, vault chiffré AES-256-GCM sur disque, base vectorielle locale. Le seul cas où des données sortent de la machine est lorsque l'utilisateur l'autorise explicitement — et dans ce cas elles sont pseudonymisées au préalable.
 
 Double licence MIT ou Apache-2.0. MSRV : 1.88.
 
 ---
+
+## État actuel
+
+Le tronc local contient les travaux récents suivants :
+
+- **anno-memory v0.2** dans `anno-rag` : mémoire bi-temporelle, références d'entités, rappel avec expansion graphe, invalidation de mémoires et audit MCP.
+- **RGPD core + gateway v0.4** : routes de sujet `find` / `forget` / `export`, audit JSONL chaîné, bearer auth, pseudonymisation en streaming SSE et arrêt gracieux du gateway comme du serveur MCP.
+- **Évaluation anonymisation v0.7** : corpus légal français annoté, regex e-mail, regex honorifiques FR pour personnes, baselines PII et logs d'audit du détecteur sans texte en clair.
+- **`anno-rag-tabular` phase 1** : moteur d'extraction tabulaire, schémas TOML, batching de colonnes, client LLM abstrait, vérificateurs d'offsets/support et tables LanceDB `reviews` / `columns` / `rows` / `cells`.
+
+Les documents de conformité associés vivent dans `docs/superpowers/specs/`, `docs/runbooks/` et `docs/adrs/`.
 
 ## 1. Ce que fait le projet, fonctionnellement
 
@@ -69,7 +81,7 @@ Trois résolveurs : `SimpleCorefResolver` (règles, 9 sieves), `FCoref` (neurona
 `anno::pii` classe les entités NER (personnes, lieux, organisations) **et** matche des motifs structurés : SSN, IBAN, IBAN-FR, NIR (sécurité sociale française), SIRET, cartes bancaires, e-mails, téléphones. Deux modes :
 
 - `scan_and_redact` — remplace par `[PERSON_1]`, `[ID_NUMBER_1]`, etc. (perte d'information, mais irréversible).
-- **Pseudonymisation via vault** (couche `anno-rag`) — remplace par des tokens stables (`PERSON_42`) tout en gardant le mapping cleartext ↔ token dans un fichier chiffré AES-256-GCM. La rehydratation est ensuite réversible côté machine locale uniquement.
+- **Pseudonymisation via vault** (couche `anno-rag`) — remplace par des tokens stables (`PERSON_42`) tout en gardant le mapping texte clair ↔ token dans un fichier chiffré AES-256-GCM. La rehydratation est ensuite réversible côté machine locale uniquement.
 
 ### 1.4 RAG local sur documents juridiques français — couche `anno-rag`
 
@@ -80,7 +92,7 @@ Dossier de documents
   → extraction texte (kreuzberg, OCR Tesseract optionnel pour PDF scannés)
   → détection PII (regex FR + anno NER) sur noms / NIR / SIRET / IBAN-FR / téléphones
   → pseudonymisation via Vault AES-256-GCM (cloakpipe-core)
-  → embedding (BGE-multilingual-e5-small)
+  → embedding (intfloat/multilingual-e5-small)
   → indexation LanceDB
   → sortie : outputs/*.anon.md (pseudonymisée) + index vectoriel
 ```
@@ -102,6 +114,14 @@ Au-dessus du moteur RAG, `anno-rag` expose une mémoire structurée persistante 
 
 Chaque mémoire est **pseudonymisée à l'écriture** (les PII de son corps sont remplacés par des tokens vault), puis indexée avec recherche **hybride vecteur + plein texte**. Les IDs sont des UUID v7, triables lexicographiquement par temps de création. Forget = suppression logique avec cascade sur les tokens vault qui ne sont plus référencés (SLO d'effacement physique sous 24 h, conforme à l'esprit de l'Art. 17 RGPD).
 
+La v0.2 ajoute une couche mémoire temporelle et graphe sans base de graphe externe :
+
+- `valid_from` / `valid_to` permettent les requêtes `as_of` et l'invalidation de faits obsolètes.
+- `entity_refs` relie les mémoires par tokens vault et entités non-PII canonisées (`ent:TAG:value`).
+- `memory_recall(..., graph_expand=true)` ajoute les voisins directs des meilleurs hits.
+- `memory_graph_recall(entity, max_hops, per_hop_limit, as_of)` parcourt jusqu'à 2 hops par défaut.
+- Les `Preference` et `Reference` concurrentes peuvent auto-invalider une ancienne ligne quand elles partagent une entité et dépassent le seuil de similarité configuré ; `Fact` et `Context` restent append-only.
+
 ### 1.6 Intégration Claude Desktop / Cowork via MCP
 
 `anno-rag mcp` lance un serveur **Model Context Protocol** sur stdio. Claude Desktop, Cowork ou n'importe quel client MCP s'y branche en ajoutant une entrée à son fichier de configuration :
@@ -111,12 +131,12 @@ Chaque mémoire est **pseudonymisée à l'écriture** (les PII de son corps sont
   "anno-rag": {
     "command": "/absolute/path/to/anno-rag",
     "args": ["mcp"],
-    "env": {
-      "ANNO_RAG_VAULT_PASSPHRASE": "your-passphrase-here"
-    }
+    "env": {}
   }
 }
 ```
+
+Par défaut, omettez `ANNO_RAG_VAULT_PASSPHRASE` pour utiliser le keyring OS. Les utilisateurs avancés peuvent ajouter localement `ANNO_RAG_VAULT_PASSPHRASE` avec un secret fort et unique ; JSON ne prend pas en charge les commentaires, gardez donc cette note hors du fichier de configuration.
 
 Outils MCP exposés :
 
@@ -127,7 +147,9 @@ Outils MCP exposés :
 | `detect(text)` | Scan PII à blanc : liste des entités avec catégorie, source, confiance, offsets. Aucune substitution. Pratique pour l'aperçu UI. |
 | `vault_stats()` | Statistiques du vault : nombre total de mappings et comptes par catégorie. |
 | `memory_save(text, kind, session?)` | Persiste une mémoire après tokenization PII. Renvoie l'id et le texte effectivement stocké. |
-| `memory_recall(query, top_k)` | Recall hybride (vecteur + FTS). Renvoie le plaintext **rehydraté** pour le tenant appelant. |
+| `memory_recall(query, top_k, as_of?, graph_expand?)` | Recall hybride (vecteur + FTS), éventuellement point-in-time et augmenté par voisinage d'entités. Renvoie le plaintext **rehydraté** pour le tenant appelant. |
+| `memory_graph_recall(entity, max_hops?, per_hop_limit?, as_of?)` | Rappel graphe sur `entity_refs`, avec nœuds, arêtes et mémoires connectées. |
+| `memory_invalidate(id, at?)` | Pose `valid_to` sur une mémoire ; l'appel est idempotent. |
 | `memory_forget(id? \| query?)` | Oubli par id ou par requête. Cascade sur les tokens vault orphelins. |
 | `memory_list(session?, kind?, cursor?)` | Listing paginé par session ou catégorie. |
 
@@ -159,11 +181,172 @@ Passerelle HTTP **compatible API Anthropic** qui s'intercale entre n'importe que
 - relaie la requête vers le fournisseur,
 - rehydrate la réponse avant de la rendre au client.
 
+Elle couvre aussi le streaming SSE : les deltas sont bufferisés et rescannés pour éviter qu'un token PII découpé entre deux chunks ressorte en clair. Les routes de données personnelles exposent `POST /v1/subjects/find`, `POST /v1/subjects/forget` et `GET /v1/subjects/{subject_ref}/export?format=json|csv`. Quand `ANNO_GATEWAY_BEARER_TOKEN` est configuré, les routes protégées exigent un bearer token en comparaison constant-time ; `/health` reste public. L'audit persistant peut écrire un registre JSONL chaîné par SHA-256 avec signature HMAC quotidienne.
+
 Permet d'imposer le tokenization à des outils qui ne savent pas parler MCP.
+
+### 1.8 Extraction tabulaire juridique — `anno-rag-tabular`
+
+`anno-rag-tabular` ajoute un mode de revue en tableau pour contrats, NDA, emploi, immobilier et propriété intellectuelle. Le principe : un template TOML décrit les colonnes attendues, leurs types et conditions ; l'extracteur regroupe les colonnes par budget, appelle un `LlmClient`, parse les cellules, puis vérifie que chaque valeur est soutenue par les passages cités.
+
+Phase 1 livrée :
+
+- `schema` — définitions de colonnes, types de cellule, conditions et génération JSON Schema.
+- `extract` — batching, parsing de cellules et orchestration par ligne.
+- `verify` — vérification d'offsets, round-trip de citations et scoring de support.
+- `storage` — tables LanceDB séparées pour reviews, colonnes, lignes et cellules.
+- `fanout` — exécution concurrente par revue via `run_review`.
+
+La phase suivante reste explicitement à faire : exports CSV/XLSX/Markdown, surface MCP tabulaire et UI ag-grid.
 
 ---
 
 ## 2. Démarrage rapide
+
+### 2.0 Installation Windows / macOS
+
+Le workspace déclare MSRV 1.88, mais le dépôt épingle actuellement Rust **1.95** dans `rust-toolchain.toml` pour éviter un ICE rustc rencontré sur les diagnostics du backend `gliner2_fastino`. `rustup` utilisera automatiquement cette version depuis la racine du repo.
+
+Pour une installation depuis les binaires GitHub Releases, voir aussi [docs/release/README-release.md](docs/release/README-release.md). Cette section décrit l'installation depuis le repo source ; les releases fournissent les mêmes binaires déjà compilés.
+
+#### Windows 11
+
+Prérequis :
+
+1. Installer **Visual Studio Build Tools 2022** avec le workload **Desktop development with C++**.
+2. Installer **Rustup** :
+
+```powershell
+winget install --id Rustlang.Rustup
+rustup toolchain install 1.95
+rustup default 1.95
+```
+
+3. Installer **Git** et **protoc** :
+
+```powershell
+winget install --id Git.Git
+winget install --id protobuf.protoc
+```
+
+4. Optionnel, pour OCR des PDF scannés :
+
+```powershell
+winget install --id UB-Mannheim.TesseractOCR
+```
+
+Puis, depuis le dossier du repo :
+
+```powershell
+cargo build --release -p anno-rag
+cargo build --release -p anno-privacy-gateway
+
+# Pré-chauffe le cache HuggingFace : embedder + modèle NER
+cargo run --release --example warmup_model -p anno-rag
+```
+
+Binaires produits :
+
+```powershell
+.\target\release\anno-rag.exe ingest C:\chemin\vers\dossier --recursive
+.\target\release\anno-rag.exe mcp
+.\target\release\anno-privacy-gateway.exe
+```
+
+Pour les binaires de release, Tesseract doit être dans le `PATH` pour l'OCR. Un `tesseract_path` personnalisé nécessite le support source/config et ne fait pas partie de l'installation release. Pour rester strictement hors-ligne après préchauffe, définir `ANNO_NO_DOWNLOADS=1`.
+
+#### macOS
+
+Prérequis :
+
+```sh
+xcode-select --install
+
+# Homebrew si absent : https://brew.sh/
+brew install git protobuf
+
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup toolchain install 1.95
+rustup default 1.95
+```
+
+Optionnel, pour OCR des PDF scannés :
+
+```sh
+brew install tesseract tesseract-lang
+```
+
+Puis, depuis le dossier du repo :
+
+```sh
+cargo build --release -p anno-rag
+cargo build --release -p anno-privacy-gateway
+
+# Pré-chauffe le cache HuggingFace : embedder + modèle NER
+cargo run --release --example warmup_model -p anno-rag
+```
+
+Binaires produits :
+
+```sh
+./target/release/anno-rag ingest ~/cabinet/dossier-acme --recursive
+./target/release/anno-rag mcp
+./target/release/anno-privacy-gateway
+```
+
+Sur Apple Silicon, les features `metal` / `gliner2-fastino-candle-metal` servent aux backends Candle accélérés. Les backends ONNX/CoreML sont macOS-only côté link lorsqu'ils sont explicitement activés.
+
+#### Claude Desktop
+
+Claude Desktop se branche à Hacienda via le serveur MCP stdio `anno-rag mcp`. Il faut d'abord construire `anno-rag`, puis déclarer le binaire dans `claude_desktop_config.json`.
+
+Chemins de config Claude Desktop :
+
+- Windows : `%APPDATA%\Claude\claude_desktop_config.json`
+- macOS : `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+Exemple Windows :
+
+```json
+{
+  "mcpServers": {
+    "anno-rag": {
+      "command": "C:\\Users\\NMarchitecte\\anno\\target\\release\\anno-rag.exe",
+      "args": ["mcp"],
+      "env": {
+        "ANNO_NO_DOWNLOADS": "1"
+      }
+    }
+  }
+}
+```
+
+Exemple macOS :
+
+```json
+{
+  "mcpServers": {
+    "anno-rag": {
+      "command": "/Users/you/anno/target/release/anno-rag",
+      "args": ["mcp"],
+      "env": {
+        "ANNO_NO_DOWNLOADS": "1"
+      }
+    }
+  }
+}
+```
+
+Points importants :
+
+- Utiliser un chemin **absolu** vers le binaire.
+- Sur Windows, les `\` doivent être doublés dans le JSON.
+- Redémarrer complètement Claude Desktop après modification.
+- Vérifier dans Claude Desktop via `+` → **Connectors**, ou dans les réglages développeur, que `anno-rag` est connecté.
+- La première utilisation doit idéalement se faire après `cargo run --release --example warmup_model -p anno-rag`; sinon le serveur peut télécharger les modèles au premier appel, sauf si `ANNO_NO_DOWNLOADS=1`.
+- Le vault reste local. Ne versionnez pas une vraie passphrase ; mettez-la dans la config locale Claude Desktop ou laissez `anno-rag` utiliser le keyring OS.
+
+Le `anno-privacy-gateway` sert aux clients HTTP compatibles Anthropic. Pour Claude Desktop + MCP, la voie normale est `anno-rag mcp`.
 
 ### 2.1 Bibliothèque NER seule
 
