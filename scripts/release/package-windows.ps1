@@ -24,6 +24,7 @@ $RepoRoot = Split-Path -Parent $ScriptsDir
 $PackageName = "hacienda-$Tag-$Target"
 $DistDir = Join-Path -Path $RepoRoot -ChildPath "dist"
 $StagingDir = Join-Path -Path $DistDir -ChildPath $PackageName
+$ExamplesDir = Join-Path -Path $StagingDir -ChildPath "examples"
 $ZipPath = Join-Path -Path $DistDir -ChildPath "$PackageName.zip"
 
 $RequiredFiles = @(
@@ -60,13 +61,18 @@ if (Test-Path -LiteralPath $ZipPath) {
 }
 
 New-Item -ItemType Directory -Path $StagingDir -Force | Out-Null
+New-Item -ItemType Directory -Path $ExamplesDir -Force | Out-Null
 
 foreach ($RelativePath in $RequiredFiles) {
     $SourcePath = Join-Path -Path $RepoRoot -ChildPath $RelativePath
-    Copy-Item -LiteralPath $SourcePath -Destination $StagingDir
+    $DestinationDir = $StagingDir
+    if ($RelativePath -like "docs/release/examples/*.json") {
+        $DestinationDir = $ExamplesDir
+    }
+
+    Copy-Item -LiteralPath $SourcePath -Destination $DestinationDir
 }
 
-$StagedFiles = Get-ChildItem -LiteralPath $StagingDir -File
-Compress-Archive -LiteralPath $StagedFiles.FullName -DestinationPath $ZipPath -Force
+Compress-Archive -Path (Join-Path -Path $StagingDir -ChildPath "*") -DestinationPath $ZipPath -Force
 
 Write-Output $ZipPath
