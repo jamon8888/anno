@@ -18,7 +18,10 @@ async fn reranker_lazy_inits_only_on_demand() {
     let p = Pipeline::new(cfg(tmp.path()), [0u8; 32])
         .await
         .expect("pipeline");
-    assert!(!p.reranker_loaded(), "reranker must not load at construction");
+    assert!(
+        !p.reranker_loaded(),
+        "reranker must not load at construction"
+    );
 }
 
 #[tokio::test]
@@ -32,10 +35,22 @@ async fn reranked_search_reorders_vs_rrf() {
     let corpus = tmp.path().join("corpus");
     std::fs::create_dir_all(&corpus).unwrap();
     let docs = [
-        ("a.txt", "La responsabilité contractuelle suppose une obligation de moyen et un dommage."),
-        ("b.txt", "Le bail commercial fixe la durée et le loyer du local."),
-        ("c.txt", "L'obligation de moyen engage la responsabilité contractuelle du débiteur négligent."),
-        ("d.txt", "Les congés payés sont calculés sur la base de cinq semaines annuelles."),
+        (
+            "a.txt",
+            "La responsabilité contractuelle suppose une obligation de moyen et un dommage.",
+        ),
+        (
+            "b.txt",
+            "Le bail commercial fixe la durée et le loyer du local.",
+        ),
+        (
+            "c.txt",
+            "L'obligation de moyen engage la responsabilité contractuelle du débiteur négligent.",
+        ),
+        (
+            "d.txt",
+            "Les congés payés sont calculés sur la base de cinq semaines annuelles.",
+        ),
     ];
     for (name, body) in docs {
         std::fs::write(corpus.join(name), body).unwrap();
@@ -54,8 +69,7 @@ async fn reranked_search_reorders_vs_rrf() {
         .map(|h| h.source_path.as_str())
         .collect();
     assert!(
-        top2.iter().any(|s| s.ends_with("a.txt"))
-            && top2.iter().any(|s| s.ends_with("c.txt")),
+        top2.iter().any(|s| s.ends_with("a.txt")) && top2.iter().any(|s| s.ends_with("c.txt")),
         "expected a.txt + c.txt in reranked top-2, got {top2:?}"
     );
     let rrf_order: Vec<&str> = rrf.iter().take(3).map(|h| h.source_path.as_str()).collect();

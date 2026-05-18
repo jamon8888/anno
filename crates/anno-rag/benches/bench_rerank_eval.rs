@@ -21,7 +21,9 @@ fn read_baseline(name: &str) -> (f64, f64) {
     let txt = std::fs::read_to_string(&path).unwrap();
     let v: toml::Value = toml::from_str(&txt).unwrap();
     (
-        v.get("recall_at_10").and_then(toml::Value::as_float).unwrap(),
+        v.get("recall_at_10")
+            .and_then(toml::Value::as_float)
+            .unwrap(),
         v.get("ndcg_at_10").and_then(toml::Value::as_float).unwrap(),
     )
 }

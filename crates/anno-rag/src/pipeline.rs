@@ -80,9 +80,7 @@ impl Pipeline {
     async fn reranker(&self) -> Result<&Arc<crate::rerank::Reranker>> {
         self.reranker
             .get_or_try_init(|| async {
-                crate::rerank::Reranker::load(&self.cfg)
-                    .await
-                    .map(Arc::new)
+                crate::rerank::Reranker::load(&self.cfg).await.map(Arc::new)
             })
             .await
     }
@@ -273,8 +271,7 @@ impl Pipeline {
         let refs: Vec<&str> = passages.iter().map(String::as_str).collect();
 
         let reranker = self.reranker().await?;
-        let scores =
-            reranker.score_pairs_batched(query, &refs, self.cfg.rerank_batch_size)?;
+        let scores = reranker.score_pairs_batched(query, &refs, self.cfg.rerank_batch_size)?;
 
         for (h, s) in hits.iter_mut().zip(&scores) {
             h.score = *s;
@@ -678,11 +675,9 @@ impl Pipeline {
 
         let passages: Vec<&str> = hits.iter().map(|h| h.text.as_str()).collect();
         let reranker = self.reranker().await?;
-        let scores =
-            reranker.score_pairs_batched(query, &passages, self.cfg.rerank_batch_size)?;
+        let scores = reranker.score_pairs_batched(query, &passages, self.cfg.rerank_batch_size)?;
 
-        let mut scored: Vec<(crate::memory::MemoryHit, f32)> =
-            hits.drain(..).zip(scores).collect();
+        let mut scored: Vec<(crate::memory::MemoryHit, f32)> = hits.drain(..).zip(scores).collect();
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(scored
             .into_iter()

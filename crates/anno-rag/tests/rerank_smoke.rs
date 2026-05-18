@@ -25,8 +25,16 @@ async fn onnx_io_contract_holds() {
         .commit_from_file(&onnx)
         .expect("commit onnx");
 
-    let in_names: Vec<String> = session.inputs().iter().map(|i| i.name().to_string()).collect();
-    let out_names: Vec<String> = session.outputs().iter().map(|o| o.name().to_string()).collect();
+    let in_names: Vec<String> = session
+        .inputs()
+        .iter()
+        .map(|i| i.name().to_string())
+        .collect();
+    let out_names: Vec<String> = session
+        .outputs()
+        .iter()
+        .map(|o| o.name().to_string())
+        .collect();
     eprintln!("ONNX inputs={in_names:?} outputs={out_names:?}");
 
     assert!(

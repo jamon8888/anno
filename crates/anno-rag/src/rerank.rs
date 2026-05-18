@@ -215,7 +215,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "uses cached ~571 MB model"]
     async fn relevant_outranks_irrelevant() {
-        let r = Reranker::load(&AnnoRagConfig::default()).await.expect("load");
+        let r = Reranker::load(&AnnoRagConfig::default())
+            .await
+            .expect("load");
         let scores = r
             .score_pairs(
                 "responsabilité contractuelle du débiteur",
@@ -229,21 +231,26 @@ mod tests {
         assert!(
             scores[0] > scores[1],
             "legal passage ({}) must outrank pancake recipe ({})",
-            scores[0], scores[1]
+            scores[0],
+            scores[1]
         );
     }
 
     #[tokio::test]
     #[ignore = "uses cached ~571 MB model"]
     async fn empty_passages_is_empty_no_panic() {
-        let r = Reranker::load(&AnnoRagConfig::default()).await.expect("load");
+        let r = Reranker::load(&AnnoRagConfig::default())
+            .await
+            .expect("load");
         assert!(r.score_pairs("q", &[]).expect("score").is_empty());
     }
 
     #[tokio::test]
     #[ignore = "uses cached ~571 MB model"]
     async fn batching_matches_single_and_is_deterministic() {
-        let r = Reranker::load(&AnnoRagConfig::default()).await.expect("load");
+        let r = Reranker::load(&AnnoRagConfig::default())
+            .await
+            .expect("load");
         let passages: Vec<String> = (0..17).map(|i| format!("clause numéro {i}")).collect();
         let refs: Vec<&str> = passages.iter().map(String::as_str).collect();
         let a = r.score_pairs("clause", &refs).expect("a");
@@ -257,7 +264,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "uses cached ~571 MB model"]
     async fn overlong_passage_truncates_no_panic() {
-        let r = Reranker::load(&AnnoRagConfig::default()).await.expect("load");
+        let r = Reranker::load(&AnnoRagConfig::default())
+            .await
+            .expect("load");
         let long = "lorem ipsum ".repeat(5000);
         let s = r.score_pairs("q", &[long.as_str()]).expect("score");
         assert_eq!(s.len(), 1);

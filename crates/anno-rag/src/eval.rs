@@ -182,10 +182,7 @@ pub async fn run_eval(pipeline: &Pipeline, queries: &EvalQueries) -> Result<Eval
 /// # Errors
 /// Propagates any [`crate::error::Error`] from `pipeline.search_reranked`.
 #[cfg(feature = "rerank")]
-pub async fn run_eval_reranked(
-    pipeline: &Pipeline,
-    queries: &EvalQueries,
-) -> Result<EvalScores> {
+pub async fn run_eval_reranked(pipeline: &Pipeline, queries: &EvalQueries) -> Result<EvalScores> {
     let mut recalls = Vec::with_capacity(queries.queries.len());
     let mut ndcgs = Vec::with_capacity(queries.queries.len());
     let pool = (SEARCH_CHUNK_LIMIT * 2).max(30);
