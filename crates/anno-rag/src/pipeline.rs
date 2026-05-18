@@ -21,6 +21,13 @@ pub struct Pipeline {
     reranker: tokio::sync::OnceCell<std::sync::Arc<crate::rerank::Reranker>>,
     store: Store,
     cfg: AnnoRagConfig,
+    /// Memories-table row count as of the last `optimize_memories`
+    /// fold-in on the recall path. When the live count exceeds this,
+    /// recall runs `optimize()` to index the new rows, then advances
+    /// the watermark. `Relaxed` is sufficient: a missed/duplicated
+    /// optimize is self-correcting on the next recall (idempotent),
+    /// never incorrect.
+    memory_fts_watermark: std::sync::atomic::AtomicU64,
 }
 
 impl Pipeline {
@@ -43,6 +50,7 @@ impl Pipeline {
             reranker: tokio::sync::OnceCell::new(),
             store,
             cfg,
+            memory_fts_watermark: std::sync::atomic::AtomicU64::new(0),
         })
     }
 
@@ -537,6 +545,37 @@ impl Pipeline {
         })
     }
 
+    /// Guarantee the memories table is FTS-queryable before a hybrid
+    /// recall:
+    /// 1. Create the FTS index if absent (idempotent, cheap when built).
+    /// 2. If memories were added since the last fold-in, `optimize()` so
+    ///    the new rows are covered, then advance the watermark.
+    ///
+    /// This is the *only* path that keeps memory FTS current —
+    /// `spawn_compaction_task` is not wired into any entrypoint.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if index build, count, or optimize fails.
+    async fn ensure_memory_searchable(&self) -> Result<()> {
+        use std::sync::atomic::Ordering;
+
+        // (1) Idempotent: builds once when the table first has rows,
+        // no-ops (count_rows + list_indices) thereafter.
+        self.store.build_memories_fts_index().await?;
+
+        // (2) Gate optimize on "rows added since last fold-in" so
+        // steady-state recall (no new memories) pays only a count_rows.
+        let live = self.store.memory_row_count().await?;
+        let mark = self.memory_fts_watermark.load(Ordering::Relaxed);
+        if live > mark {
+            let min_age =
+                std::time::Duration::from_secs(self.cfg.compaction_min_age_secs);
+            self.store.optimize_memories(min_age).await?;
+            self.memory_fts_watermark.store(live, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+
     /// Hybrid recall: detect + pseudonymize the query, embed (e5 query
     /// prefix), run the dense+FTS RRF-reranked search on the `memories`
     /// table, optionally filter by `session_id` / `kinds`, rehydrate.
@@ -559,6 +598,8 @@ impl Pipeline {
         let entities = self.detector_get_or_init()?.detect(query)?;
         let (tokenized_query, _) = self.vault.pseudonymize_with_refs(query, &entities).await?;
         let query_vec = self.embedder().await?.embed_query(&tokenized_query)?;
+
+        self.ensure_memory_searchable().await?;
 
         let mut raw = self
             .store
