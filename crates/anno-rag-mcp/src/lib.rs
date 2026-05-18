@@ -39,6 +39,11 @@ pub struct SearchParams {
     /// Number of results to return.
     #[serde(default = "default_top_k")]
     pub top_k: usize,
+    /// When true, re-score the top candidates with the cross-encoder
+    /// reranker. Requires the server built with `--features rerank`;
+    /// otherwise this call returns a clear error.
+    #[serde(default)]
+    pub rerank: bool,
 }
 
 fn default_top_k() -> usize {
@@ -162,6 +167,10 @@ pub struct MemoryRecallParams {
     /// (one-hop neighbours, bounded by `graph_per_hop_limit`). v0.2.
     #[serde(default)]
     pub graph_expand: bool,
+    /// When true, re-score the recalled hits with the cross-encoder
+    /// reranker. Requires the server built with `--features rerank`.
+    #[serde(default)]
+    pub rerank: bool,
 }
 
 /// Parameters for the `memory_graph_recall` tool (v0.2).
@@ -286,7 +295,35 @@ impl AnnoRagServer {
         description = "Search the indexed corpus. Pseudonymizes the query through the local vault, embeds it, returns top-K ranked chunks. Chunks are pseudonymized — call rehydrate(text) to restore originals."
     )]
     async fn search(&self, Parameters(params): Parameters<SearchParams>) -> String {
-        match self.pipeline.search(&params.query, params.top_k).await {
+        let result = if params.rerank {
+            #[cfg(feature = "rerank")]
+            {
+                tracing::info!(
+                    target: "anno_rag::audit",
+                    tool = "search",
+                    score_source = "cross_encoder",
+                    ""
+                );
+                self.pipeline
+                    .search_reranked(&params.query, params.top_k, self.cfg.rerank_pool_size)
+                    .await
+            }
+            #[cfg(not(feature = "rerank"))]
+            {
+                return "Error: rerank requested but server built without \
+                        the `rerank` feature"
+                    .to_string();
+            }
+        } else {
+            tracing::info!(
+                target: "anno_rag::audit",
+                tool = "search",
+                score_source = "rrf",
+                ""
+            );
+            self.pipeline.search(&params.query, params.top_k).await
+        };
+        match result {
             Ok(hits) => {
                 let wire = SearchResult {
                     hits: hits
@@ -412,17 +449,51 @@ impl AnnoRagServer {
             .kinds
             .as_ref()
             .map(|v| v.iter().filter_map(|k| parse_kind(k)).collect::<Vec<_>>());
-        let r = self
-            .pipeline
-            .recall_memory(
-                &p.query,
-                p.top_k,
-                p.session_id,
-                kinds,
-                p.as_of,
-                p.graph_expand,
-            )
-            .await;
+        let r = if p.rerank {
+            #[cfg(feature = "rerank")]
+            {
+                tracing::info!(
+                    target: "anno_rag::audit",
+                    tool = "memory_recall",
+                    score_source = "cross_encoder",
+                    ""
+                );
+                self.pipeline
+                    .recall_memory_reranked(
+                        &p.query,
+                        p.top_k,
+                        p.session_id,
+                        kinds,
+                        p.as_of,
+                        p.graph_expand,
+                        self.cfg.rerank_pool_size,
+                    )
+                    .await
+            }
+            #[cfg(not(feature = "rerank"))]
+            {
+                return "Error: rerank requested but server built without \
+                        the `rerank` feature"
+                    .to_string();
+            }
+        } else {
+            tracing::info!(
+                target: "anno_rag::audit",
+                tool = "memory_recall",
+                score_source = "rrf",
+                ""
+            );
+            self.pipeline
+                .recall_memory(
+                    &p.query,
+                    p.top_k,
+                    p.session_id,
+                    kinds,
+                    p.as_of,
+                    p.graph_expand,
+                )
+                .await
+        };
         let elapsed = start.elapsed().as_millis() as u64;
         match r {
             Ok(hits) => {

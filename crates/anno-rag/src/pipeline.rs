@@ -17,6 +17,8 @@ pub struct Pipeline {
     detector: OnceCell<Arc<Detector>>,
     vault: Vault,
     embedder: OnceCell<Arc<Embedder>>,
+    #[cfg(feature = "rerank")]
+    reranker: tokio::sync::OnceCell<std::sync::Arc<crate::rerank::Reranker>>,
     store: Store,
     cfg: AnnoRagConfig,
 }
@@ -37,6 +39,8 @@ impl Pipeline {
             detector: OnceCell::new(),
             vault,
             embedder: OnceCell::new(),
+            #[cfg(feature = "rerank")]
+            reranker: tokio::sync::OnceCell::new(),
             store,
             cfg,
         })
@@ -64,6 +68,28 @@ impl Pipeline {
     #[must_use]
     pub fn embedder_loaded(&self) -> bool {
         self.embedder.initialized()
+    }
+
+    /// Lazy-init the cross-encoder reranker. Downloads ~571 MB (INT8
+    /// ONNX) on first call; cached thereafter. Only compiled when the
+    /// `rerank` feature is on.
+    ///
+    /// # Errors
+    /// [`Error::Rerank`] if the model fetch or session build fails.
+    #[cfg(feature = "rerank")]
+    async fn reranker(&self) -> Result<&Arc<crate::rerank::Reranker>> {
+        self.reranker
+            .get_or_try_init(|| async {
+                crate::rerank::Reranker::load(&self.cfg).await.map(Arc::new)
+            })
+            .await
+    }
+
+    /// Returns `true` if the reranker has been initialized.
+    #[cfg(feature = "rerank")]
+    #[must_use]
+    pub fn reranker_loaded(&self) -> bool {
+        self.reranker.initialized()
     }
 
     /// Returns `true` if the PII detector has been initialized.
@@ -205,6 +231,58 @@ impl Pipeline {
         let pseudo_q = self.vault.pseudonymize(query, &entities).await?;
         let qv = self.embedder().await?.embed_query(&pseudo_q)?;
         self.store.search(&pseudo_q, &qv, top_k).await
+    }
+
+    /// Search + cross-encoder rerank.
+    ///
+    /// 1. `search` with `pool_size` (over-fetch).
+    /// 2. Rehydrate each hit's `text_pseudo` to plaintext via the vault
+    ///    — the cross-encoder must see real entities, not `<PERSON_42>`.
+    /// 3. Score `(plaintext_query, rehydrated_text)` pairs.
+    /// 4. Reorder by score desc; replace `SearchHit::score` with the
+    ///    cross-encoder score.
+    /// 5. Truncate to `top_k`.
+    ///
+    /// The plaintext query is used **only** for the rerank stage; the
+    /// upstream embed + FTS lookup still runs on the pseudonymized query,
+    /// preserving the privacy invariant.
+    ///
+    /// # Errors
+    /// [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] / [`Error::Rerank`] per failing layer.
+    #[cfg(feature = "rerank")]
+    pub async fn search_reranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        pool_size: usize,
+    ) -> Result<Vec<SearchHit>> {
+        let pool = pool_size.max(top_k).max(1);
+        let mut hits = self.search(query, pool).await?;
+        if hits.is_empty() {
+            return Ok(hits);
+        }
+
+        let mut passages: Vec<String> = Vec::with_capacity(hits.len());
+        for h in &hits {
+            let r = self.rehydrate(&h.text_pseudo).await?;
+            passages.push(r.text);
+        }
+        let refs: Vec<&str> = passages.iter().map(String::as_str).collect();
+
+        let reranker = self.reranker().await?;
+        let scores = reranker.score_pairs_batched(query, &refs, self.cfg.rerank_batch_size)?;
+
+        for (h, s) in hits.iter_mut().zip(&scores) {
+            h.score = *s;
+        }
+        hits.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        hits.truncate(top_k);
+        Ok(hits)
     }
 
     /// Rehydrate pseudo-tokens in `text` back to originals using the vault.
@@ -564,6 +642,51 @@ impl Pipeline {
             });
         }
         Ok(out)
+    }
+
+    /// Memory recall + cross-encoder rerank. Same contract as
+    /// [`Pipeline::recall_memory`] plus a `pool_size` over-fetch and a
+    /// rerank stage. `recall_memory` already returns rehydrated
+    /// plaintext, so the cross-encoder scores `(query, hit.text)`
+    /// directly — no extra vault round-trip.
+    ///
+    /// # Errors
+    /// [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] / [`Error::Rerank`] per failing layer.
+    #[cfg(feature = "rerank")]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn recall_memory_reranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        session_id: Option<String>,
+        kinds: Option<Vec<crate::memory::MemoryKind>>,
+        as_of: Option<chrono::DateTime<chrono::Utc>>,
+        graph_expand: bool,
+        pool_size: usize,
+    ) -> Result<Vec<crate::memory::MemoryHit>> {
+        let pool = pool_size.max(top_k).max(1);
+        let mut hits = self
+            .recall_memory(query, pool, session_id, kinds, as_of, graph_expand)
+            .await?;
+        if hits.is_empty() {
+            return Ok(hits);
+        }
+
+        let passages: Vec<&str> = hits.iter().map(|h| h.text.as_str()).collect();
+        let reranker = self.reranker().await?;
+        let scores = reranker.score_pairs_batched(query, &passages, self.cfg.rerank_batch_size)?;
+
+        let mut scored: Vec<(crate::memory::MemoryHit, f32)> = hits.drain(..).zip(scores).collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(scored
+            .into_iter()
+            .take(top_k)
+            .map(|(mut h, s)| {
+                h.score = s;
+                h
+            })
+            .collect())
     }
 
     /// Two-hop graph recall over `entity_refs`.

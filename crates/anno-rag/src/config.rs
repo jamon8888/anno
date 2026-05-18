@@ -53,6 +53,23 @@ pub struct AnnoRagConfig {
     #[serde(default)]
     pub embedder_dtype: Option<String>,
 
+    /// Reranker repo id on HuggingFace Hub (cross-encoder, opt-in).
+    #[serde(default = "default_rerank_model")]
+    pub rerank_model: String,
+
+    /// ONNX file within `rerank_model`. INT8 by default; point at
+    /// "onnx/model_q4f16.onnx" (702 MB) if INT8 regresses on your corpus.
+    #[serde(default = "default_rerank_onnx_file")]
+    pub rerank_onnx_file: String,
+
+    /// RRF candidates to over-fetch before reranking. Default 30.
+    #[serde(default = "default_rerank_pool_size")]
+    pub rerank_pool_size: usize,
+
+    /// Max (query,passage) pairs per ONNX forward batch. Default 8.
+    #[serde(default = "default_rerank_batch_size")]
+    pub rerank_batch_size: usize,
+
     /// Name of the LanceDB collection that stores memories (v0.1 default
     /// `"memories"`). Lives alongside the `chunks` documents table.
     #[serde(default = "default_memory_collection_name")]
@@ -141,6 +158,19 @@ fn default_mcp_server_name() -> String {
     "anno-rag".to_string()
 }
 
+fn default_rerank_model() -> String {
+    "onnx-community/bge-reranker-v2-m3-ONNX".to_string()
+}
+fn default_rerank_onnx_file() -> String {
+    "onnx/model_int8.onnx".to_string()
+}
+fn default_rerank_pool_size() -> usize {
+    30
+}
+fn default_rerank_batch_size() -> usize {
+    8
+}
+
 impl Default for AnnoRagConfig {
     fn default() -> Self {
         let data_dir = dirs::home_dir()
@@ -168,6 +198,10 @@ impl Default for AnnoRagConfig {
             conflict_cosine_threshold: default_conflict_cosine_threshold(),
             graph_max_hops: default_graph_max_hops(),
             graph_per_hop_limit: default_graph_per_hop_limit(),
+            rerank_model: default_rerank_model(),
+            rerank_onnx_file: default_rerank_onnx_file(),
+            rerank_pool_size: default_rerank_pool_size(),
+            rerank_batch_size: default_rerank_batch_size(),
         }
     }
 }
@@ -264,5 +298,14 @@ mod tests {
         let back: AnnoRagConfig = serde_json::from_str(&s).expect("deserialize");
         assert_eq!(c.embed_dim, back.embed_dim);
         assert_eq!(c.default_top_k, back.default_top_k);
+    }
+
+    #[test]
+    fn rerank_defaults_are_sane() {
+        let c = AnnoRagConfig::default();
+        assert_eq!(c.rerank_model, "onnx-community/bge-reranker-v2-m3-ONNX");
+        assert_eq!(c.rerank_onnx_file, "onnx/model_int8.onnx");
+        assert_eq!(c.rerank_pool_size, 30);
+        assert_eq!(c.rerank_batch_size, 8);
     }
 }
