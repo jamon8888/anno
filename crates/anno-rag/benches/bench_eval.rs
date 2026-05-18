@@ -6,6 +6,7 @@
 mod common;
 use anno_rag::eval::{eval_corpus_dir, load_queries, run_eval};
 use criterion::{criterion_group, criterion_main, Criterion};
+use std::time::Duration;
 use tokio::runtime::Runtime;
 
 fn bench_eval(c: &mut Criterion) {
@@ -25,13 +26,19 @@ fn bench_eval(c: &mut Criterion) {
         );
         (p, tmp)
     });
-    c.bench_function("eval_recall_ndcg", |b| {
+    let mut group = c.benchmark_group("eval");
+    group
+        .sample_size(10)
+        .warm_up_time(Duration::from_secs(1))
+        .measurement_time(Duration::from_secs(30));
+    group.bench_function("recall_ndcg", |b| {
         b.to_async(&rt).iter(|| async {
             let scores = run_eval(&pipeline, &queries).await.unwrap();
             eprintln!("RECALL_AT_10={}", scores.recall_at_10);
             eprintln!("NDCG_AT_10={}", scores.ndcg_at_10);
         });
     });
+    group.finish();
 }
 criterion_group!(benches, bench_eval);
 criterion_main!(benches);

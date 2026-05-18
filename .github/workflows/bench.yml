@@ -17,7 +17,7 @@ jobs:
           - os: windows-latest
             bench_args: "--bench bench_cold_start --bench bench_idle_rss --bench bench_search --bench bench_ingest --bench bench_eval"
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
