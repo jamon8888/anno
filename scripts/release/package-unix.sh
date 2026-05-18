@@ -17,6 +17,11 @@ validate_asset_component() {
     echo "Invalid ${name}: must match ^[A-Za-z0-9._-]+$" >&2
     exit 2
   fi
+
+  if [[ ! "${value}" =~ [A-Za-z0-9] ]]; then
+    echo "Invalid ${name}: must contain at least one ASCII alphanumeric character" >&2
+    exit 2
+  fi
 }
 
 validate_asset_component "TAG" "${tag}"
