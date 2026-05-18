@@ -568,8 +568,7 @@ impl Pipeline {
         let live = self.store.memory_row_count().await?;
         let mark = self.memory_fts_watermark.load(Ordering::Relaxed);
         if live > mark {
-            let min_age =
-                std::time::Duration::from_secs(self.cfg.compaction_min_age_secs);
+            let min_age = std::time::Duration::from_secs(self.cfg.compaction_min_age_secs);
             self.store.optimize_memories(min_age).await?;
             self.memory_fts_watermark.store(live, Ordering::Relaxed);
         }
