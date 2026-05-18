@@ -98,5 +98,9 @@ name = "bench_rerank_eval"
 harness = false
 required-features = ["rerank"]
 
+[[bench]]
+name = "bench_memory_recall"
+harness = false
+
 [lints]
 workspace = true
