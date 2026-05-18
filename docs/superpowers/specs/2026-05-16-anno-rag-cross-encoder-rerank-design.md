@@ -20,14 +20,14 @@
 
 ## 1. Goal
 
-Add a learned cross-encoder reranker that scores each (query, chunk) pair through a transformer and reorders the top-N RRF candidates by semantic relevance. Today the only reranker in the pipeline is `RRFReranker` ([crates/anno-rag/src/store.rs:698](crates/anno-rag/src/store.rs:698), [crates/anno-rag/src/store.rs:765](crates/anno-rag/src/store.rs:765)), which is rank-fusion only — it never looks at the text of the pair. A cross-encoder does, and on French legal it typically improves top-k recall 1.5–3× over RRF alone.
+Add a learned cross-encoder reranker that scores each (query, chunk) pair through a transformer and reorders the top-N RRF candidates by semantic relevance. Today the only reranker in the pipeline is `RRFReranker` (`crates/anno-rag/src/store.rs:698`, `crates/anno-rag/src/store.rs:765`), which is rank-fusion only — it never looks at the text of the pair. A cross-encoder does, and on French legal it typically improves top-k recall 1.5–3× over RRF alone.
 
-The reranker is explicitly listed as a v0.2 non-goal in [crates/anno-rag/README.md:84](crates/anno-rag/README.md:84). This spec pulls it forward as an opt-in v0.3 feature.
+The reranker is explicitly listed as a v0.2 non-goal in `crates/anno-rag/README.md:84`. This spec pulls it forward as an opt-in v0.3 feature.
 
 ## 2. Why
 
 - RRF fuses ranks (`1/(k+rank_dense) + 1/(k+rank_fts)`) without seeing the query/chunk text. Two chunks tied in RRF can have very different actual relevance; a cross-encoder breaks those ties using semantics.
-- Pairs naturally with Spec A (context-token budgeter, [docs/superpowers/specs/2026-05-16-anno-rag-context-budgeter-design.md](docs/superpowers/specs/2026-05-16-anno-rag-context-budgeter-design.md)): rerank improves *what* fits in a fixed budget; the budgeter shrinks *how much* reaches the LLM. Independent, complementary.
+- Pairs naturally with Spec A (context-token budgeter, `docs/superpowers/specs/2026-05-16-anno-rag-context-budgeter-design.md`): rerank improves *what* fits in a fixed budget; the budgeter shrinks *how much* reaches the LLM. Independent, complementary.
 - French legal is exact-match heavy (article numbers, ECLI), which is exactly where rank-fusion is weakest and a semantic reranker shines.
 
 ## 3. Non-goals
@@ -35,7 +35,7 @@ The reranker is explicitly listed as a v0.2 non-goal in [crates/anno-rag/README.
 - Multi-stage reranking (cascading multiple models). One cross-encoder, that's it.
 - Online learning or fine-tuning. Off-the-shelf weights only.
 - Replacing RRF. RRF stays; the cross-encoder runs **on top of** RRF's output.
-- GPU inference. CPU-only in v1, matching the embedder pattern at [crates/anno-rag/src/embed.rs:34](crates/anno-rag/src/embed.rs:34). GPU opt-in mirrors the embedder's documented v0.2 path; not in scope for this spec.
+- GPU inference. CPU-only in v1, matching the embedder pattern at `crates/anno-rag/src/embed.rs:34`. GPU opt-in mirrors the embedder's documented v0.2 path; not in scope for this spec.
 - ~~Quantized weights. Plain safetensors in v1.~~ **Amended:** v1 ships a **pre-quantized INT8 ONNX** model (§4). We do not *perform* quantization (no DIY GGML/ONNX quant pass) — we *consume* an already-quantized artifact published by a reputable source. Producing our own quantization (e.g. legal-domain calibration data) remains a follow-up.
 - DIY quantization or candle GGUF loading. Candle's quantized path is mature for llama-family `QMatMul` but unproven for XLM-RoBERTa / BERT-family. We sidestep it entirely by using the ONNX runtime with a pre-quantized graph.
 - Rerank for the chunk-store `pipeline::search` path AND the memories `recall_memory` path simultaneously in v1. Spec covers chunks first; memories path is a parallel, near-identical wrapper that the implementation plan may bundle or split.
@@ -206,7 +206,7 @@ query (plaintext)
                           Vec<SearchHit> (with cross-encoder scores)
 ```
 
-The rehydration step uses the existing `Pipeline::rehydrate` ([pipeline.rs:216](crates/anno-rag/src/pipeline.rs:216)). The plaintext query never enters the embed / FTS / store path, preserving the privacy invariant that nothing un-pseudonymized leaves the vault for upstream retrieval. The cross-encoder runs inside the same process as the vault; rehydrated content stays local.
+The rehydration step uses the existing `Pipeline::rehydrate` (`pipeline.rs:216`). The plaintext query never enters the embed / FTS / store path, preserving the privacy invariant that nothing un-pseudonymized leaves the vault for upstream retrieval. The cross-encoder runs inside the same process as the vault; rehydrated content stays local.
 
 ### 5.4 Model implementation (amended 2026-05-17 — ort/ONNX)
 
@@ -290,7 +290,7 @@ always designed feature-gated and off by default (§6.1).
 
 ### 5.7 Score semantics
 
-Cross-encoder score replaces the RRF score in `SearchHit::score` ([store.rs:176-179](crates/anno-rag/src/store.rs:176)) for the reranked path. Rationale:
+Cross-encoder score replaces the RRF score in `SearchHit::score` (`store.rs:176-179`) for the reranked path. Rationale:
 
 - A consumer of `search_reranked` cares about the cross-encoder ordering; preserving the RRF value alongside would double the surface and create a "which one to sort by" footgun.
 - The doc on `SearchHit::score` already says "higher = more relevant" without committing to the producer; this stays accurate.
@@ -330,7 +330,7 @@ already follow this pattern (`gliner2-fastino` features in
 
 ### 6.2 Runtime config additions
 
-In `AnnoRagConfig` ([crates/anno-rag/src/config.rs](crates/anno-rag/src/config.rs)):
+In `AnnoRagConfig` (`crates/anno-rag/src/config.rs`):
 
 ```rust
 pub struct AnnoRagConfig {
@@ -403,7 +403,7 @@ Benchmark (`benches/bench_rerank.rs`, additive next to the existing benches at C
 | Cross-encoder score (sigmoid'd logit) is incomparable to RRF score | Inherent | §5.7 documents this; audit field `score_source` records which is which. |
 | Reranker disagrees with retrieval ranking and hides relevant chunks | Medium | `pool_size = 30` default gives the reranker a fat candidate pool; raise it if recall regresses in eval. |
 | GPU users frustrated by CPU-only v1 | Low (anno's audience is CPU-first) | Document v0.2 GPU path matches embedder's; not in this spec's scope. |
-| Recall regression on French legal vs RRF baseline | Medium | Eval gate: `bench_eval` (already exists at Cargo.toml:87) must show non-regression on the v0.2 baseline at [crates/anno-rag/tests/fixtures/eval_baseline.toml:6](crates/anno-rag/tests/fixtures/eval_baseline.toml:6). If it regresses, do not ship; investigate. |
+| Recall regression on French legal vs RRF baseline | Medium | Eval gate: `bench_eval` (already exists at Cargo.toml:87) must show non-regression on the v0.2 baseline at `crates/anno-rag/tests/fixtures/eval_baseline.toml:6`. If it regresses, do not ship; investigate. |
 
 ## 10. Open questions — resolved (amended 2026-05-17)
 
