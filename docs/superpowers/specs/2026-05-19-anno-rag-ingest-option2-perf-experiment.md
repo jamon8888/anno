@@ -233,6 +233,8 @@ $env:ANNO_RAG_INGEST_POOL="2"
 $env:ANNO_RAG_INGEST_INTRA_THREADS="1"
 $env:ANNO_RAG_INGEST_WARM="true"
 $env:ANNO_RAG_INGEST_INDEX_TAIL="false"
+$env:ANNO_RAG_INGEST_MAX_DOCS="20" # optional time-box
+$env:ANNO_RAG_INGEST_MAX_CHUNKS="20" # optional time-box
 $env:CARGO_TARGET_DIR="C:\cargo-target"
 cargo bench -p anno-rag --bench bench_ingest_option2
 ```
@@ -251,6 +253,8 @@ ANNO_RAG_INGEST_BENCH=full_ingest \
 ANNO_RAG_INGEST_PROVIDER=coreml \
 ANNO_RAG_INGEST_POOL=1 \
 ANNO_RAG_INGEST_INTRA_THREADS=0 \
+ANNO_RAG_INGEST_MAX_DOCS=20 \
+ANNO_RAG_INGEST_MAX_CHUNKS=20 \
 cargo bench -p anno-rag --bench bench_ingest_option2 --features gliner2-fastino-coreml
 ```
 

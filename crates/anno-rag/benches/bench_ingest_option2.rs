@@ -87,6 +87,8 @@ struct BenchOptions {
     intra_threads: usize,
     warm: bool,
     index_tail: bool,
+    max_docs: Option<usize>,
+    max_chunks: Option<usize>,
 }
 
 impl BenchOptions {
@@ -99,6 +101,8 @@ impl BenchOptions {
         let intra_threads = env_usize("ANNO_RAG_INGEST_INTRA_THREADS", 0)?;
         let warm = env_bool("ANNO_RAG_INGEST_WARM", true)?;
         let index_tail = env_bool("ANNO_RAG_INGEST_INDEX_TAIL", false)?;
+        let max_docs = env_optional_usize("ANNO_RAG_INGEST_MAX_DOCS")?;
+        let max_chunks = env_optional_usize("ANNO_RAG_INGEST_MAX_CHUNKS")?;
 
         if pool == 0 {
             bail!("ANNO_RAG_INGEST_POOL must be >= 1");
@@ -125,6 +129,8 @@ impl BenchOptions {
             intra_threads,
             warm,
             index_tail,
+            max_docs,
+            max_chunks,
         })
     }
 
@@ -241,9 +247,9 @@ fn main() -> Result<()> {
 async fn run_ner_only(opts: &BenchOptions) -> Result<PerfResult> {
     let cfg = AnnoRagConfig::default();
     let extract_started = Instant::now();
-    let docs = collect_docs(&opts.corpus, &cfg).await?;
+    let docs = collect_docs(&opts.corpus, &cfg, opts.max_docs).await?;
     let extract_ms = extract_started.elapsed().as_millis();
-    let texts = flatten_texts(&docs);
+    let texts = flatten_texts(&docs, opts.max_chunks);
 
     let detectors = if opts.warm {
         let detectors = build_detectors(opts)?;
@@ -306,10 +312,10 @@ async fn run_full_ingest(opts: &BenchOptions) -> Result<PerfResult> {
     let mut phases = PhaseMs::zero();
 
     let extract_started = Instant::now();
-    let docs = collect_docs(&opts.corpus, &cfg).await?;
+    let docs = collect_docs(&opts.corpus, &cfg, opts.max_docs).await?;
     phases.extract = extract_started.elapsed().as_millis();
 
-    let flat = flatten_chunks(&docs);
+    let flat = flatten_chunks(&docs, opts.max_chunks);
     let texts: Vec<String> = flat.iter().map(|(_, chunk)| chunk.text.clone()).collect();
 
     let detectors = match detectors {
@@ -455,9 +461,16 @@ async fn detect_parallel(
         .collect()
 }
 
-async fn collect_docs(corpus: &Path, cfg: &AnnoRagConfig) -> Result<Vec<BenchDoc>> {
+async fn collect_docs(
+    corpus: &Path,
+    cfg: &AnnoRagConfig,
+    max_docs: Option<usize>,
+) -> Result<Vec<BenchDoc>> {
     let mut docs = Vec::new();
     for path in collect_supported_files(corpus)? {
+        if max_docs.is_some_and(|limit| docs.len() >= limit) {
+            break;
+        }
         let extracted = ingest::extract(&path, cfg)
             .await
             .with_context(|| format!("extract {}", path.display()))?;
@@ -553,14 +566,17 @@ fn is_supported(path: &Path) -> bool {
     )
 }
 
-fn flatten_texts(docs: &[BenchDoc]) -> Vec<String> {
-    docs.iter()
+fn flatten_texts(docs: &[BenchDoc], max_chunks: Option<usize>) -> Vec<String> {
+    let iter = docs
+        .iter()
         .flat_map(|doc| doc.chunks.iter().map(|chunk| chunk.text.clone()))
-        .collect()
+        .take(max_chunks.unwrap_or(usize::MAX));
+    iter.collect()
 }
 
-fn flatten_chunks(docs: &[BenchDoc]) -> Vec<(usize, ExtractedChunk)> {
-    docs.iter()
+fn flatten_chunks(docs: &[BenchDoc], max_chunks: Option<usize>) -> Vec<(usize, ExtractedChunk)> {
+    let iter = docs
+        .iter()
         .enumerate()
         .flat_map(|(doc_idx, doc)| {
             doc.chunks
@@ -568,7 +584,8 @@ fn flatten_chunks(docs: &[BenchDoc]) -> Vec<(usize, ExtractedChunk)> {
                 .cloned()
                 .map(move |chunk| (doc_idx, chunk))
         })
-        .collect()
+        .take(max_chunks.unwrap_or(usize::MAX));
+    iter.collect()
 }
 
 fn write_anon_outputs(
@@ -596,12 +613,14 @@ fn print_result(opts: &BenchOptions, result: &PerfResult) {
     let chunks_per_s = rate(result.chunks, elapsed_s);
     let rss_peak_mb = result.rss_peak_bytes / (1024 * 1024);
     println!(
-        "INGEST_PERF os={} provider={} bench={} docs={} chunks={} pool={} intra_threads={} warm={} elapsed_ms={} docs_per_s={:.4} chunks_per_s={:.4} rss_peak_mb={} extract_ms={} ner_ms={} vault_ms={} embed_ms={} store_ms={} anon_write_ms={} index_ms={} fts_ms={}",
+        "INGEST_PERF os={} provider={} bench={} docs={} chunks={} max_docs={} max_chunks={} pool={} intra_threads={} warm={} elapsed_ms={} docs_per_s={:.4} chunks_per_s={:.4} rss_peak_mb={} extract_ms={} ner_ms={} vault_ms={} embed_ms={} store_ms={} anon_write_ms={} index_ms={} fts_ms={}",
         std::env::consts::OS,
         opts.provider,
         opts.bench.as_str(),
         result.docs,
         result.chunks,
+        format_limit(opts.max_docs),
+        format_limit(opts.max_chunks),
         opts.pool,
         opts.intra_threads,
         opts.warm,
@@ -628,6 +647,10 @@ fn rate(count: usize, elapsed_s: f64) -> f64 {
     }
 }
 
+fn format_limit(limit: Option<usize>) -> String {
+    limit.map_or_else(|| "all".to_string(), |n| n.to_string())
+}
+
 fn env_string(name: &str, default: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| default.to_string())
 }
@@ -642,6 +665,17 @@ fn env_usize(name: &str, default: usize) -> Result<usize> {
             .parse::<usize>()
             .with_context(|| format!("parse {name}={raw} as usize")),
         Err(_) => Ok(default),
+    }
+}
+
+fn env_optional_usize(name: &str) -> Result<Option<usize>> {
+    match std::env::var(name) {
+        Ok(raw) if raw.trim().is_empty() => Ok(None),
+        Ok(raw) => raw
+            .parse::<usize>()
+            .map(Some)
+            .with_context(|| format!("parse {name}={raw} as usize")),
+        Err(_) => Ok(None),
     }
 }
 
@@ -678,5 +712,11 @@ mod tests {
     #[test]
     fn rate_handles_zero_elapsed() {
         assert_eq!(rate(10, 0.0), 0.0);
+    }
+
+    #[test]
+    fn format_limit_marks_unbounded() {
+        assert_eq!(format_limit(None), "all");
+        assert_eq!(format_limit(Some(12)), "12");
     }
 }
