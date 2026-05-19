@@ -4,6 +4,7 @@
 //! TOML file loading lands in v0.2.
 
 use serde::{Deserialize, Serialize};
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 /// Runtime OCR mode.
@@ -201,11 +202,21 @@ fn default_rerank_batch_size() -> usize {
     8
 }
 
+fn default_data_dir() -> PathBuf {
+    default_data_dir_from_env(std::env::var_os("ANNO_RAG_DATA_DIR"))
+}
+
+fn default_data_dir_from_env(override_dir: Option<OsString>) -> PathBuf {
+    override_dir
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|p| p.join(".anno-rag")))
+        .unwrap_or_else(|| PathBuf::from(".anno-rag"))
+}
+
 impl Default for AnnoRagConfig {
     fn default() -> Self {
-        let data_dir = dirs::home_dir()
-            .map(|p| p.join(".anno-rag"))
-            .unwrap_or_else(|| PathBuf::from(".anno-rag"));
+        let data_dir = default_data_dir();
 
         Self {
             data_dir,
@@ -296,6 +307,13 @@ mod tests {
         assert_eq!(c.index_path(), PathBuf::from("/tmp/anno-rag/index.lance"));
         assert_eq!(c.models_cache(), PathBuf::from("/tmp/anno-rag/models"));
         assert_eq!(c.outputs_dir(), PathBuf::from("/tmp/anno-rag/outputs"));
+    }
+
+    #[test]
+    fn data_dir_env_override_wins_over_home_default() {
+        let data_dir = default_data_dir_from_env(Some(OsString::from("/tmp/anno-rag-env")));
+
+        assert_eq!(data_dir, PathBuf::from("/tmp/anno-rag-env"));
     }
 
     #[test]

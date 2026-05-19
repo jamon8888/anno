@@ -21,6 +21,44 @@ Each archive contains:
 - `examples/claude_desktop_config.windows.json`
 - `examples/claude_desktop_config.macos.json`
 
+## Pre-Release Local Pipeline Gate
+
+Before building or publishing OS assets, run the local gate on a representative
+folder:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release\local-pipeline-gate.ps1 -Profile fast
+```
+
+Profiles:
+
+- `fast`: check, reuse/build local debug binaries when available, small local
+  sample ingest, re-ingest skip smoke, search smoke, and gateway boot smoke.
+  It compile-checks OCR support but skips test binary linking, OCR runtime
+  work, and release optimization.
+- `release`: `fast` plus model-heavy PII NER, resumable ingest, and
+  `anno-rag bench`; OCR runtime gates are enabled unless `-SkipOcr` is passed.
+- `deep`: `release` plus rerank/eval/memory benches.
+
+The gate writes artifacts under `target/local-release-gate/run-*/`:
+
+- `reports/metrics.json`
+- `reports/report.md`
+- `reports/commands.log`
+- per-command logs under `logs/`
+
+The fast runtime gate also smoke-tests `anno-privacy-gateway` by starting it
+briefly on an ephemeral localhost port and stopping it automatically.
+Each run sets `ANNO_RAG_DATA_DIR` to its own artifact directory so ingest,
+re-ingest, and search are measured against an isolated local store.
+
+Use `-DryRun` to inspect the command plan without building, downloading models,
+or creating sample data:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release\local-pipeline-gate.ps1 -DryRun -SkipHeavy -SkipOcr -SkipMcp
+```
+
 ## Claude Desktop
 
 Claude Desktop uses the `anno-rag` binary through stdio MCP:

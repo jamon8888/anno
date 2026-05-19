@@ -203,12 +203,22 @@ release-validate:
     set -euo pipefail
     python -m json.tool docs/release/examples/claude_desktop_config.windows.json >/dev/null
     python -m json.tool docs/release/examples/claude_desktop_config.macos.json >/dev/null
+    test -f scripts/release/local-pipeline-gate.ps1
+    test -f scripts/release/test-local-pipeline-gate.ps1
     test -f scripts/release/package-unix.sh
     test -f scripts/release/checksums.sh
     test -f scripts/release/package-windows.ps1
     test -f .github/workflows/release-binaries.yml
     cargo metadata --no-deps --format-version 1 >/dev/null
     git diff --check -- README.md docs/release .github/workflows/release-binaries.yml scripts/release
+
+# Windows-first local end-to-end release gate before packaging binaries.
+local-pipeline-gate PROFILE="fast":
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/local-pipeline-gate.ps1 -Profile "{{PROFILE}}"
+
+# Static + dry-run validation for the local release gate script.
+local-pipeline-gate-test:
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/test-local-pipeline-gate.ps1
 
 # === Evaluation ===
 
