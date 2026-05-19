@@ -1,7 +1,15 @@
 # Design — anno-rag Batch Ingest Scaling (1000 docs)
 
+> **Status update — 2026-05-19:** this A″/B throughput design is superseded.
+> The ignored acceptance test showed the pool/fan-out path was slower than the
+> sequential baseline on the target hardware. The branch now keeps only Lever C:
+> deterministic `doc_id`, skip-on-same-content, and stale-row cleanup by
+> `source_path`. A future performance branch may revisit bounded ONNX thread
+> budgets or true batched NER, but this design is no longer the implementation
+> target.
+
 **Date**: 2026-05-18 (rev. 2 — corrected after codebase review)
-**Status**: Draft for review
+**Status**: Superseded by resumable-ingest salvage
 **Scope**: `crates/anno-rag` only (no `anno`-crate changes). Target:
 ingest ~1000 documents (cap) on a recent laptop, reliably and resumably,
 materially faster than today. OCR-heavy corpora out of scope (separate

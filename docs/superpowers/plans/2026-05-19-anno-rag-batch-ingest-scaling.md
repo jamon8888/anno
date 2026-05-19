@@ -1,5 +1,12 @@
 # anno-rag Batch Ingest Scaling Implementation Plan
 
+> **Status update — 2026-05-19:** superseded after measurement. The A″ NER
+> instance pool and B document fan-out failed the throughput acceptance check
+> on the target hardware, so they are intentionally removed from the product
+> path. Keep the plan below as historical evidence; the active salvage is
+> deterministic/resumable ingest only: content-hashed `doc_id`, same-content
+> skip, and `source_path` orphan cleanup.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `Pipeline::ingest_folder` ingest ~1000 documents on a laptop materially faster and, critically, resumably/idempotently — via a bounded NER engine pool (A″), bounded document fan-out (B), and deterministic content-hashed `doc_id` (C).

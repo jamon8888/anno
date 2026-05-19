@@ -17,7 +17,6 @@ pub mod memory;
 pub(crate) mod ocr;
 pub mod pii_eval;
 pub mod pipeline;
-mod pool;
 #[cfg(feature = "rerank")]
 pub mod rerank;
 pub mod store;

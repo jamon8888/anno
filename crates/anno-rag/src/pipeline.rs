@@ -21,10 +21,15 @@ pub(crate) fn doc_uuid(file_bytes: &[u8]) -> Uuid {
     Uuid::new_v5(&Uuid::NAMESPACE_OID, file_bytes)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IngestOutcome {
+    Ingested,
+    Skipped,
+}
+
 /// End-to-end pipeline: detect → pseudonymize → embed → store.
 pub struct Pipeline {
     detector: OnceCell<Arc<Detector>>,
-    detector_pool: OnceCell<crate::pool::Pool<Detector>>,
     vault: Vault,
     embedder: OnceCell<Arc<Embedder>>,
     #[cfg(feature = "rerank")]
@@ -54,7 +59,6 @@ impl Pipeline {
         let store = Store::open(&cfg).await?;
         Ok(Self {
             detector: OnceCell::new(),
-            detector_pool: OnceCell::new(),
             vault,
             embedder: OnceCell::new(),
             #[cfg(feature = "rerank")]
@@ -81,25 +85,6 @@ impl Pipeline {
         // OnceCell::set returns Err(value) if already set — ignore since we just checked.
         let _ = self.detector.set(d);
         Ok(self.detector.get().expect("just set"))
-    }
-
-    /// Lazy-build the NER engine pool (`cfg.ingest_ner_pool` independent
-    /// `Detector`s, each its own ONNX session). Built on first ingest,
-    /// not at `Pipeline::new`, to keep non-ingest startup RSS low.
-    ///
-    /// # Errors
-    /// [`Error::Detect`] if any engine fails to load.
-    async fn detector_pool(&self) -> Result<&crate::pool::Pool<Detector>> {
-        if let Some(p) = self.detector_pool.get() {
-            return Ok(p);
-        }
-        let n = self.cfg.ingest_ner_pool.max(1);
-        let mut engines = Vec::with_capacity(n);
-        for _ in 0..n {
-            engines.push(Detector::new()?);
-        }
-        let _ = self.detector_pool.set(crate::pool::Pool::new(engines));
-        Ok(self.detector_pool.get().expect("just set"))
     }
 
     /// Returns `true` if the embedder has been initialized (model weights loaded).
@@ -138,11 +123,16 @@ impl Pipeline {
 
     /// Ingest a single file end-to-end. Writes `<stem>.anon.md` to `output_dir`.
     pub async fn ingest_one(&self, path: &Path, output_dir: &Path) -> Result<()> {
+        self.ingest_one_counted(path, output_dir).await?;
+        Ok(())
+    }
+
+    async fn ingest_one_counted(&self, path: &Path, output_dir: &Path) -> Result<IngestOutcome> {
         let file_bytes = std::fs::read(path).map_err(Error::from)?;
         let doc_id = doc_uuid(&file_bytes);
         if self.store.doc_exists(doc_id).await? {
             tracing::info!(path = %path.display(), "skip: already ingested (same content)");
-            return Ok(());
+            return Ok(IngestOutcome::Skipped);
         }
         let extracted = ingest::extract(path, &self.cfg).await?;
         let folder_path = path
@@ -152,13 +142,10 @@ impl Pipeline {
 
         // Detect + pseudonymize per chunk.
         let mut pseudo_chunks: Vec<String> = Vec::with_capacity(extracted.chunks.len());
-        {
-            let engine = self.detector_pool().await?.acquire().await;
-            for chunk in &extracted.chunks {
-                let entities = engine.detect(&chunk.text)?;
-                let pseudo = self.vault.pseudonymize(&chunk.text, &entities).await?;
-                pseudo_chunks.push(pseudo);
-            }
+        for chunk in &extracted.chunks {
+            let entities = self.detector_get_or_init()?.detect(&chunk.text)?;
+            let pseudo = self.vault.pseudonymize(&chunk.text, &entities).await?;
+            pseudo_chunks.push(pseudo);
         }
 
         // Batch-embed all pseudonymized chunks at once for throughput.
@@ -200,7 +187,7 @@ impl Pipeline {
         std::fs::write(&out_path, full_anon).map_err(Error::from)?;
 
         tracing::info!(path = %path.display(), chunks = extracted.chunks.len(), "ingested");
-        Ok(())
+        Ok(IngestOutcome::Ingested)
     }
 
     /// Walk a folder and ingest every supported file. Returns the count
@@ -246,24 +233,16 @@ impl Pipeline {
             }
             paths.push(path.to_path_buf());
         }
-        use futures::StreamExt;
-        let conc = self.cfg.ingest_concurrency.max(1);
-        let count = futures::stream::iter(paths.into_iter())
-            .map(|p| {
-                let od = output_dir;
-                async move {
-                    match self.ingest_one(&p, od).await {
-                        Ok(()) => 1usize,
-                        Err(e) => {
-                            tracing::warn!(path = %p.display(), error = %e, "ingest skipped");
-                            0
-                        }
-                    }
+        let mut count = 0usize;
+        for p in paths {
+            match self.ingest_one_counted(&p, output_dir).await {
+                Ok(IngestOutcome::Ingested) => count += 1,
+                Ok(IngestOutcome::Skipped) => {}
+                Err(e) => {
+                    tracing::warn!(path = %p.display(), error = %e, "ingest skipped");
                 }
-            })
-            .buffer_unordered(conc)
-            .fold(0usize, |acc, n| async move { acc + n })
-            .await;
+            }
+        }
         // Build the vector index in a background-equivalent flow once we
         // cross the configured threshold. Idempotent on retry.
         match self
@@ -1267,20 +1246,6 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let p = pipeline_in(tmp.path()).await;
         assert!(p.find_subject("nope").await.matches.is_empty());
-    }
-
-    #[tokio::test]
-    #[ignore = "loads N gliner2 models"]
-    async fn detector_pool_builds_configured_size() {
-        let tmp = tempfile::tempdir().unwrap();
-        let cfg = AnnoRagConfig {
-            data_dir: tmp.path().to_path_buf(),
-            ingest_ner_pool: 2,
-            ..Default::default()
-        };
-        let p = Pipeline::new(cfg, [0u8; 32]).await.expect("pipeline");
-        let pool = p.detector_pool().await.expect("pool");
-        assert_eq!(pool.size(), 2);
     }
 
     #[test]
