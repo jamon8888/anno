@@ -24,6 +24,7 @@ pub(crate) fn doc_uuid(file_bytes: &[u8]) -> Uuid {
 /// End-to-end pipeline: detect → pseudonymize → embed → store.
 pub struct Pipeline {
     detector: OnceCell<Arc<Detector>>,
+    detector_pool: OnceCell<crate::pool::Pool<Detector>>,
     vault: Vault,
     embedder: OnceCell<Arc<Embedder>>,
     #[cfg(feature = "rerank")]
@@ -53,6 +54,7 @@ impl Pipeline {
         let store = Store::open(&cfg).await?;
         Ok(Self {
             detector: OnceCell::new(),
+            detector_pool: OnceCell::new(),
             vault,
             embedder: OnceCell::new(),
             #[cfg(feature = "rerank")]
@@ -79,6 +81,25 @@ impl Pipeline {
         // OnceCell::set returns Err(value) if already set — ignore since we just checked.
         let _ = self.detector.set(d);
         Ok(self.detector.get().expect("just set"))
+    }
+
+    /// Lazy-build the NER engine pool (`cfg.ingest_ner_pool` independent
+    /// `Detector`s, each its own ONNX session). Built on first ingest,
+    /// not at `Pipeline::new`, to keep non-ingest startup RSS low.
+    ///
+    /// # Errors
+    /// [`Error::Detect`] if any engine fails to load.
+    async fn detector_pool(&self) -> Result<&crate::pool::Pool<Detector>> {
+        if let Some(p) = self.detector_pool.get() {
+            return Ok(p);
+        }
+        let n = self.cfg.ingest_ner_pool.max(1);
+        let mut engines = Vec::with_capacity(n);
+        for _ in 0..n {
+            engines.push(Detector::new()?);
+        }
+        let _ = self.detector_pool.set(crate::pool::Pool::new(engines));
+        Ok(self.detector_pool.get().expect("just set"))
     }
 
     /// Returns `true` if the embedder has been initialized (model weights loaded).
@@ -131,10 +152,13 @@ impl Pipeline {
 
         // Detect + pseudonymize per chunk.
         let mut pseudo_chunks: Vec<String> = Vec::with_capacity(extracted.chunks.len());
-        for chunk in &extracted.chunks {
-            let entities = self.detector_get_or_init()?.detect(&chunk.text)?;
-            let pseudo = self.vault.pseudonymize(&chunk.text, &entities).await?;
-            pseudo_chunks.push(pseudo);
+        {
+            let engine = self.detector_pool().await?.acquire().await;
+            for chunk in &extracted.chunks {
+                let entities = engine.detect(&chunk.text)?;
+                let pseudo = self.vault.pseudonymize(&chunk.text, &entities).await?;
+                pseudo_chunks.push(pseudo);
+            }
         }
 
         // Batch-embed all pseudonymized chunks at once for throughput.
@@ -1230,6 +1254,20 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let p = pipeline_in(tmp.path()).await;
         assert!(p.find_subject("nope").await.matches.is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore = "loads N gliner2 models"]
+    async fn detector_pool_builds_configured_size() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: tmp.path().to_path_buf(),
+            ingest_ner_pool: 2,
+            ..Default::default()
+        };
+        let p = Pipeline::new(cfg, [0u8; 32]).await.expect("pipeline");
+        let pool = p.detector_pool().await.expect("pool");
+        assert_eq!(pool.size(), 2);
     }
 
     #[test]
