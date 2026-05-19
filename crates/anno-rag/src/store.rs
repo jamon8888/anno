@@ -629,6 +629,29 @@ impl Store {
             .map_err(|e| Error::Store(format!("memory_list_indexes: {e}")))
     }
 
+    /// Whether any chunk row exists for `doc_id`. Cheap filtered count.
+    /// Used by `ingest_one` to skip files already ingested (same
+    /// content hash ⇒ same `doc_id`).
+    ///
+    /// The `doc_id` column is `FixedSizeBinary(16)` in Arrow/LanceDB, so the
+    /// DataFusion SQL filter uses the `X'<hex>'` binary-literal syntax with the
+    /// 32-char unhyphenated UUID hex (e.g. `X'550e8400e29b41d4a716446655440000'`).
+    /// A string-UUID literal (e.g. `doc_id = '550e...'`) would fail at runtime
+    /// with a column-type mismatch.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if the LanceDB count fails.
+    pub async fn doc_exists(&self, doc_id: Uuid) -> Result<bool> {
+        let hex = doc_id.simple().to_string(); // 32 hex chars, no hyphens
+        let filter = format!("doc_id = X'{hex}'");
+        let n = self
+            .tbl
+            .count_rows(Some(filter))
+            .await
+            .map_err(|e| Error::Store(format!("doc_exists count_rows: {e}")))?;
+        Ok(n > 0)
+    }
+
     /// Number of rows in the memories table. Cheap (`count_rows`); used
     /// by the recall-path optimize gate to skip `optimize()` when no
     /// memories were added since the last index fold-in.
@@ -1436,6 +1459,30 @@ mod tests {
         let doc = Uuid::nil();
         assert_eq!(chunk_uuid(doc, 0), chunk_uuid(doc, 0));
         assert_ne!(chunk_uuid(doc, 0), chunk_uuid(doc, 1));
+    }
+
+    #[tokio::test]
+    #[ignore = "opens LanceDB (~30s); run with --ignored"]
+    async fn doc_exists_false_then_true_after_upsert() {
+        let (_dir, cfg) = fresh_cfg(8);
+        let store = Store::open(&cfg).await.expect("open");
+        let doc = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"d1");
+        assert!(!store.doc_exists(doc).await.expect("exists?"));
+        store
+            .upsert(vec![ChunkRecord {
+                doc_id: doc,
+                source_path: "p".into(),
+                folder_path: "f".into(),
+                chunk_idx: 0,
+                text_pseudo: "x".into(),
+                page: None,
+                char_start: 0,
+                char_end: 1,
+                vector: vec![0.0; 8],
+            }])
+            .await
+            .expect("upsert");
+        assert!(store.doc_exists(doc).await.expect("exists?2"));
     }
 
     #[tokio::test]

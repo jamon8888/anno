@@ -119,6 +119,10 @@ impl Pipeline {
     pub async fn ingest_one(&self, path: &Path, output_dir: &Path) -> Result<()> {
         let file_bytes = std::fs::read(path).map_err(Error::from)?;
         let doc_id = doc_uuid(&file_bytes);
+        if self.store.doc_exists(doc_id).await? {
+            tracing::info!(path = %path.display(), "skip: already ingested (same content)");
+            return Ok(());
+        }
         let extracted = ingest::extract(path, &self.cfg).await?;
         let folder_path = path
             .parent()
