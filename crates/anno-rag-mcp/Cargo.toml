@@ -8,6 +8,9 @@ description  = "MCP (stdio) server exposing anno-rag's retrieval surface + (Phas
 
 [features]
 default = []
+# Pass-through to anno-rag's embedded Kreuzberg/Tesseract OCR. Runtime still
+# defaults OCR off; callers must opt in through config/CLI.
+embedded-ocr = ["anno-rag/embedded-ocr"]
 # Pass-through to anno-rag's opt-in cross-encoder reranker. Enables the
 # `rerank: bool` param on the search + memory_recall MCP tools.
 rerank = ["anno-rag/rerank"]
