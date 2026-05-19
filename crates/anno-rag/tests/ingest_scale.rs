@@ -1,6 +1,7 @@
 //! End-to-end resumable ingest: idempotent re-ingest (no duplication),
 //! resume/skip, and content-change supersede. Heavy (LanceDB + NER model);
 //! ignored by default.
+#![allow(clippy::unwrap_used)]
 
 use anno_rag::{AnnoRagConfig, Pipeline};
 
