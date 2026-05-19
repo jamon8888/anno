@@ -16,6 +16,9 @@ ocr = []
 # download on first use). Pulls ort + ndarray. Default off so plain
 # `cargo install anno-rag` users don't pay the model download.
 rerank = ["dep:ort", "dep:ndarray", "dep:is-terminal"]
+# Experimental: forward anno's GLiNER2 Fastino CoreML feature for manual
+# ingest performance benchmarks on macOS.
+gliner2-fastino-coreml = ["anno/gliner2-fastino-coreml"]
 
 [dependencies]
 anno            = { path = "../anno", features = ["gliner2-fastino"] }
@@ -82,6 +85,10 @@ harness = false
 
 [[bench]]
 name = "bench_ingest"
+harness = false
+
+[[bench]]
+name = "bench_ingest_option2"
 harness = false
 
 [[bench]]

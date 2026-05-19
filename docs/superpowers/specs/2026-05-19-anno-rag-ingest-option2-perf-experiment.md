@@ -186,8 +186,8 @@ This should be implemented behind bench/test-only seams first:
    - It must use dedicated blocking workers or `tokio::task::spawn_blocking`.
    - It must not rely on `buffer_unordered` around a synchronous CPU-bound
      function as proof of parallelism.
-3. Add an ignored integration harness or criterion bench:
-   - preferred file: `crates/anno-rag/benches/bench_ingest_option2.rs`;
+3. Add a manual `harness = false` bench:
+   - file: `crates/anno-rag/benches/bench_ingest_option2.rs`;
    - emit `INGEST_PERF ...` lines to stderr/stdout;
    - keep benchmark corpus configurable via env var;
    - default to the existing bench fixture corpus only as a smoke.
@@ -227,8 +227,14 @@ Windows CPU:
 
 ```powershell
 $env:ANNO_RAG_INGEST_BENCH_CORPUS="C:\path\to\corpus"
+$env:ANNO_RAG_INGEST_BENCH="full_ingest" # or "ner_only"
+$env:ANNO_RAG_INGEST_PROVIDER="cpu"
+$env:ANNO_RAG_INGEST_POOL="2"
+$env:ANNO_RAG_INGEST_INTRA_THREADS="1"
+$env:ANNO_RAG_INGEST_WARM="true"
+$env:ANNO_RAG_INGEST_INDEX_TAIL="false"
 $env:CARGO_TARGET_DIR="C:\cargo-target"
-cargo bench -p anno-rag --bench bench_ingest_option2 --features eval
+cargo bench -p anno-rag --bench bench_ingest_option2
 ```
 
 macOS CPU/CoreML, first provider-level check:
@@ -241,6 +247,10 @@ macOS full-ingest CoreML check, after adding an `anno-rag` forwarding feature:
 
 ```bash
 ANNO_RAG_INGEST_BENCH_CORPUS=/path/to/corpus \
+ANNO_RAG_INGEST_BENCH=full_ingest \
+ANNO_RAG_INGEST_PROVIDER=coreml \
+ANNO_RAG_INGEST_POOL=1 \
+ANNO_RAG_INGEST_INTRA_THREADS=0 \
 cargo bench -p anno-rag --bench bench_ingest_option2 --features gliner2-fastino-coreml
 ```
 

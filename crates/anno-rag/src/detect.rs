@@ -17,9 +17,10 @@
 //! plan a normalization pass via `anno::offset::bytes_to_chars` in v0.2.
 
 use crate::error::{Error, Result};
-use anno::backends::gliner2_fastino::GLiNER2Fastino;
+use anno::backends::gliner2_fastino::{GLiNER2Fastino, GLiNER2FastinoConfig};
 use anno::backends::inference::ZeroShotNER;
 use anno::EntityType;
+use anno::OnnxSessionConfig;
 use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
 use regex::Regex;
 use std::sync::OnceLock;
@@ -200,7 +201,21 @@ impl Detector {
     /// Build a new detector. Loads the GLiNER2Fastino multi-v1 ONNX model
     /// (multilingual, FR-aware) from the HF Hub cache.
     pub fn new() -> Result<Self> {
-        let ner = GLiNER2Fastino::from_pretrained(NER_MODEL_ID)
+        Self::new_with_onnx_config(OnnxSessionConfig::default())
+    }
+
+    /// Build a new detector with a custom ONNX Runtime session config.
+    ///
+    /// This is primarily used by the ingest performance harness to test
+    /// explicit ORT intra-op thread budgets and execution-provider choices.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Detect`] if the GLiNER2 Fastino model cannot be
+    /// downloaded, loaded, or initialized with the requested ONNX settings.
+    pub fn new_with_onnx_config(onnx: OnnxSessionConfig) -> Result<Self> {
+        let cfg = GLiNER2FastinoConfig::default().with_onnx(onnx);
+        let ner = GLiNER2Fastino::from_pretrained_with_config(NER_MODEL_ID, cfg)
             .map_err(|e| Error::Detect(format!("gliner2_fastino load: {e}")))?;
         Ok(Self { ner })
     }
