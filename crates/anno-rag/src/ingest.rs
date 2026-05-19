@@ -4,7 +4,9 @@
 
 use crate::config::{AnnoRagConfig, OcrMode};
 use crate::error::{Error, Result};
-use kreuzberg::core::config::{ChunkerType, ChunkingConfig, ExtractionConfig, OcrConfig};
+#[cfg(feature = "embedded-ocr")]
+use kreuzberg::core::config::OcrConfig;
+use kreuzberg::core::config::{ChunkerType, ChunkingConfig, ExtractionConfig};
 use kreuzberg::types::{Chunk, ExtractionResult, PageContent};
 use std::path::Path;
 
