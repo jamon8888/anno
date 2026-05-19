@@ -52,6 +52,28 @@ briefly on an ephemeral localhost port and stopping it automatically.
 Each run sets `ANNO_RAG_DATA_DIR` to its own artifact directory so ingest,
 re-ingest, and search are measured against an isolated local store.
 
+### Pre-Tag Acceptance Metrics
+
+Before pushing a release tag, run:
+
+```powershell
+cargo build -p anno-rag-bin -p anno-privacy-gateway
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release\local-pipeline-gate.ps1 -Profile fast -SkipMcp -SkipBuild
+```
+
+Acceptance:
+
+- `reports/metrics.json` has `"summary": { "status": "passed" }`.
+- `anno-rag ingest local samples` ingests exactly `10` documents from the built-in `11` sample files. The duplicate sample is expected to deduplicate.
+- `anno-rag reingest idempotency smoke` ingests exactly `0` documents.
+- Each search smoke exits `0`.
+- `anno-privacy-gateway boot smoke` exits `0`.
+- No `anno-rag`, `anno_rag`, `anno-privacy-gateway`, `cargo`, or `rustc` process remains after the gate.
+
+The latest known Windows debug baseline was `400.95s` for fresh ingest and
+`1.23s` for re-ingest. Treat fresh ingest above `900s`, re-ingest above `10s`,
+or any search above `90s` as a regression to investigate before tagging.
+
 Use `-DryRun` to inspect the command plan without building, downloading models,
 or creating sample data:
 
