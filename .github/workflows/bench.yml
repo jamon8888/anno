@@ -5,6 +5,13 @@ on:
       - 'crates/anno-rag/**'
       - '.github/workflows/bench.yml'
 
+# A new push to the PR cancels the previous still-running bench matrix
+# (these jobs are long + model-heavy; overlapping runs were the main CI
+# pile-up).
+concurrency:
+  group: bench-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   bench:
     strategy:
@@ -22,6 +29,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # Persist the HF model cache across runs — same key as ci.yml. Without
+      # this, every bench run on every OS re-downloads the e5 embedder
+      # (~449 MB) + the GLiNER2 ONNX weights, and the warmup step gets
+      # canceled mid-download (the recurring "operation was canceled").
+      - name: Cache HF models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-models-${{ runner.os }}-v2
+          restore-keys: |
+            hf-models-${{ runner.os }}-
       - name: Install protoc
         uses: arduino/setup-protoc@v3
         with:
