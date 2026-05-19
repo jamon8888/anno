@@ -205,6 +205,8 @@ release-validate:
     python -m json.tool docs/release/examples/claude_desktop_config.macos.json >/dev/null
     test -f scripts/release/local-pipeline-gate.ps1
     test -f scripts/release/test-local-pipeline-gate.ps1
+    test -f scripts/release/smoke-gateway.ps1
+    test -x scripts/release/smoke-gateway.sh
     test -f scripts/release/package-unix.sh
     test -f scripts/release/checksums.sh
     test -f scripts/release/package-windows.ps1
