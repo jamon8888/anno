@@ -120,6 +120,19 @@ pub struct AnnoRagConfig {
     /// graph recall sub-quadratic on hot entities.
     #[serde(default = "default_graph_per_hop_limit")]
     pub graph_per_hop_limit: usize,
+
+    /// Max documents processed concurrently by `ingest_folder`
+    /// (non-NER stages overlap; NER bounded by `ingest_ner_pool`).
+    /// Default: detected core count.
+    #[serde(default = "default_ingest_concurrency")]
+    pub ingest_concurrency: usize,
+
+    /// Number of independent NER engines (each its own ONNX session)
+    /// run in parallel during ingest. Each costs ~one gliner2 model
+    /// resident in RAM — capped low for a laptop RSS budget.
+    /// Default: min(cores, 4).
+    #[serde(default = "default_ingest_ner_pool")]
+    pub ingest_ner_pool: usize,
 }
 
 fn default_memory_collection_name() -> String {
@@ -171,6 +184,18 @@ fn default_rerank_batch_size() -> usize {
     8
 }
 
+fn detected_cores() -> usize {
+    std::thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(4)
+}
+fn default_ingest_concurrency() -> usize {
+    detected_cores().max(1)
+}
+fn default_ingest_ner_pool() -> usize {
+    detected_cores().clamp(1, 4)
+}
+
 impl Default for AnnoRagConfig {
     fn default() -> Self {
         let data_dir = dirs::home_dir()
@@ -202,6 +227,8 @@ impl Default for AnnoRagConfig {
             rerank_onnx_file: default_rerank_onnx_file(),
             rerank_pool_size: default_rerank_pool_size(),
             rerank_batch_size: default_rerank_batch_size(),
+            ingest_concurrency: default_ingest_concurrency(),
+            ingest_ner_pool: default_ingest_ner_pool(),
         }
     }
 }
@@ -307,5 +334,23 @@ mod tests {
         assert_eq!(c.rerank_onnx_file, "onnx/model_int8.onnx");
         assert_eq!(c.rerank_pool_size, 30);
         assert_eq!(c.rerank_batch_size, 8);
+    }
+
+    #[test]
+    fn ingest_scaling_defaults_are_sane() {
+        let c = AnnoRagConfig::default();
+        assert!(c.ingest_concurrency >= 1, "concurrency >= 1");
+        assert!(c.ingest_ner_pool >= 1, "ner pool >= 1");
+        assert!(
+            c.ingest_ner_pool <= 4,
+            "ner pool capped at 4 for RSS budget, got {}",
+            c.ingest_ner_pool
+        );
+        assert!(
+            c.ingest_concurrency >= c.ingest_ner_pool,
+            "concurrency ({}) must be >= ner pool ({})",
+            c.ingest_concurrency,
+            c.ingest_ner_pool
+        );
     }
 }
