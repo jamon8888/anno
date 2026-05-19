@@ -12,6 +12,15 @@ use std::sync::Arc;
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
+/// Deterministic document id: UUID v5 (OID namespace) of the raw file
+/// bytes. Same file content ⇒ same `doc_id` ⇒ the existing
+/// `merge_insert(&["doc_id","chunk_idx"])` overwrites its own rows
+/// instead of duplicating across `ingest_folder` runs.
+#[must_use]
+pub(crate) fn doc_uuid(file_bytes: &[u8]) -> Uuid {
+    Uuid::new_v5(&Uuid::NAMESPACE_OID, file_bytes)
+}
+
 /// End-to-end pipeline: detect → pseudonymize → embed → store.
 pub struct Pipeline {
     detector: OnceCell<Arc<Detector>>,
@@ -108,8 +117,9 @@ impl Pipeline {
 
     /// Ingest a single file end-to-end. Writes `<stem>.anon.md` to `output_dir`.
     pub async fn ingest_one(&self, path: &Path, output_dir: &Path) -> Result<()> {
+        let file_bytes = std::fs::read(path).map_err(Error::from)?;
+        let doc_id = doc_uuid(&file_bytes);
         let extracted = ingest::extract(path, &self.cfg).await?;
-        let doc_id = Uuid::now_v7();
         let folder_path = path
             .parent()
             .map(|p| p.display().to_string())
@@ -1213,6 +1223,15 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let p = pipeline_in(tmp.path()).await;
         assert!(p.find_subject("nope").await.matches.is_empty());
+    }
+
+    #[test]
+    fn doc_uuid_is_deterministic_and_content_sensitive() {
+        let a1 = super::doc_uuid(b"hello world");
+        let a2 = super::doc_uuid(b"hello world");
+        let b = super::doc_uuid(b"hello world!");
+        assert_eq!(a1, a2, "same bytes => same doc_id");
+        assert_ne!(a1, b, "different bytes => different doc_id");
     }
 
     #[test]
