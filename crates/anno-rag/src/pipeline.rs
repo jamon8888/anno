@@ -163,6 +163,9 @@ impl Pipeline {
             });
         }
 
+        // Content changed (or first ingest): drop any prior rows for
+        // this source_path so a superseded doc_id doesn't orphan.
+        self.store.delete_doc_rows(&extracted.source_path).await?;
         self.store.upsert(records).await?;
 
         // Write the anonymized markdown copy.

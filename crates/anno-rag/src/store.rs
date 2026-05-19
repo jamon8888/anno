@@ -773,6 +773,21 @@ impl Store {
         Ok(())
     }
 
+    /// Delete all chunk rows for a given `source_path`. Used to clear
+    /// stale rows when a file's content changed (new `doc_id`) so the
+    /// old `doc_id`'s rows don't orphan-duplicate the document.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on delete failure.
+    pub async fn delete_doc_rows(&self, source_path: &str) -> Result<()> {
+        let escaped = source_path.replace('\'', "''");
+        self.tbl
+            .delete(&format!("source_path = '{escaped}'"))
+            .await
+            .map_err(|e| Error::Store(format!("delete_doc_rows: {e}")))?;
+        Ok(())
+    }
+
     /// k-nearest-neighbor search over `vector`. v0.1 ignores `_query_text`
     /// (FTS lands in v0.2 once we add an FTS index).
     ///
@@ -1517,6 +1532,38 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].text_pseudo, "hello world");
         assert_eq!(hits[0].doc_id, doc_id);
+    }
+
+    #[tokio::test]
+    #[ignore = "opens LanceDB (~30s); run with --ignored"]
+    async fn delete_doc_rows_removes_only_that_source() {
+        let (_dir, cfg) = fresh_cfg(8);
+        let store = Store::open(&cfg).await.expect("open");
+        let mk = |d: &str, sp: &str| ChunkRecord {
+            doc_id: uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, d.as_bytes()),
+            source_path: sp.into(),
+            folder_path: "f".into(),
+            chunk_idx: 0,
+            text_pseudo: "x".into(),
+            page: None,
+            char_start: 0,
+            char_end: 1,
+            vector: vec![0.0; 8],
+        };
+        store.upsert(vec![mk("a", "A.txt"), mk("b", "B.txt")]).await.expect("up");
+        store.delete_doc_rows("A.txt").await.expect("del");
+        assert!(
+            !store
+                .doc_exists(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"a"))
+                .await
+                .unwrap()
+        );
+        assert!(
+            store
+                .doc_exists(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"b"))
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
