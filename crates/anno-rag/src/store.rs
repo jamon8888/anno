@@ -629,6 +629,29 @@ impl Store {
             .map_err(|e| Error::Store(format!("memory_list_indexes: {e}")))
     }
 
+    /// Whether any chunk row exists for `doc_id`. Cheap filtered count.
+    /// Used by `ingest_one` to skip files already ingested (same
+    /// content hash ⇒ same `doc_id`).
+    ///
+    /// The `doc_id` column is `FixedSizeBinary(16)` in Arrow/LanceDB, so the
+    /// DataFusion SQL filter uses the `X'<hex>'` binary-literal syntax with the
+    /// 32-char unhyphenated UUID hex (e.g. `X'550e8400e29b41d4a716446655440000'`).
+    /// A string-UUID literal (e.g. `doc_id = '550e...'`) would fail at runtime
+    /// with a column-type mismatch.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if the LanceDB count fails.
+    pub async fn doc_exists(&self, doc_id: Uuid) -> Result<bool> {
+        let hex = doc_id.simple().to_string(); // 32 hex chars, no hyphens
+        let filter = format!("doc_id = X'{hex}'");
+        let n = self
+            .tbl
+            .count_rows(Some(filter))
+            .await
+            .map_err(|e| Error::Store(format!("doc_exists count_rows: {e}")))?;
+        Ok(n > 0)
+    }
+
     /// Number of rows in the memories table. Cheap (`count_rows`); used
     /// by the recall-path optimize gate to skip `optimize()` when no
     /// memories were added since the last index fold-in.
@@ -747,6 +770,21 @@ impl Store {
         mi.when_matched_update_all(None);
         mi.when_not_matched_insert_all();
         mi.execute(Box::new(reader)).await?;
+        Ok(())
+    }
+
+    /// Delete all chunk rows for a given `source_path`. Used to clear
+    /// stale rows when a file's content changed (new `doc_id`) so the
+    /// old `doc_id`'s rows don't orphan-duplicate the document.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on delete failure.
+    pub async fn delete_doc_rows(&self, source_path: &str) -> Result<()> {
+        let escaped = source_path.replace('\'', "''");
+        self.tbl
+            .delete(&format!("source_path = '{escaped}'"))
+            .await
+            .map_err(|e| Error::Store(format!("delete_doc_rows: {e}")))?;
         Ok(())
     }
 
@@ -1439,6 +1477,30 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "opens LanceDB (~30s); run with --ignored"]
+    async fn doc_exists_false_then_true_after_upsert() {
+        let (_dir, cfg) = fresh_cfg(8);
+        let store = Store::open(&cfg).await.expect("open");
+        let doc = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"d1");
+        assert!(!store.doc_exists(doc).await.expect("exists?"));
+        store
+            .upsert(vec![ChunkRecord {
+                doc_id: doc,
+                source_path: "p".into(),
+                folder_path: "f".into(),
+                chunk_idx: 0,
+                text_pseudo: "x".into(),
+                page: None,
+                char_start: 0,
+                char_end: 1,
+                vector: vec![0.0; 8],
+            }])
+            .await
+            .expect("upsert");
+        assert!(store.doc_exists(doc).await.expect("exists?2"));
+    }
+
+    #[tokio::test]
     #[ignore = "lancedb table creation takes ~30s — exercised in Task 10 integration"]
     async fn open_creates_chunks_table() {
         let (_dir, cfg) = fresh_cfg(8);
@@ -1470,6 +1532,37 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].text_pseudo, "hello world");
         assert_eq!(hits[0].doc_id, doc_id);
+    }
+
+    #[tokio::test]
+    #[ignore = "opens LanceDB (~30s); run with --ignored"]
+    async fn delete_doc_rows_removes_only_that_source() {
+        let (_dir, cfg) = fresh_cfg(8);
+        let store = Store::open(&cfg).await.expect("open");
+        let mk = |d: &str, sp: &str| ChunkRecord {
+            doc_id: uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, d.as_bytes()),
+            source_path: sp.into(),
+            folder_path: "f".into(),
+            chunk_idx: 0,
+            text_pseudo: "x".into(),
+            page: None,
+            char_start: 0,
+            char_end: 1,
+            vector: vec![0.0; 8],
+        };
+        store
+            .upsert(vec![mk("a", "A.txt"), mk("b", "B.txt")])
+            .await
+            .expect("up");
+        store.delete_doc_rows("A.txt").await.expect("del");
+        assert!(!store
+            .doc_exists(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"a"))
+            .await
+            .unwrap());
+        assert!(store
+            .doc_exists(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"b"))
+            .await
+            .unwrap());
     }
 
     #[tokio::test]

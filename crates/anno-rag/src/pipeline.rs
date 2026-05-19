@@ -12,6 +12,21 @@ use std::sync::Arc;
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
+/// Deterministic document id: UUID v5 (OID namespace) of the raw file
+/// bytes. Same file content ⇒ same `doc_id` ⇒ the existing
+/// `merge_insert(&["doc_id","chunk_idx"])` overwrites its own rows
+/// instead of duplicating across `ingest_folder` runs.
+#[must_use]
+pub(crate) fn doc_uuid(file_bytes: &[u8]) -> Uuid {
+    Uuid::new_v5(&Uuid::NAMESPACE_OID, file_bytes)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IngestOutcome {
+    Ingested,
+    Skipped,
+}
+
 /// End-to-end pipeline: detect → pseudonymize → embed → store.
 pub struct Pipeline {
     detector: OnceCell<Arc<Detector>>,
@@ -108,8 +123,18 @@ impl Pipeline {
 
     /// Ingest a single file end-to-end. Writes `<stem>.anon.md` to `output_dir`.
     pub async fn ingest_one(&self, path: &Path, output_dir: &Path) -> Result<()> {
+        self.ingest_one_counted(path, output_dir).await?;
+        Ok(())
+    }
+
+    async fn ingest_one_counted(&self, path: &Path, output_dir: &Path) -> Result<IngestOutcome> {
+        let file_bytes = std::fs::read(path).map_err(Error::from)?;
+        let doc_id = doc_uuid(&file_bytes);
+        if self.store.doc_exists(doc_id).await? {
+            tracing::info!(path = %path.display(), "skip: already ingested (same content)");
+            return Ok(IngestOutcome::Skipped);
+        }
         let extracted = ingest::extract(path, &self.cfg).await?;
-        let doc_id = Uuid::now_v7();
         let folder_path = path
             .parent()
             .map(|p| p.display().to_string())
@@ -149,6 +174,9 @@ impl Pipeline {
             });
         }
 
+        // Content changed (or first ingest): drop any prior rows for
+        // this source_path so a superseded doc_id doesn't orphan.
+        self.store.delete_doc_rows(&extracted.source_path).await?;
         self.store.upsert(records).await?;
 
         // Write the anonymized markdown copy.
@@ -159,7 +187,7 @@ impl Pipeline {
         std::fs::write(&out_path, full_anon).map_err(Error::from)?;
 
         tracing::info!(path = %path.display(), chunks = extracted.chunks.len(), "ingested");
-        Ok(())
+        Ok(IngestOutcome::Ingested)
     }
 
     /// Walk a folder and ingest every supported file. Returns the count
@@ -170,12 +198,12 @@ impl Pipeline {
         recursive: bool,
         output_dir: &Path,
     ) -> Result<usize> {
-        let mut count = 0_usize;
         let walker = if recursive {
             walkdir::WalkDir::new(folder).into_iter()
         } else {
             walkdir::WalkDir::new(folder).max_depth(1).into_iter()
         };
+        let mut paths: Vec<std::path::PathBuf> = Vec::new();
         for entry in walker.filter_map(std::result::Result::ok) {
             if !entry.file_type().is_file() {
                 continue;
@@ -203,10 +231,15 @@ impl Pipeline {
             ) {
                 continue;
             }
-            match self.ingest_one(path, output_dir).await {
-                Ok(()) => count += 1,
+            paths.push(path.to_path_buf());
+        }
+        let mut count = 0usize;
+        for p in paths {
+            match self.ingest_one_counted(&p, output_dir).await {
+                Ok(IngestOutcome::Ingested) => count += 1,
+                Ok(IngestOutcome::Skipped) => {}
                 Err(e) => {
-                    tracing::warn!(path = %path.display(), error = %e, "ingest skipped");
+                    tracing::warn!(path = %p.display(), error = %e, "ingest skipped");
                 }
             }
         }
@@ -1213,6 +1246,15 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let p = pipeline_in(tmp.path()).await;
         assert!(p.find_subject("nope").await.matches.is_empty());
+    }
+
+    #[test]
+    fn doc_uuid_is_deterministic_and_content_sensitive() {
+        let a1 = super::doc_uuid(b"hello world");
+        let a2 = super::doc_uuid(b"hello world");
+        let b = super::doc_uuid(b"hello world!");
+        assert_eq!(a1, a2, "same bytes => same doc_id");
+        assert_ne!(a1, b, "different bytes => different doc_id");
     }
 
     #[test]
