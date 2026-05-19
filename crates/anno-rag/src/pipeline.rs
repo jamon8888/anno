@@ -211,12 +211,12 @@ impl Pipeline {
         recursive: bool,
         output_dir: &Path,
     ) -> Result<usize> {
-        let mut count = 0_usize;
         let walker = if recursive {
             walkdir::WalkDir::new(folder).into_iter()
         } else {
             walkdir::WalkDir::new(folder).max_depth(1).into_iter()
         };
+        let mut paths: Vec<std::path::PathBuf> = Vec::new();
         for entry in walker.filter_map(std::result::Result::ok) {
             if !entry.file_type().is_file() {
                 continue;
@@ -244,13 +244,26 @@ impl Pipeline {
             ) {
                 continue;
             }
-            match self.ingest_one(path, output_dir).await {
-                Ok(()) => count += 1,
-                Err(e) => {
-                    tracing::warn!(path = %path.display(), error = %e, "ingest skipped");
-                }
-            }
+            paths.push(path.to_path_buf());
         }
+        use futures::StreamExt;
+        let conc = self.cfg.ingest_concurrency.max(1);
+        let count = futures::stream::iter(paths.into_iter())
+            .map(|p| {
+                let od = output_dir;
+                async move {
+                    match self.ingest_one(&p, od).await {
+                        Ok(()) => 1usize,
+                        Err(e) => {
+                            tracing::warn!(path = %p.display(), error = %e, "ingest skipped");
+                            0
+                        }
+                    }
+                }
+            })
+            .buffer_unordered(conc)
+            .fold(0usize, |acc, n| async move { acc + n })
+            .await;
         // Build the vector index in a background-equivalent flow once we
         // cross the configured threshold. Idempotent on retry.
         match self
