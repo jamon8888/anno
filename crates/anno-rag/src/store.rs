@@ -1550,20 +1550,19 @@ mod tests {
             char_end: 1,
             vector: vec![0.0; 8],
         };
-        store.upsert(vec![mk("a", "A.txt"), mk("b", "B.txt")]).await.expect("up");
+        store
+            .upsert(vec![mk("a", "A.txt"), mk("b", "B.txt")])
+            .await
+            .expect("up");
         store.delete_doc_rows("A.txt").await.expect("del");
-        assert!(
-            !store
-                .doc_exists(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"a"))
-                .await
-                .unwrap()
-        );
-        assert!(
-            store
-                .doc_exists(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"b"))
-                .await
-                .unwrap()
-        );
+        assert!(!store
+            .doc_exists(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"a"))
+            .await
+            .unwrap());
+        assert!(store
+            .doc_exists(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"b"))
+            .await
+            .unwrap());
     }
 
     #[tokio::test]

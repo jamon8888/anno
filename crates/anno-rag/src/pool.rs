@@ -68,11 +68,7 @@ impl<T> std::ops::Deref for PoolGuard<'_, T> {
 impl<T> Drop for PoolGuard<'_, T> {
     fn drop(&mut self) {
         if let Some(v) = self.val.take() {
-            self.pool
-                .items
-                .lock()
-                .expect("pool mutex poisoned")
-                .push(v);
+            self.pool.items.lock().expect("pool mutex poisoned").push(v);
             self.pool.sem.add_permits(1);
         }
     }
