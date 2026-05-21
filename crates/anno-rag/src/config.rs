@@ -6,6 +6,36 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// NER mode for `memory_save`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryNerMode {
+    /// Embed and store raw text; never run NER enrichment.
+    Disabled,
+    /// Embed and store raw text immediately; enrich NER fields in background.
+    Async,
+    /// Preserve the legacy inline detect + vault + tokenized storage path.
+    Sync,
+}
+
+impl MemoryNerMode {
+    /// Parse an environment/config string. Unknown values are rejected so
+    /// callers can fall back to their existing default.
+    #[must_use]
+    pub fn from_env_value(value: &str) -> Option<Self> {
+        match value.trim() {
+            "disabled" => Some(Self::Disabled),
+            "async" => Some(Self::Async),
+            "sync" => Some(Self::Sync),
+            _ => None,
+        }
+    }
+}
+
+fn default_memory_ner_mode() -> MemoryNerMode {
+    MemoryNerMode::Async
+}
+
 /// Runtime configuration: data paths, model IDs, chunking defaults.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnnoRagConfig {
@@ -63,6 +93,14 @@ pub struct AnnoRagConfig {
     /// store can migrate to a different embedder than documents.
     #[serde(default = "default_memory_embedding_dim")]
     pub memory_embedding_dim: usize,
+
+    /// NER mode for `memory_save`. Default: async.
+    ///
+    /// - `disabled`: embed + store raw text only.
+    /// - `async`: embed + store immediately, then enrich NER fields in background.
+    /// - `sync`: full legacy pipeline inline.
+    #[serde(default = "default_memory_ner_mode")]
+    pub memory_ner_mode: MemoryNerMode,
 
     /// Interval between background compactions (seconds). Default: 24h.
     /// Drives the GDPR Art. 17 erasure SLO — physical bytes reclaim
@@ -162,6 +200,7 @@ impl Default for AnnoRagConfig {
             embedder_dtype: None,
             memory_collection_name: default_memory_collection_name(),
             memory_embedding_dim: default_memory_embedding_dim(),
+            memory_ner_mode: default_memory_ner_mode(),
             compaction_interval_secs: default_compaction_interval_secs(),
             compaction_min_age_secs: default_compaction_min_age_secs(),
             entity_aliases: std::collections::HashMap::new(),
@@ -242,6 +281,7 @@ mod tests {
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
         assert_eq!(c.memory_embedding_dim, 384);
+        assert_eq!(c.memory_ner_mode, MemoryNerMode::Async);
     }
 
     #[test]
@@ -255,6 +295,66 @@ mod tests {
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
         assert_eq!(c.memory_embedding_dim, 384);
+        assert_eq!(c.memory_ner_mode, MemoryNerMode::Async);
+    }
+
+    #[test]
+    fn memory_ner_mode_defaults_to_async_for_old_config() {
+        let v01_json = r#"{
+            "data_dir": "/tmp/anno-rag",
+            "embed_model": "intfloat/multilingual-e5-small",
+            "embed_dim": 384,
+            "default_top_k": 10,
+            "chunk_max_chars": 2048,
+            "chunk_overlap": 256
+        }"#;
+
+        let c: AnnoRagConfig = serde_json::from_str(v01_json).expect("old config parses");
+
+        assert_eq!(c.memory_ner_mode, MemoryNerMode::Async);
+    }
+
+    #[test]
+    fn memory_ner_mode_round_trips_as_snake_case() {
+        for mode in [
+            MemoryNerMode::Disabled,
+            MemoryNerMode::Async,
+            MemoryNerMode::Sync,
+        ] {
+            let c = AnnoRagConfig {
+                memory_ner_mode: mode,
+                ..Default::default()
+            };
+
+            let s = serde_json::to_string(&c).expect("serialize");
+            let back: AnnoRagConfig = serde_json::from_str(&s).expect("deserialize");
+
+            assert_eq!(back.memory_ner_mode, mode);
+        }
+
+        let c = AnnoRagConfig {
+            memory_ner_mode: MemoryNerMode::Disabled,
+            ..Default::default()
+        };
+        let s = serde_json::to_string(&c).expect("serialize");
+        assert!(s.contains(r#""memory_ner_mode":"disabled""#));
+    }
+
+    #[test]
+    fn memory_ner_mode_parses_env_values() {
+        assert_eq!(
+            MemoryNerMode::from_env_value("disabled"),
+            Some(MemoryNerMode::Disabled)
+        );
+        assert_eq!(
+            MemoryNerMode::from_env_value(" async "),
+            Some(MemoryNerMode::Async)
+        );
+        assert_eq!(
+            MemoryNerMode::from_env_value("sync"),
+            Some(MemoryNerMode::Sync)
+        );
+        assert_eq!(MemoryNerMode::from_env_value("bogus"), None);
     }
 
     #[test]

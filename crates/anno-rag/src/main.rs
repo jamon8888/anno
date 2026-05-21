@@ -5,7 +5,11 @@
 //! - `anno-rag search <query> [--top-k <N>]`
 //! - `anno-rag mcp` — run MCP server on stdio (used by Cowork plugin)
 
-use anno_rag::{config::AnnoRagConfig, pipeline::Pipeline, vault::derive_key};
+use anno_rag::{
+    config::{AnnoRagConfig, MemoryNerMode},
+    pipeline::Pipeline,
+    vault::derive_key,
+};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -72,6 +76,11 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let mut cfg = AnnoRagConfig::default();
+    if let Ok(mode) = std::env::var("ANNO_RAG_MEMORY_NER_MODE") {
+        if let Some(mode) = MemoryNerMode::from_env_value(&mode) {
+            cfg.memory_ner_mode = mode;
+        }
+    }
     if let Cmd::Ingest { enable_ocr, .. } = &cli.cmd {
         cfg.enable_ocr |= *enable_ocr;
     }

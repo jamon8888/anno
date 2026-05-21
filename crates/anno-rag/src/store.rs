@@ -412,6 +412,41 @@ impl Store {
         Ok(res.rows_updated > 0)
     }
 
+    /// Update only the NER-derived reference fields for a memory row.
+    ///
+    /// The LanceDB update API is expression-oriented for complex list values,
+    /// so this preserves all existing fields by decoding the current row and
+    /// replacing it atomically with a `merge_insert` keyed by `id`.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on lookup, Arrow conversion, or update failure.
+    pub async fn memory_update_ner_fields(
+        &self,
+        id: &crate::memory::MemoryId,
+        token_refs: Vec<crate::memory::TokenRef>,
+        entity_refs: Vec<String>,
+    ) -> Result<()> {
+        let Some(existing) = self.memory_get(id).await? else {
+            return Ok(());
+        };
+        let updated = crate::memory::Memory {
+            token_refs,
+            entity_refs,
+            ..existing
+        };
+        let batch = memory_to_batch(&updated, self.memory_embedding_dim, &self.memories_schema)?;
+        let reader =
+            RecordBatchIterator::new(std::iter::once(Ok(batch)), self.memories_schema.clone());
+        let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(reader);
+        let mut merge_insert = self.memories_tbl.merge_insert(&["id"]);
+        merge_insert.when_matched_update_all(None);
+        merge_insert
+            .execute(reader)
+            .await
+            .map_err(|e| Error::Store(format!("update ner fields: {e}")))?;
+        Ok(())
+    }
+
     /// Create the v0.1 scalar indexes on the memories collection.
     /// Idempotent — skips columns that already have an index.
     ///
@@ -1372,6 +1407,7 @@ mod tests {
         let cfg = AnnoRagConfig {
             data_dir: dir.path().to_path_buf(),
             embed_dim: dim,
+            memory_embedding_dim: dim,
             ..Default::default()
         };
         (dir, cfg)
@@ -1456,5 +1492,49 @@ mod tests {
         // "résilier" — proves the FTS index uses French stemming, not the
         // default `simple` tokenizer. Full exercise lives in bench_eval;
         // this test documents the contract.
+    }
+
+    #[tokio::test]
+    #[ignore = "opens LanceDB (~30s); run with --ignored"]
+    async fn memory_update_ner_fields_updates_only_refs() {
+        let (_dir, cfg) = fresh_cfg(8);
+        let store = Store::open(&cfg).await.expect("open store");
+        let now = chrono::Utc::now();
+        let id = crate::memory::MemoryId::new();
+        let m = crate::memory::Memory {
+            id: id.clone(),
+            session_id: Some("s1".into()),
+            kind: crate::memory::MemoryKind::Context,
+            text: "Antoine Lefebvre approved the report.".into(),
+            created_at: now,
+            accessed_at: now,
+            valid_from: now,
+            valid_to: None,
+            embedding: vec![0.0; 8],
+            token_refs: Vec::new(),
+            entity_refs: Vec::new(),
+        };
+        store.memory_insert(&m).await.expect("insert");
+
+        store
+            .memory_update_ner_fields(
+                &id,
+                vec![crate::memory::TokenRef {
+                    label: "Person".into(),
+                    token: "PERSON_1".into(),
+                }],
+                vec!["pii:Person:PERSON_1".into()],
+            )
+            .await
+            .expect("update refs");
+
+        let updated = store
+            .memory_get(&id)
+            .await
+            .expect("get")
+            .expect("memory exists");
+        assert_eq!(updated.text, m.text);
+        assert_eq!(updated.token_refs[0].token, "PERSON_1");
+        assert_eq!(updated.entity_refs, vec!["pii:Person:PERSON_1"]);
     }
 }

@@ -9,7 +9,7 @@
 //! `Pipeline` exposes the underlying helpers. `search` is wired live
 //! because `Pipeline::search` already exists.
 
-use crate::config::AnnoRagConfig;
+use crate::config::{AnnoRagConfig, MemoryNerMode};
 use crate::pipeline::Pipeline;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
@@ -135,8 +135,10 @@ fn parse_kind(s: &str) -> Option<crate::memory::MemoryKind> {
 #[derive(Serialize)]
 struct MemorySaveResultWire {
     id: String,
+    stored_text: String,
     redacted_text: String,
     token_count: usize,
+    ner_mode: MemoryNerMode,
 }
 
 /// Parameters for the `memory_recall` tool.
@@ -211,6 +213,7 @@ struct MemoryHitWire {
     text: String,
     kind: String,
     created_at: String,
+    entity_refs: Vec<String>,
     score: f32,
 }
 
@@ -363,17 +366,40 @@ impl AnnoRagServer {
         serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
     }
 
-    /// Save a memory. PII is tokenized through the local vault before storage.
+    /// Save a memory. Default mode stores raw text immediately and enriches NER refs asynchronously.
     #[tool(
-        description = "Save a memory. PII is tokenized through the local vault before storage. Returns the new id and the redacted text actually persisted."
+        description = "Save a memory. Default async mode stores raw text immediately and enriches NER refs in the background. Returns the new id and stored text."
     )]
     async fn memory_save(&self, Parameters(p): Parameters<MemorySaveParams>) -> String {
         let start = std::time::Instant::now();
         let kind = p.kind.as_deref().and_then(parse_kind);
-        let r = self.pipeline.save_memory(&p.text, kind, p.session_id).await;
+        let session_id = p.session_id.clone();
+        let r = self
+            .pipeline
+            .save_memory(&p.text, kind, session_id.clone())
+            .await;
         let elapsed = start.elapsed().as_millis() as u64;
         match r {
             Ok(s) => {
+                if self.cfg.memory_ner_mode == MemoryNerMode::Async {
+                    let pipeline = Arc::clone(&self.pipeline);
+                    let id = s.id.clone();
+                    let text = p.text.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = pipeline
+                            .save_memory_ner_task(id.clone(), text, kind, session_id)
+                            .await
+                        {
+                            tracing::warn!(
+                                target: "anno_rag::memory::audit",
+                                tool = "memory_save_ner_task",
+                                memory_id = %id.as_string(),
+                                result = "error",
+                                "{e}"
+                            );
+                        }
+                    });
+                }
                 tracing::info!(
                     target: "anno_rag::memory::audit",
                     tool = "memory_save",
@@ -383,8 +409,10 @@ impl AnnoRagServer {
                 );
                 let wire = MemorySaveResultWire {
                     id: s.id.as_string(),
+                    stored_text: s.stored_text,
                     redacted_text: s.redacted_text,
                     token_count: s.token_refs.len(),
+                    ner_mode: s.ner_mode,
                 };
                 serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
             }
@@ -441,6 +469,7 @@ impl AnnoRagServer {
                             text: h.text,
                             kind: format!("{:?}", h.kind).to_lowercase(),
                             created_at: h.created_at,
+                            entity_refs: h.entity_refs,
                             score: h.score,
                         })
                         .collect(),
@@ -537,6 +566,7 @@ impl AnnoRagServer {
                             text: h.text,
                             kind: format!("{:?}", h.kind).to_lowercase(),
                             created_at: h.created_at,
+                            entity_refs: h.entity_refs,
                             score: h.score,
                         })
                         .collect(),
