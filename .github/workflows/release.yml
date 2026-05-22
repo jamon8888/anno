@@ -162,11 +162,11 @@ jobs:
       - name: Gateway boot smoke (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: .\scripts\release\smoke-gateway.ps1 -BinaryPath ".\target\${{ join(matrix.targets, ' ') }}\release\anno-privacy-gateway.exe"
+        run: .\scripts\release\smoke-gateway.ps1 -BinaryPath ".\target\${{ join(matrix.targets, '-') }}\release\anno-privacy-gateway.exe"
       - name: Gateway boot smoke (Unix)
         if: runner.os != 'Windows'
         shell: bash
-        run: ./scripts/release/smoke-gateway.sh "./target/${{ join(matrix.targets, ' ') }}/release/anno-privacy-gateway"
+        run: ./scripts/release/smoke-gateway.sh "./target/${{ join(matrix.targets, '-') }}/release/anno-privacy-gateway"
       - id: cargo-dist
         name: Post-build
         # We force bash here just because github makes it really hard to get values up
