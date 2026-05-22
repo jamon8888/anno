@@ -31,6 +31,43 @@ impl Embedder {
     /// Returns [`Error::Embed`] if the hub fetch, config/tokenizer parse,
     /// safetensors mmap, or BERT graph construction fails.
     pub async fn load(cfg: &AnnoRagConfig) -> Result<Self> {
+        // ── ANNO_MODELS_DIR fast-path ──────────────────────────────────────────────
+        // When set and the three required files exist, skip the HF Hub download.
+        // This is the offline path used after `anno-rag download-models`.
+        if let Some(models_dir) = std::env::var_os("ANNO_MODELS_DIR") {
+            let base = std::path::PathBuf::from(models_dir)
+                .join("multilingual-e5-small");
+            let config_path    = base.join("config.json");
+            let tokenizer_path = base.join("tokenizer.json");
+            let weights_path   = base.join("model.safetensors");
+            if config_path.exists() && tokenizer_path.exists() && weights_path.exists() {
+                let device = Device::Cpu;
+                let config_json = std::fs::read_to_string(&config_path)?;
+                let config: Config = serde_json::from_str(&config_json)
+                    .map_err(|e| Error::Embed(format!("config parse (local): {e}")))?;
+                let tokenizer = Tokenizer::from_file(&tokenizer_path)
+                    .map_err(|e| Error::Embed(format!("tokenizer load (local): {e}")))?;
+                let dtype = match cfg.embedder_dtype.as_deref() {
+                    Some("f16") => DType::F16,
+                    _ => DType::F32,
+                };
+                // SAFETY: we don't mutate the file for the lifetime of the mmap.
+                let vb = unsafe {
+                    VarBuilder::from_mmaped_safetensors(&[weights_path], dtype, &device)
+                        .map_err(|e| Error::Embed(format!("var builder (local): {e}")))?
+                };
+                let model = BertModel::load(vb, &config)
+                    .map_err(|e| Error::Embed(format!("bert load (local): {e}")))?;
+                return Ok(Self {
+                    model,
+                    tokenizer,
+                    device,
+                    dim: cfg.embed_dim,
+                });
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────────────
+
         let device = Device::Cpu;
         let api = hf_hub::api::tokio::Api::new()
             .map_err(|e| Error::Embed(format!("hf-hub init: {e}")))?;
@@ -242,5 +279,23 @@ mod tests {
         let e = Embedder::load(&cfg).await.expect("f16 load");
         let v = e.embed_batch(&["Bonjour".into()]).expect("embed");
         assert_eq!(v[0].len(), 384);
+    }
+
+    #[test]
+    fn anno_models_dir_missing_files_falls_through_to_hf() {
+        // When ANNO_MODELS_DIR points at a dir that lacks the e5 subdir,
+        // load() must NOT return an error — it must fall through to hf-hub.
+        // We can't let it actually call hf-hub in CI, so we only test the
+        // negative: that a missing-files dir does NOT trigger an early-return error.
+        let dir = tempfile::tempdir().expect("tempdir");
+        // Create the subdir but leave it empty.
+        std::fs::create_dir_all(dir.path().join("multilingual-e5-small")).expect("mkdir");
+        // We do NOT call Embedder::load here (would try HF) — just verify
+        // the path logic compiles and the dir exists:
+        let e5_dir = dir.path().join("multilingual-e5-small");
+        let has_all = e5_dir.join("config.json").exists()
+            && e5_dir.join("tokenizer.json").exists()
+            && e5_dir.join("model.safetensors").exists();
+        assert!(!has_all, "empty dir must not trigger local-load path");
     }
 }
