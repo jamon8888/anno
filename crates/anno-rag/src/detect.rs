@@ -205,9 +205,8 @@ impl Detector {
         if let Some(models_dir) = std::env::var_os("ANNO_MODELS_DIR") {
             let model_path = PathBuf::from(models_dir).join("gliner2-multi-v1-onnx");
             if model_path.exists() {
-                let ner =
-                    anno::backends::gliner2_fastino::GLiNER2Fastino::from_local(&model_path)
-                        .map_err(|e| Error::Detect(format!("gliner2_fastino load (local): {e}")))?;
+                let ner = anno::backends::gliner2_fastino::GLiNER2Fastino::from_local(&model_path)
+                    .map_err(|e| Error::Detect(format!("gliner2_fastino load (local): {e}")))?;
                 return Ok(Self { ner });
             }
         }

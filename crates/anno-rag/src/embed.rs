@@ -35,11 +35,10 @@ impl Embedder {
         // When set and the three required files exist, skip the HF Hub download.
         // This is the offline path used after `anno-rag download-models`.
         if let Some(models_dir) = std::env::var_os("ANNO_MODELS_DIR") {
-            let base = std::path::PathBuf::from(models_dir)
-                .join("multilingual-e5-small");
-            let config_path    = base.join("config.json");
+            let base = std::path::PathBuf::from(models_dir).join("multilingual-e5-small");
+            let config_path = base.join("config.json");
             let tokenizer_path = base.join("tokenizer.json");
-            let weights_path   = base.join("model.safetensors");
+            let weights_path = base.join("model.safetensors");
             if config_path.exists() && tokenizer_path.exists() && weights_path.exists() {
                 let device = Device::Cpu;
                 let config_json = std::fs::read_to_string(&config_path)?;

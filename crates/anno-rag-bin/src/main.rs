@@ -93,7 +93,10 @@ async fn main() -> anyhow::Result<()> {
                 .map(|p| p.to_path_buf())
                 .unwrap_or_else(|| d.clone());
         }
-        println!("Downloading anno-rag models to: {}", cfg.models_cache().display());
+        println!(
+            "Downloading anno-rag models to: {}",
+            cfg.models_cache().display()
+        );
         println!("  (embedder ~470 MiB + NER ~500 MiB = ~970 MiB total)");
         println!();
         let models_dir = anno_rag::download_models::download(&cfg).await?;

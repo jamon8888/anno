@@ -5,11 +5,11 @@
 #![warn(missing_docs)]
 
 pub mod bench_cli;
-pub mod download_models;
 pub mod canonicalize;
 pub mod config;
 pub mod conflict;
 pub mod detect;
+pub mod download_models;
 pub mod embed;
 pub mod error;
 pub mod eval;

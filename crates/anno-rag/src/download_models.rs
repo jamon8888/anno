@@ -43,8 +43,8 @@ async fn download_embedder(models_dir: &Path) -> Result<()> {
     let e5_dir = models_dir.join("multilingual-e5-small");
     tokio::fs::create_dir_all(&e5_dir).await?;
 
-    let api = hf_hub::api::tokio::Api::new()
-        .map_err(|e| Error::Embed(format!("hf-hub init: {e}")))?;
+    let api =
+        hf_hub::api::tokio::Api::new().map_err(|e| Error::Embed(format!("hf-hub init: {e}")))?;
     let repo = api.model(EMBED_MODEL_ID.to_string());
 
     // config.json
@@ -74,10 +74,7 @@ async fn download_embedder(models_dir: &Path) -> Result<()> {
             (p, "pytorch_model.bin")
         }
     };
-    let size_mb = std::fs::metadata(&src)
-        .map(|m| m.len())
-        .unwrap_or(0) as f64
-        / 1_048_576.0;
+    let size_mb = std::fs::metadata(&src).map(|m| m.len()).unwrap_or(0) as f64 / 1_048_576.0;
     tokio::fs::copy(&src, e5_dir.join(dest_name)).await?;
     // e5-small ships model.safetensors; the pytorch_model.bin branch is a
     // defensive fallback. NOTE: a raw .bin cannot be mmap-loaded as safetensors
@@ -141,9 +138,7 @@ fn download_ner_sync(ner_dir: &Path) -> Result<()> {
         c_refs
             .iter()
             .find_map(|c| repo.get(c).ok())
-            .ok_or_else(|| {
-                Error::Detect(format!("gliner2 onnx graph '{base}' not found"))
-            })?;
+            .ok_or_else(|| Error::Detect(format!("gliner2 onnx graph '{base}' not found")))?;
     }
 
     // Mirror the snapshot dir to ner_dir preserving subdirectory structure
@@ -179,8 +174,7 @@ fn find_snapshot_dir(downloaded_file: &Path, relative_hint: &str) -> Result<Path
 /// preserving relative paths. Subdirectories are created as needed.
 fn mirror_dir(src_root: &Path, dest_root: &Path) -> Result<()> {
     for entry in walkdir::WalkDir::new(src_root) {
-        let entry =
-            entry.map_err(|e| Error::Io(std::io::Error::other(e.to_string())))?;
+        let entry = entry.map_err(|e| Error::Io(std::io::Error::other(e.to_string())))?;
         let rel = entry
             .path()
             .strip_prefix(src_root)
@@ -224,8 +218,8 @@ mod tests {
         let fake_file = fp32.join("tokenizer.json");
         std::fs::write(&fake_file, b"{}").expect("write");
 
-        let result = find_snapshot_dir(&fake_file, "fp32_v2/tokenizer.json")
-            .expect("find snapshot dir");
+        let result =
+            find_snapshot_dir(&fake_file, "fp32_v2/tokenizer.json").expect("find snapshot dir");
         assert_eq!(result, dir.path());
     }
 
@@ -237,8 +231,7 @@ mod tests {
         let fake_file = dir.path().join("tokenizer.json");
         std::fs::write(&fake_file, b"{}").expect("write");
 
-        let result =
-            find_snapshot_dir(&fake_file, "tokenizer.json").expect("find snapshot dir");
+        let result = find_snapshot_dir(&fake_file, "tokenizer.json").expect("find snapshot dir");
         assert_eq!(result, dir.path());
     }
 
@@ -250,10 +243,7 @@ mod tests {
 
         let result = find_snapshot_dir(&fake_file, "tokenizer.json");
         assert!(result.is_err(), "must error without dtype subdir");
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("no dtype subdir"));
+        assert!(result.unwrap_err().to_string().contains("no dtype subdir"));
     }
 
     #[test]
@@ -282,8 +272,7 @@ mod tests {
         let dst = tempfile::tempdir().expect("dst");
 
         std::fs::create_dir_all(src.path().join("a").join("b")).expect("mkdir");
-        std::fs::write(src.path().join("a").join("b").join("f.bin"), b"x")
-            .expect("write");
+        std::fs::write(src.path().join("a").join("b").join("f.bin"), b"x").expect("write");
 
         mirror_dir(src.path(), dst.path()).expect("mirror");
         assert!(dst.path().join("a").join("b").join("f.bin").exists());
