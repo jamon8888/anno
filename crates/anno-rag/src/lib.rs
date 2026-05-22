@@ -5,6 +5,7 @@
 #![warn(missing_docs)]
 
 pub mod bench_cli;
+pub mod download_models;
 pub mod canonicalize;
 pub mod config;
 pub mod conflict;
@@ -13,11 +14,13 @@ pub mod embed;
 pub mod error;
 pub mod eval;
 pub mod ingest;
-pub mod mcp;
 pub mod memory;
+#[cfg(test)]
 pub(crate) mod ocr;
 pub mod pii_eval;
 pub mod pipeline;
+#[cfg(feature = "rerank")]
+pub mod rerank;
 pub mod store;
 pub mod vault;
 

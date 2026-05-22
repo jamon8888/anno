@@ -5,6 +5,12 @@ on:
   pull_request:
     branches: [main, master]
   workflow_dispatch: # Manual trigger
+# Supersede in-progress runs for the same ref: a new push to a PR cancels
+# the previous, still-running CI instead of piling up overlapping matrices.
+# `main`/tag runs use a per-SHA group so they never cancel each other.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1

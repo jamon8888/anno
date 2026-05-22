@@ -52,6 +52,11 @@ pub enum Error {
     #[error("memory: {0}")]
     Memory(String),
 
+    /// Cross-encoder reranker load or inference failed. Recoverable:
+    /// callers fall back to the non-reranked ordering.
+    #[error("rerank: {0}")]
+    Rerank(String),
+
     /// I/O error from std.
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -83,5 +88,11 @@ mod tests {
     fn display_includes_context() {
         let e = Error::Config("missing data_dir".into());
         assert_eq!(format!("{e}"), "config error: missing data_dir");
+    }
+
+    #[test]
+    fn rerank_display_includes_context() {
+        let e = Error::Rerank("onnx session build".into());
+        assert_eq!(format!("{e}"), "rerank: onnx session build");
     }
 }

@@ -9,16 +9,41 @@ use crate::store::{ChunkRecord, SearchHit, Store};
 use crate::vault::Vault;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
+
+/// Deterministic document id: UUID v5 (OID namespace) of the raw file
+/// bytes. Same file content ⇒ same `doc_id` ⇒ the existing
+/// `merge_insert(&["doc_id","chunk_idx"])` overwrites its own rows
+/// instead of duplicating across `ingest_folder` runs.
+#[must_use]
+pub(crate) fn doc_uuid(file_bytes: &[u8]) -> Uuid {
+    Uuid::new_v5(&Uuid::NAMESPACE_OID, file_bytes)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IngestOutcome {
+    Ingested { used_embedded_ocr: bool },
+    Skipped,
+}
 
 /// End-to-end pipeline: detect → pseudonymize → embed → store.
 pub struct Pipeline {
     detector: OnceCell<Arc<Detector>>,
     vault: Vault,
     embedder: OnceCell<Arc<Embedder>>,
+    #[cfg(feature = "rerank")]
+    reranker: tokio::sync::OnceCell<std::sync::Arc<crate::rerank::Reranker>>,
     store: Store,
     cfg: AnnoRagConfig,
+    /// Memories-table row count as of the last `optimize_memories`
+    /// fold-in on the recall path. When the live count exceeds this,
+    /// recall runs `optimize()` to index the new rows, then advances
+    /// the watermark. `Relaxed` is sufficient: a missed/duplicated
+    /// optimize is self-correcting on the next recall (idempotent),
+    /// never incorrect.
+    memory_fts_watermark: std::sync::atomic::AtomicU64,
 }
 
 impl Pipeline {
@@ -37,8 +62,11 @@ impl Pipeline {
             detector: OnceCell::new(),
             vault,
             embedder: OnceCell::new(),
+            #[cfg(feature = "rerank")]
+            reranker: tokio::sync::OnceCell::new(),
             store,
             cfg,
+            memory_fts_watermark: std::sync::atomic::AtomicU64::new(0),
         })
     }
 
@@ -66,6 +94,28 @@ impl Pipeline {
         self.embedder.initialized()
     }
 
+    /// Lazy-init the cross-encoder reranker. Downloads ~571 MB (INT8
+    /// ONNX) on first call; cached thereafter. Only compiled when the
+    /// `rerank` feature is on.
+    ///
+    /// # Errors
+    /// [`Error::Rerank`] if the model fetch or session build fails.
+    #[cfg(feature = "rerank")]
+    async fn reranker(&self) -> Result<&Arc<crate::rerank::Reranker>> {
+        self.reranker
+            .get_or_try_init(|| async {
+                crate::rerank::Reranker::load(&self.cfg).await.map(Arc::new)
+            })
+            .await
+    }
+
+    /// Returns `true` if the reranker has been initialized.
+    #[cfg(feature = "rerank")]
+    #[must_use]
+    pub fn reranker_loaded(&self) -> bool {
+        self.reranker.initialized()
+    }
+
     /// Returns `true` if the PII detector has been initialized.
     #[must_use]
     pub fn detector_loaded(&self) -> bool {
@@ -74,8 +124,34 @@ impl Pipeline {
 
     /// Ingest a single file end-to-end. Writes `<stem>.anon.md` to `output_dir`.
     pub async fn ingest_one(&self, path: &Path, output_dir: &Path) -> Result<()> {
-        let extracted = ingest::extract(path, &self.cfg).await?;
-        let doc_id = Uuid::now_v7();
+        self.ingest_one_counted(path, output_dir, &self.cfg).await?;
+        Ok(())
+    }
+
+    async fn ingest_one_counted(
+        &self,
+        path: &Path,
+        output_dir: &Path,
+        cfg: &AnnoRagConfig,
+    ) -> Result<IngestOutcome> {
+        let file_bytes = std::fs::read(path).map_err(Error::from)?;
+        let doc_id = doc_uuid(&file_bytes);
+        if self.store.doc_exists(doc_id).await? {
+            tracing::info!(path = %path.display(), "skip: already ingested (same content)");
+            return Ok(IngestOutcome::Skipped);
+        }
+        let extracted = ingest::extract(path, cfg).await?;
+        let used_embedded_ocr = extracted.ocr_status == ingest::OcrStatus::CompletedEmbedded;
+        if !should_index_extracted_doc(&extracted) {
+            tracing::warn!(
+                path = %path.display(),
+                class = ?extracted.class,
+                status = ?extracted.ocr_status,
+                chunks = extracted.chunks.len(),
+                "ingest skipped before indexing"
+            );
+            return Ok(IngestOutcome::Skipped);
+        }
         let folder_path = path
             .parent()
             .map(|p| p.display().to_string())
@@ -115,6 +191,9 @@ impl Pipeline {
             });
         }
 
+        // Content changed (or first ingest): drop any prior rows for
+        // this source_path so a superseded doc_id doesn't orphan.
+        self.store.delete_doc_rows(&extracted.source_path).await?;
         self.store.upsert(records).await?;
 
         // Write the anonymized markdown copy.
@@ -125,7 +204,7 @@ impl Pipeline {
         std::fs::write(&out_path, full_anon).map_err(Error::from)?;
 
         tracing::info!(path = %path.display(), chunks = extracted.chunks.len(), "ingested");
-        Ok(())
+        Ok(IngestOutcome::Ingested { used_embedded_ocr })
     }
 
     /// Walk a folder and ingest every supported file. Returns the count
@@ -136,12 +215,15 @@ impl Pipeline {
         recursive: bool,
         output_dir: &Path,
     ) -> Result<usize> {
-        let mut count = 0_usize;
+        let mut count = 0usize;
+        let mut ocr_spent = Duration::ZERO;
+        let ocr_budget = self.cfg.ocr_batch_budget_secs.map(Duration::from_secs);
         let walker = if recursive {
             walkdir::WalkDir::new(folder).into_iter()
         } else {
             walkdir::WalkDir::new(folder).max_depth(1).into_iter()
         };
+        let mut paths: Vec<std::path::PathBuf> = Vec::new();
         for entry in walker.filter_map(std::result::Result::ok) {
             if !entry.file_type().is_file() {
                 continue;
@@ -169,10 +251,21 @@ impl Pipeline {
             ) {
                 continue;
             }
-            match self.ingest_one(path, output_dir).await {
-                Ok(()) => count += 1,
+            paths.push(path.to_path_buf());
+        }
+        for p in paths {
+            let doc_cfg = cfg_for_ocr_budget(&self.cfg, ocr_budget, ocr_spent);
+            let started = Instant::now();
+            match self.ingest_one_counted(&p, output_dir, &doc_cfg).await {
+                Ok(IngestOutcome::Ingested { used_embedded_ocr }) => {
+                    if used_embedded_ocr {
+                        ocr_spent += started.elapsed();
+                    }
+                    count += 1;
+                }
+                Ok(IngestOutcome::Skipped) => {}
                 Err(e) => {
-                    tracing::warn!(path = %path.display(), error = %e, "ingest skipped");
+                    tracing::warn!(path = %p.display(), error = %e, "ingest skipped");
                 }
             }
         }
@@ -205,6 +298,58 @@ impl Pipeline {
         let pseudo_q = self.vault.pseudonymize(query, &entities).await?;
         let qv = self.embedder().await?.embed_query(&pseudo_q)?;
         self.store.search(&pseudo_q, &qv, top_k).await
+    }
+
+    /// Search + cross-encoder rerank.
+    ///
+    /// 1. `search` with `pool_size` (over-fetch).
+    /// 2. Rehydrate each hit's `text_pseudo` to plaintext via the vault
+    ///    — the cross-encoder must see real entities, not `<PERSON_42>`.
+    /// 3. Score `(plaintext_query, rehydrated_text)` pairs.
+    /// 4. Reorder by score desc; replace `SearchHit::score` with the
+    ///    cross-encoder score.
+    /// 5. Truncate to `top_k`.
+    ///
+    /// The plaintext query is used **only** for the rerank stage; the
+    /// upstream embed + FTS lookup still runs on the pseudonymized query,
+    /// preserving the privacy invariant.
+    ///
+    /// # Errors
+    /// [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] / [`Error::Rerank`] per failing layer.
+    #[cfg(feature = "rerank")]
+    pub async fn search_reranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        pool_size: usize,
+    ) -> Result<Vec<SearchHit>> {
+        let pool = pool_size.max(top_k).max(1);
+        let mut hits = self.search(query, pool).await?;
+        if hits.is_empty() {
+            return Ok(hits);
+        }
+
+        let mut passages: Vec<String> = Vec::with_capacity(hits.len());
+        for h in &hits {
+            let r = self.rehydrate(&h.text_pseudo).await?;
+            passages.push(r.text);
+        }
+        let refs: Vec<&str> = passages.iter().map(String::as_str).collect();
+
+        let reranker = self.reranker().await?;
+        let scores = reranker.score_pairs_batched(query, &refs, self.cfg.rerank_batch_size)?;
+
+        for (h, s) in hits.iter_mut().zip(&scores) {
+            h.score = *s;
+        }
+        hits.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        hits.truncate(top_k);
+        Ok(hits)
     }
 
     /// Rehydrate pseudo-tokens in `text` back to originals using the vault.
@@ -584,6 +729,36 @@ impl Pipeline {
         Ok(())
     }
 
+    /// Guarantee the memories table is FTS-queryable before a hybrid
+    /// recall:
+    /// 1. Create the FTS index if absent (idempotent, cheap when built).
+    /// 2. If memories were added since the last fold-in, `optimize()` so
+    ///    the new rows are covered, then advance the watermark.
+    ///
+    /// This is the *only* path that keeps memory FTS current —
+    /// `spawn_compaction_task` is not wired into any entrypoint.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if index build, count, or optimize fails.
+    async fn ensure_memory_searchable(&self) -> Result<()> {
+        use std::sync::atomic::Ordering;
+
+        // (1) Idempotent: builds once when the table first has rows,
+        // no-ops (count_rows + list_indices) thereafter.
+        self.store.build_memories_fts_index().await?;
+
+        // (2) Gate optimize on "rows added since last fold-in" so
+        // steady-state recall (no new memories) pays only a count_rows.
+        let live = self.store.memory_row_count().await?;
+        let mark = self.memory_fts_watermark.load(Ordering::Relaxed);
+        if live > mark {
+            let min_age = std::time::Duration::from_secs(self.cfg.compaction_min_age_secs);
+            self.store.optimize_memories(min_age).await?;
+            self.memory_fts_watermark.store(live, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+
     /// Hybrid recall: detect + pseudonymize the query, embed (e5 query
     /// prefix), run the dense+FTS RRF-reranked search on the `memories`
     /// table, optionally filter by `session_id` / `kinds`, rehydrate.
@@ -606,6 +781,8 @@ impl Pipeline {
         let entities = self.detector_get_or_init()?.detect(query)?;
         let (tokenized_query, _) = self.vault.pseudonymize_with_refs(query, &entities).await?;
         let query_vec = self.embedder().await?.embed_query(&tokenized_query)?;
+
+        self.ensure_memory_searchable().await?;
 
         let mut raw = self
             .store
@@ -689,6 +866,51 @@ impl Pipeline {
             });
         }
         Ok(out)
+    }
+
+    /// Memory recall + cross-encoder rerank. Same contract as
+    /// [`Pipeline::recall_memory`] plus a `pool_size` over-fetch and a
+    /// rerank stage. `recall_memory` already returns rehydrated
+    /// plaintext, so the cross-encoder scores `(query, hit.text)`
+    /// directly — no extra vault round-trip.
+    ///
+    /// # Errors
+    /// [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] / [`Error::Rerank`] per failing layer.
+    #[cfg(feature = "rerank")]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn recall_memory_reranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        session_id: Option<String>,
+        kinds: Option<Vec<crate::memory::MemoryKind>>,
+        as_of: Option<chrono::DateTime<chrono::Utc>>,
+        graph_expand: bool,
+        pool_size: usize,
+    ) -> Result<Vec<crate::memory::MemoryHit>> {
+        let pool = pool_size.max(top_k).max(1);
+        let mut hits = self
+            .recall_memory(query, pool, session_id, kinds, as_of, graph_expand)
+            .await?;
+        if hits.is_empty() {
+            return Ok(hits);
+        }
+
+        let passages: Vec<&str> = hits.iter().map(|h| h.text.as_str()).collect();
+        let reranker = self.reranker().await?;
+        let scores = reranker.score_pairs_batched(query, &passages, self.cfg.rerank_batch_size)?;
+
+        let mut scored: Vec<(crate::memory::MemoryHit, f32)> = hits.drain(..).zip(scores).collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(scored
+            .into_iter()
+            .take(top_k)
+            .map(|(mut h, s)| {
+                h.score = s;
+                h
+            })
+            .collect())
     }
 
     /// Two-hop graph recall over `entity_refs`.
@@ -946,6 +1168,23 @@ impl Pipeline {
             vault_tokens_purged: purged,
         })
     }
+}
+
+fn should_index_extracted_doc(extracted: &ingest::ExtractedDoc) -> bool {
+    !extracted.ocr_status.is_deferred() && !extracted.chunks.is_empty()
+}
+
+fn cfg_for_ocr_budget(
+    base: &AnnoRagConfig,
+    budget: Option<Duration>,
+    spent: Duration,
+) -> AnnoRagConfig {
+    let mut cfg = base.clone();
+    if budget.is_some_and(|limit| spent >= limit) {
+        cfg.ocr_mode = crate::config::OcrMode::Off;
+        cfg.enable_ocr = false;
+    }
+    cfg
 }
 
 /// Result returned by [`Pipeline::forget_memory`].
@@ -1279,6 +1518,15 @@ mod tests {
     }
 
     #[test]
+    fn doc_uuid_is_deterministic_and_content_sensitive() {
+        let a1 = super::doc_uuid(b"hello world");
+        let a2 = super::doc_uuid(b"hello world");
+        let b = super::doc_uuid(b"hello world!");
+        assert_eq!(a1, a2, "same bytes => same doc_id");
+        assert_ne!(a1, b, "different bytes => different doc_id");
+    }
+
+    #[test]
     fn erasure_receipt_serialises_to_json() {
         let r = ErasureReceipt {
             subject_ref: "x".into(),
@@ -1309,6 +1557,56 @@ mod tests {
         assert!(s.contains("\"stored_text\":\"Antoine Lefebvre approved the report.\""));
         assert!(s.contains("\"redacted_text\":\"Antoine Lefebvre approved the report.\""));
         assert!(s.contains("\"ner_mode\":\"async\""));
+    }
+
+    #[test]
+    fn deferred_or_empty_extractions_are_not_indexable() {
+        let deferred = ingest::ExtractedDoc {
+            source_path: "scan.pdf".into(),
+            content: String::new(),
+            chunks: Vec::new(),
+            class: ingest::DocClass::ScannedPdf,
+            ocr_status: ingest::OcrStatus::Deferred(ingest::OcrDeferredReason::Disabled),
+        };
+        assert!(!should_index_extracted_doc(&deferred));
+
+        let empty_text = ingest::ExtractedDoc {
+            source_path: "empty.txt".into(),
+            content: String::new(),
+            chunks: Vec::new(),
+            class: ingest::DocClass::Empty,
+            ocr_status: ingest::OcrStatus::NotRequired,
+        };
+        assert!(!should_index_extracted_doc(&empty_text));
+
+        let indexable = ingest::ExtractedDoc {
+            source_path: "doc.md".into(),
+            content: "Article 1".into(),
+            chunks: vec![ingest::ExtractedChunk {
+                idx: 0,
+                text: "Article 1".into(),
+                char_start: 0,
+                char_end: 9,
+                page: None,
+            }],
+            class: ingest::DocClass::TextLayer,
+            ocr_status: ingest::OcrStatus::NotRequired,
+        };
+        assert!(should_index_extracted_doc(&indexable));
+    }
+
+    #[test]
+    fn exhausted_ocr_budget_disables_runtime_ocr_for_next_doc() {
+        let cfg = AnnoRagConfig {
+            ocr_mode: crate::config::OcrMode::AutoEmbedded,
+            ocr_batch_budget_secs: Some(10),
+            ..Default::default()
+        };
+
+        let next_cfg =
+            cfg_for_ocr_budget(&cfg, Some(Duration::from_secs(10)), Duration::from_secs(10));
+
+        assert_eq!(next_cfg.effective_ocr_mode(), crate::config::OcrMode::Off);
     }
 }
 

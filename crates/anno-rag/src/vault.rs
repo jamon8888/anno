@@ -57,6 +57,8 @@ impl Vault {
         let mut v = self.inner.lock().await;
         let result = Replacer::pseudonymize(text, entities, &mut v)
             .map_err(|e| Error::Vault(format!("replacer: {e}")))?;
+        v.save()
+            .map_err(|e| Error::Vault(format!("save after pseudonymize: {e}")))?;
         Ok(result.text)
     }
 
@@ -74,6 +76,8 @@ impl Vault {
         let mut v = self.inner.lock().await;
         let result = Replacer::pseudonymize(text, entities, &mut v)
             .map_err(|e| Error::Vault(format!("replacer: {e}")))?;
+        v.save()
+            .map_err(|e| Error::Vault(format!("save after pseudonymize_with_refs: {e}")))?;
         // result.mappings is token -> original. Walk the entities so the
         // returned refs carry the detector's category as the label (e.g.
         // "Person", "Email", "NIR"), not the raw original value.

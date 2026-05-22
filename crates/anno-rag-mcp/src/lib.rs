@@ -1,16 +1,17 @@
 //! MCP server exposing anno-rag's retrieval surface to Cowork over stdio.
 //!
-//! Tools: `search`, `rehydrate`, `detect`, `vault_stats`.
+//! Tools: `search`, `rehydrate`, `detect`, `vault_stats`, memory_*.
 //! Reuse rmcp 1.6's `#[tool_router]` + `#[tool_handler]` pattern from
 //! `vendor/cloakpipe/crates/cloakpipe-mcp/src/lib.rs`.
 //!
-//! Task 6 wires the tool ROUTING and SCHEMAS. Tool bodies for rehydrate,
-//! detect, vault_stats are PLACEHOLDERS — Task 7 fills them once
-//! `Pipeline` exposes the underlying helpers. `search` is wired live
-//! because `Pipeline::search` already exists.
+//! This crate was extracted from `anno-rag::mcp` so that Phase 8 of the
+//! tabular-review plan can attach `anno-rag-tabular` review tools here
+//! without creating a cycle (anno-rag-tabular already depends on anno-rag).
 
-use crate::config::{AnnoRagConfig, MemoryNerMode};
-use crate::pipeline::Pipeline;
+#![warn(missing_docs)]
+
+use anno_rag::config::{AnnoRagConfig, MemoryNerMode};
+use anno_rag::pipeline::Pipeline;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{Implementation, ServerCapabilities, ServerInfo},
@@ -38,6 +39,11 @@ pub struct SearchParams {
     /// Number of results to return.
     #[serde(default = "default_top_k")]
     pub top_k: usize,
+    /// When true, re-score the top candidates with the cross-encoder
+    /// reranker. Requires the server built with `--features rerank`;
+    /// otherwise this call returns a clear error.
+    #[serde(default)]
+    pub rerank: bool,
 }
 
 fn default_top_k() -> usize {
@@ -122,12 +128,12 @@ pub struct MemorySaveParams {
     pub session_id: Option<String>,
 }
 
-fn parse_kind(s: &str) -> Option<crate::memory::MemoryKind> {
+fn parse_kind(s: &str) -> Option<anno_rag::memory::MemoryKind> {
     match s {
-        "fact" => Some(crate::memory::MemoryKind::Fact),
-        "preference" => Some(crate::memory::MemoryKind::Preference),
-        "reference" => Some(crate::memory::MemoryKind::Reference),
-        "context" => Some(crate::memory::MemoryKind::Context),
+        "fact" => Some(anno_rag::memory::MemoryKind::Fact),
+        "preference" => Some(anno_rag::memory::MemoryKind::Preference),
+        "reference" => Some(anno_rag::memory::MemoryKind::Reference),
+        "context" => Some(anno_rag::memory::MemoryKind::Context),
         _ => None,
     }
 }
@@ -163,6 +169,10 @@ pub struct MemoryRecallParams {
     /// (one-hop neighbours, bounded by `graph_per_hop_limit`). v0.2.
     #[serde(default)]
     pub graph_expand: bool,
+    /// When true, re-score the recalled hits with the cross-encoder
+    /// reranker. Requires the server built with `--features rerank`.
+    #[serde(default)]
+    pub rerank: bool,
 }
 
 /// Parameters for the `memory_graph_recall` tool (v0.2).
@@ -288,7 +298,35 @@ impl AnnoRagServer {
         description = "Search the indexed corpus. Pseudonymizes the query through the local vault, embeds it, returns top-K ranked chunks. Chunks are pseudonymized — call rehydrate(text) to restore originals."
     )]
     async fn search(&self, Parameters(params): Parameters<SearchParams>) -> String {
-        match self.pipeline.search(&params.query, params.top_k).await {
+        let result = if params.rerank {
+            #[cfg(feature = "rerank")]
+            {
+                tracing::info!(
+                    target: "anno_rag::audit",
+                    tool = "search",
+                    score_source = "cross_encoder",
+                    ""
+                );
+                self.pipeline
+                    .search_reranked(&params.query, params.top_k, self.cfg.rerank_pool_size)
+                    .await
+            }
+            #[cfg(not(feature = "rerank"))]
+            {
+                return "Error: rerank requested but server built without \
+                        the `rerank` feature"
+                    .to_string();
+            }
+        } else {
+            tracing::info!(
+                target: "anno_rag::audit",
+                tool = "search",
+                score_source = "rrf",
+                ""
+            );
+            self.pipeline.search(&params.query, params.top_k).await
+        };
+        match result {
             Ok(hits) => {
                 let wire = SearchResult {
                     hits: hits
@@ -439,17 +477,51 @@ impl AnnoRagServer {
             .kinds
             .as_ref()
             .map(|v| v.iter().filter_map(|k| parse_kind(k)).collect::<Vec<_>>());
-        let r = self
-            .pipeline
-            .recall_memory(
-                &p.query,
-                p.top_k,
-                p.session_id,
-                kinds,
-                p.as_of,
-                p.graph_expand,
-            )
-            .await;
+        let r = if p.rerank {
+            #[cfg(feature = "rerank")]
+            {
+                tracing::info!(
+                    target: "anno_rag::audit",
+                    tool = "memory_recall",
+                    score_source = "cross_encoder",
+                    ""
+                );
+                self.pipeline
+                    .recall_memory_reranked(
+                        &p.query,
+                        p.top_k,
+                        p.session_id,
+                        kinds,
+                        p.as_of,
+                        p.graph_expand,
+                        self.cfg.rerank_pool_size,
+                    )
+                    .await
+            }
+            #[cfg(not(feature = "rerank"))]
+            {
+                return "Error: rerank requested but server built without \
+                        the `rerank` feature"
+                    .to_string();
+            }
+        } else {
+            tracing::info!(
+                target: "anno_rag::audit",
+                tool = "memory_recall",
+                score_source = "rrf",
+                ""
+            );
+            self.pipeline
+                .recall_memory(
+                    &p.query,
+                    p.top_k,
+                    p.session_id,
+                    kinds,
+                    p.as_of,
+                    p.graph_expand,
+                )
+                .await
+        };
         let elapsed = start.elapsed().as_millis() as u64;
         match r {
             Ok(hits) => {
@@ -496,7 +568,7 @@ impl AnnoRagServer {
     async fn memory_forget(&self, Parameters(p): Parameters<MemoryForgetParams>) -> String {
         let id = match &p.id {
             Some(s) => match uuid::Uuid::parse_str(s) {
-                Ok(u) => Some(crate::memory::MemoryId(u)),
+                Ok(u) => Some(anno_rag::memory::MemoryId(u)),
                 Err(e) => return format!("Error: bad id: {e}"),
             },
             None => None,
@@ -634,7 +706,7 @@ impl AnnoRagServer {
     )]
     async fn memory_invalidate(&self, Parameters(p): Parameters<MemoryInvalidateParams>) -> String {
         let id = match uuid::Uuid::parse_str(&p.id) {
-            Ok(u) => crate::memory::MemoryId(u),
+            Ok(u) => anno_rag::memory::MemoryId(u),
             Err(e) => return format!("Error: bad id: {e}"),
         };
         let when = p.at.unwrap_or_else(chrono::Utc::now);
@@ -706,9 +778,9 @@ impl AnnoRagServer {
 ///
 /// # Errors
 ///
-/// Returns [`crate::error::Error::Detect`] if the rmcp transport fails to
+/// Returns [`anno_rag::error::Error::Detect`] if the rmcp transport fails to
 /// initialize or the server loop returns an error.
-pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> crate::error::Result<()> {
+pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> anno_rag::error::Result<()> {
     let server = AnnoRagServer::new(pipeline, cfg);
     tracing::info!("anno-rag MCP server starting on stdio");
 
@@ -716,7 +788,7 @@ pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> crate::error
     let service = server
         .serve(transport)
         .await
-        .map_err(|e| crate::error::Error::Detect(format!("MCP server failed to start: {e}")))?;
+        .map_err(|e| anno_rag::error::Error::Detect(format!("MCP server failed to start: {e}")))?;
 
     // Graceful shutdown: race the rmcp `waiting()` loop (which exits when the
     // stdio peer closes) against SIGINT / SIGTERM. On signal, cancel the
@@ -734,7 +806,7 @@ pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> crate::error
     let quit = service
         .waiting()
         .await
-        .map_err(|e| crate::error::Error::Detect(format!("MCP server error: {e}")))?;
+        .map_err(|e| anno_rag::error::Error::Detect(format!("MCP server error: {e}")))?;
     signal_task.abort();
     tracing::info!(
         target: "anno_rag::mcp::shutdown",

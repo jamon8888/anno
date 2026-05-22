@@ -21,6 +21,66 @@ Each archive contains:
 - `examples/claude_desktop_config.windows.json`
 - `examples/claude_desktop_config.macos.json`
 
+## Pre-Release Local Pipeline Gate
+
+Before building or publishing OS assets, run the local gate on a representative
+folder:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release\local-pipeline-gate.ps1 -Profile fast
+```
+
+Profiles:
+
+- `fast`: check, reuse/build local debug binaries when available, small local
+  sample ingest, re-ingest skip smoke, search smoke, and gateway boot smoke.
+  It compile-checks OCR support but skips test binary linking, OCR runtime
+  work, and release optimization.
+- `release`: `fast` plus model-heavy PII NER, resumable ingest, and
+  `anno-rag bench`; OCR runtime gates are enabled unless `-SkipOcr` is passed.
+- `deep`: `release` plus rerank/eval/memory benches.
+
+The gate writes artifacts under `target/local-release-gate/run-*/`:
+
+- `reports/metrics.json`
+- `reports/report.md`
+- `reports/commands.log`
+- per-command logs under `logs/`
+
+The fast runtime gate also smoke-tests `anno-privacy-gateway` by starting it
+briefly on an ephemeral localhost port and stopping it automatically.
+Each run sets `ANNO_RAG_DATA_DIR` to its own artifact directory so ingest,
+re-ingest, and search are measured against an isolated local store.
+
+### Pre-Tag Acceptance Metrics
+
+Before pushing a release tag, run:
+
+```powershell
+cargo build -p anno-rag-bin -p anno-privacy-gateway
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release\local-pipeline-gate.ps1 -Profile fast -SkipMcp -SkipBuild
+```
+
+Acceptance:
+
+- `reports/metrics.json` has `"summary": { "status": "passed" }`.
+- `anno-rag ingest local samples` ingests exactly `10` documents from the built-in `11` sample files. The duplicate sample is expected to deduplicate.
+- `anno-rag reingest idempotency smoke` ingests exactly `0` documents.
+- Each search smoke exits `0`.
+- `anno-privacy-gateway boot smoke` exits `0`.
+- No `anno-rag`, `anno_rag`, `anno-privacy-gateway`, `cargo`, or `rustc` process remains after the gate.
+
+The latest known Windows debug baseline was `400.95s` for fresh ingest and
+`1.23s` for re-ingest. Treat fresh ingest above `900s`, re-ingest above `10s`,
+or any search above `90s` as a regression to investigate before tagging.
+
+Use `-DryRun` to inspect the command plan without building, downloading models,
+or creating sample data:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release\local-pipeline-gate.ps1 -DryRun -SkipHeavy -SkipOcr -SkipMcp
+```
+
 ## Claude Desktop
 
 Claude Desktop uses the `anno-rag` binary through stdio MCP:
@@ -32,12 +92,15 @@ Claude Desktop uses the `anno-rag` binary through stdio MCP:
       "command": "/absolute/path/to/anno-rag",
       "args": ["mcp"],
       "env": {
-        "ANNO_NO_DOWNLOADS": "1"
+        "ANNO_MODELS_DIR": "/absolute/path/to/.anno-rag/models"
       }
     }
   }
 }
 ```
+
+Replace `/absolute/path/to/.anno-rag/models` with the path printed by `anno-rag download-models`.
+`ANNO_NO_DOWNLOADS=1` still works as a fallback if models are already in the HuggingFace cache.
 
 Config file locations:
 
@@ -55,15 +118,27 @@ Rules:
 
 ## First Run and Offline Mode
 
-The release archives do not contain model weights.
-
-For best first-run behavior, run the warmup command from a source checkout or development build before setting `ANNO_NO_DOWNLOADS=1`:
+The release archives do not contain model weights (~970 MiB total).
+Run the one-time download command included with the binary:
 
 ```sh
-cargo run --release --example warmup_model -p anno-rag
+anno-rag download-models
 ```
 
-If models are already in the HuggingFace cache, `ANNO_NO_DOWNLOADS=1` keeps runtime operation offline.
+This downloads both models (intfloat/multilingual-e5-small + SemplificaAI/gliner2-multi-v1-onnx)
+to `~/.anno-rag/models` and prints the path. Add the printed path to your environment:
+
+```sh
+# macOS / Linux — add to ~/.bashrc or ~/.zshrc
+export ANNO_MODELS_DIR="$HOME/.anno-rag/models"
+
+# Windows PowerShell — persistent, current user
+[System.Environment]::SetEnvironmentVariable("ANNO_MODELS_DIR", "$env:USERPROFILE\.anno-rag\models", "User")
+```
+
+After setting `ANNO_MODELS_DIR`, anno-rag starts without any network call.
+
+> **Developers**: the warmup example still works too — `cargo run --release --example warmup_model -p anno-rag` downloads to the HuggingFace cache (`~/.cache/huggingface/hub/`). If models are already in that cache, `ANNO_NO_DOWNLOADS=1` keeps runtime operation offline. Use `anno-rag download-models` for end-user installs and `warmup_model` for development.
 
 ## OCR
 

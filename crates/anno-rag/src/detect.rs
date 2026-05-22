@@ -22,6 +22,7 @@ use anno::backends::inference::ZeroShotNER;
 use anno::EntityType;
 use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
 use regex::Regex;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 struct FrPatterns {
@@ -200,6 +201,17 @@ impl Detector {
     /// Build a new detector. Loads the GLiNER2Fastino multi-v1 ONNX model
     /// (multilingual, FR-aware) from the HF Hub cache.
     pub fn new() -> Result<Self> {
+        // ── ANNO_MODELS_DIR fast-path ─────────────────────────────────────────
+        if let Some(models_dir) = std::env::var_os("ANNO_MODELS_DIR") {
+            let model_path = PathBuf::from(models_dir).join("gliner2-multi-v1-onnx");
+            if model_path.exists() {
+                let ner =
+                    anno::backends::gliner2_fastino::GLiNER2Fastino::from_local(&model_path)
+                        .map_err(|e| Error::Detect(format!("gliner2_fastino load (local): {e}")))?;
+                return Ok(Self { ner });
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────
         let ner = GLiNER2Fastino::from_pretrained(NER_MODEL_ID)
             .map_err(|e| Error::Detect(format!("gliner2_fastino load: {e}")))?;
         Ok(Self { ner })
@@ -471,5 +483,58 @@ mod tests {
                 w[1].end
             );
         }
+    }
+
+    #[test]
+    fn anno_models_dir_missing_ner_dir_fast_path_not_taken() {
+        // ANNO_MODELS_DIR is set but gliner2-multi-v1-onnx/ does NOT exist.
+        // The fast-path must not be taken; Detector::new falls through to
+        // from_pretrained. Two outcomes are valid:
+        //   - Ok(_): from_pretrained loaded from HF cache (models cached locally) — fast-path not taken ✓
+        //   - Err(e): from_pretrained failed (no cache / network) — error must NOT contain "(local)"
+        let dir = tempfile::tempdir().expect("tempdir");
+        // deliberately do NOT create dir.path()/gliner2-multi-v1-onnx
+
+        std::env::set_var("ANNO_MODELS_DIR", dir.path());
+        let result = Detector::new();
+        std::env::remove_var("ANNO_MODELS_DIR");
+
+        match result {
+            Ok(_) => {
+                // from_pretrained succeeded (models are HF-cached) — fast-path was not taken ✓
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                assert!(
+                    !msg.contains("(local)"),
+                    "fast-path must NOT be taken when gliner2 dir absent, got: {msg}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn anno_models_dir_local_path_entered_when_ner_dir_exists() {
+        // When ANNO_MODELS_DIR/gliner2-multi-v1-onnx/ exists (even empty),
+        // the fast-path IS taken and from_local errors with a typed error.
+        // This proves the branch is entered without requiring real model files.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ner_dir = dir.path().join("gliner2-multi-v1-onnx");
+        std::fs::create_dir_all(&ner_dir).expect("mkdir");
+
+        std::env::set_var("ANNO_MODELS_DIR", dir.path());
+        let result = Detector::new();
+        std::env::remove_var("ANNO_MODELS_DIR");
+
+        // from_local on an empty dir returns an error (no ONNX files)
+        let err = match result {
+            Ok(_) => panic!("must fail on empty model dir"),
+            Err(e) => e,
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("(local)"),
+            "error must come from local path, got: {msg}"
+        );
     }
 }

@@ -1,0 +1,15 @@
+# Committed reference scores for the RERANKED eval gate (opt-in
+# `rerank` feature). See
+# docs/superpowers/specs/2026-05-16-anno-rag-cross-encoder-rerank-design.md §10.5
+#
+# Captured from `cargo bench -p anno-rag --features rerank --bench
+# bench_rerank_eval` on the synthetic 60-document corpus (RRF over-fetch
+# → BGE-reranker-v2-m3 INT8 cross-encoder rerank).
+#
+# Seeded conservatively from the RRF baseline (eval_baseline.toml:
+# recall@10=0.84, ndcg@10=0.72) as a NON-REGRESSION floor: the reranked
+# path must do at least as well as RRF on French legal, else do not
+# ship. Tighten upward once the reranked numbers are measured on the
+# eval corpus. The gate also asserts ndcg_reranked >= ndcg_rrf directly.
+recall_at_10 = 0.84
+ndcg_at_10 = 0.72

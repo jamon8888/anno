@@ -1,0 +1,291 @@
+//! Pre-download anno-rag model weights to a local directory.
+//!
+//! After running, set `ANNO_MODELS_DIR=<path>` so both loaders skip
+//! the HuggingFace Hub network fetch on every process start.
+
+use crate::{config::AnnoRagConfig, error::Result, Error};
+use std::path::{Path, PathBuf};
+
+/// NER model HuggingFace repo id.
+const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
+/// Embedder HuggingFace repo id.
+const EMBED_MODEL_ID: &str = "intfloat/multilingual-e5-small";
+
+/// The eight base names of GLiNER2-Fastino's ONNX graphs (fp32_v2 layout).
+const NER_ONNX_BASES: &[&str] = &[
+    "encoder",
+    "token_gather",
+    "span_rep",
+    "schema_gather",
+    "count_pred_argmax",
+    "count_lstm_fixed",
+    "scorer",
+    "classifier",
+];
+
+/// Download both model families into `cfg.models_cache()` using the layout
+/// that `Embedder::load` and `Detector::new` expect when `ANNO_MODELS_DIR`
+/// is set.
+///
+/// Returns the path of the populated models directory.
+///
+/// # Errors
+/// Returns [`Error::Embed`] / [`Error::Detect`] on HF network failure, or
+/// [`Error::Io`] on filesystem errors.
+pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
+    let models_dir = cfg.models_cache();
+    download_embedder(&models_dir).await?;
+    download_ner(&models_dir).await?;
+    Ok(models_dir)
+}
+
+async fn download_embedder(models_dir: &Path) -> Result<()> {
+    let e5_dir = models_dir.join("multilingual-e5-small");
+    tokio::fs::create_dir_all(&e5_dir).await?;
+
+    let api = hf_hub::api::tokio::Api::new()
+        .map_err(|e| Error::Embed(format!("hf-hub init: {e}")))?;
+    let repo = api.model(EMBED_MODEL_ID.to_string());
+
+    // config.json
+    let src = repo
+        .get("config.json")
+        .await
+        .map_err(|e| Error::Embed(format!("config.json fetch: {e}")))?;
+    tokio::fs::copy(&src, e5_dir.join("config.json")).await?;
+    println!("  embedder config.json    ... ok");
+
+    // tokenizer.json
+    let src = repo
+        .get("tokenizer.json")
+        .await
+        .map_err(|e| Error::Embed(format!("tokenizer.json fetch: {e}")))?;
+    tokio::fs::copy(&src, e5_dir.join("tokenizer.json")).await?;
+    println!("  embedder tokenizer.json ... ok");
+
+    // weights — model.safetensors preferred, pytorch_model.bin fallback
+    let (src, dest_name) = match repo.get("model.safetensors").await {
+        Ok(p) => (p, "model.safetensors"),
+        Err(_) => {
+            let p = repo
+                .get("pytorch_model.bin")
+                .await
+                .map_err(|e| Error::Embed(format!("weights fetch: {e}")))?;
+            (p, "pytorch_model.bin")
+        }
+    };
+    let size_mb = std::fs::metadata(&src)
+        .map(|m| m.len())
+        .unwrap_or(0) as f64
+        / 1_048_576.0;
+    tokio::fs::copy(&src, e5_dir.join(dest_name)).await?;
+    // e5-small ships model.safetensors; the pytorch_model.bin branch is a
+    // defensive fallback. NOTE: a raw .bin cannot be mmap-loaded as safetensors
+    // — if this branch ever fires the downstream Embedder::load will error at
+    // VarBuilder::from_mmaped_safetensors. Left as-is so the download at least
+    // completes; the error is surfaced at load time with a clear message.
+    if dest_name == "pytorch_model.bin" {
+        tokio::fs::copy(
+            e5_dir.join("pytorch_model.bin"),
+            e5_dir.join("model.safetensors"),
+        )
+        .await?;
+    }
+    println!("  embedder weights        ... ok ({size_mb:.0} MiB)");
+    Ok(())
+}
+
+async fn download_ner(models_dir: &Path) -> Result<()> {
+    let ner_dir = models_dir.join("gliner2-multi-v1-onnx");
+    tokio::fs::create_dir_all(&ner_dir).await?;
+
+    // GLiNER2 uses the sync hf-hub API internally; run in spawn_blocking
+    let ner_dir_clone = ner_dir.clone();
+    tokio::task::spawn_blocking(move || download_ner_sync(&ner_dir_clone))
+        .await
+        .map_err(|e| Error::Detect(format!("spawn_blocking panic: {e}")))?
+}
+
+fn download_ner_sync(ner_dir: &Path) -> Result<()> {
+    use hf_hub::api::sync::Api;
+
+    let api = Api::new().map_err(|e| Error::Detect(format!("hf-hub init: {e}")))?;
+    let repo = api.model(NER_MODEL_ID.to_string());
+
+    // Tokenizer — try fp32_v2/ first (matches from_pretrained fallback order)
+    let tokenizer_candidates = [
+        "fp32_v2/tokenizer.json",
+        "fp16_v2/tokenizer.json",
+        "tokenizer.json",
+    ];
+    let (tokenizer_src, tokenizer_rel) = tokenizer_candidates
+        .iter()
+        .find_map(|&rel| repo.get(rel).ok().map(|p| (p, rel)))
+        .ok_or_else(|| Error::Detect("gliner2 tokenizer not found on HF hub".into()))?;
+
+    // Walk up from the downloaded path to find the snapshot root
+    let snapshot_dir = find_snapshot_dir(&tokenizer_src, tokenizer_rel)?;
+
+    // config.json — optional, ignore failure
+    let _ = repo
+        .get("fp32_v2/config.json")
+        .or_else(|_| repo.get("config.json"));
+
+    // 8 ONNX files — fp32_v2 preferred, fp16_v2 fallback
+    for base in NER_ONNX_BASES {
+        let candidates = [
+            format!("fp32_v2/{base}_fp32.onnx"),
+            format!("fp16_v2/{base}_fp16.onnx"),
+        ];
+        let c_refs: Vec<&str> = candidates.iter().map(String::as_str).collect();
+        c_refs
+            .iter()
+            .find_map(|c| repo.get(c).ok())
+            .ok_or_else(|| {
+                Error::Detect(format!("gliner2 onnx graph '{base}' not found"))
+            })?;
+    }
+
+    // Mirror the snapshot dir to ner_dir preserving subdirectory structure
+    mirror_dir(&snapshot_dir, ner_dir)
+}
+
+/// Walk up from `downloaded_file` by `depth` (number of '/' in `relative_hint`)
+/// until we reach the snapshot root. Verifies a dtype subdir (fp32_v2/ etc.) exists.
+fn find_snapshot_dir(downloaded_file: &Path, relative_hint: &str) -> Result<PathBuf> {
+    let depth = relative_hint.matches('/').count();
+    let mut dir = downloaded_file
+        .parent()
+        .ok_or_else(|| Error::Detect("downloaded file has no parent".into()))?;
+    for _ in 0..depth {
+        dir = dir
+            .parent()
+            .ok_or_else(|| Error::Detect("snapshot dir walk exceeded filesystem root".into()))?;
+    }
+    let snapshot_dir = dir.to_path_buf();
+    let has_subdir = ["fp32_v2", "fp16_v2", "fp32", "fp16"]
+        .iter()
+        .any(|s| snapshot_dir.join(s).is_dir());
+    if !has_subdir {
+        return Err(Error::Detect(format!(
+            "snapshot dir has no dtype subdir: {}",
+            snapshot_dir.display()
+        )));
+    }
+    Ok(snapshot_dir)
+}
+
+/// Recursively copy every file from `src_root` to `dest_root`,
+/// preserving relative paths. Subdirectories are created as needed.
+fn mirror_dir(src_root: &Path, dest_root: &Path) -> Result<()> {
+    for entry in walkdir::WalkDir::new(src_root) {
+        let entry =
+            entry.map_err(|e| Error::Io(std::io::Error::other(e.to_string())))?;
+        let rel = entry
+            .path()
+            .strip_prefix(src_root)
+            .map_err(|e| Error::Io(std::io::Error::other(e.to_string())))?;
+        let dest = dest_root.join(rel);
+        if entry.file_type().is_dir() {
+            std::fs::create_dir_all(&dest)?;
+        } else {
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(entry.path(), &dest)?;
+        }
+    }
+    println!("  NER model               ... ok (~500 MiB)");
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::AnnoRagConfig;
+
+    #[test]
+    fn download_targets_models_cache_path() {
+        let cfg = AnnoRagConfig::default();
+        let models_dir = cfg.models_cache();
+        // models_cache() = data_dir/models
+        assert_eq!(models_dir, cfg.data_dir.join("models"));
+        assert!(
+            models_dir.ends_with("models"),
+            "models_cache must end with 'models'"
+        );
+    }
+
+    #[test]
+    fn find_snapshot_dir_strips_one_level() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fp32 = dir.path().join("fp32_v2");
+        std::fs::create_dir_all(&fp32).expect("create fp32_v2");
+        let fake_file = fp32.join("tokenizer.json");
+        std::fs::write(&fake_file, b"{}").expect("write");
+
+        let result = find_snapshot_dir(&fake_file, "fp32_v2/tokenizer.json")
+            .expect("find snapshot dir");
+        assert_eq!(result, dir.path());
+    }
+
+    #[test]
+    fn find_snapshot_dir_strips_zero_levels_for_root_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        // Create a dtype subdir so the snapshot check passes
+        std::fs::create_dir_all(dir.path().join("fp32_v2")).expect("mkdir");
+        let fake_file = dir.path().join("tokenizer.json");
+        std::fs::write(&fake_file, b"{}").expect("write");
+
+        let result =
+            find_snapshot_dir(&fake_file, "tokenizer.json").expect("find snapshot dir");
+        assert_eq!(result, dir.path());
+    }
+
+    #[test]
+    fn find_snapshot_dir_rejects_missing_subdir() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fake_file = dir.path().join("tokenizer.json");
+        std::fs::write(&fake_file, b"{}").expect("write");
+
+        let result = find_snapshot_dir(&fake_file, "tokenizer.json");
+        assert!(result.is_err(), "must error without dtype subdir");
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("no dtype subdir"));
+    }
+
+    #[test]
+    fn mirror_dir_copies_full_tree() {
+        let src = tempfile::tempdir().expect("src");
+        let dst = tempfile::tempdir().expect("dst");
+
+        let sub = src.path().join("fp32_v2");
+        std::fs::create_dir_all(&sub).expect("mkdir sub");
+        std::fs::write(sub.join("encoder_fp32.onnx"), b"onnx").expect("write onnx");
+        std::fs::write(src.path().join("tokenizer.json"), b"{}").expect("write tok");
+
+        mirror_dir(src.path(), dst.path()).expect("mirror_dir");
+
+        assert!(dst
+            .path()
+            .join("fp32_v2")
+            .join("encoder_fp32.onnx")
+            .exists());
+        assert!(dst.path().join("tokenizer.json").exists());
+    }
+
+    #[test]
+    fn mirror_dir_preserves_nested_structure() {
+        let src = tempfile::tempdir().expect("src");
+        let dst = tempfile::tempdir().expect("dst");
+
+        std::fs::create_dir_all(src.path().join("a").join("b")).expect("mkdir");
+        std::fs::write(src.path().join("a").join("b").join("f.bin"), b"x")
+            .expect("write");
+
+        mirror_dir(src.path(), dst.path()).expect("mirror");
+        assert!(dst.path().join("a").join("b").join("f.bin").exists());
+    }
+}

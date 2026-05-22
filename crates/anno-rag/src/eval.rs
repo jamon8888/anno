@@ -174,6 +174,48 @@ pub async fn run_eval(pipeline: &Pipeline, queries: &EvalQueries) -> Result<Eval
     })
 }
 
+/// Reranked-path variant of [`run_eval`]: identical metric computation
+/// but retrieval goes through `pipeline.search_reranked` (RRF over-fetch
+/// → cross-encoder rerank). Used by the `bench_rerank_eval` gate to
+/// assert non-regression vs the RRF baseline.
+///
+/// # Errors
+/// Propagates any [`crate::error::Error`] from `pipeline.search_reranked`.
+#[cfg(feature = "rerank")]
+pub async fn run_eval_reranked(pipeline: &Pipeline, queries: &EvalQueries) -> Result<EvalScores> {
+    let mut recalls = Vec::with_capacity(queries.queries.len());
+    let mut ndcgs = Vec::with_capacity(queries.queries.len());
+    let pool = (SEARCH_CHUNK_LIMIT * 2).max(30);
+    for q in &queries.queries {
+        let hits = pipeline
+            .search_reranked(&q.text, SEARCH_CHUNK_LIMIT, pool)
+            .await?;
+        let mut seen = HashSet::new();
+        let ranked: Vec<String> = hits
+            .iter()
+            .filter_map(|h| {
+                Path::new(&h.source_path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(String::from)
+            })
+            .filter(|f| seen.insert(f.clone()))
+            .collect();
+        let relevant: HashMap<String, u8> = q
+            .relevant
+            .iter()
+            .map(|r| (r.doc.clone(), r.grade))
+            .collect();
+        recalls.push(recall_at_k(&ranked, &relevant, 10));
+        ndcgs.push(ndcg_at_k(&ranked, &relevant, 10));
+    }
+    let n = recalls.len().max(1) as f64;
+    Ok(EvalScores {
+        recall_at_10: recalls.iter().sum::<f64>() / n,
+        ndcg_at_10: ndcgs.iter().sum::<f64>() / n,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

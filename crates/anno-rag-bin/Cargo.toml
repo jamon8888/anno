@@ -1,0 +1,40 @@
+[package]
+name              = "anno-rag-bin"
+version           = "0.2.0"
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+description       = "anno-rag CLI binary — splits out so anno-rag-mcp can depend on anno-rag without a cycle."
+
+[features]
+default = []
+embedded-ocr = ["anno-rag/embedded-ocr", "anno-rag-mcp/embedded-ocr"]
+rerank = ["anno-rag/rerank", "anno-rag-mcp/rerank"]
+
+[[bin]]
+name = "anno-rag"
+path = "src/main.rs"
+
+[dependencies]
+anno-rag        = { path = "../anno-rag" }
+anno-rag-mcp    = { path = "../anno-rag-mcp" }
+
+clap            = { workspace = true }
+tokio           = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow          = { workspace = true }
+
+[lints]
+workspace = true
+
+[package.metadata.dist]
+dist = true
+
+[package.metadata.wix]
+upgrade-guid = "6DE17528-E63A-4AE3-806F-CBCFECD4524F"
+path-guid = "5971D5CA-864C-4CD8-910E-983882553F7C"
+license = false
+eula = false

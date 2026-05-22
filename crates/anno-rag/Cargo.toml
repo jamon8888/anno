@@ -6,16 +6,18 @@ rust-version.workspace = true
 license      = "MIT OR Apache-2.0"
 description  = "Local GDPR-compliant document anonymizer + RAG service (French legal)"
 
-[[bin]]
-name = "anno-rag"
-path = "src/main.rs"
-
 [features]
 default = []
-# Enables the `--enable-ocr` fork-to-system-tesseract runtime path.
-# No effect on linked code — the OCR module always compiles (it's a thin
-# tokio::process wrapper); the flag is informational/feature-gated docs.
+# Legacy flag for the fork-to-system-tesseract runtime path.
 ocr = []
+# Opt-in cross-encoder reranker (BGE-reranker-v2-m3 INT8 ONNX, ~571 MB
+# download on first use). Pulls ort + ndarray. Default off so plain
+# `cargo install anno-rag` users don't pay the model download.
+rerank = ["dep:ort", "dep:ndarray", "dep:is-terminal"]
+# Enables embedded Kreuzberg/Tesseract OCR. Runtime still defaults to
+# `ocr_mode = off`; callers must opt in with `ocr_mode = auto_embedded`
+# or the compatibility `--enable-ocr` CLI flag.
+embedded-ocr = ["kreuzberg/ocr"]
 
 [dependencies]
 anno            = { path = "../anno", features = ["gliner2-fastino"] }
@@ -33,6 +35,9 @@ arrow-schema        = { workspace = true }
 candle-core          = { workspace = true }
 candle-nn            = { workspace = true }
 candle-transformers  = { workspace = true }
+ort                  = { workspace = true, features = ["ndarray"], optional = true }
+ndarray              = { workspace = true, optional = true }
+is-terminal          = { version = "0.4", optional = true }
 hf-hub               = { workspace = true }
 tokenizers           = { workspace = true }
 tokio                = { workspace = true }
@@ -47,7 +52,6 @@ anyhow               = { workspace = true }
 thiserror            = { workspace = true }
 uuid                 = { workspace = true }
 regex                = { workspace = true }
-rmcp                 = { workspace = true }
 walkdir              = { workspace = true }
 sha2                 = { workspace = true }
 futures              = { workspace = true }
@@ -84,6 +88,20 @@ harness = false
 
 [[bench]]
 name = "bench_eval"
+harness = false
+
+[[bench]]
+name = "bench_rerank"
+harness = false
+required-features = ["rerank"]
+
+[[bench]]
+name = "bench_rerank_eval"
+harness = false
+required-features = ["rerank"]
+
+[[bench]]
+name = "bench_memory_recall"
 harness = false
 
 [lints]

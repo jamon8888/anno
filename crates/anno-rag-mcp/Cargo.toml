@@ -1,0 +1,32 @@
+[package]
+name         = "anno-rag-mcp"
+version      = "0.1.0"
+edition.workspace      = true
+rust-version.workspace = true
+license      = "MIT OR Apache-2.0"
+description  = "MCP (stdio) server exposing anno-rag's retrieval surface + (Phase 8) anno-rag-tabular's review tools."
+
+[features]
+default = []
+# Pass-through to anno-rag's embedded Kreuzberg/Tesseract OCR. Runtime still
+# defaults OCR off; callers must opt in through config/CLI.
+embedded-ocr = ["anno-rag/embedded-ocr"]
+# Pass-through to anno-rag's opt-in cross-encoder reranker. Enables the
+# `rerank: bool` param on the search + memory_recall MCP tools.
+rerank = ["anno-rag/rerank"]
+
+[dependencies]
+anno-rag        = { path = "../anno-rag" }
+# anno-rag-tabular will be added in Phase 8 T33 — leave out for this refactor.
+
+rmcp            = { workspace = true }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+tokio           = { workspace = true }
+tracing         = { workspace = true }
+chrono          = { workspace = true }
+schemars        = { workspace = true }
+uuid            = { workspace = true }
+
+[lints]
+workspace = true

@@ -81,7 +81,12 @@ Tracked in the v1 design (`docs/superpowers/specs/2026-05-12-anno-rag-design.md`
 - Hierarchical legal structure typing
 - Citation graph (ECLI, Cass./CE/CA)
 - Privilege gating (avocat-client)
-- Cross-encoder rerank
+- **Cross-encoder reranking**: available as an opt-in `--features rerank`
+  build. Uses BGE-reranker-v2-m3 (pre-quantized INT8 ONNX, ~571 MB
+  downloaded on first use, cached). Memory envelope with rerank on is
+  ~3 GB peak (vs the <1.5 GB default-build cap, which is unchanged —
+  rerank is off by default). Enable per the user guide; expect a
+  0.6–2.5 s rerank stage per query on CPU.
 - Tabular review (Harvey/Legora pattern — v1.1 plan exists)
 - Watch mode / index encryption at rest / multi-tenant
 - 7-crate decomposition

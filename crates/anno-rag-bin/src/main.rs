@@ -6,7 +6,7 @@
 //! - `anno-rag mcp` — run MCP server on stdio (used by Cowork plugin)
 
 use anno_rag::{
-    config::{AnnoRagConfig, MemoryNerMode},
+    config::{AnnoRagConfig, MemoryNerMode, OcrMode},
     pipeline::Pipeline,
     vault::derive_key,
 };
@@ -37,8 +37,8 @@ enum Cmd {
         /// Where to write pseudonymized copies. Defaults to ~/.anno-rag/outputs.
         #[arg(short, long)]
         output: Option<PathBuf>,
-        /// Enable OCR via system tesseract for PDFs without a text layer.
-        /// Requires the `tesseract` binary on PATH (install separately).
+        /// Enable embedded OCR for scanned PDFs/pages when this binary was
+        /// built with the `embedded-ocr` feature.
         #[arg(long, default_value_t = false)]
         enable_ocr: bool,
     },
@@ -59,6 +59,13 @@ enum Cmd {
         #[arg(long, value_name = "DIR")]
         corpus: PathBuf,
     },
+    /// Download model weights to a local directory and print the path.
+    /// Set ANNO_MODELS_DIR to the printed path so anno-rag works offline.
+    DownloadModels {
+        /// Directory to download into. Defaults to ~/.anno-rag/models.
+        #[arg(long, value_name = "DIR")]
+        dir: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
@@ -75,6 +82,33 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // DownloadModels needs no Pipeline — short-circuit before keyring lookup.
+    if let Cmd::DownloadModels { dir } = &cli.cmd {
+        let mut cfg = AnnoRagConfig::default();
+        if let Some(d) = dir {
+            // models_cache() = data_dir/models, so set data_dir = d.parent()
+            // which makes models_cache() == d (when d ends in "models").
+            cfg.data_dir = d
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| d.clone());
+        }
+        println!("Downloading anno-rag models to: {}", cfg.models_cache().display());
+        println!("  (embedder ~470 MiB + NER ~500 MiB = ~970 MiB total)");
+        println!();
+        let models_dir = anno_rag::download_models::download(&cfg).await?;
+        println!();
+        println!("Done. Set the following environment variable:");
+        println!();
+        #[cfg(windows)]
+        println!("  $env:ANNO_MODELS_DIR = \"{}\"", models_dir.display());
+        #[cfg(not(windows))]
+        println!("  export ANNO_MODELS_DIR=\"{}\"", models_dir.display());
+        println!();
+        println!("Or add it permanently to your shell profile / Claude Desktop config env.");
+        return Ok(());
+    }
+
     let mut cfg = AnnoRagConfig::default();
     if let Ok(mode) = std::env::var("ANNO_RAG_MEMORY_NER_MODE") {
         if let Some(mode) = MemoryNerMode::from_env_value(&mode) {
@@ -82,7 +116,9 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     if let Cmd::Ingest { enable_ocr, .. } = &cli.cmd {
-        cfg.enable_ocr |= *enable_ocr;
+        if *enable_ocr {
+            cfg.ocr_mode = OcrMode::AutoEmbedded;
+        }
     }
     let key = derive_key()?;
     let pipeline = Pipeline::new(cfg.clone(), key).await?;
@@ -114,6 +150,7 @@ async fn main() -> anyhow::Result<()> {
             anno_rag_mcp::serve_stdio(pipeline, cfg).await?;
         }
         Cmd::Bench { .. } => unreachable!("handled above before Pipeline::new"),
+        Cmd::DownloadModels { .. } => unreachable!("handled above before Pipeline::new"),
     }
     Ok(())
 }
