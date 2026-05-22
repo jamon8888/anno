@@ -19,14 +19,74 @@ use rmcp::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tokio::sync::OnceCell;
 
-/// State held by the MCP server: a fully-initialized Pipeline plus config.
+/// State held by the MCP server: either a pre-built Pipeline (eager) or a
+/// lazily-initialised one (deferred until the first tool call).
 #[derive(Clone)]
 pub struct AnnoRagServer {
-    pipeline: Arc<Pipeline>,
-    cfg: AnnoRagConfig,
+    pipeline: Arc<OnceCell<Arc<Pipeline>>>,
+    cfg: Arc<AnnoRagConfig>,
+    key: [u8; 32],
     #[allow(dead_code)] // populated + consumed by the rmcp #[tool_router] macro
     tool_router: ToolRouter<Self>,
+}
+
+// ---- Pipeline helpers ----
+
+impl AnnoRagServer {
+    async fn pipeline(&self) -> anno_rag::error::Result<&Pipeline> {
+        self.pipeline
+            .get_or_try_init(|| {
+                let cfg = Arc::clone(&self.cfg);
+                let key = self.key;
+                async move {
+                    if std::env::var("ANNO_MODELS_DIR").is_err() {
+                        return Err(anno_rag::error::Error::Config(
+                            "Models not downloaded. Ask me to 'Set up anno-rag' \
+                             or run `anno-rag download-models` in a terminal, \
+                             then restart the extension."
+                                .into(),
+                        ));
+                    }
+                    Pipeline::new((*cfg).clone(), key).await.map(Arc::new)
+                }
+            })
+            .await
+            .map(|arc| arc.as_ref())
+    }
+
+    fn pipeline_arc(&self) -> Option<Arc<Pipeline>> {
+        self.pipeline.get().cloned()
+    }
+}
+
+// ---- Constructors ----
+
+impl AnnoRagServer {
+    /// Construct with a pre-built pipeline (eager path). Used by serve_stdio and tests.
+    #[must_use]
+    pub fn new(pipeline: Pipeline, cfg: AnnoRagConfig) -> Self {
+        let cell = OnceCell::new();
+        let _ = cell.set(Arc::new(pipeline));
+        Self {
+            pipeline: Arc::new(cell),
+            cfg: Arc::new(cfg),
+            key: [0u8; 32],
+            tool_router: Self::tool_router(),
+        }
+    }
+
+    /// Construct with deferred pipeline init (lazy path). Used by serve_stdio_lazy.
+    #[must_use]
+    pub fn new_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> Self {
+        Self {
+            pipeline: Arc::new(OnceCell::new()),
+            cfg: Arc::new(cfg),
+            key,
+            tool_router: Self::tool_router(),
+        }
+    }
 }
 
 // ---- Tool parameter types ----
@@ -298,6 +358,10 @@ impl AnnoRagServer {
         description = "Search the indexed corpus. Pseudonymizes the query through the local vault, embeds it, returns top-K ranked chunks. Chunks are pseudonymized — call rehydrate(text) to restore originals."
     )]
     async fn search(&self, Parameters(params): Parameters<SearchParams>) -> String {
+        let p = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
         let result = if params.rerank {
             #[cfg(feature = "rerank")]
             {
@@ -307,8 +371,7 @@ impl AnnoRagServer {
                     score_source = "cross_encoder",
                     ""
                 );
-                self.pipeline
-                    .search_reranked(&params.query, params.top_k, self.cfg.rerank_pool_size)
+                p.search_reranked(&params.query, params.top_k, self.cfg.rerank_pool_size)
                     .await
             }
             #[cfg(not(feature = "rerank"))]
@@ -324,7 +387,7 @@ impl AnnoRagServer {
                 score_source = "rrf",
                 ""
             );
-            self.pipeline.search(&params.query, params.top_k).await
+            p.search(&params.query, params.top_k).await
         };
         match result {
             Ok(hits) => {
@@ -356,7 +419,11 @@ impl AnnoRagServer {
         description = "Replace pseudo-tokens (PERSON_1, EMAIL_2, NIR_3, etc.) in text back with original PII from the local vault."
     )]
     async fn rehydrate(&self, Parameters(params): Parameters<RehydrateParams>) -> String {
-        match self.pipeline.rehydrate(&params.text).await {
+        let p = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        match p.rehydrate(&params.text).await {
             Ok(r) => {
                 let wire = RehydrateResult {
                     text: r.text,
@@ -373,7 +440,11 @@ impl AnnoRagServer {
         description = "Dry-run scan: detect PII in text without replacing. Returns category, source, confidence, and char offsets for each entity."
     )]
     async fn detect(&self, Parameters(params): Parameters<DetectParams>) -> String {
-        match self.pipeline.detect(&params.text) {
+        let p = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        match p.detect(&params.text) {
             Ok(entities) => {
                 let info: Vec<EntityInfo> = entities
                     .into_iter()
@@ -396,7 +467,11 @@ impl AnnoRagServer {
     /// Vault diagnostics: total token mappings and per-category counts.
     #[tool(description = "Vault statistics: total token mappings and per-category counts.")]
     async fn vault_stats(&self) -> String {
-        let s = self.pipeline.vault_stats().await;
+        let p = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let s = p.vault_stats().await;
         let wire = VaultStatsResult {
             total_mappings: s.total_mappings,
             categories: s.categories,
@@ -409,34 +484,38 @@ impl AnnoRagServer {
         description = "Save a memory. Default async mode stores raw text immediately and enriches NER refs in the background. Returns the new id and stored text."
     )]
     async fn memory_save(&self, Parameters(p): Parameters<MemorySaveParams>) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
         let start = std::time::Instant::now();
         let kind = p.kind.as_deref().and_then(parse_kind);
         let session_id = p.session_id.clone();
-        let r = self
-            .pipeline
+        let r = pipeline
             .save_memory(&p.text, kind, session_id.clone())
             .await;
         let elapsed = start.elapsed().as_millis() as u64;
         match r {
             Ok(s) => {
                 if self.cfg.memory_ner_mode == MemoryNerMode::Async {
-                    let pipeline = Arc::clone(&self.pipeline);
-                    let id = s.id.clone();
-                    let text = p.text.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = pipeline
-                            .save_memory_ner_task(id.clone(), text, kind, session_id)
-                            .await
-                        {
-                            tracing::warn!(
-                                target: "anno_rag::memory::audit",
-                                tool = "memory_save_ner_task",
-                                memory_id = %id.as_string(),
-                                result = "error",
-                                "{e}"
-                            );
-                        }
-                    });
+                    if let Some(arc_pipeline) = self.pipeline_arc() {
+                        let id = s.id.clone();
+                        let text = p.text.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = arc_pipeline
+                                .save_memory_ner_task(id.clone(), text, kind, session_id)
+                                .await
+                            {
+                                tracing::warn!(
+                                    target: "anno_rag::memory::audit",
+                                    tool = "memory_save_ner_task",
+                                    memory_id = %id.as_string(),
+                                    result = "error",
+                                    "{e}"
+                                );
+                            }
+                        });
+                    }
                 }
                 tracing::info!(
                     target: "anno_rag::memory::audit",
@@ -472,6 +551,10 @@ impl AnnoRagServer {
         description = "Recall memories by hybrid (vector + FTS) search. Returns rehydrated plaintext for the caller's tenant."
     )]
     async fn memory_recall(&self, Parameters(p): Parameters<MemoryRecallParams>) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
         let start = std::time::Instant::now();
         let kinds = p
             .kinds
@@ -486,7 +569,7 @@ impl AnnoRagServer {
                     score_source = "cross_encoder",
                     ""
                 );
-                self.pipeline
+                pipeline
                     .recall_memory_reranked(
                         &p.query,
                         p.top_k,
@@ -511,7 +594,7 @@ impl AnnoRagServer {
                 score_source = "rrf",
                 ""
             );
-            self.pipeline
+            pipeline
                 .recall_memory(
                     &p.query,
                     p.top_k,
@@ -566,6 +649,10 @@ impl AnnoRagServer {
         description = "Forget memories by id or by query. Cascades to vault tokens no longer referenced. Returns the SLO note that physical erasure may take up to 24h."
     )]
     async fn memory_forget(&self, Parameters(p): Parameters<MemoryForgetParams>) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
         let id = match &p.id {
             Some(s) => match uuid::Uuid::parse_str(s) {
                 Ok(u) => Some(anno_rag::memory::MemoryId(u)),
@@ -574,8 +661,7 @@ impl AnnoRagServer {
             None => None,
         };
         let start = std::time::Instant::now();
-        let r = self
-            .pipeline
+        let r = pipeline
             .forget_memory(id, p.query, p.limit, p.dry_run)
             .await;
         let elapsed = start.elapsed().as_millis() as u64;
@@ -612,10 +698,13 @@ impl AnnoRagServer {
     /// List memories with cursor pagination.
     #[tool(description = "List memories with optional session/kind filter and cursor pagination.")]
     async fn memory_list(&self, Parameters(p): Parameters<MemoryListParams>) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
         let start = std::time::Instant::now();
         let kind = p.kind.as_deref().and_then(parse_kind);
-        let r = self
-            .pipeline
+        let r = pipeline
             .list_memories(p.session_id, kind, p.limit, p.cursor)
             .await;
         let elapsed = start.elapsed().as_millis() as u64;
@@ -667,9 +756,12 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<MemoryGraphRecallParams>,
     ) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
         let start = std::time::Instant::now();
-        let r = self
-            .pipeline
+        let r = pipeline
             .graph_recall(&p.entity, p.max_hops, p.per_hop_limit, p.as_of)
             .await;
         let elapsed = start.elapsed().as_millis() as u64;
@@ -705,13 +797,17 @@ impl AnnoRagServer {
         description = "Mark a memory as no longer valid as of the given timestamp (default: now). No-op if valid_to is already set."
     )]
     async fn memory_invalidate(&self, Parameters(p): Parameters<MemoryInvalidateParams>) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
         let id = match uuid::Uuid::parse_str(&p.id) {
             Ok(u) => anno_rag::memory::MemoryId(u),
             Err(e) => return format!("Error: bad id: {e}"),
         };
         let when = p.at.unwrap_or_else(chrono::Utc::now);
         let start = std::time::Instant::now();
-        let r = self.pipeline.invalidate_memory(&id, Some(when)).await;
+        let r = pipeline.invalidate_memory(&id, Some(when)).await;
         let elapsed = start.elapsed().as_millis() as u64;
         match r {
             Ok(invalidated) => {
@@ -762,18 +858,6 @@ impl ServerHandler for AnnoRagServer {
     }
 }
 
-impl AnnoRagServer {
-    /// Construct a new MCP server. Owns the pipeline through `Arc`.
-    #[must_use]
-    pub fn new(pipeline: Pipeline, cfg: AnnoRagConfig) -> Self {
-        Self {
-            pipeline: Arc::new(pipeline),
-            cfg,
-            tool_router: Self::tool_router(),
-        }
-    }
-}
-
 /// Start the MCP server on stdio. Blocks until stdin closes.
 ///
 /// # Errors
@@ -797,6 +881,48 @@ pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> anno_rag::er
     // and the Pipeline drops (Store → LanceDB connection closes; vault flushes
     // any pending save). The audit-event tracing emitted by every handler
     // is already on disk because the JsonlAuditSink sync_data's per line.
+    let cancel = service.cancellation_token();
+    let signal_task = tokio::spawn(async move {
+        shutdown_signal_mcp().await;
+        cancel.cancel();
+    });
+
+    let quit = service
+        .waiting()
+        .await
+        .map_err(|e| anno_rag::error::Error::Detect(format!("MCP server error: {e}")))?;
+    signal_task.abort();
+    tracing::info!(
+        target: "anno_rag::mcp::shutdown",
+        event = "stopped",
+        reason = ?quit,
+        "anno-rag MCP server stopped cleanly"
+    );
+    Ok(())
+}
+
+/// Start the MCP server on stdio with deferred pipeline init.
+///
+/// The `Pipeline` is not built until the first tool call, allowing the server
+/// to start within the MCP timeout window even when models are not yet cached.
+///
+/// # Errors
+///
+/// Returns [`anno_rag::error::Error::Detect`] if the rmcp transport fails to
+/// initialize or the server loop returns an error.
+pub async fn serve_stdio_lazy(
+    cfg: AnnoRagConfig,
+    key: [u8; 32],
+) -> anno_rag::error::Result<()> {
+    let server = AnnoRagServer::new_lazy(cfg, key);
+    tracing::info!("anno-rag MCP server starting (lazy) on stdio");
+
+    let transport = rmcp::transport::stdio();
+    let service = server
+        .serve(transport)
+        .await
+        .map_err(|e| anno_rag::error::Error::Detect(format!("MCP server failed to start: {e}")))?;
+
     let cancel = service.cancellation_token();
     let signal_task = tokio::spawn(async move {
         shutdown_signal_mcp().await;
@@ -865,5 +991,40 @@ async fn shutdown_signal_mcp() {
                 "shutdown signal received, cancelling MCP service"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod lazy_tests {
+    use super::*;
+    use anno_rag::config::AnnoRagConfig;
+
+    #[tokio::test]
+    async fn lazy_server_returns_error_when_models_absent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut cfg = AnnoRagConfig::default();
+        cfg.data_dir = dir.path().to_path_buf();
+        let key = [0u8; 32];
+
+        let saved = std::env::var("ANNO_MODELS_DIR").ok();
+        // Safety: test environment, single-threaded section
+        unsafe { std::env::remove_var("ANNO_MODELS_DIR") };
+
+        let server = AnnoRagServer::new_lazy(cfg, key);
+        let result = server
+            .search(Parameters(SearchParams {
+                query: "test".into(),
+                top_k: 1,
+                rerank: false,
+            }))
+            .await;
+
+        if let Some(v) = saved {
+            unsafe { std::env::set_var("ANNO_MODELS_DIR", v) };
+        }
+        assert!(
+            result.contains("Models not downloaded"),
+            "expected 'Models not downloaded' in: {result}"
+        );
     }
 }
