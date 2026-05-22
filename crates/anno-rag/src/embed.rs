@@ -302,7 +302,10 @@ mod tests {
         let result = Embedder::load(&cfg).await;
         std::env::remove_var("ANNO_MODELS_DIR");
 
-        let err = result.expect_err("must fail — garbage config.json");
+        let err = match result {
+            Ok(_) => panic!("must fail — garbage config.json"),
+            Err(e) => e,
+        };
         let msg = err.to_string();
         assert!(
             msg.contains("(local)"),

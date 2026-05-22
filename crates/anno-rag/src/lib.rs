@@ -5,6 +5,7 @@
 #![warn(missing_docs)]
 
 pub mod bench_cli;
+pub mod download_models;
 pub mod canonicalize;
 pub mod config;
 pub mod conflict;
