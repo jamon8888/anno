@@ -1,6 +1,6 @@
 //! Pipeline orchestration: ingest one doc end-to-end, search.
 
-use crate::config::AnnoRagConfig;
+use crate::config::{AnnoRagConfig, MemoryNerMode};
 use crate::detect::Detector;
 use crate::embed::Embedder;
 use crate::error::{Error, Result};
@@ -504,15 +504,39 @@ impl Pipeline {
         }
     }
 
-    /// Detect PII in `text`, pseudonymize with the vault, embed the
-    /// tokenized text, and persist as a Memory row. The on-disk text is
-    /// **always** the tokenized form; cleartext never reaches the
-    /// `memories` LanceDB collection.
+    /// Save a memory according to [`AnnoRagConfig::memory_ner_mode`].
     ///
     /// # Errors
     /// Returns [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
     /// [`Error::Store`] depending on which layer fails.
     pub async fn save_memory(
+        &self,
+        text: &str,
+        kind: Option<crate::memory::MemoryKind>,
+        session_id: Option<String>,
+    ) -> Result<SavedMemory> {
+        match self.cfg.memory_ner_mode {
+            MemoryNerMode::Sync => self.save_memory_sync(text, kind, session_id).await,
+            MemoryNerMode::Async | MemoryNerMode::Disabled => {
+                self.save_memory_fast(
+                    crate::memory::MemoryId::new(),
+                    text,
+                    kind,
+                    session_id,
+                    self.cfg.memory_ner_mode,
+                )
+                .await
+            }
+        }
+    }
+
+    /// Legacy memory-save path: detect PII, pseudonymize with the vault,
+    /// embed the tokenized text, and persist as a Memory row.
+    ///
+    /// # Errors
+    /// Returns [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] depending on which layer fails.
+    pub async fn save_memory_sync(
         &self,
         text: &str,
         kind: Option<crate::memory::MemoryKind>,
@@ -571,11 +595,112 @@ impl Pipeline {
 
         Ok(SavedMemory {
             id,
+            stored_text: tokenized.clone(),
             redacted_text: tokenized,
             token_refs,
             entity_refs: m.entity_refs,
             invalidated_ids,
+            ner_mode: MemoryNerMode::Sync,
         })
+    }
+
+    /// Fast `memory_save` path for disabled/async NER modes. Stores raw text
+    /// with an embedding and leaves NER fields empty for a later enrichment.
+    ///
+    /// # Errors
+    /// Returns [`Error::Embed`] / [`Error::Store`] depending on which layer fails.
+    pub async fn save_memory_fast(
+        &self,
+        id: crate::memory::MemoryId,
+        text: &str,
+        kind: Option<crate::memory::MemoryKind>,
+        session_id: Option<String>,
+        ner_mode: MemoryNerMode,
+    ) -> Result<SavedMemory> {
+        let mut embedding = self.embedder().await?.embed_batch(&[text.to_string()])?;
+        let embedding = embedding
+            .pop()
+            .ok_or_else(|| Error::Embed("embed_batch returned no vector for memory".into()))?;
+
+        let now = chrono::Utc::now();
+        let m = crate::memory::Memory {
+            id: id.clone(),
+            session_id,
+            kind: kind.unwrap_or(crate::memory::MemoryKind::Context),
+            text: text.to_string(),
+            created_at: now,
+            accessed_at: now,
+            valid_from: now,
+            valid_to: None,
+            embedding,
+            token_refs: Vec::new(),
+            entity_refs: Vec::new(),
+        };
+
+        self.store.memory_insert(&m).await?;
+
+        Ok(SavedMemory {
+            id,
+            stored_text: text.to_string(),
+            redacted_text: text.to_string(),
+            token_refs: Vec::new(),
+            entity_refs: Vec::new(),
+            invalidated_ids: Vec::new(),
+            ner_mode,
+        })
+    }
+
+    /// Best-effort NER enrichment for a row inserted by [`Self::save_memory_fast`].
+    ///
+    /// # Errors
+    /// Returns detector, vault, or store errors to the caller so the spawned
+    /// task can log them without disturbing the already-saved row.
+    pub async fn save_memory_ner_task(
+        &self,
+        id: crate::memory::MemoryId,
+        text: String,
+        kind: Option<crate::memory::MemoryKind>,
+        session_id: Option<String>,
+    ) -> Result<()> {
+        let entities = self.detector_get_or_init()?.detect(&text)?;
+        let (_tokenized, token_refs) = self.vault.pseudonymize_with_refs(&text, &entities).await?;
+        let entity_refs = self.extract_entities(&text, &token_refs);
+
+        if matches!(
+            kind.unwrap_or(crate::memory::MemoryKind::Context),
+            crate::memory::MemoryKind::Preference | crate::memory::MemoryKind::Reference
+        ) {
+            if let Some(current) = self.store.memory_get(&id).await? {
+                let enriched = crate::memory::Memory {
+                    token_refs: token_refs.clone(),
+                    entity_refs: entity_refs.clone(),
+                    ..current
+                };
+                let candidates = self
+                    .store
+                    .memory_candidates_for_conflict(&entity_refs, session_id.as_deref())
+                    .await?;
+                for prior in &candidates {
+                    if prior.id == id {
+                        continue;
+                    }
+                    if crate::conflict::resolves_conflict(
+                        &enriched,
+                        prior,
+                        self.cfg.conflict_cosine_threshold,
+                    ) {
+                        self.store
+                            .memory_update_valid_to(&prior.id, enriched.created_at)
+                            .await?;
+                    }
+                }
+            }
+        }
+
+        self.store
+            .memory_update_ner_fields(&id, token_refs, entity_refs)
+            .await?;
+        Ok(())
     }
 
     /// Guarantee the memories table is FTS-queryable before a hybrid
@@ -1128,7 +1253,9 @@ impl Pipeline {
 pub struct SavedMemory {
     /// Newly minted memory id.
     pub id: crate::memory::MemoryId,
-    /// Tokenized form of the input text (what got persisted).
+    /// Text actually persisted. Raw for async/disabled, tokenized for sync.
+    pub stored_text: String,
+    /// Deprecated alias kept for MCP clients for one release cycle.
     pub redacted_text: String,
     /// `(category, token)` pairs minted for the GDPR Art. 17 cascade.
     pub token_refs: Vec<crate::memory::TokenRef>,
@@ -1139,6 +1266,8 @@ pub struct SavedMemory {
     /// resolver auto-invalidated on this save (v0.2 T4). Empty for
     /// `Fact` / `Context` saves.
     pub invalidated_ids: Vec<String>,
+    /// NER mode used for the synchronous portion of this save.
+    pub ner_mode: MemoryNerMode,
 }
 
 /// Receipt returned by [`Pipeline::forget`]. Suitable for inclusion in an
@@ -1201,6 +1330,103 @@ mod tests {
             ..Default::default()
         };
         Pipeline::new(cfg, [0u8; 32]).await.expect("pipeline opens")
+    }
+
+    async fn memory_pipeline_in(dir: &Path, mode: MemoryNerMode) -> Pipeline {
+        let cfg = AnnoRagConfig {
+            data_dir: dir.to_path_buf(),
+            memory_ner_mode: mode,
+            ..Default::default()
+        };
+        Pipeline::new(cfg, [0u8; 32]).await.expect("pipeline opens")
+    }
+
+    #[tokio::test]
+    #[ignore = "loads embedder and opens LanceDB; opt in via --ignored"]
+    async fn save_memory_async_row_exists_before_ner() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = memory_pipeline_in(tmp.path(), MemoryNerMode::Async).await;
+
+        let saved = p
+            .save_memory(
+                "Antoine Lefebvre approved the report.",
+                Some(crate::memory::MemoryKind::Context),
+                Some("s1".into()),
+            )
+            .await
+            .expect("save memory");
+
+        let row = p
+            .store
+            .memory_get(&saved.id)
+            .await
+            .expect("get row")
+            .expect("row exists before background NER");
+        assert_eq!(saved.ner_mode, MemoryNerMode::Async);
+        assert_eq!(row.text, "Antoine Lefebvre approved the report.");
+        assert!(row.token_refs.is_empty());
+        assert!(row.entity_refs.is_empty());
+        assert!(!p.detector_loaded());
+    }
+
+    #[tokio::test]
+    #[ignore = "loads embedder, detector, and opens LanceDB; opt in via --ignored"]
+    async fn save_memory_async_ner_enriches_row() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = memory_pipeline_in(tmp.path(), MemoryNerMode::Async).await;
+        let text = "Send the contract draft to c.moreau@nexacorp.fr before end of day.";
+
+        let saved = p
+            .save_memory(
+                text,
+                Some(crate::memory::MemoryKind::Reference),
+                Some("s1".into()),
+            )
+            .await
+            .expect("save memory");
+        assert!(saved.token_refs.is_empty());
+        assert!(saved.entity_refs.is_empty());
+
+        p.save_memory_ner_task(
+            saved.id.clone(),
+            text.to_string(),
+            Some(crate::memory::MemoryKind::Reference),
+            Some("s1".into()),
+        )
+        .await
+        .expect("ner task");
+
+        let row = p
+            .store
+            .memory_get(&saved.id)
+            .await
+            .expect("get row")
+            .expect("row exists after NER");
+        assert_eq!(row.text, text);
+        assert!(row.token_refs.iter().any(|r| r.token.starts_with("EMAIL_")));
+        assert!(row.entity_refs.iter().any(|r| r.contains("EMAIL_")));
+    }
+
+    #[tokio::test]
+    #[ignore = "loads embedder and opens LanceDB; opt in via --ignored"]
+    async fn save_memory_disabled_skips_detector_and_refs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = memory_pipeline_in(tmp.path(), MemoryNerMode::Disabled).await;
+
+        let saved = p
+            .save_memory(
+                "Antoine Lefebvre approved the report.",
+                Some(crate::memory::MemoryKind::Context),
+                None,
+            )
+            .await
+            .expect("save memory");
+
+        assert_eq!(saved.ner_mode, MemoryNerMode::Disabled);
+        assert_eq!(saved.stored_text, "Antoine Lefebvre approved the report.");
+        assert!(saved.token_refs.is_empty());
+        assert!(saved.entity_refs.is_empty());
+        assert!(!p.detector_loaded());
     }
 
     #[tokio::test]
@@ -1269,6 +1495,25 @@ mod tests {
         let s = serde_json::to_string(&r).unwrap();
         assert!(s.contains("\"mappings_removed\":1"));
         assert!(s.contains("\"token\":\"PERSON_1\""));
+    }
+
+    #[test]
+    fn saved_memory_serializes_stored_text_and_legacy_redacted_text() {
+        let r = SavedMemory {
+            id: crate::memory::MemoryId::new(),
+            stored_text: "Antoine Lefebvre approved the report.".into(),
+            redacted_text: "Antoine Lefebvre approved the report.".into(),
+            token_refs: Vec::new(),
+            entity_refs: Vec::new(),
+            invalidated_ids: Vec::new(),
+            ner_mode: MemoryNerMode::Async,
+        };
+
+        let s = serde_json::to_string(&r).unwrap();
+
+        assert!(s.contains("\"stored_text\":\"Antoine Lefebvre approved the report.\""));
+        assert!(s.contains("\"redacted_text\":\"Antoine Lefebvre approved the report.\""));
+        assert!(s.contains("\"ner_mode\":\"async\""));
     }
 }
 

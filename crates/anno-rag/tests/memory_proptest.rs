@@ -14,7 +14,7 @@
 //! cargo test -p anno-rag --release --test memory_proptest -- --ignored
 //! ```
 
-use anno_rag::config::AnnoRagConfig;
+use anno_rag::config::{AnnoRagConfig, MemoryNerMode};
 use anno_rag::memory::MemoryKind;
 use anno_rag::pipeline::Pipeline;
 use proptest::prelude::*;
@@ -42,6 +42,7 @@ fn fresh_cfg(dir: &std::path::Path) -> AnnoRagConfig {
         data_dir: dir.to_path_buf(),
         embed_dim: 384,
         memory_embedding_dim: 384,
+        memory_ner_mode: MemoryNerMode::Sync,
         ..Default::default()
     }
 }
