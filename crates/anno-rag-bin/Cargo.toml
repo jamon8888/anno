@@ -6,6 +6,11 @@ rust-version.workspace = true
 license      = "MIT OR Apache-2.0"
 description  = "anno-rag CLI binary — splits out so anno-rag-mcp can depend on anno-rag without a cycle."
 
+[features]
+default = []
+embedded-ocr = ["anno-rag/embedded-ocr", "anno-rag-mcp/embedded-ocr"]
+rerank = ["anno-rag/rerank", "anno-rag-mcp/rerank"]
+
 [[bin]]
 name = "anno-rag"
 path = "src/main.rs"
