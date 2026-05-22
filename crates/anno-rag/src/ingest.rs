@@ -172,7 +172,7 @@ pub async fn extract(path: &Path, cfg: &AnnoRagConfig) -> Result<ExtractedDoc> {
                             path,
                             result,
                             class,
-                            OcrStatus::NotRequired,  // OCR wasn't needed after all
+                            OcrStatus::NotRequired, // OCR wasn't needed after all
                         ))
                     } else {
                         tracing::warn!(
