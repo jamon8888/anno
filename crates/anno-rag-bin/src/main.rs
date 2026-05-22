@@ -59,6 +59,13 @@ enum Cmd {
         #[arg(long, value_name = "DIR")]
         corpus: PathBuf,
     },
+    /// Download model weights to a local directory and print the path.
+    /// Set ANNO_MODELS_DIR to the printed path so anno-rag works offline.
+    DownloadModels {
+        /// Directory to download into. Defaults to ~/.anno-rag/models.
+        #[arg(long, value_name = "DIR")]
+        dir: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
@@ -72,6 +79,33 @@ async fn main() -> anyhow::Result<()> {
     // Bench builds its own Pipeline in a tempdir; short-circuit before keyring lookup.
     if let Cmd::Bench { corpus } = &cli.cmd {
         anno_rag::bench_cli::run(corpus).await?;
+        return Ok(());
+    }
+
+    // DownloadModels needs no Pipeline — short-circuit before keyring lookup.
+    if let Cmd::DownloadModels { dir } = &cli.cmd {
+        let mut cfg = AnnoRagConfig::default();
+        if let Some(d) = dir {
+            // models_cache() = data_dir/models, so set data_dir = d.parent()
+            // which makes models_cache() == d (when d ends in "models").
+            cfg.data_dir = d
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| d.clone());
+        }
+        println!("Downloading anno-rag models to: {}", cfg.models_cache().display());
+        println!("  (embedder ~470 MiB + NER ~500 MiB = ~970 MiB total)");
+        println!();
+        let models_dir = anno_rag::download_models::download(&cfg).await?;
+        println!();
+        println!("Done. Set the following environment variable:");
+        println!();
+        #[cfg(windows)]
+        println!("  $env:ANNO_MODELS_DIR = \"{}\"", models_dir.display());
+        #[cfg(not(windows))]
+        println!("  export ANNO_MODELS_DIR=\"{}\"", models_dir.display());
+        println!();
+        println!("Or add it permanently to your shell profile / Claude Desktop config env.");
         return Ok(());
     }
 
@@ -116,6 +150,7 @@ async fn main() -> anyhow::Result<()> {
             anno_rag_mcp::serve_stdio(pipeline, cfg).await?;
         }
         Cmd::Bench { .. } => unreachable!("handled above before Pipeline::new"),
+        Cmd::DownloadModels { .. } => unreachable!("handled above before Pipeline::new"),
     }
     Ok(())
 }
