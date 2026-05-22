@@ -139,11 +139,34 @@ jobs:
       - name: Install dependencies
         run: |
           ${{ matrix.packages_install }}
+      # ANNO-PATCH: MSVC CRT alignment — re-apply after every `dist generate`.
+      # ort (ONNX Runtime) links /MD; esaxx-rs (via tokenizers) defaults to /MT.
+      # Forcing -crt-static=off + -MD aligns both to the dynamic CRT and avoids
+      # LNK2038 RuntimeLibrary mismatch on Windows.
+      # See docs/superpowers/plans/2026-05-04-gliner2-fastino-finalization.md F1.2.
+      - name: Align MSVC CRT (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "RUSTFLAGS=-C target-feature=-crt-static" >> "$GITHUB_ENV"
+          echo "CFLAGS_x86_64-pc-windows-msvc=-MD" >> "$GITHUB_ENV"
+          echo "CXXFLAGS_x86_64-pc-windows-msvc=-MD" >> "$GITHUB_ENV"
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
           echo "dist ran successfully"
+      # ANNO-PATCH: Gateway boot smoke — re-apply after every `dist generate`.
+      # anno-privacy-gateway is a server binary; --help starts the server (does not print and exit).
+      # These scripts start on ANNO_GATEWAY_LISTEN=127.0.0.1:0, wait 3s, verify alive, terminate.
+      - name: Gateway boot smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\scripts\release\smoke-gateway.ps1 -BinaryPath ".\target\${{ join(matrix.targets, ' ') }}\release\anno-privacy-gateway.exe"
+      - name: Gateway boot smoke (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: ./scripts/release/smoke-gateway.sh "./target/${{ join(matrix.targets, ' ') }}/release/anno-privacy-gateway"
       - id: cargo-dist
         name: Post-build
         # We force bash here just because github makes it really hard to get values up
