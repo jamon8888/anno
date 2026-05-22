@@ -6,7 +6,7 @@
 //! - `anno-rag mcp` — run MCP server on stdio (used by Cowork plugin)
 
 use anno_rag::{
-    config::{AnnoRagConfig, MemoryNerMode},
+    config::{AnnoRagConfig, MemoryNerMode, OcrMode},
     pipeline::Pipeline,
     vault::derive_key,
 };
@@ -37,8 +37,8 @@ enum Cmd {
         /// Where to write pseudonymized copies. Defaults to ~/.anno-rag/outputs.
         #[arg(short, long)]
         output: Option<PathBuf>,
-        /// Enable OCR via system tesseract for PDFs without a text layer.
-        /// Requires the `tesseract` binary on PATH (install separately).
+        /// Enable embedded OCR for scanned PDFs/pages when this binary was
+        /// built with the `embedded-ocr` feature.
         #[arg(long, default_value_t = false)]
         enable_ocr: bool,
     },
@@ -82,7 +82,9 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     if let Cmd::Ingest { enable_ocr, .. } = &cli.cmd {
-        cfg.enable_ocr |= *enable_ocr;
+        if *enable_ocr {
+            cfg.ocr_mode = OcrMode::AutoEmbedded;
+        }
     }
     let key = derive_key()?;
     let pipeline = Pipeline::new(cfg.clone(), key).await?;

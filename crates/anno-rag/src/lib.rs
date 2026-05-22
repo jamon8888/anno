@@ -14,6 +14,7 @@ pub mod error;
 pub mod eval;
 pub mod ingest;
 pub mod memory;
+#[cfg(test)]
 pub(crate) mod ocr;
 pub mod pii_eval;
 pub mod pipeline;

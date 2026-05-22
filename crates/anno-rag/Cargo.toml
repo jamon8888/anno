@@ -8,14 +8,16 @@ description  = "Local GDPR-compliant document anonymizer + RAG service (French l
 
 [features]
 default = []
-# Enables the `--enable-ocr` fork-to-system-tesseract runtime path.
-# No effect on linked code — the OCR module always compiles (it's a thin
-# tokio::process wrapper); the flag is informational/feature-gated docs.
+# Legacy flag for the fork-to-system-tesseract runtime path.
 ocr = []
 # Opt-in cross-encoder reranker (BGE-reranker-v2-m3 INT8 ONNX, ~571 MB
 # download on first use). Pulls ort + ndarray. Default off so plain
 # `cargo install anno-rag` users don't pay the model download.
 rerank = ["dep:ort", "dep:ndarray", "dep:is-terminal"]
+# Enables embedded Kreuzberg/Tesseract OCR. Runtime still defaults to
+# `ocr_mode = off`; callers must opt in with `ocr_mode = auto_embedded`
+# or the compatibility `--enable-ocr` CLI flag.
+embedded-ocr = ["kreuzberg/ocr"]
 
 [dependencies]
 anno            = { path = "../anno", features = ["gliner2-fastino"] }

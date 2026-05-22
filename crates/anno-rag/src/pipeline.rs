@@ -9,6 +9,7 @@ use crate::store::{ChunkRecord, SearchHit, Store};
 use crate::vault::Vault;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
@@ -23,7 +24,7 @@ pub(crate) fn doc_uuid(file_bytes: &[u8]) -> Uuid {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IngestOutcome {
-    Ingested,
+    Ingested { used_embedded_ocr: bool },
     Skipped,
 }
 
@@ -123,18 +124,34 @@ impl Pipeline {
 
     /// Ingest a single file end-to-end. Writes `<stem>.anon.md` to `output_dir`.
     pub async fn ingest_one(&self, path: &Path, output_dir: &Path) -> Result<()> {
-        self.ingest_one_counted(path, output_dir).await?;
+        self.ingest_one_counted(path, output_dir, &self.cfg).await?;
         Ok(())
     }
 
-    async fn ingest_one_counted(&self, path: &Path, output_dir: &Path) -> Result<IngestOutcome> {
+    async fn ingest_one_counted(
+        &self,
+        path: &Path,
+        output_dir: &Path,
+        cfg: &AnnoRagConfig,
+    ) -> Result<IngestOutcome> {
         let file_bytes = std::fs::read(path).map_err(Error::from)?;
         let doc_id = doc_uuid(&file_bytes);
         if self.store.doc_exists(doc_id).await? {
             tracing::info!(path = %path.display(), "skip: already ingested (same content)");
             return Ok(IngestOutcome::Skipped);
         }
-        let extracted = ingest::extract(path, &self.cfg).await?;
+        let extracted = ingest::extract(path, cfg).await?;
+        let used_embedded_ocr = extracted.ocr_status == ingest::OcrStatus::CompletedEmbedded;
+        if !should_index_extracted_doc(&extracted) {
+            tracing::warn!(
+                path = %path.display(),
+                class = ?extracted.class,
+                status = ?extracted.ocr_status,
+                chunks = extracted.chunks.len(),
+                "ingest skipped before indexing"
+            );
+            return Ok(IngestOutcome::Skipped);
+        }
         let folder_path = path
             .parent()
             .map(|p| p.display().to_string())
@@ -187,7 +204,7 @@ impl Pipeline {
         std::fs::write(&out_path, full_anon).map_err(Error::from)?;
 
         tracing::info!(path = %path.display(), chunks = extracted.chunks.len(), "ingested");
-        Ok(IngestOutcome::Ingested)
+        Ok(IngestOutcome::Ingested { used_embedded_ocr })
     }
 
     /// Walk a folder and ingest every supported file. Returns the count
@@ -198,6 +215,9 @@ impl Pipeline {
         recursive: bool,
         output_dir: &Path,
     ) -> Result<usize> {
+        let mut count = 0usize;
+        let mut ocr_spent = Duration::ZERO;
+        let ocr_budget = self.cfg.ocr_batch_budget_secs.map(Duration::from_secs);
         let walker = if recursive {
             walkdir::WalkDir::new(folder).into_iter()
         } else {
@@ -233,10 +253,16 @@ impl Pipeline {
             }
             paths.push(path.to_path_buf());
         }
-        let mut count = 0usize;
         for p in paths {
-            match self.ingest_one_counted(&p, output_dir).await {
-                Ok(IngestOutcome::Ingested) => count += 1,
+            let doc_cfg = cfg_for_ocr_budget(&self.cfg, ocr_budget, ocr_spent);
+            let started = Instant::now();
+            match self.ingest_one_counted(&p, output_dir, &doc_cfg).await {
+                Ok(IngestOutcome::Ingested { used_embedded_ocr }) => {
+                    if used_embedded_ocr {
+                        ocr_spent += started.elapsed();
+                    }
+                    count += 1;
+                }
                 Ok(IngestOutcome::Skipped) => {}
                 Err(e) => {
                     tracing::warn!(path = %p.display(), error = %e, "ingest skipped");
@@ -1144,6 +1170,23 @@ impl Pipeline {
     }
 }
 
+fn should_index_extracted_doc(extracted: &ingest::ExtractedDoc) -> bool {
+    !extracted.ocr_status.is_deferred() && !extracted.chunks.is_empty()
+}
+
+fn cfg_for_ocr_budget(
+    base: &AnnoRagConfig,
+    budget: Option<Duration>,
+    spent: Duration,
+) -> AnnoRagConfig {
+    let mut cfg = base.clone();
+    if budget.is_some_and(|limit| spent >= limit) {
+        cfg.ocr_mode = crate::config::OcrMode::Off;
+        cfg.enable_ocr = false;
+    }
+    cfg
+}
+
 /// Result returned by [`Pipeline::forget_memory`].
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ForgetResult {
@@ -1506,7 +1549,7 @@ mod tests {
             token_refs: Vec::new(),
             entity_refs: Vec::new(),
             invalidated_ids: Vec::new(),
-            ner_mode: MemoryNerMode::Async,
+            ner_mode: crate::config::MemoryNerMode::Async,
         };
 
         let s = serde_json::to_string(&r).unwrap();
@@ -1514,6 +1557,56 @@ mod tests {
         assert!(s.contains("\"stored_text\":\"Antoine Lefebvre approved the report.\""));
         assert!(s.contains("\"redacted_text\":\"Antoine Lefebvre approved the report.\""));
         assert!(s.contains("\"ner_mode\":\"async\""));
+    }
+
+    #[test]
+    fn deferred_or_empty_extractions_are_not_indexable() {
+        let deferred = ingest::ExtractedDoc {
+            source_path: "scan.pdf".into(),
+            content: String::new(),
+            chunks: Vec::new(),
+            class: ingest::DocClass::ScannedPdf,
+            ocr_status: ingest::OcrStatus::Deferred(ingest::OcrDeferredReason::Disabled),
+        };
+        assert!(!should_index_extracted_doc(&deferred));
+
+        let empty_text = ingest::ExtractedDoc {
+            source_path: "empty.txt".into(),
+            content: String::new(),
+            chunks: Vec::new(),
+            class: ingest::DocClass::Empty,
+            ocr_status: ingest::OcrStatus::NotRequired,
+        };
+        assert!(!should_index_extracted_doc(&empty_text));
+
+        let indexable = ingest::ExtractedDoc {
+            source_path: "doc.md".into(),
+            content: "Article 1".into(),
+            chunks: vec![ingest::ExtractedChunk {
+                idx: 0,
+                text: "Article 1".into(),
+                char_start: 0,
+                char_end: 9,
+                page: None,
+            }],
+            class: ingest::DocClass::TextLayer,
+            ocr_status: ingest::OcrStatus::NotRequired,
+        };
+        assert!(should_index_extracted_doc(&indexable));
+    }
+
+    #[test]
+    fn exhausted_ocr_budget_disables_runtime_ocr_for_next_doc() {
+        let cfg = AnnoRagConfig {
+            ocr_mode: crate::config::OcrMode::AutoEmbedded,
+            ocr_batch_budget_secs: Some(10),
+            ..Default::default()
+        };
+
+        let next_cfg =
+            cfg_for_ocr_budget(&cfg, Some(Duration::from_secs(10)), Duration::from_secs(10));
+
+        assert_eq!(next_cfg.effective_ocr_mode(), crate::config::OcrMode::Off);
     }
 }
 

@@ -4,7 +4,26 @@
 //! TOML file loading lands in v0.2.
 
 use serde::{Deserialize, Serialize};
+use std::ffi::OsString;
 use std::path::PathBuf;
+
+/// Runtime OCR mode.
+///
+/// Build-time support is controlled separately by the `embedded-ocr` Cargo
+/// feature. This mode only decides whether a build that can OCR is allowed to
+/// do so for scanned PDFs/pages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OcrMode {
+    /// Never OCR. Scanned PDFs/pages are deferred.
+    Off,
+    /// Run embedded Kreuzberg OCR only after scanned-PDF/page classification.
+    AutoEmbedded,
+}
+
+fn default_ocr_mode() -> OcrMode {
+    OcrMode::Off
+}
 
 /// NER mode for `memory_save`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,14 +86,26 @@ pub struct AnnoRagConfig {
     #[serde(default = "default_mcp_server_name")]
     pub mcp_server_name: String,
 
-    /// Enable OCR fallback when a PDF has no text layer. Default: false.
-    /// Requires system `tesseract` binary on PATH (or `tesseract_path` set).
+    /// Runtime OCR mode. Default: `off`.
+    #[serde(default = "default_ocr_mode")]
+    pub ocr_mode: OcrMode,
+
+    /// Legacy OCR flag retained for older config files and CLI compatibility.
+    /// When true, [`Self::effective_ocr_mode`] maps it to
+    /// [`OcrMode::AutoEmbedded`].
     #[serde(default)]
     pub enable_ocr: bool,
 
-    /// Explicit path to the system `tesseract` binary. Default: PATH lookup.
+    /// Legacy path to the system `tesseract` binary. The embedded OCR path does
+    /// not use this field; it is retained while the external fallback is phased
+    /// out.
     #[serde(default)]
     pub tesseract_path: Option<PathBuf>,
+
+    /// Optional per-folder OCR wall-clock budget in seconds. When exhausted,
+    /// additional scanned PDFs/pages are deferred instead of being OCR'd.
+    #[serde(default)]
+    pub ocr_batch_budget_secs: Option<u64>,
 
     /// Embedder weight dtype. `"f32"` (default) or `"f16"` (experimental
     /// opt-in). Read by `Embedder::load`. `None` → `"f32"`. F16 halves
@@ -209,11 +240,21 @@ fn default_rerank_batch_size() -> usize {
     8
 }
 
+fn default_data_dir() -> PathBuf {
+    default_data_dir_from_env(std::env::var_os("ANNO_RAG_DATA_DIR"))
+}
+
+fn default_data_dir_from_env(override_dir: Option<OsString>) -> PathBuf {
+    override_dir
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|p| p.join(".anno-rag")))
+        .unwrap_or_else(|| PathBuf::from(".anno-rag"))
+}
+
 impl Default for AnnoRagConfig {
     fn default() -> Self {
-        let data_dir = dirs::home_dir()
-            .map(|p| p.join(".anno-rag"))
-            .unwrap_or_else(|| PathBuf::from(".anno-rag"));
+        let data_dir = default_data_dir();
 
         Self {
             data_dir,
@@ -225,8 +266,10 @@ impl Default for AnnoRagConfig {
             vector_index_threshold: default_vector_index_threshold(),
             ner_warmup_model: None,
             mcp_server_name: default_mcp_server_name(),
+            ocr_mode: default_ocr_mode(),
             enable_ocr: false,
             tesseract_path: None,
+            ocr_batch_budget_secs: None,
             embedder_dtype: None,
             memory_collection_name: default_memory_collection_name(),
             memory_embedding_dim: default_memory_embedding_dim(),
@@ -246,6 +289,16 @@ impl Default for AnnoRagConfig {
 }
 
 impl AnnoRagConfig {
+    /// Runtime OCR mode after applying legacy compatibility flags.
+    #[must_use]
+    pub fn effective_ocr_mode(&self) -> OcrMode {
+        if self.enable_ocr && self.ocr_mode == OcrMode::Off {
+            OcrMode::AutoEmbedded
+        } else {
+            self.ocr_mode
+        }
+    }
+
     /// Path to the encrypted cloakpipe Vault file (AES-256-GCM single-file format).
     #[must_use]
     pub fn vault_path(&self) -> PathBuf {
@@ -296,6 +349,13 @@ mod tests {
     }
 
     #[test]
+    fn data_dir_env_override_wins_over_home_default() {
+        let data_dir = default_data_dir_from_env(Some(OsString::from("/tmp/anno-rag-env")));
+
+        assert_eq!(data_dir, PathBuf::from("/tmp/anno-rag-env"));
+    }
+
+    #[test]
     fn deserializes_v0_1_config_without_new_fields() {
         // Old v0.1 JSON had only the original 6 fields. Verify still parses.
         let v01_json = r#"{
@@ -312,10 +372,12 @@ mod tests {
         assert_eq!(c.mcp_server_name, "anno-rag");
         assert!(!c.enable_ocr);
         assert!(c.tesseract_path.is_none());
+        assert_eq!(c.ocr_mode, OcrMode::Off);
+        assert_eq!(c.effective_ocr_mode(), OcrMode::Off);
+        assert_eq!(c.ocr_batch_budget_secs, None);
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
         assert_eq!(c.memory_embedding_dim, 384);
-        assert_eq!(c.memory_ner_mode, MemoryNerMode::Async);
     }
 
     #[test]
@@ -324,8 +386,11 @@ mod tests {
         assert_eq!(c.vector_index_threshold, 1000);
         assert!(c.ner_warmup_model.is_none());
         assert_eq!(c.mcp_server_name, "anno-rag");
+        assert_eq!(c.ocr_mode, OcrMode::Off);
+        assert_eq!(c.effective_ocr_mode(), OcrMode::Off);
         assert!(!c.enable_ocr);
         assert!(c.tesseract_path.is_none());
+        assert_eq!(c.ocr_batch_budget_secs, None);
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
         assert_eq!(c.memory_embedding_dim, 384);
@@ -389,6 +454,32 @@ mod tests {
             Some(MemoryNerMode::Sync)
         );
         assert_eq!(MemoryNerMode::from_env_value("bogus"), None);
+    }
+
+    #[test]
+    fn legacy_enable_ocr_maps_to_auto_embedded() {
+        let c = AnnoRagConfig {
+            enable_ocr: true,
+            ..Default::default()
+        };
+
+        assert_eq!(c.ocr_mode, OcrMode::Off);
+        assert_eq!(c.effective_ocr_mode(), OcrMode::AutoEmbedded);
+    }
+
+    #[test]
+    fn ocr_mode_round_trips_as_snake_case() {
+        let c = AnnoRagConfig {
+            ocr_mode: OcrMode::AutoEmbedded,
+            ocr_batch_budget_secs: Some(30),
+            ..Default::default()
+        };
+
+        let s = serde_json::to_string(&c).expect("serialize");
+        assert!(s.contains(r#""ocr_mode":"auto_embedded""#));
+        let back: AnnoRagConfig = serde_json::from_str(&s).expect("deserialize");
+        assert_eq!(back.ocr_mode, OcrMode::AutoEmbedded);
+        assert_eq!(back.ocr_batch_budget_secs, Some(30));
     }
 
     #[test]
