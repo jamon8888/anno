@@ -167,6 +167,42 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: ./scripts/release/smoke-gateway.sh "./target/${{ join(matrix.targets, '-') }}/release/anno-privacy-gateway"
+      # ANNO-PATCH: .mcpb extension packaging — re-apply after every `dist generate`.
+      - name: Package .mcpb extension
+        shell: bash
+        run: |
+          TARGET="${{ join(matrix.targets, '-') }}"
+          RELEASE_TAG="${{ needs.plan.outputs.tag }}"
+          MCPB_NAME="hacienda-${RELEASE_TAG}-${TARGET}.mcpb"
+          VERSION="${RELEASE_TAG#v}"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            BIN="anno-rag.exe"
+            PLATFORM="win32"
+          else
+            BIN="anno-rag"
+            PLATFORM="darwin"
+          fi
+          mkdir -p mcpb-staging/server
+          cp "target/${TARGET}/release/${BIN}" mcpb-staging/server/
+          python3 -c "
+          import json, sys
+          m = json.load(open('scripts/release/mcpb-manifest-template.json'))
+          m['version'] = sys.argv[1]
+          m['compatibility']['platforms'] = [sys.argv[2]]
+          m['server']['entry_point'] = 'server/' + sys.argv[3]
+          m['mcp_config']['command'] = '\${__dirname}/server/' + sys.argv[3]
+          json.dump(m, open('mcpb-staging/manifest.json', 'w'), indent=2)
+          print('manifest OK')
+          " "$VERSION" "$PLATFORM" "$BIN"
+          cd mcpb-staging && zip -r "../${MCPB_NAME}" . && cd ..
+          echo "MCPB_NAME=${MCPB_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload .mcpb artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-mcpb-${{ join(matrix.targets, '_') }}
+          path: ${{ env.MCPB_NAME }}
+
       - id: cargo-dist
         name: Post-build
         # We force bash here just because github makes it really hard to get values up
