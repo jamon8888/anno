@@ -92,12 +92,15 @@ Claude Desktop uses the `anno-rag` binary through stdio MCP:
       "command": "/absolute/path/to/anno-rag",
       "args": ["mcp"],
       "env": {
-        "ANNO_NO_DOWNLOADS": "1"
+        "ANNO_MODELS_DIR": "/absolute/path/to/.anno-rag/models"
       }
     }
   }
 }
 ```
+
+Replace `/absolute/path/to/.anno-rag/models` with the path printed by `anno-rag download-models`.
+`ANNO_NO_DOWNLOADS=1` still works as a fallback if models are already in the HuggingFace cache.
 
 Config file locations:
 
@@ -115,15 +118,27 @@ Rules:
 
 ## First Run and Offline Mode
 
-The release archives do not contain model weights.
-
-For best first-run behavior, run the warmup command from a source checkout or development build before setting `ANNO_NO_DOWNLOADS=1`:
+The release archives do not contain model weights (~970 MiB total).
+Run the one-time download command included with the binary:
 
 ```sh
-cargo run --release --example warmup_model -p anno-rag
+anno-rag download-models
 ```
 
-If models are already in the HuggingFace cache, `ANNO_NO_DOWNLOADS=1` keeps runtime operation offline.
+This downloads both models (intfloat/multilingual-e5-small + SemplificaAI/gliner2-multi-v1-onnx)
+to `~/.anno-rag/models` and prints the path. Add the printed path to your environment:
+
+```sh
+# macOS / Linux — add to ~/.bashrc or ~/.zshrc
+export ANNO_MODELS_DIR="$HOME/.anno-rag/models"
+
+# Windows PowerShell — persistent, current user
+[System.Environment]::SetEnvironmentVariable("ANNO_MODELS_DIR", "$env:USERPROFILE\.anno-rag\models", "User")
+```
+
+After setting `ANNO_MODELS_DIR`, anno-rag starts without any network call.
+
+> **Developers**: the warmup example still works too — `cargo run --release --example warmup_model -p anno-rag` downloads to the HuggingFace cache (`~/.cache/huggingface/hub/`). Use `anno-rag download-models` for end-user installs and `warmup_model` for development.
 
 ## OCR
 
