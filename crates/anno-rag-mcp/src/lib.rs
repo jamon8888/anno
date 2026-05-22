@@ -1155,9 +1155,14 @@ mod lazy_tests {
             result.contains("already_present") || result.contains("already present"),
             "expected 'already_present' in: {result}"
         );
-        assert!(
-            result.contains(models_dir.to_str().unwrap()),
-            "expected path in: {result}"
+        // Parse JSON to compare path field — avoids Windows backslash escaping issues
+        // (raw path has `\` but JSON encodes it as `\\`).
+        let parsed: serde_json::Value =
+            serde_json::from_str(&result).expect("result must be valid JSON");
+        assert_eq!(
+            parsed["path"].as_str().unwrap_or(""),
+            models_dir.to_str().unwrap(),
+            "expected path field to match models_dir"
         );
     }
 
