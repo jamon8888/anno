@@ -41,7 +41,15 @@ impl AnnoRagServer {
                 let cfg = Arc::clone(&self.cfg);
                 let key = self.key;
                 async move {
-                    if std::env::var("ANNO_MODELS_DIR").is_err() {
+                    // Models are available if either ANNO_MODELS_DIR is explicitly set
+                    // OR the two expected model subdirectories exist at the default
+                    // cache location. This avoids any set_var from main().
+                    let models_available = std::env::var("ANNO_MODELS_DIR").is_ok() || {
+                        let default_models = cfg.models_cache();
+                        default_models.join("multilingual-e5-small").exists()
+                            && default_models.join("gliner2-multi-v1-onnx").exists()
+                    };
+                    if !models_available {
                         return Err(anno_rag::error::Error::Config(
                             "Models not downloaded. Ask me to 'Set up anno-rag' \
                              or run `anno-rag download-models` in a terminal, \

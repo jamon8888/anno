@@ -96,19 +96,10 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Mcp uses lazy pipeline init — short-circuit before Pipeline::new.
-    // Auto-detect the default models path here, before any async threads
-    // start, so set_var is safe (called in single-threaded context).
+    // Auto-detection of the default models path is handled inside pipeline()
+    // in anno-rag-mcp to avoid env::set_var in a multi-threaded context.
     if let Cmd::Mcp = &cli.cmd {
         let key = derive_key()?;
-        if std::env::var("ANNO_MODELS_DIR").is_err() {
-            let default_models = cfg.models_cache();
-            if default_models.join("multilingual-e5-small").exists()
-                && default_models.join("gliner2-multi-v1-onnx").exists()
-            {
-                // SAFETY: called before tokio worker threads start.
-                std::env::set_var("ANNO_MODELS_DIR", &default_models);
-            }
-        }
         anno_rag_mcp::serve_stdio_lazy(cfg, key).await?;
         return Ok(());
     }
