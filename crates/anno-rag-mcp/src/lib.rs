@@ -357,6 +357,13 @@ struct MemoryListResultWire {
     next_cursor: Option<String>,
 }
 
+#[derive(Serialize)]
+struct DownloadModelsResult {
+    status: String,
+    path: String,
+    message: String,
+}
+
 // ---- Tool router ----
 
 #[tool_router]
@@ -852,6 +859,91 @@ impl AnnoRagServer {
             }
         }
     }
+
+    /// Download anno-rag model weights (~970 MB) to the local machine in the
+    /// background. Returns immediately. Call again in a few minutes to check
+    /// if ready. No parameters needed.
+    #[tool(
+        description = "Download anno-rag model weights (~970 MB) to the local machine. \
+                       Returns immediately — download runs in the background. \
+                       Call again in a few minutes to check if ready. \
+                       No parameters needed."
+    )]
+    async fn download_models(&self) -> String {
+        let models_dir = self.cfg.models_cache();
+        let e5_dir = models_dir.join("multilingual-e5-small");
+        let gliner_dir = models_dir.join("gliner2-multi-v1-onnx");
+
+        // Already present — nothing to do.
+        if e5_dir.exists() && gliner_dir.exists() {
+            let wire = DownloadModelsResult {
+                status: "already_present".into(),
+                path: models_dir.display().to_string(),
+                message: format!(
+                    "Models already present at {}. \
+                     Set ANNO_MODELS_DIR={} in extension settings \
+                     (or leave blank — the default path is detected automatically).",
+                    models_dir.display(),
+                    models_dir.display()
+                ),
+            };
+            return serde_json::to_string_pretty(&wire)
+                .unwrap_or_else(|e| format!("Error: {e}"));
+        }
+
+        // Download already in progress (sentinel file present).
+        let lock_file = models_dir.join(".download-lock");
+        if lock_file.exists() {
+            let wire = DownloadModelsResult {
+                status: "in_progress".into(),
+                path: models_dir.display().to_string(),
+                message: format!(
+                    "Download already in progress to {}. \
+                     Ask again in a few minutes.",
+                    models_dir.display()
+                ),
+            };
+            return serde_json::to_string_pretty(&wire)
+                .unwrap_or_else(|e| format!("Error: {e}"));
+        }
+
+        // Start a new background download.
+        if let Err(e) = std::fs::create_dir_all(&models_dir) {
+            return format!("Error: could not create models dir: {e}");
+        }
+        if let Err(e) = std::fs::write(&lock_file, b"downloading") {
+            return format!("Error: could not write lock file: {e}");
+        }
+
+        let cfg_clone = Arc::clone(&self.cfg);
+        tokio::task::spawn(async move {
+            let result = anno_rag::download_models::download(&cfg_clone).await;
+            // Remove lock on both success and failure so next call can retry.
+            let _ = std::fs::remove_file(cfg_clone.models_cache().join(".download-lock"));
+            match result {
+                Ok(_) => tracing::info!(
+                    target: "anno_rag::mcp::download_models",
+                    "background model download complete"
+                ),
+                Err(e) => tracing::warn!(
+                    target: "anno_rag::mcp::download_models",
+                    "background model download failed: {e}"
+                ),
+            }
+        });
+
+        let wire = DownloadModelsResult {
+            status: "downloading".into(),
+            path: models_dir.display().to_string(),
+            message: format!(
+                "Downloading anno-rag models to {} (~970 MB total). \
+                 This runs in the background and takes 2–15 minutes. \
+                 Ask me again in a few minutes — I will confirm when ready.",
+                models_dir.display()
+            ),
+        };
+        serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
+    }
 }
 
 #[tool_handler]
@@ -864,7 +956,8 @@ impl ServerHandler for AnnoRagServer {
                  memory_save / memory_recall / memory_forget / memory_list \
                  (PII-safe session memory; GDPR Art. 17 cascades to vault tokens), \
                  memory_graph_recall / memory_invalidate (v0.2 entity-graph + \
-                 bi-temporal). memory_recall accepts as_of + graph_expand.",
+                 bi-temporal), download_models (background model download — call on first use if models not yet downloaded). \
+                 memory_recall accepts as_of + graph_expand.",
             )
             .with_server_info(Implementation::new(
                 self.cfg.mcp_server_name.clone(),
@@ -1042,6 +1135,47 @@ mod lazy_tests {
         assert!(
             result.contains("Models not downloaded"),
             "expected 'Models not downloaded' in: {result}"
+        );
+    }
+
+    /// When both model subdirs exist, download_models reports already_present.
+    #[tokio::test(flavor = "current_thread")]
+    async fn download_models_tool_reports_already_present() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let models_dir = dir.path().join("models");
+        std::fs::create_dir_all(models_dir.join("multilingual-e5-small")).unwrap();
+        std::fs::create_dir_all(models_dir.join("gliner2-multi-v1-onnx")).unwrap();
+
+        let mut cfg = AnnoRagConfig::default();
+        cfg.data_dir = dir.path().to_path_buf();
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        let result = server.download_models().await;
+        assert!(
+            result.contains("already_present") || result.contains("already present"),
+            "expected 'already_present' in: {result}"
+        );
+        assert!(
+            result.contains(models_dir.to_str().unwrap()),
+            "expected path in: {result}"
+        );
+    }
+
+    /// When models are absent and no lock file exists, the tool starts a
+    /// background download and returns the "downloading" status immediately.
+    #[tokio::test(flavor = "current_thread")]
+    async fn download_models_tool_starts_download_when_absent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut cfg = AnnoRagConfig::default();
+        cfg.data_dir = dir.path().to_path_buf();
+
+        assert!(!dir.path().join("models").join("multilingual-e5-small").exists());
+
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let result = server.download_models().await;
+        assert!(
+            result.contains("downloading") || result.contains("in_progress") || result.contains("Downloading"),
+            "expected download status in: {result}"
         );
     }
 }
