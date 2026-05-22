@@ -68,7 +68,8 @@ impl AnnoRagServer {
     #[must_use]
     pub fn new(pipeline: Pipeline, cfg: AnnoRagConfig) -> Self {
         let cell = OnceCell::new();
-        let _ = cell.set(Arc::new(pipeline));
+        // Safety: cell is freshly created; set cannot fail on a new OnceCell.
+        let _ = cell.set(Arc::new(pipeline)).ok();
         Self {
             pipeline: Arc::new(cell),
             cfg: Arc::new(cfg),
@@ -515,6 +516,12 @@ impl AnnoRagServer {
                                 );
                             }
                         });
+                    } else {
+                        tracing::warn!(
+                            target: "anno_rag::memory::audit",
+                            tool = "memory_save",
+                            "pipeline_arc() returned None after successful pipeline init; async NER task skipped"
+                        );
                     }
                 }
                 tracing::info!(
@@ -999,7 +1006,7 @@ mod lazy_tests {
     use super::*;
     use anno_rag::config::AnnoRagConfig;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn lazy_server_returns_error_when_models_absent() {
         let dir = tempfile::tempdir().expect("tempdir");
         let mut cfg = AnnoRagConfig::default();
@@ -1007,7 +1014,9 @@ mod lazy_tests {
         let key = [0u8; 32];
 
         let saved = std::env::var("ANNO_MODELS_DIR").ok();
-        // Safety: test environment, single-threaded section
+        // Safety: flavor = "current_thread" ensures this test runs on a single OS thread.
+        // ANNO_MODELS_DIR is saved and restored so other tests in the same suite are not affected.
+        // Note: run with RUST_TEST_THREADS=1 if other tests also mutate ANNO_MODELS_DIR.
         unsafe { std::env::remove_var("ANNO_MODELS_DIR") };
 
         let server = AnnoRagServer::new_lazy(cfg, key);
