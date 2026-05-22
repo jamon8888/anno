@@ -25,7 +25,7 @@ edition = "2021"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 authors = ["Arc <attobop@gmail.com>"]
-repository = "https://github.com/arclabs561/anno"
+repository = "https://github.com/jamon8888/anno"
 homepage = "https://docs.rs/anno"
 documentation = "https://docs.rs/anno"
 
@@ -143,6 +143,7 @@ targets             = [
 ]
 installers          = ["msi", "shell", "powershell", "homebrew"]
 tap                 = "jamon8888/homebrew-hacienda"
+publish-jobs        = ["homebrew"]
 precise-builds      = true   # honours rust-toolchain.toml (pin: 1.95)
 pr-run-mode         = "plan" # dry-run on PRs; real build only on v* tags
 create-release      = true

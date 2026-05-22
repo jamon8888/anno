@@ -1,9 +1,12 @@
 [package]
 name = "anno-privacy-gateway"
 version = "0.3.0"
-edition.workspace = true
+edition.workspace    = true
 rust-version.workspace = true
-license.workspace = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+homepage.workspace   = true
 description = "Anthropic-compatible privacy gateway for Cowork and provider routing"
 
 [[bin]]
@@ -41,3 +44,9 @@ workspace = true
 
 [package.metadata.dist]
 dist = true
+
+[package.metadata.wix]
+upgrade-guid = "FD222F89-2E11-44C8-ADCD-DA4D39E2DB0D"
+path-guid = "35703D6A-11A0-4545-8663-137CA0BA264B"
+license = false
+eula = false
