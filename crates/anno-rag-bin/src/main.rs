@@ -82,6 +82,37 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // Initialize cfg early so it's available for short-circuit branches
+    let mut cfg = AnnoRagConfig::default();
+    if let Ok(mode) = std::env::var("ANNO_RAG_MEMORY_NER_MODE") {
+        if let Some(mode) = MemoryNerMode::from_env_value(&mode) {
+            cfg.memory_ner_mode = mode;
+        }
+    }
+    if let Cmd::Ingest { enable_ocr, .. } = &cli.cmd {
+        if *enable_ocr {
+            cfg.ocr_mode = OcrMode::AutoEmbedded;
+        }
+    }
+
+    // Mcp uses lazy pipeline init — short-circuit before Pipeline::new.
+    // Auto-detect the default models path here, before any async threads
+    // start, so set_var is safe (called in single-threaded context).
+    if let Cmd::Mcp = &cli.cmd {
+        let key = derive_key()?;
+        if std::env::var("ANNO_MODELS_DIR").is_err() {
+            let default_models = cfg.models_cache();
+            if default_models.join("multilingual-e5-small").exists()
+                && default_models.join("gliner2-multi-v1-onnx").exists()
+            {
+                // SAFETY: called before tokio worker threads start.
+                std::env::set_var("ANNO_MODELS_DIR", &default_models);
+            }
+        }
+        anno_rag_mcp::serve_stdio_lazy(cfg, key).await?;
+        return Ok(());
+    }
+
     // DownloadModels needs no Pipeline — short-circuit before keyring lookup.
     if let Cmd::DownloadModels { dir } = &cli.cmd {
         let mut cfg = AnnoRagConfig::default();
@@ -111,18 +142,6 @@ async fn main() -> anyhow::Result<()> {
         println!("Or add it permanently to your shell profile / Claude Desktop config env.");
         return Ok(());
     }
-
-    let mut cfg = AnnoRagConfig::default();
-    if let Ok(mode) = std::env::var("ANNO_RAG_MEMORY_NER_MODE") {
-        if let Some(mode) = MemoryNerMode::from_env_value(&mode) {
-            cfg.memory_ner_mode = mode;
-        }
-    }
-    if let Cmd::Ingest { enable_ocr, .. } = &cli.cmd {
-        if *enable_ocr {
-            cfg.ocr_mode = OcrMode::AutoEmbedded;
-        }
-    }
     let key = derive_key()?;
     let pipeline = Pipeline::new(cfg.clone(), key).await?;
 
@@ -149,9 +168,7 @@ async fn main() -> anyhow::Result<()> {
                 println!();
             }
         }
-        Cmd::Mcp => {
-            anno_rag_mcp::serve_stdio(pipeline, cfg).await?;
-        }
+        Cmd::Mcp => unreachable!("handled above before Pipeline::new"),
         Cmd::Bench { .. } => unreachable!("handled above before Pipeline::new"),
         Cmd::DownloadModels { .. } => unreachable!("handled above before Pipeline::new"),
     }
@@ -163,5 +180,25 @@ fn truncate(s: &str, n: usize) -> String {
         s.to_string()
     } else {
         format!("{}…", s.chars().take(n).collect::<String>())
+    }
+}
+
+#[cfg(test)]
+mod mcp_autodetect_tests {
+    use anno_rag::config::AnnoRagConfig;
+
+    #[test]
+    fn models_cache_path_matches_default_autodetect_layout() {
+        let cfg = AnnoRagConfig::default();
+        let models = cfg.models_cache();
+        assert!(models.ends_with("models"));
+        assert_eq!(
+            models.join("multilingual-e5-small").file_name().unwrap(),
+            "multilingual-e5-small"
+        );
+        assert_eq!(
+            models.join("gliner2-multi-v1-onnx").file_name().unwrap(),
+            "gliner2-multi-v1-onnx"
+        );
     }
 }
