@@ -763,11 +763,14 @@ impl Store {
         use lance_index::scalar::FullTextSearchQuery;
         use lancedb::rerankers::rrf::RRFReranker;
 
+        let fts_query = FullTextSearchQuery::new(query_text.to_string())
+            .with_columns(&["text".to_string()])
+            .map_err(|e| Error::Store(format!("memories fts column: {e}")))?;
         let stream = self
             .memories_tbl
             .query()
             .nearest_to(query_vec.to_vec())?
-            .full_text_search(FullTextSearchQuery::new(query_text.to_string()))
+            .full_text_search(fts_query)
             .rerank(Arc::new(RRFReranker::default()))
             .limit(top_k)
             .execute()
