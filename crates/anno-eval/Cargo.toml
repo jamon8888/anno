@@ -99,4 +99,4 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.dist]
-dist = false
+dist = false  # eval tooling (muxer_repeat, muxer_audit) — internal harness, not end-user artifacts
