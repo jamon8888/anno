@@ -487,12 +487,25 @@ mod tests {
 
     #[test]
     fn anno_models_dir_missing_ner_dir_fast_path_not_taken() {
-        // When ANNO_MODELS_DIR is set but gliner2-multi-v1-onnx/ doesn't exist,
-        // the fast-path must not trigger.
+        // ANNO_MODELS_DIR is set but gliner2-multi-v1-onnx/ does NOT exist.
+        // The fast-path must not be taken; Detector::new falls through to
+        // from_pretrained which will fail (ANNO_NO_DOWNLOADS=1 blocks network).
+        // The error must NOT contain "(local)" — that would indicate the fast-path ran.
         let dir = tempfile::tempdir().expect("tempdir");
-        let ner_dir = dir.path().join("gliner2-multi-v1-onnx");
-        assert!(!ner_dir.exists(), "dir must not exist");
-        // Fast-path condition: model_path.exists() == false → not taken. ✓
+        // deliberately do NOT create dir.path()/gliner2-multi-v1-onnx
+
+        std::env::set_var("ANNO_MODELS_DIR", dir.path());
+        std::env::set_var("ANNO_NO_DOWNLOADS", "1");
+        let result = Detector::new();
+        std::env::remove_var("ANNO_MODELS_DIR");
+        std::env::remove_var("ANNO_NO_DOWNLOADS");
+
+        let err = result.expect_err("must fail — no model dir and downloads blocked");
+        let msg = err.to_string();
+        assert!(
+            !msg.contains("(local)"),
+            "fast-path must NOT be taken when gliner2 dir absent, got: {msg}"
+        );
     }
 
     #[test]
