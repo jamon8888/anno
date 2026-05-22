@@ -97,3 +97,6 @@ bundled-hmm-params = ["anno/bundled-hmm-params"]
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.dist]
+dist = false

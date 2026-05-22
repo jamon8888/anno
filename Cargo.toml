@@ -128,3 +128,21 @@ unwrap_used = "warn"
 # This is a virtual workspace. The published `anno` crate lives at `crates/anno/`.
 # Local development overrides (path patches) live in `.cargo/config.toml`.
 # See `.cargo/config.toml.example` for the super-workspace setup.
+
+# ── cargo-dist (Phase 2A) ────────────────────────────────────────────────────
+# Managed by cargo-dist. Re-generate CI with: cargo dist generate
+# After regeneration, re-apply ANNO-PATCH sections in release.yml (Task 3+4).
+[workspace.metadata.dist]
+cargo-dist-version  = "0.32.0"
+ci                  = "github"
+targets             = [
+  "x86_64-pc-windows-msvc",
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-unknown-linux-gnu",
+]
+installers          = ["msi", "shell", "powershell", "homebrew"]
+tap                 = "jamon8888/homebrew-hacienda"
+precise-builds      = true   # honours rust-toolchain.toml (pin: 1.95)
+pr-run-mode         = "plan" # dry-run on PRs; real build only on v* tags
+create-release      = true
