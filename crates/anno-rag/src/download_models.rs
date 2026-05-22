@@ -79,7 +79,11 @@ async fn download_embedder(models_dir: &Path) -> Result<()> {
         .unwrap_or(0) as f64
         / 1_048_576.0;
     tokio::fs::copy(&src, e5_dir.join(dest_name)).await?;
-    // Loader expects model.safetensors; if we got pytorch_model.bin, copy again
+    // e5-small ships model.safetensors; the pytorch_model.bin branch is a
+    // defensive fallback. NOTE: a raw .bin cannot be mmap-loaded as safetensors
+    // — if this branch ever fires the downstream Embedder::load will error at
+    // VarBuilder::from_mmaped_safetensors. Left as-is so the download at least
+    // completes; the error is surfaced at load time with a clear message.
     if dest_name == "pytorch_model.bin" {
         tokio::fs::copy(
             e5_dir.join("pytorch_model.bin"),
