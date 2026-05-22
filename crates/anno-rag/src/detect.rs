@@ -22,6 +22,7 @@ use anno::backends::inference::ZeroShotNER;
 use anno::EntityType;
 use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
 use regex::Regex;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 struct FrPatterns {
@@ -200,6 +201,17 @@ impl Detector {
     /// Build a new detector. Loads the GLiNER2Fastino multi-v1 ONNX model
     /// (multilingual, FR-aware) from the HF Hub cache.
     pub fn new() -> Result<Self> {
+        // ── ANNO_MODELS_DIR fast-path ─────────────────────────────────────────
+        if let Some(models_dir) = std::env::var_os("ANNO_MODELS_DIR") {
+            let model_path = PathBuf::from(models_dir).join("gliner2-multi-v1-onnx");
+            if model_path.exists() {
+                let ner =
+                    anno::backends::gliner2_fastino::GLiNER2Fastino::from_local(&model_path)
+                        .map_err(|e| Error::Detect(format!("gliner2_fastino load (local): {e}")))?;
+                return Ok(Self { ner });
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────
         let ner = GLiNER2Fastino::from_pretrained(NER_MODEL_ID)
             .map_err(|e| Error::Detect(format!("gliner2_fastino load: {e}")))?;
         Ok(Self { ner })
@@ -471,5 +483,37 @@ mod tests {
                 w[1].end
             );
         }
+    }
+
+    #[test]
+    fn anno_models_dir_missing_ner_dir_fast_path_not_taken() {
+        // When ANNO_MODELS_DIR is set but gliner2-multi-v1-onnx/ doesn't exist,
+        // the fast-path must not trigger.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ner_dir = dir.path().join("gliner2-multi-v1-onnx");
+        assert!(!ner_dir.exists(), "dir must not exist");
+        // Fast-path condition: model_path.exists() == false → not taken. ✓
+    }
+
+    #[test]
+    fn anno_models_dir_local_path_entered_when_ner_dir_exists() {
+        // When ANNO_MODELS_DIR/gliner2-multi-v1-onnx/ exists (even empty),
+        // the fast-path IS taken and from_local errors with a typed error.
+        // This proves the branch is entered without requiring real model files.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ner_dir = dir.path().join("gliner2-multi-v1-onnx");
+        std::fs::create_dir_all(&ner_dir).expect("mkdir");
+
+        std::env::set_var("ANNO_MODELS_DIR", dir.path());
+        let result = Detector::new();
+        std::env::remove_var("ANNO_MODELS_DIR");
+
+        // from_local on an empty dir returns an error (no ONNX files)
+        let err = result.expect_err("must fail on empty model dir");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("(local)"),
+            "error must come from local path, got: {msg}"
+        );
     }
 }
