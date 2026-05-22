@@ -869,7 +869,9 @@ jobs:
           cache-all-crates: true
       - name: Install Miri
         run: |
-          rustup component add miri
+          # rust-toolchain.toml pins the project to stable 1.95; Miri is only
+          # available on nightly, so use +nightly explicitly throughout.
+          rustup +nightly component add miri
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -880,7 +882,7 @@ jobs:
       - name: Run Miri on unsafe code
         run: |
           # Run Miri on files with unsafe code (selective approach)
-          cargo miri test --lib --features onnx -- --test-threads=1 --nocapture || true
+          cargo +nightly miri test --lib --features onnx -- --test-threads=1 --nocapture || true
         timeout-minutes: 10
   # OpenGrep: Custom security pattern detection
   opengrep:
