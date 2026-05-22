@@ -81,7 +81,40 @@ or creating sample data:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release\local-pipeline-gate.ps1 -DryRun -SkipHeavy -SkipOcr -SkipMcp
 ```
 
-## Claude Desktop
+## Claude Desktop Extension (one-click install)
+
+Download the `.mcpb` file for your platform from the [GitHub Release](https://github.com/jamon8888/anno/releases):
+
+| Platform | File |
+|---|---|
+| Windows 11 x64 | `hacienda-<tag>-x86_64-pc-windows-msvc.mcpb` |
+| macOS Apple Silicon | `hacienda-<tag>-aarch64-apple-darwin.mcpb` |
+| macOS Intel | `hacienda-<tag>-x86_64-apple-darwin.mcpb` |
+
+**Install:**
+
+1. Open Claude Desktop → Settings → Extensions.
+2. Drag the `.mcpb` file into the window (or click "Install Extension…").
+3. Fill in config fields if prompted (all optional — leave blank for defaults).
+4. Click **Install**. The server registers instantly.
+
+**First use — download models:**
+
+Model weights (~970 MB) are not bundled. On first use, ask Claude:
+
+> "Set up anno-rag"
+
+Claude calls the `download_models` tool, which downloads models in the background (~2–15 min). Ask again after a few minutes — anno-rag confirms when ready.
+
+**Power-user shortcut (models already on disk):**
+
+If you have already run `anno-rag download-models`, open the extension settings and set **Models directory** to the path it printed. anno-rag uses models from disk immediately.
+
+---
+
+## Claude Desktop (manual config)
+
+> **Note:** If you installed via the `.mcpb` extension above, skip this section — Claude Desktop manages the config automatically.
 
 Claude Desktop uses the `anno-rag` binary through stdio MCP:
 
