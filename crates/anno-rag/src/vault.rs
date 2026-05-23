@@ -11,6 +11,7 @@
 //!   stored on first run).
 
 use crate::error::{Error, Result};
+use crate::legal::offsets::{PseudoOffsetMap, Substitution};
 use cloakpipe_core::replacer::Replacer;
 use cloakpipe_core::vault::Vault as CpVault;
 use cloakpipe_core::DetectedEntity;
@@ -101,6 +102,67 @@ impl Vault {
             }
         }
         Ok((result.text, refs))
+    }
+
+    /// Pseudonymize `text` and return the span substitution map.
+    ///
+    /// Existing call sites should continue using [`Self::pseudonymize`] or
+    /// [`Self::pseudonymize_with_refs`]. This additive API is for legal
+    /// enrichment, where GLiNER spans detected on raw text must be translated
+    /// into pseudonymized chunk coordinates.
+    ///
+    /// # Errors
+    /// Returns [`Error::Vault`] on cloakpipe replacer or vault persistence
+    /// failure, or when a detected entity cannot be matched to a minted token.
+    pub async fn pseudonymize_with_map(
+        &self,
+        text: &str,
+        entities: &[DetectedEntity],
+    ) -> Result<(String, PseudoOffsetMap)> {
+        let mut v = self.inner.lock().await;
+        let result = Replacer::pseudonymize(text, entities, &mut v)
+            .map_err(|e| Error::Vault(format!("replacer: {e}")))?;
+        v.save()
+            .map_err(|e| Error::Vault(format!("save after pseudonymize_with_map: {e}")))?;
+        drop(v);
+
+        let mut sorted_entities: Vec<&DetectedEntity> = entities.iter().collect();
+        sorted_entities.sort_by_key(|entity| entity.start);
+
+        let mut subs = Vec::with_capacity(sorted_entities.len());
+        let mut pseudo_cursor: usize = 0;
+        let mut raw_cursor: usize = 0;
+
+        for entity in sorted_entities {
+            if entity.start < raw_cursor || entity.end > text.len() {
+                continue;
+            }
+
+            pseudo_cursor += entity.start - raw_cursor;
+            let token = result
+                .mappings
+                .iter()
+                .find(|(_, original)| original.as_str() == entity.original)
+                .map(|(token, _)| token.as_str())
+                .ok_or_else(|| {
+                    Error::Vault(format!(
+                        "pseudonymize_with_map: no mapping for original {:?}",
+                        entity.original
+                    ))
+                })?;
+            let pseudo_start = pseudo_cursor as u32;
+            let pseudo_end = (pseudo_cursor + token.len()) as u32;
+            subs.push(Substitution {
+                raw_start: entity.start as u32,
+                raw_end: entity.end as u32,
+                pseudo_start,
+                pseudo_end,
+            });
+            pseudo_cursor += token.len();
+            raw_cursor = entity.end;
+        }
+
+        Ok((result.text, PseudoOffsetMap { subs }))
     }
 
     /// Reverse-lookup a pseudo-token to its original.

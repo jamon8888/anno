@@ -14,6 +14,7 @@ pub mod embed;
 pub mod error;
 pub mod eval;
 pub mod ingest;
+pub mod legal;
 pub mod memory;
 #[cfg(test)]
 pub(crate) mod ocr;

@@ -57,6 +57,19 @@ pub enum Error {
     #[error("rerank: {0}")]
     Rerank(String),
 
+    /// Legal RAG layer error — extraction, enrichment table, normalization,
+    /// or French-specific reference data. Non-fatal at ingest time: chunks
+    /// still index even if legal enrichment fails (see `enrichment_status`
+    /// retry queue).
+    #[error("legal: {0}")]
+    Legal(String),
+
+    /// lance-graph knowledge-graph operation failed (open, upsert, Cypher
+    /// query, compaction). Treated like `Legal` at the ingest path —
+    /// retried via `drain_enrichment_backlog`.
+    #[error("graph: {0}")]
+    Graph(String),
+
     /// I/O error from std.
     #[error(transparent)]
     Io(#[from] std::io::Error),

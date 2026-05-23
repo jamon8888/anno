@@ -192,6 +192,42 @@ pub fn detect_patterns(text: &str) -> Vec<DetectedEntity> {
 /// behaviour against a specific model version.
 pub const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
 
+/// PII labels recognized by the current [`Detector::detect`] NER layer.
+const PII_NER_LABELS: &[&str] = &["person", "organization", "location"];
+
+/// PII labels recognized by the current [`Detector::detect`] NER layer.
+#[must_use]
+pub fn pii_label_set() -> Vec<&'static str> {
+    PII_NER_LABELS.to_vec()
+}
+
+/// Returns true when `name` is one of the detector's PII NER labels.
+#[must_use]
+pub fn is_pii_label(name: &str) -> bool {
+    PII_NER_LABELS.contains(&name)
+}
+
+/// Return the union of PII NER labels and `extra_labels`, de-duplicated.
+#[must_use]
+pub fn combined_label_set(extra_labels: &[&str]) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = PII_NER_LABELS.to_vec();
+    for label in extra_labels {
+        if let Some(static_ref) = static_label_ref(label) {
+            if !out.contains(&static_ref) {
+                out.push(static_ref);
+            }
+        }
+    }
+    out
+}
+
+fn static_label_ref(label: &str) -> Option<&'static str> {
+    crate::legal::default_legal_labels()
+        .into_iter()
+        .find(|candidate| candidate.name == label)
+        .map(|candidate| candidate.name)
+}
+
 /// Aggregate PII detector: FR regex pack + anno NER.
 pub struct Detector {
     ner: GLiNER2Fastino,
@@ -234,7 +270,35 @@ impl Detector {
         Ok(out)
     }
 
+    /// Run the detector with a caller-controlled NER label set and threshold.
+    ///
+    /// The French regex PII layer still runs, and output uses the same
+    /// char-to-byte translation, sorting, deduplication, and cleartext-free
+    /// audit event as [`Self::detect`].
+    pub fn detect_with_labels(
+        &self,
+        text: &str,
+        labels: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<DetectedEntity>> {
+        let started = std::time::Instant::now();
+        let input_chars = text.chars().count();
+        let out = self.detect_inner_with(text, labels, threshold)?;
+        let elapsed_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        emit_detect_audit(input_chars, elapsed_us, &out);
+        Ok(out)
+    }
+
     fn detect_inner(&self, text: &str) -> Result<Vec<DetectedEntity>> {
+        self.detect_inner_with(text, PII_NER_LABELS, 0.5)
+    }
+
+    fn detect_inner_with(
+        &self,
+        text: &str,
+        labels: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<DetectedEntity>> {
         // 1. FR regex set (model-free layer).
         let mut all = detect_patterns(text);
 
@@ -245,7 +309,7 @@ impl Detector {
         // panic inside Replacer::pseudonymize.
         let anno_entities = self
             .ner
-            .extract_with_types(text, &["person", "organization", "location"], 0.5)
+            .extract_with_types(text, labels, threshold)
             .map_err(|e| Error::Detect(e.to_string()))?;
 
         // char_idx → byte_idx table. The last sentinel is text.len() so a
@@ -277,16 +341,8 @@ impl Detector {
                 .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
                 .then_with(|| pattern_priority(&a.source).cmp(&pattern_priority(&b.source)))
         });
-        let mut out: Vec<DetectedEntity> = Vec::new();
-        for e in all {
-            if let Some(last) = out.last() {
-                if e.start < last.end {
-                    continue; // overlaps with previous — drop
-                }
-            }
-            out.push(e);
-        }
-        Ok(out)
+        dedup_overlaps(&mut all);
+        Ok(all)
     }
 }
 
@@ -339,12 +395,60 @@ fn pattern_priority(s: &DetectionSource) -> u8 {
     }
 }
 
+fn dedup_overlaps(entities: &mut Vec<DetectedEntity>) {
+    let mut out: Vec<DetectedEntity> = Vec::with_capacity(entities.len());
+    for entity in entities.drain(..) {
+        if let Some(last) = out.last() {
+            if entity.start < last.end {
+                continue;
+            }
+        }
+        out.push(entity);
+    }
+    *entities = out;
+}
+
 fn map_anno_category(t: &EntityType) -> EntityCategory {
     match t {
         EntityType::Person => EntityCategory::Person,
         EntityType::Organization => EntityCategory::Organization,
         EntityType::Location => EntityCategory::Location,
         _ => EntityCategory::Custom(format!("{t:?}")),
+    }
+}
+
+#[cfg(test)]
+mod combined_label_tests {
+    use super::*;
+
+    #[test]
+    fn combined_label_set_is_union_of_pii_and_legal() {
+        let pii = pii_label_set();
+        let legal: Vec<&str> = crate::legal::default_legal_labels()
+            .iter()
+            .map(|label| label.name)
+            .collect();
+        let combined = combined_label_set(&legal);
+
+        for pii_label in &pii {
+            assert!(
+                combined.contains(pii_label),
+                "missing PII label {pii_label}"
+            );
+        }
+        for legal_label in &legal {
+            assert!(
+                combined.contains(legal_label),
+                "missing legal label {legal_label}"
+            );
+        }
+    }
+
+    #[test]
+    fn is_pii_label_distinguishes_pii_from_legal() {
+        assert!(is_pii_label("person"));
+        assert!(!is_pii_label("clause_type"));
+        assert!(!is_pii_label("obligation"));
     }
 }
 
