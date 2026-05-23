@@ -1105,8 +1105,10 @@ mod lazy_tests {
     #[tokio::test(flavor = "current_thread")]
     async fn lazy_server_returns_error_when_models_absent() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let mut cfg = AnnoRagConfig::default();
-        cfg.data_dir = dir.path().to_path_buf();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
         let key = [0u8; 32];
 
         let saved = std::env::var("ANNO_MODELS_DIR").ok();
@@ -1141,8 +1143,10 @@ mod lazy_tests {
         std::fs::create_dir_all(models_dir.join("multilingual-e5-small")).unwrap();
         std::fs::create_dir_all(models_dir.join("gliner2-multi-v1-onnx")).unwrap();
 
-        let mut cfg = AnnoRagConfig::default();
-        cfg.data_dir = dir.path().to_path_buf();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
         let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
 
         let result = server.download_models().await;
@@ -1166,8 +1170,10 @@ mod lazy_tests {
     #[tokio::test(flavor = "current_thread")]
     async fn download_models_tool_starts_download_when_absent() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let mut cfg = AnnoRagConfig::default();
-        cfg.data_dir = dir.path().to_path_buf();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
 
         assert!(!dir
             .path()
