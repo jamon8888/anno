@@ -887,8 +887,7 @@ impl AnnoRagServer {
                     models_dir.display()
                 ),
             };
-            return serde_json::to_string_pretty(&wire)
-                .unwrap_or_else(|e| format!("Error: {e}"));
+            return serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"));
         }
 
         // Download already in progress (sentinel file present).
@@ -903,8 +902,7 @@ impl AnnoRagServer {
                     models_dir.display()
                 ),
             };
-            return serde_json::to_string_pretty(&wire)
-                .unwrap_or_else(|e| format!("Error: {e}"));
+            return serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"));
         }
 
         // Start a new background download.
@@ -1018,10 +1016,7 @@ pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> anno_rag::er
 ///
 /// Returns [`anno_rag::error::Error::Detect`] if the rmcp transport fails to
 /// initialize or the server loop returns an error.
-pub async fn serve_stdio_lazy(
-    cfg: AnnoRagConfig,
-    key: [u8; 32],
-) -> anno_rag::error::Result<()> {
+pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::error::Result<()> {
     let server = AnnoRagServer::new_lazy(cfg, key);
     tracing::info!("anno-rag MCP server starting (lazy) on stdio");
 
@@ -1174,12 +1169,18 @@ mod lazy_tests {
         let mut cfg = AnnoRagConfig::default();
         cfg.data_dir = dir.path().to_path_buf();
 
-        assert!(!dir.path().join("models").join("multilingual-e5-small").exists());
+        assert!(!dir
+            .path()
+            .join("models")
+            .join("multilingual-e5-small")
+            .exists());
 
         let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
         let result = server.download_models().await;
         assert!(
-            result.contains("downloading") || result.contains("in_progress") || result.contains("Downloading"),
+            result.contains("downloading")
+                || result.contains("in_progress")
+                || result.contains("Downloading"),
             "expected download status in: {result}"
         );
     }
