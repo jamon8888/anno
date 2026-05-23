@@ -687,6 +687,36 @@ impl Store {
         Ok(n > 0)
     }
 
+    /// Fetch every chunk row belonging to `doc_id`, decoded as [`SearchHit`].
+    ///
+    /// Used by [`crate::pipeline::Pipeline::drain_enrichment_backlog`] to
+    /// re-run legal enrichment without re-ingesting the document.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query / decode failures.
+    pub async fn chunks_by_doc(&self, doc_id: Uuid) -> Result<Vec<SearchHit>> {
+        let hex = doc_id.simple().to_string();
+        let filter = format!("doc_id = X'{hex}'");
+        let stream = self
+            .tbl
+            .query()
+            .only_if(filter)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("chunks_by_doc: {e}")))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| Error::Store(format!("chunks_by_doc stream: {e}")))?;
+        let mut hits = Vec::new();
+        for batch in &batches {
+            for i in 0..batch.num_rows() {
+                hits.push(batch_to_hit(batch, i)?);
+            }
+        }
+        Ok(hits)
+    }
+
     /// Number of rows in the memories table. Cheap (`count_rows`); used
     /// by the recall-path optimize gate to skip `optimize()` when no
     /// memories were added since the last index fold-in.

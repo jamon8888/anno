@@ -423,6 +423,10 @@ impl Pipeline {
             Ok(false) => {}
             Err(e) => tracing::warn!(error = %e, "FTS index build skipped"),
         }
+        // Retry pending legal enrichments non-fatally.
+        if let Err(e) = self.drain_enrichment_backlog(64).await {
+            tracing::warn!(error = %e, "drain_enrichment_backlog failed (non-fatal)");
+        }
         Ok(count)
     }
 
@@ -1494,6 +1498,95 @@ pub enum ExportFormat {
     Csv,
 }
 
+/// Summary returned by [`Pipeline::drain_enrichment_backlog`].
+#[derive(Debug, Clone, Default)]
+pub struct EnrichmentDrainReport {
+    /// Documents successfully re-enriched on this drain pass.
+    pub ok: usize,
+    /// Documents that failed again and remain pending.
+    pub still_pending: usize,
+    /// Documents that exhausted the retry budget (≥ 5 attempts) and are
+    /// permanently marked `failed_max_retries`.
+    pub failed_max_retries: usize,
+}
+
+impl Pipeline {
+    /// Re-run legal enrichment for every document whose last attempt was
+    /// recorded as `pending`. Caps at `max_docs` per call; call repeatedly
+    /// to drain a large backlog.
+    ///
+    /// Docs that have accumulated ≥ 5 attempts are permanently marked
+    /// `failed_max_retries` and skipped on future drains. All errors during
+    /// individual re-enrichment are non-fatal and recorded in the status
+    /// table; the method only propagates errors from the status store itself.
+    ///
+    /// # Errors
+    /// Returns [`Error::Legal`] when the status table cannot be read or written.
+    pub async fn drain_enrichment_backlog(
+        &self,
+        max_docs: usize,
+    ) -> crate::error::Result<EnrichmentDrainReport> {
+        let pending = self.enrichment_status.list_pending(max_docs).await?;
+        let mut report = EnrichmentDrainReport::default();
+        for d in pending {
+            if d.attempts >= 5 {
+                self.enrichment_status
+                    .mark_failed_max_retries(
+                        d.doc_id,
+                        d.last_error.as_deref().unwrap_or("exhausted"),
+                    )
+                    .await?;
+                report.failed_max_retries += 1;
+                continue;
+            }
+            let chunks = self.store.chunks_by_doc(d.doc_id).await?;
+            match self.reenrich_doc(d.doc_id, &chunks).await {
+                Ok(()) => {
+                    self.enrichment_status.mark_ok(d.doc_id).await?;
+                    report.ok += 1;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        doc_id = %d.doc_id,
+                        attempt = d.attempts + 1,
+                        error = %e,
+                        "legal re-enrichment failed"
+                    );
+                    self.enrichment_status
+                        .mark_pending(d.doc_id, d.chunk_count, &e.to_string())
+                        .await?;
+                    report.still_pending += 1;
+                }
+            }
+        }
+        Ok(report)
+    }
+
+    /// Re-run rules-only legal enrichment for a document's already-stored
+    /// pseudonymized chunks. The vault forward map is empty because canonical
+    /// references are already embedded in the pseudonymized text (Phase 1
+    /// limitation; a per-doc vault snapshot is introduced in Stage C3).
+    async fn reenrich_doc(
+        &self,
+        doc_id: uuid::Uuid,
+        chunks: &[crate::store::SearchHit],
+    ) -> crate::error::Result<()> {
+        let fwd = crate::legal::rules::VaultForwardMap {
+            alias_to_canonical: Default::default(),
+        };
+        let mut rows = Vec::with_capacity(chunks.len());
+        for c in chunks {
+            let legal_ents: Vec<crate::legal::types::LegalEntity> = Vec::new();
+            let (row, _) =
+                self.legal_enricher
+                    .enrich_one(c.chunk_id, doc_id, &c.text_pseudo, &legal_ents, &fwd);
+            rows.push(row);
+        }
+        self.legal_store.upsert(&rows).await?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1741,6 +1834,22 @@ mod tests {
             cfg_for_ocr_budget(&cfg, Some(Duration::from_secs(10)), Duration::from_secs(10));
 
         assert_eq!(next_cfg.effective_ocr_mode(), crate::config::OcrMode::Off);
+    }
+
+    /// Drain an empty backlog — should return an all-zero report without
+    /// hitting LanceDB (the enrichment_status table will be empty).
+    #[tokio::test]
+    #[ignore = "Pipeline::new opens LanceDB (~30s) — opt in via --ignored"]
+    async fn drain_enrichment_backlog_empty_backlog_is_noop() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let p = pipeline_in(dir.path()).await;
+        let report = p
+            .drain_enrichment_backlog(64)
+            .await
+            .expect("drain ok");
+        assert_eq!(report.ok, 0);
+        assert_eq!(report.still_pending, 0);
+        assert_eq!(report.failed_max_retries, 0);
     }
 }
 
