@@ -3,7 +3,13 @@
 use crate::config::AnnoRagConfig;
 use crate::error::{Error, Result};
 use crate::legal::types::{LegalChunkEnrichment, LegalSearchFilters};
-use arrow_array::{Array, FixedSizeBinaryArray, RecordBatch, RecordBatchIterator};
+use arrow_array::{
+    builder::{
+        FixedSizeBinaryBuilder, Float32Builder, Int64Builder, ListBuilder,
+        StringBuilder, TimestampMicrosecondBuilder,
+    },
+    Array, FixedSizeBinaryArray, RecordBatch, RecordBatchIterator,
+};
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use futures::TryStreamExt;
 use lancedb::{Connection, Table};
@@ -227,9 +233,21 @@ impl LegalStore {
     /// Upsert a batch of enrichment rows.
     ///
     /// # Errors
-    /// Currently never errors; Arrow conversion lands with ingest wiring.
+    /// Returns [`Error::Arrow`] when batch encoding fails, or [`Error::Legal`]
+    /// when the LanceDB write fails.
     pub async fn upsert(&self, rows: &[LegalChunkEnrichment]) -> Result<()> {
-        let _ = rows;
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let batch = legal_rows_to_record_batch(rows)?;
+        let schema = legal_enrichment_schema();
+        let reader = RecordBatchIterator::new(vec![Ok(batch)].into_iter(), schema);
+        let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(reader);
+        self.table
+            .add(reader)
+            .execute()
+            .await
+            .map_err(|e| Error::Legal(format!("legal upsert: {e}")))?;
         Ok(())
     }
 
@@ -300,6 +318,119 @@ impl LegalStore {
     }
 }
 
+fn legal_rows_to_record_batch(rows: &[LegalChunkEnrichment]) -> Result<RecordBatch> {
+    let n = rows.len();
+    let mut chunk_id_b = FixedSizeBinaryBuilder::with_capacity(n, 16);
+    let mut doc_id_b = FixedSizeBinaryBuilder::with_capacity(n, 16);
+    let mut doc_type_b = StringBuilder::new();
+    let mut legal_domain_b = StringBuilder::new();
+    let mut jurisdiction_b = StringBuilder::new();
+    let mut document_date_b = TimestampMicrosecondBuilder::with_capacity(n);
+    let mut dossier_id_b = StringBuilder::new();
+    let mut parties_b: ListBuilder<StringBuilder> = ListBuilder::new(StringBuilder::new());
+    let mut party_roles_b: ListBuilder<StringBuilder> = ListBuilder::new(StringBuilder::new());
+    let mut legal_refs_b: ListBuilder<StringBuilder> = ListBuilder::new(StringBuilder::new());
+    let mut clause_types_b: ListBuilder<StringBuilder> = ListBuilder::new(StringBuilder::new());
+    let mut obligation_kinds_b: ListBuilder<StringBuilder> =
+        ListBuilder::new(StringBuilder::new());
+    let mut amounts_b: ListBuilder<Int64Builder> = ListBuilder::new(Int64Builder::new());
+    let mut deadlines_b: ListBuilder<TimestampMicrosecondBuilder> =
+        ListBuilder::new(TimestampMicrosecondBuilder::new());
+    let mut event_kinds_b: ListBuilder<StringBuilder> = ListBuilder::new(StringBuilder::new());
+    let mut risk_flags_b: ListBuilder<StringBuilder> = ListBuilder::new(StringBuilder::new());
+    let mut mandatory_clause_status_b = StringBuilder::new();
+    let mut confidence_min_b = Float32Builder::with_capacity(n);
+    let mut confidence_avg_b = Float32Builder::with_capacity(n);
+    let mut extractor_version_b = StringBuilder::new();
+    let mut model_id_b = StringBuilder::new();
+
+    for r in rows {
+        chunk_id_b
+            .append_value(r.chunk_id.as_bytes())
+            .map_err(Error::Arrow)?;
+        doc_id_b
+            .append_value(r.doc_id.as_bytes())
+            .map_err(Error::Arrow)?;
+        doc_type_b.append_option(r.doc_type.as_deref());
+        legal_domain_b.append_option(r.legal_domain.as_deref());
+        jurisdiction_b.append_option(r.jurisdiction.as_deref());
+        document_date_b.append_option(r.document_date.map(|d| d.timestamp_micros()));
+        dossier_id_b.append_option(r.dossier_id.as_deref());
+
+        for s in &r.parties {
+            parties_b.values().append_value(s);
+        }
+        parties_b.append(true);
+        for s in &r.party_roles {
+            party_roles_b.values().append_value(s);
+        }
+        party_roles_b.append(true);
+        for s in &r.legal_refs {
+            legal_refs_b.values().append_value(s);
+        }
+        legal_refs_b.append(true);
+        for s in &r.clause_types {
+            clause_types_b.values().append_value(s);
+        }
+        clause_types_b.append(true);
+        for s in &r.obligation_kinds {
+            obligation_kinds_b.values().append_value(s);
+        }
+        obligation_kinds_b.append(true);
+        for v in &r.amounts_eur_cents {
+            amounts_b.values().append_value(*v);
+        }
+        amounts_b.append(true);
+        for d in &r.deadlines {
+            deadlines_b.values().append_value(d.timestamp_micros());
+        }
+        deadlines_b.append(true);
+        for s in &r.event_kinds {
+            event_kinds_b.values().append_value(s);
+        }
+        event_kinds_b.append(true);
+        for s in &r.risk_flags {
+            risk_flags_b.values().append_value(s);
+        }
+        risk_flags_b.append(true);
+
+        mandatory_clause_status_b.append_option(r.mandatory_clause_status.as_deref());
+        confidence_min_b.append_value(r.confidence_min);
+        confidence_avg_b.append_value(r.confidence_avg);
+        extractor_version_b.append_value(&r.extractor_version);
+        model_id_b.append_value(&r.model_id);
+    }
+
+    let schema = legal_enrichment_schema();
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(chunk_id_b.finish()),
+            Arc::new(doc_id_b.finish()),
+            Arc::new(doc_type_b.finish()),
+            Arc::new(legal_domain_b.finish()),
+            Arc::new(jurisdiction_b.finish()),
+            Arc::new(document_date_b.finish()),
+            Arc::new(dossier_id_b.finish()),
+            Arc::new(parties_b.finish()),
+            Arc::new(party_roles_b.finish()),
+            Arc::new(legal_refs_b.finish()),
+            Arc::new(clause_types_b.finish()),
+            Arc::new(obligation_kinds_b.finish()),
+            Arc::new(amounts_b.finish()),
+            Arc::new(deadlines_b.finish()),
+            Arc::new(event_kinds_b.finish()),
+            Arc::new(risk_flags_b.finish()),
+            Arc::new(mandatory_clause_status_b.finish()),
+            Arc::new(confidence_min_b.finish()),
+            Arc::new(confidence_avg_b.finish()),
+            Arc::new(extractor_version_b.finish()),
+            Arc::new(model_id_b.finish()),
+        ],
+    )
+    .map_err(Error::Arrow)
+}
+
 fn push_array_contains(clauses: &mut Vec<String>, column: &str, values: &[String]) {
     for value in values {
         clauses.push(format!(
@@ -351,6 +482,36 @@ mod tests {
     #[test]
     fn sql_string_lit_escapes_single_quotes() {
         assert_eq!(sql_string_lit("l'avocat"), "'l''avocat'");
+    }
+
+    #[test]
+    fn upsert_encodes_empty_lists() {
+        let row = LegalChunkEnrichment {
+            chunk_id: uuid::Uuid::nil(),
+            doc_id: uuid::Uuid::nil(),
+            doc_type: None,
+            legal_domain: None,
+            jurisdiction: None,
+            document_date: None,
+            dossier_id: None,
+            parties: vec![],
+            party_roles: vec![],
+            legal_refs: vec![],
+            clause_types: vec![],
+            obligation_kinds: vec![],
+            amounts_eur_cents: vec![],
+            deadlines: vec![],
+            event_kinds: vec![],
+            risk_flags: vec![],
+            mandatory_clause_status: None,
+            confidence_min: 0.0,
+            confidence_avg: 0.0,
+            extractor_version: "v0".into(),
+            model_id: "test".into(),
+        };
+        let batch = legal_rows_to_record_batch(&[row]).expect("encodes ok");
+        assert_eq!(batch.num_rows(), 1);
+        assert_eq!(batch.num_columns(), 21);
     }
 
     #[test]

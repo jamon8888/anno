@@ -188,7 +188,27 @@ impl EnrichmentStatusStore {
     }
 
     async fn attempts(&self, doc_id: Uuid) -> Result<Option<i32>> {
-        let _ = doc_id;
+        use lancedb::query::{ExecutableQuery, QueryBase, Select};
+        let id_hex = hex::encode(doc_id.as_bytes());
+        let stream = self
+            .table
+            .query()
+            .only_if(format!("doc_id = X'{id_hex}'"))
+            .select(Select::columns(&["attempts"]))
+            .limit(1)
+            .execute()
+            .await
+            .map_err(|e| Error::Legal(format!("attempts query: {e}")))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| Error::Legal(format!("attempts stream: {e}")))?;
+        for batch in &batches {
+            if batch.num_rows() > 0 {
+                let col = required_col::<Int32Array>(batch, "attempts")?;
+                return Ok(Some(col.value(0)));
+            }
+        }
         Ok(None)
     }
 
@@ -200,7 +220,39 @@ impl EnrichmentStatusStore {
         last_error: Option<String>,
         chunk_count: i32,
     ) -> Result<()> {
-        let _ = (doc_id, status, attempts, last_error, chunk_count);
+        use arrow_array::builder::FixedSizeBinaryBuilder;
+
+        let now_micros = chrono::Utc::now().timestamp_micros();
+        let mut doc_id_b = FixedSizeBinaryBuilder::with_capacity(1, 16);
+        doc_id_b
+            .append_value(doc_id.as_bytes())
+            .map_err(Error::Arrow)?;
+        let status_arr = StringArray::from(vec![status.as_str()]);
+        let attempts_arr = Int32Array::from(vec![attempts]);
+        let last_error_arr = StringArray::from(vec![last_error.as_deref()]);
+        let ts_arr = TimestampMicrosecondArray::from(vec![now_micros]);
+        let chunk_count_arr = Int32Array::from(vec![chunk_count]);
+
+        let schema = enrichment_status_schema();
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(doc_id_b.finish()),
+                Arc::new(status_arr),
+                Arc::new(attempts_arr),
+                Arc::new(last_error_arr),
+                Arc::new(ts_arr),
+                Arc::new(chunk_count_arr),
+            ],
+        )
+        .map_err(Error::Arrow)?;
+        let reader = RecordBatchIterator::new(vec![Ok(batch)].into_iter(), schema);
+        let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(reader);
+        self.table
+            .add(reader)
+            .execute()
+            .await
+            .map_err(|e| Error::Legal(format!("upsert_row: {e}")))?;
         Ok(())
     }
 }

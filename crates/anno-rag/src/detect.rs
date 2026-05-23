@@ -413,8 +413,22 @@ fn map_anno_category(t: &EntityType) -> EntityCategory {
         EntityType::Person => EntityCategory::Person,
         EntityType::Organization => EntityCategory::Organization,
         EntityType::Location => EntityCategory::Location,
-        _ => EntityCategory::Custom(format!("{t:?}")),
+        _ => EntityCategory::Custom(t.as_label().to_ascii_lowercase()),
     }
+}
+
+/// Returns true when a detected entity should be treated as PII for vault
+/// pseudonymization. Pattern-detected entities (IBAN, phone, email, …) are
+/// always PII. NER entities are PII only for person/organisation/location.
+#[must_use]
+pub fn is_pii_entity(e: &cloakpipe_core::DetectedEntity) -> bool {
+    matches!(e.source, cloakpipe_core::DetectionSource::Pattern)
+        || matches!(
+            e.category,
+            cloakpipe_core::EntityCategory::Person
+                | cloakpipe_core::EntityCategory::Organization
+                | cloakpipe_core::EntityCategory::Location
+        )
 }
 
 #[cfg(test)]

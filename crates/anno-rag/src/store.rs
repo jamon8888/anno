@@ -1289,8 +1289,10 @@ fn ts_to_rfc3339(micros: i64) -> String {
 }
 
 /// Deterministic chunk id: UUID v5 (OID namespace) of `"{doc_id}::{chunk_idx}"`.
+/// Matches the value `Store::upsert` will write to the `chunk_id` column,
+/// so legal code can derive matching IDs *before* the row hits LanceDB.
 #[must_use]
-fn chunk_uuid(doc_id: Uuid, chunk_idx: u32) -> Uuid {
+pub fn chunk_uuid(doc_id: Uuid, chunk_idx: u32) -> Uuid {
     let name = format!("{doc_id}::{chunk_idx}");
     Uuid::new_v5(&Uuid::NAMESPACE_OID, name.as_bytes())
 }

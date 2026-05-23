@@ -5,13 +5,44 @@ use crate::detect::Detector;
 use crate::embed::Embedder;
 use crate::error::{Error, Result};
 use crate::ingest;
+use crate::legal::enricher::{LegalEntityExtractor, LegalEnricher};
+use crate::legal::types::{LegalEntity, LegalLabel};
 use crate::store::{ChunkRecord, SearchHit, Store};
 use crate::vault::Vault;
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
+
+/// No-op legal extractor for the ingest path.
+///
+/// Ingest supplies pre-detected legal entities from `detect_with_labels`
+/// directly; `extract_raw` is never called on the normal ingest path.
+/// The drain/re-enrich path uses rules-only mode (empty entity vec).
+/// A real GLiNER session adapter is added when Stage D MCP tools need
+/// full standalone re-extraction.
+struct NoopLegalExtractor;
+
+impl LegalEntityExtractor for NoopLegalExtractor {
+    fn extract(
+        &self,
+        _text: &str,
+        _labels: &[LegalLabel],
+        _thresholds: &HashMap<&'static str, f32>,
+    ) -> Result<Vec<LegalEntity>> {
+        Ok(vec![])
+    }
+
+    fn model_id(&self) -> &'static str {
+        "noop"
+    }
+
+    fn extractor_version(&self) -> &'static str {
+        env!("CARGO_PKG_VERSION")
+    }
+}
 
 /// Deterministic document id: UUID v5 (OID namespace) of the raw file
 /// bytes. Same file content ⇒ same `doc_id` ⇒ the existing
@@ -44,6 +75,12 @@ pub struct Pipeline {
     /// optimize is self-correcting on the next recall (idempotent),
     /// never incorrect.
     memory_fts_watermark: std::sync::atomic::AtomicU64,
+    /// LanceDB legal chunk enrichment table.
+    pub(crate) legal_store: crate::legal::store::LegalStore,
+    /// Enrichment retry status sidecar.
+    pub(crate) enrichment_status: crate::legal::status::EnrichmentStatusStore,
+    /// Legal entity enricher (combined GLiNER2 + rules + normalization).
+    pub(crate) legal_enricher: LegalEnricher,
 }
 
 impl Pipeline {
@@ -58,6 +95,13 @@ impl Pipeline {
         std::fs::create_dir_all(&cfg.data_dir).map_err(Error::from)?;
         let vault = Vault::open(&cfg.vault_path(), vault_key)?;
         let store = Store::open(&cfg).await?;
+        let legal_store = crate::legal::store::LegalStore::open(&cfg).await?;
+        // Index setup may fail on a brand-new empty table; treat as non-fatal.
+        if let Err(e) = legal_store.setup_indexes().await {
+            tracing::warn!(error = %e, "legal index setup skipped (table may be empty)");
+        }
+        let enrichment_status = crate::legal::status::EnrichmentStatusStore::open(&cfg).await?;
+        let legal_enricher = LegalEnricher::new(Arc::new(NoopLegalExtractor));
         Ok(Self {
             detector: OnceCell::new(),
             vault,
@@ -67,6 +111,9 @@ impl Pipeline {
             store,
             cfg,
             memory_fts_watermark: std::sync::atomic::AtomicU64::new(0),
+            legal_store,
+            enrichment_status,
+            legal_enricher,
         })
     }
 
@@ -157,12 +204,35 @@ impl Pipeline {
             .map(|p| p.display().to_string())
             .unwrap_or_default();
 
-        // Detect + pseudonymize per chunk.
-        let mut pseudo_chunks: Vec<String> = Vec::with_capacity(extracted.chunks.len());
+        // ── 1. Combined-label detect: one NER call per chunk (PII ∪ legal) ──
+        let legal_labels = crate::legal::default_legal_labels();
+        let legal_names: Vec<&str> = legal_labels.iter().map(|l| l.name).collect();
+        let combined = crate::detect::combined_label_set(&legal_names);
+        let detector = self.detector_get_or_init()?;
+
+        let mut all_entities: Vec<Vec<cloakpipe_core::DetectedEntity>> =
+            Vec::with_capacity(extracted.chunks.len());
         for chunk in &extracted.chunks {
-            let entities = self.detector_get_or_init()?.detect(&chunk.text)?;
-            let pseudo = self.vault.pseudonymize(&chunk.text, &entities).await?;
+            let ents = detector.detect_with_labels(&chunk.text, &combined, 0.5)?;
+            all_entities.push(ents);
+        }
+
+        // ── 2. Pseudonymize using PII subset; capture offset map ──
+        let mut pseudo_chunks: Vec<String> = Vec::with_capacity(extracted.chunks.len());
+        let mut offset_maps: Vec<crate::legal::offsets::PseudoOffsetMap> =
+            Vec::with_capacity(extracted.chunks.len());
+        for (chunk, ents) in extracted.chunks.iter().zip(&all_entities) {
+            let pii_ents: Vec<cloakpipe_core::DetectedEntity> = ents
+                .iter()
+                .filter(|e| crate::detect::is_pii_entity(e))
+                .cloned()
+                .collect();
+            let (pseudo, map) = self
+                .vault
+                .pseudonymize_with_map(&chunk.text, &pii_ents)
+                .await?;
             pseudo_chunks.push(pseudo);
+            offset_maps.push(map);
         }
 
         // Batch-embed all pseudonymized chunks at once for throughput.
@@ -195,6 +265,70 @@ impl Pipeline {
         // this source_path so a superseded doc_id doesn't orphan.
         self.store.delete_doc_rows(&extracted.source_path).await?;
         self.store.upsert(records).await?;
+
+        // ── 4. Legal chunk enrichment dual-write (table only; graph in C2) ──
+        let mut legal_rows = Vec::with_capacity(extracted.chunks.len());
+        for (i, chunk) in extracted.chunks.iter().enumerate() {
+            let chunk_id = crate::store::chunk_uuid(doc_id, chunk.idx);
+            let raw_legal_ents: Vec<LegalEntity> = all_entities[i]
+                .iter()
+                .filter(|e| !crate::detect::is_pii_entity(e))
+                .filter_map(|e| {
+                    if let cloakpipe_core::EntityCategory::Custom(label) = &e.category {
+                        Some(LegalEntity {
+                            label: label.clone(),
+                            text: e.original.clone(),
+                            byte_start: e.start as u32,
+                            byte_end: e.end as u32,
+                            confidence: e.confidence as f32,
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let legal_ents = self.legal_enricher.translate_to_pseudo(
+                raw_legal_ents,
+                &offset_maps[i],
+                &pseudo_chunks[i],
+            );
+            let fwd = crate::legal::rules::VaultForwardMap {
+                alias_to_canonical: Default::default(),
+            };
+            let (row, _facts) = self.legal_enricher.enrich_one(
+                chunk_id,
+                doc_id,
+                &pseudo_chunks[i],
+                &legal_ents,
+                &fwd,
+            );
+            legal_rows.push(row);
+        }
+        match self.legal_store.upsert(&legal_rows).await {
+            Ok(()) => {
+                if let Err(e) = self.enrichment_status.mark_ok(doc_id).await {
+                    tracing::warn!(doc_id = %doc_id, error = %e, "enrichment_status mark_ok failed");
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    doc_id = %doc_id,
+                    error = %e,
+                    "legal_chunk_enrichment write failed; chunks indexed, marking pending"
+                );
+                if let Err(e2) = self
+                    .enrichment_status
+                    .mark_pending(doc_id, extracted.chunks.len() as i32, &e.to_string())
+                    .await
+                {
+                    tracing::warn!(
+                        doc_id = %doc_id,
+                        error = %e2,
+                        "enrichment_status mark_pending also failed"
+                    );
+                }
+            }
+        }
 
         // Write the anonymized markdown copy.
         std::fs::create_dir_all(output_dir).map_err(Error::from)?;
