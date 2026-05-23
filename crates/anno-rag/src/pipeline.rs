@@ -81,6 +81,8 @@ pub struct Pipeline {
     pub(crate) enrichment_status: crate::legal::status::EnrichmentStatusStore,
     /// Legal entity enricher (combined GLiNER2 + rules + normalization).
     pub(crate) legal_enricher: LegalEnricher,
+    /// Lance-graph knowledge graph (Phase 1: directory-backed no-op; real writes in Stage D).
+    pub(crate) legal_kg: std::sync::Arc<dyn crate::legal::kg::LegalKnowledgeGraph>,
 }
 
 impl Pipeline {
@@ -102,6 +104,8 @@ impl Pipeline {
         }
         let enrichment_status = crate::legal::status::EnrichmentStatusStore::open(&cfg).await?;
         let legal_enricher = LegalEnricher::new(Arc::new(NoopLegalExtractor));
+        let legal_kg: std::sync::Arc<dyn crate::legal::kg::LegalKnowledgeGraph> =
+            std::sync::Arc::new(crate::legal::kg::LanceGraphStore::open(&cfg).await?);
         Ok(Self {
             detector: OnceCell::new(),
             vault,
@@ -114,6 +118,7 @@ impl Pipeline {
             legal_store,
             enrichment_status,
             legal_enricher,
+            legal_kg,
         })
     }
 
@@ -268,8 +273,14 @@ impl Pipeline {
 
         // ── 4. Legal chunk enrichment dual-write (table only; graph in C2) ──
         let mut legal_rows = Vec::with_capacity(extracted.chunks.len());
+        let mut node_batch = crate::legal::kg::NodeBatch::new();
+        let mut edge_batch = crate::legal::kg::EdgeBatch::new();
+        // Document root node for the graph.
+        node_batch.add_document(doc_id, None, None, None, None, None);
         for (i, chunk) in extracted.chunks.iter().enumerate() {
             let chunk_id = crate::store::chunk_uuid(doc_id, chunk.idx);
+            // Chunk node bridges graph ↔ LanceDB.
+            node_batch.add_chunk(chunk_id, doc_id, chunk.char_start, chunk.char_end, chunk.page);
             let raw_legal_ents: Vec<LegalEntity> = all_entities[i]
                 .iter()
                 .filter(|e| !crate::detect::is_pii_entity(e))
@@ -295,7 +306,7 @@ impl Pipeline {
             let fwd = crate::legal::rules::VaultForwardMap {
                 alias_to_canonical: Default::default(),
             };
-            let (row, _facts) = self.legal_enricher.enrich_one(
+            let (row, _facts, nodes, edges) = self.legal_enricher.enrich_one(
                 chunk_id,
                 doc_id,
                 &pseudo_chunks[i],
@@ -303,13 +314,12 @@ impl Pipeline {
                 &fwd,
             );
             legal_rows.push(row);
+            node_batch.absorb(nodes);
+            edge_batch.absorb(edges);
         }
-        match self.legal_store.upsert(&legal_rows).await {
-            Ok(()) => {
-                if let Err(e) = self.enrichment_status.mark_ok(doc_id).await {
-                    tracing::warn!(doc_id = %doc_id, error = %e, "enrichment_status mark_ok failed");
-                }
-            }
+        // LanceDB flat-table write.
+        let lance_ok = match self.legal_store.upsert(&legal_rows).await {
+            Ok(()) => true,
             Err(e) => {
                 tracing::warn!(
                     doc_id = %doc_id,
@@ -321,11 +331,28 @@ impl Pipeline {
                     .mark_pending(doc_id, extracted.chunks.len() as i32, &e.to_string())
                     .await
                 {
-                    tracing::warn!(
-                        doc_id = %doc_id,
-                        error = %e2,
-                        "enrichment_status mark_pending also failed"
-                    );
+                    tracing::warn!(doc_id = %doc_id, error = %e2, "enrichment_status mark_pending also failed");
+                }
+                false
+            }
+        };
+        // Graph dual-write (Phase 1: no-op LanceGraphStore; real writes in Stage D).
+        if lance_ok {
+            match self.legal_kg.upsert_batch(&node_batch, &edge_batch).await {
+                Ok(()) => {
+                    if let Err(e) = self.enrichment_status.mark_ok(doc_id).await {
+                        tracing::warn!(doc_id = %doc_id, error = %e, "enrichment_status mark_ok failed");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(doc_id = %doc_id, error = %e, "graph write failed; marking pending");
+                    if let Err(e2) = self
+                        .enrichment_status
+                        .mark_pending(doc_id, extracted.chunks.len() as i32, &e.to_string())
+                        .await
+                    {
+                        tracing::warn!(doc_id = %doc_id, error = %e2, "enrichment_status mark_pending also failed");
+                    }
                 }
             }
         }
@@ -1577,7 +1604,7 @@ impl Pipeline {
         let mut rows = Vec::with_capacity(chunks.len());
         for c in chunks {
             let legal_ents: Vec<crate::legal::types::LegalEntity> = Vec::new();
-            let (row, _) =
+            let (row, _facts, _nodes, _edges) =
                 self.legal_enricher
                     .enrich_one(c.chunk_id, doc_id, &c.text_pseudo, &legal_ents, &fwd);
             rows.push(row);

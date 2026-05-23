@@ -247,18 +247,23 @@ pub trait LegalKnowledgeGraph: Send + Sync {
 
 /// Lance-graph-backed knowledge graph handle.
 ///
-/// The concrete `lance-graph` adapter is intentionally left unwired until the
-/// ingest dual-write in B4 settles. Keeping this type present gives downstream
-/// code a stable construction target without touching pipeline wiring.
+/// Phase 1: directory is created and all write operations are no-ops.
+/// Real lance-graph write integration (LanceDB table-per-label + cypher
+/// execution) lands in Stage D when the graph intents are wired up.
 pub struct LanceGraphStore {
     root: std::path::PathBuf,
 }
 
 impl LanceGraphStore {
-    /// Create a graph store handle rooted at `path`.
-    #[must_use]
-    pub fn new(root: impl Into<std::path::PathBuf>) -> Self {
-        Self { root: root.into() }
+    /// Open or create the legal KG directory under `cfg.index_path()/legal_kg`.
+    ///
+    /// # Errors
+    /// Returns [`Error::Graph`] if the directory cannot be created.
+    pub async fn open(cfg: &crate::config::AnnoRagConfig) -> Result<Self> {
+        let root = cfg.index_path().join("legal_kg");
+        std::fs::create_dir_all(&root)
+            .map_err(|e| Error::Graph(format!("mkdir legal_kg: {e}")))?;
+        Ok(Self { root })
     }
 
     /// Graph root path.
@@ -271,24 +276,18 @@ impl LanceGraphStore {
 #[async_trait]
 impl LegalKnowledgeGraph for LanceGraphStore {
     async fn upsert_batch(&self, _nodes: &NodeBatch, _edges: &EdgeBatch) -> Result<()> {
-        Err(Error::Graph(format!(
-            "LanceGraphStore adapter not wired yet at {}",
-            self.root.display()
-        )))
+        // Phase 1 no-op: real LanceDB table-per-label writes land in Stage D.
+        Ok(())
     }
 
     async fn delete_doc(&self, _doc_id: Uuid) -> Result<()> {
-        Err(Error::Graph(format!(
-            "LanceGraphStore adapter not wired yet at {}",
-            self.root.display()
-        )))
+        // Phase 1 no-op.
+        Ok(())
     }
 
     async fn compact(&self) -> Result<()> {
-        Err(Error::Graph(format!(
-            "LanceGraphStore adapter not wired yet at {}",
-            self.root.display()
-        )))
+        // Phase 1 no-op.
+        Ok(())
     }
 
     async fn cypher(
@@ -296,10 +295,9 @@ impl LegalKnowledgeGraph for LanceGraphStore {
         _query: &str,
         _params: HashMap<String, String>,
     ) -> Result<Vec<HashMap<String, String>>> {
-        Err(Error::Graph(format!(
-            "LanceGraphStore adapter not wired yet at {}",
-            self.root.display()
-        )))
+        // Phase 1 no-op: returns empty result set.
+        // Real cypher execution via lance-graph wired in Stage D.
+        Ok(Vec::new())
     }
 }
 

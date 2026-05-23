@@ -3,8 +3,9 @@
 use crate::error::Result;
 use crate::legal::offsets::PseudoOffsetMap;
 use crate::legal::rules::{apply_all as apply_rules, TypedFact, VaultForwardMap};
+use crate::legal::kg::{EdgeWrite, NodeWrite};
 use crate::legal::types::LegalChunkEnrichment;
-use crate::legal::types::{LegalEntity, LegalLabel};
+use crate::legal::types::{LegalEntity, LegalLabel, PartyKind};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -110,6 +111,10 @@ pub struct LegalChunkOutput {
     pub facts: Vec<TypedFact>,
     /// Legal entities translated into pseudonymized coordinates.
     pub entities: Vec<LegalEntity>,
+    /// Node writes derived from `facts`, ready for [`LegalKnowledgeGraph::upsert_batch`].
+    pub node_writes: Vec<NodeWrite>,
+    /// Edge writes derived from `facts`, ready for [`LegalKnowledgeGraph::upsert_batch`].
+    pub edge_writes: Vec<EdgeWrite>,
 }
 
 impl LegalEnricher {
@@ -171,10 +176,11 @@ impl LegalEnricher {
         pseudo_text: &str,
         legal_ents: &[LegalEntity],
         fwd: &VaultForwardMap,
-    ) -> (LegalChunkEnrichment, Vec<TypedFact>) {
+    ) -> (LegalChunkEnrichment, Vec<TypedFact>, Vec<NodeWrite>, Vec<EdgeWrite>) {
         let facts = apply_rules(chunk_id, pseudo_text, legal_ents, fwd);
         let row = projection_from_facts(chunk_id, doc_id, legal_ents, &facts, &self.extractor);
-        (row, facts)
+        let (node_writes, edge_writes) = facts_to_graph_writes(chunk_id, doc_id, &facts);
+        (row, facts, node_writes, edge_writes)
     }
 
     /// Enrich a document's chunks in batch.
@@ -192,12 +198,14 @@ impl LegalEnricher {
             let raw_entities = self.extract_raw(chunk.raw_text)?;
             let entities =
                 self.translate_to_pseudo(raw_entities, chunk.offset_map, chunk.pseudo_text);
-            let (row, facts) =
+            let (row, facts, node_writes, edge_writes) =
                 self.enrich_one(chunk.chunk_id, doc_id, chunk.pseudo_text, &entities, fwd);
             out.push(LegalChunkOutput {
                 row,
                 facts,
                 entities,
+                node_writes,
+                edge_writes,
             });
         }
         Ok(out)
@@ -304,6 +312,133 @@ fn projection_from_facts(
     }
 }
 
+/// Convert a slice of [`TypedFact`]s into graph node and edge writes.
+///
+/// Each fact variant produces a deterministic node (via UUID v5) and one or
+/// more edges. Party ids are stable across chunks because they are derived
+/// solely from the normalized form string.
+fn facts_to_graph_writes(
+    chunk_id: Uuid,
+    doc_id: Uuid,
+    facts: &[TypedFact],
+) -> (Vec<NodeWrite>, Vec<EdgeWrite>) {
+    let doc_key = doc_id.to_string();
+    let chunk_key = chunk_id.to_string();
+    let mut nodes = Vec::new();
+    let mut edges = Vec::new();
+
+    for fact in facts {
+        match fact {
+            TypedFact::PartyRole { party, role } => {
+                let party_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, party.as_bytes());
+                let kind = if party.starts_with("org:") {
+                    PartyKind::Organization
+                } else {
+                    PartyKind::Person
+                };
+                nodes.push(NodeWrite::Party {
+                    party_id,
+                    kind,
+                    canonical_name: party.clone(),
+                    normalized_form: party.clone(),
+                    siren: None,
+                });
+                edges.push(EdgeWrite {
+                    from_label: "Party",
+                    from_key: party_id.to_string(),
+                    to_label: "Document",
+                    to_key: doc_key.clone(),
+                    edge_type: "PARTY_TO",
+                    props: HashMap::from([("role".to_string(), role.clone())]),
+                });
+            }
+            TypedFact::Obligation { obligor, kind, .. } => {
+                let oblig_id = Uuid::new_v5(
+                    &Uuid::NAMESPACE_OID,
+                    format!("{chunk_id}::{kind}").as_bytes(),
+                );
+                nodes.push(NodeWrite::Obligation {
+                    obligation_id: oblig_id,
+                    kind: kind.clone(),
+                    text_pseudo: String::new(),
+                });
+                edges.push(EdgeWrite {
+                    from_label: "Chunk",
+                    from_key: chunk_key.clone(),
+                    to_label: "Obligation",
+                    to_key: oblig_id.to_string(),
+                    edge_type: "MENTIONS",
+                    props: HashMap::new(),
+                });
+                if let Some(party) = obligor {
+                    let party_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, party.as_bytes());
+                    edges.push(EdgeWrite {
+                        from_label: "Party",
+                        from_key: party_id.to_string(),
+                        to_label: "Obligation",
+                        to_key: oblig_id.to_string(),
+                        edge_type: "BOUND_BY",
+                        props: HashMap::new(),
+                    });
+                }
+            }
+            TypedFact::Reference { article } => {
+                let article_id = Uuid::new_v5(
+                    &Uuid::NAMESPACE_OID,
+                    article.normalized_ref().as_bytes(),
+                );
+                nodes.push(NodeWrite::Article {
+                    article_id,
+                    article: article.clone(),
+                });
+                edges.push(EdgeWrite {
+                    from_label: "Document",
+                    from_key: doc_key.clone(),
+                    to_label: "Article",
+                    to_key: article_id.to_string(),
+                    edge_type: "REFERENCES",
+                    props: HashMap::new(),
+                });
+            }
+            TypedFact::CourtRouting { court } => {
+                nodes.push(NodeWrite::Court {
+                    court_id: court.id.clone(),
+                    court: court.clone(),
+                });
+                edges.push(EdgeWrite {
+                    from_label: "Document",
+                    from_key: doc_key.clone(),
+                    to_label: "Court",
+                    to_key: court.id.clone(),
+                    edge_type: "HEARS",
+                    props: HashMap::new(),
+                });
+            }
+            TypedFact::Event { kind, event_date } => {
+                let event_id = Uuid::new_v5(
+                    &Uuid::NAMESPACE_OID,
+                    format!("{chunk_id}::{kind}").as_bytes(),
+                );
+                nodes.push(NodeWrite::Event {
+                    event_id,
+                    kind: kind.clone(),
+                    event_date: *event_date,
+                    deadline_date: None,
+                });
+                edges.push(EdgeWrite {
+                    from_label: "Chunk",
+                    from_key: chunk_key.clone(),
+                    to_label: "Event",
+                    to_key: event_id.to_string(),
+                    edge_type: "MENTIONS",
+                    props: HashMap::new(),
+                });
+            }
+        }
+    }
+    (nodes, edges)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,7 +523,7 @@ mod tests {
                 .into_iter()
                 .collect(),
         };
-        let (row, facts) = enricher.enrich_one(
+        let (row, facts, _nodes, _edges) = enricher.enrich_one(
             Uuid::nil(),
             Uuid::nil(),
             "ORG_1 s'engage à payer 10 000 € sous 30 jours.",
