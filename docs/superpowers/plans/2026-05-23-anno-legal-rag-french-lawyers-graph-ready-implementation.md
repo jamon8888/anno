@@ -4,7 +4,15 @@
 
 **Goal:** Build a production-grade French legal intelligence layer with a lance-graph foundation, three-layer GLiNER2+French-rules extraction, and 11 MCP tools — Phase 1 (filtered hybrid search + citation rehydration) and Phase 2 (semi-automatic tabular extraction) in one slice.
 
-**Architecture:** Dual store. LanceDB `legal_chunk_enrichment` is a fast-filter projection per chunk; `lance-graph` is the canonical entity/relationship store with French-legal node/edge schema. A shared `Arc<Pool<GlinerSession>>` runs **one** combined-label GLiNER2 inference per chunk; `Detector` consumes PII labels (existing path) and `LegalEnricher` consumes legal labels, translating spans into pseudonymized coordinates via a `PseudoOffsetMap`. Three-layer extraction (GLiNER2 entities → French legal pattern rules → co-occurrence fallback) writes atomically per document with retry semantics (`enrichment_status` sidecar table + `drain_enrichment_backlog`).
+**Architecture:** Dual store. LanceDB `legal_chunk_enrichment` is a fast-filter projection per chunk; `lance-graph` is the canonical entity/relationship store with French-legal node/edge schema. **A combined-label inference path on the existing `Detector`** runs one GLiNER2 call per chunk with the union of PII labels + legal labels; the PII subset feeds vault pseudonymization (existing path), the legal subset feeds `LegalEnricher`, with spans translated into pseudonymized coordinates via a `PseudoOffsetMap` rebuilt from `cloakpipe_core::Replacer` output. Three-layer extraction (GLiNER2 entities → French legal pattern rules → co-occurrence fallback) writes atomically per document with retry semantics (`enrichment_status` sidecar table + `drain_enrichment_backlog`).
+
+**Live-codebase notes (verified 2026-05-23):**
+- `Detector` is shared across the pipeline via `OnceCell<Arc<Detector>>` (lazy init). **No `Pool<T>` exists** — IS5–IS8 task entries in our task tracker are stale (never merged to `main`). The Phase 1 plan deliberately does NOT introduce a pool; the existing `Arc<Detector>` is sufficient for the combined-label call.
+- `Detector::detect` currently hardcodes labels `["person","organization","location"]` and threshold `0.5` at `crates/anno-rag/src/detect.rs:248`. Plan adds a sibling `Detector::detect_with_labels(text, labels, threshold)` — additive, doesn't break existing callers.
+- Pseudonymization happens inside `cloakpipe_core::Replacer::pseudonymize` and we observe results via `result.mappings` (token → original). `PseudoOffsetMap` is reconstructed *after* pseudonymization (cumulative delta walk over the sorted entity list using each entity's minted token length).
+- `ChunkRecord` does **not** carry `chunk_id`; it's derived inside `Store::upsert` via `chunk_uuid(doc_id, chunk_idx)` (UUIDv5 of `"{doc_id}::{chunk_idx}"`, currently private at `store.rs:1293`). Plan exposes it as `pub` so legal code can derive matching IDs before the chunk row hits LanceDB.
+- `IngestOutcome` is a struct variant: `Ingested { used_embedded_ocr: bool }` + `Skipped`. **Not** a tuple variant with chunk count. The plan code blocks use the correct variant.
+- The boundary type with vault/detector is `cloakpipe_core::DetectedEntity` (`original`, `start`, `end`, `category`, `confidence`, `source`) — distinct from the legal-side `LegalEntity` we keep internal to `crates/anno-rag/src/legal/`. Both directions of mapping live in `legal::enricher`.
 
 **Tech Stack:** Rust, `anno-rag`, `anno-rag-mcp`, `anno-rag-tabular`, LanceDB 0.29-style query/index APIs, `lance-graph` 0.5+, GLiNER2 Fastino ONNX, `rmcp`, `schemars`, `tokio`, `arrow-schema`/`arrow-array`, `chrono`.
 
@@ -82,13 +90,17 @@ npx gitnexus impact --repo anno AnnoRagServer --direction upstream
 
 Expected: inspect blast radius. If HIGH or CRITICAL on any, report to user before continuing.
 
-- [ ] **Step 4: Add lance-graph to workspace deps**
+- [ ] **Step 4: Add missing dependencies to `anno-rag/Cargo.toml`**
+
+`regex` and `chrono` are already in `[dependencies]` via workspace. **Missing** from the current crate (verified 2026-05-23): `lance-graph`, `once_cell`, `hex`, `async-trait`.
 
 In `crates/anno-rag/Cargo.toml`, add under `[dependencies]`:
 
 ```toml
 lance-graph = "0.5"
-regex = "1"
+once_cell = "1"
+hex = "0.4"
+async-trait = "0.1"
 ```
 
 Run:
@@ -97,13 +109,13 @@ Run:
 cargo check -p anno-rag
 ```
 
-Expected: PASS (compiles even if no module uses lance-graph yet). If lance-graph fails to resolve, fall back to the latest 0.5.x patch listed on crates.io and rerun.
+Expected: PASS (compiles even if no module uses lance-graph yet). If `lance-graph 0.5` fails to resolve, check crates.io for the latest 0.5.x patch (the README we verified pointed to v0.5.4 at brainstorm time).
 
 Commit:
 
 ```powershell
 git add crates/anno-rag/Cargo.toml Cargo.lock
-git commit -m "deps: add lance-graph + regex to anno-rag"
+git commit -m "deps: add lance-graph + once_cell + hex + async-trait to anno-rag"
 ```
 
 - [ ] **Step 5: Add `Error::Legal` and `Error::Graph` variants**
@@ -913,20 +925,21 @@ git commit -m "feat(legal): add French normalization + code reference parser"
 
 ---
 
-### Task A3: Shared GLiNER2 pool + combined-label API
+### Task A3: Combined-label Detector API (no Pool — `Arc<Detector>` already shared)
 
 **Files:**
 - Modify: `crates/anno-rag/src/detect.rs`
-- (Reads existing `Pool<T>` from IS5 in `crates/anno-rag/src/pool.rs` or wherever it lives — locate before editing.)
 
-- [ ] **Step 1: Locate the existing Pool<T> and Detector entry points**
+> **Codebase fact (verified 2026-05-23):** there is no `Pool<T>` in `crates/anno-rag/`. `Detector` is already shared via `OnceCell<Arc<Detector>>` inside `Pipeline` (see `pipeline.rs:33`). The combined-label path runs through the existing shared `Arc<Detector>` — no pool needed.
+> The existing `Detector::detect` at `detect.rs:228–235` hardcodes labels `["person","organization","location"]` and threshold `0.5` at `detect.rs:248`. This task adds an additive `Detector::detect_with_labels(text, labels, threshold)` method; `Detector::detect` keeps its current signature so existing callers are untouched.
+
+- [ ] **Step 1: Locate the Detector entry points**
 
 ```powershell
-rg -n "pub struct Pool" crates/anno-rag/src
-rg -n "fn detect" crates/anno-rag/src/detect.rs
+rg -n "fn detect|extract_with_types" crates/anno-rag/src/detect.rs
 ```
 
-Note the `Pool<T>` constructor signature and the public `Detector::detect` method.
+Note the existing `pub fn detect(&self, text: &str) -> Result<Vec<DetectedEntity>>` and the underlying `self.ner.extract_with_types(text, &labels, threshold)` call.
 
 - [ ] **Step 2: Write the failing test for combined-label extraction**
 
@@ -967,42 +980,30 @@ cargo test -p anno-rag combined_label --lib
 
 Expected: FAIL.
 
-- [ ] **Step 4: Implement `combined_label_set`, `pii_label_set`, and `is_pii_label`**
+- [ ] **Step 4: Implement `pii_label_set`, `is_pii_label`, `combined_label_set`, and `Detector::detect_with_labels`**
 
 In `crates/anno-rag/src/detect.rs`, add near the top of the module:
 
 ```rust
-/// PII labels that drive vault pseudonymization. Keep this list narrow —
-/// adding labels here will change what gets pseudonymized.
-const PII_LABELS: &[&str] = &[
-    "person",
-    "organization",
-    "email",
-    "phone",
-    "address",
-    "iban",
-    "siren",
-    "siret",
-    "passport",
-    "nir",
-];
+/// PII labels recognised by the current `Detector::detect` (anno NER labels).
+/// Kept narrow; widening this list changes what gets pseudonymized.
+const PII_NER_LABELS: &[&str] = &["person", "organization", "location"];
 
 #[must_use]
 pub fn pii_label_set() -> Vec<&'static str> {
-    PII_LABELS.to_vec()
+    PII_NER_LABELS.to_vec()
 }
 
 #[must_use]
 pub fn is_pii_label(name: &str) -> bool {
-    PII_LABELS.contains(&name)
+    PII_NER_LABELS.contains(&name)
 }
 
-/// Return the union of PII labels and `extra_labels` (e.g. legal labels), de-duplicated.
+/// Return the union of PII NER labels and `extra_labels` (e.g. legal labels), de-duplicated.
 #[must_use]
 pub fn combined_label_set(extra_labels: &[&str]) -> Vec<&'static str> {
-    let mut out: Vec<&'static str> = PII_LABELS.to_vec();
+    let mut out: Vec<&'static str> = PII_NER_LABELS.to_vec();
     for l in extra_labels {
-        // SAFETY: only static legal labels feed this; convert via the matching static slice.
         if let Some(static_ref) = static_label_ref(l) {
             if !out.contains(&static_ref) { out.push(static_ref); }
         }
@@ -1018,7 +1019,77 @@ fn static_label_ref(label: &str) -> Option<&'static str> {
 }
 ```
 
-> **Note:** if your existing `Detector` already exposes label-control APIs (e.g. a `detect_with_labels(text, labels)` method), keep this PR additive — do not change `Detector::detect`'s signature. Stage B3 will call the shared pool through `extract_with_labels` directly.
+Then add a new method to `impl Detector` (parallel to `detect`, **not** replacing it):
+
+```rust
+impl Detector {
+    /// Same NER pipeline as [`Self::detect`] but with a caller-controlled
+    /// label set and a single floor threshold. The legacy detector regex
+    /// layer is also run — the combined output is sorted + dedup'd the same
+    /// way as `detect_inner`. Char→byte offset translation is preserved.
+    pub fn detect_with_labels(
+        &self,
+        text: &str,
+        labels: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<DetectedEntity>> {
+        let started = std::time::Instant::now();
+        let input_chars = text.chars().count();
+        let out = self.detect_inner_with(text, labels, threshold)?;
+        let elapsed_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        emit_detect_audit(input_chars, elapsed_us, &out);
+        Ok(out)
+    }
+
+    fn detect_inner_with(
+        &self,
+        text: &str,
+        labels: &[&str],
+        threshold: f32,
+    ) -> Result<Vec<DetectedEntity>> {
+        // 1. FR regex set — unchanged.
+        let mut all = detect_patterns(text);
+
+        // 2. anno NER with caller-supplied labels.
+        let anno_entities = self
+            .ner
+            .extract_with_types(text, labels, threshold)
+            .map_err(|e| Error::Detect(e.to_string()))?;
+
+        // 3. char → byte translation (same algorithm as detect_inner).
+        let mut char_to_byte: Vec<usize> = text.char_indices().map(|(b, _)| b).collect();
+        char_to_byte.push(text.len());
+        for e in anno_entities {
+            let s_char = e.start();
+            let n_char = e.end();
+            if s_char >= char_to_byte.len() || n_char > char_to_byte.len() || s_char >= n_char {
+                continue;
+            }
+            all.push(DetectedEntity {
+                original: e.text.clone(),
+                start: char_to_byte[s_char],
+                end: char_to_byte[n_char],
+                category: map_anno_category(&e.entity_type),
+                confidence: f64::from(e.confidence),
+                source: DetectionSource::Ner,
+            });
+        }
+
+        // 4. Sort + dedup (same as detect_inner — copy the closure).
+        all.sort_by(|a, b| {
+            a.start.cmp(&b.start)
+                .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
+                .then_with(|| pattern_priority(&a.source).cmp(&pattern_priority(&b.source)))
+        });
+        dedup_overlaps(&mut all);
+        Ok(all)
+    }
+}
+```
+
+> **Per-label threshold:** `extract_with_types` only takes one float. Higher per-label discrimination is enforced *after* the call inside `LegalEnricher::translate_to_pseudo` by dropping any `DetectedEntity` with `confidence < threshold[label]` — set the floor here to the minimum of all per-label thresholds (≈ 0.55).
+>
+> `dedup_overlaps` is the inline dedup logic currently embedded in `detect_inner`. Lift it into a private helper as part of this task so both `detect_inner` and `detect_inner_with` can call it.
 
 - [ ] **Step 5: Run tests**
 
@@ -2054,51 +2125,77 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement `vault.rs` change to expose `pseudonymize_with_map`**
 
-In `crates/anno-rag/src/vault.rs`, **add** (don't replace) a new method on `Vault`:
+> **Codebase fact (verified 2026-05-23):** `Vault::pseudonymize` at `vault.rs:56` calls `cloakpipe_core::Replacer::pseudonymize(text, entities, &mut v)` which returns `(text_pseudo, mappings: token → original)`. We don't synthesize aliases ourselves — Replacer does. So the offset map is built **post-hoc** from the entities + result.mappings by walking entities in raw-offset order and reading each minted token's length from `mappings`.
+
+In `crates/anno-rag/src/vault.rs`, **add** (don't replace) a new method on `Vault`. The boundary entity type is `cloakpipe_core::DetectedEntity` (with fields `original`, `start`, `end`, `category`, `confidence`, `source`), not a local `Entity`:
 
 ```rust
 use crate::legal::offsets::{PseudoOffsetMap, Substitution};
+use cloakpipe_core::DetectedEntity;
 
 impl Vault {
-    /// Pseudonymize the chunk text and return the substitution map.
-    /// Keep `pseudonymize` (existing) intact for the existing call sites.
+    /// Pseudonymize `text` and return both the pseudonymized text and the
+    /// span substitution map. Keeps `pseudonymize` (existing) intact for
+    /// existing call sites.
     pub async fn pseudonymize_with_map(
         &self,
-        raw: &str,
-        entities: &[Entity],
+        text: &str,
+        entities: &[DetectedEntity],
     ) -> crate::error::Result<(String, PseudoOffsetMap)> {
-        let mut subs = Vec::with_capacity(entities.len());
-        let mut pseudo = String::with_capacity(raw.len() + entities.len() * 6);
-        let mut cursor: usize = 0;
+        let mut v = self.inner.lock().await;
+        let result = Replacer::pseudonymize(text, entities, &mut v)
+            .map_err(|e| Error::Vault(format!("replacer: {e}")))?;
+        v.save()
+            .map_err(|e| Error::Vault(format!("save after pseudonymize_with_map: {e}")))?;
+        drop(v);
 
-        // Entities must be processed in ascending raw_start order.
-        let mut ents: Vec<&Entity> = entities.iter().collect();
-        ents.sort_by_key(|e| e.byte_start);
+        // Walk entities in raw-offset order. For each entity, look up its
+        // minted token in `result.mappings` (token -> original) and compute
+        // the pseudo offsets cumulatively.
+        let mut ents: Vec<&DetectedEntity> = entities.iter().collect();
+        ents.sort_by_key(|e| e.start);
+
+        let mut subs = Vec::with_capacity(ents.len());
+        let mut pseudo_cursor: usize = 0;
+        let mut raw_cursor: usize = 0;
 
         for e in ents {
-            let s = e.byte_start as usize;
-            let n = e.byte_end as usize;
-            if s < cursor || n > raw.len() { continue; }
-            pseudo.push_str(&raw[cursor..s]);
-            let pseudo_start = pseudo.len() as u32;
-            let alias = self.alias_for(e).await?; // existing impl produces e.g. "ORG_1"
-            pseudo.push_str(&alias);
-            let pseudo_end = pseudo.len() as u32;
+            if e.start < raw_cursor || e.end > text.len() { continue; }
+            // bytes of unchanged prefix from raw_cursor..e.start carry over unchanged
+            pseudo_cursor += e.start - raw_cursor;
+            // Find the token Replacer minted for this entity. result.mappings
+            // is token -> original; we find the token whose original matches
+            // e.original. If multiple entities share the same `original` they
+            // collapse onto one token, but Replacer applies the same token
+            // each time — so byte length is constant per original.
+            let token = result.mappings.iter()
+                .find(|(_, orig)| orig.as_str() == e.original)
+                .map(|(tok, _)| tok.as_str())
+                .ok_or_else(|| Error::Vault(format!(
+                    "pseudonymize_with_map: no mapping for original {:?}", e.original
+                )))?;
+            let pseudo_start = pseudo_cursor as u32;
+            let pseudo_end = (pseudo_cursor + token.len()) as u32;
             subs.push(Substitution {
-                raw_start: e.byte_start,
-                raw_end: e.byte_end,
+                raw_start: e.start as u32,
+                raw_end: e.end as u32,
                 pseudo_start,
                 pseudo_end,
             });
-            cursor = n;
+            pseudo_cursor += token.len();
+            raw_cursor = e.end;
         }
-        pseudo.push_str(&raw[cursor..]);
-        Ok((pseudo, PseudoOffsetMap { subs }))
+
+        Ok((result.text, PseudoOffsetMap { subs }))
     }
 }
 ```
 
-> If `Vault::alias_for` does not exist in the codebase, use whatever helper the existing `pseudonymize` uses to produce alias strings (search `crates/anno-rag/src/vault.rs` for `pseudonymize`). The goal here is *only* to capture the substitution offsets — the alias generation logic is reused unchanged.
+> **Why this is correct:**
+> - `cloakpipe_core::Replacer::pseudonymize` walks entities in their input order and replaces `text[e.start..e.end]` with a token.
+> - The unchanged segments between entities have the same byte length in raw and pseudo text.
+> - The token's byte length is `token.len()` (UTF-8 bytes — Replacer's tokens are ASCII like `ORG_1`, so `len() == chars().count()`).
+> - Walking entities in `start` order and tracking `pseudo_cursor` reproduces the same offsets Replacer produced internally.
 
 - [ ] **Step 4: Implement `LegalEnricher::enrich_chunks_batched`**
 
@@ -2299,14 +2396,111 @@ let legal_enricher = crate::legal::enricher::LegalEnricher::new(extractor);
 
 3. Add the helper `detector_session_for_legal` next to `Pipeline::new` (or in `detect.rs`); it returns an `Arc<dyn crate::legal::enricher::GlinerSession>` wrapping the existing detector session. Implementation depends on the detector internals — search `Detector::detect` for the inference call.
 
-- [ ] **Step 3: Modify `ingest_one_counted` to perform the table-only dual write**
+- [ ] **Step 3: Expose `chunk_uuid` from `store.rs` so legal code can pre-derive chunk IDs**
 
-In `pipeline.rs`, replace the existing `ingest_one_counted` body with the structure below (keep all existing behavior for the chunks path; **add** the legal enrichment block). The full source for the new function is in the spec, "Ingest Write Path" section.
+In `crates/anno-rag/src/store.rs`, change line 1293's private `fn chunk_uuid` to:
 
-Three changes vs. the existing function:
-1. Switch the per-chunk Detector loop to one combined-label call up-front, then derive PII entities and pseudonymize with `pseudonymize_with_map` (capturing the offset map).
-2. After `self.store.upsert(records).await?`, build `legal_rows` via `self.legal_enricher.enrich_one(...)` for each chunk and call `self.legal_store.upsert(&legal_rows).await`. On error, call `self.enrichment_status.mark_pending(...)` and return `Ok(IngestOutcome::Ingested(...))`. On success, call `self.enrichment_status.mark_ok(...)`.
-3. Don't write graph nodes yet — that's Task C2.
+```rust
+/// Deterministic chunk id: UUID v5 (OID namespace) of `"{doc_id}::{chunk_idx}"`.
+/// Matches the value `Store::upsert` will write to the `chunk_id` column,
+/// so legal code can derive matching IDs *before* the row hits LanceDB.
+#[must_use]
+pub fn chunk_uuid(doc_id: Uuid, chunk_idx: u32) -> Uuid {
+    let name = format!("{doc_id}::{chunk_idx}");
+    Uuid::new_v5(&Uuid::NAMESPACE_OID, name.as_bytes())
+}
+```
+
+- [ ] **Step 4: Modify `ingest_one_counted` to perform the table-only dual write**
+
+> **Codebase fact (verified 2026-05-23):**
+> - `IngestOutcome` is a struct variant: `Ingested { used_embedded_ocr: bool }` + `Skipped` (`pipeline.rs:26–29`). Use the correct variant.
+> - The existing per-chunk loop calls `self.detector_get_or_init()?.detect(&chunk.text)?` then `self.vault.pseudonymize(...)`. We replace the inner two lines with `detect_with_labels(combined) + pseudonymize_with_map(pii_subset)`.
+> - `ChunkRecord` doesn't carry `chunk_id`; we use the exposed `chunk_uuid(doc_id, chunk.idx)` to compute matching IDs for the legal store before the upsert.
+
+In `pipeline.rs`, replace the per-chunk loop (lines 161–166) with the combined-label path, **keep** the rest of the function. The change is purely additive after `self.store.upsert(records).await?`:
+
+```rust
+// ── 1. Combined-label detect: one NER call per chunk, union of PII + legal labels ──
+let legal_labels = crate::legal::default_legal_labels();
+let legal_names: Vec<&str> = legal_labels.iter().map(|l| l.name).collect();
+let combined = crate::detect::combined_label_set(&legal_names);
+let combined_refs: Vec<&str> = combined.iter().copied().collect();
+let detector = self.detector_get_or_init()?;
+
+let mut all_entities: Vec<Vec<cloakpipe_core::DetectedEntity>> = Vec::with_capacity(extracted.chunks.len());
+for chunk in &extracted.chunks {
+    let ents = detector.detect_with_labels(&chunk.text, &combined_refs, 0.5)?;
+    all_entities.push(ents);
+}
+
+// ── 2. Pseudonymize per chunk with offset map captured ──
+let mut pseudo_chunks: Vec<String> = Vec::with_capacity(extracted.chunks.len());
+let mut offset_maps: Vec<crate::legal::offsets::PseudoOffsetMap> = Vec::with_capacity(extracted.chunks.len());
+for (chunk, ents) in extracted.chunks.iter().zip(&all_entities) {
+    let pii_ents: Vec<cloakpipe_core::DetectedEntity> = ents.iter()
+        .filter(|e| crate::detect::is_pii_label(&format!("{:?}", e.category).to_lowercase()))
+        .cloned()
+        .collect();
+    let (pseudo, map) = self.vault.pseudonymize_with_map(&chunk.text, &pii_ents).await?;
+    pseudo_chunks.push(pseudo);
+    offset_maps.push(map);
+}
+
+// ── 3. Existing embed + upsert path (unchanged) ──
+let vectors = self.embedder().await?.embed_batch(&pseudo_chunks)?;
+// … build records (existing) …
+self.store.delete_doc_rows(&extracted.source_path).await?;
+self.store.upsert(records).await?;
+
+// ── 4. NEW: legal_chunk_enrichment dual-write (table only; graph comes in C2) ──
+let mut legal_rows = Vec::with_capacity(extracted.chunks.len());
+for (i, chunk) in extracted.chunks.iter().enumerate() {
+    let chunk_id = crate::store::chunk_uuid(doc_id, chunk.idx);
+    let legal_ents = self.legal_enricher.translate_to_pseudo(
+        all_entities[i].iter()
+            .filter(|e| !crate::detect::is_pii_label(&format!("{:?}", e.category).to_lowercase()))
+            .map(|e| crate::legal::types::LegalEntity {
+                label: format!("{:?}", e.category).to_lowercase(),
+                text: e.original.clone(),
+                byte_start: e.start as u32,
+                byte_end: e.end as u32,
+                confidence: e.confidence as f32,
+            })
+            .collect(),
+        &offset_maps[i],
+        &pseudo_chunks[i],
+    );
+    // For B4 we leave the vault_forward_map empty — Replacer doesn't expose
+    // a reverse-of-mapping view directly. Layer-2 rules fall back to
+    // pattern-only matching (no canonical-form resolution this task).
+    // Task C2 wires the vault forward map.
+    let fwd = crate::legal::rules::VaultForwardMap { alias_to_canonical: Default::default() };
+    let (row, _facts) = self.legal_enricher.enrich_one(chunk_id, doc_id, &pseudo_chunks[i], &legal_ents, &fwd);
+    legal_rows.push(row);
+}
+
+let written = self.legal_store.upsert(&legal_rows).await;
+match written {
+    Ok(()) => {
+        self.enrichment_status.mark_ok(doc_id).await?;
+    }
+    Err(e) => {
+        tracing::warn!(doc_id=%doc_id, error=%e,
+            "legal_chunk_enrichment write failed; chunks committed, marking pending");
+        self.enrichment_status
+            .mark_pending(doc_id, extracted.chunks.len() as i32, &e.to_string())
+            .await?;
+    }
+}
+
+// ── 5. Existing anonymized markdown write + return ──
+// (unchanged below this point)
+```
+
+The return statement remains `Ok(IngestOutcome::Ingested { used_embedded_ocr })` — **struct variant**, not tuple.
+
+> **PII-vs-legal label classification:** `cloakpipe_core::DetectedEntity` carries `category` (a cloakpipe enum like `Person`/`Organization`/…). The lowercased debug repr is compared against `is_pii_label`. If the existing detector adds new categories in the future, extend `PII_NER_LABELS` accordingly.
 
 - [ ] **Step 4: Write the integration test (small synthetic document)**
 
