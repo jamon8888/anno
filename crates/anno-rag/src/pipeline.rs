@@ -343,6 +343,11 @@ impl Pipeline {
                     if let Err(e) = self.enrichment_status.mark_ok(doc_id).await {
                         tracing::warn!(doc_id = %doc_id, error = %e, "enrichment_status mark_ok failed");
                     }
+                    // Cross-document linking pass (Phase 1: always empty hints).
+                    let hints = self.legal_enricher.cross_doc_hints(doc_id, &legal_rows, &node_batch, &edge_batch);
+                    if let Err(e) = self.legal_kg.link_cross_documents(doc_id, &hints).await {
+                        tracing::warn!(doc_id = %doc_id, error = %e, "link_cross_documents failed (non-fatal)");
+                    }
                 }
                 Err(e) => {
                     tracing::warn!(doc_id = %doc_id, error = %e, "graph write failed; marking pending");
@@ -430,29 +435,14 @@ impl Pipeline {
                 }
             }
         }
-        // Build the vector index in a background-equivalent flow once we
-        // cross the configured threshold. Idempotent on retry.
-        match self
-            .store
-            .maybe_build_index(self.cfg.vector_index_threshold)
-            .await
-        {
-            Ok(true) => tracing::info!(
-                threshold = self.cfg.vector_index_threshold,
-                "built IVF_HNSW_SQ index on chunks.vector"
-            ),
-            Ok(false) => {}
-            Err(e) => tracing::warn!(error = %e, "index build skipped"),
-        }
-        // Build the French-tokenized FTS index for hybrid search.
-        match self.store.maybe_build_fts_index().await {
-            Ok(true) => tracing::info!("built French FTS index on chunks.text_pseudo"),
-            Ok(false) => {}
-            Err(e) => tracing::warn!(error = %e, "FTS index build skipped"),
-        }
-        // Retry pending legal enrichments non-fatally.
+        // Retry pending legal enrichments first so newly-re-enriched docs
+        // are covered by the subsequent index optimization pass.
         if let Err(e) = self.drain_enrichment_backlog(64).await {
             tracing::warn!(error = %e, "drain_enrichment_backlog failed (non-fatal)");
+        }
+        // Consolidate all post-ingest index builds and KG compaction.
+        if let Err(e) = self.optimize_after_ingest().await {
+            tracing::warn!(error = %e, "optimize_after_ingest failed (non-fatal)");
         }
         Ok(count)
     }
@@ -1611,6 +1601,61 @@ impl Pipeline {
         }
         self.legal_store.upsert(&rows).await?;
         Ok(())
+    }
+
+    /// Consolidate all post-ingest index builds and graph compaction into one
+    /// call. Idempotent — safe to call multiple times.
+    ///
+    /// Steps (all individually non-fatal):
+    /// 1. Build the IVF_HNSW_SQ vector index on `chunks.vector` once the row
+    ///    count crosses `vector_index_threshold`.
+    /// 2. Build the French-tokenized FTS index on `chunks.text_pseudo`.
+    /// 3. Run `setup_indexes` on the legal enrichment store (scalar + FTS).
+    /// 4. Compact the legal knowledge graph.
+    ///
+    /// # Errors
+    /// Only propagates errors from step 1 (vector index build); all other
+    /// steps log warnings and continue.
+    pub async fn optimize_after_ingest(&self) -> Result<()> {
+        match self
+            .store
+            .maybe_build_index(self.cfg.vector_index_threshold)
+            .await
+        {
+            Ok(true) => tracing::info!(
+                threshold = self.cfg.vector_index_threshold,
+                "built IVF_HNSW_SQ index on chunks.vector"
+            ),
+            Ok(false) => {}
+            Err(e) => tracing::warn!(error = %e, "vector index build skipped"),
+        }
+        match self.store.maybe_build_fts_index().await {
+            Ok(true) => tracing::info!("built French FTS index on chunks.text_pseudo"),
+            Ok(false) => {}
+            Err(e) => tracing::warn!(error = %e, "FTS index build skipped"),
+        }
+        if let Err(e) = self.legal_store.setup_indexes().await {
+            tracing::warn!(error = %e, "legal index setup skipped");
+        }
+        if let Err(e) = self.legal_kg.compact().await {
+            tracing::warn!(error = %e, "KG compact skipped");
+        }
+        Ok(())
+    }
+
+    /// Execute a named graph traversal intent against the legal knowledge graph.
+    ///
+    /// Dispatches a parameterized Cypher query (Phase 1: always returns an
+    /// empty row set from the no-op `LanceGraphStore`; real execution wired
+    /// in Stage D).
+    ///
+    /// # Errors
+    /// Returns [`Error::Graph`] propagated from the KG backend.
+    pub async fn legal_graph_query(
+        &self,
+        intent: crate::legal::query::GraphIntent,
+    ) -> Result<crate::legal::query::GraphQueryResult> {
+        crate::legal::query::run_intent(self.legal_kg.as_ref(), intent).await
     }
 }
 

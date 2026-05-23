@@ -714,6 +714,39 @@ impl Store {
                 hits.push(batch_to_hit(batch, i)?);
             }
         }
+        hits.sort_by_key(|h| h.chunk_idx);
+        Ok(hits)
+    }
+
+    /// Fetch multiple chunks by their deterministic chunk UUIDs in one query.
+    /// Results are sorted by `chunk_idx` for stable ordering. Returns an empty
+    /// vec immediately when `chunk_ids` is empty.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query / decode failures.
+    pub async fn chunks_by_ids(&self, chunk_ids: &[Uuid]) -> Result<Vec<SearchHit>> {
+        if chunk_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = chunk_id_filter_sql(chunk_ids);
+        let stream = self
+            .tbl
+            .query()
+            .only_if(filter)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("chunks_by_ids: {e}")))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| Error::Store(format!("chunks_by_ids stream: {e}")))?;
+        let mut hits = Vec::new();
+        for batch in &batches {
+            for i in 0..batch.num_rows() {
+                hits.push(batch_to_hit(batch, i)?);
+            }
+        }
+        hits.sort_by_key(|h| h.chunk_idx);
         Ok(hits)
     }
 
@@ -1325,6 +1358,13 @@ fn ts_to_rfc3339(micros: i64) -> String {
 pub fn chunk_uuid(doc_id: Uuid, chunk_idx: u32) -> Uuid {
     let name = format!("{doc_id}::{chunk_idx}");
     Uuid::new_v5(&Uuid::NAMESPACE_OID, name.as_bytes())
+}
+
+/// Build a LanceDB `only_if` filter expression matching any of the given chunk UUIDs.
+/// Produces: `chunk_id IN (X'<hex>', X'<hex>', ...)`.
+fn chunk_id_filter_sql(ids: &[Uuid]) -> String {
+    let hexes: Vec<String> = ids.iter().map(|id| format!("X'{}'", id.simple())).collect();
+    format!("chunk_id IN ({})", hexes.join(", "))
 }
 
 fn records_to_batch(

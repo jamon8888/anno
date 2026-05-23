@@ -183,6 +183,20 @@ impl LegalEnricher {
         (row, facts, node_writes, edge_writes)
     }
 
+    /// Return cross-document link hints derived from the enriched rows and
+    /// graph batches. Phase 1 always returns an empty slice; a pattern-based
+    /// regex pass (APPEALS/AMENDS/CITES detection) lands in Stage D.
+    #[must_use]
+    pub fn cross_doc_hints(
+        &self,
+        _doc_id: uuid::Uuid,
+        _rows: &[crate::legal::types::LegalChunkEnrichment],
+        _nodes: &crate::legal::kg::NodeBatch,
+        _edges: &crate::legal::kg::EdgeBatch,
+    ) -> Vec<crate::legal::kg::CrossDocLinkHint> {
+        Vec::new()
+    }
+
     /// Enrich a document's chunks in batch.
     ///
     /// # Errors

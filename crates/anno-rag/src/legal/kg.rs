@@ -213,6 +213,18 @@ impl EdgeBatch {
     }
 }
 
+/// Hint for a cross-document relationship detected in the text of `doc_id`.
+#[derive(Debug, Clone)]
+pub struct CrossDocLinkHint {
+    /// Edge type to create, e.g. `"APPEALS"`, `"AMENDS"`, `"CITES"`.
+    pub edge_type: &'static str,
+    /// Target document UUID when already known (from a prior index lookup).
+    pub target_doc_id: Option<Uuid>,
+    /// Verbatim quote or title fragment that triggered this hint (used for
+    /// fuzzy matching when `target_doc_id` is `None`).
+    pub matching_quote: Option<String>,
+}
+
 /// Legal knowledge graph abstraction.
 #[async_trait]
 pub trait LegalKnowledgeGraph: Send + Sync {
@@ -227,6 +239,12 @@ pub trait LegalKnowledgeGraph: Send + Sync {
     /// # Errors
     /// Returns backend-specific graph errors.
     async fn delete_doc(&self, doc_id: Uuid) -> Result<()>;
+
+    /// Create cross-document edges based on detected references.
+    ///
+    /// # Errors
+    /// Returns backend-specific graph errors.
+    async fn link_cross_documents(&self, doc_id: Uuid, hints: &[CrossDocLinkHint]) -> Result<()>;
 
     /// Compact graph storage.
     ///
@@ -285,6 +303,11 @@ impl LegalKnowledgeGraph for LanceGraphStore {
         Ok(())
     }
 
+    async fn link_cross_documents(&self, _doc_id: Uuid, _hints: &[CrossDocLinkHint]) -> Result<()> {
+        // Phase 1 no-op.
+        Ok(())
+    }
+
     async fn compact(&self) -> Result<()> {
         // Phase 1 no-op.
         Ok(())
@@ -302,7 +325,7 @@ impl LegalKnowledgeGraph for LanceGraphStore {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use async_trait::async_trait;
     use std::collections::HashMap;
@@ -323,6 +346,10 @@ mod tests {
         }
 
         async fn delete_doc(&self, _doc_id: Uuid) -> crate::Result<()> {
+            Ok(())
+        }
+
+        async fn link_cross_documents(&self, _doc_id: Uuid, _hints: &[CrossDocLinkHint]) -> crate::Result<()> {
             Ok(())
         }
 
