@@ -750,6 +750,80 @@ impl Store {
         Ok(hits)
     }
 
+    /// Fetch a single chunk by its deterministic UUID. Returns `None` when
+    /// no row matches (e.g. doc not yet ingested).
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query / decode failures.
+    pub async fn chunk_by_id(&self, chunk_id: Uuid) -> Result<Option<SearchHit>> {
+        let filter = format!("chunk_id = X'{}'", chunk_id.simple());
+        let stream = self
+            .tbl
+            .query()
+            .only_if(filter)
+            .limit(1)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("chunk_by_id: {e}")))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| Error::Store(format!("chunk_by_id stream: {e}")))?;
+        for batch in &batches {
+            if batch.num_rows() > 0 {
+                return Ok(Some(batch_to_hit(batch, 0)?));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Hybrid (vector + FTS) search restricted to a pre-filtered set of chunk
+    /// UUIDs. When `allowed_ids` is empty, returns an empty vec immediately
+    /// without hitting LanceDB.
+    ///
+    /// This is the post-filter path used by `Pipeline::legal_search`: the
+    /// legal store produces a candidate set via SQL predicates, and this
+    /// method reranks only those candidates by relevance.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query / decode failures.
+    pub async fn search_filtered_to_chunks(
+        &self,
+        query_text: &str,
+        query_vec: &[f32],
+        k: usize,
+        allowed_ids: &[Uuid],
+    ) -> Result<Vec<SearchHit>> {
+        use lance_index::scalar::FullTextSearchQuery;
+        use lancedb::query::QueryBase;
+        use lancedb::rerankers::rrf::RRFReranker;
+        use std::sync::Arc;
+
+        if allowed_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = chunk_id_filter_sql(allowed_ids);
+        let stream = self
+            .tbl
+            .query()
+            .nearest_to(query_vec.to_vec())?
+            .full_text_search(FullTextSearchQuery::new(query_text.to_string()))
+            .rerank(Arc::new(RRFReranker::default()))
+            .only_if(filter)
+            .limit(k)
+            .execute()
+            .await?;
+        let batches: Vec<RecordBatch> = stream.try_collect().await?;
+        let mut hits = Vec::new();
+        for batch in &batches {
+            for i in 0..batch.num_rows() {
+                hits.push(batch_to_hit(batch, i)?);
+            }
+        }
+        hits.truncate(k);
+        Ok(hits)
+    }
+
     /// Number of rows in the memories table. Cheap (`count_rows`); used
     /// by the recall-path optimize gate to skip `optimize()` when no
     /// memories were added since the last index fold-in.

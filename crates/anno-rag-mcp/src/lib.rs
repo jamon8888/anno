@@ -364,6 +364,124 @@ struct DownloadModelsResult {
     message: String,
 }
 
+// ---- Legal tool param + result types (D1) ----
+
+/// Parameters for the `legal_ingest` tool.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalIngestParams {
+    /// Absolute path to the folder containing legal documents to ingest.
+    pub folder: String,
+    /// When true, recurse into sub-folders. Defaults to false.
+    #[serde(default)]
+    pub recursive: bool,
+}
+
+#[derive(Serialize)]
+struct LegalIngestResult {
+    ingested: usize,
+    folder: String,
+}
+
+/// Parameters for the `legal_search` tool.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalSearchParams {
+    /// Free-text query. PII is pseudonymized before embedding.
+    pub query: String,
+    /// Maximum number of results.
+    #[serde(default = "default_top_k")]
+    pub top_k: usize,
+    /// Optional doc_type filter (e.g. `"contract"`, `"judgment"`).
+    #[serde(default)]
+    pub doc_type: Option<String>,
+    /// Optional legal_domain filter (e.g. `"droit_commercial"`, `"droit_travail"`).
+    #[serde(default)]
+    pub legal_domain: Option<String>,
+    /// Optional jurisdiction filter (e.g. `"France"`, `"Paris"`).
+    #[serde(default)]
+    pub jurisdiction: Option<String>,
+    /// Optional dossier_id filter.
+    #[serde(default)]
+    pub dossier_id: Option<String>,
+    /// Filter to chunks that mention any of these normalized party forms (e.g. `["org:acme"]`).
+    #[serde(default)]
+    pub parties: Vec<String>,
+    /// Filter to chunks with any of these party roles.
+    #[serde(default)]
+    pub party_roles: Vec<String>,
+    /// Filter to chunks that cite any of these normalized article refs (e.g. `["code_civil:1240"]`).
+    #[serde(default)]
+    pub legal_refs: Vec<String>,
+    /// Filter to chunks with any of these clause types.
+    #[serde(default)]
+    pub clause_types: Vec<String>,
+    /// Filter to chunks with any of these obligation kinds.
+    #[serde(default)]
+    pub obligation_kinds: Vec<String>,
+    /// Filter to chunks with any of these risk flags.
+    #[serde(default)]
+    pub risk_flags: Vec<String>,
+    /// Minimum extraction confidence (0–1).
+    #[serde(default)]
+    pub min_confidence: Option<f32>,
+}
+
+#[derive(Serialize)]
+struct LegalSearchHitWire {
+    chunk_id: String,
+    doc_id: String,
+    text_pseudo: String,
+    score: f32,
+}
+
+#[derive(Serialize)]
+struct LegalSearchResult {
+    hits: Vec<LegalSearchHitWire>,
+}
+
+/// Parameters for the `legal_graph_query` tool.
+///
+/// `intent` discriminator: `"party_dossier"` | `"obligations_owed_by"` |
+/// `"citation_chain"` | `"procedural_timeline"` | `"appeal_chain"`.
+/// The remaining fields supply the intent's required parameters.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalGraphQueryParams {
+    /// Which named traversal to run. One of: party_dossier, obligations_owed_by,
+    /// citation_chain, procedural_timeline, appeal_chain.
+    pub intent: String,
+    /// party_dossier / obligations_owed_by: normalized party identifier.
+    pub party: Option<String>,
+    /// citation_chain: normalized article reference (e.g. "C.civ.1240").
+    pub article_ref: Option<String>,
+    /// procedural_timeline: dossier identifier.
+    pub dossier_id: Option<String>,
+    /// appeal_chain: root document id.
+    pub doc_id: Option<String>,
+    /// appeal_chain: maximum appeal hops (default 10).
+    pub max_depth: Option<u32>,
+}
+
+#[derive(Serialize)]
+struct LegalGraphQueryResult {
+    rows: Vec<std::collections::HashMap<String, String>>,
+}
+
+/// Parameters for the `legal_rehydrate_citation` tool.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalRehydrateCitationParams {
+    /// Chunk UUID (stringified) to fetch.
+    pub chunk_id: String,
+    /// UTF-8 byte offset of the citation span start (inclusive).
+    pub byte_start: u32,
+    /// UTF-8 byte offset of the citation span end (exclusive).
+    pub byte_end: u32,
+}
+
+#[derive(Serialize)]
+struct LegalRehydrateCitationResult {
+    text: String,
+    tokens_rehydrated: usize,
+}
+
 // ---- Tool router ----
 
 #[tool_router]
@@ -941,6 +1059,239 @@ impl AnnoRagServer {
             ),
         };
         serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// Ingest a folder of legal documents into the anno-rag index. Documents are
+    /// pseudonymized through the local vault and enriched with French legal entities.
+    #[tool(
+        description = "Ingest a folder of legal documents (PDF, DOCX, TXT, …). \
+                       PII is pseudonymized through the local vault. \
+                       Legal entities (parties, clauses, citations, obligations, risks) \
+                       are extracted and stored for filtered search and graph traversal."
+    )]
+    async fn legal_ingest(&self, Parameters(p): Parameters<LegalIngestParams>) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let folder = std::path::Path::new(&p.folder);
+        let out = folder.join("anon");
+        let start = std::time::Instant::now();
+        match pipeline.ingest_folder(folder, p.recursive, &out).await {
+            Ok(n) => {
+                tracing::info!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_ingest",
+                    result = "ok",
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    ingested = n,
+                    ""
+                );
+                serde_json::to_string_pretty(&LegalIngestResult {
+                    ingested: n,
+                    folder: p.folder,
+                })
+                .unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_ingest",
+                    result = "error",
+                    "{e}"
+                );
+                format!("Error: {e}")
+            }
+        }
+    }
+
+    /// Legal-filtered hybrid search. Pseudonymizes the query and restricts
+    /// vector + FTS results to chunks matching the supplied legal filters.
+    #[tool(
+        description = "Hybrid search over the legal corpus with optional filters: \
+                       doc_type, legal_domain, jurisdiction, dossier_id, parties, \
+                       party_roles, legal_refs, clause_types, obligation_kinds, \
+                       risk_flags, min_confidence. \
+                       Returns pseudonymized chunk text — call legal_rehydrate_citation \
+                       to restore originals."
+    )]
+    async fn legal_search(&self, Parameters(p): Parameters<LegalSearchParams>) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(pipeline) => pipeline,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let filters = anno_rag::legal::types::LegalSearchFilters {
+            doc_type: p.doc_type,
+            legal_domain: p.legal_domain,
+            jurisdiction: p.jurisdiction,
+            dossier_id: p.dossier_id,
+            parties: p.parties,
+            party_roles: p.party_roles,
+            legal_refs: p.legal_refs,
+            clause_types: p.clause_types,
+            obligation_kinds: p.obligation_kinds,
+            risk_flags: p.risk_flags,
+            min_confidence: p.min_confidence,
+            ..Default::default()
+        };
+        let start = std::time::Instant::now();
+        match pipeline.legal_search(&p.query, p.top_k, filters).await {
+            Ok(hits) => {
+                tracing::info!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_search",
+                    result = "ok",
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    n = hits.len(),
+                    ""
+                );
+                serde_json::to_string_pretty(&LegalSearchResult {
+                    hits: hits
+                        .into_iter()
+                        .map(|h| LegalSearchHitWire {
+                            chunk_id: h.chunk_id.to_string(),
+                            doc_id: h.doc_id.to_string(),
+                            text_pseudo: h.text_pseudo,
+                            score: h.score,
+                        })
+                        .collect(),
+                })
+                .unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_search",
+                    result = "error",
+                    "{e}"
+                );
+                format!("Error: {e}")
+            }
+        }
+    }
+
+    /// Execute a named graph traversal intent over the legal knowledge graph.
+    /// Phase 1: returns an empty row set (real lance-graph execution in Stage D).
+    #[tool(
+        description = "Run a named graph traversal over the legal knowledge graph. \
+                       Intents: party_dossier, obligations_owed_by, citation_chain, \
+                       procedural_timeline, appeal_chain. \
+                       Returns rows from the Cypher result set."
+    )]
+    async fn legal_graph_query(
+        &self,
+        Parameters(p): Parameters<LegalGraphQueryParams>,
+    ) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        use anno_rag::legal::query::GraphIntent;
+        let intent = match p.intent.as_str() {
+            "party_dossier" => match p.party {
+                Some(party) => GraphIntent::PartyDossier { party },
+                None => return "Error: party_dossier requires `party`".into(),
+            },
+            "obligations_owed_by" => match p.party {
+                Some(party) => GraphIntent::ObligationsOwedBy { party },
+                None => return "Error: obligations_owed_by requires `party`".into(),
+            },
+            "citation_chain" => match p.article_ref {
+                Some(article_ref) => GraphIntent::CitationChain { article_ref },
+                None => return "Error: citation_chain requires `article_ref`".into(),
+            },
+            "procedural_timeline" => match p.dossier_id {
+                Some(dossier_id) => GraphIntent::ProceduralTimeline { dossier_id },
+                None => return "Error: procedural_timeline requires `dossier_id`".into(),
+            },
+            "appeal_chain" => match p.doc_id {
+                Some(doc_id) => GraphIntent::AppealChain {
+                    doc_id,
+                    max_depth: p.max_depth.unwrap_or(10),
+                },
+                None => return "Error: appeal_chain requires `doc_id`".into(),
+            },
+            other => return format!(
+                "Error: unknown intent `{other}`. \
+                 Valid: party_dossier, obligations_owed_by, citation_chain, \
+                 procedural_timeline, appeal_chain"
+            ),
+        };
+        let start = std::time::Instant::now();
+        match pipeline.legal_graph_query(intent).await {
+            Ok(result) => {
+                tracing::info!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_graph_query",
+                    result = "ok",
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    rows = result.rows.len(),
+                    ""
+                );
+                serde_json::to_string_pretty(&LegalGraphQueryResult { rows: result.rows })
+                    .unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_graph_query",
+                    result = "error",
+                    "{e}"
+                );
+                format!("Error: {e}")
+            }
+        }
+    }
+
+    /// Rehydrate a citation span from a stored chunk. Fetches the chunk by UUID,
+    /// slices the given byte range from its pseudonymized text, and restores
+    /// PII tokens through the local vault.
+    #[tool(
+        description = "Rehydrate a citation span (byte_start..byte_end) from a stored \
+                       pseudonymized chunk. Returns the original plaintext for the span. \
+                       Use chunk_id + offsets from legal_search results."
+    )]
+    async fn legal_rehydrate_citation(
+        &self,
+        Parameters(p): Parameters<LegalRehydrateCitationParams>,
+    ) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let chunk_id = match uuid::Uuid::parse_str(&p.chunk_id) {
+            Ok(u) => u,
+            Err(e) => return format!("Error: bad chunk_id: {e}"),
+        };
+        let start = std::time::Instant::now();
+        match pipeline
+            .legal_rehydrate_citation(chunk_id, p.byte_start, p.byte_end)
+            .await
+        {
+            Ok(r) => {
+                tracing::info!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_rehydrate_citation",
+                    result = "ok",
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    ""
+                );
+                serde_json::to_string_pretty(&LegalRehydrateCitationResult {
+                    text: r.text,
+                    tokens_rehydrated: r.tokens_rehydrated,
+                })
+                .unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_rehydrate_citation",
+                    result = "error",
+                    "{e}"
+                );
+                format!("Error: {e}")
+            }
+        }
     }
 }
 

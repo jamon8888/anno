@@ -1657,6 +1657,77 @@ impl Pipeline {
     ) -> Result<crate::legal::query::GraphQueryResult> {
         crate::legal::query::run_intent(self.legal_kg.as_ref(), intent).await
     }
+
+    /// Legal-filtered hybrid search. Pseudonymizes the query through the vault,
+    /// embeds it, and — when `filters` specify at least one predicate — restricts
+    /// the vector search to the chunk UUIDs that pass the legal store's SQL
+    /// filters. Returns up to `top_k` hits with their pseudonymized text.
+    ///
+    /// # Errors
+    /// Returns [`Error::Detect`] / [`Error::Vault`] / [`Error::Embed`] /
+    /// [`Error::Store`] / [`Error::Legal`] per failing layer.
+    pub async fn legal_search(
+        &self,
+        query: &str,
+        top_k: usize,
+        filters: crate::legal::types::LegalSearchFilters,
+    ) -> Result<Vec<crate::legal::types::LegalSearchHit>> {
+        let entities = self.detector_get_or_init()?.detect(query)?;
+        let pseudo_q = self.vault.pseudonymize(query, &entities).await?;
+        let qv = self.embedder().await?.embed_query(&pseudo_q)?;
+
+        let chunk_hits = if filters.has_any_filter() {
+            let allowed = self
+                .legal_store
+                .filter_chunk_ids(&filters, top_k.saturating_mul(20).max(100))
+                .await?;
+            self.store
+                .search_filtered_to_chunks(&pseudo_q, &qv, top_k, &allowed)
+                .await?
+        } else {
+            self.store.search(&pseudo_q, &qv, top_k).await?
+        };
+
+        Ok(chunk_hits
+            .into_iter()
+            .map(|h| crate::legal::types::LegalSearchHit {
+                chunk_id: h.chunk_id,
+                doc_id: h.doc_id,
+                text_pseudo: h.text_pseudo,
+                score: h.score,
+                enrichment: None,
+            })
+            .collect())
+    }
+
+    /// Rehydrate a citation span from a stored pseudonymized chunk.
+    ///
+    /// Fetches the chunk by `chunk_id`, slices `byte_start..byte_end` from its
+    /// pseudonymized text, then rehydrates the resulting span through the vault.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] when the chunk is unknown or the byte range is
+    /// out of bounds; [`Error::Vault`] on rehydration failure.
+    pub async fn legal_rehydrate_citation(
+        &self,
+        chunk_id: uuid::Uuid,
+        byte_start: u32,
+        byte_end: u32,
+    ) -> Result<RehydratedText> {
+        if byte_start >= byte_end {
+            return Err(Error::Store("byte_start must be < byte_end".into()));
+        }
+        let hit = self
+            .store
+            .chunk_by_id(chunk_id)
+            .await?
+            .ok_or_else(|| Error::Store(format!("unknown chunk_id: {chunk_id}")))?;
+        let span = hit
+            .text_pseudo
+            .get(byte_start as usize..byte_end as usize)
+            .ok_or_else(|| Error::Store("offsets not valid UTF-8 boundary".into()))?;
+        self.rehydrate(span).await
+    }
 }
 
 #[cfg(test)]
