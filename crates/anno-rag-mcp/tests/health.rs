@@ -42,7 +42,7 @@ async fn anno_health_tool_returns_json_with_engine_version() {
 }
 
 #[tokio::test]
-fn anno_init_vault_rejects_empty_passphrase() {
+async fn anno_init_vault_rejects_empty_passphrase() {
     let result = init_vault_with_passphrase("");
     let json = serde_json::to_string_pretty(&result).expect("serializable");
     let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
@@ -56,7 +56,7 @@ fn anno_init_vault_rejects_empty_passphrase() {
 }
 
 #[tokio::test]
-fn anno_init_vault_rejects_short_passphrase() {
+async fn anno_init_vault_rejects_short_passphrase() {
     let result = init_vault_with_passphrase("short");
     let json = serde_json::to_string_pretty(&result).expect("serializable");
     let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
@@ -70,7 +70,7 @@ fn anno_init_vault_rejects_short_passphrase() {
 }
 
 #[tokio::test]
-fn anno_init_vault_writes_to_keyring_with_nonempty_passphrase() {
+async fn anno_init_vault_writes_to_keyring_with_nonempty_passphrase() {
     let result = init_vault_with_passphrase("correct horse battery staple");
     let json = serde_json::to_string_pretty(&result).expect("serializable");
     let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
