@@ -24,6 +24,7 @@ pub mod pipeline;
 pub mod rerank;
 pub mod store;
 pub mod vault;
+pub mod vault_admin;
 
 pub use config::AnnoRagConfig;
 pub use error::{Error, Result};
