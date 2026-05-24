@@ -93,9 +93,35 @@ impl Pipeline {
     /// they initialize lazily on first call to [`Pipeline::ingest_one`],
     /// [`Pipeline::search`], or [`Pipeline::detect`]. This keeps startup RSS
     /// under ~200 MB for callers that only need vault stats or rehydration.
+    ///
+    /// **Vault auto-recovery:** if `vault.enc` exists but the key no longer
+    /// matches (reinstall, passphrase reset, keyring cleared), the old file is
+    /// renamed to `vault.enc.bak` and a fresh vault is created automatically.
+    /// Any existing pseudonymisation mappings are lost, but the LanceDB index
+    /// is preserved so documents remain searchable.
     pub async fn new(cfg: AnnoRagConfig, vault_key: [u8; 32]) -> Result<Self> {
         std::fs::create_dir_all(&cfg.data_dir).map_err(Error::from)?;
-        let vault = Vault::open(&cfg.vault_path(), vault_key)?;
+        let vault = match Vault::open(&cfg.vault_path(), vault_key) {
+            Ok(v) => v,
+            Err(Error::Vault(ref msg)) if msg.contains("Decryption failed") => {
+                // Key mismatch — back up and start fresh (reinstall / passphrase reset).
+                let bak = cfg.data_dir.join("vault.enc.bak");
+                if let Err(e) = std::fs::rename(&cfg.vault_path(), &bak) {
+                    tracing::warn!(
+                        error = %e,
+                        "vault key mismatch — could not rename old vault, removing it"
+                    );
+                    let _ = std::fs::remove_file(&cfg.vault_path());
+                } else {
+                    tracing::warn!(
+                        backup = ?bak,
+                        "vault key mismatch — old vault backed up, starting with fresh vault"
+                    );
+                }
+                Vault::open(&cfg.vault_path(), vault_key)?
+            }
+            Err(e) => return Err(e),
+        };
         let store = Store::open(&cfg).await?;
         let legal_store = crate::legal::store::LegalStore::open(&cfg).await?;
         // Index setup may fail on a brand-new empty table; treat as non-fatal.
