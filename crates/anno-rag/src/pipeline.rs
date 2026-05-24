@@ -317,6 +317,30 @@ impl Pipeline {
             node_batch.absorb(nodes);
             edge_batch.absorb(edges);
         }
+        // ── D3: Mandatory-clause evaluation ──────────────────────────────────
+        // Concatenate all pseudonymized chunks into a single text, detect
+        // which doc-type checklist applies, and stamp every row with the
+        // aggregate status so filtered search can filter by it.
+        {
+            let full_pseudo_text = pseudo_chunks.join("\n");
+            let doc_type_key = legal_rows
+                .first()
+                .and_then(|r| r.doc_type.as_deref())
+                .unwrap_or("unknown");
+            if doc_type_key != "unknown" {
+                let checks =
+                    crate::legal::mandatory::evaluate_doc(doc_type_key, &full_pseudo_text);
+                let agg = crate::legal::mandatory::aggregate_status(&checks);
+                for row in &mut legal_rows {
+                    row.mandatory_clause_status = Some(agg.clone());
+                }
+                node_batch.absorb(
+                    checks.into_iter().map(|c| c.into_node()).collect(),
+                );
+                crate::legal::audit::audit_mandatory(doc_id, &agg);
+            }
+        }
+
         // LanceDB flat-table write.
         let lance_ok = match self.legal_store.upsert(&legal_rows).await {
             Ok(()) => true,
@@ -1728,6 +1752,209 @@ impl Pipeline {
             .ok_or_else(|| Error::Store("offsets not valid UTF-8 boundary".into()))?;
         self.rehydrate(span).await
     }
+
+    // ── D2: extract workflows ─────────────────────────────────────────────
+
+    /// Extract a contract review grid from the KG for `doc_id`.
+    ///
+    /// # Errors
+    /// Propagates graph backend errors.
+    pub async fn legal_extract_contract(
+        &self,
+        doc_id: &str,
+    ) -> Result<crate::legal::extract::ContractReview> {
+        crate::legal::extract::extract_contract(self.legal_kg.as_ref(), doc_id).await
+    }
+
+    /// Extract a case-file review grid from the KG for `dossier_id`.
+    ///
+    /// # Errors
+    /// Propagates graph backend errors.
+    pub async fn legal_extract_case_file(
+        &self,
+        dossier_id: &str,
+    ) -> Result<crate::legal::extract::CaseFileReview> {
+        crate::legal::extract::extract_case_file(self.legal_kg.as_ref(), dossier_id).await
+    }
+
+    /// Retrieve the procedural timeline for `dossier_id`.
+    ///
+    /// # Errors
+    /// Propagates graph backend errors.
+    pub async fn legal_timeline(
+        &self,
+        dossier_id: &str,
+    ) -> Result<crate::legal::extract::ProceduralTimeline> {
+        crate::legal::extract::timeline(self.legal_kg.as_ref(), dossier_id).await
+    }
+
+    /// Retrieve risk findings for a document or dossier.
+    ///
+    /// # Errors
+    /// Propagates graph backend errors.
+    pub async fn legal_risk_review(
+        &self,
+        scope_id: &str,
+        is_dossier: bool,
+    ) -> Result<crate::legal::extract::RiskReview> {
+        crate::legal::extract::risk_review(self.legal_kg.as_ref(), scope_id, is_dossier).await
+    }
+
+    // ── D3: mandatory-clause audit ────────────────────────────────────────
+
+    /// Run the mandatory-clause checklist for all chunks of `doc_id`.
+    ///
+    /// Fetches all chunks of the document from the store, concatenates their
+    /// pseudonymized text, dispatches to the per-doctype evaluator, and
+    /// returns the check results with an aggregate status.
+    ///
+    /// # Errors
+    /// Propagates store errors on chunk fetch.
+    pub async fn legal_mandatory_clause_audit(
+        &self,
+        doc_id: Uuid,
+        doc_type: &str,
+    ) -> Result<MandatoryAuditResult> {
+        let chunks = self.store.chunks_by_doc(doc_id).await?;
+        let full_text: String = chunks
+            .iter()
+            .map(|c| c.text_pseudo.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let checks = crate::legal::mandatory::evaluate_doc(doc_type, &full_text);
+        let status = crate::legal::mandatory::aggregate_status(&checks);
+        Ok(MandatoryAuditResult { doc_id, doc_type: doc_type.to_string(), checks, status })
+    }
+
+    // ── D4: prescription check ────────────────────────────────────────────
+
+    /// Compute the French prescription deadline for the given category and
+    /// anchor date, taking `interrupting_events` into account.
+    ///
+    /// Returns `None` when the category is not found in the rule table.
+    #[must_use]
+    pub fn legal_prescription_check(
+        category: &str,
+        event_date: chrono::DateTime<chrono::Utc>,
+        interrupting_events: &[crate::legal::prescription::InterruptingEvent],
+    ) -> Option<crate::legal::prescription::PrescriptionResult> {
+        crate::legal::prescription::compute_prescription(category, event_date, interrupting_events)
+    }
+
+    // ── D5: field validation ──────────────────────────────────────────────
+
+    /// Record a human (or automated) validation of an extracted fact.
+    ///
+    /// Writes a `Validation` node to the KG linked to the source chunk.
+    ///
+    /// # Errors
+    /// Propagates KG errors.
+    pub async fn legal_validate_field(
+        &self,
+        chunk_id: Uuid,
+        field_name: String,
+        action: ValidationAction,
+        corrected_value: Option<String>,
+        note: Option<String>,
+        actor: Option<String>,
+    ) -> Result<ValidationAck> {
+        let validation_id = Uuid::new_v4();
+        let validated_at = chrono::Utc::now();
+        let action_str = action.as_str().to_string();
+
+        crate::legal::audit::audit_validation(actor.as_deref(), &action_str);
+
+        let mut nodes = crate::legal::kg::NodeBatch::new();
+        nodes.nodes.push(crate::legal::kg::NodeWrite::Validation {
+            validation_id,
+            chunk_id,
+            field_name: field_name.clone(),
+            action: action_str.clone(),
+            corrected_value: corrected_value.clone(),
+            note: note.clone(),
+            validated_at,
+            actor: actor.clone(),
+        });
+
+        let mut edges = crate::legal::kg::EdgeBatch::new();
+        edges.edges.push(crate::legal::kg::EdgeWrite {
+            from_label: "Validation",
+            from_key: validation_id.to_string(),
+            to_label: "Chunk",
+            to_key: chunk_id.to_string(),
+            edge_type: "VALIDATES",
+            props: std::collections::HashMap::new(),
+        });
+
+        self.legal_kg.upsert_batch(&nodes, &edges).await?;
+
+        Ok(ValidationAck {
+            validation_id,
+            chunk_id,
+            field_name,
+            action: action_str,
+            corrected_value,
+            validated_at,
+        })
+    }
+}
+
+// ── D3 result type ────────────────────────────────────────────────────────────
+
+/// Result of a mandatory-clause audit for one document.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MandatoryAuditResult {
+    /// Document UUID audited.
+    pub doc_id: Uuid,
+    /// Document type used for checklist selection.
+    pub doc_type: String,
+    /// Per-requirement check results.
+    pub checks: Vec<crate::legal::mandatory::MandatoryCheck>,
+    /// Aggregate status: `"complete"`, `"partial"`, or `"missing"`.
+    pub status: String,
+}
+
+// ── D5 types ──────────────────────────────────────────────────────────────────
+
+/// Action taken on a validated field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValidationAction {
+    /// Confirm the extracted value is correct.
+    Confirm,
+    /// Reject the extracted value as wrong.
+    Reject,
+    /// Replace the extracted value with a corrected one.
+    Correct,
+}
+
+impl ValidationAction {
+    /// Stable string representation stored in the KG.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Confirm => "confirm",
+            Self::Reject => "reject",
+            Self::Correct => "correct",
+        }
+    }
+}
+
+/// Acknowledgement returned by [`Pipeline::legal_validate_field`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ValidationAck {
+    /// Freshly generated validation UUID.
+    pub validation_id: Uuid,
+    /// Chunk that contains the validated fact.
+    pub chunk_id: Uuid,
+    /// Field name validated.
+    pub field_name: String,
+    /// Action that was recorded.
+    pub action: String,
+    /// Corrected value, if action was `"correct"`.
+    pub corrected_value: Option<String>,
+    /// Timestamp at which the validation was recorded.
+    pub validated_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[cfg(test)]

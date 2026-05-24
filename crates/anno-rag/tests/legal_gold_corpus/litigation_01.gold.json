@@ -1,0 +1,28 @@
+{
+  "doc_type": "litigation",
+  "legal_domain": "droit_civil",
+  "entities": [
+    { "label": "organization", "text": "Lefort Construction SA" },
+    { "label": "organization", "text": "Renaud Bâtiment SNC" },
+    { "label": "court", "text": "Tribunal judiciaire de Paris" }
+  ],
+  "obligations": [
+    { "kind": "execution_travaux", "text_fragment": "livrer les travaux dans le délai" }
+  ],
+  "deadlines": [
+    { "date": "2023-12-01", "context": "délai contractuel de livraison" },
+    { "date": "2025-01-15", "context": "acte d'huissier" },
+    { "date": "2025-02-12", "context": "audience" }
+  ],
+  "amounts": [
+    { "eur_cents": 32000000, "context": "320 000 € TTC préjudice" }
+  ],
+  "mandatory_clauses": [],
+  "prescriptions": [
+    { "category": "contractuel", "anchor_date": "2023-12-01T00:00:00Z", "expected_year": 2028 }
+  ],
+  "citations": [
+    { "normalized_ref": "code_civil:1231-1" },
+    { "normalized_ref": "code_civil:1240" }
+  ]
+}

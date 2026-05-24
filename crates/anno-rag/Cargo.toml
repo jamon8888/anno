@@ -110,5 +110,9 @@ required-features = ["rerank"]
 name = "bench_memory_recall"
 harness = false
 
+[[bench]]
+name = "legal_eval"
+harness = false
+
 [lints]
 workspace = true

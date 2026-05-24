@@ -482,6 +482,90 @@ struct LegalRehydrateCitationResult {
     tokens_rehydrated: usize,
 }
 
+// ---- D2 params/results ----
+
+/// Parameters for `legal_extract_contract`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalExtractContractParams {
+    /// Document id to extract a review grid for.
+    pub doc_id: String,
+}
+
+/// Parameters for `legal_extract_case_file`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalExtractCaseFileParams {
+    /// Dossier id to extract a review grid for.
+    pub dossier_id: String,
+}
+
+/// Parameters for `legal_timeline`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalTimelineParams {
+    /// Dossier id to retrieve the procedural timeline for.
+    pub dossier_id: String,
+}
+
+/// Parameters for `legal_risk_review`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalRiskReviewParams {
+    /// Document or dossier id to scope the risk review to.
+    pub scope_id: String,
+    /// When true, treat `scope_id` as a dossier id; otherwise as a doc id.
+    pub is_dossier: bool,
+}
+
+// ---- D3 params/results ----
+
+/// Parameters for `legal_mandatory_clause_audit`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalMandatoryClauseAuditParams {
+    /// Document UUID (stringified).
+    pub doc_id: String,
+    /// Document type used to select the checklist
+    /// (e.g. `"b2b_contract"`, `"employment"`, `"rgpd"`).
+    pub doc_type: String,
+}
+
+// ---- D4 params/results ----
+
+/// Parameters for `legal_prescription_check`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalPrescriptionCheckParams {
+    /// Prescription category (e.g. `"contractuel"`, `"responsabilite_decennale"`).
+    pub category: String,
+    /// Anchor event date in ISO-8601 format (e.g. `"2020-01-15T00:00:00Z"`).
+    pub event_date: String,
+    /// Interrupting events (mise en demeure, assignation, etc.).
+    pub interrupting_events: Vec<LegalInterruptingEventWire>,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalInterruptingEventWire {
+    /// Event kind, e.g. `"mise_en_demeure"`, `"assignation"`.
+    pub kind: String,
+    /// ISO-8601 date of the interrupting event.
+    pub date: String,
+}
+
+// ---- D5 params/results ----
+
+/// Parameters for `legal_validate_field`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct LegalValidateFieldParams {
+    /// Chunk UUID (stringified) that contains the extracted fact.
+    pub chunk_id: String,
+    /// Field name being validated (e.g. `"obligation:paiement"`).
+    pub field_name: String,
+    /// Action: `"confirm"`, `"reject"`, or `"correct"`.
+    pub action: String,
+    /// Corrected value when action is `"correct"`.
+    pub corrected_value: Option<String>,
+    /// Optional free-text note from the reviewer.
+    pub note: Option<String>,
+    /// Optional reviewer identifier (email or system name).
+    pub actor: Option<String>,
+}
+
 // ---- Tool router ----
 
 #[tool_router]
@@ -1293,6 +1377,276 @@ impl AnnoRagServer {
             }
         }
     }
+
+    // ── D2 handlers ──────────────────────────────────────────────────────────
+
+    /// Extract a contract review grid from the legal KG for a given document.
+    #[tool(
+        description = "Extract a contract review grid (parties, obligations, clauses) \
+                       from the legal knowledge graph for `doc_id`. \
+                       Returns one row per extracted field with chunk provenance."
+    )]
+    async fn legal_extract_contract(
+        &self,
+        Parameters(p): Parameters<LegalExtractContractParams>,
+    ) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let start = std::time::Instant::now();
+        match pipeline.legal_extract_contract(&p.doc_id).await {
+            Ok(review) => {
+                tracing::info!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_extract_contract",
+                    doc_id = p.doc_id,
+                    rows = review.rows.len(),
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    ""
+                );
+                serde_json::to_string_pretty(&review).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    /// Extract a case-file review grid from the legal KG for a given dossier.
+    #[tool(
+        description = "Extract a case-file review grid (documents, parties, events) \
+                       from the legal knowledge graph for `dossier_id`."
+    )]
+    async fn legal_extract_case_file(
+        &self,
+        Parameters(p): Parameters<LegalExtractCaseFileParams>,
+    ) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let start = std::time::Instant::now();
+        match pipeline.legal_extract_case_file(&p.dossier_id).await {
+            Ok(review) => {
+                tracing::info!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_extract_case_file",
+                    dossier_id = p.dossier_id,
+                    rows = review.rows.len(),
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    ""
+                );
+                serde_json::to_string_pretty(&review).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    /// Retrieve the procedural timeline for a dossier, ordered chronologically.
+    #[tool(
+        description = "Retrieve the procedural timeline for `dossier_id`. \
+                       Returns events (kind, event_date, deadline_date, chunk_id) \
+                       in chronological order."
+    )]
+    async fn legal_timeline(
+        &self,
+        Parameters(p): Parameters<LegalTimelineParams>,
+    ) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let start = std::time::Instant::now();
+        match pipeline.legal_timeline(&p.dossier_id).await {
+            Ok(tl) => {
+                tracing::info!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_timeline",
+                    dossier_id = p.dossier_id,
+                    events = tl.events.len(),
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    ""
+                );
+                serde_json::to_string_pretty(&tl).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    /// Retrieve risk findings for a document or dossier, with lawyer recommendations.
+    #[tool(
+        description = "Retrieve risk findings for `scope_id`. Set `is_dossier: true` \
+                       to collect risks across all documents in the dossier. \
+                       Returns findings sorted severity-descending with French-language \
+                       lawyer recommendations."
+    )]
+    async fn legal_risk_review(
+        &self,
+        Parameters(p): Parameters<LegalRiskReviewParams>,
+    ) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let start = std::time::Instant::now();
+        match pipeline.legal_risk_review(&p.scope_id, p.is_dossier).await {
+            Ok(review) => {
+                tracing::info!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_risk_review",
+                    scope_id = p.scope_id,
+                    findings = review.findings.len(),
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    ""
+                );
+                serde_json::to_string_pretty(&review).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    // ── D3 handler ────────────────────────────────────────────────────────────
+
+    /// Run the mandatory-clause checklist for a document and return per-requirement
+    /// status with French law references.
+    #[tool(
+        description = "Audit mandatory clauses for a document. Supported doc_types: \
+                       b2b_contract, b2c_contract, employment, lease_commercial, \
+                       lease_residential, rgpd. \
+                       Returns per-requirement status (present/missing) and aggregate \
+                       status (complete/partial/missing) with French law references."
+    )]
+    async fn legal_mandatory_clause_audit(
+        &self,
+        Parameters(p): Parameters<LegalMandatoryClauseAuditParams>,
+    ) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let doc_id = match uuid::Uuid::parse_str(&p.doc_id) {
+            Ok(u) => u,
+            Err(e) => return format!("Error: bad doc_id: {e}"),
+        };
+        let start = std::time::Instant::now();
+        match pipeline.legal_mandatory_clause_audit(doc_id, &p.doc_type).await {
+            Ok(result) => {
+                anno_rag::legal::audit::audit_mandatory(doc_id, &result.status);
+                tracing::info!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_mandatory_clause_audit",
+                    doc_type = p.doc_type,
+                    status = result.status,
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    ""
+                );
+                serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    // ── D4 handler ────────────────────────────────────────────────────────────
+
+    /// Compute the French prescription deadline for a given category and anchor date.
+    #[tool(
+        description = "Compute the French prescription deadline for `category` \
+                       (contractuel, quasi_contrat, delictuel, responsabilite_decennale, \
+                       biennale_consommation, garantie_vices, action_prud_homale, \
+                       prescription_penale_crime). \
+                       Accepts interrupting events (mise_en_demeure, assignation, etc.) \
+                       that restart the prescription period. Returns prescribes_on date \
+                       and is_prescribed flag."
+    )]
+    async fn legal_prescription_check(
+        &self,
+        Parameters(p): Parameters<LegalPrescriptionCheckParams>,
+    ) -> String {
+        use anno_rag::legal::prescription::InterruptingEvent;
+
+        let event_date: chrono::DateTime<chrono::Utc> = match p.event_date.parse() {
+            Ok(d) => d,
+            Err(e) => return format!("Error: bad event_date: {e}"),
+        };
+
+        let mut interrupting = Vec::new();
+        for ev in &p.interrupting_events {
+            match ev.date.parse::<chrono::DateTime<chrono::Utc>>() {
+                Ok(d) => interrupting.push(InterruptingEvent { kind: ev.kind.clone(), date: d }),
+                Err(e) => return format!("Error: bad interrupting event date '{}': {e}", ev.date),
+            }
+        }
+
+        match anno_rag::pipeline::Pipeline::legal_prescription_check(
+            &p.category,
+            event_date,
+            &interrupting,
+        ) {
+            Some(result) => {
+                anno_rag::legal::audit::audit_prescription(
+                    uuid::Uuid::new_v4(),
+                    result.prescribes_on,
+                );
+                serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            None => format!(
+                "Error: unknown prescription category '{}'. \
+                 Valid: contractuel, quasi_contrat, delictuel, responsabilite_decennale, \
+                 biennale_consommation, garantie_vices, action_prud_homale, \
+                 prescription_penale_crime",
+                p.category
+            ),
+        }
+    }
+
+    // ── D5 handler ────────────────────────────────────────────────────────────
+
+    /// Record a human or automated validation of an extracted fact.
+    #[tool(
+        description = "Record a validation of an extracted fact. \
+                       action: confirm | reject | correct. \
+                       When action is 'correct', supply corrected_value. \
+                       Writes a Validation node to the KG linked to the chunk. \
+                       Returns the validation_id for audit tracing."
+    )]
+    async fn legal_validate_field(
+        &self,
+        Parameters(p): Parameters<LegalValidateFieldParams>,
+    ) -> String {
+        let pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let chunk_id = match uuid::Uuid::parse_str(&p.chunk_id) {
+            Ok(u) => u,
+            Err(e) => return format!("Error: bad chunk_id: {e}"),
+        };
+        let action = match p.action.as_str() {
+            "confirm" => anno_rag::pipeline::ValidationAction::Confirm,
+            "reject" => anno_rag::pipeline::ValidationAction::Reject,
+            "correct" => anno_rag::pipeline::ValidationAction::Correct,
+            other => {
+                return format!(
+                    "Error: unknown action '{other}'. Valid: confirm, reject, correct"
+                )
+            }
+        };
+        match pipeline
+            .legal_validate_field(
+                chunk_id,
+                p.field_name,
+                action,
+                p.corrected_value,
+                p.note,
+                p.actor,
+            )
+            .await
+        {
+            Ok(ack) => {
+                serde_json::to_string_pretty(&ack).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
+    }
 }
 
 #[tool_handler]
@@ -1300,13 +1654,20 @@ impl ServerHandler for AnnoRagServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
             .with_instructions(
-                "anno-rag MCP server. Tools: search (pseudonymized retrieval), \
-                 rehydrate (restore originals), detect (dry-run scan), vault_stats, \
-                 memory_save / memory_recall / memory_forget / memory_list \
-                 (PII-safe session memory; GDPR Art. 17 cascades to vault tokens), \
-                 memory_graph_recall / memory_invalidate (v0.2 entity-graph + \
-                 bi-temporal), download_models (background model download — call on first use if models not yet downloaded). \
-                 memory_recall accepts as_of + graph_expand.",
+                "anno-rag MCP server — French legal RAG with privacy-by-design. \
+                 Core: search, rehydrate, detect, vault_stats. \
+                 Memory (GDPR Art.17): memory_save, memory_recall, memory_forget, \
+                 memory_list, memory_graph_recall, memory_invalidate. \
+                 Models: download_models (call on first use). \
+                 Legal D1: legal_ingest, legal_search, legal_graph_query, \
+                 legal_rehydrate_citation. \
+                 Legal D2: legal_extract_contract, legal_extract_case_file, \
+                 legal_timeline, legal_risk_review. \
+                 Legal D3: legal_mandatory_clause_audit (b2b_contract, b2c_contract, \
+                 employment, lease_commercial, lease_residential, rgpd). \
+                 Legal D4: legal_prescription_check (8 French prescription categories). \
+                 Legal D5: legal_validate_field (confirm/reject/correct extracted facts). \
+                 All legal tools pseudonymize through the local vault.",
             )
             .with_server_info(Implementation::new(
                 self.cfg.mcp_server_name.clone(),

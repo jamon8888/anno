@@ -116,6 +116,25 @@ pub enum NodeWrite {
         /// Check status.
         status: String,
     },
+    /// Human (or automated) validation of an extracted fact.
+    Validation {
+        /// Validation id.
+        validation_id: Uuid,
+        /// Chunk UUID that contains the validated fact.
+        chunk_id: Uuid,
+        /// Field name that was validated (e.g. `"obligation:paiement"`).
+        field_name: String,
+        /// Action taken: `"confirm"`, `"reject"`, or `"correct"`.
+        action: String,
+        /// Corrected value when `action == "correct"`.
+        corrected_value: Option<String>,
+        /// Optional free-text note from the reviewer.
+        note: Option<String>,
+        /// When the validation was recorded.
+        validated_at: chrono::DateTime<chrono::Utc>,
+        /// Optional actor identifier (reviewer email or system name).
+        actor: Option<String>,
+    },
 }
 
 /// One edge staged for write to the legal graph.

@@ -1,0 +1,32 @@
+{
+  "doc_type": "employment",
+  "legal_domain": "droit_du_travail",
+  "entities": [
+    { "label": "organization", "text": "Technova SAS" },
+    { "label": "person", "text": "Alexandre Martin" }
+  ],
+  "obligations": [
+    { "kind": "remuneration", "text_fragment": "salaire mensuel brut" },
+    { "kind": "duree_travail", "text_fragment": "39 heures par semaine" }
+  ],
+  "deadlines": [
+    { "date": "2025-03-03", "context": "date de signature" }
+  ],
+  "amounts": [
+    { "eur_cents": 420000, "context": "4 200 € brut mensuel" }
+  ],
+  "mandatory_clauses": [
+    { "requirement": "qualification_poste", "status": "present" },
+    { "requirement": "remuneration", "status": "present" },
+    { "requirement": "duree_travail", "status": "present" },
+    { "requirement": "lieu_travail", "status": "present" },
+    { "requirement": "periode_essai", "status": "present" },
+    { "requirement": "convention_collective", "status": "present" }
+  ],
+  "prescriptions": [
+    { "category": "action_prud_homale", "anchor_date": "2023-03-03T00:00:00Z", "expected_year": 2025 }
+  ],
+  "citations": [
+    { "normalized_ref": "code_travail:L1221-19" }
+  ]
+}

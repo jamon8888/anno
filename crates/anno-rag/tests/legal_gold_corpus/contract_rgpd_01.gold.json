@@ -1,0 +1,27 @@
+{
+  "doc_type": "rgpd",
+  "legal_domain": "droit_numerique",
+  "entities": [
+    { "label": "organization", "text": "Numérique Conseil SASU" }
+  ],
+  "obligations": [
+    { "kind": "information", "text_fragment": "droits des personnes concernées" }
+  ],
+  "deadlines": [
+    { "date": "2025-04-01", "context": "dernière mise à jour" }
+  ],
+  "amounts": [],
+  "mandatory_clauses": [
+    { "requirement": "finalites_traitement", "status": "present" },
+    { "requirement": "base_legale", "status": "present" },
+    { "requirement": "droits_personnes", "status": "present" },
+    { "requirement": "conservation_donnees", "status": "present" },
+    { "requirement": "destinataires_donnees", "status": "present" },
+    { "requirement": "dpo_contact", "status": "present" }
+  ],
+  "prescriptions": [],
+  "citations": [
+    { "normalized_ref": "RGPD:art.6" },
+    { "normalized_ref": "RGPD:art.15" }
+  ]
+}
