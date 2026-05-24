@@ -2,15 +2,30 @@
 //!
 //! Tests call implementation functions directly — the `#[tool_router]` macro
 //! generates private methods, so they are not accessible from integration tests.
+//!
+//! Pipeline tests use a temporary `data_dir` so they never touch the real
+//! `~/.anno-rag/vault.enc` (which may have been created with a different key).
 
 use anno_rag::config::AnnoRagConfig;
 use anno_rag::pipeline::Pipeline;
 use anno_rag::vault::derive_key;
 use anno_rag_mcp::health::{collect_health, init_vault_with_passphrase, EngineHealth};
 
+/// Build an `AnnoRagConfig` backed by a fresh temporary directory.
+/// Keeps the `TempDir` alive alongside the config so the directory isn't
+/// removed before the test finishes.
+fn temp_cfg() -> (AnnoRagConfig, tempfile::TempDir) {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cfg = AnnoRagConfig {
+        data_dir: tmp.path().to_path_buf(),
+        ..Default::default()
+    };
+    (cfg, tmp)
+}
+
 #[tokio::test]
 async fn anno_health_reports_engine_version_and_tool_set() {
-    let cfg = AnnoRagConfig::default();
+    let (cfg, _tmp) = temp_cfg();
     let key = derive_key().expect("derive_key in test env");
     let pipeline = Pipeline::new(cfg.clone(), key).await.expect("pipeline up");
 
@@ -28,7 +43,7 @@ async fn anno_health_reports_engine_version_and_tool_set() {
 
 #[tokio::test]
 async fn anno_health_tool_returns_json_with_engine_version() {
-    let cfg = AnnoRagConfig::default();
+    let (cfg, _tmp) = temp_cfg();
     let key = derive_key().expect("derive_key in test env");
     let pipeline = Pipeline::new(cfg.clone(), key).await.expect("pipeline up");
 
