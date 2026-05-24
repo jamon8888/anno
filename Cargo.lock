@@ -311,6 +311,7 @@ dependencies = [
  "anno-rag-mcp",
  "anyhow",
  "clap",
+ "serde_json",
  "tokio",
  "tracing-subscriber",
 ]

@@ -1,6 +1,6 @@
 //! MCP server exposing anno-rag's retrieval surface to Cowork over stdio.
 //!
-//! Tools: `search`, `rehydrate`, `detect`, `vault_stats`, memory_*.
+//! Tools: `search`, `rehydrate`, `detect`, `vault_stats`, memory_*, `anno_health`.
 //! Reuse rmcp 1.6's `#[tool_router]` + `#[tool_handler]` pattern from
 //! `vendor/cloakpipe/crates/cloakpipe-mcp/src/lib.rs`.
 //!
@@ -9,6 +9,8 @@
 //! without creating a cycle (anno-rag-tabular already depends on anno-rag).
 
 #![warn(missing_docs)]
+
+pub mod health;
 
 use anno_rag::config::{AnnoRagConfig, MemoryNerMode};
 use anno_rag::pipeline::Pipeline;
@@ -182,6 +184,14 @@ struct VaultStatsResult {
 }
 
 // ---- Memory tool param + result types (T10) ----
+
+/// Parameters for the `anno_init_vault` tool.
+#[derive(Debug, Clone, serde::Deserialize, schemars::JsonSchema)]
+pub struct InitVaultParams {
+    /// User-supplied passphrase. Must be at least 12 characters. Argon2id-
+    /// derived into a 32-byte key; never stored or logged in cleartext.
+    pub passphrase: String,
+}
 
 /// Parameters for the `memory_save` tool.
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -695,6 +705,36 @@ impl AnnoRagServer {
             categories: s.categories,
         };
         serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// Initialize the vault keyring entry from a user-supplied passphrase
+    /// (spec §14.3 Path B). Passphrase is Argon2id-derived; never logged.
+    #[tool(
+        description = "Initialize the vault keyring entry from a user-supplied passphrase (≥12 chars). Use on first setup if you want to provide your own passphrase. The passphrase is never logged."
+    )]
+    async fn anno_init_vault(&self, Parameters(params): Parameters<InitVaultParams>) -> String {
+        let result = crate::health::init_vault_with_passphrase(&params.passphrase);
+        serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// Engine health — version, build target, available tools, vault status.
+    #[tool(
+        description = "Engine health: version, build target, available tools, vault initialization status. Side-effect-free. Call once per session before other anno tools to verify compatibility."
+    )]
+    async fn anno_health(&self) -> String {
+        let vault_initialized = self
+            .pipeline_arc()
+            .map(|arc| arc.vault_is_initialized())
+            .unwrap_or(false);
+        let h = crate::health::EngineHealth {
+            engine_version: env!("CARGO_PKG_VERSION").to_string(),
+            build_target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
+            signed: option_env!("ANNO_RAG_SIGNED_BUILD").is_some(),
+            extension_install: option_env!("ANNO_RAG_EXTENSION_INSTALL").is_some(),
+            vault_initialized,
+            available_tools: crate::health::all_tool_names(),
+        };
+        serde_json::to_string_pretty(&h).unwrap_or_else(|e| format!("Error: {e}"))
     }
 
     /// Save a memory. Default mode stores raw text immediately and enriches NER refs asynchronously.

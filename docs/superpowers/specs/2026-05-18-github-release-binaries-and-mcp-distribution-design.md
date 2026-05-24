@@ -297,3 +297,23 @@ No full model warmup is required in the release workflow. The release artifacts 
 2. Should GitHub Releases be created as draft first, or published immediately on tag push?
 3. Should tags stay global `v*`, or move later to component tags like `anno-rag-v0.2.1`?
 
+## 14. Vault Keyring Integration
+
+### 14.1 Keyring lookup order
+
+`anno-rag mcp` resolves the vault key in this order (matches `crates/anno-rag/src/vault.rs:derive_key`):
+
+1. `ANNO_RAG_VAULT_PASSPHRASE` env var, if set and non-empty: Argon2id-derive a 32-byte key from the passphrase using a fixed app salt.
+2. OS keyring lookup: service `anno-rag`, account `vault-key`. If present, hex-decode the stored value into a 32-byte key.
+3. If neither produces a value: generate 32 random bytes via `OsRng`, hex-encode, store in the keyring under service `anno-rag` / account `vault-key`, and use that. (This is the default first-run behavior — Path A.)
+
+Step 1 preserves the existing behavior so dev environments and CI keep working. See [ADR-0002](../../adrs/0002-encrypted-vault-aes-256-gcm-passphrase-or-keyring.md) for the underlying design rationale.
+
+### 14.3 First-run passphrase population
+
+Path A (auto-generate) is the existing default behavior — the engine generates 32 random bytes on first run, stores them in the keyring, and proceeds. The user never sees or types a passphrase. Best for paralegals.
+
+Path B (user-supplied) is new in Phase E. The plugin's setup skill calls a new `anno_init_vault` MCP tool with `{passphrase: "..."}`. The engine derives the key via Argon2id, writes the derived key bytes to the keyring under service `anno-rag` / account `vault-key`, overwriting any auto-generated value. **The passphrase is never logged, never echoed in agent replies, never persisted outside the keyring entry.**
+
+Both paths converge on the same keyring storage, so a user can start with Path A and switch to Path B (or vice versa via rotation in §14.4) without data loss.
+

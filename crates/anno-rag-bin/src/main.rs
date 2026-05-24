@@ -66,6 +66,21 @@ enum Cmd {
         #[arg(long, value_name = "DIR")]
         dir: Option<PathBuf>,
     },
+    /// Vault admin: keyring status, rotation (spec §14.4).
+    Vault {
+        #[command(subcommand)]
+        sub: VaultCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum VaultCmd {
+    /// Report whether the OS keyring holds a vault key entry.
+    /// Never echoes the key itself.
+    Status,
+    /// Generate a new random vault key and replace the keyring entry.
+    /// Requires an existing entry; fails otherwise.
+    Rotate,
 }
 
 #[tokio::main]
@@ -101,6 +116,22 @@ async fn main() -> anyhow::Result<()> {
     if let Cmd::Mcp = &cli.cmd {
         let key = derive_key()?;
         anno_rag_mcp::serve_stdio_lazy(cfg, key).await?;
+        return Ok(());
+    }
+
+    // Vault admin short-circuits before Pipeline::new to avoid Path A
+    // auto-generation during `vault status`.
+    if let Cmd::Vault { sub } = &cli.cmd {
+        match sub {
+            VaultCmd::Status => {
+                let s = anno_rag::vault_admin::vault_status()?;
+                println!("{}", serde_json::to_string_pretty(&s)?);
+            }
+            VaultCmd::Rotate => {
+                anno_rag::vault_admin::vault_rotate()?;
+                println!("{{\"ok\": true}}");
+            }
+        }
         return Ok(());
     }
 
@@ -162,6 +193,7 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Mcp => unreachable!("handled above before Pipeline::new"),
         Cmd::Bench { .. } => unreachable!("handled above before Pipeline::new"),
         Cmd::DownloadModels { .. } => unreachable!("handled above before Pipeline::new"),
+        Cmd::Vault { .. } => unreachable!("handled above before Pipeline::new"),
     }
     Ok(())
 }
