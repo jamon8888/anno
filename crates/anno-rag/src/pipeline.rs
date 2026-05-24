@@ -146,6 +146,13 @@ impl Pipeline {
         self.embedder.initialized()
     }
 
+    /// Returns true if the vault file backing this pipeline exists on disk.
+    /// Side-effect-free: does not open the vault.
+    #[must_use]
+    pub fn vault_is_initialized(&self) -> bool {
+        self.cfg.vault_path().exists()
+    }
+
     /// Lazy-init the cross-encoder reranker. Downloads ~571 MB (INT8
     /// ONNX) on first call; cached thereafter. Only compiled when the
     /// `rerank` feature is on.

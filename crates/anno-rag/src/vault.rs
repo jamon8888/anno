@@ -21,6 +21,11 @@ use tokio::sync::Mutex;
 
 pub use cloakpipe_core::vault::{MatchedMapping, RemovedMapping};
 
+/// OS keyring service name for anno-rag vault entries.
+pub const KEYRING_SERVICE: &str = "anno-rag";
+/// OS keyring account name for the vault key entry.
+pub const KEYRING_ACCOUNT: &str = "vault-key";
+
 /// Async-safe handle to a cloakpipe file-based Vault.
 #[derive(Clone)]
 pub struct Vault {
@@ -300,7 +305,7 @@ pub fn derive_key() -> Result<[u8; 32]> {
     VaultKeySource::from_env().derive()
 }
 
-fn derive_via_argon2(passphrase: &str) -> Result<[u8; 32]> {
+pub(crate) fn derive_via_argon2(passphrase: &str) -> Result<[u8; 32]> {
     use argon2::{Algorithm, Argon2, Params, Version};
 
     let params = Params::new(19_456, 2, 1, Some(32))
@@ -318,7 +323,7 @@ fn derive_via_argon2(passphrase: &str) -> Result<[u8; 32]> {
 fn derive_via_keyring() -> Result<[u8; 32]> {
     use rand::TryRngCore;
 
-    let entry = keyring::Entry::new("anno-rag", "vault-key")
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
         .map_err(|e| Error::Vault(format!("keyring open: {e}")))?;
 
     match entry.get_password() {
@@ -336,6 +341,21 @@ fn derive_via_keyring() -> Result<[u8; 32]> {
         }
         Err(e) => Err(Error::Vault(format!("keyring get: {e}"))),
     }
+}
+
+/// Argon2id-derive a 32-byte key from `passphrase` and store the hex-encoded
+/// bytes in the OS keyring at service [`KEYRING_SERVICE`] / account
+/// [`KEYRING_ACCOUNT`], overwriting any existing entry.
+///
+/// Used by `anno_init_vault` (spec §14.3 Path B).
+pub fn store_passphrase_derived_key_in_keyring(passphrase: &str) -> Result<()> {
+    let key = derive_via_argon2(passphrase)?;
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+        .map_err(|e| Error::Vault(format!("keyring open: {e}")))?;
+    entry
+        .set_password(&hex_encode(&key))
+        .map_err(|e| Error::Vault(format!("keyring set: {e}")))?;
+    Ok(())
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
