@@ -1,9 +1,12 @@
 //! Tests for the `anno_health` and `anno_init_vault` MCP tools.
+//!
+//! Tests call implementation functions directly — the `#[tool_router]` macro
+//! generates private methods, so they are not accessible from integration tests.
 
 use anno_rag::config::AnnoRagConfig;
 use anno_rag::pipeline::Pipeline;
 use anno_rag::vault::derive_key;
-use anno_rag_mcp::health::{collect_health, EngineHealth};
+use anno_rag_mcp::health::{collect_health, init_vault_with_passphrase, EngineHealth};
 
 #[tokio::test]
 async fn anno_health_reports_engine_version_and_tool_set() {
@@ -28,9 +31,10 @@ async fn anno_health_tool_returns_json_with_engine_version() {
     let cfg = AnnoRagConfig::default();
     let key = derive_key().expect("derive_key in test env");
     let pipeline = Pipeline::new(cfg.clone(), key).await.expect("pipeline up");
-    let server = anno_rag_mcp::AnnoRagServer::new(pipeline, cfg);
 
-    let json = server.anno_health().await;
+    // Test via collect_health (the MCP tool calls this internally)
+    let health = collect_health(&pipeline, &cfg).await;
+    let json = serde_json::to_string_pretty(&health).expect("serializable");
     let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
 
     assert_eq!(parsed["engine_version"], env!("CARGO_PKG_VERSION"));
@@ -38,18 +42,9 @@ async fn anno_health_tool_returns_json_with_engine_version() {
 }
 
 #[tokio::test]
-async fn anno_init_vault_rejects_empty_passphrase() {
-    let cfg = anno_rag::config::AnnoRagConfig::default();
-    let key = anno_rag::vault::derive_key().expect("derive_key in test env");
-    let pipeline = anno_rag::pipeline::Pipeline::new(cfg.clone(), key).await.expect("pipeline up");
-    let server = anno_rag_mcp::AnnoRagServer::new(pipeline, cfg);
-
-    let params = anno_rag_mcp::InitVaultParams {
-        passphrase: String::new(),
-    };
-    let json = server
-        .anno_init_vault(rmcp::handler::server::wrapper::Parameters(params))
-        .await;
+fn anno_init_vault_rejects_empty_passphrase() {
+    let result = init_vault_with_passphrase("");
+    let json = serde_json::to_string_pretty(&result).expect("serializable");
     let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
 
     assert_eq!(parsed["ok"], false);
@@ -61,18 +56,23 @@ async fn anno_init_vault_rejects_empty_passphrase() {
 }
 
 #[tokio::test]
-async fn anno_init_vault_writes_to_keyring_with_nonempty_passphrase() {
-    let cfg = anno_rag::config::AnnoRagConfig::default();
-    let key = anno_rag::vault::derive_key().expect("derive_key in test env");
-    let pipeline = anno_rag::pipeline::Pipeline::new(cfg.clone(), key).await.expect("pipeline up");
-    let server = anno_rag_mcp::AnnoRagServer::new(pipeline, cfg);
+fn anno_init_vault_rejects_short_passphrase() {
+    let result = init_vault_with_passphrase("short");
+    let json = serde_json::to_string_pretty(&result).expect("serializable");
+    let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
 
-    let params = anno_rag_mcp::InitVaultParams {
-        passphrase: "correct horse battery staple".to_string(),
-    };
-    let json = server
-        .anno_init_vault(rmcp::handler::server::wrapper::Parameters(params))
-        .await;
+    assert_eq!(parsed["ok"], false);
+    assert!(parsed["error"]
+        .as_str()
+        .unwrap()
+        .to_lowercase()
+        .contains("passphrase"));
+}
+
+#[tokio::test]
+fn anno_init_vault_writes_to_keyring_with_nonempty_passphrase() {
+    let result = init_vault_with_passphrase("correct horse battery staple");
+    let json = serde_json::to_string_pretty(&result).expect("serializable");
     let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
 
     assert_eq!(parsed["ok"], true);
