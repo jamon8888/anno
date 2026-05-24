@@ -1,0 +1,6 @@
+{
+  "min_engine_version": "0.3.0",
+  "recommended_engine_version": "0.3.0",
+  "required_tools": ["search", "rehydrate", "detect", "vault_stats", "anno_health"],
+  "release_page_url": "https://github.com/arclabs561/anno/releases"
+}
