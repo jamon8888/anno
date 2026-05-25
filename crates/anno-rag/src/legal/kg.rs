@@ -298,8 +298,7 @@ impl LanceGraphStore {
     /// Returns [`Error::Graph`] if the directory cannot be created.
     pub async fn open(cfg: &crate::config::AnnoRagConfig) -> Result<Self> {
         let root = cfg.index_path().join("legal_kg");
-        std::fs::create_dir_all(&root)
-            .map_err(|e| Error::Graph(format!("mkdir legal_kg: {e}")))?;
+        std::fs::create_dir_all(&root).map_err(|e| Error::Graph(format!("mkdir legal_kg: {e}")))?;
         Ok(Self { root })
     }
 
@@ -368,7 +367,11 @@ pub(crate) mod tests {
             Ok(())
         }
 
-        async fn link_cross_documents(&self, _doc_id: Uuid, _hints: &[CrossDocLinkHint]) -> crate::Result<()> {
+        async fn link_cross_documents(
+            &self,
+            _doc_id: Uuid,
+            _hints: &[CrossDocLinkHint],
+        ) -> crate::Result<()> {
             Ok(())
         }
 

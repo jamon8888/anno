@@ -268,8 +268,7 @@ mod tests {
     fn is_prescribed_true_for_past_deadline() {
         let event = d(2010, 1, 1);
         let reference = d(2026, 1, 1);
-        let r =
-            compute_prescription_at("contractuel", event, &[], reference).unwrap();
+        let r = compute_prescription_at("contractuel", event, &[], reference).unwrap();
         // 2010 + 5 = 2015, which is before 2026.
         assert!(r.is_prescribed);
     }
@@ -278,8 +277,7 @@ mod tests {
     fn is_prescribed_false_for_future_deadline() {
         let event = d(2024, 1, 1);
         let reference = d(2026, 1, 1);
-        let r =
-            compute_prescription_at("contractuel", event, &[], reference).unwrap();
+        let r = compute_prescription_at("contractuel", event, &[], reference).unwrap();
         // 2024 + 5 = 2029, which is after 2026.
         assert!(!r.is_prescribed);
     }

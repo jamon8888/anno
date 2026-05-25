@@ -1,9 +1,9 @@
 //! Legal entity extraction. Trait + GLiNER2 adapter + in-memory fake.
 
 use crate::error::Result;
+use crate::legal::kg::{EdgeWrite, NodeWrite};
 use crate::legal::offsets::PseudoOffsetMap;
 use crate::legal::rules::{apply_all as apply_rules, TypedFact, VaultForwardMap};
-use crate::legal::kg::{EdgeWrite, NodeWrite};
 use crate::legal::types::LegalChunkEnrichment;
 use crate::legal::types::{LegalEntity, LegalLabel, PartyKind};
 use std::collections::HashMap;
@@ -176,7 +176,12 @@ impl LegalEnricher {
         pseudo_text: &str,
         legal_ents: &[LegalEntity],
         fwd: &VaultForwardMap,
-    ) -> (LegalChunkEnrichment, Vec<TypedFact>, Vec<NodeWrite>, Vec<EdgeWrite>) {
+    ) -> (
+        LegalChunkEnrichment,
+        Vec<TypedFact>,
+        Vec<NodeWrite>,
+        Vec<EdgeWrite>,
+    ) {
         let facts = apply_rules(chunk_id, pseudo_text, legal_ents, fwd);
         let row = projection_from_facts(chunk_id, doc_id, legal_ents, &facts, &self.extractor);
         let (node_writes, edge_writes) = facts_to_graph_writes(chunk_id, doc_id, &facts);
@@ -397,10 +402,8 @@ fn facts_to_graph_writes(
                 }
             }
             TypedFact::Reference { article } => {
-                let article_id = Uuid::new_v5(
-                    &Uuid::NAMESPACE_OID,
-                    article.normalized_ref().as_bytes(),
-                );
+                let article_id =
+                    Uuid::new_v5(&Uuid::NAMESPACE_OID, article.normalized_ref().as_bytes());
                 nodes.push(NodeWrite::Article {
                     article_id,
                     article: article.clone(),

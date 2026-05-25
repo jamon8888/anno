@@ -5,8 +5,8 @@ use crate::error::{Error, Result};
 use crate::legal::types::{LegalChunkEnrichment, LegalSearchFilters};
 use arrow_array::{
     builder::{
-        FixedSizeBinaryBuilder, Float32Builder, Int64Builder, ListBuilder,
-        StringBuilder, TimestampMicrosecondBuilder,
+        FixedSizeBinaryBuilder, Float32Builder, Int64Builder, ListBuilder, StringBuilder,
+        TimestampMicrosecondBuilder,
     },
     Array, FixedSizeBinaryArray, RecordBatch, RecordBatchIterator,
 };
@@ -331,8 +331,7 @@ fn legal_rows_to_record_batch(rows: &[LegalChunkEnrichment]) -> Result<RecordBat
     let mut party_roles_b: ListBuilder<StringBuilder> = ListBuilder::new(StringBuilder::new());
     let mut legal_refs_b: ListBuilder<StringBuilder> = ListBuilder::new(StringBuilder::new());
     let mut clause_types_b: ListBuilder<StringBuilder> = ListBuilder::new(StringBuilder::new());
-    let mut obligation_kinds_b: ListBuilder<StringBuilder> =
-        ListBuilder::new(StringBuilder::new());
+    let mut obligation_kinds_b: ListBuilder<StringBuilder> = ListBuilder::new(StringBuilder::new());
     let mut amounts_b: ListBuilder<Int64Builder> = ListBuilder::new(Int64Builder::new());
     let mut deadlines_b: ListBuilder<TimestampMicrosecondBuilder> =
         ListBuilder::new(TimestampMicrosecondBuilder::new());

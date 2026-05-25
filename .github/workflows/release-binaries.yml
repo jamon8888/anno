@@ -81,17 +81,18 @@ jobs:
         if: runner.os == 'Windows'
         run: .\target\${{ matrix.target }}\release\anno-rag.exe --help
 
-      - name: Smoke test anno-privacy-gateway (Windows)
+      - name: Smoke test anno-privacy-gateway boot (Windows)
         if: runner.os == 'Windows'
-        run: .\target\${{ matrix.target }}\release\anno-privacy-gateway.exe --help
+        shell: pwsh
+        run: .\scripts\release\smoke-gateway.ps1 -BinaryPath ".\target\${{ matrix.target }}\release\anno-privacy-gateway.exe"
 
       - name: Smoke test anno-rag (macOS)
         if: runner.os == 'macOS'
         run: ./target/${{ matrix.target }}/release/anno-rag --help
 
-      - name: Smoke test anno-privacy-gateway (macOS)
+      - name: Smoke test anno-privacy-gateway boot (macOS)
         if: runner.os == 'macOS'
-        run: ./target/${{ matrix.target }}/release/anno-privacy-gateway --help
+        run: ./scripts/release/smoke-gateway.sh "./target/${{ matrix.target }}/release/anno-privacy-gateway"
 
       - name: Package Windows archive
         if: runner.os == 'Windows'
