@@ -71,18 +71,36 @@ pub fn init_vault_with_passphrase(passphrase: &str) -> InitVaultResult {
 /// Hardcoded list of tools exposed by the MCP server.
 pub fn all_tool_names() -> Vec<String> {
     vec![
+        // Core retrieval
         "search",
         "rehydrate",
         "detect",
         "vault_stats",
+        // Memory (GDPR Art.17)
         "memory_save",
         "memory_recall",
         "memory_forget",
         "memory_list",
         "memory_graph_recall",
         "memory_invalidate",
+        // Engine management
         "anno_health",
         "anno_init_vault",
+        "download_models",
+        // Legal D1 — ingest + search
+        "legal_ingest",
+        "legal_search",
+        "legal_graph_query",
+        "legal_rehydrate_citation",
+        // Legal D2 — extraction
+        "legal_extract_contract",
+        "legal_extract_case_file",
+        "legal_timeline",
+        "legal_risk_review",
+        // Legal D3–D5 — audit + validation
+        "legal_mandatory_clause_audit",
+        "legal_prescription_check",
+        "legal_validate_field",
     ]
     .into_iter()
     .map(String::from)

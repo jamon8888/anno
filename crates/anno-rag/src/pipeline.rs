@@ -172,11 +172,18 @@ impl Pipeline {
         self.embedder.initialized()
     }
 
-    /// Returns true if the vault file backing this pipeline exists on disk.
-    /// Side-effect-free: does not open the vault.
+    /// Returns true if the vault key is present in the OS keyring — i.e. the
+    /// user has run `anno_init_vault` (or the key was auto-generated on first
+    /// start). The vault file on disk is written lazily on the first ingest, so
+    /// checking file existence gives false negatives; the keyring is the
+    /// canonical source of truth.
     #[must_use]
     pub fn vault_is_initialized(&self) -> bool {
-        self.cfg.vault_path().exists()
+        use crate::vault::{KEYRING_ACCOUNT, KEYRING_SERVICE};
+        keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+            .ok()
+            .and_then(|e| e.get_password().ok())
+            .is_some()
     }
 
     /// Lazy-init the cross-encoder reranker. Downloads ~571 MB (INT8

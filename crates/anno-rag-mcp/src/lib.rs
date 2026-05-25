@@ -1772,11 +1772,28 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
     let server = AnnoRagServer::new_lazy(cfg, key);
     tracing::info!("anno-rag MCP server starting (lazy) on stdio");
 
+    // Clone before serve() so we can pre-warm in the background.
+    // Both the serving instance and the warmup clone share the same
+    // Arc<OnceCell<Pipeline>>, so the first to initialise wins and
+    // the result is reused by all subsequent calls.
+    let warmup_server = server.clone();
+
     let transport = rmcp::transport::stdio();
     let service = server
         .serve(transport)
         .await
         .map_err(|e| anno_rag::error::Error::Detect(format!("MCP server failed to start: {e}")))?;
+
+    // Pre-warm: trigger Pipeline::new in the background immediately after the
+    // transport handshake, so models are hot before the first real tool call.
+    // Non-fatal: a failure here is logged; the first tool call will retry.
+    tokio::spawn(async move {
+        tracing::info!("anno-rag pre-warming pipeline (models loading in background)");
+        match warmup_server.pipeline().await {
+            Ok(_) => tracing::info!("anno-rag pipeline warm — tools ready"),
+            Err(e) => tracing::warn!(error = %e, "anno-rag pre-warm failed (non-fatal)"),
+        }
+    });
 
     let cancel = service.cancellation_token();
     let signal_task = tokio::spawn(async move {
