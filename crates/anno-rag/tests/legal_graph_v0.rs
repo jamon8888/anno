@@ -12,9 +12,10 @@ use tempfile::TempDir;
 use uuid::Uuid;
 
 fn cfg_in(dir: &TempDir) -> AnnoRagConfig {
-    let mut cfg = AnnoRagConfig::default();
-    cfg.data_dir = dir.path().join("data");
-    cfg
+    AnnoRagConfig {
+        data_dir: dir.path().join("data"),
+        ..AnnoRagConfig::default()
+    }
 }
 
 async fn store() -> (TempDir, SqliteLegalGraphStore) {
