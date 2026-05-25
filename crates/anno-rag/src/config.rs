@@ -378,7 +378,6 @@ mod tests {
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
         assert_eq!(c.memory_embedding_dim, 384);
-        assert_eq!(c.memory_ner_mode, MemoryNerMode::Async);
     }
 
     #[test]

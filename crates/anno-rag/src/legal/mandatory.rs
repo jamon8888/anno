@@ -274,7 +274,11 @@ pub fn evaluate_employment(text: &str) -> Vec<MandatoryCheck> {
             key: "lieu_travail",
             description: "Lieu d'exécution du contrat",
             legal_ref: "C.trav.:L1221-1",
-            patterns: &["lieu de travail", "lieu d'exécution", "siège de l'entreprise"],
+            patterns: &[
+                "lieu de travail",
+                "lieu d'exécution",
+                "siège de l'entreprise",
+            ],
         },
         Requirement {
             key: "periode_essai",
@@ -396,7 +400,12 @@ pub fn evaluate_lease_residential(text: &str) -> Vec<MandatoryCheck> {
             key: "montant_loyer",
             description: "Montant du loyer et charges",
             legal_ref: "L.89-462:3",
-            patterns: &["montant du loyer", "loyer mensuel", "loyer de base", "charges"],
+            patterns: &[
+                "montant du loyer",
+                "loyer mensuel",
+                "loyer de base",
+                "charges",
+            ],
         },
         Requirement {
             key: "montant_depot_garantie",
@@ -651,7 +660,10 @@ mod tests {
         let text = "Rémunération mensuelle brute de 3 000 €. Durée du travail: 35 heures.";
         let checks = evaluate_doc("employment", text);
         assert!(!checks.is_empty());
-        let rem = checks.iter().find(|c| c.requirement == "remuneration").unwrap();
+        let rem = checks
+            .iter()
+            .find(|c| c.requirement == "remuneration")
+            .unwrap();
         assert_eq!(rem.status, "present");
     }
 
@@ -671,7 +683,10 @@ mod tests {
         };
         let node = check.into_node();
         assert!(
-            matches!(node, crate::legal::kg::NodeWrite::MandatoryClauseCheck { .. }),
+            matches!(
+                node,
+                crate::legal::kg::NodeWrite::MandatoryClauseCheck { .. }
+            ),
             "expected MandatoryClauseCheck variant"
         );
     }

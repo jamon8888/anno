@@ -160,11 +160,17 @@ pub fn load_corpus(dir: &Path) -> Result<GoldCorpus> {
         }
         let text = std::fs::read_to_string(&path)
             .map_err(|e| crate::error::Error::Store(format!("read {}: {e}", path.display())))?;
-        let gold_str = std::fs::read_to_string(&gold_path)
-            .map_err(|e| crate::error::Error::Store(format!("read {}: {e}", gold_path.display())))?;
-        let gold: GoldAnnotation = serde_json::from_str(&gold_str)
-            .map_err(|e| crate::error::Error::Store(format!("parse {}: {e}", gold_path.display())))?;
-        corpus.push(GoldDocument { name: stem, text, gold });
+        let gold_str = std::fs::read_to_string(&gold_path).map_err(|e| {
+            crate::error::Error::Store(format!("read {}: {e}", gold_path.display()))
+        })?;
+        let gold: GoldAnnotation = serde_json::from_str(&gold_str).map_err(|e| {
+            crate::error::Error::Store(format!("parse {}: {e}", gold_path.display()))
+        })?;
+        corpus.push(GoldDocument {
+            name: stem,
+            text,
+            gold,
+        });
     }
     corpus.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(corpus)
@@ -206,7 +212,14 @@ impl LabelMetrics {
         } else {
             2.0 * precision * recall / (precision + recall)
         };
-        Self { tp, fp, fn_, precision, recall, f1 }
+        Self {
+            tp,
+            fp,
+            fn_,
+            precision,
+            recall,
+            f1,
+        }
     }
 }
 
@@ -490,44 +503,42 @@ mod tests {
     use chrono::Datelike;
 
     fn synthetic_corpus() -> GoldCorpus {
-        vec![
-            GoldDocument {
-                name: "doc1".into(),
-                text: "Société Acme. Obligation de payer 5000 €.".into(),
-                gold: GoldAnnotation {
-                    doc_type: Some("b2b_contract".into()),
-                    legal_domain: Some("commercial".into()),
-                    entities: vec![GoldEntity {
-                        label: "organization".into(),
-                        text: "Société Acme".into(),
-                    }],
-                    obligations: vec![GoldObligation {
-                        kind: "paiement".into(),
-                        text_fragment: "Obligation de payer".into(),
-                    }],
-                    deadlines: vec![GoldDeadline {
-                        date: "2025-06-01".into(),
-                        context: "deadline".into(),
-                    }],
-                    amounts: vec![GoldAmount {
-                        eur_cents: 500_000,
-                        context: "5000 EUR".into(),
-                    }],
-                    mandatory_clauses: vec![GoldMandatoryClause {
-                        requirement: "penalites_de_retard".into(),
-                        status: "missing".into(),
-                    }],
-                    prescriptions: vec![GoldPrescription {
-                        category: "contractuel".into(),
-                        anchor_date: "2020-01-01T00:00:00Z".into(),
-                        expected_year: 2025,
-                    }],
-                    citations: vec![GoldCitation {
-                        normalized_ref: "code_civil:1240".into(),
-                    }],
-                },
+        vec![GoldDocument {
+            name: "doc1".into(),
+            text: "Société Acme. Obligation de payer 5000 €.".into(),
+            gold: GoldAnnotation {
+                doc_type: Some("b2b_contract".into()),
+                legal_domain: Some("commercial".into()),
+                entities: vec![GoldEntity {
+                    label: "organization".into(),
+                    text: "Société Acme".into(),
+                }],
+                obligations: vec![GoldObligation {
+                    kind: "paiement".into(),
+                    text_fragment: "Obligation de payer".into(),
+                }],
+                deadlines: vec![GoldDeadline {
+                    date: "2025-06-01".into(),
+                    context: "deadline".into(),
+                }],
+                amounts: vec![GoldAmount {
+                    eur_cents: 500_000,
+                    context: "5000 EUR".into(),
+                }],
+                mandatory_clauses: vec![GoldMandatoryClause {
+                    requirement: "penalites_de_retard".into(),
+                    status: "missing".into(),
+                }],
+                prescriptions: vec![GoldPrescription {
+                    category: "contractuel".into(),
+                    anchor_date: "2020-01-01T00:00:00Z".into(),
+                    expected_year: 2025,
+                }],
+                citations: vec![GoldCitation {
+                    normalized_ref: "code_civil:1240".into(),
+                }],
             },
-        ]
+        }]
     }
 
     #[test]
@@ -573,8 +584,10 @@ mod tests {
         let acc = prescription_accuracy(&corpus, |_, p| {
             // Simulate the prescription engine: 2020 + 5 = 2025.
             use chrono::{TimeZone, Utc};
-            let anchor: chrono::DateTime<Utc> =
-                p.anchor_date.parse().unwrap_or_else(|_| Utc.timestamp_opt(0, 0).unwrap());
+            let anchor: chrono::DateTime<Utc> = p
+                .anchor_date
+                .parse()
+                .unwrap_or_else(|_| Utc.timestamp_opt(0, 0).unwrap());
             crate::legal::prescription::compute_prescription(&p.category, anchor, &[])
                 .map(|r| r.prescribes_on.year())
         });

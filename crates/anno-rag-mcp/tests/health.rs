@@ -36,7 +36,9 @@ async fn anno_health_reports_engine_version_and_tool_set() {
     assert!(health.available_tools.contains(&"rehydrate".to_string()));
     assert!(health.available_tools.contains(&"detect".to_string()));
     assert!(health.available_tools.contains(&"anno_health".to_string()));
-    assert!(health.available_tools.contains(&"anno_init_vault".to_string()));
+    assert!(health
+        .available_tools
+        .contains(&"anno_init_vault".to_string()));
     assert!(!health.build_target.is_empty());
     assert!(!health.signed);
 }

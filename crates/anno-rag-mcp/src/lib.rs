@@ -1302,10 +1302,7 @@ impl AnnoRagServer {
                        procedural_timeline, appeal_chain. \
                        Returns rows from the Cypher result set."
     )]
-    async fn legal_graph_query(
-        &self,
-        Parameters(p): Parameters<LegalGraphQueryParams>,
-    ) -> String {
+    async fn legal_graph_query(&self, Parameters(p): Parameters<LegalGraphQueryParams>) -> String {
         let pipeline = match self.pipeline().await {
             Ok(p) => p,
             Err(e) => return format!("Error: {e}"),
@@ -1335,11 +1332,13 @@ impl AnnoRagServer {
                 },
                 None => return "Error: appeal_chain requires `doc_id`".into(),
             },
-            other => return format!(
-                "Error: unknown intent `{other}`. \
+            other => {
+                return format!(
+                    "Error: unknown intent `{other}`. \
                  Valid: party_dossier, obligations_owed_by, citation_chain, \
                  procedural_timeline, appeal_chain"
-            ),
+                )
+            }
         };
         let start = std::time::Instant::now();
         match pipeline.legal_graph_query(intent).await {
@@ -1482,15 +1481,10 @@ impl AnnoRagServer {
     }
 
     /// Retrieve the procedural timeline for a dossier, ordered chronologically.
-    #[tool(
-        description = "Retrieve the procedural timeline for `dossier_id`. \
+    #[tool(description = "Retrieve the procedural timeline for `dossier_id`. \
                        Returns events (kind, event_date, deadline_date, chunk_id) \
-                       in chronological order."
-    )]
-    async fn legal_timeline(
-        &self,
-        Parameters(p): Parameters<LegalTimelineParams>,
-    ) -> String {
+                       in chronological order.")]
+    async fn legal_timeline(&self, Parameters(p): Parameters<LegalTimelineParams>) -> String {
         let pipeline = match self.pipeline().await {
             Ok(p) => p,
             Err(e) => return format!("Error: {e}"),
@@ -1519,10 +1513,7 @@ impl AnnoRagServer {
                        Returns findings sorted severity-descending with French-language \
                        lawyer recommendations."
     )]
-    async fn legal_risk_review(
-        &self,
-        Parameters(p): Parameters<LegalRiskReviewParams>,
-    ) -> String {
+    async fn legal_risk_review(&self, Parameters(p): Parameters<LegalRiskReviewParams>) -> String {
         let pipeline = match self.pipeline().await {
             Ok(p) => p,
             Err(e) => return format!("Error: {e}"),
@@ -1568,7 +1559,10 @@ impl AnnoRagServer {
             Err(e) => return format!("Error: bad doc_id: {e}"),
         };
         let start = std::time::Instant::now();
-        match pipeline.legal_mandatory_clause_audit(doc_id, &p.doc_type).await {
+        match pipeline
+            .legal_mandatory_clause_audit(doc_id, &p.doc_type)
+            .await
+        {
             Ok(result) => {
                 anno_rag::legal::audit::audit_mandatory(doc_id, &result.status);
                 tracing::info!(
@@ -1611,7 +1605,10 @@ impl AnnoRagServer {
         let mut interrupting = Vec::new();
         for ev in &p.interrupting_events {
             match ev.date.parse::<chrono::DateTime<chrono::Utc>>() {
-                Ok(d) => interrupting.push(InterruptingEvent { kind: ev.kind.clone(), date: d }),
+                Ok(d) => interrupting.push(InterruptingEvent {
+                    kind: ev.kind.clone(),
+                    date: d,
+                }),
                 Err(e) => return format!("Error: bad interrupting event date '{}': {e}", ev.date),
             }
         }
@@ -1641,13 +1638,11 @@ impl AnnoRagServer {
     // ── D5 handler ────────────────────────────────────────────────────────────
 
     /// Record a human or automated validation of an extracted fact.
-    #[tool(
-        description = "Record a validation of an extracted fact. \
+    #[tool(description = "Record a validation of an extracted fact. \
                        action: confirm | reject | correct. \
                        When action is 'correct', supply corrected_value. \
                        Writes a Validation node to the KG linked to the chunk. \
-                       Returns the validation_id for audit tracing."
-    )]
+                       Returns the validation_id for audit tracing.")]
     async fn legal_validate_field(
         &self,
         Parameters(p): Parameters<LegalValidateFieldParams>,
@@ -1665,9 +1660,7 @@ impl AnnoRagServer {
             "reject" => anno_rag::pipeline::ValidationAction::Reject,
             "correct" => anno_rag::pipeline::ValidationAction::Correct,
             other => {
-                return format!(
-                    "Error: unknown action '{other}'. Valid: confirm, reject, correct"
-                )
+                return format!("Error: unknown action '{other}'. Valid: confirm, reject, correct")
             }
         };
         match pipeline
@@ -1681,9 +1674,7 @@ impl AnnoRagServer {
             )
             .await
         {
-            Ok(ack) => {
-                serde_json::to_string_pretty(&ack).unwrap_or_else(|e| format!("Error: {e}"))
-            }
+            Ok(ack) => serde_json::to_string_pretty(&ack).unwrap_or_else(|e| format!("Error: {e}")),
             Err(e) => format!("Error: {e}"),
         }
     }

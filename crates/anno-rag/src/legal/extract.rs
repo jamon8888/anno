@@ -145,10 +145,7 @@ pub async fn extract_contract(
         .await?;
     for r in &obl_rows {
         rows.push(ReviewRow {
-            field: format!(
-                "obligation:{}",
-                r.get("kind").cloned().unwrap_or_default()
-            ),
+            field: format!("obligation:{}", r.get("kind").cloned().unwrap_or_default()),
             value: r.get("text").cloned().unwrap_or_default(),
             chunk_id: r.get("cid").cloned(),
             byte_start: None,
@@ -189,7 +186,9 @@ pub async fn extract_case_file(
         rows.push(ReviewRow {
             field: format!(
                 "document:{}",
-                r.get("doc_type").cloned().unwrap_or_else(|| "unknown".into())
+                r.get("doc_type")
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".into())
             ),
             value: r.get("doc_id").cloned().unwrap_or_default(),
             chunk_id: None,

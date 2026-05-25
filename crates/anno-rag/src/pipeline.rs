@@ -5,7 +5,7 @@ use crate::detect::Detector;
 use crate::embed::Embedder;
 use crate::error::{Error, Result};
 use crate::ingest;
-use crate::legal::enricher::{LegalEntityExtractor, LegalEnricher};
+use crate::legal::enricher::{LegalEnricher, LegalEntityExtractor};
 use crate::legal::types::{LegalEntity, LegalLabel};
 use crate::store::{ChunkRecord, SearchHit, Store};
 use crate::vault::Vault;
@@ -320,7 +320,13 @@ impl Pipeline {
         for (i, chunk) in extracted.chunks.iter().enumerate() {
             let chunk_id = crate::store::chunk_uuid(doc_id, chunk.idx);
             // Chunk node bridges graph ↔ LanceDB.
-            node_batch.add_chunk(chunk_id, doc_id, chunk.char_start, chunk.char_end, chunk.page);
+            node_batch.add_chunk(
+                chunk_id,
+                doc_id,
+                chunk.char_start,
+                chunk.char_end,
+                chunk.page,
+            );
             let raw_legal_ents: Vec<LegalEntity> = all_entities[i]
                 .iter()
                 .filter(|e| !crate::detect::is_pii_entity(e))
@@ -368,15 +374,12 @@ impl Pipeline {
                 .and_then(|r| r.doc_type.as_deref())
                 .unwrap_or("unknown");
             if doc_type_key != "unknown" {
-                let checks =
-                    crate::legal::mandatory::evaluate_doc(doc_type_key, &full_pseudo_text);
+                let checks = crate::legal::mandatory::evaluate_doc(doc_type_key, &full_pseudo_text);
                 let agg = crate::legal::mandatory::aggregate_status(&checks);
                 for row in &mut legal_rows {
                     row.mandatory_clause_status = Some(agg.clone());
                 }
-                node_batch.absorb(
-                    checks.into_iter().map(|c| c.into_node()).collect(),
-                );
+                node_batch.absorb(checks.into_iter().map(|c| c.into_node()).collect());
                 crate::legal::audit::audit_mandatory(doc_id, &agg);
             }
         }
@@ -408,7 +411,12 @@ impl Pipeline {
                         tracing::warn!(doc_id = %doc_id, error = %e, "enrichment_status mark_ok failed");
                     }
                     // Cross-document linking pass (Phase 1: always empty hints).
-                    let hints = self.legal_enricher.cross_doc_hints(doc_id, &legal_rows, &node_batch, &edge_batch);
+                    let hints = self.legal_enricher.cross_doc_hints(
+                        doc_id,
+                        &legal_rows,
+                        &node_batch,
+                        &edge_batch,
+                    );
                     if let Err(e) = self.legal_kg.link_cross_documents(doc_id, &hints).await {
                         tracing::warn!(doc_id = %doc_id, error = %e, "link_cross_documents failed (non-fatal)");
                     }
@@ -1658,9 +1666,13 @@ impl Pipeline {
         let mut rows = Vec::with_capacity(chunks.len());
         for c in chunks {
             let legal_ents: Vec<crate::legal::types::LegalEntity> = Vec::new();
-            let (row, _facts, _nodes, _edges) =
-                self.legal_enricher
-                    .enrich_one(c.chunk_id, doc_id, &c.text_pseudo, &legal_ents, &fwd);
+            let (row, _facts, _nodes, _edges) = self.legal_enricher.enrich_one(
+                c.chunk_id,
+                doc_id,
+                &c.text_pseudo,
+                &legal_ents,
+                &fwd,
+            );
             rows.push(row);
         }
         self.legal_store.upsert(&rows).await?;
@@ -1863,7 +1875,12 @@ impl Pipeline {
             .join("\n");
         let checks = crate::legal::mandatory::evaluate_doc(doc_type, &full_text);
         let status = crate::legal::mandatory::aggregate_status(&checks);
-        Ok(MandatoryAuditResult { doc_id, doc_type: doc_type.to_string(), checks, status })
+        Ok(MandatoryAuditResult {
+            doc_id,
+            doc_type: doc_type.to_string(),
+            checks,
+            status,
+        })
     }
 
     // ── D4: prescription check ────────────────────────────────────────────
@@ -2186,7 +2203,7 @@ mod tests {
             token_refs: Vec::new(),
             entity_refs: Vec::new(),
             invalidated_ids: Vec::new(),
-            ner_mode: MemoryNerMode::Async,
+            ner_mode: crate::config::MemoryNerMode::Async,
         };
 
         let s = serde_json::to_string(&r).unwrap();
@@ -2253,10 +2270,7 @@ mod tests {
     async fn drain_enrichment_backlog_empty_backlog_is_noop() {
         let dir = tempfile::TempDir::new().expect("tempdir");
         let p = pipeline_in(dir.path()).await;
-        let report = p
-            .drain_enrichment_backlog(64)
-            .await
-            .expect("drain ok");
+        let report = p.drain_enrichment_backlog(64).await.expect("drain ok");
         assert_eq!(report.ok, 0);
         assert_eq!(report.still_pending, 0);
         assert_eq!(report.failed_max_retries, 0);
