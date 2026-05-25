@@ -286,6 +286,7 @@ dependencies = [
  "proptest",
  "rand 0.9.4",
  "regex",
+ "rusqlite",
  "schemars 0.8.22",
  "serde",
  "serde_json",
