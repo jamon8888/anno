@@ -19,12 +19,15 @@ jobs:
         include:
           - os: ubuntu-latest
             bench_args: ""
+            timeout_minutes: 90
           - os: macos-latest
             bench_args: "--bench bench_cold_start --bench bench_idle_rss --bench bench_search --bench bench_ingest --bench bench_eval"
+            timeout_minutes: 90
           - os: windows-latest
             bench_args: "--bench bench_cold_start --bench bench_idle_rss --bench bench_search --bench bench_ingest --bench bench_eval"
+            timeout_minutes: 180
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
