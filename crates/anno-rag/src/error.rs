@@ -64,9 +64,9 @@ pub enum Error {
     #[error("legal: {0}")]
     Legal(String),
 
-    /// lance-graph knowledge-graph operation failed (open, upsert, Cypher
-    /// query, compaction). Treated like `Legal` at the ingest path —
-    /// retried via `drain_enrichment_backlog`.
+    /// Legal knowledge-graph operation failed (open, upsert, query,
+    /// compaction). Treated like `Legal` at the ingest path — retried via
+    /// `drain_enrichment_backlog`.
     #[error("graph: {0}")]
     Graph(String),
 

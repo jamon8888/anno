@@ -1,3 +1,5 @@
+//! Legal Graph v0 SQLite backend behavior tests.
+
 use anno_rag::config::AnnoRagConfig;
 use anno_rag::legal::kg::{
     EdgeBatch, EdgeWrite, LegalKnowledgeGraph, NodeBatch, NodeWrite, SqliteLegalGraphStore,

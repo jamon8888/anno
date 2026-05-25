@@ -1,5 +1,4 @@
-//! Five named graph traversals. Each is a parameterized Cypher template
-//! dispatched through [`LegalKnowledgeGraph::cypher`].
+//! Five named graph traversals dispatched through typed graph-store methods.
 
 use crate::error::Result;
 use crate::legal::kg::LegalKnowledgeGraph;
@@ -10,15 +9,32 @@ use std::collections::HashMap;
 #[serde(tag = "intent", content = "params", rename_all = "snake_case")]
 pub enum GraphIntent {
     /// All documents and chunks that mention a given normalized party.
-    PartyDossier { party: String },
+    PartyDossier {
+        /// Normalized party name to search for.
+        party: String,
+    },
     /// Obligations for which the given party is the obligor.
-    ObligationsOwedBy { party: String },
+    ObligationsOwedBy {
+        /// Normalized obligor party name.
+        party: String,
+    },
     /// Documents and chunks that cite a given code article.
-    CitationChain { article_ref: String },
+    CitationChain {
+        /// Normalized code article reference.
+        article_ref: String,
+    },
     /// Chronological events in a dossier.
-    ProceduralTimeline { dossier_id: String },
+    ProceduralTimeline {
+        /// Dossier identifier to traverse.
+        dossier_id: String,
+    },
     /// Appeal chain rooted at a document, up to `max_depth` hops.
-    AppealChain { doc_id: String, max_depth: u32 },
+    AppealChain {
+        /// Root document identifier.
+        doc_id: String,
+        /// Maximum traversal depth.
+        max_depth: u32,
+    },
 }
 
 /// Row set returned by a graph intent query.
@@ -28,8 +44,8 @@ pub struct GraphQueryResult {
     pub rows: Vec<HashMap<String, String>>,
 }
 
-/// Resolve `intent` to a parameterized Cypher query and execute it against
-/// `kg`. Returns an empty row set when the Phase-1 no-op backend is active.
+/// Resolve `intent` to a typed graph-store traversal and execute it against
+/// `kg`.
 ///
 /// # Errors
 /// Propagates [`crate::error::Error::Graph`] from the KG backend.
@@ -37,46 +53,17 @@ pub async fn run_intent(
     kg: &dyn LegalKnowledgeGraph,
     intent: GraphIntent,
 ) -> Result<GraphQueryResult> {
-    let (query, params) = match intent {
-        GraphIntent::PartyDossier { party } => (
-            "MATCH (p:Party {normalized_form:$party})-[r:PARTY_TO]->(d:Document)\
-             -[:HAS_CHUNK]->(c:Chunk) \
-             RETURN d, r.role AS role, c ORDER BY d.document_date"
-                .to_string(),
-            HashMap::from([("party".to_string(), party)]),
-        ),
-        GraphIntent::ObligationsOwedBy { party } => (
-            "MATCH (p:Party {normalized_form:$party})-[:BOUND_BY]->(o:Obligation) \
-             OPTIONAL MATCH (o)-[:OWED_TO]->(t:Party), \
-                            (o)-[:HAS_DEADLINE]->(e:Event), \
-                            (o)-[:HAS_AMOUNT]->(a:Amount) \
-             RETURN o, t, e, a"
-                .to_string(),
-            HashMap::from([("party".to_string(), party)]),
-        ),
-        GraphIntent::CitationChain { article_ref } => (
-            "MATCH (a:Article {normalized_ref:$ref})<-[:REFERENCES]-(d:Document)\
-             -[:HAS_CHUNK]->(c:Chunk) \
-             WHERE (c)-[:MENTIONS]->(a) RETURN d, c"
-                .to_string(),
-            HashMap::from([("ref".to_string(), article_ref)]),
-        ),
-        GraphIntent::ProceduralTimeline { dossier_id } => (
-            "MATCH (d:Document {dossier_id:$dossier})-[:HAS_CHUNK]->(c:Chunk)\
-             -[:MENTIONS]->(e:Event) \
-             RETURN e ORDER BY e.event_date"
-                .to_string(),
-            HashMap::from([("dossier".to_string(), dossier_id)]),
-        ),
-        GraphIntent::AppealChain { doc_id, max_depth } => (
-            format!(
-                "MATCH path = (d:Document {{doc_id:$doc}})-[:APPEALS*1..{max_depth}]->(prior:Document) \
-                 RETURN path"
-            ),
-            HashMap::from([("doc".to_string(), doc_id.to_string())]),
-        ),
+    let rows = match intent {
+        GraphIntent::PartyDossier { party } => kg.party_dossier(&party).await?,
+        GraphIntent::ObligationsOwedBy { party } => kg.obligations_owed_by(&party).await?,
+        GraphIntent::CitationChain { article_ref } => kg.citation_chain(&article_ref).await?,
+        GraphIntent::ProceduralTimeline { dossier_id } => {
+            kg.procedural_timeline(&dossier_id).await?
+        }
+        GraphIntent::AppealChain { doc_id, max_depth } => {
+            kg.appeal_chain(&doc_id, max_depth).await?
+        }
     };
-    let rows = kg.cypher(&query, params).await?;
     Ok(GraphQueryResult { rows })
 }
 

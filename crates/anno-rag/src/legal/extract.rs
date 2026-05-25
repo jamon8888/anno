@@ -2,8 +2,7 @@
 //! procedural timeline, and risk review.
 //!
 //! All workflows query the legal knowledge graph and return structured
-//! review rows. Phase-1 KG returns empty result sets; production queries
-//! execute once the lance-graph backend is active.
+//! review rows.
 
 use crate::error::Result;
 use crate::legal::kg::LegalKnowledgeGraph;
