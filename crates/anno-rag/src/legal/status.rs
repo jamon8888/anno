@@ -148,7 +148,7 @@ impl EnrichmentStatusStore {
         let stream = self
             .table
             .query()
-            .only_if("status = 'pending'".to_string())
+            .only_if("status = 'pending'")
             .limit(max)
             .execute()
             .await

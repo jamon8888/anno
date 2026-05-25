@@ -549,6 +549,7 @@ pub struct LegalPrescriptionCheckParams {
     pub interrupting_events: Vec<LegalInterruptingEventWire>,
 }
 
+/// Wire representation of an event that interrupts or suspends prescription.
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct LegalInterruptingEventWire {
     /// Event kind, e.g. `"mise_en_demeure"`, `"assignation"`.

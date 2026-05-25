@@ -13,11 +13,17 @@ const EXTENSION_INSTALL: bool = option_env!("ANNO_RAG_EXTENSION_INSTALL").is_som
 /// Wire shape returned by `anno_health`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EngineHealth {
+    /// Engine crate version.
     pub engine_version: String,
+    /// Current CPU architecture and operating system.
     pub build_target: String,
+    /// Whether the binary was built by the signing workflow.
     pub signed: bool,
+    /// Whether the binary was packaged for one-click extension install.
     pub extension_install: bool,
+    /// Whether the vault can be opened with the configured key.
     pub vault_initialized: bool,
+    /// MCP tool names advertised by this server.
     pub available_tools: Vec<String>,
 }
 
@@ -36,7 +42,9 @@ pub async fn collect_health(pipeline: &Pipeline, _cfg: &AnnoRagConfig) -> Engine
 /// Result of `anno_init_vault`. The passphrase itself is never echoed.
 #[derive(Debug, Clone, Serialize)]
 pub struct InitVaultResult {
+    /// True when the passphrase was accepted and stored.
     pub ok: bool,
+    /// User-facing validation or keyring error when initialization fails.
     pub error: Option<String>,
 }
 

@@ -81,7 +81,7 @@ pub struct Pipeline {
     pub(crate) enrichment_status: crate::legal::status::EnrichmentStatusStore,
     /// Legal entity enricher (combined GLiNER2 + rules + normalization).
     pub(crate) legal_enricher: LegalEnricher,
-    /// Lance-graph knowledge graph (Phase 1: directory-backed no-op; real writes in Stage D).
+    /// Legal knowledge graph sidecar.
     pub(crate) legal_kg: std::sync::Arc<dyn crate::legal::kg::LegalKnowledgeGraph>,
 }
 
@@ -106,12 +106,12 @@ impl Pipeline {
             Err(Error::Vault(ref msg)) if msg.contains("Decryption failed") => {
                 // Key mismatch — back up and start fresh (reinstall / passphrase reset).
                 let bak = cfg.data_dir.join("vault.enc.bak");
-                if let Err(e) = std::fs::rename(&cfg.vault_path(), &bak) {
+                if let Err(e) = std::fs::rename(cfg.vault_path(), &bak) {
                     tracing::warn!(
                         error = %e,
                         "vault key mismatch — could not rename old vault, removing it"
                     );
-                    let _ = std::fs::remove_file(&cfg.vault_path());
+                    let _ = std::fs::remove_file(cfg.vault_path());
                 } else {
                     tracing::warn!(
                         backup = ?bak,
@@ -403,7 +403,7 @@ impl Pipeline {
                 false
             }
         };
-        // Graph dual-write (Phase 1: no-op LanceGraphStore; real writes in Stage D).
+        // Graph dual-write.
         if lance_ok {
             match self.legal_kg.upsert_batch(&node_batch, &edge_batch).await {
                 Ok(()) => {
@@ -1721,9 +1721,7 @@ impl Pipeline {
 
     /// Execute a named graph traversal intent against the legal knowledge graph.
     ///
-    /// Dispatches a parameterized Cypher query (Phase 1: always returns an
-    /// empty row set from the no-op `LanceGraphStore`; real execution wired
-    /// in Stage D).
+    /// Dispatches a typed graph intent against the configured graph backend.
     ///
     /// # Errors
     /// Returns [`Error::Graph`] propagated from the KG backend.

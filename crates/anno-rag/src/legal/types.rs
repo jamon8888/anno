@@ -175,6 +175,7 @@ pub struct ExtractedFact<T> {
 
 impl<T> ExtractedFact<T> {
     /// Builds an extracted fact and computes whether it needs human validation.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         value: T,
         confidence: f32,

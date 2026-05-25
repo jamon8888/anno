@@ -70,7 +70,7 @@ fn split_person_name(value: &str) -> (String, String) {
                 && token.chars().any(char::is_alphabetic)
         })
         .map(|(idx, _)| idx)
-        .last();
+        .next_back();
 
     if let Some(idx) = last_all_caps_idx {
         let last = tokens[idx].to_string();

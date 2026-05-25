@@ -66,8 +66,8 @@ unicode-normalization = "0.1"
 sysinfo              = "0.32"
 tempfile             = "3"
 
-# Legal RAG (Phase 1+2) — added 2026-05-23
-lance-graph          = "0.5"
+# Legal RAG (Phase 1+2) — added 2026-05-23. Graph v0 uses the local SQLite
+# backend in `legal::kg`; keep lance-graph out until a dedicated v1 backend.
 once_cell            = "1"
 hex                  = "0.4"
 async-trait          = "0.1"

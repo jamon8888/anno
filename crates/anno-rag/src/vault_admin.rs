@@ -20,7 +20,7 @@ pub struct VaultStatus {
 pub fn vault_status() -> Result<VaultStatus> {
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
         .map_err(|e| Error::Vault(format!("keyring open: {e}")))?;
-    let present = matches!(entry.get_password(), Ok(_));
+    let present = entry.get_password().is_ok();
     Ok(VaultStatus {
         service: KEYRING_SERVICE.to_string(),
         account: KEYRING_ACCOUNT.to_string(),
