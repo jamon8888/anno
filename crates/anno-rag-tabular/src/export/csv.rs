@@ -35,13 +35,10 @@ pub async fn export_csv(storage: &StorageHandle, review_id: ReviewId) -> Result<
     let cells = storage.cells.all_for_review_latest(review_id).await?;
 
     // Sort rows by doc label for a stable, human-friendly order.
-    rows.sort_by(|a, b| doc_label(a).cmp(&doc_label(b)));
+    rows.sort_by_key(doc_label);
 
     // O(1) cell lookup keyed on (row_id, col_id).
-    let cell_map: HashMap<_, _> = cells
-        .iter()
-        .map(|c| ((c.row_id, c.col_id), c))
-        .collect();
+    let cell_map: HashMap<_, _> = cells.iter().map(|c| ((c.row_id, c.col_id), c)).collect();
 
     let mut wtr = csv::Writer::from_writer(Vec::<u8>::new());
 
@@ -52,7 +49,7 @@ pub async fn export_csv(storage: &StorageHandle, review_id: ReviewId) -> Result<
         header.push(col.name.clone());
     }
     wtr.write_record(&header)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
 
     // One data row per Row.
     for row in &rows {
@@ -67,13 +64,13 @@ pub async fn export_csv(storage: &StorageHandle, review_id: ReviewId) -> Result<
             record.push(value);
         }
         wtr.write_record(&record)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
     }
 
     wtr.flush()?;
-    let bytes = wtr.into_inner().map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-    })?;
+    let bytes = wtr
+        .into_inner()
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
@@ -122,7 +119,6 @@ mod tests {
     use crate::storage::rows::Row;
     use crate::storage::StorageHandle;
     use chrono::Utc;
-    use lancedb::Connection;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -230,11 +226,7 @@ mod tests {
         let col = ColumnBuilder::new(review_id, "Term", "What is the term?", CellType::Text)
             .order(0)
             .build();
-        storage
-            .columns
-            .add(review_id, &col)
-            .await
-            .expect("add col");
+        storage.columns.add(review_id, &col).await.expect("add col");
 
         let doc_id = uuid::Uuid::now_v7();
         let row = mk_row(review_id, doc_id, "Deal/contract.pdf");
@@ -260,15 +252,10 @@ mod tests {
             .await
             .expect("create review");
 
-        let col =
-            ColumnBuilder::new(review_id, "Clause", "Verbatim clause", CellType::Verbatim)
-                .order(0)
-                .build();
-        storage
-            .columns
-            .add(review_id, &col)
-            .await
-            .expect("add col");
+        let col = ColumnBuilder::new(review_id, "Clause", "Verbatim clause", CellType::Verbatim)
+            .order(0)
+            .build();
+        storage.columns.add(review_id, &col).await.expect("add col");
 
         let doc_id = uuid::Uuid::now_v7();
         let row = mk_row(review_id, doc_id, "docs/contract.pdf");

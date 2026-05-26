@@ -287,10 +287,7 @@ async fn nda_template_extraction_with_mock_llm() {
         .await
         .expect("run_review succeeds");
     assert_eq!(outcomes.len(), 1, "one row expected");
-    outcomes[0]
-        .result
-        .as_ref()
-        .expect("extraction succeeded");
+    outcomes[0].result.as_ref().expect("extraction succeeded");
 
     // Assert the three key cells are present.
     let expected: &[(&str, Value)] = &[
@@ -350,8 +347,14 @@ async fn folder_scoping_limits_rows() {
         .expect("create review");
 
     // Simulate 4 ingested documents across two deal folders.
-    let deal_x = ["Deal_X/01_NDA/contract_1.pdf", "Deal_X/01_NDA/contract_2.pdf"];
-    let deal_y = ["Deal_Y/01_NDA/contract_3.pdf", "Deal_Y/01_NDA/contract_4.pdf"];
+    let deal_x = [
+        "Deal_X/01_NDA/contract_1.pdf",
+        "Deal_X/01_NDA/contract_2.pdf",
+    ];
+    let deal_y = [
+        "Deal_Y/01_NDA/contract_3.pdf",
+        "Deal_Y/01_NDA/contract_4.pdf",
+    ];
 
     let mut added = 0usize;
     for folder in &deal_x {
@@ -455,7 +458,11 @@ async fn conditional_non_solicitation_term() {
     storage.rows.add(&row_b).await.expect("add row_b");
 
     let mut chunks = InMemChunks::new();
-    chunks.add(doc_a, chunk_a, "HAS_NS: Parties agree on non-solicitation for 24 months.");
+    chunks.add(
+        doc_a,
+        chunk_a,
+        "HAS_NS: Parties agree on non-solicitation for 24 months.",
+    );
     chunks.add(doc_b, chunk_b, "No non-solicitation clause present.");
 
     let chunk_a_str = chunk_a.to_string();
@@ -508,7 +515,11 @@ async fn conditional_non_solicitation_term() {
         .await
         .expect("latest")
         .expect("non_solicitation cell on doc_a");
-    assert_eq!(ns_a.value, json!(true), "doc_a: non_solicitation must be true");
+    assert_eq!(
+        ns_a.value,
+        json!(true),
+        "doc_a: non_solicitation must be true"
+    );
 
     let nst_a = storage
         .cells
