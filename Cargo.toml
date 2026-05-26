@@ -125,6 +125,9 @@ missing_docs = "warn"
 [workspace.lints.clippy]
 unwrap_used = "warn"
 
+[profile.dist]
+inherits = "release"
+
 # This is a virtual workspace. The published `anno` crate lives at `crates/anno/`.
 # Local development overrides (path patches) live in `.cargo/config.toml`.
 # See `.cargo/config.toml.example` for the super-workspace setup.
