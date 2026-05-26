@@ -228,7 +228,11 @@ gh run list --repo jamon8888/anno --workflow Release --limit 5
 Monitor the selected release run:
 
 ```powershell
-gh run view <run-id> --repo jamon8888/anno --json status,conclusion,url,jobs
+$Run = gh run list --repo jamon8888/anno --workflow Release --limit 5 --json databaseId,displayTitle |
+  ConvertFrom-Json |
+  Where-Object { $_.displayTitle -match 'v0\.11\.0-rc\.1' } |
+  Select-Object -First 1
+gh run view $Run.databaseId --repo jamon8888/anno --json status,conclusion,url,jobs
 ```
 
 ### Install in Cowork
