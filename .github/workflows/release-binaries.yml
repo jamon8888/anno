@@ -28,9 +28,6 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive: zip
-          - os: macos-13
-            target: x86_64-apple-darwin
-            archive: tar.gz
           - os: macos-14
             target: aarch64-apple-darwin
             archive: tar.gz
@@ -53,7 +50,13 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - uses: arduino/setup-protoc@v3
+      - name: Install protoc (macOS)
+        if: runner.os == 'macOS'
+        run: brew list protobuf >/dev/null 2>&1 || brew install protobuf
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install protoc -y --no-progress
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -75,7 +78,7 @@ jobs:
           echo "CXXFLAGS_x86_64_pc_windows_msvc=-MT" >> "$GITHUB_ENV"
 
       - name: Build release binaries
-        run: cargo build --release -p anno-rag -p anno-privacy-gateway --target ${{ matrix.target }}
+        run: cargo build --release -p anno-rag-bin -p anno-privacy-gateway --target ${{ matrix.target }}
 
       - name: Smoke test anno-rag (Windows)
         if: runner.os == 'Windows'

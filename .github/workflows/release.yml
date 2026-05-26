@@ -140,8 +140,18 @@ jobs:
         run: |
           ${{ matrix.packages_install }}
       # ANNO-PATCH: protoc is required by lance-encoding/prost during anno-rag builds.
-      # CI installs it explicitly; release builds need the same tool on every OS.
-      - uses: arduino/setup-protoc@v3
+      # Use OS package managers instead of arduino/setup-protoc to avoid GitHub
+      # API rate limits in tag release jobs.
+      - name: Install protoc (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Install protoc (macOS)
+        if: runner.os == 'macOS'
+        run: brew list protobuf >/dev/null 2>&1 || brew install protobuf
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install protoc -y --no-progress
       # ANNO-PATCH: MSVC CRT alignment — re-apply after every `dist generate`.
       # cargo-dist statically links the MSVC CRT for Windows release artifacts.
       # Keep cc-rs/CMake dependencies on /MT too, otherwise aws-lc-sys and
@@ -165,18 +175,18 @@ jobs:
       - name: Validate anno-rag release binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: .\scripts\release\verify-release-binary.ps1 -BinaryPath ".\target\${{ join(matrix.targets, '-') }}\release\anno-rag.exe"
+        run: .\scripts\release\verify-release-binary.ps1 -BinaryPath ".\target\${{ join(matrix.targets, '-') }}\dist\anno-rag.exe"
       # ANNO-PATCH: Gateway boot smoke — re-apply after every `dist generate`.
       # anno-privacy-gateway is a server binary; --help starts the server (does not print and exit).
       # These scripts start on ANNO_GATEWAY_LISTEN=127.0.0.1:0, wait 3s, verify alive, terminate.
       - name: Gateway boot smoke (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: .\scripts\release\smoke-gateway.ps1 -BinaryPath ".\target\${{ join(matrix.targets, '-') }}\release\anno-privacy-gateway.exe"
+        run: .\scripts\release\smoke-gateway.ps1 -BinaryPath ".\target\${{ join(matrix.targets, '-') }}\dist\anno-privacy-gateway.exe"
       - name: Gateway boot smoke (Unix)
         if: runner.os != 'Windows'
         shell: bash
-        run: ./scripts/release/smoke-gateway.sh "./target/${{ join(matrix.targets, '-') }}/release/anno-privacy-gateway"
+        run: ./scripts/release/smoke-gateway.sh "./target/${{ join(matrix.targets, '-') }}/dist/anno-privacy-gateway"
       # ANNO-PATCH: .mcpb extension packaging — re-apply after every `dist generate`.
       - name: Package .mcpb extension
         shell: bash
@@ -196,7 +206,7 @@ jobs:
             PLATFORM="linux"
           fi
           mkdir -p mcpb-staging/server
-          cp "target/${TARGET}/release/${BIN}" mcpb-staging/server/
+          cp "target/${TARGET}/dist/${BIN}" mcpb-staging/server/
           python3 -c "
           import json, sys
           m = json.load(open('scripts/release/mcpb-manifest-template.json'))

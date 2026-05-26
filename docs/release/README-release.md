@@ -7,7 +7,6 @@ This document explains how to install the GitHub Release binary archives for Cla
 | Platform | Asset |
 |---|---|
 | Windows 11 x64 | `hacienda-<tag>-x86_64-pc-windows-msvc.zip` |
-| macOS Intel | `hacienda-<tag>-x86_64-apple-darwin.tar.gz` |
 | macOS Apple Silicon | `hacienda-<tag>-aarch64-apple-darwin.tar.gz` |
 
 Each archive contains:
@@ -89,7 +88,6 @@ Download the `.mcpb` file for your platform from the [GitHub Release](https://gi
 |---|---|
 | Windows 11 x64 | `hacienda-<tag>-x86_64-pc-windows-msvc.mcpb` |
 | macOS Apple Silicon | `hacienda-<tag>-aarch64-apple-darwin.mcpb` |
-| macOS Intel | `hacienda-<tag>-x86_64-apple-darwin.mcpb` |
 
 **Install:**
 
@@ -213,15 +211,15 @@ Use this flow to create an optimized GitHub prerelease for Claude Desktop/Cowork
 
 - `origin/main` equals local `main`.
 - Latest GitHub Actions CI on `main` is successful.
-- `dist plan --tag=v0.11.0-rc.3 --output-format=json` exits with code `0`.
+- `dist plan --tag=v0.11.0-rc.4 --output-format=json` exits with code `0`.
 - No local Claude Desktop MCP process is still expected to run from `D:\cargo-shared-target\debug\anno-rag.exe` after install.
 
 ### Create the RC
 
 ```powershell
-git tag v0.11.0-rc.3
+git tag v0.11.0-rc.4
 git push origin main
-git push origin v0.11.0-rc.3
+git push origin v0.11.0-rc.4
 gh run list --repo jamon8888/anno --workflow Release --limit 5
 ```
 
@@ -230,7 +228,7 @@ Monitor the selected release run:
 ```powershell
 $Run = gh run list --repo jamon8888/anno --workflow Release --limit 5 --json databaseId,displayTitle |
   ConvertFrom-Json |
-  Where-Object { $_.displayTitle -match 'v0\.11\.0-rc\.3' } |
+  Where-Object { $_.displayTitle -match 'v0\.11\.0-rc\.4' } |
   Select-Object -First 1
 gh run view $Run.databaseId --repo jamon8888/anno --json status,conclusion,url,jobs
 ```

@@ -224,7 +224,7 @@ dependencies = [
 
 [[package]]
 name = "anno-privacy-gateway"
-version = "0.11.0-rc.3"
+version = "0.11.0-rc.4"
 dependencies = [
  "async-stream",
  "axum",
@@ -305,7 +305,7 @@ dependencies = [
 
 [[package]]
 name = "anno-rag-bin"
-version = "0.11.0-rc.3"
+version = "0.11.0-rc.4"
 dependencies = [
  "anno-rag",
  "anno-rag-mcp",

@@ -15,8 +15,8 @@ if ($PathText -match "\\debug\\") {
     throw "Release verification rejected debug binary path: $PathText"
 }
 
-if ($PathText -notmatch "\\release\\") {
-    throw "Release verification expected a release path, got: $PathText"
+if ($PathText -notmatch "\\(release|dist)\\") {
+    throw "Release verification expected a release or dist profile path, got: $PathText"
 }
 
 $Item = Get-Item -LiteralPath $PathText
