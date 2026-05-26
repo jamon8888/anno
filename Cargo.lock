@@ -309,11 +309,16 @@ version = "0.11.0-rc.2"
 dependencies = [
  "anno-rag",
  "anno-rag-mcp",
+ "anno-rag-tabular",
  "anyhow",
+ "async-trait",
+ "chrono",
  "clap",
+ "lancedb",
  "serde_json",
  "tokio",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -321,7 +326,10 @@ name = "anno-rag-mcp"
 version = "0.1.0"
 dependencies = [
  "anno-rag",
+ "anno-rag-tabular",
+ "async-trait",
  "chrono",
+ "lancedb",
  "rmcp",
  "schemars 0.8.22",
  "serde",
