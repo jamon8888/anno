@@ -38,7 +38,7 @@ pub async fn export_xlsx(
     let mut rows = storage.rows.list_for_review(review_id).await?;
     let cells = storage.cells.all_for_review_latest(review_id).await?;
 
-    rows.sort_by_key(|r| crate::export::csv::doc_label(r));
+    rows.sort_by_key(crate::export::csv::doc_label);
 
     let cell_map: HashMap<_, _> = cells.iter().map(|c| ((c.row_id, c.col_id), c)).collect();
 
