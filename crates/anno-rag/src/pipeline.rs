@@ -1896,6 +1896,34 @@ impl Pipeline {
         crate::legal::prescription::compute_prescription(category, event_date, interrupting_events)
     }
 
+    // ── Chunk accessors for anno-rag-tabular ─────────────────────────────
+
+    /// Return all indexed chunks for `doc_id` in document order.
+    ///
+    /// Thin delegation to [`anno_rag::store::Store::chunks_by_doc`].
+    ///
+    /// # Errors
+    /// Returns [`Error`] if the LanceDB scan fails.
+    pub async fn chunks_by_doc(
+        &self,
+        doc_id: uuid::Uuid,
+    ) -> Result<Vec<crate::store::SearchHit>> {
+        self.store.chunks_by_doc(doc_id).await
+    }
+
+    /// Return a single chunk by its UUID.
+    ///
+    /// Thin delegation to [`anno_rag::store::Store::chunk_by_id`].
+    ///
+    /// # Errors
+    /// Returns [`Error`] if the LanceDB scan fails.
+    pub async fn chunk_by_id(
+        &self,
+        chunk_id: uuid::Uuid,
+    ) -> Result<Option<crate::store::SearchHit>> {
+        self.store.chunk_by_id(chunk_id).await
+    }
+
     // ── D5: field validation ──────────────────────────────────────────────
 
     /// Record a human (or automated) validation of an extracted fact.
