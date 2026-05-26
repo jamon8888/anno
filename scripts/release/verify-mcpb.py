@@ -23,8 +23,12 @@ def main() -> None:
     parser.add_argument("--platform", required=True, help="Expected MCPB platform")
     args = parser.parse_args()
 
-    binary_name = PurePosixPath(args.binary)
-    if binary_name.name != args.binary:
+    if (
+        "/" in args.binary
+        or "\\" in args.binary
+        or ":" in args.binary
+        or args.binary in {".", ".."}
+    ):
         fail("--binary must be a filename, not a path")
 
     try:
