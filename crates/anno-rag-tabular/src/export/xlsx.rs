@@ -80,7 +80,16 @@ pub async fn export_xlsx(
     ws.write_string_with_format(0, 0, "Doc", &header_fmt)
         .map_err(xlsx_err)?;
     for (ci, col) in columns.iter().enumerate() {
-        ws.write_string_with_format(0, (ci + 1) as u16, &col.name, &header_fmt)
+        let excel_col: u16 = (ci + 1).try_into().map_err(|_| {
+            crate::error::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "column index {} exceeds Excel's u16 column limit (max 65 535)",
+                    ci + 1
+                ),
+            ))
+        })?;
+        ws.write_string_with_format(0, excel_col, &col.name, &header_fmt)
             .map_err(xlsx_err)?;
     }
 
@@ -91,7 +100,16 @@ pub async fn export_xlsx(
         ws.write_string(excel_row, 0, &label).map_err(xlsx_err)?;
 
         for (ci, col) in columns.iter().enumerate() {
-            let excel_col = (ci + 1) as u16;
+            // Same bounds check as the header loop above.
+            let excel_col: u16 = (ci + 1).try_into().map_err(|_| {
+                crate::error::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "column index {} exceeds Excel's u16 column limit (max 65 535)",
+                        ci + 1
+                    ),
+                ))
+            })?;
             if let Some(cell) = cell_map.get(&(row.id, col.id)) {
                 let is_low = cell.confidence == Confidence::Low;
                 write_cell(

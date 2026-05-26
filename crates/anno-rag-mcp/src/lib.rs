@@ -77,12 +77,16 @@ impl AnnoRagServer {
     ) -> anno_rag_tabular::error::Result<&anno_rag_tabular::storage::StorageHandle> {
         self.tabular_storage
             .get_or_try_init(|| {
-                let data_dir = Arc::clone(&self.cfg).data_dir.clone();
+                // Use index_path() (data_dir/index.lance) — the same root that
+                // the Pipeline and CLI use.  Using data_dir directly would open
+                // a disconnected LanceDB root, making MCP and CLI work with
+                // separate databases.
+                let index_path = Arc::clone(&self.cfg).index_path();
                 async move {
-                    let uri = data_dir.to_str().ok_or_else(|| {
+                    let uri = index_path.to_str().ok_or_else(|| {
                         anno_rag_tabular::error::Error::Io(std::io::Error::new(
                             std::io::ErrorKind::InvalidInput,
-                            "data_dir is not valid UTF-8",
+                            "index_path is not valid UTF-8",
                         ))
                     })?;
                     let conn = std::sync::Arc::new(
@@ -1947,6 +1951,12 @@ impl AnnoRagServer {
             Ok(u) => anno_rag_tabular::ReviewId(u),
             Err(e) => return format!("Error: bad review_id: {e}"),
         };
+        // Verify the review exists before adding rows (mirrors CLI behaviour).
+        match ts.reviews.get(review_id).await {
+            Ok(Some(_)) => {}
+            Ok(None) => return format!("Error: review {} not found", review_id.0),
+            Err(e) => return format!("Error: {e}"),
+        }
         let mut rows_added = 0usize;
         let mut failed: Vec<String> = Vec::new();
         for id_str in &p.doc_ids {
@@ -1976,40 +1986,61 @@ impl AnnoRagServer {
         let extraction_started = if rows_added > 0 {
             match self.pipeline_arc() {
                 Some(arc_pipeline) => {
-                    let ts_clone = ts.clone();
-                    let force = p.force_reextract;
-                    tokio::spawn(async move {
-                        let chunk_src = std::sync::Arc::new(
-                            crate::tabular::PipelineChunkSource(arc_pipeline.clone()),
-                        );
-                        let llm = match anno_rag_tabular::llm::default_from_env() {
-                            Ok(l) => std::sync::Arc::from(l),
-                            Err(e) => {
-                                tracing::warn!(target: "tabular::mcp", "LLM init failed: {e}");
-                                return;
-                            }
-                        };
-                        let extractor = anno_rag_tabular::extract::Extractor::new(llm, chunk_src);
-                        let cfg = anno_rag_tabular::fanout::FanoutConfig {
-                            force_reextract: force,
-                            ..Default::default()
-                        };
-                        match anno_rag_tabular::run_review(&ts_clone, &extractor, review_id, cfg).await {
-                            Ok(outcomes) => {
-                                let ok = outcomes.iter().filter(|o| o.result.is_ok()).count();
-                                let err = outcomes.len() - ok;
-                                tracing::info!(
-                                    target: "tabular::mcp",
-                                    review = %review_id.0,
-                                    ok,
-                                    err,
-                                    "background extraction complete"
-                                );
-                            }
-                            Err(e) => tracing::warn!(target: "tabular::mcp", "run_review failed: {e}"),
+                    // Pre-flight: verify LLM credentials *before* advertising
+                    // extraction_started=true.  Without this check the caller
+                    // would believe extraction had begun even when the key is
+                    // absent, hiding the failure entirely.
+                    match anno_rag_tabular::llm::default_from_env() {
+                        Err(e) => {
+                            tracing::warn!(
+                                target: "tabular::mcp",
+                                "LLM init failed; background extraction skipped: {e}"
+                            );
+                            false
                         }
-                    });
-                    true
+                        Ok(llm_client) => {
+                            let ts_clone = ts.clone();
+                            let force = p.force_reextract;
+                            let llm = std::sync::Arc::from(llm_client);
+                            tokio::spawn(async move {
+                                let chunk_src = std::sync::Arc::new(
+                                    crate::tabular::PipelineChunkSource(arc_pipeline.clone()),
+                                );
+                                let extractor =
+                                    anno_rag_tabular::extract::Extractor::new(llm, chunk_src);
+                                let cfg = anno_rag_tabular::fanout::FanoutConfig {
+                                    force_reextract: force,
+                                    ..Default::default()
+                                };
+                                match anno_rag_tabular::run_review(
+                                    &ts_clone,
+                                    &extractor,
+                                    review_id,
+                                    cfg,
+                                )
+                                .await
+                                {
+                                    Ok(outcomes) => {
+                                        let ok =
+                                            outcomes.iter().filter(|o| o.result.is_ok()).count();
+                                        let err = outcomes.len() - ok;
+                                        tracing::info!(
+                                            target: "tabular::mcp",
+                                            review = %review_id.0,
+                                            ok,
+                                            err,
+                                            "background extraction complete"
+                                        );
+                                    }
+                                    Err(e) => tracing::warn!(
+                                        target: "tabular::mcp",
+                                        "run_review failed: {e}"
+                                    ),
+                                }
+                            });
+                            true
+                        }
+                    }
                 }
                 None => {
                     tracing::warn!(target: "tabular::mcp", "pipeline not initialised; extraction skipped");
@@ -2076,6 +2107,12 @@ impl AnnoRagServer {
             Some(r) => r,
             None => return format!("Error: row {row_id:?} not found"),
         };
+        // Reject early if the cell is already locked — avoids wasting LLM credits.
+        if let Ok(Some(existing)) = ts.cells.latest(review_id, row_id, col_id).await {
+            if existing.locked {
+                return "Error: cell is locked; unlock it first with review_unlock_cell".into();
+            }
+        }
         // Prepend instruction to prompt.
         col.prompt = format!("{}\n\n{}", p.instruction, col.prompt);
         let arc_pipeline = match self.pipeline_arc() {
@@ -2138,6 +2175,22 @@ impl AnnoRagServer {
             Ok(u) => anno_rag_tabular::ColumnId(u),
             Err(e) => return format!("Error: bad col_id: {e}"),
         };
+        // Verify the row belongs to this review (prevents cross-review cell writes).
+        match ts.rows.list_for_review(review_id).await {
+            Err(e) => return format!("Error: {e}"),
+            Ok(rows) if !rows.iter().any(|r| r.id == row_id) => {
+                return format!(
+                    "Error: row {} not found in review {}",
+                    row_id.0, review_id.0
+                )
+            }
+            _ => {}
+        }
+        // NOTE: The read-then-write below is a known TOCTOU: two concurrent
+        // callers may both read the same prev_version and write the same next
+        // version.  LanceDB is append-only so both rows are stored; `latest()`
+        // returns the most recent write.  For the single-process, single-
+        // reviewer workload this crate targets this is acceptable.
         // Read latest version to compute next.
         let prev_version = ts
             .cells
@@ -2229,7 +2282,14 @@ impl AnnoRagServer {
                     Some(s) => s.clone(),
                     None => return "Error: output_path required for xlsx format".into(),
                 };
-                let path = std::path::Path::new(&path_str);
+                let path = std::path::PathBuf::from(&path_str);
+                // Require an absolute path to prevent path-traversal writes
+                // relative to an unpredictable working directory.
+                if !path.is_absolute() {
+                    return "Error: output_path must be an absolute path (e.g. /tmp/review.xlsx)"
+                        .into();
+                }
+                let path = path.as_path();
                 match anno_rag_tabular::export::export_xlsx(ts, review_id, path).await {
                     Ok(()) => {
                         serde_json::json!({ "ok": true, "path": path_str }).to_string()
@@ -2362,6 +2422,9 @@ impl AnnoRagServer {
             Ok(u) => anno_rag_tabular::ColumnId(u),
             Err(e) => return format!("Error: bad col_id: {e}"),
         };
+        // NOTE: Read-then-write TOCTOU (same as review_set_cell).  Acceptable
+        // for single-process usage; LanceDB append-only semantics ensure no
+        // data is lost — latest() will return the winning write.
         let prev = match ts.cells.latest(review_id, row_id, col_id).await {
             Ok(Some(c)) => c,
             Ok(None) => return "Error: no cell found to lock/unlock".into(),
