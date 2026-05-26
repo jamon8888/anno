@@ -156,6 +156,10 @@ jobs:
           # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
           echo "dist ran successfully"
+      - name: Validate anno-rag release binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\scripts\release\verify-release-binary.ps1 -BinaryPath ".\target\${{ join(matrix.targets, '-') }}\release\anno-rag.exe"
       # ANNO-PATCH: Gateway boot smoke — re-apply after every `dist generate`.
       # anno-privacy-gateway is a server binary; --help starts the server (does not print and exit).
       # These scripts start on ANNO_GATEWAY_LISTEN=127.0.0.1:0, wait 3s, verify alive, terminate.
@@ -196,6 +200,19 @@ jobs:
           " "$VERSION" "$PLATFORM" "$BIN"
           cd mcpb-staging && zip -r "../${MCPB_NAME}" . && cd ..
           echo "MCPB_NAME=${MCPB_NAME}" >> "$GITHUB_ENV"
+
+      - name: Validate .mcpb extension
+        shell: bash
+        run: |
+          TARGET="${{ join(matrix.targets, '-') }}"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            BIN="anno-rag.exe"
+            PLATFORM="win32"
+          else
+            BIN="anno-rag"
+            PLATFORM="darwin"
+          fi
+          python3 scripts/release/verify-mcpb.py "${MCPB_NAME}" --binary "${BIN}" --platform "${PLATFORM}"
 
       - name: Upload .mcpb artifact
         uses: actions/upload-artifact@v7
