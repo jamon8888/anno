@@ -139,18 +139,24 @@ jobs:
       - name: Install dependencies
         run: |
           ${{ matrix.packages_install }}
+      # ANNO-PATCH: protoc is required by lance-encoding/prost during anno-rag builds.
+      # CI installs it explicitly; release builds need the same tool on every OS.
+      - uses: arduino/setup-protoc@v3
       # ANNO-PATCH: MSVC CRT alignment — re-apply after every `dist generate`.
-      # ort (ONNX Runtime) links /MD; esaxx-rs (via tokenizers) defaults to /MT.
-      # Forcing -crt-static=off + -MD aligns both to the dynamic CRT and avoids
-      # LNK2038 RuntimeLibrary mismatch on Windows.
+      # cargo-dist statically links the MSVC CRT for Windows release artifacts.
+      # Keep cc-rs/CMake dependencies on /MT too, otherwise aws-lc-sys and
+      # libsqlite3-sys compile for /MD and the final link fails with __imp_*.
       # See docs/superpowers/plans/2026-05-04-gliner2-fastino-finalization.md F1.2.
       - name: Align MSVC CRT (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          echo "RUSTFLAGS=-C target-feature=-crt-static" >> "$GITHUB_ENV"
-          echo "CFLAGS_x86_64-pc-windows-msvc=-MD" >> "$GITHUB_ENV"
-          echo "CXXFLAGS_x86_64-pc-windows-msvc=-MD" >> "$GITHUB_ENV"
+          echo "RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV"
+          echo "CFLAGS_x86_64-pc-windows-msvc=-MT" >> "$GITHUB_ENV"
+          echo "CFLAGS_x86_64_pc_windows_msvc=-MT" >> "$GITHUB_ENV"
+          echo "CXXFLAGS_x86_64-pc-windows-msvc=-MT" >> "$GITHUB_ENV"
+          echo "CXXFLAGS_x86_64_pc_windows_msvc=-MT" >> "$GITHUB_ENV"
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot
