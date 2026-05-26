@@ -7,6 +7,7 @@ import argparse
 import json
 import sys
 import zipfile
+from json import JSONDecodeError
 from pathlib import PurePosixPath
 
 
@@ -22,31 +23,47 @@ def main() -> None:
     parser.add_argument("--platform", required=True, help="Expected MCPB platform")
     args = parser.parse_args()
 
-    with zipfile.ZipFile(args.package) as archive:
-        names = set(archive.namelist())
-        if "manifest.json" not in names:
-            fail("manifest.json missing")
+    binary_name = PurePosixPath(args.binary)
+    if binary_name.name != args.binary:
+        fail("--binary must be a filename, not a path")
 
-        manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
-        binary_path = PurePosixPath("server") / args.binary
-        binary_entry = str(binary_path)
+    try:
+        with zipfile.ZipFile(args.package) as archive:
+            names = set(archive.namelist())
+            if "manifest.json" not in names:
+                fail("manifest.json missing")
 
-        if binary_entry not in names:
-            fail(f"{binary_entry} missing")
+            manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
+            if not isinstance(manifest, dict):
+                fail("manifest.json must contain a JSON object")
 
-        if manifest.get("server", {}).get("entry_point") != binary_entry:
-            fail("server.entry_point does not point to embedded binary")
+            binary_path = PurePosixPath("server") / args.binary
+            binary_entry = str(binary_path)
 
-        expected_command = "${__dirname}/" + binary_entry
-        if manifest.get("mcp_config", {}).get("command") != expected_command:
-            fail("mcp_config.command does not point to embedded binary")
+            if binary_entry not in names:
+                fail(f"{binary_entry} missing")
 
-        if manifest.get("mcp_config", {}).get("args") != ["mcp"]:
-            fail("mcp_config.args must be ['mcp']")
+            if manifest.get("server", {}).get("entry_point") != binary_entry:
+                fail("server.entry_point does not point to embedded binary")
 
-        platforms = manifest.get("compatibility", {}).get("platforms", [])
-        if platforms != [args.platform]:
-            fail(f"compatibility.platforms mismatch: {platforms!r}")
+            expected_command = "${__dirname}/" + binary_entry
+            if manifest.get("mcp_config", {}).get("command") != expected_command:
+                fail("mcp_config.command does not point to embedded binary")
+
+            if manifest.get("mcp_config", {}).get("args") != ["mcp"]:
+                fail("mcp_config.args must be ['mcp']")
+
+            platforms = manifest.get("compatibility", {}).get("platforms", [])
+            if platforms != [args.platform]:
+                fail(f"compatibility.platforms mismatch: {platforms!r}")
+    except FileNotFoundError:
+        raise
+    except zipfile.BadZipFile as exc:
+        fail(f"invalid zip package: {exc}")
+    except UnicodeDecodeError as exc:
+        fail(f"manifest.json is not valid UTF-8: {exc}")
+    except JSONDecodeError as exc:
+        fail(f"manifest.json is not valid JSON: {exc}")
 
     print(f"verify-mcpb: OK {args.package}")
 
