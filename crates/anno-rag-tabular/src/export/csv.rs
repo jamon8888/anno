@@ -81,7 +81,7 @@ pub async fn export_csv(storage: &StorageHandle, review_id: ReviewId) -> Result<
 ///
 /// Takes the last `/`-separated segment of `folder_path` when present,
 /// falling back to the stringified `doc_id` UUID.
-pub(crate) fn doc_label(row: &crate::storage::rows::Row) -> String {
+pub fn doc_label(row: &crate::storage::rows::Row) -> String {
     row.folder_path
         .as_deref()
         .and_then(|p| p.rsplit('/').next())
