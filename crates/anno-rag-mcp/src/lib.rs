@@ -723,10 +723,20 @@ impl AnnoRagServer {
         description = "Engine health: version, build target, available tools, vault initialization status. Side-effect-free. Call once per session before other anno tools to verify compatibility."
     )]
     async fn anno_health(&self) -> String {
-        let vault_initialized = self
-            .pipeline_arc()
-            .map(|arc| arc.vault_is_initialized())
-            .unwrap_or(false);
+        // Check vault independently of whether the pipeline has been lazy-
+        // inited.  pipeline_arc() returns None until the first memory/search
+        // call (OnceCell), so going through it always yields false on a fresh
+        // server — even after anno_init_vault has written to the keyring.
+        let vault_initialized = if let Some(arc) = self.pipeline_arc() {
+            arc.vault_is_initialized()
+        } else {
+            // Pipeline not yet loaded — read keyring directly.
+            use anno_rag::vault::{KEYRING_ACCOUNT, KEYRING_SERVICE};
+            keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+                .ok()
+                .and_then(|e| e.get_password().ok())
+                .is_some()
+        };
         let h = crate::health::EngineHealth {
             engine_version: env!("CARGO_PKG_VERSION").to_string(),
             build_target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
