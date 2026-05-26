@@ -204,3 +204,54 @@ expected="$(grep 'hacienda-<tag>-aarch64-apple-darwin.tar.gz' SHA256SUMS.txt | a
 actual="$(shasum -a 256 hacienda-<tag>-aarch64-apple-darwin.tar.gz | awk '{print $1}')"
 test "$expected" = "$actual"
 ```
+
+## RC release flow for Cowork performance testing
+
+Use this flow to create an optimized GitHub prerelease for Claude Desktop/Cowork testing.
+
+### Preconditions
+
+- `origin/main` equals local `main`.
+- Latest GitHub Actions CI on `main` is successful.
+- `dist plan --tag=v0.11.0-rc.1 --output-format=json` exits with code `0`.
+- No local Claude Desktop MCP process is still expected to run from `D:\cargo-shared-target\debug\anno-rag.exe` after install.
+
+### Create the RC
+
+```powershell
+git tag v0.11.0-rc.1
+git push origin main
+git push origin v0.11.0-rc.1
+gh run list --repo jamon8888/anno --workflow Release --limit 5
+```
+
+Monitor the selected release run:
+
+```powershell
+gh run view <run-id> --repo jamon8888/anno --json status,conclusion,url,jobs
+```
+
+### Install in Cowork
+
+Prefer the Windows `.mcpb` asset from the GitHub prerelease. If `.mcpb` installation is unavailable, extract the Windows release archive and point Claude Desktop at the extracted `anno-rag.exe`.
+
+After installing, restart Claude Desktop/Cowork and verify:
+
+```powershell
+Get-Process anno-rag -ErrorAction SilentlyContinue |
+  Select-Object Id,Path,StartTime,CPU,WorkingSet64
+```
+
+The `Path` must not contain `\debug\`.
+
+### Capture performance evidence
+
+Record these values before promoting the RC:
+
+- MCP process path.
+- `anno_health` response.
+- First tool-call latency after restart.
+- Representative ingest latency.
+- Representative search latency.
+- Peak working set for `anno-rag.exe`.
+- Relevant lines from `C:\Users\NMarchitecte\AppData\Roaming\Claude\logs\mcp-server-anno-rag.log`.
