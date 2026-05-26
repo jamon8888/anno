@@ -59,12 +59,14 @@ $RequiredFiles = @(
     "docs/release/examples/claude_desktop_config.macos.json"
 )
 
-$MissingFiles = foreach ($RelativePath in $RequiredFiles) {
-    $FullPath = Join-Path -Path $RepoRoot -ChildPath $RelativePath
-    if (-not (Test-Path -LiteralPath $FullPath -PathType Leaf)) {
-        $RelativePath
+$MissingFiles = @(
+    foreach ($RelativePath in $RequiredFiles) {
+        $FullPath = Join-Path -Path $RepoRoot -ChildPath $RelativePath
+        if (-not (Test-Path -LiteralPath $FullPath -PathType Leaf)) {
+            $RelativePath
+        }
     }
-}
+)
 
 if ($MissingFiles.Count -gt 0) {
     $MissingList = $MissingFiles -join [Environment]::NewLine
