@@ -253,8 +253,12 @@ async fn cmd_extract(
     let pipeline = anno_rag::pipeline::Pipeline::new(cfg.clone(), key).await?;
     let pipeline = Arc::new(pipeline);
 
-    // Open a second Lance connection for the tabular tables. LanceDB
-    // supports concurrent readers against the same dataset directory.
+    // Open a second LanceDB connection for the tabular tables.
+    // NOTE: LanceDB's Rust SDK is append-only; concurrent *readers* on the
+    // same directory are safe.  Concurrent *writers* (e.g. a background MCP
+    // extraction running alongside a CLI `extract` call) may produce duplicate
+    // version rows — `latest()` will return the most-recent write, so no data
+    // is lost, but callers should not run two extraction processes in parallel.
     let storage = open_tabular_storage(cfg).await?;
 
     let columns = storage.columns.list_for_review(review_id).await?;
@@ -327,14 +331,10 @@ async fn cmd_export(
             }
         }
         _ => {
-            // Default: csv
-            let content = export_csv(&storage, review_id).await?;
-            if let Some(path) = output {
-                std::fs::write(&path, &content)?;
-                println!("Exported CSV → {}", path.display());
-            } else {
-                print!("{content}");
-            }
+            anyhow::bail!(
+                "unknown export format '{}'; valid values: csv, md, xlsx",
+                format
+            );
         }
     }
     Ok(())
