@@ -4,7 +4,7 @@
 
 **Goal:** Produce a GitHub prerelease RC that builds optimized OS-specific `anno-rag` artifacts and a Windows `.mcpb` package for Cowork testing, without relying on local debug binaries.
 
-**Architecture:** First align the dist-able package versions so `cargo-dist` can accept a `v0.11.0-rc.1` tag. Then add cheap release verification scripts that validate `.mcpb` packaging and release-mode artifact paths inside the existing `release.yml` matrix. Finally run `dist plan`, push the version commit, create the RC tag, monitor the release workflow, and validate Cowork uses the release artifact instead of `D:\cargo-shared-target\debug\anno-rag.exe`.
+**Architecture:** First align only the dist-able package versions so `cargo-dist` can accept a `v0.11.0-rc.1` tag without forcing non-distributed crates into a prerelease dependency graph. Then add cheap release verification scripts that validate `.mcpb` packaging and release-mode artifact paths inside the existing `release.yml` matrix. Finally run `dist plan`, push the version commit, create the RC tag, monitor the release workflow, and validate Cowork uses the release artifact instead of `D:\cargo-shared-target\debug\anno-rag.exe`.
 
 **Tech Stack:** Rust/Cargo metadata, cargo-dist 0.32.0 standalone `dist` CLI, GitHub Actions, Python 3, PowerShell, gh CLI, Claude Desktop MCP config.
 
@@ -14,7 +14,8 @@
 
 | File | Action | Responsibility |
 |---|---|---|
-| `Cargo.toml` | Modify | Bump workspace version to the RC version used by release notes and shared metadata. |
+| `Cargo.toml` | Inspect | Keep workspace version stable unless every workspace package and internal version constraint is released in lockstep. |
+| `Cargo.lock` | Modify | Record the dist-able package version bump after Cargo metadata refreshes the lockfile. |
 | `crates/anno-rag-bin/Cargo.toml` | Modify | Set the distributed `anno-rag` package to the RC version. |
 | `crates/anno-privacy-gateway/Cargo.toml` | Modify | Set the distributed gateway package to the same RC version so one tag can release all dist-able packages. |
 | `scripts/release/verify-mcpb.py` | Create | Validate a packaged `.mcpb` zip contains a coherent manifest and embedded binary. |
@@ -36,23 +37,19 @@
 ## Task 1: Align Dist-Able Package Versions
 
 **Files:**
-- Modify: `Cargo.toml`
+- Modify: `Cargo.lock`
 - Modify: `crates/anno-rag-bin/Cargo.toml`
 - Modify: `crates/anno-privacy-gateway/Cargo.toml`
 
-- [ ] **Step 1: Update the workspace version**
+- [ ] **Step 1: Confirm the workspace version stays stable**
 
-In `Cargo.toml`, change:
+In `Cargo.toml`, leave the workspace version as:
 
 ```toml
 version = "0.10.0"
 ```
 
-to:
-
-```toml
-version = "0.11.0-rc.1"
-```
+Do not change the workspace version for this RC. `anno-cli` and `anno-eval` inherit the workspace version and contain internal path dependencies pinned to `0.10.0`; bumping the workspace alone breaks `cargo metadata` for non-distributed crates. This RC only releases the packages marked `dist = true`.
 
 - [ ] **Step 2: Update `anno-rag-bin` version**
 
@@ -90,7 +87,7 @@ Run:
 cargo metadata --no-deps --format-version 1 |
   ConvertFrom-Json |
   Select-Object -ExpandProperty packages |
-  Where-Object { $_.name -in @('anno-rag-bin','anno-privacy-gateway') } |
+  Where-Object { $_.name -in @('anno','anno-cli','anno-eval','anno-rag-bin','anno-privacy-gateway') } |
   Select-Object name,version
 ```
 
@@ -99,6 +96,9 @@ Expected output:
 ```text
 name                 version
 ----                 -------
+anno                 0.10.0
+anno-cli             0.10.0
+anno-eval            0.10.0
 anno-rag-bin         0.11.0-rc.1
 anno-privacy-gateway 0.11.0-rc.1
 ```
@@ -128,11 +128,11 @@ Expected: at least one match for each target triple.
 Run:
 
 ```powershell
-git add Cargo.toml crates/anno-rag-bin/Cargo.toml crates/anno-privacy-gateway/Cargo.toml
+git add Cargo.lock crates/anno-rag-bin/Cargo.toml crates/anno-privacy-gateway/Cargo.toml
 git commit -m "chore(release): prepare v0.11.0-rc.1"
 ```
 
-Expected: one commit containing only the three version changes.
+Expected: one commit containing only the two dist-able package version changes and their matching `Cargo.lock` entries.
 
 ---
 
