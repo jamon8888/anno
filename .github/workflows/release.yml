@@ -182,9 +182,12 @@ jobs:
           if [ "${{ runner.os }}" = "Windows" ]; then
             BIN="anno-rag.exe"
             PLATFORM="win32"
-          else
+          elif [ "${{ runner.os }}" = "macOS" ]; then
             BIN="anno-rag"
             PLATFORM="darwin"
+          else
+            BIN="anno-rag"
+            PLATFORM="linux"
           fi
           mkdir -p mcpb-staging/server
           cp "target/${TARGET}/release/${BIN}" mcpb-staging/server/
@@ -208,9 +211,12 @@ jobs:
           if [ "${{ runner.os }}" = "Windows" ]; then
             BIN="anno-rag.exe"
             PLATFORM="win32"
-          else
+          elif [ "${{ runner.os }}" = "macOS" ]; then
             BIN="anno-rag"
             PLATFORM="darwin"
+          else
+            BIN="anno-rag"
+            PLATFORM="linux"
           fi
           python3 scripts/release/verify-mcpb.py "${MCPB_NAME}" --binary "${BIN}" --platform "${PLATFORM}"
 
