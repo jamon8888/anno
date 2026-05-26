@@ -16,9 +16,11 @@ embedded-ocr = ["anno-rag/embedded-ocr"]
 rerank = ["anno-rag/rerank"]
 
 [dependencies]
-anno-rag        = { path = "../anno-rag" }
-# anno-rag-tabular will be added in Phase 8 T33 — leave out for this refactor.
+anno-rag         = { path = "../anno-rag" }
+anno-rag-tabular = { path = "../anno-rag-tabular" }
 
+async-trait      = "0.1"
+lancedb         = { workspace = true }
 rmcp            = { workspace = true }
 serde           = { workspace = true }
 serde_json      = { workspace = true }

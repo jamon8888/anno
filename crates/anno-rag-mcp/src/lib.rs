@@ -11,6 +11,7 @@
 #![warn(missing_docs)]
 
 pub mod health;
+pub mod tabular;
 
 use anno_rag::config::{AnnoRagConfig, MemoryNerMode};
 use anno_rag::pipeline::Pipeline;
@@ -30,6 +31,7 @@ pub struct AnnoRagServer {
     pipeline: Arc<OnceCell<Arc<Pipeline>>>,
     cfg: Arc<AnnoRagConfig>,
     key: [u8; 32],
+    tabular_storage: Arc<OnceCell<Arc<anno_rag_tabular::storage::StorageHandle>>>,
     #[allow(dead_code)] // populated + consumed by the rmcp #[tool_router] macro
     tool_router: ToolRouter<Self>,
 }
@@ -69,6 +71,34 @@ impl AnnoRagServer {
     fn pipeline_arc(&self) -> Option<Arc<Pipeline>> {
         self.pipeline.get().cloned()
     }
+
+    async fn tabular_storage(
+        &self,
+    ) -> anno_rag_tabular::error::Result<&anno_rag_tabular::storage::StorageHandle> {
+        self.tabular_storage
+            .get_or_try_init(|| {
+                let data_dir = Arc::clone(&self.cfg).data_dir.clone();
+                async move {
+                    let uri = data_dir.to_str().ok_or_else(|| {
+                        anno_rag_tabular::error::Error::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "data_dir is not valid UTF-8",
+                        ))
+                    })?;
+                    let conn = std::sync::Arc::new(
+                        lancedb::connect(uri)
+                            .execute()
+                            .await
+                            .map_err(anno_rag_tabular::error::Error::Lance)?,
+                    );
+                    anno_rag_tabular::storage::StorageHandle::open(conn)
+                        .await
+                        .map(std::sync::Arc::new)
+                }
+            })
+            .await
+            .map(|arc| arc.as_ref())
+    }
 }
 
 // ---- Constructors ----
@@ -84,6 +114,7 @@ impl AnnoRagServer {
             pipeline: Arc::new(cell),
             cfg: Arc::new(cfg),
             key: [0u8; 32],
+            tabular_storage: Arc::new(OnceCell::new()),
             tool_router: Self::tool_router(),
         }
     }
@@ -95,6 +126,7 @@ impl AnnoRagServer {
             pipeline: Arc::new(OnceCell::new()),
             cfg: Arc::new(cfg),
             key,
+            tabular_storage: Arc::new(OnceCell::new()),
             tool_router: Self::tool_router(),
         }
     }
@@ -575,6 +607,173 @@ pub struct LegalValidateFieldParams {
     pub note: Option<String>,
     /// Optional reviewer identifier (email or system name).
     pub actor: Option<String>,
+}
+
+// ---- Tabular review tool param + result types ----
+
+/// Parameters for `review_create`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct ReviewCreateParams {
+    /// Human-readable review name (e.g. "NDA batch 2026-05").
+    pub name: String,
+    /// Built-in template id to load columns from. One of:
+    /// nda-v1, customer-contract-v1, real-estate-v1, employment-v1, ip-v1.
+    /// When absent an empty review is created (add columns separately).
+    #[serde(default)]
+    pub template_id: Option<String>,
+    /// Optional folder path scoped to this review (informational only).
+    #[serde(default)]
+    pub scope_folder: Option<String>,
+}
+
+/// Parameters for `review_add_rows`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct ReviewAddRowsParams {
+    /// Review UUID (returned by review_create).
+    pub review_id: String,
+    /// List of document UUIDs to add as rows. Must already be ingested.
+    pub doc_ids: Vec<String>,
+    /// When true, force re-extraction of all columns even if cells exist.
+    #[serde(default)]
+    pub force_reextract: bool,
+}
+
+/// Parameters for `review_refine_cell`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct ReviewRefineCellParams {
+    /// Review UUID.
+    pub review_id: String,
+    /// Row UUID.
+    pub row_id: String,
+    /// Column UUID.
+    pub col_id: String,
+    /// Extra instruction prepended to the column prompt for this re-extraction.
+    pub instruction: String,
+}
+
+/// Parameters for `review_set_cell`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct ReviewSetCellParams {
+    /// Review UUID.
+    pub review_id: String,
+    /// Row UUID.
+    pub row_id: String,
+    /// Column UUID.
+    pub col_id: String,
+    /// New cell value (any JSON: string, number, bool, array, object).
+    pub value: serde_json::Value,
+    /// Lock the cell after writing so it cannot be auto-overwritten.
+    #[serde(default)]
+    pub lock: bool,
+    /// Reviewer identifier (email or name).
+    #[serde(default)]
+    pub actor: Option<String>,
+}
+
+/// Parameters for `review_lock_cell` and `review_unlock_cell`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct ReviewCellLockParams {
+    /// Review UUID.
+    pub review_id: String,
+    /// Row UUID.
+    pub row_id: String,
+    /// Column UUID.
+    pub col_id: String,
+    /// Reviewer identifier (email or name).
+    #[serde(default)]
+    pub actor: Option<String>,
+}
+
+/// Parameters for `review_export`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct ReviewExportParams {
+    /// Review UUID.
+    pub review_id: String,
+    /// Export format: "csv", "markdown", or "xlsx".
+    #[serde(default = "default_export_format")]
+    pub format: String,
+    /// Absolute path where the XLSX file will be written. Required when
+    /// format is "xlsx". Ignored for csv/markdown (returned as string).
+    #[serde(default)]
+    pub output_path: Option<String>,
+}
+
+fn default_export_format() -> String {
+    "csv".into()
+}
+
+/// Parameters for `review_get`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct ReviewGetParams {
+    /// Review UUID.
+    pub review_id: String,
+}
+
+#[derive(Serialize)]
+struct ReviewCreateResult {
+    review_id: String,
+    name: String,
+    columns_loaded: usize,
+}
+
+#[derive(Serialize)]
+struct ReviewAddRowsResult {
+    rows_added: usize,
+    extraction_started: bool,
+    failed_doc_ids: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct ReviewRefineCellResult {
+    ok: bool,
+    note: String,
+}
+
+#[derive(Serialize)]
+struct ReviewSetCellResult {
+    ok: bool,
+    locked: bool,
+}
+
+#[derive(Serialize)]
+struct ReviewCellLockResult {
+    ok: bool,
+    locked: bool,
+}
+
+#[derive(Serialize)]
+struct ReviewGetResult {
+    review_id: String,
+    name: String,
+    columns: Vec<ReviewColumnWire>,
+    rows: Vec<ReviewRowWire>,
+    cells: Vec<ReviewCellWire>,
+}
+
+#[derive(Serialize)]
+struct ReviewColumnWire {
+    id: String,
+    name: String,
+    prompt: String,
+    order: u32,
+}
+
+#[derive(Serialize)]
+struct ReviewRowWire {
+    id: String,
+    doc_id: String,
+    doc_label: String,
+}
+
+#[derive(Serialize)]
+struct ReviewCellWire {
+    row_id: String,
+    col_id: String,
+    value: serde_json::Value,
+    confidence: String,
+    support_score: f32,
+    locked: bool,
+    version: u32,
 }
 
 // ---- Tool router ----
@@ -1679,6 +1878,442 @@ impl AnnoRagServer {
             Err(e) => format!("Error: {e}"),
         }
     }
+
+    // ── Tabular review tools ────────────────────────────────────────────────
+
+    /// Create a tabular review. Optionally load columns from a built-in
+    /// template (nda-v1, customer-contract-v1, real-estate-v1,
+    /// employment-v1, ip-v1). Returns the new review_id.
+    #[tool(
+        description = "Create a tabular review. Optionally materialise columns from a \
+                       built-in template. Returns review_id. \
+                       Built-in templates: nda-v1, customer-contract-v1, \
+                       real-estate-v1, employment-v1, ip-v1."
+    )]
+    async fn review_create(&self, Parameters(p): Parameters<ReviewCreateParams>) -> String {
+        let ts = match self.tabular_storage().await {
+            Ok(ts) => ts,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let review_id = anno_rag_tabular::ReviewId::new();
+        let review = anno_rag_tabular::storage::reviews::Review {
+            id: review_id,
+            name: p.name.clone(),
+            project_id: None,
+            template_id: p.template_id.clone(),
+            scope_folder: p.scope_folder.clone(),
+            created_at: chrono::Utc::now(),
+            schema_version: 1,
+        };
+        if let Err(e) = ts.reviews.create(&review).await {
+            return format!("Error: {e}");
+        }
+        let mut columns_loaded = 0usize;
+        if let Some(tid) = &p.template_id {
+            match anno_rag_tabular::schema::template::Template::builtin(tid) {
+                Ok(tmpl) => {
+                    let cols = tmpl.into_columns(review_id);
+                    columns_loaded = cols.len();
+                    for col in cols {
+                        if let Err(e) = ts.columns.add(review_id, &col).await {
+                            return format!("Error adding column: {e}");
+                        }
+                    }
+                }
+                Err(e) => return format!("Error loading template: {e}"),
+            }
+        }
+        serde_json::to_string_pretty(&ReviewCreateResult {
+            review_id: review_id.0.to_string(),
+            name: p.name,
+            columns_loaded,
+        })
+        .unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// Add document rows to a review and kick off background extraction.
+    /// `doc_ids` must be UUIDs of documents already ingested into anno-rag.
+    #[tool(
+        description = "Add rows (one per document) to a review and start background \
+                       LLM extraction. Provide doc_ids as UUID strings from ingested \
+                       documents. Extraction runs concurrently (max 8 rows)."
+    )]
+    async fn review_add_rows(&self, Parameters(p): Parameters<ReviewAddRowsParams>) -> String {
+        let ts = match self.tabular_storage().await {
+            Ok(ts) => ts,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let review_id = match uuid::Uuid::parse_str(&p.review_id) {
+            Ok(u) => anno_rag_tabular::ReviewId(u),
+            Err(e) => return format!("Error: bad review_id: {e}"),
+        };
+        let mut rows_added = 0usize;
+        let mut failed: Vec<String> = Vec::new();
+        for id_str in &p.doc_ids {
+            let doc_id = match uuid::Uuid::parse_str(id_str) {
+                Ok(u) => u,
+                Err(_) => {
+                    failed.push(id_str.clone());
+                    continue;
+                }
+            };
+            let row = anno_rag_tabular::storage::rows::Row {
+                id: anno_rag_tabular::RowId::for_doc(review_id, doc_id),
+                review_id,
+                doc_id,
+                folder_path: None,
+                created_at: chrono::Utc::now(),
+            };
+            match ts.rows.add(&row).await {
+                Ok(()) => rows_added += 1,
+                Err(e) => {
+                    tracing::warn!(target: "tabular::mcp", "add_row failed for {doc_id}: {e}");
+                    failed.push(id_str.clone());
+                }
+            }
+        }
+        // Spawn background extraction if we have rows and a pipeline.
+        let extraction_started = if rows_added > 0 {
+            match self.pipeline_arc() {
+                Some(arc_pipeline) => {
+                    let ts_clone = ts.clone();
+                    let force = p.force_reextract;
+                    tokio::spawn(async move {
+                        let chunk_src = std::sync::Arc::new(
+                            crate::tabular::PipelineChunkSource(arc_pipeline.clone()),
+                        );
+                        let llm = match anno_rag_tabular::llm::default_from_env() {
+                            Ok(l) => std::sync::Arc::from(l),
+                            Err(e) => {
+                                tracing::warn!(target: "tabular::mcp", "LLM init failed: {e}");
+                                return;
+                            }
+                        };
+                        let extractor = anno_rag_tabular::extract::Extractor::new(llm, chunk_src);
+                        let cfg = anno_rag_tabular::fanout::FanoutConfig {
+                            force_reextract: force,
+                            ..Default::default()
+                        };
+                        match anno_rag_tabular::run_review(&ts_clone, &extractor, review_id, cfg).await {
+                            Ok(outcomes) => {
+                                let ok = outcomes.iter().filter(|o| o.result.is_ok()).count();
+                                let err = outcomes.len() - ok;
+                                tracing::info!(
+                                    target: "tabular::mcp",
+                                    review = %review_id.0,
+                                    ok,
+                                    err,
+                                    "background extraction complete"
+                                );
+                            }
+                            Err(e) => tracing::warn!(target: "tabular::mcp", "run_review failed: {e}"),
+                        }
+                    });
+                    true
+                }
+                None => {
+                    tracing::warn!(target: "tabular::mcp", "pipeline not initialised; extraction skipped");
+                    false
+                }
+            }
+        } else {
+            false
+        };
+        serde_json::to_string_pretty(&ReviewAddRowsResult {
+            rows_added,
+            extraction_started,
+            failed_doc_ids: failed,
+        })
+        .unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// Re-extract a single cell with an extra instruction prepended to the
+    /// column prompt. Bumps the cell version. Locked cells block this.
+    #[tool(
+        description = "Re-extract a single cell with an extra instruction. \
+                       The instruction is prepended to the column's prompt for \
+                       this one call. Bumps cell version. Locked cells are blocked."
+    )]
+    async fn review_refine_cell(
+        &self,
+        Parameters(p): Parameters<ReviewRefineCellParams>,
+    ) -> String {
+        let ts = match self.tabular_storage().await {
+            Ok(ts) => ts,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let _pipeline = match self.pipeline().await {
+            Ok(p) => p,
+            Err(e) => return format!("Error (pipeline): {e}"),
+        };
+        let review_id = match uuid::Uuid::parse_str(&p.review_id) {
+            Ok(u) => anno_rag_tabular::ReviewId(u),
+            Err(e) => return format!("Error: bad review_id: {e}"),
+        };
+        let col_id = match uuid::Uuid::parse_str(&p.col_id) {
+            Ok(u) => anno_rag_tabular::ColumnId(u),
+            Err(e) => return format!("Error: bad col_id: {e}"),
+        };
+        let row_id = match uuid::Uuid::parse_str(&p.row_id) {
+            Ok(u) => anno_rag_tabular::RowId(u),
+            Err(e) => return format!("Error: bad row_id: {e}"),
+        };
+        // Fetch the column definition so we can amend its prompt.
+        let cols = match ts.columns.list_for_review(review_id).await {
+            Ok(c) => c,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let mut col = match cols.into_iter().find(|c| c.id == col_id) {
+            Some(c) => c,
+            None => return format!("Error: column {col_id:?} not found in review"),
+        };
+        // Fetch the row.
+        let rows = match ts.rows.list_for_review(review_id).await {
+            Ok(r) => r,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let row = match rows.into_iter().find(|r| r.id == row_id) {
+            Some(r) => r,
+            None => return format!("Error: row {row_id:?} not found"),
+        };
+        // Prepend instruction to prompt.
+        col.prompt = format!("{}\n\n{}", p.instruction, col.prompt);
+        let arc_pipeline = match self.pipeline_arc() {
+            Some(a) => a,
+            None => return "Error: pipeline not initialised".into(),
+        };
+        let chunk_src = std::sync::Arc::new(
+            crate::tabular::PipelineChunkSource(arc_pipeline),
+        );
+        let llm = match anno_rag_tabular::llm::default_from_env() {
+            Ok(l) => std::sync::Arc::from(l),
+            Err(e) => return format!("Error: LLM init: {e}"),
+        };
+        let extractor = anno_rag_tabular::extract::Extractor::new(llm, chunk_src);
+        let mut extracted = match extractor.extract_doc(review_id, row.doc_id, &[col]).await {
+            Ok(cells) => cells,
+            Err(e) => return format!("Error: extraction failed: {e}"),
+        };
+        // Offset verification.
+        for cell in &mut extracted {
+            if let Err(e) =
+                anno_rag_tabular::verify::offsets::verify_cell_offsets(cell, row.doc_id, extractor.chunks()).await
+            {
+                tracing::warn!(target: "tabular::mcp", "offset verify: {e}");
+            }
+        }
+        for cell in extracted {
+            if let Err(e) = ts.cells.upsert(&cell).await {
+                return format!("Error: upsert failed: {e}");
+            }
+        }
+        serde_json::to_string_pretty(&ReviewRefineCellResult {
+            ok: true,
+            note: "cell re-extracted and versioned".into(),
+        })
+        .unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// Write a human-override value to a cell. Author = Human.
+    /// Set `lock: true` to prevent future auto-overwrites.
+    #[tool(
+        description = "Write a human override to a cell (any JSON value). \
+                       Set lock=true to prevent auto-overwrite by the extractor. \
+                       Author is recorded as Human."
+    )]
+    async fn review_set_cell(&self, Parameters(p): Parameters<ReviewSetCellParams>) -> String {
+        let ts = match self.tabular_storage().await {
+            Ok(ts) => ts,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let review_id = match uuid::Uuid::parse_str(&p.review_id) {
+            Ok(u) => anno_rag_tabular::ReviewId(u),
+            Err(e) => return format!("Error: bad review_id: {e}"),
+        };
+        let row_id = match uuid::Uuid::parse_str(&p.row_id) {
+            Ok(u) => anno_rag_tabular::RowId(u),
+            Err(e) => return format!("Error: bad row_id: {e}"),
+        };
+        let col_id = match uuid::Uuid::parse_str(&p.col_id) {
+            Ok(u) => anno_rag_tabular::ColumnId(u),
+            Err(e) => return format!("Error: bad col_id: {e}"),
+        };
+        // Read latest version to compute next.
+        let prev_version = ts
+            .cells
+            .latest(review_id, row_id, col_id)
+            .await
+            .ok()
+            .flatten()
+            .map(|c| c.version)
+            .unwrap_or(0);
+        let cell = anno_rag_tabular::storage::cells::Cell {
+            review_id,
+            row_id,
+            col_id,
+            value: p.value,
+            reasoning: None,
+            citations: vec![],
+            support_score: 1.0,
+            confidence: anno_rag_tabular::storage::cells::Confidence::High,
+            locked: p.lock,
+            version: prev_version + 1,
+            author: anno_rag_tabular::storage::cells::Author::Human {
+                user_id: p.actor.unwrap_or_else(|| "reviewer".into()),
+            },
+            updated_at: chrono::Utc::now(),
+        };
+        match ts.cells.upsert(&cell).await {
+            Ok(()) => serde_json::to_string_pretty(&ReviewSetCellResult {
+                ok: true,
+                locked: p.lock,
+            })
+            .unwrap_or_else(|e| format!("Error: {e}")),
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    /// Lock a cell so the extraction engine cannot overwrite it.
+    #[tool(
+        description = "Lock a cell to prevent auto-overwrite by the extraction engine. \
+                       Reads the latest value and re-writes it with locked=true. \
+                       Author is recorded as Human."
+    )]
+    async fn review_lock_cell(
+        &self,
+        Parameters(p): Parameters<ReviewCellLockParams>,
+    ) -> String {
+        self.set_cell_lock(p, true).await
+    }
+
+    /// Unlock a previously locked cell so the extraction engine may overwrite it.
+    #[tool(
+        description = "Remove a lock from a cell. The extraction engine may then \
+                       overwrite it on the next review_add_rows or review_refine_cell call."
+    )]
+    async fn review_unlock_cell(
+        &self,
+        Parameters(p): Parameters<ReviewCellLockParams>,
+    ) -> String {
+        self.set_cell_lock(p, false).await
+    }
+
+    /// Export a review as CSV, Markdown, or XLSX.
+    #[tool(
+        description = "Export a review. format: csv (default), markdown, or xlsx. \
+                       For xlsx, provide output_path (absolute). \
+                       CSV and Markdown are returned as a string in the tool response."
+    )]
+    async fn review_export(&self, Parameters(p): Parameters<ReviewExportParams>) -> String {
+        let ts = match self.tabular_storage().await {
+            Ok(ts) => ts,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let review_id = match uuid::Uuid::parse_str(&p.review_id) {
+            Ok(u) => anno_rag_tabular::ReviewId(u),
+            Err(e) => return format!("Error: bad review_id: {e}"),
+        };
+        match p.format.as_str() {
+            "csv" => match anno_rag_tabular::export::export_csv(ts, review_id).await {
+                Ok(s) => s,
+                Err(e) => format!("Error: {e}"),
+            },
+            "markdown" | "md" => {
+                match anno_rag_tabular::export::export_markdown(ts, review_id).await {
+                    Ok(s) => s,
+                    Err(e) => format!("Error: {e}"),
+                }
+            }
+            "xlsx" => {
+                let path_str = match &p.output_path {
+                    Some(s) => s.clone(),
+                    None => return "Error: output_path required for xlsx format".into(),
+                };
+                let path = std::path::Path::new(&path_str);
+                match anno_rag_tabular::export::export_xlsx(ts, review_id, path).await {
+                    Ok(()) => {
+                        serde_json::json!({ "ok": true, "path": path_str }).to_string()
+                    }
+                    Err(e) => format!("Error: {e}"),
+                }
+            }
+            other => format!("Error: unknown format '{other}'. Valid: csv, markdown, xlsx"),
+        }
+    }
+
+    /// Return the full state of a review: columns, rows, and latest cells.
+    /// Use this to track extraction progress or read the current grid.
+    #[tool(
+        description = "Return the full state of a review: columns, rows, and latest \
+                       cells with confidence and lock status. Use to poll extraction \
+                       progress or read the current grid."
+    )]
+    async fn review_get(&self, Parameters(p): Parameters<ReviewGetParams>) -> String {
+        let ts = match self.tabular_storage().await {
+            Ok(ts) => ts,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let review_id = match uuid::Uuid::parse_str(&p.review_id) {
+            Ok(u) => anno_rag_tabular::ReviewId(u),
+            Err(e) => return format!("Error: bad review_id: {e}"),
+        };
+        let review = match ts.reviews.get(review_id).await {
+            Ok(Some(r)) => r,
+            Ok(None) => return format!("Error: review {review_id:?} not found"),
+            Err(e) => return format!("Error: {e}"),
+        };
+        let columns = match ts.columns.list_for_review(review_id).await {
+            Ok(c) => c,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let rows = match ts.rows.list_for_review(review_id).await {
+            Ok(r) => r,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let cells = match ts.cells.all_for_review_latest(review_id).await {
+            Ok(c) => c,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let wire = ReviewGetResult {
+            review_id: review_id.0.to_string(),
+            name: review.name,
+            columns: columns
+                .into_iter()
+                .map(|c| ReviewColumnWire {
+                    id: c.id.0.to_string(),
+                    name: c.name,
+                    prompt: c.prompt,
+                    order: c.order,
+                })
+                .collect(),
+            rows: rows
+                .iter()
+                .map(|r| ReviewRowWire {
+                    id: r.id.0.to_string(),
+                    doc_id: r.doc_id.to_string(),
+                    doc_label: r.folder_path
+                        .as_deref()
+                        .and_then(|p| p.rsplit('/').next())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| r.doc_id.to_string()),
+                })
+                .collect(),
+            cells: cells
+                .into_iter()
+                .map(|c| ReviewCellWire {
+                    row_id: c.row_id.0.to_string(),
+                    col_id: c.col_id.0.to_string(),
+                    value: c.value,
+                    confidence: format!("{:?}", c.confidence).to_lowercase(),
+                    support_score: c.support_score,
+                    locked: c.locked,
+                    version: c.version,
+                })
+                .collect(),
+        };
+        serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
+    }
 }
 
 #[tool_handler]
@@ -1705,6 +2340,47 @@ impl ServerHandler for AnnoRagServer {
                 self.cfg.mcp_server_name.clone(),
                 env!("CARGO_PKG_VERSION"),
             ))
+    }
+}
+
+impl AnnoRagServer {
+    /// Internal: flip the locked flag on the latest cell version.
+    async fn set_cell_lock(&self, p: ReviewCellLockParams, locked: bool) -> String {
+        let ts = match self.tabular_storage().await {
+            Ok(ts) => ts,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let review_id = match uuid::Uuid::parse_str(&p.review_id) {
+            Ok(u) => anno_rag_tabular::ReviewId(u),
+            Err(e) => return format!("Error: bad review_id: {e}"),
+        };
+        let row_id = match uuid::Uuid::parse_str(&p.row_id) {
+            Ok(u) => anno_rag_tabular::RowId(u),
+            Err(e) => return format!("Error: bad row_id: {e}"),
+        };
+        let col_id = match uuid::Uuid::parse_str(&p.col_id) {
+            Ok(u) => anno_rag_tabular::ColumnId(u),
+            Err(e) => return format!("Error: bad col_id: {e}"),
+        };
+        let prev = match ts.cells.latest(review_id, row_id, col_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => return "Error: no cell found to lock/unlock".into(),
+            Err(e) => return format!("Error: {e}"),
+        };
+        let cell = anno_rag_tabular::storage::cells::Cell {
+            locked,
+            version: prev.version + 1,
+            author: anno_rag_tabular::storage::cells::Author::Human {
+                user_id: p.actor.unwrap_or_else(|| "reviewer".into()),
+            },
+            updated_at: chrono::Utc::now(),
+            ..prev
+        };
+        match ts.cells.upsert(&cell).await {
+            Ok(()) => serde_json::to_string_pretty(&ReviewCellLockResult { ok: true, locked })
+                .unwrap_or_else(|e| format!("Error: {e}")),
+            Err(e) => format!("Error: {e}"),
+        }
     }
 }
 
