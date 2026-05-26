@@ -4,6 +4,9 @@
 //! - `anno-rag ingest <folder> [--recursive] [--output <dir>]`
 //! - `anno-rag search <query> [--top-k <N>]`
 //! - `anno-rag mcp` — run MCP server on stdio (used by Cowork plugin)
+//! - `anno-rag review <subcmd>` — tabular review management
+
+mod review;
 
 use anno_rag::{
     config::{AnnoRagConfig, MemoryNerMode, OcrMode},
@@ -71,6 +74,8 @@ enum Cmd {
         #[command(subcommand)]
         sub: VaultCmd,
     },
+    /// Tabular review management: create, list, add rows, run extraction, export.
+    Review(review::ReviewArgs),
 }
 
 #[derive(Subcommand)]
@@ -135,6 +140,17 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // Review subcommands short-circuit before Pipeline::new.
+    // The `extract` subcommand builds its own pipeline internally when needed.
+    // We check by reference first (borrows are released after `matches!` returns)
+    // and then take ownership with `let-else`; after the block only the false
+    // path remains live, so `cli.cmd` is still available for the final `match`.
+    if matches!(&cli.cmd, Cmd::Review(_)) {
+        let Cmd::Review(args) = cli.cmd else { unreachable!() };
+        review::run(args.cmd, &cfg).await?;
+        return Ok(());
+    }
+
     // DownloadModels needs no Pipeline — short-circuit before keyring lookup.
     if let Cmd::DownloadModels { dir } = &cli.cmd {
         let mut cfg = AnnoRagConfig::default();
@@ -194,6 +210,7 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Bench { .. } => unreachable!("handled above before Pipeline::new"),
         Cmd::DownloadModels { .. } => unreachable!("handled above before Pipeline::new"),
         Cmd::Vault { .. } => unreachable!("handled above before Pipeline::new"),
+        Cmd::Review(_) => unreachable!("handled above before Pipeline::new"),
     }
     Ok(())
 }

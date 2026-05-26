@@ -19,14 +19,19 @@ name = "anno-rag"
 path = "src/main.rs"
 
 [dependencies]
-anno-rag        = { path = "../anno-rag" }
-anno-rag-mcp    = { path = "../anno-rag-mcp" }
+anno-rag         = { path = "../anno-rag" }
+anno-rag-mcp     = { path = "../anno-rag-mcp" }
+anno-rag-tabular = { path = "../anno-rag-tabular" }
 
+async-trait     = "0.1"
 clap            = { workspace = true }
+chrono          = { workspace = true }
+lancedb         = { workspace = true }
 tokio           = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow          = { workspace = true }
 serde_json      = { workspace = true }
+uuid            = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [lints]
