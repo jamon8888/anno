@@ -38,14 +38,9 @@ pub async fn export_xlsx(
     let mut rows = storage.rows.list_for_review(review_id).await?;
     let cells = storage.cells.all_for_review_latest(review_id).await?;
 
-    rows.sort_by(|a, b| {
-        crate::export::csv::doc_label(a).cmp(&crate::export::csv::doc_label(b))
-    });
+    rows.sort_by_key(|r| crate::export::csv::doc_label(r));
 
-    let cell_map: HashMap<_, _> = cells
-        .iter()
-        .map(|c| ((c.row_id, c.col_id), c))
-        .collect();
+    let cell_map: HashMap<_, _> = cells.iter().map(|c| ((c.row_id, c.col_id), c)).collect();
 
     // --- Formats ---
     let header_fmt = Format::new()
@@ -193,9 +188,15 @@ fn write_cell(
             // Write as a number when possible so Excel can format it.
             let fmt = if is_low { low_eur_fmt } else { eur_fmt };
             match value {
-                Value::Number(n) if n.as_f64().is_some() => {
-                    ws.write_number_with_format(row, col, n.as_f64().unwrap(), fmt)
-                        .map_err(xlsx_err)?;
+                Value::Number(n) => {
+                    if let Some(f) = n.as_f64() {
+                        ws.write_number_with_format(row, col, f, fmt)
+                            .map_err(xlsx_err)?;
+                    } else {
+                        let s = crate::export::csv::render_value(value)?;
+                        ws.write_string_with_format(row, col, &s, fmt)
+                            .map_err(xlsx_err)?;
+                    }
                 }
                 _ => {
                     let s = crate::export::csv::render_value(value)?;
@@ -209,13 +210,14 @@ fn write_cell(
             // Text, Verbatim, Enum, Number — generic rendering.
             match value {
                 Value::Null => {} // leave cell empty
-                Value::Number(n) if n.as_f64().is_some() => {
-                    if is_low {
-                        ws.write_number_with_format(row, col, n.as_f64().unwrap(), low_fmt)
-                            .map_err(xlsx_err)?;
-                    } else {
-                        ws.write_number(row, col, n.as_f64().unwrap())
-                            .map_err(xlsx_err)?;
+                Value::Number(n) => {
+                    if let Some(f) = n.as_f64() {
+                        if is_low {
+                            ws.write_number_with_format(row, col, f, low_fmt)
+                                .map_err(xlsx_err)?;
+                        } else {
+                            ws.write_number(row, col, f).map_err(xlsx_err)?;
+                        }
                     }
                 }
                 _ => {
@@ -238,7 +240,7 @@ fn write_cell(
 /// Convert an [`XlsxError`] into the crate's [`crate::error::Error::Io`]
 /// variant so callers stay within the unified `Result` type.
 fn xlsx_err(e: XlsxError) -> crate::error::Error {
-    std::io::Error::new(std::io::ErrorKind::Other, e.to_string()).into()
+    std::io::Error::other(e.to_string()).into()
 }
 
 #[cfg(test)]
@@ -251,7 +253,6 @@ mod tests {
     use crate::storage::rows::Row;
     use crate::storage::StorageHandle;
     use chrono::Utc;
-    use lancedb::Connection;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -324,15 +325,10 @@ mod tests {
             .await
             .expect("create review");
 
-        let col =
-            ColumnBuilder::new(review_id, "Parties", "Who are the parties?", CellType::Text)
-                .order(0)
-                .build();
-        storage
-            .columns
-            .add(review_id, &col)
-            .await
-            .expect("add col");
+        let col = ColumnBuilder::new(review_id, "Parties", "Who are the parties?", CellType::Text)
+            .order(0)
+            .build();
+        storage.columns.add(review_id, &col).await.expect("add col");
 
         let row = mk_row(review_id, "Deal/contract.pdf");
         storage.rows.add(&row).await.expect("add row");
@@ -351,7 +347,10 @@ mod tests {
             .await
             .expect("export xlsx");
 
-        assert!(out_path.exists(), "XLSX file must be created at output path");
+        assert!(
+            out_path.exists(),
+            "XLSX file must be created at output path"
+        );
         assert!(
             out_path.metadata().expect("metadata").len() > 0,
             "XLSX file must be non-empty"
@@ -380,11 +379,7 @@ mod tests {
             let col = ColumnBuilder::new(review_id, name, "p", CellType::Text)
                 .order(i as u32)
                 .build();
-            storage
-                .columns
-                .add(review_id, &col)
-                .await
-                .expect("add col");
+            storage.columns.add(review_id, &col).await.expect("add col");
         }
 
         let out_dir = TempDir::new().expect("out tempdir");
@@ -405,9 +400,9 @@ mod tests {
         // Count <si> entries — one per unique string (header cells).
         let si_count = xml.matches("<si>").count();
         assert!(
-            si_count >= col_names.len() + 1,
-            "expected ≥ {} shared strings (Doc + {} cols), got {}",
-            col_names.len() + 1,
+            si_count > col_names.len(),
+            "expected > {} shared strings (Doc + {} cols), got {}",
+            col_names.len(),
             col_names.len(),
             si_count
         );
