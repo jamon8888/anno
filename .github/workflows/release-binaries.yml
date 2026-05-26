@@ -50,6 +50,13 @@ jobs:
           git -c credential.helper= fetch --depth=1 origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           git checkout --detach "refs/tags/${RELEASE_TAG}"
 
+      - name: Restore workflow release scripts
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          git -c credential.helper= fetch --depth=1 origin "${{ github.sha }}"
+          git checkout FETCH_HEAD -- scripts/release/package-windows.ps1
+
       - name: Install Rust target
         shell: bash
         run: rustup target add "${{ matrix.target }}"
