@@ -130,6 +130,10 @@ inherits = "dev"
 debug = 0
 incremental = true
 codegen-units = 256
+opt-level = 0
+split-debuginfo = "off"   # skip PDB write on Windows — significant linker speedup
+# overflow-checks = false — disabled: causes STATUS_STACK_BUFFER_OVERRUN in memchr/libm on MSVC (rustc 1.95)
+strip = "none"            # explicit; no surprises
 
 [profile.dev-fast.build-override]
 debug = 0
