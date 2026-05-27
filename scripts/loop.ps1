@@ -40,7 +40,7 @@ param(
     [switch]$SkipCheck
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"   # "Stop" breaks on native-cmd stderr (git warnings, cargo warnings)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # -----------------------------------------------------------------
@@ -61,7 +61,7 @@ $check_packages  = @()
 
 if (-not $primary_package) {
     $raw = & powershell -NoProfile -ExecutionPolicy Bypass `
-        -File "$ScriptDir\dev-fast.ps1" -PrintOnly -Since $Since 2>&1
+        -File "$ScriptDir\dev-fast.ps1" -PrintOnly -Since $Since 2>$null
     $pkg_line = $raw | Where-Object { $_ -match '^Packages: ' } | Select-Object -First 1
     if (-not $pkg_line) {
         Write-Host "No changed crates detected. Use -Package <crate> to target manually."
@@ -76,7 +76,7 @@ $check_packages = @($primary_package)
 
 if ($AllAffected) {
     $raw_all = & powershell -NoProfile -ExecutionPolicy Bypass `
-        -File "$ScriptDir\dev-fast.ps1" -AllAffected -PrintOnly -Since $Since 2>&1
+        -File "$ScriptDir\dev-fast.ps1" -AllAffected -PrintOnly -Since $Since 2>$null
     $pkg_line_all = $raw_all | Where-Object { $_ -match '^Packages: ' } | Select-Object -First 1
     if ($pkg_line_all) {
         $check_packages = ($pkg_line_all -replace '^Packages: ', '') -split ', ' |
