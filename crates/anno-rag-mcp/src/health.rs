@@ -62,6 +62,25 @@ pub fn init_vault_with_passphrase(passphrase: &str) -> InitVaultResult {
     }
 }
 
+/// Build an [`EngineHealth`] snapshot from a live pipeline.
+///
+/// Extracted for testability — the MCP `anno_health` tool calls the same
+/// logic inline but cannot be called directly from integration tests because
+/// `#[tool_router]` methods are private.
+pub async fn collect_health(
+    pipeline: &anno_rag::pipeline::Pipeline,
+    _cfg: &anno_rag::config::AnnoRagConfig,
+) -> EngineHealth {
+    EngineHealth {
+        engine_version: env!("CARGO_PKG_VERSION").to_string(),
+        build_target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
+        signed: SIGNED_BUILD,
+        extension_install: EXTENSION_INSTALL,
+        vault_initialized: pipeline.vault_is_initialized(),
+        available_tools: all_tool_names(),
+    }
+}
+
 /// Hardcoded list of tools exposed by the MCP server.
 pub fn all_tool_names() -> Vec<String> {
     vec![

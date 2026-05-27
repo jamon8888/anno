@@ -127,6 +127,7 @@ unwrap_used = "warn"
 
 [profile.dist]
 inherits = "release"
+split-debuginfo = "off"  # skip PDB on Windows — faster link step
 
 [profile.dev-fast]
 inherits = "dev"
