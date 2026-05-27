@@ -51,7 +51,9 @@ crates/anno/target/
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
 *.swp
 *.swo
 .cursor/
