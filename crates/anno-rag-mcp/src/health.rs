@@ -1,7 +1,5 @@
 //! Engine health collector for the `anno_health` MCP tool (spec §13.1).
 
-use anno_rag::config::AnnoRagConfig;
-use anno_rag::pipeline::Pipeline;
 use serde::{Deserialize, Serialize};
 
 /// Set at compile time only in the CI signing job.
@@ -19,18 +17,6 @@ pub struct EngineHealth {
     pub extension_install: bool,
     pub vault_initialized: bool,
     pub available_tools: Vec<String>,
-}
-
-/// Collect health without opening the vault or loading models.
-pub async fn collect_health(pipeline: &Pipeline, _cfg: &AnnoRagConfig) -> EngineHealth {
-    EngineHealth {
-        engine_version: env!("CARGO_PKG_VERSION").to_string(),
-        build_target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
-        signed: SIGNED_BUILD,
-        extension_install: EXTENSION_INSTALL,
-        vault_initialized: pipeline.vault_is_initialized(),
-        available_tools: all_tool_names(),
-    }
 }
 
 /// Result of `anno_init_vault`. The passphrase itself is never echoed.
