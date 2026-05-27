@@ -11,6 +11,8 @@ dir = "target/nextest"
 [profile.default]
 # Retry flaky tests once (not timeouts -- those are real failures)
 retries = 1
+# Show failure output immediately; don't wait for full run to finish
+failure-output = "immediate"
 
 # Mark tests as slow after 60s, terminate after 120s.
 # Integration tests share one binary now (no per-file link overhead).
@@ -21,6 +23,20 @@ fail-fast = false
 
 # Status level for output
 status-level = "pass"
+
+# =============================================================================
+# Dev-Fast Profile — used by scripts/loop.ps1
+# =============================================================================
+
+[profile.dev-fast]
+# No retries in the dev loop — fail fast, fix, retry manually
+retries = 0
+# Show failure output immediately; don't wait for the full run to finish
+failure-output = "immediate"
+# Only show failing tests — keep the loop output clean
+status-level = "fail"
+# Use all available CPU threads for maximum parallelism
+test-threads = "num-cpus"
 
 # =============================================================================
 # CI Profile - stricter timeouts

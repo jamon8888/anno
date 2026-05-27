@@ -1,4 +1,4 @@
 {
-  "rust-analyzer.cargo.targetDir": "target/ra",
+  "rust-analyzer.cargo.targetDir": "D:/cargo-shared-target/ra",
   "rust-analyzer.checkOnSave.extraArgs": ["--profile", "dev-fast"]
 }

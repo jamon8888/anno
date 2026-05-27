@@ -59,7 +59,8 @@ crates/anno/target/
 .cursor/
 
 # Claude Code (local settings, commands, artifacts)
-.claude/
+.claude/*
+!.claude/settings.json
 
 # Cargo crates.io packaging (local scratch)
 crates/*/README.md
