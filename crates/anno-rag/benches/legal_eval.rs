@@ -9,18 +9,20 @@
 #![allow(clippy::unwrap_used, missing_docs)]
 
 use anno_rag::legal::eval::{
-    citation_validity_rate, load_corpus, mandatory_clause_f1, obligation_f1,
-    prescription_accuracy,
+    citation_validity_rate, load_corpus, mandatory_clause_f1, obligation_f1, prescription_accuracy,
 };
 use anno_rag::legal::mandatory::evaluate_doc;
 use anno_rag::legal::prescription::{compute_prescription, InterruptingEvent};
+use chrono::Datelike;
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::path::PathBuf;
 
 fn corpus_dir() -> PathBuf {
     // Canonical path: crates/anno-rag/tests/legal_gold_corpus
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into());
-    PathBuf::from(manifest).join("tests").join("legal_gold_corpus")
+    PathBuf::from(manifest)
+        .join("tests")
+        .join("legal_gold_corpus")
 }
 
 fn bench_mandatory_clause_eval(c: &mut Criterion) {
@@ -34,11 +36,7 @@ fn bench_mandatory_clause_eval(c: &mut Criterion) {
     c.bench_function("mandatory_clause_f1", |b| {
         b.iter(|| {
             let metrics = mandatory_clause_f1(&corpus, |doc| {
-                let doc_type = doc
-                    .gold
-                    .doc_type
-                    .as_deref()
-                    .unwrap_or("unknown");
+                let doc_type = doc.gold.doc_type.as_deref().unwrap_or("unknown");
                 evaluate_doc(doc_type, &doc.text)
                     .into_iter()
                     .map(|mc| (mc.requirement, mc.status))
@@ -87,8 +85,7 @@ fn bench_prescription_accuracy(c: &mut Criterion) {
     c.bench_function("prescription_accuracy", |b| {
         b.iter(|| {
             prescription_accuracy(&corpus, |_doc, presc| {
-                let anchor: chrono::DateTime<chrono::Utc> =
-                    presc.anchor_date.parse().ok()?;
+                let anchor: chrono::DateTime<chrono::Utc> = presc.anchor_date.parse().ok()?;
                 compute_prescription(&presc.category, anchor, &[] as &[InterruptingEvent])
                     .map(|r| r.prescribes_on.year())
             })
@@ -107,7 +104,11 @@ fn bench_citation_validity(c: &mut Criterion) {
         b.iter(|| {
             // Simulated predictor using gold citations directly (perfect predictor).
             citation_validity_rate(&corpus, |doc| {
-                doc.gold.citations.iter().map(|c| c.normalized_ref.clone()).collect()
+                doc.gold
+                    .citations
+                    .iter()
+                    .map(|c| c.normalized_ref.clone())
+                    .collect()
             })
         })
     });
@@ -146,13 +147,23 @@ fn emit_report() {
         compute_prescription(&presc.category, anchor, &[] as &[InterruptingEvent])
             .map(|r| r.prescribes_on.year())
     });
-    eprintln!("{{\"metric\":\"prescription_accuracy\",\"accuracy\":{:.4}}}", pa);
+    eprintln!(
+        "{{\"metric\":\"prescription_accuracy\",\"accuracy\":{:.4}}}",
+        pa
+    );
 
     // Citation validity
     let cv = citation_validity_rate(&corpus, |doc| {
-        doc.gold.citations.iter().map(|c| c.normalized_ref.clone()).collect()
+        doc.gold
+            .citations
+            .iter()
+            .map(|c| c.normalized_ref.clone())
+            .collect()
     });
-    eprintln!("{{\"metric\":\"citation_validity_rate\",\"rate\":{:.4}}}", cv);
+    eprintln!(
+        "{{\"metric\":\"citation_validity_rate\",\"rate\":{:.4}}}",
+        cv
+    );
 }
 
 /// Emit JSON metrics report + run all criterion benches.

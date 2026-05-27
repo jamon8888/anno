@@ -125,6 +125,17 @@ missing_docs = "warn"
 [workspace.lints.clippy]
 unwrap_used = "warn"
 
+[profile.dev-fast]
+inherits = "dev"
+debug = 0
+incremental = true
+codegen-units = 256
+
+[profile.dev-fast.build-override]
+debug = 0
+opt-level = 0
+codegen-units = 256
+
 # This is a virtual workspace. The published `anno` crate lives at `crates/anno/`.
 # Local development overrides (path patches) live in `.cargo/config.toml`.
 # See `.cargo/config.toml.example` for the super-workspace setup.
