@@ -51,13 +51,16 @@ crates/anno/target/
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
 *.swp
 *.swo
 .cursor/
 
 # Claude Code (local settings, commands, artifacts)
-.claude/
+.claude/*
+!.claude/settings.json
 
 # Cargo crates.io packaging (local scratch)
 crates/*/README.md
@@ -72,6 +75,7 @@ README_preview_screenshot*.png
 
 # Python
 .venv/
+.venv-*/
 __pycache__/
 *.pyc
 *.pyo

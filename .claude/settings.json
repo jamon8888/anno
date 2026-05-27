@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // \"\"' | ForEach-Object { if ($_ -match 'crates[\\/]([^\\/]+)[\\/].*\\.rs$') { powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-fast.ps1 -Package $Matches[1] -Mode check } }",
+            "timeout": 60,
+            "statusMessage": "cargo check ...",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

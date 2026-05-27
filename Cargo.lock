@@ -322,6 +322,7 @@ version = "0.1.0"
 dependencies = [
  "anno-rag",
  "chrono",
+ "keyring",
  "rmcp",
  "schemars 0.8.22",
  "serde",

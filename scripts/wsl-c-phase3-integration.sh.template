@@ -1,0 +1,47 @@
+#!/bin/bash
+# Sync Ubuntu-C clone to feat/gliner2-fastino-phase3 latest, run integration tests.
+set -e
+source ~/.cargo/env
+
+cd ~/dev/anno
+# Fetch from parent repo (worktree's .git is a pointer file, not a real repo).
+# Using FETCH_HEAD-only form (no `branch:branch`) since the branch is checked out.
+git fetch /mnt/c/Users/NMarchitecte/anno feat/gliner2-fastino-phase3
+git checkout feat/gliner2-fastino-phase3 || true
+git reset --hard FETCH_HEAD
+git log --oneline -3
+echo ""
+
+export RUSTFLAGS="--cap-lints allow"
+
+echo "=== Build (cargo check) ==="
+cargo check -p anno --features gliner2-fastino --tests > /tmp/p3-check.log 2>&1
+CHECK=$?
+echo "CHECK_EXIT=$CHECK"
+if [ $CHECK -ne 0 ]; then
+    echo "--- check failed; last 30 lines ---"
+    tail -30 /tmp/p3-check.log
+    exit 1
+fi
+
+echo ""
+echo "=== Build integration test binary ==="
+cargo test -p anno --features gliner2-fastino \
+    --test gliner2_fastino_integration --no-run > /tmp/p3-build-test.log 2>&1
+BUILD=$?
+echo "BUILD_EXIT=$BUILD"
+if [ $BUILD -ne 0 ]; then
+    echo "--- test build failed ---"
+    tail -30 /tmp/p3-build-test.log
+    exit 2
+fi
+
+echo ""
+echo "=== Run integration tests with --ignored ==="
+cargo test -p anno --features gliner2-fastino \
+    --test gliner2_fastino_integration -- --ignored --nocapture > /tmp/p3-run.log 2>&1
+RUN=$?
+echo "RUN_EXIT=$RUN"
+echo ""
+echo "--- final 80 lines of test output ---"
+tail -80 /tmp/p3-run.log
