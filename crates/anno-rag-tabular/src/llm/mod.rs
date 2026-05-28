@@ -9,7 +9,10 @@
 //! schema, here's the user message, here's the system prompt."
 
 pub mod anthropic;
+pub mod local;
 pub mod mock;
+pub mod privacy;
+pub mod routing;
 
 use async_trait::async_trait;
 use serde_json::Value;

@@ -9,7 +9,7 @@
 
 use crate::error::{Error, Result};
 use crate::ids::ReviewId;
-use crate::schema::column::ColumnBuilder;
+use crate::schema::column::{ColumnBuilder, ExtractionSpec};
 use crate::schema::{CellType, Column};
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +43,10 @@ pub struct TemplateColumn {
     /// specific fields like `code = "EUR"` or `options = [...]`).
     #[serde(flatten)]
     pub cell_type: CellTypeWire,
+    /// Optional local-extraction metadata. Absent from older templates
+    /// — `#[serde(default)]` gives `ExtractionSpec::default()` in that case.
+    #[serde(default)]
+    pub extraction: ExtractionSpec,
 }
 
 /// TOML-friendly cell type. Tagged with `type` to keep the on-disk
@@ -129,6 +133,7 @@ impl Template {
             .enumerate()
             .map(|(i, tc)| {
                 ColumnBuilder::new(review_id, &tc.name, &tc.prompt, tc.cell_type.into())
+                    .extraction(tc.extraction)
                     .order(u32::try_from(i).unwrap_or(u32::MAX))
                     .build()
             })
@@ -210,6 +215,47 @@ mod tests {
         ] {
             assert!(names.contains(&must), "missing required col {must}");
         }
+    }
+
+    #[test]
+    fn template_parses_extraction_metadata() {
+        use crate::schema::column::{ExtractionMode, ExtractionNormalizer};
+        let raw = r#"
+id = "test-template"
+name = "Test"
+version = "1.0.0"
+description = "Test"
+vertical = "legal-fr"
+
+[[column]]
+name = "landlord"
+prompt = "Landlord legal name."
+type = "text"
+
+[column.extraction]
+mode = "local_span"
+normalizer = "legal_name"
+threshold = 0.45
+keywords = ["bailleur", "entre les soussignes"]
+labels = [
+  { name = "bailleur", description = "Nom complet du bailleur" }
+]
+"#;
+        let t: Template = Template::from_toml(raw).expect("template wire parses");
+        let review = ReviewId::new();
+        let cols = t.into_columns(review);
+
+        assert_eq!(cols[0].extraction.mode, ExtractionMode::LocalSpan);
+        assert_eq!(
+            cols[0].extraction.normalizer,
+            Some(ExtractionNormalizer::LegalName)
+        );
+        assert!((cols[0].extraction.threshold.unwrap() - 0.45_f32).abs() < 1e-5);
+        assert_eq!(
+            cols[0].extraction.keywords,
+            vec!["bailleur", "entre les soussignes"]
+        );
+        assert_eq!(cols[0].extraction.labels[0].name, "bailleur");
     }
 
     #[test]

@@ -45,6 +45,7 @@ pub fn columns_schema() -> Arc<Schema> {
         Field::new("prompt", DataType::Utf8, false),
         Field::new("cell_type_json", DataType::Utf8, false), // serde_json CellType
         Field::new("conditional_json", DataType::Utf8, true),
+        Field::new("extraction_json", DataType::Utf8, true),
         Field::new("manual", DataType::Boolean, false),
         Field::new("order_idx", DataType::UInt32, false),
     ]))

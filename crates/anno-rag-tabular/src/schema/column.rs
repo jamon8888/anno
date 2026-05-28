@@ -12,6 +12,72 @@ use crate::ids::{ColumnId, ReviewId};
 use crate::schema::{CellType, ConditionalSpec};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtractionMode {
+    Auto,
+    LocalSpan,
+    LocalClause,
+    LocalClassifier,
+    LlmRequired,
+    Manual,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtractionLabel {
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtractionNormalizer {
+    LegalName,
+    DateIso,
+    EurCurrency,
+    Number,
+    Enum,
+    VerbatimClause,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExtractionSpec {
+    #[serde(default = "ExtractionSpec::default_mode")]
+    pub mode: ExtractionMode,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<ExtractionLabel>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keywords: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threshold: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalizer: Option<ExtractionNormalizer>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_before_chars: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_after_chars: Option<usize>,
+}
+
+impl ExtractionSpec {
+    fn default_mode() -> ExtractionMode {
+        ExtractionMode::Auto
+    }
+}
+
+impl Default for ExtractionSpec {
+    fn default() -> Self {
+        Self {
+            mode: ExtractionMode::Auto,
+            labels: Vec::new(),
+            keywords: Vec::new(),
+            threshold: None,
+            normalizer: None,
+            window_before_chars: None,
+            window_after_chars: None,
+        }
+    }
+}
+
 /// One column in a review.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Column {
@@ -26,6 +92,8 @@ pub struct Column {
     /// Optional gate — see [`ConditionalSpec`].
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub conditional: Option<ConditionalSpec>,
+    #[serde(default)]
+    pub extraction: ExtractionSpec,
     /// Human-input only — extractor skips this column.
     #[serde(default)]
     pub manual: bool,
@@ -42,6 +110,7 @@ pub struct ColumnBuilder {
     prompt: String,
     cell_type: CellType,
     conditional: Option<ConditionalSpec>,
+    extraction: ExtractionSpec,
     manual: bool,
     order: u32,
 }
@@ -56,6 +125,7 @@ impl ColumnBuilder {
             prompt: prompt.into(),
             cell_type,
             conditional: None,
+            extraction: ExtractionSpec::default(),
             manual: false,
             order: 0,
         }
@@ -66,6 +136,12 @@ impl ColumnBuilder {
     #[must_use]
     pub fn conditional(mut self, c: ConditionalSpec) -> Self {
         self.conditional = Some(c);
+        self
+    }
+
+    #[must_use]
+    pub fn extraction(mut self, extraction: ExtractionSpec) -> Self {
+        self.extraction = extraction;
         self
     }
 
@@ -92,6 +168,7 @@ impl ColumnBuilder {
             prompt: self.prompt,
             cell_type: self.cell_type,
             conditional: self.conditional,
+            extraction: self.extraction,
             manual: self.manual,
             order: self.order,
         }
@@ -120,6 +197,18 @@ mod tests {
             .manual()
             .build();
         assert!(c.manual);
+    }
+
+    #[test]
+    fn column_defaults_to_auto_extraction() {
+        let review = ReviewId(uuid::Uuid::now_v7());
+        let col = ColumnBuilder::new(review, "landlord", "Landlord?", CellType::Text).build();
+
+        assert_eq!(col.extraction.mode, ExtractionMode::Auto);
+        assert!(col.extraction.labels.is_empty());
+        assert!(col.extraction.keywords.is_empty());
+        assert_eq!(col.extraction.threshold, None);
+        assert_eq!(col.extraction.normalizer, None);
     }
 
     #[test]
