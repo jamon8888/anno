@@ -21,7 +21,9 @@ use std::collections::HashMap;
 /// a short English description passed to GLiNER as the label text.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LegalLabel {
+    /// Short machine-readable label name (e.g. `"contract_party"`).
     pub name: &'static str,
+    /// Human-readable description forwarded to GLiNER as the label text.
     pub description: &'static str,
 }
 
@@ -52,29 +54,47 @@ impl Default for LegalSignalCatalog {
     fn default() -> Self {
         // Labels mirror anno/gliner2_fastino legal taxonomy.
         let labels = vec![
-            LegalLabel { name: "contract_party",      description: "Party to the contract (person or organisation)" },
-            LegalLabel { name: "company_identifier",  description: "Company registration number (SIREN/SIRET/RCS)" },
-            LegalLabel { name: "amount",              description: "Monetary amount" },
-            LegalLabel { name: "date",                description: "Calendar date" },
-            LegalLabel { name: "address",             description: "Postal or civic address" },
-            LegalLabel { name: "obligation",          description: "Legal obligation or duty clause" },
-            LegalLabel { name: "right",               description: "Legal right or entitlement clause" },
-            LegalLabel { name: "jurisdiction",        description: "Governing law or jurisdiction" },
-            LegalLabel { name: "duration",            description: "Contract term or duration" },
-            LegalLabel { name: "penalty",             description: "Penalty, indemnity, or liquidated damages" },
+            LegalLabel {
+                name: "contract_party",
+                description: "Party to the contract (person or organisation)",
+            },
+            LegalLabel {
+                name: "company_identifier",
+                description: "Company registration number (SIREN/SIRET/RCS)",
+            },
+            LegalLabel { name: "amount", description: "Monetary amount" },
+            LegalLabel { name: "date", description: "Calendar date" },
+            LegalLabel { name: "address", description: "Postal or civic address" },
+            LegalLabel {
+                name: "obligation",
+                description: "Legal obligation or duty clause",
+            },
+            LegalLabel {
+                name: "right",
+                description: "Legal right or entitlement clause",
+            },
+            LegalLabel {
+                name: "jurisdiction",
+                description: "Governing law or jurisdiction",
+            },
+            LegalLabel { name: "duration", description: "Contract term or duration" },
+            LegalLabel {
+                name: "penalty",
+                description: "Penalty, indemnity, or liquidated damages",
+            },
         ];
 
         let thresholds: HashMap<&'static str, f32> = [
-            ("contract_party",     0.65),
+            ("contract_party", 0.65),
             ("company_identifier", 0.90),
-            ("amount",             0.80),
-            ("date",               0.75),
-            ("address",            0.70),
-            ("obligation",         0.55),
-            ("right",              0.55),
-            ("jurisdiction",       0.80),
-            ("duration",           0.75),
-            ("penalty",            0.70),
+            ("amount", 0.80),
+            ("date", 0.75),
+            ("address", 0.70),
+            ("obligation", 0.55),
+            ("right", 0.55),
+            ("jurisdiction", 0.80),
+            ("duration", 0.75),
+            ("penalty", 0.70),
         ]
         .into_iter()
         .collect();

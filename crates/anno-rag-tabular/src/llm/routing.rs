@@ -10,12 +10,14 @@ use crate::llm::{privacy::fallback_prompt_is_safe, LlmClient, StructuredOutput};
 use async_trait::async_trait;
 use serde_json::Value;
 
+/// LLM client that runs local extraction first and optionally falls back to a remote LLM.
 pub struct RoutingLlmClient {
     local: Box<dyn LlmClient>,
     fallback: Option<Box<dyn LlmClient>>,
 }
 
 impl RoutingLlmClient {
+    /// Create a routing client with a mandatory `local` client and an optional `fallback`.
     pub fn new(local: Box<dyn LlmClient>, fallback: Option<Box<dyn LlmClient>>) -> Self {
         Self { local, fallback }
     }

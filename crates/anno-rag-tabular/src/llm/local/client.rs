@@ -19,9 +19,13 @@ use serde_json::{json, Value};
 /// A single entity span returned by the local extractor.
 #[derive(Debug, Clone)]
 pub struct LocalEntity {
+    /// The extracted text span.
     pub text: String,
+    /// Start character index (inclusive) in the source text.
     pub start_char: usize,
+    /// End character index (exclusive) in the source text.
     pub end_char: usize,
+    /// Model confidence score in `[0, 1]`.
     pub confidence: f32,
 }
 
@@ -39,6 +43,7 @@ pub trait LocalEntityExtractor: Send + Sync {
 // Client
 // ---------------------------------------------------------------------------
 
+/// LLM client implementation that uses a local entity extractor instead of a remote API.
 pub struct LocalTabularClient {
     extractor: Box<dyn LocalEntityExtractor>,
 }
@@ -132,8 +137,13 @@ impl LlmClient for LocalTabularClient {
                         continue;
                     }
                     if best.as_ref().map_or(true, |b| ent.confidence > b.4) {
-                        best =
-                            Some((chunk.id, quote.to_string(), span.start, span.end, ent.confidence));
+                        best = Some((
+                            chunk.id,
+                            quote.to_string(),
+                            span.start,
+                            span.end,
+                            ent.confidence,
+                        ));
                     }
                 }
             }
@@ -159,7 +169,10 @@ impl LlmClient for LocalTabularClient {
             }
         }
 
-        Ok(StructuredOutput { value: Value::Object(result), usage: Usage::default() })
+        Ok(StructuredOutput {
+            value: Value::Object(result),
+            usage: Usage::default(),
+        })
     }
 
     fn model_id(&self) -> &str {

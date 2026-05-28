@@ -5,24 +5,42 @@
 use crate::error::{Error, Result};
 use uuid::Uuid;
 
+/// Result of parsing a structured user prompt containing chunks and columns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedPrompt {
+    /// Document text chunks extracted from `[CHUNK::uuid]...[/CHUNK]` markers.
     pub chunks: Vec<ParsedChunk>,
+    /// Column descriptors extracted from `[COLUMN::name]...[/COLUMN]` markers.
     pub columns: Vec<ParsedColumn>,
 }
 
+/// A single text chunk with its stable UUID identifier.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedChunk {
+    /// Stable chunk identifier (UUIDv7).
     pub id: Uuid,
+    /// Raw text content of the chunk.
     pub text: String,
 }
 
+/// A column descriptor parsed from the user prompt.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedColumn {
+    /// Column key (machine-readable name).
     pub name: String,
+    /// Human-readable extraction prompt for this column.
     pub prompt: String,
 }
 
+/// Parse a structured user prompt into chunks and columns.
+///
+/// Expects `[CHUNK::uuid]...[/CHUNK]` and `[COLUMN::name]...[/COLUMN]`
+/// markers as produced by `build_user_prompt()`.
+///
+/// # Errors
+///
+/// Returns [`Error::Extract`] if a marker is malformed or a chunk UUID
+/// cannot be parsed.
 pub fn parse_user_prompt(input: &str) -> Result<ParsedPrompt> {
     let mut chunks = Vec::new();
     let mut columns = Vec::new();

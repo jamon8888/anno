@@ -1,9 +1,12 @@
 //! Convert GLiNER character offsets to byte offsets safely for
 //! multi-byte (UTF-8) text such as French legal documents.
 
+/// A half-open byte range `[start, end)` into a UTF-8 string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ByteSpan {
+    /// Inclusive start byte offset.
     pub start: usize,
+    /// Exclusive end byte offset.
     pub end: usize,
 }
 
