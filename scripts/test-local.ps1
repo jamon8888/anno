@@ -7,18 +7,23 @@ param(
     [string[]]$Features = @(),
 
     # Skip the check step and jump straight to nextest.
-    [switch]$TestOnly
+    [switch]$TestOnly,
+
+    # Bypass the concurrent-build guard (matches dev-fast.ps1 and loop.ps1 behavior).
+    [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
 
 # ── Concurrent-build guard ─────────────────────────────────────────────────
-$running = @(Get-Process cargo, rustc -ErrorAction SilentlyContinue |
-             Where-Object { $_.Id -ne $PID })
-if ($running.Count -gt 0) {
-    $ids = $running.Id -join ", "
-    Write-Error "Concurrent build detected (PIDs: $ids). Kill them first: Get-Process cargo,rustc | Stop-Process -Force"
-    exit 1
+if (-not $Force) {
+    $running = @(Get-Process cargo, rustc -ErrorAction SilentlyContinue |
+                 Where-Object { $_.Id -ne $PID })
+    if ($running.Count -gt 0) {
+        $ids = $running.Id -join ", "
+        Write-Host "Concurrent build detected (PIDs: $ids). Kill them first: Get-Process cargo,rustc | Stop-Process -Force" -ForegroundColor Red
+        exit 1
+    }
 }
 
 $repoRoot = (& git rev-parse --show-toplevel).Trim()
@@ -33,14 +38,14 @@ if (-not $TestOnly) {
     }
     & cargo @checkArgs
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "cargo check failed — fix errors before running tests."
+        Write-Host "cargo check failed — fix errors before running tests." -ForegroundColor Red
         exit $LASTEXITCODE
     }
 }
 
 # ── Step 2: nextest with local profile ────────────────────────────────────
 Write-Host "==> nextest run -p $Package --profile local" -ForegroundColor Cyan
-$testArgs = @("nextest", "run", "-p", $Package, "--profile", "local")
+$testArgs = @("nextest", "run", "-p", $Package, "--profile", "local", "--cargo-profile", "dev-fast")
 if ($Features.Count -gt 0) {
     $testArgs += @("--features", ($Features -join ","))
 }

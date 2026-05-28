@@ -155,7 +155,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Pack
 ## Check only (no link, no tests)
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package <crate> -Mode check
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package <crate> -Mode check -Profile dev-fast
 ```
 
 ## With extra features
