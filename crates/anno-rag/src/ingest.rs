@@ -6,7 +6,10 @@ use crate::config::{AnnoRagConfig, OcrMode};
 use crate::error::{Error, Result};
 #[cfg(feature = "embedded-ocr")]
 use kreuzberg::core::config::OcrConfig;
-use kreuzberg::core::config::{ChunkerType, ChunkingConfig, ExtractionConfig};
+use kreuzberg::core::config::{
+    ChunkerType, ChunkingConfig, ContentFilterConfig, ExtractionConfig, HierarchyConfig,
+    PageConfig, PdfConfig,
+};
 use kreuzberg::types::{Chunk, ExtractionResult, PageContent};
 use std::path::Path;
 
@@ -106,11 +109,7 @@ pub struct ExtractedChunk {
 /// Returns [`Error::Ingest`] wrapping the underlying kreuzberg error if
 /// extraction fails (missing file, unsupported format, OCR error, etc.).
 pub async fn extract(path: &Path, cfg: &AnnoRagConfig) -> Result<ExtractedDoc> {
-    let native_config = ExtractionConfig {
-        chunking: Some(chunking_config(cfg)),
-        disable_ocr: true,
-        ..Default::default()
-    };
+    let native_config = native_extraction_config(cfg);
 
     let result = kreuzberg::extract_file(path, None, &native_config)
         .await
@@ -228,6 +227,46 @@ fn chunking_config(cfg: &AnnoRagConfig) -> ChunkingConfig {
         chunker_type: ChunkerType::Markdown,
         ..Default::default()
     }
+}
+
+fn native_extraction_config(cfg: &AnnoRagConfig) -> ExtractionConfig {
+    let mut extraction_config = ExtractionConfig {
+        chunking: Some(chunking_config(cfg)),
+        disable_ocr: true,
+        ..Default::default()
+    };
+
+    if cfg.advanced_pdf_native.is_enabled() {
+        extraction_config.output_format = kreuzberg::core::config::OutputFormat::Markdown;
+        extraction_config.result_format = kreuzberg::types::OutputFormat::ElementBased;
+        extraction_config.include_document_structure = true;
+        extraction_config.pages = Some(PageConfig {
+            extract_pages: true,
+            insert_page_markers: false,
+            ..Default::default()
+        });
+        extraction_config.pdf_options = Some(PdfConfig {
+            extract_images: false,
+            extract_metadata: true,
+            hierarchy: Some(HierarchyConfig {
+                enabled: true,
+                k_clusters: cfg.effective_pdf_hierarchy_clusters(),
+                include_bbox: true,
+                ocr_coverage_threshold: None,
+            }),
+            extract_annotations: cfg.pdf_extract_annotations,
+            allow_single_column_tables: cfg.pdf_allow_single_column_tables,
+            ..Default::default()
+        });
+        extraction_config.content_filter = Some(ContentFilterConfig {
+            include_headers: cfg.pdf_keep_headers,
+            include_footers: cfg.pdf_keep_footers,
+            strip_repeating_text: true,
+            include_watermarks: false,
+        });
+    }
+
+    extraction_config
 }
 
 fn map_chunks(chunks: Vec<Chunk>) -> Vec<ExtractedChunk> {
@@ -357,9 +396,79 @@ async fn embedded_ocr_extract(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::AdvancedPdfNativeMode;
     use std::io::Write;
     use std::sync::Arc;
     use tempfile::NamedTempFile;
+
+    #[test]
+    fn native_extraction_config_keeps_current_defaults_when_advanced_pdf_off() {
+        let cfg = AnnoRagConfig::default();
+
+        let extraction_config = native_extraction_config(&cfg);
+
+        assert!(extraction_config.disable_ocr);
+        assert!(extraction_config.chunking.is_some());
+        assert!(extraction_config.pages.is_none());
+        assert!(extraction_config.pdf_options.is_none());
+        assert!(extraction_config.content_filter.is_none());
+        assert!(!extraction_config.include_document_structure);
+        assert_eq!(
+            extraction_config.output_format,
+            kreuzberg::core::config::OutputFormat::Plain
+        );
+        assert_eq!(
+            extraction_config.result_format,
+            kreuzberg::types::OutputFormat::Unified
+        );
+    }
+
+    #[test]
+    fn native_extraction_config_enables_structured_pdf_profile() {
+        let cfg = AnnoRagConfig {
+            advanced_pdf_native: AdvancedPdfNativeMode::Structured,
+            pdf_keep_headers: true,
+            pdf_extract_annotations: true,
+            pdf_allow_single_column_tables: true,
+            pdf_hierarchy_clusters: 4,
+            ..Default::default()
+        };
+
+        let extraction_config = native_extraction_config(&cfg);
+
+        assert!(extraction_config.disable_ocr);
+        assert!(extraction_config.include_document_structure);
+        assert_eq!(
+            extraction_config.output_format,
+            kreuzberg::core::config::OutputFormat::Markdown
+        );
+        assert_eq!(
+            extraction_config.result_format,
+            kreuzberg::types::OutputFormat::ElementBased
+        );
+
+        let pages = extraction_config.pages.expect("page tracking enabled");
+        assert!(pages.extract_pages);
+        assert!(!pages.insert_page_markers);
+
+        let pdf = extraction_config.pdf_options.expect("pdf options enabled");
+        assert!(pdf.extract_metadata);
+        assert!(pdf.extract_annotations);
+        assert!(pdf.allow_single_column_tables);
+        let hierarchy = pdf.hierarchy.expect("hierarchy enabled");
+        assert!(hierarchy.enabled);
+        assert_eq!(hierarchy.k_clusters, 4);
+        assert!(hierarchy.include_bbox);
+        assert_eq!(hierarchy.ocr_coverage_threshold, None);
+
+        let content_filter = extraction_config
+            .content_filter
+            .expect("content filter enabled");
+        assert!(content_filter.include_headers);
+        assert!(!content_filter.include_footers);
+        assert!(content_filter.strip_repeating_text);
+        assert!(!content_filter.include_watermarks);
+    }
 
     #[tokio::test]
     async fn extracts_plain_text_file() {
