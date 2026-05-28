@@ -25,6 +25,32 @@ fn default_ocr_mode() -> OcrMode {
     OcrMode::Off
 }
 
+/// Native text-layer PDF extraction profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdvancedPdfNativeMode {
+    /// Keep the current fast native extraction behavior.
+    Off,
+    /// Enable structured native PDF extraction for better RAG provenance.
+    Structured,
+}
+
+impl AdvancedPdfNativeMode {
+    /// Returns true when the advanced native PDF profile should be used.
+    #[must_use]
+    pub fn is_enabled(self) -> bool {
+        matches!(self, Self::Structured)
+    }
+}
+
+fn default_advanced_pdf_native() -> AdvancedPdfNativeMode {
+    AdvancedPdfNativeMode::Off
+}
+
+fn default_pdf_hierarchy_clusters() -> usize {
+    6
+}
+
 /// NER mode for `memory_save`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -106,6 +132,34 @@ pub struct AnnoRagConfig {
     /// additional scanned PDFs/pages are deferred instead of being OCR'd.
     #[serde(default)]
     pub ocr_batch_budget_secs: Option<u64>,
+
+    /// Native text-layer PDF extraction profile. Default: `off`.
+    #[serde(default = "default_advanced_pdf_native")]
+    pub advanced_pdf_native: AdvancedPdfNativeMode,
+
+    /// Preserve running headers in advanced native PDF extraction.
+    #[serde(default)]
+    pub pdf_keep_headers: bool,
+
+    /// Preserve running footers in advanced native PDF extraction.
+    #[serde(default)]
+    pub pdf_keep_footers: bool,
+
+    /// Extract PDF annotations in advanced native PDF extraction.
+    #[serde(default)]
+    pub pdf_extract_annotations: bool,
+
+    /// Font-size cluster count for Kreuzberg PDF hierarchy detection.
+    #[serde(default = "default_pdf_hierarchy_clusters")]
+    pub pdf_hierarchy_clusters: usize,
+
+    /// Allow single-column pseudo-tables in native PDF table extraction.
+    #[serde(default)]
+    pub pdf_allow_single_column_tables: bool,
+
+    /// Emit diagnostic structured sidecar data for advanced native PDFs.
+    #[serde(default)]
+    pub pdf_structured_sidecar: bool,
 
     /// Embedder weight dtype. `"f32"` (default) or `"f16"` (experimental
     /// opt-in). Read by `Embedder::load`. `None` → `"f32"`. F16 halves
@@ -270,6 +324,13 @@ impl Default for AnnoRagConfig {
             enable_ocr: false,
             tesseract_path: None,
             ocr_batch_budget_secs: None,
+            advanced_pdf_native: default_advanced_pdf_native(),
+            pdf_keep_headers: false,
+            pdf_keep_footers: false,
+            pdf_extract_annotations: false,
+            pdf_hierarchy_clusters: default_pdf_hierarchy_clusters(),
+            pdf_allow_single_column_tables: false,
+            pdf_structured_sidecar: false,
             embedder_dtype: None,
             memory_collection_name: default_memory_collection_name(),
             memory_embedding_dim: default_memory_embedding_dim(),
@@ -297,6 +358,12 @@ impl AnnoRagConfig {
         } else {
             self.ocr_mode
         }
+    }
+
+    /// Kreuzberg PDF hierarchy cluster count clamped to the supported 1..=7 range.
+    #[must_use]
+    pub fn effective_pdf_hierarchy_clusters(&self) -> usize {
+        self.pdf_hierarchy_clusters.clamp(1, 7)
     }
 
     /// Path to the encrypted cloakpipe Vault file (AES-256-GCM single-file format).
@@ -480,6 +547,69 @@ mod tests {
         let back: AnnoRagConfig = serde_json::from_str(&s).expect("deserialize");
         assert_eq!(back.ocr_mode, OcrMode::AutoEmbedded);
         assert_eq!(back.ocr_batch_budget_secs, Some(30));
+    }
+
+    #[test]
+    fn advanced_pdf_native_defaults_to_off() {
+        let c = AnnoRagConfig::default();
+
+        assert_eq!(c.advanced_pdf_native, AdvancedPdfNativeMode::Off);
+        assert!(!c.advanced_pdf_native.is_enabled());
+        assert!(!c.pdf_keep_headers);
+        assert!(!c.pdf_keep_footers);
+        assert!(!c.pdf_extract_annotations);
+        assert_eq!(c.pdf_hierarchy_clusters, 6);
+        assert!(!c.pdf_allow_single_column_tables);
+        assert!(!c.pdf_structured_sidecar);
+    }
+
+    #[test]
+    fn advanced_pdf_native_round_trips_as_snake_case() {
+        let c = AnnoRagConfig {
+            advanced_pdf_native: AdvancedPdfNativeMode::Structured,
+            pdf_keep_headers: true,
+            pdf_keep_footers: true,
+            pdf_extract_annotations: true,
+            pdf_hierarchy_clusters: 4,
+            pdf_allow_single_column_tables: true,
+            pdf_structured_sidecar: true,
+            ..Default::default()
+        };
+
+        let s = serde_json::to_string(&c).expect("serialize");
+        assert!(s.contains(r#""advanced_pdf_native":"structured""#));
+        let back: AnnoRagConfig = serde_json::from_str(&s).expect("deserialize");
+
+        assert_eq!(back.advanced_pdf_native, AdvancedPdfNativeMode::Structured);
+        assert!(back.advanced_pdf_native.is_enabled());
+        assert!(back.pdf_keep_headers);
+        assert!(back.pdf_keep_footers);
+        assert!(back.pdf_extract_annotations);
+        assert_eq!(back.pdf_hierarchy_clusters, 4);
+        assert!(back.pdf_allow_single_column_tables);
+        assert!(back.pdf_structured_sidecar);
+    }
+
+    #[test]
+    fn old_config_defaults_advanced_pdf_native_fields() {
+        let v01_json = r#"{
+            "data_dir": "/tmp/anno-rag",
+            "embed_model": "intfloat/multilingual-e5-small",
+            "embed_dim": 384,
+            "default_top_k": 10,
+            "chunk_max_chars": 2048,
+            "chunk_overlap": 256
+        }"#;
+
+        let c: AnnoRagConfig = serde_json::from_str(v01_json).expect("old config parses");
+
+        assert_eq!(c.advanced_pdf_native, AdvancedPdfNativeMode::Off);
+        assert!(!c.pdf_keep_headers);
+        assert!(!c.pdf_keep_footers);
+        assert!(!c.pdf_extract_annotations);
+        assert_eq!(c.pdf_hierarchy_clusters, 6);
+        assert!(!c.pdf_allow_single_column_tables);
+        assert!(!c.pdf_structured_sidecar);
     }
 
     #[test]
