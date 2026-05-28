@@ -362,4 +362,39 @@ mod tests {
             .expect("review row should still exist after update");
         assert_eq!(refetched.schema_version, 2);
     }
+
+    #[tokio::test]
+    async fn columns_round_trip_extraction_metadata() {
+        use crate::schema::column::{ExtractionLabel, ExtractionMode, ExtractionNormalizer, ExtractionSpec};
+
+        let (_dir, t) = fresh_table().await;
+        let review = ReviewId::new();
+
+        let extraction = ExtractionSpec {
+            mode: ExtractionMode::LocalSpan,
+            labels: vec![ExtractionLabel {
+                name: "bailleur".into(),
+                description: "Nom complet du bailleur".into(),
+            }],
+            keywords: vec!["bailleur".into()],
+            threshold: Some(0.45),
+            normalizer: Some(ExtractionNormalizer::LegalName),
+            window_before_chars: None,
+            window_after_chars: None,
+        };
+
+        let col = ColumnBuilder::new(review, "landlord", "Landlord?", CellType::Text)
+            .extraction(extraction.clone())
+            .build();
+
+        t.add(review, &col).await.expect("add");
+        let listed = t.list_for_review(review).await.expect("list");
+
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].extraction.mode, ExtractionMode::LocalSpan);
+        assert_eq!(listed[0].extraction.normalizer, Some(ExtractionNormalizer::LegalName));
+        assert!((listed[0].extraction.threshold.unwrap() - 0.45_f32).abs() < 1e-5);
+        assert_eq!(listed[0].extraction.labels[0].name, "bailleur");
+        assert_eq!(listed[0].extraction.keywords, vec!["bailleur"]);
+    }
 }

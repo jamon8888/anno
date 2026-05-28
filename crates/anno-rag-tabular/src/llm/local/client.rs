@@ -187,8 +187,8 @@ mod tests {
         ) -> Result<Vec<LocalEntity>> {
             Ok(vec![LocalEntity {
                 text: "ACME SAS".into(),
-                start_char: 17,
-                end_char: 25,
+                start_char: 16, // "Le bailleur est " = 16 chars
+                end_char: 24,   // 16 + len("ACME SAS") = 24
                 confidence: 0.91,
             }])
         }
