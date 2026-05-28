@@ -12,6 +12,97 @@ use crate::ids::{ColumnId, ReviewId};
 use crate::schema::{CellType, ConditionalSpec};
 use serde::{Deserialize, Serialize};
 
+/// How a column's cells are extracted — local NER, LLM, or manual.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtractionMode {
+    /// Choose automatically based on cell type and available models.
+    Auto,
+    /// Extract a contiguous text span with a local GLiNER model.
+    LocalSpan,
+    /// Extract a full clause (multi-span) with a local model.
+    LocalClause,
+    /// Classify into a fixed label set with a local model.
+    LocalClassifier,
+    /// Always delegate to the remote LLM; never run locally.
+    LlmRequired,
+    /// Human-input only — no extractor runs.
+    Manual,
+}
+
+/// A GLiNER label (name + natural-language description) for local extraction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtractionLabel {
+    /// Short identifier used to match extracted spans (e.g. `"bailleur"`).
+    pub name: String,
+    /// Natural-language description forwarded to GLiNER as the label text.
+    pub description: String,
+}
+
+/// Post-processing normalizer applied to raw extracted spans.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtractionNormalizer {
+    /// Normalize to a canonical legal entity name.
+    LegalName,
+    /// Parse and reformat as ISO 8601 date.
+    DateIso,
+    /// Parse as a EUR monetary amount.
+    EurCurrency,
+    /// Parse as a floating-point number.
+    Number,
+    /// Map to the nearest allowed enum option.
+    Enum,
+    /// Return the raw clause text verbatim.
+    VerbatimClause,
+}
+
+/// Configuration controlling how a column's cells are extracted locally.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExtractionSpec {
+    /// Extraction strategy for this column.
+    #[serde(default = "ExtractionSpec::default_mode")]
+    pub mode: ExtractionMode,
+    /// GLiNER labels used in `local_span` / `local_clause` modes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<ExtractionLabel>,
+    /// Keyword hints used to narrow the search window before extraction.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keywords: Vec<String>,
+    /// Minimum GLiNER confidence threshold (default `0.45`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threshold: Option<f32>,
+    /// Optional post-processing normalizer applied to the raw span.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalizer: Option<ExtractionNormalizer>,
+    /// Characters to include before the keyword match when building the extraction window.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_before_chars: Option<usize>,
+    /// Characters to include after the keyword match when building the extraction window.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_after_chars: Option<usize>,
+}
+
+impl ExtractionSpec {
+    fn default_mode() -> ExtractionMode {
+        ExtractionMode::Auto
+    }
+}
+
+impl Default for ExtractionSpec {
+    fn default() -> Self {
+        Self {
+            mode: ExtractionMode::Auto,
+            labels: Vec::new(),
+            keywords: Vec::new(),
+            threshold: None,
+            normalizer: None,
+            window_before_chars: None,
+            window_after_chars: None,
+        }
+    }
+}
+
 /// One column in a review.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Column {
@@ -26,6 +117,9 @@ pub struct Column {
     /// Optional gate — see [`ConditionalSpec`].
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub conditional: Option<ConditionalSpec>,
+    /// Local extraction configuration for this column.
+    #[serde(default)]
+    pub extraction: ExtractionSpec,
     /// Human-input only — extractor skips this column.
     #[serde(default)]
     pub manual: bool,
@@ -42,6 +136,7 @@ pub struct ColumnBuilder {
     prompt: String,
     cell_type: CellType,
     conditional: Option<ConditionalSpec>,
+    extraction: ExtractionSpec,
     manual: bool,
     order: u32,
 }
@@ -56,6 +151,7 @@ impl ColumnBuilder {
             prompt: prompt.into(),
             cell_type,
             conditional: None,
+            extraction: ExtractionSpec::default(),
             manual: false,
             order: 0,
         }
@@ -66,6 +162,13 @@ impl ColumnBuilder {
     #[must_use]
     pub fn conditional(mut self, c: ConditionalSpec) -> Self {
         self.conditional = Some(c);
+        self
+    }
+
+    /// Set the local extraction configuration for this column.
+    #[must_use]
+    pub fn extraction(mut self, extraction: ExtractionSpec) -> Self {
+        self.extraction = extraction;
         self
     }
 
@@ -92,6 +195,7 @@ impl ColumnBuilder {
             prompt: self.prompt,
             cell_type: self.cell_type,
             conditional: self.conditional,
+            extraction: self.extraction,
             manual: self.manual,
             order: self.order,
         }
@@ -120,6 +224,18 @@ mod tests {
             .manual()
             .build();
         assert!(c.manual);
+    }
+
+    #[test]
+    fn column_defaults_to_auto_extraction() {
+        let review = ReviewId(uuid::Uuid::now_v7());
+        let col = ColumnBuilder::new(review, "landlord", "Landlord?", CellType::Text).build();
+
+        assert_eq!(col.extraction.mode, ExtractionMode::Auto);
+        assert!(col.extraction.labels.is_empty());
+        assert!(col.extraction.keywords.is_empty());
+        assert_eq!(col.extraction.threshold, None);
+        assert_eq!(col.extraction.normalizer, None);
     }
 
     #[test]

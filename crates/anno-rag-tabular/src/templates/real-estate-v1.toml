@@ -9,15 +9,36 @@ name   = "landlord"
 prompt = "Landlord (bailleur) — full legal name and form."
 type   = "text"
 
+[column.extraction]
+mode      = "local_span"
+normalizer = "legal_name"
+threshold = 0.45
+keywords  = ["bailleur", "entre les soussignes"]
+labels    = [{ name = "bailleur", description = "Nom complet et forme juridique du bailleur" }]
+
 [[column]]
 name   = "tenant"
 prompt = "Tenant (preneur) — full legal name and form."
 type   = "text"
 
+[column.extraction]
+mode      = "local_span"
+normalizer = "legal_name"
+threshold = 0.45
+keywords  = ["preneur", "locataire"]
+labels    = [{ name = "preneur", description = "Nom complet et forme juridique du preneur" }]
+
 [[column]]
 name   = "premises_address"
 prompt = "Full address of the leased premises."
 type   = "text"
+
+[column.extraction]
+mode      = "local_span"
+normalizer = "legal_name"
+threshold = 0.50
+keywords  = ["locaux", "adresse", "situes"]
+labels    = [{ name = "adresse_locaux", description = "Adresse complète des locaux loués" }]
 
 [[column]]
 name    = "lease_type"
@@ -29,6 +50,13 @@ options = ["bail_commercial_3_6_9", "bail_derogatoire", "bail_professionnel", "b
 name   = "start_date"
 prompt = "Lease start date. ISO 8601."
 type   = "date"
+
+[column.extraction]
+mode      = "local_span"
+normalizer = "date_iso"
+threshold = 0.50
+keywords  = ["prend effet", "date d'entree", "date de debut"]
+labels    = [{ name = "date_debut_bail", description = "Date de début du bail" }]
 
 [[column]]
 name   = "term_years"
@@ -46,6 +74,13 @@ prompt = "Annual base rent in EUR."
 type   = "currency"
 code   = "EUR"
 
+[column.extraction]
+mode      = "local_span"
+normalizer = "eur_currency"
+threshold = 0.60
+keywords  = ["loyer annuel", "loyer de base", "loyer hors taxes"]
+labels    = [{ name = "loyer_annuel", description = "Montant du loyer annuel en euros HT" }]
+
 [[column]]
 name   = "rent_escalation"
 prompt = "Rent escalation clause (ILAT, ILC, ICC index). Verbatim."
@@ -56,6 +91,13 @@ name   = "security_deposit"
 prompt = "Security deposit (dépôt de garantie) amount in EUR."
 type   = "currency"
 code   = "EUR"
+
+[column.extraction]
+mode      = "local_span"
+normalizer = "eur_currency"
+threshold = 0.60
+keywords  = ["depot de garantie", "cautionnement"]
+labels    = [{ name = "depot_garantie", description = "Montant du dépôt de garantie en euros" }]
 
 [[column]]
 name   = "permitted_use"

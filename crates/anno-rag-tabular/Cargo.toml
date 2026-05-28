@@ -6,10 +6,17 @@ rust-version.workspace = true
 license.workspace = true
 description = "Harvey/Legora-style tabular review for anno-rag — schema-driven extraction with per-cell citations."
 
+[features]
+# Enable the live GLiNER2/Fastino entity-extraction adapter.
+# Adds anno::GLiNEROnnx as the LocalEntityExtractor implementation.
+# Ignored by default so CI never downloads model weights.
+gliner2 = ["dep:anno"]
+
 [dependencies]
 # Single-crate workspace today — pulls in detector, vault, store, embed, audit.
 # Replaces the plan's anno-rag-core / -store / -embed / -audit deps.
 anno-rag           = { path = "../anno-rag" }
+anno               = { path = "../anno", features = ["gliner2-fastino"], optional = true }
 
 tokio              = { workspace = true }
 async-trait        = "0.1"

@@ -11,6 +11,7 @@
 
 use crate::error::Result;
 use crate::ids::{ColumnId, ReviewId};
+use crate::schema::column::ExtractionSpec;
 use crate::schema::Column;
 use crate::storage::arrow_schema::columns_schema;
 use crate::storage::reviews::ReviewsTable;
@@ -93,6 +94,8 @@ impl ColumnsTable {
             None => None,
         };
         let cond_a = StringArray::from(vec![cond_json]);
+        let extraction_json = serde_json::to_string(&col.extraction)?;
+        let extraction_a = StringArray::from(vec![Some(extraction_json)]);
         let manual_a = BooleanArray::from(vec![col.manual]);
         let order_a = UInt32Array::from(vec![col.order]);
 
@@ -105,6 +108,7 @@ impl ColumnsTable {
                 Arc::new(prompt_a),
                 Arc::new(ttype_a),
                 Arc::new(cond_a),
+                Arc::new(extraction_a),
                 Arc::new(manual_a),
                 Arc::new(order_a),
             ],
@@ -211,16 +215,20 @@ fn row_to_column(b: &RecordBatch, i: usize) -> Result<Column> {
         .as_any()
         .downcast_ref::<StringArray>()
         .expect("column 5 (conditional_json) is StringArray by schema");
+    // Column 6 is extraction_json (nullable Utf8). Tables written before
+    // this field existed will not have it — fall back to ExtractionSpec::default().
+    let extraction_a = b.schema().field_with_name("extraction_json").ok().and_then(|_| {
+        b.column_by_name("extraction_json")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+    });
     let manual_a = b
-        .column(6)
-        .as_any()
-        .downcast_ref::<BooleanArray>()
-        .expect("column 6 (manual) is BooleanArray by schema");
+        .column_by_name("manual")
+        .and_then(|c| c.as_any().downcast_ref::<BooleanArray>())
+        .expect("manual is BooleanArray by schema");
     let order_a = b
-        .column(7)
-        .as_any()
-        .downcast_ref::<UInt32Array>()
-        .expect("column 7 (order_idx) is UInt32Array by schema");
+        .column_by_name("order_idx")
+        .and_then(|c| c.as_any().downcast_ref::<UInt32Array>())
+        .expect("order_idx is UInt32Array by schema");
 
     let id_bytes: [u8; 16] = id_a
         .value(i)
@@ -231,12 +239,18 @@ fn row_to_column(b: &RecordBatch, i: usize) -> Result<Column> {
     } else {
         Some(serde_json::from_str(cond_a.value(i))?)
     };
+    let extraction: ExtractionSpec = extraction_a
+        .and_then(|a| if a.is_null(i) { None } else { Some(a.value(i)) })
+        .map(serde_json::from_str)
+        .transpose()?
+        .unwrap_or_default();
     Ok(Column {
         id: ColumnId(uuid::Uuid::from_bytes(id_bytes)),
         name: name_a.value(i).to_string(),
         prompt: prompt_a.value(i).to_string(),
         cell_type: serde_json::from_str(ttype_a.value(i))?,
         conditional,
+        extraction,
         manual: manual_a.value(i),
         order: order_a.value(i),
     })
@@ -347,5 +361,40 @@ mod tests {
             .expect("get review")
             .expect("review row should still exist after update");
         assert_eq!(refetched.schema_version, 2);
+    }
+
+    #[tokio::test]
+    async fn columns_round_trip_extraction_metadata() {
+        use crate::schema::column::{ExtractionLabel, ExtractionMode, ExtractionNormalizer, ExtractionSpec};
+
+        let (_dir, t) = fresh_table().await;
+        let review = ReviewId::new();
+
+        let extraction = ExtractionSpec {
+            mode: ExtractionMode::LocalSpan,
+            labels: vec![ExtractionLabel {
+                name: "bailleur".into(),
+                description: "Nom complet du bailleur".into(),
+            }],
+            keywords: vec!["bailleur".into()],
+            threshold: Some(0.45),
+            normalizer: Some(ExtractionNormalizer::LegalName),
+            window_before_chars: None,
+            window_after_chars: None,
+        };
+
+        let col = ColumnBuilder::new(review, "landlord", "Landlord?", CellType::Text)
+            .extraction(extraction.clone())
+            .build();
+
+        t.add(review, &col).await.expect("add");
+        let listed = t.list_for_review(review).await.expect("list");
+
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].extraction.mode, ExtractionMode::LocalSpan);
+        assert_eq!(listed[0].extraction.normalizer, Some(ExtractionNormalizer::LegalName));
+        assert!((listed[0].extraction.threshold.unwrap() - 0.45_f32).abs() < 1e-5);
+        assert_eq!(listed[0].extraction.labels[0].name, "bailleur");
+        assert_eq!(listed[0].extraction.keywords, vec!["bailleur"]);
     }
 }

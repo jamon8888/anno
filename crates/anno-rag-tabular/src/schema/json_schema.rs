@@ -10,7 +10,7 @@
 //! Manual columns (human-only) are excluded — the LLM never produces
 //! a value for them.
 
-use crate::schema::{CellType, Column};
+use crate::schema::{CellType, Column, ExtractionLabel, ExtractionMode, ExtractionSpec};
 use serde_json::{json, Value};
 
 /// Build a JSON Schema describing the expected per-row extraction output.
@@ -44,7 +44,19 @@ pub fn for_columns(columns: &[Column]) -> Value {
             continue;
         }
         required.push(json!(c.name.clone()));
-        properties.insert(c.name.clone(), cell_envelope(&c.cell_type));
+        let mut envelope = cell_envelope(&c.cell_type);
+        if let Some(obj) = envelope.as_object_mut() {
+            obj.insert(
+                "x-anno-column".to_string(),
+                json!({
+                    "name": c.name,
+                    "prompt": c.prompt,
+                    "cell_type": c.cell_type,
+                    "extraction": c.extraction,
+                }),
+            );
+        }
+        properties.insert(c.name.clone(), envelope);
     }
 
     json!({
@@ -198,6 +210,34 @@ mod tests {
         // And `notes` is absent from `required` too.
         let req = s["required"].as_array().expect("required must be array");
         assert!(req.iter().all(|v| v != &json!("notes")));
+    }
+
+    #[test]
+    fn schema_includes_anno_column_metadata() {
+        let r = ReviewId::new();
+        let extraction = ExtractionSpec {
+            mode: ExtractionMode::LocalSpan,
+            labels: vec![ExtractionLabel {
+                name: "bailleur".into(),
+                description: "Nom complet du bailleur".into(),
+            }],
+            keywords: vec!["bailleur".into()],
+            threshold: Some(0.45),
+            normalizer: None,
+            window_before_chars: None,
+            window_after_chars: None,
+        };
+        let col = ColumnBuilder::new(r, "landlord", "Landlord?", CellType::Text)
+            .extraction(extraction)
+            .build();
+
+        let schema = for_columns(&[col]);
+        let meta = &schema["properties"]["landlord"]["x-anno-column"];
+
+        assert_eq!(meta["name"], "landlord");
+        assert_eq!(meta["prompt"], "Landlord?");
+        assert_eq!(meta["extraction"]["mode"], "local_span");
+        assert_eq!(meta["extraction"]["labels"][0]["name"], "bailleur");
     }
 
     #[test]

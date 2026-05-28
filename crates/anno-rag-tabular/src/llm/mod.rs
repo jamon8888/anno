@@ -8,8 +8,16 @@
 //! trait — callers above just see "give me JSON conforming to this
 //! schema, here's the user message, here's the system prompt."
 
+/// Anthropic Claude backend implementation of [`LlmClient`].
 pub mod anthropic;
+/// Local GLiNER2/Fastino extraction client and supporting types.
+pub mod local;
+/// Deterministic mock client for use in tests.
 pub mod mock;
+/// Privacy gate — PII detection helpers for prompt safety checks.
+pub mod privacy;
+/// Routing client that runs local extraction first and falls back to an LLM.
+pub mod routing;
 
 use async_trait::async_trait;
 use serde_json::Value;
