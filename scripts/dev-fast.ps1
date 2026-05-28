@@ -79,11 +79,11 @@ $repoRoot = (& git rev-parse --show-toplevel).Trim()
 Set-Location -LiteralPath $repoRoot
 
 # ── Target-dir — enforce SSD ──────────────────────────────────────────────────
-# Canonical location: D:\cargo-target (SSD, set as User env var + .cargo/config.toml).
+# Canonical location: E:\cargo-target (SSD, set as User env var + .cargo/config.toml).
 # Fall back with a warning when running outside the normal setup.
 if (-not $env:CARGO_TARGET_DIR) {
-    $env:CARGO_TARGET_DIR = "D:\cargo-target"
-    Write-Warning "CARGO_TARGET_DIR not set — defaulting to D:\cargo-target. Verify it is on your SSD."
+    $env:CARGO_TARGET_DIR = "E:\cargo-target"
+    Write-Warning "CARGO_TARGET_DIR not set — defaulting to E:\cargo-target. Verify it is on your SSD."
 }
 
 $selected = [System.Collections.Generic.List[string]]::new()

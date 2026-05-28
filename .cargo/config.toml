@@ -1,0 +1,26 @@
+[build]
+rustflags = ["--cap-lints", "allow"]
+rustdocflags = ["--cap-lints", "allow"]
+# Target dir on E: (external SSD) — D: is HDD which causes lld-link to hang on
+# large test binaries (lance+datafusion+candle). C: only has ~30 GB free.
+# sccache cache (random I/O) stays on C: SSD at %LOCALAPPDATA%\Mozilla\sccache.
+# rust-analyzer gets C:\cargo-target\ra (small, fast access needed).
+target-dir = "E:\\cargo-target"
+
+# Windows MSVC: suppress LNK2038 RuntimeLibrary mismatch between
+# ort-sys (/MD, dynamic CRT) and esaxx-rs (/MT, static CRT).
+# /NODEFAULTLIB:libcmt tells link.exe to drop the static CRT import lib
+# so the dynamic CRT from ort-sys wins without a conflict.
+# Also rebuild esaxx-rs with /MD via CFLAGS so future incremental builds
+# don't re-introduce the mismatch (takes effect after `cargo clean -p esaxx-rs`).
+[target.x86_64-pc-windows-msvc]
+linker = "lld-link"
+rustflags = ["--cap-lints", "allow", "-C", "link-arg=/NODEFAULTLIB:libcmt", "-C", "target-cpu=native"]
+
+[env]
+CFLAGS_x86_64_pc_windows_msvc = "/MD"
+CXXFLAGS_x86_64_pc_windows_msvc = "/MD"
+# sccache and incremental compilation are mutually exclusive — sccache misses
+# all lookups when incremental is on because .d file fingerprints differ.
+# RUSTC_WRAPPER=sccache is always active on this machine; disable incremental globally.
+CARGO_INCREMENTAL = "0"
