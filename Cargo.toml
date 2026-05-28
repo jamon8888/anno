@@ -136,7 +136,7 @@ debug = 0
 # incremental disabled: conflicts with sccache (RUSTC_WRAPPER=sccache always active).
 # sccache misses all cache lookups when incremental .d fingerprints are present.
 incremental = false
-codegen-units = 256
+codegen-units = 512
 opt-level = 0
 split-debuginfo = "off"   # skip PDB write on Windows — significant linker speedup
 # overflow-checks = false — disabled: causes STATUS_STACK_BUFFER_OVERRUN in memchr/libm on MSVC (rustc 1.95)
@@ -145,7 +145,7 @@ strip = "none"            # explicit; no surprises
 [profile.dev-fast.build-override]
 debug = 0
 opt-level = 0
-codegen-units = 256
+codegen-units = 512
 
 # Heavy ML/NLP deps: compile at opt-level 2 even in dev/dev-fast so tests
 # don't crawl. These crates do numeric work that is 10-50× slower unoptimized.
