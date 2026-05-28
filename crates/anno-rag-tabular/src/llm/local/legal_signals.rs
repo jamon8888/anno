@@ -62,9 +62,18 @@ impl Default for LegalSignalCatalog {
                 name: "company_identifier",
                 description: "Company registration number (SIREN/SIRET/RCS)",
             },
-            LegalLabel { name: "amount", description: "Monetary amount" },
-            LegalLabel { name: "date", description: "Calendar date" },
-            LegalLabel { name: "address", description: "Postal or civic address" },
+            LegalLabel {
+                name: "amount",
+                description: "Monetary amount",
+            },
+            LegalLabel {
+                name: "date",
+                description: "Calendar date",
+            },
+            LegalLabel {
+                name: "address",
+                description: "Postal or civic address",
+            },
             LegalLabel {
                 name: "obligation",
                 description: "Legal obligation or duty clause",
@@ -77,7 +86,10 @@ impl Default for LegalSignalCatalog {
                 name: "jurisdiction",
                 description: "Governing law or jurisdiction",
             },
-            LegalLabel { name: "duration", description: "Contract term or duration" },
+            LegalLabel {
+                name: "duration",
+                description: "Contract term or duration",
+            },
             LegalLabel {
                 name: "penalty",
                 description: "Penalty, indemnity, or liquidated damages",
@@ -129,7 +141,10 @@ impl LegalSignalCatalog {
             }
         }
 
-        LegalSignalPlan { label_descriptions, label_thresholds }
+        LegalSignalPlan {
+            label_descriptions,
+            label_thresholds,
+        }
     }
 }
 
@@ -160,7 +175,10 @@ mod tests {
             plan.label_thresholds,
             vec![("contract_party", 0.65), ("amount", 0.80)]
         );
-        assert!(plan.label_descriptions.iter().any(|(name, _)| *name == "contract_party"));
+        assert!(plan
+            .label_descriptions
+            .iter()
+            .any(|(name, _)| *name == "contract_party"));
     }
 
     #[test]

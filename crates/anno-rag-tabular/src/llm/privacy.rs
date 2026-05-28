@@ -38,16 +38,14 @@ fn obvious_phone_absent(text: &str) -> bool {
 
 fn obvious_iban_absent(text: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| {
-        Regex::new(r"(?i)\bFR\d{2}(?:[\s]?[0-9A-Z]){23}\b").expect("iban regex")
-    });
+    let re =
+        RE.get_or_init(|| Regex::new(r"(?i)\bFR\d{2}(?:[\s]?[0-9A-Z]){23}\b").expect("iban regex"));
     !re.is_match(text)
 }
 
 fn obvious_siren_absent(text: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE
-        .get_or_init(|| Regex::new(r"\b\d{3}\s?\d{3}\s?\d{3}\b").expect("siren regex"));
+    let re = RE.get_or_init(|| Regex::new(r"\b\d{3}\s?\d{3}\s?\d{3}\b").expect("siren regex"));
     !re.is_match(text)
 }
 
@@ -62,7 +60,9 @@ mod tests {
 
     #[test]
     fn rejects_clear_email() {
-        assert!(!fallback_prompt_is_safe("Contact: marie.dupont@example.com"));
+        assert!(!fallback_prompt_is_safe(
+            "Contact: marie.dupont@example.com"
+        ));
     }
 
     #[test]
@@ -79,7 +79,8 @@ mod tests {
 
     #[test]
     fn accepts_legal_boilerplate_without_pii() {
-        let text = "Le bail commercial est soumis aux articles L145-1 et suivants du Code de commerce.";
+        let text =
+            "Le bail commercial est soumis aux articles L145-1 et suivants du Code de commerce.";
         assert!(fallback_prompt_is_safe(text));
     }
 }

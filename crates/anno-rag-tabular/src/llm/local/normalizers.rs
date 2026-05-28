@@ -72,7 +72,11 @@ fn normalize_date(raw: &str) -> Option<Value> {
             .ok()?;
     let cap = re.captures(&lowered)?;
     let day_raw = cap.name("day")?.as_str();
-    let day: u32 = if day_raw == "1er" { 1 } else { day_raw.parse().ok()? };
+    let day: u32 = if day_raw == "1er" {
+        1
+    } else {
+        day_raw.parse().ok()?
+    };
     let month_name = cap.name("month")?.as_str();
     let month = months.iter().find(|(name, _)| *name == month_name)?.1;
     let year = cap.name("year")?.as_str();
@@ -105,13 +109,17 @@ mod tests {
 
     #[test]
     fn rejects_invalid_enum() {
-        let cell_type = CellType::Enum { options: vec!["FR".into(), "OTHER".into()] };
+        let cell_type = CellType::Enum {
+            options: vec!["FR".into(), "OTHER".into()],
+        };
         assert!(normalize_value("Allemagne", &cell_type).is_none());
     }
 
     #[test]
     fn accepts_case_insensitive_enum() {
-        let cell_type = CellType::Enum { options: vec!["FR".into(), "OTHER".into()] };
+        let cell_type = CellType::Enum {
+            options: vec!["FR".into(), "OTHER".into()],
+        };
         let v = normalize_value("fr", &cell_type).expect("ok");
         assert_eq!(v, json!("FR"));
     }

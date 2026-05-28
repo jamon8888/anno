@@ -17,6 +17,7 @@ env:
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: sccache
   CARGO_INCREMENTAL: "0"
+  # sccache-action v0.0.10: fixes LD_LIBRARY_PATH crash + uses Node 24
 permissions:
   contents: read
   checks: write
@@ -44,11 +45,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - run: cargo check --workspace --all-targets
   fmt:
     name: Format
@@ -59,7 +59,7 @@ jobs:
         with:
           components: rustfmt
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -88,11 +88,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       # All targets (lib + tests + bins + examples) so test code is also linted.
       - run: cargo clippy --workspace --all-targets --features "eval discourse" -- -D warnings
   # ------------------------------------------------------------
@@ -121,11 +120,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - run: cargo clippy -p anno --lib --features "${{ matrix.features }}" -- -D warnings
   # ==========================================================================
   # Unit tests - no features (zero-dependency baseline)
@@ -140,11 +138,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - run: cargo test --package anno --no-default-features --lib
       - run: cargo test --package anno --lib
   # ==========================================================================
@@ -166,11 +163,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -226,7 +222,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -264,11 +260,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -293,11 +288,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -328,11 +322,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -358,11 +351,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -382,11 +374,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -406,11 +397,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -439,11 +429,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       # `anno-cli` requires at least one HTML-extractor feature; the
       # MPL-free `extractor-html2text` is the lightest option that satisfies
       # that constraint and proves the no-default-features build still works.
@@ -461,11 +450,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       # Document the library crates. anno is doc'd twice with different feature
       # combinations to surface feature-gated link errors that single-feature
       # builds miss.
@@ -488,11 +476,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Run property tests
         run: cargo test --workspace --lib --features "eval discourse" -- proptest
         env:
@@ -511,11 +498,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -633,11 +619,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Run evaluator unit tests
         run: cargo test -p anno-eval --lib --features "eval discourse" test_comprehensive_eval_results_average_f1 -- --nocapture
   # ==========================================================================
@@ -653,11 +638,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Build examples (eval + discourse)
         run: cargo build --workspace --examples --features "eval discourse"
       - name: Build examples (onnx)
@@ -678,11 +662,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -767,11 +750,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -851,7 +833,6 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-        with:
           # cargo-semver-checks compares against the previous published
           # release; needs full history to find the baseline.
           fetch-depth: 0
@@ -860,13 +841,11 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - uses: obi1kenobi/cargo-semver-checks-action@v2
-        with:
           # `cuda` feature requires nvcc which Linux runners don't have;
           # `--all-features` is unbuildable. Per-crate default-features only.
           feature-group: only-explicit-features
@@ -887,11 +866,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Install cargo-deny
         run: cargo install --locked cargo-deny
       - name: Check dependencies
@@ -908,11 +886,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Install cargo-machete
         run: cargo install cargo-machete
       - name: Check unused dependencies
@@ -929,11 +906,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Install cargo-geiger
         run: cargo install cargo-geiger
       - name: Generate safety report
@@ -963,11 +939,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Install Miri
         run: |
           # rust-toolchain.toml pins the project to stable 1.95; Miri is only
@@ -1210,11 +1185,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov
       - name: Generate coverage
@@ -1241,11 +1215,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
-        with:
       - name: Validate workspace structure
         run: |
           echo "## Workspace Structure Validation" >> $GITHUB_STEP_SUMMARY
