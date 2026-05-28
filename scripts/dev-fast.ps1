@@ -14,10 +14,30 @@ param(
 
     [switch]$NoSccache,
 
-    [switch]$PrintOnly
+    [switch]$PrintOnly,
+
+    [switch]$Force   # Bypass concurrent-build guard
 )
 
 $ErrorActionPreference = "Stop"
+
+# ── Concurrent-build guard ─────────────────────────────────────────────────────
+# Multiple simultaneous cargo/rustc processes competing for target/ destroy
+# incremental-cache and saturate CPU+disk. Block early unless -Force is set.
+if (-not $PrintOnly -and -not $Force) {
+    $running = @(Get-Process cargo, rustc -ErrorAction SilentlyContinue |
+                 Where-Object { $_.Id -ne $PID })
+    if ($running.Count -gt 0) {
+        $ids = $running.Id -join ", "
+        Write-Error @"
+Concurrent build detected ($($running.Count) process(es), PIDs: $ids).
+Kill them first:
+  Get-Process cargo,rustc | Stop-Process -Force
+Or bypass this check with -Force (not recommended).
+"@
+        exit 1
+    }
+}
 
 function Get-PackageName {
     param([string]$CrateDir)
@@ -57,6 +77,14 @@ function Add-Unique {
 
 $repoRoot = (& git rev-parse --show-toplevel).Trim()
 Set-Location -LiteralPath $repoRoot
+
+# ── Target-dir — enforce SSD ──────────────────────────────────────────────────
+# Canonical location: D:\cargo-target (SSD, set as User env var + .cargo/config.toml).
+# Fall back with a warning when running outside the normal setup.
+if (-not $env:CARGO_TARGET_DIR) {
+    $env:CARGO_TARGET_DIR = "D:\cargo-target"
+    Write-Warning "CARGO_TARGET_DIR not set — defaulting to D:\cargo-target. Verify it is on your SSD."
+}
 
 $selected = [System.Collections.Generic.List[string]]::new()
 
