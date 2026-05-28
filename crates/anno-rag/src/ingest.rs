@@ -78,6 +78,15 @@ pub enum OcrDeferredReason {
     Unavailable,
 }
 
+/// One heading from Kreuzberg's markdown chunk heading context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractedHeading {
+    /// Heading depth where 1 is the top-level heading.
+    pub level: u8,
+    /// Heading text.
+    pub text: String,
+}
+
 /// One section-aware chunk with provenance back to the source.
 #[derive(Debug, Clone)]
 pub struct ExtractedChunk {
@@ -95,6 +104,10 @@ pub struct ExtractedChunk {
     pub char_end: u32,
     /// PDF page number if known (1-indexed, first page the chunk spans).
     pub page: Option<u32>,
+    /// PDF page number if known (1-indexed, last page the chunk spans).
+    pub page_end: Option<u32>,
+    /// Markdown heading hierarchy enclosing this chunk.
+    pub heading_context: Vec<ExtractedHeading>,
 }
 
 /// Extract a single document file into an [`ExtractedDoc`].
@@ -278,6 +291,20 @@ fn map_chunks(chunks: Vec<Chunk>) -> Vec<ExtractedChunk> {
             char_start: c.metadata.byte_start as u32,
             char_end: c.metadata.byte_end as u32,
             page: c.metadata.first_page.map(|p| p as u32),
+            page_end: c.metadata.last_page.map(|p| p as u32),
+            heading_context: c
+                .metadata
+                .heading_context
+                .map(|ctx| {
+                    ctx.headings
+                        .into_iter()
+                        .map(|h| ExtractedHeading {
+                            level: h.level,
+                            text: h.text,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
         })
         .collect()
 }
@@ -468,6 +495,55 @@ mod tests {
         assert!(!content_filter.include_footers);
         assert!(content_filter.strip_repeating_text);
         assert!(!content_filter.include_watermarks);
+    }
+
+    #[test]
+    fn map_chunks_preserves_page_range_and_heading_context() {
+        let chunks = vec![Chunk {
+            content: "Clause de résiliation".to_string(),
+            chunk_type: kreuzberg::types::ChunkType::Unknown,
+            embedding: None,
+            metadata: kreuzberg::types::ChunkMetadata {
+                byte_start: 10,
+                byte_end: 31,
+                token_count: None,
+                chunk_index: 0,
+                total_chunks: 1,
+                first_page: Some(2),
+                last_page: Some(3),
+                heading_context: Some(kreuzberg::types::HeadingContext {
+                    headings: vec![
+                        kreuzberg::types::HeadingLevel {
+                            level: 1,
+                            text: "Contrat".to_string(),
+                        },
+                        kreuzberg::types::HeadingLevel {
+                            level: 2,
+                            text: "Résiliation".to_string(),
+                        },
+                    ],
+                }),
+            },
+        }];
+
+        let mapped = map_chunks(chunks);
+
+        assert_eq!(mapped.len(), 1);
+        assert_eq!(mapped[0].page, Some(2));
+        assert_eq!(mapped[0].page_end, Some(3));
+        assert_eq!(
+            mapped[0].heading_context,
+            vec![
+                ExtractedHeading {
+                    level: 1,
+                    text: "Contrat".to_string(),
+                },
+                ExtractedHeading {
+                    level: 2,
+                    text: "Résiliation".to_string(),
+                },
+            ]
+        );
     }
 
     #[tokio::test]

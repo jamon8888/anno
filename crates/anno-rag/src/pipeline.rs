@@ -2240,6 +2240,8 @@ mod tests {
                 char_start: 0,
                 char_end: 9,
                 page: None,
+                page_end: None,
+                heading_context: Vec::new(),
             }],
             class: ingest::DocClass::TextLayer,
             ocr_status: ingest::OcrStatus::NotRequired,
