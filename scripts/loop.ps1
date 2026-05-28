@@ -62,8 +62,8 @@ if (-not $Force) {
 
 # ── Target-dir — enforce SSD ──────────────────────────────────────────────────
 if (-not $env:CARGO_TARGET_DIR) {
-    $env:CARGO_TARGET_DIR = "D:\cargo-target"
-    Write-Warning "[loop] CARGO_TARGET_DIR not set — defaulting to D:\cargo-target. Verify it is on your SSD."
+    $env:CARGO_TARGET_DIR = "E:\cargo-target"
+    Write-Warning "[loop] CARGO_TARGET_DIR not set — defaulting to E:\cargo-target. Verify it is on your SSD."
 }
 
 # -----------------------------------------------------------------
