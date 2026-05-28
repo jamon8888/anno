@@ -156,7 +156,10 @@ async fn cmd_list(cfg: &AnnoRagConfig) -> anyhow::Result<()> {
         return Ok(());
     }
     for r in &reviews {
-        println!("{} — {} (schema_version={})", r.id.0, r.name, r.schema_version);
+        println!(
+            "{} — {} (schema_version={})",
+            r.id.0, r.name, r.schema_version
+        );
         if let Some(t) = &r.template_id {
             println!("   template: {t}");
         }
@@ -202,7 +205,7 @@ async fn cmd_create(
         );
     } else {
         println!("Created review {} ({name})", review_id.0);
-        println!("Hint: add columns with `anno-rag review add-rows` or via the MCP `review_create` tool.");
+        println!("Hint: add document rows with `anno-rag review add-rows`. Columns are fixed at creation time — to change the schema, create a new review with a different template or --schema.");
     }
     Ok(())
 }
@@ -243,11 +246,7 @@ async fn cmd_add_rows(
     Ok(())
 }
 
-async fn cmd_extract(
-    cfg: &AnnoRagConfig,
-    review_id: ReviewId,
-    force: bool,
-) -> anyhow::Result<()> {
+async fn cmd_extract(cfg: &AnnoRagConfig, review_id: ReviewId, force: bool) -> anyhow::Result<()> {
     // Extract requires the full pipeline (chunk source) + an LLM client.
     let key = anno_rag::vault::derive_key()?;
     let pipeline = anno_rag::pipeline::Pipeline::new(cfg.clone(), key).await?;
@@ -280,8 +279,7 @@ async fn cmd_extract(
     );
 
     let chunks = Arc::new(CliChunkSource(Arc::clone(&pipeline)));
-    let llm_box = default_from_env()
-        .map_err(|e| anyhow::anyhow!("LLM client init failed: {e}"))?;
+    let llm_box = default_from_env().map_err(|e| anyhow::anyhow!("LLM client init failed: {e}"))?;
     let llm: Arc<dyn anno_rag_tabular::llm::LlmClient> = Arc::from(llm_box);
     let extractor = Extractor::new(llm, chunks);
     let fanout_cfg = FanoutConfig {
@@ -352,10 +350,7 @@ struct CliChunkSource(Arc<anno_rag::pipeline::Pipeline>);
 
 #[async_trait]
 impl ChunkSource for CliChunkSource {
-    async fn chunks_for_doc(
-        &self,
-        doc_id: Uuid,
-    ) -> anno_rag_tabular::error::Result<Vec<ChunkRef>> {
+    async fn chunks_for_doc(&self, doc_id: Uuid) -> anno_rag_tabular::error::Result<Vec<ChunkRef>> {
         let hits = self
             .0
             .chunks_by_doc(doc_id)
