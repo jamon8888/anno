@@ -10,6 +10,17 @@
 
 ---
 
+## Lean Validation
+
+This plan is already appropriately small. Keep visual QA focused on the actual user risks:
+
+- one Playwright config;
+- one high-value workbench spec to start;
+- fixture data close to the test;
+- no screenshot baseline framework until layout regressions become frequent.
+
+Do not add a separate UI test harness crate or reusable test framework for the initial app.
+
 ## Scope
 
 In scope:

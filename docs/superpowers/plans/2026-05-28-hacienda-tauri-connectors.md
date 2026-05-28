@@ -4,11 +4,23 @@
 
 **Goal:** Add a connector layer for network folders and SharePoint/OneDrive so all external sources feed the same local ingestion pipeline.
 
-**Architecture:** Define a `SourceConnector` trait with enumerate/stat/fetch/hash/provenance operations. Implement `LocalFolderConnector` for local and mounted network paths first, then `SharePointConnector` using Microsoft Graph with explicit user login and local token storage managed by OS facilities.
+**Architecture:** Keep local and mounted network paths on the existing folder ingestion path first. Add provenance fields to persisted source documents. Introduce a `SourceConnector` trait only when the SharePoint/Microsoft Graph slice exists and needs the same ingestion interface as filesystem sources.
 
 **Tech Stack:** Rust 1.95, `reqwest`, `serde`, Microsoft Graph REST, Tauri commands, existing normalized ingestion pipeline.
 
 ---
+
+## Lean Validation
+
+The connector plan is useful, but a trait hierarchy is premature for Phase 1. The walking skeleton already has local folder ingestion, and mounted network folders can use the same path-based flow.
+
+Apply these reductions before implementing:
+
+- Do not add `connectors/mod.rs`, `local.rs`, and `sharepoint.rs` until a real non-filesystem connector is implemented.
+- Keep local and network folder support as `SourceKind` plus concrete path ingestion in `ingest.rs`.
+- Add a `SourceConnector` trait only when SharePoint/Graph fetching is actually built and tested.
+- For SharePoint, start as a separate later slice with a mocked Graph client and explicit OS-managed token storage. Do not mix OAuth and local folder work in the same implementation step.
+- Keep provenance fields on `SourceDocument`; avoid a separate provenance model unless multiple connector types need it.
 
 ## Scope
 
@@ -28,36 +40,20 @@ Out of scope:
 
 ## Files
 
-- Create `crates/hacienda-workbench-core/src/connectors/mod.rs`
-- Create `crates/hacienda-workbench-core/src/connectors/local.rs`
-- Create `crates/hacienda-workbench-core/src/connectors/sharepoint.rs`
 - Modify `model.rs`, `store.rs`, `engine.rs`
 - Modify Tauri commands and frontend source picker.
+- Create connector modules only in the later SharePoint slice, when a non-filesystem connector exists.
 
 ## Tasks
 
-### Task 1: Connector Trait
+### Task 1: Local and Network Paths
 
-- [ ] Define:
-
-```rust
-#[async_trait::async_trait]
-pub trait SourceConnector: Send + Sync {
-    async fn enumerate(&self, root: &SourceRef) -> Result<Vec<SourceEntry>>;
-    async fn fetch(&self, entry: &SourceEntry, dest: &std::path::Path) -> Result<FetchedSource>;
-}
-```
-
-- [ ] Add `SourceRef`, `SourceEntry`, `SourceProvenance`.
-- [ ] Test serialization of provenance for local and SharePoint.
-
-### Task 2: Local and Network Connector
-
-- [ ] Move current folder scanner behind `LocalFolderConnector`.
+- [ ] Keep the current folder scanner in `ingest.rs`.
 - [ ] Treat UNC paths and mounted drives as `NetworkFolder` when path prefix indicates network.
-- [ ] Test local connector does not follow symlinks by default.
+- [ ] Store provenance fields directly on `SourceDocument`: source kind, source id/path/url when available, and content hash.
+- [ ] Test local/network folder scanning does not follow symlinks by default.
 
-### Task 3: SharePoint Connector Client
+### Task 2: SharePoint Connector Client
 
 - [ ] Add Microsoft Graph client wrapper with methods:
 
@@ -70,15 +66,16 @@ get_delta
 - [ ] Use mocked HTTP responses in tests.
 - [ ] Store only remote item id, drive id, site id, eTag/cTag, and display path in provenance.
 - [ ] Do not store document content outside workspace cache.
+- [ ] At this point only, introduce `SourceConnector` if the Graph path needs the same ingestion interface as local files.
 
-### Task 4: Sync Integration
+### Task 3: Sync Integration
 
 - [ ] Add `sync_source(matter_id)` engine method.
 - [ ] Fetch changed remote files into workspace cache.
 - [ ] Run normalized ingestion on cached files.
 - [ ] Mark deleted remote files as unavailable, not physically deleted from audit history.
 
-### Task 5: UI
+### Task 4: UI
 
 - [ ] Add source type segmented control: Local, Network, SharePoint.
 - [ ] Local/Network uses folder picker.

@@ -4,11 +4,23 @@
 
 **Goal:** Extend the Tauri workbench engine from text-only ingestion to normalized working documents for PDF, DOCX, XLSX, PPTX, email, and OCR-backed images/scanned PDFs.
 
-**Architecture:** Add a format extraction boundary inside `hacienda-workbench-core` that converts every source into a normalized `NormalizedDocument` tree before anonymization. Use Kreuzberg first because `anno-rag` already depends on it for document extraction; keep OCR opt-in and record extraction provenance, warnings, page numbers, and source spans.
+**Architecture:** Reuse `anno_rag::ingest::extract` as the format extraction boundary and convert its `ExtractedDoc` output into the workbench's normalized document view before anonymization. Keep OCR opt-in through existing `anno-rag` configuration and record extraction provenance, warnings, page numbers, and source spans.
 
 **Tech Stack:** Rust 1.95, `hacienda-workbench-core`, `anno-rag`, `kreuzberg`, `walkdir`, `serde`, SQLite metadata from the walking skeleton.
 
 ---
+
+## Lean Validation
+
+This plan should be simplified against the existing implementation. `anno-rag` already has Kreuzberg-based extraction in `anno_rag::ingest::extract`, with chunk provenance, OCR state, and supported file filtering in `Pipeline::ingest_folder`.
+
+Apply these reductions before implementing:
+
+- Do not create a new `format/` extractor subsystem for the first pass.
+- Do not duplicate Kreuzberg wiring in `hacienda-workbench-core`.
+- Add only the minimal workbench-facing normalized view needed by the UI. Prefer putting `NormalizedDocument`, `NormalizedBlock`, and source-span types in `model.rs` first; extract to `normalized.rs` only if `model.rs` becomes too large.
+- Implement conversion from `anno_rag::ingest::ExtractedDoc` to the workbench view in `ingest.rs`.
+- Add test fixtures only for behavior not already covered by `anno-rag` tests: per-file error isolation, UI-visible status/warnings, and read-only source preservation.
 
 ## Scope
 
@@ -29,21 +41,18 @@ Out of scope:
 
 ## Files
 
-- Modify `crates/hacienda-workbench-core/Cargo.toml`
-- Create `crates/hacienda-workbench-core/src/normalized.rs`
-- Create `crates/hacienda-workbench-core/src/format/mod.rs`
-- Create `crates/hacienda-workbench-core/src/format/text.rs`
-- Create `crates/hacienda-workbench-core/src/format/kreuzberg.rs`
-- Modify `crates/hacienda-workbench-core/src/ingest.rs`
+- Modify `crates/hacienda-workbench-core/Cargo.toml` only if an existing `anno-rag` dependency feature is missing.
 - Modify `crates/hacienda-workbench-core/src/model.rs`
+- Modify `crates/hacienda-workbench-core/src/ingest.rs`
 - Modify `crates/hacienda-workbench-core/src/store.rs`
+- Optionally create `crates/hacienda-workbench-core/src/normalized.rs` only if normalized view types make `model.rs` too large.
 - Test fixtures under `crates/hacienda-workbench-core/tests/fixtures/formats/`
 
 ## Tasks
 
 ### Task 1: Normalized Document Model
 
-- [ ] Add `normalized.rs` with:
+- [ ] Add these types to `model.rs` first. Move them to `normalized.rs` only if `model.rs` becomes too large:
 
 ```rust
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -71,38 +80,23 @@ pub struct SourceSpan {
 - [ ] Test JSON round-trip and `NormalizedDocument::plain_text()` helper.
 - [ ] Run `cargo test -p hacienda-workbench-core normalized --lib`.
 
-### Task 2: Format Extractor Trait
+### Task 2: Reuse anno-rag Extraction
 
-- [ ] Add `format/mod.rs`:
+- [ ] Call `anno_rag::ingest::extract(path, &cfg)` from workbench ingestion.
+- [ ] Convert `ExtractedDoc.content`, `ExtractedDoc.chunks`, `DocClass`, and `OcrStatus` into the workbench normalized view.
+- [ ] Record OCR-deferred/unsupported/extraction-failed states as document warnings or `SourceDocument.status = Error`.
+- [ ] Add tests that unsupported files fail per-file and source files remain unchanged.
+- [ ] Run `cargo test -p hacienda-workbench-core ingest --lib`.
 
-```rust
-pub trait FormatExtractor: Send + Sync {
-    fn supports(&self, path: &std::path::Path) -> bool;
-    fn extract(&self, path: &std::path::Path) -> crate::Result<crate::normalized::NormalizedDocument>;
-}
-```
+### Task 3: Ingestion Pipeline Integration
 
-- [ ] Add `TextExtractor` for `.txt`, `.md`, `.markdown`.
-- [ ] Add tests that unsupported extensions are rejected and text source remains unchanged.
-- [ ] Run `cargo test -p hacienda-workbench-core format --lib`.
-
-### Task 3: Kreuzberg Extractor
-
-- [ ] Add `KreuzbergExtractor` that calls Kreuzberg for PDF/Office/email/HTML/image sources.
-- [ ] Convert extractor output to paragraphs and page breaks when page metadata exists.
-- [ ] Record warnings when OCR is unavailable or a file is partially extracted.
-- [ ] Add tests with small fixtures. Use text fixtures for deterministic CI; mark heavy binary fixtures ignored if needed.
-- [ ] Run `cargo test -p hacienda-workbench-core format --lib`.
-
-### Task 4: Ingestion Pipeline Integration
-
-- [ ] Replace `scan_text_folder` with `scan_folder_with_extractors`.
+- [ ] Replace `scan_text_folder` with folder scanning that calls the `anno-rag` extraction adapter per file.
 - [ ] Store normalized JSON alongside anonymized text.
 - [ ] Keep `SourceDocument.status = Error` for failed extraction instead of aborting whole matter.
 - [ ] Add integration test: one supported file, one unsupported file, one extraction error fixture.
 - [ ] Run `cargo test -p hacienda-workbench-core ingest --lib`.
 
-### Task 5: UI Surface
+### Task 4: UI Surface
 
 - [ ] Add file-type badges in `apps/hacienda-workbench/src/App.tsx`.
 - [ ] Add extraction warning count in document list.

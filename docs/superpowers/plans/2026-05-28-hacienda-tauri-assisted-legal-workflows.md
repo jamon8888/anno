@@ -4,11 +4,23 @@
 
 **Goal:** Add declarative assisted legal workflows that propose cited checklist items and fields for a matter, with human validation and correction.
 
-**Architecture:** Represent workflows as versioned TOML manifests. A workflow runtime evaluates expected document types, field schemas, extraction profiles, checklist items, missing-piece rules, and contradiction rules against normalized working documents and tabular extraction outputs.
+**Architecture:** Start from existing `anno-rag-tabular` TOML templates and `anno-rag::legal::extract` workflow functions. The workbench stores lightweight workflow run state and maps template fields/checklist items to cited extraction outputs; a new manifest/runtime layer is deferred until existing templates cannot represent a real workflow.
 
 **Tech Stack:** Rust 1.95, `hacienda-workbench-core`, `anno-rag-tabular` for cited field extraction, TOML manifests, SQLite workflow state, Tauri UI.
 
 ---
+
+## Lean Validation
+
+The workflow goal is valid, but the repo already has two relevant foundations: `anno-rag-tabular` has TOML templates and cited extraction columns, and `anno-rag::legal::extract` already exposes contract/case-file/timeline/risk workflow functions.
+
+Apply these reductions before implementing:
+
+- Do not introduce a new workflow DSL in Phase 1.
+- Prefer adapting existing `anno-rag-tabular::schema::Template` and built-in templates for checklist/field schemas.
+- Prefer calling existing `anno-rag::legal::extract` functions for contract, case-file, timeline, and risk surfaces before creating new runtime logic.
+- Start with one `workflow.rs` module or add methods to `engine.rs`; create `workflows/manifest.rs` and `workflows/runtime.rs` only after the first workflow proves the split is needed.
+- Store workflow state in the existing workbench SQLite schema; do not add a separate workflow store.
 
 ## Scope
 
@@ -27,32 +39,33 @@ Out of scope:
 
 ## Files
 
-- Create `crates/hacienda-workbench-core/src/workflows/mod.rs`
-- Create `crates/hacienda-workbench-core/src/workflows/manifest.rs`
-- Create `crates/hacienda-workbench-core/src/workflows/runtime.rs`
-- Add manifests under `crates/hacienda-workbench-core/src/workflows/templates/*.toml`
-- Modify `store.rs`, `engine.rs`, Tauri commands, frontend UI.
+- Modify `crates/hacienda-workbench-core/src/model.rs`
+- Modify `crates/hacienda-workbench-core/src/store.rs`
+- Modify `crates/hacienda-workbench-core/src/engine.rs`
+- Modify Tauri commands and frontend UI.
+- Optionally create one `crates/hacienda-workbench-core/src/workflow.rs` if workflow code makes `engine.rs` too large.
 
 ## Tasks
 
-### Task 1: Workflow Manifest
+### Task 1: Reuse Existing Templates
 
-- [ ] Define:
+- [ ] Start from `anno-rag-tabular::schema::Template` and `Template::list_builtin()`.
+- [ ] Map built-in template columns to checklist/field display rows.
+- [ ] Add only a thin workbench workflow descriptor if the UI needs names/stages that tabular templates do not carry.
+- [ ] Do not add a new manifest format until one workflow cannot be represented by existing templates.
+
+If a descriptor is needed, keep it minimal:
 
 ```rust
-pub struct WorkflowManifest {
+pub struct WorkflowDescriptor {
     pub id: String,
     pub name: String,
     pub version: String,
-    pub extraction_profile_id: String,
-    pub expected_documents: Vec<ExpectedDocument>,
-    pub fields: Vec<WorkflowField>,
-    pub checklist: Vec<ChecklistTemplateItem>,
+    pub template_id: Option<String>,
 }
 ```
 
-- [ ] Load TOML manifests from built-ins.
-- [ ] Test `commercial-contract-v1` parses and references an existing extraction profile.
+- [ ] Test unknown workflow/template id and version parsing.
 
 ### Task 2: Workflow State Store
 

@@ -6,9 +6,19 @@
 
 **Architecture:** Add a testable Rust core crate (`hacienda-workbench-core`) for matter metadata, folder ingestion, regex PII anonymization via `anno-rag`, revisioned working documents, and append-only audit events. Add a Tauri v2 app (`apps/hacienda-workbench`) that invokes the core through commands and renders an operational dashboard, matter view, and document atelier. This plan intentionally limits Phase 1 to local folders and text/Markdown files; broad PDF/DOCX/XLSX/PPTX/email/OCR, SharePoint/OneDrive, GLiNER2/LoRA profiles, signed installers, and updater/resource packs get separate plans.
 
-**Tech Stack:** Rust 1.95, Tauri v2, Vite + React + TypeScript, lucide-react, SQLite through `rusqlite`, `anno-rag::detect::detect_patterns`, `anno-rag::vault::Vault`, Tauri dialog plugin, existing `scripts/dev-fast.ps1` local Rust loop.
+**Tech Stack:** Rust 1.95, Tauri v2, Vite + React + TypeScript, lucide-react, SQLite through `rusqlite`, `anno-rag::ingest::extract`, `anno-rag::detect::detect_patterns`, `anno-rag::vault::Vault`, Tauri dialog plugin, existing `scripts/dev-fast.ps1` local Rust loop.
 
 ---
+
+## Lean Validation
+
+This plan is valid, but implement it as the maximum acceptable split, not as a mandate to add more layers. Based on the existing workspace:
+
+- Keep exactly one new Rust core crate for the desktop boundary plus the Tauri app crate. Do not add `*-core`, `*-store`, `*-audit`, or `*-connectors` subcrates.
+- Reuse existing `anno-rag` surfaces first: `anno_rag::ingest::extract` for document text/chunk extraction, `anno_rag::detect::detect_patterns` for the first model-free PII pass, and `anno_rag::vault::Vault` / `VaultKeySource` for vault behavior.
+- Keep Rust modules coarse until a file exceeds roughly 300-400 lines or has a distinct ownership boundary. For Phase 1, `model.rs`, `store.rs`, `ingest.rs`, `anonymize.rs`, and `engine.rs` are enough.
+- Avoid a generic plugin/trait system in the walking skeleton. Use concrete functions and structs; introduce traits only when the second real implementation exists.
+- Keep Tauri commands thin. Validation and business rules stay in the Rust core; the command layer should mostly parse IDs/paths and map errors.
 
 ## Source References
 
@@ -68,7 +78,7 @@ Do not implement in this plan:
   - SQLite schema and persistence.
 
 - Create `crates/hacienda-workbench-core/src/ingest.rs`
-  - Local text/Markdown folder scanner.
+  - Local folder ingestion adapter around existing `anno-rag` extraction.
 
 - Create `crates/hacienda-workbench-core/src/anonymize.rs`
   - Model-free PII detection + vault pseudonymization.
@@ -827,10 +837,12 @@ git add -- crates/hacienda-workbench-core/src/store.rs
 git commit -m "feat(workbench): add sqlite matter store"
 ```
 
-## Task 3: Add Local Text Folder Ingestion
+## Task 3: Add Local Folder Ingestion
 
 **Files:**
 - Modify: `crates/hacienda-workbench-core/src/ingest.rs`
+
+Lean adjustment: keep this task concrete, but prefer wrapping `anno_rag::ingest::extract` over hand-rolling document extraction. The text-only `scan_text_folder` shape below is acceptable only as a short Phase 0 fallback; if implementing now, name the function around source ingestion rather than a permanent text-only scanner so the format-ingestion plan can extend it without another abstraction layer.
 
 - [ ] **Step 1: Write ingestion tests**
 

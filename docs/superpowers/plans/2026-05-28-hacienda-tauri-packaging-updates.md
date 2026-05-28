@@ -2,13 +2,25 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship Hacienda Workbench as signed Windows/macOS installers with offline resources, Tauri app updates, and separate signed resource-pack updates.
+**Goal:** Ship Hacienda Workbench as signed Windows/macOS installers with Tauri app updates. Offline resources and signed resource-pack updates are optional follow-ons once profiles/workflows actually consume imported resources.
 
-**Architecture:** Use Tauri v2 bundling for the app and updater. Add a resource-pack manifest/signature verifier inside `hacienda-workbench-core` so GLiNER2 base model, LoRA adapters, workflows, PII rules, and export templates can update separately from the app binary.
+**Architecture:** Use Tauri v2 bundling for the app and updater first. Add a resource-pack manifest/signature verifier inside `hacienda-workbench-core` only after GLiNER2 model/profile/workflow imports exist.
 
 **Tech Stack:** Tauri v2 bundler/updater, GitHub Actions, code signing/notarization, Ed25519 signatures for resource packs, existing cargo-dist release knowledge.
 
 ---
+
+## Lean Validation
+
+Packaging should lean on existing release infrastructure first. The root workspace already has cargo-dist metadata, and the Tauri app can use Tauri v2 bundling/updater without a custom release framework.
+
+Apply these reductions before implementing:
+
+- Configure Tauri bundling/updater first; only add a separate GitHub Actions workflow if the existing release flow cannot cover the app.
+- Delay resource-pack signature code until resource packs are actually consumed by profiles/workflows.
+- If resource packs are needed, keep verifier code in one `resources.rs` module at first; split `resources/signature.rs` only after tests make the split worthwhile.
+- Do not bundle giant model files by default. Prefer local cache detection, explicit resource-pack import, and clear offline warnings.
+- Keep signing keys outside the repo and document environment variables rather than adding secret-management code.
 
 ## Scope
 
@@ -29,15 +41,16 @@ Out of scope:
 ## Files
 
 - Modify `apps/hacienda-workbench/src-tauri/tauri.conf.json`
-- Create `crates/hacienda-workbench-core/src/resources/mod.rs`
-- Create `crates/hacienda-workbench-core/src/resources/signature.rs`
-- Create `docs/release/hacienda-workbench.md`
-- Create `.github/workflows/hacienda-workbench-release.yml`
-- Add resource manifests under `resources/hacienda-workbench/`
+- Modify existing release configuration where possible.
+- Optionally create `crates/hacienda-workbench-core/src/resources.rs` only when resource packs are consumed by profiles/workflows.
+- Optionally create `.github/workflows/hacienda-workbench-release.yml` only if the existing release flow cannot cover the Tauri app.
+- Optionally add resource manifests under `resources/hacienda-workbench/` only after import/verification code exists.
 
 ## Tasks
 
-### Task 1: Resource Pack Manifest
+### Task 1: Optional Resource Pack Manifest
+
+Do this task only after profiles/workflows need importable resources.
 
 - [ ] Define manifest:
 
@@ -55,7 +68,9 @@ pub struct ResourcePackManifest {
 - [ ] Verify file hash before import.
 - [ ] Test unsigned and mismatched packs fail closed.
 
-### Task 2: Resource Registry
+### Task 2: Optional Resource Registry
+
+Do this task only after Task 1 is needed.
 
 - [ ] Store installed packs in SQLite table `resource_packs`.
 - [ ] Add engine methods `list_resource_packs` and `import_resource_pack`.
@@ -88,7 +103,7 @@ pub struct ResourcePackManifest {
 Run:
 
 ```powershell
-cargo test -p hacienda-workbench-core resources --lib
+cargo test -p hacienda-workbench-core resources --lib  # only if resources.rs exists
 Set-Location apps\hacienda-workbench; npm run tauri build; Set-Location ..\..
 ```
 

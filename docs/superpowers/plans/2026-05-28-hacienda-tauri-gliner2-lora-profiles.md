@@ -2,13 +2,28 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add extraction profiles that select GLiNER2 labels, thresholds, and LoRA adapters per legal workflow or matter.
+**Goal:** Add extraction profiles that select GLiNER2 labels, thresholds, and LoRA metadata per legal workflow or matter.
 
-**Architecture:** Introduce an `ExtractionProfile` registry in `hacienda-workbench-core`. The registry loads signed or built-in profile manifests, resolves the base GLiNER2 model plus optional LoRA adapter path, and records profile metadata on every anonymization/extraction result.
+**Architecture:** Introduce one `profiles.rs` module in `hacienda-workbench-core`. It loads built-in profile manifests, records the base GLiNER2 model plus optional merged-model or adapter metadata, and stores profile metadata on every anonymization/extraction result. Runtime raw LoRA loading is feature-gated behind `gliner2-fastino-candle` and is not part of the default path.
 
 **Tech Stack:** Rust 1.95, `anno-rag::detect::Detector::detect_with_labels`, GLiNER2/Fastino APIs already in `anno`, TOML/JSON manifests, SQLite profile metadata.
 
 ---
+
+## Lean Validation
+
+GLiNER2 and LoRA are aligned with the repo, but the implementation must respect the current feature split:
+
+- `anno-rag` currently depends on `anno` with `gliner2-fastino` ONNX support.
+- Runtime LoRA adapter loading exists on the experimental Candle backend behind `anno` feature `gliner2-fastino-candle`.
+- The ONNX `GLiNER2Fastino` path explicitly rejects raw LoRA adapter directories and expects adapters to be merged/exported first.
+
+Apply these reductions before implementing:
+
+- Phase 1 should store and display profile metadata and support profile labels/thresholds using existing GLiNER2 extraction paths.
+- For LoRA, start with merged local model directories or metadata-only adapter records unless the work explicitly enables and validates `gliner2-fastino-candle`.
+- Keep this in one `profiles.rs` module initially. Split only if runtime model loading, manifest parsing, and UI state become independently large.
+- Do not add a separate model registry service; use local paths, built-in manifests, and explicit cache-missing warnings.
 
 ## Scope
 

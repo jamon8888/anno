@@ -10,6 +10,16 @@
 
 ---
 
+## Lean Validation
+
+This plan fits the existing `anno-rag-tabular` design if it stays behind the current `LlmClient` trait. Keep the implementation small:
+
+- Add at most one helper module plus one concrete provider module.
+- Do not change `Extractor`, storage, or schema APIs unless the existing trait cannot represent the result.
+- Start with `codex exec` as the concrete local-subscription path. Do not add app-server JSON-RPC, Claude local mode, or provider orchestration in this slice.
+- Keep the PII guard conservative and obvious; reuse existing pseudonymized chunk flow rather than inventing a second privacy pipeline.
+- Avoid API-key code paths in subscription mode. Strip key-related env vars and rely on the locally authenticated CLI.
+
 ## Scope
 
 Implement Phase 1 from `docs/superpowers/specs/2026-05-28-anno-rag-tabular-local-subscription-llm-design.md`:

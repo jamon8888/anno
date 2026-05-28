@@ -4,11 +4,23 @@
 
 **Goal:** Add explicit vault lifecycle controls to the Tauri workbench: locked/unlocked state, passphrase/keyring initialization, rehydration audit, and tamper-evident audit chaining.
 
-**Architecture:** Keep the PII vault physically separate from SQLite metadata. Introduce a `VaultManager` owned by `WorkbenchEngine`, expose Tauri commands for status/unlock/lock/rehydrate, and upgrade audit rows to include previous hash and event hash.
+**Architecture:** Keep the PII vault physically separate from SQLite metadata. Add explicit locked/unlocked vault state owned by `WorkbenchEngine`, expose Tauri commands for status/unlock/lock/rehydrate, and upgrade audit rows to include previous hash and event hash.
 
 **Tech Stack:** Rust 1.95, `anno-rag::vault`, `rusqlite`, `sha2`, Tauri commands, React state.
 
 ---
+
+## Lean Validation
+
+The vault lifecycle is valid, but do not reimplement the vault abstraction. Existing `anno_rag::vault::Vault` already wraps the cloakpipe vault behind an async mutex and existing `VaultKeySource` already handles passphrase/keyring/KMS-stub key derivation.
+
+Apply these reductions before implementing:
+
+- Start with a small locked/unlocked state wrapper owned by `WorkbenchEngine`. Create `vault_manager.rs` only if `engine.rs` becomes hard to read.
+- Reuse `Vault::lookup`, `Vault::pseudonymize`, and `VaultKeySource::derive`; do not create a parallel crypto/key API.
+- Keep audit persistence in the existing workbench SQLite store for now. The hash-chain logic can live in `store.rs`; do not introduce a generic audit crate.
+- Mirror the existing `anno-privacy-gateway` JSONL hash-chain pattern conceptually, but avoid adding a dependency from the workbench core to the gateway crate.
+- Never persist rehydrated plaintext in SQLite, logs, React state beyond the transient modal, or audit payloads.
 
 ## Scope
 
@@ -28,13 +40,13 @@ Out of scope:
 
 ## Files
 
-- Create `crates/hacienda-workbench-core/src/vault_manager.rs`
 - Modify `crates/hacienda-workbench-core/src/engine.rs`
 - Modify `crates/hacienda-workbench-core/src/store.rs`
 - Modify `crates/hacienda-workbench-core/src/model.rs`
 - Modify `apps/hacienda-workbench/src-tauri/src/commands.rs`
 - Modify `apps/hacienda-workbench/src/api.ts`
 - Modify `apps/hacienda-workbench/src/App.tsx`
+- Optionally create `crates/hacienda-workbench-core/src/vault_manager.rs` only if vault state makes `engine.rs` hard to read.
 
 ## Tasks
 
@@ -60,9 +72,9 @@ pub struct RehydrateRequest {
 - [ ] Test serialization uses stable enum strings.
 - [ ] Run `cargo test -p hacienda-workbench-core model --lib`.
 
-### Task 2: VaultManager
+### Task 2: Engine-Owned Vault State
 
-- [ ] Implement `VaultManager { path, vault: Mutex<Option<Vault>> }`.
+- [ ] Implement a small private engine-owned state, initially in `engine.rs`, equivalent to `{ path, vault: Mutex<Option<Vault>> }`.
 - [ ] Methods:
 
 ```rust
@@ -73,7 +85,7 @@ pub async fn rehydrate_token(&self, token: &str) -> Result<Option<String>>;
 ```
 
 - [ ] Unit tests use temp vault and verify lock removes access.
-- [ ] Run `cargo test -p hacienda-workbench-core vault_manager --lib`.
+- [ ] Run `cargo test -p hacienda-workbench-core vault --lib`.
 
 ### Task 3: Audit Hash Chain
 
