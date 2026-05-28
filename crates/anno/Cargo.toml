@@ -59,6 +59,7 @@ rayon = { workspace = true, optional = true }
 
 # Observability
 tracing = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 
 [dev-dependencies]

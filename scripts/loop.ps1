@@ -25,6 +25,9 @@
     scripts\loop.ps1 -Package anno-rag -AllAffected -Smoke
     scripts\loop.ps1 -SkipCheck -Package anno-rag-mcp
 
+.PARAMETER Force
+    Bypass the concurrent-build guard (not recommended).
+
 .NOTES
     Exit codes:
       0 - all steps passed
@@ -37,11 +40,31 @@ param(
     [switch]$Smoke,
     [string]$Since    = "HEAD",
     [switch]$AllAffected,
-    [switch]$SkipCheck
+    [switch]$SkipCheck,
+    [switch]$Force    # Bypass concurrent-build guard
 )
 
 $ErrorActionPreference = "Continue"   # "Stop" breaks on native-cmd stderr (git warnings, cargo warnings)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# ── Concurrent-build guard ─────────────────────────────────────────────────────
+if (-not $Force) {
+    $running = @(Get-Process cargo, rustc -ErrorAction SilentlyContinue |
+                 Where-Object { $_.Id -ne $PID })
+    if ($running.Count -gt 0) {
+        $ids = $running.Id -join ", "
+        Write-Host "[loop] BLOCKED — $($running.Count) cargo/rustc process(es) already running (PIDs: $ids)." -ForegroundColor Red
+        Write-Host "       Kill them: Get-Process cargo,rustc | Stop-Process -Force"
+        Write-Host "       Override:  scripts\loop.ps1 -Force"
+        exit 1
+    }
+}
+
+# ── Target-dir — enforce SSD ──────────────────────────────────────────────────
+if (-not $env:CARGO_TARGET_DIR) {
+    $env:CARGO_TARGET_DIR = "E:\cargo-target"
+    Write-Warning "[loop] CARGO_TARGET_DIR not set — defaulting to E:\cargo-target. Verify it is on your SSD."
+}
 
 # -----------------------------------------------------------------
 # Helpers

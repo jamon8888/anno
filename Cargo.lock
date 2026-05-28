@@ -162,6 +162,7 @@ dependencies = [
  "tokenizers",
  "tracing",
  "ureq 2.12.1",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -189,6 +190,7 @@ dependencies = [
  "toml 0.8.23",
  "tracing-subscriber",
  "ureq 2.12.1",
+ "workspace-hack",
  "xxhash-rust",
 ]
 
@@ -218,6 +220,7 @@ dependencies = [
  "thiserror 2.0.18",
  "unicode-normalization",
  "ureq 2.12.1",
+ "workspace-hack",
  "xxhash-rust",
  "zip 2.4.2",
 ]
@@ -248,6 +251,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -301,6 +305,7 @@ dependencies = [
  "unicode-normalization",
  "uuid",
  "walkdir",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -314,6 +319,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing-subscriber",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -331,6 +337,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -360,6 +367,7 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "uuid",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -10744,6 +10752,102 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser",
+]
+
+[[package]]
+name = "workspace-hack"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "aho-corasick",
+ "bit-set",
+ "bit-vec",
+ "bitflags 2.11.1",
+ "bytemuck",
+ "bytes",
+ "candle-core",
+ "candle-nn",
+ "candle-transformers",
+ "cc",
+ "cipher",
+ "clap",
+ "clap_builder",
+ "compact_str",
+ "criterion",
+ "crossbeam-epoch",
+ "crossbeam-utils",
+ "crypto-common",
+ "deformat",
+ "digest",
+ "either",
+ "fastrand",
+ "flate2",
+ "foldhash 0.2.0",
+ "form_urlencoded",
+ "futures",
+ "futures-channel",
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "getrandom 0.2.17",
+ "half",
+ "hashbrown 0.16.1",
+ "hashbrown 0.17.1",
+ "icu_locale_core",
+ "icu_provider",
+ "inout",
+ "kreuzberg",
+ "litemap",
+ "log",
+ "matrixmultiply",
+ "memchr",
+ "miniz_oxide",
+ "ndarray 0.16.1",
+ "num-complex",
+ "num-integer",
+ "num-traits",
+ "ort",
+ "ort-sys",
+ "percent-encoding",
+ "petgraph 0.8.3",
+ "phf 0.13.1",
+ "potential_utf",
+ "ppv-lite86",
+ "prost",
+ "prost-types",
+ "rand 0.9.4",
+ "rand_chacha 0.9.0",
+ "rand_core 0.6.4",
+ "regex",
+ "regex-automata",
+ "regex-syntax",
+ "reqwest 0.12.28",
+ "schemars 1.2.1",
+ "serde",
+ "serde_core",
+ "serde_json",
+ "simd-adler32",
+ "smallvec",
+ "stable_deref_trait",
+ "subtle",
+ "syn 2.0.117",
+ "time",
+ "time-macros",
+ "tinystr",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-core",
+ "ureq 2.12.1",
+ "uuid",
+ "writeable",
+ "yoke 0.8.2",
+ "zerocopy",
+ "zerofrom",
+ "zeroize",
+ "zerotrie",
+ "zerovec",
+ "zip 7.2.0",
 ]
 
 [[package]]

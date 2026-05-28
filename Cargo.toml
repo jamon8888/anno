@@ -15,6 +15,7 @@ members = [
     "crates/anno-rag-mcp",
     "crates/anno-rag-tabular",
     "crates/anno-privacy-gateway",
+    "workspace-hack",
 ]
 exclude = ["vendor"]
 resolver = "2"
@@ -132,8 +133,10 @@ split-debuginfo = "off"  # skip PDB on Windows — faster link step
 [profile.dev-fast]
 inherits = "dev"
 debug = 0
-incremental = true
-codegen-units = 256
+# incremental disabled: conflicts with sccache (RUSTC_WRAPPER=sccache always active).
+# sccache misses all cache lookups when incremental .d fingerprints are present.
+incremental = false
+codegen-units = 512
 opt-level = 0
 split-debuginfo = "off"   # skip PDB write on Windows — significant linker speedup
 # overflow-checks = false — disabled: causes STATUS_STACK_BUFFER_OVERRUN in memchr/libm on MSVC (rustc 1.95)
@@ -142,7 +145,31 @@ strip = "none"            # explicit; no surprises
 [profile.dev-fast.build-override]
 debug = 0
 opt-level = 0
-codegen-units = 256
+codegen-units = 512
+
+# Heavy ML/NLP deps: compile at opt-level 2 even in dev/dev-fast so tests
+# don't crawl. These crates do numeric work that is 10-50× slower unoptimized.
+[profile.dev.package]
+ndarray = { opt-level = 2 }
+candle-core = { opt-level = 2 }
+candle-nn = { opt-level = 2 }
+candle-transformers = { opt-level = 2 }
+tokenizers = { opt-level = 2 }
+safetensors = { opt-level = 2 }
+half = { opt-level = 2 }
+rayon = { opt-level = 2 }
+ort = { opt-level = 2 }
+
+[profile.dev-fast.package]
+ndarray = { opt-level = 2 }
+candle-core = { opt-level = 2 }
+candle-nn = { opt-level = 2 }
+candle-transformers = { opt-level = 2 }
+tokenizers = { opt-level = 2 }
+safetensors = { opt-level = 2 }
+half = { opt-level = 2 }
+rayon = { opt-level = 2 }
+ort = { opt-level = 2 }
 
 # This is a virtual workspace. The published `anno` crate lives at `crates/anno/`.
 # Local development overrides (path patches) live in `.cargo/config.toml`.
