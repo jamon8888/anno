@@ -14,6 +14,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: sccache
+  CARGO_INCREMENTAL: "0"
 permissions:
   contents: read
   checks: write
@@ -40,9 +43,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - run: cargo check --workspace --all-targets
   fmt:
     name: Format
@@ -76,9 +82,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       # All targets (lib + tests + bins + examples) so test code is also linted.
       - run: cargo clippy --workspace --all-targets --features "eval discourse" -- -D warnings
   # ------------------------------------------------------------
@@ -106,9 +115,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - run: cargo clippy -p anno --lib --features "${{ matrix.features }}" -- -D warnings
   # ==========================================================================
   # Unit tests - no features (zero-dependency baseline)
@@ -122,9 +134,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - run: cargo test --package anno --no-default-features --lib
       - run: cargo test --package anno --lib
   # ==========================================================================
@@ -145,9 +160,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -202,9 +220,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
           key: ${{ matrix.os }}
       # MSVC CRT alignment: anno-rag pulls anno/gliner2-fastino -> onnx -> ort,
       # which links ort_sys (built /MD, dynamic CRT). esaxx-rs (via tokenizers)
@@ -237,9 +258,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -263,9 +287,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -295,9 +322,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -322,9 +352,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -343,9 +376,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -364,9 +400,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Cache HF models
         uses: actions/cache@v4
         with:
@@ -394,9 +433,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       # `anno-cli` requires at least one HTML-extractor feature; the
       # MPL-free `extractor-html2text` is the lightest option that satisfies
       # that constraint and proves the no-default-features build still works.
@@ -413,9 +455,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       # Document the library crates. anno is doc'd twice with different feature
       # combinations to surface feature-gated link errors that single-feature
       # builds miss.
@@ -437,9 +482,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Run property tests
         run: cargo test --workspace --lib --features "eval discourse" -- proptest
         env:
@@ -457,9 +505,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -576,9 +627,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Run evaluator unit tests
         run: cargo test -p anno-eval --lib --features "eval discourse" test_comprehensive_eval_results_average_f1 -- --nocapture
   # ==========================================================================
@@ -593,9 +647,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Build examples (eval + discourse)
         run: cargo build --workspace --examples --features "eval discourse"
       - name: Build examples (onnx)
@@ -615,9 +672,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -701,9 +761,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -791,9 +854,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
           # `cuda` feature requires nvcc which Linux runners don't have;
@@ -815,9 +881,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Install cargo-deny
         run: cargo install --locked cargo-deny
       - name: Check dependencies
@@ -833,9 +902,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Install cargo-machete
         run: cargo install cargo-machete
       - name: Check unused dependencies
@@ -851,9 +923,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Install cargo-geiger
         run: cargo install cargo-geiger
       - name: Generate safety report
@@ -882,9 +957,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Install Miri
         run: |
           # rust-toolchain.toml pins the project to stable 1.95; Miri is only
@@ -1126,9 +1204,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov
       - name: Generate coverage
@@ -1154,9 +1235,12 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+        with:
+          version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
       - name: Validate workspace structure
         run: |
           echo "## Workspace Structure Validation" >> $GITHUB_STEP_SUMMARY
