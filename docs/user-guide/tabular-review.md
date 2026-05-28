@@ -89,7 +89,7 @@ Some templates contain columns that are only extracted when a parent column meet
 
 ## Locking a cell
 
-Once you have verified a cell's value you can lock it to prevent re-extraction from overwriting it:
+Once you have verified a cell's value, you can lock it to prevent re-extraction from overwriting it:
 
 ```
 # Via MCP
