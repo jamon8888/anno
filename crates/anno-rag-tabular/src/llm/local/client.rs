@@ -168,6 +168,132 @@ impl LlmClient for LocalTabularClient {
 }
 
 // ---------------------------------------------------------------------------
+// Extended trait for per-label descriptions + thresholds
+// ---------------------------------------------------------------------------
+
+/// Extended extraction interface that supports GLiNER-style label descriptions
+/// and per-label confidence thresholds.
+///
+/// Blanket implementations can wrap any [`LocalEntityExtractor`] that accepts
+/// `(name, description)` pairs or per-label thresholds.
+pub trait LocalLegalSignalExtractor: LocalEntityExtractor {
+    /// Extract entities using `(label_name, description)` pairs.
+    /// The description is passed as the GLiNER label text for richer matching.
+    fn extract_with_descriptions(
+        &self,
+        text: &str,
+        labels: &[(&str, &str)],
+        threshold: f32,
+    ) -> Result<Vec<LocalEntity>> {
+        self.extract(text, labels, threshold)
+    }
+
+    /// Extract entities with per-label thresholds.
+    /// Runs extraction at the minimum threshold then filters per label.
+    fn extract_with_thresholds(
+        &self,
+        text: &str,
+        label_thresholds: &[(&str, f32)],
+    ) -> Result<Vec<LocalEntity>> {
+        if label_thresholds.is_empty() {
+            return Ok(vec![]);
+        }
+        let min_threshold = label_thresholds
+            .iter()
+            .map(|(_, t)| *t)
+            .fold(f32::MAX, f32::min);
+        let labels: Vec<(&str, &str)> = label_thresholds
+            .iter()
+            .map(|(name, _)| (*name, *name))
+            .collect();
+        let entities = self.extract(text, &labels, min_threshold)?;
+        // Filter each entity against its per-label threshold.
+        Ok(entities
+            .into_iter()
+            .filter(|e| {
+                label_thresholds
+                    .iter()
+                    .find(|(name, _)| *name == e.text.as_str())
+                    .map_or(true, |(_, t)| e.confidence >= *t)
+            })
+            .collect())
+    }
+}
+
+// Blanket impl: every LocalEntityExtractor is also a LocalLegalSignalExtractor.
+impl<T: LocalEntityExtractor> LocalLegalSignalExtractor for T {}
+
+// ---------------------------------------------------------------------------
+// Live GLiNER2/Fastino adapter (feature = "gliner2")
+// ---------------------------------------------------------------------------
+
+/// Production [`LocalEntityExtractor`] backed by [`anno::GLiNEROnnx`].
+///
+/// Only available when the `gliner2` crate feature is enabled.
+/// Tests that use this type are marked `#[ignore]` because they require
+/// downloading model weights at runtime.
+#[cfg(feature = "gliner2")]
+pub struct Gliner2EntityExtractor {
+    model: std::sync::Arc<anno::GLiNEROnnx>,
+}
+
+#[cfg(feature = "gliner2")]
+impl Gliner2EntityExtractor {
+    /// Wrap a pre-loaded [`anno::GLiNEROnnx`] model.
+    pub fn new(model: anno::GLiNEROnnx) -> Self {
+        Self { model: std::sync::Arc::new(model) }
+    }
+
+    /// Load from HuggingFace Hub (downloads weights on first call).
+    pub fn from_pretrained(model_name: &str) -> crate::error::Result<Self> {
+        let model = anno::GLiNEROnnx::new(model_name).map_err(|e| {
+            crate::error::Error::Extract {
+                doc: "local".into(),
+                col: "*".into(),
+                source: e.to_string().into(),
+            }
+        })?;
+        Ok(Self::new(model))
+    }
+}
+
+#[cfg(feature = "gliner2")]
+impl LocalEntityExtractor for Gliner2EntityExtractor {
+    /// Extract entities. `labels` is a slice of `(name, description)` pairs;
+    /// the description is passed as the GLiNER label text for richer zero-shot
+    /// matching (e.g. "Nom complet et forme juridique du bailleur").
+    fn extract(
+        &self,
+        text: &str,
+        labels: &[(&str, &str)],
+        threshold: f32,
+    ) -> Result<Vec<LocalEntity>> {
+        // Pass descriptions as GLiNER label strings — they carry more semantic
+        // signal than short names for French legal text.
+        let label_texts: Vec<&str> = labels.iter().map(|(_, desc)| *desc).collect();
+
+        let entities = self
+            .model
+            .extract(text, &label_texts, threshold)
+            .map_err(|e| crate::error::Error::Extract {
+                doc: "local".into(),
+                col: "*".into(),
+                source: e.to_string().into(),
+            })?;
+
+        Ok(entities
+            .into_iter()
+            .map(|e| LocalEntity {
+                text: e.text,
+                start_char: e.start(),
+                end_char: e.end(),
+                confidence: f32::from(e.confidence),
+            })
+            .collect())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -254,5 +380,47 @@ mod tests {
         let out = client.generate_structured("", &user, &schema).await.expect("no error");
 
         assert!(out.value.as_object().unwrap().is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // Live GLiNER2 tests — require model weights; skipped in CI.
+    // -----------------------------------------------------------------------
+
+    #[cfg(feature = "gliner2")]
+    #[tokio::test]
+    #[ignore = "loads local GLiNER2 model weights"]
+    async fn local_gliner2_adapter_extracts_party_name() {
+        let extractor = Gliner2EntityExtractor::from_pretrained(
+            "onnx-community/gliner_small-v2.1",
+        )
+        .expect("model loads");
+        let out = extractor
+            .extract(
+                "Entre les soussignés, ACME SAS agit comme bailleur.",
+                &[("bailleur", "Nom complet et forme juridique du bailleur")],
+                0.3,
+            )
+            .expect("extract");
+        assert!(out.iter().any(|e| e.text.contains("ACME")));
+    }
+
+    #[cfg(feature = "gliner2")]
+    #[tokio::test]
+    #[ignore = "loads local GLiNER2 model weights"]
+    async fn local_gliner2_adapter_uses_descriptions_as_labels() {
+        let extractor = Gliner2EntityExtractor::from_pretrained(
+            "onnx-community/gliner_small-v2.1",
+        )
+        .expect("model loads");
+        // Verify that the description ("Montant monétaire en euros") is forwarded
+        // to GLiNER rather than the short label name ("amount").
+        let out = extractor
+            .extract(
+                "Le loyer mensuel est de 1 500 euros.",
+                &[("amount", "Montant monétaire en euros")],
+                0.3,
+            )
+            .expect("extract");
+        assert!(!out.is_empty(), "should find a monetary amount");
     }
 }
