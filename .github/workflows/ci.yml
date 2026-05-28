@@ -17,6 +17,7 @@ env:
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: sccache
   CARGO_INCREMENTAL: "0"
+  # sccache-action v0.0.10: fixes LD_LIBRARY_PATH crash + uses Node 24
 permissions:
   contents: read
   checks: write
