@@ -17,11 +17,13 @@
 //! plan a normalization pass via `anno::offset::bytes_to_chars` in v0.2.
 
 use crate::error::{Error, Result};
+use crate::legal::{LegalEntity, LegalLabel};
 use anno::backends::gliner2_fastino::GLiNER2Fastino;
 use anno::backends::inference::ZeroShotNER;
 use anno::EntityType;
 use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
 use regex::Regex;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -303,35 +305,15 @@ impl Detector {
         let mut all = detect_patterns(text);
 
         // 2. anno NER. anno reports *character* offsets; cloakpipe (and Rust
-        // string slicing) want *byte* offsets. Build a once-per-doc char→byte
-        // lookup, then translate every anno entity through it. Without this,
-        // any non-ASCII text (€, accents) triggers a "not a char boundary"
-        // panic inside Replacer::pseudonymize.
+        // string slicing) want *byte* offsets. `anno_entities_to_detected`
+        // builds the once-per-doc char→byte lookup and translates every anno
+        // entity through it. Without this, any non-ASCII text (€, accents)
+        // triggers a "not a char boundary" panic inside Replacer::pseudonymize.
         let anno_entities = self
             .ner
             .extract_with_types(text, labels, threshold)
             .map_err(|e| Error::Detect(e.to_string()))?;
-
-        // char_idx → byte_idx table. The last sentinel is text.len() so a
-        // span ending past the last char still resolves to a valid byte.
-        let mut char_to_byte: Vec<usize> = text.char_indices().map(|(b, _)| b).collect();
-        char_to_byte.push(text.len());
-
-        for e in anno_entities {
-            let s_char = e.start();
-            let n_char = e.end();
-            if s_char >= char_to_byte.len() || n_char > char_to_byte.len() || s_char >= n_char {
-                continue; // out of range — skip silently rather than panic
-            }
-            all.push(DetectedEntity {
-                original: e.text.clone(),
-                start: char_to_byte[s_char],
-                end: char_to_byte[n_char],
-                category: map_anno_category(&e.entity_type),
-                confidence: f64::from(e.confidence),
-                source: DetectionSource::Ner,
-            });
-        }
+        all.extend(anno_entities_to_detected(text, anno_entities)?);
 
         // 3. Sort + dedup overlaps.
         // Sort by (start asc, span-length desc, Pattern-before-Ner).
@@ -343,6 +325,78 @@ impl Detector {
         });
         dedup_overlaps(&mut all);
         Ok(all)
+    }
+
+    /// Run one model pass for ingest and split results into PII and legal layers.
+    ///
+    /// PII and legal outputs are deduplicated independently so a legal role can
+    /// overlap the span that the vault must pseudonymize.
+    pub fn detect_for_ingest(
+        &self,
+        text: &str,
+        legal_labels: &[LegalLabel],
+        legal_thresholds: &HashMap<&'static str, f32>,
+    ) -> Result<IngestDetectionBundle> {
+        let started = std::time::Instant::now();
+        let input_chars = text.chars().count();
+
+        let mut pii = detect_patterns(text);
+        let mut label_thresholds: Vec<(&str, f32)> =
+            PII_NER_LABELS.iter().map(|label| (*label, 0.5)).collect();
+        for label in legal_labels {
+            let threshold = legal_thresholds.get(label.name).copied().unwrap_or(0.5);
+            if !label_thresholds.iter().any(|(name, _)| *name == label.name) {
+                label_thresholds.push((label.name, threshold));
+            }
+        }
+
+        let anno_entities = self
+            .ner
+            .extract_with_label_thresholds(text, &label_thresholds)
+            .map_err(|e| Error::Detect(e.to_string()))?;
+        let raw_model_spans = anno_entities_to_detected(text, anno_entities)?;
+
+        for entity in &raw_model_spans {
+            if is_pii_entity(entity) {
+                pii.push(entity.clone());
+            }
+        }
+        pii.sort_by(|a, b| {
+            a.start
+                .cmp(&b.start)
+                .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
+                .then_with(|| pattern_priority(&a.source).cmp(&pattern_priority(&b.source)))
+        });
+        dedup_overlaps(&mut pii);
+
+        let mut legal: Vec<LegalEntity> = raw_model_spans
+            .iter()
+            .filter_map(|entity| {
+                let EntityCategory::Custom(label) = &entity.category else {
+                    return None;
+                };
+                if !legal_labels.iter().any(|candidate| candidate.name == label) {
+                    return None;
+                }
+                Some(LegalEntity {
+                    label: label.clone(),
+                    text: entity.original.clone(),
+                    byte_start: entity.start as u32,
+                    byte_end: entity.end as u32,
+                    confidence: entity.confidence as f32,
+                })
+            })
+            .collect();
+        dedup_legal_overlaps(&mut legal);
+
+        let out = IngestDetectionBundle {
+            pii,
+            legal,
+            raw_model_spans,
+        };
+        let elapsed_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        emit_detect_audit(input_chars, elapsed_us, &out.pii);
+        Ok(out)
     }
 }
 
@@ -431,9 +485,157 @@ pub fn is_pii_entity(e: &cloakpipe_core::DetectedEntity) -> bool {
         )
 }
 
+/// Layer-aware detection result for document ingest.
+#[derive(Debug, Clone, Default)]
+pub struct IngestDetectionBundle {
+    /// Spans used for vault pseudonymization.
+    pub pii: Vec<DetectedEntity>,
+    /// Legal facts and roles. These may overlap PII spans.
+    pub legal: Vec<LegalEntity>,
+    /// Raw model spans after char-to-byte translation and before layer filtering.
+    pub raw_model_spans: Vec<DetectedEntity>,
+}
+
+fn dedup_legal_overlaps(entities: &mut Vec<LegalEntity>) {
+    entities.sort_by(|a, b| {
+        a.byte_start
+            .cmp(&b.byte_start)
+            .then_with(|| b.confidence.total_cmp(&a.confidence))
+            .then_with(|| (b.byte_end - b.byte_start).cmp(&(a.byte_end - a.byte_start)))
+    });
+
+    let mut out: Vec<LegalEntity> = Vec::with_capacity(entities.len());
+    for entity in entities.drain(..) {
+        let same_label_overlap = out.iter().any(|selected| {
+            selected.label == entity.label
+                && entity.byte_start < selected.byte_end
+                && entity.byte_end > selected.byte_start
+        });
+        if !same_label_overlap {
+            out.push(entity);
+        }
+    }
+
+    out.sort_by(|a, b| {
+        a.byte_start
+            .cmp(&b.byte_start)
+            .then_with(|| a.byte_end.cmp(&b.byte_end))
+            .then_with(|| a.label.cmp(&b.label))
+    });
+    *entities = out;
+}
+
+fn anno_entities_to_detected(
+    text: &str,
+    anno_entities: Vec<anno::Entity>,
+) -> Result<Vec<DetectedEntity>> {
+    let mut char_to_byte: Vec<usize> = text.char_indices().map(|(b, _)| b).collect();
+    char_to_byte.push(text.len());
+
+    let mut out = Vec::with_capacity(anno_entities.len());
+    for e in anno_entities {
+        let s_char = e.start();
+        let n_char = e.end();
+        if s_char >= char_to_byte.len() || n_char > char_to_byte.len() || s_char >= n_char {
+            continue;
+        }
+        out.push(DetectedEntity {
+            original: e.text.clone(),
+            start: char_to_byte[s_char],
+            end: char_to_byte[n_char],
+            category: map_anno_category(&e.entity_type),
+            confidence: f64::from(e.confidence),
+            source: DetectionSource::Ner,
+        });
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod combined_label_tests {
     use super::*;
+
+    #[test]
+    fn legal_overlap_dedup_preserves_different_labels_on_same_span() {
+        let mut legal = vec![
+            crate::legal::LegalEntity {
+                label: "organization".to_string(),
+                text: "Société ABC".to_string(),
+                byte_start: 10,
+                byte_end: 21,
+                confidence: 0.91,
+            },
+            crate::legal::LegalEntity {
+                label: "contract_party".to_string(),
+                text: "Société ABC".to_string(),
+                byte_start: 10,
+                byte_end: 21,
+                confidence: 0.84,
+            },
+        ];
+
+        dedup_legal_overlaps(&mut legal);
+
+        assert_eq!(legal.len(), 2);
+        assert!(legal.iter().any(|e| e.label == "organization"));
+        assert!(legal.iter().any(|e| e.label == "contract_party"));
+    }
+
+    #[test]
+    fn legal_overlap_dedup_drops_lower_confidence_same_label_overlap() {
+        let mut legal = vec![
+            crate::legal::LegalEntity {
+                label: "contract_party".to_string(),
+                text: "Société ABC".to_string(),
+                byte_start: 10,
+                byte_end: 21,
+                confidence: 0.70,
+            },
+            crate::legal::LegalEntity {
+                label: "contract_party".to_string(),
+                text: "Société ABC SAS".to_string(),
+                byte_start: 10,
+                byte_end: 25,
+                confidence: 0.88,
+            },
+        ];
+
+        dedup_legal_overlaps(&mut legal);
+
+        assert_eq!(legal.len(), 1);
+        assert_eq!(legal[0].text, "Société ABC SAS");
+        assert_eq!(legal[0].confidence, 0.88);
+    }
+
+    #[test]
+    fn pii_and_legal_outputs_can_overlap() {
+        let pii = vec![DetectedEntity {
+            original: "Société ABC".to_string(),
+            start: 10,
+            end: 21,
+            category: EntityCategory::Organization,
+            confidence: 0.91,
+            source: DetectionSource::Ner,
+        }];
+        let legal = vec![crate::legal::LegalEntity {
+            label: "contract_party".to_string(),
+            text: "Société ABC".to_string(),
+            byte_start: 10,
+            byte_end: 21,
+            confidence: 0.84,
+        }];
+
+        let bundle = IngestDetectionBundle {
+            pii,
+            legal,
+            raw_model_spans: Vec::new(),
+        };
+
+        assert_eq!(bundle.pii.len(), 1);
+        assert_eq!(bundle.legal.len(), 1);
+        assert_eq!(bundle.pii[0].start as u32, bundle.legal[0].byte_start);
+        assert_eq!(bundle.pii[0].end as u32, bundle.legal[0].byte_end);
+    }
 
     #[test]
     fn combined_label_set_is_union_of_pii_and_legal() {
