@@ -44,7 +44,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -58,7 +58,7 @@ jobs:
         with:
           components: rustfmt
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -87,7 +87,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -119,7 +119,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -137,7 +137,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -162,7 +162,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -221,7 +221,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -259,7 +259,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -287,7 +287,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -321,7 +321,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -350,7 +350,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -373,7 +373,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -396,7 +396,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -428,7 +428,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -449,7 +449,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -475,7 +475,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -497,7 +497,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -618,7 +618,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -637,7 +637,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -661,7 +661,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -749,7 +749,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -840,7 +840,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -865,7 +865,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -885,7 +885,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -905,7 +905,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -938,7 +938,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -1184,7 +1184,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
@@ -1214,7 +1214,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+        uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
