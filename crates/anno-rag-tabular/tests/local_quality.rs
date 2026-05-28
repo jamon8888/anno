@@ -28,7 +28,10 @@ fn local_quality_extracts_safe_fields_and_abstains_on_clause_reasoning() {
     let columns = template.into_columns(anno_rag_tabular::ids::ReviewId::new());
 
     // landlord should be annotated as local-safe
-    let landlord = columns.iter().find(|c| c.name == "landlord").expect("landlord column");
+    let landlord = columns
+        .iter()
+        .find(|c| c.name == "landlord")
+        .expect("landlord column");
     assert_eq!(
         landlord.extraction.mode,
         ExtractionMode::LocalSpan,
@@ -106,7 +109,10 @@ impl LlmClient for NullClient {
         _user: &str,
         _json_schema: &Value,
     ) -> anno_rag_tabular::error::Result<StructuredOutput> {
-        Ok(StructuredOutput { value: json!({}), usage: Usage::default() })
+        Ok(StructuredOutput {
+            value: json!({}),
+            usage: Usage::default(),
+        })
     }
     fn model_id(&self) -> &str {
         "null"
@@ -147,7 +153,10 @@ async fn routing_pipeline_emits_local_value_for_local_span_column() {
     })));
     let router = RoutingLlmClient::new(local, Some(Box::new(NullClient)));
 
-    let out = router.generate_structured("", &user, &schema).await.expect("extract");
+    let out = router
+        .generate_structured("", &user, &schema)
+        .await
+        .expect("extract");
 
     assert_eq!(out.value["landlord"]["value"], "ACME SAS");
     assert_eq!(

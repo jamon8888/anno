@@ -27,7 +27,10 @@ pub fn char_span_to_byte_span(text: &str, start_char: usize, end_char: usize) ->
     if start_char >= map.len() || end_char > map.len() {
         return None;
     }
-    Some(ByteSpan { start: map[start_char], end: map[end_char] })
+    Some(ByteSpan {
+        start: map[start_char],
+        end: map[end_char],
+    })
 }
 
 #[cfg(test)]

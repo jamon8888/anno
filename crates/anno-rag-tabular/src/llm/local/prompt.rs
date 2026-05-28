@@ -49,13 +49,20 @@ pub fn parse_user_prompt(input: &str) -> Result<ParsedPrompt> {
     let mut rest = input;
     while let Some(start) = rest.find("[CHUNK::") {
         rest = &rest[start + "[CHUNK::".len()..];
-        let end_id = rest.find(']').ok_or_else(|| parse_error("missing chunk id terminator"))?;
+        let end_id = rest
+            .find(']')
+            .ok_or_else(|| parse_error("missing chunk id terminator"))?;
         let id = rest[..end_id]
             .parse::<Uuid>()
             .map_err(|e| parse_error(e.to_string()))?;
         rest = &rest[end_id + 1..];
-        let end = rest.find("[/CHUNK]").ok_or_else(|| parse_error("missing chunk close marker"))?;
-        chunks.push(ParsedChunk { id, text: rest[..end].to_string() });
+        let end = rest
+            .find("[/CHUNK]")
+            .ok_or_else(|| parse_error("missing chunk close marker"))?;
+        chunks.push(ParsedChunk {
+            id,
+            text: rest[..end].to_string(),
+        });
         rest = &rest[end + "[/CHUNK]".len()..];
     }
 
@@ -63,13 +70,18 @@ pub fn parse_user_prompt(input: &str) -> Result<ParsedPrompt> {
     rest = input;
     while let Some(start) = rest.find("[COLUMN::") {
         rest = &rest[start + "[COLUMN::".len()..];
-        let end_name =
-            rest.find(']').ok_or_else(|| parse_error("missing column name terminator"))?;
+        let end_name = rest
+            .find(']')
+            .ok_or_else(|| parse_error("missing column name terminator"))?;
         let name = rest[..end_name].to_string();
         rest = &rest[end_name + 1..];
-        let end =
-            rest.find("[/COLUMN]").ok_or_else(|| parse_error("missing column close marker"))?;
-        columns.push(ParsedColumn { name, prompt: rest[..end].to_string() });
+        let end = rest
+            .find("[/COLUMN]")
+            .ok_or_else(|| parse_error("missing column close marker"))?;
+        columns.push(ParsedColumn {
+            name,
+            prompt: rest[..end].to_string(),
+        });
         rest = &rest[end + "[/COLUMN]".len()..];
     }
 
@@ -109,9 +121,8 @@ mod tests {
     fn parses_multiple_chunks() {
         let id1 = uuid::Uuid::now_v7();
         let id2 = uuid::Uuid::now_v7();
-        let user = format!(
-            "[CHUNK::{id1}]First chunk.[/CHUNK]\n[CHUNK::{id2}]Second chunk.[/CHUNK]\n"
-        );
+        let user =
+            format!("[CHUNK::{id1}]First chunk.[/CHUNK]\n[CHUNK::{id2}]Second chunk.[/CHUNK]\n");
         let parsed = parse_user_prompt(&user).expect("parse");
         assert_eq!(parsed.chunks.len(), 2);
         assert_eq!(parsed.chunks[0].text, "First chunk.");

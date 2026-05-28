@@ -254,18 +254,19 @@ pub struct Gliner2EntityExtractor {
 impl Gliner2EntityExtractor {
     /// Wrap a pre-loaded [`anno::GLiNEROnnx`] model.
     pub fn new(model: anno::GLiNEROnnx) -> Self {
-        Self { model: std::sync::Arc::new(model) }
+        Self {
+            model: std::sync::Arc::new(model),
+        }
     }
 
     /// Load from HuggingFace Hub (downloads weights on first call).
     pub fn from_pretrained(model_name: &str) -> crate::error::Result<Self> {
-        let model = anno::GLiNEROnnx::new(model_name).map_err(|e| {
-            crate::error::Error::Extract {
+        let model =
+            anno::GLiNEROnnx::new(model_name).map_err(|e| crate::error::Error::Extract {
                 doc: "local".into(),
                 col: "*".into(),
                 source: e.to_string().into(),
-            }
-        })?;
+            })?;
         Ok(Self::new(model))
     }
 }
@@ -360,14 +361,20 @@ mod tests {
         });
 
         let client = LocalTabularClient::new_for_tests(Box::new(MockExtractor));
-        let out = client.generate_structured("", &user, &schema).await.expect("extract");
+        let out = client
+            .generate_structured("", &user, &schema)
+            .await
+            .expect("extract");
 
         assert_eq!(out.value["landlord"]["value"], "ACME SAS");
         assert_eq!(
             out.value["landlord"]["citations"][0]["chunk_id"],
             chunk_id.to_string()
         );
-        assert_eq!(out.value["landlord"]["citations"][0]["quoted_text"], "ACME SAS");
+        assert_eq!(
+            out.value["landlord"]["citations"][0]["quoted_text"],
+            "ACME SAS"
+        );
     }
 
     #[tokio::test]
@@ -390,7 +397,10 @@ mod tests {
         });
 
         let client = LocalTabularClient::new_for_tests(Box::new(MockExtractor));
-        let out = client.generate_structured("", &user, &schema).await.expect("no error");
+        let out = client
+            .generate_structured("", &user, &schema)
+            .await
+            .expect("no error");
 
         assert!(out.value.as_object().unwrap().is_empty());
     }
@@ -403,10 +413,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "loads local GLiNER2 model weights"]
     async fn local_gliner2_adapter_extracts_party_name() {
-        let extractor = Gliner2EntityExtractor::from_pretrained(
-            "onnx-community/gliner_small-v2.1",
-        )
-        .expect("model loads");
+        let extractor = Gliner2EntityExtractor::from_pretrained("onnx-community/gliner_small-v2.1")
+            .expect("model loads");
         let out = extractor
             .extract(
                 "Entre les soussignés, ACME SAS agit comme bailleur.",
@@ -421,10 +429,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "loads local GLiNER2 model weights"]
     async fn local_gliner2_adapter_uses_descriptions_as_labels() {
-        let extractor = Gliner2EntityExtractor::from_pretrained(
-            "onnx-community/gliner_small-v2.1",
-        )
-        .expect("model loads");
+        let extractor = Gliner2EntityExtractor::from_pretrained("onnx-community/gliner_small-v2.1")
+            .expect("model loads");
         // Verify that the description ("Montant monétaire en euros") is forwarded
         // to GLiNER rather than the short label name ("amount").
         let out = extractor

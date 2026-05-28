@@ -217,10 +217,14 @@ fn row_to_column(b: &RecordBatch, i: usize) -> Result<Column> {
         .expect("column 5 (conditional_json) is StringArray by schema");
     // Column 6 is extraction_json (nullable Utf8). Tables written before
     // this field existed will not have it — fall back to ExtractionSpec::default().
-    let extraction_a = b.schema().field_with_name("extraction_json").ok().and_then(|_| {
-        b.column_by_name("extraction_json")
-            .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-    });
+    let extraction_a = b
+        .schema()
+        .field_with_name("extraction_json")
+        .ok()
+        .and_then(|_| {
+            b.column_by_name("extraction_json")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+        });
     let manual_a = b
         .column_by_name("manual")
         .and_then(|c| c.as_any().downcast_ref::<BooleanArray>())
@@ -365,7 +369,9 @@ mod tests {
 
     #[tokio::test]
     async fn columns_round_trip_extraction_metadata() {
-        use crate::schema::column::{ExtractionLabel, ExtractionMode, ExtractionNormalizer, ExtractionSpec};
+        use crate::schema::column::{
+            ExtractionLabel, ExtractionMode, ExtractionNormalizer, ExtractionSpec,
+        };
 
         let (_dir, t) = fresh_table().await;
         let review = ReviewId::new();
@@ -392,7 +398,10 @@ mod tests {
 
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].extraction.mode, ExtractionMode::LocalSpan);
-        assert_eq!(listed[0].extraction.normalizer, Some(ExtractionNormalizer::LegalName));
+        assert_eq!(
+            listed[0].extraction.normalizer,
+            Some(ExtractionNormalizer::LegalName)
+        );
         assert!((listed[0].extraction.threshold.unwrap() - 0.45_f32).abs() < 1e-5);
         assert_eq!(listed[0].extraction.labels[0].name, "bailleur");
         assert_eq!(listed[0].extraction.keywords, vec!["bailleur"]);

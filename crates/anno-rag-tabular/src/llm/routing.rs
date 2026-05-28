@@ -31,15 +31,19 @@ impl LlmClient for RoutingLlmClient {
         user: &str,
         json_schema: &Value,
     ) -> crate::error::Result<StructuredOutput> {
-        let mut local_out =
-            self.local.generate_structured(system, user, json_schema).await?;
+        let mut local_out = self
+            .local
+            .generate_structured(system, user, json_schema)
+            .await?;
 
         if let Some(fallback) = &self.fallback {
             // Safety gate: never send clear PII to a remote LLM.
             if !fallback_prompt_is_safe(user) {
                 return Ok(local_out);
             }
-            let llm_out = fallback.generate_structured(system, user, json_schema).await?;
+            let llm_out = fallback
+                .generate_structured(system, user, json_schema)
+                .await?;
             // Merge: local columns take priority; fallback fills the gaps.
             merge_objects(&mut local_out.value, llm_out.value);
             // Aggregate token usage.
@@ -59,8 +63,12 @@ impl LlmClient for RoutingLlmClient {
 
 /// Merge `src` object into `dst` without overwriting existing keys.
 fn merge_objects(dst: &mut Value, src: Value) {
-    let Some(dst_obj) = dst.as_object_mut() else { return };
-    let Some(src_obj) = src.into_object() else { return };
+    let Some(dst_obj) = dst.as_object_mut() else {
+        return;
+    };
+    let Some(src_obj) = src.into_object() else {
+        return;
+    };
     for (key, value) in src_obj {
         dst_obj.entry(key).or_insert(value);
     }
@@ -98,7 +106,10 @@ mod tests {
             _user: &str,
             _json_schema: &Value,
         ) -> crate::error::Result<StructuredOutput> {
-            Ok(StructuredOutput { value: self.value.clone(), usage: Usage::default() })
+            Ok(StructuredOutput {
+                value: self.value.clone(),
+                usage: Usage::default(),
+            })
         }
         fn model_id(&self) -> &str {
             self.id
@@ -123,8 +134,7 @@ mod tests {
         });
         let router = RoutingLlmClient::new(local, Some(llm));
 
-        let user =
-            "[CHUNK::018f0000-0000-7000-8000-000000000001]ORG_1 signe le contrat.[/CHUNK]\n";
+        let user = "[CHUNK::018f0000-0000-7000-8000-000000000001]ORG_1 signe le contrat.[/CHUNK]\n";
         let out = router
             .generate_structured("", user, &json!({ "type": "object" }))
             .await
@@ -136,7 +146,10 @@ mod tests {
 
     #[tokio::test]
     async fn routing_aborts_fallback_when_prompt_contains_clear_pii() {
-        let local = Box::new(StaticClient { id: "local", value: json!({}) });
+        let local = Box::new(StaticClient {
+            id: "local",
+            value: json!({}),
+        });
         let llm = Box::new(StaticClient {
             id: "llm",
             value: json!({
