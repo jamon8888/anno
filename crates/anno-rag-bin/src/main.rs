@@ -6,7 +6,7 @@
 //! - `anno-rag mcp` — run MCP server on stdio (used by Cowork plugin)
 
 use anno_rag::{
-    config::{AnnoRagConfig, MemoryNerMode, OcrMode},
+    config::{AdvancedPdfNativeMode, AnnoRagConfig, MemoryNerMode, OcrMode},
     pipeline::Pipeline,
     vault::derive_key,
 };
@@ -41,6 +41,24 @@ enum Cmd {
         /// built with the `embedded-ocr` feature.
         #[arg(long, default_value_t = false)]
         enable_ocr: bool,
+        /// Enable structured native PDF extraction for text-layer PDFs.
+        #[arg(long, default_value_t = false)]
+        advanced_pdf_native: bool,
+        /// Keep running PDF headers in the advanced native PDF profile.
+        #[arg(long, default_value_t = false)]
+        pdf_keep_headers: bool,
+        /// Keep running PDF footers in the advanced native PDF profile.
+        #[arg(long, default_value_t = false)]
+        pdf_keep_footers: bool,
+        /// Extract PDF annotations in the advanced native PDF profile.
+        #[arg(long, default_value_t = false)]
+        pdf_extract_annotations: bool,
+        /// Hierarchy cluster count for advanced native PDF extraction.
+        #[arg(long, default_value_t = 6)]
+        pdf_hierarchy_clusters: usize,
+        /// Allow single-column pseudo-tables in advanced native PDF extraction.
+        #[arg(long, default_value_t = false)]
+        pdf_allow_single_column_tables: bool,
     },
     /// Search the indexed corpus and return ranked pseudonymized chunks.
     Search {
@@ -104,10 +122,28 @@ async fn main() -> anyhow::Result<()> {
             cfg.memory_ner_mode = mode;
         }
     }
-    if let Cmd::Ingest { enable_ocr, .. } = &cli.cmd {
+    if let Cmd::Ingest {
+        enable_ocr,
+        advanced_pdf_native,
+        pdf_keep_headers,
+        pdf_keep_footers,
+        pdf_extract_annotations,
+        pdf_hierarchy_clusters,
+        pdf_allow_single_column_tables,
+        ..
+    } = &cli.cmd
+    {
         if *enable_ocr {
             cfg.ocr_mode = OcrMode::AutoEmbedded;
         }
+        if *advanced_pdf_native {
+            cfg.advanced_pdf_native = AdvancedPdfNativeMode::Structured;
+        }
+        cfg.pdf_keep_headers = *pdf_keep_headers;
+        cfg.pdf_keep_footers = *pdf_keep_footers;
+        cfg.pdf_extract_annotations = *pdf_extract_annotations;
+        cfg.pdf_hierarchy_clusters = *pdf_hierarchy_clusters;
+        cfg.pdf_allow_single_column_tables = *pdf_allow_single_column_tables;
     }
 
     // Mcp uses lazy pipeline init — short-circuit before Pipeline::new.
@@ -173,6 +209,12 @@ async fn main() -> anyhow::Result<()> {
             recursive,
             output,
             enable_ocr: _,
+            advanced_pdf_native: _,
+            pdf_keep_headers: _,
+            pdf_keep_footers: _,
+            pdf_extract_annotations: _,
+            pdf_hierarchy_clusters: _,
+            pdf_allow_single_column_tables: _,
         } => {
             let out = output.unwrap_or_else(|| cfg.outputs_dir());
             let n = pipeline.ingest_folder(&folder, recursive, &out).await?;
