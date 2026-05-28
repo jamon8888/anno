@@ -146,7 +146,9 @@ async fn main() -> anyhow::Result<()> {
     // and then take ownership with `let-else`; after the block only the false
     // path remains live, so `cli.cmd` is still available for the final `match`.
     if matches!(&cli.cmd, Cmd::Review(_)) {
-        let Cmd::Review(args) = cli.cmd else { unreachable!() };
+        let Cmd::Review(args) = cli.cmd else {
+            unreachable!()
+        };
         review::run(args.cmd, &cfg).await?;
         return Ok(());
     }

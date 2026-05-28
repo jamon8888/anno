@@ -32,14 +32,9 @@ pub async fn export_markdown(storage: &StorageHandle, review_id: ReviewId) -> Re
     let mut rows = storage.rows.list_for_review(review_id).await?;
     let cells = storage.cells.all_for_review_latest(review_id).await?;
 
-    rows.sort_by(|a, b| {
-        crate::export::csv::doc_label(a).cmp(&crate::export::csv::doc_label(b))
-    });
+    rows.sort_by(|a, b| crate::export::csv::doc_label(a).cmp(&crate::export::csv::doc_label(b)));
 
-    let cell_map: HashMap<_, _> = cells
-        .iter()
-        .map(|c| ((c.row_id, c.col_id), c))
-        .collect();
+    let cell_map: HashMap<_, _> = cells.iter().map(|c| ((c.row_id, c.col_id), c)).collect();
 
     let mut out = String::new();
 
@@ -176,11 +171,7 @@ mod tests {
         let col = ColumnBuilder::new(review_id, "Parties", "Who?", CellType::Text)
             .order(0)
             .build();
-        storage
-            .columns
-            .add(review_id, &col)
-            .await
-            .expect("add col");
+        storage.columns.add(review_id, &col).await.expect("add col");
 
         let md = export_markdown(&storage, review_id)
             .await
@@ -221,11 +212,7 @@ mod tests {
         let col = ColumnBuilder::new(review_id, "Clause", "Key clause?", CellType::Text)
             .order(0)
             .build();
-        storage
-            .columns
-            .add(review_id, &col)
-            .await
-            .expect("add col");
+        storage.columns.add(review_id, &col).await.expect("add col");
 
         let row = mk_row(review_id, "docs/contract.pdf");
         storage.rows.add(&row).await.expect("add row");

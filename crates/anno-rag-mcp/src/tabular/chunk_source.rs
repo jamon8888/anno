@@ -13,11 +13,15 @@ pub struct PipelineChunkSource(pub Arc<Pipeline>);
 #[async_trait]
 impl ChunkSource for PipelineChunkSource {
     async fn chunks_for_doc(&self, doc_id: uuid::Uuid) -> TabularResult<Vec<ChunkRef>> {
-        let hits = self.0.chunks_by_doc(doc_id).await.map_err(|e| TabularError::Extract {
-            doc: doc_id.to_string(),
-            col: "?".into(),
-            source: Box::new(e),
-        })?;
+        let hits = self
+            .0
+            .chunks_by_doc(doc_id)
+            .await
+            .map_err(|e| TabularError::Extract {
+                doc: doc_id.to_string(),
+                col: "?".into(),
+                source: Box::new(e),
+            })?;
         Ok(hits
             .into_iter()
             .map(|h| ChunkRef {
@@ -30,11 +34,15 @@ impl ChunkSource for PipelineChunkSource {
     }
 
     async fn chunk_by_id(&self, chunk_id: uuid::Uuid) -> TabularResult<Option<ChunkRef>> {
-        let hit = self.0.chunk_by_id(chunk_id).await.map_err(|e| TabularError::Extract {
-            doc: "?".into(),
-            col: "?".into(),
-            source: Box::new(e),
-        })?;
+        let hit = self
+            .0
+            .chunk_by_id(chunk_id)
+            .await
+            .map_err(|e| TabularError::Extract {
+                doc: "?".into(),
+                col: "?".into(),
+                source: Box::new(e),
+            })?;
         Ok(hit.map(|h| ChunkRef {
             id: h.chunk_id,
             doc_id: h.doc_id,

@@ -2023,10 +2023,7 @@ impl AnnoRagServer {
                                     ..Default::default()
                                 };
                                 match anno_rag_tabular::run_review(
-                                    &ts_clone,
-                                    &extractor,
-                                    review_id,
-                                    cfg,
+                                    &ts_clone, &extractor, review_id, cfg,
                                 )
                                 .await
                                 {
@@ -2070,11 +2067,9 @@ impl AnnoRagServer {
 
     /// Re-extract a single cell with an extra instruction prepended to the
     /// column prompt. Bumps the cell version. Locked cells block this.
-    #[tool(
-        description = "Re-extract a single cell with an extra instruction. \
+    #[tool(description = "Re-extract a single cell with an extra instruction. \
                        The instruction is prepended to the column's prompt for \
-                       this one call. Bumps cell version. Locked cells are blocked."
-    )]
+                       this one call. Bumps cell version. Locked cells are blocked.")]
     async fn review_refine_cell(
         &self,
         Parameters(p): Parameters<ReviewRefineCellParams>,
@@ -2129,9 +2124,7 @@ impl AnnoRagServer {
             Some(a) => a,
             None => return "Error: pipeline not initialised".into(),
         };
-        let chunk_src = std::sync::Arc::new(
-            crate::tabular::PipelineChunkSource(arc_pipeline),
-        );
+        let chunk_src = std::sync::Arc::new(crate::tabular::PipelineChunkSource(arc_pipeline));
         let llm = match anno_rag_tabular::llm::default_from_env() {
             Ok(l) => std::sync::Arc::from(l),
             Err(e) => return format!("Error: LLM init: {e}"),
@@ -2143,8 +2136,12 @@ impl AnnoRagServer {
         };
         // Offset verification.
         for cell in &mut extracted {
-            if let Err(e) =
-                anno_rag_tabular::verify::offsets::verify_cell_offsets(cell, row.doc_id, extractor.chunks()).await
+            if let Err(e) = anno_rag_tabular::verify::offsets::verify_cell_offsets(
+                cell,
+                row.doc_id,
+                extractor.chunks(),
+            )
+            .await
             {
                 tracing::warn!(target: "tabular::mcp", "offset verify: {e}");
             }
@@ -2163,11 +2160,9 @@ impl AnnoRagServer {
 
     /// Write a human-override value to a cell. Author = Human.
     /// Set `lock: true` to prevent future auto-overwrites.
-    #[tool(
-        description = "Write a human override to a cell (any JSON value). \
+    #[tool(description = "Write a human override to a cell (any JSON value). \
                        Set lock=true to prevent auto-overwrite by the extractor. \
-                       Author is recorded as Human."
-    )]
+                       Author is recorded as Human.")]
     async fn review_set_cell(&self, Parameters(p): Parameters<ReviewSetCellParams>) -> String {
         let ts = match self.tabular_storage().await {
             Ok(ts) => ts,
@@ -2242,10 +2237,7 @@ impl AnnoRagServer {
                        Reads the latest value and re-writes it with locked=true. \
                        Author is recorded as Human."
     )]
-    async fn review_lock_cell(
-        &self,
-        Parameters(p): Parameters<ReviewCellLockParams>,
-    ) -> String {
+    async fn review_lock_cell(&self, Parameters(p): Parameters<ReviewCellLockParams>) -> String {
         self.set_cell_lock(p, true).await
     }
 
@@ -2254,10 +2246,7 @@ impl AnnoRagServer {
         description = "Remove a lock from a cell. The extraction engine may then \
                        overwrite it on the next review_add_rows or review_refine_cell call."
     )]
-    async fn review_unlock_cell(
-        &self,
-        Parameters(p): Parameters<ReviewCellLockParams>,
-    ) -> String {
+    async fn review_unlock_cell(&self, Parameters(p): Parameters<ReviewCellLockParams>) -> String {
         self.set_cell_lock(p, false).await
     }
 
@@ -2301,9 +2290,7 @@ impl AnnoRagServer {
                 }
                 let path = path.as_path();
                 match anno_rag_tabular::export::export_xlsx(ts, review_id, path).await {
-                    Ok(()) => {
-                        serde_json::json!({ "ok": true, "path": path_str }).to_string()
-                    }
+                    Ok(()) => serde_json::json!({ "ok": true, "path": path_str }).to_string(),
                     Err(e) => format!("Error: {e}"),
                 }
             }
@@ -2361,7 +2348,8 @@ impl AnnoRagServer {
                 .map(|r| ReviewRowWire {
                     id: r.id.0.to_string(),
                     doc_id: r.doc_id.to_string(),
-                    doc_label: r.folder_path
+                    doc_label: r
+                        .folder_path
                         .as_deref()
                         .and_then(|p| p.rsplit('/').next())
                         .filter(|s| !s.is_empty())
