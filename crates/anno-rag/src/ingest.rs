@@ -6,7 +6,10 @@ use crate::config::{AnnoRagConfig, OcrMode};
 use crate::error::{Error, Result};
 #[cfg(feature = "embedded-ocr")]
 use kreuzberg::core::config::OcrConfig;
-use kreuzberg::core::config::{ChunkerType, ChunkingConfig, ExtractionConfig};
+use kreuzberg::core::config::{
+    ChunkerType, ChunkingConfig, ContentFilterConfig, ExtractionConfig, HierarchyConfig,
+    PageConfig, PdfConfig,
+};
 use kreuzberg::types::{Chunk, ExtractionResult, PageContent};
 use std::path::Path;
 
@@ -75,6 +78,15 @@ pub enum OcrDeferredReason {
     Unavailable,
 }
 
+/// One heading from Kreuzberg's markdown chunk heading context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractedHeading {
+    /// Heading depth where 1 is the top-level heading.
+    pub level: u8,
+    /// Heading text.
+    pub text: String,
+}
+
 /// One section-aware chunk with provenance back to the source.
 #[derive(Debug, Clone)]
 pub struct ExtractedChunk {
@@ -92,6 +104,10 @@ pub struct ExtractedChunk {
     pub char_end: u32,
     /// PDF page number if known (1-indexed, first page the chunk spans).
     pub page: Option<u32>,
+    /// PDF page number if known (1-indexed, last page the chunk spans).
+    pub page_end: Option<u32>,
+    /// Markdown heading hierarchy enclosing this chunk.
+    pub heading_context: Vec<ExtractedHeading>,
 }
 
 /// Extract a single document file into an [`ExtractedDoc`].
@@ -106,11 +122,7 @@ pub struct ExtractedChunk {
 /// Returns [`Error::Ingest`] wrapping the underlying kreuzberg error if
 /// extraction fails (missing file, unsupported format, OCR error, etc.).
 pub async fn extract(path: &Path, cfg: &AnnoRagConfig) -> Result<ExtractedDoc> {
-    let native_config = ExtractionConfig {
-        chunking: Some(chunking_config(cfg)),
-        disable_ocr: true,
-        ..Default::default()
-    };
+    let native_config = native_extraction_config(cfg);
 
     let result = kreuzberg::extract_file(path, None, &native_config)
         .await
@@ -230,6 +242,46 @@ fn chunking_config(cfg: &AnnoRagConfig) -> ChunkingConfig {
     }
 }
 
+fn native_extraction_config(cfg: &AnnoRagConfig) -> ExtractionConfig {
+    let mut extraction_config = ExtractionConfig {
+        chunking: Some(chunking_config(cfg)),
+        disable_ocr: true,
+        ..Default::default()
+    };
+
+    if cfg.advanced_pdf_native.is_enabled() {
+        extraction_config.output_format = kreuzberg::core::config::OutputFormat::Markdown;
+        extraction_config.result_format = kreuzberg::types::OutputFormat::ElementBased;
+        extraction_config.include_document_structure = true;
+        extraction_config.pages = Some(PageConfig {
+            extract_pages: true,
+            insert_page_markers: false,
+            ..Default::default()
+        });
+        extraction_config.pdf_options = Some(PdfConfig {
+            extract_images: false,
+            extract_metadata: true,
+            hierarchy: Some(HierarchyConfig {
+                enabled: true,
+                k_clusters: cfg.effective_pdf_hierarchy_clusters(),
+                include_bbox: true,
+                ocr_coverage_threshold: None,
+            }),
+            extract_annotations: cfg.pdf_extract_annotations,
+            allow_single_column_tables: cfg.pdf_allow_single_column_tables,
+            ..Default::default()
+        });
+        extraction_config.content_filter = Some(ContentFilterConfig {
+            include_headers: cfg.pdf_keep_headers,
+            include_footers: cfg.pdf_keep_footers,
+            strip_repeating_text: true,
+            include_watermarks: false,
+        });
+    }
+
+    extraction_config
+}
+
 fn map_chunks(chunks: Vec<Chunk>) -> Vec<ExtractedChunk> {
     chunks
         .into_iter()
@@ -239,6 +291,20 @@ fn map_chunks(chunks: Vec<Chunk>) -> Vec<ExtractedChunk> {
             char_start: c.metadata.byte_start as u32,
             char_end: c.metadata.byte_end as u32,
             page: c.metadata.first_page.map(|p| p as u32),
+            page_end: c.metadata.last_page.map(|p| p as u32),
+            heading_context: c
+                .metadata
+                .heading_context
+                .map(|ctx| {
+                    ctx.headings
+                        .into_iter()
+                        .map(|h| ExtractedHeading {
+                            level: h.level,
+                            text: h.text,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
         })
         .collect()
 }
@@ -357,9 +423,128 @@ async fn embedded_ocr_extract(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::AdvancedPdfNativeMode;
     use std::io::Write;
     use std::sync::Arc;
     use tempfile::NamedTempFile;
+
+    #[test]
+    fn native_extraction_config_keeps_current_defaults_when_advanced_pdf_off() {
+        let cfg = AnnoRagConfig::default();
+
+        let extraction_config = native_extraction_config(&cfg);
+
+        assert!(extraction_config.disable_ocr);
+        assert!(extraction_config.chunking.is_some());
+        assert!(extraction_config.pages.is_none());
+        assert!(extraction_config.pdf_options.is_none());
+        assert!(extraction_config.content_filter.is_none());
+        assert!(!extraction_config.include_document_structure);
+        assert_eq!(
+            extraction_config.output_format,
+            kreuzberg::core::config::OutputFormat::Plain
+        );
+        assert_eq!(
+            extraction_config.result_format,
+            kreuzberg::types::OutputFormat::Unified
+        );
+    }
+
+    #[test]
+    fn native_extraction_config_enables_structured_pdf_profile() {
+        let cfg = AnnoRagConfig {
+            advanced_pdf_native: AdvancedPdfNativeMode::Structured,
+            pdf_keep_headers: true,
+            pdf_extract_annotations: true,
+            pdf_allow_single_column_tables: true,
+            pdf_hierarchy_clusters: 4,
+            ..Default::default()
+        };
+
+        let extraction_config = native_extraction_config(&cfg);
+
+        assert!(extraction_config.disable_ocr);
+        assert!(extraction_config.include_document_structure);
+        assert_eq!(
+            extraction_config.output_format,
+            kreuzberg::core::config::OutputFormat::Markdown
+        );
+        assert_eq!(
+            extraction_config.result_format,
+            kreuzberg::types::OutputFormat::ElementBased
+        );
+
+        let pages = extraction_config.pages.expect("page tracking enabled");
+        assert!(pages.extract_pages);
+        assert!(!pages.insert_page_markers);
+
+        let pdf = extraction_config.pdf_options.expect("pdf options enabled");
+        assert!(pdf.extract_metadata);
+        assert!(pdf.extract_annotations);
+        assert!(pdf.allow_single_column_tables);
+        let hierarchy = pdf.hierarchy.expect("hierarchy enabled");
+        assert!(hierarchy.enabled);
+        assert_eq!(hierarchy.k_clusters, 4);
+        assert!(hierarchy.include_bbox);
+        assert_eq!(hierarchy.ocr_coverage_threshold, None);
+
+        let content_filter = extraction_config
+            .content_filter
+            .expect("content filter enabled");
+        assert!(content_filter.include_headers);
+        assert!(!content_filter.include_footers);
+        assert!(content_filter.strip_repeating_text);
+        assert!(!content_filter.include_watermarks);
+    }
+
+    #[test]
+    fn map_chunks_preserves_page_range_and_heading_context() {
+        let chunks = vec![Chunk {
+            content: "Clause de résiliation".to_string(),
+            chunk_type: kreuzberg::types::ChunkType::Unknown,
+            embedding: None,
+            metadata: kreuzberg::types::ChunkMetadata {
+                byte_start: 10,
+                byte_end: 31,
+                token_count: None,
+                chunk_index: 0,
+                total_chunks: 1,
+                first_page: Some(2),
+                last_page: Some(3),
+                heading_context: Some(kreuzberg::types::HeadingContext {
+                    headings: vec![
+                        kreuzberg::types::HeadingLevel {
+                            level: 1,
+                            text: "Contrat".to_string(),
+                        },
+                        kreuzberg::types::HeadingLevel {
+                            level: 2,
+                            text: "Résiliation".to_string(),
+                        },
+                    ],
+                }),
+            },
+        }];
+
+        let mapped = map_chunks(chunks);
+
+        assert_eq!(mapped.len(), 1);
+        assert_eq!(mapped[0].page, Some(2));
+        assert_eq!(mapped[0].page_end, Some(3));
+        assert_eq!(
+            mapped[0].heading_context,
+            vec![
+                ExtractedHeading {
+                    level: 1,
+                    text: "Contrat".to_string(),
+                },
+                ExtractedHeading {
+                    level: 2,
+                    text: "Résiliation".to_string(),
+                },
+            ]
+        );
+    }
 
     #[tokio::test]
     async fn extracts_plain_text_file() {

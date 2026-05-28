@@ -16,16 +16,15 @@ use std::time::{Duration, Instant};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
-/// No-op legal extractor for the ingest path.
+/// Metadata carrier for legal entities already detected during ingest.
 ///
-/// Ingest supplies pre-detected legal entities from `detect_with_labels`
-/// directly; `extract_raw` is never called on the normal ingest path.
-/// The drain/re-enrich path uses rules-only mode (empty entity vec).
-/// A real GLiNER session adapter is added when Stage D MCP tools need
-/// full standalone re-extraction.
-struct NoopLegalExtractor;
+/// Ingest supplies pre-detected legal entities from `Detector::detect_for_ingest`
+/// directly; `extract` is not called on the normal ingest path. The model id
+/// still reports the GLiNER2 detector because enrichment rows were produced from
+/// those spans.
+struct PreDetectedLegalExtractor;
 
-impl LegalEntityExtractor for NoopLegalExtractor {
+impl LegalEntityExtractor for PreDetectedLegalExtractor {
     fn extract(
         &self,
         _text: &str,
@@ -36,7 +35,7 @@ impl LegalEntityExtractor for NoopLegalExtractor {
     }
 
     fn model_id(&self) -> &'static str {
-        "noop"
+        crate::detect::NER_MODEL_ID
     }
 
     fn extractor_version(&self) -> &'static str {
@@ -129,7 +128,7 @@ impl Pipeline {
             tracing::warn!(error = %e, "legal index setup skipped (table may be empty)");
         }
         let enrichment_status = crate::legal::status::EnrichmentStatusStore::open(&cfg).await?;
-        let legal_enricher = LegalEnricher::new(Arc::new(NoopLegalExtractor));
+        let legal_enricher = LegalEnricher::new(Arc::new(PreDetectedLegalExtractor));
         let legal_kg: std::sync::Arc<dyn crate::legal::kg::LegalKnowledgeGraph> =
             std::sync::Arc::new(crate::legal::kg::LanceGraphStore::open(&cfg).await?);
         Ok(Self {
@@ -249,32 +248,27 @@ impl Pipeline {
             .map(|p| p.display().to_string())
             .unwrap_or_default();
 
-        // ── 1. Combined-label detect: one NER call per chunk (PII ∪ legal) ──
+        // ── 1. Layer-aware detect: one NER call per chunk, PII and legal split ──
         let legal_labels = crate::legal::default_legal_labels();
-        let legal_names: Vec<&str> = legal_labels.iter().map(|l| l.name).collect();
-        let combined = crate::detect::combined_label_set(&legal_names);
+        let legal_thresholds = crate::legal::default_thresholds();
         let detector = self.detector_get_or_init()?;
 
-        let mut all_entities: Vec<Vec<cloakpipe_core::DetectedEntity>> =
+        let mut detection_bundles: Vec<crate::detect::IngestDetectionBundle> =
             Vec::with_capacity(extracted.chunks.len());
         for chunk in &extracted.chunks {
-            let ents = detector.detect_with_labels(&chunk.text, &combined, 0.5)?;
-            all_entities.push(ents);
+            let bundle =
+                detector.detect_for_ingest(&chunk.text, &legal_labels, &legal_thresholds)?;
+            detection_bundles.push(bundle);
         }
 
         // ── 2. Pseudonymize using PII subset; capture offset map ──
         let mut pseudo_chunks: Vec<String> = Vec::with_capacity(extracted.chunks.len());
         let mut offset_maps: Vec<crate::legal::offsets::PseudoOffsetMap> =
             Vec::with_capacity(extracted.chunks.len());
-        for (chunk, ents) in extracted.chunks.iter().zip(&all_entities) {
-            let pii_ents: Vec<cloakpipe_core::DetectedEntity> = ents
-                .iter()
-                .filter(|e| crate::detect::is_pii_entity(e))
-                .cloned()
-                .collect();
+        for (chunk, bundle) in extracted.chunks.iter().zip(&detection_bundles) {
             let (pseudo, map) = self
                 .vault
-                .pseudonymize_with_map(&chunk.text, &pii_ents)
+                .pseudonymize_with_map(&chunk.text, &bundle.pii)
                 .await?;
             pseudo_chunks.push(pseudo);
             offset_maps.push(map);
@@ -327,23 +321,7 @@ impl Pipeline {
                 chunk.char_end,
                 chunk.page,
             );
-            let raw_legal_ents: Vec<LegalEntity> = all_entities[i]
-                .iter()
-                .filter(|e| !crate::detect::is_pii_entity(e))
-                .filter_map(|e| {
-                    if let cloakpipe_core::EntityCategory::Custom(label) = &e.category {
-                        Some(LegalEntity {
-                            label: label.clone(),
-                            text: e.original.clone(),
-                            byte_start: e.start as u32,
-                            byte_end: e.end as u32,
-                            confidence: e.confidence as f32,
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+            let raw_legal_ents = detection_bundles[i].legal.clone();
             let legal_ents = self.legal_enricher.translate_to_pseudo(
                 raw_legal_ents,
                 &offset_maps[i],
@@ -2240,11 +2218,20 @@ mod tests {
                 char_start: 0,
                 char_end: 9,
                 page: None,
+                page_end: None,
+                heading_context: Vec::new(),
             }],
             class: ingest::DocClass::TextLayer,
             ocr_status: ingest::OcrStatus::NotRequired,
         };
         assert!(should_index_extracted_doc(&indexable));
+    }
+
+    #[test]
+    fn predetected_legal_extractor_reports_gliner_model_id() {
+        let extractor = PreDetectedLegalExtractor;
+        assert_eq!(extractor.model_id(), crate::detect::NER_MODEL_ID);
+        assert_eq!(extractor.extractor_version(), env!("CARGO_PKG_VERSION"));
     }
 
     #[test]
