@@ -298,6 +298,17 @@ Sur Apple Silicon, les features `metal` / `gliner2-fastino-candle-metal` servent
 
 #### Claude Desktop
 
+##### Installation release candidate via Claude Code
+
+Pour tester une release candidate GitHub sans compiler, ouvrez Claude Code puis collez ce prompt :
+
+```text
+Install Hacienda anno-rag v0.11.0-rc.11 into Claude Desktop/Cowork from https://github.com/jamon8888/anno/releases/tag/v0.11.0-rc.11.
+Download the asset for this machine (Windows x64: hacienda-v0.11.0-rc.11-x86_64-pc-windows-msvc.zip; macOS Apple Silicon: hacienda-v0.11.0-rc.11-aarch64-apple-darwin.tar.gz) plus SHA256SUMS.txt, verify the checksum, extract it to a stable local folder, and update Claude Desktop's claude_desktop_config.json so mcpServers.anno-rag runs the extracted anno-rag binary with args ["mcp"]. If models are not already installed, run anno-rag download-models once and set ANNO_MODELS_DIR to the path it prints. Do not add ANNO_RAG_VAULT_PASSPHRASE unless I provide one. After editing the config, tell me to fully restart Claude Desktop/Cowork and verify anno-rag appears under Connectors.
+```
+
+Remplacez le tag si vous installez une RC plus récente. Pour les builds depuis source, utilisez la configuration manuelle ci-dessous.
+
 Claude Desktop se branche à Hacienda via le serveur MCP stdio `anno-rag mcp`. Il faut d'abord construire `anno-rag`, puis déclarer le binaire dans `claude_desktop_config.json`.
 
 Chemins de config Claude Desktop :
