@@ -1,5 +1,9 @@
 # Tabular Review — User Guide
 
+Status: Available in v0.11.0-rc.11
+Audience: User, Developer, Compliance
+Language: Bilingual
+
 Tabular review lets you extract structured data from a set of documents (NDAs, contracts, employment agreements, …) into a spreadsheet-style grid — one row per document, one column per question. Every cell carries an offset-accurate citation back to the source text and a confidence score.
 
 ---
@@ -20,7 +24,9 @@ anno-rag review create \
 REVIEW_ID=01924c7f-...
 
 # 3. Register the documents to extract
-#    --doc-ids accepts the UUIDs printed by `anno-rag ingest` or `anno-rag search`
+#    --doc-ids accepts ingested document UUIDs. Current CLI ingest/search builds
+#    may not print doc_id; use MCP `search`/`legal_search` output or the
+#    installed build's review/search output as the source of document IDs.
 anno-rag review add-rows \
   --review $REVIEW_ID \
   --folder-path "deals/Acme_NDA" \
@@ -30,7 +36,6 @@ anno-rag review add-rows \
 anno-rag review extract --review $REVIEW_ID
 
 # 5. Export
-anno-rag review export --review $REVIEW_ID --format csv > acme_nda.csv
 anno-rag review export --review $REVIEW_ID --format xlsx --output acme_nda.xlsx
 anno-rag review export --review $REVIEW_ID --format md
 ```
@@ -47,19 +52,22 @@ anno-rag review export --review $REVIEW_ID --format md
 | `employment-v1`          | 14      | Employment agreements |
 | `ip-v1`                  | 14      | IP assignment & licensing |
 
-To see the columns in a template before creating a review, create a temporary review and then list its columns via the MCP `review_list_columns` tool, or inspect the TOML files under `crates/anno-rag-tabular/src/templates/`.
+To see the columns in a template before creating a review, inspect the TOML files under `crates/anno-rag-tabular/src/templates/`, or create a temporary review and read it back with the review tools available in your installed build.
 
 ---
 
-## Via the MCP (Claude Desktop / Cowork)
+## Via MCP (Claude Desktop / Cowork)
 
-All CLI subcommands are also exposed as MCP tools. Ask Claude:
+The installed MCP server exposes `review_*` tools for common tabular review
+workflows. The MCP surface is not a strict one-to-one mirror of every CLI
+subcommand, so use [MCP Tools](../developers/mcp-tools.md) and the installed
+tool list as the source of truth. Typical prompts:
 
 > "Create a tabular review called 'Acme NDA batch' using the nda-v1 template."
 
-> "Add the documents in the 'deals/Acme_NDA' folder to review <uuid>."
+> "Add these document UUIDs to review <uuid>: <doc_id_1>, <doc_id_2>."
 
-> "Run extraction on review <uuid>."
+> "Add rows and extract cells for review <uuid> using these document UUIDs."
 
 > "Export review <uuid> as a Markdown table."
 
@@ -112,11 +120,16 @@ anno-rag review extract --review $REVIEW_ID --force
 
 ## Adding custom columns
 
-After creating an empty review (no `--template`), add columns via the MCP `review_add_column` tool:
+Custom columns are schema-driven. For repeatable reviews, define or update a
+TOML template under the tabular review templates and create the review from
+that template. If your installed MCP build exposes column-management tools, use
+the installed tool schema as the source of truth.
 
 ```
-"Add a column 'penalty_clause' (text) to review <uuid> asking:
- 'Does the agreement include a penalty clause? If so, quote the clause verbatim.'"
+column_id = "penalty_clause"
+label = "Penalty clause"
+type = "text"
+prompt = "Does the agreement include a penalty clause? If so, quote the clause verbatim."
 ```
 
 Column types: `text`, `boolean`, `number`, `date`, `currency`, `verbatim`, `enum`.
@@ -127,17 +140,30 @@ Column types: `text`, `boolean`, `number`, `date`, `currency`, `verbatim`, `enum
 
 | Format | Command | Notes |
 |--------|---------|-------|
-| CSV    | `--format csv` | stdout or `--output file.csv` |
 | XLSX   | `--format xlsx --output file.xlsx` | Required: `--output`. Red fill on Low-confidence cells |
 | Markdown | `--format md` | stdout or `--output file.md` |
+
+CSV export exists in the library/MCP review surface where exposed by the
+installed build. The current CLI path documents `xlsx` and `md` as the reliable
+formats.
 
 ---
 
 ## Privacy note
 
-Tabular review is fully local and GDPR-compliant:
+Tabular review keeps storage, vault mappings, citations, verification metadata,
+and exports local. Extraction may call a configured LLM provider, so treat it as
+privacy-safe only when the provider receives tokenized text and the operator has
+approved that workflow.
 
-- Documents are pseudonymized by the anno-rag vault **before** any text is sent to the LLM.
-- The LLM only sees pseudonymized text; real names/entities never leave your machine.
-- Cell values and citations are stored in the local LanceDB index alongside the RAG index — nothing is uploaded to a cloud service.
-- To check what PII was pseudonymized for a given document, run `anno-rag vault stats` or use the `vault_stats` MCP tool.
+- Documents should be pseudonymized by the anno-rag vault before text is sent to a remote LLM.
+- Remote LLM providers should see pseudonymized text; local rehydration is a trusted local operation.
+- Cell values and citations are stored in the local LanceDB index alongside the RAG index.
+- To inspect vault pseudonymization totals, use the `vault_stats` MCP tool.
+
+## Related Docs
+
+- [Legal RAG](legal-rag.md)
+- [MCP Tools](../developers/mcp-tools.md)
+- [CLI](../developers/cli.md)
+- [Privacy Model](../security-compliance/privacy-model.md)
