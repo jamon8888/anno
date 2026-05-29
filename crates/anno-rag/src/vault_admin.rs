@@ -31,7 +31,7 @@ pub fn vault_status() -> Result<VaultStatus> {
 /// Rotate the vault key: generate 32 fresh random bytes and replace the
 /// keyring entry. Requires an existing entry; returns Err otherwise.
 pub fn vault_rotate() -> Result<()> {
-    use rand::TryRngCore;
+    use rand::RngCore;
 
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
         .map_err(|e| Error::Vault(format!("keyring open: {e}")))?;
@@ -40,9 +40,7 @@ pub fn vault_rotate() -> Result<()> {
         .map_err(|e| Error::Vault(format!("no existing keyring entry to rotate: {e}")))?;
 
     let mut new_key = [0u8; 32];
-    rand::rngs::OsRng
-        .try_fill_bytes(&mut new_key)
-        .map_err(|e| Error::Vault(format!("rng: {e}")))?;
+    rand::rng().fill_bytes(&mut new_key);
     let hex: String = new_key.iter().map(|b| format!("{:02x}", b)).collect();
     entry
         .set_password(&hex)
