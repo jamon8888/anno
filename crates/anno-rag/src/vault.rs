@@ -321,7 +321,7 @@ pub(crate) fn derive_via_argon2(passphrase: &str) -> Result<[u8; 32]> {
 }
 
 fn derive_via_keyring() -> Result<[u8; 32]> {
-    use rand::TryRngCore;
+    use rand::RngCore;
 
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
         .map_err(|e| Error::Vault(format!("keyring open: {e}")))?;
@@ -330,9 +330,7 @@ fn derive_via_keyring() -> Result<[u8; 32]> {
         Ok(hex) => parse_hex_key(&hex),
         Err(keyring::Error::NoEntry) => {
             let mut key = [0u8; 32];
-            rand::rngs::OsRng
-                .try_fill_bytes(&mut key)
-                .map_err(|e| Error::Vault(format!("OsRng fill: {e}")))?;
+            rand::rng().fill_bytes(&mut key);
             let hex = hex_encode(&key);
             entry
                 .set_password(&hex)
