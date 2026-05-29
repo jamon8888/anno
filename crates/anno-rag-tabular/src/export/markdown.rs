@@ -90,7 +90,6 @@ mod tests {
     use crate::storage::rows::Row;
     use crate::storage::StorageHandle;
     use chrono::Utc;
-    use lancedb::Connection;
     use std::sync::Arc;
     use tempfile::TempDir;
 

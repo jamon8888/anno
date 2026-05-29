@@ -1882,10 +1882,7 @@ impl Pipeline {
     ///
     /// # Errors
     /// Returns [`Error`] if the LanceDB scan fails.
-    pub async fn chunks_by_doc(
-        &self,
-        doc_id: uuid::Uuid,
-    ) -> Result<Vec<crate::store::SearchHit>> {
+    pub async fn chunks_by_doc(&self, doc_id: uuid::Uuid) -> Result<Vec<crate::store::SearchHit>> {
         self.store.chunks_by_doc(doc_id).await
     }
 
