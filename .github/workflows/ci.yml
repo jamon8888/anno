@@ -172,7 +172,7 @@ jobs:
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
           echo "ANNO_EVAL_HISTORY=$HOME/.anno_cache/eval-results.jsonl" >> "$GITHUB_ENV"
       # Optional: enable S3 dataset cache via AWS OIDC (no long-lived secrets).
-      # Configure the role ARN as a repo variable: Settings → Secrets and variables → Actions → Variables.
+      # Configure the role ARN as a repo variable: Settings -> Secrets and variables -> Actions -> Variables.
       - name: Configure AWS credentials (OIDC) for dataset cache
         if: ${{ vars.ANNO_AWS_ROLE_ARN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
         uses: aws-actions/configure-aws-credentials@v4
@@ -607,7 +607,7 @@ jobs:
   # ==========================================================================
   # F1 Unit Tests (evaluator math invariants)
   # Note: actual eval-history regression detection runs in matrix-test (worst-first step,
-  # ANNO_CHECK_REGRESSIONS=1) once sufficient history has accumulated (≥20 obs per cell).
+  # ANNO_CHECK_REGRESSIONS=1) once sufficient history has accumulated (>=20 obs per cell).
   # ==========================================================================
   regression:
     name: F1 Evaluator Unit Tests
