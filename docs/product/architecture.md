@@ -40,7 +40,8 @@ Documents
 |---|---:|---|
 | Local document ingestion | Yes | Cleartext exists before detection and tokenization. |
 | Local vault | Yes | Stores reversible mappings; protect with OS keyring, passphrase policy, and disk encryption. |
-| Local LanceDB index | No by design | Indexes pseudonymized chunks and vectors. |
+| LanceDB RAG chunks/vector indexes | No by design | Rebuildable search state should contain pseudonymized chunks and vectors. |
+| LanceDB memory/tabular state | Depends on workflow | Persistent product state can include memories, review schemas, cells, locks, corrections, and outputs; memory privacy depends on `ANNO_RAG_MEMORY_NER_MODE`. |
 | MCP client boundary | Depends on tool | Search returns tokenized evidence; rehydration intentionally returns cleartext locally. |
 | Privacy Gateway upstream boundary | No | Outbound provider calls should receive tokenized content. |
 | Audit logs | No by design | Logs should record operational events without leaking cleartext secrets or PII. |

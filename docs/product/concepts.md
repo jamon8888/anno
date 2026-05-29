@@ -57,9 +57,11 @@ configured upstream model, and keeps cleartext PII local.
 
 ## Long-Term Memory
 
-Long-term memory stores facts, preferences, references, and context as local
-pseudonymized records. Recall can combine vector search, full-text search, and
-entity relationships while keeping PII under vault control.
+Long-term memory stores facts, preferences, references, and context locally.
+Memory privacy is mode-dependent: the default asynchronous path can persist raw
+text before background enrichment, while synchronous/tokenizing paths store
+tokenized text where available. Configure and validate `ANNO_RAG_MEMORY_NER_MODE`
+before storing sensitive memory content.
 
 ## Tabular Review
 
