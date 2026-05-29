@@ -22,6 +22,18 @@ Double licence MIT ou Apache-2.0. MSRV : 1.88.
 
 ---
 
+## Product Documentation
+
+- [Full documentation home](docs/README.md)
+- [Install Hacienda](docs/getting-started/installation.md)
+- [Claude Desktop/Cowork setup](docs/getting-started/claude-desktop-cowork.md)
+- [Product concepts](docs/product/concepts.md)
+- [MCP tools](docs/developers/mcp-tools.md)
+- [Privacy model](docs/security-compliance/privacy-model.md)
+- [Release management](docs/admins/release-management.md)
+
+---
+
 ## État actuel
 
 Le tronc local contient les travaux récents suivants :
