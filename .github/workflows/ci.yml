@@ -52,7 +52,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace --all-targets
   fmt:
@@ -66,7 +66,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
   typecheck-python:
@@ -95,7 +95,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       # All targets (lib + tests + bins + examples) so test code is also linted.
       - run: cargo clippy --workspace --all-targets --features "eval discourse" -- -D warnings
@@ -127,7 +127,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy -p anno --lib --features "${{ matrix.features }}" -- -D warnings
   # ==========================================================================
@@ -145,7 +145,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --package anno --no-default-features --lib
       - run: cargo test --package anno --lib
@@ -170,7 +170,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
@@ -229,7 +229,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.os }}
@@ -267,7 +267,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Cache HF models
         uses: actions/cache@v4
@@ -295,7 +295,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Cache HF models
         uses: actions/cache@v4
@@ -329,7 +329,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Cache HF models
         uses: actions/cache@v4
@@ -358,7 +358,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Cache HF models
         uses: actions/cache@v4
@@ -381,7 +381,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Cache HF models
         uses: actions/cache@v4
@@ -404,7 +404,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Cache HF models
         uses: actions/cache@v4
@@ -436,7 +436,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       # `anno-cli` requires at least one HTML-extractor feature; the
       # MPL-free `extractor-html2text` is the lightest option that satisfies
@@ -457,7 +457,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       # Document the library crates. anno is doc'd twice with different feature
       # combinations to surface feature-gated link errors that single-feature
@@ -483,7 +483,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Run property tests
         run: cargo test --workspace --lib --features "eval discourse" -- proptest
@@ -505,7 +505,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
@@ -626,7 +626,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Run evaluator unit tests
         run: cargo test -p anno-eval --lib --features "eval discourse" test_comprehensive_eval_results_average_f1 -- --nocapture
@@ -645,7 +645,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Build examples (eval + discourse)
         run: cargo build --workspace --examples --features "eval discourse"
@@ -669,7 +669,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
@@ -757,7 +757,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
@@ -849,7 +849,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
@@ -875,7 +875,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-deny
         run: cargo install --locked cargo-deny
@@ -895,7 +895,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-machete
         run: cargo install cargo-machete
@@ -915,7 +915,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-geiger
         run: cargo install cargo-geiger
@@ -948,7 +948,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Install Miri
         run: |
@@ -1194,7 +1194,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov
@@ -1224,7 +1224,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
-          version: "v0.9.0"
+          version: "v0.15.0"
       - uses: Swatinem/rust-cache@v2
       - name: Validate workspace structure
         run: |
