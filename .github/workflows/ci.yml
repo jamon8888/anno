@@ -4,7 +4,12 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
-  workflow_dispatch: # Manual trigger
+  workflow_dispatch:
+    inputs:
+      max_examples:
+        description: "Maximum examples for full evaluation runs"
+        required: false
+        type: string
 # Supersede in-progress runs for the same ref: a new push to a PR cancels
 # the previous, still-running CI instead of piling up overlapping matrices.
 # `main`/tag runs use a per-SHA group so they never cancel each other.
@@ -799,7 +804,7 @@ jobs:
       - name: Run full evaluations
         run: ./scripts/eval-full.sh
         env:
-          MAX_EXAMPLES: ${{ github.event.inputs.max_examples || '' }}
+          MAX_EXAMPLES: ${{ inputs.max_examples || '' }}
       - name: Upload full report
         uses: actions/upload-artifact@v4
         if: always()
@@ -833,6 +838,7 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+        with:
           # cargo-semver-checks compares against the previous published
           # release; needs full history to find the baseline.
           fetch-depth: 0
@@ -846,6 +852,7 @@ jobs:
           version: "v0.9.0"
       - uses: Swatinem/rust-cache@v2
       - uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
           # `cuda` feature requires nvcc which Linux runners don't have;
           # `--all-features` is unbuildable. Per-crate default-features only.
           feature-group: only-explicit-features
@@ -1195,10 +1202,10 @@ jobs:
         run: |
           cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info || true
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v6
         if: always()
         with:
-          file: ./lcov.info
+          files: ./lcov.info
           flags: unittests
           name: codecov-anno
   # ==========================================================================
