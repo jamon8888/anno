@@ -184,8 +184,11 @@ signature/usage pour exploiter ce point d'ancrage :
 
 Un candidat GLiNER `risk_indicator` qui ne chevauche aucune règle reçoit une
 `category` générique (`"clause_a_risque"`) et une `severity` dérivée de la
-confiance (`>= 0.75 → medium`, sinon `low`). Inversement, une règle qui matche
-sans entité GLiNER produit quand même son `Risk` (precision sans rappel modèle).
+confiance (`>= 0.75 → medium`, `>= 0.55 → low`, `< 0.55 → ignoré`).
+Inversement, une règle qui matche sans entité GLiNER produit quand même son
+`Risk` (precision sans rappel modèle). En cas de chevauchement (même span à
+±20 chars), la règle l'emporte pour `category`/`severity` ; la confiance GLiNER
+est stockée dans `text_pseudo` comme annotation (pas d'impact sur la sévérité).
 
 **Effet de bord utile :** au passage, peupler le champ existant
 `LegalChunkEnrichment::risk_flags`
