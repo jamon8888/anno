@@ -112,13 +112,7 @@ pub async fn extract_contract(
     let mut rows = Vec::new();
 
     // Parties linked to the document.
-    let party_rows = kg
-        .cypher(
-            "MATCH (d:Document {doc_id:$doc})<-[r:PARTY_TO]-(p:Party) \
-             RETURN p.canonical_name AS value, r.role AS role",
-            HashMap::from([("doc".to_string(), doc_id.to_string())]),
-        )
-        .await?;
+    let party_rows = kg.contract_parties(doc_id).await?;
     for r in &party_rows {
         rows.push(ReviewRow {
             field: format!(
@@ -134,14 +128,7 @@ pub async fn extract_contract(
     }
 
     // Obligations sourced by chunks of the document.
-    let obl_rows = kg
-        .cypher(
-            "MATCH (d:Document {doc_id:$doc})-[:HAS_CHUNK]->(c:Chunk) \
-             MATCH (c)-[:SOURCES]->(o:Obligation) \
-             RETURN o.kind AS kind, o.text_pseudo AS text, c.chunk_id AS cid",
-            HashMap::from([("doc".to_string(), doc_id.to_string())]),
-        )
-        .await?;
+    let obl_rows = kg.contract_obligations(doc_id).await?;
     for r in &obl_rows {
         rows.push(ReviewRow {
             field: format!("obligation:{}", r.get("kind").cloned().unwrap_or_default()),
@@ -255,24 +242,19 @@ pub async fn timeline(
     kg: &dyn LegalKnowledgeGraph,
     dossier_id: &str,
 ) -> Result<ProceduralTimeline> {
-    let rows = kg
-        .cypher(
-            "MATCH (d:Document {dossier_id:$dossier})-[:HAS_CHUNK]->(c:Chunk) \
-             MATCH (c)-[:MENTIONS]->(e:Event) \
-             RETURN e.kind AS kind, e.event_date AS event_date, \
-                    e.deadline_date AS deadline_date, c.chunk_id AS cid \
-             ORDER BY e.event_date",
-            HashMap::from([("dossier".to_string(), dossier_id.to_string())]),
-        )
-        .await?;
+    let rows = kg.procedural_timeline(dossier_id).await?;
 
     let events = rows
         .iter()
         .map(|r| TimelineEvent {
-            kind: r.get("kind").cloned().unwrap_or_default(),
+            kind: r
+                .get("event_kind")
+                .or_else(|| r.get("kind"))
+                .cloned()
+                .unwrap_or_default(),
             event_date: r.get("event_date").cloned(),
             deadline_date: r.get("deadline_date").cloned(),
-            chunk_id: r.get("cid").cloned(),
+            chunk_id: r.get("chunk_id").or_else(|| r.get("cid")).cloned(),
         })
         .collect();
 
@@ -295,26 +277,7 @@ pub async fn risk_review(
     scope_id: &str,
     is_dossier: bool,
 ) -> Result<RiskReview> {
-    let query = if is_dossier {
-        "MATCH (d:Document {dossier_id:$scope})-[:HAS_CHUNK]->(c:Chunk) \
-         MATCH (c)-[:SOURCES]->(r:Risk) \
-         RETURN r.risk_id AS rid, r.severity AS severity, \
-                r.category AS category, r.text_pseudo AS text \
-         ORDER BY r.severity DESC"
-    } else {
-        "MATCH (d:Document {doc_id:$scope})-[:HAS_CHUNK]->(c:Chunk) \
-         MATCH (c)-[:SOURCES]->(r:Risk) \
-         RETURN r.risk_id AS rid, r.severity AS severity, \
-                r.category AS category, r.text_pseudo AS text \
-         ORDER BY r.severity DESC"
-    };
-
-    let rows = kg
-        .cypher(
-            query,
-            HashMap::from([("scope".to_string(), scope_id.to_string())]),
-        )
-        .await?;
+    let rows = kg.risk_findings(scope_id, is_dossier).await?;
 
     let findings = rows
         .iter()
@@ -376,6 +339,14 @@ mod tests {
     async fn timeline_returns_empty_on_phase1_kg() {
         let kg = crate::legal::kg::tests::InMemoryKG::default();
         let result = timeline(&kg, "dossier:2024-42").await.unwrap();
+        assert!(result.events.is_empty());
+    }
+
+    #[tokio::test]
+    async fn timeline_calls_procedural_timeline_not_cypher() {
+        let kg = crate::legal::kg::tests::InMemoryKG::default();
+        let result = timeline(&kg, "dossier-test").await.unwrap();
+        assert_eq!(result.dossier_id, "dossier-test");
         assert!(result.events.is_empty());
     }
 

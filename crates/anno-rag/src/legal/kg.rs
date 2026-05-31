@@ -349,6 +349,51 @@ pub trait LegalKnowledgeGraph: Send + Sync {
         )
         .await
     }
+
+    /// Return parties linked to a document.
+    ///
+    /// # Errors
+    /// Returns backend-specific graph errors.
+    async fn contract_parties(&self, doc_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.cypher(
+            "contract_parties",
+            HashMap::from([("doc_id".to_string(), doc_id.to_string())]),
+        )
+        .await
+    }
+
+    /// Return obligations linked to a document via MENTIONS edges.
+    ///
+    /// # Errors
+    /// Returns backend-specific graph errors.
+    async fn contract_obligations(&self, doc_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.cypher(
+            "contract_obligations",
+            HashMap::from([("doc_id".to_string(), doc_id.to_string())]),
+        )
+        .await
+    }
+
+    /// Return risk findings for a document or dossier.
+    ///
+    /// # Errors
+    /// Returns backend-specific graph errors.
+    async fn risk_findings(
+        &self,
+        scope_id: &str,
+        is_dossier: bool,
+    ) -> Result<Vec<HashMap<String, String>>> {
+        let key = if is_dossier {
+            "risk_findings_dossier"
+        } else {
+            "risk_findings_doc"
+        };
+        self.cypher(
+            key,
+            HashMap::from([("scope".to_string(), scope_id.to_string())]),
+        )
+        .await
+    }
 }
 
 /// SQLite-backed legal knowledge graph handle.
@@ -591,6 +636,108 @@ impl SqliteLegalGraphStore {
             collect_rows(&mut stmt, params![doc_id, max_depth])
         })
     }
+
+    fn contract_parties_rows(&self, doc_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT json_extract(p.props_json, '$.canonical_name') AS value,
+                            json_extract(party_edge.props_json, '$.role') AS role
+                     FROM legal_edges party_edge
+                     JOIN legal_nodes p
+                       ON p.label = 'Party'
+                      AND p.id = party_edge.from_key
+                     WHERE party_edge.from_label = 'Party'
+                       AND party_edge.to_label = 'Document'
+                       AND party_edge.to_key = ?1
+                       AND party_edge.edge_type = 'PARTY_TO'
+                     ORDER BY value",
+                )
+                .map_err(sql_err)?;
+            collect_rows(&mut stmt, params![doc_id])
+        })
+    }
+
+    fn contract_obligations_rows(&self, doc_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT json_extract(o.props_json, '$.kind') AS kind,
+                            json_extract(o.props_json, '$.text_pseudo') AS text,
+                            c.id AS cid
+                     FROM legal_nodes d
+                     JOIN legal_edges chunk_edge
+                       ON chunk_edge.from_label = 'Document'
+                      AND chunk_edge.from_key = d.id
+                      AND chunk_edge.to_label = 'Chunk'
+                      AND chunk_edge.edge_type = 'HAS_CHUNK'
+                     JOIN legal_nodes c
+                       ON c.label = 'Chunk'
+                      AND c.id = chunk_edge.to_key
+                     JOIN legal_edges mention_edge
+                       ON mention_edge.from_label = 'Chunk'
+                      AND mention_edge.from_key = c.id
+                      AND mention_edge.to_label = 'Obligation'
+                      AND mention_edge.edge_type = 'MENTIONS'
+                     JOIN legal_nodes o
+                       ON o.label = 'Obligation'
+                      AND o.id = mention_edge.to_key
+                     WHERE d.label = 'Document'
+                       AND d.id = ?1
+                     ORDER BY c.id, o.id",
+                )
+                .map_err(sql_err)?;
+            collect_rows(&mut stmt, params![doc_id])
+        })
+    }
+
+    fn risk_findings_rows(
+        &self,
+        scope_id: &str,
+        is_dossier: bool,
+    ) -> Result<Vec<HashMap<String, String>>> {
+        let filter_col = if is_dossier {
+            "json_extract(d.props_json, '$.dossier_id')"
+        } else {
+            "d.id"
+        };
+        let query = format!(
+            "SELECT r.id AS rid,
+                    json_extract(r.props_json, '$.severity') AS severity,
+                    json_extract(r.props_json, '$.category') AS category,
+                    json_extract(r.props_json, '$.text_pseudo') AS text
+             FROM legal_nodes d
+             JOIN legal_edges chunk_edge
+               ON chunk_edge.from_label = 'Document'
+              AND chunk_edge.from_key = d.id
+              AND chunk_edge.to_label = 'Chunk'
+              AND chunk_edge.edge_type = 'HAS_CHUNK'
+             JOIN legal_nodes c
+               ON c.label = 'Chunk'
+              AND c.id = chunk_edge.to_key
+             JOIN legal_edges mention_edge
+               ON mention_edge.from_label = 'Chunk'
+              AND mention_edge.from_key = c.id
+              AND mention_edge.to_label = 'Risk'
+              AND mention_edge.edge_type = 'MENTIONS'
+             JOIN legal_nodes r
+               ON r.label = 'Risk'
+              AND r.id = mention_edge.to_key
+             WHERE d.label = 'Document'
+               AND {filter_col} = ?1
+             ORDER BY
+               CASE json_extract(r.props_json, '$.severity')
+                 WHEN 'high' THEN 1
+                 WHEN 'medium' THEN 2
+                 ELSE 3
+               END,
+               r.id"
+        );
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(&query).map_err(sql_err)?;
+            collect_rows(&mut stmt, params![scope_id])
+        })
+    }
 }
 
 #[async_trait]
@@ -698,6 +845,16 @@ impl LegalKnowledgeGraph for SqliteLegalGraphStore {
                     .unwrap_or(3);
                 self.appeal_chain_rows(required_param(&params, "doc_id")?, max_depth)
             }
+            "contract_parties" => self.contract_parties_rows(required_param(&params, "doc_id")?),
+            "contract_obligations" => {
+                self.contract_obligations_rows(required_param(&params, "doc_id")?)
+            }
+            "risk_findings_doc" => {
+                self.risk_findings_rows(required_param(&params, "scope")?, false)
+            }
+            "risk_findings_dossier" => {
+                self.risk_findings_rows(required_param(&params, "scope")?, true)
+            }
             _ => Err(Error::Graph(
                 "raw Cypher execution is not supported by the SQLite graph backend".into(),
             )),
@@ -726,6 +883,22 @@ impl LegalKnowledgeGraph for SqliteLegalGraphStore {
         max_depth: u32,
     ) -> Result<Vec<HashMap<String, String>>> {
         self.appeal_chain_rows(doc_id, max_depth)
+    }
+
+    async fn contract_parties(&self, doc_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.contract_parties_rows(doc_id)
+    }
+
+    async fn contract_obligations(&self, doc_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.contract_obligations_rows(doc_id)
+    }
+
+    async fn risk_findings(
+        &self,
+        scope_id: &str,
+        is_dossier: bool,
+    ) -> Result<Vec<HashMap<String, String>>> {
+        self.risk_findings_rows(scope_id, is_dossier)
     }
 }
 
