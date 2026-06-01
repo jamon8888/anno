@@ -226,6 +226,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "anno-knowledge-core"
+version = "0.10.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "anno-knowledge-store"
+version = "0.10.0"
+dependencies = [
+ "anno-knowledge-core",
+ "chrono",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "anno-privacy-gateway"
 version = "0.11.0-rc.11"
 dependencies = [
@@ -331,6 +356,8 @@ dependencies = [
 name = "anno-rag-mcp"
 version = "0.1.0"
 dependencies = [
+ "anno-knowledge-core",
+ "anno-knowledge-store",
  "anno-rag",
  "anno-rag-tabular",
  "async-trait",
