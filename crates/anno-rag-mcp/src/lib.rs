@@ -11,6 +11,7 @@
 #![warn(missing_docs)]
 
 pub mod health;
+pub mod knowledge;
 pub mod tabular;
 
 use anno_rag::config::{AnnoRagConfig, MemoryNerMode};
