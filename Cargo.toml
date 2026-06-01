@@ -15,6 +15,7 @@ members = [
     "crates/anno-rag-mcp",
     "crates/anno-rag-tabular",
     "crates/anno-privacy-gateway",
+    "crates/anno-knowledge-core",
     "workspace-hack",
 ]
 exclude = ["vendor"]

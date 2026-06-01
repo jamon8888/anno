@@ -226,6 +226,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "anno-knowledge-core"
+version = "0.10.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "anno-privacy-gateway"
 version = "0.11.0-rc.11"
 dependencies = [
