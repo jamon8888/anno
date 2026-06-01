@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/anno.svg)](https://crates.io/crates/anno)
 [![Documentation](https://docs.rs/anno/badge.svg)](https://docs.rs/anno)
-[![CI](https://github.com/arclabs561/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/anno/actions/workflows/ci.yml)
+[![CI](https://github.com/jamon8888/anno/actions/workflows/ci.yml/badge.svg)](https://github.com/jamon8888/anno/actions/workflows/ci.yml)
 
 > **Hacienda** est le nom de ce projet. Les crates conservent leurs noms historiques (`anno`, `anno-cli`, `anno-rag`, `anno-privacy-gateway`, `anno-rag-tabular`) pour la rétro-compatibilité ; « Hacienda » désigne le workspace dans son ensemble.
 
@@ -38,10 +38,11 @@ Double licence MIT ou Apache-2.0. MSRV : 1.88.
 
 Le tronc local contient les travaux récents suivants :
 
+- **Release binaire v0.11.0-rc.11** : archives Windows x64 et macOS Apple Silicon publiées sur GitHub Releases, avec `anno-rag`, `anno-privacy-gateway`, exemples Claude Desktop et checksums SHA-256.
 - **anno-memory v0.2** dans `anno-rag` : mémoire bi-temporelle, références d'entités, rappel avec expansion graphe, invalidation de mémoires et audit MCP.
 - **RGPD core + gateway v0.4** : routes de sujet `find` / `forget` / `export`, audit JSONL chaîné, bearer auth, pseudonymisation en streaming SSE et arrêt gracieux du gateway comme du serveur MCP.
 - **Évaluation anonymisation v0.7** : corpus légal français annoté, regex e-mail, regex honorifiques FR pour personnes, baselines PII et logs d'audit du détecteur sans texte en clair.
-- **`anno-rag-tabular` phase 1** : moteur d'extraction tabulaire, schémas TOML, batching de colonnes, client LLM abstrait, vérificateurs d'offsets/support et tables LanceDB `reviews` / `columns` / `rows` / `cells`.
+- **`anno-rag-tabular` phase 1+2** : moteur d'extraction tabulaire, schémas TOML, batching de colonnes, client LLM abstrait, vérificateurs d'offsets/support, exports CSV/XLSX/Markdown, CLI `anno-rag review` et surface MCP de revue.
 
 Les documents de conformité associés vivent dans `docs/superpowers/specs/`, `docs/runbooks/` et `docs/adrs/`.
 
@@ -164,6 +165,11 @@ Outils MCP exposés :
 | `memory_invalidate(id, at?)` | Pose `valid_to` sur une mémoire ; l'appel est idempotent. |
 | `memory_forget(id? \| query?)` | Oubli par id ou par requête. Cascade sur les tokens vault orphelins. |
 | `memory_list(session?, kind?, cursor?)` | Listing paginé par session ou catégorie. |
+| `anno_init_vault(passphrase)` | Initialise le keyring du vault avec une passphrase fournie, sans l'écrire dans les logs. |
+| `anno_health()` | Version moteur, cible de build, outils disponibles et état du vault. |
+| `download_models()` | Télécharge les modèles attendus dans `~/.anno-rag/models` pour l'usage offline. |
+| `legal_*` | Ingestion/recherche juridique, requêtes graphe, citations rehydratables, extraction de contrats/dossiers, timeline, revue de risque, audits de clauses, prescription et validation humaine. |
+| `review_*` | Création de revues tabulaires, ajout de lignes, extraction/refinement de cellules, lock/unlock, override humain, export CSV/Markdown/XLSX et lecture de grille. |
 
 Le flux typique avec Claude Desktop :
 
@@ -208,8 +214,11 @@ Phase 1 livrée :
 - `verify` — vérification d'offsets, round-trip de citations et scoring de support.
 - `storage` — tables LanceDB séparées pour reviews, colonnes, lignes et cellules.
 - `fanout` — exécution concurrente par revue via `run_review`.
+- `export` — sorties CSV, XLSX et Markdown.
+- `anno-rag review` — CLI `list`, `create`, `add-rows`, `extract`, `export`.
+- MCP `review_*` — création/lecture de revue, ajout de lignes, extraction en arrière-plan, refinement cellule, overrides humains, locks et exports.
 
-La phase suivante reste explicitement à faire : exports CSV/XLSX/Markdown, surface MCP tabulaire et UI ag-grid.
+La phase suivante reste explicitement à faire : UI ag-grid / application workbench finalisée et intégration complète avec les fournisseurs LLM locaux par abonnement.
 
 ---
 
@@ -250,8 +259,7 @@ winget install --id UB-Mannheim.TesseractOCR
 Puis, depuis le dossier du repo :
 
 ```powershell
-cargo build --release -p anno-rag
-cargo build --release -p anno-privacy-gateway
+cargo build --release -p anno-rag-bin -p anno-privacy-gateway
 
 # Pré-chauffe le cache HuggingFace : embedder + modèle NER
 cargo run --release --example warmup_model -p anno-rag
@@ -291,8 +299,7 @@ brew install tesseract tesseract-lang
 Puis, depuis le dossier du repo :
 
 ```sh
-cargo build --release -p anno-rag
-cargo build --release -p anno-privacy-gateway
+cargo build --release -p anno-rag-bin -p anno-privacy-gateway
 
 # Pré-chauffe le cache HuggingFace : embedder + modèle NER
 cargo run --release --example warmup_model -p anno-rag
@@ -423,10 +430,10 @@ let model = AnyModel::new(
 ### 2.2 RAG local complet
 
 ```sh
-cargo build --release -p anno-rag
+cargo build --release -p anno-rag-bin
 
-# Pré-chauffe le cache de modèles (~600 MiB : embedder + NER)
-cargo run --release --example warmup_model -p anno-rag
+# Télécharge les modèles end-user (~970 MiB : embedder + NER)
+./target/release/anno-rag download-models
 
 # Ingestion d'un dossier
 ./target/release/anno-rag ingest ~/cabinet/dossier-acme --recursive
@@ -529,5 +536,5 @@ Liste complète : [docs/REFERENCES.md](docs/REFERENCES.md). Citable via [CITATIO
 ## License
 
 Double licence MIT ou Apache-2.0.
-Le `cloakpipe-core` vendu est Apache-2.0 (upstream `rohansx/cloakpipe`).
+Le `cloakpipe-core` vendored est Apache-2.0 (upstream `rohansx/cloakpipe`).
 Kreuzberg est sous Elastic License 2.0 — compatible avec un usage on-prem ; pour une distribution SaaS, vérifier les termes.
