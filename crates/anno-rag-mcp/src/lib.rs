@@ -30,6 +30,7 @@ use tokio::sync::OnceCell;
 #[derive(Clone)]
 pub struct AnnoRagServer {
     pipeline: Arc<OnceCell<Arc<Pipeline>>>,
+    knowledge: Arc<OnceCell<Arc<crate::knowledge::KnowledgeService>>>,
     cfg: Arc<AnnoRagConfig>,
     key: [u8; 32],
     tabular_storage: Arc<OnceCell<Arc<anno_rag_tabular::storage::StorageHandle>>>,
@@ -71,6 +72,20 @@ impl AnnoRagServer {
 
     fn pipeline_arc(&self) -> Option<Arc<Pipeline>> {
         self.pipeline.get().cloned()
+    }
+
+    async fn knowledge(
+        &self,
+    ) -> anno_knowledge_store::Result<&crate::knowledge::KnowledgeService> {
+        self.knowledge
+            .get_or_try_init(|| {
+                let cfg = Arc::clone(&self.cfg);
+                async move {
+                    crate::knowledge::KnowledgeService::open(&cfg).map(Arc::new)
+                }
+            })
+            .await
+            .map(|arc| arc.as_ref())
     }
 
     async fn tabular_storage(
@@ -117,6 +132,7 @@ impl AnnoRagServer {
         let _ = cell.set(Arc::new(pipeline)).ok();
         Self {
             pipeline: Arc::new(cell),
+            knowledge: Arc::new(OnceCell::new()),
             cfg: Arc::new(cfg),
             key: [0u8; 32],
             tabular_storage: Arc::new(OnceCell::new()),
@@ -129,6 +145,7 @@ impl AnnoRagServer {
     pub fn new_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> Self {
         Self {
             pipeline: Arc::new(OnceCell::new()),
+            knowledge: Arc::new(OnceCell::new()),
             cfg: Arc::new(cfg),
             key,
             tabular_storage: Arc::new(OnceCell::new()),
@@ -2372,6 +2389,55 @@ impl AnnoRagServer {
                 .collect(),
         };
         serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// List configured Anno knowledge sources. Does not load local ML models.
+    #[tool(
+        description = "List configured Anno knowledge sources. Does not load local ML models."
+    )]
+    async fn knowledge_sources(&self) -> String {
+        let service = match self.knowledge().await {
+            Ok(service) => service,
+            Err(e) => return format!("Error: {e}"),
+        };
+        serde_json::to_string_pretty(&service.sources()).unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// Return local Anno knowledge status without loading ML models.
+    #[tool(
+        description = "Return local Anno knowledge status for sources, objects, chunks, and failures. Does not load local ML models."
+    )]
+    async fn knowledge_status(&self) -> String {
+        let service = match self.knowledge().await {
+            Ok(service) => service,
+            Err(e) => return format!("Error: {e}"),
+        };
+        match service.status() {
+            Ok(status) => {
+                serde_json::to_string_pretty(&status).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    /// Search Anno's local multi-source knowledge index.
+    #[tool(
+        description = "Search Anno's local multi-source knowledge index. Phase 1 supports fast SQLite FTS mode and returns pseudonymized snippets only."
+    )]
+    async fn knowledge_search(
+        &self,
+        Parameters(p): Parameters<crate::knowledge::KnowledgeSearchParams>,
+    ) -> String {
+        let service = match self.knowledge().await {
+            Ok(service) => service,
+            Err(e) => return format!("Error: {e}"),
+        };
+        match service.search(p) {
+            Ok(result) => {
+                serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
     }
 }
 
