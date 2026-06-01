@@ -114,8 +114,26 @@ pub fn all_tool_names() -> Vec<String> {
         "legal_mandatory_clause_audit",
         "legal_prescription_check",
         "legal_validate_field",
+        // Knowledge (Phase 1 — SQLite FTS, no ML models)
+        "knowledge_sources",
+        "knowledge_status",
+        "knowledge_search",
     ]
     .into_iter()
     .map(String::from)
     .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_tool_names_includes_knowledge_tools() {
+        let tools = all_tool_names();
+
+        assert!(tools.contains(&"knowledge_sources".to_string()));
+        assert!(tools.contains(&"knowledge_status".to_string()));
+        assert!(tools.contains(&"knowledge_search".to_string()));
+    }
 }

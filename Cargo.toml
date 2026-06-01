@@ -15,6 +15,8 @@ members = [
     "crates/anno-rag-mcp",
     "crates/anno-rag-tabular",
     "crates/anno-privacy-gateway",
+    "crates/anno-knowledge-core",
+    "crates/anno-knowledge-store",
     "workspace-hack",
 ]
 exclude = ["vendor"]
@@ -185,7 +187,6 @@ targets             = [
   "x86_64-pc-windows-msvc",
   "x86_64-apple-darwin",
   "aarch64-apple-darwin",
-  "x86_64-unknown-linux-gnu",
 ]
 installers          = ["msi", "shell", "powershell", "homebrew"]
 tap                 = "jamon8888/homebrew-hacienda"

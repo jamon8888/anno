@@ -113,7 +113,19 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
+      # sccache and incremental compilation are mutually exclusive.
+      CARGO_INCREMENTAL: "0"
     steps:
+      # -- ANNO-PATCH checklist (re-apply after every `dist generate`) --------
+      # 1. CARGO_INCREMENTAL=0 in job env
+      # 2. Install protoc (Linux/macOS/Windows) after "Install dependencies"
+      # 3. Build caching (sccache-action + rust-cache) after protoc, before CRT
+      # 4. Align MSVC CRT (Windows) before dist build
+      # 5. Validate release binary (Windows) after dist build
+      # 6. Gateway boot smoke (Windows + Unix) after binary validation
+      # 7. Package .mcpb extension after smoke
+      # 8. Validate + upload .mcpb after packaging
+      # ----------------------------------------------------------------------
       - name: enable windows longpaths
         run: |
           git config --global core.longpaths true
@@ -153,6 +165,18 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: choco install protoc -y --no-progress
+      # ANNO-PATCH: Build caching — re-apply after every `dist generate`.
+      # sccache + rust-cache warm the heavy dep tree (candle, lancedb, datafusion,
+      # arrow, ort, kreuzberg) so release tags do not rebuild all deps from scratch
+      # every time. First 1-2 runs after a toolchain version change will be cold;
+      # subsequent runs use the GHA cache.
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+        with:
+          version: "v0.15.0"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ join(matrix.targets, '-') }}
       # ANNO-PATCH: MSVC CRT alignment — re-apply after every `dist generate`.
       # cargo-dist statically links the MSVC CRT for Windows release artifacts.
       # Keep cc-rs/CMake dependencies on /MT too, otherwise aws-lc-sys and
@@ -173,6 +197,7 @@ jobs:
           # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
           echo "dist ran successfully"
+      # ANNO-PATCH: Release binary validation — re-apply after every `dist generate`.
       - name: Validate anno-rag release binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -221,6 +246,7 @@ jobs:
           cd mcpb-staging && zip -r "../${MCPB_NAME}" . && cd ..
           echo "MCPB_NAME=${MCPB_NAME}" >> "$GITHUB_ENV"
 
+      # ANNO-PATCH: .mcpb validation and upload — re-apply after every `dist generate`.
       - name: Validate .mcpb extension
         shell: bash
         run: |
