@@ -22,6 +22,18 @@ Double licence MIT ou Apache-2.0. MSRV : 1.88.
 
 ---
 
+## Product Documentation
+
+- [Full documentation home](docs/README.md)
+- [Install Hacienda](docs/getting-started/installation.md)
+- [Claude Desktop/Cowork setup](docs/getting-started/claude-desktop-cowork.md)
+- [Product concepts](docs/product/concepts.md)
+- [MCP tools](docs/developers/mcp-tools.md)
+- [Privacy model](docs/security-compliance/privacy-model.md)
+- [Release management](docs/admins/release-management.md)
+
+---
+
 ## État actuel
 
 Le tronc local contient les travaux récents suivants :
@@ -113,7 +125,7 @@ Au-dessus du moteur RAG, `anno-rag` expose une mémoire structurée persistante 
 | `Reference` | Pointeur vers une entité canonique citée par d'autres mémoires |
 | `Context` | Contexte transitoire (dossier courant, tâche en cours) |
 
-Chaque mémoire est **pseudonymisée à l'écriture** (les PII de son corps sont remplacés par des tokens vault), puis indexée avec recherche **hybride vecteur + plein texte**. Les IDs sont des UUID v7, triables lexicographiquement par temps de création. Forget = suppression logique avec cascade sur les tokens vault qui ne sont plus référencés (SLO d'effacement physique sous 24 h, conforme à l'esprit de l'Art. 17 RGPD).
+La confidentialité des mémoires dépend de `ANNO_RAG_MEMORY_NER_MODE` : le mode asynchrone par défaut peut persister le texte brut avant enrichissement NER en arrière-plan, tandis que le mode synchrone utilise le chemin de tokenization inline quand il est disponible. Validez ce mode avant de stocker des mémoires sensibles. Les IDs sont des UUID v7, triables lexicographiquement par temps de création. Forget supprime les mémoires ciblées et cascade les tokens vault devenus orphelins quand le store le permet.
 
 La v0.2 ajoute une couche mémoire temporelle et graphe sans base de graphe externe :
 
@@ -147,7 +159,7 @@ Outils MCP exposés :
 | `rehydrate(text)` | Remplace les tokens `PERSON_*`, `EMAIL_*`, `NIR_*`… par les originaux depuis le vault local. Seule la machine de l'utilisateur a les deux faces du mapping. |
 | `detect(text)` | Scan PII à blanc : liste des entités avec catégorie, source, confiance, offsets. Aucune substitution. Pratique pour l'aperçu UI. |
 | `vault_stats()` | Statistiques du vault : nombre total de mappings et comptes par catégorie. |
-| `memory_save(text, kind, session?)` | Persiste une mémoire après tokenization PII. Renvoie l'id et le texte effectivement stocké. |
+| `memory_save(text, kind, session?)` | Persiste une mémoire ; la tokenization dépend de `ANNO_RAG_MEMORY_NER_MODE`. Renvoie l'id et le texte effectivement stocké. |
 | `memory_recall(query, top_k, as_of?, graph_expand?)` | Recall hybride (vecteur + FTS), éventuellement point-in-time et augmenté par voisinage d'entités. Renvoie le plaintext **rehydraté** pour le tenant appelant. |
 | `memory_graph_recall(entity, max_hops?, per_hop_limit?, as_of?)` | Rappel graphe sur `entity_refs`, avec nœuds, arêtes et mémoires connectées. |
 | `memory_invalidate(id, at?)` | Pose `valid_to` sur une mémoire ; l'appel est idempotent. |
@@ -468,8 +480,9 @@ Tous les spans sont en **offsets caractères**, pas en bytes. Détails et invari
 ### 3.3 Vault et clé de chiffrement (anno-rag)
 
 - Clé dérivée par **Argon2id** depuis `ANNO_RAG_VAULT_PASSPHRASE`, ou tirée aléatoirement (32 bytes hex) et stockée dans le keyring OS.
-- Cleartext jamais écrit hors de `~/.anno-rag/vault.enc`.
-- Les `outputs/*.anon.md` et l'index LanceDB ne contiennent que des tokens.
+- Les mappings clairs ↔ tokens restent dans le vault local.
+- Les `outputs/*.anon.md` et les chunks/vecteurs RAG LanceDB doivent contenir des contenus pseudonymisés.
+- LanceDB peut aussi stocker de l'état produit persistant (mémoires, schémas de revue, cellules, locks, corrections, exports). Cet état n'est pas un simple cache et peut contenir du texte clair selon les workflows et `ANNO_RAG_MEMORY_NER_MODE`.
 
 ### 3.4 Périmètre
 

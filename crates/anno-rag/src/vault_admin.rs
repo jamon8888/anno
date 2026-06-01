@@ -31,7 +31,7 @@ pub fn vault_status() -> Result<VaultStatus> {
 /// Rotate the vault key: generate 32 fresh random bytes and replace the
 /// keyring entry. Requires an existing entry; returns Err otherwise.
 pub fn vault_rotate() -> Result<()> {
-    use rand::RngCore;
+    use rand::Rng;
 
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
         .map_err(|e| Error::Vault(format!("keyring open: {e}")))?;

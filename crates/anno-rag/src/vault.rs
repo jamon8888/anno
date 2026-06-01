@@ -321,7 +321,7 @@ pub(crate) fn derive_via_argon2(passphrase: &str) -> Result<[u8; 32]> {
 }
 
 fn derive_via_keyring() -> Result<[u8; 32]> {
-    use rand::RngCore;
+    use rand::Rng;
 
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
         .map_err(|e| Error::Vault(format!("keyring open: {e}")))?;

@@ -1,5 +1,5 @@
 param(
-    # Crate to check and test. Required — forces targeting over workspace-wide runs.
+    # Crate to check and test. Required; forces targeting over workspace-wide runs.
     [Parameter(Mandatory=$true)]
     [string]$Package,
 
@@ -10,12 +10,30 @@ param(
     [switch]$TestOnly,
 
     # Bypass the concurrent-build guard (matches dev-fast.ps1 and loop.ps1 behavior).
-    [switch]$Force
+    [switch]$Force,
+
+    # Cap cargo compilation jobs. Use 1 for memory-heavy crates such as anno-rag.
+    [int]$BuildJobs = 0,
+
+    # Cap nextest runtime concurrency. Use 1 or 2 when local RAM is the bottleneck.
+    [string]$TestThreads = "",
+
+    # Nextest profile to use. "local" is fast; "default" is broader.
+    [string]$NextestProfile = "local",
+
+    # Run only library unit tests.
+    [switch]$LibOnly,
+
+    # Run one or more explicit integration test targets.
+    [string[]]$TestTarget = @(),
+
+    # Override Cargo target directory for this run, useful if the configured disk is unstable.
+    [string]$TargetDir = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-# ── Concurrent-build guard ─────────────────────────────────────────────────
+# -- Concurrent-build guard -------------------------------------------------
 if (-not $Force) {
     $running = @(Get-Process cargo, rustc -ErrorAction SilentlyContinue |
                  Where-Object { $_.Id -ne $PID })
@@ -29,7 +47,13 @@ if (-not $Force) {
 $repoRoot = (& git rev-parse --show-toplevel).Trim()
 Set-Location -LiteralPath $repoRoot
 
-# ── Step 1: targeted cargo check ──────────────────────────────────────────
+if ($TargetDir -ne "") {
+    New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
+    $env:CARGO_TARGET_DIR = $TargetDir
+    Write-Host "==> CARGO_TARGET_DIR=$TargetDir" -ForegroundColor Cyan
+}
+
+# -- Step 1: targeted cargo check ------------------------------------------
 if (-not $TestOnly) {
     Write-Host "==> check -p $Package" -ForegroundColor Cyan
     $checkArgs = @("check", "--profile", "dev-fast", "-p", $Package)
@@ -38,14 +62,27 @@ if (-not $TestOnly) {
     }
     & cargo @checkArgs
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "cargo check failed — fix errors before running tests." -ForegroundColor Red
+        Write-Host "cargo check failed; fix errors before running tests." -ForegroundColor Red
         exit $LASTEXITCODE
     }
 }
 
-# ── Step 2: nextest with local profile ────────────────────────────────────
-Write-Host "==> nextest run -p $Package --profile local" -ForegroundColor Cyan
-$testArgs = @("nextest", "run", "-p", $Package, "--profile", "local", "--cargo-profile", "dev-fast")
+# -- Step 2: nextest with local profile ------------------------------------
+Write-Host "==> nextest run -p $Package --profile $NextestProfile" -ForegroundColor Cyan
+$testArgs = @("nextest", "run", "-p", $Package)
+if ($LibOnly) {
+    $testArgs += "--lib"
+}
+foreach ($target in $TestTarget) {
+    $testArgs += @("--test", $target)
+}
+$testArgs += @("--profile", $NextestProfile, "--cargo-profile", "dev-fast")
+if ($BuildJobs -gt 0) {
+    $testArgs += @("--build-jobs", "$BuildJobs")
+}
+if ($TestThreads -ne "") {
+    $testArgs += @("--test-threads", "$TestThreads")
+}
 if ($Features.Count -gt 0) {
     $testArgs += @("--features", ($Features -join ","))
 }

@@ -245,6 +245,7 @@ fn projection_from_facts(
     let mut obligation_kinds = Vec::new();
     let mut amounts_eur_cents = Vec::new();
     let mut event_kinds = Vec::new();
+    let mut risk_flags = Vec::new();
     let mut deadlines = Vec::new();
 
     for fact in facts {
@@ -285,6 +286,11 @@ fn projection_from_facts(
                 }
             }
             TypedFact::CourtRouting { .. } => {}
+            TypedFact::Risk {
+                category, severity, ..
+            } => {
+                risk_flags.push(format!("{category}:{severity}"));
+            }
         }
     }
 
@@ -293,6 +299,13 @@ fn projection_from_facts(
         .filter(|entity| entity.label == "clause_type")
     {
         clause_types.push(entity.text.to_lowercase());
+    }
+
+    for entity in entities
+        .iter()
+        .filter(|entity| entity.label == "risk_indicator" || entity.label == "sanction")
+    {
+        risk_flags.push(entity.text.to_lowercase());
     }
 
     let confidence_min = entities
@@ -322,7 +335,7 @@ fn projection_from_facts(
         amounts_eur_cents,
         deadlines,
         event_kinds,
-        risk_flags: Vec::new(),
+        risk_flags,
         mandatory_clause_status: None,
         confidence_min,
         confidence_avg,
@@ -451,6 +464,30 @@ fn facts_to_graph_writes(
                     props: HashMap::new(),
                 });
             }
+            TypedFact::Risk {
+                category,
+                severity,
+                text_pseudo,
+            } => {
+                let risk_id = Uuid::new_v5(
+                    &Uuid::NAMESPACE_OID,
+                    format!("{chunk_id}::{category}").as_bytes(),
+                );
+                nodes.push(NodeWrite::Risk {
+                    risk_id,
+                    severity: severity.clone(),
+                    category: category.clone(),
+                    text_pseudo: text_pseudo.clone(),
+                });
+                edges.push(EdgeWrite {
+                    from_label: "Chunk",
+                    from_key: chunk_key.clone(),
+                    to_label: "Risk",
+                    to_key: risk_id.to_string(),
+                    edge_type: "MENTIONS",
+                    props: HashMap::new(),
+                });
+            }
         }
     }
     (nodes, edges)
@@ -550,6 +587,64 @@ mod tests {
         assert!(!facts.is_empty());
         assert!(row.parties.contains(&"org:acme".to_string()));
         assert!(row.obligation_kinds.contains(&"performance".to_string()));
+    }
+
+    #[test]
+    fn projection_from_facts_includes_risk_fact_and_gliner_flags() {
+        let extractor: Arc<dyn LegalEntityExtractor> = Arc::new(FakeExtractor);
+        let chunk_id = Uuid::new_v4();
+        let doc_id = Uuid::new_v4();
+        let entities = vec![LegalEntity {
+            label: "risk_indicator".into(),
+            text: "Sanction disproportionnée".into(),
+            byte_start: 0,
+            byte_end: 26,
+            confidence: 0.9,
+        }];
+        let facts = vec![TypedFact::Risk {
+            category: "clause_penale".into(),
+            severity: "medium".into(),
+            text_pseudo: "clause pénale".into(),
+        }];
+
+        let row = projection_from_facts(chunk_id, doc_id, &entities, &facts, &extractor);
+
+        assert_eq!(row.chunk_id, chunk_id);
+        assert!(row.risk_flags.contains(&"clause_penale:medium".to_string()));
+        assert!(row
+            .risk_flags
+            .contains(&"sanction disproportionnée".to_string()));
+    }
+
+    #[test]
+    fn facts_to_graph_writes_maps_risk_to_node_and_mentions_edge() {
+        let chunk_id = Uuid::new_v4();
+        let doc_id = Uuid::new_v4();
+        let facts = vec![TypedFact::Risk {
+            category: "clause_penale".into(),
+            severity: "medium".into(),
+            text_pseudo: "clause pénale".into(),
+        }];
+
+        let (nodes, edges) = facts_to_graph_writes(chunk_id, doc_id, &facts);
+
+        assert!(nodes.iter().any(|node| matches!(
+            node,
+            NodeWrite::Risk {
+                severity,
+                category,
+                text_pseudo,
+                ..
+            } if severity == "medium"
+                && category == "clause_penale"
+                && text_pseudo == "clause pénale"
+        )));
+        assert!(edges.iter().any(|edge| {
+            edge.from_label == "Chunk"
+                && edge.from_key == chunk_id.to_string()
+                && edge.to_label == "Risk"
+                && edge.edge_type == "MENTIONS"
+        }));
     }
 
     #[test]
