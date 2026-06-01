@@ -4,6 +4,7 @@
 
 #![warn(missing_docs)]
 
+pub mod accelerator;
 pub mod bench_cli;
 pub mod canonicalize;
 pub mod config;
