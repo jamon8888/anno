@@ -21,8 +21,8 @@ The repo `jamon8888/anno` is **private**, so GitHub Actions minutes are metered 
 
 | Decision | Value |
 |----------|-------|
-| Release platforms | **Windows** (`x86_64-pc-windows-msvc`) + **macOS universal2** (`universal2-apple-darwin`, covers Apple Silicon **and** Intel in one binary/one runner) |
-| Dropped release targets | `x86_64-unknown-linux-gnu` (no Linux artifact needed), separate `aarch64`/`x86_64` apple targets (replaced by universal2) |
+| Release platforms | **Windows** (`x86_64-pc-windows-msvc`) + **macOS Intel** (`x86_64-apple-darwin`) + **macOS Apple Silicon** (`aarch64-apple-darwin`) |
+| Dropped release targets | `x86_64-unknown-linux-gnu` (no Linux artifact needed). `cargo-dist 0.32.0` does not accept `universal2-apple-darwin` (`Unrecognized architecture: universal2`), so separate native macOS targets are retained to preserve coverage. |
 | CI test platform | **Linux ×1** for daily check/test/clippy; Windows touched only in `full-ci`; macOS only at release |
 | Release cadence | Weekly+ → per-release cost is central |
 | Local dev | Already fixed: `lld-link` linker, `sccache` engaged, `CARGO_TARGET_DIR=E:\cargo-target` (SSD) |
@@ -52,13 +52,13 @@ Changes:
   - Move **heavy** checks to the existing weekly schedule (`static-analysis-weekly.yml`): `safety-report` (geiger), `opengrep`, `miri-unsafe`, `coverage`, `nlp-ml-patterns`, `unused-deps` (machete). These currently run per main-push and each `cargo install` their tooling.
 
 ### Tier 3 — Release (on tag, optimized)
-- **`[workspace.metadata.dist].targets`** → `["x86_64-pc-windows-msvc", "universal2-apple-darwin"]`. Regenerate with `dist generate`, then **re-apply all `ANNO-PATCH` sections** in `release.yml` (protoc install, MSVC CRT alignment, gateway smoke, `.mcpb` packaging, release-binary verification).
+- **`[workspace.metadata.dist].targets`** → `["x86_64-pc-windows-msvc", "x86_64-apple-darwin", "aarch64-apple-darwin"]`. Regenerate with `dist generate`, then **re-apply all `ANNO-PATCH` sections** in `release.yml` (protoc install, build caching, MSVC CRT alignment, release binary validation, gateway smoke, `.mcpb` packaging/validation/upload).
 - 🔥 **Add build caching** to `build-local-artifacts` as a new `ANNO-PATCH` block, inserted **before** the `Build artifacts` (`dist build`) step:
   - `mozilla-actions/sccache-action@v0.0.10` (pinned `v0.15.0`, same as CI),
   - env `SCCACHE_GHA_ENABLED: "true"`, `RUSTC_WRAPPER: sccache`, `CARGO_INCREMENTAL: "0"`,
   - `Swatinem/rust-cache@v2` keyed per target.
   - Effect: heavy deps are reused across weekly tags; only changed workspace crates + the final optimized codegen/link recompile.
-- **Installers** aligned to the two platforms: `msi` + `powershell` (Windows), `shell` + `homebrew` (macOS). `.mcpb` packaging retained.
+- **Installers** aligned to the two OS families: `msi` + `powershell` (Windows), `shell` + `homebrew` (macOS). `.mcpb` packaging retained.
 - `pr-run-mode = "plan"` retained (free dry-run on PRs).
 
 ## 5. Budget impact (rough order-of-magnitude)
@@ -78,23 +78,24 @@ Wall-times are estimates; the point is the **multiplier math**, not exact figure
 
 Weekly ⇒ **~3300 billed min/month on releases alone** → blows past the 2000 free tier.
 
-**Release, after** (cache warm, Windows + universal2 mac):
+**Release, after** (cache warm, Windows + two native macOS targets):
 
 | Target | Wall | × | Billed |
 |--------|------|---|--------|
 | windows (cached) | ~18 | 2 | 36 |
-| macOS universal2 (cached) | ~22 | 10 | 220 |
+| macOS x64 (cached) | ~22 | 10 | 220 |
+| macOS arm (cached) | ~22 | 10 | 220 |
 | plan/global/host | ~12 | 1 | 12 |
-| **Total/tag** | | | **~270** |
+| **Total/tag** | | | **~490** |
 
-Weekly ⇒ **~1100 billed min/month**, ~3× reduction, back under budget with headroom for CI. First 1–2 post-change releases run cold (cache warming) before reaching steady state.
+Weekly ⇒ **~1960 billed min/month** for releases, much tighter than the universal2 estimate but still below the 2000 minute free tier before PR/main CI. First 1–2 post-change releases run cold (cache warming) before reaching steady state.
 
 **CI:** removing the macOS legs from `full-ci` removes the largest per-run cost; the Linux-only PR gate stays cheap.
 
 ## 6. Risks & mitigations
 
 - **Release sccache cache lineage is separate from CI.** Release uses `+crt-static` (Windows) and the dist profile; CI uses `-crt-static`. The release cache warms independently over 1–2 releases. Acceptable.
-- **`universal2-apple-darwin` build correctness.** cargo-dist cross-compiles x86_64 on an Apple Silicon runner and `lipo`s. Validate the universal binary with `lipo -info` / the existing release-binary verification on the first tagged release.
+- **macOS release cost remains high.** `cargo-dist 0.32.0` does not support a `universal2-apple-darwin` target, so preserving Intel + Apple Silicon coverage requires two macOS builds. If the budget still needs more headroom, the next product decision is whether to drop one macOS architecture or build a custom universal artifact outside cargo-dist.
 - **Re-applying `ANNO-PATCH` after `dist generate`.** This is an existing, documented hazard (the patches carry `ANNO-PATCH` markers). The new caching block must be added to the patch checklist so it survives future regenerations.
 - **Dropping Linux artifact.** If a Linux consumer appears later, re-add `x86_64-unknown-linux-gnu` (×1, cheap) to dist targets.
 
