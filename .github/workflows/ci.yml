@@ -4,6 +4,7 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
   workflow_dispatch:
     inputs:
       max_examples:
@@ -33,6 +34,10 @@ permissions:
   issues: write
   security-events: write
   id-token: write
+
+# Pull requests run a small gate by default to avoid exhausting GitHub Actions
+# minutes. Add the `full-ci` label, push to main, or run workflow_dispatch for
+# the expensive backend, platform, eval, and static-analysis matrices.
 jobs:
   # ==========================================================================
   # Quick checks (fast feedback) - runs in parallel
@@ -113,6 +118,7 @@ jobs:
   clippy-extra:
     name: Clippy (${{ matrix.features }})
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     strategy:
       fail-fast: false
       matrix:
@@ -159,6 +165,7 @@ jobs:
   test-eval:
     name: Test (eval)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
@@ -220,6 +227,7 @@ jobs:
   test-cross-platform:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     strategy:
       fail-fast: false
       matrix:
@@ -270,6 +278,7 @@ jobs:
   test-onnx:
     name: Test (ONNX backend)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
@@ -305,6 +314,7 @@ jobs:
   test-candle:
     name: Test (Candle backend)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
@@ -340,6 +350,7 @@ jobs:
   test-onnx-eval:
     name: Test (ONNX + eval)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
@@ -369,6 +380,7 @@ jobs:
   test-candle-eval:
     name: Test (Candle + eval)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
@@ -398,6 +410,7 @@ jobs:
   test-production:
     name: Test (production features)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
@@ -428,6 +441,7 @@ jobs:
   test-metal:
     name: Test (Metal on macOS)
     runs-on: macos-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -481,6 +495,7 @@ jobs:
   docs:
     name: Docs
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -507,6 +522,7 @@ jobs:
   proptest:
     name: Property Tests
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
@@ -535,6 +551,7 @@ jobs:
   matrix-test:
     name: Randomized Matrix Test
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -657,6 +674,7 @@ jobs:
   regression:
     name: F1 Evaluator Unit Tests
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -676,6 +694,7 @@ jobs:
   examples:
     name: Examples (build)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
@@ -706,6 +725,7 @@ jobs:
   eval-sanity:
     name: Eval Sanity (small samples)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -889,6 +909,7 @@ jobs:
   semver-checks:
     name: Cargo Semver Checks
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     # Non-blocking while we baseline; promote to required once it's been
     # green for one release cycle.
     continue-on-error: true
@@ -941,6 +962,7 @@ jobs:
   unused-deps:
     name: Unused Dependencies
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -961,6 +983,7 @@ jobs:
   safety-report:
     name: Safety Report (Unsafe Code Stats)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -1027,6 +1050,7 @@ jobs:
   opengrep:
     name: OpenGrep Static Analysis
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -1127,6 +1151,7 @@ jobs:
   nlp-ml-patterns:
     name: NLP/ML Pattern Analysis
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -1164,7 +1189,7 @@ jobs:
     needs: [cargo-deny, unused-deps, safety-report, opengrep, nlp-ml-patterns]
     runs-on: ubuntu-latest
     continue-on-error: true
-    if: always()
+    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci'))
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -1197,7 +1222,7 @@ jobs:
     needs: [cargo-deny, unused-deps, safety-report, opengrep, nlp-ml-patterns]
     runs-on: ubuntu-latest
     continue-on-error: true
-    if: always()
+    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci'))
     steps:
       - uses: actions/checkout@v4
       - name: Download artifacts
@@ -1270,6 +1295,7 @@ jobs:
   publish-validation:
     name: Publish Validation
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4

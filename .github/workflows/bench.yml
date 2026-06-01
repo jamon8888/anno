@@ -1,15 +1,13 @@
 name: bench
 on:
-  pull_request:
-    paths:
-      - 'crates/anno-rag/**'
-      - '.github/workflows/bench.yml'
+  workflow_dispatch:
 
-# A new push to the PR cancels the previous still-running bench matrix
-# (these jobs are long + model-heavy; overlapping runs were the main CI
-# pile-up).
+# Benchmarks are intentionally manual. They are long, model-heavy, and span
+# macOS/Windows/Linux, so running them on every PR quickly exhausts Actions
+# minutes. Use workflow_dispatch on the PR branch when performance validation is
+# actually needed.
 concurrency:
-  group: bench-${{ github.event.pull_request.number || github.sha }}
+  group: bench-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
