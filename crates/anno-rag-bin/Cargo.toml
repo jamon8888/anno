@@ -11,6 +11,8 @@ description       = "anno-rag CLI binary — splits out so anno-rag-mcp can depe
 
 [features]
 default = []
+gpu-metal = ["anno-rag/gpu-metal", "anno-rag-mcp/gpu-metal"]
+gpu-cuda = ["anno-rag/gpu-cuda", "anno-rag-mcp/gpu-cuda"]
 embedded-ocr = ["anno-rag/embedded-ocr", "anno-rag-mcp/embedded-ocr"]
 rerank = ["anno-rag/rerank", "anno-rag-mcp/rerank"]
 
