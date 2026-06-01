@@ -1,6 +1,8 @@
 # Hacienda Release Install
 
-This document explains how to install the GitHub Release binary archives for Claude Desktop and local HTTP gateway use.
+This document explains how to install the GitHub Release binary archives for Claude Desktop/Cowork and local HTTP gateway use.
+
+Current candidate promoted as GitHub "Latest": `v0.11.0-rc.11`.
 
 ## Pick the Right Asset
 
@@ -8,6 +10,10 @@ This document explains how to install the GitHub Release binary archives for Cla
 |---|---|
 | Windows 11 x64 | `hacienda-<tag>-x86_64-pc-windows-msvc.zip` |
 | macOS Apple Silicon | `hacienda-<tag>-aarch64-apple-darwin.tar.gz` |
+
+The current `Release Binaries` workflow publishes archives and checksums only:
+it does not publish `.mcpb` extension bundles. Install Claude Desktop/Cowork
+from the archive using the manual MCP config below.
 
 Each archive contains:
 
@@ -80,39 +86,18 @@ or creating sample data:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release\local-pipeline-gate.ps1 -DryRun -SkipHeavy -SkipOcr -SkipMcp
 ```
 
-## Claude Desktop Extension (one-click install)
+## Claude Desktop / Cowork
 
-Download the `.mcpb` file for your platform from the [GitHub Release](https://github.com/jamon8888/anno/releases):
+### Claude Code install prompt
 
-| Platform | File |
-|---|---|
-| Windows 11 x64 | `hacienda-<tag>-x86_64-pc-windows-msvc.mcpb` |
-| macOS Apple Silicon | `hacienda-<tag>-aarch64-apple-darwin.mcpb` |
+Open Claude Code and paste:
 
-**Install:**
+```text
+Install Hacienda anno-rag v0.11.0-rc.11 into Claude Desktop/Cowork from https://github.com/jamon8888/anno/releases/tag/v0.11.0-rc.11.
+Download the asset for this machine (Windows x64: hacienda-v0.11.0-rc.11-x86_64-pc-windows-msvc.zip; macOS Apple Silicon: hacienda-v0.11.0-rc.11-aarch64-apple-darwin.tar.gz) plus SHA256SUMS.txt, verify the checksum, extract it to a stable local folder, and update Claude Desktop's claude_desktop_config.json so mcpServers.anno-rag runs the extracted anno-rag binary with args ["mcp"]. If models are not already installed, run anno-rag download-models once and set ANNO_MODELS_DIR to the path it prints. Do not add ANNO_RAG_VAULT_PASSPHRASE unless I provide one. After editing the config, tell me to fully restart Claude Desktop/Cowork and verify anno-rag appears under Connectors.
+```
 
-1. Open Claude Desktop → Settings → Extensions.
-2. Drag the `.mcpb` file into the window (or click "Install Extension…").
-3. Fill in config fields if prompted (all optional — leave blank for defaults).
-4. Click **Install**. The server registers instantly.
-
-**First use — download models:**
-
-Model weights (~970 MB) are not bundled. On first use, ask Claude:
-
-> "Set up anno-rag"
-
-Claude calls the `download_models` tool, which downloads models in the background (~2–15 min). Ask again after a few minutes — anno-rag confirms when ready.
-
-**Power-user shortcut (models already on disk):**
-
-If you have already run `anno-rag download-models`, open the extension settings and set **Models directory** to the path it printed. anno-rag uses models from disk immediately.
-
----
-
-## Claude Desktop (manual config)
-
-> **Note:** If you installed via the `.mcpb` extension above, skip this section — Claude Desktop manages the config automatically.
+### Manual config
 
 Claude Desktop uses the `anno-rag` binary through stdio MCP:
 
@@ -205,37 +190,38 @@ test "$expected" = "$actual"
 
 ## RC release flow for Cowork performance testing
 
-Use this flow to create an optimized GitHub prerelease for Claude Desktop/Cowork testing.
+Use this flow to create an optimized GitHub candidate release for Claude Desktop/Cowork testing.
 
 ### Preconditions
 
 - `origin/main` equals local `main`.
 - Latest GitHub Actions CI on `main` is successful.
-- `dist plan --tag=v0.11.0-rc.6 --output-format=json` exits with code `0`.
+- `v0.11.0-rc.11` or the target tag points at the intended commit.
 - No local Claude Desktop MCP process is still expected to run from `D:\cargo-shared-target\debug\anno-rag.exe` after install.
 
 ### Create the RC
 
 ```powershell
-git tag v0.11.0-rc.6
+git tag v0.11.0-rc.11
 git push origin main
-git push origin v0.11.0-rc.6
-gh run list --repo jamon8888/anno --workflow Release --limit 5
+git push origin v0.11.0-rc.11
+gh run list --repo jamon8888/anno --workflow "Release Binaries" --limit 5
 ```
 
 Monitor the selected release run:
 
 ```powershell
-$Run = gh run list --repo jamon8888/anno --workflow Release --limit 5 --json databaseId,displayTitle |
+$Run = gh run list --repo jamon8888/anno --workflow "Release Binaries" --limit 5 --json databaseId,displayTitle |
   ConvertFrom-Json |
-  Where-Object { $_.displayTitle -match 'v0\.11\.0-rc\.6' } |
+  Where-Object { $_.displayTitle -match 'v0\.11\.0-rc\.11' } |
   Select-Object -First 1
 gh run view $Run.databaseId --repo jamon8888/anno --json status,conclusion,url,jobs
 ```
 
 ### Install in Cowork
 
-Prefer the Windows `.mcpb` asset from the GitHub prerelease. If `.mcpb` installation is unavailable, extract the Windows release archive and point Claude Desktop at the extracted `anno-rag.exe`.
+Extract the Windows release archive and point Claude Desktop at the extracted
+`anno-rag.exe` with args `["mcp"]`.
 
 After installing, restart Claude Desktop/Cowork and verify:
 
