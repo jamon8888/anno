@@ -939,25 +939,13 @@ jobs:
   # Static Analysis Tools
   # ==========================================================================
 
-  # Comprehensive dependency linting (replaces/enhances cargo-audit)
+  # Comprehensive dependency linting — prebuilt action, no cargo install, ~15 s
   cargo-deny:
     name: Cargo Deny
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: arduino/setup-protoc@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.10
-        with:
-          version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
-      - name: Install cargo-deny
-        run: cargo install --locked cargo-deny
-      - name: Check dependencies
-        run: cargo deny check
+      - uses: EmbarkStudios/cargo-deny-action@v2
   # Fast unused dependency detection
   unused-deps:
     name: Unused Dependencies
