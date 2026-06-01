@@ -5,8 +5,12 @@ use candle_core::Device;
 use serde::{Deserialize, Serialize};
 use std::env::VarError;
 use std::fmt;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::str::FromStr;
+use std::thread;
+use std::time::{Duration, Instant};
+
+const CUDA_RUNTIME_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Runtime accelerator preference requested by config or environment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -332,10 +336,34 @@ fn candle_metal_device() -> Result<Device> {
 }
 
 fn cuda_runtime_available() -> bool {
-    Command::new("nvidia-smi")
+    let mut child = match Command::new("nvidia-smi")
         .arg("-L")
-        .status()
-        .is_ok_and(|status| status.success())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(_) => return false,
+    };
+
+    let deadline = Instant::now() + CUDA_RUNTIME_PROBE_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.success(),
+            Ok(None) if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
