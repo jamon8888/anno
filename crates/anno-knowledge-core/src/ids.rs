@@ -96,7 +96,11 @@ impl AccountId {
     /// Derives a deterministic [`AccountId`] from a parent [`SourceId`] and a provider subject.
     #[must_use]
     pub fn from_parts(source_id: SourceId, provider_subject: &str) -> Self {
-        Self(stable_uuid(&["account", &source_id.as_string(), provider_subject]))
+        Self(stable_uuid(&[
+            "account",
+            &source_id.as_string(),
+            provider_subject,
+        ]))
     }
 }
 
@@ -104,7 +108,11 @@ impl ScopeId {
     /// Derives a deterministic [`ScopeId`] from a parent [`AccountId`] and a provider key.
     #[must_use]
     pub fn from_parts(account_id: AccountId, provider_key: &str) -> Self {
-        Self(stable_uuid(&["scope", &account_id.as_string(), provider_key]))
+        Self(stable_uuid(&[
+            "scope",
+            &account_id.as_string(),
+            provider_key,
+        ]))
     }
 }
 
@@ -117,7 +125,13 @@ impl ObjectId {
         scope_key: &str,
         external_id: &str,
     ) -> Self {
-        Self(stable_uuid(&["object", kind.as_stable_str(), account_key, scope_key, external_id]))
+        Self(stable_uuid(&[
+            "object",
+            kind.as_stable_str(),
+            account_key,
+            scope_key,
+            external_id,
+        ]))
     }
 }
 

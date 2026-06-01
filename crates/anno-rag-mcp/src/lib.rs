@@ -74,15 +74,11 @@ impl AnnoRagServer {
         self.pipeline.get().cloned()
     }
 
-    async fn knowledge(
-        &self,
-    ) -> anno_knowledge_store::Result<&crate::knowledge::KnowledgeService> {
+    async fn knowledge(&self) -> anno_knowledge_store::Result<&crate::knowledge::KnowledgeService> {
         self.knowledge
             .get_or_try_init(|| {
                 let cfg = Arc::clone(&self.cfg);
-                async move {
-                    crate::knowledge::KnowledgeService::open(&cfg).map(Arc::new)
-                }
+                async move { crate::knowledge::KnowledgeService::open(&cfg).map(Arc::new) }
             })
             .await
             .map(|arc| arc.as_ref())
@@ -2392,9 +2388,7 @@ impl AnnoRagServer {
     }
 
     /// List configured Anno knowledge sources. Does not load local ML models.
-    #[tool(
-        description = "List configured Anno knowledge sources. Does not load local ML models."
-    )]
+    #[tool(description = "List configured Anno knowledge sources. Does not load local ML models.")]
     async fn knowledge_sources(&self) -> String {
         let service = match self.knowledge().await {
             Ok(service) => service,

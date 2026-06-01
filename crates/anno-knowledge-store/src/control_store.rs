@@ -119,13 +119,7 @@ impl KnowledgeControlStore {
             "INSERT OR IGNORE INTO knowledge_parts \
              (part_id, object_id, part_type, title_pseudo, metadata_pseudo_json, extracted_chars) \
              VALUES (?1, ?2, 'file_body', ?3, ?4, ?5)",
-            params![
-                &part_id,
-                &object_id,
-                &title_pseudo,
-                &metadata,
-                body_len
-            ],
+            params![&part_id, &object_id, &title_pseudo, &metadata, body_len],
         )?;
         conn.execute(
             "INSERT OR REPLACE INTO knowledge_chunks \
@@ -218,8 +212,7 @@ fn count_failed_objects(conn: &Connection) -> Result<u64> {
 }
 
 fn parse_uuid(value: String) -> std::result::Result<uuid::Uuid, rusqlite::Error> {
-    uuid::Uuid::parse_str(&value)
-        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
+    uuid::Uuid::parse_str(&value).map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
 }
 
 fn parse_source_kind(value: &str) -> std::result::Result<SourceKind, rusqlite::Error> {
@@ -260,12 +253,8 @@ mod tests {
         let db_path = dir.path().join("knowledge.sqlite3");
         let store = KnowledgeControlStore::open(&db_path).expect("open store");
 
-        let object_id = ObjectId::from_external(
-            SourceKindForId::LocalFolder,
-            "local",
-            "folder-a",
-            "file-a",
-        );
+        let object_id =
+            ObjectId::from_external(SourceKindForId::LocalFolder, "local", "folder-a", "file-a");
         let revision_id = RevisionId::from_parts("file-a", "v1");
         let part_id = PartId::from_parts("file-a", "body");
         let chunk_id = ChunkId::from_parts(revision_id, part_id, 0);

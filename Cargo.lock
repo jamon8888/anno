@@ -356,6 +356,8 @@ dependencies = [
 name = "anno-rag-mcp"
 version = "0.1.0"
 dependencies = [
+ "anno-knowledge-core",
+ "anno-knowledge-store",
  "anno-rag",
  "anno-rag-tabular",
  "async-trait",
