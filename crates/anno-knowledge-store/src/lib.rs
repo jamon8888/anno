@@ -5,5 +5,8 @@ pub mod error;
 pub mod fts_query;
 pub mod migrations;
 
-pub use control_store::{KnowledgeControlStore, TestChunkInput};
+pub use control_store::{
+    hex32, CommitChunk, CommitObjectInput, KnowledgeControlStore, LocalFolderRegistered,
+    LocalFolderRegistration, ScopeRow, SourceRow, TestChunkInput,
+};
 pub use error::{KnowledgeStoreError, Result};

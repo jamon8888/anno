@@ -118,6 +118,10 @@ pub fn all_tool_names() -> Vec<String> {
         "knowledge_sources",
         "knowledge_status",
         "knowledge_search",
+        // Knowledge (Phase 2 — local folder source)
+        "knowledge_add_local_folder",
+        "knowledge_sync",
+        "knowledge_forget",
     ]
     .into_iter()
     .map(String::from)
@@ -135,5 +139,14 @@ mod tests {
         assert!(tools.contains(&"knowledge_sources".to_string()));
         assert!(tools.contains(&"knowledge_status".to_string()));
         assert!(tools.contains(&"knowledge_search".to_string()));
+    }
+
+    #[test]
+    fn all_tool_names_includes_phase2_knowledge_tools() {
+        let tools = all_tool_names();
+
+        assert!(tools.contains(&"knowledge_add_local_folder".to_string()));
+        assert!(tools.contains(&"knowledge_sync".to_string()));
+        assert!(tools.contains(&"knowledge_forget".to_string()));
     }
 }

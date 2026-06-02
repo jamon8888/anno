@@ -25,6 +25,7 @@ embedded-ocr = ["kreuzberg/ocr"]
 
 [dependencies]
 anno            = { path = "../anno", features = ["gliner2-fastino"] }
+anno-knowledge-core = { path = "../anno-knowledge-core" }
 cloakpipe-core  = { path = "../../vendor/cloakpipe/crates/cloakpipe-core" }
 
 kreuzberg            = { workspace = true }

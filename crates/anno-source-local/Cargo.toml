@@ -1,0 +1,21 @@
+[package]
+name = "anno-source-local"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Local folder source connector (discovery + change detection) for Anno knowledge indexing."
+
+[dependencies]
+anno-knowledge-core = { path = "../anno-knowledge-core" }
+chrono = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[lints]
+workspace = true
