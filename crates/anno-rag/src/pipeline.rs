@@ -159,7 +159,7 @@ impl Pipeline {
         if let Some(d) = self.detector.get() {
             return Ok(d);
         }
-        let d = Arc::new(Detector::new()?);
+        let d = Arc::new(Detector::new(&self.cfg)?);
         // OnceCell::set returns Err(value) if already set — ignore since we just checked.
         let _ = self.detector.set(d);
         Ok(self.detector.get().expect("just set"))

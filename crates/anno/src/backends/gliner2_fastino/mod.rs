@@ -166,6 +166,21 @@ impl GLiNER2FastinoConfig {
         self.onnx = onnx;
         self
     }
+
+    /// Override the ONNX execution-provider preferences without exposing
+    /// the crate-internal `OnnxSessionConfig` type to downstream crates.
+    #[must_use]
+    pub fn with_onnx_provider_preferences(
+        mut self,
+        use_cpu_provider: bool,
+        prefer_coreml: bool,
+        prefer_cuda: bool,
+    ) -> Self {
+        self.onnx.use_cpu_provider = use_cpu_provider;
+        self.onnx.prefer_coreml = prefer_coreml;
+        self.onnx.prefer_cuda = prefer_cuda;
+        self
+    }
 }
 
 /// How to apply labels across a batch.

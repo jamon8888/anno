@@ -5,11 +5,11 @@
 //! via `cargo test --test pii_ner -- --ignored --nocapture` and in the
 //! nightly bench workflow.
 
-use anno_rag::detect::Detector;
 use anno_rag::pii_eval::{
     check_pii_corpus, load_pii_annotations, pii_corpus_dir, resolve_span, score_detections,
     CategoryScore, TrueSpan,
 };
+use anno_rag::{detect::Detector, AnnoRagConfig};
 use std::collections::HashMap;
 
 const NER_CATEGORIES: &[&str] = &["Person", "Organization", "Location"];
@@ -20,7 +20,8 @@ fn ner_pii_recall_meets_baseline() {
     let dir = pii_corpus_dir();
     let ann = load_pii_annotations(&dir).expect("annotations");
     check_pii_corpus(&dir, &ann).expect("corpus consistent");
-    let detector = Detector::new().expect("Detector::new — warm the HF model cache first");
+    let detector = Detector::new(&AnnoRagConfig::default())
+        .expect("Detector::new — warm the HF model cache first");
 
     let mut agg: HashMap<String, CategoryScore> = HashMap::new();
     for doc in &ann.docs {
@@ -104,7 +105,7 @@ fn diagnose_ner_misses() {
     use anno_rag::pii_eval::category_key;
     let dir = pii_corpus_dir();
     let ann = load_pii_annotations(&dir).expect("annotations");
-    let detector = Detector::new().expect("Detector::new");
+    let detector = Detector::new(&AnnoRagConfig::default()).expect("Detector::new");
 
     for doc in &ann.docs {
         let content = std::fs::read_to_string(dir.join(&doc.file)).expect("read doc");
