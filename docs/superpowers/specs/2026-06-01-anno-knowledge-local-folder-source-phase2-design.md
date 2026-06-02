@@ -322,8 +322,10 @@ text, file bodies, or pseudonymization internals.
 
 ## 14. Deferred to later phases
 
-- Phase 3: `embed_pseudonymized_chunks`, `knowledge_chunks_v1` LanceDB vector
-  projection, semantic/deep search fusion, vector-lag in status.
-- Phase 4+: Outlook/Microsoft connector, attachments, additional sources.
-- Optional: dual-write from `Pipeline::ingest_folder`, background job queue,
-  daemon split.
+All items deferred from this spec are tracked in [`docs/product/roadmap.md`](../../product/roadmap.md):
+
+- Phase 3: vector projection + semantic search (spec'd separately)
+- Deletion reconciliation (`forgotten` counter scaffolding)
+- Outlook/Microsoft connector + attachments + additional sources
+- Optional dual-write from `Pipeline::ingest_folder`
+- Background job queue / daemon split

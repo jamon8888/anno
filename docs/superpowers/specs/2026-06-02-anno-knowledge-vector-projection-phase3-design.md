@@ -440,10 +440,12 @@ Non-regression set (all must remain green):
 
 ## 18. Deferred to later phases
 
-- `Deep` mode with a local reranker (CrossEncoder over the merged candidate set).
-- `Auto` mode that picks `Fast` vs `Semantic` based on vector lag and embedder warmth.
-- Re-embed pipeline when `embedding_model` changes — detection is recorded now, the *action* is deferred.
-- `acl_hash` column population — empty placeholder column to be added in the Outlook phase.
-- Outlook / Microsoft Graph connector — its own phase, builds on top of this index.
-- Background job queue / daemon split — only if duplicate Bert instances across Claude Desktop + Codex become a real issue.
-- Filter pushdown in `search_semantic` (by source_id, source_kind, date range) — schema already carries the columns; the API surface waits for a real query use case.
+All items deferred from this spec are tracked in [`docs/product/roadmap.md`](../../product/roadmap.md):
+
+- `Deep` mode with a local reranker
+- `Auto` mode (Fast/Semantic auto-routing)
+- Re-embed pipeline on `embedding_model` change
+- `acl_hash` column population (Outlook era)
+- Outlook / Microsoft Graph connector
+- Background job queue / daemon split
+- Filter pushdown in `search_semantic`
