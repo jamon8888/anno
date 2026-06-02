@@ -179,6 +179,15 @@ pub struct SearchHit {
     pub score: f32,
 }
 
+/// Summary of chunk rows removed for a registered source folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeleteFolderRowsReport {
+    /// Number of chunk rows removed from the chunks table.
+    pub removed_chunks: u64,
+    /// Distinct document ids observed under the source folder before deletion.
+    pub doc_ids: Vec<Uuid>,
+}
+
 /// Handle to the `chunks` table.
 #[derive(Clone)]
 pub struct Store {
@@ -839,6 +848,19 @@ impl Store {
         Ok(n as u64)
     }
 
+    /// Count rows in the chunks table.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if the LanceDB count fails.
+    pub async fn count_chunks(&self) -> Result<u64> {
+        let n = self
+            .tbl
+            .count_rows(None)
+            .await
+            .map_err(|e| Error::Store(format!("chunks count_rows: {e}")))?;
+        Ok(n as u64)
+    }
+
     /// Build an FTS index on `memories.text`. Idempotent — returns `Ok(false)`
     /// when the index already exists or the table is empty. Mirrors the
     /// French-tokenized chunks FTS index in [`Self::maybe_build_fts_index`].
@@ -961,6 +983,113 @@ impl Store {
             .await
             .map_err(|e| Error::Store(format!("delete_doc_rows: {e}")))?;
         Ok(())
+    }
+
+    /// List distinct raw legal corpus folder paths currently present in chunks.
+    /// Intended for local/admin bookkeeping; do not expose these paths in MCP
+    /// or UI responses without a privacy gate.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if the LanceDB query or Arrow decode fails.
+    pub async fn list_indexed_folder_paths(&self) -> Result<Vec<String>> {
+        let stream = self
+            .tbl
+            .query()
+            .select(lancedb::query::Select::columns(&["folder_path"]))
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("list_indexed_folder_paths query: {e}")))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| Error::Store(format!("list_indexed_folder_paths collect: {e}")))?;
+        let mut seen = std::collections::BTreeSet::new();
+        for batch in &batches {
+            let folder_paths = batch
+                .column_by_name("folder_path")
+                .ok_or_else(|| Error::Store("folder_path column missing".into()))?
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or_else(|| Error::Store("folder_path wrong type".into()))?;
+            for i in 0..folder_paths.len() {
+                if !folder_paths.is_null(i) {
+                    seen.insert(folder_paths.value(i).to_string());
+                }
+            }
+        }
+        Ok(seen.into_iter().collect())
+    }
+
+    /// Count chunks whose `source_path` is inside `folder_path`.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if the LanceDB query or Arrow decode fails.
+    pub async fn count_chunks_for_folder(&self, folder_path: &str) -> Result<u64> {
+        Ok(self.source_rows_for_subtree(folder_path).await?.len() as u64)
+    }
+
+    /// List distinct document ids whose `source_path` is inside `folder_path`.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if the LanceDB query or Arrow decode fails.
+    pub async fn doc_ids_for_source_subtree(&self, folder_path: &str) -> Result<Vec<Uuid>> {
+        let mut doc_ids = std::collections::BTreeSet::new();
+        for (doc_id, _) in self.source_rows_for_subtree(folder_path).await? {
+            doc_ids.insert(doc_id);
+        }
+        Ok(doc_ids.into_iter().collect())
+    }
+
+    /// Delete all chunks whose `source_path` is inside `folder_path`.
+    /// Returns the row count and document ids observed before deletion.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if the LanceDB query/decode/delete fails.
+    pub async fn delete_folder_rows(&self, folder_path: &str) -> Result<DeleteFolderRowsReport> {
+        let rows = self.source_rows_for_subtree(folder_path).await?;
+        let removed_chunks = rows.len() as u64;
+        let mut doc_ids = std::collections::BTreeSet::new();
+        let mut source_paths = std::collections::BTreeSet::new();
+        for (doc_id, source_path) in rows {
+            doc_ids.insert(doc_id);
+            source_paths.insert(source_path);
+        }
+        for source_path in source_paths {
+            self.delete_doc_rows(&source_path).await?;
+        }
+        Ok(DeleteFolderRowsReport {
+            removed_chunks,
+            doc_ids: doc_ids.into_iter().collect(),
+        })
+    }
+
+    async fn source_rows_for_subtree(&self, folder_path: &str) -> Result<Vec<(Uuid, String)>> {
+        let stream = self
+            .tbl
+            .query()
+            .select(lancedb::query::Select::columns(&["doc_id", "source_path"]))
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("source_rows_for_subtree query: {e}")))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| Error::Store(format!("source_rows_for_subtree collect: {e}")))?;
+        let mut rows = Vec::new();
+        for batch in &batches {
+            let doc_ids = get_col::<FixedSizeBinaryArray>(batch, "doc_id")?;
+            let source_paths = get_col::<StringArray>(batch, "source_path")?;
+            for idx in 0..batch.num_rows() {
+                if source_paths.is_null(idx) {
+                    continue;
+                }
+                let source_path = source_paths.value(idx);
+                if path_is_in_subtree(source_path, folder_path) {
+                    rows.push((uuid_from_fsb(doc_ids, idx)?, source_path.to_string()));
+                }
+            }
+        }
+        Ok(rows)
     }
 
     /// k-nearest-neighbor search over `vector`. v0.1 ignores `_query_text`
@@ -1560,6 +1689,24 @@ fn uuid_from_fsb(arr: &FixedSizeBinaryArray, i: usize) -> Result<Uuid> {
     Ok(Uuid::from_bytes(arr16))
 }
 
+fn path_is_in_subtree(source_path: &str, root_path: &str) -> bool {
+    let source = normalize_path_for_subtree_match(source_path);
+    let root = normalize_path_for_subtree_match(root_path);
+    if root.is_empty() {
+        return false;
+    }
+    source == root
+        || source
+            .strip_prefix(&root)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn normalize_path_for_subtree_match(path: &str) -> String {
+    path.replace('\\', "/")
+        .trim_end_matches('/')
+        .to_ascii_lowercase()
+}
+
 fn batch_to_hit(b: &RecordBatch, i: usize) -> Result<SearchHit> {
     let chunk_id_arr = get_col::<FixedSizeBinaryArray>(b, "chunk_id")?;
     let doc_id_arr = get_col::<FixedSizeBinaryArray>(b, "doc_id")?;
@@ -1748,6 +1895,126 @@ mod tests {
             .doc_exists(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"b"))
             .await
             .unwrap());
+    }
+
+    #[test]
+    fn path_is_in_subtree_matches_exact_and_children() {
+        assert!(path_is_in_subtree("C:/legal/a", "C:/legal/a"));
+        assert!(path_is_in_subtree("C:/legal/a/one.txt", "C:/legal/a"));
+        assert!(path_is_in_subtree("C:/legal/a/sub/two.txt", "C:/legal/a"));
+    }
+
+    #[test]
+    fn path_is_in_subtree_does_not_match_sibling_prefix() {
+        assert!(!path_is_in_subtree("C:/legal/ab/one.txt", "C:/legal/a"));
+        assert!(!path_is_in_subtree("C:/legal/a-file.txt", "C:/legal/a"));
+    }
+
+    #[test]
+    fn path_is_in_subtree_handles_windows_separators_and_case() {
+        assert!(path_is_in_subtree(
+            r"C:\Legal\Client\Sub\one.txt",
+            "c:/legal/client"
+        ));
+    }
+
+    #[tokio::test]
+    #[ignore = "opens LanceDB; run with --ignored"]
+    async fn list_indexed_folder_paths_returns_distinct_folders() {
+        let (_dir, cfg) = fresh_cfg(8);
+        let store = Store::open(&cfg).await.expect("open");
+
+        let folders = store.list_indexed_folder_paths().await.expect("list");
+        assert!(folders.is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore = "opens LanceDB; run with --ignored"]
+    async fn count_chunks_returns_zero_on_empty_store() {
+        let (_dir, cfg) = fresh_cfg(8);
+        let store = Store::open(&cfg).await.expect("open");
+
+        assert_eq!(store.count_chunks().await.expect("count"), 0);
+    }
+
+    #[tokio::test]
+    #[ignore = "opens LanceDB; run with --ignored"]
+    async fn list_count_and_delete_folder_rows_use_source_subtree() {
+        let (_dir, cfg) = fresh_cfg(8);
+        let store = Store::open(&cfg).await.expect("open");
+        let mk = |d: &str, folder_path: &str, source_path: &str| ChunkRecord {
+            doc_id: uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, d.as_bytes()),
+            source_path: source_path.into(),
+            folder_path: folder_path.into(),
+            chunk_idx: 0,
+            text_pseudo: "x".into(),
+            page: None,
+            char_start: 0,
+            char_end: 1,
+            vector: vec![0.0; 8],
+        };
+        store
+            .upsert(vec![
+                mk("a", "C:/legal/a", "C:/legal/a/one.txt"),
+                mk("b", "C:/legal/a/sub", "C:/legal/a/sub/two.txt"),
+                mk("c", "C:/legal/a", "C:/legal/a/l'avocat.txt"),
+                mk("d", "C:/legal/ab", "C:/legal/ab/one.txt"),
+            ])
+            .await
+            .expect("up");
+
+        let folders = store.list_indexed_folder_paths().await.expect("list");
+        assert_eq!(
+            folders,
+            vec![
+                "C:/legal/a".to_string(),
+                "C:/legal/a/sub".to_string(),
+                "C:/legal/ab".to_string()
+            ]
+        );
+        assert_eq!(store.count_chunks().await.expect("count all"), 4);
+        assert_eq!(
+            store
+                .count_chunks_for_folder("C:/legal/a")
+                .await
+                .expect("count"),
+            3
+        );
+        let mut expected_doc_ids = vec![
+            uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"a"),
+            uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"b"),
+            uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"c"),
+        ];
+        expected_doc_ids.sort();
+        assert_eq!(
+            store
+                .doc_ids_for_source_subtree("C:/legal/a")
+                .await
+                .expect("doc ids"),
+            expected_doc_ids
+        );
+
+        let report = store
+            .delete_folder_rows("C:/legal/a")
+            .await
+            .expect("delete folder");
+        assert_eq!(report.removed_chunks, 3);
+        assert_eq!(report.doc_ids, expected_doc_ids);
+        assert_eq!(
+            store
+                .count_chunks_for_folder("C:/legal/a")
+                .await
+                .expect("count"),
+            0
+        );
+        assert_eq!(
+            store
+                .count_chunks_for_folder("C:/legal/ab")
+                .await
+                .expect("count"),
+            1
+        );
+        assert_eq!(store.count_chunks().await.expect("count all"), 1);
     }
 
     #[tokio::test]

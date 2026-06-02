@@ -348,6 +348,34 @@ impl KnowledgeControlStore {
             .map_err(Into::into)
     }
 
+    /// Return the source whose scope provider key exactly matches `provider_key`.
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn source_by_provider_key(&self, provider_key: &str) -> Result<Option<SourceRow>> {
+        let conn = self.conn.lock().expect("knowledge sqlite mutex poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT src.source_id, src.kind, src.display_label_pseudo, src.enabled \
+             FROM source_scopes s \
+             JOIN source_accounts a ON a.account_id = s.account_id \
+             JOIN knowledge_sources src ON src.source_id = a.source_id \
+             WHERE s.provider_key = ?1 \
+             ORDER BY src.created_at \
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![provider_key])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(SourceRow {
+                source_id: SourceId::new(parse_uuid(row.get::<_, String>(0)?)?),
+                kind: row.get(1)?,
+                display_label_pseudo: row.get(2)?,
+                enabled: row.get::<_, i64>(3)? != 0,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Return enabled scopes for a source.
     ///
     /// # Errors
@@ -922,5 +950,30 @@ mod tests {
             .search_fast(&KnowledgeSearchRequest::new("contrat").with_top_k(5))
             .expect("search");
         assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn source_by_provider_key_finds_registered_local_folder() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let store =
+            KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
+        let reg = store
+            .register_local_folder(LocalFolderRegistration {
+                stable_key: "C:/docs".into(),
+                source_label_pseudo: "FOLDER_1".into(),
+                scope_label_pseudo: "FOLDER_1".into(),
+                provider_key: "C:/docs".into(),
+            })
+            .expect("register");
+
+        let found = store
+            .source_by_provider_key("C:/docs")
+            .expect("lookup")
+            .expect("source");
+        assert_eq!(found.source_id, reg.source_id);
+        assert!(store
+            .source_by_provider_key("C:/missing")
+            .expect("missing")
+            .is_none());
     }
 }

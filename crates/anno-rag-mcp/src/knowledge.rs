@@ -107,6 +107,17 @@ impl KnowledgeService {
         Ok(0)
     }
 
+    /// Forget the local-folder source whose provider path matches `path`.
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn forget_source_by_path(&self, path: &str) -> anno_knowledge_store::Result<u64> {
+        if let Some(source) = self.store.source_by_provider_key(path)? {
+            return self.store.forget_source(&source.source_id);
+        }
+        Ok(0)
+    }
+
     /// Run a bounded sync over all enabled scopes of a source (or all sources).
     /// Loads the local NER model on demand for pseudonymization.
     ///
@@ -292,5 +303,34 @@ mod tests {
         let removed = service.forget_source(&source_id).expect("forget");
         assert_eq!(removed, 0);
         assert!(service.sources().is_empty());
+    }
+
+    #[test]
+    fn forget_source_by_path_removes_matching_local_folder() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let folder = dir.path().join("corpus");
+        std::fs::create_dir_all(&folder).expect("mkdir");
+
+        let service = KnowledgeService::open(&cfg).expect("service");
+        service
+            .add_local_folder(&folder.display().to_string())
+            .expect("add");
+        assert_eq!(service.sources().len(), 1);
+
+        let removed = service
+            .forget_source_by_path(&folder.display().to_string())
+            .expect("forget by path");
+        assert_eq!(removed, 0);
+        assert!(service.sources().is_empty());
+        assert_eq!(
+            service
+                .forget_source_by_path(&folder.display().to_string())
+                .expect("second forget"),
+            0
+        );
     }
 }
