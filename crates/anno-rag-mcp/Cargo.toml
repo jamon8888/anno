@@ -8,6 +8,8 @@ description  = "MCP (stdio) server exposing anno-rag's retrieval surface + (Phas
 
 [features]
 default = []
+gpu-metal = ["anno-rag/gpu-metal"]
+gpu-cuda = ["anno-rag/gpu-cuda"]
 # Pass-through to anno-rag's embedded Kreuzberg/Tesseract OCR. Runtime still
 # defaults OCR off; callers must opt in through config/CLI.
 embedded-ocr = ["anno-rag/embedded-ocr"]

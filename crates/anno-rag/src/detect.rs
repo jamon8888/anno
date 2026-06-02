@@ -194,8 +194,70 @@ pub fn detect_patterns(text: &str) -> Vec<DetectedEntity> {
 /// behaviour against a specific model version.
 pub const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
 
+/// Candle/PyTorch GLiNER2 repo used for Apple Metal detector acceleration.
+pub const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
+const CANDLE_NER_MODEL_DIR: &str = "gliner2-multi-v1-candle";
+
 /// PII labels recognized by the current [`Detector::detect`] NER layer.
 const PII_NER_LABELS: &[&str] = &["person", "organization", "location"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DetectorOnnxProviderConfig {
+    use_cpu_provider: bool,
+    prefer_coreml: bool,
+    prefer_cuda: bool,
+}
+
+fn detector_onnx_config_for(
+    preference: crate::accelerator::AcceleratorPreference,
+) -> Result<DetectorOnnxProviderConfig> {
+    let requested = crate::accelerator::AcceleratorPreference::from_env_or(preference)?;
+    let mut onnx = DetectorOnnxProviderConfig {
+        use_cpu_provider: true,
+        prefer_coreml: false,
+        prefer_cuda: false,
+    };
+    match requested {
+        crate::accelerator::AcceleratorPreference::Cpu => {
+            onnx.prefer_cuda = false;
+            onnx.prefer_coreml = false;
+        }
+        crate::accelerator::AcceleratorPreference::Auto => {
+            onnx.prefer_cuda = cfg!(feature = "gpu-cuda");
+        }
+        crate::accelerator::AcceleratorPreference::Cuda => {
+            if !cfg!(feature = "gpu-cuda") {
+                return Err(Error::Config(
+                    "ANNO_ACCELERATOR=cuda requires a binary built with feature gpu-cuda".into(),
+                ));
+            }
+            onnx.prefer_cuda = true;
+        }
+        crate::accelerator::AcceleratorPreference::Metal => {
+            if !cfg!(feature = "gpu-metal") {
+                return Err(Error::Config(
+                    "ANNO_ACCELERATOR=metal requires a binary built with feature gpu-metal".into(),
+                ));
+            }
+            onnx.prefer_coreml = false;
+        }
+    }
+    Ok(onnx)
+}
+
+fn detector_model_config_for(
+    preference: crate::accelerator::AcceleratorPreference,
+) -> Result<anno::backends::gliner2_fastino::GLiNER2FastinoConfig> {
+    let onnx = detector_onnx_config_for(preference)?;
+    Ok(
+        anno::backends::gliner2_fastino::GLiNER2FastinoConfig::default()
+            .with_onnx_provider_preferences(
+                onnx.use_cpu_provider,
+                onnx.prefer_coreml,
+                onnx.prefer_cuda,
+            ),
+    )
+}
 
 /// PII labels recognized by the current [`Detector::detect`] NER layer.
 #[must_use]
@@ -231,27 +293,121 @@ fn static_label_ref(label: &str) -> Option<&'static str> {
 }
 
 /// Aggregate PII detector: FR regex pack + anno NER.
+enum NerBackend {
+    Onnx(GLiNER2Fastino),
+    #[cfg(feature = "gpu-metal")]
+    Candle(anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle),
+}
+
+impl NerBackend {
+    fn extract_with_types(
+        &self,
+        text: &str,
+        labels: &[&str],
+        threshold: f32,
+    ) -> anno::Result<Vec<anno::Entity>> {
+        match self {
+            Self::Onnx(model) => model.extract_with_types(text, labels, threshold),
+            #[cfg(feature = "gpu-metal")]
+            Self::Candle(model) => model.extract_with_types(text, labels, threshold),
+        }
+    }
+
+    fn extract_with_label_thresholds(
+        &self,
+        text: &str,
+        label_thresholds: &[(&str, f32)],
+    ) -> anno::Result<Vec<anno::Entity>> {
+        match self {
+            Self::Onnx(model) => model.extract_with_label_thresholds(text, label_thresholds),
+            #[cfg(feature = "gpu-metal")]
+            Self::Candle(model) => model.extract_with_label_thresholds(text, label_thresholds),
+        }
+    }
+}
+
 pub struct Detector {
-    ner: GLiNER2Fastino,
+    ner: NerBackend,
 }
 
 impl Detector {
     /// Build a new detector. Loads the GLiNER2Fastino multi-v1 ONNX model
     /// (multilingual, FR-aware) from the HF Hub cache.
-    pub fn new() -> Result<Self> {
+    pub fn new(cfg: &crate::config::AnnoRagConfig) -> Result<Self> {
+        let requested = crate::accelerator::AcceleratorPreference::from_env_or(cfg.accelerator)?;
+        let decision = crate::accelerator::resolve(requested)?;
+        if matches!(
+            decision.selected,
+            crate::accelerator::SelectedAccelerator::Metal
+        ) {
+            return Self::new_candle_metal(cfg, &decision);
+        }
+
+        let model_cfg = detector_model_config_for(cfg.accelerator)?;
+
         // ── ANNO_MODELS_DIR fast-path ─────────────────────────────────────────
         if let Some(models_dir) = std::env::var_os("ANNO_MODELS_DIR") {
             let model_path = PathBuf::from(models_dir).join("gliner2-multi-v1-onnx");
             if model_path.exists() {
-                let ner = anno::backends::gliner2_fastino::GLiNER2Fastino::from_local(&model_path)
-                    .map_err(|e| Error::Detect(format!("gliner2_fastino load (local): {e}")))?;
-                return Ok(Self { ner });
+                let ner = anno::backends::gliner2_fastino::GLiNER2Fastino::from_local_with_config(
+                    &model_path,
+                    model_cfg.clone(),
+                )
+                .map_err(|e| Error::Detect(format!("gliner2_fastino load (local): {e}")))?;
+                return Ok(Self {
+                    ner: NerBackend::Onnx(ner),
+                });
             }
         }
         // ─────────────────────────────────────────────────────────────────────
-        let ner = GLiNER2Fastino::from_pretrained(NER_MODEL_ID)
+        let ner = GLiNER2Fastino::from_pretrained_with_config(NER_MODEL_ID, model_cfg)
             .map_err(|e| Error::Detect(format!("gliner2_fastino load: {e}")))?;
-        Ok(Self { ner })
+        Ok(Self {
+            ner: NerBackend::Onnx(ner),
+        })
+    }
+
+    #[cfg(feature = "gpu-metal")]
+    fn new_candle_metal(
+        _cfg: &crate::config::AnnoRagConfig,
+        decision: &crate::accelerator::AcceleratorDecision,
+    ) -> Result<Self> {
+        let device = crate::accelerator::candle_device(decision)?;
+        if let Some(models_dir) = std::env::var_os("ANNO_MODELS_DIR") {
+            let model_path = PathBuf::from(models_dir).join(CANDLE_NER_MODEL_DIR);
+            if model_path.exists() {
+                let ner =
+                    anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_local_with_device(
+                        &model_path,
+                        &device,
+                    )
+                    .map_err(|e| {
+                        Error::Detect(format!("gliner2_fastino_candle load (local): {e}"))
+                    })?;
+                return Ok(Self {
+                    ner: NerBackend::Candle(ner),
+                });
+            }
+        }
+        let ner =
+            anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_pretrained_with_device(
+                CANDLE_NER_MODEL_ID,
+                &device,
+            )
+            .map_err(|e| Error::Detect(format!("gliner2_fastino_candle load: {e}")))?;
+        Ok(Self {
+            ner: NerBackend::Candle(ner),
+        })
+    }
+
+    #[cfg(not(feature = "gpu-metal"))]
+    fn new_candle_metal(
+        _cfg: &crate::config::AnnoRagConfig,
+        _decision: &crate::accelerator::AcceleratorDecision,
+    ) -> Result<Self> {
+        Err(Error::Config(
+            "ANNO_ACCELERATOR=metal requires a binary built with feature gpu-metal".into(),
+        ))
     }
 
     /// Detect entities in `text`. Returns spans sorted by start, deduplicated
@@ -741,7 +897,7 @@ mod tests {
     #[test]
     #[ignore = "anno NER startup hangs without model cache; run with --ignored"]
     fn detects_iban_fr() {
-        let d = Detector::new().expect("detector builds");
+        let d = Detector::new(&crate::config::AnnoRagConfig::default()).expect("detector builds");
         let text = "Virement vers FR76 3000 6000 0112 3456 7890 189 demain.";
         let ents = d.detect(text).expect("detect ok");
         assert!(
@@ -755,7 +911,7 @@ mod tests {
     #[test]
     #[ignore = "anno NER startup hangs without model cache; run with --ignored"]
     fn detects_fr_phone() {
-        let d = Detector::new().expect("detector builds");
+        let d = Detector::new(&crate::config::AnnoRagConfig::default()).expect("detector builds");
         let text = "Appelez le 06 12 34 56 78 demain.";
         let ents = d.detect(text).expect("detect ok");
         assert!(
@@ -769,7 +925,7 @@ mod tests {
     #[test]
     #[ignore = "anno NER startup hangs without model cache; run with --ignored"]
     fn detects_siret_only_when_luhn_passes() {
-        let d = Detector::new().expect("detector builds");
+        let d = Detector::new(&crate::config::AnnoRagConfig::default()).expect("detector builds");
         // 73282932000074 is a Luhn-valid 14-digit. 73282932000075 is not.
         let text_valid = "SIRET 73282932000074 ici.";
         let text_invalid = "SIRET 73282932000075 ici.";
@@ -787,7 +943,7 @@ mod tests {
     #[test]
     #[ignore = "anno NER startup hangs without model cache; run with --ignored"]
     fn no_overlapping_spans_in_output() {
-        let d = Detector::new().expect("detector builds");
+        let d = Detector::new(&crate::config::AnnoRagConfig::default()).expect("detector builds");
         let text = "Marie Dupont, IBAN FR76 1234 5678 9012 3456 7890 123";
         let ents = d.detect(text).expect("ok");
         for w in ents.windows(2) {
@@ -815,7 +971,7 @@ mod tests {
         // deliberately do NOT create dir.path()/gliner2-multi-v1-onnx
 
         std::env::set_var("ANNO_MODELS_DIR", dir.path());
-        let result = Detector::new();
+        let result = Detector::new(&crate::config::AnnoRagConfig::default());
         std::env::remove_var("ANNO_MODELS_DIR");
 
         match result {
@@ -842,7 +998,7 @@ mod tests {
         std::fs::create_dir_all(&ner_dir).expect("mkdir");
 
         std::env::set_var("ANNO_MODELS_DIR", dir.path());
-        let result = Detector::new();
+        let result = Detector::new(&crate::config::AnnoRagConfig::default());
         std::env::remove_var("ANNO_MODELS_DIR");
 
         // from_local on an empty dir returns an error (no ONNX files)
@@ -855,5 +1011,23 @@ mod tests {
             msg.contains("(local)"),
             "error must come from local path, got: {msg}"
         );
+    }
+
+    #[test]
+    fn cpu_detector_uses_cpu_provider() {
+        let cfg = detector_onnx_config_for(crate::accelerator::AcceleratorPreference::Cpu)
+            .expect("cpu config");
+        assert!(cfg.use_cpu_provider);
+        assert!(!cfg.prefer_cuda);
+        assert!(!cfg.prefer_coreml);
+    }
+
+    #[test]
+    fn cuda_detector_requires_cuda_feature() {
+        if !cfg!(feature = "gpu-cuda") {
+            let err = detector_onnx_config_for(crate::accelerator::AcceleratorPreference::Cuda)
+                .expect_err("cuda unavailable");
+            assert!(err.to_string().contains("gpu-cuda"));
+        }
     }
 }

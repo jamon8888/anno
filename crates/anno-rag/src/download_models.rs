@@ -8,6 +8,9 @@ use std::path::{Path, PathBuf};
 
 /// NER model HuggingFace repo id.
 const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
+/// Candle/PyTorch GLiNER2 repo used by Metal sidecars.
+#[cfg(feature = "gpu-metal")]
+const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
 /// Embedder HuggingFace repo id.
 const EMBED_MODEL_ID: &str = "intfloat/multilingual-e5-small";
 
@@ -36,6 +39,8 @@ pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
     let models_dir = cfg.models_cache();
     download_embedder(&models_dir).await?;
     download_ner(&models_dir).await?;
+    #[cfg(feature = "gpu-metal")]
+    download_candle_ner(&models_dir).await?;
     Ok(models_dir)
 }
 
@@ -101,6 +106,33 @@ async fn download_ner(models_dir: &Path) -> Result<()> {
     tokio::task::spawn_blocking(move || download_ner_sync(&ner_dir_clone))
         .await
         .map_err(|e| Error::Detect(format!("spawn_blocking panic: {e}")))?
+}
+
+#[cfg(feature = "gpu-metal")]
+async fn download_candle_ner(models_dir: &Path) -> Result<()> {
+    let candle_dir = models_dir.join("gliner2-multi-v1-candle");
+    tokio::fs::create_dir_all(&candle_dir).await?;
+    let api =
+        hf_hub::api::tokio::Api::new().map_err(|e| Error::Detect(format!("hf-hub init: {e}")))?;
+    let repo = api.model(CANDLE_NER_MODEL_ID.to_string());
+    for file in [
+        "tokenizer.json",
+        "config.json",
+        "encoder_config/config.json",
+        "model.safetensors",
+    ] {
+        let src = repo
+            .get(file)
+            .await
+            .map_err(|e| Error::Detect(format!("{file} fetch: {e}")))?;
+        let dest = candle_dir.join(file);
+        if let Some(parent) = dest.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::copy(&src, dest).await?;
+    }
+    println!("  Candle NER model        ... ok");
+    Ok(())
 }
 
 fn download_ner_sync(ner_dir: &Path) -> Result<()> {

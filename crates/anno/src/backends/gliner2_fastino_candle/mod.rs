@@ -156,6 +156,11 @@ impl GLiNER2FastinoCandle {
         Self::from_local_on_device(model_dir, &Device::Cpu)
     }
 
+    /// Load from a local directory with an explicit Candle device.
+    pub fn from_local_with_device(model_dir: &Path, device: &Device) -> crate::Result<Self> {
+        Self::from_local_on_device(model_dir, device)
+    }
+
     /// Load from HuggingFace Hub. Downloads `tokenizer.json`,
     /// `config.json`, and `model.safetensors` to the local HF cache,
     /// then defers to [`Self::from_local`].
@@ -164,6 +169,11 @@ impl GLiNER2FastinoCandle {
     /// `fastino/gliner2-multi-v1`), NOT the SemplificaAI ONNX export.
     /// They're different artifacts.
     pub fn from_pretrained(model_id: &str) -> crate::Result<Self> {
+        Self::from_pretrained_with_device(model_id, &Device::Cpu)
+    }
+
+    /// Load from HuggingFace Hub with an explicit Candle device.
+    pub fn from_pretrained_with_device(model_id: &str, device: &Device) -> crate::Result<Self> {
         let api = crate::backends::hf_loader::hf_api()
             .map_err(|e| crate::Error::Backend(format!("hf_api: {e}")))?;
         let repo = api.model(model_id.to_string());
@@ -190,7 +200,7 @@ impl GLiNER2FastinoCandle {
         let snapshot_dir = weights_path
             .parent()
             .ok_or_else(|| crate::Error::Backend("snapshot dir resolution".into()))?;
-        let mut model = Self::from_local(snapshot_dir)?;
+        let mut model = Self::from_local_with_device(snapshot_dir, device)?;
         model.model_id = model_id.to_string();
         Ok(model)
     }
@@ -550,5 +560,18 @@ impl ZeroShotNER for GLiNER2FastinoCandle {
         threshold: f32,
     ) -> crate::Result<Vec<crate::Entity>> {
         self.extract_ner(text, descriptions, threshold)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_local_with_device_rejects_missing_weights() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let err = GLiNER2FastinoCandle::from_local_with_device(dir.path(), &Device::Cpu)
+            .expect_err("empty dir must fail");
+        assert!(err.to_string().contains("model.safetensors"));
     }
 }

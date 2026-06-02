@@ -4,6 +4,7 @@
 //! - `anno-rag ingest <folder> [--recursive] [--output <dir>]`
 //! - `anno-rag search <query> [--top-k <N>]`
 //! - `anno-rag mcp` — run MCP server on stdio (used by Cowork plugin)
+//! - `anno-rag diagnose-gpu` — print accelerator diagnostics
 //! - `anno-rag review <subcmd>` — tabular review management
 
 mod review;
@@ -74,6 +75,8 @@ enum Cmd {
     /// Run the MCP server on stdio. Used by Cowork as a plugin transport.
     /// Blocks until stdin closes.
     Mcp,
+    /// Print GPU/accelerator diagnostics without loading model weights.
+    DiagnoseGpu,
     /// Reproduce SLO measurements on a user corpus.
     Bench {
         /// Folder containing the documents to bench (PDF/DOCX/TXT/MD).
@@ -149,6 +152,12 @@ async fn main() -> anyhow::Result<()> {
         cfg.pdf_extract_annotations = *pdf_extract_annotations;
         cfg.pdf_hierarchy_clusters = *pdf_hierarchy_clusters;
         cfg.pdf_allow_single_column_tables = *pdf_allow_single_column_tables;
+    }
+
+    if let Cmd::DiagnoseGpu = &cli.cmd {
+        let diagnostics = anno_rag::accelerator::diagnostics(cfg.accelerator)?;
+        println!("{}", serde_json::to_string_pretty(&diagnostics)?);
+        return Ok(());
     }
 
     // Mcp uses lazy pipeline init — short-circuit before Pipeline::new.
@@ -251,6 +260,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Cmd::Mcp => unreachable!("handled above before Pipeline::new"),
+        Cmd::DiagnoseGpu => unreachable!("handled above before Pipeline::new"),
         Cmd::Bench { .. } => unreachable!("handled above before Pipeline::new"),
         Cmd::DownloadModels { .. } => unreachable!("handled above before Pipeline::new"),
         Cmd::Vault { .. } => unreachable!("handled above before Pipeline::new"),
@@ -284,5 +294,16 @@ mod mcp_autodetect_tests {
             models.join("gliner2-multi-v1-onnx").file_name().unwrap(),
             "gliner2-multi-v1-onnx"
         );
+    }
+}
+
+#[cfg(test)]
+mod gpu_cli_tests {
+    use super::*;
+
+    #[test]
+    fn parses_diagnose_gpu_command() {
+        let cli = Cli::try_parse_from(["anno-rag", "diagnose-gpu"]).expect("parse");
+        assert!(matches!(cli.cmd, Cmd::DiagnoseGpu));
     }
 }

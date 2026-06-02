@@ -40,7 +40,10 @@ impl Embedder {
             let tokenizer_path = base.join("tokenizer.json");
             let weights_path = base.join("model.safetensors");
             if config_path.exists() && tokenizer_path.exists() && weights_path.exists() {
-                let device = Device::Cpu;
+                let requested =
+                    crate::accelerator::AcceleratorPreference::from_env_or(cfg.accelerator)?;
+                let decision = crate::accelerator::resolve(requested)?;
+                let device = crate::accelerator::candle_device(&decision)?;
                 let config_json = std::fs::read_to_string(&config_path)?;
                 let config: Config = serde_json::from_str(&config_json)
                     .map_err(|e| Error::Embed(format!("config parse (local): {e}")))?;
@@ -67,7 +70,9 @@ impl Embedder {
         }
         // ─────────────────────────────────────────────────────────────────────────────
 
-        let device = Device::Cpu;
+        let requested = crate::accelerator::AcceleratorPreference::from_env_or(cfg.accelerator)?;
+        let decision = crate::accelerator::resolve(requested)?;
+        let device = crate::accelerator::candle_device(&decision)?;
         let api = hf_hub::api::tokio::Api::new()
             .map_err(|e| Error::Embed(format!("hf-hub init: {e}")))?;
         let repo = api.model(cfg.embed_model.clone());
@@ -124,6 +129,17 @@ impl Embedder {
     #[must_use]
     pub fn dim(&self) -> usize {
         self.dim
+    }
+
+    #[cfg(test)]
+    fn device_label_for_test(device: &Device) -> &'static str {
+        crate::accelerator::device_label(device)
+    }
+
+    /// Device label used by diagnostics and tests.
+    #[must_use]
+    pub fn device_label(&self) -> &'static str {
+        crate::accelerator::device_label(&self.device)
     }
 
     /// Embed a batch of passages (indexed documents).
@@ -241,6 +257,11 @@ mod tests {
         assert_ne!(passage, query);
         assert!(passage.starts_with("passage: "));
         assert!(query.starts_with("query: "));
+    }
+
+    #[test]
+    fn cpu_device_label_is_stable() {
+        assert_eq!(Embedder::device_label_for_test(&Device::Cpu), "cpu");
     }
 
     #[tokio::test]

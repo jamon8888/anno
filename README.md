@@ -230,6 +230,8 @@ Le workspace déclare MSRV 1.88, mais le dépôt épingle actuellement Rust **1.
 
 Pour une installation depuis les binaires GitHub Releases, voir aussi [docs/release/README-release.md](docs/release/README-release.md). Cette section décrit l'installation depuis le repo source ; les releases fournissent les mêmes binaires déjà compilés.
 
+GPU sidecar builds are documented in [docs/release/accelerated-gpu-builds.md](docs/release/accelerated-gpu-builds.md). The default release remains CPU-first; use the Metal or CUDA archives only on matching hardware.
+
 #### Windows 11
 
 Prérequis :

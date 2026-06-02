@@ -3,6 +3,7 @@
 //! v0.1: hard-coded defaults sourced via [`AnnoRagConfig::default`].
 //! TOML file loading lands in v0.2.
 
+use crate::accelerator::AcceleratorPreference;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -168,6 +169,11 @@ pub struct AnnoRagConfig {
     #[serde(default)]
     pub embedder_dtype: Option<String>,
 
+    /// Runtime accelerator preference. Defaults to `auto`; `ANNO_ACCELERATOR`
+    /// overrides this at process start.
+    #[serde(default)]
+    pub accelerator: AcceleratorPreference,
+
     /// Reranker repo id on HuggingFace Hub (cross-encoder, opt-in).
     #[serde(default = "default_rerank_model")]
     pub rerank_model: String,
@@ -332,6 +338,7 @@ impl Default for AnnoRagConfig {
             pdf_allow_single_column_tables: false,
             pdf_structured_sidecar: false,
             embedder_dtype: None,
+            accelerator: AcceleratorPreference::Auto,
             memory_collection_name: default_memory_collection_name(),
             memory_embedding_dim: default_memory_embedding_dim(),
             memory_ner_mode: default_memory_ner_mode(),
@@ -478,6 +485,20 @@ mod tests {
         let c: AnnoRagConfig = serde_json::from_str(v01_json).expect("old config parses");
 
         assert_eq!(c.memory_ner_mode, MemoryNerMode::Async);
+    }
+
+    #[test]
+    fn old_config_defaults_accelerator_to_auto() {
+        let v01_json = r#"{
+            "data_dir": ".anno-rag",
+            "embed_model": "intfloat/multilingual-e5-small",
+            "embed_dim": 384,
+            "default_top_k": 10,
+            "chunk_max_chars": 2048,
+            "chunk_overlap": 256
+        }"#;
+        let c: AnnoRagConfig = serde_json::from_str(v01_json).expect("old config parses");
+        assert_eq!(c.accelerator, AcceleratorPreference::Auto);
     }
 
     #[test]
