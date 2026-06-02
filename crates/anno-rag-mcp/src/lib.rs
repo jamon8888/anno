@@ -215,7 +215,7 @@ pub struct ForgetParams {
     pub target: String,
 }
 
-/// Parameters for the `search` tool.
+/// Parameters for the `legacy_search` tool.
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct SearchParams {
     /// User query text. May contain PII — will be pseudonymized through the vault.
@@ -966,14 +966,14 @@ struct ReviewCellWire {
 // ---- Internal tool implementations ----
 
 impl AnnoRagServer {
-    async fn search_impl(&self, params: SearchParams) -> Result<serde_json::Value, String> {
+    async fn legacy_search_impl(&self, params: SearchParams) -> Result<serde_json::Value, String> {
         let p = self.pipeline().await.map_err(|e| e.to_string())?;
         let result = if params.rerank {
             #[cfg(feature = "rerank")]
             {
                 tracing::info!(
                     target: "anno_rag::audit",
-                    tool = "search",
+                    tool = "legacy_search",
                     score_source = "cross_encoder",
                     ""
                 );
@@ -989,7 +989,7 @@ impl AnnoRagServer {
         } else {
             tracing::info!(
                 target: "anno_rag::audit",
-                tool = "search",
+                tool = "legacy_search",
                 score_source = "rrf",
                 ""
             );
@@ -1476,13 +1476,12 @@ fn legal_folder_id(path: &str) -> String {
 
 #[tool_router]
 impl AnnoRagServer {
-    /// Search the indexed corpus. Pseudonymizes the query through the local
-    /// vault, embeds it, and returns top-K ranked pseudonymized chunks.
+    /// Deprecated legacy search over the indexed corpus.
     #[tool(
-        description = "Search the indexed corpus. Pseudonymizes the query through the local vault, embeds it, returns top-K ranked chunks. Chunks are pseudonymized — call rehydrate(text) to restore originals."
+        description = "Deprecated - use 'search(scope=\"legal\", mode=\"semantic\")' for equivalent behavior. Continues to work."
     )]
-    async fn search(&self, Parameters(params): Parameters<SearchParams>) -> String {
-        match self.search_impl(params).await {
+    async fn legacy_search(&self, Parameters(params): Parameters<SearchParams>) -> String {
+        match self.legacy_search_impl(params).await {
             Ok(value) => {
                 serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
             }
@@ -1490,12 +1489,11 @@ impl AnnoRagServer {
         }
     }
 
-    /// Unified search tool - temporary name during Phase 2.5.
-    /// Task 8 swaps this to `search` and renames the legacy to `legacy_search`.
+    /// Unified search tool across local indexes.
     #[tool(
         description = "Search Anno's local indexes. mode='fast' (default) uses SQLite FTS5 - no models loaded. mode='semantic' loads the embedder. scope='all' (default), 'knowledge', or 'legal'. filters forwarded to legal scope."
     )]
-    async fn search_unified(&self, Parameters(p): Parameters<SearchUnifiedParams>) -> String {
+    async fn search(&self, Parameters(p): Parameters<SearchUnifiedParams>) -> String {
         self.search_impl_routing(p).await
     }
 
@@ -3321,7 +3319,7 @@ mod lazy_tests {
 
         let server = AnnoRagServer::new_lazy(cfg, key);
         let result = server
-            .search(Parameters(SearchParams {
+            .legacy_search(Parameters(SearchParams {
                 query: "test".into(),
                 top_k: 1,
                 rerank: false,
