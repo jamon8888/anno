@@ -153,6 +153,28 @@ impl AnnoRagServer {
 
 // ---- Tool parameter types ----
 
+/// Parameters for `knowledge_add_local_folder`.
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+pub struct KnowledgeAddFolderParams {
+    /// Absolute path to the local folder to register as a knowledge source.
+    pub path: String,
+}
+
+/// Parameters for `knowledge_sync`.
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
+pub struct KnowledgeSyncParams {
+    /// Optional source id; if omitted, all local-folder sources are synced.
+    #[serde(default)]
+    pub source_id: Option<String>,
+}
+
+/// Parameters for `knowledge_forget`.
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+pub struct KnowledgeForgetParams {
+    /// Source id whose content should be removed from SQLite and FTS.
+    pub source_id: String,
+}
+
 /// Parameters for the `search` tool.
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct SearchParams {
@@ -2431,6 +2453,83 @@ impl AnnoRagServer {
             Ok(result) => {
                 serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
             }
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    /// Register a local folder as an Anno knowledge source. Does not load models.
+    #[tool(
+        description = "Register a local folder as an Anno knowledge source. Does not load local ML models. Run knowledge_sync afterwards to index it."
+    )]
+    async fn knowledge_add_local_folder(
+        &self,
+        Parameters(p): Parameters<KnowledgeAddFolderParams>,
+    ) -> String {
+        let service = match self.knowledge().await {
+            Ok(s) => s,
+            Err(e) => return format!("Error: {e}"),
+        };
+        match service.add_local_folder(&p.path) {
+            Ok(source_id) => serde_json::to_string_pretty(
+                &serde_json::json!({"ok": true, "source_id": source_id}),
+            )
+            .unwrap_or_else(|e| format!("Error: {e}")),
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    /// Sync Anno local-folder knowledge sources end to end. Loads the local NER model.
+    #[tool(
+        description = "Sync Anno local-folder knowledge sources: walk, extract, pseudonymize locally, and write pseudonymized FTS chunks. Loads the local NER model. Bounded per run; call again to resume large folders."
+    )]
+    async fn knowledge_sync(
+        &self,
+        Parameters(p): Parameters<KnowledgeSyncParams>,
+    ) -> String {
+        let service = match self.knowledge().await {
+            Ok(s) => s,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let pipeline = match self.pipeline().await {
+            Ok(pl) => pl,
+            Err(_) => {
+                return serde_json::json!({
+                    "ok": false,
+                    "error": {
+                        "code": "models_missing",
+                        "message": "Models are not available. Fast FTS search works on already-indexed content; indexing is paused.",
+                        "next_action": "Run download_models or ask Anno to set up models."
+                    }
+                })
+                .to_string()
+            }
+        };
+        match service.sync(pipeline, self.cfg.as_ref(), p.source_id.as_deref()).await {
+            Ok(summary) => serde_json::to_string_pretty(
+                &serde_json::json!({"ok": true, "summary": summary}),
+            )
+            .unwrap_or_else(|e| format!("Error: {e}")),
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    /// Remove an Anno knowledge source and all its indexed content.
+    #[tool(
+        description = "Remove an Anno knowledge source and all its pseudonymized content from SQLite and FTS. Does not load local ML models."
+    )]
+    async fn knowledge_forget(
+        &self,
+        Parameters(p): Parameters<KnowledgeForgetParams>,
+    ) -> String {
+        let service = match self.knowledge().await {
+            Ok(s) => s,
+            Err(e) => return format!("Error: {e}"),
+        };
+        match service.forget_source(&p.source_id) {
+            Ok(removed) => serde_json::to_string_pretty(
+                &serde_json::json!({"ok": true, "removed_objects": removed}),
+            )
+            .unwrap_or_else(|e| format!("Error: {e}")),
             Err(e) => format!("Error: {e}"),
         }
     }
