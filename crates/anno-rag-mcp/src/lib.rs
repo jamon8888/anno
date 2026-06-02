@@ -161,6 +161,38 @@ pub struct KnowledgeAddFolderParams {
     pub path: String,
 }
 
+/// Parameters for `index`.
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+pub struct IndexParams {
+    /// Absolute path to index.
+    pub path: String,
+    /// Indexing profile: general, legal, or all.
+    #[serde(default = "default_index_profile")]
+    pub profile: String,
+}
+
+fn default_index_profile() -> String {
+    "general".to_string()
+}
+
+fn validate_profile(profile: &str) -> Result<(), String> {
+    match profile {
+        "general" | "legal" | "all" => Ok(()),
+        other => Err(format!(
+            "Unsupported index profile '{other}'. Expected one of: general, legal, all."
+        )),
+    }
+}
+
+fn knowledge_sync_issue(summary: &SyncSummary) -> Option<String> {
+    (summary.failed > 0 || summary.truncated).then(|| {
+        format!(
+            "knowledge sync incomplete: failed={}, truncated={}",
+            summary.failed, summary.truncated
+        )
+    })
+}
+
 /// Parameters for `knowledge_sync`.
 #[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 pub struct KnowledgeSyncParams {
@@ -995,6 +1027,73 @@ impl AnnoRagServer {
         service
             .sync(pipeline, self.cfg.as_ref(), p.source_id.as_deref())
             .await
+    }
+
+    pub(crate) async fn index_impl_routing(&self, p: IndexParams) -> String {
+        if let Err(error) = validate_profile(&p.profile) {
+            return serde_json::json!({
+                "ok": false,
+                "error": error,
+            })
+            .to_string();
+        }
+
+        let mut knowledge = serde_json::Value::Null;
+        let mut legal = serde_json::Value::Null;
+        let mut errors = Vec::new();
+
+        if matches!(p.profile.as_str(), "general" | "all") {
+            match self.knowledge_add_local_folder_impl(&p.path).await {
+                Ok(source_id) => {
+                    match self
+                        .knowledge_sync_impl(KnowledgeSyncParams {
+                            source_id: Some(source_id.clone()),
+                        })
+                        .await
+                    {
+                        Ok(summary) => {
+                            if let Some(issue) = knowledge_sync_issue(&summary) {
+                                errors.push(issue);
+                            }
+                            knowledge = serde_json::json!({
+                                "source_id": source_id,
+                                "summary": summary,
+                            });
+                        }
+                        Err(e) => errors.push(format!("knowledge sync: {e}")),
+                    }
+                }
+                Err(e) => errors.push(format!("knowledge add: {e}")),
+            }
+        }
+
+        if matches!(p.profile.as_str(), "legal" | "all") {
+            match self
+                .legal_ingest_impl(LegalIngestParams {
+                    folder: p.path.clone(),
+                    recursive: true,
+                })
+                .await
+            {
+                Ok(value) => legal = value,
+                Err(e) => errors.push(format!("legal ingest: {e}")),
+            }
+        }
+
+        let errors = if errors.is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::json!(errors)
+        };
+
+        serde_json::json!({
+            "ok": errors.is_null(),
+            "profile": p.profile,
+            "knowledge": knowledge,
+            "legal": legal,
+            "errors": errors,
+        })
+        .to_string()
     }
 
     async fn knowledge_forget_impl(&self, p: KnowledgeForgetParams) -> Result<u64, String> {
@@ -2513,6 +2612,14 @@ impl AnnoRagServer {
         }
     }
 
+    /// Unified folder indexing entry point for general knowledge and legal corpora.
+    #[tool(
+        description = "Index a local folder using profile general, legal, or all. General registers and syncs knowledge sources; legal ingests legal documents recursively."
+    )]
+    async fn index(&self, Parameters(p): Parameters<IndexParams>) -> String {
+        self.index_impl_routing(p).await
+    }
+
     /// Register a local folder as an Anno knowledge source. Does not load models.
     #[tool(
         description = "Register a local folder as an Anno knowledge source. Does not load local ML models. Run knowledge_sync afterwards to index it."
@@ -2886,5 +2993,88 @@ mod lazy_tests {
                 || result.contains("Downloading"),
             "expected download status in: {result}"
         );
+    }
+
+    #[test]
+    fn index_unknown_profile_returns_error() {
+        let err = validate_profile("weird").expect_err("unknown profile should fail validation");
+        assert!(
+            err.contains("weird"),
+            "validation error should name rejected profile: {err}"
+        );
+    }
+
+    #[test]
+    fn index_sync_summary_issue_flags_failed_or_truncated_runs() {
+        let clean = SyncSummary::default();
+        assert!(knowledge_sync_issue(&clean).is_none());
+
+        let failed = SyncSummary {
+            failed: 2,
+            ..Default::default()
+        };
+        let failed_issue = knowledge_sync_issue(&failed).expect("failed issue");
+        assert!(failed_issue.contains("failed=2"));
+
+        let truncated = SyncSummary {
+            truncated: true,
+            ..Default::default()
+        };
+        let truncated_issue = knowledge_sync_issue(&truncated).expect("truncated issue");
+        assert!(truncated_issue.contains("truncated=true"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn index_general_routes_to_knowledge_path() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let corpus_dir = dir.path().join("corpus");
+        std::fs::create_dir_all(&corpus_dir).expect("corpus dir");
+        std::fs::write(corpus_dir.join("note.txt"), "Bonjour index").expect("write corpus file");
+
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().join("data"),
+            ..Default::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        let result = server
+            .index_impl_routing(IndexParams {
+                path: corpus_dir.to_string_lossy().into_owned(),
+                profile: "general".into(),
+            })
+            .await;
+        let parsed: serde_json::Value =
+            serde_json::from_str(&result).expect("index result must be JSON");
+
+        assert_eq!(parsed["profile"], "general");
+        assert!(
+            parsed.get("knowledge").is_some(),
+            "general profile should attempt knowledge routing: {result}"
+        );
+        assert!(
+            parsed.get("errors").is_some(),
+            "index result should include errors field: {result}"
+        );
+        assert!(
+            parsed["legal"].is_null(),
+            "general profile should not route to legal ingest: {result}"
+        );
+
+        if parsed["ok"] == false {
+            let errors = parsed["errors"]
+                .as_array()
+                .expect("failed index result should include errors array");
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| e.as_str().is_some_and(|s| s.contains("knowledge sync"))),
+                "failed general index should report knowledge sync error: {result}"
+            );
+        } else {
+            assert!(
+                parsed["knowledge"].is_object(),
+                "successful general index should include knowledge object: {result}"
+            );
+        }
     }
 }
