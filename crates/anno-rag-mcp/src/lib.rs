@@ -11,9 +11,9 @@
 #![warn(missing_docs)]
 
 pub mod health;
+mod indexer;
 pub mod knowledge;
 pub mod tabular;
-mod indexer;
 
 use anno_rag::config::{AnnoRagConfig, MemoryNerMode};
 use anno_rag::pipeline::Pipeline;
@@ -2482,10 +2482,7 @@ impl AnnoRagServer {
     #[tool(
         description = "Sync Anno local-folder knowledge sources: walk, extract, pseudonymize locally, and write pseudonymized FTS chunks. Loads the local NER model. Bounded per run; call again to resume large folders."
     )]
-    async fn knowledge_sync(
-        &self,
-        Parameters(p): Parameters<KnowledgeSyncParams>,
-    ) -> String {
+    async fn knowledge_sync(&self, Parameters(p): Parameters<KnowledgeSyncParams>) -> String {
         let service = match self.knowledge().await {
             Ok(s) => s,
             Err(e) => return format!("Error: {e}"),
@@ -2504,11 +2501,14 @@ impl AnnoRagServer {
                 .to_string()
             }
         };
-        match service.sync(pipeline, self.cfg.as_ref(), p.source_id.as_deref()).await {
-            Ok(summary) => serde_json::to_string_pretty(
-                &serde_json::json!({"ok": true, "summary": summary}),
-            )
-            .unwrap_or_else(|e| format!("Error: {e}")),
+        match service
+            .sync(pipeline, self.cfg.as_ref(), p.source_id.as_deref())
+            .await
+        {
+            Ok(summary) => {
+                serde_json::to_string_pretty(&serde_json::json!({"ok": true, "summary": summary}))
+                    .unwrap_or_else(|e| format!("Error: {e}"))
+            }
             Err(e) => format!("Error: {e}"),
         }
     }
@@ -2517,10 +2517,7 @@ impl AnnoRagServer {
     #[tool(
         description = "Remove an Anno knowledge source and all its pseudonymized content from SQLite and FTS. Does not load local ML models."
     )]
-    async fn knowledge_forget(
-        &self,
-        Parameters(p): Parameters<KnowledgeForgetParams>,
-    ) -> String {
+    async fn knowledge_forget(&self, Parameters(p): Parameters<KnowledgeForgetParams>) -> String {
         let service = match self.knowledge().await {
             Ok(s) => s,
             Err(e) => return format!("Error: {e}"),

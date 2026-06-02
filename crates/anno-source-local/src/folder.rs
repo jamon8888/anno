@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 /// Supported file extensions for the local folder source (lowercase, no dot).
 const SUPPORTED_EXTS: &[&str] = &[
-    "txt", "md", "markdown", "pdf", "doc", "docx", "rtf", "odt", "html", "htm",
-    "csv", "tsv", "xlsx", "xls", "pptx", "ppt", "eml", "msg", "json", "xml",
+    "txt", "md", "markdown", "pdf", "doc", "docx", "rtf", "odt", "html", "htm", "csv", "tsv",
+    "xlsx", "xls", "pptx", "ppt", "eml", "msg", "json", "xml",
 ];
 
 /// Per-run discovery budget. Bounds work so a single `knowledge_sync` call
@@ -24,7 +24,10 @@ pub struct DiscoverBudget {
 
 impl Default for DiscoverBudget {
     fn default() -> Self {
-        Self { max_files: 200, max_total_bytes: 512 * 1024 * 1024 }
+        Self {
+            max_files: 200,
+            max_total_bytes: 512 * 1024 * 1024,
+        }
     }
 }
 
@@ -59,7 +62,9 @@ impl LocalFolderSource {
     /// Create a source rooted at `root`.
     #[must_use]
     pub fn new(root: impl AsRef<Path>) -> Self {
-        Self { root: root.as_ref().to_path_buf() }
+        Self {
+            root: root.as_ref().to_path_buf(),
+        }
     }
 
     /// Walk the folder and return discovered objects, bounded by `budget`.
@@ -71,7 +76,9 @@ impl LocalFolderSource {
     /// Returns [`LocalSourceError`] if the root is not a directory or IO fails.
     pub fn discover(&self, budget: &DiscoverBudget) -> Result<Vec<DiscoveredObject>> {
         if !self.root.is_dir() {
-            return Err(LocalSourceError::NotADirectory(self.root.display().to_string()));
+            return Err(LocalSourceError::NotADirectory(
+                self.root.display().to_string(),
+            ));
         }
 
         let mut paths: Vec<PathBuf> = walkdir::WalkDir::new(&self.root)
@@ -101,8 +108,15 @@ impl LocalFolderSource {
                 .map(DateTime::<Utc>::from)
                 .unwrap_or_else(|_| Utc::now());
             let external_id = canonical_id(&path);
-            let title_raw = path.file_name().and_then(|s| s.to_str()).map(str::to_string);
-            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+            let title_raw = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map(str::to_string);
+            let ext = path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_lowercase();
             let metadata_raw = serde_json::json!({
                 "path": external_id,
                 "ext": ext,
@@ -169,7 +183,13 @@ mod tests {
 
         let names: Vec<String> = objects
             .iter()
-            .map(|o| o.external_id.rsplit(['/', '\\']).next().unwrap().to_string())
+            .map(|o| {
+                o.external_id
+                    .rsplit(['/', '\\'])
+                    .next()
+                    .unwrap()
+                    .to_string()
+            })
             .collect();
         assert!(names.iter().any(|n| n == "a.txt"));
         assert!(names.iter().any(|n| n == "b.md"));
@@ -203,7 +223,10 @@ mod tests {
             write(dir.path(), &format!("f{i}.txt"), b"x");
         }
         let src = LocalFolderSource::new(dir.path());
-        let budget = DiscoverBudget { max_files: 3, max_total_bytes: u64::MAX };
+        let budget = DiscoverBudget {
+            max_files: 3,
+            max_total_bytes: u64::MAX,
+        };
         let objects = src.discover(&budget).expect("discover");
         assert_eq!(objects.len(), 3);
     }

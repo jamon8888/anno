@@ -299,7 +299,12 @@ impl KnowledgeControlStore {
              (account_id, source_id, provider_subject, tenant_id, display_label_pseudo, \
               scopes_granted_json, auth_ref, created_at, last_seen_at) \
              VALUES (?1, ?2, 'local', NULL, ?3, '[]', NULL, ?4, NULL)",
-            params![account_id.as_string(), source_id.as_string(), reg.source_label_pseudo, now],
+            params![
+                account_id.as_string(),
+                source_id.as_string(),
+                reg.source_label_pseudo,
+                now
+            ],
         )?;
         conn.execute(
             "INSERT OR IGNORE INTO source_scopes \
@@ -314,7 +319,11 @@ impl KnowledgeControlStore {
                 "{\"enabled\":true,\"max_pages_per_run\":5,\"include_attachments\":false}",
             ],
         )?;
-        Ok(LocalFolderRegistered { source_id, account_id, scope_id })
+        Ok(LocalFolderRegistered {
+            source_id,
+            account_id,
+            scope_id,
+        })
     }
 
     /// List configured sources.
@@ -335,7 +344,8 @@ impl KnowledgeControlStore {
                 enabled: row.get::<_, i64>(3)? != 0,
             })
         })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     /// Return enabled scopes for a source.
@@ -361,14 +371,19 @@ impl KnowledgeControlStore {
                 enabled: row.get::<_, i64>(4)? != 0,
             })
         })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     /// True when the object already has an `fts_ready` revision at this provider version.
     ///
     /// # Errors
     /// Returns store errors on SQLite failure.
-    pub fn revision_is_fts_ready(&self, object_id: &ObjectId, provider_version: &str) -> Result<bool> {
+    pub fn revision_is_fts_ready(
+        &self,
+        object_id: &ObjectId,
+        provider_version: &str,
+    ) -> Result<bool> {
         let conn = self.conn.lock().expect("knowledge sqlite mutex poisoned");
         let n: i64 = conn.query_row(
             "SELECT COUNT(*) FROM knowledge_objects o \
@@ -388,9 +403,13 @@ impl KnowledgeControlStore {
     pub fn commit_object(&self, input: &CommitObjectInput) -> Result<()> {
         let now = Utc::now().to_rfc3339();
         let source_kind = serde_json::to_value(input.source_kind)?
-            .as_str().expect("source kind serializes to string").to_string();
+            .as_str()
+            .expect("source kind serializes to string")
+            .to_string();
         let object_type = serde_json::to_value(input.object_type)?
-            .as_str().expect("object type serializes to string").to_string();
+            .as_str()
+            .expect("object type serializes to string")
+            .to_string();
         let oid = input.object_id.as_string();
         let rid = input.revision_id.as_string();
         let pid = input.part_id.as_string();
@@ -427,13 +446,28 @@ impl KnowledgeControlStore {
                title_pseudo = excluded.title_pseudo, \
                metadata_pseudo_json = excluded.metadata_pseudo_json, \
                extracted_chars = excluded.extracted_chars",
-            params![pid, oid, input.title_pseudo, input.metadata_pseudo_json,
-                    input.chunks.iter().map(|c| c.text_pseudo.chars().count() as i64).sum::<i64>()],
+            params![
+                pid,
+                oid,
+                input.title_pseudo,
+                input.metadata_pseudo_json,
+                input
+                    .chunks
+                    .iter()
+                    .map(|c| c.text_pseudo.chars().count() as i64)
+                    .sum::<i64>()
+            ],
         )?;
 
         // Replace prior chunks + FTS rows for this object.
-        tx.execute("DELETE FROM knowledge_objects_fts WHERE object_id = ?1", params![oid])?;
-        tx.execute("DELETE FROM knowledge_chunks WHERE object_id = ?1", params![oid])?;
+        tx.execute(
+            "DELETE FROM knowledge_objects_fts WHERE object_id = ?1",
+            params![oid],
+        )?;
+        tx.execute(
+            "DELETE FROM knowledge_chunks WHERE object_id = ?1",
+            params![oid],
+        )?;
 
         for c in &input.chunks {
             let cid = c.chunk_id.as_string();
@@ -609,7 +643,8 @@ mod tests {
     #[test]
     fn add_local_folder_source_then_list_and_get_scopes() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let store = KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
+        let store =
+            KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
 
         let reg = store
             .register_local_folder(LocalFolderRegistration {
@@ -624,7 +659,9 @@ mod tests {
         assert_eq!(sources.len(), 1);
         assert_eq!(sources[0].source_id, reg.source_id);
 
-        let scopes = store.enabled_scopes_for_source(&reg.source_id).expect("scopes");
+        let scopes = store
+            .enabled_scopes_for_source(&reg.source_id)
+            .expect("scopes");
         assert_eq!(scopes.len(), 1);
         assert_eq!(scopes[0].scope_id, reg.scope_id);
         assert_eq!(scopes[0].provider_key, "C:/docs");
@@ -634,7 +671,8 @@ mod tests {
     #[test]
     fn register_local_folder_is_idempotent_on_same_path() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let store = KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
+        let store =
+            KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
         let a = store
             .register_local_folder(LocalFolderRegistration {
                 stable_key: "C:/docs".to_string(),
@@ -709,19 +747,33 @@ mod tests {
     #[test]
     fn commit_object_then_search_and_skip_unchanged() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let store = KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
+        let store =
+            KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
         let reg = store
             .register_local_folder(LocalFolderRegistration {
-                stable_key: "C:/docs".into(), source_label_pseudo: "FOLDER_1".into(),
-                scope_label_pseudo: "FOLDER_1".into(), provider_key: "C:/docs".into(),
-            }).expect("register");
+                stable_key: "C:/docs".into(),
+                source_label_pseudo: "FOLDER_1".into(),
+                scope_label_pseudo: "FOLDER_1".into(),
+                provider_key: "C:/docs".into(),
+            })
+            .expect("register");
 
         let hash = [1u8; 32];
-        let input = commit_input(reg.scope_id, reg.account_id, reg.source_id, hash, "le contrat FOLDER_1");
+        let input = commit_input(
+            reg.scope_id,
+            reg.account_id,
+            reg.source_id,
+            hash,
+            "le contrat FOLDER_1",
+        );
 
-        assert!(!store.revision_is_fts_ready(&input.object_id, &input.provider_version).expect("check"));
+        assert!(!store
+            .revision_is_fts_ready(&input.object_id, &input.provider_version)
+            .expect("check"));
         store.commit_object(&input).expect("commit");
-        assert!(store.revision_is_fts_ready(&input.object_id, &input.provider_version).expect("check"));
+        assert!(store
+            .revision_is_fts_ready(&input.object_id, &input.provider_version)
+            .expect("check"));
 
         let hits = store
             .search_fast(&KnowledgeSearchRequest::new("contrat").with_top_k(5))
@@ -736,16 +788,32 @@ mod tests {
     #[test]
     fn recommit_with_new_revision_replaces_chunks_no_duplicates() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let store = KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
+        let store =
+            KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
         let reg = store
             .register_local_folder(LocalFolderRegistration {
-                stable_key: "C:/docs".into(), source_label_pseudo: "FOLDER_1".into(),
-                scope_label_pseudo: "FOLDER_1".into(), provider_key: "C:/docs".into(),
-            }).expect("register");
+                stable_key: "C:/docs".into(),
+                source_label_pseudo: "FOLDER_1".into(),
+                scope_label_pseudo: "FOLDER_1".into(),
+                provider_key: "C:/docs".into(),
+            })
+            .expect("register");
 
-        let v1 = commit_input(reg.scope_id, reg.account_id, reg.source_id, [1u8; 32], "version une FOLDER_1");
+        let v1 = commit_input(
+            reg.scope_id,
+            reg.account_id,
+            reg.source_id,
+            [1u8; 32],
+            "version une FOLDER_1",
+        );
         store.commit_object(&v1).expect("commit v1");
-        let v2 = commit_input(reg.scope_id, reg.account_id, reg.source_id, [2u8; 32], "version deux FOLDER_1");
+        let v2 = commit_input(
+            reg.scope_id,
+            reg.account_id,
+            reg.source_id,
+            [2u8; 32],
+            "version deux FOLDER_1",
+        );
         store.commit_object(&v2).expect("commit v2");
 
         let status = store.status().expect("status");
@@ -760,13 +828,23 @@ mod tests {
     #[test]
     fn forget_scope_removes_objects_chunks_and_fts() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let store = KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
+        let store =
+            KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
         let reg = store
             .register_local_folder(LocalFolderRegistration {
-                stable_key: "C:/docs".into(), source_label_pseudo: "FOLDER_1".into(),
-                scope_label_pseudo: "FOLDER_1".into(), provider_key: "C:/docs".into(),
-            }).expect("register");
-        let input = commit_input(reg.scope_id, reg.account_id, reg.source_id, [1u8; 32], "le contrat FOLDER_1");
+                stable_key: "C:/docs".into(),
+                source_label_pseudo: "FOLDER_1".into(),
+                scope_label_pseudo: "FOLDER_1".into(),
+                provider_key: "C:/docs".into(),
+            })
+            .expect("register");
+        let input = commit_input(
+            reg.scope_id,
+            reg.account_id,
+            reg.source_id,
+            [1u8; 32],
+            "le contrat FOLDER_1",
+        );
         store.commit_object(&input).expect("commit");
         assert_eq!(store.status().expect("status").objects, 1);
 

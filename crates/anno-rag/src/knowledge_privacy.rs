@@ -83,8 +83,8 @@ impl Pipeline {
         };
 
         // Metadata: pseudonymize the serialized JSON string.
-        let metadata_raw_str = serde_json::to_string(&input.metadata_raw)
-            .unwrap_or_else(|_| "{}".to_string());
+        let metadata_raw_str =
+            serde_json::to_string(&input.metadata_raw).unwrap_or_else(|_| "{}".to_string());
         let metadata_pseudo_json = {
             let bundle =
                 detector.detect_for_ingest(&metadata_raw_str, &no_legal, &no_thresholds)?;
@@ -97,10 +97,11 @@ impl Pipeline {
 
         let mut out = Vec::with_capacity(input.chunks.len());
         for chunk in &input.chunks {
-            let bundle =
-                detector.detect_for_ingest(&chunk.text, &no_legal, &no_thresholds)?;
-            let (text_pseudo, _map) =
-                self.vault.pseudonymize_with_map(&chunk.text, &bundle.pii).await?;
+            let bundle = detector.detect_for_ingest(&chunk.text, &no_legal, &no_thresholds)?;
+            let (text_pseudo, _map) = self
+                .vault
+                .pseudonymize_with_map(&chunk.text, &bundle.pii)
+                .await?;
             out.push(PseudonymizedChunk {
                 chunk_idx: chunk.idx,
                 title_pseudo: title_pseudo.clone(),

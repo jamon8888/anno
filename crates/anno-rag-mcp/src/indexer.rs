@@ -46,7 +46,9 @@ pub async fn sync_local_scope(
     let mut summary = SyncSummary::default();
     let budget = DiscoverBudget::default();
     let src = LocalFolderSource::new(&scope.provider_key);
-    let discovered = src.discover(&budget).map_err(|e| format!("discover: {e}"))?;
+    let discovered = src
+        .discover(&budget)
+        .map_err(|e| format!("discover: {e}"))?;
     summary.seen = discovered.len() as u64;
     summary.truncated = discovered.len() >= budget.max_files;
 
