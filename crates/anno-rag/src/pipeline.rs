@@ -61,7 +61,7 @@ enum IngestOutcome {
 /// End-to-end pipeline: detect → pseudonymize → embed → store.
 pub struct Pipeline {
     detector: OnceCell<Arc<Detector>>,
-    vault: Vault,
+    pub(crate) vault: Vault,
     embedder: OnceCell<Arc<Embedder>>,
     #[cfg(feature = "rerank")]
     reranker: tokio::sync::OnceCell<std::sync::Arc<crate::rerank::Reranker>>,
@@ -155,7 +155,7 @@ impl Pipeline {
     }
 
     /// Lazy-init the detector. Synchronous because `Detector::new` is sync.
-    fn detector_get_or_init(&self) -> Result<&Arc<Detector>> {
+    pub(crate) fn detector_get_or_init(&self) -> Result<&Arc<Detector>> {
         if let Some(d) = self.detector.get() {
             return Ok(d);
         }

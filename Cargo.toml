@@ -17,6 +17,7 @@ members = [
     "crates/anno-privacy-gateway",
     "crates/anno-knowledge-core",
     "crates/anno-knowledge-store",
+    "crates/anno-source-local",
     "workspace-hack",
 ]
 exclude = ["vendor"]
