@@ -20,6 +20,7 @@ anno-rag         = { path = "../anno-rag" }
 anno-rag-tabular = { path = "../anno-rag-tabular" }
 anno-knowledge-core  = { path = "../anno-knowledge-core" }
 anno-knowledge-store = { path = "../anno-knowledge-store" }
+anno-source-local = { path = "../anno-source-local" }
 
 async-trait      = "0.1"
 lancedb         = { workspace = true }

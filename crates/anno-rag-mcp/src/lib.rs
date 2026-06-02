@@ -13,6 +13,7 @@
 pub mod health;
 pub mod knowledge;
 pub mod tabular;
+mod indexer;
 
 use anno_rag::config::{AnnoRagConfig, MemoryNerMode};
 use anno_rag::pipeline::Pipeline;
