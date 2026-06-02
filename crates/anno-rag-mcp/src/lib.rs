@@ -1151,6 +1151,57 @@ impl AnnoRagServer {
         .to_string()
     }
 
+    pub(crate) async fn status_impl_routing(&self) -> String {
+        let knowledge = self
+            .knowledge_status_impl()
+            .await
+            .ok()
+            .and_then(|s| serde_json::to_value(s).ok())
+            .unwrap_or(serde_json::Value::Null);
+
+        let legal = match self.pipeline_arc() {
+            Some(p) => match p.store_count_chunks().await {
+                Ok(n) => serde_json::json!({ "chunks": n }),
+                Err(_) => serde_json::Value::Null,
+            },
+            None => serde_json::Value::Null,
+        };
+
+        let vault = match self.pipeline_arc() {
+            Some(p) => {
+                let stats = p.vault_stats().await;
+                serde_json::json!({
+                    "available": true,
+                    "total_mappings": stats.total_mappings,
+                    "categories": stats.categories,
+                })
+            }
+            None => serde_json::json!({
+                "available": false,
+                "reason": "pipeline_not_initialized",
+                "total_mappings": null,
+                "categories": {},
+            }),
+        };
+
+        let models = match self.pipeline_arc() {
+            Some(p) => serde_json::json!({
+                "embedder_loaded": p.embedder_loaded(),
+                "detector_loaded": p.detector_loaded(),
+            }),
+            None => serde_json::json!({ "embedder_loaded": false, "detector_loaded": false }),
+        };
+
+        serde_json::json!({
+            "ok": true,
+            "knowledge": knowledge,
+            "legal": legal,
+            "vault": vault,
+            "models": models,
+        })
+        .to_string()
+    }
+
     async fn knowledge_status_impl(&self) -> Result<anno_knowledge_core::KnowledgeStatus, String> {
         let service = self.knowledge().await.map_err(|e| e.to_string())?;
         service.status().map_err(|e| e.to_string())
@@ -1371,6 +1422,13 @@ impl AnnoRagServer {
     )]
     async fn sources(&self) -> String {
         self.sources_impl_routing().await
+    }
+
+    #[tool(
+        description = "Anno-wide index health: source counts, chunks, vault stats, model load state. Does not load models."
+    )]
+    async fn status(&self) -> String {
+        self.status_impl_routing().await
     }
 
     /// Replace pseudo-tokens in text back with original PII from the vault.
@@ -3327,6 +3385,28 @@ mod lazy_tests {
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
 
         assert_eq!(v["ok"], true);
+        assert!(server.pipeline_arc().is_none());
+    }
+
+    #[tokio::test]
+    async fn status_returns_unified_health() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        assert!(server.pipeline_arc().is_none());
+        let out = server.status_impl_routing().await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(v["ok"], true);
+        assert!(v.get("knowledge").is_some());
+        assert!(v.get("vault").is_some());
+        assert!(v.get("models").is_some());
+        assert_eq!(v["knowledge"]["objects"], 0);
+        assert_eq!(v["vault"]["available"], false);
+        assert_eq!(v["vault"]["reason"], "pipeline_not_initialized");
+        assert_eq!(v["models"]["embedder_loaded"], false);
         assert!(server.pipeline_arc().is_none());
     }
 
