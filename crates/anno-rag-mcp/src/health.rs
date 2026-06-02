@@ -84,8 +84,14 @@ pub async fn collect_health(
 /// Hardcoded list of tools exposed by the MCP server.
 pub fn all_tool_names() -> Vec<String> {
     vec![
-        // Core retrieval
+        // Unified MCP surface (Phase 2.5)
+        "index",
         "search",
+        "sources",
+        "status",
+        "forget",
+        // Legacy retrieval
+        "legacy_search",
         "rehydrate",
         "detect",
         "vault_stats",
@@ -131,6 +137,54 @@ pub fn all_tool_names() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn all_tool_names_lists_new_unified_tools_first() {
+        let names = all_tool_names();
+        assert_eq!(names[0], "index");
+        assert_eq!(names[1], "search");
+        assert_eq!(names[2], "sources");
+        assert_eq!(names[3], "status");
+        assert_eq!(names[4], "forget");
+    }
+
+    #[test]
+    fn all_tool_names_includes_legacy_search() {
+        let names = all_tool_names();
+        assert!(names.iter().any(|n| n == "legacy_search"));
+        let new_search_idx = names
+            .iter()
+            .position(|n| n == "search")
+            .expect("search present");
+        let legacy_idx = names
+            .iter()
+            .position(|n| n == "legacy_search")
+            .expect("legacy_search present");
+        assert!(
+            legacy_idx > new_search_idx,
+            "legacy_search should appear after new 'search'"
+        );
+    }
+
+    #[test]
+    fn all_tool_names_still_includes_legacy_phase2_tools() {
+        let names = all_tool_names();
+        for legacy in [
+            "knowledge_search",
+            "knowledge_add_local_folder",
+            "knowledge_sync",
+            "knowledge_sources",
+            "knowledge_status",
+            "knowledge_forget",
+            "legal_ingest",
+            "legal_search",
+        ] {
+            assert!(
+                names.iter().any(|n| n == legacy),
+                "missing legacy tool {legacy}"
+            );
+        }
+    }
 
     #[test]
     fn all_tool_names_includes_knowledge_tools() {
