@@ -98,8 +98,9 @@ impl LocalFolderSource {
             }
             let meta = std::fs::metadata(&path)?;
             let size = meta.len();
-            if bytes_used.saturating_add(size) > budget.max_total_bytes && !out.is_empty() {
-                break;
+            let remaining_bytes = budget.max_total_bytes.saturating_sub(bytes_used);
+            if size > remaining_bytes {
+                continue;
             }
             let bytes = std::fs::read(&path)?;
             let content_hash = sha256(&bytes);
@@ -229,6 +230,23 @@ mod tests {
         };
         let objects = src.discover(&budget).expect("discover");
         assert_eq!(objects.len(), 3);
+    }
+
+    #[test]
+    fn budget_skips_oversized_files_and_continues() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        write(dir.path(), "a-large.txt", b"too large for this budget");
+        write(dir.path(), "b-small.txt", b"x");
+
+        let src = LocalFolderSource::new(dir.path());
+        let budget = DiscoverBudget {
+            max_files: 10,
+            max_total_bytes: 4,
+        };
+        let objects = src.discover(&budget).expect("discover");
+
+        assert_eq!(objects.len(), 1);
+        assert!(objects[0].external_id.ends_with("b-small.txt"));
     }
 
     #[test]

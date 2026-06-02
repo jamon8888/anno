@@ -515,6 +515,34 @@ impl KnowledgeControlStore {
         Ok(removed)
     }
 
+    /// Delete a source and all objects, chunks, FTS rows, accounts, and scopes under it.
+    /// Returns the number of objects removed.
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn forget_source(&self, source_id: &SourceId) -> Result<u64> {
+        let sid = source_id.as_string();
+        let mut conn = self.conn.lock().expect("knowledge sqlite mutex poisoned");
+        let tx = conn.transaction()?;
+        // Remove FTS rows first (no cascade on the virtual table).
+        tx.execute(
+            "DELETE FROM knowledge_objects_fts WHERE object_id IN \
+             (SELECT object_id FROM knowledge_objects WHERE source_id = ?1)",
+            params![sid],
+        )?;
+        let removed = tx.execute(
+            "DELETE FROM knowledge_objects WHERE source_id = ?1",
+            params![sid],
+        )? as u64;
+        tx.execute(
+            "DELETE FROM knowledge_sources WHERE source_id = ?1",
+            params![sid],
+        )?;
+        // source_accounts/source_scopes and object children cascade via foreign keys.
+        tx.commit()?;
+        Ok(removed)
+    }
+
     /// Run local FTS search. This must not load models.
     ///
     /// # Errors
@@ -851,6 +879,42 @@ mod tests {
         let removed = store.forget_scope(&reg.scope_id).expect("forget");
         assert_eq!(removed, 1);
 
+        let status = store.status().expect("status");
+        assert_eq!(status.objects, 0);
+        assert_eq!(status.chunks, 0);
+        let hits = store
+            .search_fast(&KnowledgeSearchRequest::new("contrat").with_top_k(5))
+            .expect("search");
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn forget_source_removes_source_objects_chunks_and_fts() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let store =
+            KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
+        let reg = store
+            .register_local_folder(LocalFolderRegistration {
+                stable_key: "C:/docs".into(),
+                source_label_pseudo: "FOLDER_1".into(),
+                scope_label_pseudo: "FOLDER_1".into(),
+                provider_key: "C:/docs".into(),
+            })
+            .expect("register");
+        let input = commit_input(
+            reg.scope_id,
+            reg.account_id,
+            reg.source_id,
+            [1u8; 32],
+            "le contrat FOLDER_1",
+        );
+        store.commit_object(&input).expect("commit");
+        assert_eq!(store.list_sources().expect("sources").len(), 1);
+
+        let removed = store.forget_source(&reg.source_id).expect("forget source");
+        assert_eq!(removed, 1);
+
+        assert!(store.list_sources().expect("sources").is_empty());
         let status = store.status().expect("status");
         assert_eq!(status.objects, 0);
         assert_eq!(status.chunks, 0);
