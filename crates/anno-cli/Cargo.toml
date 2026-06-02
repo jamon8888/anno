@@ -50,7 +50,7 @@ muxer = { version = "0.5", default-features = false, features = [
 deformat = { workspace = true }
 xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
 rayon = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
+workspace-hack = { version = "0.1", path = "../../workspace-hack", optional = true }
 
 [features]
 default = ["onnx", "extractor-readability"]
