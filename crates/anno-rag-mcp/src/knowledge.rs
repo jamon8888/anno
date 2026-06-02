@@ -5,7 +5,7 @@ use anno_knowledge_store::{KnowledgeControlStore, LocalFolderRegistration};
 use anno_rag::config::AnnoRagConfig;
 use rmcp::schemars;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::indexer::{sync_local_scope, SyncSummary};
 
@@ -99,15 +99,12 @@ impl KnowledgeService {
     /// Returns store errors on SQLite failure.
     pub fn forget_source(&self, source_id: &str) -> anno_knowledge_store::Result<u64> {
         let sources = self.store.list_sources()?;
-        let mut removed = 0;
         for source in &sources {
             if source.source_id.as_string() == source_id {
-                for scope in self.store.enabled_scopes_for_source(&source.source_id)? {
-                    removed += self.store.forget_scope(&scope.scope_id)?;
-                }
+                return self.store.forget_source(&source.source_id);
             }
         }
-        Ok(removed)
+        Ok(0)
     }
 
     /// Run a bounded sync over all enabled scopes of a source (or all sources).
@@ -183,13 +180,12 @@ fn knowledge_db_path(cfg: &AnnoRagConfig) -> PathBuf {
     cfg.data_dir.join("knowledge.sqlite3")
 }
 
-/// Coarse pseudonymized label for a local folder (last path component, no full path leak).
+/// Coarse pseudonymized label for a local folder (stable, no path component leak).
 fn pseudo_folder_label(path: &str) -> String {
-    let last = Path::new(path)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("folder");
-    format!("local:{last}")
+    let stable = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, path.as_bytes())
+        .simple()
+        .to_string();
+    format!("local_folder_{}", &stable[..12])
 }
 
 #[cfg(test)]
@@ -252,5 +248,49 @@ mod tests {
 
         let sources = service.sources();
         assert_eq!(sources.len(), 1);
+    }
+
+    #[test]
+    fn add_local_folder_label_does_not_leak_folder_name() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let folder = dir.path().join("Client Dupont Confidential");
+        std::fs::create_dir_all(&folder).expect("mkdir");
+
+        let service = KnowledgeService::open(&cfg).expect("service");
+        service
+            .add_local_folder(&folder.display().to_string())
+            .expect("add");
+
+        let sources = service.sources();
+        let label = sources[0]["label"].as_str().expect("label");
+        assert!(label.starts_with("local_folder_"));
+        assert!(!label.contains("Dupont"));
+        assert!(!label.contains("Client"));
+        assert!(!label.contains("Confidential"));
+    }
+
+    #[test]
+    fn forget_source_removes_source_from_sources() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let folder = dir.path().join("corpus");
+        std::fs::create_dir_all(&folder).expect("mkdir");
+
+        let service = KnowledgeService::open(&cfg).expect("service");
+        let source_id = service
+            .add_local_folder(&folder.display().to_string())
+            .expect("add");
+        assert_eq!(service.sources().len(), 1);
+
+        let removed = service.forget_source(&source_id).expect("forget");
+        assert_eq!(removed, 0);
+        assert!(service.sources().is_empty());
     }
 }
