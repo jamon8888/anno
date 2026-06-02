@@ -16,7 +16,7 @@ what each phase shipped, what's next, and what's parked.
 |------|--------|------|------|
 | Phase 1 — Foundation (core types, store, 3 MCP tools) | ✅ Shipped (`87aeff2b`) | [multisource design §23 Ph1-2](../superpowers/specs/2026-05-29-anno-local-knowledge-service-multisource-design.md) | [phase 1 plan](../superpowers/plans/2026-05-29-anno-local-knowledge-service-phase1.md) |
 | Phase 2 — Local folder source + privacy API | ✅ Shipped (`87aeff2b`) | [local folder source design](../superpowers/specs/2026-06-01-anno-knowledge-local-folder-source-phase2-design.md) | [phase 2 plan](../superpowers/plans/2026-06-01-anno-knowledge-local-folder-source-phase2.md) |
-| Phase 2.5 — MCP surface consolidation | 🔵 Brainstormed | — | — |
+| Phase 2.5 — MCP surface consolidation | 📋 Spec'd | [consolidation design](../superpowers/specs/2026-06-02-anno-mcp-surface-consolidation-phase2.5-design.md) | — |
 | Phase 3 — Vector projection + semantic search | 📋 Spec'd, plan ready | [vector projection design](../superpowers/specs/2026-06-02-anno-knowledge-vector-projection-phase3-design.md) | [phase 3 plan](../superpowers/plans/2026-06-02-anno-knowledge-vector-projection-phase3.md) |
 | Phase 4 — Outlook / Microsoft Graph connector | 🟡 Not started | [parent §18](../superpowers/specs/2026-05-29-anno-local-knowledge-service-multisource-design.md) | — |
 | Phase 5+ — Additional sources | 🟡 Not started | — | — |
