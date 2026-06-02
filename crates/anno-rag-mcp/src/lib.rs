@@ -2070,10 +2070,7 @@ impl AnnoRagServer {
     /// Ingest a folder of legal documents into the anno-rag index. Documents are
     /// pseudonymized through the local vault and enriched with French legal entities.
     #[tool(
-        description = "Ingest a folder of legal documents (PDF, DOCX, TXT, …). \
-                       PII is pseudonymized through the local vault. \
-                       Legal entities (parties, clauses, citations, obligations, risks) \
-                       are extracted and stored for filtered search and graph traversal."
+        description = "Deprecated - use 'index(path, profile=\"legal\")' instead. Continues to work."
     )]
     async fn legal_ingest(&self, Parameters(p): Parameters<LegalIngestParams>) -> String {
         match self.legal_ingest_impl(p).await {
@@ -2087,12 +2084,7 @@ impl AnnoRagServer {
     /// Legal-filtered hybrid search. Pseudonymizes the query and restricts
     /// vector + FTS results to chunks matching the supplied legal filters.
     #[tool(
-        description = "Hybrid search over the legal corpus with optional filters: \
-                       doc_type, legal_domain, jurisdiction, dossier_id, parties, \
-                       party_roles, legal_refs, clause_types, obligation_kinds, \
-                       risk_flags, min_confidence. \
-                       Returns pseudonymized chunk text — call legal_rehydrate_citation \
-                       to restore originals."
+        description = "Deprecated - use 'search(query, scope=\"legal\", filters={...})' instead. Continues to work."
     )]
     async fn legal_search(&self, Parameters(p): Parameters<LegalSearchParams>) -> String {
         match self.legal_search_impl(p).await {
@@ -2969,7 +2961,7 @@ impl AnnoRagServer {
     }
 
     /// List configured Anno knowledge sources. Does not load local ML models.
-    #[tool(description = "List configured Anno knowledge sources. Does not load local ML models.")]
+    #[tool(description = "Deprecated - use 'sources()' instead. Continues to work.")]
     async fn knowledge_sources(&self) -> String {
         match self.knowledge_sources_impl().await {
             Ok(sources) => {
@@ -2980,9 +2972,7 @@ impl AnnoRagServer {
     }
 
     /// Return local Anno knowledge status without loading ML models.
-    #[tool(
-        description = "Return local Anno knowledge status for sources, objects, chunks, and failures. Does not load local ML models."
-    )]
+    #[tool(description = "Deprecated - use 'status()' instead. Continues to work.")]
     async fn knowledge_status(&self) -> String {
         match self.knowledge_status_impl().await {
             Ok(status) => {
@@ -2994,7 +2984,7 @@ impl AnnoRagServer {
 
     /// Search Anno's local multi-source knowledge index.
     #[tool(
-        description = "Search Anno's local multi-source knowledge index. Phase 1 supports fast SQLite FTS mode and returns pseudonymized snippets only."
+        description = "Deprecated - use 'search(query, scope=\"knowledge\")' instead. Continues to work."
     )]
     async fn knowledge_search(
         &self,
@@ -3017,9 +3007,7 @@ impl AnnoRagServer {
     }
 
     /// Register a local folder as an Anno knowledge source. Does not load models.
-    #[tool(
-        description = "Register a local folder as an Anno knowledge source. Does not load local ML models. Run knowledge_sync afterwards to index it."
-    )]
+    #[tool(description = "Deprecated - use 'index(path)' instead. Continues to work.")]
     async fn knowledge_add_local_folder(
         &self,
         Parameters(p): Parameters<KnowledgeAddFolderParams>,
@@ -3035,7 +3023,7 @@ impl AnnoRagServer {
 
     /// Sync Anno local-folder knowledge sources end to end. Loads the local NER model.
     #[tool(
-        description = "Sync Anno local-folder knowledge sources: walk, extract, pseudonymize locally, and write pseudonymized FTS chunks. Loads the local NER model. Bounded per run; call again to resume large folders."
+        description = "Deprecated - use 'index(path)' (re-indexes idempotently). Continues to work."
     )]
     async fn knowledge_sync(&self, Parameters(p): Parameters<KnowledgeSyncParams>) -> String {
         if let Err(e) = self.knowledge().await {
@@ -3062,9 +3050,7 @@ impl AnnoRagServer {
     }
 
     /// Remove an Anno knowledge source and all its indexed content.
-    #[tool(
-        description = "Remove an Anno knowledge source and all its pseudonymized content from SQLite and FTS. Does not load local ML models."
-    )]
+    #[tool(description = "Deprecated - use 'forget(target)' instead. Continues to work.")]
     async fn knowledge_forget(&self, Parameters(p): Parameters<KnowledgeForgetParams>) -> String {
         match self.knowledge_forget_impl(p).await {
             Ok(removed) => serde_json::to_string_pretty(
@@ -3301,6 +3287,37 @@ async fn shutdown_signal_mcp() {
 mod lazy_tests {
     use super::*;
     use anno_rag::config::AnnoRagConfig;
+
+    #[test]
+    fn deprecated_tools_have_deprecation_banner_in_description() {
+        let src = include_str!("lib.rs");
+        let deprecated = [
+            "legal_search",
+            "legal_ingest",
+            "knowledge_search",
+            "knowledge_add_local_folder",
+            "knowledge_sync",
+            "knowledge_sources",
+            "knowledge_status",
+            "knowledge_forget",
+            "legacy_search",
+        ];
+        for name in deprecated {
+            let needle = format!("async fn {name}(");
+            let pos = src
+                .find(&needle)
+                .unwrap_or_else(|| panic!("tool {name} not found"));
+            let before = &src[..pos];
+            let tool_block_start = before
+                .rfind("#[tool(")
+                .unwrap_or_else(|| panic!("no #[tool( before {name}"));
+            let tool_block = &src[tool_block_start..pos];
+            assert!(
+                tool_block.contains("Deprecated"),
+                "tool {name} description missing 'Deprecated' marker: {tool_block}",
+            );
+        }
+    }
 
     #[tokio::test(flavor = "current_thread")]
     async fn lazy_server_returns_error_when_models_absent() {
