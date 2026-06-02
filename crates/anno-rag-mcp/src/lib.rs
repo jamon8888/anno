@@ -227,6 +227,29 @@ fn default_top_k() -> usize {
     10
 }
 
+/// Parameters for the unified `search` tool.
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct SearchUnifiedParams {
+    /// User query text.
+    pub query: String,
+    /// Maximum number of results. Default: 10.
+    #[serde(default = "default_search_unified_top_k")]
+    pub top_k: usize,
+    /// Search mode: `fast` (default) or `semantic`.
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// Search scope: `all` (default), `knowledge`, or `legal`.
+    #[serde(default)]
+    pub scope: Option<String>,
+    /// Optional legal-search filters when legal scope is included.
+    #[serde(default)]
+    pub filters: Option<serde_json::Value>,
+}
+
+fn default_search_unified_top_k() -> usize {
+    10
+}
+
 /// Parameters for the `rehydrate` tool.
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct RehydrateParams {
@@ -539,6 +562,89 @@ pub struct LegalSearchParams {
     /// Minimum extraction confidence (0–1).
     #[serde(default)]
     pub min_confidence: Option<f32>,
+}
+
+fn build_legal_search_params(p: &SearchUnifiedParams) -> LegalSearchParams {
+    let filters = p.filters.as_ref().and_then(serde_json::Value::as_object);
+
+    LegalSearchParams {
+        query: p.query.clone(),
+        top_k: p.top_k,
+        doc_type: filter_string(filters, "doc_type"),
+        legal_domain: filter_string(filters, "legal_domain"),
+        jurisdiction: filter_string(filters, "jurisdiction"),
+        dossier_id: filter_string(filters, "dossier_id"),
+        parties: filter_string_vec(filters, "parties"),
+        party_roles: filter_string_vec(filters, "party_roles"),
+        legal_refs: filter_string_vec(filters, "legal_refs"),
+        clause_types: filter_string_vec(filters, "clause_types"),
+        obligation_kinds: filter_string_vec(filters, "obligation_kinds"),
+        risk_flags: filter_string_vec(filters, "risk_flags"),
+        min_confidence: filter_f32(filters, "min_confidence"),
+    }
+}
+
+fn filter_string(
+    filters: Option<&serde_json::Map<String, serde_json::Value>>,
+    key: &str,
+) -> Option<String> {
+    filters
+        .and_then(|values| values.get(key))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+}
+
+fn filter_string_vec(
+    filters: Option<&serde_json::Map<String, serde_json::Value>>,
+    key: &str,
+) -> Vec<String> {
+    filters
+        .and_then(|values| values.get(key))
+        .and_then(serde_json::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn filter_f32(
+    filters: Option<&serde_json::Map<String, serde_json::Value>>,
+    key: &str,
+) -> Option<f32> {
+    filters
+        .and_then(|values| values.get(key))
+        .and_then(serde_json::Value::as_f64)
+        .map(|value| value as f32)
+}
+
+fn normalize_search_mode(mode: Option<String>, warnings: &mut Vec<String>) -> String {
+    match mode.as_deref().unwrap_or("fast") {
+        "fast" => "fast".to_string(),
+        "semantic" => "semantic".to_string(),
+        other => {
+            warnings.push(format!(
+                "unsupported search mode '{other}'; using mode='fast'"
+            ));
+            "fast".to_string()
+        }
+    }
+}
+
+fn normalize_search_scope(scope: Option<String>, warnings: &mut Vec<String>) -> String {
+    match scope.as_deref().unwrap_or("all") {
+        "all" => "all".to_string(),
+        "knowledge" => "knowledge".to_string(),
+        "legal" => "legal".to_string(),
+        other => {
+            warnings.push(format!(
+                "unsupported search scope '{other}'; using scope='all'"
+            ));
+            "all".to_string()
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -1016,6 +1122,86 @@ impl AnnoRagServer {
         service.search(p).map_err(|e| e.to_string())
     }
 
+    pub(crate) async fn search_impl_routing(&self, p: SearchUnifiedParams) -> String {
+        let mut hits = Vec::<serde_json::Value>::new();
+        let mut warnings = Vec::<String>::new();
+        let mode = normalize_search_mode(p.mode.clone(), &mut warnings);
+        let scope = normalize_search_scope(p.scope.clone(), &mut warnings);
+
+        if scope == "all" || scope == "knowledge" {
+            if mode == "semantic" {
+                warnings.push(
+                    "knowledge scope skipped in semantic mode (knowledge index currently supports fast mode only)"
+                        .to_string(),
+                );
+            } else {
+                match self
+                    .knowledge_search_impl(crate::knowledge::KnowledgeSearchParams {
+                        query: p.query.clone(),
+                        top_k: p.top_k,
+                        mode: Some(mode.clone()),
+                    })
+                    .await
+                {
+                    Ok(result) => {
+                        for hit in result.hits {
+                            match serde_json::to_value(hit) {
+                                Ok(mut value) => {
+                                    if let Some(object) = value.as_object_mut() {
+                                        object.insert(
+                                            "source".to_string(),
+                                            serde_json::Value::String("knowledge".to_string()),
+                                        );
+                                    }
+                                    hits.push(value);
+                                }
+                                Err(e) => warnings.push(format!("knowledge scope failed: {e}")),
+                            }
+                        }
+                    }
+                    Err(e) => warnings.push(format!("knowledge scope failed: {e}")),
+                }
+            }
+        }
+
+        if scope == "all" || scope == "legal" {
+            if mode == "fast" {
+                warnings.push(
+                    "legal scope skipped in fast mode (requires models). Use mode='semantic' to include legal results.".to_string(),
+                );
+            } else {
+                match self.legal_search_impl(build_legal_search_params(&p)).await {
+                    Ok(value) => {
+                        if let Some(legal_hits) =
+                            value.get("hits").and_then(serde_json::Value::as_array)
+                        {
+                            for hit in legal_hits {
+                                let mut value = hit.clone();
+                                if let Some(object) = value.as_object_mut() {
+                                    object.insert(
+                                        "source".to_string(),
+                                        serde_json::Value::String("legal".to_string()),
+                                    );
+                                }
+                                hits.push(value);
+                            }
+                        }
+                    }
+                    Err(e) => warnings.push(format!("legal scope failed: {e}")),
+                }
+            }
+        }
+
+        serde_json::json!({
+            "ok": true,
+            "mode_used": mode,
+            "scope_used": scope,
+            "hits": hits,
+            "warnings": warnings,
+        })
+        .to_string()
+    }
+
     async fn knowledge_add_local_folder_impl(&self, path: &str) -> Result<String, String> {
         let service = self.knowledge().await.map_err(|e| e.to_string())?;
         service.add_local_folder(path).map_err(|e| e.to_string())
@@ -1120,6 +1306,15 @@ impl AnnoRagServer {
             }
             Err(e) => format!("Error: {e}"),
         }
+    }
+
+    /// Unified search tool - temporary name during Phase 2.5.
+    /// Task 8 swaps this to `search` and renames the legacy to `legacy_search`.
+    #[tool(
+        description = "Search Anno's local indexes. mode='fast' (default) uses SQLite FTS5 - no models loaded. mode='semantic' loads the embedder. scope='all' (default), 'knowledge', or 'legal'. filters forwarded to legal scope."
+    )]
+    async fn search_unified(&self, Parameters(p): Parameters<SearchUnifiedParams>) -> String {
+        self.search_impl_routing(p).await
     }
 
     /// Replace pseudo-tokens in text back with original PII from the vault.
@@ -2937,6 +3132,82 @@ mod lazy_tests {
             result.contains("Models not downloaded"),
             "expected 'Models not downloaded' in: {result}"
         );
+    }
+
+    #[tokio::test]
+    async fn search_fast_all_returns_legal_warning() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".into(),
+                top_k: 5,
+                mode: Some("fast".into()),
+                scope: Some("all".into()),
+                filters: None,
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["mode_used"], "fast");
+        assert_eq!(v["scope_used"], "all");
+        let warnings = v["warnings"].as_array().expect("warnings array");
+        assert!(warnings.iter().any(|w| w.as_str().unwrap_or("")
+            == "legal scope skipped in fast mode (requires models). Use mode='semantic' to include legal results."));
+    }
+
+    #[tokio::test]
+    async fn search_fast_knowledge_returns_no_warning() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".into(),
+                top_k: 5,
+                mode: Some("fast".into()),
+                scope: Some("knowledge".into()),
+                filters: None,
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(v["scope_used"], "knowledge");
+        let warnings = v["warnings"].as_array().expect("warnings array");
+        assert!(warnings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_semantic_knowledge_returns_warning() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".into(),
+                top_k: 5,
+                mode: Some("semantic".into()),
+                scope: Some("knowledge".into()),
+                filters: None,
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(v["mode_used"], "semantic");
+        assert_eq!(v["scope_used"], "knowledge");
+        let warnings = v["warnings"].as_array().expect("warnings array");
+        assert!(warnings.iter().any(|w| w
+            .as_str()
+            .unwrap_or("")
+            .contains("knowledge scope skipped in semantic mode")));
     }
 
     /// When both model subdirs exist, download_models reports already_present.
