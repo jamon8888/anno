@@ -1109,6 +1109,48 @@ impl AnnoRagServer {
         Ok(service.sources())
     }
 
+    pub(crate) async fn sources_impl_routing(&self) -> String {
+        let mut sources = Vec::<serde_json::Value>::new();
+
+        if let Ok(knowledge_sources) = self.knowledge_sources_impl().await {
+            for mut source in knowledge_sources {
+                if let serde_json::Value::Object(ref mut object) = source {
+                    if let Some(source_id) = object
+                        .get("source_id")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                    {
+                        object.insert("id".to_string(), serde_json::Value::String(source_id));
+                    }
+                    object.insert(
+                        "kind".to_string(),
+                        serde_json::Value::String("knowledge_folder".to_string()),
+                    );
+                }
+                sources.push(source);
+            }
+        }
+
+        if let Some(pipeline) = self.pipeline_arc() {
+            if let Ok(paths) = pipeline.store_list_indexed_folder_paths().await {
+                for path in paths {
+                    let id = legal_folder_id(&path);
+                    sources.push(serde_json::json!({
+                        "id": id,
+                        "kind": "legal_corpus",
+                        "label": id,
+                    }));
+                }
+            }
+        }
+
+        serde_json::json!({
+            "ok": true,
+            "sources": sources,
+        })
+        .to_string()
+    }
+
     async fn knowledge_status_impl(&self) -> Result<anno_knowledge_core::KnowledgeStatus, String> {
         let service = self.knowledge().await.map_err(|e| e.to_string())?;
         service.status().map_err(|e| e.to_string())
@@ -1290,6 +1332,13 @@ impl AnnoRagServer {
     }
 }
 
+fn legal_folder_id(path: &str) -> String {
+    let stable = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, path.as_bytes())
+        .simple()
+        .to_string();
+    format!("legal_folder_{}", &stable[..12])
+}
+
 // ---- Tool router ----
 
 #[tool_router]
@@ -1315,6 +1364,13 @@ impl AnnoRagServer {
     )]
     async fn search_unified(&self, Parameters(p): Parameters<SearchUnifiedParams>) -> String {
         self.search_impl_routing(p).await
+    }
+
+    #[tool(
+        description = "List all indexed sources. Labels and ids are pseudonymous; raw local paths are not returned. Does not load models."
+    )]
+    async fn sources(&self) -> String {
+        self.sources_impl_routing().await
     }
 
     /// Replace pseudo-tokens in text back with original PII from the vault.
@@ -3208,6 +3264,70 @@ mod lazy_tests {
             .as_str()
             .unwrap_or("")
             .contains("knowledge scope skipped in semantic mode")));
+    }
+
+    #[tokio::test]
+    async fn sources_aggregates_knowledge_and_legal_corpora() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let corpus_dir = dir.path().join("corpus");
+        std::fs::create_dir_all(&corpus_dir).expect("corpus dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let source_id = server
+            .knowledge_add_local_folder_impl(corpus_dir.to_str().expect("utf8 path"))
+            .await
+            .expect("source id");
+        let out = server.sources_impl_routing().await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(v["ok"], true);
+        let sources = v["sources"].as_array().expect("sources array");
+        assert!(
+            sources.is_empty()
+                || sources
+                    .iter()
+                    .all(|s| { s["kind"] == "knowledge_folder" || s["kind"] == "legal_corpus" })
+        );
+        let knowledge = sources
+            .iter()
+            .find(|s| s["kind"] == "knowledge_folder")
+            .expect("knowledge source");
+        assert_eq!(knowledge["id"], source_id);
+        assert_eq!(knowledge["source_id"], source_id);
+        assert_ne!(
+            knowledge["label"].as_str().unwrap_or(""),
+            corpus_dir.to_str().unwrap_or("")
+        );
+    }
+
+    #[test]
+    fn legal_folder_id_is_stable_and_pseudonymous() {
+        let path = "C:/legal/client-a";
+        let id = legal_folder_id(path);
+        assert_eq!(id, legal_folder_id(path));
+        assert!(id.starts_with("legal_folder_"));
+        assert_eq!(id.len(), "legal_folder_".len() + 12);
+        assert!(!id.contains("client-a"));
+        assert!(!id.contains(path));
+    }
+
+    #[tokio::test]
+    async fn sources_does_not_initialize_pipeline() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        assert!(server.pipeline_arc().is_none());
+
+        let out = server.sources_impl_routing().await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], true);
+        assert!(server.pipeline_arc().is_none());
     }
 
     /// When both model subdirs exist, download_models reports already_present.
