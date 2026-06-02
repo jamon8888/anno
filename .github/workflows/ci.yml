@@ -915,13 +915,22 @@ jobs:
   # Static Analysis Tools
   # ==========================================================================
 
-  # Comprehensive dependency linting — prebuilt action, no cargo install, ~15 s
+  # Comprehensive dependency linting. Run on the normal Ubuntu Rust toolchain
+  # instead of cargo-deny's Docker action; the Docker image uses a musl host
+  # that breaks cargo metadata with the pinned Rust 1.95 toolchain.
   cargo-deny:
     name: Cargo Deny
     runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: dtolnay/rust-toolchain@1.95
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.19.8
+          fallback: none
+      - run: cargo deny --all-features check
   # ==========================================================================
   # Publish Validation (best-effort; expected to fail while publishing is paused)
   # ==========================================================================
