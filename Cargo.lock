@@ -284,6 +284,7 @@ name = "anno-rag"
 version = "0.2.0"
 dependencies = [
  "anno",
+ "anno-knowledge-core",
  "anyhow",
  "argon2",
  "arrow",
@@ -360,6 +361,7 @@ dependencies = [
  "anno-knowledge-store",
  "anno-rag",
  "anno-rag-tabular",
+ "anno-source-local",
  "async-trait",
  "chrono",
  "keyring",
