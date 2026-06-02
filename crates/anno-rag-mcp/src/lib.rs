@@ -208,6 +208,13 @@ pub struct KnowledgeForgetParams {
     pub source_id: String,
 }
 
+/// Parameters for the unified `forget` tool.
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ForgetParams {
+    /// Source id (UUID), legal corpus id returned by sources(), or explicit local folder path supplied by the user.
+    pub target: String,
+}
+
 /// Parameters for the `search` tool.
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct SearchParams {
@@ -1381,6 +1388,81 @@ impl AnnoRagServer {
             .forget_source(&p.source_id)
             .map_err(|e| e.to_string())
     }
+
+    pub(crate) async fn forget_impl_routing(&self, p: ForgetParams) -> String {
+        let mut knowledge_removed = 0;
+        let mut legal_removed = 0;
+        let mut errors = Vec::<String>::new();
+
+        if p.target.starts_with("legal_folder_") {
+            if let Some(pipeline) = self.pipeline_arc() {
+                match self.resolve_legal_folder_id(&pipeline, &p.target).await {
+                    Ok(Some(path)) => match pipeline.forget_legal_folder_path(&path).await {
+                        Ok(removed) => legal_removed = removed,
+                        Err(e) => errors.push(format!("legal forget: {e}")),
+                    },
+                    Ok(None) => {}
+                    Err(e) => errors.push(format!("legal resolve: {e}")),
+                }
+            }
+        } else if uuid::Uuid::parse_str(&p.target).is_ok() {
+            match self
+                .knowledge_forget_impl(KnowledgeForgetParams {
+                    source_id: p.target.clone(),
+                })
+                .await
+            {
+                Ok(removed) => knowledge_removed = removed,
+                Err(e) => errors.push(format!("knowledge forget: {e}")),
+            }
+        } else {
+            match self.knowledge_forget_by_path(&p.target).await {
+                Ok(removed) => knowledge_removed = removed,
+                Err(e) => errors.push(format!("knowledge forget: {e}")),
+            }
+
+            if let Some(pipeline) = self.pipeline_arc() {
+                match pipeline.forget_legal_folder_path(&p.target).await {
+                    Ok(removed) => legal_removed = removed,
+                    Err(e) => errors.push(format!("legal forget: {e}")),
+                }
+            }
+        }
+
+        serde_json::json!({
+            "ok": errors.is_empty(),
+            "removed": {
+                "knowledge_objects": knowledge_removed,
+                "legal_chunks": legal_removed,
+            },
+            "errors": if errors.is_empty() {
+                serde_json::Value::Null
+            } else {
+                serde_json::json!(errors)
+            },
+        })
+        .to_string()
+    }
+
+    async fn knowledge_forget_by_path(&self, path: &str) -> Result<u64, String> {
+        let service = self.knowledge().await.map_err(|e| e.to_string())?;
+        service
+            .forget_source_by_path(path)
+            .map_err(|e| e.to_string())
+    }
+
+    async fn resolve_legal_folder_id(
+        &self,
+        pipeline: &anno_rag::pipeline::Pipeline,
+        id: &str,
+    ) -> Result<Option<String>, String> {
+        let paths = pipeline
+            .store_list_indexed_folder_paths()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(paths.into_iter().find(|path| legal_folder_id(path) == id))
+    }
 }
 
 fn legal_folder_id(path: &str) -> String {
@@ -1422,6 +1504,13 @@ impl AnnoRagServer {
     )]
     async fn sources(&self) -> String {
         self.sources_impl_routing().await
+    }
+
+    #[tool(
+        description = "Remove an indexed source. Accepts a source_id (UUID), a legal corpus id from sources(), or an explicit folder path. Does not load models."
+    )]
+    async fn forget(&self, Parameters(p): Parameters<ForgetParams>) -> String {
+        self.forget_impl_routing(p).await
     }
 
     #[tool(
@@ -3385,6 +3474,53 @@ mod lazy_tests {
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
 
         assert_eq!(v["ok"], true);
+        assert!(server.pipeline_arc().is_none());
+    }
+
+    #[tokio::test]
+    async fn forget_uuid_routes_to_knowledge_forget() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let target = uuid::Uuid::nil().to_string();
+
+        let out = server
+            .forget_impl_routing(ForgetParams {
+                target: target.clone(),
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["removed"]["knowledge_objects"], 0);
+        assert_eq!(v["removed"]["legal_chunks"], 0);
+        assert!(v["errors"].is_null());
+    }
+
+    #[tokio::test]
+    async fn forget_legal_id_is_noop_when_unknown() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        assert!(server.pipeline_arc().is_none());
+
+        let out = server
+            .forget_impl_routing(ForgetParams {
+                target: "legal_folder_000000000000".to_string(),
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["removed"]["knowledge_objects"], 0);
+        assert_eq!(v["removed"]["legal_chunks"], 0);
+        assert!(v["errors"].is_null());
         assert!(server.pipeline_arc().is_none());
     }
 
