@@ -31,7 +31,7 @@ These are MCP reliability issues, not model-quality issues. They should be fixed
 
 Change `forget_impl_routing` so legal deletion is never silently skipped:
 
-- For `target` matching `legal_folder_*`, call `self.pipeline().await` before resolving/deleting in the immediate patch.
+- For `target` matching `legal_folder_*`, use `LegalMaintenanceService` to resolve and delete the folder id without calling `self.pipeline().await`; `self.pipeline()` is model-gated and would make maintenance depend on downloaded models.
 - For path targets, always attempt both knowledge deletion and legal deletion.
 - If legal deletion cannot run because the vault/pipeline cannot initialize, return `ok: false` with `errors=["legal forget: ..."]`.
 - Preserve the existing corpus-id path, which already uses document ids and can initialize the pipeline when needed.
@@ -47,6 +47,7 @@ Change unified search mode resolution:
 
 - If `scope="legal"` and `mode` is omitted, use `semantic`.
 - If `scope="all"` and `mode` is omitted, use `fast` for knowledge and `semantic` for legal, then merge hits. This is the new `auto` behavior without requiring callers to specify it.
+- For implicit mixed mode, return `mode_used="auto"` and a `scope_modes` object such as `{"knowledge":"fast","legal":"semantic"}` so callers can see that different backends used different execution modes.
 - If `mode="fast"` and `scope="legal"` is explicit, return `ok:false` with `error="legal scope requires semantic mode"` rather than silently skipping legal.
 - If `mode="fast"` and `scope="all"` is explicit, keep knowledge fast search and include a warning that legal was skipped.
 
@@ -63,6 +64,7 @@ Fix simple false positives:
 - `corpus_get` and `corpus_health` must check `corpus_exists`, not only UUID parseability.
 - `status` should report legal chunk count without requiring the pipeline to already be initialized.
 - `download_models` should validate expected model files or a manifest, not only folder existence.
+- Legal chunk counts and folder deletion must use the main `anno_rag::store::Store`; `LegalStore` only holds legal enrichment rows and cannot report or delete all legal chunks by folder path.
 
 Acceptance:
 
@@ -79,6 +81,7 @@ Introduce a shared `VaultKeyService` used by CLI vault commands, MCP `anno_init_
 - `derive_key_for_runtime()`: current behavior, but with verified persistence.
 - `status()`: returns key source, persistence health, and user-facing remediation.
 - `initialize_from_passphrase(passphrase)`: writes key material and verifies it through the same status path.
+- `vault status` and MCP health must report the active source as one of `env_passphrase`, `keyring`, `dpapi_file`, `kms_unimplemented`, or `missing`.
 
 Windows fallback:
 
@@ -100,6 +103,7 @@ Introduce `ModelInventoryService` for `download_models`, `status`, and diagnosti
 - Validate E5 files and GLiNER ONNX/tokenizer files.
 - Return `missing`, `partial`, `ready`, or `downloading`.
 - Avoid any model load during status checks.
+- Model readiness must inspect the effective loader path: `ANNO_MODELS_DIR` when set, otherwise `cfg.models_cache()`.
 
 Acceptance:
 
