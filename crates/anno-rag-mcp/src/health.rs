@@ -81,11 +81,34 @@ pub async fn collect_health(
     }
 }
 
+fn review_tool_names() -> Vec<String> {
+    vec![
+        "review_create",
+        "review_add_rows",
+        "review_extract",
+        "review_refine_cell",
+        "review_set_cell",
+        "review_lock_cell",
+        "review_unlock_cell",
+        "review_export",
+        "review_get",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect()
+}
+
 /// Hardcoded list of tools exposed by the MCP server.
 pub fn all_tool_names() -> Vec<String> {
-    vec![
-        // Core retrieval
+    let mut tools: Vec<String> = vec![
+        // Unified MCP surface (Phase 2.5)
+        "index",
         "search",
+        "sources",
+        "status",
+        "forget",
+        // Legacy retrieval
+        "legacy_search",
         "rehydrate",
         "detect",
         "vault_stats",
@@ -125,12 +148,63 @@ pub fn all_tool_names() -> Vec<String> {
     ]
     .into_iter()
     .map(String::from)
-    .collect()
+    .collect();
+
+    tools.extend(review_tool_names());
+    tools
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn all_tool_names_lists_new_unified_tools_first() {
+        let names = all_tool_names();
+        assert_eq!(names[0], "index");
+        assert_eq!(names[1], "search");
+        assert_eq!(names[2], "sources");
+        assert_eq!(names[3], "status");
+        assert_eq!(names[4], "forget");
+    }
+
+    #[test]
+    fn all_tool_names_includes_legacy_search() {
+        let names = all_tool_names();
+        assert!(names.iter().any(|n| n == "legacy_search"));
+        let new_search_idx = names
+            .iter()
+            .position(|n| n == "search")
+            .expect("search present");
+        let legacy_idx = names
+            .iter()
+            .position(|n| n == "legacy_search")
+            .expect("legacy_search present");
+        assert!(
+            legacy_idx > new_search_idx,
+            "legacy_search should appear after new 'search'"
+        );
+    }
+
+    #[test]
+    fn all_tool_names_still_includes_legacy_phase2_tools() {
+        let names = all_tool_names();
+        for legacy in [
+            "knowledge_search",
+            "knowledge_add_local_folder",
+            "knowledge_sync",
+            "knowledge_sources",
+            "knowledge_status",
+            "knowledge_forget",
+            "legal_ingest",
+            "legal_search",
+        ] {
+            assert!(
+                names.iter().any(|n| n == legacy),
+                "missing legacy tool {legacy}"
+            );
+        }
+    }
 
     #[test]
     fn all_tool_names_includes_knowledge_tools() {
@@ -148,5 +222,41 @@ mod tests {
         assert!(tools.contains(&"knowledge_add_local_folder".to_string()));
         assert!(tools.contains(&"knowledge_sync".to_string()));
         assert!(tools.contains(&"knowledge_forget".to_string()));
+    }
+
+    #[test]
+    fn all_tool_names_includes_tabular_review_tools_after_knowledge_tools() {
+        let tools = all_tool_names();
+
+        for review_tool in [
+            "review_create",
+            "review_add_rows",
+            "review_extract",
+            "review_refine_cell",
+            "review_set_cell",
+            "review_lock_cell",
+            "review_unlock_cell",
+            "review_export",
+            "review_get",
+        ] {
+            assert!(
+                tools.contains(&review_tool.to_string()),
+                "missing review tool {review_tool}"
+            );
+        }
+
+        let knowledge_forget_idx = tools
+            .iter()
+            .position(|tool| tool == "knowledge_forget")
+            .expect("knowledge_forget present");
+        let review_create_idx = tools
+            .iter()
+            .position(|tool| tool == "review_create")
+            .expect("review_create present");
+
+        assert!(
+            review_create_idx > knowledge_forget_idx,
+            "review_create should appear after knowledge_forget"
+        );
     }
 }

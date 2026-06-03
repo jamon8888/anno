@@ -22,6 +22,11 @@ env:
   RUST_BACKTRACE: 1
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: sccache
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  NODE_OPTIONS: "--no-deprecation"
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
   CARGO_INCREMENTAL: "0"
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_DEV_SPLIT_DEBUGINFO: "off"
@@ -46,14 +51,14 @@ jobs:
     name: Docs audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Docs hygiene checks (fast, offline)
         run: python3 scripts/docs_audit.py
   check:
     name: Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: arduino/setup-protoc@v3
         with:
@@ -62,13 +67,13 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - run: cargo check --workspace --all-targets
   fmt:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -76,13 +81,13 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - run: cargo fmt --all -- --check
   typecheck-python:
     name: Typecheck (Python / ty)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -94,7 +99,7 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -105,7 +110,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       # All targets (lib + tests + bins + examples) so test code is also linted.
       - run: cargo clippy --workspace --all-targets --features "eval discourse" -- -D warnings
   # ------------------------------------------------------------
@@ -127,7 +132,7 @@ jobs:
           - "schema"
           - "candle"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -138,7 +143,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - run: cargo clippy -p anno --lib --features "${{ matrix.features }}" -- -D warnings
   # ==========================================================================
   # Unit tests - no features (zero-dependency baseline)
@@ -147,7 +152,7 @@ jobs:
     name: Test (minimal)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: arduino/setup-protoc@v3
         with:
@@ -156,7 +161,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - run: cargo test --package anno --no-default-features --lib
       - run: cargo test --package anno --lib
   # ==========================================================================
@@ -167,7 +172,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -182,7 +187,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -206,7 +211,7 @@ jobs:
         if: ${{ vars.ANNO_AWS_ROLE_ARN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
         run: aws --version
       - name: Cache datasets
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.anno_cache
           key: anno-datasets-${{ runner.os }}-v3-${{ github.run_id }}
@@ -233,7 +238,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Free disk space
         if: runner.os == 'Linux'
         run: |
@@ -250,7 +255,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
         with:
           key: ${{ matrix.os }}
       # MSVC CRT alignment: anno-rag pulls anno/gliner2-fastino -> onnx -> ort,
@@ -280,7 +285,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -296,9 +301,9 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Cache HF models
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/huggingface
           key: hf-models-${{ runner.os }}-v2
@@ -316,7 +321,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -332,9 +337,9 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Cache HF models
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/huggingface
           key: hf-models-${{ runner.os }}-v2
@@ -352,7 +357,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -367,9 +372,9 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Cache HF models
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/huggingface
           key: hf-models-${{ runner.os }}-v2
@@ -382,7 +387,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -397,9 +402,9 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Cache HF models
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/huggingface
           key: hf-models-${{ runner.os }}-v2
@@ -412,7 +417,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -428,9 +433,9 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Cache HF models
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/huggingface
           key: hf-models-${{ runner.os }}-v2
@@ -451,7 +456,7 @@ jobs:
     name: Minimal build (no-default-features)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: arduino/setup-protoc@v3
         with:
@@ -460,7 +465,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       # `anno-cli` requires at least one HTML-extractor feature; the
       # MPL-free `extractor-html2text` is the lightest option that satisfies
       # that constraint and proves the no-default-features build still works.
@@ -473,7 +478,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: arduino/setup-protoc@v3
         with:
@@ -482,7 +487,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       # Document the library crates. anno is doc'd twice with different feature
       # combinations to surface feature-gated link errors that single-feature
       # builds miss.
@@ -500,7 +505,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -516,7 +521,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Run property tests
         run: cargo test --workspace --lib --features "eval discourse" -- proptest
         env:
@@ -530,7 +535,7 @@ jobs:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: arduino/setup-protoc@v3
         with:
@@ -539,7 +544,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -559,14 +564,14 @@ jobs:
         if: ${{ vars.ANNO_AWS_ROLE_ARN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
         run: aws --version
       - name: Cache HF models
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/huggingface
           key: hf-models-${{ runner.os }}-v2
           restore-keys: |
             hf-models-${{ runner.os }}-
       - name: Cache datasets
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.anno_cache
           key: anno-datasets-${{ runner.os }}-v3-${{ github.run_id }}
@@ -575,7 +580,7 @@ jobs:
       # Muxer history + eval history in their own cache lineage so MAB learning and
       # dataset observation counts are never overwritten by test-eval/eval-sanity writes.
       - name: Cache muxer state and eval history (persistent MAB learning)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.anno_cache/muxer_history.*.json
@@ -652,7 +657,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: arduino/setup-protoc@v3
         with:
@@ -661,7 +666,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Run evaluator unit tests
         run: cargo test -p anno-eval --lib --features "eval discourse" test_comprehensive_eval_results_average_f1 -- --nocapture
   # ==========================================================================
@@ -672,7 +677,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -688,7 +693,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Build examples (eval + discourse)
         run: cargo build --workspace --examples --features "eval discourse"
       - name: Build examples (onnx)
@@ -704,7 +709,7 @@ jobs:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -720,7 +725,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -740,14 +745,14 @@ jobs:
         if: ${{ vars.ANNO_AWS_ROLE_ARN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
         run: aws --version
       - name: Cache HF models
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/huggingface
           key: hf-models-${{ runner.os }}-v2
           restore-keys: |
             hf-models-${{ runner.os }}-
       - name: Cache datasets
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.anno_cache
           key: anno-datasets-${{ runner.os }}-v3-${{ github.run_id }}
@@ -756,7 +761,7 @@ jobs:
       # Restore eval history so CLI benchmark accumulates observation counts across runs.
       # Uses the same anno-muxer key family as matrix-test to share state.
       - name: Cache eval history (persistent observation counts)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.anno_cache/eval-results.jsonl
@@ -782,7 +787,7 @@ jobs:
               > reports/eval-sanity-report.md
           fi
       - name: Upload sanity report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: eval-sanity-report
@@ -799,7 +804,7 @@ jobs:
       github.event_name == 'workflow_dispatch'
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: arduino/setup-protoc@v3
         with:
@@ -808,7 +813,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Set ANNO cache dir and eval history path (matches actions/cache)
         run: |
           echo "ANNO_CACHE_DIR=$HOME/.anno_cache" >> "$GITHUB_ENV"
@@ -828,14 +833,14 @@ jobs:
         if: ${{ vars.ANNO_AWS_ROLE_ARN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/eval-')) }}
         run: aws --version
       - name: Cache HF models
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/huggingface
           key: hf-models-${{ runner.os }}-v2
           restore-keys: |
             hf-models-${{ runner.os }}-
       - name: Cache datasets
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.anno_cache
           key: anno-datasets-${{ runner.os }}-v3-${{ github.run_id }}
@@ -843,7 +848,7 @@ jobs:
             anno-datasets-${{ runner.os }}-v3-
       # Restore eval history so full evals seed from accumulated observation counts.
       - name: Cache eval history (persistent observation counts)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.anno_cache/eval-results.jsonl
@@ -856,7 +861,7 @@ jobs:
         env:
           MAX_EXAMPLES: ${{ inputs.max_examples || '' }}
       - name: Upload full report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: eval-full-report
@@ -871,7 +876,7 @@ jobs:
     env:
       RUSTC_WRAPPER: ""
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       # Library crates gitignore Cargo.lock; generate one for the audit scan.
       - run: cargo generate-lockfile
@@ -890,7 +895,7 @@ jobs:
     # green for one release cycle.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # cargo-semver-checks compares against the previous published
           # release; needs full history to find the baseline.
@@ -903,7 +908,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
           # `cuda` feature requires nvcc which Linux runners don't have;
@@ -915,13 +920,22 @@ jobs:
   # Static Analysis Tools
   # ==========================================================================
 
-  # Comprehensive dependency linting — prebuilt action, no cargo install, ~15 s
+  # Comprehensive dependency linting. Run on the normal Ubuntu Rust toolchain
+  # instead of cargo-deny's Docker action; the Docker image uses a musl host
+  # that breaks cargo metadata with the pinned Rust 1.95 toolchain.
   cargo-deny:
     name: Cargo Deny
     runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: ""
     steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.95
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.19.8
+          fallback: none
+      - run: cargo deny --all-features check
   # ==========================================================================
   # Publish Validation (best-effort; expected to fail while publishing is paused)
   # ==========================================================================
@@ -931,7 +945,7 @@ jobs:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: arduino/setup-protoc@v3
         with:
@@ -940,7 +954,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: "v0.15.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.8.2
       - name: Validate workspace structure
         run: |
           echo "## Workspace Structure Validation" >> $GITHUB_STEP_SUMMARY
@@ -986,7 +1000,7 @@ jobs:
           See \`docs/PUBLISH_STATUS.md\` for detailed information and fixes.
           EOF
       - name: Upload publish validation report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: publish-validation-report

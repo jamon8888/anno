@@ -313,14 +313,9 @@ mod tests {
         std::fs::write(e5_dir.join("tokenizer.json"), b"not json").expect("tok");
         std::fs::write(e5_dir.join("model.safetensors"), b"not safetensors").expect("weights");
 
-        // Set the env var for this test. Note: env vars are process-global; this
-        // test is not #[ignore] so it must not conflict with parallel tests.
-        // We accept that risk for this unit test (model load tests run serially
-        // under `cargo test` by default in a single thread for #[tokio::test]).
-        std::env::set_var("ANNO_MODELS_DIR", dir.path());
+        let _models_dir = crate::env_guard::ScopedAnnoModelsDir::set(dir.path());
         let cfg = crate::config::AnnoRagConfig::default();
         let result = Embedder::load(&cfg).await;
-        std::env::remove_var("ANNO_MODELS_DIR");
 
         let err = match result {
             Ok(_) => panic!("must fail — garbage config.json"),

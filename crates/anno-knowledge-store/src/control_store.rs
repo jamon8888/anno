@@ -348,6 +348,34 @@ impl KnowledgeControlStore {
             .map_err(Into::into)
     }
 
+    /// Return the source whose scope provider key exactly matches `provider_key`.
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn source_by_provider_key(&self, provider_key: &str) -> Result<Option<SourceRow>> {
+        let conn = self.conn.lock().expect("knowledge sqlite mutex poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT src.source_id, src.kind, src.display_label_pseudo, src.enabled \
+             FROM source_scopes s \
+             JOIN source_accounts a ON a.account_id = s.account_id \
+             JOIN knowledge_sources src ON src.source_id = a.source_id \
+             WHERE s.provider_key = ?1 \
+             ORDER BY src.created_at \
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![provider_key])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(SourceRow {
+                source_id: SourceId::new(parse_uuid(row.get::<_, String>(0)?)?),
+                kind: row.get(1)?,
+                display_label_pseudo: row.get(2)?,
+                enabled: row.get::<_, i64>(3)? != 0,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Return enabled scopes for a source.
     ///
     /// # Errors
@@ -511,6 +539,34 @@ impl KnowledgeControlStore {
             params![sid],
         )? as u64;
         // knowledge_chunks/revisions/parts cascade via ON DELETE CASCADE.
+        tx.commit()?;
+        Ok(removed)
+    }
+
+    /// Delete a source and all objects, chunks, FTS rows, accounts, and scopes under it.
+    /// Returns the number of objects removed.
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn forget_source(&self, source_id: &SourceId) -> Result<u64> {
+        let sid = source_id.as_string();
+        let mut conn = self.conn.lock().expect("knowledge sqlite mutex poisoned");
+        let tx = conn.transaction()?;
+        // Remove FTS rows first (no cascade on the virtual table).
+        tx.execute(
+            "DELETE FROM knowledge_objects_fts WHERE object_id IN \
+             (SELECT object_id FROM knowledge_objects WHERE source_id = ?1)",
+            params![sid],
+        )?;
+        let removed = tx.execute(
+            "DELETE FROM knowledge_objects WHERE source_id = ?1",
+            params![sid],
+        )? as u64;
+        tx.execute(
+            "DELETE FROM knowledge_sources WHERE source_id = ?1",
+            params![sid],
+        )?;
+        // source_accounts/source_scopes and object children cascade via foreign keys.
         tx.commit()?;
         Ok(removed)
     }
@@ -858,5 +914,66 @@ mod tests {
             .search_fast(&KnowledgeSearchRequest::new("contrat").with_top_k(5))
             .expect("search");
         assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn forget_source_removes_source_objects_chunks_and_fts() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let store =
+            KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
+        let reg = store
+            .register_local_folder(LocalFolderRegistration {
+                stable_key: "C:/docs".into(),
+                source_label_pseudo: "FOLDER_1".into(),
+                scope_label_pseudo: "FOLDER_1".into(),
+                provider_key: "C:/docs".into(),
+            })
+            .expect("register");
+        let input = commit_input(
+            reg.scope_id,
+            reg.account_id,
+            reg.source_id,
+            [1u8; 32],
+            "le contrat FOLDER_1",
+        );
+        store.commit_object(&input).expect("commit");
+        assert_eq!(store.list_sources().expect("sources").len(), 1);
+
+        let removed = store.forget_source(&reg.source_id).expect("forget source");
+        assert_eq!(removed, 1);
+
+        assert!(store.list_sources().expect("sources").is_empty());
+        let status = store.status().expect("status");
+        assert_eq!(status.objects, 0);
+        assert_eq!(status.chunks, 0);
+        let hits = store
+            .search_fast(&KnowledgeSearchRequest::new("contrat").with_top_k(5))
+            .expect("search");
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn source_by_provider_key_finds_registered_local_folder() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let store =
+            KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
+        let reg = store
+            .register_local_folder(LocalFolderRegistration {
+                stable_key: "C:/docs".into(),
+                source_label_pseudo: "FOLDER_1".into(),
+                scope_label_pseudo: "FOLDER_1".into(),
+                provider_key: "C:/docs".into(),
+            })
+            .expect("register");
+
+        let found = store
+            .source_by_provider_key("C:/docs")
+            .expect("lookup")
+            .expect("source");
+        assert_eq!(found.source_id, reg.source_id);
+        assert!(store
+            .source_by_provider_key("C:/missing")
+            .expect("missing")
+            .is_none());
     }
 }

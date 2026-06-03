@@ -161,6 +161,21 @@ impl ReviewsTable {
         Ok(None)
     }
 
+    /// Delete a review row by id.
+    ///
+    /// This only removes the top-level review row. Callers that need a
+    /// cascading cleanup must delete dependent rows in sibling tables
+    /// explicitly before calling this method.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::Error::Lance`] on delete failure.
+    pub async fn delete(&self, id: ReviewId) -> Result<()> {
+        let id_hex = uuid_to_filter_lit(id.0);
+        self.tbl.delete(&format!("id = X'{id_hex}'")).await?;
+        Ok(())
+    }
+
     /// Increment the review's `schema_version` by one and return the
     /// new value. Called by [`crate::storage::ColumnsTable::add_with_bump`]
     /// whenever a column is added so the extraction engine can detect
@@ -326,6 +341,27 @@ mod tests {
         }
         let all = t.list().await.expect("list");
         assert_eq!(all.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn delete_removes_review() {
+        let (_dir, t) = fresh_table().await;
+        let r = Review {
+            id: ReviewId::new(),
+            name: "Review to delete".into(),
+            project_id: None,
+            template_id: None,
+            scope_folder: None,
+            created_at: Utc::now(),
+            schema_version: 1,
+        };
+        t.create(&r).await.expect("create");
+
+        t.delete(r.id).await.expect("delete");
+
+        assert!(t.get(r.id).await.expect("get").is_none());
+        let all = t.list().await.expect("list");
+        assert!(!all.iter().any(|review| review.id == r.id));
     }
 
     #[tokio::test]

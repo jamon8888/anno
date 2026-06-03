@@ -148,6 +148,21 @@ impl ColumnsTable {
         reviews.bump_schema_version(review_id).await
     }
 
+    /// Delete every column row belonging to `review_id`.
+    ///
+    /// Used by rollback paths that need to remove all materialized
+    /// template columns for a review. It does not delete the owning
+    /// review row or any cell rows.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::Error::Lance`] on delete failure.
+    pub async fn delete_for_review(&self, review_id: ReviewId) -> Result<()> {
+        let hex = uuid_to_filter_lit(review_id.0);
+        self.tbl.delete(&format!("review_id = X'{hex}'")).await?;
+        Ok(())
+    }
+
     /// List every column belonging to `review_id`, sorted by `order`.
     ///
     /// Lance returns batches in arbitrary order, so we sort in-process —
@@ -338,6 +353,38 @@ mod tests {
         let only_r1 = t.list_for_review(r1).await.expect("list r1");
         assert_eq!(only_r1.len(), 1);
         assert_eq!(only_r1[0].name, "a");
+    }
+
+    #[tokio::test]
+    async fn delete_for_review_removes_only_matching_columns() {
+        let (_dir, t) = fresh_table().await;
+        let r1 = ReviewId::new();
+        let r2 = ReviewId::new();
+        t.add(
+            r1,
+            &ColumnBuilder::new(r1, "a", "p", CellType::Text).build(),
+        )
+        .await
+        .expect("add r1 a");
+        t.add(
+            r1,
+            &ColumnBuilder::new(r1, "b", "p", CellType::Text).build(),
+        )
+        .await
+        .expect("add r1 b");
+        t.add(
+            r2,
+            &ColumnBuilder::new(r2, "c", "p", CellType::Text).build(),
+        )
+        .await
+        .expect("add r2");
+
+        t.delete_for_review(r1).await.expect("delete r1");
+
+        assert!(t.list_for_review(r1).await.expect("list r1").is_empty());
+        let r2_cols = t.list_for_review(r2).await.expect("list r2");
+        assert_eq!(r2_cols.len(), 1);
+        assert_eq!(r2_cols[0].name, "c");
     }
 
     #[tokio::test]

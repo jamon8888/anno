@@ -213,6 +213,39 @@ impl Pipeline {
         self.detector.initialized()
     }
 
+    /// List distinct raw legal corpus folder paths from the chunks table.
+    /// Intended for local/admin bookkeeping; do not expose these paths in MCP
+    /// or UI responses without a privacy gate.
+    ///
+    /// # Errors
+    /// Returns store errors on LanceDB query/decode failure.
+    pub async fn store_list_indexed_folder_paths(&self) -> Result<Vec<String>> {
+        self.store.list_indexed_folder_paths().await
+    }
+
+    /// Count rows in the legal chunks table.
+    ///
+    /// # Errors
+    /// Returns store errors on LanceDB count failure.
+    pub async fn store_count_chunks(&self) -> Result<u64> {
+        self.store.count_chunks().await
+    }
+
+    /// Remove legal corpus state whose `source_path` is inside `path`.
+    ///
+    /// # Errors
+    /// Returns store/legal/graph errors on cascade or chunk deletion failure.
+    pub async fn forget_legal_folder_path(&self, path: &str) -> Result<u64> {
+        let doc_ids = self.store.doc_ids_for_source_subtree(path).await?;
+        for doc_id in &doc_ids {
+            self.legal_store.delete_doc(*doc_id).await?;
+            self.legal_kg.delete_doc(*doc_id).await?;
+            self.enrichment_status.delete_doc(*doc_id).await?;
+        }
+        let report = self.store.delete_folder_rows(path).await?;
+        Ok(report.removed_chunks)
+    }
+
     /// Ingest a single file end-to-end. Writes `<stem>.anon.md` to `output_dir`.
     pub async fn ingest_one(&self, path: &Path, output_dir: &Path) -> Result<()> {
         self.ingest_one_counted(path, output_dir, &self.cfg).await?;
@@ -2037,6 +2070,33 @@ mod tests {
             ..Default::default()
         };
         Pipeline::new(cfg, [0u8; 32]).await.expect("pipeline opens")
+    }
+
+    #[tokio::test]
+    #[ignore = "opens Pipeline/LanceDB; run with --ignored"]
+    async fn forget_legal_folder_path_on_empty_store_is_noop() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let pipeline = match Pipeline::new(
+            AnnoRagConfig {
+                data_dir: dir.path().to_path_buf(),
+                ..Default::default()
+            },
+            [0u8; 32],
+        )
+        .await
+        {
+            Ok(pipeline) => pipeline,
+            Err(e) => {
+                eprintln!("skipping: {e}");
+                return;
+            }
+        };
+
+        let removed = pipeline
+            .forget_legal_folder_path("C:/does/not/exist")
+            .await
+            .expect("forget folder");
+        assert_eq!(removed, 0);
     }
 
     #[tokio::test]

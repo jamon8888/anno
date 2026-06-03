@@ -61,13 +61,29 @@ To see the columns in a template before creating a review, inspect the TOML file
 The installed MCP server exposes `review_*` tools for common tabular review
 workflows. The MCP surface is not a strict one-to-one mirror of every CLI
 subcommand, so use [MCP Tools](../developers/mcp-tools.md) and the installed
-tool list as the source of truth. Typical prompts:
+tool list as the source of truth.
+
+Canonical MCP workflow:
+
+1. Create a review with `review_create`.
+2. Add ingested document UUIDs with `review_add_rows`.
+3. Call `review_extract` when `review_add_rows.extraction_started` is `false`, or when a rerun is needed. Use `force_reextract=true` to rerun unlocked cells even when extraction already produced values.
+4. Poll `review_get` and inspect `extraction_status.state` until it is `completed`, `completed_with_errors`, or `blocked`.
+5. Correct cells with `review_refine_cell` for targeted re-extraction, or `review_set_cell` for a human override.
+6. Lock verified cells with `review_lock_cell`; unlock them with `review_unlock_cell` before changing them again.
+7. Export with `review_export`.
+
+`extraction_status.state` reports `completed` when extraction finished cleanly,
+`completed_with_errors` when some rows or cells failed, and `blocked` when the
+review cannot proceed until the reported error is resolved.
+
+Typical prompts:
 
 > "Create a tabular review called 'Acme NDA batch' using the nda-v1 template."
 
 > "Add these document UUIDs to review <uuid>: <doc_id_1>, <doc_id_2>."
 
-> "Add rows and extract cells for review <uuid> using these document UUIDs."
+> "Start extraction for review <uuid>; use force_reextract if unlocked cells should be rerun."
 
 > "Export review <uuid> as a Markdown table."
 
