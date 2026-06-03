@@ -33,7 +33,7 @@ Change `forget_impl_routing` so legal deletion is never silently skipped:
 
 - For `target` matching `legal_folder_*`, use `LegalMaintenanceService` to resolve and delete the folder id without calling `self.pipeline().await`; `self.pipeline()` is model-gated and would make maintenance depend on downloaded models.
 - For path targets, always attempt both knowledge deletion and legal deletion.
-- If legal deletion cannot run because the vault/pipeline cannot initialize, return `ok: false` with `errors=["legal forget: ..."]`.
+- If legal deletion cannot run because the legal maintenance stores cannot initialize, return `ok: false` with `errors=["legal forget: ..."]`.
 - Preserve the existing corpus-id path, which already uses document ids and can initialize the pipeline when needed.
 
 Acceptance:
