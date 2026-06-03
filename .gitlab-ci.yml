@@ -129,6 +129,9 @@ docs_audit:
   stage: hygiene
   image: python:3.10-slim
   interruptible: true
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git
   script:
     - python scripts/docs_audit.py
 
