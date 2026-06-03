@@ -966,6 +966,20 @@ fn parse_review_doc_ids(doc_ids: &[String]) -> ParsedReviewDocIds {
     ParsedReviewDocIds { valid, failed }
 }
 
+fn combine_review_add_rows_extraction_error(
+    mut row_errors: Vec<String>,
+    extraction_error: Option<String>,
+) -> Option<String> {
+    if let Some(error) = extraction_error {
+        row_errors.push(error);
+    }
+    if row_errors.is_empty() {
+        None
+    } else {
+        Some(row_errors.join("; "))
+    }
+}
+
 #[derive(Serialize)]
 struct ReviewExtractResult {
     review_id: String,
@@ -2988,6 +3002,7 @@ impl AnnoRagServer {
             }
         };
         let mut rows_added = 0usize;
+        let mut row_errors = Vec::new();
         for doc_id in ingested_doc_ids {
             let row = anno_rag_tabular::storage::rows::Row {
                 id: anno_rag_tabular::RowId::for_doc(review_id, doc_id),
@@ -3000,6 +3015,7 @@ impl AnnoRagServer {
                 Ok(()) => rows_added += 1,
                 Err(e) => {
                     tracing::warn!(target: "tabular::mcp", "add_row failed for {doc_id}: {e}");
+                    row_errors.push(format!("adding row for doc_id {doc_id}: {e}"));
                     failed.push(doc_id.to_string());
                 }
             }
@@ -3012,14 +3028,19 @@ impl AnnoRagServer {
         } else {
             None
         };
+        let extraction_started = extraction
+            .as_ref()
+            .map(|result| result.extraction_started)
+            .unwrap_or(false);
+        let extraction_error = combine_review_add_rows_extraction_error(
+            row_errors,
+            extraction.and_then(|result| result.extraction_error),
+        );
         serde_json::to_string_pretty(&ReviewAddRowsResult {
             rows_added,
-            extraction_started: extraction
-                .as_ref()
-                .map(|result| result.extraction_started)
-                .unwrap_or(false),
+            extraction_started,
             failed_doc_ids: failed,
-            extraction_error: extraction.and_then(|result| result.extraction_error),
+            extraction_error,
         })
         .unwrap_or_else(|e| format!("Error: {e}"))
     }
@@ -3703,6 +3724,21 @@ mod tabular_status_tests {
 
         assert_eq!(parsed.valid, vec![good]);
         assert_eq!(parsed.failed, vec!["not-a-uuid".to_string()]);
+    }
+
+    #[test]
+    fn review_add_rows_extraction_error_includes_row_storage_errors() {
+        let combined = combine_review_add_rows_extraction_error(
+            vec![
+                "adding row for doc_id 018f1a90-f1a0-7000-8000-000000000001: write failed"
+                    .into(),
+            ],
+            Some("review has no columns to extract".into()),
+        )
+        .expect("combined error");
+
+        assert!(combined.contains("write failed"));
+        assert!(combined.contains("review has no columns to extract"));
     }
 
     #[test]
