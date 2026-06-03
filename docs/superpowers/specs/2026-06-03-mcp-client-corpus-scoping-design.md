@@ -35,6 +35,72 @@ Search is not client-corpus scoped:
 
 This allows an indexed folder A and indexed folder B to both participate in later searches unless the tool implementation applies a corpus filter.
 
+## Code Review Findings
+
+The design is driven by the following issues observed in the existing code:
+
+### P0: Unified MCP Search Is Not Client Scoped
+
+`SearchUnifiedParams` currently exposes only `query`, `top_k`, `mode`, `scope`, and legal `filters`. There is no `corpus_id` and no `allow_cross_corpus` override. The unified router calls knowledge and legal search without a client-folder constraint, so `scope` only selects the index family, not the active client dossier.
+
+Required change:
+
+- Add `corpus_id` and `allow_cross_corpus` to the unified search params.
+- Resolve the effective corpus before any backend search runs.
+- Refuse unscoped searches when more than one corpus exists.
+- Include `corpus_id` in every hit returned to Claude Desktop.
+
+### P0: Knowledge FTS Searches All Sources
+
+`KnowledgeSearchRequest` has no source or corpus field, and `search_fast` queries `knowledge_objects_fts` directly with only `MATCH ?1`. That means all registered local-folder sources participate in FTS ranking.
+
+Required change:
+
+- Extend the knowledge search request with a source/corpus filter.
+- Join or filter through `knowledge_objects` so FTS results are limited to the selected corpus.
+- Return `source_id` or `corpus_id` in hits for auditability.
+
+### P0: Legal Search Falls Back To Global LanceDB Search
+
+`legal_search` applies legal metadata filters only when `LegalSearchFilters::has_any_filter()` is true. Without such filters, it calls the global chunk search. The legal metadata filters are business filters, not client-folder isolation, and ingestion currently does not stamp a corpus filter.
+
+Required change:
+
+- Add a corpus filter path independent of business legal filters.
+- Restrict candidate chunks to document ids under the selected legal folder root.
+- Compose corpus filtering with existing legal filters instead of replacing them.
+
+### P1: Tabular Reviews Do Not Enforce Their Scope
+
+`review_create.scope_folder` is stored but not used as an operational guard. `review_add_rows` verifies only that a `doc_id` exists in the global index and writes tabular rows with `folder_path: None`.
+
+Required change:
+
+- Store authoritative corpus scope on each review.
+- Validate every added `doc_id` against the review corpus.
+- Persist row scope metadata rather than `None`.
+- Make `review_extract` and `review_refine_cell` use the review corpus when reading source chunks.
+
+### P1: Forget By UUID Leaves Legal Data Behind
+
+`forget(target)` treats UUID targets as knowledge source ids and only removes knowledge data. Legal data is removed through `legal_folder_*` ids or explicit raw paths. For a folder indexed with `profile=all`, a user can remove the knowledge side while the legal chunks remain searchable.
+
+Required change:
+
+- Introduce corpus-aware forgetting.
+- `forget(target=corpus_id)` must remove both knowledge and legal data for the corpus.
+- Keep legacy `knowledge_forget` and `legal_folder_*` behavior, but make the main `forget` tool report whether it removed both sides.
+
+### P1: Case-File Extraction Uses Raw Cypher
+
+`legal_extract_case_file` reaches `extract_case_file`, which calls `kg.cypher(...)`. The SQLite graph backend does not support raw Cypher execution, so the tool fails before returning an empty or populated case-file result.
+
+Required change:
+
+- Replace raw Cypher calls with typed graph methods implemented by the SQLite backend.
+- Keep the MCP shape stable.
+- Add tests proving unknown dossiers return empty results instead of backend errors.
+
 ## Proposed Model
 
 ### Corpus
@@ -119,23 +185,39 @@ If two or more corpus entries exist, sensitive tools require `corpus_id`. Withou
 
 - Use the review's corpus scope.
 
+`forget(target)`
+
+- Accepts `corpus_id` as the preferred target.
+- Removes both knowledge objects and legal chunks for the corpus.
+- Reports separate `knowledge_objects` and `legal_chunks` removal counts.
+
 Deprecated legal and knowledge aliases must share the same guard logic as their replacement tools.
 
 ## Data Changes
 
 ### Knowledge
 
-Extend `KnowledgeSearchRequest` with optional `source_id` or `corpus_id` filtering. The SQLite FTS query should join or filter through `knowledge_objects` so results are restricted to the selected source/scope. Hits should include `corpus_id` or `source_id` in the wire response.
+Extend `KnowledgeSearchRequest` with optional `source_id` or `corpus_id` filtering. The SQLite FTS query must join or filter through `knowledge_objects` so results are restricted to the selected source/scope before ranking and limiting. Hits must include `corpus_id` or `source_id` in the wire response.
 
 ### Legal
 
-Persist the mapping between `corpus_id` and legal folder root. Legal search should be able to restrict candidate chunks to documents whose `source_path` is inside that root. The existing store already has subtree helpers for legal folder paths; the implementation should reuse them instead of exposing raw paths in MCP.
+Persist the mapping between `corpus_id` and legal folder root. Legal search must restrict candidate chunks to documents whose `source_path` is inside that root. The existing store already has subtree helpers for legal folder paths; the implementation should reuse them instead of exposing raw paths in MCP. This corpus filter must run even when no business legal filters are supplied.
 
 For better future dossier workflows, legal ingestion should also stamp a corpus grouping key into legal enrichment metadata or graph document nodes. This key can coexist with business `dossier_id`.
 
 ### Tabular
 
-Add or use an existing review field for authoritative corpus scope. Fill row scope metadata when adding documents. Any tabular operation that traverses source documents must validate against the review corpus.
+Add or use an existing review field for authoritative corpus scope. Fill row scope metadata when adding documents. Any tabular operation that traverses source documents must validate against the review corpus. A `doc_id` that exists globally but belongs to another corpus must be rejected.
+
+### Forget
+
+The corpus registry must make deletion symmetric. Removing a corpus removes:
+
+- the knowledge source and its FTS rows;
+- legal chunks whose source path is inside the corpus root;
+- legal enrichment rows for those document ids;
+- legal graph nodes and edges for those document ids;
+- tabular reviews, rows, columns, and cells scoped to the corpus.
 
 ## Baseline Fixes
 
@@ -173,6 +255,7 @@ Verification:
 - Knowledge FTS filtering restricts by selected source/corpus.
 - Legal folder subtree filtering returns only documents inside the selected corpus.
 - Tabular `review_add_rows` rejects doc ids outside the review corpus.
+- `forget(corpus_id)` removes both knowledge and legal data for a corpus indexed with `profile=all`.
 - SQLite case-file graph methods return empty rows for unknown dossiers.
 - SQLite case-file graph methods return expected rows for a synthetic dossier.
 
@@ -184,6 +267,7 @@ Verification:
 - Search with `corpus_id=B` returns no A hits.
 - Search with `allow_cross_corpus=true` can return both A and B.
 - `review_create(corpus_id=A)` then `review_add_rows` with a B document returns a clear error.
+- `forget(corpus_id=A)` removes A from both knowledge and legal indexes while B remains searchable.
 - Deprecated `knowledge_search` and `legal_search` obey the same guard.
 - `index(profile=all)` on the PDF fixture returns `ok:true`, `failed:0`.
 - `legal_extract_case_file` does not fail with the SQLite Cypher error.
@@ -194,7 +278,8 @@ Verification:
 2. Add corpus registry and expose `corpus_list`/`corpus_get`.
 3. Add corpus filtering and guard behavior to search tools.
 4. Scope tabular reviews and row additions.
-5. Run sustained MCP tests across two synthetic corpora and the existing multi-format fixture.
+5. Make `forget` corpus-aware and symmetric across knowledge and legal data.
+6. Run sustained MCP tests across two synthetic corpora and the existing multi-format fixture.
 
 ## Acceptance Criteria
 
@@ -202,6 +287,7 @@ Verification:
 - With multiple corpora present, sensitive tools refuse unscoped calls.
 - A selected `corpus_id` limits knowledge search, legal search, legal extraction, and tabular review operations to that corpus.
 - Cross-corpus search requires `allow_cross_corpus: true`.
+- `forget(corpus_id)` removes both knowledge and legal data for that corpus.
 - PDF ingestion works in local Claude Desktop builds without a system Pdfium installation.
 - `legal_extract_case_file` works on the SQLite graph backend.
 - Raw filesystem paths are not returned by the MCP corpus or search responses.
