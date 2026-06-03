@@ -3729,10 +3729,7 @@ mod tabular_status_tests {
     #[test]
     fn review_add_rows_extraction_error_includes_row_storage_errors() {
         let combined = combine_review_add_rows_extraction_error(
-            vec![
-                "adding row for doc_id 018f1a90-f1a0-7000-8000-000000000001: write failed"
-                    .into(),
-            ],
+            vec!["adding row for doc_id 018f1a90-f1a0-7000-8000-000000000001: write failed".into()],
             Some("review has no columns to extract".into()),
         )
         .expect("combined error");
