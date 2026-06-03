@@ -15,6 +15,7 @@ mod indexer;
 pub mod knowledge;
 pub mod tabular;
 
+use crate::indexer::SyncSummary;
 use anno_rag::config::{AnnoRagConfig, MemoryNerMode};
 use anno_rag::pipeline::Pipeline;
 use rmcp::{
@@ -160,6 +161,38 @@ pub struct KnowledgeAddFolderParams {
     pub path: String,
 }
 
+/// Parameters for `index`.
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+pub struct IndexParams {
+    /// Absolute path to index.
+    pub path: String,
+    /// Indexing profile: general, legal, or all.
+    #[serde(default = "default_index_profile")]
+    pub profile: String,
+}
+
+fn default_index_profile() -> String {
+    "general".to_string()
+}
+
+fn validate_profile(profile: &str) -> Result<(), String> {
+    match profile {
+        "general" | "legal" | "all" => Ok(()),
+        other => Err(format!(
+            "Unsupported index profile '{other}'. Expected one of: general, legal, all."
+        )),
+    }
+}
+
+fn knowledge_sync_issue(summary: &SyncSummary) -> Option<String> {
+    (summary.failed > 0 || summary.truncated).then(|| {
+        format!(
+            "knowledge sync incomplete: failed={}, truncated={}",
+            summary.failed, summary.truncated
+        )
+    })
+}
+
 /// Parameters for `knowledge_sync`.
 #[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 pub struct KnowledgeSyncParams {
@@ -175,7 +208,14 @@ pub struct KnowledgeForgetParams {
     pub source_id: String,
 }
 
-/// Parameters for the `search` tool.
+/// Parameters for the unified `forget` tool.
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ForgetParams {
+    /// Source id (UUID), legal corpus id returned by sources(), or explicit local folder path supplied by the user.
+    pub target: String,
+}
+
+/// Parameters for the `legacy_search` tool.
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct SearchParams {
     /// User query text. May contain PII — will be pseudonymized through the vault.
@@ -191,6 +231,29 @@ pub struct SearchParams {
 }
 
 fn default_top_k() -> usize {
+    10
+}
+
+/// Parameters for the unified `search` tool.
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct SearchUnifiedParams {
+    /// User query text.
+    pub query: String,
+    /// Maximum number of results. Default: 10.
+    #[serde(default = "default_search_unified_top_k")]
+    pub top_k: usize,
+    /// Search mode: `fast` (default) or `semantic`.
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// Search scope: `all` (default), `knowledge`, or `legal`.
+    #[serde(default)]
+    pub scope: Option<String>,
+    /// Optional legal-search filters when legal scope is included.
+    #[serde(default)]
+    pub filters: Option<serde_json::Value>,
+}
+
+fn default_search_unified_top_k() -> usize {
     10
 }
 
@@ -508,6 +571,89 @@ pub struct LegalSearchParams {
     pub min_confidence: Option<f32>,
 }
 
+fn build_legal_search_params(p: &SearchUnifiedParams) -> LegalSearchParams {
+    let filters = p.filters.as_ref().and_then(serde_json::Value::as_object);
+
+    LegalSearchParams {
+        query: p.query.clone(),
+        top_k: p.top_k,
+        doc_type: filter_string(filters, "doc_type"),
+        legal_domain: filter_string(filters, "legal_domain"),
+        jurisdiction: filter_string(filters, "jurisdiction"),
+        dossier_id: filter_string(filters, "dossier_id"),
+        parties: filter_string_vec(filters, "parties"),
+        party_roles: filter_string_vec(filters, "party_roles"),
+        legal_refs: filter_string_vec(filters, "legal_refs"),
+        clause_types: filter_string_vec(filters, "clause_types"),
+        obligation_kinds: filter_string_vec(filters, "obligation_kinds"),
+        risk_flags: filter_string_vec(filters, "risk_flags"),
+        min_confidence: filter_f32(filters, "min_confidence"),
+    }
+}
+
+fn filter_string(
+    filters: Option<&serde_json::Map<String, serde_json::Value>>,
+    key: &str,
+) -> Option<String> {
+    filters
+        .and_then(|values| values.get(key))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+}
+
+fn filter_string_vec(
+    filters: Option<&serde_json::Map<String, serde_json::Value>>,
+    key: &str,
+) -> Vec<String> {
+    filters
+        .and_then(|values| values.get(key))
+        .and_then(serde_json::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn filter_f32(
+    filters: Option<&serde_json::Map<String, serde_json::Value>>,
+    key: &str,
+) -> Option<f32> {
+    filters
+        .and_then(|values| values.get(key))
+        .and_then(serde_json::Value::as_f64)
+        .map(|value| value as f32)
+}
+
+fn normalize_search_mode(mode: Option<String>, warnings: &mut Vec<String>) -> String {
+    match mode.as_deref().unwrap_or("fast") {
+        "fast" => "fast".to_string(),
+        "semantic" => "semantic".to_string(),
+        other => {
+            warnings.push(format!(
+                "unsupported search mode '{other}'; using mode='fast'"
+            ));
+            "fast".to_string()
+        }
+    }
+}
+
+fn normalize_search_scope(scope: Option<String>, warnings: &mut Vec<String>) -> String {
+    match scope.as_deref().unwrap_or("all") {
+        "all" => "all".to_string(),
+        "knowledge" => "knowledge".to_string(),
+        "legal" => "legal".to_string(),
+        other => {
+            warnings.push(format!(
+                "unsupported search scope '{other}'; using scope='all'"
+            ));
+            "all".to_string()
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct LegalSearchHitWire {
     chunk_id: String,
@@ -817,26 +963,17 @@ struct ReviewCellWire {
     version: u32,
 }
 
-// ---- Tool router ----
+// ---- Internal tool implementations ----
 
-#[tool_router]
 impl AnnoRagServer {
-    /// Search the indexed corpus. Pseudonymizes the query through the local
-    /// vault, embeds it, and returns top-K ranked pseudonymized chunks.
-    #[tool(
-        description = "Search the indexed corpus. Pseudonymizes the query through the local vault, embeds it, returns top-K ranked chunks. Chunks are pseudonymized — call rehydrate(text) to restore originals."
-    )]
-    async fn search(&self, Parameters(params): Parameters<SearchParams>) -> String {
-        let p = match self.pipeline().await {
-            Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
-        };
+    async fn legacy_search_impl(&self, params: SearchParams) -> Result<serde_json::Value, String> {
+        let p = self.pipeline().await.map_err(|e| e.to_string())?;
         let result = if params.rerank {
             #[cfg(feature = "rerank")]
             {
                 tracing::info!(
                     target: "anno_rag::audit",
-                    tool = "search",
+                    tool = "legacy_search",
                     score_source = "cross_encoder",
                     ""
                 );
@@ -845,42 +982,540 @@ impl AnnoRagServer {
             }
             #[cfg(not(feature = "rerank"))]
             {
-                return "Error: rerank requested but server built without \
+                return Err("rerank requested but server built without \
                         the `rerank` feature"
-                    .to_string();
+                    .to_string());
             }
         } else {
             tracing::info!(
                 target: "anno_rag::audit",
-                tool = "search",
+                tool = "legacy_search",
                 score_source = "rrf",
                 ""
             );
             p.search(&params.query, params.top_k).await
         };
-        match result {
+        let hits = result.map_err(|e| e.to_string())?;
+        let wire = SearchResult {
+            hits: hits
+                .into_iter()
+                .map(|h| SearchHitWire {
+                    doc_id: h.doc_id.to_string(),
+                    chunk_id: h.chunk_id.to_string(),
+                    source_path: h.source_path,
+                    folder_path: h.folder_path,
+                    chunk_idx: h.chunk_idx,
+                    text_pseudo: h.text_pseudo,
+                    page: h.page,
+                    char_start: h.char_start,
+                    char_end: h.char_end,
+                    score: h.score,
+                })
+                .collect(),
+        };
+        serde_json::to_value(wire).map_err(|e| e.to_string())
+    }
+
+    async fn vault_stats_impl(&self) -> Result<serde_json::Value, String> {
+        let p = self.pipeline().await.map_err(|e| e.to_string())?;
+        let s = p.vault_stats().await;
+        let wire = VaultStatsResult {
+            total_mappings: s.total_mappings,
+            categories: s.categories,
+        };
+        serde_json::to_value(wire).map_err(|e| e.to_string())
+    }
+
+    async fn legal_ingest_impl(&self, p: LegalIngestParams) -> Result<serde_json::Value, String> {
+        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let folder = std::path::Path::new(&p.folder);
+        let out = folder.join("anon");
+        let start = std::time::Instant::now();
+        match pipeline.ingest_folder(folder, p.recursive, &out).await {
+            Ok(n) => {
+                tracing::info!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_ingest",
+                    result = "ok",
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    ingested = n,
+                    ""
+                );
+                serde_json::to_value(LegalIngestResult {
+                    ingested: n,
+                    folder: p.folder,
+                })
+                .map_err(|e| e.to_string())
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_ingest",
+                    result = "error",
+                    "{e}"
+                );
+                Err(e.to_string())
+            }
+        }
+    }
+
+    async fn legal_search_impl(&self, p: LegalSearchParams) -> Result<serde_json::Value, String> {
+        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let filters = anno_rag::legal::types::LegalSearchFilters {
+            doc_type: p.doc_type,
+            legal_domain: p.legal_domain,
+            jurisdiction: p.jurisdiction,
+            dossier_id: p.dossier_id,
+            parties: p.parties,
+            party_roles: p.party_roles,
+            legal_refs: p.legal_refs,
+            clause_types: p.clause_types,
+            obligation_kinds: p.obligation_kinds,
+            risk_flags: p.risk_flags,
+            min_confidence: p.min_confidence,
+            ..Default::default()
+        };
+        let start = std::time::Instant::now();
+        match pipeline.legal_search(&p.query, p.top_k, filters).await {
             Ok(hits) => {
-                let wire = SearchResult {
+                tracing::info!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_search",
+                    result = "ok",
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    n = hits.len(),
+                    ""
+                );
+                serde_json::to_value(LegalSearchResult {
                     hits: hits
                         .into_iter()
-                        .map(|h| SearchHitWire {
-                            doc_id: h.doc_id.to_string(),
+                        .map(|h| LegalSearchHitWire {
                             chunk_id: h.chunk_id.to_string(),
-                            source_path: h.source_path,
-                            folder_path: h.folder_path,
-                            chunk_idx: h.chunk_idx,
+                            doc_id: h.doc_id.to_string(),
                             text_pseudo: h.text_pseudo,
-                            page: h.page,
-                            char_start: h.char_start,
-                            char_end: h.char_end,
                             score: h.score,
                         })
                         .collect(),
-                };
-                serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
+                })
+                .map_err(|e| e.to_string())
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "anno_rag::legal::audit",
+                    tool = "legal_search",
+                    result = "error",
+                    "{e}"
+                );
+                Err(e.to_string())
+            }
+        }
+    }
+
+    async fn knowledge_sources_impl(&self) -> Result<Vec<serde_json::Value>, String> {
+        let service = self.knowledge().await.map_err(|e| e.to_string())?;
+        Ok(service.sources())
+    }
+
+    pub(crate) async fn sources_impl_routing(&self) -> String {
+        let mut sources = Vec::<serde_json::Value>::new();
+
+        if let Ok(knowledge_sources) = self.knowledge_sources_impl().await {
+            for mut source in knowledge_sources {
+                if let serde_json::Value::Object(ref mut object) = source {
+                    if let Some(source_id) = object
+                        .get("source_id")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                    {
+                        object.insert("id".to_string(), serde_json::Value::String(source_id));
+                    }
+                    object.insert(
+                        "kind".to_string(),
+                        serde_json::Value::String("knowledge_folder".to_string()),
+                    );
+                }
+                sources.push(source);
+            }
+        }
+
+        if let Some(pipeline) = self.pipeline_arc() {
+            if let Ok(paths) = pipeline.store_list_indexed_folder_paths().await {
+                for path in paths {
+                    let id = legal_folder_id(&path);
+                    sources.push(serde_json::json!({
+                        "id": id,
+                        "kind": "legal_corpus",
+                        "label": id,
+                    }));
+                }
+            }
+        }
+
+        serde_json::json!({
+            "ok": true,
+            "sources": sources,
+        })
+        .to_string()
+    }
+
+    pub(crate) async fn status_impl_routing(&self) -> String {
+        let knowledge = self
+            .knowledge_status_impl()
+            .await
+            .ok()
+            .and_then(|s| serde_json::to_value(s).ok())
+            .unwrap_or(serde_json::Value::Null);
+
+        let legal = match self.pipeline_arc() {
+            Some(p) => match p.store_count_chunks().await {
+                Ok(n) => serde_json::json!({ "chunks": n }),
+                Err(_) => serde_json::Value::Null,
+            },
+            None => serde_json::Value::Null,
+        };
+
+        let vault = match self.pipeline_arc() {
+            Some(p) => {
+                let stats = p.vault_stats().await;
+                serde_json::json!({
+                    "available": true,
+                    "total_mappings": stats.total_mappings,
+                    "categories": stats.categories,
+                })
+            }
+            None => serde_json::json!({
+                "available": false,
+                "reason": "pipeline_not_initialized",
+                "total_mappings": null,
+                "categories": {},
+            }),
+        };
+
+        let models = match self.pipeline_arc() {
+            Some(p) => serde_json::json!({
+                "embedder_loaded": p.embedder_loaded(),
+                "detector_loaded": p.detector_loaded(),
+            }),
+            None => serde_json::json!({ "embedder_loaded": false, "detector_loaded": false }),
+        };
+
+        serde_json::json!({
+            "ok": true,
+            "knowledge": knowledge,
+            "legal": legal,
+            "vault": vault,
+            "models": models,
+        })
+        .to_string()
+    }
+
+    async fn knowledge_status_impl(&self) -> Result<anno_knowledge_core::KnowledgeStatus, String> {
+        let service = self.knowledge().await.map_err(|e| e.to_string())?;
+        service.status().map_err(|e| e.to_string())
+    }
+
+    async fn knowledge_search_impl(
+        &self,
+        p: crate::knowledge::KnowledgeSearchParams,
+    ) -> Result<crate::knowledge::KnowledgeSearchResponse, String> {
+        let service = self.knowledge().await.map_err(|e| e.to_string())?;
+        service.search(p).map_err(|e| e.to_string())
+    }
+
+    pub(crate) async fn search_impl_routing(&self, p: SearchUnifiedParams) -> String {
+        let mut hits = Vec::<serde_json::Value>::new();
+        let mut warnings = Vec::<String>::new();
+        let mode = normalize_search_mode(p.mode.clone(), &mut warnings);
+        let scope = normalize_search_scope(p.scope.clone(), &mut warnings);
+
+        if scope == "all" || scope == "knowledge" {
+            if mode == "semantic" {
+                warnings.push(
+                    "knowledge scope skipped in semantic mode (knowledge index currently supports fast mode only)"
+                        .to_string(),
+                );
+            } else {
+                match self
+                    .knowledge_search_impl(crate::knowledge::KnowledgeSearchParams {
+                        query: p.query.clone(),
+                        top_k: p.top_k,
+                        mode: Some(mode.clone()),
+                    })
+                    .await
+                {
+                    Ok(result) => {
+                        for hit in result.hits {
+                            match serde_json::to_value(hit) {
+                                Ok(mut value) => {
+                                    if let Some(object) = value.as_object_mut() {
+                                        object.insert(
+                                            "source".to_string(),
+                                            serde_json::Value::String("knowledge".to_string()),
+                                        );
+                                    }
+                                    hits.push(value);
+                                }
+                                Err(e) => warnings.push(format!("knowledge scope failed: {e}")),
+                            }
+                        }
+                    }
+                    Err(e) => warnings.push(format!("knowledge scope failed: {e}")),
+                }
+            }
+        }
+
+        if scope == "all" || scope == "legal" {
+            if mode == "fast" {
+                warnings.push(
+                    "legal scope skipped in fast mode (requires models). Use mode='semantic' to include legal results.".to_string(),
+                );
+            } else {
+                match self.legal_search_impl(build_legal_search_params(&p)).await {
+                    Ok(value) => {
+                        if let Some(legal_hits) =
+                            value.get("hits").and_then(serde_json::Value::as_array)
+                        {
+                            for hit in legal_hits {
+                                let mut value = hit.clone();
+                                if let Some(object) = value.as_object_mut() {
+                                    object.insert(
+                                        "source".to_string(),
+                                        serde_json::Value::String("legal".to_string()),
+                                    );
+                                }
+                                hits.push(value);
+                            }
+                        }
+                    }
+                    Err(e) => warnings.push(format!("legal scope failed: {e}")),
+                }
+            }
+        }
+
+        serde_json::json!({
+            "ok": true,
+            "mode_used": mode,
+            "scope_used": scope,
+            "hits": hits,
+            "warnings": warnings,
+        })
+        .to_string()
+    }
+
+    async fn knowledge_add_local_folder_impl(&self, path: &str) -> Result<String, String> {
+        let service = self.knowledge().await.map_err(|e| e.to_string())?;
+        service.add_local_folder(path).map_err(|e| e.to_string())
+    }
+
+    async fn knowledge_sync_impl(&self, p: KnowledgeSyncParams) -> Result<SyncSummary, String> {
+        let service = self.knowledge().await.map_err(|e| e.to_string())?;
+        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        service
+            .sync(pipeline, self.cfg.as_ref(), p.source_id.as_deref())
+            .await
+    }
+
+    pub(crate) async fn index_impl_routing(&self, p: IndexParams) -> String {
+        if let Err(error) = validate_profile(&p.profile) {
+            return serde_json::json!({
+                "ok": false,
+                "error": error,
+            })
+            .to_string();
+        }
+
+        let mut knowledge = serde_json::Value::Null;
+        let mut legal = serde_json::Value::Null;
+        let mut errors = Vec::new();
+
+        if matches!(p.profile.as_str(), "general" | "all") {
+            match self.knowledge_add_local_folder_impl(&p.path).await {
+                Ok(source_id) => {
+                    match self
+                        .knowledge_sync_impl(KnowledgeSyncParams {
+                            source_id: Some(source_id.clone()),
+                        })
+                        .await
+                    {
+                        Ok(summary) => {
+                            if let Some(issue) = knowledge_sync_issue(&summary) {
+                                errors.push(issue);
+                            }
+                            knowledge = serde_json::json!({
+                                "source_id": source_id,
+                                "summary": summary,
+                            });
+                        }
+                        Err(e) => errors.push(format!("knowledge sync: {e}")),
+                    }
+                }
+                Err(e) => errors.push(format!("knowledge add: {e}")),
+            }
+        }
+
+        if matches!(p.profile.as_str(), "legal" | "all") {
+            match self
+                .legal_ingest_impl(LegalIngestParams {
+                    folder: p.path.clone(),
+                    recursive: true,
+                })
+                .await
+            {
+                Ok(value) => legal = value,
+                Err(e) => errors.push(format!("legal ingest: {e}")),
+            }
+        }
+
+        let errors = if errors.is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::json!(errors)
+        };
+
+        serde_json::json!({
+            "ok": errors.is_null(),
+            "profile": p.profile,
+            "knowledge": knowledge,
+            "legal": legal,
+            "errors": errors,
+        })
+        .to_string()
+    }
+
+    async fn knowledge_forget_impl(&self, p: KnowledgeForgetParams) -> Result<u64, String> {
+        let service = self.knowledge().await.map_err(|e| e.to_string())?;
+        service
+            .forget_source(&p.source_id)
+            .map_err(|e| e.to_string())
+    }
+
+    pub(crate) async fn forget_impl_routing(&self, p: ForgetParams) -> String {
+        let mut knowledge_removed = 0;
+        let mut legal_removed = 0;
+        let mut errors = Vec::<String>::new();
+
+        if p.target.starts_with("legal_folder_") {
+            if let Some(pipeline) = self.pipeline_arc() {
+                match self.resolve_legal_folder_id(&pipeline, &p.target).await {
+                    Ok(Some(path)) => match pipeline.forget_legal_folder_path(&path).await {
+                        Ok(removed) => legal_removed = removed,
+                        Err(e) => errors.push(format!("legal forget: {e}")),
+                    },
+                    Ok(None) => {}
+                    Err(e) => errors.push(format!("legal resolve: {e}")),
+                }
+            }
+        } else if uuid::Uuid::parse_str(&p.target).is_ok() {
+            match self
+                .knowledge_forget_impl(KnowledgeForgetParams {
+                    source_id: p.target.clone(),
+                })
+                .await
+            {
+                Ok(removed) => knowledge_removed = removed,
+                Err(e) => errors.push(format!("knowledge forget: {e}")),
+            }
+        } else {
+            match self.knowledge_forget_by_path(&p.target).await {
+                Ok(removed) => knowledge_removed = removed,
+                Err(e) => errors.push(format!("knowledge forget: {e}")),
+            }
+
+            if let Some(pipeline) = self.pipeline_arc() {
+                match pipeline.forget_legal_folder_path(&p.target).await {
+                    Ok(removed) => legal_removed = removed,
+                    Err(e) => errors.push(format!("legal forget: {e}")),
+                }
+            }
+        }
+
+        serde_json::json!({
+            "ok": errors.is_empty(),
+            "removed": {
+                "knowledge_objects": knowledge_removed,
+                "legal_chunks": legal_removed,
+            },
+            "errors": if errors.is_empty() {
+                serde_json::Value::Null
+            } else {
+                serde_json::json!(errors)
+            },
+        })
+        .to_string()
+    }
+
+    async fn knowledge_forget_by_path(&self, path: &str) -> Result<u64, String> {
+        let service = self.knowledge().await.map_err(|e| e.to_string())?;
+        service
+            .forget_source_by_path(path)
+            .map_err(|e| e.to_string())
+    }
+
+    async fn resolve_legal_folder_id(
+        &self,
+        pipeline: &anno_rag::pipeline::Pipeline,
+        id: &str,
+    ) -> Result<Option<String>, String> {
+        let paths = pipeline
+            .store_list_indexed_folder_paths()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(paths.into_iter().find(|path| legal_folder_id(path) == id))
+    }
+}
+
+fn legal_folder_id(path: &str) -> String {
+    let stable = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, path.as_bytes())
+        .simple()
+        .to_string();
+    format!("legal_folder_{}", &stable[..12])
+}
+
+// ---- Tool router ----
+
+#[tool_router]
+impl AnnoRagServer {
+    /// Deprecated legacy search over the indexed corpus.
+    #[tool(
+        description = "Deprecated - use 'search(scope=\"legal\", mode=\"semantic\")' for equivalent behavior. Continues to work."
+    )]
+    async fn legacy_search(&self, Parameters(params): Parameters<SearchParams>) -> String {
+        match self.legacy_search_impl(params).await {
+            Ok(value) => {
+                serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => format!("Error: {e}"),
         }
+    }
+
+    /// Unified search tool across local indexes.
+    #[tool(
+        description = "Search Anno's local indexes. mode='fast' (default) uses SQLite FTS5 - no models loaded. mode='semantic' loads the embedder. scope='all' (default), 'knowledge', or 'legal'. filters forwarded to legal scope."
+    )]
+    async fn search(&self, Parameters(p): Parameters<SearchUnifiedParams>) -> String {
+        self.search_impl_routing(p).await
+    }
+
+    #[tool(
+        description = "List all indexed sources. Labels and ids are pseudonymous; raw local paths are not returned. Does not load models."
+    )]
+    async fn sources(&self) -> String {
+        self.sources_impl_routing().await
+    }
+
+    #[tool(
+        description = "Remove an indexed source. Accepts a source_id (UUID), a legal corpus id from sources(), or an explicit folder path. Does not load models."
+    )]
+    async fn forget(&self, Parameters(p): Parameters<ForgetParams>) -> String {
+        self.forget_impl_routing(p).await
+    }
+
+    #[tool(
+        description = "Anno-wide index health: source counts, chunks, vault stats, model load state. Does not load models."
+    )]
+    async fn status(&self) -> String {
+        self.status_impl_routing().await
     }
 
     /// Replace pseudo-tokens in text back with original PII from the vault.
@@ -936,16 +1571,12 @@ impl AnnoRagServer {
     /// Vault diagnostics: total token mappings and per-category counts.
     #[tool(description = "Vault statistics: total token mappings and per-category counts.")]
     async fn vault_stats(&self) -> String {
-        let p = match self.pipeline().await {
-            Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
-        };
-        let s = p.vault_stats().await;
-        let wire = VaultStatsResult {
-            total_mappings: s.total_mappings,
-            categories: s.categories,
-        };
-        serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
+        match self.vault_stats_impl().await {
+            Ok(value) => {
+                serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
     }
 
     /// Initialize the vault keyring entry from a user-supplied passphrase
@@ -1439,109 +2070,28 @@ impl AnnoRagServer {
     /// Ingest a folder of legal documents into the anno-rag index. Documents are
     /// pseudonymized through the local vault and enriched with French legal entities.
     #[tool(
-        description = "Ingest a folder of legal documents (PDF, DOCX, TXT, …). \
-                       PII is pseudonymized through the local vault. \
-                       Legal entities (parties, clauses, citations, obligations, risks) \
-                       are extracted and stored for filtered search and graph traversal."
+        description = "Deprecated - use 'index(path, profile=\"legal\")' instead. Continues to work."
     )]
     async fn legal_ingest(&self, Parameters(p): Parameters<LegalIngestParams>) -> String {
-        let pipeline = match self.pipeline().await {
-            Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
-        };
-        let folder = std::path::Path::new(&p.folder);
-        let out = folder.join("anon");
-        let start = std::time::Instant::now();
-        match pipeline.ingest_folder(folder, p.recursive, &out).await {
-            Ok(n) => {
-                tracing::info!(
-                    target: "anno_rag::legal::audit",
-                    tool = "legal_ingest",
-                    result = "ok",
-                    duration_ms = start.elapsed().as_millis() as u64,
-                    ingested = n,
-                    ""
-                );
-                serde_json::to_string_pretty(&LegalIngestResult {
-                    ingested: n,
-                    folder: p.folder,
-                })
-                .unwrap_or_else(|e| format!("Error: {e}"))
+        match self.legal_ingest_impl(p).await {
+            Ok(value) => {
+                serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
             }
-            Err(e) => {
-                tracing::warn!(
-                    target: "anno_rag::legal::audit",
-                    tool = "legal_ingest",
-                    result = "error",
-                    "{e}"
-                );
-                format!("Error: {e}")
-            }
+            Err(e) => format!("Error: {e}"),
         }
     }
 
     /// Legal-filtered hybrid search. Pseudonymizes the query and restricts
     /// vector + FTS results to chunks matching the supplied legal filters.
     #[tool(
-        description = "Hybrid search over the legal corpus with optional filters: \
-                       doc_type, legal_domain, jurisdiction, dossier_id, parties, \
-                       party_roles, legal_refs, clause_types, obligation_kinds, \
-                       risk_flags, min_confidence. \
-                       Returns pseudonymized chunk text — call legal_rehydrate_citation \
-                       to restore originals."
+        description = "Deprecated - use 'search(query, scope=\"legal\", filters={...})' instead. Continues to work."
     )]
     async fn legal_search(&self, Parameters(p): Parameters<LegalSearchParams>) -> String {
-        let pipeline = match self.pipeline().await {
-            Ok(pipeline) => pipeline,
-            Err(e) => return format!("Error: {e}"),
-        };
-        let filters = anno_rag::legal::types::LegalSearchFilters {
-            doc_type: p.doc_type,
-            legal_domain: p.legal_domain,
-            jurisdiction: p.jurisdiction,
-            dossier_id: p.dossier_id,
-            parties: p.parties,
-            party_roles: p.party_roles,
-            legal_refs: p.legal_refs,
-            clause_types: p.clause_types,
-            obligation_kinds: p.obligation_kinds,
-            risk_flags: p.risk_flags,
-            min_confidence: p.min_confidence,
-            ..Default::default()
-        };
-        let start = std::time::Instant::now();
-        match pipeline.legal_search(&p.query, p.top_k, filters).await {
-            Ok(hits) => {
-                tracing::info!(
-                    target: "anno_rag::legal::audit",
-                    tool = "legal_search",
-                    result = "ok",
-                    duration_ms = start.elapsed().as_millis() as u64,
-                    n = hits.len(),
-                    ""
-                );
-                serde_json::to_string_pretty(&LegalSearchResult {
-                    hits: hits
-                        .into_iter()
-                        .map(|h| LegalSearchHitWire {
-                            chunk_id: h.chunk_id.to_string(),
-                            doc_id: h.doc_id.to_string(),
-                            text_pseudo: h.text_pseudo,
-                            score: h.score,
-                        })
-                        .collect(),
-                })
-                .unwrap_or_else(|e| format!("Error: {e}"))
+        match self.legal_search_impl(p).await {
+            Ok(value) => {
+                serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
             }
-            Err(e) => {
-                tracing::warn!(
-                    target: "anno_rag::legal::audit",
-                    tool = "legal_search",
-                    result = "error",
-                    "{e}"
-                );
-                format!("Error: {e}")
-            }
+            Err(e) => format!("Error: {e}"),
         }
     }
 
@@ -2411,25 +2961,20 @@ impl AnnoRagServer {
     }
 
     /// List configured Anno knowledge sources. Does not load local ML models.
-    #[tool(description = "List configured Anno knowledge sources. Does not load local ML models.")]
+    #[tool(description = "Deprecated - use 'sources()' instead. Continues to work.")]
     async fn knowledge_sources(&self) -> String {
-        let service = match self.knowledge().await {
-            Ok(service) => service,
-            Err(e) => return format!("Error: {e}"),
-        };
-        serde_json::to_string_pretty(&service.sources()).unwrap_or_else(|e| format!("Error: {e}"))
+        match self.knowledge_sources_impl().await {
+            Ok(sources) => {
+                serde_json::to_string_pretty(&sources).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
     }
 
     /// Return local Anno knowledge status without loading ML models.
-    #[tool(
-        description = "Return local Anno knowledge status for sources, objects, chunks, and failures. Does not load local ML models."
-    )]
+    #[tool(description = "Deprecated - use 'status()' instead. Continues to work.")]
     async fn knowledge_status(&self) -> String {
-        let service = match self.knowledge().await {
-            Ok(service) => service,
-            Err(e) => return format!("Error: {e}"),
-        };
-        match service.status() {
+        match self.knowledge_status_impl().await {
             Ok(status) => {
                 serde_json::to_string_pretty(&status).unwrap_or_else(|e| format!("Error: {e}"))
             }
@@ -2439,17 +2984,13 @@ impl AnnoRagServer {
 
     /// Search Anno's local multi-source knowledge index.
     #[tool(
-        description = "Search Anno's local multi-source knowledge index. Phase 1 supports fast SQLite FTS mode and returns pseudonymized snippets only."
+        description = "Deprecated - use 'search(query, scope=\"knowledge\")' instead. Continues to work."
     )]
     async fn knowledge_search(
         &self,
         Parameters(p): Parameters<crate::knowledge::KnowledgeSearchParams>,
     ) -> String {
-        let service = match self.knowledge().await {
-            Ok(service) => service,
-            Err(e) => return format!("Error: {e}"),
-        };
-        match service.search(p) {
+        match self.knowledge_search_impl(p).await {
             Ok(result) => {
                 serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
             }
@@ -2457,19 +2998,21 @@ impl AnnoRagServer {
         }
     }
 
-    /// Register a local folder as an Anno knowledge source. Does not load models.
+    /// Unified folder indexing entry point for general knowledge and legal corpora.
     #[tool(
-        description = "Register a local folder as an Anno knowledge source. Does not load local ML models. Run knowledge_sync afterwards to index it."
+        description = "Index a local folder using profile general, legal, or all. General registers and syncs knowledge sources; legal ingests legal documents recursively."
     )]
+    async fn index(&self, Parameters(p): Parameters<IndexParams>) -> String {
+        self.index_impl_routing(p).await
+    }
+
+    /// Register a local folder as an Anno knowledge source. Does not load models.
+    #[tool(description = "Deprecated - use 'index(path)' instead. Continues to work.")]
     async fn knowledge_add_local_folder(
         &self,
         Parameters(p): Parameters<KnowledgeAddFolderParams>,
     ) -> String {
-        let service = match self.knowledge().await {
-            Ok(s) => s,
-            Err(e) => return format!("Error: {e}"),
-        };
-        match service.add_local_folder(&p.path) {
+        match self.knowledge_add_local_folder_impl(&p.path).await {
             Ok(source_id) => serde_json::to_string_pretty(
                 &serde_json::json!({"ok": true, "source_id": source_id}),
             )
@@ -2480,31 +3023,24 @@ impl AnnoRagServer {
 
     /// Sync Anno local-folder knowledge sources end to end. Loads the local NER model.
     #[tool(
-        description = "Sync Anno local-folder knowledge sources: walk, extract, pseudonymize locally, and write pseudonymized FTS chunks. Loads the local NER model. Bounded per run; call again to resume large folders."
+        description = "Deprecated - use 'index(path)' (re-indexes idempotently). Continues to work."
     )]
     async fn knowledge_sync(&self, Parameters(p): Parameters<KnowledgeSyncParams>) -> String {
-        let service = match self.knowledge().await {
-            Ok(s) => s,
-            Err(e) => return format!("Error: {e}"),
-        };
-        let pipeline = match self.pipeline().await {
-            Ok(pl) => pl,
-            Err(_) => {
-                return serde_json::json!({
-                    "ok": false,
-                    "error": {
-                        "code": "models_missing",
-                        "message": "Models are not available. Fast FTS search works on already-indexed content; indexing is paused.",
-                        "next_action": "Run download_models or ask Anno to set up models."
-                    }
-                })
-                .to_string()
-            }
-        };
-        match service
-            .sync(pipeline, self.cfg.as_ref(), p.source_id.as_deref())
-            .await
-        {
+        if let Err(e) = self.knowledge().await {
+            return format!("Error: {e}");
+        }
+        if self.pipeline().await.is_err() {
+            return serde_json::json!({
+                "ok": false,
+                "error": {
+                    "code": "models_missing",
+                    "message": "Models are not available. Fast FTS search works on already-indexed content; indexing is paused.",
+                    "next_action": "Run download_models or ask Anno to set up models."
+                }
+            })
+            .to_string();
+        }
+        match self.knowledge_sync_impl(p).await {
             Ok(summary) => {
                 serde_json::to_string_pretty(&serde_json::json!({"ok": true, "summary": summary}))
                     .unwrap_or_else(|e| format!("Error: {e}"))
@@ -2514,15 +3050,9 @@ impl AnnoRagServer {
     }
 
     /// Remove an Anno knowledge source and all its indexed content.
-    #[tool(
-        description = "Remove an Anno knowledge source and all its pseudonymized content from SQLite and FTS. Does not load local ML models."
-    )]
+    #[tool(description = "Deprecated - use 'forget(target)' instead. Continues to work.")]
     async fn knowledge_forget(&self, Parameters(p): Parameters<KnowledgeForgetParams>) -> String {
-        let service = match self.knowledge().await {
-            Ok(s) => s,
-            Err(e) => return format!("Error: {e}"),
-        };
-        match service.forget_source(&p.source_id) {
+        match self.knowledge_forget_impl(p).await {
             Ok(removed) => serde_json::to_string_pretty(
                 &serde_json::json!({"ok": true, "removed_objects": removed}),
             )
@@ -2758,6 +3288,37 @@ mod lazy_tests {
     use super::*;
     use anno_rag::config::AnnoRagConfig;
 
+    #[test]
+    fn deprecated_tools_have_deprecation_banner_in_description() {
+        let src = include_str!("lib.rs");
+        let deprecated = [
+            "legal_search",
+            "legal_ingest",
+            "knowledge_search",
+            "knowledge_add_local_folder",
+            "knowledge_sync",
+            "knowledge_sources",
+            "knowledge_status",
+            "knowledge_forget",
+            "legacy_search",
+        ];
+        for name in deprecated {
+            let needle = format!("async fn {name}(");
+            let pos = src
+                .find(&needle)
+                .unwrap_or_else(|| panic!("tool {name} not found"));
+            let before = &src[..pos];
+            let tool_block_start = before
+                .rfind("#[tool(")
+                .unwrap_or_else(|| panic!("no #[tool( before {name}"));
+            let tool_block = &src[tool_block_start..pos];
+            assert!(
+                tool_block.contains("Deprecated"),
+                "tool {name} description missing 'Deprecated' marker: {tool_block}",
+            );
+        }
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn lazy_server_returns_error_when_models_absent() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -2775,7 +3336,7 @@ mod lazy_tests {
 
         let server = AnnoRagServer::new_lazy(cfg, key);
         let result = server
-            .search(Parameters(SearchParams {
+            .legacy_search(Parameters(SearchParams {
                 query: "test".into(),
                 top_k: 1,
                 rerank: false,
@@ -2789,6 +3350,215 @@ mod lazy_tests {
             result.contains("Models not downloaded"),
             "expected 'Models not downloaded' in: {result}"
         );
+    }
+
+    #[tokio::test]
+    async fn search_fast_all_returns_legal_warning() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".into(),
+                top_k: 5,
+                mode: Some("fast".into()),
+                scope: Some("all".into()),
+                filters: None,
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["mode_used"], "fast");
+        assert_eq!(v["scope_used"], "all");
+        let warnings = v["warnings"].as_array().expect("warnings array");
+        assert!(warnings.iter().any(|w| w.as_str().unwrap_or("")
+            == "legal scope skipped in fast mode (requires models). Use mode='semantic' to include legal results."));
+    }
+
+    #[tokio::test]
+    async fn search_fast_knowledge_returns_no_warning() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".into(),
+                top_k: 5,
+                mode: Some("fast".into()),
+                scope: Some("knowledge".into()),
+                filters: None,
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(v["scope_used"], "knowledge");
+        let warnings = v["warnings"].as_array().expect("warnings array");
+        assert!(warnings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_semantic_knowledge_returns_warning() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".into(),
+                top_k: 5,
+                mode: Some("semantic".into()),
+                scope: Some("knowledge".into()),
+                filters: None,
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(v["mode_used"], "semantic");
+        assert_eq!(v["scope_used"], "knowledge");
+        let warnings = v["warnings"].as_array().expect("warnings array");
+        assert!(warnings.iter().any(|w| w
+            .as_str()
+            .unwrap_or("")
+            .contains("knowledge scope skipped in semantic mode")));
+    }
+
+    #[tokio::test]
+    async fn sources_aggregates_knowledge_and_legal_corpora() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let corpus_dir = dir.path().join("corpus");
+        std::fs::create_dir_all(&corpus_dir).expect("corpus dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let source_id = server
+            .knowledge_add_local_folder_impl(corpus_dir.to_str().expect("utf8 path"))
+            .await
+            .expect("source id");
+        let out = server.sources_impl_routing().await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(v["ok"], true);
+        let sources = v["sources"].as_array().expect("sources array");
+        assert!(
+            sources.is_empty()
+                || sources
+                    .iter()
+                    .all(|s| { s["kind"] == "knowledge_folder" || s["kind"] == "legal_corpus" })
+        );
+        let knowledge = sources
+            .iter()
+            .find(|s| s["kind"] == "knowledge_folder")
+            .expect("knowledge source");
+        assert_eq!(knowledge["id"], source_id);
+        assert_eq!(knowledge["source_id"], source_id);
+        assert_ne!(
+            knowledge["label"].as_str().unwrap_or(""),
+            corpus_dir.to_str().unwrap_or("")
+        );
+    }
+
+    #[test]
+    fn legal_folder_id_is_stable_and_pseudonymous() {
+        let path = "C:/legal/client-a";
+        let id = legal_folder_id(path);
+        assert_eq!(id, legal_folder_id(path));
+        assert!(id.starts_with("legal_folder_"));
+        assert_eq!(id.len(), "legal_folder_".len() + 12);
+        assert!(!id.contains("client-a"));
+        assert!(!id.contains(path));
+    }
+
+    #[tokio::test]
+    async fn sources_does_not_initialize_pipeline() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        assert!(server.pipeline_arc().is_none());
+
+        let out = server.sources_impl_routing().await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], true);
+        assert!(server.pipeline_arc().is_none());
+    }
+
+    #[tokio::test]
+    async fn forget_uuid_routes_to_knowledge_forget() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let target = uuid::Uuid::nil().to_string();
+
+        let out = server
+            .forget_impl_routing(ForgetParams {
+                target: target.clone(),
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["removed"]["knowledge_objects"], 0);
+        assert_eq!(v["removed"]["legal_chunks"], 0);
+        assert!(v["errors"].is_null());
+    }
+
+    #[tokio::test]
+    async fn forget_legal_id_is_noop_when_unknown() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        assert!(server.pipeline_arc().is_none());
+
+        let out = server
+            .forget_impl_routing(ForgetParams {
+                target: "legal_folder_000000000000".to_string(),
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["removed"]["knowledge_objects"], 0);
+        assert_eq!(v["removed"]["legal_chunks"], 0);
+        assert!(v["errors"].is_null());
+        assert!(server.pipeline_arc().is_none());
+    }
+
+    #[tokio::test]
+    async fn status_returns_unified_health() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        assert!(server.pipeline_arc().is_none());
+        let out = server.status_impl_routing().await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(v["ok"], true);
+        assert!(v.get("knowledge").is_some());
+        assert!(v.get("vault").is_some());
+        assert!(v.get("models").is_some());
+        assert_eq!(v["knowledge"]["objects"], 0);
+        assert_eq!(v["vault"]["available"], false);
+        assert_eq!(v["vault"]["reason"], "pipeline_not_initialized");
+        assert_eq!(v["models"]["embedder_loaded"], false);
+        assert!(server.pipeline_arc().is_none());
     }
 
     /// When both model subdirs exist, download_models reports already_present.
@@ -2845,5 +3615,88 @@ mod lazy_tests {
                 || result.contains("Downloading"),
             "expected download status in: {result}"
         );
+    }
+
+    #[test]
+    fn index_unknown_profile_returns_error() {
+        let err = validate_profile("weird").expect_err("unknown profile should fail validation");
+        assert!(
+            err.contains("weird"),
+            "validation error should name rejected profile: {err}"
+        );
+    }
+
+    #[test]
+    fn index_sync_summary_issue_flags_failed_or_truncated_runs() {
+        let clean = SyncSummary::default();
+        assert!(knowledge_sync_issue(&clean).is_none());
+
+        let failed = SyncSummary {
+            failed: 2,
+            ..Default::default()
+        };
+        let failed_issue = knowledge_sync_issue(&failed).expect("failed issue");
+        assert!(failed_issue.contains("failed=2"));
+
+        let truncated = SyncSummary {
+            truncated: true,
+            ..Default::default()
+        };
+        let truncated_issue = knowledge_sync_issue(&truncated).expect("truncated issue");
+        assert!(truncated_issue.contains("truncated=true"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn index_general_routes_to_knowledge_path() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let corpus_dir = dir.path().join("corpus");
+        std::fs::create_dir_all(&corpus_dir).expect("corpus dir");
+        std::fs::write(corpus_dir.join("note.txt"), "Bonjour index").expect("write corpus file");
+
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().join("data"),
+            ..Default::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        let result = server
+            .index_impl_routing(IndexParams {
+                path: corpus_dir.to_string_lossy().into_owned(),
+                profile: "general".into(),
+            })
+            .await;
+        let parsed: serde_json::Value =
+            serde_json::from_str(&result).expect("index result must be JSON");
+
+        assert_eq!(parsed["profile"], "general");
+        assert!(
+            parsed.get("knowledge").is_some(),
+            "general profile should attempt knowledge routing: {result}"
+        );
+        assert!(
+            parsed.get("errors").is_some(),
+            "index result should include errors field: {result}"
+        );
+        assert!(
+            parsed["legal"].is_null(),
+            "general profile should not route to legal ingest: {result}"
+        );
+
+        if parsed["ok"] == false {
+            let errors = parsed["errors"]
+                .as_array()
+                .expect("failed index result should include errors array");
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| e.as_str().is_some_and(|s| s.contains("knowledge sync"))),
+                "failed general index should report knowledge sync error: {result}"
+            );
+        } else {
+            assert!(
+                parsed["knowledge"].is_object(),
+                "successful general index should include knowledge object: {result}"
+            );
+        }
     }
 }

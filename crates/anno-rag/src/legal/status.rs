@@ -138,6 +138,19 @@ impl EnrichmentStatusStore {
         .await
     }
 
+    /// Delete retry/status rows belonging to one document id.
+    ///
+    /// # Errors
+    /// Returns [`Error::Legal`] when LanceDB deletion fails.
+    pub async fn delete_doc(&self, doc_id: Uuid) -> Result<()> {
+        let id_hex = hex::encode(doc_id.as_bytes());
+        self.table
+            .delete(&format!("doc_id = X'{id_hex}'"))
+            .await
+            .map_err(|err| Error::Legal(format!("status delete_doc: {err}")))?;
+        Ok(())
+    }
+
     /// List pending documents sorted by oldest attempt first.
     ///
     /// # Errors
