@@ -1,0 +1,378 @@
+# GitLab CI/CD for the imported GitLab project.
+# Phase 1 mirrors the portable fast gate from .github/workflows/ci.yml.
+# GitHub-only release and crates.io publish workflows stay in .github/workflows
+# until their release, artifact, and secret flows are migrated deliberately.
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+stages:
+  - hygiene
+  - build
+  - test
+  - security
+  - release_build
+  - release_upload
+  - release_publish
+
+variables:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_DEV_SPLIT_DEBUGINFO: "off"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_PROFILE_TEST_SPLIT_DEBUGINFO: "off"
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+.fast_rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+.release_rules:
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+.*$/'
+    - when: never
+
+.rust_cache:
+  cache:
+    key: "cargo-${CI_JOB_NAME_SLUG}-${CI_COMMIT_REF_SLUG}"
+    fallback_keys:
+      - "cargo-${CI_JOB_NAME_SLUG}-${CI_DEFAULT_BRANCH}"
+      - "cargo-${CI_JOB_NAME_SLUG}"
+    paths:
+      - .cargo/bin/
+      - .cargo/git/db/
+      - .cargo/registry/cache/
+      - .cargo/registry/index/
+      - target/
+    policy: pull-push
+
+.rust_job:
+  extends: .rust_cache
+  image: rust:latest
+  interruptible: true
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates clang cmake curl git jq libssl-dev pkg-config protobuf-compiler python3 unzip zip
+    - rustc --version
+    - cargo --version
+    - protoc --version
+
+.release_cache:
+  cache:
+    key: "release-${CI_JOB_NAME_SLUG}-${CI_COMMIT_REF_SLUG}"
+    fallback_keys:
+      - "release-${CI_JOB_NAME_SLUG}-${CI_DEFAULT_BRANCH}"
+      - "release-${CI_JOB_NAME_SLUG}"
+    paths:
+      - .cargo/git/db/
+      - .cargo/registry/cache/
+      - .cargo/registry/index/
+    policy: pull-push
+
+.release_linux_job:
+  extends:
+    - .release_cache
+    - .release_rules
+  stage: release_build
+  image: rust:latest
+  interruptible: true
+  timeout: 3h
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates clang cmake curl git jq libssl-dev pkg-config protobuf-compiler python3 tar gzip
+    - rustc --version
+    - cargo --version
+    - protoc --version
+
+.release_macos_job:
+  extends:
+    - .release_cache
+    - .release_rules
+  stage: release_build
+  tags:
+    - saas-macos-medium-m1
+  image: macos-15-xcode-16
+  interruptible: true
+  timeout: 3h
+  before_script:
+    - |
+      if ! command -v cargo >/dev/null 2>&1; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        export PATH="$HOME/.cargo/bin:$PATH"
+      fi
+    - |
+      if [[ "$(uname -m)" == "arm64" && "${RELEASE_TARGET}" == "x86_64-apple-darwin" ]]; then
+        softwareupdate --install-rosetta --agree-to-license || true
+      fi
+    - rustup target add "${RELEASE_TARGET}"
+    - brew list protobuf >/dev/null 2>&1 || brew install protobuf
+    - rustc --version
+    - cargo --version
+    - protoc --version
+
+docs_audit:
+  extends: .fast_rules
+  stage: hygiene
+  image: python:3.10-slim
+  interruptible: true
+  script:
+    - python scripts/docs_audit.py
+
+typecheck_python:
+  extends: .fast_rules
+  stage: hygiene
+  image: python:3.10-slim
+  interruptible: true
+  variables:
+    UV_CACHE_DIR: "$CI_PROJECT_DIR/.cache/uv"
+  cache:
+    key: "uv-${CI_COMMIT_REF_SLUG}"
+    fallback_keys:
+      - "uv-${CI_DEFAULT_BRANCH}"
+      - "uv"
+    paths:
+      - .cache/uv/
+    policy: pull-push
+  before_script:
+    - pip install --no-cache-dir uv
+  script:
+    - uvx ty check scripts/docs_audit.py scripts/apply_registry_enrichment.py
+
+check:
+  extends:
+    - .rust_job
+    - .fast_rules
+  stage: build
+  script:
+    - cargo check --workspace --all-targets
+
+fmt:
+  extends:
+    - .rust_job
+    - .fast_rules
+  stage: hygiene
+  script:
+    - rustup component add rustfmt
+    - cargo fmt --all -- --check
+
+clippy:
+  extends:
+    - .rust_job
+    - .fast_rules
+  stage: build
+  script:
+    - rustup component add clippy
+    - cargo clippy --workspace --all-targets --features "eval discourse" -- -D warnings
+
+test_minimal:
+  extends:
+    - .rust_job
+    - .fast_rules
+  stage: test
+  script:
+    - cargo test --package anno --no-default-features --lib
+    - cargo test --package anno --lib
+
+minimal_build:
+  extends:
+    - .rust_job
+    - .fast_rules
+  stage: build
+  script:
+    - cargo check --workspace --no-default-features --features anno-cli/extractor-html2text
+
+cargo_deny:
+  extends:
+    - .rust_cache
+    - .fast_rules
+  stage: security
+  image: rust:1.95
+  interruptible: true
+  variables:
+    RUSTC_WRAPPER: ""
+  before_script:
+    - cargo install --locked cargo-deny --version 0.19.8
+  script:
+    - cargo deny --all-features check
+
+release_linux_x86_64:
+  extends: .release_linux_job
+  variables:
+    RELEASE_TARGET: x86_64-unknown-linux-gnu
+  script:
+    - rustup target add "${RELEASE_TARGET}"
+    - cargo build --release -p anno-rag-bin -p anno-privacy-gateway --target "${RELEASE_TARGET}"
+    - './target/${RELEASE_TARGET}/release/anno-rag --help'
+    - ./scripts/release/smoke-gateway.sh "./target/${RELEASE_TARGET}/release/anno-privacy-gateway"
+    - ./scripts/release/package-unix.sh "${CI_COMMIT_TAG}" "${RELEASE_TARGET}"
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - dist/*.tar.gz
+
+release_macos_x86_64:
+  extends: .release_macos_job
+  variables:
+    RELEASE_TARGET: x86_64-apple-darwin
+  script:
+    - cargo build --release -p anno-rag-bin -p anno-privacy-gateway --target "${RELEASE_TARGET}"
+    - './target/${RELEASE_TARGET}/release/anno-rag --help'
+    - ./scripts/release/smoke-gateway.sh "./target/${RELEASE_TARGET}/release/anno-privacy-gateway"
+    - ./scripts/release/package-unix.sh "${CI_COMMIT_TAG}" "${RELEASE_TARGET}"
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - dist/*.tar.gz
+
+release_macos_aarch64:
+  extends: .release_macos_job
+  variables:
+    RELEASE_TARGET: aarch64-apple-darwin
+  script:
+    - cargo build --release -p anno-rag-bin -p anno-privacy-gateway --target "${RELEASE_TARGET}"
+    - './target/${RELEASE_TARGET}/release/anno-rag --help'
+    - ./scripts/release/smoke-gateway.sh "./target/${RELEASE_TARGET}/release/anno-privacy-gateway"
+    - ./scripts/release/package-unix.sh "${CI_COMMIT_TAG}" "${RELEASE_TARGET}"
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - dist/*.tar.gz
+
+release_windows_x86_64:
+  extends: .release_rules
+  stage: release_build
+  tags:
+    - saas-windows-medium-amd64
+  interruptible: true
+  timeout: 3h
+  variables:
+    RELEASE_TARGET: x86_64-pc-windows-msvc
+  cache:
+    key: "release-${CI_JOB_NAME_SLUG}-${CI_COMMIT_REF_SLUG}"
+    fallback_keys:
+      - "release-${CI_JOB_NAME_SLUG}-${CI_DEFAULT_BRANCH}"
+      - "release-${CI_JOB_NAME_SLUG}"
+    paths:
+      - .cargo/git/db/
+      - .cargo/registry/cache/
+      - .cargo/registry/index/
+    policy: pull-push
+  before_script:
+    - git config --global core.longpaths true
+    - |
+      if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+        Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile "rustup-init.exe"
+        .\rustup-init.exe -y --default-toolchain stable
+        $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+      }
+    - rustup target add $env:RELEASE_TARGET
+    - choco install protoc -y --no-progress
+    - rustc --version
+    - cargo --version
+    - protoc --version
+  script:
+    - |
+      $env:RUSTFLAGS = "--cap-lints allow -C link-arg=/NODEFAULTLIB:libcmt"
+      $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS = "--cap-lints allow -C link-arg=/NODEFAULTLIB:libcmt"
+      Set-Item -Path Env:CFLAGS_x86_64-pc-windows-msvc -Value "/MD"
+      $env:CFLAGS_x86_64_pc_windows_msvc = "/MD"
+      Set-Item -Path Env:CXXFLAGS_x86_64-pc-windows-msvc -Value "/MD"
+      $env:CXXFLAGS_x86_64_pc_windows_msvc = "/MD"
+      cargo build --release -p anno-rag-bin -p anno-privacy-gateway --target $env:RELEASE_TARGET
+    - .\target\x86_64-pc-windows-msvc\release\anno-rag.exe --help
+    - .\scripts\release\smoke-gateway.ps1 -BinaryPath ".\target\x86_64-pc-windows-msvc\release\anno-privacy-gateway.exe"
+    - .\scripts\release\package-windows.ps1 -Tag "$env:CI_COMMIT_TAG" -Target "$env:RELEASE_TARGET"
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - dist/*.zip
+
+upload_release_assets:
+  extends: .release_rules
+  stage: release_upload
+  image: alpine:latest
+  needs:
+    - job: release_linux_x86_64
+      artifacts: true
+    - job: release_windows_x86_64
+      artifacts: true
+    - job: release_macos_x86_64
+      artifacts: true
+    - job: release_macos_aarch64
+      artifacts: true
+  script:
+    - apk add --no-cache bash coreutils curl
+    - ./scripts/release/checksums.sh
+    - |
+      package_registry_url="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/hacienda/${CI_COMMIT_TAG}"
+      for file in dist/*; do
+        if [ ! -f "${file}" ]; then
+          continue
+        fi
+        filename="$(basename "${file}")"
+        curl --fail --location \
+          --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+          --upload-file "${file}" \
+          "${package_registry_url}/${filename}"
+        echo "Uploaded ${filename}"
+      done
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - dist/*
+
+publish_gitlab_release:
+  extends: .release_rules
+  stage: release_publish
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  needs:
+    - job: upload_release_assets
+      artifacts: true
+  variables:
+    GLAB_ENABLE_CI_AUTOLOGIN: "true"
+  script:
+    - |
+      package_registry_url="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/hacienda/${CI_COMMIT_TAG}"
+      linux_asset="hacienda-${CI_COMMIT_TAG}-x86_64-unknown-linux-gnu.tar.gz"
+      windows_asset="hacienda-${CI_COMMIT_TAG}-x86_64-pc-windows-msvc.zip"
+      macos_intel_asset="hacienda-${CI_COMMIT_TAG}-x86_64-apple-darwin.tar.gz"
+      macos_arm_asset="hacienda-${CI_COMMIT_TAG}-aarch64-apple-darwin.tar.gz"
+      cat > release-notes.md <<EOF
+      Automated GitLab release for ${CI_COMMIT_TAG}.
+
+      Included archives:
+      - Linux x64: ${linux_asset}
+      - Windows x64: ${windows_asset}
+      - macOS Intel: ${macos_intel_asset}
+      - macOS Apple Silicon: ${macos_arm_asset}
+      - SHA-256 checksums: SHA256SUMS.txt
+      EOF
+      cat > assets-links.json <<EOF
+      [
+        {"name":"Linux x64","url":"${package_registry_url}/${linux_asset}","link_type":"package","direct_asset_path":"/binaries/${linux_asset}"},
+        {"name":"Windows x64","url":"${package_registry_url}/${windows_asset}","link_type":"package","direct_asset_path":"/binaries/${windows_asset}"},
+        {"name":"macOS Intel","url":"${package_registry_url}/${macos_intel_asset}","link_type":"package","direct_asset_path":"/binaries/${macos_intel_asset}"},
+        {"name":"macOS Apple Silicon","url":"${package_registry_url}/${macos_arm_asset}","link_type":"package","direct_asset_path":"/binaries/${macos_arm_asset}"},
+        {"name":"SHA256SUMS.txt","url":"${package_registry_url}/SHA256SUMS.txt","link_type":"other","direct_asset_path":"/binaries/SHA256SUMS.txt"}
+      ]
+      EOF
+      glab release create "${CI_COMMIT_TAG}" \
+        --repo "${CI_PROJECT_PATH}" \
+        --name "Release ${CI_COMMIT_TAG}" \
+        --notes-file release-notes.md \
+        --ref "${CI_COMMIT_SHA}" \
+        --assets-links "$(cat assets-links.json)"
