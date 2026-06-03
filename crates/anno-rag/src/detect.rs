@@ -970,9 +970,8 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         // deliberately do NOT create dir.path()/gliner2-multi-v1-onnx
 
-        std::env::set_var("ANNO_MODELS_DIR", dir.path());
+        let _models_dir = crate::env_guard::ScopedAnnoModelsDir::set(dir.path());
         let result = Detector::new(&crate::config::AnnoRagConfig::default());
-        std::env::remove_var("ANNO_MODELS_DIR");
 
         match result {
             Ok(_) => {
@@ -997,9 +996,8 @@ mod tests {
         let ner_dir = dir.path().join("gliner2-multi-v1-onnx");
         std::fs::create_dir_all(&ner_dir).expect("mkdir");
 
-        std::env::set_var("ANNO_MODELS_DIR", dir.path());
+        let _models_dir = crate::env_guard::ScopedAnnoModelsDir::set(dir.path());
         let result = Detector::new(&crate::config::AnnoRagConfig::default());
-        std::env::remove_var("ANNO_MODELS_DIR");
 
         // from_local on an empty dir returns an error (no ONNX files)
         let err = match result {

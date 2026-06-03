@@ -12,6 +12,8 @@ pub mod conflict;
 pub mod detect;
 pub mod download_models;
 pub mod embed;
+#[cfg(test)]
+pub(crate) mod env_guard;
 pub mod error;
 pub mod eval;
 pub mod ingest;
