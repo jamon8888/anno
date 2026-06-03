@@ -33,12 +33,21 @@ async fn anno_health_reports_engine_version_and_tool_set() {
 
     assert_eq!(health.engine_version, env!("CARGO_PKG_VERSION"));
     assert!(health.available_tools.contains(&"search".to_string()));
+    assert!(health
+        .available_tools
+        .contains(&"legacy_search".to_string()));
     assert!(health.available_tools.contains(&"rehydrate".to_string()));
     assert!(health.available_tools.contains(&"detect".to_string()));
     assert!(health.available_tools.contains(&"anno_health".to_string()));
     assert!(health
         .available_tools
         .contains(&"anno_init_vault".to_string()));
+    assert!(health
+        .available_tools
+        .contains(&"knowledge_forget".to_string()));
+    assert!(health
+        .available_tools
+        .contains(&"review_extract".to_string()));
     assert!(!health.build_target.is_empty());
     assert!(!health.signed);
 }

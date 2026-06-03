@@ -81,9 +81,26 @@ pub async fn collect_health(
     }
 }
 
+fn review_tool_names() -> Vec<String> {
+    vec![
+        "review_create",
+        "review_add_rows",
+        "review_extract",
+        "review_refine_cell",
+        "review_set_cell",
+        "review_lock_cell",
+        "review_unlock_cell",
+        "review_export",
+        "review_get",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect()
+}
+
 /// Hardcoded list of tools exposed by the MCP server.
 pub fn all_tool_names() -> Vec<String> {
-    vec![
+    let mut tools: Vec<String> = vec![
         // Unified MCP surface (Phase 2.5)
         "index",
         "search",
@@ -131,7 +148,10 @@ pub fn all_tool_names() -> Vec<String> {
     ]
     .into_iter()
     .map(String::from)
-    .collect()
+    .collect();
+
+    tools.extend(review_tool_names());
+    tools
 }
 
 #[cfg(test)]
@@ -202,5 +222,41 @@ mod tests {
         assert!(tools.contains(&"knowledge_add_local_folder".to_string()));
         assert!(tools.contains(&"knowledge_sync".to_string()));
         assert!(tools.contains(&"knowledge_forget".to_string()));
+    }
+
+    #[test]
+    fn all_tool_names_includes_tabular_review_tools_after_knowledge_tools() {
+        let tools = all_tool_names();
+
+        for review_tool in [
+            "review_create",
+            "review_add_rows",
+            "review_extract",
+            "review_refine_cell",
+            "review_set_cell",
+            "review_lock_cell",
+            "review_unlock_cell",
+            "review_export",
+            "review_get",
+        ] {
+            assert!(
+                tools.contains(&review_tool.to_string()),
+                "missing review tool {review_tool}"
+            );
+        }
+
+        let knowledge_forget_idx = tools
+            .iter()
+            .position(|tool| tool == "knowledge_forget")
+            .expect("knowledge_forget present");
+        let review_create_idx = tools
+            .iter()
+            .position(|tool| tool == "review_create")
+            .expect("review_create present");
+
+        assert!(
+            review_create_idx > knowledge_forget_idx,
+            "review_create should appear after knowledge_forget"
+        );
     }
 }
