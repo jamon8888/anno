@@ -46,14 +46,27 @@ arguments.
 
 ## Review Tools
 
-Tools whose names begin with `review_` cover common tabular review workflows:
-creating a review, adding ingested document IDs, starting extraction through row
-addition where supported, reading review state, refining or overriding cells,
-locking cells, and exporting results.
+| Tool | Purpose | Response highlights |
+|---|---|---|
+| `review_create` | Create a tabular review and optionally materialize columns from a built-in template. | Returns `review_id`, review name, and `columns_loaded`. |
+| `review_add_rows` | Add ingested document UUIDs as review rows. | Returns `rows_added`, `failed_doc_ids`, `extraction_started`, and `extraction_error`; starts extraction when rows were added. |
+| `review_extract` | Start extraction for an existing review. | Returns row and column counts plus `extraction_started`; use `force_reextract=true` to rerun unlocked cells. |
+| `review_get` | Read review state. | Returns columns, rows, latest cells, and `extraction_status` for polling background extraction. |
+| `review_refine_cell` | Re-extract one cell with an extra instruction. | Writes a new cell version; locked cells are rejected until unlocked. |
+| `review_set_cell` | Write a human override value to one cell. | Records a human-authored version and can lock it with `lock=true`. |
+| `review_lock_cell` | Lock the latest cell value. | Prevents automatic extraction from overwriting the cell. |
+| `review_unlock_cell` | Unlock a cell. | Allows future extraction or refinement to overwrite the cell. |
+| `review_export` | Export the review as `csv`, `markdown`, or `xlsx`. | CSV/Markdown are returned in the tool response; XLSX requires an absolute `output_path`. |
 
-The MCP review surface is not a one-to-one mirror of every CLI subcommand. Use
-the installed MCP tool schema as the source of truth for available review tools
-and arguments.
+Canonical MCP review workflow:
+
+1. Create a review with `review_create`.
+2. Add ingested document UUIDs with `review_add_rows`.
+3. Call `review_extract` when `review_add_rows.extraction_started` is `false`, or when a rerun is needed.
+4. Poll `review_get` and inspect `extraction_status.state` until it is `completed`, `completed_with_errors`, or `blocked`.
+5. Correct cells with `review_refine_cell` for targeted re-extraction, or `review_set_cell` for a human override.
+6. Lock verified cells with `review_lock_cell`; unlock them with `review_unlock_cell` before changing them again.
+7. Export with `review_export`.
 
 ## Related Docs
 

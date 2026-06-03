@@ -443,9 +443,63 @@ function Invoke-McpSmoke {
     $Stopwatch.Stop()
     $Stdout = $Process.StandardOutput.ReadToEnd()
     $Stderr = $Process.StandardError.ReadToEnd()
-    @($Stdout, $Stderr) | Set-Content -LiteralPath $LogPath -Encoding UTF8
 
-    $Status = if ($Process.ExitCode -eq 0 -and $Stdout.Contains("tools")) { "passed" } else { "failed" }
+    $RequiredMcpTools = @(
+        "index",
+        "search",
+        "sources",
+        "status",
+        "forget",
+        "legacy_search",
+        "anno_health",
+        "review_create",
+        "review_add_rows",
+        "review_extract",
+        "review_refine_cell",
+        "review_set_cell",
+        "review_lock_cell",
+        "review_unlock_cell",
+        "review_export",
+        "review_get"
+    )
+    $ToolNames = @()
+    foreach ($Line in ($Stdout -split "\r?\n")) {
+        $Trimmed = $Line.Trim()
+        if (-not $Trimmed.StartsWith("{")) {
+            continue
+        }
+        try {
+            $Message = $Trimmed | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            continue
+        }
+        $MessageProperties = @($Message.PSObject.Properties | ForEach-Object { $_.Name })
+        if ($MessageProperties -notcontains "id" -or $Message.id -ne 2) {
+            continue
+        }
+        if ($MessageProperties -notcontains "result" -or $null -eq $Message.result) {
+            continue
+        }
+        $ResultProperties = @($Message.result.PSObject.Properties | ForEach-Object { $_.Name })
+        if ($ResultProperties -notcontains "tools") {
+            continue
+        }
+        foreach ($Tool in $Message.result.tools) {
+            $ToolProperties = @($Tool.PSObject.Properties | ForEach-Object { $_.Name })
+            if ($ToolProperties -contains "name" -and $Tool.name) {
+                $ToolNames += [string]$Tool.name
+            }
+        }
+    }
+    $MissingMcpTools = @($RequiredMcpTools | Where-Object { $ToolNames -notcontains $_ })
+
+    $LogLines = @($Stdout, $Stderr)
+    if ($MissingMcpTools.Count -gt 0) {
+        $LogLines += "Missing MCP tools: $($MissingMcpTools -join ', ')"
+    }
+    $LogLines | Set-Content -LiteralPath $LogPath -Encoding UTF8
+
+    $Status = if ($Process.ExitCode -eq 0 -and $MissingMcpTools.Count -eq 0) { "passed" } else { "failed" }
     Add-GateRecord @{
         name = $Name
         command = $CommandLine

@@ -24,8 +24,8 @@ use rmcp::{
     schemars, tool, tool_handler, tool_router, ServerHandler, ServiceExt,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::OnceCell;
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::{OnceCell, RwLock};
 
 /// State held by the MCP server: either a pre-built Pipeline (eager) or a
 /// lazily-initialised one (deferred until the first tool call).
@@ -36,6 +36,7 @@ pub struct AnnoRagServer {
     cfg: Arc<AnnoRagConfig>,
     key: [u8; 32],
     tabular_storage: Arc<OnceCell<Arc<anno_rag_tabular::storage::StorageHandle>>>,
+    extraction_status: Arc<RwLock<HashMap<anno_rag_tabular::ReviewId, ReviewExtractionStatus>>>,
     #[allow(dead_code)] // populated + consumed by the rmcp #[tool_router] macro
     tool_router: ToolRouter<Self>,
 }
@@ -117,6 +118,29 @@ impl AnnoRagServer {
             .await
             .map(|arc| arc.as_ref())
     }
+
+    async fn filter_ingested_doc_ids(
+        &self,
+        ids: Vec<uuid::Uuid>,
+        failed: &mut Vec<String>,
+    ) -> Result<Vec<uuid::Uuid>, String> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let cfg = self.cfg.as_ref().clone();
+        let store = anno_rag::store::Store::open(&cfg)
+            .await
+            .map_err(|e| format!("opening RAG index: {e}"))?;
+        let mut ingested = Vec::new();
+        for doc_id in ids {
+            match store.doc_exists(doc_id).await {
+                Ok(true) => ingested.push(doc_id),
+                Ok(false) => failed.push(doc_id.to_string()),
+                Err(e) => return Err(format!("checking doc_id {doc_id}: {e}")),
+            }
+        }
+        Ok(ingested)
+    }
 }
 
 // ---- Constructors ----
@@ -134,6 +158,7 @@ impl AnnoRagServer {
             cfg: Arc::new(cfg),
             key: [0u8; 32],
             tabular_storage: Arc::new(OnceCell::new()),
+            extraction_status: Arc::new(RwLock::new(HashMap::new())),
             tool_router: Self::tool_router(),
         }
     }
@@ -147,6 +172,7 @@ impl AnnoRagServer {
             cfg: Arc::new(cfg),
             key,
             tabular_storage: Arc::new(OnceCell::new()),
+            extraction_status: Arc::new(RwLock::new(HashMap::new())),
             tool_router: Self::tool_router(),
         }
     }
@@ -825,6 +851,16 @@ pub struct ReviewAddRowsParams {
     pub force_reextract: bool,
 }
 
+/// Parameters for `review_extract`.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct ReviewExtractParams {
+    /// Review UUID.
+    pub review_id: String,
+    /// When true, force re-extraction of all columns even if cells exist.
+    #[serde(default)]
+    pub force_reextract: bool,
+}
+
 /// Parameters for `review_refine_cell`.
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct ReviewRefineCellParams {
@@ -908,6 +944,185 @@ struct ReviewAddRowsResult {
     rows_added: usize,
     extraction_started: bool,
     failed_doc_ids: Vec<String>,
+    extraction_error: Option<String>,
+}
+
+struct ParsedReviewDocIds {
+    valid: Vec<uuid::Uuid>,
+    failed: Vec<String>,
+}
+
+fn parse_review_doc_ids(doc_ids: &[String]) -> ParsedReviewDocIds {
+    let mut valid = Vec::new();
+    let mut failed = Vec::new();
+
+    for doc_id in doc_ids {
+        match uuid::Uuid::parse_str(doc_id) {
+            Ok(id) => valid.push(id),
+            Err(_) => failed.push(doc_id.clone()),
+        }
+    }
+
+    ParsedReviewDocIds { valid, failed }
+}
+
+fn combine_review_add_rows_extraction_error(
+    mut row_errors: Vec<String>,
+    extraction_error: Option<String>,
+) -> Option<String> {
+    if let Some(error) = extraction_error {
+        row_errors.push(error);
+    }
+    if row_errors.is_empty() {
+        None
+    } else {
+        Some(row_errors.join("; "))
+    }
+}
+
+#[derive(Serialize)]
+struct ReviewExtractResult {
+    review_id: String,
+    rows: usize,
+    columns: usize,
+    extraction_started: bool,
+    extraction_error: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+struct ReviewRowErrorWire {
+    row_id: String,
+    doc_id: String,
+    error: String,
+}
+
+#[derive(Clone)]
+struct ReviewExtractionStatus {
+    review_id: anno_rag_tabular::ReviewId,
+    state: String,
+    rows: usize,
+    columns: usize,
+    ok_rows: usize,
+    failed_rows: usize,
+    row_errors: Vec<ReviewRowErrorWire>,
+    last_error: Option<String>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Clone, Serialize)]
+struct ReviewExtractionStatusWire {
+    review_id: String,
+    state: String,
+    rows: usize,
+    columns: usize,
+    ok_rows: usize,
+    failed_rows: usize,
+    row_errors: Vec<ReviewRowErrorWire>,
+    last_error: Option<String>,
+    updated_at: String,
+}
+
+impl ReviewExtractionStatus {
+    fn running(review_id: anno_rag_tabular::ReviewId, rows: usize, columns: usize) -> Self {
+        Self {
+            review_id,
+            state: "running".into(),
+            rows,
+            columns,
+            ok_rows: 0,
+            failed_rows: 0,
+            row_errors: Vec::new(),
+            last_error: None,
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
+    fn completed(
+        review_id: anno_rag_tabular::ReviewId,
+        rows: usize,
+        columns: usize,
+        ok_rows: usize,
+        row_errors: Vec<ReviewRowErrorWire>,
+    ) -> Self {
+        let failed_rows = row_errors.len();
+        let state = if failed_rows == 0 {
+            "completed"
+        } else {
+            "completed_with_errors"
+        };
+        Self {
+            review_id,
+            state: state.into(),
+            rows,
+            columns,
+            ok_rows,
+            failed_rows,
+            row_errors,
+            last_error: None,
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
+    fn blocked(
+        review_id: anno_rag_tabular::ReviewId,
+        rows: usize,
+        columns: usize,
+        error: String,
+    ) -> Self {
+        Self {
+            review_id,
+            state: "blocked".into(),
+            rows,
+            columns,
+            ok_rows: 0,
+            failed_rows: rows,
+            row_errors: Vec::new(),
+            last_error: Some(error),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
+    fn to_wire(&self) -> ReviewExtractionStatusWire {
+        ReviewExtractionStatusWire {
+            review_id: self.review_id.0.to_string(),
+            state: self.state.clone(),
+            rows: self.rows,
+            columns: self.columns,
+            ok_rows: self.ok_rows,
+            failed_rows: self.failed_rows,
+            row_errors: self.row_errors.clone(),
+            last_error: self.last_error.clone(),
+            updated_at: self.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+fn try_mark_review_extraction_running(
+    statuses: &mut HashMap<anno_rag_tabular::ReviewId, ReviewExtractionStatus>,
+    review_id: anno_rag_tabular::ReviewId,
+    rows: usize,
+    columns: usize,
+) -> Result<(), ReviewExtractResult> {
+    if let Some(existing) = statuses.get(&review_id) {
+        if existing.state == "running" {
+            return Err(ReviewExtractResult {
+                review_id: review_id.0.to_string(),
+                rows: existing.rows,
+                columns: existing.columns,
+                extraction_started: false,
+                extraction_error: Some(format!(
+                    "extraction already running for review {}",
+                    review_id.0
+                )),
+            });
+        }
+    }
+
+    statuses.insert(
+        review_id,
+        ReviewExtractionStatus::running(review_id, rows, columns),
+    );
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -935,6 +1150,7 @@ struct ReviewGetResult {
     columns: Vec<ReviewColumnWire>,
     rows: Vec<ReviewRowWire>,
     cells: Vec<ReviewCellWire>,
+    extraction_status: Option<ReviewExtractionStatusWire>,
 }
 
 #[derive(Serialize)]
@@ -966,6 +1182,59 @@ struct ReviewCellWire {
 // ---- Internal tool implementations ----
 
 impl AnnoRagServer {
+    async fn create_review_from_params(
+        &self,
+        p: ReviewCreateParams,
+    ) -> Result<ReviewCreateResult, String> {
+        let ts = self.tabular_storage().await.map_err(|e| e.to_string())?;
+        let review_id = anno_rag_tabular::ReviewId::new();
+        let columns = if let Some(tid) = &p.template_id {
+            anno_rag_tabular::schema::template::Template::builtin(tid)
+                .map_err(|e| format!("loading template: {e}"))?
+                .into_columns(review_id)
+        } else {
+            Vec::new()
+        };
+        let columns_loaded = columns.len();
+        let review = anno_rag_tabular::storage::reviews::Review {
+            id: review_id,
+            name: p.name.clone(),
+            project_id: None,
+            template_id: p.template_id.clone(),
+            scope_folder: p.scope_folder.clone(),
+            created_at: chrono::Utc::now(),
+            schema_version: 1,
+        };
+        ts.reviews
+            .create(&review)
+            .await
+            .map_err(|e| e.to_string())?;
+        for col in columns {
+            if let Err(e) = ts.columns.add(review_id, &col).await {
+                let add_error = format!("adding column: {e}");
+                let mut cleanup_errors = Vec::new();
+                if let Err(cleanup_error) = ts.columns.delete_for_review(review_id).await {
+                    cleanup_errors.push(format!("deleting review columns: {cleanup_error}"));
+                }
+                if let Err(cleanup_error) = ts.reviews.delete(review_id).await {
+                    cleanup_errors.push(format!("deleting review: {cleanup_error}"));
+                }
+                if cleanup_errors.is_empty() {
+                    return Err(format!("{add_error}; rolled back review {}", review_id.0));
+                }
+                return Err(format!(
+                    "{add_error}; cleanup failed after partial review creation: {}",
+                    cleanup_errors.join("; ")
+                ));
+            }
+        }
+        Ok(ReviewCreateResult {
+            review_id: review_id.0.to_string(),
+            name: p.name,
+            columns_loaded,
+        })
+    }
+
     async fn legacy_search_impl(&self, params: SearchParams) -> Result<serde_json::Value, String> {
         let p = self.pipeline().await.map_err(|e| e.to_string())?;
         let result = if params.rerank {
@@ -1462,6 +1731,199 @@ impl AnnoRagServer {
             .map_err(|e| e.to_string())?;
 
         Ok(paths.into_iter().find(|path| legal_folder_id(path) == id))
+    }
+
+    async fn start_review_extraction(
+        &self,
+        ts: anno_rag_tabular::storage::StorageHandle,
+        review_id: anno_rag_tabular::ReviewId,
+        force_reextract: bool,
+    ) -> ReviewExtractResult {
+        match ts.reviews.get(review_id).await {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return ReviewExtractResult {
+                    review_id: review_id.0.to_string(),
+                    rows: 0,
+                    columns: 0,
+                    extraction_started: false,
+                    extraction_error: Some(format!("review {} not found", review_id.0)),
+                };
+            }
+            Err(e) => {
+                return ReviewExtractResult {
+                    review_id: review_id.0.to_string(),
+                    rows: 0,
+                    columns: 0,
+                    extraction_started: false,
+                    extraction_error: Some(e.to_string()),
+                };
+            }
+        }
+
+        let columns = match ts.columns.list_for_review(review_id).await {
+            Ok(columns) => columns,
+            Err(e) => {
+                return ReviewExtractResult {
+                    review_id: review_id.0.to_string(),
+                    rows: 0,
+                    columns: 0,
+                    extraction_started: false,
+                    extraction_error: Some(e.to_string()),
+                };
+            }
+        };
+        let rows = match ts.rows.list_for_review(review_id).await {
+            Ok(rows) => rows,
+            Err(e) => {
+                return ReviewExtractResult {
+                    review_id: review_id.0.to_string(),
+                    rows: 0,
+                    columns: columns.len(),
+                    extraction_started: false,
+                    extraction_error: Some(e.to_string()),
+                };
+            }
+        };
+        let row_count = rows.len();
+        let column_count = columns.len();
+
+        if row_count == 0 || column_count == 0 {
+            let error = if row_count == 0 && column_count == 0 {
+                "review has no rows or columns to extract".to_string()
+            } else if row_count == 0 {
+                "review has no rows to extract".to_string()
+            } else {
+                "review has no columns to extract".to_string()
+            };
+            self.extraction_status.write().await.insert(
+                review_id,
+                ReviewExtractionStatus::blocked(review_id, row_count, column_count, error.clone()),
+            );
+            return ReviewExtractResult {
+                review_id: review_id.0.to_string(),
+                rows: row_count,
+                columns: column_count,
+                extraction_started: false,
+                extraction_error: Some(error),
+            };
+        }
+
+        if let Err(e) = self.pipeline().await {
+            let error = e.to_string();
+            self.extraction_status.write().await.insert(
+                review_id,
+                ReviewExtractionStatus::blocked(review_id, row_count, column_count, error.clone()),
+            );
+            return ReviewExtractResult {
+                review_id: review_id.0.to_string(),
+                rows: row_count,
+                columns: column_count,
+                extraction_started: false,
+                extraction_error: Some(error),
+            };
+        }
+
+        let Some(arc_pipeline) = self.pipeline_arc() else {
+            let error = "pipeline not initialised".to_string();
+            self.extraction_status.write().await.insert(
+                review_id,
+                ReviewExtractionStatus::blocked(review_id, row_count, column_count, error.clone()),
+            );
+            return ReviewExtractResult {
+                review_id: review_id.0.to_string(),
+                rows: row_count,
+                columns: column_count,
+                extraction_started: false,
+                extraction_error: Some(error),
+            };
+        };
+
+        let llm_client = match anno_rag_tabular::llm::default_from_env() {
+            Ok(llm_client) => llm_client,
+            Err(e) => {
+                let error = e.to_string();
+                self.extraction_status.write().await.insert(
+                    review_id,
+                    ReviewExtractionStatus::blocked(
+                        review_id,
+                        row_count,
+                        column_count,
+                        error.clone(),
+                    ),
+                );
+                return ReviewExtractResult {
+                    review_id: review_id.0.to_string(),
+                    rows: row_count,
+                    columns: column_count,
+                    extraction_started: false,
+                    extraction_error: Some(error),
+                };
+            }
+        };
+
+        {
+            let mut statuses = self.extraction_status.write().await;
+            if let Err(result) = try_mark_review_extraction_running(
+                &mut statuses,
+                review_id,
+                row_count,
+                column_count,
+            ) {
+                return result;
+            }
+        }
+
+        let status = Arc::clone(&self.extraction_status);
+        let llm = Arc::from(llm_client);
+        tokio::spawn(async move {
+            let chunk_src = Arc::new(crate::tabular::PipelineChunkSource(arc_pipeline));
+            let extractor = anno_rag_tabular::extract::Extractor::new(llm, chunk_src);
+            let cfg = anno_rag_tabular::fanout::FanoutConfig {
+                force_reextract,
+                ..Default::default()
+            };
+            match anno_rag_tabular::run_review(&ts, &extractor, review_id, cfg).await {
+                Ok(outcomes) => {
+                    let ok_rows = outcomes.iter().filter(|o| o.result.is_ok()).count();
+                    let row_errors = outcomes
+                        .iter()
+                        .filter_map(|o| {
+                            o.result.as_ref().err().map(|e| ReviewRowErrorWire {
+                                row_id: o.row_id.0.to_string(),
+                                doc_id: o.doc_id.to_string(),
+                                error: e.to_string(),
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    status.write().await.insert(
+                        review_id,
+                        ReviewExtractionStatus::completed(
+                            review_id,
+                            row_count,
+                            column_count,
+                            ok_rows,
+                            row_errors,
+                        ),
+                    );
+                }
+                Err(e) => {
+                    let error = e.to_string();
+                    status.write().await.insert(
+                        review_id,
+                        ReviewExtractionStatus::blocked(review_id, row_count, column_count, error),
+                    );
+                }
+            }
+        });
+
+        ReviewExtractResult {
+            review_id: review_id.0.to_string(),
+            rows: row_count,
+            columns: column_count,
+            extraction_started: true,
+            extraction_error: None,
+        }
     }
 }
 
@@ -2492,44 +2954,12 @@ impl AnnoRagServer {
                        real-estate-v1, employment-v1, ip-v1."
     )]
     async fn review_create(&self, Parameters(p): Parameters<ReviewCreateParams>) -> String {
-        let ts = match self.tabular_storage().await {
-            Ok(ts) => ts,
-            Err(e) => return format!("Error: {e}"),
-        };
-        let review_id = anno_rag_tabular::ReviewId::new();
-        let review = anno_rag_tabular::storage::reviews::Review {
-            id: review_id,
-            name: p.name.clone(),
-            project_id: None,
-            template_id: p.template_id.clone(),
-            scope_folder: p.scope_folder.clone(),
-            created_at: chrono::Utc::now(),
-            schema_version: 1,
-        };
-        if let Err(e) = ts.reviews.create(&review).await {
-            return format!("Error: {e}");
-        }
-        let mut columns_loaded = 0usize;
-        if let Some(tid) = &p.template_id {
-            match anno_rag_tabular::schema::template::Template::builtin(tid) {
-                Ok(tmpl) => {
-                    let cols = tmpl.into_columns(review_id);
-                    columns_loaded = cols.len();
-                    for col in cols {
-                        if let Err(e) = ts.columns.add(review_id, &col).await {
-                            return format!("Error adding column: {e}");
-                        }
-                    }
-                }
-                Err(e) => return format!("Error loading template: {e}"),
+        match self.create_review_from_params(p).await {
+            Ok(result) => {
+                serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
             }
+            Err(e) => format!("Error: {e}"),
         }
-        serde_json::to_string_pretty(&ReviewCreateResult {
-            review_id: review_id.0.to_string(),
-            name: p.name,
-            columns_loaded,
-        })
-        .unwrap_or_else(|e| format!("Error: {e}"))
     }
 
     /// Add document rows to a review and kick off background extraction.
@@ -2554,16 +2984,26 @@ impl AnnoRagServer {
             Ok(None) => return format!("Error: review {} not found", review_id.0),
             Err(e) => return format!("Error: {e}"),
         }
+        let parsed = parse_review_doc_ids(&p.doc_ids);
+        let mut failed = parsed.failed;
+        let ingested_doc_ids = match self
+            .filter_ingested_doc_ids(parsed.valid, &mut failed)
+            .await
+        {
+            Ok(ids) => ids,
+            Err(e) => {
+                return serde_json::to_string_pretty(&ReviewAddRowsResult {
+                    rows_added: 0,
+                    extraction_started: false,
+                    failed_doc_ids: failed,
+                    extraction_error: Some(e),
+                })
+                .unwrap_or_else(|e| format!("Error: {e}"));
+            }
+        };
         let mut rows_added = 0usize;
-        let mut failed: Vec<String> = Vec::new();
-        for id_str in &p.doc_ids {
-            let doc_id = match uuid::Uuid::parse_str(id_str) {
-                Ok(u) => u,
-                Err(_) => {
-                    failed.push(id_str.clone());
-                    continue;
-                }
-            };
+        let mut row_errors = Vec::new();
+        for doc_id in ingested_doc_ids {
             let row = anno_rag_tabular::storage::rows::Row {
                 id: anno_rag_tabular::RowId::for_doc(review_id, doc_id),
                 review_id,
@@ -2575,81 +3015,54 @@ impl AnnoRagServer {
                 Ok(()) => rows_added += 1,
                 Err(e) => {
                     tracing::warn!(target: "tabular::mcp", "add_row failed for {doc_id}: {e}");
-                    failed.push(id_str.clone());
+                    row_errors.push(format!("adding row for doc_id {doc_id}: {e}"));
+                    failed.push(doc_id.to_string());
                 }
             }
         }
-        // Spawn background extraction if we have rows and a pipeline.
-        let extraction_started = if rows_added > 0 {
-            match self.pipeline_arc() {
-                Some(arc_pipeline) => {
-                    // Pre-flight: verify LLM credentials *before* advertising
-                    // extraction_started=true.  Without this check the caller
-                    // would believe extraction had begun even when the key is
-                    // absent, hiding the failure entirely.
-                    match anno_rag_tabular::llm::default_from_env() {
-                        Err(e) => {
-                            tracing::warn!(
-                                target: "tabular::mcp",
-                                "LLM init failed; background extraction skipped: {e}"
-                            );
-                            false
-                        }
-                        Ok(llm_client) => {
-                            let ts_clone = ts.clone();
-                            let force = p.force_reextract;
-                            let llm = std::sync::Arc::from(llm_client);
-                            tokio::spawn(async move {
-                                let chunk_src = std::sync::Arc::new(
-                                    crate::tabular::PipelineChunkSource(arc_pipeline.clone()),
-                                );
-                                let extractor =
-                                    anno_rag_tabular::extract::Extractor::new(llm, chunk_src);
-                                let cfg = anno_rag_tabular::fanout::FanoutConfig {
-                                    force_reextract: force,
-                                    ..Default::default()
-                                };
-                                match anno_rag_tabular::run_review(
-                                    &ts_clone, &extractor, review_id, cfg,
-                                )
-                                .await
-                                {
-                                    Ok(outcomes) => {
-                                        let ok =
-                                            outcomes.iter().filter(|o| o.result.is_ok()).count();
-                                        let err = outcomes.len() - ok;
-                                        tracing::info!(
-                                            target: "tabular::mcp",
-                                            review = %review_id.0,
-                                            ok,
-                                            err,
-                                            "background extraction complete"
-                                        );
-                                    }
-                                    Err(e) => tracing::warn!(
-                                        target: "tabular::mcp",
-                                        "run_review failed: {e}"
-                                    ),
-                                }
-                            });
-                            true
-                        }
-                    }
-                }
-                None => {
-                    tracing::warn!(target: "tabular::mcp", "pipeline not initialised; extraction skipped");
-                    false
-                }
-            }
+        let extraction = if rows_added > 0 {
+            Some(
+                self.start_review_extraction(ts.clone(), review_id, p.force_reextract)
+                    .await,
+            )
         } else {
-            false
+            None
         };
+        let extraction_started = extraction
+            .as_ref()
+            .map(|result| result.extraction_started)
+            .unwrap_or(false);
+        let extraction_error = combine_review_add_rows_extraction_error(
+            row_errors,
+            extraction.and_then(|result| result.extraction_error),
+        );
         serde_json::to_string_pretty(&ReviewAddRowsResult {
             rows_added,
             extraction_started,
             failed_doc_ids: failed,
+            extraction_error,
         })
         .unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// Start background extraction for an existing review.
+    #[tool(
+        description = "Start background LLM extraction for an existing tabular review. \
+                       Use force_reextract=true to overwrite existing unlocked cells."
+    )]
+    async fn review_extract(&self, Parameters(p): Parameters<ReviewExtractParams>) -> String {
+        let ts = match self.tabular_storage().await {
+            Ok(ts) => ts,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let review_id = match uuid::Uuid::parse_str(&p.review_id) {
+            Ok(u) => anno_rag_tabular::ReviewId(u),
+            Err(e) => return format!("Error: bad review_id: {e}"),
+        };
+        let result = self
+            .start_review_extraction(ts.clone(), review_id, p.force_reextract)
+            .await;
+        serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
     }
 
     /// Re-extract a single cell with an extra instruction prepended to the
@@ -2901,6 +3314,12 @@ impl AnnoRagServer {
             Ok(u) => anno_rag_tabular::ReviewId(u),
             Err(e) => return format!("Error: bad review_id: {e}"),
         };
+        let extraction_status = self
+            .extraction_status
+            .read()
+            .await
+            .get(&review_id)
+            .map(ReviewExtractionStatus::to_wire);
         let review = match ts.reviews.get(review_id).await {
             Ok(Some(r)) => r,
             Ok(None) => return format!("Error: review {review_id:?} not found"),
@@ -2956,6 +3375,7 @@ impl AnnoRagServer {
                     version: c.version,
                 })
                 .collect(),
+            extraction_status,
         };
         serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"))
     }
@@ -3280,6 +3700,140 @@ async fn shutdown_signal_mcp() {
                 "shutdown signal received, cancelling MCP service"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tabular_status_tests {
+    use super::*;
+    use anno_rag::config::AnnoRagConfig;
+
+    async fn temp_server() -> (AnnoRagServer, tempfile::TempDir) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let cfg = AnnoRagConfig {
+            data_dir: tmp.path().to_path_buf(),
+            ..Default::default()
+        };
+        (AnnoRagServer::new_lazy(cfg, [0u8; 32]), tmp)
+    }
+
+    #[test]
+    fn parse_review_doc_ids_separates_invalid_uuid_strings() {
+        let good = uuid::Uuid::now_v7();
+        let parsed = parse_review_doc_ids(&[good.to_string(), "not-a-uuid".into()]);
+
+        assert_eq!(parsed.valid, vec![good]);
+        assert_eq!(parsed.failed, vec!["not-a-uuid".to_string()]);
+    }
+
+    #[test]
+    fn review_add_rows_extraction_error_includes_row_storage_errors() {
+        let combined = combine_review_add_rows_extraction_error(
+            vec!["adding row for doc_id 018f1a90-f1a0-7000-8000-000000000001: write failed".into()],
+            Some("review has no columns to extract".into()),
+        )
+        .expect("combined error");
+
+        assert!(combined.contains("write failed"));
+        assert!(combined.contains("review has no columns to extract"));
+    }
+
+    #[test]
+    fn completed_extraction_status_converts_to_wire() {
+        let review_id = anno_rag_tabular::ReviewId::new();
+        let status = ReviewExtractionStatus::completed(
+            review_id,
+            2,
+            3,
+            1,
+            vec![ReviewRowErrorWire {
+                row_id: "row-1".into(),
+                doc_id: "doc-1".into(),
+                error: "LLM failed".into(),
+            }],
+        );
+
+        let wire = status.to_wire();
+
+        assert_eq!(wire.review_id, review_id.0.to_string());
+        assert_eq!(wire.state, "completed_with_errors");
+        assert_eq!(wire.rows, 2);
+        assert_eq!(wire.columns, 3);
+        assert_eq!(wire.ok_rows, 1);
+        assert_eq!(wire.failed_rows, 1);
+        assert_eq!(wire.row_errors[0].error, "LLM failed");
+    }
+
+    #[test]
+    fn blocked_extraction_status_carries_human_error() {
+        let review_id = anno_rag_tabular::ReviewId::new();
+        let status =
+            ReviewExtractionStatus::blocked(review_id, 2, 14, "Models not downloaded".into());
+        let wire = status.to_wire();
+
+        assert_eq!(wire.state, "blocked");
+        assert_eq!(wire.failed_rows, 2);
+        assert_eq!(wire.last_error.as_deref(), Some("Models not downloaded"));
+    }
+
+    #[test]
+    fn running_extraction_status_blocks_duplicate_start() {
+        let review_id = anno_rag_tabular::ReviewId::new();
+        let mut statuses = HashMap::new();
+
+        let first = try_mark_review_extraction_running(&mut statuses, review_id, 3, 4);
+        assert!(first.is_ok(), "first start should mark running");
+        let duplicate = try_mark_review_extraction_running(&mut statuses, review_id, 9, 10)
+            .expect_err("second start should be rejected");
+
+        assert!(!duplicate.extraction_started);
+        assert_eq!(duplicate.rows, 3);
+        assert_eq!(duplicate.columns, 4);
+        assert!(duplicate
+            .extraction_error
+            .as_deref()
+            .expect("duplicate error")
+            .contains("already running"));
+    }
+
+    #[test]
+    fn review_get_result_serializes_extraction_status() {
+        let review_id = anno_rag_tabular::ReviewId::new();
+        let result = ReviewGetResult {
+            review_id: review_id.0.to_string(),
+            name: "Review".into(),
+            columns: Vec::new(),
+            rows: Vec::new(),
+            cells: Vec::new(),
+            extraction_status: Some(ReviewExtractionStatus::running(review_id, 3, 4).to_wire()),
+        };
+
+        let json = serde_json::to_value(result).expect("serialize review get result");
+
+        assert_eq!(json["extraction_status"]["state"], "running");
+        assert_eq!(json["extraction_status"]["rows"], 3);
+        assert_eq!(json["extraction_status"]["columns"], 4);
+    }
+
+    #[tokio::test]
+    async fn review_create_rejects_bad_template_without_orphan_review() {
+        let (server, _tmp) = temp_server().await;
+        let ts = server.tabular_storage().await.expect("tabular storage");
+
+        let result = server
+            .create_review_from_params(ReviewCreateParams {
+                name: "Bad template".into(),
+                template_id: Some("missing-template".into()),
+                scope_folder: None,
+            })
+            .await;
+
+        assert!(result.is_err());
+        let reviews = ts.reviews.list().await.expect("list reviews");
+        assert!(
+            reviews.is_empty(),
+            "invalid template must not create a review"
+        );
     }
 }
 
