@@ -9,11 +9,14 @@ Current candidate promoted as GitHub "Latest": `v0.11.0-rc.11`.
 | Platform | Asset |
 |---|---|
 | Windows 11 x64 | `hacienda-<tag>-x86_64-pc-windows-msvc.zip` |
+| macOS Intel | `hacienda-<tag>-x86_64-apple-darwin.tar.gz` |
 | macOS Apple Silicon | `hacienda-<tag>-aarch64-apple-darwin.tar.gz` |
 
-The current `Release Binaries` workflow publishes archives and checksums only:
-it does not publish `.mcpb` extension bundles. Install Claude Desktop/Cowork
-from the archive using the manual MCP config below.
+For new tags, the canonical CPU release path is the `Release` workflow generated
+by cargo-dist. It publishes platform archives/installers, checksums, and `.mcpb`
+extension bundles. The `Release Binaries (Manual Fallback)` workflow is manual
+only and publishes archive/checksum assets if the cargo-dist path needs a
+targeted rerun.
 
 Each archive contains:
 
@@ -205,18 +208,22 @@ Use this flow to create an optimized GitHub candidate release for Claude Desktop
 git tag v0.11.0-rc.11
 git push origin main
 git push origin v0.11.0-rc.11
-gh run list --repo jamon8888/anno --workflow "Release Binaries" --limit 5
+gh run list --repo jamon8888/anno --workflow "Release" --limit 5
 ```
 
 Monitor the selected release run:
 
 ```powershell
-$Run = gh run list --repo jamon8888/anno --workflow "Release Binaries" --limit 5 --json databaseId,displayTitle |
+$Run = gh run list --repo jamon8888/anno --workflow "Release" --limit 5 --json databaseId,displayTitle |
   ConvertFrom-Json |
   Where-Object { $_.displayTitle -match 'v0\.11\.0-rc\.11' } |
   Select-Object -First 1
 gh run view $Run.databaseId --repo jamon8888/anno --json status,conclusion,url,jobs
 ```
+
+If the cargo-dist release path fails because of a workflow-specific packaging
+issue, run `Release Binaries (Manual Fallback)` manually against the same tag.
+Do not use the fallback as the default tag trigger.
 
 ### Install in Cowork
 

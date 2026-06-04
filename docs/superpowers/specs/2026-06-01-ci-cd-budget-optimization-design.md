@@ -1,21 +1,33 @@
 # CI/CD Budget Optimization — Design
 
 **Date:** 2026-06-01
-**Status:** Draft (awaiting review)
+**Status:** Implemented for GitHub public-fork release routing
 **Approach:** A — surgical optimization of the existing cargo-dist + `ci.yml` pipeline (no rewrite)
 **Related:** [`2026-05-27-rapid-build-architecture-design.md`](2026-05-27-rapid-build-architecture-design.md), [`2026-05-26-release-plan-design.md`](2026-05-26-release-plan-design.md), [`2026-05-22-anno-installer-phase2-cargo-dist-design.md`](2026-05-22-anno-installer-phase2-cargo-dist-design.md)
 
 ## 1. Problem
 
-The repo `jamon8888/anno` is **private**, so GitHub Actions minutes are metered against the 2000 min/month free tier and billed beyond it, with **OS multipliers**: Linux ×1, **Windows ×2**, **macOS ×10**. Three budgets hurt simultaneously:
+The repo `jamon8888/anno` was originally treated as **private**, where GitHub
+Actions minutes are metered against the included monthly tier and billed beyond
+it, with OS multipliers. The repo is now **public**, so standard GitHub-hosted
+CPU runners are the default path for CI and releases. The optimization goal
+shifts from avoiding standard-runner minutes to avoiding duplicate tag-triggered
+workflows, cache/storage churn, and accidental crates.io publication. Three
+budgets still matter:
 
-1. **Actions minutes** — too many billed minutes, dominated by macOS jobs (×10).
+1. **Actions runtime/noise** — duplicate tag-triggered release workflows make
+   failures harder to triage and rebuild the same artifacts more than once.
 2. **Local CPU** — the dev machine is an i7-7500U (2 cores / 4 threads, 2016). Heavy local builds are the daily bottleneck.
 3. **Release cost** — releases run **weekly or more**, and the release pipeline rebuilds the full heavy dependency tree (candle, lancedb/datafusion, arrow, ort, kreuzberg) **from scratch on every tag**, across 4 targets including 2 macOS targets.
 
 ### Root-cause finding
 
-`.github/workflows/release.yml` (cargo-dist generated) has **no build caching** — no `sccache`, no `Swatinem/rust-cache`. cargo-dist omits caching by default. On a weekly cadence with Windows (×2) + 2× macOS (×10 each), this is the dominant budget drain. The daily `ci.yml` is already reasonably optimized (small PR gate, `full-ci`-gated heavy matrices, sccache via GHA, `cancel-in-progress`).
+The codebase had two CPU release paths capable of reacting to the same `v*`
+tag: the cargo-dist generated `.github/workflows/release.yml` and the
+hand-rolled `.github/workflows/release-binaries.yml`. It also had
+`.github/workflows/publish.yml` firing on `v*` tags, which made frequent RC tags
+unsafe because release packaging and crates.io publication shared the same
+trigger.
 
 ## 2. Locked decisions
 
@@ -59,38 +71,27 @@ Changes:
   - `Swatinem/rust-cache@v2` keyed per target.
   - Effect: heavy deps are reused across weekly tags; only changed workspace crates + the final optimized codegen/link recompile.
 - **Installers** aligned to the two OS families: `msi` + `powershell` (Windows), `shell` + `homebrew` (macOS). `.mcpb` packaging retained.
-- `pr-run-mode = "plan"` retained (free dry-run on PRs).
+- `release.yml` no longer subscribes to `pull_request` events because the
+  generated PR run was skipped in this repository and only added check noise.
+- `release-binaries.yml` is retained as `Release Binaries (Manual Fallback)` and
+  no longer runs on `v*` tags.
+- `publish.yml` is manual-only with `confirm=publish`; crates.io publication is
+  no longer coupled to GitHub Release tags.
 
-## 5. Budget impact (rough order-of-magnitude)
+## 5. Budget impact
 
-Wall-times are estimates; the point is the **multiplier math**, not exact figures.
+On the public `jamon8888/anno` fork, standard GitHub-hosted CPU runners are not
+the main billing constraint. The practical impact is operational:
 
-**Release, before** (no cache, 4 targets, ~35–40 min each):
+- one CPU release workflow runs on each `v*` tag instead of two;
+- RC tags no longer attempt crates.io publication;
+- cargo-dist release caching still reduces wall time and avoids repeatedly
+  rebuilding the heavy dependency tree;
+- manual fallback release builds remain available without becoming the default.
 
-| Target | Wall | × | Billed |
-|--------|------|---|--------|
-| linux | 35 | 1 | 35 |
-| windows | 40 | 2 | 80 |
-| macOS x64 | 35 | 10 | 350 |
-| macOS arm | 35 | 10 | 350 |
-| plan/global/host | ~15 | 1 | 15 |
-| **Total/tag** | | | **~830** |
-
-Weekly ⇒ **~3300 billed min/month on releases alone** → blows past the 2000 free tier.
-
-**Release, after** (cache warm, Windows + two native macOS targets):
-
-| Target | Wall | × | Billed |
-|--------|------|---|--------|
-| windows (cached) | ~18 | 2 | 36 |
-| macOS x64 (cached) | ~22 | 10 | 220 |
-| macOS arm (cached) | ~22 | 10 | 220 |
-| plan/global/host | ~12 | 1 | 12 |
-| **Total/tag** | | | **~490** |
-
-Weekly ⇒ **~1960 billed min/month** for releases, much tighter than the universal2 estimate but still below the 2000 minute free tier before PR/main CI. First 1–2 post-change releases run cold (cache warming) before reaching steady state.
-
-**CI:** removing the macOS legs from `full-ci` removes the largest per-run cost; the Linux-only PR gate stays cheap.
+If the repo becomes private again, the old multiplier math matters again:
+Windows and macOS release jobs should stay cached, macOS should stay out of
+daily CI, and fallback workflows should remain manual-only.
 
 ## 6. Risks & mitigations
 

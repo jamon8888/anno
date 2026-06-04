@@ -1,8 +1,6 @@
 name: publish
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
       confirm:
@@ -23,7 +21,6 @@ jobs:
     environment: crates-io
     steps:
       - name: Guard (manual trigger)
-        if: github.event_name == 'workflow_dispatch'
         run: |
           if [ "${{ inputs.confirm }}" != "publish" ]; then
             echo "Refusing to publish: set workflow input confirm=publish"

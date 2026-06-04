@@ -1,13 +1,10 @@
-name: Release Binaries
+name: Release Binaries (Manual Fallback)
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing v* tag to release"
+        description: "Existing v* tag to package with the manual fallback workflow"
         required: true
         type: string
 
@@ -15,7 +12,7 @@ permissions:
   contents: write
 
 env:
-  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  RELEASE_TAG: ${{ inputs.tag }}
 
 jobs:
   build:

@@ -14,13 +14,14 @@ The legacy `anno-core 0.8.0`, `anno-metrics 0.8.0`, and `anno-graph 0.8.0` remai
 
 ## Publish command
 
-The publish workflow (`.github/workflows/publish.yml`) fires on `v*` tag push and on workflow_dispatch with `confirm=publish`. Authentication uses crates.io trusted publishing (OIDC), no API tokens.
+The publish workflow (`.github/workflows/publish.yml`) is manual-only. It does
+not fire on GitHub Release tags, so RC tags can exercise release packaging
+without publishing crates to crates.io. Authentication uses crates.io trusted
+publishing (OIDC), no API tokens.
 
 ```bash
-# Tag-triggered (preferred):
-git tag vX.Y.Z && git push --follow-tags
-
-# Manual dispatch (idempotent, safe to re-run after a partial failure):
+# Manual dispatch from the intended release ref. Idempotent and safe to re-run
+# after a partial failure.
 GITHUB_TOKEN= gh workflow run publish.yml -f confirm=publish
 ```
 
