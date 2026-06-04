@@ -8,7 +8,7 @@ use anno_knowledge_core::{
     ObjectType, PartId, RevisionId, ScopeId, SourceId, SourceKind, SourceKindForId,
 };
 use chrono::Utc;
-use rusqlite::{params, Connection};
+use rusqlite::{params, params_from_iter, Connection};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -209,13 +209,20 @@ impl KnowledgeControlStore {
             .expect("object type serializes to string")
             .to_string();
 
+        let source_id = SourceId::from_parts(SourceKindForId::LocalFolder, "test-source");
+        let account_id = AccountId::from_parts(source_id, "test-account");
+        let scope_id = ScopeId::from_parts(account_id, "test-scope");
+
         conn.execute(
             "INSERT OR IGNORE INTO knowledge_objects \
              (object_id, source_id, account_id, scope_id, external_id, object_type, \
-              title_pseudo, metadata_pseudo_json, source_url_policy, source_updated_at, state) \
-             VALUES (?1, 'test-source', 'test-account', 'test-scope', ?1, ?2, ?3, ?4, NULL, ?5, 'pseudonymized')",
+               title_pseudo, metadata_pseudo_json, source_url_policy, source_updated_at, state) \
+              VALUES (?1, ?2, ?3, ?4, ?1, ?5, ?6, ?7, NULL, ?8, 'pseudonymized')",
             params![
                 &object_id,
+                source_id.as_string(),
+                account_id.as_string(),
+                scope_id.as_string(),
                 &object_type,
                 &title_pseudo,
                 &metadata,
@@ -580,22 +587,48 @@ impl KnowledgeControlStore {
             return Ok(Vec::new());
         };
         let conn = self.conn.lock().expect("knowledge sqlite mutex poisoned");
-        let mut stmt = conn.prepare(
-            "SELECT chunk_id, object_id, revision_id, source_kind, object_type, title_pseudo, \
+        let mut sql = String::from(
+            "SELECT knowledge_objects_fts.chunk_id, knowledge_objects_fts.object_id, \
+                    knowledge_objects_fts.revision_id, knowledge_objects_fts.source_kind, \
+                    knowledge_objects_fts.object_type, knowledge_objects_fts.title_pseudo, \
                     snippet(knowledge_objects_fts, 6, '[', ']', '...', 20) AS snippet, \
-                    bm25(knowledge_objects_fts) AS score \
+                    bm25(knowledge_objects_fts) AS score, \
+                    o.source_id, o.scope_id \
              FROM knowledge_objects_fts \
-             WHERE knowledge_objects_fts MATCH ?1 \
-             ORDER BY score \
-             LIMIT ?2",
-        )?;
-        let rows = stmt.query_map(params![fts_query, request.top_k as i64], |row| {
+             JOIN knowledge_objects o ON o.object_id = knowledge_objects_fts.object_id \
+             WHERE knowledge_objects_fts MATCH ?",
+        );
+        let mut bindings = Vec::<rusqlite::types::Value>::new();
+        bindings.push(fts_query.into());
+        if !request.source_ids.is_empty() {
+            sql.push_str(" AND o.source_id IN (");
+            sql.push_str(&repeat_vars(request.source_ids.len()));
+            sql.push(')');
+            for source_id in &request.source_ids {
+                bindings.push(source_id.as_string().into());
+            }
+        }
+        if !request.scope_ids.is_empty() {
+            sql.push_str(" AND o.scope_id IN (");
+            sql.push_str(&repeat_vars(request.scope_ids.len()));
+            sql.push(')');
+            for scope_id in &request.scope_ids {
+                bindings.push(scope_id.as_string().into());
+            }
+        }
+        sql.push_str(" ORDER BY score LIMIT ?");
+        bindings.push((request.top_k as i64).into());
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(bindings), |row| {
             let source_kind_text: String = row.get(3)?;
             let object_type_text: String = row.get(4)?;
             Ok(KnowledgeSearchHit {
                 chunk_id: ChunkId::new(parse_uuid(row.get::<_, String>(0)?)?),
                 object_id: ObjectId::new(parse_uuid(row.get::<_, String>(1)?)?),
                 revision_id: RevisionId::new(parse_uuid(row.get::<_, String>(2)?)?),
+                source_id: SourceId::new(parse_uuid(row.get::<_, String>(8)?)?),
+                scope_id: ScopeId::new(parse_uuid(row.get::<_, String>(9)?)?),
                 source_kind: parse_source_kind(&source_kind_text)?,
                 object_type: parse_object_type(&object_type_text)?,
                 title_pseudo: row.get(5)?,
@@ -607,6 +640,10 @@ impl KnowledgeControlStore {
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
+}
+
+fn repeat_vars(len: usize) -> String {
+    (0..len).map(|_| "?").collect::<Vec<_>>().join(", ")
 }
 
 fn count(conn: &Connection, table: &str) -> Result<u64> {
@@ -839,6 +876,56 @@ mod tests {
         let status = store.status().expect("status");
         assert_eq!(status.objects, 1);
         assert_eq!(status.chunks, 1);
+    }
+
+    #[test]
+    fn search_fast_filters_by_source_id() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let store =
+            KnowledgeControlStore::open(dir.path().join("knowledge.sqlite3")).expect("open");
+        let a = store
+            .register_local_folder(LocalFolderRegistration {
+                stable_key: "c:/clients/a".into(),
+                source_label_pseudo: "a".into(),
+                scope_label_pseudo: "a".into(),
+                provider_key: "c:/clients/a".into(),
+            })
+            .expect("register a");
+        let b = store
+            .register_local_folder(LocalFolderRegistration {
+                stable_key: "c:/clients/b".into(),
+                source_label_pseudo: "b".into(),
+                scope_label_pseudo: "b".into(),
+                provider_key: "c:/clients/b".into(),
+            })
+            .expect("register b");
+        let input_a = commit_input(
+            a.scope_id,
+            a.account_id,
+            a.source_id,
+            [1u8; 32],
+            "Contrat Alpha",
+        );
+        let input_b = commit_input(
+            b.scope_id,
+            b.account_id,
+            b.source_id,
+            [2u8; 32],
+            "Contrat Beta",
+        );
+        store.commit_object(&input_a).expect("commit a");
+        store.commit_object(&input_b).expect("commit b");
+
+        let hits = store
+            .search_fast(
+                &KnowledgeSearchRequest::new("contrat")
+                    .with_top_k(10)
+                    .with_source_ids(vec![a.source_id]),
+            )
+            .expect("search");
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].source_id, a.source_id);
     }
 
     #[test]

@@ -7,15 +7,16 @@
 //! The 32-byte vault key is sourced via [`derive_key`]:
 //! - If `ANNO_RAG_VAULT_PASSPHRASE` env var is set: Argon2id the passphrase
 //!   into a 32-byte key (deterministic across runs given the same passphrase).
-//! - Else: read a random 32-byte secret from the OS keyring (generated and
-//!   stored on first run).
+//! - Else: read a random 32-byte secret from the OS keyring, falling back to
+//!   a Windows DPAPI-protected local file when the keyring path is unavailable.
 
 use crate::error::{Error, Result};
 use crate::legal::offsets::{PseudoOffsetMap, Substitution};
 use cloakpipe_core::replacer::Replacer;
 use cloakpipe_core::vault::Vault as CpVault;
 use cloakpipe_core::DetectedEntity;
-use std::path::Path;
+use serde::Serialize;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -25,6 +26,39 @@ pub use cloakpipe_core::vault::{MatchedMapping, RemovedMapping};
 pub const KEYRING_SERVICE: &str = "anno-rag";
 /// OS keyring account name for the vault key entry.
 pub const KEYRING_ACCOUNT: &str = "vault-key";
+/// Windows DPAPI-protected fallback file name.
+pub const DPAPI_FILE_NAME: &str = "vault-key.dpapi";
+
+/// Source selected by [`vault_key_status`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VaultKeyStatusSource {
+    /// `ANNO_RAG_VAULT_PASSPHRASE` is configured.
+    EnvPassphrase,
+    /// OS keyring entry `anno-rag:vault-key`.
+    Keyring,
+    /// Windows DPAPI-protected fallback file.
+    DpapiFile,
+    /// KMS environment variables are configured, but the adapter is not implemented yet.
+    KmsUnimplemented,
+    /// No usable vault key source was found.
+    Missing,
+}
+
+/// Non-secret status for the configured vault key source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VaultKeyStatus {
+    /// Selected status source.
+    pub source: VaultKeyStatusSource,
+    /// Whether the source currently has key material or source configuration.
+    pub present: bool,
+    /// Whether the source can produce a valid 32-byte vault key.
+    pub usable: bool,
+    /// Whether the key source persists across process restarts.
+    pub persistent: bool,
+    /// User-facing status message. Never includes key bytes or passphrase text.
+    pub message: String,
+}
 
 /// Async-safe handle to a cloakpipe file-based Vault.
 #[derive(Clone)]
@@ -233,7 +267,8 @@ pub enum VaultKeySource {
     /// across runs given the same passphrase + fixed app salt.
     Passphrase(String),
     /// OS keyring entry `anno-rag:vault-key`. Generated + stored on first
-    /// run if the entry is missing.
+    /// run if the entry is missing; Windows DPAPI is used as fallback when
+    /// the keyring path is unavailable.
     Keyring,
     /// External KMS provider — v0.5+. Currently a stub: returns
     /// [`Error::Vault`] with a clear message pointing at the adapter
@@ -252,7 +287,7 @@ impl VaultKeySource {
     ///
     /// 1. `ANNO_RAG_VAULT_KMS_PROVIDER` + `ANNO_RAG_VAULT_KMS_KEY_ID` → KMS.
     /// 2. `ANNO_RAG_VAULT_PASSPHRASE` → Passphrase.
-    /// 3. Default → Keyring.
+    /// 3. Default → Keyring, then Windows DPAPI fallback.
     #[must_use]
     pub fn from_env() -> Self {
         let provider = std::env::var("ANNO_RAG_VAULT_KMS_PROVIDER").ok();
@@ -296,7 +331,8 @@ impl VaultKeySource {
 ///    v0.4 — returns an explanatory error).
 /// 2. `ANNO_RAG_VAULT_PASSPHRASE` env var (Argon2id with a fixed app salt).
 /// 3. OS keyring entry `anno-rag:vault-key`. If missing, generate 32 random
-///    bytes via `OsRng`, hex-encode, store in keyring.
+///    bytes via `OsRng`, hex-encode, store in keyring, or use the Windows
+///    DPAPI fallback when the keyring path is unavailable.
 ///
 /// # Errors
 /// Returns [`Error::Vault`] on KDF / keyring failure, or if the KMS source
@@ -320,24 +356,325 @@ pub(crate) fn derive_via_argon2(passphrase: &str) -> Result<[u8; 32]> {
     Ok(key)
 }
 
-fn derive_via_keyring() -> Result<[u8; 32]> {
-    use rand::Rng;
+fn dpapi_file_path() -> Result<PathBuf> {
+    let base = dirs::data_local_dir()
+        .ok_or_else(|| Error::Vault("could not determine local data directory".into()))?
+        .join("anno-rag");
+    std::fs::create_dir_all(&base)?;
+    Ok(base.join(DPAPI_FILE_NAME))
+}
 
+#[cfg(windows)]
+fn dpapi_protect(data: &[u8]) -> Result<Vec<u8>> {
+    use windows_sys::Win32::Foundation::{LocalFree, HLOCAL};
+    use windows_sys::Win32::Security::Cryptography::{
+        CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB as DATA_BLOB,
+    };
+
+    let cb_data = u32::try_from(data.len())
+        .map_err(|_| Error::Vault("DPAPI input is too large".into()))?;
+    let input = DATA_BLOB {
+        cbData: cb_data,
+        pbData: data.as_ptr() as *mut u8,
+    };
+    let mut output = DATA_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
+
+    let ok = unsafe {
+        CryptProtectData(
+            &input,
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    };
+    if ok == 0 {
+        return Err(Error::Vault(format!(
+            "DPAPI protect failed: {}",
+            std::io::Error::last_os_error()
+        )));
+    }
+
+    let protected =
+        unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec() };
+    unsafe {
+        LocalFree(output.pbData as HLOCAL);
+    }
+    Ok(protected)
+}
+
+#[cfg(not(windows))]
+fn dpapi_protect(_data: &[u8]) -> Result<Vec<u8>> {
+    Err(Error::Vault(
+        "Windows DPAPI fallback is only available on Windows".into(),
+    ))
+}
+
+#[cfg(windows)]
+fn dpapi_unprotect(data: &[u8]) -> Result<Vec<u8>> {
+    use windows_sys::Win32::Foundation::{LocalFree, HLOCAL};
+    use windows_sys::Win32::Security::Cryptography::{
+        CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB as DATA_BLOB,
+    };
+
+    let cb_data = u32::try_from(data.len())
+        .map_err(|_| Error::Vault("DPAPI input is too large".into()))?;
+    let input = DATA_BLOB {
+        cbData: cb_data,
+        pbData: data.as_ptr() as *mut u8,
+    };
+    let mut output = DATA_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
+
+    let ok = unsafe {
+        CryptUnprotectData(
+            &input,
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    };
+    if ok == 0 {
+        return Err(Error::Vault(format!(
+            "DPAPI unprotect failed: {}",
+            std::io::Error::last_os_error()
+        )));
+    }
+
+    let unprotected =
+        unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec() };
+    unsafe {
+        std::ptr::write_bytes(output.pbData, 0, output.cbData as usize);
+        LocalFree(output.pbData as HLOCAL);
+    }
+    Ok(unprotected)
+}
+
+#[cfg(not(windows))]
+fn dpapi_unprotect(_data: &[u8]) -> Result<Vec<u8>> {
+    Err(Error::Vault(
+        "Windows DPAPI fallback is only available on Windows".into(),
+    ))
+}
+
+/// Read the Windows DPAPI-protected fallback key, if present.
+///
+/// # Errors
+/// Returns [`Error::Vault`] on unreadable, undecryptable, or malformed DPAPI
+/// fallback data.
+pub fn read_dpapi_key() -> Result<Option<[u8; 32]>> {
+    let path = dpapi_file_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let protected = std::fs::read(&path)
+        .map_err(|e| Error::Vault(format!("DPAPI key file read {}: {e}", path.display())))?;
+    let mut unprotected = dpapi_unprotect(&protected)?;
+    if unprotected.len() != 32 {
+        return Err(Error::Vault(format!(
+            "DPAPI key file has unexpected length {} (expected 32 bytes)",
+            unprotected.len()
+        )));
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&unprotected);
+    unprotected.fill(0);
+    Ok(Some(key))
+}
+
+/// Write the Windows DPAPI-protected fallback key.
+///
+/// # Errors
+/// Returns [`Error::Vault`] if DPAPI protection or file persistence fails.
+pub fn write_dpapi_key(key: &[u8; 32]) -> Result<()> {
+    let path = dpapi_file_path()?;
+    let protected = dpapi_protect(key)?;
+    std::fs::write(&path, protected)
+        .map_err(|e| Error::Vault(format!("DPAPI key file write {}: {e}", path.display())))?;
+    Ok(())
+}
+
+fn store_key_in_keyring(key: &[u8; 32]) -> Result<()> {
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
         .map_err(|e| Error::Vault(format!("keyring open: {e}")))?;
+    entry
+        .set_password(&hex_encode(key))
+        .map_err(|e| Error::Vault(format!("keyring set: {e}")))?;
+    let stored = entry.get_password().map_err(|e| {
+        Error::Vault(format!(
+            "keyring set verification failed: {e}; vault key was not persisted in keyring"
+        ))
+    })?;
+    let stored_key = parse_hex_key(&stored)?;
+    if stored_key != *key {
+        return Err(Error::Vault(
+            "keyring set verification read back a different key".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn random_vault_key() -> [u8; 32] {
+    use rand::Rng;
+
+    let mut key = [0u8; 32];
+    rand::rng().fill_bytes(&mut key);
+    key
+}
+
+fn write_dpapi_key_after_keyring_error(key: &[u8; 32], keyring_error: Error) -> Result<()> {
+    write_dpapi_key(key).map_err(|dpapi_error| {
+        Error::Vault(format!(
+            "{keyring_error}; Windows DPAPI fallback write failed: {dpapi_error}"
+        ))
+    })
+}
+
+fn generate_dpapi_fallback_key(keyring_error: Error) -> Result<[u8; 32]> {
+    let key = random_vault_key();
+    write_dpapi_key_after_keyring_error(&key, keyring_error)?;
+    Ok(key)
+}
+
+fn generate_key_with_keyring_or_dpapi() -> Result<[u8; 32]> {
+    let key = random_vault_key();
+    if let Err(keyring_error) = store_key_in_keyring(&key) {
+        write_dpapi_key_after_keyring_error(&key, keyring_error)?;
+    }
+    Ok(key)
+}
+
+fn dpapi_status_after_keyring_missing() -> Result<VaultKeyStatus> {
+    let path = dpapi_file_path()?;
+    match read_dpapi_key() {
+        Ok(Some(_)) => Ok(VaultKeyStatus {
+            source: VaultKeyStatusSource::DpapiFile,
+            present: true,
+            usable: true,
+            persistent: true,
+            message: format!("vault key is stored in Windows DPAPI file {}", path.display()),
+        }),
+        Ok(None) => Ok(VaultKeyStatus {
+            source: VaultKeyStatusSource::Missing,
+            present: false,
+            usable: false,
+            persistent: false,
+            message: "no vault key is configured".to_string(),
+        }),
+        Err(e) => Ok(VaultKeyStatus {
+            source: VaultKeyStatusSource::DpapiFile,
+            present: path.exists(),
+            usable: false,
+            persistent: path.exists(),
+            message: format!("Windows DPAPI fallback is not usable: {e}"),
+        }),
+    }
+}
+
+/// Return non-secret status for the effective vault key source.
+///
+/// # Errors
+/// Returns [`Error::Vault`] if local status paths cannot be resolved.
+pub fn vault_key_status() -> Result<VaultKeyStatus> {
+    let provider = std::env::var("ANNO_RAG_VAULT_KMS_PROVIDER").ok();
+    let key_id = std::env::var("ANNO_RAG_VAULT_KMS_KEY_ID").ok();
+    if let (Some(provider), Some(key_id)) = (provider, key_id) {
+        if !provider.is_empty() && !key_id.is_empty() {
+            return Ok(VaultKeyStatus {
+                source: VaultKeyStatusSource::KmsUnimplemented,
+                present: true,
+                usable: false,
+                persistent: false,
+                message: format!(
+                    "KMS vault key source is configured but not implemented (provider={provider})"
+                ),
+            });
+        }
+    }
+
+    if let Ok(passphrase) = std::env::var("ANNO_RAG_VAULT_PASSPHRASE") {
+        let usable = derive_via_argon2(&passphrase).is_ok();
+        return Ok(VaultKeyStatus {
+            source: VaultKeyStatusSource::EnvPassphrase,
+            present: true,
+            usable,
+            persistent: false,
+            message: "vault key is derived from configured environment secret".to_string(),
+        });
+    }
+
+    let entry = match keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT) {
+        Ok(entry) => entry,
+        Err(e) => {
+            let mut status = dpapi_status_after_keyring_missing()?;
+            if status.source == VaultKeyStatusSource::Missing {
+                status.message = format!("keyring is unavailable and no fallback key was found: {e}");
+            }
+            return Ok(status);
+        }
+    };
+
+    match entry.get_password() {
+        Ok(hex) => {
+            let usable = parse_hex_key(&hex).is_ok();
+            Ok(VaultKeyStatus {
+                source: VaultKeyStatusSource::Keyring,
+                present: true,
+                usable,
+                persistent: true,
+                message: if usable {
+                    "vault key is stored in the OS keyring".to_string()
+                } else {
+                    "OS keyring vault key is malformed".to_string()
+                },
+            })
+        }
+        Err(keyring::Error::NoEntry) => dpapi_status_after_keyring_missing(),
+        Err(e) => {
+            let mut status = dpapi_status_after_keyring_missing()?;
+            if status.source == VaultKeyStatusSource::Missing {
+                status.message = format!("keyring read failed and no fallback key was found: {e}");
+            }
+            Ok(status)
+        }
+    }
+}
+
+fn derive_via_keyring() -> Result<[u8; 32]> {
+    let entry = match keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT) {
+        Ok(entry) => entry,
+        Err(e) => {
+            if let Some(key) = read_dpapi_key()? {
+                return Ok(key);
+            }
+            return generate_dpapi_fallback_key(Error::Vault(format!("keyring open: {e}")));
+        }
+    };
 
     match entry.get_password() {
         Ok(hex) => parse_hex_key(&hex),
         Err(keyring::Error::NoEntry) => {
-            let mut key = [0u8; 32];
-            rand::rng().fill_bytes(&mut key);
-            let hex = hex_encode(&key);
-            entry
-                .set_password(&hex)
-                .map_err(|e| Error::Vault(format!("keyring set: {e}")))?;
-            Ok(key)
+            if let Some(key) = read_dpapi_key()? {
+                return Ok(key);
+            }
+            generate_key_with_keyring_or_dpapi()
         }
-        Err(e) => Err(Error::Vault(format!("keyring get: {e}"))),
+        Err(e) => {
+            if let Some(key) = read_dpapi_key()? {
+                return Ok(key);
+            }
+            generate_dpapi_fallback_key(Error::Vault(format!("keyring get: {e}")))
+        }
     }
 }
 
@@ -347,13 +684,40 @@ fn derive_via_keyring() -> Result<[u8; 32]> {
 ///
 /// Used by `anno_init_vault` (spec §14.3 Path B).
 pub fn store_passphrase_derived_key_in_keyring(passphrase: &str) -> Result<()> {
+    initialize_vault_key_from_passphrase(passphrase).map(|_| ())
+}
+
+/// Argon2id-derive a 32-byte key from `passphrase` and persist it in the OS
+/// keyring, falling back to a Windows DPAPI-protected file if the keyring write
+/// path is unavailable.
+///
+/// Used by `anno_init_vault` and startup repair flows. The passphrase itself is
+/// never returned or logged.
+pub fn initialize_vault_key_from_passphrase(passphrase: &str) -> Result<VaultKeyStatus> {
     let key = derive_via_argon2(passphrase)?;
-    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
-        .map_err(|e| Error::Vault(format!("keyring open: {e}")))?;
-    entry
-        .set_password(&hex_encode(&key))
-        .map_err(|e| Error::Vault(format!("keyring set: {e}")))?;
-    Ok(())
+    match store_key_in_keyring(&key) {
+        Ok(()) => Ok(VaultKeyStatus {
+            source: VaultKeyStatusSource::Keyring,
+            present: true,
+            usable: true,
+            persistent: true,
+            message: "vault key was stored in the OS keyring".to_string(),
+        }),
+        Err(keyring_error) => {
+            write_dpapi_key(&key).map_err(|dpapi_error| {
+                Error::Vault(format!(
+                    "{keyring_error}; Windows DPAPI fallback write failed: {dpapi_error}"
+                ))
+            })?;
+            Ok(VaultKeyStatus {
+                source: VaultKeyStatusSource::DpapiFile,
+                present: true,
+                usable: true,
+                persistent: true,
+                message: "vault key was stored in a Windows DPAPI fallback file".to_string(),
+            })
+        }
+    }
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
@@ -387,6 +751,10 @@ fn parse_hex_key(hex: &str) -> Result<[u8; 32]> {
 mod tests {
     use super::*;
     use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
+    use std::ffi::OsString;
+    use std::sync::Mutex as StdMutex;
+
+    static ENV_LOCK: StdMutex<()> = StdMutex::new(());
 
     fn email_entity(text: &str, start: usize) -> DetectedEntity {
         DetectedEntity {
@@ -503,13 +871,15 @@ mod tests {
 
     #[test]
     fn argon2_passphrase_yields_deterministic_key() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let previous_passphrase = std::env::var_os("ANNO_RAG_VAULT_PASSPHRASE");
         unsafe {
             std::env::set_var("ANNO_RAG_VAULT_PASSPHRASE", "test-passphrase-deterministic");
         }
         let k1 = derive_key().expect("first derive");
         let k2 = derive_key().expect("second derive");
         unsafe {
-            std::env::remove_var("ANNO_RAG_VAULT_PASSPHRASE");
+            restore_env("ANNO_RAG_VAULT_PASSPHRASE", previous_passphrase);
         }
         assert_eq!(k1, k2);
         assert_ne!(k1, [0u8; 32]);
@@ -560,5 +930,41 @@ mod tests {
         let a = VaultKeySource::Passphrase("one".into()).derive().unwrap();
         let b = VaultKeySource::Passphrase("two".into()).derive().unwrap();
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn vault_key_status_prefers_env_passphrase() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let previous_passphrase = std::env::var_os("ANNO_RAG_VAULT_PASSPHRASE");
+        let previous_kms_provider = std::env::var_os("ANNO_RAG_VAULT_KMS_PROVIDER");
+        let previous_kms_key_id = std::env::var_os("ANNO_RAG_VAULT_KMS_KEY_ID");
+
+        unsafe {
+            std::env::set_var("ANNO_RAG_VAULT_PASSPHRASE", "test-status-passphrase");
+            std::env::remove_var("ANNO_RAG_VAULT_KMS_PROVIDER");
+            std::env::remove_var("ANNO_RAG_VAULT_KMS_KEY_ID");
+        }
+
+        let status = vault_key_status().expect("status from env passphrase");
+
+        unsafe {
+            restore_env("ANNO_RAG_VAULT_PASSPHRASE", previous_passphrase);
+            restore_env("ANNO_RAG_VAULT_KMS_PROVIDER", previous_kms_provider);
+            restore_env("ANNO_RAG_VAULT_KMS_KEY_ID", previous_kms_key_id);
+        }
+
+        assert_eq!(status.source, VaultKeyStatusSource::EnvPassphrase);
+        assert!(status.present);
+        assert!(status.usable);
+        assert!(!status.persistent);
+        assert!(!status.message.to_lowercase().contains("test-status"));
+    }
+
+    unsafe fn restore_env(name: &str, value: Option<OsString>) {
+        if let Some(value) = value {
+            std::env::set_var(name, value);
+        } else {
+            std::env::remove_var(name);
+        }
     }
 }

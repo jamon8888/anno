@@ -331,6 +331,42 @@ pub trait LegalKnowledgeGraph: Send + Sync {
         .await
     }
 
+    /// Return document rows for a case-file dossier.
+    ///
+    /// # Errors
+    /// Returns backend-specific graph errors.
+    async fn case_file_documents(&self, dossier_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.cypher(
+            "case_file_documents",
+            HashMap::from([("dossier_id".to_string(), dossier_id.to_string())]),
+        )
+        .await
+    }
+
+    /// Return distinct party rows for a case-file dossier.
+    ///
+    /// # Errors
+    /// Returns backend-specific graph errors.
+    async fn case_file_parties(&self, dossier_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.cypher(
+            "case_file_parties",
+            HashMap::from([("dossier_id".to_string(), dossier_id.to_string())]),
+        )
+        .await
+    }
+
+    /// Return chronological event rows for a case-file dossier.
+    ///
+    /// # Errors
+    /// Returns backend-specific graph errors.
+    async fn case_file_events(&self, dossier_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.cypher(
+            "case_file_events",
+            HashMap::from([("dossier_id".to_string(), dossier_id.to_string())]),
+        )
+        .await
+    }
+
     /// Return an appeal chain rooted at a document.
     ///
     /// # Errors
@@ -597,6 +633,80 @@ impl SqliteLegalGraphStore {
         })
     }
 
+    fn case_file_documents_rows(&self, dossier_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT d.id AS doc_id,
+                            json_extract(d.props_json, '$.doc_type') AS doc_type
+                       FROM legal_nodes d
+                      WHERE d.label = 'Document'
+                        AND json_extract(d.props_json, '$.dossier_id') = ?1
+                      ORDER BY d.id",
+                )
+                .map_err(sql_err)?;
+            collect_rows(&mut stmt, params![dossier_id])
+        })
+    }
+
+    fn case_file_parties_rows(&self, dossier_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT DISTINCT
+                            json_extract(p.props_json, '$.canonical_name') AS value,
+                            json_extract(party_edge.props_json, '$.role') AS role
+                       FROM legal_nodes d
+                       JOIN legal_edges party_edge
+                         ON party_edge.from_label = 'Party'
+                        AND party_edge.to_label = 'Document'
+                        AND party_edge.to_key = d.id
+                        AND party_edge.edge_type = 'PARTY_TO'
+                       JOIN legal_nodes p
+                         ON p.label = 'Party'
+                        AND p.id = party_edge.from_key
+                      WHERE d.label = 'Document'
+                        AND json_extract(d.props_json, '$.dossier_id') = ?1
+                      ORDER BY value, role",
+                )
+                .map_err(sql_err)?;
+            collect_rows(&mut stmt, params![dossier_id])
+        })
+    }
+
+    fn case_file_events_rows(&self, dossier_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT json_extract(e.props_json, '$.kind') AS kind,
+                            json_extract(e.props_json, '$.event_date') AS event_date,
+                            c.id AS cid
+                       FROM legal_nodes d
+                       JOIN legal_edges chunk_edge
+                         ON chunk_edge.from_label = 'Document'
+                        AND chunk_edge.from_key = d.id
+                        AND chunk_edge.to_label = 'Chunk'
+                        AND chunk_edge.edge_type = 'HAS_CHUNK'
+                       JOIN legal_nodes c
+                         ON c.label = 'Chunk'
+                        AND c.id = chunk_edge.to_key
+                       JOIN legal_edges mention_edge
+                         ON mention_edge.from_label = 'Chunk'
+                        AND mention_edge.from_key = c.id
+                        AND mention_edge.to_label = 'Event'
+                        AND mention_edge.edge_type = 'MENTIONS'
+                       JOIN legal_nodes e
+                         ON e.label = 'Event'
+                        AND e.id = mention_edge.to_key
+                      WHERE d.label = 'Document'
+                        AND json_extract(d.props_json, '$.dossier_id') = ?1
+                      ORDER BY event_date, d.id, c.id, e.id",
+                )
+                .map_err(sql_err)?;
+            collect_rows(&mut stmt, params![dossier_id])
+        })
+    }
+
     fn appeal_chain_rows(
         &self,
         doc_id: &str,
@@ -838,6 +948,15 @@ impl LegalKnowledgeGraph for SqliteLegalGraphStore {
             "procedural_timeline" => {
                 self.procedural_timeline_rows(required_param(&params, "dossier_id")?)
             }
+            "case_file_documents" => {
+                self.case_file_documents_rows(required_param(&params, "dossier_id")?)
+            }
+            "case_file_parties" => {
+                self.case_file_parties_rows(required_param(&params, "dossier_id")?)
+            }
+            "case_file_events" => {
+                self.case_file_events_rows(required_param(&params, "dossier_id")?)
+            }
             "appeal_chain" => {
                 let max_depth = params
                     .get("max_depth")
@@ -875,6 +994,18 @@ impl LegalKnowledgeGraph for SqliteLegalGraphStore {
 
     async fn procedural_timeline(&self, dossier_id: &str) -> Result<Vec<HashMap<String, String>>> {
         self.procedural_timeline_rows(dossier_id)
+    }
+
+    async fn case_file_documents(&self, dossier_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.case_file_documents_rows(dossier_id)
+    }
+
+    async fn case_file_parties(&self, dossier_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.case_file_parties_rows(dossier_id)
+    }
+
+    async fn case_file_events(&self, dossier_id: &str) -> Result<Vec<HashMap<String, String>>> {
+        self.case_file_events_rows(dossier_id)
     }
 
     async fn appeal_chain(

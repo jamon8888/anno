@@ -9,6 +9,7 @@ use crate::legal::enricher::{LegalEnricher, LegalEntityExtractor};
 use crate::legal::types::{LegalEntity, LegalLabel};
 use crate::store::{ChunkRecord, SearchHit, Store};
 use crate::vault::Vault;
+use anno_corpus_core::{ContentId, CorpusId, DocumentInstanceId};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -52,9 +53,70 @@ pub(crate) fn doc_uuid(file_bytes: &[u8]) -> Uuid {
     Uuid::new_v5(&Uuid::NAMESPACE_OID, file_bytes)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Corpus-qualified legal ingest context.
+#[derive(Debug, Clone)]
+pub struct LegalIngestScope {
+    /// Corpus that owns the indexed legal document.
+    pub corpus_id: CorpusId,
+    /// Root folder used to derive stable relative document paths.
+    pub root: std::path::PathBuf,
+}
+
+/// Document observed during a corpus-scoped legal ingest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LegalIngestedDocument {
+    /// Corpus-qualified legal document id.
+    pub document_id: DocumentInstanceId,
+    /// Source path used by the legal index.
+    pub source_path: String,
+    /// Normalized path relative to the corpus root, when scoped.
+    pub relative_path: Option<String>,
+    /// Content hash of the source bytes.
+    pub content_id: ContentId,
+}
+
+/// Summary returned by a corpus-scoped legal ingest.
+#[derive(Debug, Clone, Default)]
+pub struct LegalIngestSummary {
+    /// Number of newly indexed documents.
+    pub ingested: usize,
+    /// Documents that are available in the corpus, including already-indexed ones.
+    pub documents: Vec<LegalIngestedDocument>,
+}
+
+#[must_use]
+pub(crate) fn scoped_doc_uuid(
+    corpus_id: CorpusId,
+    normalized_relative_path: &str,
+    content_id: &ContentId,
+) -> Uuid {
+    DocumentInstanceId::from_parts(corpus_id, normalized_relative_path, content_id).as_uuid()
+}
+
+fn normalized_relative_path(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+        .replace('\\', "/")
+        .trim_start_matches('/')
+        .to_ascii_lowercase()
+}
+
+fn intersect_uuids(a: &[uuid::Uuid], b: &[uuid::Uuid]) -> Vec<uuid::Uuid> {
+    let b: std::collections::BTreeSet<_> = b.iter().copied().collect();
+    a.iter().copied().filter(|id| b.contains(id)).collect()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum IngestOutcome {
-    Ingested { used_embedded_ocr: bool },
+    Ingested {
+        used_embedded_ocr: bool,
+        document: Option<LegalIngestedDocument>,
+    },
+    AlreadyIndexed {
+        document: Option<LegalIngestedDocument>,
+    },
     Skipped,
 }
 
@@ -93,31 +155,21 @@ impl Pipeline {
     /// [`Pipeline::search`], or [`Pipeline::detect`]. This keeps startup RSS
     /// under ~200 MB for callers that only need vault stats or rehydration.
     ///
-    /// **Vault auto-recovery:** if `vault.enc` exists but the key no longer
-    /// matches (reinstall, passphrase reset, keyring cleared), the old file is
-    /// renamed to `vault.enc.bak` and a fresh vault is created automatically.
-    /// Any existing pseudonymisation mappings are lost, but the LanceDB index
-    /// is preserved so documents remain searchable.
+    /// If `vault.enc` exists but the key no longer matches (reinstall,
+    /// passphrase reset, keyring cleared), startup fails with an explicit
+    /// vault error. The file is not renamed or deleted automatically because
+    /// losing pseudonymisation mappings breaks rehydration.
     pub async fn new(cfg: AnnoRagConfig, vault_key: [u8; 32]) -> Result<Self> {
         std::fs::create_dir_all(&cfg.data_dir).map_err(Error::from)?;
         let vault = match Vault::open(&cfg.vault_path(), vault_key) {
             Ok(v) => v,
             Err(Error::Vault(ref msg)) if msg.contains("Decryption failed") => {
-                // Key mismatch — back up and start fresh (reinstall / passphrase reset).
-                let bak = cfg.data_dir.join("vault.enc.bak");
-                if let Err(e) = std::fs::rename(cfg.vault_path(), &bak) {
-                    tracing::warn!(
-                        error = %e,
-                        "vault key mismatch — could not rename old vault, removing it"
-                    );
-                    let _ = std::fs::remove_file(cfg.vault_path());
-                } else {
-                    tracing::warn!(
-                        backup = ?bak,
-                        "vault key mismatch — old vault backed up, starting with fresh vault"
-                    );
-                }
-                Vault::open(&cfg.vault_path(), vault_key)?
+                return Err(Error::Vault(
+                    "vault key mismatch; refusing to replace vault.enc automatically. \
+                     Configure the original ANNO_RAG_VAULT_PASSPHRASE/keyring key, \
+                     or move the vault/index aside and re-index deliberately."
+                        .into(),
+                ));
             }
             Err(e) => return Err(e),
         };
@@ -246,9 +298,23 @@ impl Pipeline {
         Ok(report.removed_chunks)
     }
 
+    /// Remove legal corpus state for exact document ids.
+    ///
+    /// # Errors
+    /// Returns store/legal/graph errors on cascade or chunk deletion failure.
+    pub async fn forget_legal_doc_ids(&self, doc_ids: &[uuid::Uuid]) -> Result<u64> {
+        for doc_id in doc_ids {
+            self.legal_store.delete_doc(*doc_id).await?;
+            self.legal_kg.delete_doc(*doc_id).await?;
+            self.enrichment_status.delete_doc(*doc_id).await?;
+        }
+        self.store.delete_doc_id_rows(doc_ids).await
+    }
+
     /// Ingest a single file end-to-end. Writes `<stem>.anon.md` to `output_dir`.
     pub async fn ingest_one(&self, path: &Path, output_dir: &Path) -> Result<()> {
-        self.ingest_one_counted(path, output_dir, &self.cfg).await?;
+        self.ingest_one_counted(path, output_dir, &self.cfg, None)
+            .await?;
         Ok(())
     }
 
@@ -257,12 +323,30 @@ impl Pipeline {
         path: &Path,
         output_dir: &Path,
         cfg: &AnnoRagConfig,
+        scope: Option<&LegalIngestScope>,
     ) -> Result<IngestOutcome> {
         let file_bytes = std::fs::read(path).map_err(Error::from)?;
-        let doc_id = doc_uuid(&file_bytes);
+        let content_id = ContentId::from_bytes(&file_bytes);
+        let scoped_relative = scope.map(|scope| normalized_relative_path(&scope.root, path));
+        let doc_id = match (scope, scoped_relative.as_deref()) {
+            (Some(scope), Some(relative)) => {
+                scoped_doc_uuid(scope.corpus_id, relative, &content_id)
+            }
+            _ => doc_uuid(&file_bytes),
+        };
+        let scoped_document = || {
+            scope.map(|_| LegalIngestedDocument {
+                document_id: DocumentInstanceId::new(doc_id),
+                source_path: path.display().to_string(),
+                relative_path: scoped_relative.clone(),
+                content_id: content_id.clone(),
+            })
+        };
         if self.store.doc_exists(doc_id).await? {
             tracing::info!(path = %path.display(), "skip: already ingested (same content)");
-            return Ok(IngestOutcome::Skipped);
+            return Ok(IngestOutcome::AlreadyIndexed {
+                document: scoped_document(),
+            });
         }
         let extracted = ingest::extract(path, cfg).await?;
         let used_embedded_ocr = extracted.ocr_status == ingest::OcrStatus::CompletedEmbedded;
@@ -453,7 +537,13 @@ impl Pipeline {
         std::fs::write(&out_path, full_anon).map_err(Error::from)?;
 
         tracing::info!(path = %path.display(), chunks = extracted.chunks.len(), "ingested");
-        Ok(IngestOutcome::Ingested { used_embedded_ocr })
+        Ok(IngestOutcome::Ingested {
+            used_embedded_ocr,
+            document: scoped_document().map(|mut document| {
+                document.source_path.clone_from(&extracted.source_path);
+                document
+            }),
+        })
     }
 
     /// Walk a folder and ingest every supported file. Returns the count
@@ -464,53 +554,72 @@ impl Pipeline {
         recursive: bool,
         output_dir: &Path,
     ) -> Result<usize> {
-        let mut count = 0usize;
+        Ok(self
+            .ingest_folder_with_scope(folder, recursive, output_dir, None)
+            .await?
+            .ingested)
+    }
+
+    /// Walk a folder and ingest every supported file with corpus-qualified document ids.
+    pub async fn ingest_folder_scoped(
+        &self,
+        folder: &Path,
+        recursive: bool,
+        output_dir: &Path,
+        scope: LegalIngestScope,
+    ) -> Result<usize> {
+        Ok(self
+            .ingest_folder_scoped_summary(folder, recursive, output_dir, scope)
+            .await?
+            .ingested)
+    }
+
+    /// Walk a folder with corpus-qualified document ids and return indexed document metadata.
+    pub async fn ingest_folder_scoped_summary(
+        &self,
+        folder: &Path,
+        recursive: bool,
+        output_dir: &Path,
+        scope: LegalIngestScope,
+    ) -> Result<LegalIngestSummary> {
+        self.ingest_folder_with_scope(folder, recursive, output_dir, Some(scope))
+            .await
+    }
+
+    async fn ingest_folder_with_scope(
+        &self,
+        folder: &Path,
+        recursive: bool,
+        output_dir: &Path,
+        scope: Option<LegalIngestScope>,
+    ) -> Result<LegalIngestSummary> {
+        let mut summary = LegalIngestSummary::default();
         let mut ocr_spent = Duration::ZERO;
         let ocr_budget = self.cfg.ocr_batch_budget_secs.map(Duration::from_secs);
-        let walker = if recursive {
-            walkdir::WalkDir::new(folder).into_iter()
-        } else {
-            walkdir::WalkDir::new(folder).max_depth(1).into_iter()
-        };
-        let mut paths: Vec<std::path::PathBuf> = Vec::new();
-        for entry in walker.filter_map(std::result::Result::ok) {
-            if !entry.file_type().is_file() {
-                continue;
-            }
-            let path = entry.path();
-            let ext = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-                .to_lowercase();
-            if !matches!(
-                ext.as_str(),
-                // Documents
-                "pdf" | "docx" | "pptx" | "xlsx" | "xls" | "xlsb" | "xlsm"
-                | "txt" | "md" | "rst" | "html" | "htm" | "rtf" | "epub" | "odt" | "ods" | "odp"
-                // Email
-                | "eml" | "msg"
-                // Data / markup
-                | "xml" | "csv" | "tsv" | "json" | "yaml" | "yml" | "toml"
-                // Archives (kreuzberg extracts + recurses)
-                | "zip" | "tar" | "gz" | "bz2" | "xz" | "7z"
-                // Code source (tree-sitter)
-                | "rs" | "py" | "js" | "ts" | "java" | "c" | "cpp" | "h" | "hpp"
-                | "cs" | "go" | "rb" | "php" | "swift" | "kt" | "scala" | "sql"
-            ) {
-                continue;
-            }
-            paths.push(path.to_path_buf());
-        }
+        let paths = legal_ingest_candidate_paths(folder, recursive, output_dir);
         for p in paths {
             let doc_cfg = cfg_for_ocr_budget(&self.cfg, ocr_budget, ocr_spent);
             let started = Instant::now();
-            match self.ingest_one_counted(&p, output_dir, &doc_cfg).await {
-                Ok(IngestOutcome::Ingested { used_embedded_ocr }) => {
+            match self
+                .ingest_one_counted(&p, output_dir, &doc_cfg, scope.as_ref())
+                .await
+            {
+                Ok(IngestOutcome::Ingested {
+                    used_embedded_ocr,
+                    document,
+                }) => {
                     if used_embedded_ocr {
                         ocr_spent += started.elapsed();
                     }
-                    count += 1;
+                    summary.ingested += 1;
+                    if let Some(document) = document {
+                        summary.documents.push(document);
+                    }
+                }
+                Ok(IngestOutcome::AlreadyIndexed { document }) => {
+                    if let Some(document) = document {
+                        summary.documents.push(document);
+                    }
                 }
                 Ok(IngestOutcome::Skipped) => {}
                 Err(e) => {
@@ -527,7 +636,7 @@ impl Pipeline {
         if let Err(e) = self.optimize_after_ingest().await {
             tracing::warn!(error = %e, "optimize_after_ingest failed (non-fatal)");
         }
-        Ok(count)
+        Ok(summary)
     }
 
     /// Search: pseudonymize query → embed → store.search.
@@ -1408,6 +1517,67 @@ impl Pipeline {
     }
 }
 
+fn legal_ingest_candidate_paths(
+    folder: &Path,
+    recursive: bool,
+    output_dir: &Path,
+) -> Vec<std::path::PathBuf> {
+    let walker = if recursive {
+        walkdir::WalkDir::new(folder).into_iter()
+    } else {
+        walkdir::WalkDir::new(folder).max_depth(1).into_iter()
+    };
+    let mut paths: Vec<std::path::PathBuf> = Vec::new();
+    for entry in walker
+        .filter_entry(|entry| !is_anno_generated_output(entry.path(), output_dir))
+        .filter_map(std::result::Result::ok)
+    {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let path = entry.path();
+        if !is_supported_ingest_path(path) || is_anno_generated_output(path, output_dir) {
+            continue;
+        }
+        paths.push(path.to_path_buf());
+    }
+    paths.sort();
+    paths
+}
+
+fn is_supported_ingest_path(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    matches!(
+        ext.as_str(),
+        // Documents
+        "pdf" | "docx" | "pptx" | "xlsx" | "xls" | "xlsb" | "xlsm"
+            | "txt" | "md" | "rst" | "html" | "htm" | "rtf" | "epub" | "odt" | "ods" | "odp"
+            // Email
+            | "eml" | "msg"
+            // Data / markup
+            | "xml" | "csv" | "tsv" | "json" | "yaml" | "yml" | "toml"
+            // Archives (kreuzberg extracts + recurses)
+            | "zip" | "tar" | "gz" | "bz2" | "xz" | "7z"
+            // Code source (tree-sitter)
+            | "rs" | "py" | "js" | "ts" | "java" | "c" | "cpp" | "h" | "hpp"
+            | "cs" | "go" | "rb" | "php" | "swift" | "kt" | "scala" | "sql"
+    )
+}
+
+fn is_anno_generated_output(path: &Path, output_dir: &Path) -> bool {
+    if path.starts_with(output_dir) {
+        return true;
+    }
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_ascii_lowercase().contains(".anon."))
+        .unwrap_or(false)
+}
+
 fn should_index_extracted_doc(extracted: &ingest::ExtractedDoc) -> bool {
     !extracted.ocr_status.is_deferred() && !extracted.chunks.is_empty()
 }
@@ -1772,6 +1942,47 @@ impl Pipeline {
         } else {
             self.store.search(&pseudo_q, &qv, top_k).await?
         };
+
+        Ok(chunk_hits
+            .into_iter()
+            .map(|h| crate::legal::types::LegalSearchHit {
+                chunk_id: h.chunk_id,
+                doc_id: h.doc_id,
+                text_pseudo: h.text_pseudo,
+                score: h.score,
+                enrichment: None,
+            })
+            .collect())
+    }
+
+    /// Legal hybrid search restricted to an explicit document set.
+    pub async fn legal_search_scoped(
+        &self,
+        query: &str,
+        top_k: usize,
+        filters: crate::legal::types::LegalSearchFilters,
+        allowed_doc_ids: &[uuid::Uuid],
+    ) -> Result<Vec<crate::legal::types::LegalSearchHit>> {
+        if allowed_doc_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let entities = self.detector_get_or_init()?.detect(query)?;
+        let pseudo_q = self.vault.pseudonymize(query, &entities).await?;
+        let qv = self.embedder().await?.embed_query(&pseudo_q)?;
+        let corpus_chunk_ids = self.store.chunk_ids_for_docs(allowed_doc_ids).await?;
+        let allowed = if filters.has_any_filter() {
+            let business = self
+                .legal_store
+                .filter_chunk_ids(&filters, top_k.saturating_mul(20).max(100))
+                .await?;
+            intersect_uuids(&corpus_chunk_ids, &business)
+        } else {
+            corpus_chunk_ids
+        };
+        let chunk_hits = self
+            .store
+            .search_filtered_to_chunks(&pseudo_q, &qv, top_k, &allowed)
+            .await?;
 
         Ok(chunk_hits
             .into_iter()
@@ -2239,6 +2450,52 @@ mod tests {
         let b = super::doc_uuid(b"hello world!");
         assert_eq!(a1, a2, "same bytes => same doc_id");
         assert_ne!(a1, b, "different bytes => different doc_id");
+    }
+
+    #[test]
+    fn scoped_doc_uuid_distinguishes_same_bytes_across_corpora() {
+        use anno_corpus_core::{ContentId, CorpusId};
+
+        let bytes = b"same contract";
+        let content = ContentId::from_bytes(bytes);
+        let corpus_a = CorpusId::from_normalized_root("c:/clients/a");
+        let corpus_b = CorpusId::from_normalized_root("c:/clients/b");
+
+        let doc_a = super::scoped_doc_uuid(corpus_a, "contract.pdf", &content);
+        let doc_b = super::scoped_doc_uuid(corpus_b, "contract.pdf", &content);
+
+        assert_ne!(doc_a, doc_b);
+        assert_eq!(super::doc_uuid(bytes), super::doc_uuid(bytes));
+    }
+
+    #[test]
+    fn legal_ingest_candidate_paths_skip_anno_generated_outputs() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("anon");
+        std::fs::create_dir_all(&out).expect("anon dir");
+        std::fs::write(dir.path().join("source.md"), b"# source").expect("source");
+        std::fs::write(out.join("source.anon.md"), b"# generated").expect("generated");
+        std::fs::create_dir_all(dir.path().join("nested")).expect("nested dir");
+        std::fs::write(
+            dir.path().join("nested").join("contract.anon.md"),
+            b"# generated nested",
+        )
+        .expect("generated nested");
+        std::fs::write(dir.path().join("nested").join("contract.md"), b"# contract")
+            .expect("nested source");
+
+        let paths = legal_ingest_candidate_paths(dir.path(), true, &out);
+        let names: Vec<String> = paths
+            .iter()
+            .map(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+
+        assert_eq!(names, vec!["contract.md", "source.md"]);
     }
 
     #[test]

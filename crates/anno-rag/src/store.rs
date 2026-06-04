@@ -759,6 +759,56 @@ impl Store {
         Ok(hits)
     }
 
+    /// Fetch chunk UUIDs for a set of document UUIDs.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query / decode failures.
+    pub async fn chunk_ids_for_docs(&self, doc_ids: &[Uuid]) -> Result<Vec<Uuid>> {
+        if doc_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = doc_id_filter_sql(doc_ids);
+        let stream = self
+            .tbl
+            .query()
+            .select(lancedb::query::Select::columns(&["chunk_id"]))
+            .only_if(filter)
+            .execute()
+            .await
+            .map_err(|e| Error::Store(format!("chunk_ids_for_docs: {e}")))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| Error::Store(format!("chunk_ids_for_docs stream: {e}")))?;
+        let mut out = Vec::new();
+        for batch in &batches {
+            let arr = get_col::<FixedSizeBinaryArray>(batch, "chunk_id")?;
+            for idx in 0..batch.num_rows() {
+                out.push(uuid_from_fsb(arr, idx)?);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Delete all chunk rows whose `doc_id` belongs to `doc_ids`.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] if LanceDB count/query/delete fails.
+    pub async fn delete_doc_id_rows(&self, doc_ids: &[Uuid]) -> Result<u64> {
+        if doc_ids.is_empty() {
+            return Ok(0);
+        }
+        let removed = self.chunk_ids_for_docs(doc_ids).await?.len() as u64;
+        if removed == 0 {
+            return Ok(0);
+        }
+        self.tbl
+            .delete(&doc_id_filter_sql(doc_ids))
+            .await
+            .map_err(|e| Error::Store(format!("delete_doc_id_rows: {e}")))?;
+        Ok(removed)
+    }
+
     /// Fetch a single chunk by its deterministic UUID. Returns `None` when
     /// no row matches (e.g. doc not yet ingested).
     ///
@@ -831,6 +881,25 @@ impl Store {
         }
         hits.truncate(k);
         Ok(hits)
+    }
+
+    /// Hybrid search restricted to documents.
+    ///
+    /// # Errors
+    /// Returns [`Error::Store`] on query / decode failures.
+    pub async fn search_filtered_to_docs(
+        &self,
+        query_text: &str,
+        query_vec: &[f32],
+        k: usize,
+        allowed_doc_ids: &[Uuid],
+    ) -> Result<Vec<SearchHit>> {
+        if allowed_doc_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let chunk_ids = self.chunk_ids_for_docs(allowed_doc_ids).await?;
+        self.search_filtered_to_chunks(query_text, query_vec, k, &chunk_ids)
+            .await
     }
 
     /// Number of rows in the memories table. Cheap (`count_rows`); used
@@ -1570,6 +1639,11 @@ fn chunk_id_filter_sql(ids: &[Uuid]) -> String {
     format!("chunk_id IN ({})", hexes.join(", "))
 }
 
+fn doc_id_filter_sql(ids: &[Uuid]) -> String {
+    let hexes: Vec<String> = ids.iter().map(|id| format!("X'{}'", id.simple())).collect();
+    format!("doc_id IN ({})", hexes.join(", "))
+}
+
 fn records_to_batch(
     records: &[ChunkRecord],
     dim: usize,
@@ -1830,6 +1904,35 @@ mod tests {
             .await
             .expect("upsert");
         assert!(store.doc_exists(doc).await.expect("exists?2"));
+    }
+
+    #[tokio::test]
+    #[ignore = "opens LanceDB (~30s); run with --ignored"]
+    async fn search_filtered_to_docs_uses_only_allowed_doc_ids() {
+        let (_dir, cfg) = fresh_cfg(8);
+        let store = Store::open(&cfg).await.expect("open");
+        let a = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"a");
+        let b = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"b");
+        let mk = |doc_id: uuid::Uuid, text: &str| ChunkRecord {
+            doc_id,
+            source_path: format!("{doc_id}.txt"),
+            folder_path: "corpus".into(),
+            chunk_idx: 0,
+            text_pseudo: text.into(),
+            page: None,
+            char_start: 0,
+            char_end: text.len() as u32,
+            vector: vec![0.0; 8],
+        };
+        store
+            .upsert(vec![mk(a, "Alpha contrat"), mk(b, "Beta contrat")])
+            .await
+            .expect("upsert");
+        let hits = store
+            .search_filtered_to_docs("contrat", &[0.0; 8], 10, &[a])
+            .await
+            .expect("search");
+        assert!(hits.iter().all(|hit| hit.doc_id == a));
     }
 
     #[tokio::test]

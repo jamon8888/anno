@@ -16,6 +16,8 @@ use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config};
 use tokenizers::Tokenizer;
 
+const MAX_EMBED_TOKENS: usize = 512;
+
 /// 384-dim multilingual embedder backed by candle + `BertModel`.
 pub struct Embedder {
     model: BertModel,
@@ -186,17 +188,21 @@ impl Embedder {
             .encode_batch(prefixed, true)
             .map_err(|e| Error::Embed(format!("tokenize: {e}")))?;
 
-        let max_len = encs.iter().map(|e| e.get_ids().len()).max().unwrap_or(0);
+        let max_len = encs
+            .iter()
+            .map(|e| e.get_ids().len().min(MAX_EMBED_TOKENS))
+            .max()
+            .unwrap_or(0);
         let n = texts.len();
 
         let mut ids: Vec<i64> = Vec::with_capacity(n * max_len);
         let mut mask: Vec<i64> = Vec::with_capacity(n * max_len);
         for e in &encs {
-            let len = e.get_ids().len();
-            let pad = max_len - len;
-            ids.extend(e.get_ids().iter().map(|&x| i64::from(x)));
+            let take = e.get_ids().len().min(max_len);
+            let pad = max_len - take;
+            ids.extend(e.get_ids()[..take].iter().map(|&x| i64::from(x)));
             ids.extend(std::iter::repeat_n(0i64, pad));
-            mask.extend(e.get_attention_mask().iter().map(|&x| i64::from(x)));
+            mask.extend(e.get_attention_mask()[..take].iter().map(|&x| i64::from(x)));
             mask.extend(std::iter::repeat_n(0i64, pad));
         }
 

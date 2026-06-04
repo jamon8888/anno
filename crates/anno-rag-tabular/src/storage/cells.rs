@@ -364,6 +364,16 @@ impl CellsTable {
         }
         Ok(best.into_values().collect())
     }
+
+    /// Delete every cell version belonging to `review_id`.
+    ///
+    /// # Errors
+    /// Returns [`crate::error::Error::Lance`] on delete failure.
+    pub async fn delete_for_review(&self, review_id: ReviewId) -> Result<()> {
+        let hex = uuid_to_filter_lit(review_id.0);
+        self.tbl.delete(&format!("review_id = X'{hex}'")).await?;
+        Ok(())
+    }
 }
 
 /// Decode row `i` of a `tabular_cells` batch into a [`Cell`].
@@ -632,6 +642,38 @@ mod tests {
         assert!(
             latest.iter().all(|c| c.version == 2),
             "every (row, col) pair should resolve to v2"
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_for_review_removes_only_matching_cells() {
+        let (_dir, t) = fresh_table().await;
+        let r1 = ReviewId::new();
+        let r2 = ReviewId::new();
+        let row1 = RowId::for_doc(r1, uuid::Uuid::now_v7());
+        let row2 = RowId::for_doc(r2, uuid::Uuid::now_v7());
+        let col1 = ColumnId::for_name(r1, "x");
+        let col2 = ColumnId::for_name(r2, "x");
+        t.upsert(&mk_cell(r1, row1, col1, 1, false, system_v1()))
+            .await
+            .expect("r1 v1");
+        t.upsert(&mk_cell(r1, row1, col1, 2, false, system_v1()))
+            .await
+            .expect("r1 v2");
+        t.upsert(&mk_cell(r2, row2, col2, 1, false, system_v1()))
+            .await
+            .expect("r2 v1");
+
+        t.delete_for_review(r1).await.expect("delete r1");
+
+        assert!(t
+            .all_for_review_latest(r1)
+            .await
+            .expect("r1 latest")
+            .is_empty());
+        assert_eq!(
+            t.all_for_review_latest(r2).await.expect("r2 latest").len(),
+            1
         );
     }
 }

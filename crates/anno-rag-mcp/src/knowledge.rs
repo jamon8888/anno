@@ -1,6 +1,6 @@
 //! MCP-facing facade for local knowledge tools.
 
-use anno_knowledge_core::{KnowledgeSearchMode, KnowledgeSearchRequest, KnowledgeStatus};
+use anno_knowledge_core::{KnowledgeSearchMode, KnowledgeSearchRequest, KnowledgeStatus, SourceId};
 use anno_knowledge_store::{KnowledgeControlStore, LocalFolderRegistration};
 use anno_rag::config::AnnoRagConfig;
 use rmcp::schemars;
@@ -20,6 +20,12 @@ pub struct KnowledgeSearchParams {
     /// Search mode. Phase 1 accepts only `fast`.
     #[serde(default)]
     pub mode: Option<String>,
+    /// Optional corpus id for scoped search.
+    #[serde(default)]
+    pub corpus_id: Option<String>,
+    /// Explicitly allow cross-corpus search.
+    #[serde(default)]
+    pub allow_cross_corpus: bool,
 }
 
 fn default_knowledge_top_k() -> usize {
@@ -167,6 +173,18 @@ impl KnowledgeService {
         &self,
         params: KnowledgeSearchParams,
     ) -> anno_knowledge_store::Result<KnowledgeSearchResponse> {
+        self.search_with_source_ids(params, None)
+    }
+
+    /// Search the local knowledge FTS index with an optional source filter.
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn search_with_source_ids(
+        &self,
+        params: KnowledgeSearchParams,
+        source_ids: Option<Vec<SourceId>>,
+    ) -> anno_knowledge_store::Result<KnowledgeSearchResponse> {
         let mode = params.mode.as_deref().unwrap_or("fast");
         if mode != "fast" {
             return Ok(KnowledgeSearchResponse {
@@ -175,7 +193,16 @@ impl KnowledgeService {
             });
         }
 
-        let request = KnowledgeSearchRequest::new(params.query).with_top_k(params.top_k);
+        let mut request = KnowledgeSearchRequest::new(params.query).with_top_k(params.top_k);
+        if let Some(source_ids) = source_ids {
+            if source_ids.is_empty() {
+                return Ok(KnowledgeSearchResponse {
+                    mode: "fast".to_string(),
+                    hits: Vec::new(),
+                });
+            }
+            request = request.with_source_ids(source_ids);
+        }
         let hits = match request.mode {
             KnowledgeSearchMode::Fast => self.store.search_fast(&request)?,
             KnowledgeSearchMode::Semantic | KnowledgeSearchMode::Deep => Vec::new(),
@@ -234,6 +261,8 @@ mod tests {
                 query: "contrat".to_string(),
                 top_k: 5,
                 mode: None,
+                corpus_id: None,
+                allow_cross_corpus: false,
             })
             .expect("search");
 

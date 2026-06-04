@@ -1,6 +1,6 @@
 //! Query types for the knowledge search surface.
 
-use crate::ids::{ChunkId, ObjectId, RevisionId};
+use crate::ids::{ChunkId, ObjectId, RevisionId, ScopeId, SourceId};
 use crate::object::ObjectType;
 use crate::source::SourceKind;
 use serde::{Deserialize, Serialize};
@@ -26,6 +26,10 @@ pub struct KnowledgeSearchRequest {
     pub mode: KnowledgeSearchMode,
     /// Number of results to return (clamped to local-machine budget).
     pub top_k: usize,
+    /// Optional source filter.
+    pub source_ids: Vec<SourceId>,
+    /// Optional scope filter.
+    pub scope_ids: Vec<ScopeId>,
 }
 
 impl KnowledgeSearchRequest {
@@ -36,6 +40,8 @@ impl KnowledgeSearchRequest {
             query: query.into(),
             mode: KnowledgeSearchMode::Fast,
             top_k: 10,
+            source_ids: Vec::new(),
+            scope_ids: Vec::new(),
         }
     }
 
@@ -43,6 +49,20 @@ impl KnowledgeSearchRequest {
     #[must_use]
     pub fn with_top_k(mut self, top_k: usize) -> Self {
         self.top_k = top_k.clamp(1, 50);
+        self
+    }
+
+    /// Restrict search to source ids.
+    #[must_use]
+    pub fn with_source_ids(mut self, source_ids: Vec<SourceId>) -> Self {
+        self.source_ids = source_ids;
+        self
+    }
+
+    /// Restrict search to scope ids.
+    #[must_use]
+    pub fn with_scope_ids(mut self, scope_ids: Vec<ScopeId>) -> Self {
+        self.scope_ids = scope_ids;
         self
     }
 }
@@ -56,6 +76,10 @@ pub struct KnowledgeSearchHit {
     pub object_id: ObjectId,
     /// Revision identifier at time of indexing.
     pub revision_id: RevisionId,
+    /// Source identifier for corpus scoping.
+    pub source_id: SourceId,
+    /// Scope identifier for corpus scoping.
+    pub scope_id: ScopeId,
     /// Kind of the source this hit came from.
     pub source_kind: SourceKind,
     /// Logical type of the parent object.
@@ -78,6 +102,8 @@ mod tests {
 
         assert_eq!(request.mode, KnowledgeSearchMode::Fast);
         assert_eq!(request.top_k, 10);
+        assert!(request.source_ids.is_empty());
+        assert!(request.scope_ids.is_empty());
     }
 
     #[test]

@@ -7,7 +7,6 @@
 use crate::error::Result;
 use crate::legal::kg::LegalKnowledgeGraph;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // ── Review grid ──────────────────────────────────────────────────────────────
 
@@ -158,16 +157,9 @@ pub async fn extract_case_file(
     dossier_id: &str,
 ) -> Result<CaseFileReview> {
     let mut rows = Vec::new();
-    let mk_params = || HashMap::from([("dossier".to_string(), dossier_id.to_string())]);
 
     // Documents in this dossier.
-    let doc_rows = kg
-        .cypher(
-            "MATCH (d:Document {dossier_id:$dossier}) \
-             RETURN d.doc_id AS doc_id, d.doc_type AS doc_type",
-            mk_params(),
-        )
-        .await?;
+    let doc_rows = kg.case_file_documents(dossier_id).await?;
     for r in &doc_rows {
         rows.push(ReviewRow {
             field: format!(
@@ -185,13 +177,7 @@ pub async fn extract_case_file(
     }
 
     // Parties across all documents in the dossier.
-    let party_rows = kg
-        .cypher(
-            "MATCH (d:Document {dossier_id:$dossier})<-[rel:PARTY_TO]-(p:Party) \
-             RETURN DISTINCT p.canonical_name AS value, rel.role AS role",
-            mk_params(),
-        )
-        .await?;
+    let party_rows = kg.case_file_parties(dossier_id).await?;
     for r in &party_rows {
         rows.push(ReviewRow {
             field: format!(
@@ -207,15 +193,7 @@ pub async fn extract_case_file(
     }
 
     // Procedural events, chronological.
-    let event_rows = kg
-        .cypher(
-            "MATCH (d:Document {dossier_id:$dossier})-[:HAS_CHUNK]->(c:Chunk) \
-             MATCH (c)-[:MENTIONS]->(e:Event) \
-             RETURN e.kind AS kind, e.event_date AS event_date, c.chunk_id AS cid \
-             ORDER BY e.event_date",
-            mk_params(),
-        )
-        .await?;
+    let event_rows = kg.case_file_events(dossier_id).await?;
     for r in &event_rows {
         rows.push(ReviewRow {
             field: format!("event:{}", r.get("kind").cloned().unwrap_or_default()),

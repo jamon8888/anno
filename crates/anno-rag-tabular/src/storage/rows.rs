@@ -146,6 +146,16 @@ impl RowsTable {
         Ok(out)
     }
 
+    /// Delete every row belonging to `review_id`.
+    ///
+    /// # Errors
+    /// Returns [`crate::error::Error::Lance`] on delete failure.
+    pub async fn delete_for_review(&self, review_id: ReviewId) -> Result<()> {
+        let hex = uuid_to_filter_lit(review_id.0);
+        self.tbl.delete(&format!("review_id = X'{hex}'")).await?;
+        Ok(())
+    }
+
     /// Look up a row by id. Returns `Ok(None)` if no row matches —
     /// missing rows are not an error here, only IO is.
     ///
@@ -281,5 +291,26 @@ mod tests {
         let (_dir, t) = fresh_table().await;
         let unknown = RowId::for_doc(ReviewId::new(), uuid::Uuid::now_v7());
         assert!(t.get(unknown).await.expect("get").is_none());
+    }
+
+    #[tokio::test]
+    async fn delete_for_review_removes_only_matching_rows() {
+        let (_dir, t) = fresh_table().await;
+        let r1 = ReviewId::new();
+        let r2 = ReviewId::new();
+        t.add(&mk_row(r1, uuid::Uuid::now_v7()))
+            .await
+            .expect("add r1");
+        t.add(&mk_row(r1, uuid::Uuid::now_v7()))
+            .await
+            .expect("add r1 second");
+        t.add(&mk_row(r2, uuid::Uuid::now_v7()))
+            .await
+            .expect("add r2");
+
+        t.delete_for_review(r1).await.expect("delete r1");
+
+        assert!(t.list_for_review(r1).await.expect("list r1").is_empty());
+        assert_eq!(t.list_for_review(r2).await.expect("list r2").len(), 1);
     }
 }

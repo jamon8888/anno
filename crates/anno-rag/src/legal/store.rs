@@ -19,6 +19,16 @@ use uuid::Uuid;
 /// LanceDB table name for chunk-level legal projection.
 pub const LEGAL_ENRICHMENT_TABLE: &str = "legal_chunk_enrichment";
 
+const LEGAL_LABEL_LIST_INDEX_COLUMNS: &[&str] = &[
+    "parties",
+    "party_roles",
+    "legal_refs",
+    "clause_types",
+    "obligation_kinds",
+    "event_kinds",
+    "risk_flags",
+];
+
 /// Arrow schema for the chunk-level legal projection.
 #[must_use]
 pub fn legal_enrichment_schema() -> Arc<Schema> {
@@ -205,16 +215,7 @@ impl LegalStore {
                     .map_err(|err| Error::Legal(format!("bitmap {column}: {err}")))?;
             }
         }
-        for column in [
-            "parties",
-            "party_roles",
-            "legal_refs",
-            "clause_types",
-            "obligation_kinds",
-            "deadlines",
-            "event_kinds",
-            "risk_flags",
-        ] {
+        for &column in LEGAL_LABEL_LIST_INDEX_COLUMNS {
             if !has_index_on(column) {
                 self.table
                     .create_index(
@@ -481,6 +482,12 @@ mod tests {
     #[test]
     fn sql_string_lit_escapes_single_quotes() {
         assert_eq!(sql_string_lit("l'avocat"), "'l''avocat'");
+    }
+
+    #[test]
+    fn label_list_indexes_skip_non_label_deadlines() {
+        assert!(LEGAL_LABEL_LIST_INDEX_COLUMNS.contains(&"parties"));
+        assert!(!LEGAL_LABEL_LIST_INDEX_COLUMNS.contains(&"deadlines"));
     }
 
     #[test]

@@ -50,8 +50,8 @@ pub fn init_vault_with_passphrase(passphrase: &str) -> InitVaultResult {
             error: Some("passphrase must be at least 12 characters".to_string()),
         };
     }
-    match anno_rag::vault::store_passphrase_derived_key_in_keyring(passphrase) {
-        Ok(()) => InitVaultResult {
+    match anno_rag::vault::initialize_vault_key_from_passphrase(passphrase) {
+        Ok(_) => InitVaultResult {
             ok: true,
             error: None,
         },
@@ -105,6 +105,9 @@ pub fn all_tool_names() -> Vec<String> {
         "index",
         "search",
         "sources",
+        "corpus_list",
+        "corpus_get",
+        "corpus_health",
         "status",
         "forget",
         // Legacy retrieval
@@ -164,8 +167,11 @@ mod tests {
         assert_eq!(names[0], "index");
         assert_eq!(names[1], "search");
         assert_eq!(names[2], "sources");
-        assert_eq!(names[3], "status");
-        assert_eq!(names[4], "forget");
+        assert_eq!(names[3], "corpus_list");
+        assert_eq!(names[4], "corpus_get");
+        assert_eq!(names[5], "corpus_health");
+        assert_eq!(names[6], "status");
+        assert_eq!(names[7], "forget");
     }
 
     #[test]

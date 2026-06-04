@@ -195,6 +195,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "anno-corpus-core"
+version = "0.10.0"
+dependencies = [
+ "serde",
+ "sha2",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "anno-corpus-store"
+version = "0.10.0"
+dependencies = [
+ "anno-corpus-core",
+ "chrono",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "anno-eval"
 version = "0.10.0"
 dependencies = [
@@ -284,6 +309,7 @@ name = "anno-rag"
 version = "0.2.0"
 dependencies = [
  "anno",
+ "anno-corpus-core",
  "anno-knowledge-core",
  "anyhow",
  "argon2",
@@ -331,6 +357,7 @@ dependencies = [
  "unicode-normalization",
  "uuid",
  "walkdir",
+ "windows-sys 0.61.2",
  "workspace-hack",
 ]
 
@@ -357,6 +384,8 @@ dependencies = [
 name = "anno-rag-mcp"
 version = "0.1.0"
 dependencies = [
+ "anno-corpus-core",
+ "anno-corpus-store",
  "anno-knowledge-core",
  "anno-knowledge-store",
  "anno-rag",

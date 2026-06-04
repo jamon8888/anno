@@ -10,9 +10,11 @@
 
 #![warn(missing_docs)]
 
+pub mod corpus;
 pub mod health;
 mod indexer;
 pub mod knowledge;
+mod legal_maintenance;
 pub mod model_inventory;
 pub mod tabular;
 
@@ -34,6 +36,8 @@ use tokio::sync::{OnceCell, RwLock};
 pub struct AnnoRagServer {
     pipeline: Arc<OnceCell<Arc<Pipeline>>>,
     knowledge: Arc<OnceCell<Arc<crate::knowledge::KnowledgeService>>>,
+    corpus: Arc<OnceCell<Arc<crate::corpus::CorpusService>>>,
+    legal_maintenance: Arc<OnceCell<Arc<crate::legal_maintenance::LegalMaintenanceService>>>,
     cfg: Arc<AnnoRagConfig>,
     key: [u8; 32],
     tabular_storage: Arc<OnceCell<Arc<anno_rag_tabular::storage::StorageHandle>>>,
@@ -78,6 +82,32 @@ impl AnnoRagServer {
             .get_or_try_init(|| {
                 let cfg = Arc::clone(&self.cfg);
                 async move { crate::knowledge::KnowledgeService::open(&cfg).map(Arc::new) }
+            })
+            .await
+            .map(|arc| arc.as_ref())
+    }
+
+    async fn corpus(&self) -> anno_corpus_store::Result<&crate::corpus::CorpusService> {
+        self.corpus
+            .get_or_try_init(|| {
+                let cfg = Arc::clone(&self.cfg);
+                async move { crate::corpus::CorpusService::open(&cfg).map(Arc::new) }
+            })
+            .await
+            .map(|arc| arc.as_ref())
+    }
+
+    async fn legal_maintenance(
+        &self,
+    ) -> anno_rag::Result<&crate::legal_maintenance::LegalMaintenanceService> {
+        self.legal_maintenance
+            .get_or_try_init(|| {
+                let cfg = Arc::clone(&self.cfg);
+                async move {
+                    crate::legal_maintenance::LegalMaintenanceService::open(&cfg)
+                        .await
+                        .map(Arc::new)
+                }
             })
             .await
             .map(|arc| arc.as_ref())
@@ -137,6 +167,42 @@ impl AnnoRagServer {
         }
         Ok(ingested)
     }
+
+    async fn filter_review_doc_ids_by_corpus(
+        &self,
+        review_id: anno_rag_tabular::ReviewId,
+        ids: Vec<uuid::Uuid>,
+        failed: &mut Vec<String>,
+    ) -> Result<Vec<uuid::Uuid>, String> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let service = self.corpus().await.map_err(|e| e.to_string())?;
+        let review_corpus = service
+            .store()
+            .corpus_for_binding(
+                anno_corpus_core::CorpusBindingKind::TabularReview,
+                &review_id.0.to_string(),
+            )
+            .map_err(|e| e.to_string())?;
+        let allowed_docs = service
+            .store()
+            .document_ids_for_corpus(review_corpus, "legal")
+            .map_err(|e| e.to_string())?;
+        let allowed = allowed_docs
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        Ok(ids
+            .into_iter()
+            .filter(|doc_id| {
+                let ok = allowed.contains(doc_id);
+                if !ok {
+                    failed.push(format!("{doc_id}: outside review corpus"));
+                }
+                ok
+            })
+            .collect())
+    }
 }
 
 // ---- Constructors ----
@@ -151,6 +217,8 @@ impl AnnoRagServer {
         Self {
             pipeline: Arc::new(cell),
             knowledge: Arc::new(OnceCell::new()),
+            corpus: Arc::new(OnceCell::new()),
+            legal_maintenance: Arc::new(OnceCell::new()),
             cfg: Arc::new(cfg),
             key: [0u8; 32],
             tabular_storage: Arc::new(OnceCell::new()),
@@ -165,6 +233,8 @@ impl AnnoRagServer {
         Self {
             pipeline: Arc::new(OnceCell::new()),
             knowledge: Arc::new(OnceCell::new()),
+            corpus: Arc::new(OnceCell::new()),
+            legal_maintenance: Arc::new(OnceCell::new()),
             cfg: Arc::new(cfg),
             key,
             tabular_storage: Arc::new(OnceCell::new()),
@@ -237,6 +307,13 @@ pub struct ForgetParams {
     pub target: String,
 }
 
+/// Parameters for corpus lookup tools.
+#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct CorpusGetParams {
+    /// Stable corpus id.
+    pub corpus_id: String,
+}
+
 /// Parameters for the `legacy_search` tool.
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct SearchParams {
@@ -264,7 +341,7 @@ pub struct SearchUnifiedParams {
     /// Maximum number of results. Default: 10.
     #[serde(default = "default_search_unified_top_k")]
     pub top_k: usize,
-    /// Search mode: `fast` (default) or `semantic`.
+    /// Search mode: `fast`, `semantic`, or omitted for scope-dependent auto mode.
     #[serde(default)]
     pub mode: Option<String>,
     /// Search scope: `all` (default), `knowledge`, or `legal`.
@@ -273,6 +350,12 @@ pub struct SearchUnifiedParams {
     /// Optional legal-search filters when legal scope is included.
     #[serde(default)]
     pub filters: Option<serde_json::Value>,
+    /// Optional corpus id to constrain the query.
+    #[serde(default)]
+    pub corpus_id: Option<String>,
+    /// Explicitly allow cross-corpus search.
+    #[serde(default)]
+    pub allow_cross_corpus: bool,
 }
 
 fn default_search_unified_top_k() -> usize {
@@ -299,8 +382,8 @@ pub struct DetectParams {
 struct SearchHitWire {
     doc_id: String,
     chunk_id: String,
-    source_path: String,
-    folder_path: String,
+    corpus_id: Option<String>,
+    document_label: Option<String>,
     chunk_idx: u32,
     text_pseudo: String,
     page: Option<u32>,
@@ -591,6 +674,12 @@ pub struct LegalSearchParams {
     /// Minimum extraction confidence (0–1).
     #[serde(default)]
     pub min_confidence: Option<f32>,
+    /// Optional corpus id to constrain the legal query.
+    #[serde(default)]
+    pub corpus_id: Option<String>,
+    /// Explicitly allow cross-corpus legal search.
+    #[serde(default)]
+    pub allow_cross_corpus: bool,
 }
 
 fn build_legal_search_params(p: &SearchUnifiedParams) -> LegalSearchParams {
@@ -610,6 +699,8 @@ fn build_legal_search_params(p: &SearchUnifiedParams) -> LegalSearchParams {
         obligation_kinds: filter_string_vec(filters, "obligation_kinds"),
         risk_flags: filter_string_vec(filters, "risk_flags"),
         min_confidence: filter_f32(filters, "min_confidence"),
+        corpus_id: p.corpus_id.clone(),
+        allow_cross_corpus: p.allow_cross_corpus,
     }
 }
 
@@ -649,19 +740,6 @@ fn filter_f32(
         .map(|value| value as f32)
 }
 
-fn normalize_search_mode(mode: Option<String>, warnings: &mut Vec<String>) -> String {
-    match mode.as_deref().unwrap_or("fast") {
-        "fast" => "fast".to_string(),
-        "semantic" => "semantic".to_string(),
-        other => {
-            warnings.push(format!(
-                "unsupported search mode '{other}'; using mode='fast'"
-            ));
-            "fast".to_string()
-        }
-    }
-}
-
 fn normalize_search_scope(scope: Option<String>, warnings: &mut Vec<String>) -> String {
     match scope.as_deref().unwrap_or("all") {
         "all" => "all".to_string(),
@@ -672,6 +750,129 @@ fn normalize_search_scope(scope: Option<String>, warnings: &mut Vec<String>) -> 
                 "unsupported search scope '{other}'; using scope='all'"
             ));
             "all".to_string()
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchBackendMode {
+    Fast,
+    Semantic,
+    Skipped,
+}
+
+impl SearchBackendMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Fast => "fast",
+            Self::Semantic => "semantic",
+            Self::Skipped => "skipped",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SearchExecutionPlan {
+    mode_used: &'static str,
+    knowledge: SearchBackendMode,
+    legal: SearchBackendMode,
+    explicit_fast_legal_error: bool,
+}
+
+fn search_execution_plan(
+    mode: Option<String>,
+    scope: &str,
+    warnings: &mut Vec<String>,
+) -> SearchExecutionPlan {
+    match (mode.as_deref(), scope) {
+        (None, "legal") => SearchExecutionPlan {
+            mode_used: "semantic",
+            knowledge: SearchBackendMode::Skipped,
+            legal: SearchBackendMode::Semantic,
+            explicit_fast_legal_error: false,
+        },
+        (None, "all") => SearchExecutionPlan {
+            mode_used: "auto",
+            knowledge: SearchBackendMode::Fast,
+            legal: SearchBackendMode::Semantic,
+            explicit_fast_legal_error: false,
+        },
+        (None, "knowledge") => SearchExecutionPlan {
+            mode_used: "fast",
+            knowledge: SearchBackendMode::Fast,
+            legal: SearchBackendMode::Skipped,
+            explicit_fast_legal_error: false,
+        },
+        (None, other) => {
+            warnings.push(format!(
+                "unsupported normalized search scope '{other}'; using scope='all'"
+            ));
+            SearchExecutionPlan {
+                mode_used: "auto",
+                knowledge: SearchBackendMode::Fast,
+                legal: SearchBackendMode::Semantic,
+                explicit_fast_legal_error: false,
+            }
+        }
+        (Some("fast"), "legal") => SearchExecutionPlan {
+            mode_used: "fast",
+            knowledge: SearchBackendMode::Skipped,
+            legal: SearchBackendMode::Skipped,
+            explicit_fast_legal_error: true,
+        },
+        (Some("fast"), "all") => {
+            warnings.push(
+                "legal scope skipped in fast mode (requires models). Use mode='semantic' to include legal results."
+                    .to_string(),
+            );
+            SearchExecutionPlan {
+                mode_used: "fast",
+                knowledge: SearchBackendMode::Fast,
+                legal: SearchBackendMode::Skipped,
+                explicit_fast_legal_error: false,
+            }
+        }
+        (Some("fast"), "knowledge") => SearchExecutionPlan {
+            mode_used: "fast",
+            knowledge: SearchBackendMode::Fast,
+            legal: SearchBackendMode::Skipped,
+            explicit_fast_legal_error: false,
+        },
+        (Some("semantic"), "knowledge") => {
+            warnings.push(
+                "knowledge scope skipped in semantic mode (knowledge index currently supports fast mode only)"
+                    .to_string(),
+            );
+            SearchExecutionPlan {
+                mode_used: "semantic",
+                knowledge: SearchBackendMode::Skipped,
+                legal: SearchBackendMode::Skipped,
+                explicit_fast_legal_error: false,
+            }
+        }
+        (Some("semantic"), "legal") => SearchExecutionPlan {
+            mode_used: "semantic",
+            knowledge: SearchBackendMode::Skipped,
+            legal: SearchBackendMode::Semantic,
+            explicit_fast_legal_error: false,
+        },
+        (Some("semantic"), "all") => {
+            warnings.push(
+                "knowledge scope skipped in semantic mode (knowledge index currently supports fast mode only)"
+                    .to_string(),
+            );
+            SearchExecutionPlan {
+                mode_used: "semantic",
+                knowledge: SearchBackendMode::Skipped,
+                legal: SearchBackendMode::Semantic,
+                explicit_fast_legal_error: false,
+            }
+        }
+        (Some(other), _) => {
+            warnings.push(format!(
+                "unsupported search mode '{other}'; using implicit mode for scope='{scope}'"
+            ));
+            search_execution_plan(None, scope, warnings)
         }
     }
 }
@@ -833,6 +1034,9 @@ pub struct ReviewCreateParams {
     /// Optional folder path scoped to this review (informational only).
     #[serde(default)]
     pub scope_folder: Option<String>,
+    /// Optional corpus id that owns this review.
+    #[serde(default)]
+    pub corpus_id: Option<String>,
 }
 
 /// Parameters for `review_add_rows`.
@@ -1182,6 +1386,23 @@ impl AnnoRagServer {
         &self,
         p: ReviewCreateParams,
     ) -> Result<ReviewCreateResult, String> {
+        let review_corpus = {
+            let service = self.corpus().await.map_err(|e| e.to_string())?;
+            let count = service.store().corpus_count().map_err(|e| e.to_string())?;
+            if p.corpus_id.is_some() || count > 0 {
+                match service
+                    .resolve_effective(p.corpus_id.as_deref(), false)
+                    .map_err(|e| e.to_string())?
+                {
+                    anno_corpus_core::EffectiveCorpus::Single(corpus_id) => Some(corpus_id),
+                    anno_corpus_core::EffectiveCorpus::CrossCorpus => {
+                        return Err("tabular reviews must be bound to one corpus".to_string());
+                    }
+                }
+            } else {
+                None
+            }
+        };
         let ts = self.tabular_storage().await.map_err(|e| e.to_string())?;
         let review_id = anno_rag_tabular::ReviewId::new();
         let columns = if let Some(tid) = &p.template_id {
@@ -1208,6 +1429,39 @@ impl AnnoRagServer {
         for col in columns {
             if let Err(e) = ts.columns.add(review_id, &col).await {
                 let add_error = format!("adding column: {e}");
+                let mut cleanup_errors = Vec::new();
+                if let Err(cleanup_error) = ts.columns.delete_for_review(review_id).await {
+                    cleanup_errors.push(format!("deleting review columns: {cleanup_error}"));
+                }
+                if let Err(cleanup_error) = ts.reviews.delete(review_id).await {
+                    cleanup_errors.push(format!("deleting review: {cleanup_error}"));
+                }
+                if cleanup_errors.is_empty() {
+                    return Err(format!("{add_error}; rolled back review {}", review_id.0));
+                }
+                return Err(format!(
+                    "{add_error}; cleanup failed after partial review creation: {}",
+                    cleanup_errors.join("; ")
+                ));
+            }
+        }
+        if let Some(corpus_id) = review_corpus {
+            let bind_result = self
+                .corpus()
+                .await
+                .map_err(|e| e.to_string())?
+                .store()
+                .add_binding(
+                    corpus_id,
+                    anno_corpus_core::CorpusBindingKind::TabularReview,
+                    &review_id.0.to_string(),
+                    &serde_json::json!({
+                        "name": p.name.clone(),
+                        "template_id": p.template_id.clone(),
+                    }),
+                );
+            if let Err(e) = bind_result {
+                let add_error = format!("binding review to corpus: {e}");
                 let mut cleanup_errors = Vec::new();
                 if let Err(cleanup_error) = ts.columns.delete_for_review(review_id).await {
                     cleanup_errors.push(format!("deleting review columns: {cleanup_error}"));
@@ -1267,8 +1521,8 @@ impl AnnoRagServer {
                 .map(|h| SearchHitWire {
                     doc_id: h.doc_id.to_string(),
                     chunk_id: h.chunk_id.to_string(),
-                    source_path: h.source_path,
-                    folder_path: h.folder_path,
+                    corpus_id: None,
+                    document_label: Some(h.doc_id.to_string()),
                     chunk_idx: h.chunk_idx,
                     text_pseudo: h.text_pseudo,
                     page: h.page,
@@ -1291,23 +1545,76 @@ impl AnnoRagServer {
         serde_json::to_value(wire).map_err(|e| e.to_string())
     }
 
-    async fn legal_ingest_impl(&self, p: LegalIngestParams) -> Result<serde_json::Value, String> {
+    async fn legal_ingest_impl(
+        &self,
+        p: LegalIngestParams,
+        corpus_id: Option<anno_corpus_core::CorpusId>,
+    ) -> Result<serde_json::Value, String> {
         let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
         let folder = std::path::Path::new(&p.folder);
         let out = folder.join("anon");
         let start = std::time::Instant::now();
-        match pipeline.ingest_folder(folder, p.recursive, &out).await {
-            Ok(n) => {
+        let ingest_result = if let Some(corpus_id) = corpus_id {
+            pipeline
+                .ingest_folder_scoped_summary(
+                    folder,
+                    p.recursive,
+                    &out,
+                    anno_rag::pipeline::LegalIngestScope {
+                        corpus_id,
+                        root: folder.to_path_buf(),
+                    },
+                )
+                .await
+        } else {
+            pipeline
+                .ingest_folder(folder, p.recursive, &out)
+                .await
+                .map(|ingested| anno_rag::pipeline::LegalIngestSummary {
+                    ingested,
+                    documents: Vec::new(),
+                })
+        };
+
+        match ingest_result {
+            Ok(summary) => {
+                if let Some(corpus_id) = corpus_id {
+                    let service = self.corpus().await.map_err(|e| e.to_string())?;
+                    let label = legal_folder_id(&p.folder);
+                    service
+                        .store()
+                        .add_binding(
+                            corpus_id,
+                            anno_corpus_core::CorpusBindingKind::LegalFolder,
+                            &label,
+                            &serde_json::json!({"label": label.clone()}),
+                        )
+                        .map_err(|e| e.to_string())?;
+                    for document in &summary.documents {
+                        service
+                            .store()
+                            .add_document(
+                                corpus_id,
+                                document.document_id,
+                                "legal",
+                                &document.source_path,
+                                document.relative_path.as_deref(),
+                                &document.content_id,
+                                &serde_json::json!({"folder_id": label.clone()}),
+                            )
+                            .map_err(|e| e.to_string())?;
+                    }
+                }
                 tracing::info!(
                     target: "anno_rag::legal::audit",
                     tool = "legal_ingest",
                     result = "ok",
                     duration_ms = start.elapsed().as_millis() as u64,
-                    ingested = n,
+                    ingested = summary.ingested,
                     ""
                 );
                 serde_json::to_value(LegalIngestResult {
-                    ingested: n,
+                    ingested: summary.ingested,
                     folder: p.folder,
                 })
                 .map_err(|e| e.to_string())
@@ -1325,23 +1632,59 @@ impl AnnoRagServer {
     }
 
     async fn legal_search_impl(&self, p: LegalSearchParams) -> Result<serde_json::Value, String> {
+        let effective = self
+            .resolve_effective_corpus(p.corpus_id.as_deref(), p.allow_cross_corpus)
+            .await?;
+        self.legal_search_impl_with_effective(p, &effective).await
+    }
+
+    async fn legal_search_impl_with_effective(
+        &self,
+        p: LegalSearchParams,
+        effective: &anno_corpus_core::EffectiveCorpus,
+    ) -> Result<serde_json::Value, String> {
         let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let LegalSearchParams {
+            query,
+            top_k,
+            doc_type,
+            legal_domain,
+            jurisdiction,
+            dossier_id,
+            parties,
+            party_roles,
+            legal_refs,
+            clause_types,
+            obligation_kinds,
+            risk_flags,
+            min_confidence,
+            corpus_id: _,
+            allow_cross_corpus: _,
+        } = p;
         let filters = anno_rag::legal::types::LegalSearchFilters {
-            doc_type: p.doc_type,
-            legal_domain: p.legal_domain,
-            jurisdiction: p.jurisdiction,
-            dossier_id: p.dossier_id,
-            parties: p.parties,
-            party_roles: p.party_roles,
-            legal_refs: p.legal_refs,
-            clause_types: p.clause_types,
-            obligation_kinds: p.obligation_kinds,
-            risk_flags: p.risk_flags,
-            min_confidence: p.min_confidence,
+            doc_type,
+            legal_domain,
+            jurisdiction,
+            dossier_id,
+            parties,
+            party_roles,
+            legal_refs,
+            clause_types,
+            obligation_kinds,
+            risk_flags,
+            min_confidence,
             ..Default::default()
         };
         let start = std::time::Instant::now();
-        match pipeline.legal_search(&p.query, p.top_k, filters).await {
+        let result = match self.legal_document_ids_for_effective(effective).await? {
+            Some(doc_ids) => {
+                pipeline
+                    .legal_search_scoped(&query, top_k, filters, &doc_ids)
+                    .await
+            }
+            None => pipeline.legal_search(&query, top_k, filters).await,
+        };
+        match result {
             Ok(hits) => {
                 tracing::info!(
                     target: "anno_rag::legal::audit",
@@ -1403,8 +1746,8 @@ impl AnnoRagServer {
             }
         }
 
-        if let Some(pipeline) = self.pipeline_arc() {
-            if let Ok(paths) = pipeline.store_list_indexed_folder_paths().await {
+        if let Ok(legal_maintenance) = self.legal_maintenance().await {
+            if let Ok(paths) = legal_maintenance.list_indexed_folder_paths().await {
                 for path in paths {
                     let id = legal_folder_id(&path);
                     sources.push(serde_json::json!({
@@ -1431,12 +1774,12 @@ impl AnnoRagServer {
             .and_then(|s| serde_json::to_value(s).ok())
             .unwrap_or(serde_json::Value::Null);
 
-        let legal = match self.pipeline_arc() {
-            Some(p) => match p.store_count_chunks().await {
+        let legal = match self.legal_maintenance().await {
+            Ok(service) => match service.count_chunks().await {
                 Ok(n) => serde_json::json!({ "chunks": n }),
-                Err(_) => serde_json::Value::Null,
+                Err(e) => serde_json::json!({ "chunks": null, "error": e.to_string() }),
             },
-            None => serde_json::Value::Null,
+            Err(e) => serde_json::json!({ "chunks": null, "error": e.to_string() }),
         };
 
         let vault = match self.pipeline_arc() {
@@ -1480,33 +1823,126 @@ impl AnnoRagServer {
         service.status().map_err(|e| e.to_string())
     }
 
+    async fn resolve_effective_corpus(
+        &self,
+        corpus_id: Option<&str>,
+        allow_cross_corpus: bool,
+    ) -> Result<anno_corpus_core::EffectiveCorpus, String> {
+        let service = self.corpus().await.map_err(|e| e.to_string())?;
+        service
+            .resolve_effective(corpus_id, allow_cross_corpus)
+            .map_err(|e| e.to_string())
+    }
+
+    async fn knowledge_source_ids_for_effective(
+        &self,
+        effective: &anno_corpus_core::EffectiveCorpus,
+    ) -> Result<Option<Vec<anno_knowledge_core::SourceId>>, String> {
+        let anno_corpus_core::EffectiveCorpus::Single(corpus_id) = effective else {
+            return Ok(None);
+        };
+        let service = self.corpus().await.map_err(|e| e.to_string())?;
+        let bindings = service
+            .store()
+            .binding_ids_for_corpus_kind(
+                *corpus_id,
+                anno_corpus_core::CorpusBindingKind::KnowledgeSource,
+            )
+            .map_err(|e| e.to_string())?;
+        let mut ids = Vec::with_capacity(bindings.len());
+        for binding in bindings {
+            let parsed =
+                uuid::Uuid::parse_str(&binding).map_err(|e| format!("bad source binding: {e}"))?;
+            ids.push(anno_knowledge_core::SourceId::new(parsed));
+        }
+        Ok(Some(ids))
+    }
+
+    async fn legal_document_ids_for_effective(
+        &self,
+        effective: &anno_corpus_core::EffectiveCorpus,
+    ) -> Result<Option<Vec<uuid::Uuid>>, String> {
+        let anno_corpus_core::EffectiveCorpus::Single(corpus_id) = effective else {
+            return Ok(None);
+        };
+        let service = self.corpus().await.map_err(|e| e.to_string())?;
+        service
+            .store()
+            .document_ids_for_corpus(*corpus_id, "legal")
+            .map(Some)
+            .map_err(|e| e.to_string())
+    }
+
     async fn knowledge_search_impl(
         &self,
         p: crate::knowledge::KnowledgeSearchParams,
     ) -> Result<crate::knowledge::KnowledgeSearchResponse, String> {
+        let effective = self
+            .resolve_effective_corpus(p.corpus_id.as_deref(), p.allow_cross_corpus)
+            .await?;
+        self.knowledge_search_impl_with_effective(p, &effective)
+            .await
+    }
+
+    async fn knowledge_search_impl_with_effective(
+        &self,
+        p: crate::knowledge::KnowledgeSearchParams,
+        effective: &anno_corpus_core::EffectiveCorpus,
+    ) -> Result<crate::knowledge::KnowledgeSearchResponse, String> {
         let service = self.knowledge().await.map_err(|e| e.to_string())?;
-        service.search(p).map_err(|e| e.to_string())
+        let source_ids = self.knowledge_source_ids_for_effective(effective).await?;
+        service
+            .search_with_source_ids(p, source_ids)
+            .map_err(|e| e.to_string())
     }
 
     pub(crate) async fn search_impl_routing(&self, p: SearchUnifiedParams) -> String {
         let mut hits = Vec::<serde_json::Value>::new();
         let mut warnings = Vec::<String>::new();
-        let mode = normalize_search_mode(p.mode.clone(), &mut warnings);
         let scope = normalize_search_scope(p.scope.clone(), &mut warnings);
+        let plan = search_execution_plan(p.mode.clone(), &scope, &mut warnings);
+        if plan.explicit_fast_legal_error {
+            return serde_json::json!({
+                "ok": false,
+                "error": "legal scope requires semantic mode",
+                "mode_used": plan.mode_used,
+                "scope_used": scope,
+                "scope_modes": {
+                    "knowledge": plan.knowledge.as_str(),
+                    "legal": plan.legal.as_str(),
+                },
+                "warnings": warnings,
+            })
+            .to_string();
+        }
+
+        let effective = match self
+            .resolve_effective_corpus(p.corpus_id.as_deref(), p.allow_cross_corpus)
+            .await
+        {
+            Ok(effective) => effective,
+            Err(e) => {
+                return serde_json::json!({
+                    "ok": false,
+                    "error": e,
+                })
+                .to_string();
+            }
+        };
 
         if scope == "all" || scope == "knowledge" {
-            if mode == "semantic" {
-                warnings.push(
-                    "knowledge scope skipped in semantic mode (knowledge index currently supports fast mode only)"
-                        .to_string(),
-                );
-            } else {
+            if plan.knowledge == SearchBackendMode::Fast {
                 match self
-                    .knowledge_search_impl(crate::knowledge::KnowledgeSearchParams {
-                        query: p.query.clone(),
-                        top_k: p.top_k,
-                        mode: Some(mode.clone()),
-                    })
+                    .knowledge_search_impl_with_effective(
+                        crate::knowledge::KnowledgeSearchParams {
+                            query: p.query.clone(),
+                            top_k: p.top_k,
+                            mode: Some("fast".to_string()),
+                            corpus_id: p.corpus_id.clone(),
+                            allow_cross_corpus: p.allow_cross_corpus,
+                        },
+                        &effective,
+                    )
                     .await
                 {
                     Ok(result) => {
@@ -1531,12 +1967,11 @@ impl AnnoRagServer {
         }
 
         if scope == "all" || scope == "legal" {
-            if mode == "fast" {
-                warnings.push(
-                    "legal scope skipped in fast mode (requires models). Use mode='semantic' to include legal results.".to_string(),
-                );
-            } else {
-                match self.legal_search_impl(build_legal_search_params(&p)).await {
+            if plan.legal == SearchBackendMode::Semantic {
+                match self
+                    .legal_search_impl_with_effective(build_legal_search_params(&p), &effective)
+                    .await
+                {
                     Ok(value) => {
                         if let Some(legal_hits) =
                             value.get("hits").and_then(serde_json::Value::as_array)
@@ -1560,8 +1995,12 @@ impl AnnoRagServer {
 
         serde_json::json!({
             "ok": true,
-            "mode_used": mode,
+            "mode_used": plan.mode_used,
             "scope_used": scope,
+            "scope_modes": {
+                "knowledge": plan.knowledge.as_str(),
+                "legal": plan.legal.as_str(),
+            },
             "hits": hits,
             "warnings": warnings,
         })
@@ -1590,6 +2029,26 @@ impl AnnoRagServer {
             .to_string();
         }
 
+        let corpus = match self.corpus().await {
+            Ok(service) => match service.register_index_root(&p.path, &p.profile) {
+                Ok(corpus) => corpus,
+                Err(e) => {
+                    return serde_json::json!({
+                        "ok": false,
+                        "error": format!("corpus register: {e}"),
+                    })
+                    .to_string();
+                }
+            },
+            Err(e) => {
+                return serde_json::json!({
+                    "ok": false,
+                    "error": format!("corpus service: {e}"),
+                })
+                .to_string();
+            }
+        };
+
         let mut knowledge = serde_json::Value::Null;
         let mut legal = serde_json::Value::Null;
         let mut errors = Vec::new();
@@ -1597,6 +2056,16 @@ impl AnnoRagServer {
         if matches!(p.profile.as_str(), "general" | "all") {
             match self.knowledge_add_local_folder_impl(&p.path).await {
                 Ok(source_id) => {
+                    if let Ok(service) = self.corpus().await {
+                        if let Err(e) = service.store().add_binding(
+                            corpus.corpus_id,
+                            anno_corpus_core::CorpusBindingKind::KnowledgeSource,
+                            &source_id,
+                            &serde_json::json!({"profile": p.profile.clone()}),
+                        ) {
+                            errors.push(format!("corpus knowledge binding: {e}"));
+                        }
+                    }
                     match self
                         .knowledge_sync_impl(KnowledgeSyncParams {
                             source_id: Some(source_id.clone()),
@@ -1621,10 +2090,13 @@ impl AnnoRagServer {
 
         if matches!(p.profile.as_str(), "legal" | "all") {
             match self
-                .legal_ingest_impl(LegalIngestParams {
-                    folder: p.path.clone(),
-                    recursive: true,
-                })
+                .legal_ingest_impl(
+                    LegalIngestParams {
+                        folder: p.path.clone(),
+                        recursive: true,
+                    },
+                    Some(corpus.corpus_id),
+                )
                 .await
             {
                 Ok(value) => legal = value,
@@ -1641,6 +2113,8 @@ impl AnnoRagServer {
         serde_json::json!({
             "ok": errors.is_null(),
             "profile": p.profile,
+            "corpus_id": corpus.corpus_id.as_string(),
+            "corpus_label": corpus.label_pseudo,
             "knowledge": knowledge,
             "legal": legal,
             "errors": errors,
@@ -1656,20 +2130,30 @@ impl AnnoRagServer {
     }
 
     pub(crate) async fn forget_impl_routing(&self, p: ForgetParams) -> String {
+        if let Ok(uuid) = uuid::Uuid::parse_str(&p.target) {
+            let corpus_id = anno_corpus_core::CorpusId::new(uuid);
+            if let Ok(service) = self.corpus().await {
+                if service.store().corpus_exists(corpus_id).unwrap_or(false) {
+                    return self.forget_corpus(corpus_id).await;
+                }
+            }
+        }
+
         let mut knowledge_removed = 0;
         let mut legal_removed = 0;
         let mut errors = Vec::<String>::new();
 
         if p.target.starts_with("legal_folder_") {
-            if let Some(pipeline) = self.pipeline_arc() {
-                match self.resolve_legal_folder_id(&pipeline, &p.target).await {
-                    Ok(Some(path)) => match pipeline.forget_legal_folder_path(&path).await {
+            match self.resolve_legal_folder_id(&p.target).await {
+                Ok(Some(path)) => match self.legal_maintenance().await {
+                    Ok(service) => match service.forget_folder_path(&path).await {
                         Ok(removed) => legal_removed = removed,
                         Err(e) => errors.push(format!("legal forget: {e}")),
                     },
-                    Ok(None) => {}
-                    Err(e) => errors.push(format!("legal resolve: {e}")),
-                }
+                    Err(e) => errors.push(format!("legal maintenance: {e}")),
+                },
+                Ok(None) => {}
+                Err(e) => errors.push(format!("legal resolve: {e}")),
             }
         } else if uuid::Uuid::parse_str(&p.target).is_ok() {
             match self
@@ -1687,11 +2171,12 @@ impl AnnoRagServer {
                 Err(e) => errors.push(format!("knowledge forget: {e}")),
             }
 
-            if let Some(pipeline) = self.pipeline_arc() {
-                match pipeline.forget_legal_folder_path(&p.target).await {
+            match self.legal_maintenance().await {
+                Ok(service) => match service.forget_folder_path(&p.target).await {
                     Ok(removed) => legal_removed = removed,
                     Err(e) => errors.push(format!("legal forget: {e}")),
-                }
+                },
+                Err(e) => errors.push(format!("legal maintenance: {e}")),
             }
         }
 
@@ -1700,6 +2185,7 @@ impl AnnoRagServer {
             "removed": {
                 "knowledge_objects": knowledge_removed,
                 "legal_chunks": legal_removed,
+                "tabular_reviews": 0u64,
             },
             "errors": if errors.is_empty() {
                 serde_json::Value::Null
@@ -1710,6 +2196,130 @@ impl AnnoRagServer {
         .to_string()
     }
 
+    async fn forget_corpus(&self, corpus_id: anno_corpus_core::CorpusId) -> String {
+        let mut knowledge_removed = 0u64;
+        let mut legal_removed = 0u64;
+        let mut tabular_reviews = 0u64;
+        let mut errors = Vec::<String>::new();
+
+        let service = match self.corpus().await {
+            Ok(service) => service,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let bindings = match service.store().bindings_for_corpus(corpus_id) {
+            Ok(bindings) => bindings,
+            Err(e) => return format!("Error: {e}"),
+        };
+        let legal_doc_ids = match service.store().document_ids_for_corpus(corpus_id, "legal") {
+            Ok(ids) => ids,
+            Err(e) => {
+                errors.push(format!("corpus legal documents: {e}"));
+                Vec::new()
+            }
+        };
+        if !legal_doc_ids.is_empty() {
+            match self.legal_maintenance().await {
+                Ok(service) => match service.forget_doc_ids(&legal_doc_ids).await {
+                    Ok(removed) => {
+                        legal_removed += removed;
+                    }
+                    Err(e) => errors.push(format!("legal forget docs: {e}")),
+                },
+                Err(e) => errors.push(format!("legal maintenance: {e}")),
+            }
+        }
+
+        for binding in bindings {
+            match binding.binding_kind {
+                anno_corpus_core::CorpusBindingKind::KnowledgeSource => {
+                    match self
+                        .knowledge_forget_impl(KnowledgeForgetParams {
+                            source_id: binding.binding_id,
+                        })
+                        .await
+                    {
+                        Ok(removed) => knowledge_removed += removed,
+                        Err(e) => errors.push(format!("knowledge forget: {e}")),
+                    }
+                }
+                anno_corpus_core::CorpusBindingKind::LegalFolder => {
+                    match self.resolve_legal_folder_id(&binding.binding_id).await {
+                        Ok(Some(path)) => match self.legal_maintenance().await {
+                            Ok(service) => match service.forget_folder_path(&path).await {
+                                Ok(removed) => legal_removed += removed,
+                                Err(e) => errors.push(format!("legal forget: {e}")),
+                            },
+                            Err(e) => errors.push(format!("legal maintenance: {e}")),
+                        },
+                        Ok(None) => {
+                            match self.legal_maintenance().await {
+                                Ok(service) => {
+                                    match service.forget_folder_path(&binding.binding_id).await {
+                                        Ok(removed) => legal_removed += removed,
+                                        Err(e) => errors.push(format!("legal forget: {e}")),
+                                    }
+                                }
+                                Err(e) => errors.push(format!("legal maintenance: {e}")),
+                            };
+                        }
+                        Err(e) => errors.push(format!("legal resolve: {e}")),
+                    }
+                }
+                anno_corpus_core::CorpusBindingKind::TabularReview => {
+                    match self.forget_tabular_review(&binding.binding_id).await {
+                        Ok(()) => tabular_reviews += 1,
+                        Err(e) => errors.push(format!("tabular forget: {e}")),
+                    }
+                }
+                anno_corpus_core::CorpusBindingKind::LegalDocument => {}
+            }
+        }
+
+        if errors.is_empty() {
+            if let Err(e) = service.store().delete_corpus_registry_rows(corpus_id) {
+                errors.push(format!("corpus registry delete: {e}"));
+            }
+        }
+
+        serde_json::json!({
+            "ok": errors.is_empty(),
+            "removed": {
+                "knowledge_objects": knowledge_removed,
+                "legal_chunks": legal_removed,
+                "tabular_reviews": tabular_reviews,
+            },
+            "errors": if errors.is_empty() {
+                serde_json::Value::Null
+            } else {
+                serde_json::json!(errors)
+            },
+        })
+        .to_string()
+    }
+
+    async fn forget_tabular_review(&self, review_id: &str) -> Result<(), String> {
+        let review_uuid = uuid::Uuid::parse_str(review_id).map_err(|e| e.to_string())?;
+        let review_id = anno_rag_tabular::ReviewId(review_uuid);
+        let ts = self.tabular_storage().await.map_err(|e| e.to_string())?;
+        ts.cells
+            .delete_for_review(review_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        ts.rows
+            .delete_for_review(review_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        ts.columns
+            .delete_for_review(review_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        ts.reviews
+            .delete(review_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     async fn knowledge_forget_by_path(&self, path: &str) -> Result<u64, String> {
         let service = self.knowledge().await.map_err(|e| e.to_string())?;
         service
@@ -1717,17 +2327,12 @@ impl AnnoRagServer {
             .map_err(|e| e.to_string())
     }
 
-    async fn resolve_legal_folder_id(
-        &self,
-        pipeline: &anno_rag::pipeline::Pipeline,
-        id: &str,
-    ) -> Result<Option<String>, String> {
-        let paths = pipeline
-            .store_list_indexed_folder_paths()
+    async fn resolve_legal_folder_id(&self, id: &str) -> Result<Option<String>, String> {
+        let service = self.legal_maintenance().await.map_err(|e| e.to_string())?;
+        service
+            .resolve_folder_id(id, legal_folder_id)
             .await
-            .map_err(|e| e.to_string())?;
-
-        Ok(paths.into_iter().find(|path| legal_folder_id(path) == id))
+            .map_err(|e| e.to_string())
     }
 
     async fn start_review_extraction(
@@ -1950,7 +2555,7 @@ impl AnnoRagServer {
 
     /// Unified search tool across local indexes.
     #[tool(
-        description = "Search Anno's local indexes. mode='fast' (default) uses SQLite FTS5 - no models loaded. mode='semantic' loads the embedder. scope='all' (default), 'knowledge', or 'legal'. filters forwarded to legal scope."
+        description = "Search Anno's local indexes. Omit mode for scope-dependent auto mode: scope='knowledge' uses fast search, scope='legal' uses semantic legal search, and scope='all' reports per-backend scope_modes. Explicit mode='fast' avoids model loading; with scope='all' it skips legal scope, and with scope='legal' it returns an error. mode='semantic' loads models for legal search. scope='all' (default), 'knowledge', or 'legal'. filters forwarded to legal scope."
     )]
     async fn search(&self, Parameters(p): Parameters<SearchUnifiedParams>) -> String {
         self.search_impl_routing(p).await
@@ -1961,6 +2566,68 @@ impl AnnoRagServer {
     )]
     async fn sources(&self) -> String {
         self.sources_impl_routing().await
+    }
+
+    /// List indexed client corpora without exposing raw filesystem paths.
+    #[tool(description = "List indexed client corpora without exposing raw filesystem paths.")]
+    async fn corpus_list(&self) -> String {
+        match self.corpus().await {
+            Ok(service) => {
+                let count = match service.store().corpus_count() {
+                    Ok(count) => count,
+                    Err(e) => return format!("Error: {e}"),
+                };
+                serde_json::json!({
+                    "ok": true,
+                    "count": count
+                })
+                .to_string()
+            }
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    /// Return one corpus summary by corpus_id.
+    #[tool(description = "Return one corpus summary by corpus_id.")]
+    async fn corpus_get(&self, Parameters(p): Parameters<CorpusGetParams>) -> String {
+        let parsed = match crate::corpus::parse_corpus_id(&p.corpus_id) {
+            Ok(id) => id,
+            Err(e) => return serde_json::json!({ "ok": false, "error": e }).to_string(),
+        };
+        let service = match self.corpus().await {
+            Ok(service) => service,
+            Err(e) => {
+                return serde_json::json!({ "ok": false, "error": e.to_string() }).to_string();
+            }
+        };
+        match service.get(parsed) {
+            Ok(Some(corpus)) => serde_json::json!({ "ok": true, "corpus": corpus }).to_string(),
+            Ok(None) => serde_json::json!({
+                "ok": false,
+                "error": format!("unknown corpus {}", p.corpus_id),
+            })
+            .to_string(),
+            Err(e) => serde_json::json!({ "ok": false, "error": e.to_string() }).to_string(),
+        }
+    }
+
+    /// Return one corpus health summary by corpus_id.
+    #[tool(description = "Return one corpus health summary by corpus_id.")]
+    async fn corpus_health(&self, Parameters(p): Parameters<CorpusGetParams>) -> String {
+        let parsed = match crate::corpus::parse_corpus_id(&p.corpus_id) {
+            Ok(id) => id,
+            Err(e) => return serde_json::json!({ "ok": false, "error": e }).to_string(),
+        };
+        let service = match self.corpus().await {
+            Ok(service) => service,
+            Err(e) => {
+                return serde_json::json!({ "ok": false, "error": e.to_string() }).to_string();
+            }
+        };
+        match service.health(parsed) {
+            Ok(health) => serde_json::json!({ "ok": true, "health": health }).to_string(),
+            Err(e) => serde_json::json!({ "ok": false, "error": e.to_string() }).to_string(),
+        }
     }
 
     #[tool(
@@ -2545,7 +3212,7 @@ impl AnnoRagServer {
         description = "Deprecated - use 'index(path, profile=\"legal\")' instead. Continues to work."
     )]
     async fn legal_ingest(&self, Parameters(p): Parameters<LegalIngestParams>) -> String {
-        match self.legal_ingest_impl(p).await {
+        match self.legal_ingest_impl(p, None).await {
             Ok(value) => {
                 serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
             }
@@ -2996,8 +3663,23 @@ impl AnnoRagServer {
         }
         let parsed = parse_review_doc_ids(&p.doc_ids);
         let mut failed = parsed.failed;
+        let valid_in_corpus = match self
+            .filter_review_doc_ids_by_corpus(review_id, parsed.valid, &mut failed)
+            .await
+        {
+            Ok(ids) => ids,
+            Err(e) => {
+                return serde_json::to_string_pretty(&ReviewAddRowsResult {
+                    rows_added: 0,
+                    extraction_started: false,
+                    failed_doc_ids: failed,
+                    extraction_error: Some(e),
+                })
+                .unwrap_or_else(|e| format!("Error: {e}"));
+            }
+        };
         let ingested_doc_ids = match self
-            .filter_ingested_doc_ids(parsed.valid, &mut failed)
+            .filter_ingested_doc_ids(valid_in_corpus, &mut failed)
             .await
         {
             Ok(ids) => ids,
@@ -3619,28 +4301,11 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
     let server = AnnoRagServer::new_lazy(cfg, key);
     tracing::info!("anno-rag MCP server starting (lazy) on stdio");
 
-    // Clone before serve() so we can pre-warm in the background.
-    // Both the serving instance and the warmup clone share the same
-    // Arc<OnceCell<Pipeline>>, so the first to initialise wins and
-    // the result is reused by all subsequent calls.
-    let warmup_server = server.clone();
-
     let transport = rmcp::transport::stdio();
     let service = server
         .serve(transport)
         .await
         .map_err(|e| anno_rag::error::Error::Detect(format!("MCP server failed to start: {e}")))?;
-
-    // Pre-warm: trigger Pipeline::new in the background immediately after the
-    // transport handshake, so models are hot before the first real tool call.
-    // Non-fatal: a failure here is logged; the first tool call will retry.
-    tokio::spawn(async move {
-        tracing::info!("anno-rag pre-warming pipeline (models loading in background)");
-        match warmup_server.pipeline().await {
-            Ok(_) => tracing::info!("anno-rag pipeline warm — tools ready"),
-            Err(e) => tracing::warn!(error = %e, "anno-rag pre-warm failed (non-fatal)"),
-        }
-    });
 
     let cancel = service.cancellation_token();
     let signal_task = tokio::spawn(async move {
@@ -3835,6 +4500,7 @@ mod tabular_status_tests {
                 name: "Bad template".into(),
                 template_id: Some("missing-template".into()),
                 scope_folder: None,
+                corpus_id: None,
             })
             .await;
 
@@ -3844,6 +4510,52 @@ mod tabular_status_tests {
             reviews.is_empty(),
             "invalid template must not create a review"
         );
+    }
+
+    #[tokio::test]
+    async fn review_add_rows_rejects_doc_outside_review_corpus() {
+        let (server, _tmp) = temp_server().await;
+        let corpus_service = server.corpus().await.expect("corpus");
+        let a = corpus_service
+            .register_index_root("c:/clients/a", "all")
+            .expect("a");
+        let b = corpus_service
+            .register_index_root("c:/clients/b", "all")
+            .expect("b");
+        let doc_b = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"b-doc");
+        corpus_service
+            .store()
+            .add_document(
+                b.corpus_id,
+                anno_corpus_core::DocumentInstanceId::new(doc_b),
+                "legal",
+                "c:/clients/b/doc.pdf",
+                Some("doc.pdf"),
+                &anno_corpus_core::ContentId::from_bytes(b"doc"),
+                &serde_json::json!({}),
+            )
+            .expect("doc b");
+
+        let created = server
+            .create_review_from_params(ReviewCreateParams {
+                name: "A review".into(),
+                template_id: None,
+                scope_folder: None,
+                corpus_id: Some(a.corpus_id.as_string()),
+            })
+            .await
+            .expect("review");
+
+        let out = server
+            .review_add_rows(Parameters(ReviewAddRowsParams {
+                review_id: created.review_id,
+                doc_ids: vec![doc_b.to_string()],
+                force_reextract: false,
+            }))
+            .await;
+
+        assert!(out.contains("outside review corpus"), "{out}");
+        assert!(out.contains(&doc_b.to_string()), "{out}");
     }
 }
 
@@ -3947,6 +4659,8 @@ mod lazy_tests {
                 mode: Some("fast".into()),
                 scope: Some("all".into()),
                 filters: None,
+                corpus_id: None,
+                allow_cross_corpus: true,
             })
             .await;
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
@@ -3956,6 +4670,131 @@ mod lazy_tests {
         let warnings = v["warnings"].as_array().expect("warnings array");
         assert!(warnings.iter().any(|w| w.as_str().unwrap_or("")
             == "legal scope skipped in fast mode (requires models). Use mode='semantic' to include legal results."));
+    }
+
+    #[tokio::test]
+    async fn search_legal_without_mode_uses_semantic() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".into(),
+                top_k: 5,
+                mode: None,
+                scope: Some("legal".into()),
+                filters: None,
+                corpus_id: None,
+                allow_cross_corpus: true,
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["mode_used"], "semantic");
+        assert_eq!(v["scope_modes"]["legal"], "semantic");
+        assert!(v["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .all(|w| !w
+                .as_str()
+                .unwrap_or("")
+                .contains("legal scope skipped in fast mode")));
+    }
+
+    #[tokio::test]
+    async fn search_all_without_mode_reports_auto_scope_modes() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".into(),
+                top_k: 5,
+                mode: None,
+                scope: Some("all".into()),
+                filters: None,
+                corpus_id: None,
+                allow_cross_corpus: true,
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["mode_used"], "auto");
+        assert_eq!(v["scope_modes"]["knowledge"], "fast");
+        assert_eq!(v["scope_modes"]["legal"], "semantic");
+    }
+
+    #[tokio::test]
+    async fn search_fast_legal_returns_error() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".into(),
+                top_k: 5,
+                mode: Some("fast".into()),
+                scope: Some("legal".into()),
+                filters: None,
+                corpus_id: None,
+                allow_cross_corpus: true,
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], false);
+        assert!(v["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("legal scope requires semantic mode"));
+    }
+
+    #[tokio::test]
+    async fn search_requires_corpus_when_multiple_exist() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let corpus = server.corpus().await.expect("corpus");
+        corpus
+            .register_index_root("c:/clients/a", "all")
+            .expect("a");
+        corpus
+            .register_index_root("c:/clients/b", "all")
+            .expect("b");
+
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".into(),
+                top_k: 5,
+                mode: Some("fast".into()),
+                scope: Some("knowledge".into()),
+                filters: None,
+                corpus_id: None,
+                allow_cross_corpus: false,
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], false);
+        assert!(v["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("corpus_id is required"));
+        assert!(!out.contains("c:/clients/a"));
+        assert!(!out.contains("c:/clients/b"));
     }
 
     #[tokio::test]
@@ -3973,6 +4812,8 @@ mod lazy_tests {
                 mode: Some("fast".into()),
                 scope: Some("knowledge".into()),
                 filters: None,
+                corpus_id: None,
+                allow_cross_corpus: true,
             })
             .await;
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
@@ -3996,6 +4837,8 @@ mod lazy_tests {
                 mode: Some("semantic".into()),
                 scope: Some("knowledge".into()),
                 filters: None,
+                corpus_id: None,
+                allow_cross_corpus: true,
             })
             .await;
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
@@ -4073,6 +4916,68 @@ mod lazy_tests {
     }
 
     #[tokio::test]
+    async fn corpus_service_opens_under_data_dir() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        let out = server.corpus_list().await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["count"], 0);
+        assert!(dir.path().join("corpus.sqlite3").exists());
+        assert!(server.pipeline_arc().is_none());
+    }
+
+    #[tokio::test]
+    async fn corpus_get_unknown_returns_error() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let id = uuid::Uuid::new_v4().to_string();
+
+        let out = server
+            .corpus_get(Parameters(CorpusGetParams { corpus_id: id }))
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], false);
+        assert!(v["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("unknown corpus"));
+    }
+
+    #[tokio::test]
+    async fn corpus_health_unknown_returns_error() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let id = uuid::Uuid::new_v4().to_string();
+
+        let out = server
+            .corpus_health(Parameters(CorpusGetParams { corpus_id: id }))
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], false);
+        assert!(v["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("unknown corpus"));
+    }
+
+    #[tokio::test]
     async fn forget_uuid_routes_to_knowledge_forget() {
         let dir = tempfile::tempdir().expect("temp dir");
         let cfg = AnnoRagConfig {
@@ -4093,6 +4998,34 @@ mod lazy_tests {
         assert_eq!(v["removed"]["knowledge_objects"], 0);
         assert_eq!(v["removed"]["legal_chunks"], 0);
         assert!(v["errors"].is_null());
+    }
+
+    #[tokio::test]
+    async fn forget_corpus_reports_all_backend_buckets() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let corpus = server
+            .corpus()
+            .await
+            .expect("corpus")
+            .register_index_root("c:/clients/a", "all")
+            .expect("register");
+
+        let out = server
+            .forget_impl_routing(ForgetParams {
+                target: corpus.corpus_id.as_string(),
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], true);
+        assert!(v["removed"].get("knowledge_objects").is_some());
+        assert!(v["removed"].get("legal_chunks").is_some());
+        assert!(v["removed"].get("tabular_reviews").is_some());
     }
 
     #[tokio::test]
@@ -4120,6 +5053,27 @@ mod lazy_tests {
     }
 
     #[tokio::test]
+    async fn forget_path_attempts_legal_maintenance_without_pipeline() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        let out = server
+            .forget_impl_routing(ForgetParams {
+                target: dir.path().join("client").display().to_string(),
+            })
+            .await;
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["removed"]["legal_chunks"], 0);
+        assert!(server.pipeline_arc().is_none());
+    }
+
+    #[tokio::test]
     async fn status_returns_unified_health() {
         let dir = tempfile::tempdir().expect("temp dir");
         let cfg = AnnoRagConfig {
@@ -4143,7 +5097,7 @@ mod lazy_tests {
         assert!(server.pipeline_arc().is_none());
     }
 
-    /// When both model subdirs exist, download_models reports already_present.
+    /// When all required model files exist, download_models reports already_present.
     #[tokio::test(flavor = "current_thread")]
     async fn download_models_tool_reports_already_present() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -4163,7 +5117,7 @@ mod lazy_tests {
             "expected 'already_present' in: {result}"
         );
         // Parse JSON to compare path field — avoids Windows backslash escaping issues
-        // (raw path has `\` but JSON encodes it as `\`).
+        // (raw path has `\` but JSON encodes it as `\\`).
         let parsed: serde_json::Value =
             serde_json::from_str(&result).expect("result must be valid JSON");
         assert_eq!(
@@ -4278,6 +5232,10 @@ mod lazy_tests {
         let parsed: serde_json::Value =
             serde_json::from_str(&result).expect("index result must be JSON");
 
+        assert!(
+            parsed["corpus_id"].as_str().is_some(),
+            "index should return corpus_id: {result}"
+        );
         assert_eq!(parsed["profile"], "general");
         assert!(
             parsed.get("knowledge").is_some(),

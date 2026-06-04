@@ -83,10 +83,12 @@ impl LocalFolderSource {
 
         let mut paths: Vec<PathBuf> = walkdir::WalkDir::new(&self.root)
             .into_iter()
+            .filter_entry(|e| !is_generated_anno_dir(&self.root, e.path()))
             .filter_map(std::result::Result::ok)
             .filter(|e| e.file_type().is_file())
             .map(walkdir::DirEntry::into_path)
             .filter(|p| is_supported(p))
+            .filter(|p| !is_generated_anno_file(p))
             .collect();
         paths.sort();
 
@@ -148,6 +150,22 @@ fn is_supported(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_generated_anno_dir(root: &Path, path: &Path) -> bool {
+    path.strip_prefix(root)
+        .ok()
+        .and_then(|relative| relative.components().next())
+        .and_then(|component| component.as_os_str().to_str())
+        .map(|name| name.eq_ignore_ascii_case("anon"))
+        .unwrap_or(false)
+}
+
+fn is_generated_anno_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_ascii_lowercase().contains(".anon."))
+        .unwrap_or(false)
+}
+
 fn sha256(bytes: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
@@ -195,6 +213,39 @@ mod tests {
         assert!(names.iter().any(|n| n == "a.txt"));
         assert!(names.iter().any(|n| n == "b.md"));
         assert!(!names.iter().any(|n| n == "ignore.bin"));
+    }
+
+    #[test]
+    fn skips_anno_generated_outputs() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        write(dir.path(), "source.md", b"# source");
+        fs::create_dir_all(dir.path().join("anon")).expect("anon dir");
+        fs::write(
+            dir.path().join("anon").join("source.anon.md"),
+            b"# generated",
+        )
+        .expect("generated output");
+        fs::create_dir_all(dir.path().join("nested")).expect("nested dir");
+        fs::write(
+            dir.path().join("nested").join("report.anon.md"),
+            b"# generated nested",
+        )
+        .expect("generated nested output");
+
+        let src = LocalFolderSource::new(dir.path());
+        let objects = src.discover(&DiscoverBudget::default()).expect("discover");
+
+        let names: Vec<String> = objects
+            .iter()
+            .map(|o| {
+                o.external_id
+                    .rsplit(['/', '\\'])
+                    .next()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(names, vec!["source.md"]);
     }
 
     #[test]
