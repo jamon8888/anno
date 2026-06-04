@@ -4949,10 +4949,7 @@ mod lazy_tests {
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
 
         assert_eq!(v["ok"], false);
-        assert!(v["error"]
-            .as_str()
-            .unwrap_or("")
-            .contains("unknown corpus"));
+        assert!(v["error"].as_str().unwrap_or("").contains("unknown corpus"));
     }
 
     #[tokio::test]
@@ -4971,10 +4968,7 @@ mod lazy_tests {
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
 
         assert_eq!(v["ok"], false);
-        assert!(v["error"]
-            .as_str()
-            .unwrap_or("")
-            .contains("unknown corpus"));
+        assert!(v["error"].as_str().unwrap_or("").contains("unknown corpus"));
     }
 
     #[tokio::test]

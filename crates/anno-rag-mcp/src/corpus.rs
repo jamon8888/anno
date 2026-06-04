@@ -110,7 +110,10 @@ impl CorpusService {
                 binding.binding_kind == anno_corpus_core::CorpusBindingKind::TabularReview
             })
             .count();
-        let legal_documents = self.store.document_ids_for_corpus(corpus_id, "legal")?.len();
+        let legal_documents = self
+            .store
+            .document_ids_for_corpus(corpus_id, "legal")?
+            .len();
         Ok(CorpusHealthWire {
             corpus_id: corpus.corpus_id,
             health: corpus.health,

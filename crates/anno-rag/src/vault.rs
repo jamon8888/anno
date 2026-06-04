@@ -371,8 +371,8 @@ fn dpapi_protect(data: &[u8]) -> Result<Vec<u8>> {
         CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB as DATA_BLOB,
     };
 
-    let cb_data = u32::try_from(data.len())
-        .map_err(|_| Error::Vault("DPAPI input is too large".into()))?;
+    let cb_data =
+        u32::try_from(data.len()).map_err(|_| Error::Vault("DPAPI input is too large".into()))?;
     let input = DATA_BLOB {
         cbData: cb_data,
         pbData: data.as_ptr() as *mut u8,
@@ -422,8 +422,8 @@ fn dpapi_unprotect(data: &[u8]) -> Result<Vec<u8>> {
         CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB as DATA_BLOB,
     };
 
-    let cb_data = u32::try_from(data.len())
-        .map_err(|_| Error::Vault("DPAPI input is too large".into()))?;
+    let cb_data =
+        u32::try_from(data.len()).map_err(|_| Error::Vault("DPAPI input is too large".into()))?;
     let input = DATA_BLOB {
         cbData: cb_data,
         pbData: data.as_ptr() as *mut u8,
@@ -562,7 +562,10 @@ fn dpapi_status_after_keyring_missing() -> Result<VaultKeyStatus> {
             present: true,
             usable: true,
             persistent: true,
-            message: format!("vault key is stored in Windows DPAPI file {}", path.display()),
+            message: format!(
+                "vault key is stored in Windows DPAPI file {}",
+                path.display()
+            ),
         }),
         Ok(None) => Ok(VaultKeyStatus {
             source: VaultKeyStatusSource::Missing,
@@ -618,7 +621,8 @@ pub fn vault_key_status() -> Result<VaultKeyStatus> {
         Err(e) => {
             let mut status = dpapi_status_after_keyring_missing()?;
             if status.source == VaultKeyStatusSource::Missing {
-                status.message = format!("keyring is unavailable and no fallback key was found: {e}");
+                status.message =
+                    format!("keyring is unavailable and no fallback key was found: {e}");
             }
             return Ok(status);
         }

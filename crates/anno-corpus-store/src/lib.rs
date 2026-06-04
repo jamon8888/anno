@@ -5,4 +5,6 @@ pub mod migrations;
 pub mod store;
 
 pub use error::{Error, Result};
-pub use store::{CorpusBindingRow, CorpusDocumentRow, CorpusRow, CorpusStore, RegisterCorpusResult};
+pub use store::{
+    CorpusBindingRow, CorpusDocumentRow, CorpusRow, CorpusStore, RegisterCorpusResult,
+};
