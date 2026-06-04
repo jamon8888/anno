@@ -31,42 +31,44 @@ impl Embedder {
     /// Returns [`Error::Embed`] if the hub fetch, config/tokenizer parse,
     /// safetensors mmap, or BERT graph construction fails.
     pub async fn load(cfg: &AnnoRagConfig) -> Result<Self> {
-        // ── ANNO_MODELS_DIR fast-path ──────────────────────────────────────────────
-        // When set and the three required files exist, skip the HF Hub download.
-        // This is the offline path used after `anno-rag download-models`.
-        if let Some(models_dir) = std::env::var_os("ANNO_MODELS_DIR") {
-            let base = std::path::PathBuf::from(models_dir).join("multilingual-e5-small");
-            let config_path = base.join("config.json");
-            let tokenizer_path = base.join("tokenizer.json");
-            let weights_path = base.join("model.safetensors");
-            if config_path.exists() && tokenizer_path.exists() && weights_path.exists() {
-                let requested =
-                    crate::accelerator::AcceleratorPreference::from_env_or(cfg.accelerator)?;
-                let decision = crate::accelerator::resolve(requested)?;
-                let device = crate::accelerator::candle_device(&decision)?;
-                let config_json = std::fs::read_to_string(&config_path)?;
-                let config: Config = serde_json::from_str(&config_json)
-                    .map_err(|e| Error::Embed(format!("config parse (local): {e}")))?;
-                let tokenizer = Tokenizer::from_file(&tokenizer_path)
-                    .map_err(|e| Error::Embed(format!("tokenizer load (local): {e}")))?;
-                let dtype = match cfg.embedder_dtype.as_deref() {
-                    Some("f16") => DType::F16,
-                    _ => DType::F32,
-                };
-                // SAFETY: we don't mutate the file for the lifetime of the mmap.
-                let vb = unsafe {
-                    VarBuilder::from_mmaped_safetensors(&[weights_path], dtype, &device)
-                        .map_err(|e| Error::Embed(format!("var builder (local): {e}")))?
-                };
-                let model = BertModel::load(vb, &config)
-                    .map_err(|e| Error::Embed(format!("bert load (local): {e}")))?;
-                return Ok(Self {
-                    model,
-                    tokenizer,
-                    device,
-                    dim: cfg.embed_dim,
-                });
-            }
+        // ── Local model fast-path ─────────────────────────────────────────────────
+        // Use ANNO_MODELS_DIR when non-empty, otherwise the configured default
+        // cache. When the three required files exist, skip HF Hub loading.
+        let local_models_dir = std::env::var_os("ANNO_MODELS_DIR")
+            .filter(|value| !value.is_empty())
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| cfg.models_cache());
+        let base = local_models_dir.join("multilingual-e5-small");
+        let config_path = base.join("config.json");
+        let tokenizer_path = base.join("tokenizer.json");
+        let weights_path = base.join("model.safetensors");
+        if config_path.exists() && tokenizer_path.exists() && weights_path.exists() {
+            let requested =
+                crate::accelerator::AcceleratorPreference::from_env_or(cfg.accelerator)?;
+            let decision = crate::accelerator::resolve(requested)?;
+            let device = crate::accelerator::candle_device(&decision)?;
+            let config_json = std::fs::read_to_string(&config_path)?;
+            let config: Config = serde_json::from_str(&config_json)
+                .map_err(|e| Error::Embed(format!("config parse (local): {e}")))?;
+            let tokenizer = Tokenizer::from_file(&tokenizer_path)
+                .map_err(|e| Error::Embed(format!("tokenizer load (local): {e}")))?;
+            let dtype = match cfg.embedder_dtype.as_deref() {
+                Some("f16") => DType::F16,
+                _ => DType::F32,
+            };
+            // SAFETY: we don't mutate the file for the lifetime of the mmap.
+            let vb = unsafe {
+                VarBuilder::from_mmaped_safetensors(&[weights_path], dtype, &device)
+                    .map_err(|e| Error::Embed(format!("var builder (local): {e}")))?
+            };
+            let model = BertModel::load(vb, &config)
+                .map_err(|e| Error::Embed(format!("bert load (local): {e}")))?;
+            return Ok(Self {
+                model,
+                tokenizer,
+                device,
+                dim: cfg.embed_dim,
+            });
         }
         // ─────────────────────────────────────────────────────────────────────────────
 
@@ -325,6 +327,33 @@ mod tests {
         assert!(
             msg.contains("(local)"),
             "error must come from local path, got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn default_models_cache_local_path_entered_when_files_exist() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = crate::config::AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let e5_dir = cfg.models_cache().join("multilingual-e5-small");
+        std::fs::create_dir_all(&e5_dir).expect("mkdir");
+        std::fs::write(e5_dir.join("config.json"), b"not json").expect("config");
+        std::fs::write(e5_dir.join("tokenizer.json"), b"not json").expect("tok");
+        std::fs::write(e5_dir.join("model.safetensors"), b"not safetensors").expect("weights");
+
+        let _models_dir = crate::env_guard::ScopedAnnoModelsDir::unset();
+        let result = Embedder::load(&cfg).await;
+
+        let err = match result {
+            Ok(_) => panic!("must fail — garbage config.json"),
+            Err(e) => e,
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("(local)"),
+            "error must come from default local path, got: {msg}"
         );
     }
 

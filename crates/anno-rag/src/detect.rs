@@ -345,19 +345,21 @@ impl Detector {
 
         let model_cfg = detector_model_config_for(cfg.accelerator)?;
 
-        // ── ANNO_MODELS_DIR fast-path ─────────────────────────────────────────
-        if let Some(models_dir) = std::env::var_os("ANNO_MODELS_DIR") {
-            let model_path = PathBuf::from(models_dir).join("gliner2-multi-v1-onnx");
-            if model_path.exists() {
-                let ner = anno::backends::gliner2_fastino::GLiNER2Fastino::from_local_with_config(
-                    &model_path,
-                    model_cfg.clone(),
-                )
-                .map_err(|e| Error::Detect(format!("gliner2_fastino load (local): {e}")))?;
-                return Ok(Self {
-                    ner: NerBackend::Onnx(ner),
-                });
-            }
+        // ── Local model fast-path ─────────────────────────────────────────────
+        let model_root = std::env::var_os("ANNO_MODELS_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| cfg.models_cache());
+        let model_path = model_root.join("gliner2-multi-v1-onnx");
+        if model_path.exists() {
+            let ner = anno::backends::gliner2_fastino::GLiNER2Fastino::from_local_with_config(
+                &model_path,
+                model_cfg.clone(),
+            )
+            .map_err(|e| Error::Detect(format!("gliner2_fastino load (local): {e}")))?;
+            return Ok(Self {
+                ner: NerBackend::Onnx(ner),
+            });
         }
         // ─────────────────────────────────────────────────────────────────────
         let ner = GLiNER2Fastino::from_pretrained_with_config(NER_MODEL_ID, model_cfg)
@@ -373,21 +375,23 @@ impl Detector {
         decision: &crate::accelerator::AcceleratorDecision,
     ) -> Result<Self> {
         let device = crate::accelerator::candle_device(decision)?;
-        if let Some(models_dir) = std::env::var_os("ANNO_MODELS_DIR") {
-            let model_path = PathBuf::from(models_dir).join(CANDLE_NER_MODEL_DIR);
-            if model_path.exists() {
-                let ner =
-                    anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_local_with_device(
-                        &model_path,
-                        &device,
-                    )
-                    .map_err(|e| {
-                        Error::Detect(format!("gliner2_fastino_candle load (local): {e}"))
-                    })?;
-                return Ok(Self {
-                    ner: NerBackend::Candle(ner),
-                });
-            }
+        let model_root = std::env::var_os("ANNO_MODELS_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| _cfg.models_cache());
+        let model_path = model_root.join(CANDLE_NER_MODEL_DIR);
+        if model_path.exists() {
+            let ner =
+                anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_local_with_device(
+                    &model_path,
+                    &device,
+                )
+                .map_err(|e| {
+                    Error::Detect(format!("gliner2_fastino_candle load (local): {e}"))
+                })?;
+            return Ok(Self {
+                ner: NerBackend::Candle(ner),
+            });
         }
         let ner =
             anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_pretrained_with_device(
@@ -961,30 +965,19 @@ mod tests {
     }
 
     #[test]
-    fn anno_models_dir_missing_ner_dir_fast_path_not_taken() {
+    fn anno_models_dir_missing_ner_dir_does_not_satisfy_local_fast_path() {
         // ANNO_MODELS_DIR is set but gliner2-multi-v1-onnx/ does NOT exist.
-        // The fast-path must not be taken; Detector::new falls through to
-        // from_pretrained. Two outcomes are valid:
-        //   - Ok(_): from_pretrained loaded from HF cache (models cached locally) — fast-path not taken ✓
-        //   - Err(e): from_pretrained failed (no cache / network) — error must NOT contain "(local)"
+        // Verify the local readiness condition without calling Detector::new,
+        // because the fallback path may touch Hugging Face cache/network.
         let dir = tempfile::tempdir().expect("tempdir");
         // deliberately do NOT create dir.path()/gliner2-multi-v1-onnx
 
         let _models_dir = crate::env_guard::ScopedAnnoModelsDir::set(dir.path());
-        let result = Detector::new(&crate::config::AnnoRagConfig::default());
-
-        match result {
-            Ok(_) => {
-                // from_pretrained succeeded (models are HF-cached) — fast-path was not taken ✓
-            }
-            Err(e) => {
-                let msg = e.to_string();
-                assert!(
-                    !msg.contains("(local)"),
-                    "fast-path must NOT be taken when gliner2 dir absent, got: {msg}"
-                );
-            }
-        }
+        let model_root = std::env::var_os("ANNO_MODELS_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| crate::config::AnnoRagConfig::default().models_cache());
+        assert!(!model_root.join("gliner2-multi-v1-onnx").exists());
     }
 
     #[test]
@@ -1008,6 +1001,30 @@ mod tests {
         assert!(
             msg.contains("(local)"),
             "error must come from local path, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn default_models_cache_local_path_entered_when_ner_dir_exists() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = crate::config::AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let ner_dir = cfg.models_cache().join("gliner2-multi-v1-onnx");
+        std::fs::create_dir_all(&ner_dir).expect("mkdir");
+
+        let _models_dir = crate::env_guard::ScopedAnnoModelsDir::unset();
+        let result = Detector::new(&cfg);
+
+        let err = match result {
+            Ok(_) => panic!("must fail on empty model dir"),
+            Err(e) => e,
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("(local)"),
+            "error must come from default local path, got: {msg}"
         );
     }
 

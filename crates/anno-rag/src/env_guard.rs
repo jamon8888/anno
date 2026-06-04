@@ -15,11 +15,29 @@ pub(crate) struct ScopedAnnoModelsDir {
 impl ScopedAnnoModelsDir {
     /// Set `ANNO_MODELS_DIR` while holding the shared test lock.
     pub(crate) fn set(path: &Path) -> Self {
+        Self::set_raw(path.as_os_str())
+    }
+
+    /// Set `ANNO_MODELS_DIR` to a raw OS value while holding the shared test lock.
+    pub(crate) fn set_raw(value: impl AsRef<std::ffi::OsStr>) -> Self {
         let guard = ANNO_MODELS_DIR_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let previous = std::env::var_os("ANNO_MODELS_DIR");
-        std::env::set_var("ANNO_MODELS_DIR", path);
+        unsafe { std::env::set_var("ANNO_MODELS_DIR", value.as_ref()) };
+        Self {
+            previous,
+            _guard: guard,
+        }
+    }
+
+    /// Unset `ANNO_MODELS_DIR` while holding the shared test lock.
+    pub(crate) fn unset() -> Self {
+        let guard = ANNO_MODELS_DIR_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let previous = std::env::var_os("ANNO_MODELS_DIR");
+        unsafe { std::env::remove_var("ANNO_MODELS_DIR") };
         Self {
             previous,
             _guard: guard,
@@ -30,9 +48,9 @@ impl ScopedAnnoModelsDir {
 impl Drop for ScopedAnnoModelsDir {
     fn drop(&mut self) {
         if let Some(value) = &self.previous {
-            std::env::set_var("ANNO_MODELS_DIR", value);
+            unsafe { std::env::set_var("ANNO_MODELS_DIR", value) };
         } else {
-            std::env::remove_var("ANNO_MODELS_DIR");
+            unsafe { std::env::remove_var("ANNO_MODELS_DIR") };
         }
     }
 }

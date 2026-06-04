@@ -13,6 +13,7 @@
 pub mod health;
 mod indexer;
 pub mod knowledge;
+pub mod model_inventory;
 pub mod tabular;
 
 use crate::indexer::SyncSummary;
@@ -50,21 +51,16 @@ impl AnnoRagServer {
                 let cfg = Arc::clone(&self.cfg);
                 let key = self.key;
                 async move {
-                    // Models are available if either ANNO_MODELS_DIR is explicitly set
-                    // OR the two expected model subdirectories exist at the default
-                    // cache location. This avoids any set_var from main().
-                    let models_available = std::env::var("ANNO_MODELS_DIR").is_ok() || {
-                        let default_models = cfg.models_cache();
-                        default_models.join("multilingual-e5-small").exists()
-                            && default_models.join("gliner2-multi-v1-onnx").exists()
-                    };
-                    if !models_available {
-                        return Err(anno_rag::error::Error::Config(
-                            "Models not downloaded. Ask me to 'Set up anno-rag' \
+                    let inventory =
+                        crate::model_inventory::ModelInventoryService::new(&cfg).inspect();
+                    if !inventory.ready {
+                        return Err(anno_rag::error::Error::Config(format!(
+                            "Models not ready at {} (state={}). Ask me to 'Set up anno-rag' \
                              or run `anno-rag download-models` in a terminal, \
-                             then restart the extension."
-                                .into(),
-                        ));
+                             then restart the extension.",
+                            inventory.path,
+                            inventory.state.as_str()
+                        )));
                     }
                     Pipeline::new((*cfg).clone(), key).await.map(Arc::new)
                 }
@@ -1460,13 +1456,14 @@ impl AnnoRagServer {
             }),
         };
 
-        let models = match self.pipeline_arc() {
-            Some(p) => serde_json::json!({
-                "embedder_loaded": p.embedder_loaded(),
-                "detector_loaded": p.detector_loaded(),
-            }),
-            None => serde_json::json!({ "embedder_loaded": false, "detector_loaded": false }),
-        };
+        let inventory =
+            crate::model_inventory::ModelInventoryService::new(self.cfg.as_ref()).inspect();
+        let loaded = self.pipeline_arc();
+        let models = serde_json::json!({
+            "inventory": inventory,
+            "embedder_loaded": loaded.as_ref().is_some_and(|p| p.embedder_loaded()),
+            "detector_loaded": loaded.as_ref().is_some_and(|p| p.detector_loaded()),
+        });
 
         serde_json::json!({
             "ok": true,
@@ -2456,29 +2453,42 @@ impl AnnoRagServer {
                        No parameters needed."
     )]
     async fn download_models(&self) -> String {
-        let models_dir = self.cfg.models_cache();
-        let e5_dir = models_dir.join("multilingual-e5-small");
-        let gliner_dir = models_dir.join("gliner2-multi-v1-onnx");
+        let inventory =
+            crate::model_inventory::ModelInventoryService::new(self.cfg.as_ref()).inspect();
 
-        // Already present — nothing to do.
-        if e5_dir.exists() && gliner_dir.exists() {
+        if inventory.ready {
             let wire = DownloadModelsResult {
                 status: "already_present".into(),
-                path: models_dir.display().to_string(),
+                path: inventory.path.clone(),
                 message: format!(
-                    "Models already present at {}. \
-                     Set ANNO_MODELS_DIR={} in extension settings \
-                     (or leave blank — the default path is detected automatically).",
-                    models_dir.display(),
-                    models_dir.display()
+                    "Models ready at {}. The effective model path is selected by {}.",
+                    inventory.path,
+                    if inventory.from_env {
+                        "ANNO_MODELS_DIR"
+                    } else {
+                        "the default cache"
+                    }
                 ),
             };
             return serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"));
         }
 
-        // Download already in progress (sentinel file present).
+        if inventory.from_env {
+            let wire = DownloadModelsResult {
+                status: inventory.state.as_str().into(),
+                path: inventory.path.clone(),
+                message: format!(
+                    "ANNO_MODELS_DIR points to {}, but required model files are missing. \
+                     Fix that directory or unset ANNO_MODELS_DIR before using download_models.",
+                    inventory.path
+                ),
+            };
+            return serde_json::to_string_pretty(&wire).unwrap_or_else(|e| format!("Error: {e}"));
+        }
+
+        let models_dir = self.cfg.models_cache();
         let lock_file = models_dir.join(".download-lock");
-        if lock_file.exists() {
+        if inventory.downloading || lock_file.exists() {
             let wire = DownloadModelsResult {
                 status: "in_progress".into(),
                 path: models_dir.display().to_string(),
@@ -3840,7 +3850,30 @@ mod tabular_status_tests {
 #[cfg(test)]
 mod lazy_tests {
     use super::*;
+    use crate::model_inventory::test_env::ScopedAnnoModelsDir;
     use anno_rag::config::AnnoRagConfig;
+    use std::path::Path;
+
+    fn create_required_model_files(models_dir: &Path) {
+        for rel in [
+            "multilingual-e5-small/config.json",
+            "multilingual-e5-small/model.safetensors",
+            "multilingual-e5-small/tokenizer.json",
+            "gliner2-multi-v1-onnx/fp32_v2/classifier_fp32.onnx",
+            "gliner2-multi-v1-onnx/fp32_v2/count_lstm_fixed_fp32.onnx",
+            "gliner2-multi-v1-onnx/fp32_v2/count_pred_argmax_fp32.onnx",
+            "gliner2-multi-v1-onnx/fp32_v2/encoder_fp32.onnx",
+            "gliner2-multi-v1-onnx/fp32_v2/schema_gather_fp32.onnx",
+            "gliner2-multi-v1-onnx/fp32_v2/scorer_fp32.onnx",
+            "gliner2-multi-v1-onnx/fp32_v2/span_rep_fp32.onnx",
+            "gliner2-multi-v1-onnx/fp32_v2/token_gather_fp32.onnx",
+            "gliner2-multi-v1-onnx/fp32_v2/tokenizer.json",
+        ] {
+            let path = models_dir.join(rel);
+            std::fs::create_dir_all(path.parent().expect("required file parent")).unwrap();
+            std::fs::write(path, b"test model file").unwrap();
+        }
+    }
 
     #[test]
     fn deprecated_tools_have_deprecation_banner_in_description() {
@@ -3882,11 +3915,7 @@ mod lazy_tests {
         };
         let key = [0u8; 32];
 
-        let saved = std::env::var("ANNO_MODELS_DIR").ok();
-        // Safety: flavor = "current_thread" ensures this test runs on a single OS thread.
-        // ANNO_MODELS_DIR is saved and restored so other tests in the same suite are not affected.
-        // Note: run with RUST_TEST_THREADS=1 if other tests also mutate ANNO_MODELS_DIR.
-        unsafe { std::env::remove_var("ANNO_MODELS_DIR") };
+        let _models_env = ScopedAnnoModelsDir::unset();
 
         let server = AnnoRagServer::new_lazy(cfg, key);
         let result = server
@@ -3897,12 +3926,9 @@ mod lazy_tests {
             }))
             .await;
 
-        if let Some(v) = saved {
-            unsafe { std::env::set_var("ANNO_MODELS_DIR", v) };
-        }
         assert!(
-            result.contains("Models not downloaded"),
-            "expected 'Models not downloaded' in: {result}"
+            result.contains("Models not ready") || result.contains("Models not downloaded"),
+            "expected model readiness error in: {result}"
         );
     }
 
@@ -4111,7 +4137,9 @@ mod lazy_tests {
         assert_eq!(v["knowledge"]["objects"], 0);
         assert_eq!(v["vault"]["available"], false);
         assert_eq!(v["vault"]["reason"], "pipeline_not_initialized");
+        assert!(v["models"].get("inventory").is_some());
         assert_eq!(v["models"]["embedder_loaded"], false);
+        assert_eq!(v["models"]["detector_loaded"], false);
         assert!(server.pipeline_arc().is_none());
     }
 
@@ -4120,8 +4148,8 @@ mod lazy_tests {
     async fn download_models_tool_reports_already_present() {
         let dir = tempfile::tempdir().expect("tempdir");
         let models_dir = dir.path().join("models");
-        std::fs::create_dir_all(models_dir.join("multilingual-e5-small")).unwrap();
-        std::fs::create_dir_all(models_dir.join("gliner2-multi-v1-onnx")).unwrap();
+        create_required_model_files(&models_dir);
+        let _models_env = ScopedAnnoModelsDir::unset();
 
         let cfg = AnnoRagConfig {
             data_dir: dir.path().to_path_buf(),
@@ -4135,7 +4163,7 @@ mod lazy_tests {
             "expected 'already_present' in: {result}"
         );
         // Parse JSON to compare path field — avoids Windows backslash escaping issues
-        // (raw path has `\` but JSON encodes it as `\\`).
+        // (raw path has `\` but JSON encodes it as `\`).
         let parsed: serde_json::Value =
             serde_json::from_str(&result).expect("result must be valid JSON");
         assert_eq!(
@@ -4145,29 +4173,57 @@ mod lazy_tests {
         );
     }
 
-    /// When models are absent and no lock file exists, the tool starts a
-    /// background download and returns the "downloading" status immediately.
     #[tokio::test(flavor = "current_thread")]
-    async fn download_models_tool_starts_download_when_absent() {
+    async fn download_models_tool_rejects_empty_dirs() {
         let dir = tempfile::tempdir().expect("tempdir");
+        let models_dir = dir.path().join("models");
+        std::fs::create_dir_all(models_dir.join("multilingual-e5-small")).unwrap();
+        std::fs::create_dir_all(models_dir.join("gliner2-multi-v1-onnx")).unwrap();
+
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let _models_env = ScopedAnnoModelsDir::set(&models_dir);
+
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let result = server.download_models().await;
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&result).expect("result must be valid JSON");
+        assert_eq!(parsed["status"], "partial");
+        assert_eq!(
+            parsed["path"].as_str().unwrap_or(""),
+            models_dir.to_str().unwrap()
+        );
+        assert!(
+            parsed["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("ANNO_MODELS_DIR"),
+            "message should tell user to fix/unset env var: {result}"
+        );
+    }
+
+    /// When a default-cache download lock exists, the tool reports in_progress
+    /// without starting another background download.
+    #[tokio::test(flavor = "current_thread")]
+    async fn download_models_tool_reports_in_progress_when_lock_present() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let models_dir = dir.path().join("models");
+        std::fs::create_dir_all(&models_dir).unwrap();
+        std::fs::write(models_dir.join(".download-lock"), b"downloading").unwrap();
+        let _models_env = ScopedAnnoModelsDir::unset();
         let cfg = AnnoRagConfig {
             data_dir: dir.path().to_path_buf(),
             ..Default::default()
         };
 
-        assert!(!dir
-            .path()
-            .join("models")
-            .join("multilingual-e5-small")
-            .exists());
-
         let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
         let result = server.download_models().await;
         assert!(
-            result.contains("downloading")
-                || result.contains("in_progress")
-                || result.contains("Downloading"),
-            "expected download status in: {result}"
+            result.contains("in_progress") || result.contains("downloading"),
+            "expected in-progress download status in: {result}"
         );
     }
 
