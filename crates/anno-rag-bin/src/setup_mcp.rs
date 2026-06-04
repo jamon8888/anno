@@ -467,6 +467,79 @@ async fn read_mcp_line(
         .with_context(|| format!("MCP {label} response stream ended"))
 }
 
+pub async fn run(args: SetupMcpArgs) -> anyhow::Result<()> {
+    let binary = match args.binary {
+        Some(path) => path,
+        None => std::env::current_exe().context("resolve current executable")?,
+    };
+    validate_absolute_path(&binary).map_err(|e| anyhow!(e))?;
+
+    let models_dir = args.models_dir.unwrap_or_else(default_models_dir);
+    validate_absolute_path(&models_dir).map_err(|e| anyhow!(e))?;
+    let models_verified = if args.target == SetupTarget::Manual {
+        model_cache_verified(&models_dir)
+    } else {
+        ensure_models(&models_dir, args.skip_models, args.dry_run).await?
+    };
+
+    let mut summary = Vec::<String>::new();
+    summary.push(format!("binary: {}", binary.display()));
+    summary.push(format!("models_dir: {}", models_dir.display()));
+    summary.push(format!("models_verified: {models_verified}"));
+
+    if args.target == SetupTarget::Manual {
+        let desktop = merge_desktop_config(json!({}), &binary, &models_dir, models_verified)?;
+        summary.push(format!(
+            "desktop_json: {}",
+            serde_json::to_string_pretty(&desktop)?
+        ));
+        summary.push(format!(
+            "claude_code_command: {}",
+            display_command(
+                "claude",
+                &build_claude_code_args(args.claude_code_scope, &models_dir, &binary)?,
+            )
+        ));
+        println!("{}", summary.join("\n"));
+        return Ok(());
+    }
+
+    if args.target.includes_desktop() {
+        if args.desktop_mode == DesktopMode::Mcpb {
+            summary.push(
+                "desktop: .mcpb install is interactive; use the release .mcpb asset or rerun with --desktop-mode json"
+                    .to_string(),
+            );
+        } else {
+            let config_path = match args.desktop_config {
+                Some(path) => path,
+                None => default_desktop_config_path()?,
+            };
+            let existing = read_json_file_or_empty(&config_path)?;
+            let merged = merge_desktop_config(existing, &binary, &models_dir, models_verified)?;
+            let result = write_desktop_config(&config_path, &merged, args.dry_run)?;
+            summary.push(format!("desktop: {}", result.message));
+        }
+    }
+
+    if args.target.includes_claude_code() {
+        let result =
+            configure_claude_code(args.claude_code_scope, &models_dir, &binary, args.dry_run)?;
+        summary.push(format!("claude_code: {result}"));
+    }
+
+    if !args.dry_run {
+        match run_fast_mcp_smoke(&binary, &models_dir, false).await {
+            Ok(msg) => summary.push(format!("smoke: {msg}")),
+            Err(error) => summary.push(format!("smoke_warning: {error}")),
+        }
+    }
+
+    summary.push("restart Claude Desktop/Cowork before verifying anno_health".to_string());
+    println!("{}", summary.join("\n"));
+    Ok(())
+}
+
 fn create_parent_dir(path: &Path) -> anyhow::Result<()> {
     if let Some(parent) = path
         .parent()
@@ -859,6 +932,28 @@ mod tests {
 
         assert!(result.starts_with("dry-run: would smoke-test"));
         assert!(result.ends_with(" mcp"));
+    }
+
+    #[tokio::test]
+    async fn run_manual_does_not_download_or_require_models_suffix() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let models_dir = dir.path().join("manual-cache");
+        let binary = absolute_test_path(&["hacienda", "anno-rag"]);
+        let args = SetupMcpArgs {
+            target: SetupTarget::Manual,
+            binary: Some(binary),
+            models_dir: Some(models_dir.clone()),
+            desktop_config: None,
+            desktop_mode: DesktopMode::Json,
+            claude_code_scope: ClaudeCodeScope::User,
+            skip_models: false,
+            dry_run: false,
+            force: false,
+        };
+
+        run(args).await.expect("manual run");
+
+        assert!(!models_dir.exists());
     }
 
     fn write_required_files(root: &Path, files: &[&str]) {
