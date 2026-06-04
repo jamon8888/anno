@@ -1,16 +1,52 @@
 {
   "hooks": {
-    "PostToolUse": [
+    "UserPromptSubmit": [
       {
-        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "shell": "powershell",
-            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // \"\"' | ForEach-Object { if ($_ -match 'crates[\\/]([^\\/]+)[\\/].*\\.rs$') { powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-fast.ps1 -Package $Matches[1] -Mode check } }",
-            "timeout": 60,
-            "statusMessage": "cargo check ...",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-harness/prompt-secret-scan.ps1",
+            "timeout": 20,
+            "statusMessage": "secret scan ..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-harness/block-dangerous-tool.ps1",
+            "timeout": 20,
+            "statusMessage": "safety gate ..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-harness/post-edit-rust-check.ps1",
+            "timeout": 90,
+            "statusMessage": "targeted Rust check ...",
             "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-harness/stop-verify.ps1",
+            "timeout": 30,
+            "statusMessage": "completion gate ..."
           }
         ]
       }
