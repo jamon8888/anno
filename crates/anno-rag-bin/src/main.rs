@@ -8,6 +8,7 @@
 //! - `anno-rag review <subcmd>` — tabular review management
 
 mod review;
+mod setup_mcp;
 
 use anno_rag::{
     config::{AdvancedPdfNativeMode, AnnoRagConfig, MemoryNerMode, OcrMode},

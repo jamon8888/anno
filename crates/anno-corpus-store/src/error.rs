@@ -12,6 +12,9 @@ pub enum Error {
     /// JSON serialization failed.
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    /// Filesystem operation failed.
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
     /// Corpus root normalization failed.
     #[error(transparent)]
     Root(#[from] anno_corpus_core::RootError),

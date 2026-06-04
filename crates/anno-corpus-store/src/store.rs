@@ -68,6 +68,10 @@ pub struct CorpusDocumentRow {
 impl CorpusStore {
     /// Open or create the corpus registry database.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         let conn = Connection::open(path)?;
         migrations::migrate(&conn)?;
         Ok(Self {
@@ -404,6 +408,16 @@ mod tests {
         let dir = tempfile::tempdir().expect("temp dir");
         let store = CorpusStore::open(dir.path().join("corpora.sqlite3")).expect("open store");
         (dir, store)
+    }
+
+    #[test]
+    fn open_creates_missing_parent_directory() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db_path = dir.path().join("nested").join("corpora.sqlite3");
+
+        let _store = CorpusStore::open(&db_path).expect("open nested store");
+
+        assert!(db_path.exists());
     }
 
     #[test]
