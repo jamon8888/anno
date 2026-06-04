@@ -26,7 +26,8 @@ Double licence MIT ou Apache-2.0. MSRV : 1.88.
 
 - [Full documentation home](docs/README.md)
 - [Install Hacienda](docs/getting-started/installation.md)
-- [Claude Desktop/Cowork setup](docs/getting-started/claude-desktop-cowork.md)
+- [Claude Desktop/Cowork/Claude Code setup](docs/getting-started/claude-desktop-cowork.md)
+- [Cross-platform MCP setup design](docs/superpowers/specs/2026-06-04-cross-platform-mcp-setup-design.md)
 - [Product concepts](docs/product/concepts.md)
 - [MCP tools](docs/developers/mcp-tools.md)
 - [Privacy model](docs/security-compliance/privacy-model.md)
@@ -39,6 +40,7 @@ Double licence MIT ou Apache-2.0. MSRV : 1.88.
 Le tronc local contient les travaux récents suivants :
 
 - **Release binaire v0.11.0-rc.11** : archives Windows x64 et macOS Apple Silicon publiées sur GitHub Releases, avec `anno-rag`, `anno-privacy-gateway`, exemples Claude Desktop et checksums SHA-256.
+- **Setup MCP cross-platform** : `anno-rag setup-mcp` et les wrappers `scripts/setup-mcp.*` installent `anno-rag`, vérifient ou téléchargent les modèles GLiNER + embeddings, puis configurent Claude Desktop/Cowork et Claude Code sans build local.
 - **anno-memory v0.2** dans `anno-rag` : mémoire bi-temporelle, références d'entités, rappel avec expansion graphe, invalidation de mémoires et audit MCP.
 - **RGPD core + gateway v0.4** : routes de sujet `find` / `forget` / `export`, audit JSONL chaîné, bearer auth, pseudonymisation en streaming SSE et arrêt gracieux du gateway comme du serveur MCP.
 - **Évaluation anonymisation v0.7** : corpus légal français annoté, regex e-mail, regex honorifiques FR pour personnes, baselines PII et logs d'audit du détecteur sans texte en clair.
@@ -135,19 +137,45 @@ La v0.2 ajoute une couche mémoire temporelle et graphe sans base de graphe exte
 - `memory_graph_recall(entity, max_hops, per_hop_limit, as_of)` parcourt jusqu'à 2 hops par défaut.
 - Les `Preference` et `Reference` concurrentes peuvent auto-invalider une ancienne ligne quand elles partagent une entité et dépassent le seuil de similarité configuré ; `Fact` et `Context` restent append-only.
 
-### 1.6 Intégration Claude Desktop / Cowork via MCP
+### 1.6 Intégration Claude Desktop / Cowork / Claude Code via MCP
 
-`anno-rag mcp` lance un serveur **Model Context Protocol** sur stdio. Claude Desktop, Cowork ou n'importe quel client MCP s'y branche en ajoutant une entrée à son fichier de configuration :
+`anno-rag mcp` lance un serveur **Model Context Protocol** sur stdio. Claude Desktop et Cowork partagent la même cible locale quand Cowork est utilisé dans Claude Desktop. Claude Code se configure séparément via `claude mcp add`, mais pointe vers le même binaire et le même cache de modèles.
 
 ```json
 {
-  "anno-rag": {
-    "command": "/absolute/path/to/anno-rag",
-    "args": ["mcp"],
-    "env": {}
+  "mcpServers": {
+    "anno-rag": {
+      "command": "/absolute/path/to/anno-rag",
+      "args": ["mcp"],
+      "env": {
+        "ANNO_MODELS_DIR": "/absolute/path/to/.anno-rag/models"
+      }
+    }
   }
 }
 ```
+
+L'installation MCP cross-platform est disponible via les wrappers de release ou
+le binaire installé :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1 -Target all
+```
+
+```bash
+./scripts/setup-mcp.sh --target all
+```
+
+Les wrappers appellent la sous-commande :
+
+```bash
+anno-rag setup-mcp --target all
+```
+
+`all` signifie : config Desktop/Cowork + config Claude Code. Les instructions
+manuelles restent disponibles dans
+[docs/getting-started/claude-desktop-cowork.md](docs/getting-started/claude-desktop-cowork.md)
+pour inspecter ou adapter le JSON.
 
 Par défaut, omettez `ANNO_RAG_VAULT_PASSPHRASE` pour utiliser le keyring OS. Les utilisateurs avancés peuvent ajouter localement `ANNO_RAG_VAULT_PASSPHRASE` avec un secret fort et unique ; JSON ne prend pas en charge les commentaires, gardez donc cette note hors du fichier de configuration.
 
@@ -171,7 +199,7 @@ Outils MCP exposés :
 | `legal_*` | Ingestion/recherche juridique, requêtes graphe, citations rehydratables, extraction de contrats/dossiers, timeline, revue de risque, audits de clauses, prescription et validation humaine. |
 | `review_*` | Création de revues tabulaires, ajout de lignes, extraction/refinement de cellules, lock/unlock, override humain, export CSV/Markdown/XLSX et lecture de grille. |
 
-Le flux typique avec Claude Desktop :
+Le flux typique avec Claude Desktop/Cowork :
 
 ```
 Utilisateur  →  Claude  →  search("résiliation Acme")
@@ -317,7 +345,29 @@ Binaires produits :
 
 Sur Apple Silicon, les features `metal` / `gliner2-fastino-candle-metal` servent aux backends Candle accélérés. Les backends ONNX/CoreML sont macOS-only côté link lorsqu'ils sont explicitement activés.
 
-#### Claude Desktop
+#### Claude Desktop / Cowork / Claude Code
+
+Le setup simple, sans build local, installe le binaire de release, télécharge
+les modèles locaux si nécessaire et configure les clients MCP :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1 -Target all -Tag latest
+```
+
+```bash
+./scripts/setup-mcp.sh --target all --tag latest
+```
+
+La sous-commande directe est aussi disponible :
+
+```bash
+anno-rag setup-mcp --target all
+```
+
+`desktop` couvre Claude Desktop et Cowork, car Cowork s'exécute dans Claude
+Desktop pour ce flux local. `claude-code` couvre Claude Code via `claude mcp
+add`. Les instructions ci-dessous restent le chemin manuel fiable quand vous
+voulez contrôler le JSON vous-même.
 
 ##### Installation release candidate via Claude Code
 
@@ -330,7 +380,7 @@ Download the asset for this machine (Windows x64: hacienda-v0.11.0-rc.11-x86_64-
 
 Remplacez le tag si vous installez une RC plus récente. Pour les builds depuis source, utilisez la configuration manuelle ci-dessous.
 
-Claude Desktop se branche à Hacienda via le serveur MCP stdio `anno-rag mcp`. Il faut d'abord construire `anno-rag`, puis déclarer le binaire dans `claude_desktop_config.json`.
+Claude Desktop et Cowork se branchent à Hacienda via le serveur MCP stdio `anno-rag mcp`. Il faut d'abord construire `anno-rag` ou extraire le binaire de release, puis déclarer le binaire dans `claude_desktop_config.json`.
 
 Chemins de config Claude Desktop :
 
@@ -375,10 +425,18 @@ Points importants :
 - Sur Windows, les `\` doivent être doublés dans le JSON.
 - Redémarrer complètement Claude Desktop après modification.
 - Vérifier dans Claude Desktop via `+` → **Connectors**, ou dans les réglages développeur, que `anno-rag` est connecté.
-- La première utilisation doit idéalement se faire après `cargo run --release --example warmup_model -p anno-rag`; sinon le serveur peut télécharger les modèles au premier appel, sauf si `ANNO_NO_DOWNLOADS=1`.
+- La première utilisation doit idéalement se faire après `anno-rag download-models` et avec `ANNO_MODELS_DIR` dans la config MCP ; sinon le serveur peut télécharger les modèles au premier appel, sauf si `ANNO_NO_DOWNLOADS=1`.
 - Le vault reste local. Ne versionnez pas une vraie passphrase ; mettez-la dans la config locale Claude Desktop ou laissez `anno-rag` utiliser le keyring OS.
 
-Le `anno-privacy-gateway` sert aux clients HTTP compatibles Anthropic. Pour Claude Desktop + MCP, la voie normale est `anno-rag mcp`.
+Pour Claude Code, le chemin manuel est :
+
+```powershell
+claude mcp add --transport stdio --scope user `
+  --env ANNO_MODELS_DIR=C:\Users\you\.anno-rag\models `
+  anno-rag -- C:\Users\you\Tools\hacienda\anno-rag.exe mcp
+```
+
+Le `anno-privacy-gateway` sert aux clients HTTP compatibles Anthropic. Pour Claude Desktop/Cowork/Claude Code + MCP local, la voie normale est `anno-rag mcp`.
 
 ### 2.1 Bibliothèque NER seule
 
