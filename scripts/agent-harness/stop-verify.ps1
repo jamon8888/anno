@@ -18,9 +18,12 @@ try {
     if (Test-Path -LiteralPath $stampPath) {
         $stamp = Get-Content -LiteralPath $stampPath -Raw | ConvertFrom-Json
         $stampFiles = @($stamp.changed_rust_files | ForEach-Object { [string]$_ })
+        $checkedCrates = @($stamp.checked_crates | ForEach-Object { [string]$_ })
+        $currentCrates = @(Get-AgentHarnessCratesFromPaths -PathText $rustChanged)
         $currentFingerprint = Get-AgentHarnessRustDiffFingerprint -Repo $repo -Files $rustChanged
         $missingFiles = @($rustChanged | Where-Object { $stampFiles -notcontains $_ })
-        if ($stamp.rust_diff_fingerprint -eq $currentFingerprint -and $missingFiles.Count -eq 0) {
+        $missingCrates = @($currentCrates | Where-Object { $checkedCrates -notcontains $_ })
+        if ($stamp.rust_diff_fingerprint -eq $currentFingerprint -and $missingFiles.Count -eq 0 -and $missingCrates.Count -eq 0) {
             Write-Output "agent harness stop gate: matching targeted check found for $($stamp.crate)"
             exit 0
         }

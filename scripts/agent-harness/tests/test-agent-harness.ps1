@@ -134,8 +134,22 @@ $tests.Add({
         $files = Get-AgentHarnessChangedRustFiles -Repo $tempRepo
         Assert-Equal ($files -join ",") "crates/anno-rag/src/pipeline.rs" "changed Rust file detection"
 
-        $fingerprint = Get-AgentHarnessRustDiffFingerprint -Repo $tempRepo -Files $files
-        Assert-Equal $fingerprint.Length 64 "Rust diff fingerprint length"
+        $unstagedFingerprint = Get-AgentHarnessRustDiffFingerprint -Repo $tempRepo -Files $files
+        Assert-Equal $unstagedFingerprint.Length 64 "Rust diff fingerprint length"
+
+        git -C $tempRepo add crates/anno-rag/src/pipeline.rs | Out-Null
+        $stagedFiles = Get-AgentHarnessChangedRustFiles -Repo $tempRepo
+        $stagedFingerprint = Get-AgentHarnessRustDiffFingerprint -Repo $tempRepo -Files $stagedFiles
+        Assert-Equal $stagedFingerprint $unstagedFingerprint "staged and unstaged fingerprints match same content"
+
+        New-Item -ItemType Directory -Path (Join-Path $tempRepo "crates/anno-rag-bin/src") -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $tempRepo "crates/anno-rag-bin/src/new_file.rs") -Value "pub fn added() {}" -Encoding UTF8
+
+        $filesWithUntracked = Get-AgentHarnessChangedRustFiles -Repo $tempRepo
+        Assert-Equal ($filesWithUntracked -join ",") "crates/anno-rag/src/pipeline.rs,crates/anno-rag-bin/src/new_file.rs" "untracked Rust file detection"
+
+        $crates = Get-AgentHarnessCratesFromPaths -PathText $filesWithUntracked
+        Assert-Equal ($crates -join ",") "anno-rag,anno-rag-bin" "changed crate extraction"
     } finally {
         if (Test-Path -LiteralPath $tempRepo) {
             Remove-Item -LiteralPath $tempRepo -Recurse -Force

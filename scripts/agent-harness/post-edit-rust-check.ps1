@@ -41,6 +41,7 @@ try {
     }
 
     $changedRustFiles = @(Get-AgentHarnessChangedRustFiles -Repo $repo)
+    $changedRustCrates = @(Get-AgentHarnessCratesFromPaths -PathText $changedRustFiles)
     $fingerprint = Get-AgentHarnessRustDiffFingerprint -Repo $repo -Files $changedRustFiles
 
     $stateDir = Join-Path $repo ".agent-harness/state"
@@ -49,7 +50,9 @@ try {
         crate = $crate
         file = $pathText
         command = "scripts/dev-fast.ps1 -Package $crate -Mode check"
+        checked_crates = @($crate)
         changed_rust_files = $changedRustFiles
+        changed_rust_crates = $changedRustCrates
         rust_diff_fingerprint = $fingerprint
         checked_at_utc = (Get-Date).ToUniversalTime().ToString("o")
     }

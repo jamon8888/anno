@@ -122,19 +122,42 @@ function Get-AgentHarnessChangedRustFiles {
         throw "Repository path is required"
     }
 
-    $changed = git -C $Repo diff --name-only HEAD 2>$null
+    $status = git -C $Repo status --porcelain=v1 -uall
     if ($LASTEXITCODE -ne 0) {
-        throw "git diff --name-only HEAD failed with exit code $LASTEXITCODE"
+        throw "git status --porcelain failed with exit code $LASTEXITCODE"
     }
 
     $files = @(
-        $changed |
+        $status |
+            ForEach-Object {
+                $line = [string]$_
+                if ($line.Length -lt 4) {
+                    return
+                }
+                $path = $line.Substring(3).Trim()
+                if ($path -match " -> ") {
+                    $parts = $path -split " -> "
+                    $path = $parts[$parts.Length - 1]
+                }
+                $path.Trim('"') -replace "\\", "/"
+            } |
             Where-Object { $_ -match "\.rs$" } |
-            ForEach-Object { ($_ -replace "\\", "/").Trim() } |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
             Sort-Object -Unique
     )
     return $files
+}
+
+function Get-AgentHarnessCratesFromPaths {
+    param([string[]]$PathText)
+
+    $crates = @(
+        $PathText |
+            ForEach-Object { Get-AgentHarnessCrateFromPath -PathText $_ } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Sort-Object -Unique
+    )
+    return $crates
 }
 
 function Get-AgentHarnessRustDiffFingerprint {
@@ -157,11 +180,23 @@ function Get-AgentHarnessRustDiffFingerprint {
     $parts = New-Object System.Collections.Generic.List[string]
     foreach ($file in $normalizedFiles) {
         $parts.Add("FILE:$file")
-        $diff = git -C $Repo diff -- $file
-        if ($LASTEXITCODE -ne 0) {
-            throw "git diff for $file failed with exit code $LASTEXITCODE"
+        git -C $Repo ls-files --error-unmatch -- $file 2>$null | Out-Null
+        $isTracked = $LASTEXITCODE -eq 0
+        if ($isTracked) {
+            $diff = git -C $Repo diff HEAD --binary -- $file
+            if ($LASTEXITCODE -ne 0) {
+                throw "git diff HEAD for $file failed with exit code $LASTEXITCODE"
+            }
+            $parts.Add("TRACKED")
+            $parts.Add(($diff -join "`n"))
+        } else {
+            $fullPath = Join-Path $Repo $file
+            if (-not (Test-Path -LiteralPath $fullPath)) {
+                throw "Untracked Rust file no longer exists: $file"
+            }
+            $parts.Add("UNTRACKED:$file")
+            $parts.Add((Get-Content -LiteralPath $fullPath -Raw -Encoding UTF8))
         }
-        $parts.Add(($diff -join "`n"))
     }
 
     $fingerprintText = $parts -join "`n---AGENT-HARNESS-DIFF---`n"
@@ -247,6 +282,7 @@ Export-ModuleMember -Function `
     Get-AgentHarnessFilePath, `
     Get-AgentHarnessCrateFromPath, `
     Get-AgentHarnessChangedRustFiles, `
+    Get-AgentHarnessCratesFromPaths, `
     Get-AgentHarnessRustDiffFingerprint, `
     Test-AgentHarnessDangerousCommand, `
     Test-AgentHarnessSecretText, `

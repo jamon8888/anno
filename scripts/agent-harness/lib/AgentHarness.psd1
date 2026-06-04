@@ -14,6 +14,7 @@
         'Get-AgentHarnessFilePath',
         'Get-AgentHarnessCrateFromPath',
         'Get-AgentHarnessChangedRustFiles',
+        'Get-AgentHarnessCratesFromPaths',
         'Get-AgentHarnessRustDiffFingerprint',
         'Test-AgentHarnessDangerousCommand',
         'Test-AgentHarnessSecretText',
