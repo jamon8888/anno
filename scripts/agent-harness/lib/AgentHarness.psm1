@@ -115,6 +115,66 @@ function Get-AgentHarnessCrateFromPath {
     return ""
 }
 
+function Get-AgentHarnessChangedRustFiles {
+    param([string]$Repo)
+
+    if ([string]::IsNullOrWhiteSpace($Repo)) {
+        throw "Repository path is required"
+    }
+
+    $changed = git -C $Repo diff --name-only HEAD 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "git diff --name-only HEAD failed with exit code $LASTEXITCODE"
+    }
+
+    $files = @(
+        $changed |
+            Where-Object { $_ -match "\.rs$" } |
+            ForEach-Object { ($_ -replace "\\", "/").Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Sort-Object -Unique
+    )
+    return $files
+}
+
+function Get-AgentHarnessRustDiffFingerprint {
+    param(
+        [string]$Repo,
+        [string[]]$Files
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Repo)) {
+        throw "Repository path is required"
+    }
+
+    $normalizedFiles = @(
+        $Files |
+            ForEach-Object { if ($null -ne $_) { ($_ -replace "\\", "/").Trim() } } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Sort-Object -Unique
+    )
+
+    $parts = New-Object System.Collections.Generic.List[string]
+    foreach ($file in $normalizedFiles) {
+        $parts.Add("FILE:$file")
+        $diff = git -C $Repo diff -- $file
+        if ($LASTEXITCODE -ne 0) {
+            throw "git diff for $file failed with exit code $LASTEXITCODE"
+        }
+        $parts.Add(($diff -join "`n"))
+    }
+
+    $fingerprintText = $parts -join "`n---AGENT-HARNESS-DIFF---`n"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($fingerprintText)
+    $sha = New-Object System.Security.Cryptography.SHA256Managed
+    try {
+        $hash = $sha.ComputeHash($bytes)
+    } finally {
+        $sha.Dispose()
+    }
+    return (($hash | ForEach-Object { $_.ToString("x2") }) -join "")
+}
+
 function Test-AgentHarnessDangerousCommand {
     param([string]$Command)
 
@@ -186,6 +246,8 @@ Export-ModuleMember -Function `
     Get-AgentHarnessPromptText, `
     Get-AgentHarnessFilePath, `
     Get-AgentHarnessCrateFromPath, `
+    Get-AgentHarnessChangedRustFiles, `
+    Get-AgentHarnessRustDiffFingerprint, `
     Test-AgentHarnessDangerousCommand, `
     Test-AgentHarnessSecretText, `
     Write-AgentHarnessBlockJson

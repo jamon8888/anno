@@ -33,7 +33,7 @@ function Invoke-HarnessScript {
     param(
         [string]$ScriptName,
         [string]$InputPath,
-        [string[]]$Args = @()
+        [string[]]$ExtraArgs = @()
     )
     $scriptPath = Join-Path $HarnessRoot $ScriptName
     if (-not (Test-Path -LiteralPath $scriptPath)) {
@@ -48,8 +48,12 @@ function Invoke-HarnessScript {
     $argParts.Add("Bypass")
     $argParts.Add("-File")
     $argParts.Add(('"{0}"' -f ($scriptPath -replace '"', '\"')))
-    foreach ($arg in $Args) {
-        $argParts.Add(('"{0}"' -f ($arg -replace '"', '\"')))
+    foreach ($arg in $ExtraArgs) {
+        if ($arg.StartsWith("-")) {
+            $argParts.Add($arg)
+        } else {
+            $argParts.Add(('"{0}"' -f ($arg -replace '"', '\"')))
+        }
     }
     $psi.Arguments = $argParts -join " "
     $psi.RedirectStandardInput = $true
@@ -109,9 +113,34 @@ $tests.Add({
 })
 
 $tests.Add({
-    $r = Invoke-HarnessScript "post-edit-rust-check.ps1" (Join-Path $fixtures "post-edit-rust.json") @("-NoRun")
-    Assert-Equal $r.ExitCode 0 "post-edit dry mapping passes"
+    $r = Invoke-HarnessScript "post-edit-rust-check.ps1" (Join-Path $fixtures "post-edit-rust.json") -ExtraArgs @("-NoRun")
+    Assert-Equal $r.ExitCode 0 "post-edit dry mapping passes stdout='$($r.Stdout)' stderr='$($r.Stderr)'"
     Assert-Contains $r.Stdout "anno-rag" "crate detection"
+})
+
+$tests.Add({
+    $tempRepo = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-harness-test-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $tempRepo | Out-Null
+    try {
+        git -C $tempRepo init | Out-Null
+        git -C $tempRepo config user.email "agent-harness@example.invalid" | Out-Null
+        git -C $tempRepo config user.name "Agent Harness Test" | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $tempRepo "crates/anno-rag/src") -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $tempRepo "crates/anno-rag/src/pipeline.rs") -Value "fn main() {}" -Encoding UTF8
+        git -C $tempRepo add . | Out-Null
+        git -C $tempRepo commit -m "initial" | Out-Null
+        Set-Content -LiteralPath (Join-Path $tempRepo "crates/anno-rag/src/pipeline.rs") -Value "fn main() { println!(`"hi`"); }" -Encoding UTF8
+
+        $files = Get-AgentHarnessChangedRustFiles -Repo $tempRepo
+        Assert-Equal ($files -join ",") "crates/anno-rag/src/pipeline.rs" "changed Rust file detection"
+
+        $fingerprint = Get-AgentHarnessRustDiffFingerprint -Repo $tempRepo -Files $files
+        Assert-Equal $fingerprint.Length 64 "Rust diff fingerprint length"
+    } finally {
+        if (Test-Path -LiteralPath $tempRepo) {
+            Remove-Item -LiteralPath $tempRepo -Recurse -Force
+        }
+    }
 })
 
 $ran = 0

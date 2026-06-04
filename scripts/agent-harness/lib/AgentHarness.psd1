@@ -13,6 +13,8 @@
         'Get-AgentHarnessPromptText',
         'Get-AgentHarnessFilePath',
         'Get-AgentHarnessCrateFromPath',
+        'Get-AgentHarnessChangedRustFiles',
+        'Get-AgentHarnessRustDiffFingerprint',
         'Test-AgentHarnessDangerousCommand',
         'Test-AgentHarnessSecretText',
         'Write-AgentHarnessBlockJson'

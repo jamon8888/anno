@@ -8,8 +8,7 @@ Import-Module (Join-Path $ScriptDir "lib/AgentHarness.psm1") -Force
 
 try {
     $repo = Get-AgentHarnessRepoRoot
-    $changed = git -C $repo diff --name-only HEAD 2>$null
-    $rustChanged = @($changed | Where-Object { $_ -match "\.rs$" })
+    $rustChanged = @(Get-AgentHarnessChangedRustFiles -Repo $repo)
     if ($rustChanged.Count -eq 0) {
         Write-Output "agent harness stop gate: no Rust changes detected"
         exit 0
@@ -18,8 +17,13 @@ try {
     $stampPath = Join-Path $repo ".agent-harness/state/last-check.json"
     if (Test-Path -LiteralPath $stampPath) {
         $stamp = Get-Content -LiteralPath $stampPath -Raw | ConvertFrom-Json
-        Write-Output "agent harness stop gate: last targeted check found for $($stamp.crate)"
-        exit 0
+        $stampFiles = @($stamp.changed_rust_files | ForEach-Object { [string]$_ })
+        $currentFingerprint = Get-AgentHarnessRustDiffFingerprint -Repo $repo -Files $rustChanged
+        $missingFiles = @($rustChanged | Where-Object { $stampFiles -notcontains $_ })
+        if ($stamp.rust_diff_fingerprint -eq $currentFingerprint -and $missingFiles.Count -eq 0) {
+            Write-Output "agent harness stop gate: matching targeted check found for $($stamp.crate)"
+            exit 0
+        }
     }
 
     $reason = "Rust changes detected without a recent agent harness targeted check. Run scripts/dev-fast.ps1 for the changed crate or explain why verification is impossible."
